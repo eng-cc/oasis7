@@ -672,6 +672,15 @@
     - `P2PARCH6_SEQ_SSH_PASSWORD='***' P2PARCH6_STORAGE_SSH_PASSWORD='***' ./scripts/p2p-real-env-triad-snapshot.sh --samples 4 --interval-secs 5 --out-dir .tmp/p2p_real_env_triad`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] triad-current-version-full-game-nodes (PRD-P2P-026) [test_tier_required]: 用当前仓库版本升级本机 + 两台 ECS 三节点，并把 triad 收口到“三节点都是完整游戏节点”的 current release 基线；本机继续保留 player-entry 组件，三端同版 runtime 经过同步冷重置后复跑 same-window snapshot，需再次给出 `three_equal_validator` pass candidate。 Trace: .pm/tasks/task_160a5a96b32945999f7ef30a84e244d3.yaml
+  - 产物文件:
+    - `doc/p2p/project.md`
+    - `doc/testing/evidence/p2p-real-env-triad-current-version-full-game-nodes-2026-05-16.md`
+    - `.pm/tasks/task_160a5a96b32945999f7ef30a84e244d3.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `P2PARCH6_SEQ_SSH_PASSWORD='***' P2PARCH6_STORAGE_SSH_PASSWORD='***' ./scripts/p2p-real-env-triad-snapshot.sh --samples 4 --interval-secs 5 --out-dir .tmp/p2p_real_env_triad_sync_reset`
+    - `curl -fsS http://127.0.0.1:5633/v1/chain/status`
+    - `curl -I -fsS http://127.0.0.1:4273/`
 - [x] world-registry-validator-truth-bootstrap (PRD-P2P-003/018/026) [test_tier_required]: 让 `oasis7_chain_runtime` 在 execution world 已存在 `governance_finality_signer_registry` 时，用 world-state registry 覆盖本地 PoS validator membership / signer binding，并把 replication remote writer allowlist 与 reward runtime node identity binding 统一切到这份 effective config；`--node-validator*` 退回为 bootstrap 或显式运维覆盖，同时补齐 validator / finality signer 的治理准入目标流程文档。 Trace: .pm/tasks/task_d27fd4eafe4c41bdb046d3fe3765033f.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`

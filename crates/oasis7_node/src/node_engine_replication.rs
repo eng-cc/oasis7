@@ -379,11 +379,11 @@ impl PosNodeEngine {
                 }
             }
             if let Some(payload) = synced_commit {
-                self.replication_persisted_height =
-                    self.replication_persisted_height.max(next_height);
                 with_execution_hook(&mut execution_hook, |hook| {
                     self.apply_synced_replication_commit(world_id, &payload, hook)
                 })?;
+                self.replication_persisted_height =
+                    self.replication_persisted_height.max(next_height);
                 next_height = checked_replication_successor(
                     next_height,
                     "next_height",
