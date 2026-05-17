@@ -1,6 +1,8 @@
 use super::*;
 use oasis7_distfs::assemble_snapshot;
 
+const ISSUE160_SAMPLE_WORLD_ENV: &str = "OASIS7_VERIFY_ISSUE160_SAMPLE_WORLD";
+
 #[test]
 fn load_from_dir_falls_back_to_json_when_distfs_sidecar_is_invalid() {
     let mut world = World::new();
@@ -68,12 +70,18 @@ fn snapshot_json_without_era_fields_keeps_backward_compatibility() {
 
 #[test]
 fn sample_issue160_execution_world_matches_tick_consensus_after_distfs_restore() {
+    if std::env::var_os(ISSUE160_SAMPLE_WORLD_ENV).is_none() {
+        return;
+    }
+
     let dir = std::path::Path::new(
         "output/chain-runtime/viewer-live-node-playtest-issue160-trust-refresh-fix1/reward-runtime-execution-world",
     );
-    if !dir.exists() {
-        return;
-    }
+    assert!(
+        dir.exists(),
+        "set {ISSUE160_SAMPLE_WORLD_ENV}=1 only when the sample world exists at {}",
+        dir.display()
+    );
 
     let snapshot_json = Snapshot::load_json(dir.join("snapshot.json")).expect("load snapshot json");
     let journal = Journal::load_json(dir.join("journal.json")).expect("load journal json");

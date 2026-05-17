@@ -60,6 +60,11 @@ run_id_override=""
 session_prefix="active-llm-retention"
 stack_args=()
 
+# Formal retention capture can opt into the longer runtime-live request budget
+# without changing the default trust-floor ceiling for ordinary runtime-live use.
+: "${OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS:=180000}"
+export OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --url)

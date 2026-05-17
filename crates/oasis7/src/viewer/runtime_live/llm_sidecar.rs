@@ -56,6 +56,7 @@ const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const RUNTIME_PROVIDER_CHECK_CACHE_MS: u64 = 2_000;
 const ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS: &str = "OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS";
+const DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS: u64 = 30_000;
 
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
@@ -102,10 +103,9 @@ fn resolve_runtime_live_llm_timeout_ms(configured_timeout_ms: u64) -> u64 {
     let runtime_timeout_ceiling_ms = std::env::var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS)
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
-        .map(|value| value.max(1));
-    runtime_timeout_ceiling_ms.map_or(configured_timeout_ms, |ceiling_ms| {
-        configured_timeout_ms.min(ceiling_ms)
-    })
+        .map(|value| value.max(1))
+        .unwrap_or(DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS);
+    configured_timeout_ms.min(runtime_timeout_ceiling_ms)
 }
 
 enum RuntimeDecisionRunner {
@@ -909,7 +909,7 @@ mod tests {
     fn runtime_live_llm_timeout_defaults_to_configured_budget() {
         let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
         std::env::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
-        assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 180_000);
+        assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 30_000);
         assert_eq!(resolve_runtime_live_llm_timeout_ms(8_000), 8_000);
     }
 
