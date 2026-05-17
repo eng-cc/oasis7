@@ -7,7 +7,7 @@ impl PosNodeEngine {
     pub(super) fn sync_replication_height_once(
         &self,
         endpoint: &ReplicationNetworkEndpoint,
-        node_id: &str,
+        _node_id: &str,
         world_id: &str,
         replication_runtime: &mut ReplicationRuntime,
         height: u64,
@@ -114,8 +114,28 @@ impl PosNodeEngine {
                 height, err
             ),
         })?;
-        replication_runtime.apply_remote_message(node_id, world_id, &message)?;
-        endpoint.publish_local_content_provider(world_id, message.record.content_hash.as_str())?;
+        if !fetch_commit.from_cache {
+            endpoint.remember_validated_fetch_commit_success(
+                &request,
+                &FetchCommitResponse {
+                    found: true,
+                    message: Some(message.clone()),
+                },
+            );
+        }
+        Ok(GapSyncHeightOutcome::Synced { message, payload })
+    }
+
+    pub(super) fn persist_synced_replication_message(
+        &self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
+        replication_runtime: &mut ReplicationRuntime,
+        message: &replication::GossipReplicationMessage,
+        height: u64,
+    ) -> Result<(), NodeError> {
+        replication_runtime.apply_remote_message(node_id, world_id, message)?;
         let persisted = replication_runtime.load_commit_message_by_height(world_id, height)?;
         if persisted
             .as_ref()
@@ -129,16 +149,8 @@ impl PosNodeEngine {
                 ),
             });
         }
-        if !fetch_commit.from_cache {
-            endpoint.remember_validated_fetch_commit_success(
-                &request,
-                &FetchCommitResponse {
-                    found: true,
-                    message: Some(message.clone()),
-                },
-            );
-        }
-        Ok(GapSyncHeightOutcome::Synced { payload })
+        endpoint.publish_local_content_provider(world_id, message.record.content_hash.as_str())?;
+        Ok(())
     }
 
     pub(super) fn apply_synced_replication_commit(

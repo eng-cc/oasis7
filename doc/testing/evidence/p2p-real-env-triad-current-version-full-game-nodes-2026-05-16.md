@@ -35,10 +35,10 @@
 1. 构建当前 release：
   - `env -u RUSTC_WRAPPER cargo build --release -p oasis7 --bin oasis7_chain_runtime`
   - `env -u RUSTC_WRAPPER cargo build --release -p oasis7 --bin oasis7_viewer_live`
-2. 统一 release：
+2. 审计轮次 1 首轮统一 release：
   - 本机 `/opt/oasis7/p2p-triad-local/current`
   - ECS `/opt/oasis7/p2p-triad/current`
-  - 三端 `oasis7_chain_runtime` 最终统一为 `sha256=a7f5f8d44aee4e8c0384ac3d63f3528bcadce2ae28c03976197d07ea281c3f8a`
+  - 当时三端 `oasis7_chain_runtime` 统一为 `sha256=a7f5f8d44aee4e8c0384ac3d63f3528bcadce2ae28c03976197d07ea281c3f8a`
 3. 本机完整节点补件：
   - 由于本机 `PLAYER_ENTRY_ENABLE=1`，新 release 除 `oasis7_chain_runtime` 外还需补齐 `oasis7_viewer_live` 与 `web/` 静态目录；本轮已把旧 full-stack release 的 `web/` 复制到新 release，并放入新编译的 `oasis7_viewer_live`。
 4. 冲突排查：

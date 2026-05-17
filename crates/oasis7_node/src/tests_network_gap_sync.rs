@@ -331,7 +331,7 @@ fn successor_probe_cooldown_suppresses_same_height_not_found_retry() {
     let synced = engine
         .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
         .expect("sync height 1");
-    let GapSyncHeightOutcome::Synced { payload } = synced else {
+    let GapSyncHeightOutcome::Synced { payload, .. } = synced else {
         panic!("expected synced outcome for height 1");
     };
     engine
@@ -466,7 +466,7 @@ fn successor_probe_cooldown_preserves_waitable_hold_decision() {
     let synced = engine
         .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
         .expect("sync height 1");
-    let GapSyncHeightOutcome::Synced { payload } = synced else {
+    let GapSyncHeightOutcome::Synced { payload, .. } = synced else {
         panic!("expected synced outcome for height 1");
     };
     engine

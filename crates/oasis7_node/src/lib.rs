@@ -171,6 +171,7 @@ impl NodePosStatusAdapter for PosConsensusStatus {
 #[derive(Debug, Clone)]
 enum GapSyncHeightOutcome {
     Synced {
+        message: replication::GossipReplicationMessage,
         payload: replication_state_reconcile::ReplicationCommitPayload,
     },
     NotFound,

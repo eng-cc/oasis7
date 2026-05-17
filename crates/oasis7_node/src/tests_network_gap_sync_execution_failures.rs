@@ -47,7 +47,7 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
         ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
             .expect("endpoint");
     let mut remote_replication = super::replication::ReplicationRuntime::new(
-        &signed_replication_config(dir_remote, 150),
+        &signed_replication_config(dir_remote.clone(), 150),
         "node-a",
     )
     .expect("remote replication runtime");
@@ -128,7 +128,41 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
     );
     assert_eq!(engine.replication_persisted_height, 0);
     assert_eq!(engine.committed_height, 0);
+    assert_eq!(
+        replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted height after failed probe"),
+        0
+    );
+    assert!(replication
+        .load_commit_message_by_height(world_id, 1)
+        .expect("load persisted commit after failed probe")
+        .is_none());
+    let reopened_replication =
+        super::replication::ReplicationRuntime::new(&local_replication_config, "node-b")
+            .expect("reopen local replication runtime");
+    assert_eq!(
+        reopened_replication
+            .latest_persisted_commit_height(world_id)
+            .expect("reopened latest persisted height after failed probe"),
+        0
+    );
+    let retry_err = engine
+        .maybe_hold_proposal_for_replication_successor_probe(
+            &endpoint,
+            "node-b",
+            world_id,
+            1_001,
+            Some(&mut replication),
+            Some(&mut hook),
+        )
+        .expect_err("probe retry should still surface execution failure");
+    assert!(
+        matches!(retry_err, NodeError::Execution { ref reason } if reason.contains("forced execution failure at height 1")),
+        "unexpected probe retry error: {retry_err:?}"
+    );
 
+    let _ = fs::remove_dir_all(&dir_remote);
     let _ = fs::remove_dir_all(&dir_local);
 }
 
@@ -163,7 +197,7 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
         ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
             .expect("endpoint");
     let mut remote_replication = super::replication::ReplicationRuntime::new(
-        &signed_replication_config(dir_remote, 152),
+        &signed_replication_config(dir_remote.clone(), 152),
         "node-a",
     )
     .expect("remote replication runtime");
@@ -244,6 +278,39 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
     );
     assert_eq!(engine.replication_persisted_height, 0);
     assert_eq!(engine.committed_height, 0);
+    assert_eq!(
+        replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted height after failed gap sync"),
+        0
+    );
+    assert!(replication
+        .load_commit_message_by_height(world_id, 1)
+        .expect("load persisted commit after failed gap sync")
+        .is_none());
+    let reopened_replication =
+        super::replication::ReplicationRuntime::new(&local_replication_config, "node-b")
+            .expect("reopen local replication runtime");
+    assert_eq!(
+        reopened_replication
+            .latest_persisted_commit_height(world_id)
+            .expect("reopened latest persisted height after failed gap sync"),
+        0
+    );
+    let retry_err = engine
+        .sync_missing_replication_commits(
+            &endpoint,
+            "node-b",
+            world_id,
+            Some(&mut replication),
+            Some(&mut hook),
+        )
+        .expect_err("gap sync retry should still surface execution failure");
+    assert!(
+        matches!(retry_err, NodeError::Execution { ref reason } if reason.contains("forced execution failure at height 1")),
+        "unexpected gap sync retry error: {retry_err:?}"
+    );
 
+    let _ = fs::remove_dir_all(&dir_remote);
     let _ = fs::remove_dir_all(&dir_local);
 }

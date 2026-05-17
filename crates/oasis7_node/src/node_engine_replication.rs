@@ -348,7 +348,10 @@ impl PosNodeEngine {
             "starting replication gap sync",
         )?;
         while next_height <= self.network_committed_height {
-            let mut synced_commit: Option<ReplicationCommitPayload> = None;
+            let mut synced_commit: Option<(
+                replication::GossipReplicationMessage,
+                ReplicationCommitPayload,
+            )> = None;
             let mut not_found = false;
             let mut last_error = None;
             for attempt in 1..=REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT {
@@ -359,8 +362,8 @@ impl PosNodeEngine {
                     replication_runtime,
                     next_height,
                 ) {
-                    Ok(GapSyncHeightOutcome::Synced { payload }) => {
-                        synced_commit = Some(payload);
+                    Ok(GapSyncHeightOutcome::Synced { message, payload }) => {
+                        synced_commit = Some((message, payload));
                         break;
                     }
                     Ok(GapSyncHeightOutcome::NotFound) => {
@@ -378,10 +381,18 @@ impl PosNodeEngine {
                     }
                 }
             }
-            if let Some(payload) = synced_commit {
+            if let Some((message, payload)) = synced_commit {
                 with_execution_hook(&mut execution_hook, |hook| {
                     self.apply_synced_replication_commit(world_id, &payload, hook)
                 })?;
+                self.persist_synced_replication_message(
+                    endpoint,
+                    node_id,
+                    world_id,
+                    replication_runtime,
+                    &message,
+                    next_height,
+                )?;
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
                 next_height = checked_replication_successor(

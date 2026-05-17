@@ -37,13 +37,21 @@ impl PosNodeEngine {
             replication_runtime,
             probe_height,
         ) {
-            Ok(GapSyncHeightOutcome::Synced { payload }) => {
+            Ok(GapSyncHeightOutcome::Synced { message, payload }) => {
                 self.last_replication_successor_probe_height = None;
                 self.last_replication_successor_probe_at_ms = None;
                 self.last_replication_successor_probe_hold = None;
                 with_execution_hook(&mut execution_hook, |hook| {
                     self.apply_synced_replication_commit(world_id, &payload, hook)
                 })?;
+                self.persist_synced_replication_message(
+                    endpoint,
+                    node_id,
+                    world_id,
+                    replication_runtime,
+                    &message,
+                    probe_height,
+                )?;
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(probe_height);
                 Ok(true)
