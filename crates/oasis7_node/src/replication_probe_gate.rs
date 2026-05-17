@@ -53,13 +53,6 @@ impl PosNodeEngine {
                     &message,
                     probe_height,
                 )?;
-                endpoint.remember_validated_fetch_commit_success(
-                    &replication_runtime.build_fetch_commit_request(world_id, probe_height)?,
-                    &FetchCommitResponse {
-                        found: true,
-                        message: Some(message.clone()),
-                    },
-                );
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(probe_height);
                 self.record_synced_replication_height(probe_height, block_hash, committed_at_ms)?;

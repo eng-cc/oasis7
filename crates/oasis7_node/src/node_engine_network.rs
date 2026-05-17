@@ -96,7 +96,7 @@ impl PosNodeEngine {
                 reason: format!("gap sync height {} payload block_hash is empty", height),
             });
         }
-        match replication_runtime.validate_remote_message_for_observe(node_id, world_id, &message) {
+        match replication_runtime.validate_remote_message_for_apply(node_id, world_id, &message) {
             Ok(true) => {}
             Ok(false) => return Ok(GapSyncHeightOutcome::NotFound),
             Err(err) => return Err(err),
@@ -119,6 +119,13 @@ impl PosNodeEngine {
                 height, err
             ),
         })?;
+        endpoint.remember_validated_fetch_commit_success(
+            &request,
+            &FetchCommitResponse {
+                found: true,
+                message: Some(message.clone()),
+            },
+        );
         Ok(GapSyncHeightOutcome::Synced { message, payload })
     }
 

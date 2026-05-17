@@ -193,6 +193,56 @@ fn validate_remote_message_for_observe_accepts_writer_in_allowlist() {
 }
 
 #[test]
+fn validate_remote_message_for_apply_rejects_non_monotonic_record_without_mutating_guard() {
+    let dir = temp_dir("apply-guard-preflight-reject");
+    let (_, allowed_public_hex) = deterministic_keypair_hex(52);
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_remote_writer_allowlist(vec![allowed_public_hex.clone()])
+        .expect("allowlist");
+    let mut runtime = ReplicationRuntime::new(&config, "node-b").expect("runtime");
+    runtime.guard = SingleWriterReplicationGuard {
+        writer_id: Some(allowed_public_hex),
+        writer_epoch: 1,
+        last_sequence: 3,
+    };
+    let stale_message = signed_remote_message(52, "world-apply-guard-preflight", "node-a", 3);
+
+    let accepted = runtime
+        .validate_remote_message_for_apply("node-b", "world-apply-guard-preflight", &stale_message)
+        .expect("stale record should be skipped");
+    assert!(!accepted);
+    assert_eq!(runtime.guard.last_sequence, 3);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn validate_remote_message_for_apply_accepts_next_record_without_mutating_guard() {
+    let dir = temp_dir("apply-guard-preflight-accept");
+    let (_, allowed_public_hex) = deterministic_keypair_hex(62);
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_remote_writer_allowlist(vec![allowed_public_hex.clone()])
+        .expect("allowlist");
+    let mut runtime = ReplicationRuntime::new(&config, "node-b").expect("runtime");
+    runtime.guard = SingleWriterReplicationGuard {
+        writer_id: Some(allowed_public_hex),
+        writer_epoch: 1,
+        last_sequence: 1,
+    };
+    let next_message = signed_remote_message(62, "world-apply-guard-preflight", "node-a", 2);
+
+    let accepted = runtime
+        .validate_remote_message_for_apply("node-b", "world-apply-guard-preflight", &next_message)
+        .expect("next record should pass");
+    assert!(accepted);
+    assert_eq!(runtime.guard.last_sequence, 1);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn seeded_writer_epoch_from_millis_distinguishes_writers() {
     let epoch_a = seeded_writer_epoch_from_millis(1_777_990_618_174, Some("writer-a"));
     let epoch_b = seeded_writer_epoch_from_millis(1_777_990_618_174, Some("writer-b"));
