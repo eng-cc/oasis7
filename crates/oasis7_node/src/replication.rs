@@ -576,6 +576,36 @@ impl ReplicationRuntime {
         Ok(true)
     }
 
+    pub(crate) fn validate_remote_message_for_apply(
+        &self,
+        node_id: &str,
+        world_id: &str,
+        message: &GossipReplicationMessage,
+    ) -> Result<bool, NodeError> {
+        if !self.validate_remote_message_for_observe(node_id, world_id, message)? {
+            return Ok(false);
+        }
+        if self.is_stale_remote_record(&message.record) {
+            return Ok(false);
+        }
+
+        let mut next_guard = self.guard.clone();
+        next_guard
+            .validate_and_advance(&message.record)
+            .map_err(distfs_error_to_node_error)?;
+
+        let computed_hash = blake3_hex(message.payload.as_slice());
+        if computed_hash != message.record.content_hash {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "replication content hash mismatch: expected={}, got={}",
+                    message.record.content_hash, computed_hash
+                ),
+            });
+        }
+        Ok(true)
+    }
+
     fn persist_state(&self, node_id: &str) -> Result<(), NodeError> {
         write_json_pretty(self.config.guard_state_path().as_path(), &self.guard)?;
         write_json_pretty(

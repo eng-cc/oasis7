@@ -219,8 +219,7 @@ impl PosNodeEngine {
                 "ingesting replication message",
             )?;
             let payload_view = parse_replication_commit_payload_view(message.payload.as_slice());
-            match replication_runtime
-                .validate_remote_message_for_observe(node_id, world_id, &message)
+            match replication_runtime.validate_remote_message_for_apply(node_id, world_id, &message)
             {
                 Ok(true) => {}
                 Ok(false) => continue,
@@ -402,13 +401,6 @@ impl PosNodeEngine {
                     &message,
                     next_height,
                 )?;
-                endpoint.remember_validated_fetch_commit_success(
-                    &replication_runtime.build_fetch_commit_request(world_id, next_height)?,
-                    &FetchCommitResponse {
-                        found: true,
-                        message: Some(message.clone()),
-                    },
-                );
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
                 self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
