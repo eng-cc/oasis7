@@ -1,7 +1,7 @@
 # game PRD 文件级索引
 审计轮次: 12
 
-更新时间：2026-05-07
+更新时间：2026-05-17
 
 ## 入口
 - 模块 PRD：`doc/game/prd.md`
@@ -15,21 +15,22 @@
 - 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - 想先看当前冲刺窗口与留存修复：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 - 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
+- 想先看“成熟世界里小玩家为什么不必立刻依附 major power，仍能继续形成 leverage”：先读 `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`
 - 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
 - 想先看试玩放行与 beta 边界：先读 `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
 - 想继续按文件名、专题或补充材料下钻：使用下方密度快照、热点子域导航与补充入口
 
-## 密度快照（2026-05-07）
-- `doc/game/`：80 份文件
-- `doc/game/gameplay/`：75 份文件
-- `doc/game/gameplay/` 正式专题三件套：57 份文件
+## 密度快照（2026-05-17）
+- `doc/game/`：87 份文件
+- `doc/game/gameplay/`：82 份文件
+- `doc/game/gameplay/` 正式专题三件套：63 份文件
 - `doc/game/gameplay/` 补充材料：18 份文件
 - 模块根入口：5 份文件
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `gameplay/` 正式专题三件套 | 54 | 核心玩法骨架、留存修复、preview/beta gate、claim economy、治理、长稳与发布闭环 |
+| `gameplay/` 正式专题三件套 | 63 | 核心玩法骨架、留存修复、preview/beta gate、claim economy、治理、agency 合同与 mature-world 小玩家承接 |
 | `gameplay/` 补充材料 | 18 | runbook、evidence、checklist、handoff 与跨角色执行留痕 |
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
@@ -37,6 +38,7 @@
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`：核心玩法骨架主入口。
 - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`：当前冲刺窗口、跨角色优先级与 10 分钟留存修复主入口。
 - `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`：间接控制下的 accepted intent、主因果、打断重排与续玩恢复合同主入口。
+- `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`：mature-world 小玩家承接、受保护 first win、专业化与局部影响力主入口。
 - `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`：物理尺度真值、间接控制动作粒度与表现层夸张边界主入口。
 - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`：试玩执行边界与继续/暂停决策主入口。
 - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`：closed beta 放行条件与候选级门禁主入口。
@@ -75,6 +77,7 @@
 | `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.prd.md` | `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.design.md` | `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.project.md` |
 | `doc/game/gameplay/gameplay-release-production-closure.prd.md` | `doc/game/gameplay/gameplay-release-production-closure.design.md` | `doc/game/gameplay/gameplay-release-production-closure.project.md` |
 | `doc/game/gameplay/gameplay-runtime-governance-closure.prd.md` | `doc/game/gameplay/gameplay-runtime-governance-closure.design.md` | `doc/game/gameplay/gameplay-runtime-governance-closure.project.md` |
+| `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md` | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.design.md` | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.project.md` |
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` | `doc/game/gameplay/gameplay-top-level-design.project.md` |
 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md` | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md` | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md` |
 

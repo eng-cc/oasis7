@@ -80,6 +80,10 @@
 - [x] runtime-control-feeling-canonical-contract (PRD-GAME-014) [test_tier_required]: `runtime_engineer` 已把 `player_gameplay` canonical snapshot 与 recent-feedback 真值对齐到 control-feeling 合同，正式补齐 accepted intent、intent scope/target、status reason、last world change、resume anchor、primary blocker 与 resume-next-step 字段，并让 `prompt_control` / `agent_chat` / `gameplay_action` / world-control 共享同一 runtime 语义面。 Trace: .pm/tasks/task_f3c25dd6688f40fbbcf05df9036a83ec.yaml
 - 后续待建任务统一收口在 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`，避免在 gameplay 主入口重复展开未绑定 Trace 的计划行。
 
+### T11 小玩家成长线与成熟世界承接（2026-05-17）
+- [x] small-player-progression-contract-freeze (PRD-GAME-015) [test_tier_required]: `producer_system_designer` 已新增 `PRD-GAME-015` 专题 PRD / design / project，并完成根入口、`gameplay` 主文档、索引与 execution log 挂载；正式冻结 mature-world 小玩家默认主线 `local operator -> regional specialist -> limited-scope regional influence`，明确 `protected first industrial win` 指低爆炸半径、可恢复和 leverage 可见，而不是新手无敌豁免。 Trace: .pm/tasks/task_d97dfa29208444a9b6a652f2a12fb65d.yaml
+- 后续待建任务统一收口在 `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.project.md`，避免在 gameplay 主入口重复展开未绑定 Trace 的计划行。
+
 ## 依赖
 
 - 运行时与模块治理基线：`doc/world-runtime/prd.md`
@@ -100,7 +104,7 @@
 ## 状态
 
 - 当前状态：`进行中`
-- 已完成：文档归位、命名语义化、必备字段补齐、工程分册格式修复、Gameplay Runtime/模块化/协议扩展任务拆解与落地、Gameplay 模块测试矩阵引用固化、设计评审准备与战争/政治数值基线补齐、前期工业引导闭环文档冻结（首个制成品/工厂主链）、T4 的 runtime 工业状态/事件与 viewer 主反馈闭环、T5 的 `PostOnboarding` 阶段目标链闭环、T6 的纯 API 客户端等价闭环、T7 的封闭 Beta 准入专题冻结与根入口挂载。
+- 已完成：文档归位、命名语义化、必备字段补齐、工程分册格式修复、Gameplay Runtime/模块化/协议扩展任务拆解与落地、Gameplay 模块测试矩阵引用固化、设计评审准备与战争/政治数值基线补齐、前期工业引导闭环文档冻结（首个制成品/工厂主链）、T4 的 runtime 工业状态/事件与 viewer 主反馈闭环、T5 的 `PostOnboarding` 阶段目标链闭环、T6 的纯 API 客户端等价闭环、T7 的封闭 Beta 准入专题冻结与根入口挂载、T11 的 mature-world 小玩家成长线合同冻结。
 - 未完成：当前无 `T7` 技术阻塞；后续仅保留统一 gate、trend baseline 与 liveops 节奏的持续监控。
 - 阻塞项：无统一 gate 技术阻塞；当前继续保持 `internal_playable_alpha_late` 属于 producer claim 决策，不得据此宣称 `closed beta approved`。
 

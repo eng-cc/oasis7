@@ -7,7 +7,7 @@ status: done
 priority: P2
 source_signal: null
 source_refs:
-  - /home/scc/worktrees/oasis7-viewer-bevy-embedded-pixel-world-canvas/doc/world-simulator/viewer/viewer-bevy-embedded-pixel-world-canvas-2026-05-11.prd.md
+  - doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md
   - doc/world-simulator/project.md
 doc_refs: []
 related_prd:
