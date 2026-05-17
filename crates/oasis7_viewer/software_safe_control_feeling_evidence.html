@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>software_safe control-feeling evidence</title>
+    <style>
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #0f172a;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      iframe {
+        border: 0;
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe
+      id="software-safe-frame"
+      src="./software_safe.html?test_api=1&connect=0&locale=en"
+      title="software_safe control-feeling evidence"
+    ></iframe>
+    <script>
+      const snapshot = {
+        time: 12,
+        config: {
+          space: {
+            width_cm: 10_000_000,
+            depth_cm: 5_000_000,
+            height_cm: 1_000_000,
+          },
+        },
+        model: {
+          agents: {
+            "agent-0": {
+              id: "agent-0",
+              name: "Agent 0",
+              location_id: "loc-0",
+              resources: {},
+            },
+          },
+          locations: {
+            "loc-0": {
+              id: "loc-0",
+              name: "Factory Anchor",
+              pos: { x_cm: 0, y_cm: 0, z_cm: 0 },
+              profile: { radius_cm: 25_000, radiation_emission_per_tick: 0, material: "silicate" },
+              resources: {},
+            },
+          },
+          agent_prompt_profiles: {},
+          agent_execution_debug_contexts: {},
+        },
+        player_gameplay: {
+          stage_id: "post_onboarding",
+          stage_status: "blocked",
+          execution_state: "blocked",
+          accepted_intent_id: "gameplay_action:build_factory_smelter_mk1",
+          intent_summary: "Queue build_factory_smelter_mk1 for agent-0",
+          intent_scope: "gameplay_action",
+          intent_target: "agent-0",
+          status_reason: "Advance 1-2 steps to apply the queued build action.",
+          last_world_change: null,
+          resume_anchor: "Recover the first sustainable line",
+          resume_next_step: "Advance after replenishing materials to confirm the line resumes.",
+          goal_id: "post_onboarding.recover_capability",
+          goal_kind: "RecoverCapability",
+          goal_title: "Recover sustainable capability",
+          objective: "Stabilize the first production line before expanding.",
+          progress_detail: "The primary line is blocked by missing material input.",
+          progress_percent: 68,
+          blocker_kind: "material_shortage",
+          blocker_detail: "iron input exhausted at factory-0",
+          causality_kind: "world_constraint",
+          causality_detail: "iron input exhausted at factory-0",
+          blocker_supplemental_detail: null,
+          next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
+          branch_hint: null,
+          available_actions: [
+            {
+              action_id: "build_factory_smelter_mk1",
+              target_agent_id: "agent-0",
+              label: "Build smelter mk1",
+              protocol_action: "gameplay_action.submit",
+              disabled_reason: null
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Request snapshot",
+              protocol_action: "world.request_snapshot",
+              disabled_reason: null
+            }
+          ],
+          recent_feedback: {
+            action: "gameplay_action:build_factory_smelter_mk1",
+            stage: "blocked",
+            effect: "The line remains stalled until iron input is replenished.",
+            reason: "iron input exhausted at factory-0",
+            hint: "Replenish upstream materials, then advance again.",
+            delta_logical_time: 0,
+            delta_event_seq: 0
+          },
+          agent_claim: null
+        }
+      };
+
+      const frame = document.getElementById("software-safe-frame");
+
+      function focusAgencySurface() {
+        const doc = frame?.contentDocument;
+        if (!doc) {
+          return false;
+        }
+        let changed = false;
+        const stageCallout = Array.from(doc.querySelectorAll(".callout--warn")).find((callout) => {
+          const title = callout.querySelector(".callout__title")?.textContent?.trim();
+          return title === "World Connection Needs Attention";
+        });
+        if (stageCallout) {
+          stageCallout.style.display = "none";
+          changed = true;
+        }
+        const pixelWorldHost = doc.querySelector(".pixel-world-host");
+        if (pixelWorldHost) {
+          pixelWorldHost.style.display = "none";
+          changed = true;
+        }
+        const renderDto = Array.from(doc.querySelectorAll("details")).find((details) => {
+          const summary = details.querySelector("summary");
+          return summary?.textContent?.includes("Expand Render DTO");
+        });
+        if (renderDto) {
+          renderDto.style.display = "none";
+          changed = true;
+        }
+        const emptyHints = Array.from(doc.querySelectorAll(".empty"));
+        for (const hint of emptyHints) {
+          const text = hint.textContent || "";
+          if (text.includes("prompt_control requires viewer auth bootstrap")
+            || text.includes("main_token_transfer requires viewer auth bootstrap")) {
+            hint.style.display = "none";
+            changed = true;
+          }
+        }
+        const body = doc.body;
+        if (body) {
+          body.style.overflow = "hidden";
+        }
+        return changed;
+      }
+
+      function hideConnectionCallout() {
+        const doc = frame?.contentDocument;
+        if (!doc) {
+          return false;
+        }
+        const callouts = Array.from(doc.querySelectorAll(".callout--warn"));
+        let changed = false;
+        for (const callout of callouts) {
+          const title = callout.querySelector(".callout__title")?.textContent?.trim();
+          if (title === "World Connection Needs Attention") {
+            callout.style.display = "none";
+            changed = true;
+          }
+        }
+        return changed;
+      }
+
+      function injectSnapshot() {
+        const api = frame?.contentWindow?.__AW_TEST__;
+        if (!api?.injectSnapshot) {
+          window.setTimeout(injectSnapshot, 100);
+          return;
+        }
+        api.injectSnapshot(snapshot);
+        window.setTimeout(() => {
+          if (!focusAgencySurface()) {
+            window.setTimeout(focusAgencySurface, 200);
+          }
+        }, 200);
+      }
+
+      frame.addEventListener("load", () => {
+        window.setTimeout(injectSnapshot, 150);
+      });
+    </script>
+  </body>
+</html>
