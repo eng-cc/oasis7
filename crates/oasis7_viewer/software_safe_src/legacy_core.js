@@ -1516,6 +1516,14 @@ function buildGameplaySummary(locale = state.uiLocale) {
   const progressPercent = Number.isFinite(progressRaw)
     ? Math.max(0, Math.min(100, Math.floor(progressRaw)))
     : null;
+  const acceptedIntentId = gameplay.accepted_intent_id || null;
+  const intentSummary = gameplay.intent_summary || null;
+  const intentScope = gameplay.intent_scope || null;
+  const intentTarget = gameplay.intent_target || null;
+  const statusReason = gameplay.status_reason || null;
+  const lastWorldChange = gameplay.last_world_change || null;
+  const resumeAnchor = gameplay.resume_anchor || null;
+  const resumeNextStep = gameplay.resume_next_step || null;
   const availableActions = Array.isArray(gameplay.available_actions)
     ? gameplay.available_actions
       .map((action) => ({
@@ -1720,10 +1728,67 @@ function buildGameplaySummary(locale = state.uiLocale) {
         return resolvedBlockerKind || null;
     }
   })();
+  const recommendedAction = availableActions
+    .filter((action) => !action.disabledReason)
+    .sort((left, right) => {
+      const priority = (action) => {
+        switch (action.executeKind) {
+          case "gameplay_action":
+            return 0;
+          case "step":
+            return 1;
+          case "play":
+            return 2;
+          case "request_snapshot":
+            return 3;
+          case "agent_chat":
+            return 4;
+          default:
+            return 5;
+        }
+      };
+      return priority(left) - priority(right);
+    })[0] || null;
+  const acceptedIntentSummary = intentSummary
+    || acceptedIntentId
+    || localeText(
+      locale,
+      "还没有一条被正式接受的玩家意图",
+      "No player-facing accepted intent yet",
+    );
+  const acceptedIntentDetail = (() => {
+    if (lastWorldChange) {
+      return lastWorldChange;
+    }
+    if (statusReason) {
+      return statusReason;
+    }
+    if (recentFeedback?.hint) {
+      return recentFeedback.hint;
+    }
+    return localeText(
+      locale,
+      "先提交一个玩法动作，再看系统如何确认、推进或阻塞它。",
+      "Submit one gameplay action first, then read how the system confirms, advances, or blocks it.",
+    );
+  })();
+  const narrativeNextStep = emptyEntityBlocker
+    ? emptyEntityBlocker.nextStepHint
+    : gameplay.next_step_hint || resumeNextStep || null;
+  const narrativeBlockerDetail = resolvedBlockerDetail || statusReason || recentFeedback?.reason || null;
 
   return {
     stageId: gameplay.stage_id || null,
     stageStatus: resolvedStageStatus,
+    acceptedIntentId,
+    acceptedIntentSummary,
+    acceptedIntentScope: intentScope,
+    acceptedIntentTarget: intentTarget,
+    acceptedIntentDetail,
+    statusReason,
+    lastWorldChange,
+    resumeAnchor,
+    resumeNextStep,
     executionState,
     executionStateLabel,
     executionStateMachine,
@@ -1744,16 +1809,19 @@ function buildGameplaySummary(locale = state.uiLocale) {
       ? runtimeBlockerDetail
       : null,
     nextStepHint: runtimeAlreadyPublishedEmptyEntityBlocker
-      ? gameplay.next_step_hint || emptyEntityBlocker?.nextStepHint || null
+      ? gameplay.next_step_hint || emptyEntityBlocker?.nextStepHint || resumeNextStep || null
       : emptyEntityBlocker
         ? emptyEntityBlocker.nextStepHint
-        : gameplay.next_step_hint || null,
+        : gameplay.next_step_hint || resumeNextStep || null,
     branchHint: gameplay.branch_hint || null,
+    narrativeBlockerDetail,
+    narrativeNextStep,
     entityCounts: {
       agents: agents.length,
       locations: locations.length,
     },
     availableActions,
+    recommendedAction,
     recentFeedback,
     agentClaim: clone(gameplay.agent_claim),
     assetGovernanceHandoff: isLocaleZh(locale)

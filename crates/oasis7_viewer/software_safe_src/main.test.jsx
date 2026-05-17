@@ -50,6 +50,14 @@ function sampleSnapshot(overrides = {}) {
       stage_id: "post_onboarding",
       stage_status: "blocked",
       execution_state: "blocked",
+      accepted_intent_id: "gameplay_action:build_factory_smelter_mk1",
+      intent_summary: "Queue build_factory_smelter_mk1 for agent-0",
+      intent_scope: "gameplay_action",
+      intent_target: "agent-0",
+      status_reason: "Advance 1-2 steps to apply the queued build action.",
+      last_world_change: null,
+      resume_anchor: "Recover the first sustainable line",
+      resume_next_step: "Advance after replenishing materials to confirm the line resumes.",
       goal_id: "post_onboarding.recover_capability",
       goal_kind: "RecoverCapability",
       goal_title: "Recover sustainable capability",
@@ -64,6 +72,13 @@ function sampleSnapshot(overrides = {}) {
       next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
       branch_hint: null,
       available_actions: [
+        {
+          action_id: "build_factory_smelter_mk1",
+          target_agent_id: "agent-0",
+          label: "Build smelter mk1",
+          protocol_action: "gameplay_action.submit",
+          disabled_reason: null,
+        },
         {
           action_id: "request_snapshot",
           label: "Request snapshot",
@@ -177,9 +192,12 @@ describe("viewer web ui automation baseline", () => {
     expect(within(targetsPanel).getByText("Targets")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Industrial World Command Desk")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getAllByText("Accepted Intent").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getAllByText("Queue build_factory_smelter_mk1 for agent-0").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();
     expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
-    expect(within(stagePanel).getByText("Current Blocker")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Missing Material")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Recommended Action")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Runtime Diagnostics")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Session Ladder")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Runtime Diagnostics")).toBeInTheDocument();
@@ -218,6 +236,7 @@ describe("viewer web ui automation baseline", () => {
     const stagePanel = container.querySelector("#viewer-stage-panel");
     expect(stagePanel).toBeTruthy();
     expect(within(stagePanel).getByText("Formal Gameplay Summary")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("Accepted Intent").length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText("Next Step").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Actions Not Exposed On This Page")).toBeInTheDocument();
   });
