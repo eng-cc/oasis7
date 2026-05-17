@@ -238,6 +238,32 @@
 
 oasis7 的世界不是无尺度表格。
 
+## 2.9 成熟世界中的小玩家成长线
+
+在 `PostOnboarding` 与首个持续能力之后，产品还必须回答另一件事：当世界已经存在更强组织、更深政治和更长历史时，小玩家/新玩家为什么还值得继续玩。
+
+当前答案不应是“立刻加入大组织”，也不应只是“世界本来就很热闹”。正式路线应当至少提供 1 条不依赖立即站队的 `small-player lane`，让玩家能在成熟世界里继续形成独立 leverage。
+
+当前冻结的默认主线是：
+
+1. `local operator`：先稳住 1 条小规模工业或服务能力，完成 1 次对世界有可见后果的胜利。
+2. `regional specialist`：再把这条能力转成短周期、区域性有用的专业化角色，而不是马上跳到全局治理或大战争。
+3. `limited-scope regional influence`：通过持续贡献获得局部优先级、局部机会或局部可见度，但不直接等价为 global governance 权力。
+
+这里所谓 `protected first industrial win`，保护的不是“不会被碰”，而是：
+
+- 早期 footprint 小，不应一开始就与 major-power 主战略面重叠。
+- 失败后存在 repair / rebuild / pivot 路径，不会立刻把玩家打回“只能投靠别人或只能退坑”。
+- 玩家必须能明确回答“我做了什么、世界因此变了什么、下一步为什么仍值得继续”，而不是只看到世界自己在运转。
+
+这条线与当前 `PRD-GAME-012` 的 early-retention 冲刺边界保持分离：
+
+- 当前 trust gate / first capability gate 仍是最近两周主优先级。
+- `#165` 解决的是“首个持续能力之后如何继续有独立价值”，不是重新改写首个 10 分钟。
+- 只有当成熟世界下的小玩家样本能持续给出 `player leverage != world activity only` 的证据时，这条线才算正式成立。
+
+专题口径见 `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`。
+
 当前正式口径必须同时成立两件事：
 
 1. 世界物理真值有尺度，而且当前 canonical 空间坐标、距离与尺寸继续以厘米整数合同落地。

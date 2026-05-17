@@ -177,6 +177,10 @@
 - 后续待建任务见 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`：
   `runtime-control-feeling-canonical-contract`、`viewer-control-feeling-surface-alignment`、`agent-control-feeling-reprioritize-contract`、`qa-control-feeling-matrix`。
 
+### T11 小玩家成长线与成熟世界承接（2026-05-17）
+- [x] small-player-progression-contract-freeze (PRD-GAME-015) [test_tier_required]: `producer_system_designer` 已新增 `PRD-GAME-015` 专题 PRD / design / project，并完成 `game` 根入口、`gameplay` 主文档、索引与当前 task execution log 挂载；正式冻结 `local operator -> regional specialist -> limited-scope regional influence` 主线，并把 `protected first industrial win` 收口为低爆炸半径、可恢复和 leverage 可见的 first win，而不是新手无敌豁免。 Trace: .pm/tasks/task_d97dfa29208444a9b6a652f2a12fb65d.yaml
+- 后续待建任务统一收口在 `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.project.md`，避免在 gameplay 主入口重复展开未绑定 Trace 的计划行。
+
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
 - doc/game/prd.index.md

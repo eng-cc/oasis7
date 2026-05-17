@@ -1,0 +1,23 @@
+task_uid: task_d97dfa29208444a9b6a652f2a12fb65d
+title: "freeze meaningful small-player progression lane in mature world states"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-game-issue-165-small-player-progression-lane
+execution_log_path: .pm/tasks/task_d97dfa29208444a9b6a652f2a12fb65d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/prd.md
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-top-level-design.prd.md
+doc_refs:
+  - doc/game/gameplay/gameplay-top-level-design.project.md
+related_prd: []
+acceptance:
+  - "define at least one credible early-game lane that does not require immediate alignment with major powers"
+  - "new player can achieve a meaningful outcome before engaging deep governance or large-scale conflict"
+  - "lane remains valuable even in mature world states"
+handoff_to: []
+updated_at: 2026-05-17T20:04:27+08:00
+last_started_at: 2026-05-17T19:36:31+08:00
+last_closed_at: 2026-05-17T20:04:27+08:00
