@@ -256,8 +256,26 @@ impl PosNodeEngine {
             if !should_apply {
                 continue;
             }
+            let mut executed_commit = None;
+            if let Some(payload) = payload_view.as_ref() {
+                if payload.height == committed_successor {
+                    let full_payload = parse_replication_commit_payload(message.payload.as_slice())
+                        .ok_or_else(|| NodeError::Replication {
+                            reason: format!(
+                                "replication message payload decode failed at height {}",
+                                payload.height
+                            ),
+                        })?;
+                    let executed = with_execution_hook(&mut execution_hook, |hook| {
+                        self.execute_synced_replication_commit(world_id, &full_payload, hook)
+                    })?;
+                    executed_commit = Some((full_payload.height, executed.0, executed.1));
+                }
+            }
+            let mut persisted_commit = false;
             match replication_runtime.apply_remote_message(node_id, world_id, &message) {
                 Ok(()) => {
+                    persisted_commit = true;
                     endpoint.publish_local_content_provider(
                         world_id,
                         message.record.content_hash.as_str(),
@@ -270,27 +288,17 @@ impl PosNodeEngine {
                             self.replication_persisted_height =
                                 self.replication_persisted_height.max(payload.height);
                         }
-                        if payload.height == committed_successor
-                            && self.replication_persisted_height >= payload.height
-                        {
-                            let full_payload =
-                                parse_replication_commit_payload(message.payload.as_slice())
-                                    .ok_or_else(|| NodeError::Replication {
-                                        reason: format!(
-                                    "replication message payload decode failed at height {}",
-                                    payload.height
-                                ),
-                                    })?;
-                            with_execution_hook(&mut execution_hook, |hook| {
-                                self.apply_synced_replication_commit(world_id, &full_payload, hook)
-                            })?;
-                        }
                     }
                 }
                 Err(err) => rejected.push(format!(
                     "node_id={} world_id={} err={}",
                     message.node_id, message.world_id, err
                 )),
+            }
+            if persisted_commit {
+                if let Some((height, block_hash, committed_at_ms)) = executed_commit {
+                    self.record_synced_replication_height(height, block_hash, committed_at_ms)?;
+                }
             }
         }
         if !rejected.is_empty() {
@@ -382,9 +390,10 @@ impl PosNodeEngine {
                 }
             }
             if let Some((message, payload)) = synced_commit {
-                with_execution_hook(&mut execution_hook, |hook| {
-                    self.apply_synced_replication_commit(world_id, &payload, hook)
-                })?;
+                let (block_hash, committed_at_ms) =
+                    with_execution_hook(&mut execution_hook, |hook| {
+                        self.execute_synced_replication_commit(world_id, &payload, hook)
+                    })?;
                 self.persist_synced_replication_message(
                     endpoint,
                     node_id,
@@ -393,8 +402,16 @@ impl PosNodeEngine {
                     &message,
                     next_height,
                 )?;
+                endpoint.remember_validated_fetch_commit_success(
+                    &replication_runtime.build_fetch_commit_request(world_id, next_height)?,
+                    &FetchCommitResponse {
+                        found: true,
+                        message: Some(message.clone()),
+                    },
+                );
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
+                self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
                 next_height = checked_replication_successor(
                     next_height,
                     "next_height",
