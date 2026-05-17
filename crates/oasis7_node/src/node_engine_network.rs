@@ -7,7 +7,7 @@ impl PosNodeEngine {
     pub(super) fn sync_replication_height_once(
         &self,
         endpoint: &ReplicationNetworkEndpoint,
-        _node_id: &str,
+        node_id: &str,
         world_id: &str,
         replication_runtime: &mut ReplicationRuntime,
         height: u64,
@@ -96,6 +96,11 @@ impl PosNodeEngine {
                 reason: format!("gap sync height {} payload block_hash is empty", height),
             });
         }
+        match replication_runtime.validate_remote_message_for_observe(node_id, world_id, &message) {
+            Ok(true) => {}
+            Ok(false) => return Ok(GapSyncHeightOutcome::NotFound),
+            Err(err) => return Err(err),
+        }
         validate_consensus_action_root(payload.action_root.as_str(), payload.actions.as_slice())
             .map_err(|err| NodeError::Replication {
                 reason: format!(
@@ -114,15 +119,6 @@ impl PosNodeEngine {
                 height, err
             ),
         })?;
-        if !fetch_commit.from_cache {
-            endpoint.remember_validated_fetch_commit_success(
-                &request,
-                &FetchCommitResponse {
-                    found: true,
-                    message: Some(message.clone()),
-                },
-            );
-        }
         Ok(GapSyncHeightOutcome::Synced { message, payload })
     }
 
@@ -144,7 +140,7 @@ impl PosNodeEngine {
         {
             return Err(NodeError::Replication {
                 reason: format!(
-                    "gap sync height {} persisted commit hash mismatch expected={}",
+                    "synced replication height {} persisted commit hash mismatch expected={}",
                     height, message.record.content_hash
                 ),
             });
@@ -153,12 +149,12 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    pub(super) fn apply_synced_replication_commit(
+    pub(super) fn execute_synced_replication_commit(
         &mut self,
         world_id: &str,
         payload: &ReplicationCommitPayload,
         execution_hook: Option<&mut dyn NodeExecutionHook>,
-    ) -> Result<(), NodeError> {
+    ) -> Result<(String, i64), NodeError> {
         if payload.execution_block_hash.is_some() != payload.execution_state_root.is_some() {
             return Err(NodeError::Replication {
                 reason: format!(
@@ -199,11 +195,18 @@ impl PosNodeEngine {
                 payload.height, err
             ),
         })?;
-        self.record_synced_replication_height(
-            payload.height,
-            payload.block_hash.clone(),
-            payload.committed_at_ms,
-        )
+        Ok((payload.block_hash.clone(), payload.committed_at_ms))
+    }
+
+    pub(super) fn apply_synced_replication_commit(
+        &mut self,
+        world_id: &str,
+        payload: &ReplicationCommitPayload,
+        execution_hook: Option<&mut dyn NodeExecutionHook>,
+    ) -> Result<(), NodeError> {
+        let (block_hash, committed_at_ms) =
+            self.execute_synced_replication_commit(world_id, payload, execution_hook)?;
+        self.record_synced_replication_height(payload.height, block_hash, committed_at_ms)
     }
 
     pub(super) fn record_synced_replication_height(

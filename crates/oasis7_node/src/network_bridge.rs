@@ -44,7 +44,6 @@ struct CachedFetchCommitSuccess {
 
 pub(crate) struct GapSyncFetchCommitResponse {
     pub response: FetchCommitResponse,
-    pub from_cache: bool,
 }
 
 pub(crate) fn default_replication_topic(world_id: &str) -> String {
@@ -307,16 +306,10 @@ impl ReplicationNetworkEndpoint {
             )?;
         }
         if let Some(response) = self.cached_fetch_commit_success_response(request) {
-            return Ok(GapSyncFetchCommitResponse {
-                response,
-                from_cache: true,
-            });
+            return Ok(GapSyncFetchCommitResponse { response });
         }
         let response = self.request_json(REPLICATION_FETCH_COMMIT_PROTOCOL, request)?;
-        Ok(GapSyncFetchCommitResponse {
-            response,
-            from_cache: false,
-        })
+        Ok(GapSyncFetchCommitResponse { response })
     }
 
     pub(crate) fn remember_validated_fetch_commit_success(

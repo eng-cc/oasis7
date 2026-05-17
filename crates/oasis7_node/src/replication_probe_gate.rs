@@ -41,9 +41,10 @@ impl PosNodeEngine {
                 self.last_replication_successor_probe_height = None;
                 self.last_replication_successor_probe_at_ms = None;
                 self.last_replication_successor_probe_hold = None;
-                with_execution_hook(&mut execution_hook, |hook| {
-                    self.apply_synced_replication_commit(world_id, &payload, hook)
-                })?;
+                let (block_hash, committed_at_ms) =
+                    with_execution_hook(&mut execution_hook, |hook| {
+                        self.execute_synced_replication_commit(world_id, &payload, hook)
+                    })?;
                 self.persist_synced_replication_message(
                     endpoint,
                     node_id,
@@ -52,8 +53,16 @@ impl PosNodeEngine {
                     &message,
                     probe_height,
                 )?;
+                endpoint.remember_validated_fetch_commit_success(
+                    &replication_runtime.build_fetch_commit_request(world_id, probe_height)?,
+                    &FetchCommitResponse {
+                        found: true,
+                        message: Some(message.clone()),
+                    },
+                );
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(probe_height);
+                self.record_synced_replication_height(probe_height, block_hash, committed_at_ms)?;
                 Ok(true)
             }
             Ok(GapSyncHeightOutcome::NotFound) => {

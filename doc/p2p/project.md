@@ -674,9 +674,12 @@
     - `git diff --check`
 - [x] triad-current-version-full-game-nodes (PRD-P2P-026) [test_tier_required]: 用当前仓库版本升级本机 + 两台 ECS 三节点，并把 triad 收口到“三节点都是完整游戏节点”的 current release 基线；本机继续保留 player-entry 组件，三端同版 runtime 经过同步冷重置后复跑 same-window snapshot，需再次给出 `three_equal_validator` pass candidate。 Trace: .pm/tasks/task_160a5a96b32945999f7ef30a84e244d3.yaml
   - 产物文件:
+    - `crates/oasis7_node/src/lib.rs`
+    - `crates/oasis7_node/src/node_engine_network.rs`
     - `crates/oasis7_node/src/node_engine_replication.rs`
     - `crates/oasis7_node/src/replication_probe_gate.rs`
     - `crates/oasis7_node/src/tests_clock_and_replication.rs`
+    - `crates/oasis7_node/src/tests_network_gap_sync.rs`
     - `crates/oasis7_node/src/tests_network_gap_sync_execution_failures.rs`
     - `doc/p2p/project.md`
     - `doc/testing/evidence/p2p-real-env-triad-current-version-full-game-nodes-2026-05-16.md`
