@@ -489,6 +489,45 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
         recorded[0].headers.get("content-type").map(String::as_str),
         Some("application/json")
     );
+    let decision_request: crate::simulator::DecisionRequest =
+        serde_json::from_slice(recorded[0].body.as_slice())
+            .expect("decode provider-backed decision request");
+    let action_refs: Vec<&str> = decision_request
+        .observation
+        .action_catalog
+        .iter()
+        .map(|entry| entry.action_ref.as_str())
+        .collect();
+    for expected_action_ref in [
+        "harvest_radiation",
+        "mine_compound",
+        "refine_compound",
+        "build_factory",
+        "schedule_recipe",
+    ] {
+        assert!(
+            action_refs.contains(&expected_action_ref),
+            "provider-backed catalog should expose {expected_action_ref}: {:?}",
+            action_refs
+        );
+    }
+    let memory_summary = decision_request
+        .observation
+        .memory_summary
+        .as_deref()
+        .expect("provider-backed catalog should seed memory summary");
+    assert!(
+        memory_summary.contains("post_onboarding.establish_first_capability"),
+        "unexpected memory summary: {memory_summary}"
+    );
+    assert!(
+        memory_summary.contains("build_factory(factory.smelter.mk1)"),
+        "unexpected memory summary: {memory_summary}"
+    );
+    assert!(
+        memory_summary.contains("schedule_recipe("),
+        "unexpected memory summary: {memory_summary}"
+    );
     clear_runtime_provider_env();
 }
 

@@ -4,11 +4,10 @@ use crate::simulator::{
     ProviderExecutionMode, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
-use ed25519_dalek::SigningKey;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -19,117 +18,10 @@ mod chain_sync_feedback;
 mod industrial_progression;
 mod prompt_control;
 mod snapshot_progress;
+#[path = "tests_support.rs"]
+mod tests_support;
 
-const VIEWER_AGENT_DECISION_SOURCE_ENV: &str = "OASIS7_AGENT_DECISION_SOURCE";
-const VIEWER_AGENT_PROVIDER_BACKEND_ENV: &str = "OASIS7_AGENT_PROVIDER_BACKEND";
-const VIEWER_AGENT_PROVIDER_CONTRACT_ENV: &str = "OASIS7_AGENT_PROVIDER_CONTRACT";
-const VIEWER_AGENT_PROVIDER_TRANSPORT_ENV: &str = "OASIS7_AGENT_PROVIDER_TRANSPORT";
-const VIEWER_AGENT_PROVIDER_URL_ENV: &str = "OASIS7_AGENT_PROVIDER_URL";
-const VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV: &str = "OASIS7_AGENT_PROVIDER_AUTH_TOKEN";
-const VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV: &str =
-    "OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS";
-const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
-const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
-const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
-const RUNTIME_AGENT_CHAT_ECHO_ENV: &str = "OASIS7_RUNTIME_AGENT_CHAT_ECHO";
-const HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
-
-fn test_signer(seed: u8) -> (String, String) {
-    let private_key = [seed; 32];
-    let signing_key = SigningKey::from_bytes(&private_key);
-    (
-        hex::encode(signing_key.verifying_key().to_bytes()),
-        hex::encode(private_key),
-    )
-}
-
-fn lock_test_llm_env() -> std::sync::MutexGuard<'static, ()> {
-    let guard = runtime_provider_env_lock().lock().expect("env lock");
-    clear_runtime_provider_env();
-    std::env::set_var(crate::simulator::ENV_LLM_MODEL, "gpt-4o-mini");
-    std::env::set_var(
-        crate::simulator::ENV_LLM_BASE_URL,
-        "https://api.openai.com/v1",
-    );
-    std::env::set_var(crate::simulator::ENV_LLM_API_KEY, "test-api-key");
-    guard
-}
-
-fn clear_runtime_provider_env() {
-    let removed_old_brand_envs = [
-        removed_old_brand_runtime_live_env("AGENT_DECISION_SOURCE"),
-        removed_old_brand_runtime_live_env("AGENT_PROVIDER_BACKEND"),
-        removed_old_brand_runtime_live_env("AGENT_PROVIDER_CONTRACT"),
-        removed_old_brand_runtime_live_env("AGENT_PROVIDER_TRANSPORT"),
-        removed_old_brand_runtime_live_env("AGENT_PROVIDER_MODE"),
-        removed_old_brand_runtime_live_env("RUNTIME_AGENT_CHAT_ECHO"),
-    ];
-    for env_name in [
-        VIEWER_AGENT_DECISION_SOURCE_ENV,
-        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
-        VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
-        VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
-        VIEWER_AGENT_PROVIDER_MODE_ENV,
-        RUNTIME_AGENT_CHAT_ECHO_ENV,
-    ] {
-        std::env::remove_var(env_name);
-    }
-    for env_name in removed_old_brand_envs {
-        std::env::remove_var(env_name);
-    }
-}
-
-fn runtime_provider_env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
-
-fn clear_hosted_strong_auth_env() {
-    std::env::remove_var(HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV);
-}
-
-fn hosted_strong_auth_env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
-
-fn lock_test_hosted_strong_auth_env() -> std::sync::MutexGuard<'static, ()> {
-    let guard = hosted_strong_auth_env_lock().lock().expect("env lock");
-    clear_hosted_strong_auth_env();
-    guard
-}
-
-fn test_now_unix_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .try_into()
-        .unwrap_or(u64::MAX)
-}
-
-fn connect_runtime_live_client(addr: &str) -> (BufReader<TcpStream>, BufWriter<TcpStream>) {
-    let stream = TcpStream::connect(addr).expect("connect runtime live");
-    stream.set_nodelay(true).expect("set_nodelay");
-    stream
-        .set_read_timeout(Some(Duration::from_millis(500)))
-        .expect("set_read_timeout");
-    stream
-        .set_write_timeout(Some(Duration::from_millis(500)))
-        .expect("set_write_timeout");
-    let reader_stream = stream.try_clone().expect("clone stream");
-    let mut reader = BufReader::new(reader_stream);
-    let mut writer = BufWriter::new(stream);
-    send_runtime_live_request(
-        &mut writer,
-        &ViewerRequest::Hello {
-            client: "runtime-live-test".to_string(),
-            version: VIEWER_PROTOCOL_VERSION,
-        },
-    );
-    read_runtime_live_hello_ack(&mut reader);
-    (reader, writer)
-}
+use tests_support::*;
 
 fn send_runtime_live_request(writer: &mut BufWriter<TcpStream>, request: &ViewerRequest) {
     serde_json::to_writer(&mut *writer, request).expect("write request");
@@ -292,6 +184,7 @@ fn wait_for_runtime_live_server(addr: &str) {
 struct TestChainStatusServer {
     addr: String,
     committed_height: Arc<AtomicU64>,
+    release_security_policy: ReleaseSecurityPolicy,
     submitted_gameplay_requests: Arc<Mutex<Vec<crate::viewer::GameplayActionRequest>>>,
     stop: Arc<AtomicBool>,
     join_handle: Option<thread::JoinHandle<()>>,
@@ -299,6 +192,16 @@ struct TestChainStatusServer {
 
 impl TestChainStatusServer {
     fn start(execution_world_dir: std::path::PathBuf) -> Self {
+        Self::start_with_release_security_policy(
+            execution_world_dir,
+            ReleaseSecurityPolicy::production_hardened(),
+        )
+    }
+
+    fn start_with_release_security_policy(
+        execution_world_dir: std::path::PathBuf,
+        release_security_policy: ReleaseSecurityPolicy,
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind chain status server");
         listener
             .set_nonblocking(true)
@@ -312,6 +215,7 @@ impl TestChainStatusServer {
         let next_gameplay_action_id_for_thread = Arc::new(AtomicU64::new(1));
         let stop_for_thread = Arc::clone(&stop);
         let execution_world_dir_for_thread = execution_world_dir.clone();
+        let release_security_policy_for_thread = release_security_policy.clone();
         let join_handle = thread::spawn(move || loop {
             if stop_for_thread.load(Ordering::SeqCst) {
                 break;
@@ -341,6 +245,7 @@ impl TestChainStatusServer {
                                     "committed_height": committed_height_for_thread.load(Ordering::SeqCst),
                                 },
                                 "execution_world_dir": execution_world_dir_for_thread,
+                                "release_security_policy": release_security_policy_for_thread,
                             });
                             let body = serde_json::to_vec(&body).expect("encode chain status body");
                             let response = format!(
@@ -412,6 +317,7 @@ impl TestChainStatusServer {
         Self {
             addr: addr.to_string(),
             committed_height,
+            release_security_policy,
             submitted_gameplay_requests,
             stop,
             join_handle: Some(join_handle),
@@ -1004,7 +910,7 @@ fn runtime_simulator_action_mapping_covers_module_artifact_actions() {
 }
 
 #[test]
-fn runtime_simulator_action_mapping_keeps_unmapped_actions_as_none() {
+fn runtime_simulator_action_mapping_includes_industrial_actions() {
     let server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("runtime server");
@@ -1013,11 +919,66 @@ fn runtime_simulator_action_mapping_keeps_unmapped_actions_as_none() {
         owner: ResourceOwner::Agent {
             agent_id: "agent-1".to_string(),
         },
-        location_id: "loc-1".to_string(),
-        factory_id: "factory-1".to_string(),
-        factory_kind: "smelter".to_string(),
+        location_id: "runtime:10:20:0".to_string(),
+        factory_id: "factory.alpha".to_string(),
+        factory_kind: "factory.assembler.mk1".to_string(),
     };
-    assert!(control_plane::simulator_action_to_runtime(&build_factory, &server.world).is_none());
+    let build_mapped = control_plane::simulator_action_to_runtime(&build_factory, &server.world)
+        .expect("build factory action should map");
+    assert_eq!(
+        build_mapped,
+        RuntimeAction::BuildFactory {
+            builder_agent_id: "agent-1".to_string(),
+            site_id: "runtime:10:20:0".to_string(),
+            spec: crate::runtime::FactoryModuleSpec {
+                factory_id: "factory.alpha".to_string(),
+                display_name: "Assembler MK1".to_string(),
+                tier: 3,
+                tags: vec!["assembler".to_string(), "precision".to_string()],
+                build_cost: vec![
+                    crate::runtime::MaterialStack::new("structural_frame", 8),
+                    crate::runtime::MaterialStack::new("iron_ingot", 10),
+                    crate::runtime::MaterialStack::new("copper_wire", 8),
+                ],
+                build_time_ticks: 1,
+                base_power_draw: 20,
+                recipe_slots: 2,
+                throughput_bps: 10_000,
+                maintenance_per_tick: 1,
+            },
+        }
+    );
+
+    let schedule_recipe = crate::simulator::Action::ScheduleRecipe {
+        owner: ResourceOwner::Agent {
+            agent_id: "agent-1".to_string(),
+        },
+        factory_id: "factory.alpha".to_string(),
+        recipe_id: "recipe.assembler.control_chip".to_string(),
+        batches: 3,
+    };
+    let schedule_mapped =
+        control_plane::simulator_action_to_runtime(&schedule_recipe, &server.world)
+            .expect("schedule recipe action should map");
+    assert_eq!(
+        schedule_mapped,
+        RuntimeAction::ScheduleRecipe {
+            requester_agent_id: "agent-1".to_string(),
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: "recipe.assembler.control_chip".to_string(),
+            plan: crate::runtime::RecipeExecutionPlan::accepted(
+                3,
+                vec![
+                    crate::runtime::MaterialStack::new("copper_wire", 12),
+                    crate::runtime::MaterialStack::new("polymer_resin", 6),
+                ],
+                vec![crate::runtime::MaterialStack::new("control_chip", 3)],
+                vec![crate::runtime::MaterialStack::new("waste_resin", 3)],
+                18,
+                1,
+            ),
+        }
+    );
 
     let transfer_to_location = crate::simulator::Action::TransferResource {
         from: ResourceOwner::Agent {
@@ -1164,5 +1125,60 @@ fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
     );
     assert_eq!(server.world.state().time, initial_time);
     assert_eq!(server.last_chain_committed_height, 0);
+    assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
+}
+
+#[test]
+fn chain_linked_runtime_committed_height_zero_skips_bootstrap_execution_world_validation() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_zero_committed_height");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "chain-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    execution_world.step().expect("advance execution world");
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist execution world");
+
+    let chain_status = TestChainStatusServer::start_with_release_security_policy(
+        execution_world_dir,
+        ReleaseSecurityPolicy::default(),
+    );
+    chain_status.committed_height.store(0, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
+        action: "chain_sync".to_string(),
+        stage: "blocked".to_string(),
+        effect: "stale bootstrap execution world should be ignored before the first commit"
+            .to_string(),
+        intent_summary: None,
+        target_agent_id: None,
+        reason: Some("bootstrap-only".to_string()),
+        hint: Some("wait for first committed height".to_string()),
+        delta_logical_time: 0,
+        delta_event_seq: 0,
+    });
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    session.subscribed.insert(ViewerStream::Events);
+    session.subscribed.insert(ViewerStream::Snapshot);
+    let initial_time = server.world.state().time;
+    let (mut writer, peer) = test_writer_pair();
+
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("chain sync should ignore zero-height bootstrap state");
+
+    assert!(!progressed);
+    assert_eq!(server.world.state().time, initial_time);
+    assert_eq!(server.last_chain_committed_height, 0);
+    assert!(server.latest_player_gameplay_feedback.is_none());
     assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
 }

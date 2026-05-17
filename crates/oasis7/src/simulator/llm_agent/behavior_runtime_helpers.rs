@@ -669,8 +669,9 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     }
                 ]
             })),
-            "environment.current_observation" => serde_json::to_value(observation)
-                .map_err(|err| format!("serialize observation failed: {err}")),
+            "environment.current_observation" => {
+                self.environment_current_observation_module(observation)
+            }
             "memory.short_term.recent" => {
                 let limit = parse_limit_arg(request.args.get("limit"), 3, 8);
                 let mut entries: Vec<MemoryEntry> =

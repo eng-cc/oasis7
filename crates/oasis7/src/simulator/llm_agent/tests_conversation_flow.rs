@@ -881,6 +881,71 @@ fn openai_client_respects_configured_timeout_without_hidden_retry() {
     }
 }
 
+#[test]
+fn openai_client_retries_single_concurrency_limit_decode_failure() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind flaky openai server");
+    let bind = listener.local_addr().expect("listener addr");
+    thread::spawn(move || {
+        for attempt in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
+            let mut buffer = [0_u8; 4096];
+            let _ = stream.read(&mut buffer);
+            let event_payload = if attempt == 0 {
+                serde_json::json!({
+                    "error": {
+                        "type": "rate_limit_error",
+                        "message": "Concurrency limit exceeded for account, please retry later"
+                    }
+                })
+                .to_string()
+            } else {
+                serde_json::json!({
+                    "type": "response.completed",
+                    "sequence_number": 1,
+                    "response": {
+                        "id": "resp_retry_ok",
+                        "object": "response",
+                        "created_at": 1,
+                        "completed_at": 2,
+                        "model": "gpt-test",
+                        "output": [{
+                            "type": "function_call",
+                            "call_id": "call_decision",
+                            "name": "agent_submit_decision",
+                            "arguments": "{\"decision\":\"wait\"}"
+                        }],
+                        "status": "completed",
+                        "parallel_tool_calls": false
+                    }
+                })
+                .to_string()
+            };
+            let body = format!("data: {event_payload}\n\n");
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        }
+    });
+
+    let mut config = base_config();
+    config.timeout_ms = 1_000;
+    config.base_url = format!("http://{bind}/v1");
+    let client = OpenAiChatCompletionClient::from_config(&config).expect("client");
+    let request = LlmCompletionRequest {
+        model: config.model.clone(),
+        system_prompt: config.system_prompt.clone(),
+        user_prompt: "return wait".to_string(),
+        debug_mode: false,
+    };
+
+    let result = client.complete(&request).expect("client should retry once");
+    assert!(result.output.contains("\"decision\":\"wait\""));
+}
+
 fn spawn_slow_openai_like_server(response_delay: Duration) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind slow openai server");
     let bind = listener.local_addr().expect("listener addr");

@@ -260,6 +260,38 @@ pub(in crate::viewer::runtime_live) fn simulator_action_to_runtime(
             buyer_agent_id: buyer_agent_id.clone(),
             wasm_hash: wasm_hash.clone(),
         }),
+        SimulatorAction::BuildFactory {
+            owner,
+            location_id,
+            factory_id,
+            factory_kind,
+        } => match owner {
+            ResourceOwner::Agent { agent_id } => {
+                crate::viewer::gameplay_actions::runtime_factory_build_action(
+                    agent_id,
+                    location_id,
+                    factory_id,
+                    factory_kind,
+                )
+            }
+            _ => None,
+        },
+        SimulatorAction::ScheduleRecipe {
+            owner,
+            factory_id,
+            recipe_id,
+            batches,
+        } => match owner {
+            ResourceOwner::Agent { agent_id } => {
+                crate::viewer::gameplay_actions::runtime_schedule_recipe_action(
+                    agent_id,
+                    factory_id,
+                    recipe_id,
+                    (*batches).try_into().ok()?,
+                )
+            }
+            _ => None,
+        },
         SimulatorAction::DelistModuleArtifact {
             seller_agent_id,
             wasm_hash,

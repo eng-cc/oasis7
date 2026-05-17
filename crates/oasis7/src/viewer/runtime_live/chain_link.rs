@@ -1,6 +1,9 @@
 use super::*;
 
 use super::super::protocol::{GameplayActionError, GameplayActionRequest};
+use crate::runtime::{
+    production_hardened_main_token_config, MainTokenConfig, MainTokenSupplyState,
+};
 use std::net::ToSocketAddrs;
 
 const CHAIN_GAMEPLAY_SUBMIT_PATH: &str = "/v1/chain/gameplay/submit";
@@ -10,6 +13,7 @@ const CHAIN_LINK_TIMEOUT_MS: u64 = 300;
 struct ChainStatusSyncSnapshot {
     consensus: ChainStatusConsensusSnapshot,
     execution_world_dir: PathBuf,
+    release_security_policy: ReleaseSecurityPolicy,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -242,7 +246,16 @@ fn prepare_chain_linked_runtime_update(
     chain_status_bind: &str,
 ) -> Result<PreparedChainLinkedRuntimeUpdate, ViewerRuntimeLiveServerError> {
     let chain_status = fetch_chain_status_snapshot(chain_status_bind)?;
-    let world = load_chain_execution_world(chain_status.execution_world_dir.as_path())?;
+    if chain_status.consensus.committed_height == 0 {
+        return Ok(PreparedChainLinkedRuntimeUpdate {
+            committed_height: 0,
+            world: RuntimeWorld::new_production_hardened(),
+        });
+    }
+    let world = load_chain_execution_world(
+        chain_status.execution_world_dir.as_path(),
+        chain_status.release_security_policy,
+    )?;
     Ok(PreparedChainLinkedRuntimeUpdate {
         committed_height: chain_status.consensus.committed_height,
         world,
@@ -377,8 +390,9 @@ fn gameplay_chain_submit_error(
     }
 }
 
-fn load_chain_execution_world(
+pub(super) fn load_chain_execution_world(
     execution_world_dir: &Path,
+    release_security_policy: ReleaseSecurityPolicy,
 ) -> Result<RuntimeWorld, ViewerRuntimeLiveServerError> {
     let snapshot_path = execution_world_dir.join("snapshot.json");
     let journal_path = execution_world_dir.join("journal.json");
@@ -398,7 +412,41 @@ fn load_chain_execution_world(
 
     RuntimeWorld::load_from_dir(execution_world_dir)
         .map(|world| {
-            world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
+            let mut world = world.with_release_security_policy(release_security_policy.clone());
+            normalize_chain_execution_world_main_token_config(&mut world, release_security_policy);
+            world
         })
         .map_err(ViewerRuntimeLiveServerError::Runtime)
+}
+
+fn normalize_chain_execution_world_main_token_config(
+    world: &mut RuntimeWorld,
+    release_security_policy: ReleaseSecurityPolicy,
+) {
+    if release_security_policy.is_production_hardened() {
+        if world.main_token_config() == &MainTokenConfig::default() {
+            world.set_main_token_config(production_hardened_main_token_config());
+        }
+        return;
+    }
+
+    let state = world.state();
+    let pristine_main_token_state = state.main_token_supply == MainTokenSupplyState::default()
+        && state.main_token_balances.is_empty()
+        && state.main_token_genesis_buckets.is_empty()
+        && state.main_token_epoch_issuance_records.is_empty()
+        && state.main_token_treasury_balances.is_empty()
+        && state.main_token_claim_nonces.is_empty()
+        && state.main_token_transfer_nonces.is_empty()
+        && state.main_token_scheduled_policy_updates.is_empty()
+        && state.main_token_treasury_distribution_records.is_empty()
+        && state.main_token_node_points_bridge_records.is_empty()
+        && state
+            .restricted_starter_claim_liveops_pool_top_up_records
+            .is_empty();
+    if pristine_main_token_state
+        && world.main_token_config() == &production_hardened_main_token_config()
+    {
+        world.set_main_token_config(MainTokenConfig::default());
+    }
 }

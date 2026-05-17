@@ -1,4 +1,6 @@
 use super::*;
+use crate::runtime::{MainTokenConfig, ReleaseSecurityPolicy};
+use crate::viewer::runtime_live::chain_link::load_chain_execution_world;
 
 #[test]
 fn chain_linked_runtime_missing_persistence_keeps_world_and_height() {
@@ -76,4 +78,30 @@ fn chain_linked_runtime_missing_persistence_without_subscription_does_not_poison
     assert_eq!(server.world.state().time, initial_time);
     assert!(server.latest_player_gameplay_feedback.is_none());
     assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
+}
+
+#[test]
+fn chain_linked_runtime_dev_local_policy_normalizes_main_token_config_before_verifying_tick_consensus(
+) {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_dev_local_main_token_normalize");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "chain-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    execution_world.step().expect("advance execution world");
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist execution world");
+
+    let world = load_chain_execution_world(
+        execution_world_dir.as_path(),
+        ReleaseSecurityPolicy::default(),
+    )
+    .expect("dev-local viewer load should normalize persisted execution world");
+
+    assert_eq!(world.main_token_config(), &MainTokenConfig::default());
+    world
+        .verify_tick_consensus_chain()
+        .expect("viewer world should retain a valid tick consensus chain");
 }

@@ -61,7 +61,7 @@
   - AC-7: 若玩家无法显式中断、改道或重新聚焦主目标，只能被动等待 agent 自行推进，则判定为 agency weakened，即便世界仍在持续运行。
   - AC-8: 本专题必须给出未来 UX/runtime/agent 变更的判据：增强型变更至少强化 1 条 guarantee 且不削弱其余 guarantee；任何削弱 accepted intent、主因果、重排入口或续玩恢复的变更都必须经 `producer_system_designer` 显式裁决。
   - AC-9: 本专题完成后，`game` 根 PRD / project、`gameplay` 主文档、索引与当前 task execution log 必须互链到 `PRD-GAME-014` 与 `TASK-GAME-071~075`。
-  - AC-10: 当前阶段口径继续保持 `internal_playable_alpha_late`、`trust gate = hold`、`first capability gate = not_run`；本专题不允许被包装成“issue #160 已解决”或“正式留存已恢复”。
+  - AC-10: 当前阶段口径继续保持 `internal_playable_alpha_late`，且本专题自身不允许被单独包装成“issue #160 已解决”或“正式留存已恢复”；`#160` 的 closeout 必须继续以独立 formal evidence 为准，而不是把 control-feeling 文档当作替代证据。
 - Non-Goals:
   - 不把 oasis7 改成第一人称直接操作或逐块建造游戏。
   - 不在本专题中直接修复 active-LLM provider、runtime freeze 或 capability gate 本身；这些仍由对应实现任务负责。

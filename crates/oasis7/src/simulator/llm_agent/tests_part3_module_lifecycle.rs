@@ -418,6 +418,77 @@ fn llm_agent_oasis7_rules_guide_module_returns_stage_playbook() {
 }
 
 #[test]
+fn llm_agent_current_observation_module_exposes_build_ready_context() {
+    let behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+    let mut observation = make_observation();
+    observation.visible_locations = vec![ObservedLocation {
+        location_id: "loc-build".to_string(),
+        name: "build-site".to_string(),
+        pos: GeoPos {
+            x_cm: 0,
+            y_cm: 0,
+            z_cm: 0,
+        },
+        profile: Default::default(),
+        distance_cm: 0,
+    }];
+
+    let result = behavior.run_prompt_module(
+        &LlmModuleCallRequest {
+            module: "environment.current_observation".to_string(),
+            args: serde_json::json!({}),
+        },
+        &observation,
+    );
+
+    assert_eq!(
+        result.get("ok").and_then(|value| value.as_bool()),
+        Some(true)
+    );
+    let module_result = result.get("result").expect("current observation result");
+    assert_eq!(
+        module_result
+            .get("current_location_id")
+            .and_then(|value| value.as_str()),
+        Some("loc-build")
+    );
+    assert_eq!(
+        module_result
+            .get("can_build_factory_smelter_mk1_now")
+            .and_then(|value| value.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        module_result
+            .get("missing_build_prerequisites")
+            .and_then(|value| value.as_array())
+            .map(|items| items.len()),
+        Some(0)
+    );
+    assert_eq!(
+        module_result
+            .get("recommended_build_factory_action")
+            .and_then(|value| value.get("decision"))
+            .and_then(|value| value.as_str()),
+        Some("build_factory")
+    );
+    assert_eq!(
+        module_result
+            .get("recommended_build_factory_action")
+            .and_then(|value| value.get("location_id"))
+            .and_then(|value| value.as_str()),
+        Some("loc-build")
+    );
+    assert_eq!(
+        module_result
+            .get("factory_build_costs_default")
+            .and_then(|value| value.get("electricity"))
+            .and_then(|value| value.as_i64()),
+        Some(10)
+    );
+}
+
+#[test]
 fn llm_agent_power_order_book_status_module_reads_snapshot_with_limit() {
     let behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
     let mut observation = make_observation();
