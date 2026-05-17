@@ -45,5 +45,9 @@ manifest_path="$tmpdir/public-testnet-smoke.json"
 ./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-mainnet.example.json >/dev/null
 ./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json >/dev/null
 ./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-mainnet.example.json >/dev/null
+./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json >/dev/null
+./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest "$manifest_path" \
+  --lanes-tsv doc/testing/templates/public-testnet-readiness-lanes.example.tsv >/dev/null
 
 echo "network-tier-manifest smoke passed"

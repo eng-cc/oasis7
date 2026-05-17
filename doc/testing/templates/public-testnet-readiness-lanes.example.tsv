@@ -1,0 +1,8 @@
+# lane_id	owner	status	evidence_path	note
+shared_devnet_pass	qa_engineer	pass	doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-03-24.md	replace with the latest shared_devnet pass evidence used as public_testnet source
+public_rpc_ready	runtime_engineer	partial	doc/testing/evidence/public-testnet-skeleton-example.md	replace with public RPC reachability and freshness evidence
+explorer_public_ready	runtime_engineer	partial	doc/testing/evidence/public-testnet-skeleton-example.md	replace with public explorer reachability and freshness evidence
+faucet_guard_ready	liveops_community	partial	doc/testing/evidence/public-testnet-skeleton-example.md	replace with guarded faucet boundary and abuse controls evidence
+reset_policy_announced	liveops_community	partial	doc/testing/evidence/public-testnet-skeleton-example.md	replace with published reset policy and rehearsal note
+runtime_bootstrap	runtime_engineer	partial	doc/testing/templates/public-testnet-rehearsal-template.md	replace with runtime bootstrap and /v1/chain/status evidence
+claims_boundary_review	qa_engineer	partial	doc/testing/templates/public-testnet-exit-review-template.md	replace with claims boundary review and denylist confirmation
