@@ -1,0 +1,23 @@
+task_uid: task_7a279b3f05a34def8d75f86ce2ede4e7
+title: "formal public_testnet readiness gate"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-public-testnet-readiness-gate
+execution_log_path: .pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/project.md
+  - doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md
+  - testing-manual.md
+doc_refs: []
+related_prd:
+  - PRD-P2P-028
+acceptance:
+  - "repo-owned public_testnet readiness review script distinguishes skeleton from live candidate evidence"
+  - "p2p docs and testing manual define required live public_testnet evidence and verdict states"
+  - "required-tier smoke validates the new readiness gate path"
+handoff_to: []
+updated_at: 2026-05-17T23:01:52+08:00
+last_started_at: 2026-05-17T22:53:48+08:00
+last_closed_at: 2026-05-17T23:01:52+08:00

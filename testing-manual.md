@@ -969,6 +969,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   --manifest doc/testing/templates/network-tier-public-testnet.example.json
 ./scripts/network-tier-exit-review.sh \
   --manifest doc/testing/templates/network-tier-mainnet.example.json
+./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest doc/testing/templates/network-tier-public-testnet.example.json
 ./scripts/network-tier-manifest-smoke.sh
 ```
 - 当前 `network_tier_manifest` 最小职责：
@@ -982,6 +984,12 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `oasis7_chain_runtime --network-tier-manifest <path>` 可从 manifest 读取 `chain_id/world_id/bootstrap_peer_ref` 默认值，并在 `/v1/chain/status` 暴露 formal `tier/status`。
   - `oasis7_game_launcher` 与 `oasis7_web_launcher` 支持 `chain_network_tier_manifest` 透传，不再要求 manifest 模式下重复手填同一套 tier 基本参数。
   - `./scripts/network-tier-exit-review.sh` 可把 `public_testnet` 的 rehearsal gate 和 `mainnet` 的 `MAINNET-1~4` gate 汇总成最小 exit-review 输入。
+  - `./scripts/network-tier-public-testnet-readiness.sh` 可把 `public_testnet` 的 skeleton manifest、lane evidence 与 claims boundary 汇总成 `specified_skeleton_only|partial|block|ready_for_live_candidate` verdict。
+- `public_testnet` readiness review 规则：
+  - 只有 manifest、没有 lane evidence 时，`specified_skeleton_only` 仍只代表 skeleton，不代表可部署。
+  - 要进入 live candidate 评审，至少要补齐 `shared_devnet_pass/public_rpc_ready/explorer_public_ready/faucet_guard_ready/reset_policy_announced/runtime_bootstrap/claims_boundary_review` 七条 lane。
+  - 示例 lane scaffold: `doc/testing/templates/public-testnet-readiness-lanes.example.tsv`
+  - 示例 placeholder evidence: `doc/testing/evidence/public-testnet-skeleton-example.md`
 - 当前边界：
   - `shared_devnet` 没有 public RPC/explorer/faucet/reset contract 时，不得叫 `public_testnet`
   - `mainnet` 只要不是 `faucet_mode=none`、`reset_policy=frozen`、`governance_registry_only` 并且缺 `MAINNET-1~4`，就不得叫 `mainnet`

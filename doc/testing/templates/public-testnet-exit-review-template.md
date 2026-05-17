@@ -27,3 +27,5 @@
 - blockers:
   - `<blocker-1>`
 
+## Readiness review input
+- `./scripts/network-tier-public-testnet-readiness.sh --manifest <manifest> --lanes-tsv <lanes.tsv>`

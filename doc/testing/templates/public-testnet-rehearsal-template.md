@@ -36,3 +36,6 @@
 - open_blockers:
   - `<blocker-1>`
 
+## Follow-up
+- readiness_review_command:
+  - `./scripts/network-tier-public-testnet-readiness.sh --manifest <manifest> --lanes-tsv <lanes.tsv>`
