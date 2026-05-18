@@ -1,0 +1,18 @@
+task_uid: task_fd98df36264944238538dea896ce4ce0
+title: "formalize hosted public join managed identity and centralized custody architecture"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-hosted-public-join-managed-custody
+execution_log_path: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/prd.md
+  - doc/p2p/project.md
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-18T21:01:00+08:00
+last_started_at: 2026-05-18T20:36:27+08:00
+last_closed_at: 2026-05-18T21:01:00+08:00
