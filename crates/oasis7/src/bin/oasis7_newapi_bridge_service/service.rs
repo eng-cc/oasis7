@@ -266,7 +266,14 @@ impl BridgeService {
                 Ok(bind_response(&binding, &project_binding, false))
             })
             .map_err(|err| map_store_error(err, "persist bind bridge user failed"))?;
-        self.ensure_inference_binding_ready(response.bridge_user_id.as_str(), now_unix_ms)?;
+        if let Err(err) =
+            self.ensure_inference_binding_ready(response.bridge_user_id.as_str(), now_unix_ms)
+        {
+            if !response.reused_existing_binding {
+                self.rollback_new_binding(response.bridge_user_id.as_str())?;
+            }
+            return Err(err);
+        }
         Ok(response)
     }
 
@@ -490,6 +497,18 @@ impl BridgeService {
 
     pub(super) fn max_credit_attempts(&self) -> u32 {
         self.config.max_credit_attempts.max(1)
+    }
+
+    fn rollback_new_binding(&self, bridge_user_id: &str) -> Result<(), BridgeServiceError> {
+        self.store_mutate(|state| {
+            state
+                .bindings
+                .retain(|binding| binding.bridge_user_id != bridge_user_id);
+            state
+                .project_bindings
+                .retain(|project| project.bridge_user_id != bridge_user_id);
+            Ok(())
+        })
     }
 
     pub(super) fn letai_parent_channel_id(&self) -> Option<String> {

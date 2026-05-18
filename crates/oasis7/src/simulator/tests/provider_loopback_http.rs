@@ -205,6 +205,18 @@ fn provider_http_client_rejects_remote_http_for_remote_https_transport() {
 }
 
 #[test]
+fn provider_http_client_rejects_loopback_remote_https_host() {
+    let err = ProviderLoopbackHttpClient::new_with_transport(
+        "https://127.0.0.1:5841",
+        None,
+        200,
+        "remote_https",
+    )
+    .expect_err("loopback remote https host should fail");
+    assert!(err.to_string().contains("public remote https host"));
+}
+
+#[test]
 fn provider_loopback_http_client_surfaces_http_401_on_decision() {
     let base_url = spawn_mock_http_server(1, |_| MockHttpResponse {
         status_code: 401,

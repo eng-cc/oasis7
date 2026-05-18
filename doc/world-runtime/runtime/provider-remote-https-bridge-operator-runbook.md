@@ -100,7 +100,7 @@ OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH=/path/to/newapi-bridge/bridge-state.j
 
 此时:
 
-- Client 传 `--agent-provider-auth-token <newapi_user_ref>`，bridge 会自动按 `newapi_user_ref` 找 `token_key`
+- Client 传 `--agent-provider-auth-token newapi_user_ref:<user_ref>`，bridge 会自动按 `newapi_user_ref` 找 `token_key`
 - 或传 `--agent-provider-auth-token bridge_user_id:<id>`，bridge 会按 `bridge_user_id` 查找
 - 不再需要 `/etc/oasis7/remote-provider-auth-routes.json`
 - 不再需要 `/etc/oasis7/remote-provider-llm-routes.json`
@@ -173,6 +173,12 @@ curl -sS -H "Authorization: Bearer <token>" https://t2t.oasis7.tech/v1/provider/
 curl -sS -H "Authorization: Bearer <token>" https://t2t.oasis7.tech/v1/provider/health
 ```
 
+若 LetAI 上游对默认 `oasis7-letai-provider-cli/1.0` User-Agent 做了额外拦截，可在 env 里显式覆写:
+
+```bash
+OASIS7_REMOTE_LLM_USER_AGENT=curl/8.5.0
+```
+
 ## Runtime 接入
 
 ```bash
@@ -195,4 +201,4 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
 - 该参考装配复用了 `oasis7_provider_local_bridge` 的 provider contract 和 prompt/decision parser，因此 `provider_id` 仍会表现为 `provider_local_bridge`。
 - `provider_health` 默认通过 `OASIS7_REMOTE_LLM_HEALTH_URL` 做 upstream 探针；若 LetAI/兼容服务不支持该路径，需要显式改成可用的健康检查地址。
 - 在未提供真实 LetAI `api_key/model` 前，ECS 端只能部署模板和二进制，不能完成最终 smoke。
-- per-user mode 当前按“请求 bearer token”选择上游 `token_key`；如果后续需要按 `newapi_user_ref`、链上账户或 runtime claim 身份路由，需要再把用户身份显式带进 provider contract。
+- 自动映射模式当前只接受 `newapi_user_ref:<user_ref>` / `bridge_user_id:<id>` 这类显式 bearer selector；不再接受裸 `newapi_user_ref`，避免把可猜测的短字符串直接当作公网 bridge token。

@@ -12,7 +12,7 @@ DEFAULT_BASE_URL = "https://api.letai.run/v1"
 DEFAULT_TIMEOUT_MS = 15000
 DEFAULT_MAX_OUTPUT_TOKENS = 256
 DEFAULT_TEMPERATURE = 0.0
-DEFAULT_USER_AGENT = "curl/8.5.0"
+DEFAULT_USER_AGENT = "oasis7-letai-provider-cli/1.0"
 
 
 def env_required(*names: str) -> str:
@@ -70,6 +70,11 @@ def load_route_config() -> dict:
     route_label = env_optional("OASIS7_REMOTE_LLM_ROUTE_LABEL")
     routes_path = env_optional("OASIS7_REMOTE_LLM_ROUTES_PATH")
     if not routes_path:
+        if route_label and not env_optional("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH"):
+            raise RuntimeError(
+                "OASIS7_REMOTE_LLM_ROUTE_LABEL requires either "
+                "OASIS7_REMOTE_LLM_ROUTES_PATH or OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH"
+            )
         return load_newapi_bridge_state_route(route_label)
     try:
         with open(routes_path, "r", encoding="utf-8") as handle:
@@ -85,11 +90,9 @@ def load_route_config() -> dict:
     lookup_label = route_label or "default"
     route = payload.get(lookup_label)
     if route is None:
-        if route_label:
-            raise RuntimeError(
-                f"route config `{lookup_label}` was not found in OASIS7_REMOTE_LLM_ROUTES_PATH"
-            )
-        return load_newapi_bridge_state_route(route_label)
+        raise RuntimeError(
+            f"route config `{lookup_label}` was not found in OASIS7_REMOTE_LLM_ROUTES_PATH"
+        )
     if not isinstance(route, dict):
         raise RuntimeError(f"route config `{lookup_label}` must be a JSON object")
     return route
@@ -153,6 +156,8 @@ def resolve_newapi_binding(bindings: list, route_label: str) -> dict | None:
         elif prefix == "bridge_user_id" and value:
             by_ref = ""
             by_bridge_user_id = value
+        else:
+            return None
     for entry in bindings:
         if not isinstance(entry, dict):
             continue
@@ -234,6 +239,8 @@ def parse_gateway_call(argv: list[str]) -> tuple[str, int, str]:
             # `agent --timeout` comes from the local embedded fallback path, which
             # still passes seconds rather than milliseconds.
             timeout_ms = int(argv[index]) * 1000
+        else:
+            raise RuntimeError(f"unknown gateway flag: {flag}")
         index += 1
     if not params:
         raise RuntimeError("gateway call requires --params")
@@ -268,6 +275,8 @@ def parse_local_agent(argv: list[str]) -> tuple[str, int, str]:
             if index >= len(argv):
                 raise RuntimeError("--agent requires a value")
             agent_id = argv[index].strip() or agent_id
+        else:
+            raise RuntimeError(f"unknown agent flag: {flag}")
         index += 1
     if not prompt.strip():
         raise RuntimeError("agent invocation missing --message")
@@ -353,6 +362,13 @@ def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
         "OASIS7_REMOTE_LLM_RESPONSE_FORMAT_JSON_OBJECT",
         "LETAI_RESPONSE_FORMAT_JSON_OBJECT",
     )
+    use_stream = route_or_env_bool(
+        route,
+        "stream",
+        False,
+        "OASIS7_REMOTE_LLM_STREAM",
+        "LETAI_STREAM",
+    )
 
     messages = []
     if system_prompt:
@@ -363,7 +379,7 @@ def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
         "model": model,
         "messages": messages,
         "temperature": temperature,
-        "stream": True,
+        "stream": use_stream,
         "max_tokens": max_output_tokens,
         "user": f"oasis7-provider:{agent_id}",
     }
@@ -379,8 +395,12 @@ def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
     started = time.time()
     try:
         with urllib.request.urlopen(request, timeout=max(timeout_ms, 1000) / 1000.0) as response:
-            payload = response.read().decode("utf-8")
             status_code = response.status
+            if use_stream:
+                decoded, content, usage = decode_sse_completion_stream(response)
+            else:
+                payload = response.read().decode("utf-8")
+                decoded, content, usage = decode_completion_payload(payload)
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"upstream chat completion returned HTTP {exc.code}: {detail}") from exc
@@ -389,7 +409,6 @@ def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
 
     if status_code < 200 or status_code >= 300:
         raise RuntimeError(f"upstream chat completion returned unexpected HTTP {status_code}")
-    decoded, content, usage = decode_completion_payload(payload)
     duration_ms = int((time.time() - started) * 1000)
     return {
         "payloads": [{"text": content}],
@@ -429,12 +448,12 @@ def decode_completion_payload(payload: str) -> tuple[dict, str, dict]:
     return decoded, content, usage
 
 
-def decode_sse_completion_payload(payload: str) -> tuple[dict, str, dict]:
+def decode_sse_completion_stream(response) -> tuple[dict, str, dict]:
     text_parts: list[str] = []
     usage: dict = {}
     last_chunk: dict = {}
-    for raw_line in payload.splitlines():
-        line = raw_line.strip()
+    for raw_line in response:
+        line = raw_line.decode("utf-8", errors="replace").strip()
         if not line or not line.startswith("data:"):
             continue
         data = line[5:].strip()
@@ -462,6 +481,12 @@ def decode_sse_completion_payload(payload: str) -> tuple[dict, str, dict]:
     if not content:
         raise RuntimeError("upstream SSE response did not contain assistant content")
     return last_chunk, content, usage
+
+
+def decode_sse_completion_payload(payload: str) -> tuple[dict, str, dict]:
+    return decode_sse_completion_stream(
+        [f"{line}\n".encode("utf-8") for line in payload.splitlines()]
+    )
 
 
 def main() -> int:

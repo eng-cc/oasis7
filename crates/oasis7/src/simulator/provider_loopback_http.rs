@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt;
+use std::net::IpAddr;
 use std::time::Duration;
 
 use reqwest::blocking::{Client, RequestBuilder};
@@ -451,6 +452,11 @@ pub fn validate_provider_http_base_url(
                     "scheme must be https for remote provider transport".to_string(),
                 ));
             }
+            if !is_public_remote_https_host(host) {
+                return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
+                    "host must be a public remote https host".to_string(),
+                ));
+            }
         }
         _ => {
             return Err(ProviderLoopbackHttpError::InvalidBaseUrl(format!(
@@ -459,4 +465,17 @@ pub fn validate_provider_http_base_url(
         }
     }
     Ok(url)
+}
+
+fn is_public_remote_https_host(host: &str) -> bool {
+    if matches!(host.trim(), "127.0.0.1" | "localhost" | "::1") {
+        return false;
+    }
+    let Ok(ip) = host.parse::<IpAddr>() else {
+        return true;
+    };
+    match ip {
+        IpAddr::V4(ipv4) => !ipv4.is_private() && !ipv4.is_loopback() && !ipv4.is_link_local(),
+        IpAddr::V6(ipv6) => !ipv6.is_loopback() && !ipv6.is_unicast_link_local(),
+    }
 }
