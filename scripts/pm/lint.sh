@@ -56,6 +56,8 @@ require_file "scripts/pm/memory-report.sh"
 require_file "scripts/pm/migrate-task-identity.sh"
 require_file "scripts/pm/move-task.sh"
 require_file "scripts/pm/new-task.sh"
+require_file "scripts/pm/pm_store_cli.py"
+require_file "scripts/pm/pm_store_docio.py"
 require_file "scripts/pm/pm_store.py"
 require_file "scripts/pm/promote-memory.sh"
 require_file "scripts/pm/promote-signal.sh"
@@ -105,6 +107,10 @@ fi
 ./scripts/pm/reflection-report.sh --json >/dev/null
 ./scripts/pm/role-report.sh --json >/dev/null
 ./scripts/pm/workflow-report.sh --role producer_system_designer --phase review --json >/dev/null
+python3 -m py_compile \
+  "$SCRIPT_DIR/pm_store.py" \
+  "$SCRIPT_DIR/pm_store_cli.py" \
+  "$SCRIPT_DIR/pm_store_docio.py"
 python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR"
 ./scripts/pm/task-execution-log-lint.sh >/dev/null
 
