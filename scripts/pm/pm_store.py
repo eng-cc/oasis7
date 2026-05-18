@@ -20,6 +20,27 @@ from pm_store_docio import (
     parse_key_value,
     parse_scalar,
 )
+from pm_store_reporting import (
+    build_memory_report as build_memory_report_helper,
+    build_reflection_summary as build_reflection_summary_helper,
+    build_role_report as build_role_report_helper,
+    build_signal_summary as build_signal_summary_helper,
+    build_workflow_checklist as build_workflow_checklist_helper,
+    build_workflow_report as build_workflow_report_helper,
+    cmd_memory_report as cmd_memory_report_helper,
+    cmd_reflection_report as cmd_reflection_report_helper,
+    cmd_role_report as cmd_role_report_helper,
+    cmd_workflow_report as cmd_workflow_report_helper,
+    cmd_working_memory_report as cmd_working_memory_report_helper,
+)
+from pm_store_stage import (
+    build_stage_report as build_stage_report_helper,
+    cmd_set_stage as cmd_set_stage_helper,
+    cmd_stage_lint as cmd_stage_lint_helper,
+    cmd_stage_report as cmd_stage_report_helper,
+    run_stage_lint as run_stage_lint_helper,
+)
+from pm_store_task_lint import run_task_backlog_lint as run_task_backlog_lint_helper
 TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
 TASK_STATUSES = {"candidate", "committed", "blocked", "done", "deferred"}
 LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
@@ -1886,352 +1907,57 @@ def build_memory_report(
     include_shared: bool,
     stale_after_days: int,
 ) -> dict[str, object]:
-    stale_cutoff = datetime.now().astimezone() - timedelta(days=stale_after_days)
-    active_records: list[dict[str, object]] = []
-    needs_review_records: list[dict[str, object]] = []
-    superseded_records: list[dict[str, object]] = []
-    role_summary: OrderedDict[str, OrderedDict[str, int]] = OrderedDict()
-    eligible_roles = sorted(load_roles(root))
-    if include_shared:
-        eligible_roles.append("shared")
-
-    def include_owner(owner: str) -> bool:
-        if role_filter and owner != role_filter:
-            return False
-        if owner == "shared":
-            return include_shared
-        return True
-
-    def ensure_role_summary(owner: str) -> OrderedDict[str, int]:
-        if owner not in role_summary:
-            role_summary[owner] = OrderedDict(
-                [
-                    ("active", 0),
-                    ("needs_review", 0),
-                    ("superseded", 0),
-                ]
-            )
-        return role_summary[owner]
-
-    for owner in eligible_roles:
-        if include_owner(owner):
-            ensure_role_summary(owner)
-
-    def shape_record(owner: str, record: OrderedDict[str, object]) -> dict[str, object]:
-        last_reviewed_at = parse_timestamp(record["last_reviewed_at"])
-        review_state = "needs_review" if record.get("status") == "active" and last_reviewed_at <= stale_cutoff else "fresh"
-        payload: OrderedDict[str, object] = OrderedDict(
-            [
-                ("id", record.get("id")),
-                ("role", owner if owner != "shared" else "shared"),
-                ("topic", record.get("topic")),
-                ("status", record.get("status")),
-                ("summary", record.get("summary")),
-                ("effective_at", record.get("effective_at")),
-                ("last_reviewed_at", record.get("last_reviewed_at")),
-                ("review_state", review_state),
-                ("source_refs", list(record.get("source_refs", []))),
-                ("tags", list(record.get("tags", []))),
-            ]
-        )
-        if record.get("status") == "active":
-            payload["confidence"] = record.get("confidence")
-            payload["promotion_reason"] = record.get("promotion_reason")
-        else:
-            payload["superseded_at"] = record.get("superseded_at")
-            payload["superseded_by"] = record.get("superseded_by")
-            payload["supersede_reason"] = record.get("supersede_reason")
-        return payload
-
-    for _, _, owner, record in iter_memory_records(root):
-        if not include_owner(owner):
-            continue
-        shaped = shape_record(owner, record)
-        summary = ensure_role_summary(owner)
-        if record.get("status") == "active":
-            active_records.append(shaped)
-            summary["active"] += 1
-            if shaped["review_state"] == "needs_review":
-                needs_review_records.append(shaped)
-                summary["needs_review"] += 1
-        else:
-            superseded_records.append(shaped)
-            summary["superseded"] += 1
-
-    active_records.sort(key=lambda item: (str(item["role"]), str(item["topic"]), str(item["effective_at"])), reverse=False)
-    needs_review_records.sort(key=lambda item: str(item["last_reviewed_at"]))
-    superseded_records.sort(key=lambda item: str(item.get("superseded_at") or ""), reverse=True)
-
-    return {
-        "generated_at": now_iso(),
-        "stale_after_days": stale_after_days,
-        "role_filter": role_filter,
-        "include_shared": include_shared,
-        "counts": {
-            "active": len(active_records),
-            "needs_review": len(needs_review_records),
-            "superseded": len(superseded_records),
-        },
-        "roles": role_summary,
-        "active": active_records,
-        "needs_review": needs_review_records,
-        "superseded": superseded_records,
-    }
-
-
-def task_sort_key(item: dict[str, object]) -> tuple[object, object, object]:
-    return (
-        PRIORITY_ORDER.get(str(item.get("priority")), 99),
-        str(item.get("updated_at") or ""),
-        str(item.get("task_uid") or ""),
+    return build_memory_report_helper(
+        root,
+        role_filter,
+        include_shared,
+        stale_after_days,
+        now_iso=now_iso,
+        load_roles=load_roles,
+        parse_timestamp=parse_timestamp,
+        iter_memory_records=iter_memory_records,
     )
-
-
-def normalize_list_field(value: object) -> list[object]:
-    if isinstance(value, list):
-        return list(value)
-    if value in {None, ""}:
-        return []
-    return [value]
 
 
 def build_role_report(root: pathlib.Path, role_filter: str | None, stale_after_days: int) -> dict[str, object]:
-    sync_task_views(root)
-    roles = sorted(load_roles(root))
-    if role_filter and role_filter not in roles:
-        raise ValueError(f"unknown role: {role_filter}")
-
-    included_roles = [role_filter] if role_filter else roles
-    memory_report = build_memory_report(
+    return build_role_report_helper(
         root,
-        role_filter=role_filter,
-        include_shared=False,
-        stale_after_days=stale_after_days,
+        role_filter,
+        stale_after_days,
+        now_iso=now_iso,
+        sync_task_views=sync_task_views,
+        load_roles=load_roles,
+        build_memory_report_impl=build_memory_report,
+        load_list_document=load_list_document,
+        task_registry_path=task_registry_path,
+        load_mapping_document=load_mapping_document,
+        role_backlog_path=role_backlog_path,
+        priority_order=PRIORITY_ORDER,
     )
-
-    registry_header, registry_entries = load_list_document(task_registry_path(root), "tasks")
-    del registry_header
-    registry_by_id: dict[str, OrderedDict[str, object]] = {
-        str(entry["task_uid"]): entry for entry in registry_entries if entry.get("task_uid")
-    }
-    task_field_cache: dict[str, OrderedDict[str, object]] = {}
-
-    active_by_role: dict[str, list[dict[str, object]]] = {role: [] for role in included_roles}
-    needs_review_by_role: dict[str, list[dict[str, object]]] = {role: [] for role in included_roles}
-    superseded_by_role: dict[str, list[dict[str, object]]] = {role: [] for role in included_roles}
-
-    for item in memory_report["active"]:
-        active_by_role[str(item["role"])].append(item)
-    for item in memory_report["needs_review"]:
-        needs_review_by_role[str(item["role"])].append(item)
-    for item in memory_report["superseded"]:
-        superseded_by_role[str(item["role"])].append(item)
-
-    def load_task_fields(task_path: str | None) -> OrderedDict[str, object]:
-        if not task_path:
-            return OrderedDict()
-        if task_path not in task_field_cache:
-            resolved = root / task_path
-            task_field_cache[task_path] = load_mapping_document(resolved) if resolved.is_file() else OrderedDict()
-        return task_field_cache[task_path]
-
-    def shape_backlog_task(role: str, entry: OrderedDict[str, object]) -> dict[str, object]:
-        del role
-        task_uid = str(entry.get("task_uid") or "")
-        registry_entry = registry_by_id.get(task_uid, OrderedDict())
-        task_path = str(entry.get("task_path") or registry_entry.get("task_path") or "")
-        task_fields = load_task_fields(task_path)
-        return {
-            "task_uid": task_uid,
-            "title": entry.get("title") or task_fields.get("title"),
-            "priority": entry.get("priority") or registry_entry.get("priority") or task_fields.get("priority"),
-            "status": entry.get("status") or task_fields.get("status") or registry_entry.get("status"),
-            "source_signal": entry.get("source_signal") or task_fields.get("source_signal") or registry_entry.get("source_signal"),
-            "task_path": task_path or None,
-            "updated_at": task_fields.get("updated_at") or registry_entry.get("updated_at"),
-            "related_prd": normalize_list_field(entry.get("related_prd") or task_fields.get("related_prd")),
-            "acceptance": normalize_list_field(entry.get("acceptance") or task_fields.get("acceptance")),
-            "handoff_to": normalize_list_field(entry.get("handoff_to") or task_fields.get("handoff_to")),
-        }
-
-    role_payloads: OrderedDict[str, dict[str, object]] = OrderedDict()
-    backlog_totals: OrderedDict[str, int] = OrderedDict(
-        (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
-    )
-
-    for role in included_roles:
-        backlog_counts: OrderedDict[str, int] = OrderedDict(
-            (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
-        )
-        tasks_by_status: OrderedDict[str, list[dict[str, object]]] = OrderedDict(
-            (status, []) for status in ("candidate", "committed", "blocked", "done", "deferred")
-        )
-
-        for file_status in ("candidate", "committed", "blocked", "done"):
-            path = role_backlog_path(root, role, file_status)
-            _, entries = load_list_document(path, "tasks")
-            for entry in entries:
-                shaped = shape_backlog_task(role, entry)
-                status = str(shaped.get("status") or file_status)
-                if status not in tasks_by_status:
-                    continue
-                backlog_counts[status] += 1
-                backlog_totals[status] += 1
-                tasks_by_status[status].append(shaped)
-
-        for task_items in tasks_by_status.values():
-            task_items.sort(key=task_sort_key)
-
-        role_payloads[role] = {
-            "backlog_counts": backlog_counts,
-            "memory_counts": OrderedDict(memory_report["roles"].get(role, {})),
-            "tasks": tasks_by_status,
-            "active_memory": active_by_role[role],
-            "needs_review_memory": needs_review_by_role[role],
-            "superseded_memory": superseded_by_role[role],
-        }
-
-    return {
-        "generated_at": now_iso(),
-        "stale_after_days": stale_after_days,
-        "role_filter": role_filter,
-        "role_count": len(included_roles),
-        "backlog_totals": backlog_totals,
-        "roles": role_payloads,
-    }
 
 
 def build_signal_summary(root: pathlib.Path, role_filter: str | None) -> dict[str, object]:
-    roles = load_roles(root)
-    if role_filter and role_filter not in roles:
-        raise ValueError(f"unknown role: {role_filter}")
-
-    promotion_counts: OrderedDict[str, int] = OrderedDict(
-        (state, 0) for state in ("new", "triaged", "promoted_candidate_task", "discarded", "deferred")
+    return build_signal_summary_helper(
+        root,
+        role_filter,
+        load_roles=load_roles,
+        load_signal_entries=load_signal_entries,
+        severity_order=SEVERITY_ORDER,
     )
-    memory_promotion_counts: OrderedDict[str, int] = OrderedDict(
-        (state, 0) for state in ("pending", "promoted", "rejected", "deferred")
-    )
-    pending_signals: list[dict[str, object]] = []
-
-    for payload in load_signal_entries(root):
-        if role_filter and payload.get("role_hint") != role_filter:
-            continue
-
-        promotion_state = str(payload.get("promotion_state") or "new")
-        if promotion_state in promotion_counts:
-            promotion_counts[promotion_state] += 1
-
-        memory_state = str(payload.get("memory_promotion_state") or "pending")
-        if memory_state in memory_promotion_counts:
-            memory_promotion_counts[memory_state] += 1
-
-        # A signal stays pending until the operator has explicitly closed the
-        # memory decision path. Rejected/deferred/promoted memory decisions
-        # should no longer show up as pending workflow work.
-        is_pending = memory_state == "pending" and promotion_state in {
-            "new",
-            "triaged",
-            "promoted_candidate_task",
-        }
-        if is_pending:
-            pending_signals.append(
-                {
-                    "signal_id": payload.get("signal_id"),
-                    "role_hint": payload.get("role_hint"),
-                    "severity": payload.get("severity"),
-                    "source_type": payload.get("source_type"),
-                    "source_ref": payload.get("source_ref"),
-                    "summary": payload.get("summary"),
-                    "promotion_state": promotion_state,
-                    "memory_promotion_state": memory_state,
-                }
-            )
-
-    pending_signals.sort(
-        key=lambda item: (
-            SEVERITY_ORDER.get(str(item.get("severity")), 99),
-            str(item.get("signal_id") or ""),
-        )
-    )
-
-    return {
-        "role_filter": role_filter,
-        "counts": promotion_counts,
-        "memory_counts": memory_promotion_counts,
-        "pending_count": len(pending_signals),
-        "pending_signals": pending_signals,
-    }
 
 
 def build_reflection_summary(root: pathlib.Path, role_filter: str | None) -> dict[str, object]:
-    sync_task_views(root)
-    roles = load_roles(root)
-    if role_filter and role_filter not in roles:
-        raise ValueError(f"unknown role: {role_filter}")
-
-    _, registry_entries = load_list_document(task_registry_path(root), "tasks")
-    tasks_by_signal: dict[str, list[dict[str, object]]] = {}
-    for entry in registry_entries:
-        source_signal = str(entry.get("source_signal") or "")
-        if not source_signal:
-            continue
-        task_path = root / str(entry.get("task_path") or "")
-        fields = load_mapping_document(task_path) if task_path.exists() else OrderedDict()
-        task_payload = {
-            "task_uid": fields.get("task_uid") or entry.get("task_uid"),
-            "title": fields.get("title"),
-            "owner_role": fields.get("owner_role") or entry.get("owner_role"),
-            "status": fields.get("status") or entry.get("status"),
-            "priority": fields.get("priority") or entry.get("priority"),
-            "task_path": entry.get("task_path"),
-        }
-        tasks_by_signal.setdefault(source_signal, []).append(task_payload)
-
-    counts = OrderedDict(
-        [
-            ("triaged", 0),
-            ("promoted_candidate_task", 0),
-            ("discarded", 0),
-            ("deferred", 0),
-        ]
+    return build_reflection_summary_helper(
+        root,
+        role_filter,
+        sync_task_views=sync_task_views,
+        load_roles=load_roles,
+        load_list_document=load_list_document,
+        task_registry_path=task_registry_path,
+        load_mapping_document=load_mapping_document,
+        load_signal_entries=load_signal_entries,
+        severity_order=SEVERITY_ORDER,
     )
-    items: list[dict[str, object]] = []
-    for payload in load_signal_entries(root):
-        if payload.get("source_type") != "reflection":
-            continue
-        if role_filter and payload.get("role_hint") != role_filter:
-            continue
-        promotion_state = str(payload.get("promotion_state") or "triaged")
-        if promotion_state in counts:
-            counts[promotion_state] += 1
-        linked_tasks = list(tasks_by_signal.get(str(payload.get("signal_id") or ""), []))
-        items.append(
-            {
-                "signal_id": payload.get("signal_id"),
-                "role_hint": payload.get("role_hint"),
-                "severity": payload.get("severity"),
-                "promotion_state": promotion_state,
-                "memory_promotion_state": payload.get("memory_promotion_state"),
-                "source_ref": payload.get("source_ref"),
-                "summary": payload.get("summary"),
-                "linked_tasks": linked_tasks,
-            }
-        )
-
-    items.sort(
-        key=lambda item: (
-            SEVERITY_ORDER.get(str(item.get("severity")), 99),
-            str(item.get("signal_id") or ""),
-        )
-    )
-
-    return {
-        "role_filter": role_filter,
-        "count": len(items),
-        "counts": counts,
-        "items": items,
-    }
 
 
 def build_workflow_checklist(
@@ -2244,206 +1970,7 @@ def build_workflow_checklist(
     working_memory_summary: dict[str, object],
     reflection_summary: dict[str, object],
 ) -> list[OrderedDict[str, object]]:
-    checklist: list[OrderedDict[str, object]] = []
-    backlog_counts = role_payload["backlog_counts"]
-    memory_counts = role_payload["memory_counts"]
-    gate_status = str(stage_report["gate"]["status"] or "")
-    pending_signals = int(signal_summary["pending_count"])
-    working_memory_entries = int(working_memory_summary["entry_count"])
-    pending_reflections = int(reflection_summary["counts"]["triaged"])
-    task_execution_log = None if task_context is None else str(task_context.get("execution_log_path") or "") or None
-
-    def add(item_id: str, summary: str, command: str | None = None, reason: str | None = None) -> None:
-        item = OrderedDict([("id", item_id), ("summary", summary)])
-        if command:
-            item["command"] = command
-        if reason:
-            item["reason"] = reason
-        checklist.append(item)
-
-    if phase == "start":
-        if task_context is None:
-            add(
-                "bind-task",
-                "若当前工作绑定到明确任务，补传 `--task-uid <TASK-UID>` 记录 `last_started_at`，避免 `.pm` workflow 只停留在口头层。",
-            )
-        add(
-            "read-docs",
-            "先读目标模块 PRD / project，再开始编辑。",
-        )
-        if task_execution_log:
-            add(
-                "read-execution-log",
-                "读取当前 task execution log，避免同任务上下文断档。",
-                command=f"sed -n '1,200p' {task_execution_log}",
-            )
-        add(
-            "role-report",
-            f"读取 {role} 的 backlog 与 memory 现状，避免重复处理已知问题。",
-            command=f"./scripts/pm/role-report.sh --role {role}",
-        )
-        if pending_signals > 0:
-            add(
-                "triage-signals",
-                "先处理该角色尚未闭环的 signal，避免任务结论继续停留在 inbox。",
-                reason=f"pending_signals={pending_signals}",
-            )
-        if int(backlog_counts["blocked"]) > 0:
-            add(
-                "inspect-blockers",
-                "先看 blocked backlog，优先判断是否需要解除阻断或升级阶段风险。",
-                command=f"./scripts/pm/role-report.sh --role {role}",
-                reason=f"blocked_tasks={backlog_counts['blocked']}",
-            )
-        if int(backlog_counts["candidate"]) > 0:
-            add(
-                "review-candidates",
-                "清理 candidate 池，决定哪些要升为 committed，哪些继续 deferred。",
-                command=f"./scripts/pm/role-report.sh --role {role}",
-                reason=f"candidate_tasks={backlog_counts['candidate']}",
-            )
-        if int(memory_counts["needs_review"]) > 0:
-            add(
-                "review-memory",
-                "先 review stale memory，再写入新的长期结论，避免并行存在旧口径。",
-                command=f"./scripts/pm/memory-report.sh --role {role} --no-shared",
-                reason=f"needs_review_memory={memory_counts['needs_review']}",
-            )
-        if role == "producer_system_designer":
-            add(
-                "review-stage",
-                "制作人开始推进前先看阶段和 gate 汇总，确认 blocker 与 claim envelope 是否已变化。",
-                command="./scripts/pm/stage-report.sh",
-                reason=f"gate_status={gate_status}",
-            )
-    elif phase == "close":
-        if task_context is None:
-            add(
-                "bind-task",
-                "若当前工作绑定到明确任务，补传 `--task-uid <TASK-UID>` 记录 `last_closed_at`，否则不能宣称 `.pm` workflow 已完整接入。",
-            )
-        add(
-            "write-execution-log",
-            "先回写当前 task execution log，再做 signal / memory / backlog 的结构化收口。",
-        )
-        add(
-            "extract-memory",
-            "执行记忆抽取三问：这条结论是否跨任务复用、是否能避免其他 owner 重复踩坑、是否会影响 PRD/实现/测试/对外口径；任一为 yes 时，至少生成 signal、working_memory 或 memory 候选，而不是只写 execution log。",
-        )
-        if task_context is not None and working_memory_entries == 0:
-            add(
-                "bootstrap-working-memory",
-                "当前 task 还没有 working_memory；默认不要直接从当前 live Codex session 自读。若确实需要 transcript extraction，请显式给出 `--session-id`，或显式传 `--allow-auto-session` 后再决定是否提炼为 reflection signal / candidate task。",
-                command=f"./scripts/pm/codex-working-memory.sh --task-uid {task_context['task_uid']} --role {role} --session-id <session_id>",
-            )
-        elif working_memory_entries > 0:
-            add(
-                "review-working-memory",
-                "先处理 task-scoped working_memory：提炼成 reflection signal、转 task/memory，或显式保留待过期，不要让过程认知悬空。",
-                command="./scripts/pm/working-memory-report.sh --task-uid <TASK-UID>",
-                reason=f"working_memory_entries={working_memory_entries}",
-            )
-            add(
-                "autoflow-working-memory",
-                "可先用安全默认自动化把 working_memory 提成 reflection signal 和 candidate task，再进入 owner review。",
-                command="./scripts/pm/working-memory-autoflow.sh --task-uid <TASK-UID> --severity medium --priority P2",
-            )
-        if pending_reflections > 0:
-            add(
-                "review-reflection",
-                "处理仍停留在 triaged 的 reflection signal，决定是否转 task/memory/deferred。",
-                command=f"./scripts/pm/reflection-report.sh --role {role}",
-                reason=f"triaged_reflections={pending_reflections}",
-            )
-        add(
-            "prepare-pr-review",
-            "默认评审边界在 GitHub PR：完成 commit 后通过 `./scripts/prepare-task-pr.sh` 执行 PR preflight / create，并以 required checks + review/approval 作为正式 review 流程；本地不再要求额外的 pre-commit review 脚本。",
-            command="./scripts/prepare-task-pr.sh",
-        )
-        if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
-            add(
-                "promote-signals",
-                "把新增的高价值 QA / liveops / incident 结论提升到 signal inbox，而不是只留在 task execution log。",
-                command=f"./scripts/pm/promote-signal.sh ... --role-hint {role}",
-            )
-        add(
-            "sync-backlog",
-            "把本轮任务状态迁移回 backlog / task registry，避免 `.pm` 与实际执行脱节。",
-            command="./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status <candidate|committed|blocked|done|deferred>",
-        )
-        add(
-            "sync-memory",
-            "稳定结论进入 active memory，被新结论取代的记录显式 supersede，不允许直接覆盖旧口径。",
-            command=f"./scripts/pm/promote-memory.sh --signal-id <SIG-ID> --role {role} --topic <topic> --promotion-reason <reason>",
-        )
-        if role == "producer_system_designer":
-            add(
-                "sync-stage",
-                "若阶段判断、gate lane 或对外 claim envelope 有变化，同步更新 `.pm/stage/*.yaml` 并重跑阶段汇总。",
-                command="./scripts/pm/stage-report.sh",
-            )
-        add(
-            "pm-verify",
-            "收口前复跑 PM 结构门禁，确认 report / lint 仍能读通本轮改动。",
-            command="./scripts/pm/lint.sh",
-        )
-    else:
-        add(
-            "review-stage",
-            "以 stage report 作为阶段评审输入，再结合角色视图确认 blocker、backlog 和长期结论。",
-            command="./scripts/pm/stage-report.sh",
-            reason=f"gate_status={gate_status}",
-        )
-        add(
-            "review-role",
-            f"读取 {role} 的 role report，确认 backlog / memory / blocked task 是否需要裁决。",
-            command=f"./scripts/pm/role-report.sh --role {role}",
-        )
-        if pending_signals > 0:
-            add(
-                "review-signals",
-                "阶段评审前先处理未闭环 signal，避免新风险没有进入正式候选池。",
-                reason=f"pending_signals={pending_signals}",
-            )
-        if int(memory_counts["needs_review"]) > 0:
-            add(
-                "review-stale-memory",
-                "处理 stale memory，避免阶段裁决继续引用过期结论。",
-                command=f"./scripts/pm/memory-report.sh --role {role} --no-shared",
-                reason=f"needs_review_memory={memory_counts['needs_review']}",
-            )
-
-    return checklist
-
-
-def build_workflow_report(
-    root: pathlib.Path,
-    role: str,
-    phase: str,
-    stale_after_days: int,
-    task_uid: str | None,
-) -> dict[str, object]:
-    roles = load_roles(root)
-    if role not in roles:
-        raise ValueError(f"unknown role: {role}")
-    if phase not in {"start", "close", "review"}:
-        raise ValueError(f"unsupported phase: {phase}")
-
-    task_context: dict[str, object] | None = None
-    if task_uid:
-        task_context = load_task_context(root, task_uid)
-
-    role_report = build_role_report(root, role_filter=role, stale_after_days=stale_after_days)
-    role_payload = role_report["roles"][role]
-    stage_report = build_stage_report(root)
-    signal_role_filter = None if (phase == "review" and role == "producer_system_designer") else role
-    signal_summary = build_signal_summary(root, role_filter=signal_role_filter)
-    if task_uid:
-        working_memory_summary = build_working_memory_report(root, task_uid=task_uid, role_filter=None)
-    else:
-        working_memory_summary = build_working_memory_report(root, task_uid=None, role_filter=role)
-    reflection_summary = build_reflection_summary(root, role_filter=signal_role_filter)
-    checklist = build_workflow_checklist(
+    return build_workflow_checklist_helper(
         role,
         phase,
         task_context,
@@ -2454,449 +1981,66 @@ def build_workflow_report(
         reflection_summary,
     )
 
-    if task_uid and phase in {"start", "close"}:
-        task_context = record_task_workflow_phase(root, task_uid, role, phase)
 
-    return {
-        "generated_at": now_iso(),
-        "phase": phase,
-        "role": role,
-        "task_context": task_context,
-        "stale_after_days": stale_after_days,
-        "role_report": role_payload,
-        "signal_summary": signal_summary,
-        "stage_report": stage_report,
-        "working_memory_summary": working_memory_summary,
-        "reflection_summary": reflection_summary,
-        "checklist": checklist,
-    }
+def build_workflow_report(
+    root: pathlib.Path,
+    role: str,
+    phase: str,
+    stale_after_days: int,
+    task_uid: str | None,
+) -> dict[str, object]:
+    return build_workflow_report_helper(
+        root,
+        role,
+        phase,
+        stale_after_days,
+        task_uid,
+        now_iso=now_iso,
+        load_roles=load_roles,
+        load_task_context=load_task_context,
+        build_role_report_impl=build_role_report,
+        build_stage_report_impl=build_stage_report,
+        build_signal_summary_impl=build_signal_summary,
+        build_working_memory_report=build_working_memory_report,
+        build_reflection_summary_impl=build_reflection_summary,
+        build_workflow_checklist_impl=build_workflow_checklist,
+        record_task_workflow_phase=record_task_workflow_phase,
+    )
 
 
 def run_task_backlog_lint(root: pathlib.Path) -> None:
-    sync_task_views(root)
-    roles = load_roles(root)
-    failures: list[str] = []
-
-    def fail(message: str) -> None:
-        failures.append(message)
-
-    signal_ids, promoted_signal_ids = collect_signals(root)
-
-    for line_no, raw_line in enumerate((root / ".pm/inbox/signals.jsonl").read_text(encoding="utf-8").splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        payload = json.loads(line)
-        missing = sorted(
-            {
-                "signal_id",
-                "source_type",
-                "source_ref",
-                "role_hint",
-                "severity",
-                "summary",
-                "promotion_state",
-            }
-            - payload.keys()
-        )
-        if missing:
-            fail(f"signal missing keys at .pm/inbox/signals.jsonl:{line_no}: {', '.join(missing)}")
-            continue
-        if payload["role_hint"] not in roles:
-            fail(f"signal role_hint not registered: {payload['signal_id']} -> {payload['role_hint']}")
-        if str(payload.get("source_type") or "") == "devlog":
-            fail(f"signal source_type must not be devlog archive: {payload['signal_id']}")
-        source_ref = str(payload.get("source_ref") or "")
-        if not source_ref:
-            fail(f"signal source_ref missing: {payload['signal_id']}")
-        else:
-            if is_devlog_archive_reference(source_ref):
-                fail(f"signal source_ref must not use doc/devlog archive: {payload['signal_id']} -> {source_ref}")
-            try:
-                resolved_signal_source = resolve_source_ref_path(root, source_ref)
-            except ValueError as exc:
-                fail(f"signal source_ref invalid: {payload['signal_id']} -> {exc}")
-            else:
-                if not resolved_signal_source.exists():
-                    fail(
-                        f"signal source_ref missing: {payload['signal_id']} -> "
-                        f"{parse_reference_path(source_ref)}"
-                    )
-        if payload["promotion_state"] not in ALLOWED_SIGNAL_STATES:
-            fail(f"signal promotion_state invalid: {payload['signal_id']} -> {payload['promotion_state']}")
-        memory_state = str(payload.get("memory_promotion_state", "pending"))
-        if memory_state not in ALLOWED_MEMORY_PROMOTION_STATES:
-            fail(f"signal memory_promotion_state invalid: {payload['signal_id']} -> {memory_state}")
-        if memory_state == "promoted":
-            missing_memory_keys = sorted(
-                {
-                    "memory_decision_at",
-                    "memory_id",
-                    "memory_promotion_reason",
-                    "memory_role",
-                    "memory_scope",
-                    "memory_topic",
-                }
-                - payload.keys()
-            )
-            if missing_memory_keys:
-                fail(
-                    f"signal promoted memory missing keys: {payload['signal_id']} -> "
-                    + ", ".join(missing_memory_keys)
-                )
-            elif payload["memory_promotion_reason"] not in ALLOWED_PROMOTION_REASONS:
-                fail(
-                    f"signal memory_promotion_reason invalid: "
-                    f"{payload['signal_id']} -> {payload['memory_promotion_reason']}"
-                )
-        elif memory_state == "rejected":
-            missing_rejection_keys = sorted({"memory_decision_at", "memory_rejection_reason"} - payload.keys())
-            if missing_rejection_keys:
-                fail(
-                    f"signal rejected memory missing keys: {payload['signal_id']} -> "
-                    + ", ".join(missing_rejection_keys)
-                )
-            elif payload["memory_rejection_reason"] not in ALLOWED_MEMORY_REJECTION_REASONS:
-                fail(
-                    f"signal memory_rejection_reason invalid: "
-                    f"{payload['signal_id']} -> {payload['memory_rejection_reason']}"
-                )
-        elif memory_state == "deferred":
-            missing_deferred_keys = sorted({"memory_decision_at", "memory_deferred_reason"} - payload.keys())
-            if missing_deferred_keys:
-                fail(
-                    f"signal deferred memory missing keys: {payload['signal_id']} -> "
-                    + ", ".join(missing_deferred_keys)
-                )
-
-    registry_header, registry_entries = load_list_document(task_registry_path(root), "tasks")
-    if str(registry_header.get("identity_key") or "") != "task_uid":
-        fail("tasks registry identity_key mismatch: expected task_uid")
-
-    registry_by_id: dict[str, OrderedDict[str, object]] = {}
-    for entry in registry_entries:
-        task_uid = str(entry.get("task_uid") or "")
-        if not task_uid:
-            fail("registry task missing task_uid")
-            continue
-        if task_uid in registry_by_id:
-            fail(f"duplicate registry task_uid: {task_uid}")
-            continue
-        registry_by_id[task_uid] = entry
-        owner_role = entry.get("owner_role")
-        status = entry.get("status")
-        if owner_role not in roles:
-            fail(f"registry task owner_role not registered: {task_uid} -> {owner_role}")
-        if status not in TASK_STATUSES:
-            fail(f"registry task status invalid: {task_uid} -> {status}")
-        task_path = entry.get("task_path")
-        if not task_path or not (root / str(task_path)).is_file():
-            fail(f"registry task path missing: {task_uid} -> {task_path}")
-        source_signal = entry.get("source_signal")
-        if source_signal and str(source_signal) not in signal_ids:
-            fail(f"registry task source_signal missing from inbox: {task_uid} -> {source_signal}")
-
-    task_source_signals: set[str] = set()
-    task_files = sorted(path for path in (root / ".pm/tasks").glob("*.yaml") if path.is_file())
-    if len(task_files) != len(registry_entries):
-        fail(f"task file count mismatch: files={len(task_files)} registry={len(registry_entries)}")
-
-    task_fields_by_id: dict[str, OrderedDict[str, object]] = {}
-    for path in task_files:
-        fields = load_mapping_document(path)
-        task_uid = fields.get("task_uid")
-        if not task_uid:
-            fail(f"task file missing task_uid: {path.relative_to(root)}")
-            continue
-        task_uid = str(task_uid)
-        task_fields_by_id[task_uid] = fields
-        owner_role = fields.get("owner_role")
-        status = fields.get("status")
-        if owner_role not in roles:
-            fail(f"task file owner_role not registered: {task_uid} -> {owner_role}")
-        if status not in TASK_STATUSES:
-            fail(f"task file status invalid: {task_uid} -> {status}")
-        registry_entry = registry_by_id.get(task_uid)
-        if registry_entry is None:
-            fail(f"task file missing from registry: {task_uid}")
-        else:
-            if registry_entry.get("owner_role") != owner_role:
-                fail(f"registry owner_role mismatch: {task_uid}")
-            if registry_entry.get("status") != status:
-                fail(f"registry status mismatch: {task_uid}")
-            if registry_entry.get("priority") != fields.get("priority"):
-                fail(f"registry priority mismatch: {task_uid}")
-            expected_path = f".pm/tasks/{path.name}"
-            if registry_entry.get("task_path") != expected_path:
-                fail(f"registry task_path mismatch: {task_uid} -> {registry_entry.get('task_path')} != {expected_path}")
-        source_signal = fields.get("source_signal")
-        if source_signal:
-            task_source_signals.add(str(source_signal))
-            if str(source_signal) not in signal_ids:
-                fail(f"task source_signal missing from inbox: {task_uid} -> {source_signal}")
-        source_refs = fields.get("source_refs")
-        if not isinstance(source_refs, list) or not source_refs:
-            fail(f"task file source_refs must be a non-empty list: {task_uid}")
-        else:
-            for source_ref in source_refs:
-                if is_devlog_archive_reference(str(source_ref)):
-                    fail(f"task file source_ref must not use doc/devlog archive: {task_uid} -> {source_ref}")
-                try:
-                    resolved_source = resolve_source_ref_path(root, str(source_ref))
-                except ValueError as exc:
-                    fail(f"task file source_ref invalid: {task_uid} -> {exc}")
-                else:
-                    if not resolved_source.exists():
-                        fail(
-                            f"task file source_ref missing: {task_uid} -> "
-                            f"{parse_reference_path(str(source_ref))}"
-                        )
-        for key in ("last_started_at", "last_closed_at"):
-            value = fields.get(key)
-            if value in {None, ""}:
-                continue
-            try:
-                datetime.fromisoformat(str(value))
-            except ValueError:
-                fail(f"task file invalid {key}: {task_uid} -> {value}")
-        if fields.get("last_started_at") not in {None, ""} and fields.get("last_closed_at") not in {None, ""}:
-            try:
-                started_at = datetime.fromisoformat(str(fields["last_started_at"]))
-                closed_at = datetime.fromisoformat(str(fields["last_closed_at"]))
-                if closed_at < started_at:
-                    fail(f"task file close precedes start: {task_uid}")
-            except ValueError:
-                pass
-        if status in {"blocked", "done", "deferred"} and fields.get("last_started_at") in {None, ""}:
-            fail(f"task file missing last_started_at for started workflow task: {task_uid}")
-        if status in {"done", "deferred"} and fields.get("last_closed_at") in {None, ""}:
-            fail(f"task file missing last_closed_at for closed workflow task: {task_uid}")
-        execution_log_path = str(fields.get("execution_log_path") or "")
-        expected_execution_log_path = task_execution_log_relative_path(task_uid)
-        if execution_log_path != expected_execution_log_path:
-            fail(
-                f"task file execution_log_path mismatch: {task_uid} -> "
-                f"{execution_log_path or '(missing)'} != {expected_execution_log_path}"
-            )
-            continue
-        execution_log_file = root / execution_log_path
-        if not execution_log_file.is_file():
-            fail(f"task execution log missing: {task_uid} -> {execution_log_path}")
-            continue
-        require_entry = status in {"blocked", "done", "deferred"} or fields.get("last_started_at") not in {None, ""}
-        entry_count = 0
-        active_entry_line: int | None = None
-        entry_has_done = False
-        entry_has_pending = False
-        for line_no, raw_line in enumerate(execution_log_file.read_text(encoding="utf-8").splitlines(), start=1):
-            if raw_line.startswith("## "):
-                if active_entry_line is not None:
-                    if not entry_has_done:
-                        fail(
-                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_uid}"
-                        )
-                    if not entry_has_pending:
-                        fail(
-                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_uid}"
-                        )
-                match = TASK_EXECUTION_LOG_ENTRY_RE.fullmatch(raw_line)
-                if not match:
-                    fail(f"{execution_log_path}:{line_no}: invalid execution log heading for {task_uid}")
-                    active_entry_line = None
-                    entry_has_done = False
-                    entry_has_pending = False
-                    continue
-                role_name = match.group(3)
-                if role_name not in roles:
-                    fail(f"{execution_log_path}:{line_no}: unknown role in execution log for {task_uid}: {role_name}")
-                entry_count += 1
-                active_entry_line = line_no
-                entry_has_done = False
-                entry_has_pending = False
-                continue
-            if active_entry_line is None:
-                continue
-            if raw_line.startswith("- 完成内容:"):
-                entry_has_done = True
-            elif raw_line.startswith("- 遗留事项:"):
-                entry_has_pending = True
-        if active_entry_line is not None:
-            if not entry_has_done:
-                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_uid}")
-            if not entry_has_pending:
-                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_uid}")
-        if require_entry and entry_count == 0:
-            fail(f"task execution log requires at least one entry: {task_uid}")
-
-    for signal_id in promoted_signal_ids:
-        if signal_id not in task_source_signals:
-            fail(f"promoted signal has no task file: {signal_id}")
-
-    backlog_membership: dict[str, list[tuple[str, str, OrderedDict[str, object]]]] = {}
-    for role in sorted(roles):
-        for file_status in ("candidate", "committed", "blocked", "done"):
-            path = role_backlog_path(root, role, file_status)
-            header, entries = load_list_document(path, "tasks")
-            if header.get("role") != role:
-                fail(f"{path.relative_to(root)} role header mismatch: {header.get('role')} != {role}")
-            if header.get("status") != file_status:
-                fail(f"{path.relative_to(root)} status header mismatch: {header.get('status')} != {file_status}")
-            for entry in entries:
-                task_uid = entry.get("task_uid")
-                if not task_uid:
-                    fail(f"{path.relative_to(root)} entry missing task_uid")
-                    continue
-                task_uid = str(task_uid)
-                entry_status = entry.get("status")
-                if file_status != "done" and entry_status != file_status:
-                    fail(f"{path.relative_to(root)} {task_uid} entry status mismatch: {entry_status} != {file_status}")
-                if file_status == "done" and entry_status not in {"done", "deferred"}:
-                    fail(f"{path.relative_to(root)} {task_uid} invalid done-lane status: {entry_status}")
-                backlog_membership.setdefault(task_uid, []).append((role, file_status, entry))
-
-    for task_uid, registry_entry in registry_by_id.items():
-        memberships = backlog_membership.get(task_uid, [])
-        if len(memberships) != 1:
-            fail(f"task backlog membership mismatch: {task_uid} has {len(memberships)} entries")
-            continue
-        role, file_status, entry = memberships[0]
-        if role != registry_entry.get("owner_role"):
-            fail(f"task backlog owner mismatch: {task_uid} -> {role} != {registry_entry.get('owner_role')}")
-        expected_file_status = backlog_file_for_status(str(registry_entry.get("status")))
-        if file_status != expected_file_status[:-5]:
-            fail(f"task backlog lane mismatch: {task_uid} -> {file_status} != {expected_file_status[:-5]}")
-        task_fields = task_fields_by_id.get(task_uid)
-        if task_fields is None:
-            continue
-        for key in ("title", "priority", "source_signal", "status"):
-            if entry.get(key) != task_fields.get(key):
-                fail(f"task backlog field mismatch: {task_uid} -> {key}")
-
-    for task_uid, memberships in backlog_membership.items():
-        if task_uid not in registry_by_id:
-            fail(f"backlog task missing from registry: {task_uid}")
-            continue
-        task_fields = task_fields_by_id.get(task_uid)
-        if task_fields is None:
-            continue
-        for role, file_status, entry in memberships:
-            if entry.get("status") != task_fields.get("status"):
-                fail(f"backlog/task status mismatch: {task_uid}")
-            if file_status != backlog_file_for_status(str(task_fields.get('status')))[:-5]:
-                fail(f"backlog/task lane mismatch: {task_uid}")
-
-    if failures:
-        for failure in failures:
-            print(f"pm-lint: FAIL: {failure}", file=sys.stderr)
-        raise SystemExit(1)
+    run_task_backlog_lint_helper(
+        root,
+        sync_task_views=sync_task_views,
+        load_roles=load_roles,
+        collect_signals=collect_signals,
+        is_devlog_archive_reference=is_devlog_archive_reference,
+        resolve_source_ref_path=resolve_source_ref_path,
+        parse_reference_path=parse_reference_path,
+        load_list_document=load_list_document,
+        task_registry_path=task_registry_path,
+        load_mapping_document=load_mapping_document,
+        task_execution_log_relative_path=task_execution_log_relative_path,
+        role_backlog_path=role_backlog_path,
+        backlog_file_for_status=backlog_file_for_status,
+        task_execution_log_entry_re=TASK_EXECUTION_LOG_ENTRY_RE,
+        allowed_signal_states=ALLOWED_SIGNAL_STATES,
+        allowed_memory_promotion_states=ALLOWED_MEMORY_PROMOTION_STATES,
+        allowed_memory_rejection_reasons=ALLOWED_MEMORY_REJECTION_REASONS,
+        task_statuses=TASK_STATUSES,
+    )
 
 
 def run_stage_lint(root: pathlib.Path) -> None:
-    sync_task_views(root)
-    failures: list[str] = []
-
-    def fail(message: str) -> None:
-        failures.append(message)
-
-    stage_current = load_mapping_document(root / ".pm/stage/current.yaml")
-    gate = load_mapping_document(root / ".pm/stage/gate.yaml")
-    _, registry_entries = load_list_document(task_registry_path(root), "tasks")
-    task_uids = {str(entry.get("task_uid")) for entry in registry_entries if entry.get("task_uid")}
-
-    def require_keys(doc_name: str, payload: OrderedDict[str, object], required: set[str]) -> None:
-        missing = sorted(required - set(payload.keys()))
-        if missing:
-            fail(f"{doc_name} missing keys: {', '.join(missing)}")
-
-    require_keys(
-        ".pm/stage/current.yaml",
-        stage_current,
-        {"version", "current_stage", "candidate_stage", "claim_envelope", "decision_date", "updated_from", "blocking_tasks"},
-    )
-    require_keys(
-        ".pm/stage/gate.yaml",
-        gate,
-        {"version", "gate_id", "status", "lane_status", "blocking_tasks", "updated_from"},
-    )
-
-    producer_stage_memory = load_active_memory_record(
+    run_stage_lint_helper(
         root,
-        root / ".pm/roles/producer_system_designer/memory/active.yaml",
-        "stage.current",
+        sync_task_views=sync_task_views,
+        load_mapping_document=load_mapping_document,
+        load_list_document=load_list_document,
+        task_registry_path=task_registry_path,
+        load_active_memory_record=load_active_memory_record,
+        validate_runtime_source_ref=validate_runtime_source_ref,
     )
-    shared_claim_memory = load_active_memory_record(
-        root,
-        root / ".pm/shared/memory/active.yaml",
-        "gate.claim_envelope",
-    )
-
-    current_stage = stage_current.get("current_stage")
-    claim_envelope = stage_current.get("claim_envelope")
-    updated_from = stage_current.get("updated_from")
-    gate_status = gate.get("status")
-    gate_updated_from = gate.get("updated_from")
-
-    if current_stage is None and producer_stage_memory is not None:
-        fail("stage current is null while producer active memory still declares topic stage.current")
-    if claim_envelope is None and shared_claim_memory is not None:
-        fail("claim_envelope is null while shared active memory still declares topic gate.claim_envelope")
-    if current_stage is not None:
-        if claim_envelope is None:
-            fail("current_stage is set but claim_envelope is null")
-        if not isinstance(updated_from, list) or not updated_from:
-            fail("stage current requires non-empty updated_from once current_stage is set")
-        else:
-            for source_ref in updated_from:
-                try:
-                    validate_runtime_source_ref(root, str(source_ref), "stage current updated_from")
-                except ValueError as exc:
-                    fail(str(exc))
-        decision_date = stage_current.get("decision_date")
-        if decision_date in {None, ""}:
-            fail("stage current requires decision_date once current_stage is set")
-        else:
-            try:
-                datetime.fromisoformat(str(decision_date))
-            except ValueError:
-                fail(f"stage current has invalid decision_date: {decision_date}")
-
-    if gate_status != "draft":
-        if not isinstance(gate_updated_from, list) or not gate_updated_from:
-            fail("gate requires non-empty updated_from once status leaves draft")
-        else:
-            for source_ref in gate_updated_from:
-                try:
-                    validate_runtime_source_ref(root, str(source_ref), "gate updated_from")
-                except ValueError as exc:
-                    fail(str(exc))
-        if gate.get("gate_id") in {None, ""}:
-            fail("gate requires gate_id once status leaves draft")
-
-    for doc_name, blocking_tasks in (
-        (".pm/stage/current.yaml", stage_current.get("blocking_tasks", [])),
-        (".pm/stage/gate.yaml", gate.get("blocking_tasks", [])),
-    ):
-        if not isinstance(blocking_tasks, list):
-            fail(f"{doc_name} blocking_tasks must be a list")
-            continue
-        for task_uid in blocking_tasks:
-            if str(task_uid) not in task_uids:
-                fail(f"{doc_name} references missing blocking task: {task_uid}")
-
-    tracked_blocking_ids = {
-        str(task_uid) for task_uid in list(stage_current.get("blocking_tasks", [])) + list(gate.get("blocking_tasks", []))
-    }
-    for entry in registry_entries:
-        if entry.get("status") != "blocked":
-            continue
-        task_uid = str(entry.get("task_uid"))
-        if task_uid not in tracked_blocking_ids:
-            fail(f"blocked task missing from stage/gate blocking_tasks: {task_uid}")
-
-    if failures:
-        for failure in failures:
-            print(f"stage-lint: FAIL: {failure}", file=sys.stderr)
-        raise SystemExit(1)
 
 
 def cmd_memory_lint(args: argparse.Namespace) -> int:
@@ -2935,108 +2079,17 @@ def cmd_sync_views(args: argparse.Namespace) -> int:
 
 
 def cmd_stage_lint(args: argparse.Namespace) -> int:
-    run_stage_lint(args.root)
-    print("stage-lint: OK")
-    return 0
+    return cmd_stage_lint_helper(args, run_stage_lint_impl=run_stage_lint)
 
 
 def cmd_set_stage(args: argparse.Namespace) -> int:
-    if not args.source_ref:
-        raise ValueError("at least one --source-ref is required")
-    for source_ref in args.source_ref:
-        validate_runtime_source_ref(args.root, str(source_ref), "set-stage source_ref")
-
-    stage_current_path = args.root / ".pm/stage/current.yaml"
-    gate_path = args.root / ".pm/stage/gate.yaml"
-    stage_current = load_mapping_document(stage_current_path)
-    gate = load_mapping_document(gate_path)
-
-    source_refs = list(dict.fromkeys(args.source_ref))
-    stage_changed = False
-    gate_changed = False
-
-    def assign_stage(key: str, value) -> None:
-        nonlocal stage_changed
-        if stage_current.get(key) != value:
-            stage_current[key] = value
-            stage_changed = True
-
-    def assign_gate(key: str, value) -> None:
-        nonlocal gate_changed
-        if gate.get(key) != value:
-            gate[key] = value
-            gate_changed = True
-
-    if args.current_stage is not None:
-        assign_stage("current_stage", args.current_stage)
-    if args.candidate_stage is not None:
-        assign_stage("candidate_stage", args.candidate_stage)
-    elif args.clear_candidate_stage:
-        assign_stage("candidate_stage", None)
-    if args.claim_envelope is not None:
-        assign_stage("claim_envelope", args.claim_envelope)
-    if args.decision_date is not None:
-        assign_stage("decision_date", args.decision_date)
-    elif stage_changed and stage_current.get("decision_date") in {None, ""}:
-        assign_stage("decision_date", datetime.now().astimezone().date().isoformat())
-
-    if args.gate_id is not None:
-        assign_gate("gate_id", args.gate_id)
-    elif args.clear_gate_id:
-        assign_gate("gate_id", None)
-    if args.gate_status is not None:
-        assign_gate("status", args.gate_status)
-    if args.lane_status:
-        assign_gate("lane_status", list(args.lane_status))
-    elif args.clear_lane_status:
-        assign_gate("lane_status", [])
-    if args.blocking_task:
-        blocking = list(dict.fromkeys(args.blocking_task))
-        assign_stage("blocking_tasks", blocking)
-        assign_gate("blocking_tasks", blocking)
-    elif args.clear_blocking_tasks:
-        assign_stage("blocking_tasks", [])
-        assign_gate("blocking_tasks", [])
-
-    if stage_changed:
-        stage_current["updated_from"] = source_refs
-    if gate_changed:
-        gate["updated_from"] = source_refs
-
-    if not stage_changed and not gate_changed:
-        raise ValueError("set-stage received no effective changes")
-
-    original_stage_text = stage_current_path.read_text(encoding="utf-8")
-    original_gate_text = gate_path.read_text(encoding="utf-8")
-    try:
-        dump_mapping_document(stage_current_path, stage_current)
-        dump_mapping_document(gate_path, gate)
-        run_stage_lint(args.root)
-    except BaseException:
-        stage_current_path.write_text(original_stage_text, encoding="utf-8")
-        gate_path.write_text(original_gate_text, encoding="utf-8")
-        raise
-
-    result = {
-        "current_stage": stage_current.get("current_stage"),
-        "candidate_stage": stage_current.get("candidate_stage"),
-        "claim_envelope": stage_current.get("claim_envelope"),
-        "decision_date": stage_current.get("decision_date"),
-        "gate_id": gate.get("gate_id"),
-        "gate_status": gate.get("status"),
-        "lane_status": list(gate.get("lane_status", [])),
-        "blocking_tasks": list(stage_current.get("blocking_tasks", [])),
-        "updated_from": source_refs,
-    }
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False))
-    else:
-        print(
-            "set-stage: updated "
-            f"current_stage={result['current_stage']} claim_envelope={result['claim_envelope']} "
-            f"gate_status={result['gate_status']}"
-        )
-    return 0
+    return cmd_set_stage_helper(
+        args,
+        validate_runtime_source_ref=validate_runtime_source_ref,
+        load_mapping_document=load_mapping_document,
+        dump_mapping_document=dump_mapping_document,
+        run_stage_lint_impl=run_stage_lint,
+    )
 
 
 def cmd_new_task(args: argparse.Namespace) -> int:
@@ -3156,251 +2209,23 @@ def cmd_supersede_memory(args: argparse.Namespace) -> int:
 
 
 def cmd_memory_report(args: argparse.Namespace) -> int:
-    if args.role == "shared":
-        raise ValueError("--role=shared is invalid; use --include-shared without --role")
-    if args.stale_after_days < 0:
-        raise ValueError("--stale-after-days must be >= 0")
-    if args.role and args.role not in load_roles(args.root):
-        raise ValueError(f"unknown role: {args.role}")
-
-    report = build_memory_report(
-        args.root,
-        role_filter=args.role,
-        include_shared=args.include_shared,
-        stale_after_days=args.stale_after_days,
-    )
-    if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return 0
-
-    lines = [
-        "oasis7 memory report",
-        f"- generated_at: {report['generated_at']}",
-        f"- stale_after_days: {report['stale_after_days']}",
-        f"- role_filter: {report['role_filter'] or '(all roles)'}",
-        f"- include_shared: {'yes' if report['include_shared'] else 'no'}",
-        f"- counts: active={report['counts']['active']}, needs_review={report['counts']['needs_review']}, superseded={report['counts']['superseded']}",
-        "- role_summary:",
-    ]
-    if report["roles"]:
-        for role, counts in report["roles"].items():
-            lines.append(
-                f"  - {role}: active={counts['active']}, needs_review={counts['needs_review']}, superseded={counts['superseded']}"
-            )
-    else:
-        lines.append("  - (none)")
-
-    lines.append("- needs_review:")
-    if report["needs_review"]:
-        for item in report["needs_review"]:
-            lines.append(
-                f"  - {item['id']} / {item['role']} / {item['topic']} / last_reviewed_at={item['last_reviewed_at']}"
-            )
-    else:
-        lines.append("  - (none)")
-
-    lines.append("- active:")
-    if report["active"]:
-        for item in report["active"]:
-            lines.append(f"  - {item['id']} / {item['role']} / {item['topic']} / {item['review_state']}")
-    else:
-        lines.append("  - (none)")
-
-    lines.append("- superseded:")
-    if report["superseded"]:
-        for item in report["superseded"]:
-            lines.append(
-                f"  - {item['id']} / {item['role']} / {item['topic']} / superseded_by={item['superseded_by']}"
-            )
-    else:
-        lines.append("  - (none)")
-
-    print("\n".join(lines))
-    return 0
+    return cmd_memory_report_helper(args, load_roles=load_roles, build_memory_report_impl=build_memory_report)
 
 
 def cmd_working_memory_report(args: argparse.Namespace) -> int:
-    report = build_working_memory_report(args.root, task_uid=args.task_uid, role_filter=args.role)
-    if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return 0
-
-    lines = [
-        "oasis7 working memory report",
-        f"- generated_at: {report['generated_at']}",
-        f"- task_filter: {report['task_filter'] or '(all tasks)'}",
-        f"- role_filter: {report['role_filter'] or '(all roles)'}",
-        f"- task_count: {report['task_count']}",
-        f"- entry_count: {report['entry_count']}",
-        "- counts_by_kind: " + ", ".join(f"{kind}={count}" for kind, count in report["counts_by_kind"].items()),
-        "- tasks:",
-    ]
-    if report["tasks"]:
-        for task_uid, payload in report["tasks"].items():
-            lines.append(
-                f"  - {task_uid} / {payload['role']} / {payload.get('worktree_hint') or '(no worktree_hint)'} / "
-                f"entries={payload['entry_count']}"
-            )
-            for entry in payload["entries"][:5]:
-                lines.append(
-                    f"    - {entry['entry_id']} / {entry['entry_kind']} / {entry['captured_at']} / {entry['summary']}"
-                )
-    else:
-        lines.append("  - (none)")
-
-    print("\n".join(lines))
-    return 0
+    return cmd_working_memory_report_helper(args, build_working_memory_report=build_working_memory_report)
 
 
 def cmd_reflection_report(args: argparse.Namespace) -> int:
-    report = build_reflection_summary(args.root, role_filter=args.role)
-    if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return 0
-
-    lines = [
-        "oasis7 reflection report",
-        f"- role_filter: {report['role_filter'] or '(all roles)'}",
-        f"- count: {report['count']}",
-        "- counts: " + ", ".join(f"{key}={value}" for key, value in report["counts"].items()),
-        "- items:",
-    ]
-    if report["items"]:
-        for item in report["items"]:
-            linked_tasks = item["linked_tasks"]
-            linked_summary = (
-                ", ".join(str(task["task_uid"]) for task in linked_tasks)
-                if linked_tasks
-                else "(none)"
-            )
-            lines.append(
-                f"  - {item['signal_id']} / {item['promotion_state']} / "
-                f"{item['memory_promotion_state']} / linked_tasks={linked_summary} / {item['summary']}"
-            )
-    else:
-        lines.append("  - (none)")
-
-    print("\n".join(lines))
-    return 0
+    return cmd_reflection_report_helper(args, build_reflection_summary_impl=build_reflection_summary)
 
 
 def cmd_role_report(args: argparse.Namespace) -> int:
-    if args.stale_after_days < 0:
-        raise ValueError("--stale-after-days must be >= 0")
-
-    report = build_role_report(args.root, role_filter=args.role, stale_after_days=args.stale_after_days)
-    if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return 0
-
-    lines = [
-        "oasis7 role report",
-        f"- generated_at: {report['generated_at']}",
-        f"- stale_after_days: {report['stale_after_days']}",
-        f"- role_filter: {report['role_filter'] or '(all roles)'}",
-        f"- backlog_totals: {', '.join(f'{k}={v}' for k, v in report['backlog_totals'].items())}",
-    ]
-
-    for role, payload in report["roles"].items():
-        lines.append(f"- role: {role}")
-        lines.append(
-            "  backlog_counts: "
-            + ", ".join(f"{status}={count}" for status, count in payload["backlog_counts"].items())
-        )
-        lines.append(
-            "  memory_counts: "
-            + ", ".join(f"{status}={count}" for status, count in payload["memory_counts"].items())
-        )
-
-        lines.append("  blocked_tasks:")
-        if payload["tasks"]["blocked"]:
-            for item in payload["tasks"]["blocked"]:
-                lines.append(f"    - {item['task_uid']} / {item['priority']} / {item['title']}")
-        else:
-            lines.append("    - (none)")
-
-        lines.append("  needs_review_memory:")
-        if payload["needs_review_memory"]:
-            for item in payload["needs_review_memory"]:
-                lines.append(f"    - {item['id']} / {item['topic']} / {item['last_reviewed_at']}")
-        else:
-            lines.append("    - (none)")
-
-    print("\n".join(lines))
-    return 0
+    return cmd_role_report_helper(args, build_role_report_impl=build_role_report)
 
 
 def cmd_workflow_report(args: argparse.Namespace) -> int:
-    if args.stale_after_days < 0:
-        raise ValueError("--stale-after-days must be >= 0")
-
-    report = build_workflow_report(
-        args.root,
-        role=args.role,
-        phase=args.phase,
-        stale_after_days=args.stale_after_days,
-        task_uid=args.task_uid,
-    )
-    if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return 0
-
-    backlog_counts = report["role_report"]["backlog_counts"]
-    memory_counts = report["role_report"]["memory_counts"]
-    signal_counts = report["signal_summary"]["counts"]
-    memory_signal_counts = report["signal_summary"]["memory_counts"]
-
-    lines = [
-        "oasis7 workflow report",
-        f"- generated_at: {report['generated_at']}",
-        f"- phase: {report['phase']}",
-        f"- role: {report['role']}",
-        f"- task_uid: {(report['task_context'] or {}).get('task_uid') or '(none)'}",
-        f"- stale_after_days: {report['stale_after_days']}",
-        f"- current_stage: {report['stage_report']['current_stage']}",
-        f"- gate_status: {report['stage_report']['gate']['status']}",
-        "- backlog_counts: " + ", ".join(f"{status}={count}" for status, count in backlog_counts.items()),
-        "- memory_counts: " + ", ".join(f"{status}={count}" for status, count in memory_counts.items()),
-        f"- working_memory_entries: {report['working_memory_summary']['entry_count']}",
-        "- signal_counts: " + ", ".join(f"{status}={count}" for status, count in signal_counts.items()),
-        "- memory_signal_counts: "
-        + ", ".join(f"{status}={count}" for status, count in memory_signal_counts.items()),
-        "- reflection_counts: "
-        + ", ".join(f"{status}={count}" for status, count in report["reflection_summary"]["counts"].items()),
-        f"- blocked_tasks: {len(report['stage_report']['blocking_tasks'])}",
-        "- pending_signals:",
-    ]
-
-    if report["task_context"] is not None:
-        lines.insert(
-            6,
-            f"- task_status: {report['task_context']['status']} / "
-            f"last_started_at={(report['task_context'].get('last_started_at') or '(none)')} / "
-            f"last_closed_at={(report['task_context'].get('last_closed_at') or '(none)')}",
-        )
-        lines.insert(7, f"- execution_log_path: {report['task_context'].get('execution_log_path') or '(none)'}")
-
-    if report["signal_summary"]["pending_signals"]:
-        for item in report["signal_summary"]["pending_signals"]:
-            lines.append(
-                f"  - {item['signal_id']} / {item.get('role_hint') or '(unknown role)'} / "
-                f"{item['severity']} / {item['promotion_state']} / "
-                f"{item['memory_promotion_state']} / {item['summary']}"
-            )
-    else:
-        lines.append("  - (none)")
-
-    lines.append("- checklist:")
-    for index, item in enumerate(report["checklist"], start=1):
-        line = f"  {index}. {item['summary']}"
-        if item.get("reason"):
-            line += f" [{item['reason']}]"
-        lines.append(line)
-        if item.get("command"):
-            lines.append(f"     cmd: {item['command']}")
-
-    print("\n".join(lines))
-    return 0
+    return cmd_workflow_report_helper(args, build_workflow_report_impl=build_workflow_report)
 
 
 def cmd_codex_transcript_report(args: argparse.Namespace) -> int:
@@ -3643,183 +2468,20 @@ def cmd_promote_memory(args: argparse.Namespace) -> int:
 
 
 def build_stage_report(root: pathlib.Path) -> dict[str, object]:
-    sync_task_views(root)
-    registry_header, registry_entries = load_list_document(task_registry_path(root), "tasks")
-    del registry_header
-    tasks_by_id: dict[str, OrderedDict[str, object]] = {
-        str(entry["task_uid"]): entry for entry in registry_entries if entry.get("task_uid")
-    }
-
-    role_counts: OrderedDict[str, OrderedDict[str, int]] = OrderedDict()
-    for role in sorted(load_roles(root)):
-        counts: OrderedDict[str, int] = OrderedDict(
-            (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
-        )
-        for file_status in ("candidate", "committed", "blocked", "done"):
-            path = role_backlog_path(root, role, file_status)
-            _, entries = load_list_document(path, "tasks")
-            for entry in entries:
-                status = str(entry.get("status"))
-                if status in counts:
-                    counts[status] += 1
-        role_counts[role] = counts
-
-    task_counts: OrderedDict[str, int] = OrderedDict(
-        (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
+    return build_stage_report_helper(
+        root,
+        sync_task_views=sync_task_views,
+        load_list_document=load_list_document,
+        task_registry_path=task_registry_path,
+        load_roles=load_roles,
+        role_backlog_path=role_backlog_path,
+        load_mapping_document=load_mapping_document,
     )
-    for entry in registry_entries:
-        status = str(entry.get("status"))
-        if status in task_counts:
-            task_counts[status] += 1
-
-    stage_current = load_mapping_document(root / ".pm/stage/current.yaml")
-    gate = load_mapping_document(root / ".pm/stage/gate.yaml")
-
-    def detail_task(task_uid: str) -> dict[str, object]:
-        entry = tasks_by_id.get(task_uid)
-        if entry is None:
-            return {"task_uid": task_uid, "missing": True}
-        task_path = root / str(entry["task_path"])
-        task_fields = load_mapping_document(task_path) if task_path.is_file() else OrderedDict()
-        return {
-            "task_uid": task_uid,
-            "missing": False,
-            "owner_role": entry.get("owner_role"),
-            "status": entry.get("status"),
-            "priority": entry.get("priority"),
-            "title": task_fields.get("title"),
-            "task_path": entry.get("task_path"),
-        }
-
-    blocking_ids: list[str] = []
-    for task_uid in stage_current.get("blocking_tasks", []):
-        blocking_ids.append(str(task_uid))
-    for task_uid in gate.get("blocking_tasks", []):
-        task_uid = str(task_uid)
-        if task_uid not in blocking_ids:
-            blocking_ids.append(task_uid)
-    untracked_blocked_ids: list[str] = []
-    for entry in registry_entries:
-        if entry.get("status") != "blocked":
-            continue
-        task_uid = str(entry["task_uid"])
-        if task_uid not in blocking_ids:
-            untracked_blocked_ids.append(task_uid)
-
-    producer_active_header, producer_active_records = load_list_document(
-        root / ".pm/roles/producer_system_designer/memory/active.yaml",
-        "records",
-    )
-    del producer_active_header
-    shared_active_header, shared_active_records = load_list_document(
-        root / ".pm/shared/memory/active.yaml",
-        "records",
-    )
-    del shared_active_header
-
-    def memory_summary(records: list[OrderedDict[str, object]]) -> list[dict[str, object]]:
-        result: list[dict[str, object]] = []
-        for record in records:
-            result.append(
-                {
-                    "id": record.get("id"),
-                    "topic": record.get("topic"),
-                    "summary": record.get("summary"),
-                    "effective_at": record.get("effective_at"),
-                }
-            )
-        return result
-
-    return {
-        "current_stage": stage_current.get("current_stage"),
-        "candidate_stage": stage_current.get("candidate_stage"),
-        "claim_envelope": stage_current.get("claim_envelope"),
-        "decision_date": stage_current.get("decision_date"),
-        "updated_from": list(stage_current.get("updated_from", [])),
-        "gate": {
-            "gate_id": gate.get("gate_id"),
-            "status": gate.get("status"),
-            "lane_status": list(gate.get("lane_status", [])),
-            "updated_from": list(gate.get("updated_from", [])),
-        },
-        "task_counts": task_counts,
-        "role_counts": role_counts,
-        "blocking_tasks": [detail_task(task_uid) for task_uid in blocking_ids],
-        "untracked_blocked_tasks": [detail_task(task_uid) for task_uid in untracked_blocked_ids],
-        "memory_inputs": {
-            "producer_active": memory_summary(producer_active_records),
-            "shared_active": memory_summary(shared_active_records),
-        },
-    }
 
 
 def cmd_stage_report(args: argparse.Namespace) -> int:
-    report = build_stage_report(args.root)
-    if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return 0
+    return cmd_stage_report_helper(args, build_stage_report_impl=build_stage_report)
 
-    lines = [
-        "oasis7 stage report",
-        f"- current_stage: {report['current_stage']}",
-        f"- candidate_stage: {report['candidate_stage']}",
-        f"- claim_envelope: {report['claim_envelope']}",
-        f"- decision_date: {report['decision_date']}",
-        f"- gate_id: {report['gate']['gate_id']}",
-        f"- gate_status: {report['gate']['status']}",
-        f"- task_counts: {', '.join(f'{k}={v}' for k, v in report['task_counts'].items())}",
-        f"- updated_from: {', '.join(report['updated_from']) or '(none)'}",
-        f"- gate_updated_from: {', '.join(report['gate']['updated_from']) or '(none)'}",
-        f"- gate_lane_status: {', '.join(report['gate']['lane_status']) or '(none)'}",
-        "- blocking_tasks:",
-    ]
-    if report["blocking_tasks"]:
-        for item in report["blocking_tasks"]:
-            if item.get("missing"):
-                lines.append(f"  - {item['task_uid']} (missing)")
-            else:
-                lines.append(
-                    f"  - {item['task_uid']} [{item['status']}] {item['owner_role']} / "
-                    f"{item['priority']} / {item['title']}"
-                )
-    else:
-        lines.append("  - (none)")
-
-    lines.append("- role_counts:")
-    for role, counts in report["role_counts"].items():
-        lines.append(
-            f"  - {role}: " + ", ".join(f"{status}={count}" for status, count in counts.items())
-        )
-
-    lines.append("- untracked_blocked_tasks:")
-    if report["untracked_blocked_tasks"]:
-        for item in report["untracked_blocked_tasks"]:
-            if item.get("missing"):
-                lines.append(f"  - {item['task_uid']} (missing)")
-            else:
-                lines.append(
-                    f"  - {item['task_uid']} [{item['status']}] {item['owner_role']} / "
-                    f"{item['priority']} / {item['title']}"
-                )
-    else:
-        lines.append("  - (none)")
-
-    lines.append("- producer_active_memory:")
-    if report["memory_inputs"]["producer_active"]:
-        for item in report["memory_inputs"]["producer_active"]:
-            lines.append(f"  - {item['id']} / {item['topic']} / {item['summary']}")
-    else:
-        lines.append("  - (none)")
-
-    lines.append("- shared_active_memory:")
-    if report["memory_inputs"]["shared_active"]:
-        for item in report["memory_inputs"]["shared_active"]:
-            lines.append(f"  - {item['id']} / {item['topic']} / {item['summary']}")
-    else:
-        lines.append("  - (none)")
-
-    print("\n".join(lines))
-    return 0
 def main() -> int:
     parser = build_parser(
         handlers={

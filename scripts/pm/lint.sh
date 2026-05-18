@@ -58,6 +58,9 @@ require_file "scripts/pm/move-task.sh"
 require_file "scripts/pm/new-task.sh"
 require_file "scripts/pm/pm_store_cli.py"
 require_file "scripts/pm/pm_store_docio.py"
+require_file "scripts/pm/pm_store_reporting.py"
+require_file "scripts/pm/pm_store_stage.py"
+require_file "scripts/pm/pm_store_task_lint.py"
 require_file "scripts/pm/pm_store.py"
 require_file "scripts/pm/promote-memory.sh"
 require_file "scripts/pm/promote-signal.sh"
@@ -110,7 +113,10 @@ fi
 python3 -m py_compile \
   "$SCRIPT_DIR/pm_store.py" \
   "$SCRIPT_DIR/pm_store_cli.py" \
-  "$SCRIPT_DIR/pm_store_docio.py"
+  "$SCRIPT_DIR/pm_store_docio.py" \
+  "$SCRIPT_DIR/pm_store_reporting.py" \
+  "$SCRIPT_DIR/pm_store_stage.py" \
+  "$SCRIPT_DIR/pm_store_task_lint.py"
 python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR"
 ./scripts/pm/task-execution-log-lint.sh >/dev/null
 
