@@ -1,0 +1,7 @@
+[target.wasm32-unknown-unknown]
+runner = [
+  "/bin/bash",
+  "-lc",
+  "exec \"$(git rev-parse --show-toplevel)/scripts/wasm-bindgen-test-runner.sh\" \"$@\"",
+  "wasm-bindgen-test-runner",
+]
