@@ -54,14 +54,54 @@ async function findWasmBindgenVersion() {
   return match[1];
 }
 
-async function resolveWasmBindgenCommand() {
+async function wasmBindgenVersionMatches(commandPath, expectedVersion) {
+  if (!commandPath) {
+    return false;
+  }
   try {
-    await access(wasmBindgenCliPath);
-    return wasmBindgenCliPath;
-  } catch {}
+    await access(commandPath);
+  } catch {
+    return false;
+  }
 
+  return await new Promise((resolvePromise) => {
+    const child = spawn(commandPath, ["--version"], {
+      cwd: workspaceRoot,
+      stdio: ["ignore", "pipe", "ignore"],
+      env: process.env,
+    });
+    let stdout = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.on("error", () => resolvePromise(false));
+    child.on("exit", (code) => {
+      resolvePromise(code === 0 && stdout.trim() === `wasm-bindgen ${expectedVersion}`);
+    });
+  });
+}
+
+async function resolveWasmBindgenCommand() {
   const wasmBindgenVersion = await findWasmBindgenVersion();
-  console.log(`wasm-bindgen cli missing; installing wasm-bindgen-cli ${wasmBindgenVersion}`);
+  const cachedRoot = resolve(
+    process.env.XDG_CACHE_HOME || resolve(process.env.HOME || workspaceRoot, ".cache"),
+    "oasis7",
+    "wasm-bindgen-cli",
+    wasmBindgenVersion,
+  );
+  const cachedCliPath = resolve(cachedRoot, "bin", "wasm-bindgen");
+
+  if (await wasmBindgenVersionMatches(cachedCliPath, wasmBindgenVersion)) {
+    return cachedCliPath;
+  }
+  if (await wasmBindgenVersionMatches(process.env.WASM_BINDGEN_BIN, wasmBindgenVersion)) {
+    return process.env.WASM_BINDGEN_BIN;
+  }
+  if (await wasmBindgenVersionMatches(wasmBindgenCliPath, wasmBindgenVersion)) {
+    return wasmBindgenCliPath;
+  }
+
+  console.log(`wasm-bindgen cli missing or stale; installing wasm-bindgen-cli ${wasmBindgenVersion}`);
   await runChecked("env", [
     "-u",
     "RUSTC_WRAPPER",
@@ -72,10 +112,13 @@ async function resolveWasmBindgenCommand() {
     "--version",
     wasmBindgenVersion,
     "--root",
-    cargoHomeDir,
+    cachedRoot,
   ]);
-  await access(wasmBindgenCliPath);
-  return wasmBindgenCliPath;
+
+  if (!(await wasmBindgenVersionMatches(cachedCliPath, wasmBindgenVersion))) {
+    throw new Error(`failed to provision wasm-bindgen ${wasmBindgenVersion} under ${cachedRoot}`);
+  }
+  return cachedCliPath;
 }
 
 async function listFilesRecursively(dirPath) {
