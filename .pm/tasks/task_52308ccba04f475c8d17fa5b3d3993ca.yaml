@@ -10,11 +10,13 @@ source_refs:
   - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
   - doc/world-simulator/viewer/viewer-manual.manual.md
   - doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md
+  - doc/world-simulator/project.md
 doc_refs:
   - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
   - doc/world-simulator/viewer/viewer-manual.manual.md
   - doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md
   - doc/world-runtime/evidence/formal-release-fixed-genesis-default-viewer-2026-05-16.md
+  - doc/world-simulator/project.md
 related_prd:
   - PRD-WORLD_SIMULATOR-039
 acceptance:
