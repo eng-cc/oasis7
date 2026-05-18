@@ -792,6 +792,9 @@ pub(super) fn project_summary_matches(
             let token_match = token_key
                 .map(|value| value == expected_token_key)
                 .unwrap_or(false);
+            // LetAI's project summary payload may omit `token_key`, so a project-id
+            // match is still treated as sufficient here. The later topup log check
+            // remains the second verifier before we mark a credit flow reconciled.
             if project_match && (token_match || token_key.is_none()) {
                 return true;
             }

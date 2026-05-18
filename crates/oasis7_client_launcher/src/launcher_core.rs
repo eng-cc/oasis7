@@ -200,6 +200,11 @@ pub(super) fn validate_provider_base_url_for_transport(
             if !base_url.trim().starts_with("https://") {
                 return Err("provider base url must use https:// for remote_https".to_string());
             }
+            if !is_public_remote_https_host(host.as_str()) {
+                return Err(
+                    "provider base url must use a public https host for remote_https".to_string(),
+                );
+            }
         }
         _ => {
             return Err("provider transport must be loopback_http or remote_https".to_string());
@@ -353,7 +358,12 @@ pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<Confi
                     }
                 }
                 Some(REMOTE_HTTPS_PROVIDER_TRANSPORT) => {
-                    if !base_url.trim().starts_with("https://") {
+                    if validate_provider_base_url_for_transport(
+                        base_url.as_str(),
+                        REMOTE_HTTPS_PROVIDER_TRANSPORT,
+                    )
+                    .is_err()
+                    {
                         issues.push(ConfigIssue::ProviderBaseUrlInvalid);
                     }
                 }
@@ -843,6 +853,22 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
 
 pub(super) fn is_loopback_host(host: &str) -> bool {
     matches!(host.trim(), "127.0.0.1" | "localhost" | "::1" | "[::1]")
+}
+
+pub(super) fn is_public_remote_https_host(host: &str) -> bool {
+    let normalized = host.trim().trim_start_matches('[').trim_end_matches(']');
+    if is_loopback_host(host) || normalized.eq_ignore_ascii_case("localhost") {
+        return false;
+    }
+    let Ok(ip) = normalized.parse::<std::net::IpAddr>() else {
+        return true;
+    };
+    match ip {
+        std::net::IpAddr::V4(ipv4) => {
+            !ipv4.is_private() && !ipv4.is_loopback() && !ipv4.is_link_local()
+        }
+        std::net::IpAddr::V6(ipv6) => !ipv6.is_loopback() && !ipv6.is_unicast_link_local(),
+    }
 }
 pub(super) fn parse_port(raw: &str, label: &str) -> Result<u16, String> {
     let value = raw.trim();

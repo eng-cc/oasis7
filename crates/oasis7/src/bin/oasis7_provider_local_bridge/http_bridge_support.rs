@@ -14,13 +14,7 @@ pub(super) fn handle_connection(
 ) -> Result<(), String> {
     let request = read_http_request(stream)?;
     let route_label = authorize_request(state, &request)?;
-    if route_label.is_none()
-        && state.options.auth_token.is_some()
-        && state.options.auth_route_map.is_empty()
-    {
-        return write_json_response(stream, 401, &json!({"error":"Unauthorized"}));
-    }
-    if route_label.is_none() && !state.options.auth_route_map.is_empty() {
+    if route_label.is_none() {
         return write_json_response(stream, 401, &json!({"error":"Unauthorized"}));
     }
     match (request.method.as_str(), request.path.as_str()) {
@@ -61,7 +55,12 @@ fn authorize_request(
         return Ok(state.options.auth_route_map.get(token).cloned());
     }
     if state.options.auth_route_from_bearer {
-        return Ok(presented.map(ToOwned::to_owned));
+        let Some(token) = presented else {
+            return Ok(None);
+        };
+        return Ok(state
+            .resolve_newapi_bridge_route_label(token)
+            .map(str::to_string));
     }
     let Some(expected) = state.options.auth_token.as_deref() else {
         return Ok(Some("default".to_string()));

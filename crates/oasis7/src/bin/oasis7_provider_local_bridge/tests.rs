@@ -6,6 +6,7 @@ use oasis7::simulator::{
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
 use std::collections::BTreeMap;
+use std::fs;
 
 #[derive(Debug, Clone)]
 struct FakeInvoker {
@@ -271,6 +272,50 @@ fn parse_options_accepts_auth_route_from_bearer() {
     assert!(options.auth_route_from_bearer);
     assert!(options.auth_route_map.is_empty());
     assert!(options.auth_token.is_none());
+}
+
+#[test]
+fn parse_options_rejects_short_auth_token() {
+    let err = parse_options(["--auth-token", "too-short"].into_iter()).expect_err("short token");
+    assert!(err.contains("at least 24 characters"));
+}
+
+#[test]
+fn route_label_env_clears_label_when_absent() {
+    assert_eq!(
+        route_label_env(None),
+        vec![("OASIS7_REMOTE_LLM_ROUTE_LABEL", String::new())]
+    );
+}
+
+#[test]
+fn resolve_newapi_bridge_route_label_requires_active_binding() {
+    let state_path = std::env::temp_dir().join(format!(
+        "oasis7-provider-bridge-state-{}.json",
+        std::process::id()
+    ));
+    fs::write(
+        state_path.as_path(),
+        serde_json::to_vec(&serde_json::json!({
+            "bindings": [
+                {
+                    "bridge_user_id": "bridge-user-000001",
+                    "newapi_user_ref": "user-1",
+                    "status": "disabled"
+                }
+            ]
+        }))
+        .expect("encode bridge state"),
+    )
+    .expect("write bridge state");
+    std::env::set_var(
+        "OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH",
+        state_path.as_os_str(),
+    );
+    let state = ProviderState::new(CliOptions::default()).expect("provider state");
+    assert_eq!(state.resolve_newapi_bridge_route_label("user-1"), None);
+    std::env::remove_var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH");
+    let _ = fs::remove_file(state_path);
 }
 
 fn sample_request() -> DecisionRequest {

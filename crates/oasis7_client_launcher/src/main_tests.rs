@@ -11,8 +11,8 @@ use super::{
         ExplorerTab, WebExplorerOverviewResponse,
     },
     install_cjk_font, normalize_host_for_url, normalize_launch_config, parse_chain_role,
-    parse_chain_validators, parse_host_port, parse_port, probe_chain_status_endpoint,
-    read_named_env_value_with, resolve_control_plane_env_with,
+    parse_chain_validators, parse_host_port, parse_http_base_url, parse_port,
+    probe_chain_status_endpoint, read_named_env_value_with, resolve_control_plane_env_with,
     self_guided::{
         resolve_config_guide_target, resolve_next_task_hint, resolve_primary_disabled_cta,
         ConfigGuideTargetHint, DemoModePhase, DisabledActionCta, NextTaskHint, OnboardingStep,
@@ -146,6 +146,14 @@ fn build_launcher_args_accepts_remote_https_provider_transport() {
     assert!(args.contains(&"remote_https".to_string()));
     assert!(args.contains(&"--agent-provider-url".to_string()));
     assert!(args.contains(&"https://provider.example".to_string()));
+}
+
+#[test]
+fn parse_http_base_url_defaults_https_to_port_443() {
+    let (host, port) =
+        parse_http_base_url("https://provider.example", "provider base url").expect("https url");
+    assert_eq!(host, "provider.example");
+    assert_eq!(port, 443);
 }
 
 #[test]
@@ -906,6 +914,18 @@ fn collect_required_config_issues_rejects_non_loopback_provider_base_url() {
     };
     let issues = collect_required_config_issues(&config);
     assert!(issues.contains(&ConfigIssue::ProviderBaseUrlLoopbackRequired));
+}
+
+#[test]
+fn collect_required_config_issues_rejects_loopback_remote_https_provider_base_url() {
+    let config = LaunchConfig {
+        agent_decision_source: "provider_backed".to_string(),
+        agent_provider_transport: "remote_https".to_string(),
+        agent_provider_url: "https://127.0.0.1:5841".to_string(),
+        ..LaunchConfig::default()
+    };
+    let issues = collect_required_config_issues(&config);
+    assert!(issues.contains(&ConfigIssue::ProviderBaseUrlInvalid));
 }
 
 #[test]

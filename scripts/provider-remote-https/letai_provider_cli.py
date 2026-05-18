@@ -12,6 +12,7 @@ DEFAULT_BASE_URL = "https://api.letai.run/v1"
 DEFAULT_TIMEOUT_MS = 15000
 DEFAULT_MAX_OUTPUT_TOKENS = 256
 DEFAULT_TEMPERATURE = 0.0
+DEFAULT_USER_AGENT = "curl/8.5.0"
 
 
 def env_required(*names: str) -> str:
@@ -83,9 +84,11 @@ def load_route_config() -> dict:
         raise RuntimeError("OASIS7_REMOTE_LLM_ROUTES_PATH root must be a JSON object")
     lookup_label = route_label or "default"
     route = payload.get(lookup_label)
-    if route is None and route_label:
-        return load_newapi_bridge_state_route(route_label)
     if route is None:
+        if route_label:
+            raise RuntimeError(
+                f"route config `{lookup_label}` was not found in OASIS7_REMOTE_LLM_ROUTES_PATH"
+            )
         return load_newapi_bridge_state_route(route_label)
     if not isinstance(route, dict):
         raise RuntimeError(f"route config `{lookup_label}` must be a JSON object")
@@ -228,7 +231,9 @@ def parse_gateway_call(argv: list[str]) -> tuple[str, int, str]:
             index += 1
             if index >= len(argv):
                 raise RuntimeError("--timeout requires a value")
-            timeout_ms = int(argv[index])
+            # `agent --timeout` comes from the local embedded fallback path, which
+            # still passes seconds rather than milliseconds.
+            timeout_ms = int(argv[index]) * 1000
         index += 1
     if not params:
         raise RuntimeError("gateway call requires --params")
@@ -256,7 +261,8 @@ def parse_local_agent(argv: list[str]) -> tuple[str, int, str]:
             index += 1
             if index >= len(argv):
                 raise RuntimeError("--timeout requires a value")
-            timeout_ms = int(argv[index]) * 1000
+            # `gateway call agent --timeout` is already passed in milliseconds.
+            timeout_ms = int(argv[index])
         elif flag == "--agent":
             index += 1
             if index >= len(argv):
@@ -291,9 +297,7 @@ def make_headers(api_key: str) -> dict[str, str]:
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        # LetAI's upstream gateway rejects Python urllib's default user agent
-        # with HTTP 403 / error code 1010, while a curl-like user agent passes.
-        "User-Agent": "curl/8.5.0",
+        "User-Agent": env_optional("OASIS7_REMOTE_LLM_USER_AGENT") or DEFAULT_USER_AGENT,
     }
     extra_headers_json = env_optional(
         "OASIS7_REMOTE_LLM_EXTRA_HEADERS_JSON", "LETAI_EXTRA_HEADERS_JSON"
@@ -408,7 +412,11 @@ def decode_completion_payload(payload: str) -> tuple[dict, str, dict]:
     stripped = payload.strip()
     if not stripped:
         raise RuntimeError("upstream response body was empty")
-    if stripped.startswith("data:"):
+    if any(
+        line.strip().startswith("data:")
+        for line in payload.splitlines()
+        if line.strip()
+    ):
         return decode_sse_completion_payload(stripped)
     decoded = json.loads(payload)
     choices = decoded.get("choices")

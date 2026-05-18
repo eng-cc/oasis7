@@ -184,6 +184,60 @@ impl ProviderState {
         recent_feedback.push_back(summary);
     }
 
+    fn resolve_newapi_bridge_route_label<'a>(&self, bearer: &'a str) -> Option<&'a str> {
+        let normalized = bearer.trim();
+        if normalized.is_empty() {
+            return None;
+        }
+        let state_path = env::var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())?;
+        let raw = fs::read_to_string(state_path.as_str()).ok()?;
+        let payload = serde_json::from_str::<Value>(raw.as_str()).ok()?;
+        let bindings = payload.get("bindings").and_then(Value::as_array)?;
+        let project_bindings = payload.get("project_bindings").and_then(Value::as_array)?;
+        let (by_ref, by_bridge_user_id) = if let Some((prefix, value)) = normalized.split_once(':')
+        {
+            let value = value.trim();
+            match prefix {
+                "newapi_user_ref" if !value.is_empty() => (Some(value), None),
+                "bridge_user_id" if !value.is_empty() => (None, Some(value)),
+                _ => (Some(normalized), Some(normalized)),
+            }
+        } else {
+            (Some(normalized), Some(normalized))
+        };
+        bindings.iter().find_map(|entry| {
+            let object = entry.as_object()?;
+            if object.get("status").and_then(Value::as_str) != Some("active") {
+                return None;
+            }
+            let ref_match = by_ref.is_some_and(|value| {
+                object.get("newapi_user_ref").and_then(Value::as_str) == Some(value)
+            });
+            let user_match = by_bridge_user_id.is_some_and(|value| {
+                object.get("bridge_user_id").and_then(Value::as_str) == Some(value)
+            });
+            let bridge_user_id = object.get("bridge_user_id").and_then(Value::as_str)?;
+            let has_token = project_bindings.iter().any(|project| {
+                let Some(project) = project.as_object() else {
+                    return false;
+                };
+                project.get("bridge_user_id").and_then(Value::as_str) == Some(bridge_user_id)
+                    && project
+                        .get("token_key")
+                        .and_then(Value::as_str)
+                        .is_some_and(|value| !value.trim().is_empty())
+            });
+            if (ref_match || user_match) && has_token {
+                Some(normalized)
+            } else {
+                None
+            }
+        })
+    }
+
     fn handle_decision(
         &self,
         request: DecisionRequest,
@@ -601,6 +655,11 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     if options.bind_addr.trim().is_empty() {
         return Err("--bind requires a non-empty value".to_string());
     }
+    if let Some(token) = options.auth_token.as_deref() {
+        if token.trim().len() < 24 {
+            return Err("--auth-token must be at least 24 characters".to_string());
+        }
+    }
     Ok(options)
 }
 
@@ -627,9 +686,10 @@ fn print_help() {
 }
 
 fn route_label_env(route_label: Option<&str>) -> Vec<(&'static str, String)> {
-    route_label
-        .map(|value| vec![("OASIS7_REMOTE_LLM_ROUTE_LABEL", value.to_string())])
-        .unwrap_or_default()
+    vec![(
+        "OASIS7_REMOTE_LLM_ROUTE_LABEL",
+        route_label.unwrap_or_default().to_string(),
+    )]
 }
 
 fn load_auth_route_map(path: &str) -> Result<BTreeMap<String, String>, String> {
