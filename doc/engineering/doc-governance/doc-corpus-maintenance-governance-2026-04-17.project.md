@@ -13,6 +13,7 @@
 - [x] testing-evidence-path-followup (PRD-ENGINEERING-025/029) [test_tier_required]: 作为第四条 follow-up，建立 `testing-evidence-path-governance` 专题并新增 `doc/testing/evidence/README.md`，把 `testing/evidence` 从“热点路径内无首读入口”收口到按问题分流的 canonical 子域入口。 Trace: .pm/tasks/task_38707b4060b54e5e8b8ebcdb8d18a602.yaml
 - [x] readme-governance-path-followup (PRD-ENGINEERING-025/030) [test_tier_required]: 作为第五条 follow-up，建立 `readme-governance-path-governance` 专题并新增 `doc/readme/governance/README.md`，把 `readme/governance` 从“热点路径内无首读入口”收口到按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流的 canonical 子域入口。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
 - [x] quarterly-doc-inventory-review-followup (PRD-ENGINEERING-025) [test_tier_required]: 执行 2026-04-24 季度复核，重新运行 `bash ./scripts/doc-inventory-report.sh` 固定当前 `doc/` 体量快照，并把下一条 follow-up 从“待季度复核”改判为“near-limit active project docs 拆分优先”，避免继续停留在泛化的 review placeholder。 Trace: .pm/tasks/task_1104ff9bb9114aaa85c445785950a939.yaml
+- [x] world-simulator-doc-redundancy-reduction-followup (PRD-ENGINEERING-015/025) [test_tier_required]: 作为已完成 `world-simulator/viewer` 路径治理后的 aftercare，收口 `doc/world-simulator/viewer/viewer-manual.md` 的 legacy 正文残留，并把 `doc/world-simulator/prd.index.md` 压回“精确检索优先”的文件级索引角色，避免与模块 `README.md` 再做一套 landing。 Trace: .pm/tasks/task_aaebf3a722a847b9b2e8d23695ea71c0.yaml
 
 ## 2026-04-24 季度复核快照
 - `bash ./scripts/doc-inventory-report.sh` 当前快照：
@@ -29,6 +30,7 @@
 
 说明:
 `doc/devlog` 历史压缩、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 路径级治理都已完成首批入口收口。季度复核也已完成当前快照重算；后续若要继续扩 `core/reviews`、`world-simulator/launcher`、`ci/longrun/templates`、`gap` 或 `production` 等 follow-up，仍需至少各自独立创建 `.pm` task；默认仍建议独立 worktree，除非用户明确要求复用当前 PR/工作树。
+2026-05-18 补充：已对 `world-simulator` 已治理路径执行一轮重复入口 aftercare，清掉 `viewer-manual.md` 的 legacy 正文残留，并将 `prd.index.md` 收回 index-first 角色；该动作不改变季度复核已冻结的“near-limit active project docs 拆分优先”下一步顺序。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -43,5 +45,5 @@
 - 当前阶段: M2 已完成
 - 阶段说明: formalize + report + five path follow-ups + quarterly review closed
 - 阻塞项: 无
-- 最近更新: 2026-04-24
-- 后续动作: 入口减重专题 `PRD-ENGINEERING-024` 与首批五条路径级 follow-up 已完成，当前季度复核也已完成。下一条 follow-up 不再是泛化的 review placeholder，而是 near-limit active project docs 拆分优先：先处理 `doc/world-simulator/project.md` 与 `doc/readme/project.md`，随后再评估 `core/reviews` 与 `world-simulator/launcher` 是否需要独立专题。
+- 最近更新: 2026-05-18
+- 后续动作: 入口减重专题 `PRD-ENGINEERING-024` 与首批五条路径级 follow-up 已完成；`world-simulator` 既有路径也已完成一轮重复入口 aftercare。下一条正式 follow-up 仍然不是新的路径扩张，而是 near-limit active project docs 拆分优先：先处理 `doc/world-simulator/project.md` 与 `doc/readme/project.md`，随后再评估 `core/reviews` 与 `world-simulator/launcher` 是否需要独立专题。
