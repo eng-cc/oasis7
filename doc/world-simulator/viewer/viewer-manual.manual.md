@@ -54,6 +54,12 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 - `main_token_transfer` 仍保持阻断，页面只显示 lane verdict，不提供资产转账表单。
 - 页面不再提供 `standard Viewer` 跳转，也不再承担材质/theme/3D 视觉 QA 职责。
 
+## 证据边界
+- 当前 formal gameplay PASS 证据以 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 为准。
+  - 该证据包含 2026-04-08 的 LLM-enabled follow-up PASS，结论是当前 Web 主入口已具备 release-grade formal gameplay 样本。
+- `doc/world-runtime/evidence/formal-release-fixed-genesis-default-viewer-2026-05-16.md` 只证明 formal-release default world 在 `--no-llm` 观察链路下可加载、可连接、可选中实体。
+  - 这份截图证据属于 observer/debug，不替代 formal gameplay 证明。
+
 ## Web 闭环
 
 ### 标准人工闭环
@@ -114,6 +120,7 @@ agent-browser close
 - 无法进入正式玩法：检查 LLM provider 配置；若显式 `--no-llm`，只允许 observer/debug。
 - `agent-browser` 失败：先检查 `agent-browser --version` 与浏览器依赖。
 - 有状态但不推进：优先跑 `viewer-software-safe-step-regression.sh`，确认是正常推进还是显式 blocker。
+- 如果只看到 `--no-llm` 截图证据：不要把它当成 formal gameplay PASS；回到 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 看 LLM-enabled follow-up 结论。
 
 ## 已移除能力
 - 原生 Viewer crate 启动路径
@@ -125,3 +132,4 @@ agent-browser close
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md`
+- `doc/world-runtime/evidence/formal-release-fixed-genesis-default-viewer-2026-05-16.md`
