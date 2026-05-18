@@ -15,6 +15,7 @@
 - [x] quarterly-doc-inventory-review-followup (PRD-ENGINEERING-025) [test_tier_required]: 执行 2026-04-24 季度复核，重新运行 `bash ./scripts/doc-inventory-report.sh` 固定当前 `doc/` 体量快照，并把下一条 follow-up 从“待季度复核”改判为“near-limit active project docs 拆分优先”，避免继续停留在泛化的 review placeholder。 Trace: .pm/tasks/task_1104ff9bb9114aaa85c445785950a939.yaml
 - [x] world-simulator-doc-redundancy-reduction-followup (PRD-ENGINEERING-015/025) [test_tier_required]: 作为已完成 `world-simulator/viewer` 路径治理后的 aftercare，收口 `doc/world-simulator/viewer/viewer-manual.md` 的 legacy 正文残留，并把 `doc/world-simulator/prd.index.md` 压回“精确检索优先”的文件级索引角色，避免与模块 `README.md` 再做一套 landing。 Trace: .pm/tasks/task_aaebf3a722a847b9b2e8d23695ea71c0.yaml
 - [x] viewer-manual-canonical-source-cleanup-followup (PRD-ENGINEERING-025) [test_tier_required]: 继续对当前真值/当前基线类正式文档执行 aftercare，把 `world-simulator/site github-pages` 相关正式文档中的 `viewer-manual.md` 基线路径统一改回 `viewer-manual.manual.md`，避免 legacy redirect 再次被误读成 canonical source。 Trace: .pm/tasks/task_010e133e25f5411daa05bbbf80ff3727.yaml
+- [x] viewer-manual-sync-contract-refresh-followup (PRD-ENGINEERING-025) [test_tier_required]: 刷新 `scripts/site-manual-sync-check.sh` 的 source/manual 与 HTML mirror 校验契约，使其重新匹配当前 `render_mode=viewer&test_api=1` 基线，避免镜像同步门禁继续盯过时命令字符串。 Trace: .pm/tasks/task_03cd617323c840d29a36b5bfa91792ed.yaml
 
 ## 2026-04-24 季度复核快照
 - `bash ./scripts/doc-inventory-report.sh` 当前快照：
