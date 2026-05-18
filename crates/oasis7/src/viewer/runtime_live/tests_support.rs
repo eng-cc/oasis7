@@ -1,7 +1,7 @@
 use super::*;
 use ed25519_dalek::SigningKey;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::net::TcpStream;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -27,6 +27,10 @@ pub(super) fn test_signer(seed: u8) -> (String, String) {
         hex::encode(signing_key.verifying_key().to_bytes()),
         hex::encode(private_key),
     )
+}
+
+pub(super) fn removed_old_brand_runtime_live_env(suffix: &str) -> String {
+    ["AGENT", "WORLD", suffix].join("_")
 }
 
 pub(super) fn lock_test_llm_env() -> std::sync::MutexGuard<'static, ()> {
