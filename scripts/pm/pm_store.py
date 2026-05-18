@@ -10,7 +10,16 @@ import uuid
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
-SAFE_SCALAR_RE = re.compile(r"[A-Za-z0-9_.:/+-]+")
+from pm_store_cli import build_parser
+from pm_store_docio import (
+    dump_list_document,
+    dump_mapping_document,
+    format_scalar,
+    load_list_document,
+    load_mapping_document,
+    parse_key_value,
+    parse_scalar,
+)
 TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
 TASK_STATUSES = {"candidate", "committed", "blocked", "done", "deferred"}
 LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
@@ -95,184 +104,6 @@ def rewrite_object_strings(value, replacements: dict[str, str]):
     if isinstance(value, dict):
         return {key: rewrite_object_strings(item, replacements) for key, item in value.items()}
     return value
-
-
-def parse_scalar(value: str):
-    value = value.strip()
-    if value == "null":
-        return None
-    if value == "true":
-        return True
-    if value == "false":
-        return False
-    if value.startswith('"'):
-        return json.loads(value)
-    return value
-
-
-def format_scalar(value) -> str:
-    if value is None:
-        return "null"
-    if value is True:
-        return "true"
-    if value is False:
-        return "false"
-    value = str(value)
-    if SAFE_SCALAR_RE.fullmatch(value):
-        return value
-    return json.dumps(value, ensure_ascii=False)
-
-
-def parse_key_value(text: str) -> tuple[str, str]:
-    key, sep, value = text.partition(": ")
-    if not sep:
-        raise ValueError(f"invalid key/value line: {text!r}")
-    return key, value
-
-
-def load_list_document(path: pathlib.Path, list_key: str) -> tuple[OrderedDict[str, object], list[OrderedDict[str, object]]]:
-    header: OrderedDict[str, object] = OrderedDict()
-    items: list[OrderedDict[str, object]] = []
-    current: OrderedDict[str, object] | None = None
-    active_list_key: str | None = None
-    in_items = False
-
-    for line_no, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not raw_line.strip():
-            continue
-        if not in_items:
-            if raw_line == f"{list_key}: []":
-                return header, []
-            if raw_line == f"{list_key}:":
-                in_items = True
-                continue
-            if raw_line.startswith(" "):
-                raise ValueError(f"{path}:{line_no}: unexpected indentation before {list_key}")
-            if raw_line.endswith(": []"):
-                key = raw_line[:-4]
-                header[key] = []
-                continue
-            key, value = parse_key_value(raw_line)
-            header[key] = parse_scalar(value)
-            continue
-
-        if raw_line.startswith("  - "):
-            if current is not None:
-                items.append(current)
-            current = OrderedDict()
-            key, value = parse_key_value(raw_line[4:])
-            current[key] = parse_scalar(value)
-            active_list_key = None
-            continue
-
-        if raw_line.startswith("      - "):
-            if current is None or active_list_key is None:
-                raise ValueError(f"{path}:{line_no}: dangling nested list item")
-            value = parse_scalar(raw_line[8:])
-            current[active_list_key].append(value)
-            continue
-
-        if raw_line.startswith("    "):
-            if current is None:
-                raise ValueError(f"{path}:{line_no}: item field before item start")
-            stripped = raw_line[4:]
-            if stripped.endswith(": []"):
-                key = stripped[:-4]
-                current[key] = []
-                active_list_key = None
-                continue
-            if stripped.endswith(":"):
-                key = stripped[:-1]
-                current[key] = []
-                active_list_key = key
-                continue
-            key, value = parse_key_value(stripped)
-            current[key] = parse_scalar(value)
-            active_list_key = None
-            continue
-
-        raise ValueError(f"{path}:{line_no}: unsupported line: {raw_line!r}")
-
-    if in_items and current is not None:
-        items.append(current)
-    return header, items
-
-
-def dump_list_document(path: pathlib.Path, header: OrderedDict[str, object], list_key: str, items: list[OrderedDict[str, object]]) -> None:
-    lines: list[str] = []
-    for key, value in header.items():
-        if isinstance(value, list):
-            if value:
-                raise ValueError(f"top-level lists other than {list_key} are not supported in {path}")
-            lines.append(f"{key}: []")
-        else:
-            lines.append(f"{key}: {format_scalar(value)}")
-
-    if not items:
-        lines.append(f"{list_key}: []")
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return
-
-    lines.append(f"{list_key}:")
-    for item in items:
-        first = True
-        for key, value in item.items():
-            prefix = "  - " if first else "    "
-            if isinstance(value, list):
-                if not value:
-                    lines.append(f"{prefix}{key}: []")
-                else:
-                    lines.append(f"{prefix}{key}:")
-                    for entry in value:
-                        lines.append(f"      - {format_scalar(entry)}")
-            else:
-                lines.append(f"{prefix}{key}: {format_scalar(value)}")
-            first = False
-
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def load_mapping_document(path: pathlib.Path) -> OrderedDict[str, object]:
-    data: OrderedDict[str, object] = OrderedDict()
-    active_list_key: str | None = None
-    for line_no, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not raw_line.strip():
-            continue
-        if raw_line.startswith("  - "):
-            if active_list_key is None:
-                raise ValueError(f"{path}:{line_no}: list item without list key")
-            data[active_list_key].append(parse_scalar(raw_line[4:]))
-            continue
-        if raw_line.startswith(" "):
-            raise ValueError(f"{path}:{line_no}: unsupported indentation in mapping doc")
-        if raw_line.endswith(": []"):
-            data[raw_line[:-4]] = []
-            active_list_key = None
-            continue
-        if raw_line.endswith(":"):
-            key = raw_line[:-1]
-            data[key] = []
-            active_list_key = key
-            continue
-        key, value = parse_key_value(raw_line)
-        data[key] = parse_scalar(value)
-        active_list_key = None
-    return data
-
-
-def dump_mapping_document(path: pathlib.Path, data: OrderedDict[str, object]) -> None:
-    lines: list[str] = []
-    for key, value in data.items():
-        if isinstance(value, list):
-            if not value:
-                lines.append(f"{key}: []")
-            else:
-                lines.append(f"{key}:")
-                for entry in value:
-                    lines.append(f"  - {format_scalar(entry)}")
-        else:
-            lines.append(f"{key}: {format_scalar(value)}")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def load_roles(root: pathlib.Path) -> set[str]:
@@ -3989,211 +3820,37 @@ def cmd_stage_report(args: argparse.Namespace) -> int:
 
     print("\n".join(lines))
     return 0
-
-
-def add_task_uid_argument(parser: argparse.ArgumentParser, *, required: bool = False) -> None:
-    parser.add_argument("--task-uid", dest="task_uid", required=required)
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="oasis7 .pm store helper")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    sync_views = subparsers.add_parser("sync-views")
-    sync_views.add_argument("root", type=pathlib.Path)
-    sync_views.add_argument("--json", action="store_true")
-    sync_views.set_defaults(func=cmd_sync_views)
-
-    task_lint = subparsers.add_parser("task-lint")
-    task_lint.add_argument("root", type=pathlib.Path)
-    task_lint.set_defaults(func=cmd_task_lint)
-
-    task_execution_log_lint = subparsers.add_parser("task-execution-log-lint")
-    task_execution_log_lint.add_argument("root", type=pathlib.Path)
-    task_execution_log_lint.set_defaults(func=cmd_task_execution_log_lint)
-
-    memory_lint = subparsers.add_parser("memory-lint")
-    memory_lint.add_argument("root", type=pathlib.Path)
-    memory_lint.set_defaults(func=cmd_memory_lint)
-
-    working_memory_lint = subparsers.add_parser("working-memory-lint")
-    working_memory_lint.add_argument("root", type=pathlib.Path)
-    working_memory_lint.set_defaults(func=cmd_working_memory_lint)
-
-    memory_report = subparsers.add_parser("memory-report")
-    memory_report.add_argument("root", type=pathlib.Path)
-    memory_report.add_argument("--role")
-    memory_report.add_argument("--include-shared", dest="include_shared", action="store_true")
-    memory_report.add_argument("--no-shared", dest="include_shared", action="store_false")
-    memory_report.set_defaults(include_shared=True)
-    memory_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
-    memory_report.add_argument("--json", action="store_true")
-    memory_report.set_defaults(func=cmd_memory_report)
-
-    new_task = subparsers.add_parser("new-task")
-    new_task.add_argument("root", type=pathlib.Path)
-    new_task.add_argument("--owner-role", required=True)
-    new_task.add_argument("--title", required=True)
-    new_task.add_argument("--priority", choices=tuple(PRIORITY_ORDER.keys()), default="P2")
-    new_task.add_argument("--source-signal")
-    new_task.add_argument("--source-ref", action="append", default=[], required=True)
-    new_task.add_argument("--doc-ref", action="append", default=[])
-    new_task.add_argument("--related-prd", action="append", default=[])
-    new_task.add_argument("--acceptance", action="append", default=[])
-    new_task.add_argument("--handoff-to", action="append", default=[])
-    new_task.add_argument("--worktree-hint")
-    new_task.add_argument("--json", action="store_true")
-    new_task.set_defaults(func=cmd_new_task)
-
-    working_memory_report = subparsers.add_parser("working-memory-report")
-    working_memory_report.add_argument("root", type=pathlib.Path)
-    add_task_uid_argument(working_memory_report)
-    working_memory_report.add_argument("--role")
-    working_memory_report.add_argument("--json", action="store_true")
-    working_memory_report.set_defaults(func=cmd_working_memory_report)
-
-    reflection_report = subparsers.add_parser("reflection-report")
-    reflection_report.add_argument("root", type=pathlib.Path)
-    reflection_report.add_argument("--role")
-    reflection_report.add_argument("--json", action="store_true")
-    reflection_report.set_defaults(func=cmd_reflection_report)
-
-    role_report = subparsers.add_parser("role-report")
-    role_report.add_argument("root", type=pathlib.Path)
-    role_report.add_argument("--role")
-    role_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
-    role_report.add_argument("--json", action="store_true")
-    role_report.set_defaults(func=cmd_role_report)
-
-    workflow_report = subparsers.add_parser("workflow-report")
-    workflow_report.add_argument("root", type=pathlib.Path)
-    workflow_report.add_argument("--role", required=True)
-    workflow_report.add_argument("--phase", choices=("start", "close", "review"), default="start")
-    add_task_uid_argument(workflow_report)
-    workflow_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
-    workflow_report.add_argument("--json", action="store_true")
-    workflow_report.set_defaults(func=cmd_workflow_report)
-
-    promote_memory = subparsers.add_parser("promote-memory")
-    promote_memory.add_argument("root", type=pathlib.Path)
-    promote_memory.add_argument("--signal-id", required=True)
-    promote_memory.add_argument("--scope", choices=("role", "shared"), default="role")
-    promote_memory.add_argument("--role")
-    promote_memory.add_argument("--memory-id")
-    promote_memory.add_argument("--topic")
-    promote_memory.add_argument("--summary")
-    promote_memory.add_argument("--source-ref", action="append", default=[])
-    promote_memory.add_argument("--tag", action="append", default=[])
-    promote_memory.add_argument("--confidence", default="confirmed")
-    promote_memory.add_argument("--promotion-reason")
-    promote_memory.add_argument("--reject-reason")
-    promote_memory.add_argument("--defer-reason")
-    promote_memory.add_argument("--effective-at")
-    promote_memory.add_argument("--json", action="store_true")
-    promote_memory.set_defaults(func=cmd_promote_memory)
-
-    move_task = subparsers.add_parser("move-task")
-    move_task.add_argument("root", type=pathlib.Path)
-    add_task_uid_argument(move_task, required=True)
-    move_task.add_argument("--to-status", required=True, choices=sorted(TASK_STATUSES))
-    move_task.add_argument("--json", action="store_true")
-    move_task.set_defaults(func=cmd_move_task)
-
-    supersede_memory = subparsers.add_parser("supersede-memory")
-    supersede_memory.add_argument("root", type=pathlib.Path)
-    supersede_memory.add_argument("--scope", choices=("role", "shared"), default="role")
-    supersede_memory.add_argument("--role")
-    supersede_memory.add_argument("--memory-id", required=True)
-    supersede_memory.add_argument("--superseded-by", required=True)
-    supersede_memory.add_argument("--supersede-reason", required=True)
-    supersede_memory.add_argument("--json", action="store_true")
-    supersede_memory.set_defaults(func=cmd_supersede_memory)
-
-    stage_report = subparsers.add_parser("stage-report")
-    stage_report.add_argument("root", type=pathlib.Path)
-    stage_report.add_argument("--json", action="store_true")
-    stage_report.set_defaults(func=cmd_stage_report)
-
-    stage_lint = subparsers.add_parser("stage-lint")
-    stage_lint.add_argument("root", type=pathlib.Path)
-    stage_lint.set_defaults(func=cmd_stage_lint)
-
-    set_stage = subparsers.add_parser("set-stage")
-    set_stage.add_argument("root", type=pathlib.Path)
-    set_stage.add_argument("--current-stage")
-    set_stage.add_argument("--candidate-stage")
-    set_stage.add_argument("--clear-candidate-stage", action="store_true")
-    set_stage.add_argument("--claim-envelope")
-    set_stage.add_argument("--decision-date")
-    set_stage.add_argument("--gate-id")
-    set_stage.add_argument("--clear-gate-id", action="store_true")
-    set_stage.add_argument("--gate-status")
-    set_stage.add_argument("--lane-status", action="append", default=[])
-    set_stage.add_argument("--clear-lane-status", action="store_true")
-    set_stage.add_argument("--blocking-task", action="append", default=[])
-    set_stage.add_argument("--clear-blocking-tasks", action="store_true")
-    set_stage.add_argument("--source-ref", action="append", default=[])
-    set_stage.add_argument("--json", action="store_true")
-    set_stage.set_defaults(func=cmd_set_stage)
-
-    codex_transcript_report = subparsers.add_parser("codex-transcript-report")
-    codex_transcript_report.add_argument("root", type=pathlib.Path)
-    codex_transcript_report.add_argument("--session-id")
-    add_task_uid_argument(codex_transcript_report)
-    codex_transcript_report.add_argument("--worktree-hint")
-    codex_transcript_report.add_argument("--thread-name-pattern")
-    codex_transcript_report.add_argument("--codex-dir", default="~/.codex")
-    codex_transcript_report.add_argument("--after-ts")
-    codex_transcript_report.add_argument("--before-ts")
-    codex_transcript_report.add_argument("--json", action="store_true")
-    codex_transcript_report.set_defaults(func=cmd_codex_transcript_report)
-
-    import_working_memory = subparsers.add_parser("import-working-memory")
-    import_working_memory.add_argument("root", type=pathlib.Path)
-    add_task_uid_argument(import_working_memory, required=True)
-    import_working_memory.add_argument("--role", required=True)
-    import_working_memory.add_argument("--worktree-hint")
-    import_working_memory.add_argument("--input-json", required=True)
-    import_working_memory.add_argument("--expires-days", type=int, default=DEFAULT_WORKING_MEMORY_EXPIRES_DAYS)
-    import_working_memory.add_argument("--session-id")
-    import_working_memory.add_argument("--thread-name")
-    import_working_memory.add_argument("--codex-dir", default="~/.codex")
-    import_working_memory.add_argument("--mapping-updated-at")
-    import_working_memory.add_argument("--transcript-source")
-    import_working_memory.add_argument("--captured-until-ts")
-    import_working_memory.add_argument("--json", action="store_true")
-    import_working_memory.set_defaults(func=cmd_import_working_memory)
-
-    promote_working_memory_signal = subparsers.add_parser("promote-working-memory-signal")
-    promote_working_memory_signal.add_argument("root", type=pathlib.Path)
-    add_task_uid_argument(promote_working_memory_signal, required=True)
-    promote_working_memory_signal.add_argument("--role")
-    promote_working_memory_signal.add_argument("--entry-id", action="append", default=[])
-    promote_working_memory_signal.add_argument("--severity", choices=("low", "medium", "high", "critical"), default="medium")
-    promote_working_memory_signal.add_argument("--json", action="store_true")
-    promote_working_memory_signal.set_defaults(func=cmd_promote_working_memory_signal)
-
-    working_memory_autoflow = subparsers.add_parser("working-memory-autoflow")
-    working_memory_autoflow.add_argument("root", type=pathlib.Path)
-    add_task_uid_argument(working_memory_autoflow, required=True)
-    working_memory_autoflow.add_argument("--role")
-    working_memory_autoflow.add_argument("--entry-id", action="append", default=[])
-    working_memory_autoflow.add_argument("--severity", choices=("low", "medium", "high", "critical"), default="medium")
-    working_memory_autoflow.add_argument("--priority", choices=tuple(PRIORITY_ORDER.keys()), default="P2")
-    working_memory_autoflow.add_argument("--dry-run", action="store_true")
-    working_memory_autoflow.add_argument("--json", action="store_true")
-    working_memory_autoflow.set_defaults(func=cmd_working_memory_autoflow)
-
-    migrate_task_identity_parser = subparsers.add_parser("migrate-task-identity")
-    migrate_task_identity_parser.add_argument("root", type=pathlib.Path)
-    migrate_task_identity_parser.add_argument("--json", action="store_true")
-    migrate_task_identity_parser.set_defaults(func=cmd_migrate_task_identity)
-
-    return parser
-
-
 def main() -> int:
-    parser = build_parser()
+    parser = build_parser(
+        handlers={
+            "cmd_sync_views": cmd_sync_views,
+            "cmd_task_lint": cmd_task_lint,
+            "cmd_task_execution_log_lint": cmd_task_execution_log_lint,
+            "cmd_memory_lint": cmd_memory_lint,
+            "cmd_working_memory_lint": cmd_working_memory_lint,
+            "cmd_memory_report": cmd_memory_report,
+            "cmd_new_task": cmd_new_task,
+            "cmd_working_memory_report": cmd_working_memory_report,
+            "cmd_reflection_report": cmd_reflection_report,
+            "cmd_role_report": cmd_role_report,
+            "cmd_workflow_report": cmd_workflow_report,
+            "cmd_promote_memory": cmd_promote_memory,
+            "cmd_move_task": cmd_move_task,
+            "cmd_supersede_memory": cmd_supersede_memory,
+            "cmd_stage_report": cmd_stage_report,
+            "cmd_stage_lint": cmd_stage_lint,
+            "cmd_set_stage": cmd_set_stage,
+            "cmd_codex_transcript_report": cmd_codex_transcript_report,
+            "cmd_import_working_memory": cmd_import_working_memory,
+            "cmd_promote_working_memory_signal": cmd_promote_working_memory_signal,
+            "cmd_working_memory_autoflow": cmd_working_memory_autoflow,
+            "cmd_migrate_task_identity": cmd_migrate_task_identity,
+        },
+        default_memory_review_stale_days=DEFAULT_MEMORY_REVIEW_STALE_DAYS,
+        default_working_memory_expires_days=DEFAULT_WORKING_MEMORY_EXPIRES_DAYS,
+        priority_choices=tuple(PRIORITY_ORDER.keys()),
+        task_statuses=tuple(sorted(TASK_STATUSES)),
+    )
     args = parser.parse_args()
     try:
         return args.func(args)
