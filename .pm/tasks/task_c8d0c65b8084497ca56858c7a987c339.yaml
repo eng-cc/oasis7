@@ -1,0 +1,22 @@
+task_uid: task_c8d0c65b8084497ca56858c7a987c339
+title: "reduce pm_store.py tech debt via modular extraction"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-pm-store-modularization-slice
+execution_log_path: .pm/tasks/task_c8d0c65b8084497ca56858c7a987c339.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-001
+  - PRD-ENGINEERING-003
+acceptance:
+  - "scripts/pm/pm_store.py extracts at least one major helper domain into sibling modules without behavior drift"
+  - "required-tier PM workflow checks still pass after the refactor"
+handoff_to: []
+updated_at: 2026-05-18T20:40:22+08:00
+last_started_at: 2026-05-18T20:28:25+08:00
+last_closed_at: 2026-05-18T20:40:22+08:00
