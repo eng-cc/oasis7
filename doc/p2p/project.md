@@ -539,6 +539,20 @@
     - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 新增“hosted_public_join 托管身份 / 托管密钥与手机号邮箱登录”专题 PRD / design / project，并把 hosted account、手机号/邮箱登录、`signer_ref`、device session、step-up auth、自托管升级与 player-custody trust boundary 纳入模块追踪。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
+  - 产物文件:
+    - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
+    - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md`
+    - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `doc/p2p/prd.index.md`
+    - `doc/p2p/README.md`
+    - `.pm/tasks/task_fd98df36264944238538dea896ce4ce0.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PRD-P2P-029|托管身份|托管密钥|手机号|邮箱|hosted account|signer_ref" doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] bridge-binding-and-route-contract (PRD-P2P-TBRIDGE-001) [test_tier_required]: 为独立 `bridge-service` 落地最小 runtime slice，提供绑定 API、deposit route API、repo-owned 状态持久化、活跃 route 复用 / 过期与冲突错误语义，作为后续 watcher / `bridge_ledger` / LetAI OpenAPI adapter 的前置基线。 Trace: .pm/tasks/task_e56e4cfdb9534919a6f7bc7c6ba62ee9.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_newapi_bridge_service.rs`
@@ -778,6 +792,7 @@
 - `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
 - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+- `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
 - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
 - `oasis7_viewer_live.release.example.toml`
@@ -793,7 +808,8 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-08
+- 更新日期: 2026-05-18
+- 最新完成: `hosted-managed-identity-doc-freeze`（已新增 hosted_public_join 托管身份 / 托管密钥专题三件套，正式冻结 hosted account、手机号/邮箱登录、`signer_ref`、device session、step-up auth 与自托管升级边界；当前明确这是目标态规格，不代表代码已实现。）
 - 最新完成: `newapi-auto-credit-closure`（已把 `oasis7_newapi_bridge_service` 收口为 LetAI OpenAPI 真链路：新增持久化 `bridge_ledger`、explorer poll watcher、block-height confirmation、exact-match `--pricing-rule` 折算、`platform_user_id/platform_project_id/token_key/external_order_id`、user upsert、project/token 创建、topup、query verification 与 retry/manual-review 状态机。）
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。

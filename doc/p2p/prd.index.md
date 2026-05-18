@@ -13,7 +13,7 @@
 - 想先回答模块在做什么、主链和 DistFS 的统一边界是什么：先读 `doc/p2p/prd.md`
 - 想先回答当前在推进什么、哪些安全/签名/覆盖网络任务仍在推进：先读 `doc/p2p/project.md`
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：先读 `doc/p2p/node/README.md`
-- 想先看主链安全、hosted world 接入或 mixed-topology reachability：优先从 `blockchain/` 与 `network/` 子域进入
+- 想先看主链安全、hosted world 接入、托管身份/托管密钥或 mixed-topology reachability：优先从 `blockchain/` 与 `network/` 子域进入
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-04-10）
@@ -78,6 +78,7 @@
 | `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md` | `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.design.md` | `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.project.md` |
 | `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md` | `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md` | `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md` |
 | `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md` | `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md` | `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md` |
+| `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md` | `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md` | `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md` |
 | `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md` | `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.design.md` | `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.project.md` |
 | `doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23.prd.md` | `doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23.design.md` | `doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23.project.md` |
 | `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phaseb-consensus-execution.prd.md` | `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phaseb-consensus-execution.design.md` | `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phaseb-consensus-execution.project.md` |
