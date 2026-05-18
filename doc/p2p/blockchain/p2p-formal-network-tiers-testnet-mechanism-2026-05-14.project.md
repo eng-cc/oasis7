@@ -3,10 +3,11 @@
 - 对应设计文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md`
 - 对应需求文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
 
-审计轮次: 1
+审计轮次: 2
 ## 任务拆解（含 PRD-ID 映射）
 - [x] formal-network-tiers-testnet-mechanism (PRD-P2P-028) [test_tier_required]: 新建“正式网络分层与 testnet 机制”专题 PRD / design / project，并在同一专题内补齐 `network_tier_manifest` runtime/launcher 接线、repo-owned validate/smoke/exit-review、example manifests 与 public-testnet rehearsal/exit-review 模板。 Trace: .pm/tasks/task_7021c28970ef4f40b0367563df7f1e32.yaml
 - [x] formal-public-testnet-readiness-gate (PRD-P2P-028) [test_tier_required]: 在 formal network tier 机制之上追加 `public_testnet` readiness review follow-up，补齐 repo-owned lane gate、placeholder-safe endpoint 判定、seven-lane rehearsal 模板与 skeleton evidence scaffold，确保当前仓库只能把真实 lane/evidence 推进到 `ready_for_live_candidate`。 Trace: .pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.yaml
+- [x] formal-public-testnet-live-candidate-checklist (PRD-P2P-028) [test_tier_required]: 为当前 `specified_skeleton_only` 状态补一份 repo-owned companion runbook，冻结 `public_testnet` 从 skeleton 到 `ready_for_live_candidate` 的 seven-lane checklist、最小 evidence、canonical 命令、硬阻断条件与 claim boundary，避免“还差什么”只停留在聊天结论。 Trace: .pm/tasks/task_3f0ab6e26c034d42bedcecf38d066fb2.yaml
 
 ### 后续切片
 - `runtime_engineer` / TIER-2:
@@ -14,6 +15,8 @@
 - `qa_engineer` + `liveops_community` / TIER-3:
   - 已完成 skeleton：建立 first `public_testnet` rehearsal / exit-review 模板，并补 `network-tier-exit-review.sh` 作为 formal gate 汇总入口。
   - 已完成 readiness gate：新增 `network-tier-public-testnet-readiness.sh`、lane scaffold 与 skeleton evidence placeholder，可把 `public_testnet` 从“只有 manifest skeleton”与“具备 live candidate lane evidence”区分开。
+- `producer_system_designer` / TIER-3.5:
+  - 已完成 checklist：新增 companion runbook，把 seven-lane owner、最小 evidence、执行顺序、canonical 命令与禁止 claims 冻结成单一入口。
 - `producer_system_designer` + `runtime_engineer` / TIER-4:
   - 剩余 live 工作：把 `public_testnet exit review -> mainnet gating` 接入 live `MAINNET-1~4` evidence、public claims policy 执行面与正式 no-reset commitment。
 
@@ -28,6 +31,7 @@
   - `oasis7_chain_runtime`、`oasis7_game_launcher`、`oasis7_web_launcher` 已支持 formal manifest 输入；runtime status 面已暴露 formal tier/status。
   - 已补 `shared_devnet/public_testnet/mainnet` 的 genesis/bootstrap example refs，以及 `public_testnet` rehearsal / exit-review 模板。
   - 已补 `public_testnet` readiness review 入口：repo-owned lane scaffold、skeleton evidence placeholder 与 `specified_skeleton_only|partial|block|ready_for_live_candidate` verdict 脚本。
+  - 已补 `public_testnet` live-candidate companion runbook，统一回答“当前还差哪些 lane / evidence / claims review 才能进入 live candidate”。
   - 已明确 `shared_devnet` 仍是 shared release-train，不等于 live public testnet。
 - 当前缺口:
   - 仓库里还没有 live `public_testnet` 的 public RPC/explorer/faucet/reset evidence。
@@ -44,6 +48,7 @@
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md`
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
 - `crates/oasis7/src/network_tier_manifest.rs`
 - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
 - `crates/oasis7/src/bin/oasis7_chain_runtime/cli.rs`
@@ -75,6 +80,7 @@
 - `doc/p2p/project.md`
 - `doc/p2p/prd.index.md`
 - `testing-manual.md`
+- `.pm/tasks/task_3f0ab6e26c034d42bedcecf38d066fb2.execution.md`
 
 ## 验收命令（本轮）
 - `./scripts/network-tier-manifest-smoke.sh`
@@ -84,6 +90,7 @@
 - `./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
 - `./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-mainnet.example.json`
 - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
+- `rg -n "ready_for_live_candidate|specified_skeleton_only|seven-lane|claim boundary" doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md testing-manual.md doc/p2p/prd.md doc/p2p/project.md`
 - `env -u RUSTC_WRAPPER cargo check -p oasis7`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 build_oasis7_chain_runtime_args_prefers_network_tier_manifest_when_present`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 build_chain_runtime_args_uses_network_tier_manifest_when_present`
@@ -94,5 +101,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 基础 formal mechanism 与 `public_testnet` readiness gate 已补齐；后续只在建立 live `public_testnet` lane evidence 与 `MAINNET-1~4` 实证时再推进，不得把当前 skeleton/runtime 接线误报为 live `public_testnet` / `mainnet`。
-- 最近更新: 2026-05-14
+- 下一步: 基础 formal mechanism、readiness gate 与 live-candidate checklist 已补齐；后续只在建立真实 live `public_testnet` lane evidence 与 `MAINNET-1~4` 实证时再推进，不得把当前 skeleton/runtime 接线或 checklist 文档误报为 live `public_testnet` / `mainnet`。
+- 最近更新: 2026-05-18
