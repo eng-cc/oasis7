@@ -343,3 +343,16 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.yaml
+  - task_uid: task_587ad2fa5f81454796868b4014cf79cd
+    title: "shared_devnet pass truth audit"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-P2P-028
+    acceptance:
+      - "确认 shared_devnet_pass 的真值来源与 formal public_testnet 前置条件是否一致"
+      - "若存在口径漂移，回写 runbook/manual/project 到单一真值"
+      - "文档门禁通过且不放大当前 shared-devnet 实际状态"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_587ad2fa5f81454796868b4014cf79cd.yaml

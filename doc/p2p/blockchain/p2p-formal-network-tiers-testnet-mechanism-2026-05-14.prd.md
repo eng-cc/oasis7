@@ -33,7 +33,7 @@
   - PRD-P2P-TIER-004: As a `liveops_community`, I want claims boundaries tied to tier state, so that external communication stays behind execution truth.
 - Critical User Flows:
   1. Flow-P2P-TIER-001: `producer` 先为某一网络层生成 `network_tier_manifest`，固定 tier、network id、genesis、candidate bundle、endpoint policy 与 claims boundary。
-  2. Flow-P2P-TIER-002: `runtime_engineer` 以 `shared_devnet pass` 和 pinned bundle 为输入，提出 `public_testnet` manifest，声明 public RPC/explorer/faucet/reset/validator admission。
+  2. Flow-P2P-TIER-002: `runtime_engineer` 以 formal `shared_devnet` overall gate `pass` 和 pinned bundle 为输入，提出 `public_testnet` manifest，声明 public RPC/explorer/faucet/reset/validator admission；这里的 `shared_devnet pass` 只指 `shared-network-track-gate.sh --track shared_devnet` 的 required lanes 全部 `pass`，不接受局部 lane `pass/partial` 组合替代。
   3. Flow-P2P-TIER-003: `qa_engineer` 对照 manifest 与 gate 结论决定该 tier 是 `planned/specified_skeleton_only/rehearsal/live` 中哪一档，并决定是否允许 public claims。
   4. Flow-P2P-TIER-004: `mainnet` 申请时，系统必须同时检查 `public_testnet exit review + MAINNET-1~4 + frozen genesis + no-reset commitment`；任一缺失即阻断。
 - Functional Specification Matrix:
@@ -92,7 +92,7 @@
 ## 5. Risks & Roadmap
 - Phased Rollout:
   - MVP: 冻结四层网络模型、manifest schema、claims boundary 与 repo-owned skeleton。
-  - v1.1: 把 `shared_devnet pass -> public_testnet planned` 的 promotion gate 与 runbook 正式接线。
+  - v1.1: 把 `shared-network-track-gate.sh --track shared_devnet` overall `pass` -> `public_testnet planned` 的 promotion gate 与 runbook 正式接线，避免把 shared-devnet 的局部 lane 进展误读成可进入 public-testnet manifest 的前置条件。
   - v1.2: 落第一轮 public testnet rehearsal，补齐 public RPC/explorer/faucet/reset evidence。
   - v2.0: 在 `public_testnet` exit review 与 `MAINNET-1~4` 全绿后，再讨论 mainnet manifest 激活。
 - Technical Risks:
