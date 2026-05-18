@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
-Group=root
+User=oasis7-provider
+Group=oasis7-provider
 WorkingDirectory=/opt/oasis7/remote-provider-bridge/current
 EnvironmentFile=/etc/oasis7/remote-provider-bridge.env
 ExecStart=/opt/oasis7/remote-provider-bridge/current/scripts/provider-remote-https/start-remote-provider-bridge.sh

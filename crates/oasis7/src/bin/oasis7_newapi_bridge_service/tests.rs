@@ -159,6 +159,56 @@ fn bind_user_eagerly_provisions_platform_user_project_and_token_when_letai_is_co
 }
 
 #[test]
+fn bind_user_retry_reuses_binding_and_retries_eager_provisioning_after_upsert_failure() {
+    let letai_server = MockLetaiServer::spawn();
+    let letai_base_url = letai_server.base_url.clone();
+    letai_server.fail_first_user_upsert_requests(1);
+    let test_service = test_service_with_endpoints(
+        "bind-eager-letai-retry",
+        900,
+        None,
+        Some(letai_base_url),
+        1,
+        None,
+    );
+
+    let first_err = test_service
+        .service
+        .bind_user(
+            BindBridgeUserRequest {
+                newapi_user_ref: "user-1".to_string(),
+                oasis_sender_account_id: "oc:pk:sender-1".to_string(),
+                external_user_name: Some("User One".to_string()),
+                email: Some("user1@example.com".to_string()),
+                metadata: None,
+                project_name: Some("user-one-project".to_string()),
+                project_metadata: None,
+            },
+            1_000,
+        )
+        .expect_err("first eager provision should fail");
+    assert_eq!(first_err.code, "letai_response_not_success");
+
+    let retried = bind_default_user(&test_service);
+    assert!(retried.reused_existing_binding);
+
+    let snapshot = test_service.service.snapshot();
+    assert_eq!(snapshot.bindings.len(), 1);
+    assert_eq!(
+        snapshot.bindings[0].platform_user_id.as_deref(),
+        Some("platform-user-000001")
+    );
+    assert_eq!(
+        snapshot.project_bindings[0].platform_project_id.as_deref(),
+        Some("platform-project-000001")
+    );
+    assert_eq!(
+        snapshot.project_bindings[0].token_key.as_deref(),
+        Some("token-key-000001")
+    );
+}
+
+#[test]
 fn create_deposit_route_persists_and_reuses_active_route() {
     let test_service = test_service("route-reuse", 900);
     let binding = bind_default_user(&test_service);

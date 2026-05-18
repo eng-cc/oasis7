@@ -71,6 +71,7 @@ pub(crate) fn check_provider_loopback_http_provider(
     check_provider_http_provider(base_url, auth_token, timeout_ms, "loopback_http")
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn check_provider_http_provider(
     base_url: &str,
     auth_token: Option<&str>,
@@ -164,10 +165,12 @@ pub(crate) fn host_for_url(host: &str) -> String {
 
 pub(crate) fn parse_http_base_url(base_url: &str, label: &str) -> Result<(String, u16), String> {
     let mut raw = base_url.trim();
+    let mut default_port = 80;
     if let Some(stripped) = raw.strip_prefix("http://") {
         raw = stripped;
     } else if let Some(stripped) = raw.strip_prefix("https://") {
         raw = stripped;
+        default_port = 443;
     }
     raw = raw.trim_end_matches('/');
     let authority = raw
@@ -181,6 +184,6 @@ pub(crate) fn parse_http_base_url(base_url: &str, label: &str) -> Result<(String
     if authority.starts_with('[') || authority.contains(':') {
         parse_host_port(authority, label)
     } else {
-        Ok((authority.to_string(), 80))
+        Ok((authority.to_string(), default_port))
     }
 }

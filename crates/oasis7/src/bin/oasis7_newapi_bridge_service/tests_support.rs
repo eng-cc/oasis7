@@ -166,6 +166,7 @@ struct MockLetaiState {
     topup_requests: Vec<Value>,
     topup_records: Vec<(String, String, u64)>,
     fail_first_topup_requests: usize,
+    fail_first_user_upsert_requests: usize,
     omit_logs_for_orders: BTreeSet<String>,
 }
 
@@ -219,6 +220,13 @@ impl MockLetaiServer {
             .fail_first_topup_requests = count;
     }
 
+    pub(super) fn fail_first_user_upsert_requests(&self, count: usize) {
+        self.state
+            .lock()
+            .expect("mock letai state lock")
+            .fail_first_user_upsert_requests = count;
+    }
+
     pub(super) fn omit_logs_for_order(&self, external_order_id: &str) {
         self.state
             .lock()
@@ -261,6 +269,18 @@ fn handle_mock_letai_request(
                 .and_then(Value::as_str)
                 .expect("external_user_id")
                 .to_string();
+            {
+                let mut state = state.lock().expect("mock letai state lock");
+                if state.fail_first_user_upsert_requests > 0 {
+                    state.fail_first_user_upsert_requests -= 1;
+                    respond_json(
+                        stream,
+                        500,
+                        &json!({"success": false, "message": "temporary user upsert failure"}),
+                    );
+                    return;
+                }
+            }
             let platform_user_id = {
                 let mut state = state.lock().expect("mock letai state lock");
                 if let Some(existing) = state.user_ids_by_external.get(external_user_id.as_str()) {

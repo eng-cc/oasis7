@@ -35,13 +35,11 @@
 - `OASIS7_NEWAPI_BRIDGE_LETAI_PLATFORM_KEY`
 - `OASIS7_NEWAPI_BRIDGE_STATE_PATH`
 
-推荐同时明确:
+必须同时明确:
 
 - `OASIS7_NEWAPI_BRIDGE_LETAI_PARENT_CHANNEL_ID`
 - `OASIS7_NEWAPI_BRIDGE_BIND_ADDR`
 - `OASIS7_NEWAPI_BRIDGE_ROUTE_TTL_SECONDS`
-
-生产注意:
 
 - 当前 LetAI 生产环境若省略 `OASIS7_NEWAPI_BRIDGE_LETAI_PARENT_CHANNEL_ID`，动态创建出的 project token 可能默认落到已废弃分组 `cc`，随后对 `https://api.letai.run/v1/models` / `POST /v1/chat/completions` 会返回 `HTTP 403` 与 `分组 cc 已被弃用`。
 - 因此在真实 ECS 部署里，`OASIS7_NEWAPI_BRIDGE_LETAI_PARENT_CHANNEL_ID` 应视为必填项，而不是可选优化项。

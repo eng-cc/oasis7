@@ -234,11 +234,16 @@ impl RuntimeLlmSidecar {
             return;
         }
 
+        let probe_timeout_ms = if settings.provider_transport == REMOTE_HTTPS_PROVIDER_TRANSPORT {
+            settings.connect_timeout_ms.max(1_500)
+        } else {
+            settings.connect_timeout_ms.min(500)
+        };
         self.provider_check_snapshot = Some(
             match ProviderLoopbackHttpClient::new_with_transport(
                 settings.base_url.as_str(),
                 settings.auth_token.as_deref(),
-                settings.connect_timeout_ms.min(500),
+                probe_timeout_ms,
                 settings.provider_transport.as_str(),
             ) {
                 Ok(client) => match (client.provider_info(), client.provider_health()) {

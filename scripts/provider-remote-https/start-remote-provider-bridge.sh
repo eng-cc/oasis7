@@ -9,6 +9,15 @@ require_env() {
   fi
 }
 
+require_readable_file() {
+  local path="$1"
+  local label="$2"
+  if [[ ! -r "$path" ]]; then
+    echo "$label is not readable: $path" >&2
+    exit 1
+  fi
+}
+
 require_env OASIS7_PROVIDER_BRIDGE_ROOT
 
 ROOT_DIR="$OASIS7_PROVIDER_BRIDGE_ROOT"
@@ -24,8 +33,11 @@ AUTH_ROUTE_FROM_BEARER="${OASIS7_PROVIDER_AUTH_ROUTE_FROM_BEARER:-}"
 
 if [[ -n "${AUTH_ROUTE_MAP_PATH}" ]]; then
   require_env OASIS7_REMOTE_LLM_ROUTES_PATH
+  require_readable_file "$AUTH_ROUTE_MAP_PATH" "OASIS7_PROVIDER_AUTH_ROUTE_MAP_PATH"
+  require_readable_file "$OASIS7_REMOTE_LLM_ROUTES_PATH" "OASIS7_REMOTE_LLM_ROUTES_PATH"
 elif [[ "${AUTH_ROUTE_FROM_BEARER}" == "1" || "${AUTH_ROUTE_FROM_BEARER}" == "true" || "${AUTH_ROUTE_FROM_BEARER}" == "yes" || "${AUTH_ROUTE_FROM_BEARER}" == "on" ]]; then
   require_env OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH
+  require_readable_file "$OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH" "OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH"
 else
   require_env OASIS7_PROVIDER_BRIDGE_AUTH_TOKEN
   require_env OASIS7_REMOTE_LLM_API_KEY
