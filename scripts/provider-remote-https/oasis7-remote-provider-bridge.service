@@ -1,0 +1,19 @@
+[Unit]
+Description=oasis7 remote HTTPS provider bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/oasis7/remote-provider-bridge/current
+EnvironmentFile=/etc/oasis7/remote-provider-bridge.env
+ExecStart=/opt/oasis7/remote-provider-bridge/current/scripts/provider-remote-https/start-remote-provider-bridge.sh
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -287,11 +287,14 @@ pub(super) fn deployment_mode_from_options(options: &CliOptions) -> DeploymentMo
         .unwrap_or(DeploymentMode::TrustedLocalOnly)
 }
 
-pub(super) fn uses_loopback_provider(options: &CliOptions) -> bool {
+pub(super) fn uses_provider_http_transport(options: &CliOptions) -> bool {
     options.agent_decision_source == PROVIDER_BACKED_DECISION_SOURCE
         && options.agent_provider_backend == LOCAL_BRIDGE_PROVIDER_BACKEND
         && options.agent_provider_contract == WORLDSIM_PROVIDER_CONTRACT
-        && options.agent_provider_transport == LOOPBACK_HTTP_PROVIDER_TRANSPORT
+        && matches!(
+            options.agent_provider_transport.as_str(),
+            LOOPBACK_HTTP_PROVIDER_TRANSPORT | REMOTE_HTTPS_PROVIDER_TRANSPORT
+        )
 }
 
 fn parse_required_value<'a, I>(

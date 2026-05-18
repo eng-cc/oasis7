@@ -152,6 +152,7 @@ fn handle_mock_chain_request(
 struct MockProjectRecord {
     external_project_id: String,
     platform_project_id: String,
+    platform_user_id: String,
     project_name: String,
     token_key: String,
 }
@@ -277,7 +278,7 @@ fn handle_mock_letai_request(
                 stream,
                 200,
                 &json!({
-                    "ok": true,
+                    "success": true,
                     "data": {
                         "platform_user_id": platform_user_id,
                         "external_user_id": external_user_id,
@@ -285,12 +286,12 @@ fn handle_mock_letai_request(
                 }),
             );
         }
-        ("POST", _) if path.ends_with("/projects/ensure-token") => {
+        ("POST", _) if path.ends_with("/projects/upsert") => {
             let payload: Value =
                 serde_json::from_slice(request.body.as_slice()).expect("project ensure payload");
             let platform_user_id = path
                 .trim_start_matches("/api/platform/open/users/")
-                .trim_end_matches("/projects/ensure-token")
+                .trim_end_matches("/projects/upsert")
                 .trim_end_matches('/')
                 .to_string();
             let external_project_id = payload
@@ -299,7 +300,7 @@ fn handle_mock_letai_request(
                 .expect("external_project_id")
                 .to_string();
             let project_name = payload
-                .get("project_name")
+                .get("external_project_name")
                 .and_then(Value::as_str)
                 .unwrap_or("default-project")
                 .to_string();
@@ -314,6 +315,7 @@ fn handle_mock_letai_request(
                     let record = MockProjectRecord {
                         external_project_id: external_project_id.clone(),
                         platform_project_id: format!("platform-project-{:06}", seq),
+                        platform_user_id: platform_user_id.clone(),
                         project_name,
                         token_key: format!("token-key-{:06}", seq),
                     };
@@ -327,13 +329,25 @@ fn handle_mock_letai_request(
                 stream,
                 200,
                 &json!({
-                    "ok": true,
+                    "success": true,
                     "data": {
-                        "platform_project_id": record.platform_project_id,
-                        "external_project_id": record.external_project_id,
-                        "project_name": record.project_name,
-                        "token_key": record.token_key,
-                        "token_status": "active",
+                        "platform_project_id": record.platform_project_id.as_str(),
+                        "platform_user_id": record.platform_user_id.as_str(),
+                        "external_project_id": record.external_project_id.as_str(),
+                        "external_project_name": record.project_name.as_str(),
+                        "local_user_id": 105,
+                        "token_id": 205,
+                        "token_name": record.project_name.as_str(),
+                        "token_key": record.token_key.as_str(),
+                        "group": "default",
+                        "status": 1,
+                        "token_status": 1,
+                        "quota_limited_by": "user",
+                        "quota_used": 0,
+                        "user_quota_remaining": 2_000_000,
+                        "unlimited_quota": true,
+                        "expires_at": -1,
+                        "metadata": "{\"env\":\"test\"}",
                     }
                 }),
             );
@@ -382,7 +396,7 @@ fn handle_mock_letai_request(
         ("GET", _)
             if path.starts_with("/api/platform/open/users/")
                 && !path.ends_with("/logs")
-                && !path.ends_with("/projects/token-summary") =>
+                && !path.ends_with("/projects/upsert") =>
         {
             let platform_user_id = path
                 .trim_start_matches("/api/platform/open/users/")
@@ -409,33 +423,49 @@ fn handle_mock_letai_request(
                 }),
             );
         }
-        ("GET", _) if path.ends_with("/projects/token-summary") => {
-            let platform_user_id = path
-                .trim_start_matches("/api/platform/open/users/")
-                .trim_end_matches("/projects/token-summary")
+        ("GET", _)
+            if path.starts_with("/api/platform/open/projects/") && path.ends_with("/summary") =>
+        {
+            let platform_project_id = path
+                .trim_start_matches("/api/platform/open/projects/")
+                .trim_end_matches("/summary")
                 .trim_end_matches('/')
                 .to_string();
-            let items = {
+            let project = {
                 let state = state.lock().expect("mock letai state lock");
                 state
                     .project_by_user_and_external
                     .iter()
-                    .filter(|((user_id, _), _)| user_id == &platform_user_id)
+                    .find(|(_, record)| record.platform_project_id == platform_project_id)
                     .map(|(_, record)| {
                         json!({
                             "platform_project_id": record.platform_project_id,
+                            "platform_user_id": record.platform_user_id,
                             "external_project_id": record.external_project_id,
-                            "project_name": record.project_name,
-                            "token_key": record.token_key,
+                            "external_project_name": record.project_name,
+                            "local_user_id": 105,
+                            "token_id": 205,
+                            "token_name": record.project_name,
+                            "group": "default",
+                            "status": 1,
+                            "token_status": 1,
+                            "quota_limited_by": "user",
+                            "quota_used": 0,
+                            "user_quota_remaining": 2_000_000,
+                            "unlimited_quota": true,
+                            "expires_at": -1,
+                            "metadata": "{\"env\":\"test\"}",
                         })
                     })
-                    .collect::<Vec<_>>()
+                    .unwrap_or_else(|| json!({}))
             };
-            respond_json(stream, 200, &json!({"ok": true, "items": items}));
+            respond_json(stream, 200, &json!({"success": true, "data": project}));
         }
-        ("GET", _) if path.ends_with("/logs") => {
-            let platform_user_id = path
-                .trim_start_matches("/api/platform/open/users/")
+        ("GET", _)
+            if path.starts_with("/api/platform/open/projects/") && path.ends_with("/logs") =>
+        {
+            let platform_project_id = path
+                .trim_start_matches("/api/platform/open/projects/")
                 .trim_end_matches("/logs")
                 .trim_end_matches('/')
                 .to_string();
@@ -454,7 +484,11 @@ fn handle_mock_letai_request(
                         .iter()
                         .enumerate()
                         .filter(|(_, (user_id, order_id, _))| {
-                            user_id == &platform_user_id && order_id == &external_order_id
+                            order_id == &external_order_id
+                                && state.project_by_user_and_external.values().any(|record| {
+                                    record.platform_project_id == platform_project_id
+                                        && record.platform_user_id == *user_id
+                                })
                         })
                         .map(|(index, (_, order_id, quota))| {
                             json!({

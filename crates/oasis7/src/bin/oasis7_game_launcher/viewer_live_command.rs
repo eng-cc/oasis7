@@ -57,7 +57,7 @@ pub(super) fn apply_viewer_live_env_overrides(
         command.env_remove(env_name);
     }
 
-    if uses_loopback_provider(options) {
+    if uses_provider_http_transport(options) {
         command.env(
             VIEWER_AGENT_DECISION_SOURCE_ENV,
             PROVIDER_BACKED_DECISION_SOURCE,
@@ -72,7 +72,7 @@ pub(super) fn apply_viewer_live_env_overrides(
         );
         command.env(
             VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
-            LOOPBACK_HTTP_PROVIDER_TRANSPORT,
+            options.agent_provider_transport.as_str(),
         );
         command.env(
             VIEWER_AGENT_PROVIDER_URL_ENV,

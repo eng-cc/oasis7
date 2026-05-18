@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::env;
 use std::fs;
@@ -60,6 +61,8 @@ struct CliOptions {
     provider_thinking: String,
     gateway_health_url: String,
     auth_token: Option<String>,
+    auth_route_map: BTreeMap<String, String>,
+    auth_route_from_bearer: bool,
 }
 
 impl Default for CliOptions {
@@ -71,6 +74,8 @@ impl Default for CliOptions {
             provider_thinking: DEFAULT_PROVIDER_THINKING.to_string(),
             gateway_health_url: default_gateway_health_url(),
             auth_token: None,
+            auth_route_map: BTreeMap::new(),
+            auth_route_from_bearer: false,
         }
     }
 }
@@ -182,6 +187,7 @@ impl ProviderState {
     fn handle_decision(
         &self,
         request: DecisionRequest,
+        route_label: Option<&str>,
         invoker: &dyn AgentInvoker,
     ) -> DecisionResponse {
         if let Err(err) = request.validate_contract() {
@@ -213,6 +219,7 @@ impl ProviderState {
             timeout_seconds,
             prompt,
             idempotency_key: format!("{session_key}-{timeout_seconds}"),
+            route_label: route_label.map(ToOwned::to_owned),
         });
         self.active_requests.fetch_sub(1, Ordering::SeqCst);
         let latency_ms = started_at.elapsed().as_millis() as u64;
@@ -377,6 +384,7 @@ struct AgentInvocation {
     timeout_seconds: u64,
     prompt: String,
     idempotency_key: String,
+    route_label: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -427,6 +435,7 @@ fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOu
         .arg(rpc_timeout_ms.to_string())
         .arg("--params")
         .arg(params)
+        .envs(route_label_env(invocation.route_label.as_deref()))
         .env(
             oasis7::observability::TRACE_SESSION_ID_ENV,
             resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL),
@@ -469,6 +478,7 @@ fn invoke_local_agent(
         .arg("--timeout")
         .arg(invocation.timeout_seconds.to_string())
         .arg("--json")
+        .envs(route_label_env(invocation.route_label.as_deref()))
         .env(
             oasis7::observability::TRACE_SESSION_ID_ENV,
             resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL),
@@ -577,6 +587,13 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--auth-token" => {
                 options.auth_token = Some(required_value(&mut iter, "--auth-token")?.to_string());
             }
+            "--auth-route-map" => {
+                let path = required_value(&mut iter, "--auth-route-map")?;
+                options.auth_route_map = load_auth_route_map(path)?;
+            }
+            "--auth-route-from-bearer" => {
+                options.auth_route_from_bearer = true;
+            }
             "-h" | "--help" => return Err("help requested".to_string()),
             other => return Err(format!("unknown argument: {other}")),
         }
@@ -596,9 +613,48 @@ fn required_value<'a>(
 }
 
 fn print_help() {
-    eprintln!(
-        "Usage: oasis7_provider_local_bridge [options]\n\n  --bind <host:port>            Loopback bind address (default: 127.0.0.1:5841)\n  --provider-cli-bin <path>         provider CLI path (default: resolved runtime CLI)\n  --provider-agent <id>         provider agent id (default: main)\n  --provider-thinking <level>   provider thinking level (default: off)\n  --gateway-health-url <url>    provider gateway health URL\n  --auth-token <token>          Optional bearer token for bridge endpoints\n"
-    );
+    eprintln!(concat!(
+        "Usage: oasis7_provider_local_bridge [options]\n\n",
+        "  --bind <host:port>            Loopback bind address (default: 127.0.0.1:5841)\n",
+        "  --provider-cli-bin <path>     provider CLI path (default: resolved runtime CLI)\n",
+        "  --provider-agent <id>         provider agent id (default: main)\n",
+        "  --provider-thinking <level>   provider thinking level (default: off)\n",
+        "  --gateway-health-url <url>    provider gateway health URL\n",
+        "  --auth-token <token>          Optional single bearer token for bridge endpoints\n",
+        "  --auth-route-map <path>       Optional JSON file mapping bearer token to route label\n",
+        "  --auth-route-from-bearer      Treat request bearer token itself as route label\n",
+    ));
+}
+
+fn route_label_env(route_label: Option<&str>) -> Vec<(&'static str, String)> {
+    route_label
+        .map(|value| vec![("OASIS7_REMOTE_LLM_ROUTE_LABEL", value.to_string())])
+        .unwrap_or_default()
+}
+
+fn load_auth_route_map(path: &str) -> Result<BTreeMap<String, String>, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|err| format!("read auth route map `{path}` failed: {err}"))?;
+    let parsed = serde_json::from_str::<BTreeMap<String, String>>(raw.as_str())
+        .map_err(|err| format!("parse auth route map `{path}` failed: {err}"))?;
+    let normalized = parsed
+        .into_iter()
+        .filter_map(|(token, route)| {
+            let token = token.trim().to_string();
+            let route = route.trim().to_string();
+            if token.is_empty() || route.is_empty() {
+                None
+            } else {
+                Some((token, route))
+            }
+        })
+        .collect::<BTreeMap<_, _>>();
+    if normalized.is_empty() {
+        return Err(format!(
+            "auth route map `{path}` did not contain any usable entries"
+        ));
+    }
+    Ok(normalized)
 }
 
 fn provider_error_response(

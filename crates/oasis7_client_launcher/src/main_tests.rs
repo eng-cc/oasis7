@@ -129,6 +129,26 @@ fn build_launcher_args_accepts_agent_direct_connect_alias() {
 }
 
 #[test]
+fn build_launcher_args_accepts_remote_https_provider_transport() {
+    let config = LaunchConfig {
+        llm_enabled: true,
+        agent_decision_source: "provider_backed".to_string(),
+        agent_provider_transport: "remote_https".to_string(),
+        agent_provider_url: "https://provider.example".to_string(),
+        agent_provider_auth_token: "secret-token".to_string(),
+        agent_provider_connect_timeout_ms: "15000".to_string(),
+        agent_execution_lane: "headless".to_string(),
+        agent_provider_profile: "oasis7_p0_low_freq_npc".to_string(),
+        ..LaunchConfig::default()
+    };
+    let args = build_launcher_args(&config).expect("args should build");
+    assert!(args.contains(&"--agent-provider-transport".to_string()));
+    assert!(args.contains(&"remote_https".to_string()));
+    assert!(args.contains(&"--agent-provider-url".to_string()));
+    assert!(args.contains(&"https://provider.example".to_string()));
+}
+
+#[test]
 fn hosted_public_join_transfer_barrier_tracks_deployment_mode() {
     assert!(hosted_public_join_transfer_blocked(&LaunchConfig {
         deployment_mode: "hosted_public_join".to_string(),

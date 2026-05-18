@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+require_env() {
+  local name="$1"
+  if [[ -z "${!name:-}" ]]; then
+    echo "missing required environment variable: $name" >&2
+    exit 1
+  fi
+}
+
+require_env OASIS7_NEWAPI_BRIDGE_ROOT
+require_env OASIS7_NEWAPI_BRIDGE_STATE_PATH
+require_env OASIS7_NEWAPI_BRIDGE_LETAI_BASE_URL
+require_env OASIS7_NEWAPI_BRIDGE_LETAI_PLATFORM_KEY
+
+ROOT_DIR="$OASIS7_NEWAPI_BRIDGE_ROOT"
+BRIDGE_BIN="${OASIS7_NEWAPI_BRIDGE_BIN:-$ROOT_DIR/oasis7_newapi_bridge_service}"
+BIND_ADDR="${OASIS7_NEWAPI_BRIDGE_BIND_ADDR:-127.0.0.1:5852}"
+STATE_PATH="$OASIS7_NEWAPI_BRIDGE_STATE_PATH"
+ROUTE_TTL_SECONDS="${OASIS7_NEWAPI_BRIDGE_ROUTE_TTL_SECONDS:-900}"
+DEPOSIT_ACCOUNT_PREFIX="${OASIS7_NEWAPI_BRIDGE_DEPOSIT_ACCOUNT_PREFIX:-oc:bridge:}"
+LETAI_BASE_URL="$OASIS7_NEWAPI_BRIDGE_LETAI_BASE_URL"
+LETAI_PLATFORM_KEY="$OASIS7_NEWAPI_BRIDGE_LETAI_PLATFORM_KEY"
+LETAI_PARENT_CHANNEL_ID="${OASIS7_NEWAPI_BRIDGE_LETAI_PARENT_CHANNEL_ID:-}"
+LETAI_TIMEOUT_MS="${OASIS7_NEWAPI_BRIDGE_LETAI_TIMEOUT_MS:-5000}"
+RECONCILE_INTERVAL_SECONDS="${OASIS7_NEWAPI_BRIDGE_RECONCILE_INTERVAL_SECONDS:-0}"
+MAX_CREDIT_ATTEMPTS="${OASIS7_NEWAPI_BRIDGE_MAX_CREDIT_ATTEMPTS:-3}"
+CHAIN_BASE_URL="${OASIS7_NEWAPI_BRIDGE_CHAIN_BASE_URL:-}"
+CHAIN_TIMEOUT_MS="${OASIS7_NEWAPI_BRIDGE_CHAIN_TIMEOUT_MS:-5000}"
+CHAIN_CONFIRMATIONS_REQUIRED="${OASIS7_NEWAPI_BRIDGE_CHAIN_CONFIRMATIONS_REQUIRED:-1}"
+
+if [[ ! -x "$BRIDGE_BIN" ]]; then
+  echo "bridge binary is not executable: $BRIDGE_BIN" >&2
+  exit 1
+fi
+
+cmd=(
+  "$BRIDGE_BIN"
+  --bind-addr "$BIND_ADDR"
+  --state-path "$STATE_PATH"
+  --route-ttl-seconds "$ROUTE_TTL_SECONDS"
+  --deposit-account-prefix "$DEPOSIT_ACCOUNT_PREFIX"
+  --letai-base-url "$LETAI_BASE_URL"
+  --letai-platform-key "$LETAI_PLATFORM_KEY"
+  --letai-timeout-ms "$LETAI_TIMEOUT_MS"
+  --max-credit-attempts "$MAX_CREDIT_ATTEMPTS"
+  --chain-timeout-ms "$CHAIN_TIMEOUT_MS"
+  --chain-confirmations-required "$CHAIN_CONFIRMATIONS_REQUIRED"
+)
+
+if [[ -n "$LETAI_PARENT_CHANNEL_ID" ]]; then
+  cmd+=(--letai-parent-channel-id "$LETAI_PARENT_CHANNEL_ID")
+fi
+
+if [[ "$RECONCILE_INTERVAL_SECONDS" != "0" ]]; then
+  cmd+=(--reconcile-interval-seconds "$RECONCILE_INTERVAL_SECONDS")
+fi
+
+if [[ -n "$CHAIN_BASE_URL" ]]; then
+  cmd+=(--chain-base-url "$CHAIN_BASE_URL")
+fi
+
+exec "${cmd[@]}"

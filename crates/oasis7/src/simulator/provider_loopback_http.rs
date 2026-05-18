@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use super::{DecisionRequest, DecisionResponse, FeedbackEnvelope};
 
 const DEFAULT_PROVIDER_LOOPBACK_HTTP_PROVIDER_ID: &str = "provider_loopback_http";
+pub const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
+pub const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
 pub const PROVIDER_PHASE1_ACTION_SET_ALIAS: &str = "phase1_low_frequency";
 const PROVIDER_PHASE1_REQUIRED_CAPABILITIES: &[&str] = &["decision", "feedback"];
 const PROVIDER_PHASE1_REQUIRED_ACTIONS: &[&str] = &[
@@ -230,7 +232,7 @@ impl fmt::Display for ProviderLoopbackHttpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidBaseUrl(detail) => {
-                write!(f, "invalid provider loopback base url: {detail}")
+                write!(f, "invalid provider base url: {detail}")
             }
             Self::RequestFailed { path, detail } => {
                 write!(f, "provider request {path} failed: {detail}")
@@ -268,7 +270,21 @@ impl ProviderLoopbackHttpClient {
         auth_token: Option<&str>,
         timeout_ms: u64,
     ) -> Result<Self, ProviderLoopbackHttpError> {
-        let base_url = validate_provider_loopback_http_base_url(base_url)?;
+        Self::new_with_transport(
+            base_url,
+            auth_token,
+            timeout_ms,
+            LOOPBACK_HTTP_PROVIDER_TRANSPORT,
+        )
+    }
+
+    pub fn new_with_transport(
+        base_url: &str,
+        auth_token: Option<&str>,
+        timeout_ms: u64,
+        transport: &str,
+    ) -> Result<Self, ProviderLoopbackHttpError> {
+        let base_url = validate_provider_http_base_url(base_url, transport)?;
         let http = Client::builder()
             .timeout(Duration::from_millis(timeout_ms.max(1)))
             .build()
@@ -396,6 +412,13 @@ impl ProviderLoopbackHttpClient {
 pub fn validate_provider_loopback_http_base_url(
     base_url: &str,
 ) -> Result<Url, ProviderLoopbackHttpError> {
+    validate_provider_http_base_url(base_url, LOOPBACK_HTTP_PROVIDER_TRANSPORT)
+}
+
+pub fn validate_provider_http_base_url(
+    base_url: &str,
+    transport: &str,
+) -> Result<Url, ProviderLoopbackHttpError> {
     let trimmed = base_url.trim();
     if trimmed.is_empty() {
         return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
@@ -404,20 +427,36 @@ pub fn validate_provider_loopback_http_base_url(
     }
     let url = Url::parse(trimmed)
         .map_err(|err| ProviderLoopbackHttpError::InvalidBaseUrl(err.to_string()))?;
-    if url.scheme() != "http" {
-        return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
-            "scheme must be http for localhost provider".to_string(),
-        ));
-    }
     let Some(host) = url.host_str() else {
         return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
             "host is required".to_string(),
         ));
     };
-    if !matches!(host, "127.0.0.1" | "localhost" | "::1") {
-        return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
-            "host must be loopback (127.0.0.1 / localhost / ::1)".to_string(),
-        ));
+    match transport.trim() {
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT => {
+            if url.scheme() != "http" {
+                return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
+                    "scheme must be http for localhost provider".to_string(),
+                ));
+            }
+            if !matches!(host, "127.0.0.1" | "localhost" | "::1") {
+                return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
+                    "host must be loopback (127.0.0.1 / localhost / ::1)".to_string(),
+                ));
+            }
+        }
+        REMOTE_HTTPS_PROVIDER_TRANSPORT => {
+            if url.scheme() != "https" {
+                return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
+                    "scheme must be https for remote provider transport".to_string(),
+                ));
+            }
+        }
+        _ => {
+            return Err(ProviderLoopbackHttpError::InvalidBaseUrl(format!(
+                "unsupported provider transport `{transport}`"
+            )));
+        }
     }
     Ok(url)
 }

@@ -32,7 +32,7 @@ pub(super) struct LetaiUserUpsertResult {
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct LetaiEnsureProjectTokenRequest {
     pub(super) external_project_id: String,
-    pub(super) project_name: String,
+    pub(super) external_project_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) parent_channel_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -116,7 +116,7 @@ impl LetaiOpenApiAdapter {
         request: &LetaiEnsureProjectTokenRequest,
     ) -> Result<LetaiProjectTokenResult, LetaiAdapterError> {
         let path = format!(
-            "/api/platform/open/users/{}/projects/ensure-token",
+            "/api/platform/open/users/{}/projects/upsert",
             platform_user_id.trim()
         );
         let payload = self.post_json(path.as_str(), request)?;
@@ -163,26 +163,29 @@ impl LetaiOpenApiAdapter {
 
     pub(super) fn fetch_project_token_summary(
         &self,
-        platform_user_id: &str,
+        platform_project_id: &str,
     ) -> Result<Value, LetaiAdapterError> {
         let path = format!(
-            "/api/platform/open/users/{}/projects/token-summary",
-            platform_user_id.trim()
+            "/api/platform/open/projects/{}/summary",
+            platform_project_id.trim()
         );
         self.get_json(path.as_str(), &[])
     }
 
-    pub(super) fn fetch_user_logs(
+    pub(super) fn fetch_project_logs(
         &self,
-        platform_user_id: &str,
+        platform_project_id: &str,
         external_order_id: &str,
     ) -> Result<Value, LetaiAdapterError> {
-        let path = format!("/api/platform/open/users/{}/logs", platform_user_id.trim());
+        let path = format!(
+            "/api/platform/open/projects/{}/logs",
+            platform_project_id.trim()
+        );
         self.get_json(
             path.as_str(),
             &[
                 ("external_order_id", external_order_id),
-                ("limit", &DEFAULT_LOG_QUERY_LIMIT.to_string()),
+                ("page_size", &DEFAULT_LOG_QUERY_LIMIT.to_string()),
             ],
         )
     }
@@ -245,15 +248,23 @@ fn decode_json_response(
             ),
         )
     })?;
-    if let Some(false) = payload.get("ok").and_then(Value::as_bool) {
+    if let Some(false) = payload
+        .get("ok")
+        .and_then(Value::as_bool)
+        .or_else(|| payload.get("success").and_then(Value::as_bool))
+    {
         return Err(request_error(
             "letai_response_not_ok",
             format!(
-                "{label} returned ok=false{}: {}",
+                "{label} returned success=false{}: {}",
                 format_error_code(payload.get("error_code").and_then(Value::as_str)),
                 payload
-                    .get("error")
+                    .get("message")
                     .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .or_else(|| payload.get("error").and_then(Value::as_str))
+                    .or_else(|| payload.get("msg").and_then(Value::as_str))
+                    .or_else(|| payload.get("detail").and_then(Value::as_str))
                     .unwrap_or("unknown error")
             ),
         ));
@@ -277,14 +288,8 @@ fn extract_required_string(
 fn extract_optional_string(value: &Value, keys: &[&str]) -> Option<String> {
     candidate_objects(value)
         .find_map(|object| {
-            keys.iter().find_map(|key| {
-                object
-                    .get(*key)
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned)
-            })
+            keys.iter()
+                .find_map(|key| object.get(*key).and_then(value_as_non_empty_string))
         })
         .or_else(|| extract_string_recursive(value, keys))
 }
@@ -293,12 +298,7 @@ fn extract_string_recursive(value: &Value, keys: &[&str]) -> Option<String> {
     match value {
         Value::Object(map) => map.iter().find_map(|(key, child)| {
             if keys.iter().any(|candidate| candidate == key) {
-                child
-                    .as_str()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned)
-                    .or_else(|| extract_string_recursive(child, keys))
+                value_as_non_empty_string(child).or_else(|| extract_string_recursive(child, keys))
             } else {
                 extract_string_recursive(child, keys)
             }
@@ -316,6 +316,21 @@ fn candidate_objects(value: &Value) -> impl Iterator<Item = &Map<String, Value>>
     let user = value.get("user").and_then(Value::as_object).into_iter();
     let project = value.get("project").and_then(Value::as_object).into_iter();
     root.chain(data).chain(user).chain(project)
+}
+
+fn value_as_non_empty_string(value: &Value) -> Option<String> {
+    match value {
+        Value::String(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Value::Number(number) => Some(number.to_string()),
+        _ => None,
+    }
 }
 
 fn normalize_base_url(raw: &str) -> Result<String, String> {
@@ -379,5 +394,30 @@ mod tests {
         let err = decode_json_response(response, "LetAI GET").expect_err("expected error");
         assert!(!err.message.contains("secret"));
         assert!(!err.message.contains("token_key"));
+    }
+
+    #[test]
+    fn decode_json_response_rejects_success_false_payloads() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("addr");
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).expect("read request");
+            let body = br#"{"success":false,"message":"bad token"}"#;
+            write_http_response(
+                &mut stream,
+                200,
+                "application/json; charset=utf-8",
+                body,
+                false,
+            )
+            .expect("write response");
+        });
+        let client = Client::new();
+        let response = client.get(format!("http://{}", addr)).send().expect("send");
+        let err = decode_json_response(response, "LetAI GET").expect_err("expected error");
+        assert!(err.message.contains("success=false"));
+        assert!(err.message.contains("bad token"));
     }
 }

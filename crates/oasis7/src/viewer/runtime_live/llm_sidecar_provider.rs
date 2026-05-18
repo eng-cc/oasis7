@@ -55,7 +55,7 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
     .unwrap_or_else(|| LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string());
     let Some(_) = canonical_agent_provider_transport(transport.as_str()) else {
         return Err(format!(
-            "unsupported agent provider transport `{transport}`; expected loopback_http"
+            "unsupported agent provider transport `{transport}`; expected loopback_http or remote_https"
         ));
     };
 
@@ -113,6 +113,9 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
 
     Ok(Some(ProviderDecisionSettings {
         requested_provider_mode: decision_source.to_string(),
+        provider_transport: canonical_agent_provider_transport(transport.as_str())
+            .unwrap_or(LOOPBACK_HTTP_PROVIDER_TRANSPORT)
+            .to_string(),
         base_url: base_url.to_string(),
         auth_token,
         connect_timeout_ms,
@@ -205,6 +208,7 @@ fn canonical_agent_provider_transport(raw: &str) -> Option<&'static str> {
         LOOPBACK_HTTP_PROVIDER_TRANSPORT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT),
+        REMOTE_HTTPS_PROVIDER_TRANSPORT => Some(REMOTE_HTTPS_PROVIDER_TRANSPORT),
         _ => None,
     }
 }

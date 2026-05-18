@@ -40,7 +40,7 @@ impl eframe::App for ClientLauncherApp {
                 if let Some(detail) = self.chain_runtime_status.detail() {
                     response.on_hover_text(detail);
                 }
-                if is_provider_loopback_http_mode(&self.config) {
+                if is_provider_http_mode(&self.config) {
                     ui.separator();
                     let provider_status = match &self.provider_check_status {
                         ProviderCheckStatus::Disabled => ProviderCheckStatus::Idle,
@@ -48,7 +48,7 @@ impl eframe::App for ClientLauncherApp {
                     };
                     let provider_label = format!(
                         "{}: {}",
-                        self.tr("Local Provider", "Local Provider"),
+                        self.tr("Provider", "Provider"),
                         provider_status.text(self.ui_language)
                     );
                     let response =

@@ -1,15 +1,7 @@
 use super::*;
 use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peers;
 #[cfg(not(target_arch = "wasm32"))]
-use oasis7::simulator::{evaluate_provider_compatibility, ProviderHealth, ProviderInfo};
-#[cfg(not(target_arch = "wasm32"))]
-use serde::de::DeserializeOwned;
-#[cfg(not(target_arch = "wasm32"))]
-use std::io::{Read, Write};
-#[cfg(not(target_arch = "wasm32"))]
-use std::net::{TcpStream, ToSocketAddrs};
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::{Duration, Instant};
+use std::io::Read;
 
 #[cfg(not(target_arch = "wasm32"))]
 const OASIS7_GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
@@ -21,46 +13,19 @@ pub(super) const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 pub(super) const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
 pub(super) const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 pub(super) const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
+pub(super) const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
 pub(super) const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 pub(super) const DEFAULT_PROVIDER_DISCOVERY_BASE_URL: &str = DEFAULT_AGENT_PROVIDER_URL;
 
 #[path = "launcher_core_http.rs"]
 mod http_support;
 #[cfg(all(not(target_arch = "wasm32"), test))]
+pub(crate) use self::http_support::check_provider_loopback_http_provider;
+#[cfg(all(not(target_arch = "wasm32"), test))]
 pub(crate) use self::http_support::probe_chain_status_endpoint;
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use self::http_support::{
-    check_provider_loopback_http_provider, normalize_host_for_connect,
-};
+pub(crate) use self::http_support::{check_provider_http_provider, normalize_host_for_connect};
 pub(crate) use self::http_support::{host_for_url, normalize_host_for_url, parse_http_base_url};
-
-#[cfg(not(target_arch = "wasm32"))]
-#[derive(Debug, Clone, Deserialize)]
-struct ProviderInfoResponse {
-    provider_id: String,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    version: Option<String>,
-    #[serde(default)]
-    protocol_version: Option<String>,
-    #[serde(default)]
-    capabilities: Vec<String>,
-    #[serde(default)]
-    supported_action_sets: Vec<String>,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[derive(Debug, Clone, Deserialize)]
-struct ProviderHealthResponse {
-    ok: bool,
-    #[serde(default)]
-    status: Option<String>,
-    #[serde(default)]
-    last_error: Option<String>,
-    #[serde(default)]
-    queue_depth: Option<u64>,
-}
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,15 +46,17 @@ impl std::fmt::Display for ProviderCheckError {
     }
 }
 
-pub(super) fn is_provider_loopback_http_mode(config: &LaunchConfig) -> bool {
+pub(super) fn is_provider_http_mode(config: &LaunchConfig) -> bool {
     canonical_agent_decision_source(config.agent_decision_source.as_str())
         == Some(PROVIDER_BACKED_DECISION_SOURCE)
         && canonical_agent_provider_backend(config.agent_provider_backend.as_str())
             == Some(LOCAL_BRIDGE_PROVIDER_BACKEND)
         && canonical_agent_provider_contract(config.agent_provider_contract.as_str())
             == Some(WORLDSIM_PROVIDER_CONTRACT)
-        && canonical_agent_provider_transport(config.agent_provider_transport.as_str())
-            == Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT)
+        && matches!(
+            canonical_agent_provider_transport(config.agent_provider_transport.as_str()),
+            Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT) | Some(REMOTE_HTTPS_PROVIDER_TRANSPORT)
+        )
 }
 
 pub(super) fn validate_agent_decision_source(raw: &str) -> Result<(), String> {
@@ -113,7 +80,7 @@ pub(super) fn validate_agent_provider_contract(raw: &str) -> Result<(), String> 
 pub(super) fn validate_agent_provider_transport(raw: &str) -> Result<(), String> {
     canonical_agent_provider_transport(raw)
         .map(|_| ())
-        .ok_or_else(|| "agent provider transport must be loopback_http".to_string())
+        .ok_or_else(|| "agent provider transport must be loopback_http or remote_https".to_string())
 }
 
 pub(super) fn canonical_provider_execution_mode(raw: &str) -> Option<&'static str> {
@@ -166,6 +133,7 @@ pub(super) fn canonical_agent_provider_transport(raw: &str) -> Option<&'static s
         LOOPBACK_HTTP_PROVIDER_TRANSPORT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT),
+        REMOTE_HTTPS_PROVIDER_TRANSPORT => Some(REMOTE_HTTPS_PROVIDER_TRANSPORT),
         _ => None,
     }
 }
@@ -208,11 +176,34 @@ pub(super) fn parse_agent_provider_connect_timeout_ms(
 }
 
 pub(super) fn validate_provider_base_url(base_url: &str) -> Result<(String, u16), String> {
+    validate_provider_base_url_for_transport(base_url, LOOPBACK_HTTP_PROVIDER_TRANSPORT)
+}
+
+pub(super) fn validate_provider_base_url_for_transport(
+    base_url: &str,
+    transport: &str,
+) -> Result<(String, u16), String> {
     let (host, port) = parse_http_base_url(base_url, "provider base url")?;
-    if !is_loopback_host(host.as_str()) {
-        return Err(
-            "provider base url must use a loopback host (127.0.0.1 / localhost / ::1)".to_string(),
-        );
+    match canonical_agent_provider_transport(transport) {
+        Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT) => {
+            if !base_url.trim().starts_with("http://") {
+                return Err("provider base url must use http:// for loopback_http".to_string());
+            }
+            if !is_loopback_host(host.as_str()) {
+                return Err(
+                    "provider base url must use a loopback host (127.0.0.1 / localhost / ::1)"
+                        .to_string(),
+                );
+            }
+        }
+        Some(REMOTE_HTTPS_PROVIDER_TRANSPORT) => {
+            if !base_url.trim().starts_with("https://") {
+                return Err("provider base url must use https:// for remote_https".to_string());
+            }
+        }
+        _ => {
+            return Err("provider transport must be loopback_http or remote_https".to_string());
+        }
     }
     Ok((host, port))
 }
@@ -341,7 +332,7 @@ pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<Confi
         issues.push(ConfigIssue::AgentProviderModeInvalid);
     }
 
-    if is_provider_loopback_http_mode(config) {
+    if is_provider_http_mode(config) {
         if validate_agent_provider_backend(config.agent_provider_backend.as_str()).is_err()
             || validate_agent_provider_contract(config.agent_provider_contract.as_str()).is_err()
             || validate_agent_provider_transport(config.agent_provider_transport.as_str()).is_err()
@@ -351,12 +342,22 @@ pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<Confi
         if effective_provider_base_url(config).is_err() {
             issues.push(ConfigIssue::ProviderBaseUrlRequired);
         } else if let Ok(base_url) = effective_provider_base_url(config) {
-            match validate_provider_base_url(base_url.as_str()) {
-                Ok(_) => {}
-                Err(err) if err.contains("loopback") => {
-                    issues.push(ConfigIssue::ProviderBaseUrlLoopbackRequired);
+            match canonical_agent_provider_transport(config.agent_provider_transport.as_str()) {
+                Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT) => {
+                    match validate_provider_base_url(base_url.as_str()) {
+                        Ok(_) => {}
+                        Err(err) if err.contains("loopback") => {
+                            issues.push(ConfigIssue::ProviderBaseUrlLoopbackRequired);
+                        }
+                        Err(_) => issues.push(ConfigIssue::ProviderBaseUrlInvalid),
+                    }
                 }
-                Err(_) => issues.push(ConfigIssue::ProviderBaseUrlInvalid),
+                Some(REMOTE_HTTPS_PROVIDER_TRANSPORT) => {
+                    if !base_url.trim().starts_with("https://") {
+                        issues.push(ConfigIssue::ProviderBaseUrlInvalid);
+                    }
+                }
+                _ => issues.push(ConfigIssue::ProviderBaseUrlInvalid),
             }
         }
         if parse_agent_provider_connect_timeout_ms(config).is_err() {
@@ -572,13 +573,17 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
                 .unwrap_or(BUILTIN_LLM_DECISION_SOURCE)
                 .to_string(),
         );
-        if is_provider_loopback_http_mode(config) {
+        if is_provider_http_mode(config) {
             args.push("--agent-provider-backend".to_string());
             args.push(LOCAL_BRIDGE_PROVIDER_BACKEND.to_string());
             args.push("--agent-provider-contract".to_string());
             args.push(WORLDSIM_PROVIDER_CONTRACT.to_string());
             args.push("--agent-provider-transport".to_string());
-            args.push(LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string());
+            args.push(
+                canonical_agent_provider_transport(config.agent_provider_transport.as_str())
+                    .unwrap_or(LOOPBACK_HTTP_PROVIDER_TRANSPORT)
+                    .to_string(),
+            );
             args.push("--agent-provider-url".to_string());
             args.push(effective_provider_base_url(config)?);
             if !config.agent_provider_auth_token.trim().is_empty() {

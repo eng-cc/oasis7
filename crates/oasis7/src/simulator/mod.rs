@@ -116,10 +116,11 @@ pub use provider_loopback_adapter::ProviderLoopbackAdapter;
 #[cfg(not(target_arch = "wasm32"))]
 pub use provider_loopback_http::{
     evaluate_provider_compatibility, provider_phase1_required_actions,
-    provider_phase1_required_capabilities, validate_provider_loopback_http_base_url,
-    ProviderCompatibilityReport, ProviderCompatibilityStatus, ProviderFeedbackAck, ProviderHealth,
-    ProviderInfo, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
-    PROVIDER_PHASE1_ACTION_SET_ALIAS,
+    provider_phase1_required_capabilities, validate_provider_http_base_url,
+    validate_provider_loopback_http_base_url, ProviderCompatibilityReport,
+    ProviderCompatibilityStatus, ProviderFeedbackAck, ProviderHealth, ProviderInfo,
+    ProviderLoopbackHttpClient, ProviderLoopbackHttpError, LOOPBACK_HTTP_PROVIDER_TRANSPORT,
+    PROVIDER_PHASE1_ACTION_SET_ALIAS, REMOTE_HTTPS_PROVIDER_TRANSPORT,
 };
 pub use runner::{
     AgentQuota, AgentRunner, AgentStats, AgentTickResult, RateLimitPolicy, RateLimitState,

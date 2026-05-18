@@ -1,4 +1,16 @@
 use super::*;
+#[cfg(not(target_arch = "wasm32"))]
+use oasis7::simulator::{
+    evaluate_provider_compatibility, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
+};
+#[cfg(all(not(target_arch = "wasm32"), test))]
+use std::io::{Read, Write};
+#[cfg(all(not(target_arch = "wasm32"), test))]
+use std::net::{TcpStream, ToSocketAddrs};
+#[cfg(all(not(target_arch = "wasm32"), test))]
+use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
 
 #[cfg(all(not(target_arch = "wasm32"), test))]
 pub(crate) fn probe_chain_status_endpoint(bind: &str) -> Result<(), String> {
@@ -50,65 +62,76 @@ pub(crate) fn probe_chain_status_endpoint(bind: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), test))]
 pub(crate) fn check_provider_loopback_http_provider(
     base_url: &str,
     auth_token: Option<&str>,
     timeout_ms: u64,
 ) -> Result<ProviderSnapshot, ProviderCheckError> {
-    validate_provider_base_url(base_url).map_err(ProviderCheckError::InvalidConfig)?;
+    check_provider_http_provider(base_url, auth_token, timeout_ms, "loopback_http")
+}
+
+pub(crate) fn check_provider_http_provider(
+    base_url: &str,
+    auth_token: Option<&str>,
+    timeout_ms: u64,
+    transport: &str,
+) -> Result<ProviderSnapshot, ProviderCheckError> {
+    validate_provider_base_url_for_transport(base_url, transport)
+        .map_err(ProviderCheckError::InvalidConfig)?;
+    let client =
+        ProviderLoopbackHttpClient::new_with_transport(base_url, auth_token, timeout_ms, transport)
+            .map_err(map_provider_client_error)?;
     let info_started_at = Instant::now();
-    let info: ProviderInfoResponse =
-        http_json_request_with_timeout(base_url, "/v1/provider/info", auth_token, timeout_ms)?;
+    let info = client.provider_info().map_err(map_provider_client_error)?;
     let info_latency_ms = info_started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
     let health_started_at = Instant::now();
-    let health: ProviderHealthResponse =
-        http_json_request_with_timeout(base_url, "/v1/provider/health", auth_token, timeout_ms)?;
+    let health = client
+        .provider_health()
+        .map_err(map_provider_client_error)?;
     let health_latency_ms = health_started_at
         .elapsed()
         .as_millis()
         .min(u64::MAX as u128) as u64;
-    let provider_info = ProviderInfo {
-        provider_id: info.provider_id,
-        name: info.name,
-        version: info.version,
-        protocol_version: info.protocol_version,
-        capabilities: info.capabilities,
-        supported_action_sets: info.supported_action_sets,
-    };
-    let provider_health = ProviderHealth {
-        ok: health.ok,
-        status: health.status,
-        uptime_ms: None,
-        last_error: health.last_error,
-        queue_depth: health.queue_depth,
-    };
-    let compatibility = evaluate_provider_compatibility(&provider_info, Some(&provider_health));
-    let status = provider_health
+    let compatibility = evaluate_provider_compatibility(&info, Some(&health));
+    let status = health
         .status
-        .unwrap_or_else(|| if provider_health.ok { "ok" } else { "not_ok" }.to_string());
+        .unwrap_or_else(|| if health.ok { "ok" } else { "not_ok" }.to_string());
     Ok(ProviderSnapshot {
-        provider_id: provider_info.provider_id,
-        name: provider_info
-            .name
-            .unwrap_or_else(|| "Local Provider".to_string()),
-        version: provider_info
-            .version
-            .unwrap_or_else(|| "unknown".to_string()),
-        protocol_version: provider_info
+        provider_id: info.provider_id,
+        name: info.name.unwrap_or_else(|| "Provider".to_string()),
+        version: info.version.unwrap_or_else(|| "unknown".to_string()),
+        protocol_version: info
             .protocol_version
             .unwrap_or_else(|| "unknown".to_string()),
-        capabilities: provider_info.capabilities,
-        supported_action_sets: provider_info.supported_action_sets,
+        capabilities: info.capabilities,
+        supported_action_sets: info.supported_action_sets,
         compatibility_status: compatibility.status.into(),
         status,
-        queue_depth: provider_health.queue_depth,
-        last_error: provider_health.last_error,
+        queue_depth: health.queue_depth,
+        last_error: health.last_error,
         fallback_reason: compatibility.fallback_reason,
         info_latency_ms,
         health_latency_ms,
         total_latency_ms: info_latency_ms.saturating_add(health_latency_ms),
     })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn map_provider_client_error(error: ProviderLoopbackHttpError) -> ProviderCheckError {
+    match error {
+        ProviderLoopbackHttpError::InvalidBaseUrl(detail) => {
+            ProviderCheckError::InvalidConfig(detail)
+        }
+        ProviderLoopbackHttpError::Unauthorized { detail, .. } => {
+            ProviderCheckError::Unauthorized(detail)
+        }
+        ProviderLoopbackHttpError::RequestFailed { detail, .. }
+        | ProviderLoopbackHttpError::UnexpectedStatus { body: detail, .. }
+        | ProviderLoopbackHttpError::DecodeFailed { detail, .. } => {
+            ProviderCheckError::Unreachable(detail)
+        }
+    }
 }
 
 pub(crate) fn normalize_host_for_connect(host: &str) -> String {
@@ -143,8 +166,8 @@ pub(crate) fn parse_http_base_url(base_url: &str, label: &str) -> Result<(String
     let mut raw = base_url.trim();
     if let Some(stripped) = raw.strip_prefix("http://") {
         raw = stripped;
-    } else if raw.starts_with("https://") {
-        return Err(format!("{label} must use http:// for localhost provider"));
+    } else if let Some(stripped) = raw.strip_prefix("https://") {
+        raw = stripped;
     }
     raw = raw.trim_end_matches('/');
     let authority = raw
@@ -160,104 +183,4 @@ pub(crate) fn parse_http_base_url(base_url: &str, label: &str) -> Result<(String
     } else {
         Ok((authority.to_string(), 80))
     }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn http_json_request_with_timeout<T: DeserializeOwned>(
-    base_url: &str,
-    path: &str,
-    auth_token: Option<&str>,
-    timeout_ms: u64,
-) -> Result<T, ProviderCheckError> {
-    let (status_code, response_body) =
-        http_request_with_timeout(base_url, path, auth_token, timeout_ms)?;
-    if status_code == 401 {
-        return Err(ProviderCheckError::Unauthorized(format!(
-            "provider check returned HTTP 401 for {path}"
-        )));
-    }
-    if !(200..=299).contains(&status_code) {
-        let body_text = String::from_utf8_lossy(response_body.as_slice());
-        return Err(ProviderCheckError::Unreachable(format!(
-            "provider check {path} failed with HTTP {status_code}: {body_text}"
-        )));
-    }
-    serde_json::from_slice(response_body.as_slice()).map_err(|err| {
-        ProviderCheckError::Unreachable(format!(
-            "decode provider check {path} response failed: {err}"
-        ))
-    })
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn http_request_with_timeout(
-    base_url: &str,
-    path: &str,
-    auth_token: Option<&str>,
-    timeout_ms: u64,
-) -> Result<(u16, Vec<u8>), ProviderCheckError> {
-    let (host, port) = parse_http_base_url(base_url, "provider base url")
-        .map_err(ProviderCheckError::InvalidConfig)?;
-    let connect_host = normalize_host_for_connect(host.as_str());
-    let socket_addr = (connect_host.as_str(), port)
-        .to_socket_addrs()
-        .map_err(|err| ProviderCheckError::Unreachable(format!("resolve provider failed: {err}")))?
-        .next()
-        .ok_or_else(|| {
-            ProviderCheckError::Unreachable(
-                "resolve provider failed: no socket address".to_string(),
-            )
-        })?;
-    let mut stream =
-        TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout_ms.max(1)))
-            .map_err(|err| {
-                ProviderCheckError::Unreachable(format!("connect provider failed: {err}"))
-            })?;
-    let timeout = Some(Duration::from_millis(timeout_ms.max(1)));
-    let _ = stream.set_read_timeout(timeout);
-    let _ = stream.set_write_timeout(timeout);
-
-    let host_header = host_for_url(host.as_str());
-    let mut request =
-        format!("GET {path} HTTP/1.1\r\nHost: {host_header}:{port}\r\nConnection: close\r\n");
-    if let Some(token) = auth_token.filter(|value| !value.trim().is_empty()) {
-        request.push_str(&format!("Authorization: Bearer {}\r\n", token.trim()));
-    }
-    request.push_str("\r\n");
-    stream.write_all(request.as_bytes()).map_err(|err| {
-        ProviderCheckError::Unreachable(format!("write provider check failed: {err}"))
-    })?;
-    let mut response_bytes = Vec::new();
-    stream.read_to_end(&mut response_bytes).map_err(|err| {
-        ProviderCheckError::Unreachable(format!("read provider check failed: {err}"))
-    })?;
-    parse_http_response(response_bytes.as_slice())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn parse_http_response(bytes: &[u8]) -> Result<(u16, Vec<u8>), ProviderCheckError> {
-    let Some(boundary) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
-        return Err(ProviderCheckError::Unreachable(
-            "invalid HTTP response: missing header terminator".to_string(),
-        ));
-    };
-    let header = std::str::from_utf8(&bytes[..boundary]).map_err(|_| {
-        ProviderCheckError::Unreachable("invalid HTTP response: header is not UTF-8".to_string())
-    })?;
-    let body = bytes[(boundary + 4)..].to_vec();
-    let Some(status_line) = header.lines().next() else {
-        return Err(ProviderCheckError::Unreachable(
-            "invalid HTTP response: missing status line".to_string(),
-        ));
-    };
-    let Some(status_code) = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|token| token.parse::<u16>().ok())
-    else {
-        return Err(ProviderCheckError::Unreachable(format!(
-            "invalid HTTP response status line: {status_line}"
-        )));
-    };
-    Ok((status_code, body))
 }

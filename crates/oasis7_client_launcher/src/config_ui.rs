@@ -686,16 +686,13 @@ impl ClientLauncherApp {
     }
 
     fn render_provider_summary(&mut self, ui: &mut egui::Ui) {
-        if !is_provider_loopback_http_mode(&self.config) {
+        if !is_provider_http_mode(&self.config) {
             return;
         }
 
         ui.separator();
         ui.horizontal_wrapped(|ui| {
-            ui.label(self.tr(
-                "Local Provider 兼容检查",
-                "Local Provider Compatibility Check",
-            ));
+            ui.label(self.tr("Provider 兼容检查", "Provider Compatibility Check"));
             let status = match &self.provider_check_status {
                 ProviderCheckStatus::Disabled => ProviderCheckStatus::Idle,
                 other => other.clone(),
@@ -726,7 +723,7 @@ impl ClientLauncherApp {
         ui.horizontal_wrapped(|ui| {
             #[cfg(not(target_arch = "wasm32"))]
             {
-                if ui.button(self.tr("检查本地 Provider", "Check Local Provider")).clicked() {
+                if ui.button(self.tr("检查 Provider", "Check Provider")).clicked() {
                     self.check_local_provider();
                 }
             }
@@ -734,11 +731,11 @@ impl ClientLauncherApp {
             {
                 ui.add_enabled(
                     false,
-                    egui::Button::new(self.tr("检查本地 Provider", "Check Local Provider")),
+                    egui::Button::new(self.tr("检查 Provider", "Check Provider")),
                 );
                 ui.small(self.tr(
-                    "Web 启动器暂不执行本地 Local Provider 兼容检查，请使用 native launcher。",
-                    "Web launcher does not run the local provider compatibility check yet; use the native launcher.",
+                    "Web 启动器暂不执行 native provider 兼容检查，请使用 native launcher。",
+                    "Web launcher does not run the native provider compatibility check yet; use the native launcher.",
                 ));
             }
         });
@@ -836,10 +833,11 @@ impl ClientLauncherApp {
                 return;
             }
         };
-        match check_provider_loopback_http_provider(
+        match check_provider_http_provider(
             base_url.as_str(),
             Some(self.config.agent_provider_auth_token.as_str()),
             timeout_ms,
+            self.config.agent_provider_transport.as_str(),
         ) {
             Ok(mut snapshot) => {
                 if self.config.agent_decision_source.trim()
@@ -889,8 +887,7 @@ impl ClientLauncherApp {
     #[cfg(target_arch = "wasm32")]
     fn check_local_provider(&mut self) {
         self.provider_check_status = ProviderCheckStatus::Unsupported(
-            "web launcher does not support the native localhost Local Provider compatibility check"
-                .to_string(),
+            "web launcher does not support the native provider compatibility check".to_string(),
         );
     }
 
