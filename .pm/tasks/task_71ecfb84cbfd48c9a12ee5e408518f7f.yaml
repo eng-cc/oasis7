@@ -1,0 +1,22 @@
+task_uid: task_71ecfb84cbfd48c9a12ee5e408518f7f
+title: "extract pm task lint stage and workflow report modules"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_71ecfb84cbfd48c9a12ee5e408518f7f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - scripts/pm/pm_store.py
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-001
+  - PRD-ENGINEERING-003
+acceptance:
+  - "task backlog lint, stage report/lint/cmd, and workflow-memory report helpers move into sibling modules without behavior drift"
+  - "pm lint and PM smoke chains still pass after the multi-module extraction"
+handoff_to: []
+updated_at: 2026-05-18T23:01:07+08:00
+last_started_at: 2026-05-18T22:41:34+08:00
+last_closed_at: 2026-05-18T23:01:07+08:00
