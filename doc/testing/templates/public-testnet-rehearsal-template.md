@@ -16,8 +16,11 @@
 ## Required gates
 - [ ] `shared_devnet_pass`
 - [ ] `public_rpc_ready`
+- [ ] `explorer_public_ready`
 - [ ] `faucet_guard_ready`
 - [ ] `reset_policy_announced`
+- [ ] `runtime_bootstrap`
+- [ ] `claims_boundary_review`
 
 ## Runtime verification
 - [ ] `oasis7_chain_runtime --network-tier-manifest <path>` boots successfully
@@ -29,6 +32,8 @@
 - [ ] explorer smoke
 - [ ] faucet smoke
 - [ ] reset policy announcement
+- [ ] runtime bootstrap and `/v1/chain/status` capture
+- [ ] claims boundary / denylist review
 - [ ] incident / rollback note if applicable
 
 ## Verdict

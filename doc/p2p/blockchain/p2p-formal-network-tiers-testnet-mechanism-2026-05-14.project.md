@@ -6,6 +6,7 @@
 审计轮次: 1
 ## 任务拆解（含 PRD-ID 映射）
 - [x] formal-network-tiers-testnet-mechanism (PRD-P2P-028) [test_tier_required]: 新建“正式网络分层与 testnet 机制”专题 PRD / design / project，并在同一专题内补齐 `network_tier_manifest` runtime/launcher 接线、repo-owned validate/smoke/exit-review、example manifests 与 public-testnet rehearsal/exit-review 模板。 Trace: .pm/tasks/task_7021c28970ef4f40b0367563df7f1e32.yaml
+- [x] formal-public-testnet-readiness-gate (PRD-P2P-028) [test_tier_required]: 在 formal network tier 机制之上追加 `public_testnet` readiness review follow-up，补齐 repo-owned lane gate、placeholder-safe endpoint 判定、seven-lane rehearsal 模板与 skeleton evidence scaffold，确保当前仓库只能把真实 lane/evidence 推进到 `ready_for_live_candidate`。 Trace: .pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.yaml
 
 ### 后续切片
 - `runtime_engineer` / TIER-2:
@@ -56,6 +57,7 @@
 - `scripts/network-tier-manifest-smoke.sh`
 - `scripts/network-tier-exit-review.sh`
 - `scripts/network-tier-public-testnet-readiness.sh`
+- `.pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.execution.md`
 - `doc/testing/templates/network-tier-shared-devnet.example.json`
 - `doc/testing/templates/network-tier-public-testnet.example.json`
 - `doc/testing/templates/network-tier-mainnet.example.json`
