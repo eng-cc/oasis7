@@ -10,6 +10,87 @@ use super::super::model::{
 use super::{BridgeService, BridgeServiceError};
 
 impl BridgeService {
+    pub(super) fn ensure_inference_binding_ready(
+        &self,
+        bridge_user_id: &str,
+        now_unix_ms: i64,
+    ) -> Result<(), BridgeServiceError> {
+        let adapter = match self.letai_adapter() {
+            Ok(adapter) => adapter,
+            Err(err) if err.code == "letai_openapi_not_configured" => return Ok(()),
+            Err(err) => return Err(err),
+        };
+        let snapshot = self.snapshot();
+        let binding = snapshot
+            .bindings
+            .iter()
+            .find(|binding| {
+                binding.bridge_user_id == bridge_user_id
+                    && binding.status == BridgeBindingStatus::Active
+            })
+            .cloned()
+            .ok_or_else(|| {
+                BridgeServiceError::not_found(
+                    "binding_not_found",
+                    format!("active bridge binding `{bridge_user_id}` does not exist"),
+                )
+            })?;
+        let project_binding = snapshot
+            .project_bindings
+            .iter()
+            .find(|project| project.bridge_user_id == bridge_user_id)
+            .cloned()
+            .ok_or_else(|| {
+                BridgeServiceError::not_found(
+                    "project_binding_not_found",
+                    format!("LetAI project binding `{bridge_user_id}` does not exist"),
+                )
+            })?;
+        if binding.platform_user_id.is_some()
+            && project_binding.platform_project_id.is_some()
+            && project_binding.token_key.is_some()
+        {
+            return Ok(());
+        }
+
+        let upsert_result = adapter
+            .upsert_user(&LetaiUserUpsertRequest {
+                external_user_id: binding.letai_external_user_id.clone(),
+                external_user_name: binding.letai_external_user_name.clone(),
+                email: binding.email.clone(),
+                metadata: binding.metadata.clone(),
+            })
+            .map_err(|err| BridgeServiceError::bad_gateway(err.code, err.message))?;
+        self.persist_binding_user_ready(
+            bridge_user_id,
+            upsert_result.platform_user_id.as_str(),
+            now_unix_ms,
+        )?;
+
+        let parent_channel_id = project_binding
+            .parent_channel_id
+            .clone()
+            .or_else(|| adapter.parent_channel_id().map(ToOwned::to_owned));
+        let ensure_project_result = adapter
+            .ensure_project_token(
+                upsert_result.platform_user_id.as_str(),
+                &LetaiEnsureProjectTokenRequest {
+                    external_project_id: project_binding.letai_external_project_id.clone(),
+                    external_project_name: project_binding.project_name.clone(),
+                    parent_channel_id,
+                    metadata: project_binding.metadata.clone(),
+                },
+            )
+            .map_err(|err| BridgeServiceError::bad_gateway(err.code, err.message))?;
+        self.persist_binding_project_ready(
+            bridge_user_id,
+            upsert_result.platform_user_id.as_str(),
+            &ensure_project_result,
+            now_unix_ms,
+        )?;
+        Ok(())
+    }
+
     pub(super) fn process_credit_ready_entries(
         &self,
         now_unix_ms: i64,
@@ -130,7 +211,7 @@ impl BridgeService {
             upsert_result.platform_user_id.as_str(),
             &LetaiEnsureProjectTokenRequest {
                 external_project_id: project_binding.letai_external_project_id.clone(),
-                project_name: project_binding.project_name.clone(),
+                external_project_name: project_binding.project_name.clone(),
                 parent_channel_id,
                 metadata: project_binding.metadata.clone(),
             },
@@ -203,21 +284,22 @@ impl BridgeService {
                     return Ok(false);
                 }
             };
-        let project_snapshot =
-            match adapter.fetch_project_token_summary(upsert_result.platform_user_id.as_str()) {
-                Ok(snapshot) => snapshot,
-                Err(err) => {
-                    self.record_manual_review(
-                        bridge_deposit_id,
-                        err.code,
-                        err.message.as_str(),
-                        now_unix_ms,
-                    )?;
-                    return Ok(false);
-                }
-            };
-        let topup_log_snapshot = match adapter.fetch_user_logs(
-            upsert_result.platform_user_id.as_str(),
+        let project_snapshot = match adapter
+            .fetch_project_token_summary(ensure_project_result.platform_project_id.as_str())
+        {
+            Ok(snapshot) => snapshot,
+            Err(err) => {
+                self.record_manual_review(
+                    bridge_deposit_id,
+                    err.code,
+                    err.message.as_str(),
+                    now_unix_ms,
+                )?;
+                return Ok(false);
+            }
+        };
+        let topup_log_snapshot = match adapter.fetch_project_logs(
+            ensure_project_result.platform_project_id.as_str(),
             external_order_id.as_str(),
         ) {
             Ok(snapshot) => snapshot,
@@ -358,6 +440,29 @@ impl BridgeService {
         })
     }
 
+    fn persist_binding_user_ready(
+        &self,
+        bridge_user_id: &str,
+        platform_user_id: &str,
+        now_unix_ms: i64,
+    ) -> Result<(), BridgeServiceError> {
+        self.store_mutate(|state| {
+            let Some(binding) = state
+                .bindings
+                .iter_mut()
+                .find(|binding| binding.bridge_user_id == bridge_user_id)
+            else {
+                return Err(BridgeServiceError::not_found(
+                    "binding_not_found",
+                    format!("bridge binding `{bridge_user_id}` does not exist"),
+                ));
+            };
+            binding.platform_user_id = Some(platform_user_id.to_string());
+            binding.updated_at_unix_ms = now_unix_ms;
+            Ok(())
+        })
+    }
+
     fn persist_project_ready(
         &self,
         bridge_deposit_id: &str,
@@ -401,6 +506,48 @@ impl BridgeService {
             entry.project_snapshot = Some(result.snapshot.clone());
             entry.state = BridgeLedgerState::Crediting;
             entry.updated_at_unix_ms = now_unix_ms;
+            Ok(())
+        })
+    }
+
+    fn persist_binding_project_ready(
+        &self,
+        bridge_user_id: &str,
+        platform_user_id: &str,
+        result: &LetaiProjectTokenResult,
+        now_unix_ms: i64,
+    ) -> Result<(), BridgeServiceError> {
+        self.store_mutate(|state| {
+            let Some(binding) = state
+                .bindings
+                .iter_mut()
+                .find(|binding| binding.bridge_user_id == bridge_user_id)
+            else {
+                return Err(BridgeServiceError::not_found(
+                    "binding_not_found",
+                    format!("bridge binding `{bridge_user_id}` does not exist"),
+                ));
+            };
+            binding.platform_user_id = Some(platform_user_id.to_string());
+            binding.updated_at_unix_ms = now_unix_ms;
+
+            let Some(project_binding) = state
+                .project_bindings
+                .iter_mut()
+                .find(|project| project.bridge_user_id == bridge_user_id)
+            else {
+                return Err(BridgeServiceError::not_found(
+                    "project_binding_not_found",
+                    format!("LetAI project binding `{bridge_user_id}` does not exist"),
+                ));
+            };
+            project_binding.platform_project_id = Some(result.platform_project_id.clone());
+            project_binding.token_key = Some(result.token_key.clone());
+            project_binding.token_status = result.token_status.clone();
+            if project_binding.parent_channel_id.is_none() {
+                project_binding.parent_channel_id = self.letai_parent_channel_id();
+            }
+            project_binding.updated_at_unix_ms = now_unix_ms;
             Ok(())
         })
     }
@@ -645,7 +792,7 @@ pub(super) fn project_summary_matches(
             let token_match = token_key
                 .map(|value| value == expected_token_key)
                 .unwrap_or(false);
-            if project_match && token_match {
+            if project_match && (token_match || token_key.is_none()) {
                 return true;
             }
             if token_match && project_id.is_none() {

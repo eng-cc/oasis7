@@ -36,7 +36,7 @@ mod url_encoding;
 mod viewer_live_command;
 use cli::{
     deployment_mode_from_options, parse_host_port, parse_options, print_help,
-    uses_loopback_provider,
+    uses_provider_http_transport,
 };
 use hosted_access::{DeploymentMode, DEFAULT_DEPLOYMENT_MODE};
 use hosted_player_session::HostedPlayerSessionIssuer;
@@ -76,6 +76,7 @@ const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
 const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
 const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
+const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
 const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
 const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 15_000;
@@ -1002,8 +1003,9 @@ fn validate_agent_provider_transport(raw: &str) -> Result<(), String> {
     match raw.trim() {
         LOOPBACK_HTTP_PROVIDER_TRANSPORT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
-        _ => Err("--agent-provider-transport must be loopback_http".to_string()),
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS
+        | REMOTE_HTTPS_PROVIDER_TRANSPORT => Ok(()),
+        _ => Err("--agent-provider-transport must be loopback_http or remote_https".to_string()),
     }
 }
 
@@ -1012,6 +1014,7 @@ fn canonical_agent_provider_transport(raw: &str) -> &'static str {
         LOOPBACK_HTTP_PROVIDER_TRANSPORT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => LOOPBACK_HTTP_PROVIDER_TRANSPORT,
+        REMOTE_HTTPS_PROVIDER_TRANSPORT => REMOTE_HTTPS_PROVIDER_TRANSPORT,
         _ => LOOPBACK_HTTP_PROVIDER_TRANSPORT,
     }
 }

@@ -370,7 +370,8 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 模式总口径（`PRD-CORE-009`）：
   - `viewer` / `pure_api` 是当前正式玩家访问模式，分别对应默认 Web 入口和纯接口正式入口；`software_safe` 仅保留为 `viewer` 的兼容 alias。
   - `pure_api` 的正式游玩与 headed Web/UI 一样，默认要求 active LLM access；禁用 LLM 后只能做 blocked/observer-debug 诊断，不再计入正式可玩性证据。
-  - `player_parity` / `headless_agent` / `debug_viewer` 是 agent provider 的 execution lane；当前 Local Provider provider-backed 主口径必须写成 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`，`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias，这些字段都不构成额外玩家访问模式。
+  - `player_parity` / `headless_agent` / `debug_viewer` 是 agent provider 的 execution lane；当前 Local Provider provider-backed 主口径必须写成 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`，远程托管 bridge 则必须显式写成 `agent_provider_transport=remote_https`，`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias，这些字段都不构成额外玩家访问模式。
+  - repo-owned `remote_https` 参考装配当前采用 `oasis7_provider_local_bridge` + `scripts/provider-remote-https/letai_provider_cli.py` + `nginx` HTTPS 反代；操作步骤见 `doc/world-runtime/runtime/provider-remote-https-bridge-operator-runbook.md`。
   - 任何 QA / release / playability 结论都应先标明玩家访问模式，再补充 execution lane；不得把 `headless_agent` 或 `debug_viewer` 直接当成“第四种入口”。
 - `oasis7_viewer_live` / Viewer 页面：默认使用 `agent-browser` 驱动页面与采集证据；当 `renderMode=viewer`（或兼容 alias `software_safe`）且带 viewer auth bootstrap 时，允许继续验证选中 Agent 的最小 `prompt/chat` 闭环。
 - 若只需要回归 `software_safe` 纯实时最小闭环（加载 -> 连接 -> 选择目标 -> 实时事件/语义摘要可见，且页面不再暴露回放控件），优先执行 `./scripts/viewer-software-safe-step-regression.sh`；该脚本不再主动调用 `__AW_TEST__.sendControl('step')`，而是等待 `logicalTime/eventSeq` 自然增长；若当前 runtime 被 `llm_required` 等 gameplay blocker 卡住，则要求页面显式暴露 blocker，而不是再用手动步进补推进。

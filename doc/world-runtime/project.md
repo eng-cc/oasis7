@@ -388,6 +388,8 @@
     - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_provider_local_bridge --bin oasis7_viewer_live --bin oasis7_game_launcher --bin oasis7_chain_runtime`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime gameplay_submit -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- --scenario llm_bootstrap --with-llm --agent-provider-mode provider_loopback_http --agent-provider-url http://127.0.0.1:5841 --agent-provider-connect-timeout-ms 15000 --agent-provider-profile oasis7_p0_low_freq_npc --agent-execution-lane player_parity`
+    - `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- --scenario llm_bootstrap --with-llm --agent-provider-mode provider_backed --agent-provider-backend provider_local_bridge --agent-provider-contract worldsim_provider_v1 --agent-provider-transport remote_https --agent-provider-url https://provider.example --agent-provider-connect-timeout-ms 15000 --agent-provider-profile oasis7_p0_low_freq_npc --agent-execution-lane player_parity`
+    - `python3 scripts/provider-remote-https/letai_provider_cli.py agent --agent letai --message '{"decision":"wait"}' --timeout 15 --json`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] wasm-executor-real-compiled-cache (PRD-WORLD_RUNTIME-002) [test_tier_required]: 将 `oasis7_wasm_executor` 的磁盘 compiled cache 从“原始 `.wasm` 回盘 + 再次 `Module::new(...)`”修正为“序列化 compiled artifact 回盘 + `Module::deserialize_file(...)` 命中”，并补齐 serialized artifact round-trip / 损坏恢复回归，以及 executor perf probe 的测试编译裂缝。 Trace: .pm/tasks/task_c7a8defc7c0f4f4c8f86660b50df08a5.yaml

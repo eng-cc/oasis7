@@ -40,6 +40,7 @@ const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
 const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
 const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
+const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
 const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 const DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 3_000;
 const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
@@ -78,6 +79,7 @@ pub(in crate::viewer::runtime_live) use self::runtime_support::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::viewer::runtime_live) struct ProviderDecisionSettings {
     pub(in crate::viewer::runtime_live) requested_provider_mode: String,
+    pub(in crate::viewer::runtime_live) provider_transport: String,
     pub(in crate::viewer::runtime_live) base_url: String,
     pub(in crate::viewer::runtime_live) auth_token: Option<String>,
     pub(in crate::viewer::runtime_live) connect_timeout_ms: u64,
@@ -233,10 +235,11 @@ impl RuntimeLlmSidecar {
         }
 
         self.provider_check_snapshot = Some(
-            match ProviderLoopbackHttpClient::new(
+            match ProviderLoopbackHttpClient::new_with_transport(
                 settings.base_url.as_str(),
                 settings.auth_token.as_deref(),
                 settings.connect_timeout_ms.min(500),
+                settings.provider_transport.as_str(),
             ) {
                 Ok(client) => match (client.provider_info(), client.provider_health()) {
                     (Ok(info), Ok(health)) => {
@@ -800,10 +803,11 @@ impl RuntimeLlmSidecar {
                     let settings = provider_settings.as_ref().ok_or_else(|| {
                         "provider runner selected without resolved settings".to_string()
                     })?;
-                    let adapter = ProviderLoopbackAdapter::new(
+                    let adapter = ProviderLoopbackAdapter::new_with_transport(
                         settings.base_url.as_str(),
                         settings.auth_token.as_deref(),
                         settings.connect_timeout_ms,
+                        settings.provider_transport.as_str(),
                     )
                     .map_err(|err| format!("provider init failed for {}: {}", agent_id, err))?;
                     let behavior = ProviderBackedAgentBehavior::new(
@@ -812,7 +816,8 @@ impl RuntimeLlmSidecar {
                         provider_phase1_action_catalog(),
                     )
                     .with_provider_config_ref(format!(
-                        "provider://loopback-http/runtime-live/pid-{}/{}",
+                        "provider://{}/runtime-live/pid-{}/{}",
+                        settings.provider_transport,
                         std::process::id(),
                         agent_id
                     ))

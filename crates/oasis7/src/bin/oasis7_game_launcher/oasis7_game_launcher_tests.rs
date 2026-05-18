@@ -259,6 +259,38 @@ fn parse_options_accepts_overrides() {
 }
 
 #[test]
+fn parse_options_accepts_remote_https_provider_transport() {
+    let options = parse_options(
+        [
+            "--with-llm",
+            "--agent-decision-source",
+            "provider_backed",
+            "--agent-provider-backend",
+            "provider_local_bridge",
+            "--agent-provider-contract",
+            "worldsim_provider_v1",
+            "--agent-provider-transport",
+            "remote_https",
+            "--agent-provider-url",
+            "https://provider.example",
+            "--agent-provider-auth-token",
+            "secret-token",
+            "--agent-provider-connect-timeout-ms",
+            "3000",
+            "--agent-provider-profile",
+            "oasis7_p0_low_freq_npc",
+            "--agent-execution-lane",
+            "player_parity",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+
+    assert_eq!(options.agent_provider_transport, "remote_https");
+    assert_eq!(options.agent_provider_url, "https://provider.example");
+}
+
+#[test]
 fn parse_options_accepts_chain_disable() {
     let options = parse_options(["--chain-disable"].into_iter()).expect("parse should succeed");
     assert!(!options.chain_enabled);

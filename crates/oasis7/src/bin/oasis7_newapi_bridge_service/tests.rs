@@ -126,6 +126,39 @@ fn bind_user_rejects_conflicting_active_binding() {
 }
 
 #[test]
+fn bind_user_eagerly_provisions_platform_user_project_and_token_when_letai_is_configured() {
+    let letai_server = MockLetaiServer::spawn();
+    let test_service = test_service_with_endpoints(
+        "bind-eager-letai",
+        900,
+        None,
+        Some(letai_server.base_url.clone()),
+        1,
+        None,
+    );
+    let created = bind_default_user(&test_service);
+    assert_eq!(created.bridge_user_id, "bridge-user-000001");
+
+    let snapshot = test_service.service.snapshot();
+    assert_eq!(
+        snapshot.bindings[0].platform_user_id.as_deref(),
+        Some("platform-user-000001")
+    );
+    assert_eq!(
+        snapshot.project_bindings[0].platform_project_id.as_deref(),
+        Some("platform-project-000001")
+    );
+    assert_eq!(
+        snapshot.project_bindings[0].token_key.as_deref(),
+        Some("token-key-000001")
+    );
+    assert_eq!(
+        snapshot.project_bindings[0].token_status.as_deref(),
+        Some("1")
+    );
+}
+
+#[test]
 fn create_deposit_route_persists_and_reuses_active_route() {
     let test_service = test_service("route-reuse", 900);
     let binding = bind_default_user(&test_service);

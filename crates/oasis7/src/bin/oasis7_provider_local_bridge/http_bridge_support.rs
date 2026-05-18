@@ -13,7 +13,14 @@ pub(super) fn handle_connection(
     invoker: &dyn AgentInvoker,
 ) -> Result<(), String> {
     let request = read_http_request(stream)?;
-    if !authorize_request(state, &request) {
+    let route_label = authorize_request(state, &request)?;
+    if route_label.is_none()
+        && state.options.auth_token.is_some()
+        && state.options.auth_route_map.is_empty()
+    {
+        return write_json_response(stream, 401, &json!({"error":"Unauthorized"}));
+    }
+    if route_label.is_none() && !state.options.auth_route_map.is_empty() {
         return write_json_response(stream, 401, &json!({"error":"Unauthorized"}));
     }
     match (request.method.as_str(), request.path.as_str()) {
@@ -24,7 +31,7 @@ pub(super) fn handle_connection(
         ("POST", "/v1/world-simulator/decision") => {
             let decoded: DecisionRequest = serde_json::from_slice(request.body.as_slice())
                 .map_err(|err| format!("decode decision request failed: {err}"))?;
-            let response = state.handle_decision(decoded, invoker);
+            let response = state.handle_decision(decoded, route_label.as_deref(), invoker);
             write_json_response(stream, 200, &response)
         }
         ("POST", "/v1/world-simulator/feedback") => {
@@ -37,16 +44,31 @@ pub(super) fn handle_connection(
     }
 }
 
-fn authorize_request(state: &ProviderState, request: &RecordedHttpRequest) -> bool {
-    let Some(expected) = state.options.auth_token.as_deref() else {
-        return true;
-    };
-    request
+fn authorize_request(
+    state: &ProviderState,
+    request: &RecordedHttpRequest,
+) -> Result<Option<String>, String> {
+    let presented = request
         .headers
         .get("authorization")
         .and_then(|value| value.strip_prefix("Bearer "))
-        .map(|value| value == expected)
-        .unwrap_or(false)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if !state.options.auth_route_map.is_empty() {
+        let Some(token) = presented else {
+            return Ok(None);
+        };
+        return Ok(state.options.auth_route_map.get(token).cloned());
+    }
+    if state.options.auth_route_from_bearer {
+        return Ok(presented.map(ToOwned::to_owned));
+    }
+    let Some(expected) = state.options.auth_token.as_deref() else {
+        return Ok(Some("default".to_string()));
+    };
+    Ok(presented
+        .filter(|value| *value == expected)
+        .map(|_| "default".to_string()))
 }
 
 #[derive(Debug)]

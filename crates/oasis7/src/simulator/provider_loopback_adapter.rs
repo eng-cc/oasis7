@@ -26,7 +26,18 @@ impl ProviderLoopbackAdapter {
         auth_token: Option<&str>,
         timeout_ms: u64,
     ) -> Result<Self, ProviderLoopbackHttpError> {
-        let client = ProviderLoopbackHttpClient::new(base_url, auth_token, timeout_ms)?;
+        Self::new_with_transport(base_url, auth_token, timeout_ms, "loopback_http")
+    }
+
+    pub fn new_with_transport(
+        base_url: &str,
+        auth_token: Option<&str>,
+        timeout_ms: u64,
+        transport: &str,
+    ) -> Result<Self, ProviderLoopbackHttpError> {
+        let client = ProviderLoopbackHttpClient::new_with_transport(
+            base_url, auth_token, timeout_ms, transport,
+        )?;
         Ok(Self::with_client(
             DEFAULT_PROVIDER_LOOPBACK_ADAPTER_PROVIDER_ID,
             client,
@@ -146,9 +157,9 @@ impl ProviderLoopbackAdapter {
             } => DecisionProviderError::new(
                 format!("provider_http_{status_code}"),
                 if body.is_empty() {
-                    format!("provider loopback bridge returned HTTP {status_code}")
+                    format!("provider bridge returned HTTP {status_code}")
                 } else {
-                    format!("provider loopback bridge returned HTTP {status_code}: {body}")
+                    format!("provider bridge returned HTTP {status_code}: {body}")
                 },
                 status_code >= 500,
             ),

@@ -171,7 +171,7 @@ impl BridgeService {
         let project_name = normalize_optional(request.project_name.as_deref())
             .unwrap_or_else(|| Self::default_project_name(newapi_user_ref.as_str()));
         let letai_external_user_id = Self::build_letai_external_user_id(newapi_user_ref.as_str());
-        self.store
+        let response = self.store
             .mutate(|state| {
                 expire_routes(state.routes.as_mut_slice(), now_unix_ms);
                 if let Some(existing_index) = state.bindings.iter().position(|binding| {
@@ -265,7 +265,9 @@ impl BridgeService {
                     .expect("binding exists after insert");
                 Ok(bind_response(&binding, &project_binding, false))
             })
-            .map_err(|err| map_store_error(err, "persist bind bridge user failed"))
+            .map_err(|err| map_store_error(err, "persist bind bridge user failed"))?;
+        self.ensure_inference_binding_ready(response.bridge_user_id.as_str(), now_unix_ms)?;
+        Ok(response)
     }
 
     pub(super) fn create_deposit_route(

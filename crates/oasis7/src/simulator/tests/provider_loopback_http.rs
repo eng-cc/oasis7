@@ -181,6 +181,30 @@ fn provider_loopback_http_client_rejects_non_loopback_base_url() {
 }
 
 #[test]
+fn provider_http_client_accepts_remote_https_base_url() {
+    let client = ProviderLoopbackHttpClient::new_with_transport(
+        "https://provider.example",
+        Some("secret-token"),
+        200,
+        "remote_https",
+    )
+    .expect("remote https client should build");
+    let _ = client;
+}
+
+#[test]
+fn provider_http_client_rejects_remote_http_for_remote_https_transport() {
+    let err = ProviderLoopbackHttpClient::new_with_transport(
+        "http://provider.example",
+        None,
+        200,
+        "remote_https",
+    )
+    .expect_err("plain http remote transport should fail");
+    assert!(err.to_string().contains("https"));
+}
+
+#[test]
 fn provider_loopback_http_client_surfaces_http_401_on_decision() {
     let base_url = spawn_mock_http_server(1, |_| MockHttpResponse {
         status_code: 401,

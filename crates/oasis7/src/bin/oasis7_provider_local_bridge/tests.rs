@@ -52,7 +52,7 @@ fn handle_decision_returns_wait_without_provider_error_on_invalid_json() {
             route_note: None,
         }),
     };
-    let response = state.handle_decision(sample_request(), &invoker);
+    let response = state.handle_decision(sample_request(), None, &invoker);
     assert_eq!(response.decision, ProviderDecision::Wait);
     assert!(response.provider_error.is_none());
     assert_eq!(response.trace_payload.schema_repair_count, 1);
@@ -70,7 +70,7 @@ fn handle_decision_surfaces_gateway_failure_as_provider_error() {
     let invoker = FakeInvoker {
         response: Err("gateway down".to_string()),
     };
-    let response = state.handle_decision(sample_request(), &invoker);
+    let response = state.handle_decision(sample_request(), None, &invoker);
     assert_eq!(response.decision, ProviderDecision::Wait);
     assert_eq!(
         response
@@ -150,6 +150,7 @@ fn build_gateway_agent_params_uses_session_key_and_timeout() {
         timeout_seconds: 15,
         prompt: "{\"action\":\"wait\"}".to_string(),
         idempotency_key: "idem-1".to_string(),
+        route_label: None,
     };
     let params = build_gateway_agent_params(&invocation).expect("params");
     let value: Value = serde_json::from_str(params.as_str()).expect("json");
@@ -212,7 +213,7 @@ fn handle_decision_rejects_unsupported_schema_version() {
     };
     let mut request = sample_request();
     request.observation.observation_schema_version = "oc_dual_obs_v0".to_string();
-    let response = state.handle_decision(request, &invoker);
+    let response = state.handle_decision(request, None, &invoker);
     assert_eq!(response.decision, ProviderDecision::Wait);
     assert_eq!(
         response
@@ -232,7 +233,7 @@ fn handle_decision_rejects_unsupported_action_schema_version() {
     };
     let mut request = sample_request();
     request.observation.action_schema_version = "oc_dual_act_v0".to_string();
-    let response = state.handle_decision(request, &invoker);
+    let response = state.handle_decision(request, None, &invoker);
     assert_eq!(response.decision, ProviderDecision::Wait);
     assert_eq!(
         response
@@ -252,7 +253,7 @@ fn handle_decision_rejects_player_parity_request_with_headless_fields() {
     };
     let mut request = sample_request();
     request.observation.mode = ProviderExecutionMode::PlayerParity;
-    let response = state.handle_decision(request, &invoker);
+    let response = state.handle_decision(request, None, &invoker);
     assert_eq!(response.decision, ProviderDecision::Wait);
     assert_eq!(
         response
@@ -262,6 +263,14 @@ fn handle_decision_rejects_player_parity_request_with_headless_fields() {
             .code,
         "mode_observation_mismatch"
     );
+}
+
+#[test]
+fn parse_options_accepts_auth_route_from_bearer() {
+    let options = parse_options(["--auth-route-from-bearer"].into_iter()).expect("parse options");
+    assert!(options.auth_route_from_bearer);
+    assert!(options.auth_route_map.is_empty());
+    assert!(options.auth_token.is_none());
 }
 
 fn sample_request() -> DecisionRequest {

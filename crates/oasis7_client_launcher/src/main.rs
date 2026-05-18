@@ -687,46 +687,46 @@ impl ConfigIssue {
                 "Viewer static directory does not exist or is not a directory"
             }
             (Self::AgentProviderModeInvalid, UiLanguage::ZhCn) => {
-                "Agent 接入方式必须是 builtin_llm、agent_direct_connect 或 provider_loopback_http"
+                "Agent 接入方式必须是 builtin_llm、agent_direct_connect 或 provider_backed"
             }
             (Self::AgentProviderModeInvalid, UiLanguage::EnUs) => {
-                "Agent access mode must be builtin_llm, agent_direct_connect, or provider_loopback_http"
+                "Agent access mode must be builtin_llm, agent_direct_connect, or provider_backed"
             }
             (Self::ProviderBaseUrlRequired, UiLanguage::ZhCn) => {
-                "启用 ProviderBacked(Local HTTP) 且关闭自动发现时，必须填写 Local Provider Base URL"
+                "启用 ProviderBacked 且关闭自动发现时，必须填写 Provider Base URL"
             }
             (Self::ProviderBaseUrlRequired, UiLanguage::EnUs) => {
-                "Local Provider base URL is required when auto-discover is disabled"
+                "Provider base URL is required when auto-discover is disabled"
             }
             (Self::ProviderBaseUrlInvalid, UiLanguage::ZhCn) => {
-                "Local Provider Base URL 必须是有效的 http://<host>:<port>"
+                "Provider Base URL 必须是有效的 http://<host>:<port> 或 https://<host>"
             }
             (Self::ProviderBaseUrlInvalid, UiLanguage::EnUs) => {
-                "Local Provider base URL must be a valid http://<host>:<port>"
+                "Provider base URL must be a valid http://<host>:<port> or https://<host>"
             }
             (Self::ProviderBaseUrlLoopbackRequired, UiLanguage::ZhCn) => {
-                "Local Provider Base URL 仅允许使用 loopback 地址（127.0.0.1 / localhost / ::1）"
+                "loopback_http 的 Provider Base URL 仅允许使用 loopback 地址（127.0.0.1 / localhost / ::1）"
             }
             (Self::ProviderBaseUrlLoopbackRequired, UiLanguage::EnUs) => {
-                "Local Provider base URL must use a loopback host (127.0.0.1 / localhost / ::1)"
+                "loopback_http provider base URL must use a loopback host (127.0.0.1 / localhost / ::1)"
             }
             (Self::ProviderConnectTimeoutMsInvalid, UiLanguage::ZhCn) => {
-                "Local Provider 连接超时毫秒必须是正整数"
+                "Provider 连接超时毫秒必须是正整数"
             }
             (Self::ProviderConnectTimeoutMsInvalid, UiLanguage::EnUs) => {
-                "Local Provider connect timeout milliseconds must be a positive integer"
+                "Provider connect timeout milliseconds must be a positive integer"
             }
             (Self::ProviderExecutionModeInvalid, UiLanguage::ZhCn) => {
-                "Local Provider execution mode 必须是 player_parity 或 headless_agent"
+                "Provider execution mode 必须是 player_parity 或 headless_agent"
             }
             (Self::ProviderExecutionModeInvalid, UiLanguage::EnUs) => {
-                "Local Provider execution mode must be player_parity or headless_agent"
+                "Provider execution mode must be player_parity or headless_agent"
             }
             (Self::ProviderProfileRequired, UiLanguage::ZhCn) => {
-                "启用 ProviderBacked(Local HTTP) 时，Local Provider Agent Profile 不能为空"
+                "启用 ProviderBacked 时，Provider Agent Profile 不能为空"
             }
             (Self::ProviderProfileRequired, UiLanguage::EnUs) => {
-                "Local Provider agent profile is required when ProviderBacked(Local HTTP) is enabled"
+                "Provider agent profile is required when ProviderBacked is enabled"
             }
             (Self::LauncherBinRequired, UiLanguage::ZhCn) => {
                 "启动器二进制路径（launcher bin）是必填项"
