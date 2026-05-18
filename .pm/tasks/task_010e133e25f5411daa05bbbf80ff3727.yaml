@@ -1,0 +1,21 @@
+task_uid: task_010e133e25f5411daa05bbbf80ff3727
+title: "viewer manual canonical source cleanup"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_010e133e25f5411daa05bbbf80ff3727.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/prd.md
+  - doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md
+  - doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.prd.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-025
+acceptance:
+  - "current baseline docs point at viewer-manual.manual.md instead of legacy viewer-manual.md"
+handoff_to: []
+updated_at: 2026-05-18T22:21:02+08:00
+last_started_at: 2026-05-18T22:18:25+08:00
+last_closed_at: 2026-05-18T22:21:02+08:00

@@ -14,6 +14,7 @@
 - [x] readme-governance-path-followup (PRD-ENGINEERING-025/030) [test_tier_required]: 作为第五条 follow-up，建立 `readme-governance-path-governance` 专题并新增 `doc/readme/governance/README.md`，把 `readme/governance` 从“热点路径内无首读入口”收口到按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流的 canonical 子域入口。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
 - [x] quarterly-doc-inventory-review-followup (PRD-ENGINEERING-025) [test_tier_required]: 执行 2026-04-24 季度复核，重新运行 `bash ./scripts/doc-inventory-report.sh` 固定当前 `doc/` 体量快照，并把下一条 follow-up 从“待季度复核”改判为“near-limit active project docs 拆分优先”，避免继续停留在泛化的 review placeholder。 Trace: .pm/tasks/task_1104ff9bb9114aaa85c445785950a939.yaml
 - [x] world-simulator-doc-redundancy-reduction-followup (PRD-ENGINEERING-015/025) [test_tier_required]: 作为已完成 `world-simulator/viewer` 路径治理后的 aftercare，收口 `doc/world-simulator/viewer/viewer-manual.md` 的 legacy 正文残留，并把 `doc/world-simulator/prd.index.md` 压回“精确检索优先”的文件级索引角色，避免与模块 `README.md` 再做一套 landing。 Trace: .pm/tasks/task_aaebf3a722a847b9b2e8d23695ea71c0.yaml
+- [x] viewer-manual-canonical-source-cleanup-followup (PRD-ENGINEERING-025) [test_tier_required]: 继续对当前真值/当前基线类正式文档执行 aftercare，把 `world-simulator/site github-pages` 相关正式文档中的 `viewer-manual.md` 基线路径统一改回 `viewer-manual.manual.md`，避免 legacy redirect 再次被误读成 canonical source。 Trace: .pm/tasks/task_010e133e25f5411daa05bbbf80ff3727.yaml
 
 ## 2026-04-24 季度复核快照
 - `bash ./scripts/doc-inventory-report.sh` 当前快照：

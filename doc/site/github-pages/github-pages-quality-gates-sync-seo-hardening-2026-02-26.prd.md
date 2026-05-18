@@ -13,7 +13,7 @@
 
 ## 目标
 - 建立 GitHub Pages 发布前的最小质量门禁，避免“改了就发”导致线上回归。
-- 消除 `doc/world-simulator/viewer/viewer-manual.md` 与 `site/doc/cn|en/viewer-manual.html` 的关键命令路径漂移。
+- 消除 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `site/doc/cn|en/viewer-manual.html` 的关键命令路径漂移。
 - 补齐首页 SEO/社交元信息，提升外部分享与搜索展示稳定性。
 
 ## 范围
