@@ -90,12 +90,14 @@ summary_md="$run_dir/summary.md"
 
 python3 - "$manifest_path" "$lanes_tsv" "$summary_json" "$summary_md" "$run_dir" <<'PY'
 import csv
+import ipaddress
 import json
 import pathlib
 import sys
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
+repo_root = pathlib.Path.cwd().resolve()
 manifest_path = pathlib.Path(sys.argv[1]).resolve()
 lanes_tsv_arg = sys.argv[2].strip()
 summary_json_path = pathlib.Path(sys.argv[3]).resolve()
@@ -160,6 +162,44 @@ def is_placeholder_ref(raw: str) -> bool:
     )
 
 
+def is_non_public_endpoint(raw: str) -> bool:
+    hostname = urlparse(raw.strip().lower()).hostname
+    if not hostname:
+        return False
+    if hostname in {"localhost", "localhost.localdomain"}:
+        return True
+    if (
+        hostname.endswith(".localhost")
+        or hostname.endswith(".local")
+        or hostname.endswith(".localdomain")
+        or hostname.endswith(".internal")
+        or hostname.endswith(".home.arpa")
+    ):
+        return True
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    return not ip.is_global
+
+
+def is_template_ref(raw: str, resolved: pathlib.Path | None = None) -> bool:
+    lowered = raw.strip().lower()
+    if (
+        "/templates/" in lowered
+        or lowered.startswith("doc/testing/templates/")
+        or lowered.endswith("-template.md")
+    ):
+        return True
+    if resolved is None:
+        return False
+    try:
+        relative = resolved.resolve().relative_to(repo_root)
+    except ValueError:
+        return False
+    return relative.parts[:2] == ("doc", "testing") and "templates" in relative.parts
+
+
 def escape_markdown_cell(raw: str) -> str:
     return raw.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
 
@@ -184,6 +224,8 @@ for endpoint_name in ("rpc_ref", "explorer_ref", "faucet_ref"):
         continue
     if is_placeholder_ref(raw):
         manifest_blockers.append(f"{endpoint_name}_placeholder:{raw}")
+    elif is_non_public_endpoint(raw):
+        manifest_blockers.append(f"{endpoint_name}_non_public:{raw}")
 
 if data["status"] not in {"specified_skeleton_only", "rehearsal", "live"}:
     manifest_blockers.append(f"unsupported_public_testnet_status:{data['status']}")
@@ -214,7 +256,9 @@ if lanes_tsv_arg:
             evidence = resolve_ref(evidence_path)
             if not evidence.is_file():
                 raise SystemExit(f"lane `{lane_id}` evidence path missing: {evidence}")
-            if status == "pass" and is_placeholder_ref(evidence_path):
+            if status == "pass" and (
+                is_placeholder_ref(evidence_path) or is_template_ref(evidence_path, evidence)
+            ):
                 raise SystemExit(
                     f"lane `{lane_id}` pass evidence cannot use placeholder/template ref: {evidence_path}"
                 )
