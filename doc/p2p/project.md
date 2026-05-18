@@ -524,6 +524,21 @@
       - `rg -n "public_testnet|mainnet|shared_devnet|specified_skeleton_only|network_tier_manifest" doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md testing-manual.md scripts/network-tier-manifest.sh`
       - `./scripts/doc-governance-check.sh`
       - `git diff --check`
+- [x] formal-public-testnet-readiness-gate (PRD-P2P-028) [test_tier_required]: 为 formal `public_testnet` 增补独立 readiness review follow-up，新增 repo-owned `network-tier-public-testnet-readiness.sh`、seven-lane scaffold、skeleton placeholder evidence 与 rehearsal/template 文档收口，使仓库可以明确区分 `specified_skeleton_only`、`partial`、`block` 与 `ready_for_live_candidate`，并阻断把 placeholder endpoint 误报成 live candidate。 Trace: .pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.yaml
+  - 产物文件:
+    - `scripts/network-tier-public-testnet-readiness.sh`
+    - `scripts/network-tier-manifest-smoke.sh`
+    - `doc/testing/templates/public-testnet-rehearsal-template.md`
+    - `doc/testing/templates/public-testnet-readiness-lanes.example.tsv`
+    - `doc/testing/evidence/public-testnet-skeleton-example.md`
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/network-tier-manifest-smoke.sh`
+    - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
   - [x] bridge-binding-and-route-contract (PRD-P2P-TBRIDGE-001) [test_tier_required]: 为独立 `bridge-service` 落地最小 runtime slice，提供绑定 API、deposit route API、repo-owned 状态持久化、活跃 route 复用 / 过期与冲突错误语义，作为后续 watcher / `bridge_ledger` / LetAI OpenAPI adapter 的前置基线。 Trace: .pm/tasks/task_e56e4cfdb9534919a6f7bc7c6ba62ee9.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_newapi_bridge_service.rs`

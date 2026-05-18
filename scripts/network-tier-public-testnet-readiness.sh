@@ -94,6 +94,7 @@ import json
 import pathlib
 import sys
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 manifest_path = pathlib.Path(sys.argv[1]).resolve()
 lanes_tsv_arg = sys.argv[2].strip()
@@ -131,6 +132,23 @@ def resolve_ref(raw: str) -> pathlib.Path:
 
 def is_placeholder_ref(raw: str) -> bool:
     lowered = raw.strip().lower()
+    hostname = urlparse(lowered).hostname
+    if hostname:
+        placeholder_hosts = {
+            "example.com",
+            "example.net",
+            "example.org",
+            "example.invalid",
+        }
+        if (
+            hostname in placeholder_hosts
+            or hostname.endswith(".example")
+            or hostname.endswith(".example.com")
+            or hostname.endswith(".example.net")
+            or hostname.endswith(".example.org")
+            or hostname.endswith(".example.invalid")
+        ):
+            return True
     return (
         lowered == ""
         or "example.invalid" in lowered

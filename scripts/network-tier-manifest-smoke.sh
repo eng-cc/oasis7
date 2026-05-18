@@ -97,9 +97,9 @@ import sys
 path = pathlib.Path(sys.argv[1])
 data = json.loads(path.read_text(encoding="utf-8"))
 data["status"] = "rehearsal"
-data["endpoint_policy"]["rpc_ref"] = "https://live-candidate.oasis7.example/rpc"
-data["endpoint_policy"]["explorer_ref"] = "https://live-candidate.oasis7.example/explorer"
-data["endpoint_policy"]["faucet_ref"] = "https://live-candidate.oasis7.example/faucet"
+data["endpoint_policy"]["rpc_ref"] = "https://public-testnet-live-candidate.oasis7.network/rpc"
+data["endpoint_policy"]["explorer_ref"] = "https://public-testnet-live-candidate.oasis7.network/explorer"
+data["endpoint_policy"]["faucet_ref"] = "https://public-testnet-live-candidate.oasis7.network/faucet"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 
