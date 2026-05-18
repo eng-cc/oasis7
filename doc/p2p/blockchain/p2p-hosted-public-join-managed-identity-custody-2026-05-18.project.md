@@ -7,6 +7,22 @@
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 冻结 `hosted_public_join` 的托管身份、托管密钥、手机号/邮箱登录、自托管升级和 trust boundary 文档真值，并回写模块入口映射。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
+- [x] hosted-browser-device-session-recovery (PRD-P2P-029) [test_tier_required]: 清退 `hosted_public_join` 浏览器 `localStorage privateKey` 持久化，引入 `device_session_id` contract，并把 hosted player-session 恢复链路改成“持久化 device session handle + 页内临时 Ed25519 会话 key”。 Trace: .pm/tasks/task_584da7818a9d42e6aae5894512413102.yaml
+  - 产物文件:
+    - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
+    - `crates/oasis7_viewer/software_safe_src/legacy_core.js`
+    - `crates/oasis7_viewer/software_safe_src/main.test.jsx`
+    - `crates/oasis7_viewer/software_safe.js`
+    - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_584da7818a9d42e6aae5894512413102.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_player_session_ -- --nocapture`
+    - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `npm --prefix crates/oasis7_viewer run test:ui`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ### 后续切片
 - `runtime_engineer` + `viewer_engineer` / hosted-account-identity-broker:
@@ -97,7 +113,7 @@
 ## 当前结论
 - 结论-1: 对 `hosted_public_join` 而言，“手机号/邮箱登录 + 中心化托管密钥 + 可选自托管升级”是比“让普通玩家保存公私钥”更合适的正式产品路径。
 - 结论-2: 中心化 KMS 不是直接替代全部产品语义；更准确的落法是 `identity broker + custody service + sign API`，KMS/HSM 作为 custody backend 的实现选项，而不是前端/运行时直接耦合的唯一接口。
-- 结论-3: 当前代码仍只有 preview session / preview strong-auth / browser local private-key debt；本专题只是冻结目标态，未声称已实现。
+- 结论-3: 当前代码已经完成第一刀 `device_session` 收口：launcher grant 新增 `device_session_id`，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`，刷新页后只保留 `device_session` handle，并按需在页内重新生成临时 Ed25519 session key；但 hosted account、手机号/邮箱登录、custody sign API 与真正的托管签名后端仍未实现。
 - 结论-4: 托管身份仅面向 player plane；node / validator / governance signer 继续沿用独立 custody/governance 专题。
 
 ## 依赖
@@ -121,5 +137,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 优先执行 `hosted-account-identity-broker` 与 `device-session-and-runtime-binding`，先把“登录账户”和“浏览器不再存长期私钥”落成代码真值，再推进 custody sign lane。
+- 下一步: 优先执行 `hosted-account-identity-broker`，把 hosted account、手机号/邮箱 OTP/magic link/passkey、`hosted_account_id -> player_id` 绑定与跨设备恢复落成代码真值；随后推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
 - 最近更新: 2026-05-18

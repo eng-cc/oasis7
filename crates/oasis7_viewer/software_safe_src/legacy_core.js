@@ -81,6 +81,7 @@ export const state = {
   auth: {
     available: false,
     playerId: null,
+    deviceSessionId: null,
     publicKey: null,
     privateKey: null,
     releaseToken: null,
@@ -538,6 +539,7 @@ function resolveAuthBootstrap() {
     return {
       available: false,
       playerId: null,
+      deviceSessionId: null,
       publicKey: null,
       privateKey: null,
       releaseToken: null,
@@ -570,6 +572,7 @@ function resolveAuthBootstrap() {
     return {
       available: false,
       playerId: playerId || null,
+      deviceSessionId: null,
       publicKey: publicKey || null,
       privateKey: privateKey || null,
       releaseToken: null,
@@ -594,6 +597,7 @@ function resolveAuthBootstrap() {
   return {
     available: true,
     playerId,
+    deviceSessionId: null,
     publicKey,
     privateKey,
     releaseToken: null,
@@ -631,7 +635,7 @@ function hostedPlayerSessionStorageKey() {
 }
 
 function persistHostedPlayerSession(auth) {
-  if (!auth?.available || !auth?.playerId || !auth?.publicKey || !auth?.privateKey || auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!auth?.available || !auth?.playerId || auth.source === "legacy_viewer_auth_bootstrap") {
     return;
   }
   try {
@@ -639,8 +643,7 @@ function persistHostedPlayerSession(auth) {
       hostedPlayerSessionStorageKey(),
       JSON.stringify({
         playerId: auth.playerId,
-        publicKey: auth.publicKey,
-        privateKey: auth.privateKey,
+        deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
         releaseToken: auth.releaseToken || null,
         issuedAtUnixMs: auth.issuedAtUnixMs || null,
         sessionEpoch: auth.sessionEpoch || null,
@@ -665,18 +668,28 @@ function resolveStoredHostedPlayerSession() {
     }
     const parsed = JSON.parse(raw);
     const playerId = String(parsed?.playerId || "").trim();
-    const publicKey = String(parsed?.publicKey || "").trim().toLowerCase();
-    const privateKey = String(parsed?.privateKey || "").trim().toLowerCase();
     const releaseToken = String(parsed?.releaseToken || "").trim();
-    if (!playerId || !publicKey || !privateKey || !releaseToken) {
+    const deviceSessionId = String(parsed?.deviceSessionId || parsed?.device_session_id || parsed?.releaseToken || "").trim();
+    if (!playerId || !releaseToken) {
       clearHostedPlayerSession();
       return null;
     }
+    window.localStorage?.setItem(
+      hostedPlayerSessionStorageKey(),
+      JSON.stringify({
+        playerId,
+        deviceSessionId: deviceSessionId || releaseToken,
+        releaseToken,
+        issuedAtUnixMs: parsed?.issuedAtUnixMs ?? null,
+        sessionEpoch: parsed?.sessionEpoch ?? null,
+      }),
+    );
     return {
       available: true,
       playerId,
-      publicKey,
-      privateKey,
+      deviceSessionId: deviceSessionId || releaseToken,
+      publicKey: null,
+      privateKey: null,
       releaseToken,
       error: null,
       revokeReason: null,
@@ -707,6 +720,29 @@ function resolveViewerAuthState() {
     return bootstrap;
   }
   return resolveStoredHostedPlayerSession() || bootstrap;
+}
+
+function authHasSigningKeyMaterial(auth) {
+  return !!String(auth?.publicKey || "").trim() && !!String(auth?.privateKey || "").trim();
+}
+
+async function ensureHostedAuthSigningKey(auth = state.auth) {
+  if (!auth?.available || auth.source === "legacy_viewer_auth_bootstrap") {
+    return auth;
+  }
+  if (authHasSigningKeyMaterial(auth)) {
+    return auth;
+  }
+  const keypair = await generateEphemeralEd25519Keypair();
+  auth.publicKey = keypair.publicKey;
+  auth.privateKey = keypair.privateKey;
+  auth.registrationStatus = "issued";
+  auth.runtimeStatus = "recovery_pending_key";
+  auth.syncInFlight = false;
+  auth.recoveryErrorCode = null;
+  auth.recoveryErrorMessage = null;
+  persistHostedPlayerSession(auth);
+  return auth;
 }
 
 async function refreshHostedAdmissionState() {
@@ -868,10 +904,10 @@ function playerSessionReason(auth, deploymentHint) {
       return "player interaction is currently unlocked through legacy viewer auth bootstrap in trusted preview mode";
     }
     if (auth.registrationStatus === "registered") {
-      return "player interaction is unlocked through hosted-issued player_id + browser-local ephemeral Ed25519 session";
+      return "player interaction is unlocked through hosted-issued player_id + browser device session plus an in-memory browser-generated Ed25519 session key";
     }
     if (auth.registrationStatus === "registering" || auth.registrationStatus === "issued") {
-      return "browser-local hosted identity is ready; runtime player-session registration is still in progress";
+      return "browser device session is ready; runtime player-session registration is still in progress";
     }
     return auth.error || "hosted player identity exists, but runtime registration still needs recovery";
   }
@@ -905,13 +941,13 @@ function buildStrongAuthTier(promptCapability) {
       return {
         status: "preview_backend_reauth_available",
         reason:
-          "hosted preview backend reauth is available after the browser-local player_session has completed runtime registration for prompt_control",
+          "hosted preview backend reauth is available after the browser device-session-backed player_session has completed runtime registration for prompt_control",
       };
     }
     return {
       status: "issued_pending_register",
       reason:
-        "hosted preview backend reauth stays pending until the browser-local player_session finishes runtime registration",
+        "hosted preview backend reauth stays pending until the browser device-session-backed player_session finishes runtime registration",
     };
   }
   if (promptPolicy.availability === "trusted_local_preview_only") {
@@ -1050,7 +1086,7 @@ function buildAuthSurfaceModel() {
     ? state.auth.available
       ? state.auth.source === "legacy_viewer_auth_bootstrap"
         ? "legacy_viewer_auth_bootstrap+hosted_access_hint"
-        : "hosted_player_issue+browser_local_ephemeral_key"
+        : "hosted_player_issue+browser_local_device_session"
       : "hosted_access_hint"
     : state.auth.available
       ? state.auth.source
@@ -1099,8 +1135,8 @@ function buildAuthSurfaceModel() {
       ? state.auth.source === "legacy_viewer_auth_bootstrap"
         ? "reconnect still depends on the current preview bootstrap; hosted player-session reconnect/release is available only after switching away from legacy bootstrap"
         : state.auth.registrationStatus === "registered"
-          ? "page reload will reuse the browser-local hosted key and attempt reconnect_sync first"
-          : "browser-local hosted key is persisted, but runtime session restore is still pending this page load"
+          ? "page reload will reuse the hosted device session, mint a fresh browser session key, and attempt reconnect_sync first"
+          : "hosted device session is persisted locally, but runtime player-session restore is still pending this page load"
       : isHostedPublicJoinHint(deploymentHint)
         ? buildHostedRecoveryHint("en")?.detail
           || "hosted public join recovers by acquiring a player_session first, then re-registering it through reconnect_sync"
@@ -1169,8 +1205,8 @@ function buildHostedRecoveryHint(locale = state.uiLocale) {
       kind: "missing",
       title: isLocaleZh(locale) ? "运行时中找不到托管玩家会话" : "Hosted player session is missing from runtime",
       detail: isLocaleZh(locale)
-        ? "浏览器本地密钥仍存在，但运行时已经不再识别这个会话。请重新获取托管玩家会话并重新注册。"
-        : "The browser-local key still exists, but the runtime no longer recognizes the session. Acquire a fresh hosted player session and register again.",
+        ? "浏览器本地只保留了 device session，但运行时已经不再识别这个会话。请重新获取托管玩家会话并重新注册。"
+        : "The browser only retained the local device-session handle, but the runtime no longer recognizes this session. Acquire a fresh hosted player session and register again.",
       cta: isLocaleZh(locale) ? "重新获取托管玩家会话" : "Re-acquire Hosted Player Session",
     };
   }
@@ -2732,6 +2768,9 @@ async function issueHostedPlayerIdentity() {
     state.auth = {
       available: true,
       playerId: String(payload.grant.player_id || "").trim(),
+      deviceSessionId: String(payload.grant.device_session_id || "").trim()
+        || String(payload.grant.release_token || "").trim()
+        || null,
       publicKey: keypair.publicKey,
       privateKey: keypair.privateKey,
       releaseToken: String(payload.grant.release_token || "").trim() || null,
@@ -2787,8 +2826,9 @@ async function retryHostedPlayerIdentityIssue() {
 }
 
 async function requestHostedStrongAuthGrant(actionId, agentId) {
-  const playerId = String(state.auth.playerId || "").trim();
-  const publicKey = String(state.auth.publicKey || "").trim();
+  const auth = await ensureHostedAuthSigningKey(state.auth);
+  const playerId = String(auth.playerId || "").trim();
+  const publicKey = String(auth.publicKey || "").trim();
   const releaseToken = String(state.auth.releaseToken || "").trim();
   const approvalCode = String(state.strongAuth.approvalCode || "").trim();
   if (!playerId || !publicKey || !releaseToken) {
@@ -2900,14 +2940,15 @@ function resetHostedPlayerAuthState(errorMessage = null, revocationMeta = null) 
   const revokeReason = String(revocationMeta?.revokeReason || "").trim() || null;
   const revokedBy = String(revocationMeta?.revokedBy || "").trim() || null;
   state.auth = bootstrap.available
-    ? bootstrap
-    : {
+      ? bootstrap
+      : {
         ...bootstrap,
         source: "guest_only",
         registrationStatus: "guest",
         error: errorMessage,
         revokeReason,
         revokedBy,
+        deviceSessionId: null,
         sessionEpoch: null,
         issuedAtUnixMs: null,
         releaseToken: null,
@@ -2987,9 +3028,10 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   }
   state.auth.pendingRequestedAgentId = normalizedRequestedAgentId;
   state.auth.pendingForceRebind = forceRebind === true;
+  const auth = await ensureHostedAuthSigningKey(state.auth);
   const request = {
-    player_id: state.auth.playerId,
-    public_key: state.auth.publicKey,
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
   };
   if (normalizedRequestedAgentId) {
     request.requested_agent_id = normalizedRequestedAgentId;
@@ -2997,7 +3039,7 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   if (forceRebind === true) {
     request.force_rebind = true;
   }
-  request.auth = await buildSessionRegisterAuthProof(request, state.auth);
+  request.auth = await buildSessionRegisterAuthProof(request, auth);
   sendJson({
     type: "authoritative_recovery",
     command: {
@@ -3354,6 +3396,9 @@ function sendPromptControl(mode, payload = null) {
       feedback.effect = "registering player session";
       render();
       await ensureRegisteredPlayerSession(agentId);
+      request.player_id = state.auth.playerId;
+      request.public_key = state.auth.publicKey;
+      request.updated_by = state.auth.playerId;
       let strongAuthGrant = null;
       if (String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join") {
         feedback.stage = "authorizing";
