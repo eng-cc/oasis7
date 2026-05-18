@@ -1,0 +1,27 @@
+task_uid: task_52308ccba04f475c8d17fa5b3d3993ca
+title: "viewer formal lane truth alignment"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-viewer-formal-lane-truth-align
+execution_log_path: .pm/tasks/task_52308ccba04f475c8d17fa5b3d3993ca.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+  - doc/world-simulator/viewer/viewer-manual.manual.md
+  - doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+  - doc/world-simulator/viewer/viewer-manual.manual.md
+  - doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md
+  - doc/world-runtime/evidence/formal-release-fixed-genesis-default-viewer-2026-05-16.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-039
+acceptance:
+  - "viewer web entry project truth reflects completed canonical-entry work"
+  - "viewer manual distinguishes formal gameplay PASS evidence from observer-only no-LLM viewer evidence"
+  - "viewer doc surface links formal gameplay proof from the canonical manual"
+handoff_to: []
+updated_at: 2026-05-18T18:09:07+08:00
+last_started_at: 2026-05-18T18:02:24+08:00
+last_closed_at: 2026-05-18T18:09:07+08:00

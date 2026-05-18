@@ -9,6 +9,7 @@
 - 协作角色: `producer_system_designer`
 - 当前结论: `pass`
 - 目标: 按新的主入口 contract 重跑 `software_safe` formal Web gameplay 证据，确认默认 `/` 与 `render_mode=auto` 是否落到 `software_safe`，并把 release/current-entry claim 继续绑定到真实采证结果。
+- 文件名保留历史 `software_safe` 命名；当前 canonical Web/UI 名称已经是 `viewer`，这里只是沿用原任务证据文件名。
 
 ## 最终结论
 - primary Web 入口 contract 已拿到新的 browser 证据:
