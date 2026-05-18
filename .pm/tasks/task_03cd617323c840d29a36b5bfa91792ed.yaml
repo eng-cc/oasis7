@@ -1,0 +1,22 @@
+task_uid: task_03cd617323c840d29a36b5bfa91792ed
+title: "viewer manual sync contract refresh"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_03cd617323c840d29a36b5bfa91792ed.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - scripts/site-manual-sync-check.sh
+  - doc/world-simulator/viewer/viewer-manual.manual.md
+  - site/doc/cn/viewer-manual.html
+  - site/doc/en/viewer-manual.html
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-025
+acceptance:
+  - "viewer manual sync gate validates the current render_mode=viewer test_api baseline"
+handoff_to: []
+updated_at: 2026-05-18T22:46:57+08:00
+last_started_at: 2026-05-18T22:38:49+08:00
+last_closed_at: 2026-05-18T22:46:57+08:00

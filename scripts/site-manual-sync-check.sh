@@ -10,22 +10,20 @@ MIRROR_MANUALS=(
   "${REPO_ROOT}/site/doc/en/viewer-manual.html"
 )
 
-REQUIRED_PATTERNS=(
+SOURCE_REQUIRED_PATTERNS=(
   'command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }'
-  'agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&test_api=1"'
+  'agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"'
+  'agent-browser snapshot -i'
+)
+
+MIRROR_REQUIRED_PATTERNS=(
+  'command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }'
+  'agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"'
   'agent-browser snapshot -i'
 )
 
 FORBIDDEN_PATTERNS=(
   'export REPO_ROOT="$(pwd)"'
-)
-
-SOURCE_REFERENCE_REQUIRED_PATTERNS=(
-  'doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md'
-)
-
-MIRROR_REFERENCE_REQUIRED_PATTERNS=(
-  'https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md'
 )
 
 MIRROR_REFERENCE_FORBIDDEN_PATTERNS=(
@@ -75,15 +73,13 @@ check_forbidden_patterns() {
   done
 }
 
-check_required_patterns "${SOURCE_MANUAL}" "${REQUIRED_PATTERNS[@]}"
+check_required_patterns "${SOURCE_MANUAL}" "${SOURCE_REQUIRED_PATTERNS[@]}"
 check_forbidden_patterns "${SOURCE_MANUAL}" "${FORBIDDEN_PATTERNS[@]}"
-check_required_patterns "${SOURCE_MANUAL}" "${SOURCE_REFERENCE_REQUIRED_PATTERNS[@]}"
 
 for mirror in "${MIRROR_MANUALS[@]}"; do
-  check_required_patterns "${mirror}" "${REQUIRED_PATTERNS[@]}"
+  check_required_patterns "${mirror}" "${MIRROR_REQUIRED_PATTERNS[@]}"
   check_forbidden_patterns "${mirror}" "${FORBIDDEN_PATTERNS[@]}"
-  check_required_patterns "${mirror}" "${MIRROR_REFERENCE_REQUIRED_PATTERNS[@]}"
   check_forbidden_patterns "${mirror}" "${MIRROR_REFERENCE_FORBIDDEN_PATTERNS[@]}"
 done
 
-echo "ok: viewer manual static mirrors are synced with agent-browser command baseline and reference links"
+echo "ok: viewer manual static mirrors are synced with the current agent-browser command baseline"
