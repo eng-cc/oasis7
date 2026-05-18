@@ -123,7 +123,10 @@ def resolve_ref(raw: str) -> pathlib.Path:
     path = pathlib.Path(raw)
     if path.is_absolute():
         return path.resolve()
-    return (manifest_path.parent / path).resolve()
+    manifest_relative = (manifest_path.parent / path).resolve()
+    if manifest_relative.exists():
+        return manifest_relative
+    return (pathlib.Path.cwd() / path).resolve()
 
 
 def is_placeholder_ref(raw: str) -> bool:
@@ -134,17 +137,23 @@ def is_placeholder_ref(raw: str) -> bool:
         or "public-testnet-example" in lowered
         or "public-testnet-smoke" in lowered
         or lowered.endswith("public-testnet-skeleton-example.md")
+        or lowered.endswith("public-testnet-rehearsal-template.md")
+        or lowered.endswith("public-testnet-exit-review-template.md")
     )
 
 
+def escape_markdown_cell(raw: str) -> str:
+    return raw.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
+
+
 lanes = []
-missing_required_lanes = []
+missing_required_lanes = list(required_lanes)
 manifest_blockers = []
 lanes_tsv_path = None
 
 bundle_ref = data["runtime_refs"]["release_candidate_bundle_ref"]
 bundle_path = resolve_ref(bundle_ref)
-if not bundle_path.exists():
+if not bundle_path.is_file():
     manifest_blockers.append(
         f"release_candidate_bundle_ref_missing:{bundle_path}"
     )
@@ -180,9 +189,17 @@ if lanes_tsv_arg:
                 raise SystemExit(f"duplicate lane_id in lanes tsv: {lane_id}")
             if status not in status_rank:
                 raise SystemExit(f"unsupported lane status `{status}` for {lane_id}")
-            evidence = pathlib.Path(evidence_path).expanduser().resolve()
-            if not evidence.exists():
+            if not owner:
+                raise SystemExit(f"lane `{lane_id}` owner cannot be empty")
+            if not evidence_path:
+                raise SystemExit(f"lane `{lane_id}` evidence path cannot be empty")
+            evidence = resolve_ref(evidence_path)
+            if not evidence.is_file():
                 raise SystemExit(f"lane `{lane_id}` evidence path missing: {evidence}")
+            if status == "pass" and is_placeholder_ref(evidence_path):
+                raise SystemExit(
+                    f"lane `{lane_id}` pass evidence cannot use placeholder/template ref: {evidence_path}"
+                )
             seen_lane_ids.add(lane_id)
             lanes.append(
                 {
@@ -310,11 +327,11 @@ if lanes:
     for lane in lanes:
         lines.append(
             "| `{lane}` | `{owner}` | `{status}` | `{evidence}` | {note} |".format(
-                lane=lane["lane_id"],
-                owner=lane["owner"],
-                status=lane["status"],
-                evidence=lane["evidence_path"],
-                note=lane["note"],
+                lane=escape_markdown_cell(lane["lane_id"]),
+                owner=escape_markdown_cell(lane["owner"]),
+                status=escape_markdown_cell(lane["status"]),
+                evidence=escape_markdown_cell(lane["evidence_path"]),
+                note=escape_markdown_cell(lane["note"]),
             )
         )
 
