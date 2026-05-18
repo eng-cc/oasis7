@@ -6,7 +6,7 @@
 审计轮次: 5
 > 状态更新（2026-03-08）:
 > - `oasis7_viewer_live` 已移除 `--release-config`、`--runtime-world` 与 `--node-*` legacy 控制面参数。
-> - 本文中涉及 `--release-config` 的目标表述仅保留历史背景；当前口径以 viewer-manual 与模块主 PRD 为准。
+> - 本文中涉及 `--release-config` 的目标表述仅保留历史背景；当前口径以 `viewer-manual.manual.md` 与模块主 PRD 为准。
 
 ## ROUND-002 主从口径
 - 主入口统一指向 `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`，本文仅维护增量。
@@ -34,7 +34,7 @@
 
 ## 接口/数据
 - 输入基线
-  - `doc/world-simulator/viewer/viewer-manual.md`
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/world-simulator.project.md`
   - `doc/world-simulator/viewer/viewer-generic-focus-targets.prd.md`
   - `doc/world-simulator/viewer/viewer-web-test-api-step-control-2026-02-24.prd.md`
@@ -63,7 +63,7 @@
 - 风险：手册页超出当前可维护密度。
   - 缓解：仅同步能力口径，不扩展新章节结构。
 - 风险：代码能力继续演进导致页面再次过时。
-  - 缓解：以 `doc/world-simulator/viewer/viewer-manual.md` 作为后续同步基线，滚动更新。
+  - 缓解：以 `doc/world-simulator/viewer/viewer-manual.manual.md` 作为后续同步基线，滚动更新。
 
 ## 原文约束点映射（内容保真）
 - 约束-1（目标与问题定义）：沿用原“目标”章节约束，不改变问题定义与解决方向。

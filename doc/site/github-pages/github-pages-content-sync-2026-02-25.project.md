@@ -32,7 +32,7 @@
 
 ## 依赖
 - 继续沿用 `site/` 静态目录与 GitHub Pages 工作流。
-- 内容基线以 `doc/world-simulator/viewer/viewer-manual.md` 和已合入代码行为为准。
+- 内容基线以 `doc/world-simulator/viewer/viewer-manual.manual.md` 和已合入代码行为为准。
 
 ## 状态
 - 当前阶段：已完成（任务 0/1/2/3 全部完成）

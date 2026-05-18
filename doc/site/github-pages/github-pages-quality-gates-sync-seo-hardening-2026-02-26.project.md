@@ -42,7 +42,7 @@
 ## 依赖
 - 站点静态结构：`site/` 与 `site/assets/app.js` 既有交互契约。
 - 发布流程：`.github/workflows/pages.yml`。
-- 手册内容基线：`doc/world-simulator/viewer/viewer-manual.md`。
+- 手册内容基线：`doc/world-simulator/viewer/viewer-manual.manual.md`。
 
 ## 状态
 - 当前阶段：已完成（T0~T4 全部完成）
