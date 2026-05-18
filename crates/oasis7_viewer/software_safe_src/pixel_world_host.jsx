@@ -50,6 +50,131 @@ function buildRecentEventHotspots(events) {
     }));
 }
 
+function countResourceEntries(summary) {
+  if (!summary || summary === "-") {
+    return 0;
+  }
+  return String(summary)
+    .split(" · ")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .length;
+}
+
+function worldCenterPosition(worldBounds) {
+  if (!worldBounds) {
+    return null;
+  }
+  return {
+    x_cm: worldBounds.width_cm / 2,
+    y_cm: worldBounds.depth_cm / 2,
+    z_cm: worldBounds.height_cm / 2,
+  };
+}
+
+function clampWorldPosition(pos, worldBounds) {
+  if (!pos || !worldBounds) {
+    return null;
+  }
+  return {
+    x_cm: Math.min(worldBounds.width_cm, Math.max(0, Number(pos.x_cm) || 0)),
+    y_cm: Math.min(worldBounds.depth_cm, Math.max(0, Number(pos.y_cm) || 0)),
+    z_cm: Math.min(worldBounds.height_cm, Math.max(0, Number(pos.z_cm) || 0)),
+  };
+}
+
+function offsetWorldPosition(anchor, worldBounds, xRatio, yRatio) {
+  if (!worldBounds) {
+    return null;
+  }
+  const base = anchor || worldCenterPosition(worldBounds);
+  if (!base) {
+    return null;
+  }
+  return clampWorldPosition({
+    x_cm: base.x_cm + (worldBounds.width_cm * xRatio),
+    y_cm: base.y_cm + (worldBounds.depth_cm * yRatio),
+    z_cm: base.z_cm || 0,
+  }, worldBounds);
+}
+
+function resolveSelectionPosition(selection, agents, locations) {
+  if (!selection) {
+    return null;
+  }
+  if (selection.kind === "agent") {
+    return agents.find((agent) => agent.id === selection.id)?.pos || null;
+  }
+  if (selection.kind === "location") {
+    return locations.find((location) => location.id === selection.id)?.pos || null;
+  }
+  return null;
+}
+
+function buildPixelWorldLinks(agents, locationById) {
+  return agents
+    .filter((agent) => agent.location_id && agent.pos && locationById.has(agent.location_id))
+    .map((agent) => ({
+      id: `link:${agent.id}:${agent.location_id}`,
+      kind: "agent_assignment",
+      from: agent.pos,
+      to: locationById.get(agent.location_id).pos,
+      emphasis: agent.location_id ? 0.72 : 0.5,
+    }));
+}
+
+function buildVisualHotspots({
+  worldBounds,
+  anchor,
+  goalHighlight,
+  blockerHighlight,
+  recentEventHotspots,
+}) {
+  if (!worldBounds) {
+    return [];
+  }
+  const offsets = [
+    [-0.18, -0.14],
+    [0.18, -0.12],
+    [0.22, 0.14],
+    [-0.2, 0.16],
+    [0.0, -0.22],
+    [0.0, 0.22],
+  ];
+  const staged = [];
+  if (goalHighlight?.title) {
+    staged.push({
+      id: "goal-highlight",
+      label: goalHighlight.title,
+      kind: "goal",
+      emphasis: 1,
+      size_hint_px: 14,
+    });
+  }
+  if (blockerHighlight?.kind) {
+    staged.push({
+      id: "blocker-highlight",
+      label: blockerHighlight.kind,
+      kind: "blocker",
+      emphasis: 1,
+      size_hint_px: 16,
+    });
+  }
+  for (const hotspot of recentEventHotspots.slice(0, 4)) {
+    staged.push({
+      id: `recent:${hotspot.id}`,
+      label: hotspot.title,
+      kind: hotspot.kind || "recent_event",
+      emphasis: 0.72,
+      size_hint_px: 10,
+    });
+  }
+  return staged.map((entry, index) => ({
+    ...entry,
+    pos: offsetWorldPosition(anchor, worldBounds, ...(offsets[index % offsets.length] || [0, 0])),
+  })).filter((entry) => entry.pos);
+}
+
 function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal }) {
   let bridge = null;
   let runtimeSource = "detached";
@@ -143,6 +268,7 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
         height_cm: Number(space.height_cm) || 0,
       }
     : null;
+  const worldScaleBase = Math.max(1, Math.min(worldBounds?.width_cm || 1, worldBounds?.depth_cm || 1));
 
   const locations = lists.locations
     .map((location) => ({
@@ -151,6 +277,12 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
       pos: normalizePosition(location.pos),
       radius_cm: Number(location?.profile?.radius_cm) || 0,
       resource_summary: core.resourceSummary(location.resources),
+      resource_score: countResourceEntries(core.resourceSummary(location.resources)),
+      size_hint_px: 16 + Math.min(
+        18,
+        (((Number(location?.profile?.radius_cm) || 0) / worldScaleBase) * 420)
+          + (countResourceEntries(core.resourceSummary(location.resources)) * 2),
+      ),
     }))
     .filter((location) => location.pos);
 
@@ -160,10 +292,17 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
     location_id: agent.location_id || null,
     pos: normalizePosition(agent.pos || (selected?.id === agent.id ? selected?.pos : null)),
     resource_summary: core.resourceSummary(agent.resources),
+    resource_score: countResourceEntries(core.resourceSummary(agent.resources)),
     status_badges: [
       agent.location_id ? `location=${agent.location_id}` : null,
       agent.kind ? `kind=${agent.kind}` : null,
     ].filter(Boolean),
+    size_hint_px: 12 + Math.min(
+      10,
+      (countResourceEntries(core.resourceSummary(agent.resources)) * 2)
+        + (agent.location_id ? 2 : 0)
+        + (agent.kind ? 1 : 0),
+    ),
   }));
 
   const selection = core.state.selectedKind && core.state.selectedId
@@ -172,26 +311,44 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
         id: core.state.selectedId,
       }
     : null;
+  const locationById = new Map(locations.map((location) => [location.id, location]));
+  const links = buildPixelWorldLinks(agents, locationById);
+  const anchor = resolveSelectionPosition(selection, agents, locations)
+    || agents.find((agent) => agent.pos)?.pos
+    || locations[0]?.pos
+    || worldCenterPosition(worldBounds);
+  const goalHighlight = gameplay?.goalTitle
+    ? {
+        title: gameplay.goalTitle,
+        objective: gameplay.objective || null,
+      }
+    : null;
+  const blockerHighlight = gameplay?.blockerKind || gameplay?.blockerDetail
+    ? {
+        kind: gameplay.blockerKind || "blocked",
+        detail: gameplay.blockerDetail || null,
+      }
+    : null;
+  const recentEventHotspots = buildRecentEventHotspots(core.state.recentEvents);
+  const visualHotspots = buildVisualHotspots({
+    worldBounds,
+    anchor,
+    goalHighlight,
+    blockerHighlight,
+    recentEventHotspots,
+  });
 
   return {
     locale,
     world_bounds: worldBounds,
     locations,
     agents,
+    links,
     selection,
-    goal_highlight: gameplay?.goalTitle
-      ? {
-          title: gameplay.goalTitle,
-          objective: gameplay.objective || null,
-        }
-      : null,
-    blocker_highlight: gameplay?.blockerKind || gameplay?.blockerDetail
-      ? {
-          kind: gameplay.blockerKind || "blocked",
-          detail: gameplay.blockerDetail || null,
-        }
-      : null,
-    recent_event_hotspots: buildRecentEventHotspots(core.state.recentEvents),
+    goal_highlight: goalHighlight,
+    blocker_highlight: blockerHighlight,
+    recent_event_hotspots: recentEventHotspots,
+    visual_hotspots: visualHotspots,
     presentation: {
       world_bounds_label: worldScaleSurface.physicalTruth.worldBoundsLabel,
       marker_truth_note: worldScaleSurface.presentationScale.markerTruthNote,
@@ -465,7 +622,8 @@ export function PixelWorldHost(props) {
       <div class="pixel-world-host__toolbar badge-row">
         <span class="badge badge--accent">{`locations=${renderState().locations.length}`}</span>
         <span class="badge badge--accent">{`agents=${renderState().agents.length}`}</span>
-        <span class="badge">{`hotspots=${renderState().recent_event_hotspots.length}`}</span>
+        <span class="badge">{`links=${renderState().links.length}`}</span>
+        <span class="badge">{`hotspots=${renderState().visual_hotspots.length}`}</span>
         <span class="badge">{renderState().world_bounds ? "world_bounds=ready" : "world_bounds=missing"}</span>
         <span class="badge">{`renderer=${rendererStatus()}`}</span>
         <span class="badge">{`runtime=${runtimeSource()}`}</span>

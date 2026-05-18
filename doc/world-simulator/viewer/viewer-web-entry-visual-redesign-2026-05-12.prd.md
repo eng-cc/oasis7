@@ -72,6 +72,7 @@
   - Agent chat
   - prompt override 展开链路
   - `__AW_TEST__` 合同
+- 像素世界主舞台必须优先利用现有 snapshot / gameplay 数据派生更丰富的世界语义层，例如地点 footprint、Agent-地点关系连线、goal/blocker/event 热点等；不允许在“只有少量实体”时退化成只剩孤立点位的几何示意。
 - 嵌入式世界舞台必须以 wasm bridge 作为唯一 renderer runtime；若 bridge 缺失或启动失败，页面应显式退回 host fallback/callout，而不是静默切到第二套 JS renderer。
 - repo-owned 回归至少分两层：
   - 结构 / DOM 层：`Vitest + @solidjs/testing-library` 断言 `World / Targets / Command` 锚点、`Runtime Diagnostics` / `Session Ladder` / `Hosted Action Matrix` 降级面，以及 `Agent Chat` / `Prompt Overrides` 的可达性。
@@ -123,6 +124,7 @@
 - AC-2: Player 主路径首屏只暴露世界、目标、下一步动作和关键反馈；诊断/治理信息被显式降级。
 - AC-3: `Agent Chat`、Prompt Overrides、关键 summary/blocker surface 仍保持可达且可测试。
 - AC-4: 视觉系统明显区别于当前通用深色 dashboard 风格，并在桌面/移动端都保持一致的层级逻辑。
+- AC-5: 像素世界主舞台即使面对稀疏快照，也必须通过关系线、热点或地点尺度提示保持“世界正在发生什么”的可读性，而不是只显示少量孤点。
 
 ## 7. Validation & Decision Record
 - Test Plan & Traceability:

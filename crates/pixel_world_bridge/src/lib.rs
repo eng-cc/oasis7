@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::mem;
 
 use bevy::prelude::*;
@@ -11,12 +11,11 @@ use serde_wasm_bindgen::{from_value, to_value};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
+mod render;
+
 thread_local! {
     static BRIDGE_SHARED: RefCell<BridgeSharedState> = RefCell::new(BridgeSharedState::default());
 }
-
-const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
-const AGENT_HIT_HALF_SIZE: f64 = 8.0;
 
 #[derive(Clone, Debug, Deserialize)]
 struct Position {
@@ -32,6 +31,11 @@ struct Location {
     #[allow(dead_code)]
     label: String,
     pos: Position,
+    #[allow(dead_code)]
+    radius_cm: f64,
+    #[allow(dead_code)]
+    resource_summary: String,
+    size_hint_px: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -40,6 +44,35 @@ struct Agent {
     #[allow(dead_code)]
     label: String,
     pos: Option<Position>,
+    #[allow(dead_code)]
+    location_id: Option<String>,
+    #[allow(dead_code)]
+    resource_summary: String,
+    #[allow(dead_code)]
+    status_badges: Vec<String>,
+    size_hint_px: Option<f64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct Link {
+    id: String,
+    #[allow(dead_code)]
+    kind: String,
+    from: Position,
+    to: Position,
+    emphasis: Option<f64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct VisualHotspot {
+    id: String,
+    #[allow(dead_code)]
+    label: String,
+    #[allow(dead_code)]
+    kind: String,
+    pos: Position,
+    emphasis: Option<f64>,
+    size_hint_px: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -61,6 +94,8 @@ struct RenderState {
     world_bounds: Option<WorldBounds>,
     locations: Vec<Location>,
     agents: Vec<Agent>,
+    links: Vec<Link>,
+    visual_hotspots: Vec<VisualHotspot>,
     selection: Option<Selection>,
 }
 
@@ -144,40 +179,22 @@ struct BridgeSharedState {
     on_fatal: Option<Function>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct GridLayoutKey {
-    width: i32,
-    height: i32,
-    step_milli: i32,
-    offset_x_milli: i32,
-    offset_y_milli: i32,
-}
-
 #[derive(Resource, Default)]
 struct BevyRuntimeState {
     mounted: bool,
     render_state: Option<RenderState>,
     render_version: u64,
     camera: CameraState,
+    camera_fit_version: u64,
+    camera_user_override: bool,
     drag_state: Option<DragState>,
     hit_regions: Vec<HitRegion>,
     hover_key: Option<String>,
-    grid_layout: Option<GridLayoutKey>,
+    grid_layout: Option<render::GridLayoutKey>,
     location_entities: HashMap<String, Entity>,
     agent_entities: HashMap<String, Entity>,
-}
-
-#[derive(Component)]
-struct PixelWorldGridVisual;
-
-#[derive(Component)]
-struct PixelWorldLocationVisual {
-    id: String,
-}
-
-#[derive(Component)]
-struct PixelWorldAgentVisual {
-    id: String,
+    link_entities: HashMap<String, Entity>,
+    hotspot_entities: HashMap<String, Entity>,
 }
 
 #[derive(Default)]
@@ -276,6 +293,24 @@ fn sprite_for_rect(color: Color, width: f32, height: f32) -> Sprite {
     Sprite::from_color(color, Vec2::new(width, height))
 }
 
+fn transform_for_line(
+    from_x: f64,
+    from_y: f64,
+    to_x: f64,
+    to_y: f64,
+    width: f64,
+    height: f64,
+    z: f32,
+) -> Transform {
+    let mid_x = (from_x + to_x) / 2.0;
+    let mid_y = (from_y + to_y) / 2.0;
+    let angle = (-(to_y - from_y)).atan2(to_x - from_x) as f32;
+    let mut transform =
+        Transform::from_translation(to_bevy_translation(mid_x, mid_y, width, height, z));
+    transform.rotation = Quat::from_rotation_z(angle);
+    transform
+}
+
 fn emit_event_value(value: &Value) -> Result<(), JsValue> {
     let payload = js_value_from_serializable(value)?;
     BRIDGE_SHARED.with(|shared| {
@@ -351,7 +386,7 @@ fn boot_bevy_app(canvas_selector: String) {
         ..default()
     }));
     app.add_systems(Startup, setup_scene);
-    app.add_systems(Update, (sync_external_state, render_scene));
+    app.add_systems(Update, (sync_external_state, render::render_scene));
     app.run();
 }
 
@@ -374,6 +409,8 @@ fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
     if snapshot.render_version != runtime.render_version {
         runtime.render_version = snapshot.render_version;
         runtime.render_state = snapshot.render_state;
+        runtime.camera_fit_version = 0;
+        runtime.camera_user_override = false;
     }
 
     for event in snapshot.input_events {
@@ -408,6 +445,7 @@ fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
                 {
                     runtime.camera.pan_x_px = start_pan_x + (x - start_x);
                     runtime.camera.pan_y_px = start_pan_y + (y - start_y);
+                    runtime.camera_user_override = true;
                     let _ = emit_camera_state(&runtime.camera);
                     continue;
                 }
@@ -446,6 +484,7 @@ fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
             InputEvent::Wheel { delta_y } => {
                 let factor = if delta_y < 0.0 { 1.12 } else { 0.89 };
                 runtime.camera.zoom = clamp(runtime.camera.zoom * factor, 0.6, 3.5);
+                runtime.camera_user_override = true;
                 let _ = emit_camera_state(&runtime.camera);
             }
             InputEvent::Click { x, y } => {
@@ -458,301 +497,6 @@ fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
             }
         }
     }
-}
-
-fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -> GridLayoutKey {
-    let grid_step = clamp(24.0 * camera.zoom.max(0.5), 12.0, 72.0);
-    let offset_x = ((camera.pan_x_px % grid_step) + grid_step) % grid_step;
-    let offset_y = ((camera.pan_y_px % grid_step) + grid_step) % grid_step;
-    GridLayoutKey {
-        width: width.round() as i32,
-        height: height.round() as i32,
-        step_milli: (grid_step * 1000.0).round() as i32,
-        offset_x_milli: (offset_x * 1000.0).round() as i32,
-        offset_y_milli: (offset_y * 1000.0).round() as i32,
-    }
-}
-
-fn grid_geometry(layout: &GridLayoutKey) -> (f64, f64, f64, f64, Color) {
-    (
-        layout.step_milli as f64 / 1000.0,
-        layout.offset_x_milli as f64 / 1000.0,
-        layout.offset_y_milli as f64 / 1000.0,
-        layout.width as f64,
-        Color::srgba_u8(99, 179, 255, 26),
-    )
-}
-
-fn reconcile_grid(
-    commands: &mut Commands,
-    runtime: &mut BevyRuntimeState,
-    existing_grid: &Query<Entity, With<PixelWorldGridVisual>>,
-    width: f64,
-    height: f64,
-) {
-    let next_layout = build_grid_layout(&runtime.camera, width, height);
-    if runtime.grid_layout.as_ref() == Some(&next_layout) {
-        return;
-    }
-
-    for entity in existing_grid.iter() {
-        commands.entity(entity).despawn();
-    }
-
-    let (grid_step, offset_x, offset_y, layout_width, grid_color) = grid_geometry(&next_layout);
-    let layout_height = next_layout.height as f64;
-
-    let mut x = offset_x;
-    while x <= layout_width {
-        commands.spawn((
-            sprite_for_rect(grid_color, 1.0, layout_height as f32),
-            Transform::from_translation(to_bevy_translation(
-                x,
-                layout_height / 2.0,
-                layout_width,
-                layout_height,
-                0.0,
-            )),
-            PixelWorldGridVisual,
-        ));
-        x += grid_step;
-    }
-
-    let mut y = offset_y;
-    while y <= layout_height {
-        commands.spawn((
-            sprite_for_rect(grid_color, layout_width as f32, 1.0),
-            Transform::from_translation(to_bevy_translation(
-                layout_width / 2.0,
-                y,
-                layout_width,
-                layout_height,
-                0.0,
-            )),
-            PixelWorldGridVisual,
-        ));
-        y += grid_step;
-    }
-
-    runtime.grid_layout = Some(next_layout);
-}
-
-fn reconcile_locations(
-    commands: &mut Commands,
-    runtime: &mut BevyRuntimeState,
-    width: f64,
-    height: f64,
-    animation_ms: f64,
-) {
-    let mut active_ids = HashSet::new();
-    let Some(render_state) = runtime.render_state.as_ref() else {
-        return;
-    };
-    let Some(world_bounds) = render_state.world_bounds.as_ref() else {
-        for (_, entity) in runtime.location_entities.drain() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    };
-
-    for location in &render_state.locations {
-        let Some((canvas_x, canvas_y)) =
-            to_canvas_point(&location.pos, world_bounds, width, height, &runtime.camera)
-        else {
-            continue;
-        };
-        active_ids.insert(location.id.clone());
-        let pulse = 1.0 + (0.08 * ((animation_ms / 360.0) + location.id.len() as f64).sin());
-        let size = 16.0 * pulse;
-        let transform = Transform::from_translation(to_bevy_translation(
-            canvas_x, canvas_y, width, height, 1.0,
-        ));
-        let sprite = sprite_for_square(Color::srgba_u8(110, 231, 183, 184), size as f32);
-
-        if let Some(entity) = runtime.location_entities.get(&location.id).copied() {
-            commands.entity(entity).insert((sprite, transform));
-        } else {
-            let entity = commands
-                .spawn((
-                    sprite,
-                    transform,
-                    PixelWorldLocationVisual {
-                        id: location.id.clone(),
-                    },
-                ))
-                .id();
-            runtime
-                .location_entities
-                .insert(location.id.clone(), entity);
-        }
-
-        runtime.hit_regions.push(HitRegion {
-            kind: "location",
-            id: location.id.clone(),
-            left: canvas_x - LOCATION_HIT_HALF_SIZE,
-            top: canvas_y - LOCATION_HIT_HALF_SIZE,
-            right: canvas_x + LOCATION_HIT_HALF_SIZE,
-            bottom: canvas_y + LOCATION_HIT_HALF_SIZE,
-        });
-    }
-
-    let stale_ids: Vec<String> = runtime
-        .location_entities
-        .keys()
-        .filter(|id| !active_ids.contains(*id))
-        .cloned()
-        .collect();
-    for id in stale_ids {
-        if let Some(entity) = runtime.location_entities.remove(&id) {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn reconcile_agents(
-    commands: &mut Commands,
-    runtime: &mut BevyRuntimeState,
-    width: f64,
-    height: f64,
-    animation_ms: f64,
-) {
-    let Some(render_state) = runtime.render_state.as_ref() else {
-        for (_, entity) in runtime.agent_entities.drain() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    };
-
-    let mut active_ids = HashSet::new();
-    for (index, agent) in render_state.agents.iter().enumerate() {
-        active_ids.insert(agent.id.clone());
-        let (canvas_x, canvas_y) = render_state
-            .world_bounds
-            .as_ref()
-            .and_then(|world_bounds| {
-                agent.pos.as_ref().and_then(|pos| {
-                    to_canvas_point(pos, world_bounds, width, height, &runtime.camera)
-                })
-            })
-            .unwrap_or_else(|| {
-                fallback_point_for_entity(&agent.id, width, height, &runtime.camera)
-            });
-        let is_selected = render_state
-            .selection
-            .as_ref()
-            .map(|selection| selection.kind == "agent" && selection.id == agent.id)
-            .unwrap_or(false);
-        let pulse = 1.0 + (0.12 * ((animation_ms / 240.0) + index as f64).sin());
-        let size = if is_selected { 15.0 } else { 12.0 } * pulse;
-        let color = if is_selected {
-            Color::srgb_u8(251, 191, 36)
-        } else {
-            Color::srgb_u8(99, 179, 255)
-        };
-        let transform = Transform::from_translation(to_bevy_translation(
-            canvas_x, canvas_y, width, height, 2.0,
-        ));
-        let sprite = sprite_for_square(color, size as f32);
-
-        if let Some(entity) = runtime.agent_entities.get(&agent.id).copied() {
-            commands.entity(entity).insert((sprite, transform));
-        } else {
-            let entity = commands
-                .spawn((
-                    sprite,
-                    transform,
-                    PixelWorldAgentVisual {
-                        id: agent.id.clone(),
-                    },
-                ))
-                .id();
-            runtime.agent_entities.insert(agent.id.clone(), entity);
-        }
-
-        runtime.hit_regions.push(HitRegion {
-            kind: "agent",
-            id: agent.id.clone(),
-            left: canvas_x - AGENT_HIT_HALF_SIZE,
-            top: canvas_y - AGENT_HIT_HALF_SIZE,
-            right: canvas_x + AGENT_HIT_HALF_SIZE,
-            bottom: canvas_y + AGENT_HIT_HALF_SIZE,
-        });
-    }
-
-    let stale_ids: Vec<String> = runtime
-        .agent_entities
-        .keys()
-        .filter(|id| !active_ids.contains(*id))
-        .cloned()
-        .collect();
-    for id in stale_ids {
-        if let Some(entity) = runtime.agent_entities.remove(&id) {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState) {
-    for (_, entity) in runtime.location_entities.drain() {
-        commands.entity(entity).despawn();
-    }
-    for (_, entity) in runtime.agent_entities.drain() {
-        commands.entity(entity).despawn();
-    }
-    runtime.grid_layout = None;
-    runtime.hit_regions.clear();
-    runtime.hover_key = None;
-}
-
-fn render_scene(
-    mut commands: Commands,
-    mut runtime: ResMut<BevyRuntimeState>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    current_grid: Query<Entity, With<PixelWorldGridVisual>>,
-    location_visuals: Query<(Entity, &PixelWorldLocationVisual)>,
-    agent_visuals: Query<(Entity, &PixelWorldAgentVisual)>,
-    time: Res<Time>,
-) {
-    if !runtime.mounted {
-        clear_runtime_visuals(&mut commands, &mut runtime);
-        for entity in current_grid.iter() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    }
-
-    for (entity, visual) in location_visuals.iter() {
-        runtime
-            .location_entities
-            .entry(visual.id.clone())
-            .or_insert(entity);
-    }
-    for (entity, visual) in agent_visuals.iter() {
-        runtime
-            .agent_entities
-            .entry(visual.id.clone())
-            .or_insert(entity);
-    }
-
-    let Ok(window) = windows.single() else {
-        return;
-    };
-    let Some(_) = runtime.render_state.as_ref() else {
-        clear_runtime_visuals(&mut commands, &mut runtime);
-        for entity in current_grid.iter() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    };
-
-    let width = window.width() as f64;
-    let height = window.height() as f64;
-    let animation_ms = time.elapsed_secs_f64() * 1000.0;
-    runtime.hit_regions.clear();
-
-    reconcile_grid(&mut commands, &mut runtime, &current_grid, width, height);
-    reconcile_locations(&mut commands, &mut runtime, width, height, animation_ms);
-    reconcile_agents(&mut commands, &mut runtime, width, height, animation_ms);
 }
 
 #[wasm_bindgen]

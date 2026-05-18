@@ -120,6 +120,30 @@ afterEach(() => {
 });
 
 describe("pixel world host", () => {
+  it("builds richer visual DTO layers from the existing snapshot contract", async () => {
+    vi.resetModules();
+    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+
+    const core = await import("./legacy_core.js");
+    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
+
+    const snapshot = sampleSnapshot();
+    snapshot.model.agents["agent-0"].pos = { x_cm: 25_000, y_cm: 25_000, z_cm: 0 };
+    core.injectSnapshot(snapshot);
+    core.state.recentEvents = [
+      { eventId: "evt-1", title: "Transfer spike", kind: "resource_transfer" },
+      { eventId: "evt-2", title: "Queue update", kind: "build_queue" },
+    ];
+
+    const renderState = buildPixelWorldRenderState("en");
+    expect(renderState.links).toHaveLength(1);
+    expect(renderState.visual_hotspots.length).toBeGreaterThanOrEqual(4);
+    expect(renderState.visual_hotspots.some((entry) => entry.kind === "goal")).toBe(true);
+    expect(renderState.visual_hotspots.some((entry) => entry.kind === "blocker")).toBe(true);
+  });
+
   it("shows the explicit fallback surface when the wasm runtime is unavailable", async () => {
     const { core } = await renderPixelWorldHost();
 
