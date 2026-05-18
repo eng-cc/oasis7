@@ -1,0 +1,21 @@
+task_uid: task_7b6929739bc3444f88376c382badf4cf
+title: "cover pm_store sibling modules in pm lint"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_7b6929739bc3444f88376c382badf4cf.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - scripts/pm/lint.sh
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-001
+  - PRD-ENGINEERING-003
+acceptance:
+  - "pm lint explicitly requires new pm_store sibling modules and syntax-checks them"
+handoff_to: []
+updated_at: 2026-05-18T22:19:12+08:00
+last_started_at: 2026-05-18T22:18:08+08:00
+last_closed_at: 2026-05-18T22:19:12+08:00
