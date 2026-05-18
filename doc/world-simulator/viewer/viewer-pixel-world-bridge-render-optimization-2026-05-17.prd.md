@@ -26,6 +26,16 @@
   - `pixel_world_runtime_module_wasm.js` 事件协议调整
   - 新增 world DTO 字段、3D 渲染、shader/material 重写
 
+## 范围
+- 范围内：
+  - `pixel_world_bridge` 的 Bevy wasm 内核结构优化。
+  - 与该优化直接相关的 repo-owned wasm/unit/UI regression。
+  - 对应专题文档、模块项目页 trace 与 task execution log 回写。
+- 范围外：
+  - 宿主页面结构或文案改版。
+  - 运行时协议、world DTO 字段或 JS 事件契约调整。
+  - 3D 渲染恢复、shader/material 重写或更激进的 camera 语义改造。
+
 ## 3. User Stories
 - As a `viewer_engineer`, I want the embedded pixel-world wasm runtime to stop rebuilding the whole Bevy scene every frame, so that the main Web world stage can scale to denser snapshots without wasting CPU on ECS churn.
 - As a `qa_engineer`, I want the optimization to preserve current runtime-visible contracts and explicit fallback behavior, so that existing wasm/runtime regressions stay valid while performance improves.
@@ -71,16 +81,40 @@
   - 渲染对象 viewport culling
 - 若本轮后仍有性能压力，再拆下一 task。
 
+## 接口 / 数据
+- 保持不变的宿主接口：
+  - `createPixelWorldBridge()`
+  - `mount` / `update` / `tick` / `unmount`
+  - `camera_state_changed`
+  - `hover_entity`
+  - `select_entity`
+- 本轮涉及的数据与内部缓存：
+  - `render_state` / `render_version`
+  - grid layout key（窗口宽高、zoom、pan）
+  - `location_id -> Entity` / `agent_id -> Entity`
+  - `hit_regions`
+- 本轮不新增任何 world DTO、宿主事件字段或 JS fallback 协议。
+
 ## 5. Risks & Roadmap
 - M1：完成专题 PRD / Project 建模，冻结 P0 优化边界。
 - M2：完成 `pixel_world_bridge` 的实体池与常驻 grid 改造。
 - M3：补齐定向验证、task execution log 与模块主项目追踪。
+
+## 里程碑
+- M1：专题 PRD / Project 建模完成。
+- M2：`pixel_world_bridge` 的 grid/entity cache 与增量 reconcile 完成。
+- M3：host tests、wasm unit tests、wasm check、viewer UI regression 与文档回写完成。
 
 ### Technical Risks
 - 增量更新若回收逻辑不严，容易留下 stale entity 或错位 hit region。
   - 对策：把 grid/location/agent cache 分开，并补最小单测覆盖布局 key 与实体复用语义。
 - 如果把优化 scope 扩到相机语义或 shader，会显著增加回归面。
   - 对策：本轮强制限制为 P0 结构优化，不改宿主合同。
+
+## 风险
+- 增量 reconcile 若漏掉 stale entity 回收，可能出现残留 sprite 或错误命中区域。
+- 测试如果只停留在 host target，会再次掩盖 wasm runner / schema 漂移问题。
+- 若后续把 scope 扩大到 camera/shader 层，本专题的低风险收口边界会被破坏。
 
 ## 6. Acceptance Criteria
 - AC-1: `pixel_world_bridge` 不再在每一帧先 `despawn` 再 `spawn` 全部 grid/location/agent 实体。
