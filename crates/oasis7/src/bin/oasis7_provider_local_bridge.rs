@@ -30,6 +30,7 @@ const DEFAULT_PROTOCOL_VERSION: &str = "world-simulator-provider-loopback-http-v
 const MAX_RECENT_FEEDBACK: usize = 8;
 const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const TRACE_SESSION_PROCESS_LABEL: &str = "oasis7_provider_local_bridge";
+const MIN_BRIDGE_AUTH_TOKEN_LEN: usize = 24;
 
 fn default_provider_cli_bin() -> String {
     env::var("OASIS7_PROVIDER_CLI_BIN")
@@ -39,6 +40,8 @@ fn default_provider_cli_bin() -> String {
         .unwrap_or_else(|| ["open", "claw"].concat())
 }
 
+#[path = "oasis7_provider_local_bridge/auth_support.rs"]
+mod auth_support;
 #[path = "oasis7_provider_local_bridge/http_bridge_support.rs"]
 mod http_bridge_support;
 #[path = "oasis7_provider_local_bridge/support.rs"]
@@ -47,6 +50,9 @@ mod support;
 #[path = "oasis7_provider_local_bridge/tests.rs"]
 mod tests;
 
+use self::auth_support::{
+    load_cached_newapi_bridge_state, parse_newapi_bridge_bearer_selector, NewapiBridgeStateCache,
+};
 use self::http_bridge_support::handle_connection;
 use self::support::{
     agent_output_from_json, estimated_current_location_id, local_session_id_from_session_key,
@@ -88,6 +94,7 @@ struct ProviderState {
     active_requests: Arc<AtomicU64>,
     last_error: Arc<Mutex<Option<String>>>,
     recent_feedback: Arc<Mutex<VecDeque<String>>>,
+    newapi_bridge_state_cache: Arc<Mutex<NewapiBridgeStateCache>>,
 }
 
 impl ProviderState {
@@ -103,6 +110,7 @@ impl ProviderState {
             active_requests: Arc::new(AtomicU64::new(0)),
             last_error: Arc::new(Mutex::new(None)),
             recent_feedback: Arc::new(Mutex::new(VecDeque::new())),
+            newapi_bridge_state_cache: Arc::new(Mutex::new(NewapiBridgeStateCache::default())),
         })
     }
 
@@ -184,29 +192,17 @@ impl ProviderState {
         recent_feedback.push_back(summary);
     }
 
-    fn resolve_newapi_bridge_route_label<'a>(&self, bearer: &'a str) -> Option<&'a str> {
+    fn resolve_newapi_bridge_route_label(&self, bearer: &str) -> Option<String> {
         let normalized = bearer.trim();
         if normalized.is_empty() {
             return None;
         }
-        let state_path = env::var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH")
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())?;
-        let raw = fs::read_to_string(state_path.as_str()).ok()?;
-        let payload = serde_json::from_str::<Value>(raw.as_str()).ok()?;
+        let payload = self.load_newapi_bridge_state()?;
         let bindings = payload.get("bindings").and_then(Value::as_array)?;
         let project_bindings = payload.get("project_bindings").and_then(Value::as_array)?;
-        let (by_ref, by_bridge_user_id) = if let Some((prefix, value)) = normalized.split_once(':')
-        {
-            let value = value.trim();
-            match prefix {
-                "newapi_user_ref" if !value.is_empty() => (Some(value), None),
-                "bridge_user_id" if !value.is_empty() => (None, Some(value)),
-                _ => (Some(normalized), Some(normalized)),
-            }
-        } else {
-            (Some(normalized), Some(normalized))
+        let (by_ref, by_bridge_user_id) = match parse_newapi_bridge_bearer_selector(normalized) {
+            Some(selector) => selector,
+            None => return None,
         };
         bindings.iter().find_map(|entry| {
             let object = entry.as_object()?;
@@ -231,11 +227,15 @@ impl ProviderState {
                         .is_some_and(|value| !value.trim().is_empty())
             });
             if (ref_match || user_match) && has_token {
-                Some(normalized)
+                Some(normalized.to_string())
             } else {
                 None
             }
         })
+    }
+
+    fn load_newapi_bridge_state(&self) -> Option<Value> {
+        load_cached_newapi_bridge_state(&self.newapi_bridge_state_cache)
     }
 
     fn handle_decision(
@@ -656,8 +656,10 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
         return Err("--bind requires a non-empty value".to_string());
     }
     if let Some(token) = options.auth_token.as_deref() {
-        if token.trim().len() < 24 {
-            return Err("--auth-token must be at least 24 characters".to_string());
+        if token.trim().len() < MIN_BRIDGE_AUTH_TOKEN_LEN {
+            return Err(format!(
+                "--auth-token must be at least {MIN_BRIDGE_AUTH_TOKEN_LEN} characters"
+            ));
         }
     }
     Ok(options)
@@ -702,7 +704,7 @@ fn load_auth_route_map(path: &str) -> Result<BTreeMap<String, String>, String> {
         .filter_map(|(token, route)| {
             let token = token.trim().to_string();
             let route = route.trim().to_string();
-            if token.is_empty() || route.is_empty() {
+            if token.len() < MIN_BRIDGE_AUTH_TOKEN_LEN || route.is_empty() {
                 None
             } else {
                 Some((token, route))

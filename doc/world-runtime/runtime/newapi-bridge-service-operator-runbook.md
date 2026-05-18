@@ -73,7 +73,7 @@ OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH=/etc/oasis7/newapi-bridge/bridge-stat
 此时 client 直接传:
 
 ```bash
---agent-provider-auth-token <newapi_user_ref>
+--agent-provider-auth-token newapi_user_ref:<newapi_user_ref>
 ```
 
 provider bridge 会自动解析到对应的 `token_key`。

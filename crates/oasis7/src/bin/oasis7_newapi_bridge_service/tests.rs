@@ -188,9 +188,12 @@ fn bind_user_retry_reuses_binding_and_retries_eager_provisioning_after_upsert_fa
         )
         .expect_err("first eager provision should fail");
     assert_eq!(first_err.code, "letai_response_not_success");
+    let failed_snapshot = test_service.service.snapshot();
+    assert!(failed_snapshot.bindings.is_empty());
+    assert!(failed_snapshot.project_bindings.is_empty());
 
     let retried = bind_default_user(&test_service);
-    assert!(retried.reused_existing_binding);
+    assert!(!retried.reused_existing_binding);
 
     let snapshot = test_service.service.snapshot();
     assert_eq!(snapshot.bindings.len(), 1);
