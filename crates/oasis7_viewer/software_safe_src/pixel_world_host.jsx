@@ -119,7 +119,7 @@ function buildPixelWorldLinks(agents, locationById) {
       kind: "agent_assignment",
       from: agent.pos,
       to: locationById.get(agent.location_id).pos,
-      emphasis: agent.location_id ? 0.72 : 0.5,
+      emphasis: 0.72,
     }));
 }
 
