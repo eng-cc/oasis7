@@ -312,11 +312,11 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByText("preview_backend_reauth_available")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "hosted preview backend reauth is available after the browser-local player_session has completed runtime registration for prompt_control",
+        "hosted preview backend reauth is available after the browser device-session-backed player_session has completed runtime registration for prompt_control",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("page reload will reuse the browser-local hosted key and attempt reconnect_sync first"),
+      screen.getByText("page reload will reuse the hosted device session, mint a fresh browser session key, and attempt reconnect_sync first"),
     ).toBeInTheDocument();
     const assetLane = screen.getByText("Asset / Governance Lane").closest("section");
     expect(assetLane).toBeTruthy();
@@ -349,7 +349,7 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.queryByText("preview_backend_reauth_available")).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "hosted preview backend reauth stays pending until the browser-local player_session finishes runtime registration",
+        "hosted preview backend reauth stays pending until the browser device-session-backed player_session finishes runtime registration",
       ),
     ).toBeInTheDocument();
   });

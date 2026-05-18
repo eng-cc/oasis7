@@ -36,6 +36,7 @@ pub(super) struct HostedPlayerSessionAdmissionSnapshot {
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct HostedPlayerSessionIssueGrant {
     pub(super) player_id: String,
+    pub(super) device_session_id: String,
     pub(super) issued_at_unix_ms: u64,
     pub(super) auth_mode: String,
     pub(super) release_token: String,
@@ -308,6 +309,7 @@ impl HostedPlayerSessionIssuer {
         self.issued_players_total = self.issued_players_total.saturating_add(1);
         self.issue_timestamps_unix_ms.push_back(issued_at_unix_ms);
         let player_id = build_player_id(issued_at_unix_ms, self.next_sequence);
+        let device_session_id = build_device_session_id(issued_at_unix_ms, self.next_sequence);
         let release_token = build_release_token(issued_at_unix_ms, self.next_sequence);
         self.active_release_tokens_by_player
             .insert(player_id.clone(), release_token.clone());
@@ -330,6 +332,7 @@ impl HostedPlayerSessionIssuer {
             admission,
             grant: Some(HostedPlayerSessionIssueGrant {
                 player_id,
+                device_session_id,
                 issued_at_unix_ms,
                 auth_mode: "browser_local_ephemeral_ed25519".to_string(),
                 release_token,
@@ -537,6 +540,10 @@ fn build_release_token(issued_at_unix_ms: u64, sequence: u64) -> String {
     format!("hosted-release-{issued_at_unix_ms:016x}-{sequence:08x}")
 }
 
+fn build_device_session_id(issued_at_unix_ms: u64, sequence: u64) -> String {
+    format!("hosted-device-session-{issued_at_unix_ms:016x}-{sequence:08x}")
+}
+
 fn now_unix_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -559,6 +566,9 @@ mod tests {
         assert_eq!(response.deployment_mode, "hosted_public_join");
         let grant = response.grant.expect("grant");
         assert!(grant.player_id.starts_with("hosted-player-"));
+        assert!(grant
+            .device_session_id
+            .starts_with("hosted-device-session-"));
         assert_eq!(grant.auth_mode, "browser_local_ephemeral_ed25519");
         assert!(grant.release_token.starts_with("hosted-release-"));
         assert_eq!(response.admission.active_player_sessions, 1);
