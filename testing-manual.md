@@ -991,6 +991,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - 要进入 live candidate 评审，至少要补齐 `shared_devnet_pass/public_rpc_ready/explorer_public_ready/faucet_guard_ready/reset_policy_announced/runtime_bootstrap/claims_boundary_review` 七条 lane。
   - 示例 lane scaffold: `doc/testing/templates/public-testnet-readiness-lanes.example.tsv`
   - 示例 placeholder evidence: `doc/testing/evidence/public-testnet-skeleton-example.md`
+  - companion checklist/runbook: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
 - 当前边界：
   - `shared_devnet` 没有 public RPC/explorer/faucet/reset contract 时，不得叫 `public_testnet`
   - `mainnet` 只要不是 `faucet_mode=none`、`reset_policy=frozen`、`governance_registry_only` 并且缺 `MAINNET-1~4`，就不得叫 `mainnet`

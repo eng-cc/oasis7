@@ -53,6 +53,7 @@
   - SC-21: validator / finality signer 必须具备一条正式的治理准入流程，至少覆盖 `apply -> approved_candidate -> probation_ready -> active -> rotate/revoke`，并明确 world-state registry 才是正式激活真值；`--node-validator*` 与 operator-local env 只能作为 bootstrap 或显式运维覆盖。
   - SC-22: p2p 模块必须具备一套正式的公共主链式网络分层机制，明确 `local_devnet -> shared_devnet -> public_testnet -> mainnet` 的 tier 边界、manifest 真值与 claims/promotion 规则，避免把 shared release-train 与正式 testnet/mainnet 继续混写。
   - SC-23: `public_testnet` 必须具备一条 repo-owned readiness review 路径，能把“只有 skeleton manifest”与“具备 live candidate evidence”明确区分，避免把 placeholder endpoint 或模板证据误报为可部署结论。
+  - SC-24: `public_testnet` 必须具备一份 repo-owned live-candidate companion checklist，把 seven-lane readiness gate、最小 evidence、canonical 命令与允许/禁止 claims 固定成单一执行入口，避免 producer/liveops/QA 对“还差哪些”各说各话。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -190,6 +191,7 @@
   - AC-36: `mainchain-token-newapi-quota-bridge-2026-05-06` 专题文档落盘并映射任务链，明确 `one-way OC -> LetAI Run OpenAPI quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、动态 project/`token_key`、query verification 与 manual review 风控，以及“不支持自动提现/不承诺公开兑换所”边界。
   - AC-37: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 专题文档与 repo-owned skeleton 必须落盘并映射任务链 `formal-network-tiers-testnet-mechanism (PRD-P2P-028)`，明确 `local_devnet/shared_devnet/public_testnet/mainnet` 四层模型、`network_tier_manifest` 字段集合、`public_testnet` 的 public RPC/explorer/faucet/reset 语义，以及 `mainnet` 的 `no faucet + frozen reset + MAINNET-1~4` gate。
   - AC-38: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`，并对 placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 保持阻断。
+  - AC-39: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结 seven-lane owner/evidence/check 命令/claim boundary 与当前 `specified_skeleton_only` 边界。
 - Non-Goals:
   - 不在本 PRD 细化 viewer UI 交互。
   - 不替代 runtime 内核的模块执行细节设计。
@@ -330,7 +332,7 @@
 | PRD-P2P-025 | triad-observability-stack | `test_tier_required` | triad host/process monitor、merged observability summary、testing manual 入口、fixture 回归与 real-env smoke | 当前 real-env triad（本机 + 2 ECS，runtime 已为 three_equal_validator）的 canonical 运维监控入口，并显式区分 legacy service label 与真实 runtime role |
 | PRD-P2P-026 | triad-three-equal-validator-topology | `test_tier_required` | live triad validator-set/signer/bootstrap 改造、same-window snapshot evidence、testing manual claim 口径更新与 legacy service label 边界说明 | 三节点等权 validator 拓扑、live 运维真值与 mixed-topology 历史边界 |
 | PRD-P2P-027 | mainchain-token-newapi-quota-bridge-proposal | `test_tier_required` | `OC -> LetAI Run OpenAPI quota` 专题 PRD/design/project 建档、one-way bridge boundary、独立 bridge-service、唯一入账映射、`bridge_ledger` 状态机、动态 project/`token_key`、query verification 与 operator risk gate 冻结 | 链上资产到 AI 服务内部额度的受控桥接口径与后续实现排序 |
-| PRD-P2P-028 | formal-network-tiers-testnet-mechanism | `test_tier_required` | 正式网络分层 / testnet 机制专题 PRD/design/project 建档、`network_tier_manifest` 脚本+smoke+example manifests、`testing-manual` 入口与 current verdict 冻结 | 公共主链式 `shared_devnet/public_testnet/mainnet` 分层口径、manifest 真值与后续 runtime/liveops 接线排序 |
+| PRD-P2P-028 | formal-network-tiers-testnet-mechanism | `test_tier_required` | 正式网络分层 / testnet 机制专题 PRD/design/project 建档、`network_tier_manifest` 脚本+smoke+example manifests、`testing-manual` 入口、current verdict 冻结与 `public_testnet` live-candidate checklist companion runbook | 公共主链式 `shared_devnet/public_testnet/mainnet` 分层口径、manifest 真值、live-candidate checklist 与后续 runtime/liveops 接线排序 |
 - S9/S10 长跑结果模板（TASK-P2P-003）:
 | 字段 | 说明 | 来源 |
 | --- | --- | --- |

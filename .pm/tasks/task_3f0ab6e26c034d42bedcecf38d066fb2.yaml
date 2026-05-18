@@ -1,0 +1,23 @@
+task_uid: task_3f0ab6e26c034d42bedcecf38d066fb2
+title: "formal public_testnet live candidate checklist"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-formal-public-testnet-live-candidate-checklist
+execution_log_path: .pm/tasks/task_3f0ab6e26c034d42bedcecf38d066fb2.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md
+  - doc/p2p/project.md
+  - testing-manual.md
+doc_refs: []
+related_prd:
+  - PRD-P2P-028
+acceptance:
+  - "新增 formal public_testnet live-candidate checklist 专题并冻结最短闭环"
+  - "主 p2p prd/project 与 testing-manual 回写该 checklist 的入口和当前缺口"
+  - "文档门禁通过且不把 checklist 误写成 live testnet 已建成"
+handoff_to: []
+updated_at: 2026-05-18T19:49:35+08:00
+last_started_at: 2026-05-18T18:01:43+08:00
+last_closed_at: 2026-05-18T19:49:35+08:00

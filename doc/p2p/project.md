@@ -539,6 +539,20 @@
     - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] formal-public-testnet-live-candidate-checklist (PRD-P2P-028) [test_tier_required]: 补一份 formal `public_testnet` companion runbook，把当前从 `specified_skeleton_only` 进入 `ready_for_live_candidate` 还缺的 seven-lane gate、owner、最小 evidence、canonical 命令与禁止 claims 冻结成 repo-owned checklist，不再只停留在聊天结论。 Trace: .pm/tasks/task_3f0ab6e26c034d42bedcecf38d066fb2.yaml
+  - 产物文件:
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `doc/p2p/prd.index.md`
+    - `testing-manual.md`
+    - `.pm/tasks/task_3f0ab6e26c034d42bedcecf38d066fb2.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "ready_for_live_candidate|specified_skeleton_only|seven-lane|claim boundary" doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md doc/p2p/prd.md doc/p2p/project.md testing-manual.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] bridge-binding-and-route-contract (PRD-P2P-TBRIDGE-001) [test_tier_required]: 为独立 `bridge-service` 落地最小 runtime slice，提供绑定 API、deposit route API、repo-owned 状态持久化、活跃 route 复用 / 过期与冲突错误语义，作为后续 watcher / `bridge_ledger` / LetAI OpenAPI adapter 的前置基线。 Trace: .pm/tasks/task_e56e4cfdb9534919a6f7bc7c6ba62ee9.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_newapi_bridge_service.rs`
