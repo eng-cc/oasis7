@@ -1,0 +1,19 @@
+task_uid: task_40310c312e9f4681805b5b74b30cac9a
+title: "pixel world bridge render optimization"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-pixel-world-bridge-render-optimization
+execution_log_path: .pm/tasks/task_40310c312e9f4681805b5b74b30cac9a.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/project.md
+  - doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md
+  - .pm/tasks/task_7aaccc0bf0094d64ab0e155087610eae.execution.md
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-18T09:00:10+08:00
+last_started_at: 2026-05-17T22:35:15+08:00
+last_closed_at: 2026-05-18T09:00:10+08:00

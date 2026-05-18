@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::mem;
 
 use bevy::prelude::*;
@@ -13,6 +14,9 @@ use web_sys::HtmlCanvasElement;
 thread_local! {
     static BRIDGE_SHARED: RefCell<BridgeSharedState> = RefCell::new(BridgeSharedState::default());
 }
+
+const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
+const AGENT_HIT_HALF_SIZE: f64 = 8.0;
 
 #[derive(Clone, Debug, Deserialize)]
 struct Position {
@@ -140,6 +144,15 @@ struct BridgeSharedState {
     on_fatal: Option<Function>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct GridLayoutKey {
+    width: i32,
+    height: i32,
+    step_milli: i32,
+    offset_x_milli: i32,
+    offset_y_milli: i32,
+}
+
 #[derive(Resource, Default)]
 struct BevyRuntimeState {
     mounted: bool,
@@ -149,10 +162,23 @@ struct BevyRuntimeState {
     drag_state: Option<DragState>,
     hit_regions: Vec<HitRegion>,
     hover_key: Option<String>,
+    grid_layout: Option<GridLayoutKey>,
+    location_entities: HashMap<String, Entity>,
+    agent_entities: HashMap<String, Entity>,
 }
 
 #[derive(Component)]
-struct PixelWorldVisual;
+struct PixelWorldGridVisual;
+
+#[derive(Component)]
+struct PixelWorldLocationVisual {
+    id: String,
+}
+
+#[derive(Component)]
+struct PixelWorldAgentVisual {
+    id: String,
+}
 
 #[derive(Default)]
 struct SharedSnapshot {
@@ -240,6 +266,14 @@ fn to_bevy_translation(canvas_x: f64, canvas_y: f64, width: f64, height: f64, z:
         ((height / 2.0) - canvas_y) as f32,
         z,
     )
+}
+
+fn sprite_for_square(color: Color, size: f32) -> Sprite {
+    Sprite::from_color(color, Vec2::splat(size))
+}
+
+fn sprite_for_rect(color: Color, width: f32, height: f32) -> Sprite {
+    Sprite::from_color(color, Vec2::new(width, height))
 }
 
 fn emit_event_value(value: &Value) -> Result<(), JsValue> {
@@ -426,65 +460,172 @@ fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
     }
 }
 
-fn render_scene(
-    mut commands: Commands,
-    mut runtime: ResMut<BevyRuntimeState>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    current_visuals: Query<Entity, With<PixelWorldVisual>>,
-    time: Res<Time>,
+fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -> GridLayoutKey {
+    let grid_step = clamp(24.0 * camera.zoom.max(0.5), 12.0, 72.0);
+    let offset_x = ((camera.pan_x_px % grid_step) + grid_step) % grid_step;
+    let offset_y = ((camera.pan_y_px % grid_step) + grid_step) % grid_step;
+    GridLayoutKey {
+        width: width.round() as i32,
+        height: height.round() as i32,
+        step_milli: (grid_step * 1000.0).round() as i32,
+        offset_x_milli: (offset_x * 1000.0).round() as i32,
+        offset_y_milli: (offset_y * 1000.0).round() as i32,
+    }
+}
+
+fn grid_geometry(layout: &GridLayoutKey) -> (f64, f64, f64, f64, Color) {
+    (
+        layout.step_milli as f64 / 1000.0,
+        layout.offset_x_milli as f64 / 1000.0,
+        layout.offset_y_milli as f64 / 1000.0,
+        layout.width as f64,
+        Color::srgba_u8(99, 179, 255, 26),
+    )
+}
+
+fn reconcile_grid(
+    commands: &mut Commands,
+    runtime: &mut BevyRuntimeState,
+    existing_grid: &Query<Entity, With<PixelWorldGridVisual>>,
+    width: f64,
+    height: f64,
 ) {
-    for entity in &current_visuals {
+    let next_layout = build_grid_layout(&runtime.camera, width, height);
+    if runtime.grid_layout.as_ref() == Some(&next_layout) {
+        return;
+    }
+
+    for entity in existing_grid.iter() {
         commands.entity(entity).despawn();
     }
-    runtime.hit_regions.clear();
 
-    if !runtime.mounted {
-        return;
+    let (grid_step, offset_x, offset_y, layout_width, grid_color) = grid_geometry(&next_layout);
+    let layout_height = next_layout.height as f64;
+
+    let mut x = offset_x;
+    while x <= layout_width {
+        commands.spawn((
+            sprite_for_rect(grid_color, 1.0, layout_height as f32),
+            Transform::from_translation(to_bevy_translation(
+                x,
+                layout_height / 2.0,
+                layout_width,
+                layout_height,
+                0.0,
+            )),
+            PixelWorldGridVisual,
+        ));
+        x += grid_step;
     }
 
-    let Ok(window) = windows.single() else {
+    let mut y = offset_y;
+    while y <= layout_height {
+        commands.spawn((
+            sprite_for_rect(grid_color, layout_width as f32, 1.0),
+            Transform::from_translation(to_bevy_translation(
+                layout_width / 2.0,
+                y,
+                layout_width,
+                layout_height,
+                0.0,
+            )),
+            PixelWorldGridVisual,
+        ));
+        y += grid_step;
+    }
+
+    runtime.grid_layout = Some(next_layout);
+}
+
+fn reconcile_locations(
+    commands: &mut Commands,
+    runtime: &mut BevyRuntimeState,
+    width: f64,
+    height: f64,
+    animation_ms: f64,
+) {
+    let mut active_ids = HashSet::new();
+    let Some(render_state) = runtime.render_state.as_ref() else {
         return;
     };
-    let Some(render_state) = runtime.render_state.clone() else {
+    let Some(world_bounds) = render_state.world_bounds.as_ref() else {
+        for (_, entity) in runtime.location_entities.drain() {
+            commands.entity(entity).despawn();
+        }
         return;
     };
 
-    let width = window.width() as f64;
-    let height = window.height() as f64;
-    let animation_ms = time.elapsed_secs_f64() * 1000.0;
-    spawn_grid(&mut commands, &runtime.camera, width, height);
+    for location in &render_state.locations {
+        let Some((canvas_x, canvas_y)) =
+            to_canvas_point(&location.pos, world_bounds, width, height, &runtime.camera)
+        else {
+            continue;
+        };
+        active_ids.insert(location.id.clone());
+        let pulse = 1.0 + (0.08 * ((animation_ms / 360.0) + location.id.len() as f64).sin());
+        let size = 16.0 * pulse;
+        let transform = Transform::from_translation(to_bevy_translation(
+            canvas_x, canvas_y, width, height, 1.0,
+        ));
+        let sprite = sprite_for_square(Color::srgba_u8(110, 231, 183, 184), size as f32);
 
-    if let Some(world_bounds) = &render_state.world_bounds {
-        for location in &render_state.locations {
-            if let Some((canvas_x, canvas_y)) =
-                to_canvas_point(&location.pos, world_bounds, width, height, &runtime.camera)
-            {
-                let pulse =
-                    1.0 + (0.08 * ((animation_ms / 360.0) + location.id.len() as f64).sin());
-                let size = 16.0 * pulse;
-                commands.spawn((
-                    Sprite::from_color(
-                        Color::srgba_u8(110, 231, 183, 184),
-                        Vec2::splat(size as f32),
-                    ),
-                    Transform::from_translation(to_bevy_translation(
-                        canvas_x, canvas_y, width, height, 1.0,
-                    )),
-                    PixelWorldVisual,
-                ));
-                runtime.hit_regions.push(HitRegion {
-                    kind: "location",
-                    id: location.id.clone(),
-                    left: canvas_x - 8.0,
-                    top: canvas_y - 8.0,
-                    right: canvas_x + 8.0,
-                    bottom: canvas_y + 8.0,
-                });
-            }
+        if let Some(entity) = runtime.location_entities.get(&location.id).copied() {
+            commands.entity(entity).insert((sprite, transform));
+        } else {
+            let entity = commands
+                .spawn((
+                    sprite,
+                    transform,
+                    PixelWorldLocationVisual {
+                        id: location.id.clone(),
+                    },
+                ))
+                .id();
+            runtime
+                .location_entities
+                .insert(location.id.clone(), entity);
+        }
+
+        runtime.hit_regions.push(HitRegion {
+            kind: "location",
+            id: location.id.clone(),
+            left: canvas_x - LOCATION_HIT_HALF_SIZE,
+            top: canvas_y - LOCATION_HIT_HALF_SIZE,
+            right: canvas_x + LOCATION_HIT_HALF_SIZE,
+            bottom: canvas_y + LOCATION_HIT_HALF_SIZE,
+        });
+    }
+
+    let stale_ids: Vec<String> = runtime
+        .location_entities
+        .keys()
+        .filter(|id| !active_ids.contains(*id))
+        .cloned()
+        .collect();
+    for id in stale_ids {
+        if let Some(entity) = runtime.location_entities.remove(&id) {
+            commands.entity(entity).despawn();
         }
     }
+}
 
+fn reconcile_agents(
+    commands: &mut Commands,
+    runtime: &mut BevyRuntimeState,
+    width: f64,
+    height: f64,
+    animation_ms: f64,
+) {
+    let Some(render_state) = runtime.render_state.as_ref() else {
+        for (_, entity) in runtime.agent_entities.drain() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+
+    let mut active_ids = HashSet::new();
     for (index, agent) in render_state.agents.iter().enumerate() {
+        active_ids.insert(agent.id.clone());
         let (canvas_x, canvas_y) = render_state
             .world_bounds
             .as_ref()
@@ -508,49 +649,110 @@ fn render_scene(
         } else {
             Color::srgb_u8(99, 179, 255)
         };
-        commands.spawn((
-            Sprite::from_color(color, Vec2::splat(size as f32)),
-            Transform::from_translation(to_bevy_translation(
-                canvas_x, canvas_y, width, height, 2.0,
-            )),
-            PixelWorldVisual,
+        let transform = Transform::from_translation(to_bevy_translation(
+            canvas_x, canvas_y, width, height, 2.0,
         ));
+        let sprite = sprite_for_square(color, size as f32);
+
+        if let Some(entity) = runtime.agent_entities.get(&agent.id).copied() {
+            commands.entity(entity).insert((sprite, transform));
+        } else {
+            let entity = commands
+                .spawn((
+                    sprite,
+                    transform,
+                    PixelWorldAgentVisual {
+                        id: agent.id.clone(),
+                    },
+                ))
+                .id();
+            runtime.agent_entities.insert(agent.id.clone(), entity);
+        }
+
         runtime.hit_regions.push(HitRegion {
             kind: "agent",
             id: agent.id.clone(),
-            left: canvas_x - 8.0,
-            top: canvas_y - 8.0,
-            right: canvas_x + 8.0,
-            bottom: canvas_y + 8.0,
+            left: canvas_x - AGENT_HIT_HALF_SIZE,
+            top: canvas_y - AGENT_HIT_HALF_SIZE,
+            right: canvas_x + AGENT_HIT_HALF_SIZE,
+            bottom: canvas_y + AGENT_HIT_HALF_SIZE,
         });
+    }
+
+    let stale_ids: Vec<String> = runtime
+        .agent_entities
+        .keys()
+        .filter(|id| !active_ids.contains(*id))
+        .cloned()
+        .collect();
+    for id in stale_ids {
+        if let Some(entity) = runtime.agent_entities.remove(&id) {
+            commands.entity(entity).despawn();
+        }
     }
 }
 
-fn spawn_grid(commands: &mut Commands, camera: &CameraState, width: f64, height: f64) {
-    let grid_step = clamp(24.0 * camera.zoom.max(0.5), 12.0, 72.0);
-    let offset_x = ((camera.pan_x_px % grid_step) + grid_step) % grid_step;
-    let offset_y = ((camera.pan_y_px % grid_step) + grid_step) % grid_step;
-    let grid_color = Color::srgba_u8(99, 179, 255, 26);
+fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState) {
+    for (_, entity) in runtime.location_entities.drain() {
+        commands.entity(entity).despawn();
+    }
+    for (_, entity) in runtime.agent_entities.drain() {
+        commands.entity(entity).despawn();
+    }
+    runtime.grid_layout = None;
+    runtime.hit_regions.clear();
+    runtime.hover_key = None;
+}
 
-    let mut x = offset_x;
-    while x <= width {
-        commands.spawn((
-            Sprite::from_color(grid_color, Vec2::new(1.0, height as f32)),
-            Transform::from_translation(to_bevy_translation(x, height / 2.0, width, height, 0.0)),
-            PixelWorldVisual,
-        ));
-        x += grid_step;
+fn render_scene(
+    mut commands: Commands,
+    mut runtime: ResMut<BevyRuntimeState>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    current_grid: Query<Entity, With<PixelWorldGridVisual>>,
+    location_visuals: Query<(Entity, &PixelWorldLocationVisual)>,
+    agent_visuals: Query<(Entity, &PixelWorldAgentVisual)>,
+    time: Res<Time>,
+) {
+    if !runtime.mounted {
+        clear_runtime_visuals(&mut commands, &mut runtime);
+        for entity in current_grid.iter() {
+            commands.entity(entity).despawn();
+        }
+        return;
     }
 
-    let mut y = offset_y;
-    while y <= height {
-        commands.spawn((
-            Sprite::from_color(grid_color, Vec2::new(width as f32, 1.0)),
-            Transform::from_translation(to_bevy_translation(width / 2.0, y, width, height, 0.0)),
-            PixelWorldVisual,
-        ));
-        y += grid_step;
+    for (entity, visual) in location_visuals.iter() {
+        runtime
+            .location_entities
+            .entry(visual.id.clone())
+            .or_insert(entity);
     }
+    for (entity, visual) in agent_visuals.iter() {
+        runtime
+            .agent_entities
+            .entry(visual.id.clone())
+            .or_insert(entity);
+    }
+
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Some(_) = runtime.render_state.as_ref() else {
+        clear_runtime_visuals(&mut commands, &mut runtime);
+        for entity in current_grid.iter() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+
+    let width = window.width() as f64;
+    let height = window.height() as f64;
+    let animation_ms = time.elapsed_secs_f64() * 1000.0;
+    runtime.hit_regions.clear();
+
+    reconcile_grid(&mut commands, &mut runtime, &current_grid, width, height);
+    reconcile_locations(&mut commands, &mut runtime, width, height, animation_ms);
+    reconcile_agents(&mut commands, &mut runtime, width, height, animation_ms);
 }
 
 #[wasm_bindgen]
@@ -689,5 +891,70 @@ impl PixelWorldBridge {
             shared.input_events.clear();
         });
         status_value("detached")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    fn assert_grid_layout_is_stable_for_same_camera_and_size() {
+        let camera = CameraState::default();
+        let left = build_grid_layout(&camera, 960.0, 540.0);
+        let right = build_grid_layout(&camera, 960.0, 540.0);
+        assert_eq!(left, right);
+    }
+
+    fn assert_grid_layout_changes_when_camera_pan_changes() {
+        let mut camera = CameraState::default();
+        let before = build_grid_layout(&camera, 960.0, 540.0);
+        camera.pan_x_px = 10.0;
+        let after = build_grid_layout(&camera, 960.0, 540.0);
+        assert_ne!(before, after);
+    }
+
+    fn assert_fallback_point_stays_within_canvas() {
+        let point = fallback_point_for_entity("agent-0", 960.0, 540.0, &CameraState::default());
+        assert!(point.0 >= 0.0 && point.0 <= 960.0);
+        assert!(point.1 >= 0.0 && point.1 <= 540.0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn grid_layout_is_stable_for_same_camera_and_size() {
+        assert_grid_layout_is_stable_for_same_camera_and_size();
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn grid_layout_changes_when_camera_pan_changes() {
+        assert_grid_layout_changes_when_camera_pan_changes();
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn fallback_point_stays_within_canvas() {
+        assert_fallback_point_stays_within_canvas();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test]
+    fn wasm_grid_layout_is_stable_for_same_camera_and_size() {
+        assert_grid_layout_is_stable_for_same_camera_and_size();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test]
+    fn wasm_grid_layout_changes_when_camera_pan_changes() {
+        assert_grid_layout_changes_when_camera_pan_changes();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test]
+    fn wasm_fallback_point_stays_within_canvas() {
+        assert_fallback_point_stays_within_canvas();
     }
 }
