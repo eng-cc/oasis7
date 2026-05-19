@@ -25,6 +25,7 @@
     - `git diff --check`
 - [x] hosted-account-identity-broker-server (PRD-P2P-029) [test_tier_required]: 在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server，提供邮箱 login challenge、稳定 `hosted_account_id -> player_id` 映射持久化、验证后换发 `device_session + player_session`，并把 viewer hosted onboarding 改成 email + OTP 表单。 Trace: .pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.yaml
   - 产物文件:
+    - `crates/oasis7/Cargo.toml`
     - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs`
     - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
     - `crates/oasis7/src/bin/oasis7_game_launcher/static_http.rs`
@@ -132,7 +133,7 @@
 - 结论-1: 对 `hosted_public_join` 而言，“邮箱登录 + 中心化托管密钥 + 可选自托管升级”是比“让普通玩家保存公私钥”更合适的正式产品路径。
 - 结论-2: 中心化 KMS 不是直接替代全部产品语义；更准确的落法是 `identity broker + custody service + sign API`，KMS/HSM 作为 custody backend 的实现选项，而不是前端/运行时直接耦合的唯一接口。
 - 结论-3: 当前代码已经完成两刀 hosted identity 基线：其一是 `device_session` 收口，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`；其二是中心化 hosted account 登录 server，`oasis7_game_launcher` 现已提供 email login challenge、稳定 `hosted_account_id -> player_id` 持久化和登录后换发 `device_session + player_session` 的 public route，viewer 也已改成 hosted account 登录表单。
-- 结论-4: 当前登录投递仍是 preview transport：server 仅支持 `preview_inline` 或 `server_log_only` 这两种 repo-owned challenge delivery mode，还没有接真实邮件 provider。
+- 结论-4: 当前登录投递已具备真实邮件链路：server 现支持 `preview_inline`、`server_log_only` 与 `smtp` 三种 challenge delivery mode，其中 `smtp` 通过 `OASIS7_HOSTED_LOGIN_SMTP_*` 环境变量加载配置，默认可对接 Aliyun DirectMail `smtpdm.aliyun.com:465`。
 - 结论-5: 托管身份仅面向 player plane；node / validator / governance signer 继续沿用独立 custody/governance 专题。
 
 ## 依赖
@@ -156,5 +157,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 优先把 `hosted-account-identity-broker` 从 preview transport 推进到真实邮件 delivery provider，补 `magic link`、挑战发送配额与恢复/冻结策略；随后推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
-- 最近更新: 2026-05-18
+- 下一步: 优先补 `magic link`、挑战发送配额与恢复/冻结策略，并为 SMTP 链路增加 staging/live smoke 与运维 runbook；随后推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
+- 最近更新: 2026-05-19

@@ -4,6 +4,9 @@ use super::hosted_player_session::{
     HostedPlayerSessionIssueResponse, HostedPlayerSessionIssuer,
 };
 use super::{emit_stderr_or_event, Level};
+use lettre::message::Mailbox;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{Message, SmtpTransport, Transport};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, VecDeque};
@@ -22,10 +25,20 @@ const HOSTED_ACCOUNT_STORE_PATH_ENV: &str = "OASIS7_HOSTED_ACCOUNT_STORE_PATH";
 const HOSTED_LOGIN_DELIVERY_MODE_ENV: &str = "OASIS7_HOSTED_LOGIN_DELIVERY_MODE";
 const HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE: &str = "preview_inline";
 const HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY: &str = "server_log_only";
+const HOSTED_LOGIN_DELIVERY_MODE_SMTP: &str = "smtp";
+const HOSTED_LOGIN_SMTP_HOST_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_HOST";
+const HOSTED_LOGIN_SMTP_PORT_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_PORT";
+const HOSTED_LOGIN_SMTP_USERNAME_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_USERNAME";
+const HOSTED_LOGIN_SMTP_PASSWORD_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_PASSWORD";
+const HOSTED_LOGIN_SMTP_FROM_EMAIL_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_FROM_EMAIL";
+const HOSTED_LOGIN_SMTP_FROM_NAME_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_FROM_NAME";
+const HOSTED_LOGIN_SMTP_DEFAULT_HOST: &str = "smtpdm.aliyun.com";
+const HOSTED_LOGIN_SMTP_DEFAULT_PORT: u16 = 465;
 const LOGIN_CHALLENGE_TTL_MS: u64 = 10 * 60 * 1000;
 const LOGIN_START_RATE_LIMIT_WINDOW_MS: u64 = 60_000;
 const LOGIN_START_RATE_LIMIT_PER_HANDLE: u64 = 3;
 const LOGIN_CHALLENGE_MAX_ATTEMPTS: u8 = 5;
+const HOSTED_LOGIN_EMAIL_SUBJECT: &str = "Oasis7 login code";
 
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct HostedAccountLoginStartResponse {
@@ -81,10 +94,21 @@ pub(super) struct HostedAccountIdentityBroker {
     store_path: PathBuf,
     store: HostedAccountStore,
     delivery_mode: String,
+    smtp_config: Option<HostedLoginSmtpConfig>,
     next_challenge_sequence: u64,
     otp_secret: u64,
     recent_start_timestamps_by_factor: BTreeMap<String, VecDeque<u64>>,
     pending_challenges: BTreeMap<String, PendingHostedLoginChallenge>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HostedLoginSmtpConfig {
+    host: String,
+    port: u16,
+    username: String,
+    password: String,
+    from_email: String,
+    from_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -122,14 +146,21 @@ impl HostedAccountIdentityBroker {
     pub(super) fn from_env() -> Result<Self, String> {
         let store_path = resolve_store_path();
         let store = load_store(store_path.as_path())?;
+        let delivery_mode = normalize_delivery_mode(
+            std::env::var(HOSTED_LOGIN_DELIVERY_MODE_ENV)
+                .ok()
+                .as_deref(),
+        );
+        let smtp_config = if delivery_mode == HOSTED_LOGIN_DELIVERY_MODE_SMTP {
+            Some(HostedLoginSmtpConfig::from_env()?)
+        } else {
+            None
+        };
         Ok(Self {
             store_path,
             store,
-            delivery_mode: normalize_delivery_mode(
-                std::env::var(HOSTED_LOGIN_DELIVERY_MODE_ENV)
-                    .ok()
-                    .as_deref(),
-            ),
+            delivery_mode,
+            smtp_config,
             next_challenge_sequence: 0,
             otp_secret: now_unix_ms() ^ 0xa5a5_1357_5a5a_c3c3,
             recent_start_timestamps_by_factor: BTreeMap::new(),
@@ -144,6 +175,7 @@ impl HostedAccountIdentityBroker {
             store_path,
             store,
             delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
+            smtp_config: None,
             next_challenge_sequence: 0,
             otp_secret: now_unix_ms() ^ 0x5a5a_c3c3_a5a5_1357,
             recent_start_timestamps_by_factor: BTreeMap::new(),
@@ -156,6 +188,7 @@ impl HostedAccountIdentityBroker {
             store_path: PathBuf::new(),
             store: HostedAccountStore::default(),
             delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
+            smtp_config: None,
             next_challenge_sequence: 0,
             otp_secret: 0,
             recent_start_timestamps_by_factor: BTreeMap::new(),
@@ -223,10 +256,6 @@ impl HostedAccountIdentityBroker {
         );
         let masked_login_hint = mask_login_hint(channel, normalized_login_hint.as_str());
         let expires_at_unix_ms = issued_at_unix_ms.saturating_add(LOGIN_CHALLENGE_TTL_MS);
-        self.recent_start_timestamps_by_factor
-            .entry(factor_key)
-            .or_default()
-            .push_back(issued_at_unix_ms);
         let challenge = PendingHostedLoginChallenge {
             challenge_id: challenge_id.clone(),
             login_channel: channel.to_string(),
@@ -236,14 +265,30 @@ impl HostedAccountIdentityBroker {
             expires_at_unix_ms,
             failed_attempts: 0,
         };
+        if let Err(err) = self.deliver_login_challenge(&challenge) {
+            let log_message = format!(
+                "hosted account login delivery failed: channel={} target={} reason={err}",
+                challenge.login_channel, challenge.masked_login_hint
+            );
+            emit_stderr_or_event(
+                Level::ERROR,
+                log_message.as_str(),
+                "hosted account login delivery failed",
+            );
+            return HostedAccountLoginStartResponse {
+                ok: false,
+                error_code: Some("login_delivery_failed".to_string()),
+                error: Some("failed to deliver login verification code; retry shortly".to_string()),
+                deployment_mode: deployment_mode.as_str().to_string(),
+                challenge: None,
+            };
+        }
+        self.recent_start_timestamps_by_factor
+            .entry(factor_key)
+            .or_default()
+            .push_back(issued_at_unix_ms);
         self.pending_challenges
             .insert(challenge_id.clone(), challenge);
-        emit_delivery_notice(
-            self.delivery_mode.as_str(),
-            channel,
-            masked_login_hint.as_str(),
-            otp_code.as_str(),
-        );
         HostedAccountLoginStartResponse {
             ok: true,
             error_code: None,
@@ -437,6 +482,118 @@ impl HostedAccountIdentityBroker {
             .map(|timestamps| timestamps.len() as u64 >= LOGIN_START_RATE_LIMIT_PER_HANDLE)
             .unwrap_or(false)
     }
+
+    fn deliver_login_challenge(
+        &self,
+        challenge: &PendingHostedLoginChallenge,
+    ) -> Result<(), String> {
+        match self.delivery_mode.as_str() {
+            HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE => Ok(()),
+            HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY => {
+                emit_delivery_notice(
+                    challenge.login_channel.as_str(),
+                    challenge.masked_login_hint.as_str(),
+                    challenge.otp_code.as_str(),
+                );
+                Ok(())
+            }
+            HOSTED_LOGIN_DELIVERY_MODE_SMTP => self
+                .smtp_config
+                .as_ref()
+                .ok_or_else(|| {
+                    "smtp delivery mode selected without a resolved SMTP configuration".to_string()
+                })?
+                .send_login_code(
+                    challenge.normalized_login_hint.as_str(),
+                    challenge.otp_code.as_str(),
+                ),
+            other => Err(format!("unsupported hosted login delivery mode `{other}`")),
+        }
+    }
+}
+
+impl HostedLoginSmtpConfig {
+    fn from_env() -> Result<Self, String> {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    fn from_lookup<F>(mut lookup: F) -> Result<Self, String>
+    where
+        F: FnMut(&str) -> Option<String>,
+    {
+        let from_email = required_trimmed_lookup(
+            &mut lookup,
+            HOSTED_LOGIN_SMTP_FROM_EMAIL_ENV,
+            "hosted login SMTP sender email",
+        )?;
+        if normalize_email(from_email.as_str()).is_none() {
+            return Err(format!(
+                "hosted login SMTP sender email `{from_email}` must be a valid email address"
+            ));
+        }
+        let password = required_trimmed_lookup(
+            &mut lookup,
+            HOSTED_LOGIN_SMTP_PASSWORD_ENV,
+            "hosted login SMTP password",
+        )?;
+        let host = optional_trimmed_lookup(&mut lookup, HOSTED_LOGIN_SMTP_HOST_ENV)
+            .unwrap_or_else(|| HOSTED_LOGIN_SMTP_DEFAULT_HOST.to_string());
+        let port = match optional_trimmed_lookup(&mut lookup, HOSTED_LOGIN_SMTP_PORT_ENV) {
+            Some(raw) => raw
+                .parse::<u16>()
+                .map_err(|err| format!("hosted login SMTP port `{raw}` is invalid: {err}"))?,
+            None => HOSTED_LOGIN_SMTP_DEFAULT_PORT,
+        };
+        let username = optional_trimmed_lookup(&mut lookup, HOSTED_LOGIN_SMTP_USERNAME_ENV)
+            .unwrap_or_else(|| from_email.clone());
+        let from_name = optional_trimmed_lookup(&mut lookup, HOSTED_LOGIN_SMTP_FROM_NAME_ENV);
+        Ok(Self {
+            host,
+            port,
+            username,
+            password,
+            from_email,
+            from_name,
+        })
+    }
+
+    fn send_login_code(&self, target_email: &str, otp_code: &str) -> Result<(), String> {
+        let email = Message::builder()
+            .from(self.from_mailbox()?)
+            .to(parse_mailbox(target_email, "target email")?)
+            .subject(HOSTED_LOGIN_EMAIL_SUBJECT)
+            .body(build_login_email_body(otp_code))
+            .map_err(|err| format!("failed to build hosted login SMTP email: {err}"))?;
+        let transport = SmtpTransport::relay(self.host.as_str())
+            .map_err(|err| {
+                format!(
+                    "failed to configure hosted login SMTP relay `{}`: {err}",
+                    self.host
+                )
+            })?
+            .port(self.port)
+            .credentials(Credentials::new(
+                self.username.clone(),
+                self.password.clone(),
+            ))
+            .build();
+        transport.send(&email).map_err(|err| {
+            format!(
+                "failed to send hosted login SMTP email via {}:{}: {err}",
+                self.host, self.port
+            )
+        })?;
+        Ok(())
+    }
+
+    fn from_mailbox(&self) -> Result<Mailbox, String> {
+        let raw = if let Some(name) = self.from_name.as_deref() {
+            format!("{name} <{}>", self.from_email)
+        } else {
+            self.from_email.clone()
+        };
+        parse_mailbox(raw.as_str(), "sender email")
+    }
 }
 
 fn response_from_issue(
@@ -552,19 +709,12 @@ fn normalize_delivery_mode(raw: Option<&str>) -> String {
         HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY => {
             HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY.to_string()
         }
+        HOSTED_LOGIN_DELIVERY_MODE_SMTP => HOSTED_LOGIN_DELIVERY_MODE_SMTP.to_string(),
         _ => HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
     }
 }
 
-fn emit_delivery_notice(
-    delivery_mode: &str,
-    channel: &str,
-    masked_login_hint: &str,
-    otp_code: &str,
-) {
-    if delivery_mode != HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY {
-        return;
-    }
+fn emit_delivery_notice(channel: &str, masked_login_hint: &str, otp_code: &str) {
     let message = format!(
         "hosted account login challenge issued: channel={channel} target={masked_login_hint} otp={otp_code}"
     );
@@ -618,6 +768,40 @@ fn mask_login_hint(channel: &str, normalized_login_hint: &str) -> String {
 
 fn factor_key(channel: &str, normalized_login_hint: &str) -> String {
     format!("{channel}:{normalized_login_hint}")
+}
+
+fn optional_trimmed_lookup<F>(lookup: &mut F, key: &str) -> Option<String>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    lookup(key).and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn required_trimmed_lookup<F>(lookup: &mut F, key: &str, label: &str) -> Result<String, String>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    optional_trimmed_lookup(lookup, key)
+        .ok_or_else(|| format!("{label} env `{key}` is required when SMTP delivery is enabled"))
+}
+
+fn parse_mailbox(raw: &str, label: &str) -> Result<Mailbox, String> {
+    raw.parse()
+        .map_err(|err| format!("invalid hosted login SMTP {label} `{raw}`: {err}"))
+}
+
+fn build_login_email_body(otp_code: &str) -> String {
+    let expires_in_minutes = LOGIN_CHALLENGE_TTL_MS / 60_000;
+    format!(
+        "Your Oasis7 login code is {otp_code}.\n\nThis code expires in {expires_in_minutes} minutes.\nIf you did not request this code, you can ignore this email.\n"
+    )
 }
 
 fn build_login_challenge_id(issued_at_unix_ms: u64, sequence: u64) -> String {
@@ -798,5 +982,92 @@ mod tests {
             &mut issuer,
         );
         assert_eq!(missing.error_code.as_deref(), Some("challenge_not_found"));
+    }
+
+    #[test]
+    fn hosted_account_login_start_rolls_back_on_delivery_failure() {
+        let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("smtp-fail"))
+            .expect("broker");
+        broker.delivery_mode = HOSTED_LOGIN_DELIVERY_MODE_SMTP.to_string();
+        let response = broker.start_login(
+            DeploymentMode::HostedPublicJoin,
+            "email",
+            "player@example.com",
+        );
+        assert!(!response.ok);
+        assert_eq!(
+            response.error_code.as_deref(),
+            Some("login_delivery_failed")
+        );
+        assert!(broker.pending_challenges.is_empty());
+        assert!(broker.recent_start_timestamps_by_factor.is_empty());
+    }
+
+    #[test]
+    fn normalize_delivery_mode_accepts_smtp() {
+        assert_eq!(
+            normalize_delivery_mode(Some(" smtp ")),
+            HOSTED_LOGIN_DELIVERY_MODE_SMTP
+        );
+        assert_eq!(
+            normalize_delivery_mode(Some("server_log_only")),
+            HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY
+        );
+        assert_eq!(
+            normalize_delivery_mode(Some("unexpected")),
+            HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE
+        );
+    }
+
+    #[test]
+    fn hosted_login_smtp_config_defaults_to_aliyun_relay() {
+        let config = HostedLoginSmtpConfig::from_lookup(|key| match key {
+            HOSTED_LOGIN_SMTP_FROM_EMAIL_ENV => Some("account@mail.oasis7.tech".to_string()),
+            HOSTED_LOGIN_SMTP_PASSWORD_ENV => Some("smtp-secret".to_string()),
+            _ => None,
+        })
+        .expect("config");
+        assert_eq!(config.host, HOSTED_LOGIN_SMTP_DEFAULT_HOST);
+        assert_eq!(config.port, HOSTED_LOGIN_SMTP_DEFAULT_PORT);
+        assert_eq!(config.username, "account@mail.oasis7.tech");
+        assert_eq!(config.from_email, "account@mail.oasis7.tech");
+        assert_eq!(config.from_name.as_deref(), None);
+    }
+
+    #[test]
+    fn hosted_login_smtp_config_supports_custom_sender_fields() {
+        let config = HostedLoginSmtpConfig::from_lookup(|key| match key {
+            HOSTED_LOGIN_SMTP_FROM_EMAIL_ENV => Some("account@mail.oasis7.tech".to_string()),
+            HOSTED_LOGIN_SMTP_PASSWORD_ENV => Some("smtp-secret".to_string()),
+            HOSTED_LOGIN_SMTP_HOST_ENV => Some("smtp.example.com".to_string()),
+            HOSTED_LOGIN_SMTP_PORT_ENV => Some("587".to_string()),
+            HOSTED_LOGIN_SMTP_USERNAME_ENV => Some("mailer".to_string()),
+            HOSTED_LOGIN_SMTP_FROM_NAME_ENV => Some("Oasis7 Accounts".to_string()),
+            _ => None,
+        })
+        .expect("config");
+        assert_eq!(config.host, "smtp.example.com");
+        assert_eq!(config.port, 587);
+        assert_eq!(config.username, "mailer");
+        assert_eq!(config.from_name.as_deref(), Some("Oasis7 Accounts"));
+        assert_eq!(
+            config.from_mailbox().expect("mailbox").to_string(),
+            "Oasis7 Accounts <account@mail.oasis7.tech>"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires live SMTP credentials and a recipient mailbox"]
+    fn hosted_login_smtp_live_smoke() {
+        let config = HostedLoginSmtpConfig::from_env().expect("smtp config from env");
+        let target = std::env::var("OASIS7_HOSTED_LOGIN_SMTP_SMOKE_TO_EMAIL")
+            .expect("OASIS7_HOSTED_LOGIN_SMTP_SMOKE_TO_EMAIL");
+        assert!(
+            !target.trim().is_empty(),
+            "OASIS7_HOSTED_LOGIN_SMTP_SMOKE_TO_EMAIL must not be empty"
+        );
+        config
+            .send_login_code(target.trim(), "123456")
+            .expect("live SMTP delivery");
     }
 }
