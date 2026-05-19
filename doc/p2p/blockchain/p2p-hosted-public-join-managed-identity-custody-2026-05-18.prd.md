@@ -30,7 +30,7 @@
 - 若把 player custody 与 node/governance signer 共用一套 trust domain，会让产品问题和协议级 custody 问题互相绑死。
 
 ## 1. Executive Summary
-- Problem Statement: `hosted_public_join` 现在已经补上了 hosted account 邮箱登录 broker 与 `device_session + in-memory session key` 恢复链路，普通玩家不再需要手抄浏览器本地私钥才能回到同一 `player_id`。但这套实现仍停留在 preview 边界：`crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs` 依然依赖 `OASIS7_HOSTED_STRONG_AUTH_*` + `approval_code`；登录 challenge 仍只有 `preview_inline/server_log_only` 两种 repo-owned transport；`signer_ref`、managed custody sign API、真实邮件投递、冻结/恢复策略和 self-custody upgrade 还没有进入正式后端 contract。如果不把这些缺口继续收完，`public join` 仍然不能被宣称为生产级 hosted wallet / custody 方案。
+- Problem Statement: `hosted_public_join` 现在已经补上了 hosted account 邮箱登录 broker、`device_session + in-memory session key` 恢复链路，以及 env-configured SMTP 邮件投递；普通玩家不再需要手抄浏览器本地私钥，也不必继续依赖 repo-owned preview code 才能回到同一 `player_id`。但这套实现整体仍停留在 `limited playable technical preview` 边界：`crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs` 依然依赖 `OASIS7_HOSTED_STRONG_AUTH_*` + `approval_code`；`signer_ref`、managed custody sign API、冻结/恢复策略和 self-custody upgrade 还没有进入正式后端 contract。如果不把这些缺口继续收完，`public join` 仍然不能被宣称为生产级 hosted wallet / custody 方案。
 - Proposed Solution: 为 `hosted_public_join` 正式冻结一套 producer-owned 的“托管身份 + 托管密钥 + 自托管升级”目标态。默认玩家路径改为 `guest -> hosted account -> managed player signer -> optional self-custody bind/transfer-out`：用户用邮箱验证码或 magic link 登录，浏览器只拿 `player_session` 与设备级短期密钥；长期玩家 signer 留在服务端 custody plane，由 KMS/HSM 或 KMS-wrapped sealed-key backend 保护，并通过 step-up auth + policy engine 出签。
 - Success Criteria:
   - SC-1: `hosted_public_join` 必须提供“不输入原始公钥私钥也能开始玩”的正式登录路径，默认支持邮箱登录。

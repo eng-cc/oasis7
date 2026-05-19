@@ -846,8 +846,8 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-18
-- 最新完成: `hosted-account-identity-broker-server`（已在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server：支持 email login challenge、稳定 `hosted_account_id -> player_id` 持久化，以及登录完成后换发 `device_session + player_session`；viewer 正式入口也已改成 hosted account 登录表单。当前 challenge delivery 仍是 preview `preview_inline/server_log_only`，尚未接真实邮件 provider。）
+- 更新日期: 2026-05-19
+- 最新完成: `hosted-account-identity-broker-server`（已在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server：支持 email login challenge、稳定 `hosted_account_id -> player_id` 持久化，以及登录完成后换发 `device_session + player_session`；viewer 正式入口也已改成 hosted account 登录表单。当前 challenge delivery 已支持 `preview_inline` / `server_log_only` / `smtp`，其中 `smtp` 通过 `OASIS7_HOSTED_LOGIN_SMTP_*` 环境变量接真实邮件 provider，默认可对接 Aliyun DirectMail `smtpdm.aliyun.com:465`。）
 - 最新完成: `hosted-browser-device-session-recovery`（已把 `hosted_public_join` 的 viewer/launcher 第一刀落成代码真值：launcher grant 新增 `device_session_id`，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`，刷新页后仅保留 `device_session` handle，并按需重新生成页内临时 Ed25519 session key 以完成 reconnect/register。）
 - 最新完成: `hosted-managed-identity-doc-freeze`（已新增 hosted_public_join 托管身份 / 托管密钥专题三件套，正式冻结 hosted account、邮箱登录、`signer_ref`、device session、step-up auth 与自托管升级边界；当前剩余缺口集中在 hosted account 登录入口与托管签名后端。）
 - 最新完成: `newapi-auto-credit-closure`（已把 `oasis7_newapi_bridge_service` 收口为 LetAI OpenAPI 真链路：新增持久化 `bridge_ledger`、explorer poll watcher、block-height confirmation、exact-match `--pricing-rule` 折算、`platform_user_id/platform_project_id/token_key/external_order_id`、user upsert、project/token 创建、topup、query verification 与 retry/manual-review 状态机。）
