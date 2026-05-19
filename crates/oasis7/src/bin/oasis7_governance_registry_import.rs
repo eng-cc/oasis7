@@ -5,11 +5,12 @@ use std::process;
 
 use oasis7::runtime::{
     GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
-    GovernanceThresholdSignerPolicy, ReleaseSecurityPolicy, World,
+    GovernanceThresholdSignerPolicy, ReleaseSecurityPolicy, World, WorldState,
     MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE,
     MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 const DEFAULT_FINALITY_SLOT_ID: &str = "governance.finality.v1";
 const DEFAULT_GENESIS_CONTROLLER_ACCOUNT_ID: &str = "msig.genesis.v1";
@@ -43,6 +44,13 @@ struct ManifestSlotThresholds {
     thresholds: BTreeMap<String, u16>,
 }
 
+#[derive(Debug, Serialize)]
+struct StateRootProjection<'a> {
+    state: &'a WorldState,
+    manifest_hash: &'a str,
+    policy_hash: &'a str,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct ImportSummary {
     world_dir: String,
@@ -50,6 +58,8 @@ struct ImportSummary {
     imported_finality_slot_id: String,
     finality_signer_count: usize,
     controller_policy_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reconciled_latest_tick: Option<u64>,
 }
 
 fn main() {
@@ -114,6 +124,7 @@ fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
     world
         .set_governance_main_token_controller_registry(controller_registry.clone())
         .map_err(|err| format!("write controller registry failed: {err:?}"))?;
+    let (world, reconciled_latest_tick) = reconcile_latest_tick_consensus_state_root(world)?;
     world
         .save_to_dir(options.world_dir.as_path())
         .map_err(|err| format!("save world {} failed: {err:?}", options.world_dir.display()))?;
@@ -123,7 +134,40 @@ fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
         imported_finality_slot_id: finality_registry.slot_id,
         finality_signer_count: finality_registry.signer_bindings.len(),
         controller_policy_count: controller_registry.controller_signer_policies.len(),
+        reconciled_latest_tick,
     })
+}
+
+fn reconcile_latest_tick_consensus_state_root(
+    world: World,
+) -> Result<(World, Option<u64>), String> {
+    let manifest_hash = world
+        .current_manifest_hash()
+        .map_err(|err| format!("compute current manifest hash failed: {err:?}"))?;
+    let policy_hash = hash_json(&world.policies())
+        .map_err(|err| format!("compute current policy hash failed: {err:?}"))?;
+    let state_root = hash_json(&StateRootProjection {
+        state: world.state(),
+        manifest_hash: manifest_hash.as_str(),
+        policy_hash: policy_hash.as_str(),
+    })
+    .map_err(|err| format!("compute current state root failed: {err:?}"))?;
+    let mut snapshot = world.snapshot();
+    let Some(record) = snapshot.tick_consensus_records.last_mut() else {
+        return Ok((world, None));
+    };
+    if record.block.header.state_root == state_root
+        && record.block.execution_digest.state_projection_hash == state_root
+    {
+        return Ok((world, None));
+    }
+    let reconciled_tick = record.block.header.tick;
+    record.block.header.state_root = state_root.clone();
+    record.block.execution_digest.state_projection_hash = state_root;
+    record.certificate.block_hash = record.block.block_hash();
+    let reconciled = World::from_snapshot(snapshot, world.journal().clone())
+        .map_err(|err| format!("rebuild world after state-root reconciliation failed: {err:?}"))?;
+    Ok((reconciled, Some(reconciled_tick)))
 }
 
 fn load_or_create_world(world_dir: &Path) -> Result<World, String> {
@@ -289,6 +333,13 @@ fn validate_manifest_entry(entry: &PublicManifestEntry) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+fn hash_json<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
+    let bytes = serde_json::to_vec(value)?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(hex::encode(hasher.finalize()))
 }
 
 fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, String> {
@@ -645,6 +696,105 @@ mod tests {
         })
         .expect_err("manifest threshold mismatch must fail");
         assert!(err.contains("manifest slot threshold mismatch"), "{err}");
+    }
+
+    #[test]
+    fn import_reconciles_latest_tick_consensus_state_root_for_existing_world() {
+        let temp_dir = temp_dir("reconcile-existing-world");
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let manifest_path = temp_dir.join("public_manifest.json");
+        std::fs::write(
+            manifest_path.as_path(),
+            serde_json::to_vec_pretty(&vec![
+                serde_json::json!({
+                    "slot_id": "governance.finality.v1",
+                    "signer_id": "signer01",
+                    "scheme": "ed25519",
+                    "public_key_hex": "54e7a02919fff2d49a9c325def8cb0211ea7f7a75a9011b9d0678b9e2a7af6bc"
+                }),
+                serde_json::json!({
+                    "slot_id": "governance.finality.v1",
+                    "signer_id": "signer02",
+                    "scheme": "ed25519",
+                    "public_key_hex": "38dac17ff403cc19de033e47be7cf7b5354635fbc5c1976d7c532e20494aace4"
+                }),
+                serde_json::json!({
+                    "slot_id": "governance.finality.v1",
+                    "signer_id": "signer03",
+                    "scheme": "ed25519",
+                    "public_key_hex": "e22bd5029176296712fb1a477f91c15775e5ab858181cb4172839ced526f12c8"
+                }),
+                serde_json::json!({
+                    "slot_id": "msig.genesis.v1",
+                    "signer_id": "signer01",
+                    "scheme": "ed25519",
+                    "public_key_hex": "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30"
+                }),
+                serde_json::json!({
+                    "slot_id": "msig.genesis.v1",
+                    "signer_id": "signer02",
+                    "scheme": "ed25519",
+                    "public_key_hex": "7014e88a6336ec91fc7e6ffb044b50232e4411ec403f90123fa8a202a3420a04"
+                }),
+                serde_json::json!({
+                    "slot_id": "msig.staking_governance.v1",
+                    "signer_id": "signer01",
+                    "scheme": "ed25519",
+                    "public_key_hex": "13c160fc0f516b9a5663aa00c2a5446be6467f68ce341fdd79cdb64224dffd20"
+                }),
+                serde_json::json!({
+                    "slot_id": "msig.staking_governance.v1",
+                    "signer_id": "signer02",
+                    "scheme": "ed25519",
+                    "public_key_hex": "10fa4d90abf753ec1aa54aee3ea53bab25f43e7078897e1fb6a3777af2255bcb"
+                }),
+                serde_json::json!({
+                    "slot_id": "msig.ecosystem_governance.v1",
+                    "signer_id": "signer01",
+                    "scheme": "ed25519",
+                    "public_key_hex": "0241f2e23305407676f2a5cec6d154da74944b2a366b2b2b6913cb746d402d0e"
+                }),
+                serde_json::json!({
+                    "slot_id": "msig.ecosystem_governance.v1",
+                    "signer_id": "signer02",
+                    "scheme": "ed25519",
+                    "public_key_hex": "960137cd5d675a517daed5f14ea6bea460e196fda4310a581ecd448f3bcd20b4"
+                }),
+                serde_json::json!({
+                    "slot_id": "msig.security_council.v1",
+                    "signer_id": "signer01",
+                    "scheme": "ed25519",
+                    "public_key_hex": "d09de9413371ae42f643e4f8f31e2139611d1617809375b1ad884df3fb089448"
+                }),
+                serde_json::json!({
+                    "slot_id": "msig.security_council.v1",
+                    "signer_id": "signer02",
+                    "scheme": "ed25519",
+                    "public_key_hex": "aa738a832b0d3bf371d231a0bd8502fd411f2a9723246e5d7d215e8fb0ecbb7c"
+                })
+            ])
+            .expect("encode manifest"),
+        )
+        .expect("write manifest");
+
+        let world_dir = temp_dir.join("world");
+        let mut world = World::new_production_hardened();
+        world.step().expect("step 1");
+        world.step().expect("step 2");
+        world.save_to_dir(world_dir.as_path()).expect("seed world");
+
+        let summary = run_import(super::CliOptions {
+            world_dir: world_dir.clone(),
+            public_manifest: manifest_path,
+            finality_slot_id: "governance.finality.v1".to_string(),
+            default_threshold: 2,
+        })
+        .expect("run import");
+        assert!(summary.reconciled_latest_tick.is_some());
+
+        let loaded = World::load_from_dir(world_dir).expect("load reconciled world");
+        assert!(loaded.governance_finality_signer_registry().is_some());
+        assert!(loaded.governance_main_token_controller_registry().is_some());
     }
 
     #[test]

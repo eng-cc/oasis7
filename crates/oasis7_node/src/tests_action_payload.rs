@@ -119,10 +119,10 @@ struct TestMainTokenActionSigningEnvelope<'a> {
 enum TestMainTokenActionSigningPayload<'a> {
     TransferMainToken(TestTransferMainTokenSigningData<'a>),
     ClaimMainTokenVesting(TestClaimMainTokenVestingSigningData<'a>),
-    InitializeMainTokenGenesis(TestInitializeMainTokenGenesisSigningData<'a>),
-    DistributeMainTokenTreasury(TestDistributeMainTokenTreasurySigningData<'a>),
+    InitializeMainTokenGenesis(TestInitializeMainTokenGenesisSigningData),
+    DistributeMainTokenTreasury(TestDistributeMainTokenTreasurySigningData),
     UpdateRestrictedStarterClaimAdminRegistry(
-        TestUpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
+        TestUpdateRestrictedStarterClaimAdminRegistrySigningData,
     ),
 }
 
@@ -142,22 +142,38 @@ struct TestClaimMainTokenVestingSigningData<'a> {
 }
 
 #[derive(Serialize)]
-struct TestInitializeMainTokenGenesisSigningData<'a> {
-    allocations: &'a [JsonValue],
+struct TestInitializeMainTokenGenesisSigningData {
+    allocations: Vec<TestMainTokenGenesisAllocationPlan>,
 }
 
 #[derive(Serialize)]
-struct TestDistributeMainTokenTreasurySigningData<'a> {
+struct TestDistributeMainTokenTreasurySigningData {
     proposal_id: u64,
-    distribution_id: &'a str,
-    bucket_id: &'a str,
-    distributions: &'a [JsonValue],
+    distribution_id: String,
+    bucket_id: String,
+    distributions: Vec<TestMainTokenTreasuryDistribution>,
 }
 
 #[derive(Serialize)]
-struct TestUpdateRestrictedStarterClaimAdminRegistrySigningData<'a> {
-    controller_account_id: &'a str,
-    next_admin_account_ids: &'a [JsonValue],
+struct TestUpdateRestrictedStarterClaimAdminRegistrySigningData {
+    controller_account_id: String,
+    next_admin_account_ids: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TestMainTokenGenesisAllocationPlan {
+    bucket_id: String,
+    ratio_bps: u32,
+    recipient: String,
+    cliff_epochs: u64,
+    linear_unlock_epochs: u64,
+    start_epoch: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TestMainTokenTreasuryDistribution {
+    account_id: String,
+    amount: u64,
 }
 
 fn test_main_token_action_signature_prefix(action_kind: &str) -> &'static str {
@@ -236,11 +252,12 @@ fn test_main_token_signing_action(action: &JsonValue) -> TestMainTokenActionSign
         "InitializeMainTokenGenesis" => {
             TestMainTokenActionSigningPayload::InitializeMainTokenGenesis(
                 TestInitializeMainTokenGenesisSigningData {
-                    allocations: data
-                        .get("allocations")
-                        .and_then(JsonValue::as_array)
-                        .map(Vec::as_slice)
-                        .expect("genesis allocations"),
+                    allocations: serde_json::from_value(
+                        data.get("allocations")
+                            .cloned()
+                            .expect("genesis allocations"),
+                    )
+                    .expect("decode genesis allocations"),
                 },
             )
         }
@@ -254,16 +271,19 @@ fn test_main_token_signing_action(action: &JsonValue) -> TestMainTokenActionSign
                     distribution_id: data
                         .get("distribution_id")
                         .and_then(JsonValue::as_str)
-                        .expect("treasury distribution_id"),
+                        .expect("treasury distribution_id")
+                        .to_string(),
                     bucket_id: data
                         .get("bucket_id")
                         .and_then(JsonValue::as_str)
-                        .expect("treasury bucket_id"),
-                    distributions: data
-                        .get("distributions")
-                        .and_then(JsonValue::as_array)
-                        .map(Vec::as_slice)
-                        .expect("treasury distributions"),
+                        .expect("treasury bucket_id")
+                        .to_string(),
+                    distributions: serde_json::from_value(
+                        data.get("distributions")
+                            .cloned()
+                            .expect("treasury distributions"),
+                    )
+                    .expect("decode treasury distributions"),
                 },
             )
         }
@@ -273,12 +293,14 @@ fn test_main_token_signing_action(action: &JsonValue) -> TestMainTokenActionSign
                     controller_account_id: data
                         .get("controller_account_id")
                         .and_then(JsonValue::as_str)
-                        .expect("restricted claim admin registry controller_account_id"),
-                    next_admin_account_ids: data
-                        .get("next_admin_account_ids")
-                        .and_then(JsonValue::as_array)
-                        .map(Vec::as_slice)
-                        .expect("restricted claim admin registry next_admin_account_ids"),
+                        .expect("restricted claim admin registry controller_account_id")
+                        .to_string(),
+                    next_admin_account_ids: serde_json::from_value(
+                        data.get("next_admin_account_ids")
+                            .cloned()
+                            .expect("restricted claim admin registry next_admin_account_ids"),
+                    )
+                    .expect("decode restricted claim admin registry next_admin_account_ids"),
                 },
             )
         }

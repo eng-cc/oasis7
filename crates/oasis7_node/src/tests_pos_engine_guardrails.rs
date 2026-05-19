@@ -168,6 +168,57 @@ fn pos_engine_non_expected_proposer_does_not_open_local_proposal() {
 }
 
 #[test]
+fn pos_engine_non_expected_proposer_keeps_pending_consensus_actions_queued() {
+    let validators = multi_validators();
+    let probe_config = NodeConfig::new("node-a", "world-non-proposer-queue", NodeRole::Sequencer)
+        .expect("probe config")
+        .with_pos_validators(validators.clone())
+        .expect("probe validators");
+    let probe_engine = PosNodeEngine::new(&probe_config).expect("probe engine");
+    let expected = probe_engine
+        .expected_proposer(0)
+        .expect("expected proposer for slot 0");
+    let non_proposer = validators
+        .iter()
+        .map(|validator| validator.validator_id.as_str())
+        .find(|validator_id| *validator_id != expected)
+        .expect("non proposer");
+
+    let config = NodeConfig::new(
+        non_proposer,
+        "world-non-proposer-queue",
+        NodeRole::Sequencer,
+    )
+    .expect("config")
+    .with_pos_validators(validators)
+    .expect("validators")
+    .with_auto_attest_all_validators(true);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let queued = NodeConsensusAction::from_payload(7, config.player_id.clone(), vec![7_u8])
+        .expect("queued action");
+    engine.pending_consensus_actions.insert(7, queued);
+
+    let snapshot = engine
+        .tick(
+            &config.node_id,
+            &config.world_id,
+            1_000,
+            None,
+            None,
+            None,
+            None,
+            Vec::new(),
+            None,
+        )
+        .expect("tick");
+
+    assert_eq!(snapshot.consensus_snapshot.latest_height, 0);
+    assert_eq!(snapshot.consensus_snapshot.committed_height, 0);
+    assert_eq!(engine.pending_consensus_actions.len(), 1);
+    assert!(engine.pending_consensus_actions.contains_key(&7));
+}
+
+#[test]
 fn pos_engine_apply_decision_rejects_height_overflow_without_state_mutation() {
     let config =
         NodeConfig::new("node-a", "world-overflow-apply", NodeRole::Observer).expect("config");
