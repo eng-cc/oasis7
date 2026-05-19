@@ -58,12 +58,12 @@
 ### 3.4 Skill-to-decision mapping
 | superpowers skill | decision | current handling in oasis7 |
 | --- | --- | --- |
-| `verification-before-completion` | adopted | 已落地为 `scripts/pm/claim-ready.sh` 和 claim 前 fresh verification 契约。 |
+| `verification-before-completion` | adopted | 已落地为 `scripts/pm/claim-ready.sh`、claim 前 fresh verification 契约，以及同名 repo-owned skill。 |
 | `using-git-worktrees` | adopted | 已由 `./scripts/new-task-worktree.sh` 和 root `AGENTS.md` 的 worktree 规则覆盖。 |
 | `requesting-code-review` | adopted | 已映射到 `prepare-task-pr` + GitHub PR review 默认边界。 |
-| `receiving-code-review` | adopted | 已映射到 `pr-review-thread-closeout.sh` 与 review fix/verify loop。 |
-| `finishing-a-development-branch` | adopted | 已映射到 `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链。 |
-| `systematic-debugging` | deferred | 认可其调试顺序，但尚未形成 repo-owned debugging playbook/helper。 |
+| `receiving-code-review` | adopted | 已映射到 `pr-review-thread-closeout.sh`、review fix/verify loop，以及同名 repo-owned skill。 |
+| `finishing-a-development-branch` | adopted | 已映射到 `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链，以及同名 repo-owned skill。 |
+| `systematic-debugging` | adopted | 已本地化为 repo-owned debugging skill，不再停留在 deferred playbook。 |
 | `dispatching-parallel-agents` | deferred | 只保留为显式授权下的 bounded `spawn_agent` 参考，不升为默认流程。 |
 | `executing-plans` | deferred | 当前先依赖 `project.md`/`.pm` 的正式计划真值，暂不再引入单独执行会话契约。 |
 | `writing-skills` | deferred | 等本地 skill surface 稳定后再决定是否需要 repo-owned 作者手册。 |
@@ -92,6 +92,16 @@
   - 可提 PR / 可合并宣称
 - 目标：把“claim 之前必须 fresh verify”固定成 repo-owned 可执行契约。
 
+### 4.2A Localized workflow skills
+- 当前已本地化：
+  - `.agents/skills/verification-before-completion`
+  - `.agents/skills/systematic-debugging`
+  - `.agents/skills/receiving-code-review`
+  - `.agents/skills/finishing-a-development-branch`
+- 约束：
+  - 这些 skill 必须继续绑定 repo-owned helper 和正式 workflow 文档。
+  - 不能把 skill 文案提升为新的独立真值系统。
+
 ### 4.3 Viewer visual companion pilot
 - owner 倾向：`viewer_engineer`
 - 接入点：
@@ -112,3 +122,4 @@
 - 任何 adopted 项如果没有 repo-owned follow-up，就仍视为未落地。
 - 任何 rejected 项如果重新出现在 root workflow 文档中，应视为治理回弹。
 - 任何 visual companion 使用如果绕过实现 task / regression / PR review，应视为越界。
+- 任何已本地化 skill 如果与 `AGENTS.md`、`.pm` helper 或 engineering 专题口径漂移，应视为 inventory truth drift。

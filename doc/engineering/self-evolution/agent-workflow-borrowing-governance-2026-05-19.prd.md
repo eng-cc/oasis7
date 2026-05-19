@@ -50,12 +50,12 @@
 - Current `superpowers` skill matrix (`main` snapshot on 2026-05-19):
 | skill | decision | oasis7 mapping | rationale |
 | --- | --- | --- | --- |
-| `verification-before-completion` | adopted | repo-owned `scripts/pm/claim-ready.sh` + PR/closeout claim checklist | 与当前 evidence-first 收口完全同向，且已能落到 fresh verification helper。 |
+| `verification-before-completion` | adopted | repo-owned `.agents/skills/verification-before-completion` + `scripts/pm/claim-ready.sh` + PR/closeout claim checklist | 与当前 evidence-first 收口完全同向，且现已同时具备 fresh verification helper 与本地 skill 入口。 |
 | `using-git-worktrees` | adopted | `./scripts/new-task-worktree.sh` + root `AGENTS.md` 的“一需求一 worktree”规则 | 与当前隔离执行模型一致；仓库内已有更强的 repo-native 原子 bootstrap。 |
 | `requesting-code-review` | adopted | `./scripts/prepare-task-pr.sh` + GitHub PR review 默认边界 | “收口前显式请求 review” 与当前默认 PR 主链一致，只是不照搬其 reviewer-dispatch 语义。 |
-| `receiving-code-review` | adopted | `./scripts/pr-review-thread-closeout.sh` + same-PR review fix/verify loop | 强调先验证评论、再修复、再回看 PR 状态，和当前 review-thread closeout 方向一致。 |
-| `finishing-a-development-branch` | adopted | `task-closeout -> prepare-task-pr -> merge/cleanup` 现有 repo-owned 收口链 | 其“分支收尾、决定如何集成”的结构可直接映射到当前标准收口主链。 |
-| `systematic-debugging` | deferred | future debugging/playbook follow-up | 价值高，但当前 borrowing 专题还没把“bug/debug 契约”落成 repo-owned helper 或 QA playbook。 |
+| `receiving-code-review` | adopted | repo-owned `.agents/skills/receiving-code-review` + `./scripts/pr-review-thread-closeout.sh` + same-PR review fix/verify loop | 强调先验证评论、再修复、再回看 PR 状态，和当前 review-thread closeout 方向一致；现已本地化为 skill。 |
+| `finishing-a-development-branch` | adopted | repo-owned `.agents/skills/finishing-a-development-branch` + `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链 | 其“分支收尾、决定如何集成”的结构可直接映射到当前标准收口主链，且现已本地化为 skill。 |
+| `systematic-debugging` | adopted | repo-owned `.agents/skills/systematic-debugging` | 价值高且不引入第二套 workflow 真值；现已收口成 repo-owned debugging skill。 |
 | `dispatching-parallel-agents` | deferred | bounded `spawn_agent` usage under explicit authorization | 可借其拆分原则，但不能回流成默认 subagent-first 工作流。 |
 | `executing-plans` | deferred | future plan-execution follow-up if a repo-owned contract is needed | 可用于“已有正式计划后的执行会话”，但当前仓库已经有 `project.md`/`.pm`，不急于再引入单独会话契约。 |
 | `writing-skills` | deferred | future local skill-authoring governance | 适合等本地 skill surface 进一步收缩后，再决定是否引入成正式作者手册。 |
@@ -66,7 +66,7 @@
 | `using-superpowers` | rejected | none | 外部 bootstrap 不能取代当前 `AGENTS.md + .pm + GitHub PR review` 主链。 |
 - Acceptance Criteria:
   - AC-1: 专题必须明确写出 `superpowers` 当前 `main` 分支 skill inventory 的 adopted / rejected / deferred 清单，且每项都带 rationale 与 oasis7 mapping。
-  - AC-2: adopted 项至少形成三条正式 follow-up：workflow behavior eval harness、completion-claim verification gate、Viewer visual companion pilot。
+  - AC-2: adopted 项至少形成三条正式 follow-up：workflow behavior eval harness、completion-claim verification gate、Viewer visual companion pilot；其中 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch` 允许进一步落为本地 repo-owned skills。
   - AC-3: rejected 项必须显式覆盖与 oasis7 当前默认流程冲突的三类外部规则：强制 brainstorming gate、默认 fresh subagent+两轮 review、无条件 universal TDD。
   - AC-4: deferred 项必须把 multi-harness pluginization 与自动 skill bootstrap 维持在“非当前默认流程”边界，不得混入 root `AGENTS.md` 现行口径。
   - AC-5: `engineering` 根入口、主项目、文件级索引和 `world-simulator` Viewer 后续参考口径必须完成回写。

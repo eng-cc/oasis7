@@ -8,6 +8,7 @@
 ## 任务拆解（含 PRD-ID 映射）
 - [x] agent-workflow-borrowing-governance (PRD-ENGINEERING-031) [test_tier_required]: 建立专题 `prd/design/project`，首批冻结 `superpowers` 的 adopted / rejected / deferred 边界，并回写 engineering 根入口、主项目、索引与 Viewer Web 后续参考口径。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
 - [x] completion-claim-verification-helper (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-002) [test_tier_required]: 落地 repo-owned `scripts/pm/claim-ready.sh`，把“fresh verification before completion claims”收成可执行 helper，并同步接入 `prepare-task-pr` 推荐输出、PM close checklist、README 与 shell regression。 Trace: .pm/tasks/task_32a955cb401e4a269f72113db4fa0371.yaml
+- [x] superpowers-skill-localization (PRD-ENGINEERING-031) [test_tier_required]: 将 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch` 四个已裁定可借鉴项本地化为 repo-owned skills，并同步回写 borrowing / skill inventory 文档真值。 Trace: .pm/tasks/task_6a10c37fc1fe4528a1b3cda4a43721c6.yaml
 
 ## Planned Follow-ups
 - `workflow-behavior-eval-harness-followup` (`PRD-ENGINEERING-AWB-001`, target `test_tier_required + test_tier_full`): 为 `new-task-worktree -> workflow-report -> task-closeout -> prepare-task-pr -> review-thread-closeout` 建立 repo-owned agent behavior eval harness，验证主链规则在真实 agent 回合中被遵守。启动时需创建独立 `.pm` task 与 worktree。
@@ -37,6 +38,7 @@
 - 最新完成:
   - 已建立专题三件套，冻结 `superpowers` 的 adopted / rejected / deferred 边界，并将 adopted 项收口为三条 repo-owned follow-up。
   - 已落地 `completion-claim-verification-helper`，新增 `scripts/pm/claim-ready.sh`，并把 helper 接入 `prepare-task-pr` 推荐输出、PM close checklist、README 与 shell regression。
+  - 已新增四个 repo-owned workflow skills：`verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`，并把它们接回 borrowing / skill inventory 文档真值。
 - 下一步:
   - 优先推进 `workflow-behavior-eval-harness-followup`，先验证当前 engineering 主链是否能被 agent 稳定执行出来。
   - Viewer 方向仅在下一轮明确结构/视觉题时，按需启动 `viewer-visual-companion-pilot-followup`。

@@ -61,7 +61,7 @@
 - Acceptance Criteria:
   - AC-1: 当前 skill inventory 中必须明确写出至少一批 `retire` 项，并给出对应 replacement surface。
   - AC-2: 本轮至少完成 1 组以上低耦合 skill surface 的正式退役，并清理角色卡中的直接引用。
-  - AC-3: `agent-browser`、`prd`、`xiaohongshu`、`xiaohongshu-note-analyzer`、`gpt-image-2`、`humanizer-zh` 的保留理由必须显式记录为 repo-owned 或明确场景专属。
+  - AC-3: `agent-browser`、`prd`、`xiaohongshu`、`xiaohongshu-note-analyzer`、`gpt-image-2`、`humanizer-zh`，以及后续新增的 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`，其保留理由都必须显式记录为 repo-owned 或明确场景专属。
   - AC-4: 对 generic game-skill 镜像簇若未本轮删除，必须标记为 `defer` 并说明“为何先不动”。
 - Non-Goals:
   - 不在本轮重写全部 generic game-skill 内容。
@@ -100,6 +100,7 @@
 | DEC-SKILL-001 | 先退役低耦合通用 skill，再处理 generic game-skill 镜像簇 | 一次性批量删除全部 generic skill | 引用面和角色卡同步风险太高，应先做低风险收缩。 |
 | DEC-SKILL-002 | repo-owned/场景专属 skill 保留，本轮不动 | 统一要求所有 skill 都改成上游安装 | `agent-browser`、`prd`、`xiaohongshu*` 等已与当前仓库工作流强绑定。 |
 | DEC-SKILL-003 | 对与当前默认流程冲突的通用 skill 直接 retire | 保留 skill 但继续在角色卡中推荐 | 会继续制造“存在即推荐”的误导。 |
+| DEC-SKILL-004 | 对已在 borrowing 专题中裁定为可借鉴、且能直接绑定 repo-owned helper / workflow truth 的 skill，允许新增为本地 repo-owned skill | 只在 borrowing 文档里记录 adopted 结论，不把 skill surface 真正落盘 | 若 adopted 项始终不进入 `.agents/skills/`，角色层就无法稳定触发这些 repo-native 工作流。 |
 
 ## 结论
 - 🟢 Ready
