@@ -126,14 +126,16 @@
   - 依据:
     - 本轮没有真实 guarded faucet 与 abuse control 验证
 5. `reset_policy_announced`
-  - `partial`
+  - `pass`
   - 依据:
     - manifest 已声明 `reset_policy=resettable`
-    - 但本轮没有正式对外 reset policy 公告
+    - 已发布公开 GitHub issue `#249` `Public testnet reset policy announcement for oasis7-public-testnet-parallel-20260518`
+    - issue 已明确当前 `public_testnet` 的 reset 语义、claim boundary 与当前公网入口
 6. `claims_boundary_review`
   - `partial`
   - 依据:
-    - 本轮只有 runtime deploy 证据，没有 producer / QA / liveops 正式 claims review
+    - `#249` 只提供 reset policy public announcement
+    - 本轮仍没有 producer / QA / liveops 的正式 claims review 记录
 7. `shared_devnet_pass`
   - `partial`
   - 依据:
@@ -142,4 +144,4 @@
 ## 结论
 1. 这次“进一步做部署”已经把两台阿里云上的 testnet 节点推进成了实际加载 formal `public_testnet` manifest 的 live runtime。
 2. 这次通过公网 `IP:port` 直接验证，已经把 `public_rpc_ready` 与 `explorer_public_ready` 推进成 `pass`，不依赖 testnet 专用域名。
-3. 当前仍然不能放行为 `ready_for_live_candidate`，因为 `faucet_guard_ready`、`reset_policy_announced`、`claims_boundary_review`、`shared_devnet_pass` 还没有补齐。
+3. 当前仍然不能放行为 `ready_for_live_candidate`，因为 `faucet_guard_ready`、`claims_boundary_review`、`shared_devnet_pass` 还没有补齐，且 manifest 里的 `faucet_ref` 仍是 placeholder。
