@@ -18,6 +18,8 @@ const HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admiss
 const HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
 const HOSTED_PLAYER_SESSION_ISSUE_ROUTE = "/api/public/player-session/issue";
 const HOSTED_PLAYER_SESSION_RELEASE_ROUTE = "/api/public/player-session/release";
+const HOSTED_ACCOUNT_LOGIN_START_ROUTE = "/api/public/hosted-account/login/start";
+const HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE = "/api/public/hosted-account/login/complete";
 const HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
 const HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 30000;
 const DEFAULT_WS_ADDR = "ws://127.0.0.1:5011";
@@ -84,7 +86,11 @@ export const state = {
   selectedObject: null,
   auth: {
     available: false,
+    hostedAccountId: null,
     playerId: null,
+    loginChannel: null,
+    maskedLoginHint: null,
+    deviceSessionId: null,
     publicKey: null,
     privateKey: null,
     releaseToken: null,
@@ -104,6 +110,21 @@ export const state = {
     pendingRequestedAgentId: null,
     pendingForceRebind: false,
     rebindNotice: null,
+  },
+  hostedLogin: {
+    channel: "email",
+    handle: "",
+    challengeId: null,
+    maskedLoginHint: null,
+    deliveryMode: null,
+    previewCode: null,
+    code: "",
+    expiresAtUnixMs: null,
+    retryAfterSeconds: null,
+    accountExists: false,
+    startInFlight: false,
+    completeInFlight: false,
+    error: null,
   },
   promptDraft: {
     agentId: null,
@@ -390,7 +411,11 @@ function resolveAuthBootstrap() {
   if (!raw || typeof raw !== "object") {
     return {
       available: false,
+      hostedAccountId: null,
       playerId: null,
+      loginChannel: null,
+      maskedLoginHint: null,
+      deviceSessionId: null,
       publicKey: null,
       privateKey: null,
       releaseToken: null,
@@ -422,7 +447,11 @@ function resolveAuthBootstrap() {
   if (!playerId || !publicKey || !privateKey) {
     return {
       available: false,
+      hostedAccountId: null,
       playerId: playerId || null,
+      loginChannel: null,
+      maskedLoginHint: null,
+      deviceSessionId: null,
       publicKey: publicKey || null,
       privateKey: privateKey || null,
       releaseToken: null,
@@ -446,7 +475,11 @@ function resolveAuthBootstrap() {
   }
   return {
     available: true,
+    hostedAccountId: null,
     playerId,
+    loginChannel: null,
+    maskedLoginHint: null,
+    deviceSessionId: null,
     publicKey,
     privateKey,
     releaseToken: null,
@@ -491,7 +524,11 @@ function persistHostedPlayerSession(auth) {
     window.localStorage?.setItem(
       hostedPlayerSessionStorageKey(),
       JSON.stringify({
+        hostedAccountId: auth.hostedAccountId || null,
         playerId: auth.playerId,
+        loginChannel: auth.loginChannel || null,
+        maskedLoginHint: auth.maskedLoginHint || null,
+        deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
         publicKey: auth.publicKey,
         privateKey: auth.privateKey,
         releaseToken: auth.releaseToken || null,
@@ -517,7 +554,11 @@ function resolveStoredHostedPlayerSession() {
       return null;
     }
     const parsed = JSON.parse(raw);
+    const hostedAccountId = String(parsed?.hostedAccountId || parsed?.hosted_account_id || "").trim();
     const playerId = String(parsed?.playerId || "").trim();
+    const loginChannel = String(parsed?.loginChannel || parsed?.login_channel || "").trim();
+    const maskedLoginHint = String(parsed?.maskedLoginHint || parsed?.masked_login_hint || "").trim();
+    const deviceSessionId = String(parsed?.deviceSessionId || parsed?.device_session_id || parsed?.releaseToken || "").trim();
     const publicKey = String(parsed?.publicKey || "").trim().toLowerCase();
     const privateKey = String(parsed?.privateKey || "").trim().toLowerCase();
     const releaseToken = String(parsed?.releaseToken || "").trim();
@@ -527,7 +568,11 @@ function resolveStoredHostedPlayerSession() {
     }
     return {
       available: true,
+      hostedAccountId: hostedAccountId || null,
       playerId,
+      loginChannel: loginChannel || null,
+      maskedLoginHint: maskedLoginHint || null,
+      deviceSessionId: deviceSessionId || releaseToken,
       publicKey,
       privateKey,
       releaseToken,
@@ -560,6 +605,18 @@ function resolveViewerAuthState() {
     return bootstrap;
   }
   return resolveStoredHostedPlayerSession() || bootstrap;
+}
+
+function resetHostedLoginChallenge() {
+  state.hostedLogin.channel = "email";
+  state.hostedLogin.challengeId = null;
+  state.hostedLogin.maskedLoginHint = null;
+  state.hostedLogin.deliveryMode = null;
+  state.hostedLogin.previewCode = null;
+  state.hostedLogin.code = "";
+  state.hostedLogin.expiresAtUnixMs = null;
+  state.hostedLogin.accountExists = false;
+  state.hostedLogin.completeInFlight = false;
 }
 
 async function refreshHostedAdmissionState() {
@@ -1520,34 +1577,120 @@ function canAutoIssueHostedPlayerSession() {
     && state.auth.source !== "legacy_viewer_auth_bootstrap";
 }
 
-async function issueHostedPlayerIdentity() {
+async function startHostedAccountLogin() {
+  if (!canAutoIssueHostedPlayerSession()) {
+    return { ok: false, reason: "hosted account login is unavailable on this lane" };
+  }
+  const channel = "email";
+  state.hostedLogin.channel = channel;
+  const handle = String(state.hostedLogin.handle || "").trim();
+  if (!handle) {
+    state.hostedLogin.error = "email is required before login can start";
+    render();
+    return { ok: false, reason: state.hostedLogin.error };
+  }
+  state.hostedLogin.startInFlight = true;
+  state.hostedLogin.error = null;
+  state.hostedLogin.retryAfterSeconds = null;
+  render();
+  try {
+    const response = await fetch(HOSTED_ACCOUNT_LOGIN_START_ROUTE, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        channel,
+        handle,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok || !payload?.challenge?.challenge_id) {
+      const retryAfterSeconds = payload?.retry_after_seconds == null ? null : Number(payload.retry_after_seconds);
+      const baseMessage = payload?.error || payload?.error_code || `hosted account login start failed with HTTP ${response.status}`;
+      const message = retryAfterSeconds && Number.isFinite(retryAfterSeconds)
+        ? `${baseMessage} (retry in ${retryAfterSeconds}s)`
+        : baseMessage;
+      const hostedLoginError = new Error(message);
+      hostedLoginError.hostedLoginRetryAfterSeconds = retryAfterSeconds;
+      throw hostedLoginError;
+    }
+    state.hostedLogin.challengeId = String(payload.challenge.challenge_id || "").trim() || null;
+    state.hostedLogin.maskedLoginHint = String(payload.challenge.masked_login_hint || "").trim() || null;
+    state.hostedLogin.deliveryMode = String(payload.challenge.delivery_mode || "").trim() || null;
+    state.hostedLogin.previewCode = String(payload.challenge.preview_code || "").trim() || null;
+    state.hostedLogin.code = state.hostedLogin.previewCode || "";
+    state.hostedLogin.expiresAtUnixMs = payload?.challenge?.expires_at_unix_ms == null ? null : Number(payload.challenge.expires_at_unix_ms);
+    state.hostedLogin.retryAfterSeconds = null;
+    state.hostedLogin.accountExists = false;
+    state.hostedLogin.startInFlight = false;
+    state.hostedLogin.completeInFlight = false;
+    state.hostedLogin.error = null;
+    render();
+    return { ok: true, challengeId: state.hostedLogin.challengeId };
+  } catch (error) {
+    state.hostedLogin.startInFlight = false;
+    if (error?.hostedLoginRetryAfterSeconds != null) {
+      state.hostedLogin.retryAfterSeconds = Number(error.hostedLoginRetryAfterSeconds);
+    }
+    state.hostedLogin.error = String(error);
+    render();
+    return { ok: false, reason: state.hostedLogin.error };
+  }
+}
+
+async function completeHostedAccountLogin() {
   if (!canAutoIssueHostedPlayerSession()) {
     return state.auth;
   }
-  if (state.auth.available || state.auth.issueInFlight) {
+  if (state.auth.available) {
+    return state.auth;
+  }
+  const challengeId = String(state.hostedLogin.challengeId || "").trim();
+  const otpCode = String(state.hostedLogin.code || "").trim();
+  if (!challengeId || !otpCode) {
+    state.hostedLogin.error = "verification code is required before hosted login can complete";
+    render();
     return state.auth;
   }
   state.auth.issueInFlight = true;
+  state.hostedLogin.completeInFlight = true;
+  state.hostedLogin.error = null;
   state.auth.error = null;
   render();
   try {
-    const response = await fetch(HOSTED_PLAYER_SESSION_ISSUE_ROUTE, {
-      method: "GET",
+    const response = await fetch(HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE, {
+      method: "POST",
       cache: "no-store",
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        challenge_id: challengeId,
+        otp_code: otpCode,
+      }),
     });
     const payload = await response.json();
-    if (!response.ok || !payload?.ok || !payload?.grant?.player_id) {
+    if (!response.ok || !payload?.ok || !payload?.grant?.player_id || !payload?.account?.hosted_account_id) {
       if (payload?.admission) {
         state.hostedAdmission = clone(payload.admission);
       }
-      throw new Error(payload?.error || payload?.error_code || `hosted player-session issue failed with HTTP ${response.status}`);
+      throw new Error(payload?.error || payload?.error_code || `hosted account login complete failed with HTTP ${response.status}`);
     }
     state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
     const keypair = await generateEphemeralEd25519Keypair();
     state.auth = {
       available: true,
+      hostedAccountId: String(payload.account.hosted_account_id || "").trim() || null,
       playerId: String(payload.grant.player_id || "").trim(),
+      loginChannel: String(payload.account.login_channel || "").trim() || null,
+      maskedLoginHint: String(payload.account.masked_login_hint || "").trim() || null,
+      deviceSessionId: String(payload.grant.device_session_id || "").trim()
+        || String(payload.grant.release_token || "").trim()
+        || null,
       publicKey: keypair.publicKey,
       privateKey: keypair.privateKey,
       releaseToken: String(payload.grant.release_token || "").trim() || null,
@@ -1569,36 +1712,41 @@ async function issueHostedPlayerIdentity() {
       rebindNotice: null,
     };
     persistHostedPlayerSession(state.auth);
+    resetHostedLoginChallenge();
+    state.hostedLogin.startInFlight = false;
+    state.hostedLogin.error = null;
     render();
     return state.auth;
   } catch (error) {
     state.auth.issueInFlight = false;
+    state.hostedLogin.completeInFlight = false;
+    state.hostedLogin.error = String(error);
     state.auth.error = String(error);
     render();
     return state.auth;
   }
 }
 
+async function issueHostedPlayerIdentity() {
+  return completeHostedAccountLogin();
+}
+
 async function ensureHostedPlayerAuthAvailable() {
-  if (state.auth.available) {
-    return state.auth;
-  }
-  if (canAutoIssueHostedPlayerSession()) {
-    return issueHostedPlayerIdentity();
-  }
   return state.auth;
 }
 
 async function retryHostedPlayerIdentityIssue() {
   if (!canAutoIssueHostedPlayerSession()) {
-    return { ok: false, reason: "hosted public player-session issue is unavailable on this lane" };
+    return { ok: false, reason: "hosted account login is unavailable on this lane" };
   }
-  const auth = await issueHostedPlayerIdentity();
+  const auth = state.hostedLogin.challengeId
+    ? await completeHostedAccountLogin()
+    : await startHostedAccountLogin();
   render();
   return {
-    ok: auth.available,
-    playerId: auth.playerId,
-    error: auth.error,
+    ok: auth?.available === true || auth?.ok === true,
+    playerId: auth?.playerId || null,
+    error: auth?.error || state.hostedLogin.error,
   };
 }
 
@@ -3480,6 +3628,8 @@ function installTestApi() {
     setStrongAuthApprovalCode,
     injectSnapshot,
     logoutHostedPlayerSession,
+    startHostedAccountLogin,
+    completeHostedAccountLogin,
     retryHostedPlayerIdentityIssue,
     reportFatalError,
   };
@@ -3584,6 +3734,8 @@ export {
   renderDetails,
   reportFatalError,
   resourceSummary,
+  startHostedAccountLogin,
+  completeHostedAccountLogin,
   retryHostedPlayerIdentityIssue,
   runSteps,
   select,
