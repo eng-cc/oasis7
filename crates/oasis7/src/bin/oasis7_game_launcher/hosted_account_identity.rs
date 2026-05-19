@@ -164,7 +164,7 @@ impl HostedAccountIdentityBroker {
             return HostedAccountLoginStartResponse {
                 ok: false,
                 error_code: Some("unsupported_login_channel".to_string()),
-                error: Some("login_channel must be one of: email|phone".to_string()),
+                error: Some("login_channel must be email".to_string()),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
             };
@@ -507,7 +507,6 @@ fn emit_delivery_notice(
 fn normalize_login_channel(raw: &str) -> Option<&'static str> {
     match raw.trim() {
         "email" => Some("email"),
-        "phone" => Some("phone"),
         _ => None,
     }
 }
@@ -519,7 +518,6 @@ fn normalize_login_hint(channel: &str, raw: &str) -> Option<String> {
     }
     match channel {
         "email" => normalize_email(trimmed),
-        "phone" => normalize_phone(trimmed),
         _ => None,
     }
 }
@@ -528,24 +526,6 @@ fn normalize_email(raw: &str) -> Option<String> {
     let normalized = raw.trim().to_ascii_lowercase();
     let (local, domain) = normalized.split_once('@')?;
     if local.is_empty() || domain.is_empty() || !domain.contains('.') {
-        return None;
-    }
-    Some(normalized)
-}
-
-fn normalize_phone(raw: &str) -> Option<String> {
-    let mut normalized = String::new();
-    for (index, ch) in raw.trim().chars().enumerate() {
-        if ch.is_ascii_digit() {
-            normalized.push(ch);
-            continue;
-        }
-        if ch == '+' && index == 0 {
-            normalized.push(ch);
-        }
-    }
-    let digits = normalized.chars().filter(|ch| ch.is_ascii_digit()).count();
-    if digits < 7 || digits > 18 {
         return None;
     }
     Some(normalized)
@@ -560,22 +540,6 @@ fn mask_login_hint(channel: &str, normalized_login_hint: &str) -> String {
             let local_chars: Vec<char> = local.chars().collect();
             let visible = local_chars.iter().take(2).collect::<String>();
             format!("{visible}***@{domain}")
-        }
-        "phone" => {
-            let suffix: String = normalized_login_hint
-                .chars()
-                .rev()
-                .take(4)
-                .collect::<String>()
-                .chars()
-                .rev()
-                .collect();
-            let prefix = if normalized_login_hint.starts_with('+') {
-                "+"
-            } else {
-                ""
-            };
-            format!("{prefix}***{suffix}")
         }
         _ => "***".to_string(),
     }
@@ -621,18 +585,19 @@ mod tests {
     }
 
     #[test]
-    fn hosted_account_login_start_rejects_invalid_channel() {
+    fn hosted_account_login_start_rejects_phone_channel() {
         let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("invalid"))
             .expect("broker");
-        let response = broker.start_login(
-            DeploymentMode::HostedPublicJoin,
-            "telegram",
-            "user@example.com",
-        );
+        let response =
+            broker.start_login(DeploymentMode::HostedPublicJoin, "phone", "+1 415 555 0101");
         assert!(!response.ok);
         assert_eq!(
             response.error_code.as_deref(),
             Some("unsupported_login_channel")
+        );
+        assert_eq!(
+            response.error.as_deref(),
+            Some("login_channel must be email")
         );
     }
 
@@ -693,8 +658,11 @@ mod tests {
         let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("wrong-otp"))
             .expect("broker");
         let mut issuer = HostedPlayerSessionIssuer::default();
-        let start =
-            broker.start_login(DeploymentMode::HostedPublicJoin, "phone", "+1 415 555 0101");
+        let start = broker.start_login(
+            DeploymentMode::HostedPublicJoin,
+            "email",
+            "player@example.com",
+        );
         let challenge = start.challenge.expect("challenge");
         let response = broker.complete_login(
             DeploymentMode::HostedPublicJoin,

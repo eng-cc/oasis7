@@ -1,4 +1,4 @@
-# oasis7 hosted_public_join 托管身份 / 托管密钥与手机号邮箱登录（设计文档）
+# oasis7 hosted_public_join 托管身份 / 托管密钥与邮箱登录（设计文档）
 
 - 对应需求文档: `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
@@ -24,7 +24,7 @@
   - 对外可见: 静态网页、世界只读快照、guest/player session 入口、低风险 gameplay 输入
   - 不可见: operator control API、长期 signer、custody backend
 - `identity plane`
-  - 负责手机号/邮箱登录、OTP / magic link / passkey、device session、account recovery、rate limit
+  - 负责邮箱登录、OTP / magic link、device session、account recovery、rate limit
   - 输出: `hosted_account_id`, `device_session_id`, `player_session`
 - `custody plane`
   - 负责 `signer_ref`、托管签名、step-up 授权、风险策略、审计日志
@@ -112,7 +112,7 @@
 ## 9. Runtime / Viewer 对接原则
 - Runtime
   - 只校验 session、capability、签名证明和 `signer_ref` 绑定
-  - 不直接关心手机号或邮箱明文
+  - 不直接关心邮箱明文
   - `player_id -> entity` 绑定继续由 runtime 真值维护
 - Viewer
   - UI 上显示 `Oasis ID`、登录状态、custody mode、设备状态
@@ -140,7 +140,7 @@
   - `hosted_public_join` 已禁止 legacy host key bootstrap 直接进入 hosted mode
   - public player session / preview strong-auth contract 已存在
 - 当前未成立:
-  - hosted account / 手机号邮箱登录
+  - hosted account / 邮箱登录
   - managed custody sign lane
   - browser local private-key debt 清退
   - self-custody bind / transfer-out 正式能力

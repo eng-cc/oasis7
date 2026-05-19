@@ -147,37 +147,13 @@ function HostedLoginForm(props) {
     <div class="stack">
       <div class="control-grid">
         <div class="field">
-          <label for={props.channelId ?? "hosted-login-channel"}>
-            {tr(locale(), "登录渠道", "Login Channel")}
-          </label>
-          <select
-            id={props.channelId ?? "hosted-login-channel"}
-            value={core.state.hostedLogin.channel}
-            onChange={(event) => {
-              core.state.hostedLogin.channel = String(event.currentTarget.value || "email").trim() || "email";
-              core.state.hostedLogin.error = null;
-              core.state.hostedLogin.challengeId = null;
-              core.state.hostedLogin.maskedLoginHint = null;
-              core.state.hostedLogin.deliveryMode = null;
-              core.state.hostedLogin.previewCode = null;
-              core.state.hostedLogin.code = "";
-              core.state.hostedLogin.expiresAtUnixMs = null;
-              core.state.hostedLogin.accountExists = false;
-              core.requestRender();
-            }}
-          >
-            <option value="email">{tr(locale(), "邮箱", "Email")}</option>
-            <option value="phone">{tr(locale(), "手机号", "Phone")}</option>
-          </select>
-        </div>
-        <div class="field">
           <label for={props.handleId ?? "hosted-login-handle"}>
-            {tr(locale(), "手机号或邮箱", "Phone or Email")}
+            {tr(locale(), "邮箱", "Email")}
           </label>
           <input
             id={props.handleId ?? "hosted-login-handle"}
-            type="text"
-            autocomplete="off"
+            type="email"
+            autocomplete="email"
             value={core.state.hostedLogin.handle}
             onInput={(event) => {
               core.state.hostedLogin.handle = String(event.currentTarget.value || "");
