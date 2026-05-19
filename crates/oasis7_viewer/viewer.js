@@ -2222,7 +2222,7 @@ function hostedPlayerSessionStorageKey() {
   return `${HOSTED_PLAYER_SESSION_STORAGE_PREFIX}:${initialWsUrl()}`;
 }
 function persistHostedPlayerSession(auth) {
-  if (!auth?.available || !auth?.playerId || !auth?.publicKey || !auth?.privateKey || auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!auth?.available || !auth?.playerId || auth.source === "legacy_viewer_auth_bootstrap") {
     return;
   }
   try {
@@ -2234,8 +2234,6 @@ function persistHostedPlayerSession(auth) {
         loginChannel: auth.loginChannel || null,
         maskedLoginHint: auth.maskedLoginHint || null,
         deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
-        publicKey: auth.publicKey,
-        privateKey: auth.privateKey,
         releaseToken: auth.releaseToken || null,
         issuedAtUnixMs: auth.issuedAtUnixMs || null,
         sessionEpoch: auth.sessionEpoch || null
@@ -2261,14 +2259,25 @@ function resolveStoredHostedPlayerSession() {
     const playerId = String(parsed?.playerId || "").trim();
     const loginChannel = String(parsed?.loginChannel || parsed?.login_channel || "").trim();
     const maskedLoginHint = String(parsed?.maskedLoginHint || parsed?.masked_login_hint || "").trim();
-    const deviceSessionId = String(parsed?.deviceSessionId || parsed?.device_session_id || parsed?.releaseToken || "").trim();
-    const publicKey = String(parsed?.publicKey || "").trim().toLowerCase();
-    const privateKey = String(parsed?.privateKey || "").trim().toLowerCase();
     const releaseToken = String(parsed?.releaseToken || "").trim();
-    if (!playerId || !publicKey || !privateKey || !releaseToken) {
+    const deviceSessionId = String(parsed?.deviceSessionId || parsed?.device_session_id || parsed?.releaseToken || "").trim();
+    if (!playerId || !releaseToken) {
       clearHostedPlayerSession();
       return null;
     }
+    window.localStorage?.setItem(
+      hostedPlayerSessionStorageKey(),
+      JSON.stringify({
+        hostedAccountId: hostedAccountId || null,
+        playerId,
+        loginChannel: loginChannel || null,
+        maskedLoginHint: maskedLoginHint || null,
+        deviceSessionId: deviceSessionId || releaseToken,
+        releaseToken,
+        issuedAtUnixMs: parsed?.issuedAtUnixMs ?? null,
+        sessionEpoch: parsed?.sessionEpoch ?? null
+      })
+    );
     return {
       available: true,
       hostedAccountId: hostedAccountId || null,
@@ -2276,8 +2285,8 @@ function resolveStoredHostedPlayerSession() {
       loginChannel: loginChannel || null,
       maskedLoginHint: maskedLoginHint || null,
       deviceSessionId: deviceSessionId || releaseToken,
-      publicKey,
-      privateKey,
+      publicKey: null,
+      privateKey: null,
       releaseToken,
       error: null,
       revokeReason: null,
