@@ -30,11 +30,11 @@
 - 若把 player custody 与 node/governance signer 共用一套 trust domain，会让产品问题和协议级 custody 问题互相绑死。
 
 ## 1. Executive Summary
-- Problem Statement: `hosted_public_join` 已具备 `guest/player session`、公开 admission control 与 preview `strong_auth` 的第一层 contract，但代码真值仍停留在“无 hosted account、无邮箱登录、无托管密钥服务”的阶段。`crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs` 当前只签发 `player_id + release_token`，没有用户身份因子；`crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs` 仍依赖 `OASIS7_HOSTED_STRONG_AUTH_*` 环境变量和 `approval_code`；`crates/oasis7_viewer/software_safe.js` 还会把 hosted player `publicKey/privateKey/releaseToken` 写入 `localStorage`。如果继续要求用户自己保存或输入公私钥，`public join` 很难成为面向普通玩家的产品入口。
+- Problem Statement: `hosted_public_join` 现在已经补上了 hosted account 邮箱登录 broker 与 `device_session + in-memory session key` 恢复链路，普通玩家不再需要手抄浏览器本地私钥才能回到同一 `player_id`。但这套实现仍停留在 preview 边界：`crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs` 依然依赖 `OASIS7_HOSTED_STRONG_AUTH_*` + `approval_code`；登录 challenge 仍只有 `preview_inline/server_log_only` 两种 repo-owned transport；`signer_ref`、managed custody sign API、真实邮件投递、冻结/恢复策略和 self-custody upgrade 还没有进入正式后端 contract。如果不把这些缺口继续收完，`public join` 仍然不能被宣称为生产级 hosted wallet / custody 方案。
 - Proposed Solution: 为 `hosted_public_join` 正式冻结一套 producer-owned 的“托管身份 + 托管密钥 + 自托管升级”目标态。默认玩家路径改为 `guest -> hosted account -> managed player signer -> optional self-custody bind/transfer-out`：用户用邮箱验证码或 magic link 登录，浏览器只拿 `player_session` 与设备级短期密钥；长期玩家 signer 留在服务端 custody plane，由 KMS/HSM 或 KMS-wrapped sealed-key backend 保护，并通过 step-up auth + policy engine 出签。
 - Success Criteria:
   - SC-1: `hosted_public_join` 必须提供“不输入原始公钥私钥也能开始玩”的正式登录路径，默认支持邮箱登录。
-  - SC-2: 浏览器在 `hosted_public_join` 下不得再持有长期资产 signer、node signer 或可长期复用的明文私钥；当前 `localStorage` 持久化 `privateKey` 只能保留为 preview debt。
+  - SC-2: 浏览器在 `hosted_public_join` 下不得再持有长期资产 signer、node signer 或可长期复用的明文私钥；旧 `localStorage privateKey` 残留必须被清洗而不是恢复到运行态。
   - SC-3: 玩家身份必须拆成 `hosted_account_id`、`player_id`、`device_session_id`、`signer_ref` 四类真值，不再把 `player_id` 直接当成完整账户体系。
   - SC-4: 高风险动作必须支持 `managed custody sign` lane，并由 step-up auth、风险策略和审计日志共同放行；`main_token_transfer` 不得再停留在“blocked，但没有目标方案”的状态。
   - SC-5: 玩家默认不需要保存或输入原始公私钥；如需自托管，必须走显式的 `bind external wallet` 或 `transfer-out to self-custody` 流程，而不是把托管私钥直接回流到浏览器。
@@ -80,7 +80,7 @@
 - Acceptance Criteria:
   - AC-1: 专题必须明确 `hosted_account_id/player_id/device_session_id/signer_ref` 的职责分离，不再把 `player_id` 既当登录账户又当 signer。
   - AC-2: 专题必须明确邮箱登录是 hosted player 默认入口，而“输入公钥/私钥”不是默认 UX。
-  - AC-3: 专题必须明确当前 `hosted_public_join` 代码真值仍包含 browser `localStorage` 持久化 `privateKey` 的 preview debt，并把它标记为必须清退。
+  - AC-3: 专题必须明确 hosted 浏览器已经清退 `localStorage privateKey` 持久化，并改用 `device_session + in-memory ephemeral Ed25519` 恢复路径；旧缓存残留必须在读取时被清洗。
   - AC-4: 专题必须明确 `managed custody sign` lane 的动作范围，至少覆盖 `prompt_control_apply` / `prompt_control_rollback` / `main_token_transfer`。
   - AC-5: 专题必须明确托管身份只适用于 player plane；node / validator / governance signer 继续由独立 custody/governance 文档约束。
   - AC-6: 专题必须定义至少一个不回传托管私钥的 self-custody 升级路径。
@@ -124,7 +124,7 @@
   - 若 hosted account 已存在但 `player_id` 对应实体槽已被 runtime 占用，必须先走 rebind / operator arbitration，不能靠重复创建 signer 绕过 ownership。
 - Non-Functional Requirements:
   - NFR-P2P-029-1: 任何 hosted login、step-up、sign authorization、revoke、freeze 与 transfer-out 事件都必须有审计记录。
-  - NFR-P2P-029-2: 浏览器端不得持久化托管 signer 明文私钥；当前 `localStorage` 中的 `privateKey` 仅允许作为待清退 preview debt 被明确标注。
+  - NFR-P2P-029-2: 浏览器端不得持久化托管 signer 明文私钥；hosted 浏览器当前只允许落盘 `device_session` 级恢复材料，旧 `privateKey` 残留必须在读取时被清洗而不是继续恢复到运行态。
   - NFR-P2P-029-3: `identity broker` 与 `custody service` 必须是独立信任面；身份验证通过不等于自动拥有高风险出签能力。
   - NFR-P2P-029-4: `managed custody` 默认适用于 hosted player surface，不得被误扩展为 node/governance/validator signer 方案。
   - NFR-P2P-029-5: 用户默认看到的是 `Oasis ID` / 账户状态 / custody mode，而不是原始公钥命名。

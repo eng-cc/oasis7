@@ -3120,14 +3120,17 @@ async function startHostedAccountLogin() {
   state.hostedLogin.error = null;
   render();
   try {
-    const query = new URLSearchParams({
-      channel,
-      handle
-    });
-    const response = await fetch(`${HOSTED_ACCOUNT_LOGIN_START_ROUTE}?${query.toString()}`, {
+    const response = await fetch(HOSTED_ACCOUNT_LOGIN_START_ROUTE, {
       method: "POST",
       cache: "no-store",
-      headers: { Accept: "application/json" }
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        channel,
+        handle
+      })
     });
     const payload = await response.json();
     if (!response.ok || !payload?.ok || !payload?.challenge?.challenge_id) {
@@ -3139,7 +3142,7 @@ async function startHostedAccountLogin() {
     state.hostedLogin.previewCode = String(payload.challenge.preview_code || "").trim() || null;
     state.hostedLogin.code = state.hostedLogin.previewCode || "";
     state.hostedLogin.expiresAtUnixMs = payload?.challenge?.expires_at_unix_ms == null ? null : Number(payload.challenge.expires_at_unix_ms);
-    state.hostedLogin.accountExists = payload?.challenge?.account_exists === true;
+    state.hostedLogin.accountExists = false;
     state.hostedLogin.startInFlight = false;
     state.hostedLogin.completeInFlight = false;
     state.hostedLogin.error = null;
@@ -3175,14 +3178,17 @@ async function completeHostedAccountLogin() {
   state.auth.error = null;
   render();
   try {
-    const query = new URLSearchParams({
-      challenge_id: challengeId,
-      otp_code: otpCode
-    });
-    const response = await fetch(`${HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE}?${query.toString()}`, {
+    const response = await fetch(HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE, {
       method: "POST",
       cache: "no-store",
-      headers: { Accept: "application/json" }
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        challenge_id: challengeId,
+        otp_code: otpCode
+      })
     });
     const payload = await response.json();
     if (!response.ok || !payload?.ok || !payload?.grant?.player_id || !payload?.account?.hosted_account_id) {
@@ -3286,7 +3292,7 @@ async function requestHostedStrongAuthGrant(actionId, agentId) {
   return payload.grant;
 }
 function sendReconnectSync() {
-  if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap" || !authHasSigningKeyMaterial(state.auth)) {
     return;
   }
   state.auth.syncInFlight = true;
@@ -3407,10 +3413,11 @@ async function logoutHostedPlayerSession() {
   }
   return { ok: true };
 }
-function syncHostedPlayerSessionOnConnect() {
+async function syncHostedPlayerSessionOnConnect() {
   if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap" || state.auth.syncInFlight) {
     return;
   }
+  await ensureHostedAuthSigningKey(state.auth);
   sendReconnectSync();
 }
 function clearPendingSessionRegisterWaiter(error = null) {

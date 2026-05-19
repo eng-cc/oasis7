@@ -15,13 +15,29 @@ use super::hosted_strong_auth::{
 };
 use super::runtime_presence::query_runtime_bound_players;
 use super::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+#[derive(Debug, Default, Deserialize)]
+struct HostedAccountLoginStartRequest {
+    #[serde(default)]
+    channel: String,
+    #[serde(default)]
+    handle: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct HostedAccountLoginCompleteRequest {
+    #[serde(default)]
+    challenge_id: String,
+    #[serde(default)]
+    otp_code: String,
+}
 
 pub(super) fn handle_http_connection(
     mut stream: TcpStream,
@@ -54,6 +70,7 @@ pub(super) fn handle_http_connection(
     let mut parts = line.split_whitespace();
     let method = parts.next().unwrap_or("");
     let target = parts.next().unwrap_or("");
+    let request_body = extract_request_body(request.as_ref());
 
     let head_only = method.eq_ignore_ascii_case("HEAD");
     let path_only = target.split('?').next().unwrap_or(target);
@@ -72,12 +89,18 @@ pub(super) fn handle_http_connection(
         || is_login_start_route
         || is_login_complete_route
         || is_strong_auth_grant_route;
-    let allow_post =
+    let post_only_route =
         is_release_route || is_refresh_route || is_login_start_route || is_login_complete_route;
-    if !method.eq_ignore_ascii_case("GET")
-        && !head_only
-        && !(allow_post && method.eq_ignore_ascii_case("POST"))
-    {
+    let head_mutation_route = is_issue_route
+        || is_release_route
+        || is_refresh_route
+        || is_login_start_route
+        || is_login_complete_route
+        || is_strong_auth_grant_route;
+    let get_allowed = method.eq_ignore_ascii_case("GET") && !post_only_route;
+    let post_allowed = method.eq_ignore_ascii_case("POST") && post_only_route;
+    let head_allowed = head_only && !head_mutation_route;
+    if !get_allowed && !post_allowed && !head_allowed {
         write_http_response(&mut stream, 405, "text/plain", b"Method Not Allowed", false)
             .map_err(|err| format!("failed to write 405 response: {err}"))?;
         return Ok(());
@@ -124,8 +147,17 @@ pub(super) fn handle_http_connection(
         return Ok(());
     }
     if is_login_start_route {
-        let login_channel = parse_query_value(target, "channel").unwrap_or_default();
-        let login_hint = parse_query_value(target, "handle").unwrap_or_default();
+        let payload = parse_login_start_request(request_body).unwrap_or_default();
+        let login_channel = if payload.channel.trim().is_empty() {
+            parse_query_value(target, "channel").unwrap_or_default()
+        } else {
+            payload.channel
+        };
+        let login_hint = if payload.handle.trim().is_empty() {
+            parse_query_value(target, "handle").unwrap_or_default()
+        } else {
+            payload.handle
+        };
         let response = start_hosted_account_login(
             deployment_mode,
             login_channel.as_str(),
@@ -137,8 +169,17 @@ pub(super) fn handle_http_connection(
         return Ok(());
     }
     if is_login_complete_route {
-        let challenge_id = parse_query_value(target, "challenge_id").unwrap_or_default();
-        let otp_code = parse_query_value(target, "otp_code").unwrap_or_default();
+        let payload = parse_login_complete_request(request_body).unwrap_or_default();
+        let challenge_id = if payload.challenge_id.trim().is_empty() {
+            parse_query_value(target, "challenge_id").unwrap_or_default()
+        } else {
+            payload.challenge_id
+        };
+        let otp_code = if payload.otp_code.trim().is_empty() {
+            parse_query_value(target, "otp_code").unwrap_or_default()
+        } else {
+            payload.otp_code
+        };
         let response = complete_hosted_account_login(
             deployment_mode,
             challenge_id.as_str(),
@@ -325,6 +366,30 @@ fn issue_strong_auth_grant(
         release_token,
         &mut issuer,
     ))
+}
+
+fn extract_request_body(request: &str) -> &str {
+    request
+        .split_once("\r\n\r\n")
+        .map(|(_, body)| body)
+        .or_else(|| request.split_once("\n\n").map(|(_, body)| body))
+        .unwrap_or("")
+}
+
+fn parse_login_start_request(body: &str) -> Option<HostedAccountLoginStartRequest> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    serde_json::from_str(trimmed).ok()
+}
+
+fn parse_login_complete_request(body: &str) -> Option<HostedAccountLoginCompleteRequest> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    serde_json::from_str(trimmed).ok()
 }
 
 fn parse_query_value(target: &str, key: &str) -> Option<String> {
