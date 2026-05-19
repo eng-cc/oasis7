@@ -1,4 +1,5 @@
 use super::hosted_access::DeploymentMode;
+use super::hosted_account_store_backend::{HostedAccountRecord, HostedAccountStoreBackend};
 use super::hosted_player_session::{
     HostedPlayerSessionAdmissionSnapshot, HostedPlayerSessionIssueGrant,
     HostedPlayerSessionIssueResponse, HostedPlayerSessionIssuer,
@@ -8,19 +9,15 @@ use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use rand_core::{OsRng, RngCore};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::{BTreeMap, VecDeque};
-use std::fs;
-use std::io::Write;
-#[cfg(unix)]
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(super) const HOSTED_ACCOUNT_LOGIN_START_ROUTE: &str = "/api/public/hosted-account/login/start";
 pub(super) const HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE: &str =
     "/api/public/hosted-account/login/complete";
-const HOSTED_ACCOUNT_STORE_PATH_ENV: &str = "OASIS7_HOSTED_ACCOUNT_STORE_PATH";
 const HOSTED_LOGIN_DELIVERY_MODE_ENV: &str = "OASIS7_HOSTED_LOGIN_DELIVERY_MODE";
 const HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE: &str = "preview_inline";
 const HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY: &str = "server_log_only";
@@ -95,8 +92,7 @@ pub(super) struct HostedAccountLoginChallengeSnapshot {
 
 #[derive(Debug)]
 pub(super) struct HostedAccountIdentityBroker {
-    store_path: PathBuf,
-    store: HostedAccountStore,
+    store_backend: HostedAccountStoreBackend,
     delivery_mode: String,
     smtp_config: Option<HostedLoginSmtpConfig>,
     next_challenge_sequence: u64,
@@ -150,30 +146,8 @@ enum HostedLoginDeliveryPlan {
     SmtpUnavailable,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct HostedAccountStore {
-    next_account_sequence: u64,
-    next_player_sequence: u64,
-    accounts_by_id: BTreeMap<String, HostedAccountRecord>,
-    account_id_by_factor: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct HostedAccountRecord {
-    hosted_account_id: String,
-    player_id: String,
-    login_channel: String,
-    normalized_login_hint: String,
-    masked_login_hint: String,
-    status: String,
-    created_at_unix_ms: u64,
-    last_verified_at_unix_ms: u64,
-}
-
 impl HostedAccountIdentityBroker {
     pub(super) fn from_env() -> Result<Self, String> {
-        let store_path = resolve_store_path();
-        let store = load_store(store_path.as_path())?;
         let delivery_mode = normalize_delivery_mode(
             std::env::var(HOSTED_LOGIN_DELIVERY_MODE_ENV)
                 .ok()
@@ -185,8 +159,7 @@ impl HostedAccountIdentityBroker {
             None
         };
         Ok(Self {
-            store_path,
-            store,
+            store_backend: HostedAccountStoreBackend::from_env()?,
             delivery_mode,
             smtp_config,
             next_challenge_sequence: 0,
@@ -198,10 +171,8 @@ impl HostedAccountIdentityBroker {
 
     #[cfg(test)]
     fn with_store_path(store_path: PathBuf) -> Result<Self, String> {
-        let store = load_store(store_path.as_path())?;
         Ok(Self {
-            store_path,
-            store,
+            store_backend: HostedAccountStoreBackend::with_file_store_path(store_path)?,
             delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
             smtp_config: None,
             next_challenge_sequence: 0,
@@ -213,8 +184,7 @@ impl HostedAccountIdentityBroker {
 
     pub(super) fn disabled() -> Self {
         Self {
-            store_path: PathBuf::new(),
-            store: HostedAccountStore::default(),
+            store_backend: HostedAccountStoreBackend::disabled(),
             delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
             smtp_config: None,
             next_challenge_sequence: 0,
@@ -468,61 +438,34 @@ impl HostedAccountIdentityBroker {
             challenge.normalized_login_hint.as_str(),
         );
         let verified_at_unix_ms = now_unix_ms();
-        let account_id = self
-            .store
-            .account_id_by_factor
-            .get(factor_key.as_str())
-            .cloned()
-            .unwrap_or_else(|| {
-                self.store.next_account_sequence =
-                    self.store.next_account_sequence.saturating_add(1);
-                build_hosted_account_id(self.store.next_account_sequence)
-            });
-        let player_id = if let Some(record) = self.store.accounts_by_id.get_mut(account_id.as_str())
-        {
-            record.last_verified_at_unix_ms = verified_at_unix_ms;
-            record.status = "active".to_string();
-            record.player_id.clone()
-        } else {
-            self.store.next_player_sequence = self.store.next_player_sequence.saturating_add(1);
-            let player_id = build_hosted_player_id(self.store.next_player_sequence);
-            self.store.accounts_by_id.insert(
-                account_id.clone(),
-                HostedAccountRecord {
-                    hosted_account_id: account_id.clone(),
-                    player_id: player_id.clone(),
-                    login_channel: challenge.login_channel.clone(),
-                    normalized_login_hint: challenge.normalized_login_hint.clone(),
-                    masked_login_hint: challenge.masked_login_hint.clone(),
-                    status: "active".to_string(),
-                    created_at_unix_ms: verified_at_unix_ms,
-                    last_verified_at_unix_ms: verified_at_unix_ms,
-                },
-            );
-            self.store
-                .account_id_by_factor
-                .insert(factor_key, account_id.clone());
-            player_id
+        let record = match self.store_backend.record_verified_login(
+            factor_key.as_str(),
+            challenge.login_channel.as_str(),
+            challenge.normalized_login_hint.as_str(),
+            challenge.masked_login_hint.as_str(),
+            verified_at_unix_ms,
+        ) {
+            Ok(record) => record,
+            Err(err) => {
+                return HostedAccountLoginCompleteResponse {
+                    ok: false,
+                    error_code: Some("account_store_persist_failed".to_string()),
+                    error: Some(err),
+                    deployment_mode: deployment_mode.as_str().to_string(),
+                    account: None,
+                    grant: None,
+                    admission: None,
+                };
+            }
         };
-        if let Err(err) = save_store(self.store_path.as_path(), &self.store) {
-            return HostedAccountLoginCompleteResponse {
-                ok: false,
-                error_code: Some("account_store_persist_failed".to_string()),
-                error: Some(err),
-                deployment_mode: deployment_mode.as_str().to_string(),
-                account: None,
-                grant: None,
-                admission: None,
-            };
-        }
-        let issue = issuer.issue_for_player(deployment_mode, player_id.as_str());
-        let account = self
-            .store
-            .accounts_by_id
-            .get(account_id.as_str())
-            .cloned()
-            .map(account_summary_from_record);
+        let issue = issuer.issue_for_player(deployment_mode, record.player_id.as_str());
+        let account = Some(account_summary_from_record(&record));
         response_from_issue(deployment_mode, issue, account)
+    }
+
+    #[cfg(test)]
+    fn persisted_account_count(&self) -> usize {
+        self.store_backend.debug_account_count()
     }
 
     fn prune_expired_challenges(&mut self) {
@@ -772,95 +715,14 @@ fn response_from_issue(
     }
 }
 
-fn account_summary_from_record(record: HostedAccountRecord) -> HostedAccountSummary {
+fn account_summary_from_record(record: &HostedAccountRecord) -> HostedAccountSummary {
     HostedAccountSummary {
-        hosted_account_id: record.hosted_account_id,
-        player_id: record.player_id,
-        login_channel: record.login_channel,
-        masked_login_hint: record.masked_login_hint,
-        status: record.status,
+        hosted_account_id: record.hosted_account_id.clone(),
+        player_id: record.player_id.clone(),
+        login_channel: record.login_channel.clone(),
+        masked_login_hint: record.masked_login_hint.clone(),
+        status: record.status.clone(),
         last_verified_at_unix_ms: record.last_verified_at_unix_ms,
-    }
-}
-
-fn resolve_store_path() -> PathBuf {
-    if let Ok(raw) = std::env::var(HOSTED_ACCOUNT_STORE_PATH_ENV) {
-        let trimmed = raw.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
-        }
-    }
-    std::env::current_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(".oasis7-hosted-account-store.json")
-}
-
-fn load_store(path: &Path) -> Result<HostedAccountStore, String> {
-    if !path.exists() {
-        return Ok(HostedAccountStore::default());
-    }
-    let raw = fs::read_to_string(path).map_err(|err| {
-        format!(
-            "failed to read hosted account store `{}`: {err}",
-            path.display()
-        )
-    })?;
-    serde_json::from_str(raw.as_str()).map_err(|err| {
-        format!(
-            "failed to parse hosted account store `{}`: {err}",
-            path.display()
-        )
-    })
-}
-
-fn save_store(path: &Path, store: &HostedAccountStore) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "failed to create hosted account store directory `{}`: {err}",
-                parent.display()
-            )
-        })?;
-    }
-    let raw = serde_json::to_string_pretty(store)
-        .map_err(|err| format!("failed to serialize hosted account store: {err}"))?;
-    #[cfg(unix)]
-    {
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .mode(0o600)
-            .open(path)
-            .map_err(|err| {
-                format!(
-                    "failed to open hosted account store `{}`: {err}",
-                    path.display()
-                )
-            })?;
-        file.write_all(raw.as_bytes()).map_err(|err| {
-            format!(
-                "failed to write hosted account store `{}`: {err}",
-                path.display()
-            )
-        })?;
-        file.set_permissions(fs::Permissions::from_mode(0o600))
-            .map_err(|err| {
-                format!(
-                    "failed to secure hosted account store permissions `{}`: {err}",
-                    path.display()
-                )
-            })?;
-        return Ok(());
-    }
-    #[cfg(not(unix))]
-    {
-        fs::write(path, raw).map_err(|err| {
-            format!(
-                "failed to write hosted account store `{}`: {err}",
-                path.display()
-            )
-        })
     }
 }
 
@@ -991,14 +853,6 @@ fn build_login_otp_code(
     let mut prefix = [0u8; 8];
     prefix.copy_from_slice(&digest.as_bytes()[..8]);
     format!("{:06}", u64::from_le_bytes(prefix) % 1_000_000)
-}
-
-fn build_hosted_account_id(sequence: u64) -> String {
-    format!("oasis-account-{sequence:08x}")
-}
-
-fn build_hosted_player_id(sequence: u64) -> String {
-    format!("hosted-player-account-{sequence:08x}")
 }
 
 fn now_unix_ms() -> u64 {

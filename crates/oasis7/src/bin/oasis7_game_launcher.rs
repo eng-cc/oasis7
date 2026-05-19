@@ -22,6 +22,8 @@ mod cli;
 mod hosted_access;
 #[path = "oasis7_game_launcher/hosted_account_identity.rs"]
 mod hosted_account_identity;
+#[path = "oasis7_game_launcher/hosted_account_store_backend.rs"]
+mod hosted_account_store_backend;
 #[path = "oasis7_game_launcher/hosted_player_session.rs"]
 mod hosted_player_session;
 #[path = "oasis7_game_launcher/hosted_strong_auth.rs"]
