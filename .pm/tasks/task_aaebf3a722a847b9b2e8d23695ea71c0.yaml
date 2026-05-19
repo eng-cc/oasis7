@@ -13,11 +13,12 @@ source_refs:
   - doc/world-simulator/viewer/viewer-manual.md
 doc_refs: []
 related_prd:
+  - PRD-ENGINEERING-015
   - PRD-ENGINEERING-025
 acceptance:
   - "legacy redirect pages no longer carry duplicated manual body"
   - "world-simulator README remains the primary landing selector while prd.index returns to index-first role"
 handoff_to: []
-updated_at: 2026-05-18T20:35:43+08:00
+updated_at: 2026-05-19T09:33:31+08:00
 last_started_at: 2026-05-18T20:28:49+08:00
 last_closed_at: 2026-05-18T20:35:43+08:00
