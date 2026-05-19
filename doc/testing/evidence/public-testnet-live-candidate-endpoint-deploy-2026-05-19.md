@@ -59,7 +59,7 @@
   - `active`
 - `/v1/chain/status` 关键字段:
   - `world_id=oasis7-public-testnet-parallel-20260518`
-  - `role=sequencer`
+  - `role=storage`
   - `last_error=null`
   - `network_tier.tier=public_testnet`
   - `network_tier.status=rehearsal`

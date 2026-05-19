@@ -9,7 +9,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey};
 use oasis7_distfs::{
     public_key_hex_from_signing_key_hex, sign_feedback_create_request, FeedbackCreateRequest,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 
 #[path = "tests_action_payload_consensus_auth.rs"]

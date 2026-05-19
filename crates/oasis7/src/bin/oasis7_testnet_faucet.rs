@@ -16,11 +16,20 @@ use oasis7::runtime::{
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
+#[path = "oasis7_testnet_faucet_support.rs"]
+mod faucet_support;
+
+use faucet_support::{
+    faucet_claim_status_code, prune_faucet_state_trackers, prune_tracker_map,
+    rollback_claim_reservation, ClaimReservation,
+};
+
 const DEFAULT_CLAIM_PATH: &str = "/claim";
 const DEFAULT_INFO_PATH: &str = "/";
 const DEFAULT_HEALTH_PATH: &str = "/healthz";
 const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 10;
 const DEFAULT_COOLDOWN_SECS: u64 = 24 * 60 * 60;
+const MAX_TRACKED_FAUCET_CLAIMANTS: usize = 4096;
 
 #[derive(Debug, Clone)]
 enum Command {
@@ -657,11 +666,52 @@ impl FaucetService {
                 )?;
             }
             ("POST", DEFAULT_CLAIM_PATH) => {
-                let body = extract_http_json_body(&buffer[..bytes])?;
-                let request: FaucetClaimRequest = serde_json::from_slice(body)
-                    .map_err(|err| format!("invalid faucet claim request: {err}"))?;
-                let response = self.process_claim(request, remote_ip.as_str())?;
-                write_json_response(&mut stream, if response.ok { 200 } else { 429 }, &response)?;
+                let body = match extract_http_json_body(&buffer[..bytes]) {
+                    Ok(body) => body,
+                    Err(err) => {
+                        write_json_response(
+                            &mut stream,
+                            400,
+                            &serde_json::json!({
+                                "ok": false,
+                                "error_code": "bad_request",
+                                "error": err,
+                            }),
+                        )?;
+                        return Ok(());
+                    }
+                };
+                let request: FaucetClaimRequest = match serde_json::from_slice(body) {
+                    Ok(request) => request,
+                    Err(err) => {
+                        write_json_response(
+                            &mut stream,
+                            400,
+                            &serde_json::json!({
+                                "ok": false,
+                                "error_code": "bad_request",
+                                "error": format!("invalid faucet claim request: {err}"),
+                            }),
+                        )?;
+                        return Ok(());
+                    }
+                };
+                let response = match self.process_claim(request, remote_ip.as_str()) {
+                    Ok(response) => response,
+                    Err(err) => {
+                        write_json_response(
+                            &mut stream,
+                            500,
+                            &serde_json::json!({
+                                "ok": false,
+                                "error_code": "internal_error",
+                                "error": err,
+                            }),
+                        )?;
+                        return Ok(());
+                    }
+                };
+                write_json_response(&mut stream, faucet_claim_status_code(&response), &response)?;
             }
             _ => {
                 write_json_response(
@@ -679,96 +729,156 @@ impl FaucetService {
         request: FaucetClaimRequest,
         remote_ip: &str,
     ) -> Result<FaucetClaimResponse, String> {
-        let target_account_id = validate_target_account_id(request.account_id.as_str())?;
+        let target_account_id = match validate_target_account_id(request.account_id.as_str()) {
+            Ok(account_id) => account_id,
+            Err(err) => {
+                return Ok(self.claim_error_response(
+                    "bad_request",
+                    format!("invalid faucet target account: {err}"),
+                ));
+            }
+        };
         let now_ms = now_unix_ms();
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| "lock faucet state failed".to_string())?;
         let cooldown_ms = i64::try_from(self.options.cooldown_secs)
             .unwrap_or(i64::MAX)
             .saturating_mul(1000);
-        if let Some(last_ms) = state
-            .last_account_claim_unix_ms
-            .get(target_account_id.as_str())
         {
-            if now_ms.saturating_sub(*last_ms) < cooldown_ms {
-                return Ok(FaucetClaimResponse {
-                    ok: false,
-                    faucet_account_id: self.faucet_account_id.clone(),
-                    amount: self.options.amount,
-                    cooldown_secs: self.options.cooldown_secs,
-                    action_id: None,
-                    submitted_at_unix_ms: None,
-                    error_code: Some("cooldown_active".to_string()),
-                    error: Some(format!(
-                        "account is still in cooldown: account_id={target_account_id}"
-                    )),
-                });
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| "lock faucet state failed".to_string())?;
+            prune_faucet_state_trackers(&mut state, now_ms, cooldown_ms);
+            if let Some(cooldown_response) = self.cooldown_response(
+                &state,
+                target_account_id.as_str(),
+                remote_ip,
+                now_ms,
+                cooldown_ms,
+            ) {
+                return Ok(cooldown_response);
             }
         }
-        if let Some(last_ms) = state.last_ip_claim_unix_ms.get(remote_ip) {
-            if now_ms.saturating_sub(*last_ms) < cooldown_ms {
-                return Ok(FaucetClaimResponse {
-                    ok: false,
-                    faucet_account_id: self.faucet_account_id.clone(),
-                    amount: self.options.amount,
-                    cooldown_secs: self.options.cooldown_secs,
-                    action_id: None,
-                    submitted_at_unix_ms: None,
-                    error_code: Some("ip_cooldown_active".to_string()),
-                    error: Some(format!("ip is still in cooldown: ip={remote_ip}")),
-                });
-            }
-        }
-        let snapshot = fetch_faucet_account_snapshot(
+        let snapshot = match fetch_faucet_account_snapshot(
             &self.client,
             self.options.upstream.as_str(),
             self.faucet_account_id.as_str(),
-        )?;
+        ) {
+            Ok(snapshot) => snapshot,
+            Err(err) => {
+                return Ok(self.claim_error_response(
+                    "upstream_unavailable",
+                    format!("fetch faucet account snapshot failed: {err}"),
+                ));
+            }
+        };
         if snapshot.liquid_balance < self.options.amount {
-            return Ok(FaucetClaimResponse {
-                ok: false,
-                faucet_account_id: self.faucet_account_id.clone(),
-                amount: self.options.amount,
-                cooldown_secs: self.options.cooldown_secs,
-                action_id: None,
-                submitted_at_unix_ms: None,
-                error_code: Some("insufficient_balance".to_string()),
-                error: Some(format!(
+            return Ok(self.claim_error_response(
+                "insufficient_balance",
+                format!(
                     "faucet balance too low: liquid_balance={} amount={}",
                     snapshot.liquid_balance, self.options.amount
-                )),
-            });
+                ),
+            ));
         }
-        let nonce = state
-            .next_nonce
-            .unwrap_or(snapshot.next_nonce_hint)
-            .max(snapshot.next_nonce_hint);
-        let transfer_request = build_signed_transfer_request(
+        let (nonce, reservation) = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| "lock faucet state failed".to_string())?;
+            prune_faucet_state_trackers(&mut state, now_ms, cooldown_ms);
+            if let Some(cooldown_response) = self.cooldown_response(
+                &state,
+                target_account_id.as_str(),
+                remote_ip,
+                now_ms,
+                cooldown_ms,
+            ) {
+                return Ok(cooldown_response);
+            }
+            let nonce = state
+                .next_nonce
+                .unwrap_or(snapshot.next_nonce_hint)
+                .max(snapshot.next_nonce_hint);
+            let previous_next_nonce = state.next_nonce;
+            let reserved_next_nonce = nonce.saturating_add(1);
+            state.next_nonce = Some(reserved_next_nonce);
+            let previous_account_claim_ms = state
+                .last_account_claim_unix_ms
+                .insert(target_account_id.clone(), now_ms);
+            let previous_ip_claim_ms = state
+                .last_ip_claim_unix_ms
+                .insert(remote_ip.to_string(), now_ms);
+            (
+                nonce,
+                ClaimReservation {
+                    previous_next_nonce,
+                    reserved_next_nonce,
+                    previous_account_claim_ms,
+                    previous_ip_claim_ms,
+                },
+            )
+        };
+        let transfer_request = match build_signed_transfer_request(
             self.faucet_account_id.as_str(),
             target_account_id.as_str(),
             self.options.amount,
             nonce,
             self.options.faucet_public_key.as_str(),
             self.options.faucet_private_key.as_str(),
-        )?;
-        let response: ChainTransferSubmitResponse = post_json(
+        ) {
+            Ok(request) => request,
+            Err(err) => {
+                let mut state = self
+                    .state
+                    .lock()
+                    .map_err(|_| "lock faucet state failed".to_string())?;
+                rollback_claim_reservation(
+                    &mut state,
+                    target_account_id.as_str(),
+                    remote_ip,
+                    now_ms,
+                    &reservation,
+                );
+                return Err(err);
+            }
+        };
+        let response: ChainTransferSubmitResponse = match post_json(
             &self.client,
             self.options.upstream.as_str(),
             "/v1/chain/transfer/submit",
             &transfer_request,
-        )?;
-        if response.ok {
-            state.next_nonce = Some(nonce.saturating_add(1));
-            state
-                .last_account_claim_unix_ms
-                .insert(target_account_id.clone(), now_ms);
-            state
-                .last_ip_claim_unix_ms
-                .insert(remote_ip.to_string(), now_ms);
-        } else if response.error_code.as_deref() == Some("nonce_replay") {
-            state.next_nonce = None;
+        ) {
+            Ok(response) => response,
+            Err(err) => {
+                let mut state = self
+                    .state
+                    .lock()
+                    .map_err(|_| "lock faucet state failed".to_string())?;
+                rollback_claim_reservation(
+                    &mut state,
+                    target_account_id.as_str(),
+                    remote_ip,
+                    now_ms,
+                    &reservation,
+                );
+                return Ok(self.claim_error_response(
+                    "upstream_unavailable",
+                    format!("submit faucet transfer failed: {err}"),
+                ));
+            }
+        };
+        if !response.ok {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| "lock faucet state failed".to_string())?;
+            rollback_claim_reservation(
+                &mut state,
+                target_account_id.as_str(),
+                remote_ip,
+                now_ms,
+                &reservation,
+            );
         }
         Ok(FaucetClaimResponse {
             ok: response.ok,
@@ -780,6 +890,46 @@ impl FaucetService {
             error_code: response.error_code,
             error: response.error,
         })
+    }
+
+    fn claim_error_response(&self, error_code: &str, error: String) -> FaucetClaimResponse {
+        FaucetClaimResponse {
+            ok: false,
+            faucet_account_id: self.faucet_account_id.clone(),
+            amount: self.options.amount,
+            cooldown_secs: self.options.cooldown_secs,
+            action_id: None,
+            submitted_at_unix_ms: None,
+            error_code: Some(error_code.to_string()),
+            error: Some(error),
+        }
+    }
+
+    fn cooldown_response(
+        &self,
+        state: &FaucetState,
+        target_account_id: &str,
+        remote_ip: &str,
+        now_ms: i64,
+        cooldown_ms: i64,
+    ) -> Option<FaucetClaimResponse> {
+        if let Some(last_ms) = state.last_account_claim_unix_ms.get(target_account_id) {
+            if now_ms.saturating_sub(*last_ms) < cooldown_ms {
+                return Some(self.claim_error_response(
+                    "cooldown_active",
+                    format!("account is still in cooldown: account_id={target_account_id}"),
+                ));
+            }
+        }
+        if let Some(last_ms) = state.last_ip_claim_unix_ms.get(remote_ip) {
+            if now_ms.saturating_sub(*last_ms) < cooldown_ms {
+                return Some(self.claim_error_response(
+                    "ip_cooldown_active",
+                    format!("ip is still in cooldown: ip={remote_ip}"),
+                ));
+            }
+        }
+        None
     }
 }
 
@@ -901,6 +1051,8 @@ fn write_json_response<T: Serialize>(
         400 => "HTTP/1.1 400 Bad Request",
         404 => "HTTP/1.1 404 Not Found",
         429 => "HTTP/1.1 429 Too Many Requests",
+        502 => "HTTP/1.1 502 Bad Gateway",
+        503 => "HTTP/1.1 503 Service Unavailable",
         _ => "HTTP/1.1 500 Internal Server Error",
     };
     let headers = format!(
@@ -986,3 +1138,7 @@ fn print_help() {
         "Usage:\n  oasis7_testnet_faucet serve --listen <host:port> --upstream <base_url> --faucet-public-key[-file] <value> --faucet-private-key[-file] <value> --amount <u64> [--cooldown-secs <u64>] [--request-timeout-secs <u64>]\n  oasis7_testnet_faucet submit-genesis --upstream <base_url> --threshold <u16> --signer-public-key[-file] <value> --signer-private-key[-file] <value> --bucket-id <id> --recipient <account_id> [--controller-account-id <id>] [--ratio-bps <u32>] [--cliff-epochs <u64>] [--linear-unlock-epochs <u64>] [--start-epoch <u64>]\n  oasis7_testnet_faucet claim-vesting --upstream <base_url> --bucket-id <id> --beneficiary <account_id> --nonce <u64> --public-key[-file] <value> --private-key[-file] <value>"
     );
 }
+
+#[cfg(test)]
+#[path = "oasis7_testnet_faucet_tests.rs"]
+mod tests;
