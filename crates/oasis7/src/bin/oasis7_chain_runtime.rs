@@ -46,6 +46,8 @@ mod feedback_submit_api;
 mod gameplay_submit_api;
 #[path = "oasis7_chain_runtime/governance_registry.rs"]
 mod governance_registry;
+#[path = "oasis7_chain_runtime/main_token_submit_api.rs"]
+mod main_token_submit_api;
 #[path = "oasis7_chain_runtime/module_release_attestation_submit_api.rs"]
 mod module_release_attestation_submit_api;
 #[path = "oasis7_chain_runtime/node_keypair_config.rs"]

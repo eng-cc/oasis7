@@ -47,8 +47,17 @@ fn node_pos_config_from_world_finality_registry(
     registry: &GovernanceFinalitySignerRegistry,
     fallback: &NodePosConfig,
 ) -> NodePosConfig {
-    let validators = registry
+    let validator_signer_public_keys = registry
         .signer_bindings
+        .iter()
+        .map(|(binding_key, public_key_hex)| {
+            (
+                validator_id_from_registry_binding(registry.slot_id.as_str(), binding_key),
+                public_key_hex.clone(),
+            )
+        })
+        .collect::<BTreeMap<String, String>>();
+    let validators = validator_signer_public_keys
         .keys()
         .cloned()
         .map(|validator_id| PosValidator {
@@ -56,8 +65,7 @@ fn node_pos_config_from_world_finality_registry(
             stake: WORLD_REGISTRY_EQUAL_VALIDATOR_STAKE,
         })
         .collect::<Vec<PosValidator>>();
-    let validator_player_ids = registry
-        .signer_bindings
+    let validator_player_ids = validator_signer_public_keys
         .keys()
         .cloned()
         .map(|validator_id| (validator_id.clone(), validator_id))
@@ -65,7 +73,7 @@ fn node_pos_config_from_world_finality_registry(
     NodePosConfig {
         validators,
         validator_player_ids,
-        validator_signer_public_keys: registry.signer_bindings.clone(),
+        validator_signer_public_keys,
         supermajority_numerator: fallback.supermajority_numerator,
         supermajority_denominator: fallback.supermajority_denominator,
         epoch_length_slots: fallback.epoch_length_slots,
@@ -76,6 +84,15 @@ fn node_pos_config_from_world_finality_registry(
         slot_clock_genesis_unix_ms: fallback.slot_clock_genesis_unix_ms,
         max_past_slot_lag: fallback.max_past_slot_lag,
     }
+}
+
+fn validator_id_from_registry_binding(slot_id: &str, binding_key: &str) -> String {
+    let prefix = format!("{slot_id}.");
+    binding_key
+        .strip_prefix(prefix.as_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or(binding_key)
+        .to_string()
 }
 
 fn node_main_token_controller_binding_from_registry(
@@ -278,6 +295,58 @@ mod tests {
         assert_eq!(config.pos_config.slot_duration_ms, 12_000);
         assert_eq!(config.pos_config.ticks_per_slot, 10);
         assert_eq!(config.pos_config.proposal_tick_phase, 9);
+    }
+
+    #[test]
+    fn world_finality_registry_strips_slot_prefix_from_validator_ids() {
+        let temp_dir = temp_dir("finality-prefix-override");
+        let mut world = World::new();
+        world
+            .set_governance_finality_signer_registry(GovernanceFinalitySignerRegistry {
+                slot_id: "governance.finality.v1".to_string(),
+                threshold: 2,
+                threshold_bps: 0,
+                signer_bindings: BTreeMap::from([
+                    (
+                        "governance.finality.v1.triad-testnet-sequencer".to_string(),
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
+                    ),
+                    (
+                        "governance.finality.v1.triad-testnet-storage".to_string(),
+                        "2222222222222222222222222222222222222222222222222222222222222222"
+                            .to_string(),
+                    ),
+                ]),
+            })
+            .expect("set finality registry");
+        world.save_to_dir(&temp_dir).expect("save execution world");
+
+        let config = apply_world_governance_registry_overrides(
+            NodeConfig::new("triad-testnet-sequencer", "world-a", NodeRole::Sequencer)
+                .expect("node config"),
+            &temp_dir,
+        )
+        .expect("apply registry overrides");
+
+        let validator_ids = config
+            .pos_config
+            .validators
+            .iter()
+            .map(|validator| validator.validator_id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            validator_ids,
+            vec!["triad-testnet-sequencer", "triad-testnet-storage"]
+        );
+        assert_eq!(
+            config
+                .pos_config
+                .validator_signer_public_keys
+                .get("triad-testnet-sequencer")
+                .map(String::as_str),
+            Some("1111111111111111111111111111111111111111111111111111111111111111")
+        );
     }
 
     #[test]

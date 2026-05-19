@@ -119,13 +119,13 @@ struct LocalMainTokenActionSigningEnvelope<'a> {
 enum LocalMainTokenActionSigningPayload<'a> {
     TransferMainToken(LocalTransferMainTokenSigningData<'a>),
     ClaimMainTokenVesting(LocalClaimMainTokenVestingSigningData<'a>),
-    InitializeMainTokenGenesis(LocalInitializeMainTokenGenesisSigningData<'a>),
-    DistributeMainTokenTreasury(LocalDistributeMainTokenTreasurySigningData<'a>),
+    InitializeMainTokenGenesis(LocalInitializeMainTokenGenesisSigningData),
+    DistributeMainTokenTreasury(LocalDistributeMainTokenTreasurySigningData),
     TopUpRestrictedStarterClaimLiveopsPool(
         LocalTopUpRestrictedStarterClaimLiveopsPoolSigningData<'a>,
     ),
     UpdateRestrictedStarterClaimAdminRegistry(
-        LocalUpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
+        LocalUpdateRestrictedStarterClaimAdminRegistrySigningData,
     ),
 }
 
@@ -145,16 +145,16 @@ struct LocalClaimMainTokenVestingSigningData<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct LocalInitializeMainTokenGenesisSigningData<'a> {
-    allocations: &'a [JsonValue],
+struct LocalInitializeMainTokenGenesisSigningData {
+    allocations: Vec<LocalMainTokenGenesisAllocationPlan>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct LocalDistributeMainTokenTreasurySigningData<'a> {
+struct LocalDistributeMainTokenTreasurySigningData {
     proposal_id: u64,
-    distribution_id: &'a str,
-    bucket_id: &'a str,
-    distributions: &'a [JsonValue],
+    distribution_id: String,
+    bucket_id: String,
+    distributions: Vec<LocalMainTokenTreasuryDistribution>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -165,9 +165,25 @@ struct LocalTopUpRestrictedStarterClaimLiveopsPoolSigningData<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct LocalUpdateRestrictedStarterClaimAdminRegistrySigningData<'a> {
-    controller_account_id: &'a str,
-    next_admin_account_ids: &'a [JsonValue],
+struct LocalUpdateRestrictedStarterClaimAdminRegistrySigningData {
+    controller_account_id: String,
+    next_admin_account_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct LocalMainTokenGenesisAllocationPlan {
+    bucket_id: String,
+    ratio_bps: u32,
+    recipient: String,
+    cliff_epochs: u64,
+    linear_unlock_epochs: u64,
+    start_epoch: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct LocalMainTokenTreasuryDistribution {
+    account_id: String,
+    amount: u64,
 }
 
 impl fmt::Debug for NodeRuntime {
@@ -656,11 +672,12 @@ fn build_local_main_token_action_signing_action(
         "InitializeMainTokenGenesis" => Ok(
             LocalMainTokenActionSigningPayload::InitializeMainTokenGenesis(
                 LocalInitializeMainTokenGenesisSigningData {
-                    allocations: data
-                        .get("allocations")
-                        .and_then(JsonValue::as_array)
-                        .map(Vec::as_slice)
-                        .ok_or_else(|| "genesis action missing allocations".to_string())?,
+                    allocations: serde_json::from_value(
+                        data.get("allocations")
+                            .cloned()
+                            .ok_or_else(|| "genesis action missing allocations".to_string())?,
+                    )
+                    .map_err(|err| format!("genesis action allocations decode failed: {err}"))?,
                 },
             ),
         ),
@@ -674,16 +691,19 @@ fn build_local_main_token_action_signing_action(
                     distribution_id: data
                         .get("distribution_id")
                         .and_then(JsonValue::as_str)
-                        .ok_or_else(|| "treasury action missing distribution_id".to_string())?,
+                        .ok_or_else(|| "treasury action missing distribution_id".to_string())?
+                        .to_string(),
                     bucket_id: data
                         .get("bucket_id")
                         .and_then(JsonValue::as_str)
-                        .ok_or_else(|| "treasury action missing bucket_id".to_string())?,
-                    distributions: data
-                        .get("distributions")
-                        .and_then(JsonValue::as_array)
-                        .map(Vec::as_slice)
-                        .ok_or_else(|| "treasury action missing distributions".to_string())?,
+                        .ok_or_else(|| "treasury action missing bucket_id".to_string())?
+                        .to_string(),
+                    distributions: serde_json::from_value(
+                        data.get("distributions")
+                            .cloned()
+                            .ok_or_else(|| "treasury action missing distributions".to_string())?,
+                    )
+                    .map_err(|err| format!("treasury action distributions decode failed: {err}"))?,
                 },
             ),
         ),
@@ -723,15 +743,21 @@ fn build_local_main_token_action_signing_action(
                         .ok_or_else(|| {
                             "restricted claim admin registry action missing controller_account_id"
                                 .to_string()
-                        })?,
-                    next_admin_account_ids: data
-                        .get("next_admin_account_ids")
-                        .and_then(JsonValue::as_array)
-                        .map(Vec::as_slice)
-                        .ok_or_else(|| {
-                            "restricted claim admin registry action missing next_admin_account_ids"
-                                .to_string()
-                        })?,
+                        })?
+                        .to_string(),
+                    next_admin_account_ids: serde_json::from_value(
+                        data.get("next_admin_account_ids")
+                            .cloned()
+                            .ok_or_else(|| {
+                                "restricted claim admin registry action missing next_admin_account_ids"
+                                    .to_string()
+                            })?,
+                    )
+                    .map_err(|err| {
+                        format!(
+                            "restricted claim admin registry next_admin_account_ids decode failed: {err}"
+                        )
+                    })?,
                 },
             ),
         ),
