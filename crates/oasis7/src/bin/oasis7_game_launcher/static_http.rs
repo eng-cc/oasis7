@@ -18,10 +18,12 @@ use super::*;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs;
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+const MAX_HTTP_REQUEST_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Default, Deserialize)]
 struct HostedAccountLoginStartRequest {
@@ -52,15 +54,12 @@ pub(super) fn handle_http_connection(
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|err| format!("failed to set read timeout: {err}"))?;
 
-    let mut buffer = [0u8; 8192];
-    let bytes = stream
-        .read(&mut buffer)
-        .map_err(|err| format!("failed to read request: {err}"))?;
-    if bytes == 0 {
+    let request_bytes = read_http_request_bytes(&mut stream)?;
+    if request_bytes.is_empty() {
         return Ok(());
     }
 
-    let request = String::from_utf8_lossy(&buffer[..bytes]);
+    let request = String::from_utf8_lossy(request_bytes.as_slice());
     let Some(line) = request.lines().next() else {
         write_http_response(&mut stream, 400, "text/plain", b"Bad Request", false)
             .map_err(|err| format!("failed to write 400 response: {err}"))?;
@@ -261,10 +260,40 @@ fn start_hosted_account_login(
     login_hint: &str,
     hosted_account_broker: &Arc<Mutex<HostedAccountIdentityBroker>>,
 ) -> Result<HostedAccountLoginStartResponse, String> {
-    let mut broker = hosted_account_broker
-        .lock()
-        .map_err(|_| "hosted account broker lock poisoned".to_string())?;
-    Ok(broker.start_login(deployment_mode, login_channel, login_hint))
+    let reserved = {
+        let mut broker = hosted_account_broker
+            .lock()
+            .map_err(|_| "hosted account broker lock poisoned".to_string())?;
+        match broker.reserve_login_start(deployment_mode, login_channel, login_hint) {
+            Ok(reserved) => reserved,
+            Err(response) => return Ok(response),
+        }
+    };
+    if let Err(err) = reserved.deliver() {
+        let mut broker = hosted_account_broker
+            .lock()
+            .map_err(|_| "hosted account broker lock poisoned".to_string())?;
+        broker.rollback_reserved_login_start(&reserved);
+        let (channel, masked_login_hint) = reserved.masked_target();
+        let log_message = format!(
+            "hosted account login delivery failed: channel={} target={} reason={err}",
+            channel, masked_login_hint
+        );
+        emit_stderr_or_event(
+            Level::ERROR,
+            log_message.as_str(),
+            "hosted account login delivery failed",
+        );
+        return Ok(HostedAccountLoginStartResponse {
+            ok: false,
+            error_code: Some("login_delivery_failed".to_string()),
+            error: Some("failed to deliver login verification code; retry shortly".to_string()),
+            retry_after_seconds: Some(5),
+            deployment_mode: deployment_mode.as_str().to_string(),
+            challenge: None,
+        });
+    }
+    Ok(reserved.success_response(deployment_mode))
 }
 
 fn complete_hosted_account_login(
@@ -366,6 +395,83 @@ fn issue_strong_auth_grant(
         release_token,
         &mut issuer,
     ))
+}
+
+fn read_http_request_bytes(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
+    let mut buffer = Vec::with_capacity(8192);
+    let mut chunk = [0u8; 4096];
+    let mut expected_total_len = None;
+    loop {
+        let bytes = match stream.read(&mut chunk) {
+            Ok(bytes) => bytes,
+            Err(err)
+                if err.kind() == ErrorKind::WouldBlock || err.kind() == ErrorKind::TimedOut =>
+            {
+                if buffer.is_empty() {
+                    return Ok(Vec::new());
+                }
+                return Err("request body timed out before completion".to_string());
+            }
+            Err(err) => return Err(format!("failed to read request: {err}")),
+        };
+        if bytes == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..bytes]);
+        if buffer.len() > MAX_HTTP_REQUEST_BYTES {
+            return Err(format!(
+                "request exceeded max size of {MAX_HTTP_REQUEST_BYTES} bytes"
+            ));
+        }
+        if expected_total_len.is_none() {
+            if let Some((header_end, delimiter_len)) = find_header_terminator(buffer.as_slice()) {
+                let header = String::from_utf8_lossy(&buffer[..header_end]);
+                let content_length = parse_content_length(header.as_ref())?;
+                expected_total_len = Some(
+                    header_end
+                        .saturating_add(delimiter_len)
+                        .saturating_add(content_length),
+                );
+            }
+        }
+        if let Some(expected_total_len) = expected_total_len {
+            if buffer.len() >= expected_total_len {
+                buffer.truncate(expected_total_len);
+                break;
+            }
+        }
+    }
+    Ok(buffer)
+}
+
+fn find_header_terminator(buffer: &[u8]) -> Option<(usize, usize)> {
+    for (pattern, delimiter_len) in [
+        (b"\r\n\r\n".as_slice(), 4usize),
+        (b"\n\n".as_slice(), 2usize),
+    ] {
+        if let Some(index) = buffer
+            .windows(pattern.len())
+            .position(|window| window == pattern)
+        {
+            return Some((index, delimiter_len));
+        }
+    }
+    None
+}
+
+fn parse_content_length(headers: &str) -> Result<usize, String> {
+    for line in headers.lines() {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if name.trim().eq_ignore_ascii_case("content-length") {
+            return value
+                .trim()
+                .parse::<usize>()
+                .map_err(|err| format!("invalid Content-Length header `{}`: {err}", value.trim()));
+        }
+    }
+    Ok(0)
 }
 
 fn extract_request_body(request: &str) -> &str {
