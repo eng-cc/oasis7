@@ -16,7 +16,8 @@ mkdir -p \
   "$tmp_repo/crates/oasis7_proto/src"
 
 printf '<!doctype html>old dist\n' > "$tmp_repo/crates/oasis7_viewer/dist/index.html"
-printf 'console.log("safe mode changed");\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.js"
+printf 'console.log("viewer changed");\n' > "$tmp_repo/crates/oasis7_viewer/viewer.js"
+printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.js"
 printf '<!doctype html>software safe\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.html"
 printf '<!doctype html>claim evidence\n' > "$tmp_repo/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html"
 printf '{"name":"oasis7-viewer-software-safe-ui","scripts":{"build:software-safe":"echo ok"}}\n' > "$tmp_repo/crates/oasis7_viewer/package.json"
@@ -39,7 +40,7 @@ printf '# lock\n' > "$tmp_repo/Cargo.lock"
 printf '[workspace]\nmembers = []\n' > "$tmp_repo/Cargo.toml"
 
 touch -d '2026-03-16 00:00:00' "$tmp_repo/crates/oasis7_viewer/dist/index.html"
-touch -d '2026-03-17 00:00:00' "$tmp_repo/crates/oasis7_viewer/software_safe.js"
+touch -d '2026-03-17 00:00:00' "$tmp_repo/crates/oasis7_viewer/viewer.js"
 
 cat > "$tmp_repo/bin/npm" <<'NPM'
 #!/usr/bin/env bash
@@ -71,7 +72,7 @@ if [[ ! -f "$expected_dir/pixel-world-bridge/pixel_world_bridge.js" ]]; then
 fi
 
 if ! grep -Fq 'npm --prefix' "$tmp_repo/stderr.log"; then
-  echo "expected freshness helper to trigger software_safe rebuild" >&2
+  echo "expected freshness helper to trigger viewer rebuild" >&2
   cat "$tmp_repo/stderr.log" >&2
   exit 1
 fi

@@ -14,7 +14,7 @@
 - 范围内:
   - 发布产物 `viewer.html`（canonical）/ `software_safe.html`（compat）
   - 发布产物 `viewer.js`（canonical）/ `software_safe.js`（compat）
-  - 源码与构建入口 `software_safe.html` / `software_safe.js` / `software_safe_src/**`
+  - 源码与构建入口 `software_safe.html` / `software_safe_src/**`，以及 generated bundle `viewer.js` / compat alias `software_safe.js`
   - `scripts/run-viewer-web.sh`
   - `scripts/viewer-primary-web-entry-regression.sh`
   - `scripts/viewer-software-safe-step-regression*.sh`
@@ -28,8 +28,8 @@
 ## 接口 / 数据
 - 入口 URL: `http://<host>:<port>/?ws=ws://<web-bind>`
 - Launcher 输出: 必须显式注入 `render_mode=viewer`
-- 静态入口: 发布产物 `viewer.html`（兼容保留 `software_safe.html`）；源码页面文件当前仍由 `software_safe.html` 生成
-- 测试契约: 发布产物 `viewer.js` / `software_safe.js` 暴露同一套 `__AW_TEST__` 状态与动作接口；源码 bundle 文件当前仍由 `software_safe.js` 生成
+- 静态入口: 发布产物 `viewer.html`（兼容保留 `software_safe.html`）；源码页面文件继续由 `software_safe.html` 承载，但其 canonical bundle 指向 `viewer.js`
+- 测试契约: 发布产物 `viewer.js` / `software_safe.js` 暴露同一套 `__AW_TEST__` 状态与动作接口；`viewer.js` 为 canonical generated bundle，`software_safe.js` 为 compat alias
 - 验证数据:
   - Web 入口 freshness 检查结果
   - `viewer-primary-web-entry-regression.sh` evidence

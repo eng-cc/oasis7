@@ -219,7 +219,7 @@ scope = [
     "Cargo.toml",
     "Cargo.lock",
     "crates/oasis7_viewer/software_safe.html",
-    "crates/oasis7_viewer/software_safe.js",
+    "crates/oasis7_viewer/viewer.js",
     "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html",
     "crates/oasis7_viewer/package.json",
     "crates/oasis7_viewer/package-lock.json",
@@ -280,7 +280,7 @@ PY
   cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/index.html"
   cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/viewer.html"
   cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/software_safe.html"
-  cp "$repo_root/crates/oasis7_viewer/software_safe.js" "$rebuilt_dir/viewer.js"
+  cp "$repo_root/crates/oasis7_viewer/viewer.js" "$rebuilt_dir/viewer.js"
   cp "$repo_root/crates/oasis7_viewer/software_safe.js" "$rebuilt_dir/software_safe.js"
   cp "$repo_root/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
     "$rebuilt_dir/software_safe_first_agent_claim_evidence.html"
