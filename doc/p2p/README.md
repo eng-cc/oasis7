@@ -8,7 +8,7 @@
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：`doc/p2p/node/README.md`
 - 想先看主链安全、mainnet-grade readiness 与 signer custody：`doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
 - 想先看 hosted world 玩家接入与网页会话鉴权：`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
-- 想先看 `hosted_public_join` 如何让普通玩家用手机号/邮箱登录、由服务端托管 player signer，并保留后续自托管升级路径：`doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
+- 想先看 `hosted_public_join` 如何让普通玩家用邮箱登录、由服务端托管 player signer，并保留后续自托管升级路径：`doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
 - 想先看“没有公网 IP 也要成为正式节点”的主链级覆盖网络目标态：`doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
 - 想先看 Token 分配 / 治理签名 / 生产 signer 外部化 / `OC -> LetAI Run OpenAPI quota` bridge：`doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`、`doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`、`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`、`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
 - 当前链上代币的正式产品名固定为“绿洲币 / Oasis Coin”；当前 runtime symbol/ticker 为 `OC`，公钥派生账户前缀为 `oc:pk:`；当前创世 `initial_supply` 已冻结为 `10,000,000,000 OC`。
@@ -26,7 +26,7 @@
 - `project.md` 是执行台账，适合确认当前安全硬化、signer 外部化、token 与 hosted world 相关任务的推进状态。
 - `node/README.md` 是当前最高密度热点子域 `node/` 的 canonical 入口，适合先按“奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译”分流，再进入具体专题。
 - `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 p2p 模块时的首读入口。
-- 高频专题承担主题真值：`p2p-mainnet-*` 负责主链安全与 readiness；`p2p-mainnet-private-reachability-architecture-2026-04-01` 负责 mixed-topology 覆盖网络目标态；`p2p-hosted-world-player-access-and-session-auth` 负责玩家接入与会话鉴权；`p2p-hosted-public-join-managed-identity-custody-2026-05-18` 负责手机号/邮箱 hosted login、托管 player signer 与自托管升级边界；token / signer 系列专题负责分配、签名交易与治理签名外部化。
+- 高频专题承担主题真值：`p2p-mainnet-*` 负责主链安全与 readiness；`p2p-mainnet-private-reachability-architecture-2026-04-01` 负责 mixed-topology 覆盖网络目标态；`p2p-hosted-world-player-access-and-session-auth` 负责玩家接入与会话鉴权；`p2p-hosted-public-join-managed-identity-custody-2026-05-18` 负责邮箱 hosted login、托管 player signer 与自托管升级边界；token / signer 系列专题负责分配、签名交易与治理签名外部化。
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接罗列近期专题长名单。

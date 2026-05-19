@@ -763,6 +763,7 @@ function resolveViewerAuthState() {
 }
 
 function resetHostedLoginChallenge() {
+  state.hostedLogin.channel = "email";
   state.hostedLogin.challengeId = null;
   state.hostedLogin.maskedLoginHint = null;
   state.hostedLogin.deliveryMode = null;
@@ -2795,10 +2796,11 @@ async function startHostedAccountLogin() {
   if (!canAutoIssueHostedPlayerSession()) {
     return { ok: false, reason: "hosted account login is unavailable on this lane" };
   }
-  const channel = String(state.hostedLogin.channel || "email").trim() || "email";
+  const channel = "email";
+  state.hostedLogin.channel = channel;
   const handle = String(state.hostedLogin.handle || "").trim();
   if (!handle) {
-    state.hostedLogin.error = "phone number or email is required before login can start";
+    state.hostedLogin.error = "email is required before login can start";
     render();
     return { ok: false, reason: state.hostedLogin.error };
   }
@@ -4366,18 +4368,11 @@ function renderSummary() {
         ? `<div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
             <div class="panel__header"><div class="panel__title">Hosted Account Login</div></div>
             <div class="panel__body stack">
-              <div class="empty">Hosted public join now upgrades guest access through a centralized phone-or-email login before acquiring a player session.</div>
+              <div class="empty">Hosted public join now upgrades guest access through a centralized email login before acquiring a player session.</div>
               <div class="control-grid">
                 <div class="field">
-                  <label for="hosted-login-channel">Login Channel</label>
-                  <select id="hosted-login-channel">
-                    <option value="email" ${state.hostedLogin.channel === "email" ? "selected" : ""}>Email</option>
-                    <option value="phone" ${state.hostedLogin.channel === "phone" ? "selected" : ""}>Phone</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="hosted-login-handle">Phone or Email</label>
-                  <input id="hosted-login-handle" type="text" autocomplete="off" value="${escapeHtml(state.hostedLogin.handle || "")}" />
+                  <label for="hosted-login-handle">Email</label>
+                  <input id="hosted-login-handle" type="email" autocomplete="email" value="${escapeHtml(state.hostedLogin.handle || "")}" />
                 </div>
               </div>
               <div class="toolbar"><button data-auth-action="start-login" ${state.hostedLogin.startInFlight ? "disabled" : ""}>Request Login Code</button></div>
@@ -4822,14 +4817,6 @@ function bindEvents() {
       }
     });
   });
-  const hostedLoginChannel = document.getElementById("hosted-login-channel");
-  if (hostedLoginChannel) {
-    hostedLoginChannel.addEventListener("change", (event) => {
-      state.hostedLogin.channel = String(event.target.value || "email").trim() || "email";
-      state.hostedLogin.error = null;
-      resetHostedLoginChallenge();
-    });
-  }
   const hostedLoginHandle = document.getElementById("hosted-login-handle");
   if (hostedLoginHandle) {
     hostedLoginHandle.addEventListener("input", (event) => {
@@ -5002,6 +4989,8 @@ export {
   renderDetails,
   reportFatalError,
   resourceSummary,
+  startHostedAccountLogin,
+  completeHostedAccountLogin,
   retryHostedPlayerIdentityIssue,
   runSteps,
   select,

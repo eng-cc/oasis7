@@ -1,4 +1,4 @@
-# oasis7 hosted_public_join 托管身份 / 托管密钥与手机号邮箱登录（项目管理文档）
+# oasis7 hosted_public_join 托管身份 / 托管密钥与邮箱登录（项目管理文档）
 
 - 对应设计文档: `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md`
 - 对应需求文档: `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
@@ -6,7 +6,7 @@
 审计轮次: 1
 
 ## 任务拆解（含 PRD-ID 映射）
-- [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 冻结 `hosted_public_join` 的托管身份、托管密钥、手机号/邮箱登录、自托管升级和 trust boundary 文档真值，并回写模块入口映射。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
+- [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 冻结 `hosted_public_join` 的托管身份、托管密钥、邮箱登录、自托管升级和 trust boundary 文档真值，并回写模块入口映射。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
 - [x] hosted-browser-device-session-recovery (PRD-P2P-029) [test_tier_required]: 清退 `hosted_public_join` 浏览器 `localStorage privateKey` 持久化，引入 `device_session_id` contract，并把 hosted player-session 恢复链路改成“持久化 device session handle + 页内临时 Ed25519 会话 key”。 Trace: .pm/tasks/task_584da7818a9d42e6aae5894512413102.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
@@ -23,7 +23,7 @@
     - `npm --prefix crates/oasis7_viewer run test:ui`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] hosted-account-identity-broker-server (PRD-P2P-029) [test_tier_required]: 在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server，提供手机号/邮箱 login challenge、稳定 `hosted_account_id -> player_id` 映射持久化、验证后换发 `device_session + player_session`，并把 viewer hosted onboarding 改成 phone/email + OTP 表单。 Trace: .pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.yaml
+- [x] hosted-account-identity-broker-server (PRD-P2P-029) [test_tier_required]: 在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server，提供邮箱 login challenge、稳定 `hosted_account_id -> player_id` 映射持久化、验证后换发 `device_session + player_session`，并把 viewer hosted onboarding 改成 email + OTP 表单。 Trace: .pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs`
     - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
@@ -48,7 +48,7 @@
 
 ### 后续切片
 - `runtime_engineer` + `viewer_engineer` / hosted-account-identity-broker:
-  - 目标: 落地 hosted account、手机号/邮箱 OTP/magic link/passkey、`hosted_account_id` 与 `player_id` 绑定、设备识别与恢复流程。
+  - 目标: 落地 hosted account、邮箱 OTP/magic link、`hosted_account_id` 与 `player_id` 绑定、设备识别与恢复流程。
 - `runtime_engineer` + `viewer_engineer` / device-session-and-runtime-binding:
   - 目标: 用 `device_session` 替换当前浏览器 `privateKey` 持久化，打通 player-session refresh/rebind/recovery 与 runtime entity binding。
 - `runtime_engineer` / managed-custody-sign-api:
@@ -68,7 +68,7 @@
   - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
 - 输出:
   - hosted account contract
-  - 手机号/邮箱登录入口
+  - 邮箱登录入口
   - `hosted_account_id -> player_id` 绑定规则
 - 完成定义:
   - 不输入裸公私钥也能完成 hosted player login
@@ -133,10 +133,10 @@
   - 盗号、设备丢失、重复绑定、OTP 滥刷、风控冻结、托管退出失败都能给出 block/pass 结论
 
 ## 当前结论
-- 结论-1: 对 `hosted_public_join` 而言，“手机号/邮箱登录 + 中心化托管密钥 + 可选自托管升级”是比“让普通玩家保存公私钥”更合适的正式产品路径。
+- 结论-1: 对 `hosted_public_join` 而言，“邮箱登录 + 中心化托管密钥 + 可选自托管升级”是比“让普通玩家保存公私钥”更合适的正式产品路径。
 - 结论-2: 中心化 KMS 不是直接替代全部产品语义；更准确的落法是 `identity broker + custody service + sign API`，KMS/HSM 作为 custody backend 的实现选项，而不是前端/运行时直接耦合的唯一接口。
-- 结论-3: 当前代码已经完成两刀 hosted identity 基线：其一是 `device_session` 收口，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`；其二是中心化 hosted account 登录 server，`oasis7_game_launcher` 现已提供 phone/email login challenge、稳定 `hosted_account_id -> player_id` 持久化和登录后换发 `device_session + player_session` 的 public route，viewer 也已改成 hosted account 登录表单。
-- 结论-4: 当前登录投递仍是 preview transport：server 仅支持 `preview_inline` 或 `server_log_only` 这两种 repo-owned challenge delivery mode，还没有接真实短信/邮件 provider。
+- 结论-3: 当前代码已经完成两刀 hosted identity 基线：其一是 `device_session` 收口，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`；其二是中心化 hosted account 登录 server，`oasis7_game_launcher` 现已提供 email login challenge、稳定 `hosted_account_id -> player_id` 持久化和登录后换发 `device_session + player_session` 的 public route，viewer 也已改成 hosted account 登录表单。
+- 结论-4: 当前登录投递仍是 preview transport：server 仅支持 `preview_inline` 或 `server_log_only` 这两种 repo-owned challenge delivery mode，还没有接真实邮件 provider。
 - 结论-5: 托管身份仅面向 player plane；node / validator / governance signer 继续沿用独立 custody/governance 专题。
 
 ## 依赖
@@ -154,11 +154,11 @@
 - `testing-manual.md`
 
 ## 验收命令（本轮文档冻结）
-- `rg -n "PRD-P2P-029|托管身份|托管密钥|手机号|邮箱|hosted account|signer_ref" doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+- `rg -n "PRD-P2P-029|托管身份|托管密钥|邮箱|hosted account|signer_ref" doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
 ## 状态
 - 当前状态: active
-- 下一步: 优先把 `hosted-account-identity-broker` 从 preview transport 推进到真实 delivery provider，补 `magic link/passkey`、挑战发送配额与恢复/冻结策略；随后推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
+- 下一步: 优先把 `hosted-account-identity-broker` 从 preview transport 推进到真实邮件 delivery provider，补 `magic link`、挑战发送配额与恢复/冻结策略；随后推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
 - 最近更新: 2026-05-18

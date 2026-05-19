@@ -539,7 +539,7 @@
     - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 新增“hosted_public_join 托管身份 / 托管密钥与手机号邮箱登录”专题 PRD / design / project，并把 hosted account、手机号/邮箱登录、`signer_ref`、device session、step-up auth、自托管升级与 player-custody trust boundary 纳入模块追踪。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
+- [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 新增“hosted_public_join 托管身份 / 托管密钥与邮箱登录”专题 PRD / design / project，并把 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、自托管升级与 player-custody trust boundary 纳入模块追踪。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
   - 产物文件:
     - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
     - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md`
@@ -550,7 +550,7 @@
     - `doc/p2p/README.md`
     - `.pm/tasks/task_fd98df36264944238538dea896ce4ce0.execution.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "PRD-P2P-029|托管身份|托管密钥|手机号|邮箱|hosted account|signer_ref" doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+    - `rg -n "PRD-P2P-029|托管身份|托管密钥|邮箱|hosted account|signer_ref" doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] hosted-browser-device-session-recovery (PRD-P2P-029) [test_tier_required]: 移除 `hosted_public_join` 浏览器对 hosted player `privateKey` 的持久化，新增 launcher `device_session_id` contract，并把 reconnect/register 改成“持久化 device session handle + 页内临时 Ed25519 会话 key”的恢复路径。 Trace: .pm/tasks/task_584da7818a9d42e6aae5894512413102.yaml
@@ -569,7 +569,7 @@
     - `npm --prefix crates/oasis7_viewer run test:ui`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] hosted-account-identity-broker-server (PRD-P2P-029) [test_tier_required]: 为 `hosted_public_join` 落地中心化 hosted account 登录 server，提供手机号/邮箱 login challenge、稳定 `hosted_account_id -> player_id` 持久化和登录完成后的 `device_session + player_session` 换发，并将正式 Web 入口从“直接领 player session”改成 hosted account 登录表单。 Trace: .pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.yaml
+- [x] hosted-account-identity-broker-server (PRD-P2P-029) [test_tier_required]: 为 `hosted_public_join` 落地中心化 hosted account 登录 server，提供邮箱 login challenge、稳定 `hosted_account_id -> player_id` 持久化和登录完成后的 `device_session + player_session` 换发，并将正式 Web 入口从“直接领 player session”改成 hosted account 登录表单。 Trace: .pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs`
     - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
@@ -847,9 +847,9 @@
 
 ## 状态
 - 更新日期: 2026-05-18
-- 最新完成: `hosted-account-identity-broker-server`（已在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server：支持 phone/email login challenge、稳定 `hosted_account_id -> player_id` 持久化，以及登录完成后换发 `device_session + player_session`；viewer 正式入口也已改成 hosted account 登录表单。当前 challenge delivery 仍是 preview `preview_inline/server_log_only`，尚未接真实短信/邮件 provider。）
+- 最新完成: `hosted-account-identity-broker-server`（已在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server：支持 email login challenge、稳定 `hosted_account_id -> player_id` 持久化，以及登录完成后换发 `device_session + player_session`；viewer 正式入口也已改成 hosted account 登录表单。当前 challenge delivery 仍是 preview `preview_inline/server_log_only`，尚未接真实邮件 provider。）
 - 最新完成: `hosted-browser-device-session-recovery`（已把 `hosted_public_join` 的 viewer/launcher 第一刀落成代码真值：launcher grant 新增 `device_session_id`，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`，刷新页后仅保留 `device_session` handle，并按需重新生成页内临时 Ed25519 session key 以完成 reconnect/register。）
-- 最新完成: `hosted-managed-identity-doc-freeze`（已新增 hosted_public_join 托管身份 / 托管密钥专题三件套，正式冻结 hosted account、手机号/邮箱登录、`signer_ref`、device session、step-up auth 与自托管升级边界；当前剩余缺口集中在 hosted account 登录入口与托管签名后端。）
+- 最新完成: `hosted-managed-identity-doc-freeze`（已新增 hosted_public_join 托管身份 / 托管密钥专题三件套，正式冻结 hosted account、邮箱登录、`signer_ref`、device session、step-up auth 与自托管升级边界；当前剩余缺口集中在 hosted account 登录入口与托管签名后端。）
 - 最新完成: `newapi-auto-credit-closure`（已把 `oasis7_newapi_bridge_service` 收口为 LetAI OpenAPI 真链路：新增持久化 `bridge_ledger`、explorer poll watcher、block-height confirmation、exact-match `--pricing-rule` 折算、`platform_user_id/platform_project_id/token_key/external_order_id`、user upsert、project/token 创建、topup、query verification 与 retry/manual-review 状态机。）
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。

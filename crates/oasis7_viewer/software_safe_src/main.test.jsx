@@ -279,8 +279,7 @@ describe("viewer web ui automation baseline", () => {
 
     screen.getByText("Runtime Diagnostics").click();
     expect(screen.getAllByRole("button", { name: "Request Login Code" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByLabelText("Login Channel").length).toBeGreaterThan(0);
-    expect(screen.getAllByLabelText("Phone or Email").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Email").length).toBeGreaterThan(0);
     expect(screen.getByText("upgrade_after_player_session")).toBeInTheDocument();
     expect(
       screen.getAllByText(
