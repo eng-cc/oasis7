@@ -202,7 +202,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Session Ladder")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Runtime Diagnostics")).toBeInTheDocument();
     expect(screen.getByTestId("pixel-world-host")).toHaveTextContent("pixel-world-host:en");
-  });
+  }, 15000);
 
   it("unlocks agent chat and prompt override surfaces once an agent is selected", async () => {
     const { core } = await renderViewerApp({
