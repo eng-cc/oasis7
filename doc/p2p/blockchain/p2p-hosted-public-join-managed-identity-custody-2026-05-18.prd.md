@@ -31,7 +31,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: `hosted_public_join` 现在已经补上了 hosted account 邮箱登录 broker、`device_session + in-memory session key` 恢复链路，以及 env-configured SMTP 邮件投递；普通玩家不再需要手抄浏览器本地私钥，也不必继续依赖 repo-owned preview code 才能回到同一 `player_id`。但这套实现整体仍停留在 `limited playable technical preview` 边界：`crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs` 依然依赖 `OASIS7_HOSTED_STRONG_AUTH_*` + `approval_code`；`signer_ref`、managed custody sign API、冻结/恢复策略和 self-custody upgrade 还没有进入正式后端 contract。如果不把这些缺口继续收完，`public join` 仍然不能被宣称为生产级 hosted wallet / custody 方案。
-- Proposed Solution: 为 `hosted_public_join` 正式冻结一套 producer-owned 的“托管身份 + 托管密钥 + 自托管升级”目标态。默认玩家路径改为 `guest -> hosted account -> managed player signer -> optional self-custody bind/transfer-out`：用户用邮箱验证码或 magic link 登录，浏览器只拿 `player_session` 与设备级短期密钥；长期玩家 signer 留在服务端 custody plane，由 KMS/HSM 或 KMS-wrapped sealed-key backend 保护，并通过 step-up auth + policy engine 出签。
+- Proposed Solution: 为 `hosted_public_join` 正式冻结一套 producer-owned 的“托管身份 + 托管密钥 + 自托管升级”目标态。默认玩家路径改为 `guest -> hosted account -> managed player signer -> optional self-custody bind/transfer-out`：用户用邮箱验证码登录，浏览器只拿 `player_session` 与设备级短期密钥；长期玩家 signer 留在服务端 custody plane，由 KMS/HSM 或 KMS-wrapped sealed-key backend 保护，并通过 step-up auth + policy engine 出签。
 - Success Criteria:
   - SC-1: `hosted_public_join` 必须提供“不输入原始公钥私钥也能开始玩”的正式登录路径，默认支持邮箱登录。
   - SC-2: 浏览器在 `hosted_public_join` 下不得再持有长期资产 signer、node signer 或可长期复用的明文私钥；旧 `localStorage privateKey` 残留必须被清洗而不是恢复到运行态。
@@ -62,7 +62,7 @@
   - PRD-P2P-029-F: As a player, I want an optional path to bind an external wallet or move to self-custody later, so that managed onboarding does not lock me into browser-only trust.
 - Critical User Flows:
   1. Flow-P2P-029-001: `访客打开 hosted_public_join URL -> 先拿 guest session -> 浏览世界 -> 点击开始游玩`
-  2. Flow-P2P-029-002: `用户选择邮箱登录 -> 收到 OTP / magic link challenge -> hosted account 验证通过 -> 生成或恢复 hosted_account_id`
+  2. Flow-P2P-029-002: `用户选择邮箱登录 -> 收到 OTP challenge -> hosted account 验证通过 -> 生成或恢复 hosted_account_id`
   3. Flow-P2P-029-003: `account service 为用户恢复 signer_ref 和 player_id -> session broker 签发 player_session + device_session -> runtime 完成 entity bind`
   4. Flow-P2P-029-004: `玩家执行普通玩法输入 -> 浏览器只用 device session key 或 session token -> runtime 校验 capability，不触发 custody sign`
   5. Flow-P2P-029-005: `玩家执行 prompt_control_apply / main_token_transfer 等高风险动作 -> step-up auth -> policy engine 评估 -> custody service 出签 -> runtime 验证并执行`
@@ -91,7 +91,7 @@
 
 ## 3. Technical Requirements
 - Architecture Overview: 最合适的 hosted_public_join 目标态不是“让浏览器代持真正的玩家私钥”，也不是“强迫用户第一次进游戏就接外部钱包”，而是把登录、设备会话、托管签名和后续自托管升级拆成四层。
-  - `identity broker`: 处理邮箱 OTP、magic link、rate limit 与登录风险控制。
+  - `identity broker`: 处理邮箱 OTP、rate limit 与登录风险控制。
   - `account registry`: 保存 `hosted_account_id -> player_id/signer_ref/device bindings` 映射。
   - `session broker`: 用已验证账户换发 `player_session` 与设备短期 key challenge，服务于 runtime register/reconnect。
   - `custody service`: 只暴露 `prepare_sign/approve_sign/finalize_sign` 或等价 sign API；底层可以是 KMS/HSM 直管密钥，也可以是 KMS-wrapped sealed-key backend，但浏览器不能直接拿到长期 signer。
@@ -129,7 +129,7 @@
   - NFR-P2P-029-4: `managed custody` 默认适用于 hosted player surface，不得被误扩展为 node/governance/validator signer 方案。
   - NFR-P2P-029-5: 用户默认看到的是 `Oasis ID` / 账户状态 / custody mode，而不是原始公钥命名。
   - NFR-P2P-029-6: 本专题完成前，仓内与对外口径不得声称“任意新用户已经默认拥有安全托管钱包并可直接进行资产动作”。
-- Security & Privacy: 邮箱、设备标识和签名授权记录都属于敏感身份数据。本专题允许记录账户 ID、factor 类型、掩码后的联系方式、signer 引用、公钥摘要、step-up 与审计事件；禁止把真实 OTP、原始私钥、seed、magic link token 或长期签名材料写入仓库、前端 bootstrap、日志与测试证据。
+- Security & Privacy: 邮箱、设备标识和签名授权记录都属于敏感身份数据。本专题允许记录账户 ID、factor 类型、掩码后的联系方式、signer 引用、公钥摘要、step-up 与审计事件；禁止把真实 OTP、原始私钥、seed 或长期签名材料写入仓库、前端 bootstrap、日志与测试证据。
 
 ## 4. Risks & Roadmap
 - Non-Goals:

@@ -35,8 +35,11 @@ const HOSTED_LOGIN_SMTP_FROM_NAME_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_FROM_NAM
 const HOSTED_LOGIN_SMTP_DEFAULT_HOST: &str = "smtpdm.aliyun.com";
 const HOSTED_LOGIN_SMTP_DEFAULT_PORT: u16 = 465;
 const LOGIN_CHALLENGE_TTL_MS: u64 = 10 * 60 * 1000;
-const LOGIN_START_RATE_LIMIT_WINDOW_MS: u64 = 60_000;
-const LOGIN_START_RATE_LIMIT_PER_HANDLE: u64 = 3;
+const LOGIN_START_RESEND_COOLDOWN_MS: u64 = 30_000;
+const LOGIN_START_BURST_WINDOW_MS: u64 = 60_000;
+const LOGIN_START_BURST_LIMIT_PER_HANDLE: usize = 3;
+const LOGIN_START_EXTENDED_WINDOW_MS: u64 = 10 * 60_000;
+const LOGIN_START_EXTENDED_LIMIT_PER_HANDLE: usize = 10;
 const LOGIN_CHALLENGE_MAX_ATTEMPTS: u8 = 5;
 const HOSTED_LOGIN_EMAIL_SUBJECT: &str = "Oasis7 login code";
 
@@ -47,6 +50,8 @@ pub(super) struct HostedAccountLoginStartResponse {
     pub(super) error_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) retry_after_seconds: Option<u64>,
     pub(super) deployment_mode: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) challenge: Option<HostedAccountLoginChallengeSnapshot>,
@@ -120,6 +125,13 @@ struct PendingHostedLoginChallenge {
     otp_code: String,
     expires_at_unix_ms: u64,
     failed_attempts: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HostedLoginStartBlock {
+    error_code: String,
+    error: String,
+    retry_after_seconds: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -209,6 +221,7 @@ impl HostedAccountIdentityBroker {
                 error: Some(
                     "hosted account login is only available on hosted_public_join".to_string(),
                 ),
+                retry_after_seconds: None,
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
             };
@@ -219,6 +232,7 @@ impl HostedAccountIdentityBroker {
                 ok: false,
                 error_code: Some("unsupported_login_channel".to_string()),
                 error: Some("login_channel must be email".to_string()),
+                retry_after_seconds: None,
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
             };
@@ -228,18 +242,17 @@ impl HostedAccountIdentityBroker {
                 ok: false,
                 error_code: Some("login_hint_invalid".to_string()),
                 error: Some(format!("{channel} login_hint is invalid")),
+                retry_after_seconds: None,
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
             };
         };
-        if self.rate_limited(channel, normalized_login_hint.as_str()) {
+        if let Some(block) = self.login_start_block(channel, normalized_login_hint.as_str()) {
             return HostedAccountLoginStartResponse {
                 ok: false,
-                error_code: Some("login_rate_limited".to_string()),
-                error: Some(
-                    "too many login challenges were issued for this handle; retry in a minute"
-                        .to_string(),
-                ),
+                error_code: Some(block.error_code),
+                error: Some(block.error),
+                retry_after_seconds: Some(block.retry_after_seconds),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
             };
@@ -279,6 +292,7 @@ impl HostedAccountIdentityBroker {
                 ok: false,
                 error_code: Some("login_delivery_failed".to_string()),
                 error: Some("failed to deliver login verification code; retry shortly".to_string()),
+                retry_after_seconds: Some(5),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
             };
@@ -293,6 +307,7 @@ impl HostedAccountIdentityBroker {
             ok: true,
             error_code: None,
             error: None,
+            retry_after_seconds: None,
             deployment_mode: deployment_mode.as_str().to_string(),
             challenge: Some(HostedAccountLoginChallengeSnapshot {
                 challenge_id,
@@ -466,7 +481,7 @@ impl HostedAccountIdentityBroker {
                 .front()
                 .copied()
                 .unwrap_or(0)
-                .saturating_add(LOGIN_START_RATE_LIMIT_WINDOW_MS)
+                .saturating_add(LOGIN_START_EXTENDED_WINDOW_MS)
                 <= now
             {
                 timestamps.pop_front();
@@ -474,13 +489,77 @@ impl HostedAccountIdentityBroker {
         }
     }
 
-    fn rate_limited(&mut self, channel: &str, normalized_login_hint: &str) -> bool {
+    fn login_start_block(
+        &mut self,
+        channel: &str,
+        normalized_login_hint: &str,
+    ) -> Option<HostedLoginStartBlock> {
         self.prune_expired_challenges();
         let factor_key = factor_key(channel, normalized_login_hint);
-        self.recent_start_timestamps_by_factor
-            .get(factor_key.as_str())
-            .map(|timestamps| timestamps.len() as u64 >= LOGIN_START_RATE_LIMIT_PER_HANDLE)
-            .unwrap_or(false)
+        let timestamps = self
+            .recent_start_timestamps_by_factor
+            .get(factor_key.as_str())?;
+        let now = now_unix_ms();
+        if let Some(last_issued_at_unix_ms) = timestamps.back().copied() {
+            let next_allowed_at_unix_ms =
+                last_issued_at_unix_ms.saturating_add(LOGIN_START_RESEND_COOLDOWN_MS);
+            if next_allowed_at_unix_ms > now {
+                let retry_after_seconds =
+                    retry_after_seconds(next_allowed_at_unix_ms.saturating_sub(now));
+                return Some(HostedLoginStartBlock {
+                    error_code: "login_retry_cooldown".to_string(),
+                    error: format!(
+                        "a login code was just sent for this email; retry in {retry_after_seconds} seconds"
+                    ),
+                    retry_after_seconds,
+                });
+            }
+        }
+        let burst_count = timestamps
+            .iter()
+            .filter(|issued_at_unix_ms| {
+                issued_at_unix_ms.saturating_add(LOGIN_START_BURST_WINDOW_MS) > now
+            })
+            .count();
+        if burst_count >= LOGIN_START_BURST_LIMIT_PER_HANDLE {
+            let retry_after_seconds = timestamps
+                .iter()
+                .find(|issued_at_unix_ms| {
+                    issued_at_unix_ms.saturating_add(LOGIN_START_BURST_WINDOW_MS) > now
+                })
+                .copied()
+                .map(|issued_at_unix_ms| {
+                    retry_after_seconds(
+                        issued_at_unix_ms
+                            .saturating_add(LOGIN_START_BURST_WINDOW_MS)
+                            .saturating_sub(now),
+                    )
+                })
+                .unwrap_or(60);
+            return Some(HostedLoginStartBlock {
+                error_code: "login_rate_limited".to_string(),
+                error: format!(
+                    "too many login codes were requested for this email; retry in {retry_after_seconds} seconds"
+                ),
+                retry_after_seconds,
+            });
+        }
+        if timestamps.len() >= LOGIN_START_EXTENDED_LIMIT_PER_HANDLE {
+            let oldest_tracked_unix_ms = timestamps.front().copied().unwrap_or(now);
+            let retry_after_seconds = retry_after_seconds(
+                oldest_tracked_unix_ms
+                    .saturating_add(LOGIN_START_EXTENDED_WINDOW_MS)
+                    .saturating_sub(now),
+            );
+            return Some(HostedLoginStartBlock {
+                error_code: "login_rate_limited".to_string(),
+                error: format!(
+                    "too many login codes were requested for this email in the last 10 minutes; retry in {retry_after_seconds} seconds"
+                ),
+                retry_after_seconds,
+            });
+        }
+        None
     }
 
     fn deliver_login_challenge(
@@ -804,6 +883,10 @@ fn build_login_email_body(otp_code: &str) -> String {
     )
 }
 
+fn retry_after_seconds(remaining_ms: u64) -> u64 {
+    remaining_ms.saturating_add(999).saturating_div(1000).max(1)
+}
+
 fn build_login_challenge_id(issued_at_unix_ms: u64, sequence: u64) -> String {
     format!("hosted-login-challenge-{issued_at_unix_ms:016x}-{sequence:08x}")
 }
@@ -838,236 +921,5 @@ fn now_unix_ms() -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    fn temp_store_path(name: &str) -> PathBuf {
-        let unique = now_unix_ms();
-        std::env::temp_dir().join(format!("oasis7-hosted-account-{name}-{unique}.json"))
-    }
-
-    #[test]
-    fn hosted_account_login_start_rejects_phone_channel() {
-        let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("invalid"))
-            .expect("broker");
-        let response =
-            broker.start_login(DeploymentMode::HostedPublicJoin, "phone", "+1 415 555 0101");
-        assert!(!response.ok);
-        assert_eq!(
-            response.error_code.as_deref(),
-            Some("unsupported_login_channel")
-        );
-        assert_eq!(
-            response.error.as_deref(),
-            Some("login_channel must be email")
-        );
-    }
-
-    #[test]
-    fn hosted_account_login_complete_reuses_stable_player_id() {
-        let path = temp_store_path("stable-player");
-        let mut broker =
-            HostedAccountIdentityBroker::with_store_path(path.clone()).expect("broker");
-        let mut issuer = HostedPlayerSessionIssuer::default();
-
-        let start = broker.start_login(
-            DeploymentMode::HostedPublicJoin,
-            "email",
-            "player@example.com",
-        );
-        let challenge = start.challenge.expect("challenge");
-        let first = broker.complete_login(
-            DeploymentMode::HostedPublicJoin,
-            challenge.challenge_id.as_str(),
-            challenge.preview_code.as_deref().unwrap_or_default(),
-            &mut issuer,
-        );
-        assert!(first.ok);
-        let first_account = first.account.clone().expect("account");
-        let first_grant = first.grant.clone().expect("grant");
-        assert_eq!(first_account.player_id, first_grant.player_id);
-
-        std::thread::sleep(Duration::from_millis(2));
-        let start_second = broker.start_login(
-            DeploymentMode::HostedPublicJoin,
-            "email",
-            "player@example.com",
-        );
-        let challenge_second = start_second.challenge.expect("challenge");
-        let second = broker.complete_login(
-            DeploymentMode::HostedPublicJoin,
-            challenge_second.challenge_id.as_str(),
-            challenge_second.preview_code.as_deref().unwrap_or_default(),
-            &mut issuer,
-        );
-        assert!(second.ok);
-        let second_account = second.account.expect("second account");
-        let second_grant = second.grant.expect("second grant");
-        assert_eq!(
-            first_account.hosted_account_id,
-            second_account.hosted_account_id
-        );
-        assert_eq!(first_account.player_id, second_account.player_id);
-        assert_eq!(first_grant.player_id, second_grant.player_id);
-        assert_ne!(first_grant.release_token, second_grant.release_token);
-
-        let reloaded = HostedAccountIdentityBroker::with_store_path(path).expect("reloaded broker");
-        assert_eq!(reloaded.store.accounts_by_id.len(), 1);
-    }
-
-    #[test]
-    fn hosted_account_login_complete_rejects_wrong_otp() {
-        let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("wrong-otp"))
-            .expect("broker");
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let start = broker.start_login(
-            DeploymentMode::HostedPublicJoin,
-            "email",
-            "player@example.com",
-        );
-        let challenge = start.challenge.expect("challenge");
-        let wrong_code = if challenge.preview_code.as_deref() == Some("000000") {
-            "000001"
-        } else {
-            "000000"
-        };
-        let response = broker.complete_login(
-            DeploymentMode::HostedPublicJoin,
-            challenge.challenge_id.as_str(),
-            wrong_code,
-            &mut issuer,
-        );
-        assert!(!response.ok);
-        assert_eq!(response.error_code.as_deref(), Some("otp_code_invalid"));
-    }
-
-    #[test]
-    fn hosted_account_login_complete_locks_after_repeated_invalid_otp() {
-        let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("otp-lock"))
-            .expect("broker");
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let start = broker.start_login(
-            DeploymentMode::HostedPublicJoin,
-            "email",
-            "player@example.com",
-        );
-        let challenge = start.challenge.expect("challenge");
-        let wrong_code = if challenge.preview_code.as_deref() == Some("000000") {
-            "000001"
-        } else {
-            "000000"
-        };
-        for _ in 0..(LOGIN_CHALLENGE_MAX_ATTEMPTS - 1) {
-            let response = broker.complete_login(
-                DeploymentMode::HostedPublicJoin,
-                challenge.challenge_id.as_str(),
-                wrong_code,
-                &mut issuer,
-            );
-            assert_eq!(response.error_code.as_deref(), Some("otp_code_invalid"));
-        }
-        let locked = broker.complete_login(
-            DeploymentMode::HostedPublicJoin,
-            challenge.challenge_id.as_str(),
-            wrong_code,
-            &mut issuer,
-        );
-        assert_eq!(locked.error_code.as_deref(), Some("otp_code_locked"));
-
-        let missing = broker.complete_login(
-            DeploymentMode::HostedPublicJoin,
-            challenge.challenge_id.as_str(),
-            challenge.preview_code.as_deref().unwrap_or_default(),
-            &mut issuer,
-        );
-        assert_eq!(missing.error_code.as_deref(), Some("challenge_not_found"));
-    }
-
-    #[test]
-    fn hosted_account_login_start_rolls_back_on_delivery_failure() {
-        let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("smtp-fail"))
-            .expect("broker");
-        broker.delivery_mode = HOSTED_LOGIN_DELIVERY_MODE_SMTP.to_string();
-        let response = broker.start_login(
-            DeploymentMode::HostedPublicJoin,
-            "email",
-            "player@example.com",
-        );
-        assert!(!response.ok);
-        assert_eq!(
-            response.error_code.as_deref(),
-            Some("login_delivery_failed")
-        );
-        assert!(broker.pending_challenges.is_empty());
-        assert!(broker.recent_start_timestamps_by_factor.is_empty());
-    }
-
-    #[test]
-    fn normalize_delivery_mode_accepts_smtp() {
-        assert_eq!(
-            normalize_delivery_mode(Some(" smtp ")),
-            HOSTED_LOGIN_DELIVERY_MODE_SMTP
-        );
-        assert_eq!(
-            normalize_delivery_mode(Some("server_log_only")),
-            HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY
-        );
-        assert_eq!(
-            normalize_delivery_mode(Some("unexpected")),
-            HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE
-        );
-    }
-
-    #[test]
-    fn hosted_login_smtp_config_defaults_to_aliyun_relay() {
-        let config = HostedLoginSmtpConfig::from_lookup(|key| match key {
-            HOSTED_LOGIN_SMTP_FROM_EMAIL_ENV => Some("account@mail.oasis7.tech".to_string()),
-            HOSTED_LOGIN_SMTP_PASSWORD_ENV => Some("smtp-secret".to_string()),
-            _ => None,
-        })
-        .expect("config");
-        assert_eq!(config.host, HOSTED_LOGIN_SMTP_DEFAULT_HOST);
-        assert_eq!(config.port, HOSTED_LOGIN_SMTP_DEFAULT_PORT);
-        assert_eq!(config.username, "account@mail.oasis7.tech");
-        assert_eq!(config.from_email, "account@mail.oasis7.tech");
-        assert_eq!(config.from_name.as_deref(), None);
-    }
-
-    #[test]
-    fn hosted_login_smtp_config_supports_custom_sender_fields() {
-        let config = HostedLoginSmtpConfig::from_lookup(|key| match key {
-            HOSTED_LOGIN_SMTP_FROM_EMAIL_ENV => Some("account@mail.oasis7.tech".to_string()),
-            HOSTED_LOGIN_SMTP_PASSWORD_ENV => Some("smtp-secret".to_string()),
-            HOSTED_LOGIN_SMTP_HOST_ENV => Some("smtp.example.com".to_string()),
-            HOSTED_LOGIN_SMTP_PORT_ENV => Some("587".to_string()),
-            HOSTED_LOGIN_SMTP_USERNAME_ENV => Some("mailer".to_string()),
-            HOSTED_LOGIN_SMTP_FROM_NAME_ENV => Some("Oasis7 Accounts".to_string()),
-            _ => None,
-        })
-        .expect("config");
-        assert_eq!(config.host, "smtp.example.com");
-        assert_eq!(config.port, 587);
-        assert_eq!(config.username, "mailer");
-        assert_eq!(config.from_name.as_deref(), Some("Oasis7 Accounts"));
-        assert_eq!(
-            config.from_mailbox().expect("mailbox").to_string(),
-            "Oasis7 Accounts <account@mail.oasis7.tech>"
-        );
-    }
-
-    #[test]
-    #[ignore = "requires live SMTP credentials and a recipient mailbox"]
-    fn hosted_login_smtp_live_smoke() {
-        let config = HostedLoginSmtpConfig::from_env().expect("smtp config from env");
-        let target = std::env::var("OASIS7_HOSTED_LOGIN_SMTP_SMOKE_TO_EMAIL")
-            .expect("OASIS7_HOSTED_LOGIN_SMTP_SMOKE_TO_EMAIL");
-        assert!(
-            !target.trim().is_empty(),
-            "OASIS7_HOSTED_LOGIN_SMTP_SMOKE_TO_EMAIL must not be empty"
-        );
-        config
-            .send_login_code(target.trim(), "123456")
-            .expect("live SMTP delivery");
-    }
-}
+#[path = "hosted_account_identity_tests.rs"]
+mod tests;

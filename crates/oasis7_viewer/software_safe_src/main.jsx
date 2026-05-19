@@ -158,6 +158,7 @@ function HostedLoginForm(props) {
             onInput={(event) => {
               core.state.hostedLogin.handle = String(event.currentTarget.value || "");
               core.state.hostedLogin.error = null;
+              core.state.hostedLogin.retryAfterSeconds = null;
               core.requestRender();
             }}
           />
@@ -215,7 +216,14 @@ function HostedLoginForm(props) {
         </div>
       </Show>
       <Show when={core.state.hostedLogin.error}>
-        <EmptyState>{core.state.hostedLogin.error}</EmptyState>
+        <div class="stack">
+          <EmptyState>{core.state.hostedLogin.error}</EmptyState>
+          <Show when={core.state.hostedLogin.retryAfterSeconds != null}>
+            <div class="badge-row">
+              <Badge>{`retry_after=${core.state.hostedLogin.retryAfterSeconds}s`}</Badge>
+            </div>
+          </Show>
+        </div>
       </Show>
     </div>
   );

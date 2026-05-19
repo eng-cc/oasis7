@@ -290,6 +290,23 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.queryByText(/not implemented yet/i)).not.toBeInTheDocument();
   });
 
+  it("surfaces hosted login retry-after guidance when OTP resend is throttled", async () => {
+    await renderViewerApp({
+      setupAfterMount(core) {
+        core.state.hostedAccess = sampleHostedPublicJoinAccess();
+        core.state.hostedLogin.handle = "player@example.com";
+        core.state.hostedLogin.error = "a login code was just sent for this email; retry in 21 seconds (retry in 21s)";
+        core.state.hostedLogin.retryAfterSeconds = 21;
+      },
+    });
+
+    screen.getByText("Runtime Diagnostics").click();
+    expect(
+      screen.getAllByText("a login code was just sent for this email; retry in 21 seconds (retry in 21s)").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("retry_after=21s").length).toBeGreaterThan(0);
+  });
+
   it("marks hosted backend reauth as available once a browser player session is registered", async () => {
     await renderViewerApp({
       setupAfterMount(core) {
