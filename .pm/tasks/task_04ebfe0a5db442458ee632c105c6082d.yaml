@@ -1,0 +1,23 @@
+task_uid: task_04ebfe0a5db442458ee632c105c6082d
+title: "close pm_store modularization review comment"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_04ebfe0a5db442458ee632c105c6082d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - scripts/pm/pm_store_task_lint.py
+  - scripts/pm/pm_store.py
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-001
+  - PRD-ENGINEERING-003
+acceptance:
+  - "pm_store_task_lint restores promoted-memory reason validation without behavior drift"
+  - "review comment fix passes pm lint and required verification"
+handoff_to: []
+updated_at: 2026-05-19T09:39:08+08:00
+last_started_at: 2026-05-19T09:36:08+08:00
+last_closed_at: 2026-05-19T09:39:08+08:00

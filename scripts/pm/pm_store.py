@@ -2026,6 +2026,7 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
         task_execution_log_entry_re=TASK_EXECUTION_LOG_ENTRY_RE,
         allowed_signal_states=ALLOWED_SIGNAL_STATES,
         allowed_memory_promotion_states=ALLOWED_MEMORY_PROMOTION_STATES,
+        allowed_promotion_reasons=ALLOWED_PROMOTION_REASONS,
         allowed_memory_rejection_reasons=ALLOWED_MEMORY_REJECTION_REASONS,
         task_statuses=TASK_STATUSES,
     )

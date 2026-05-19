@@ -25,6 +25,7 @@ def run_task_backlog_lint(
     task_execution_log_entry_re,
     allowed_signal_states,
     allowed_memory_promotion_states,
+    allowed_promotion_reasons,
     allowed_memory_rejection_reasons,
     task_statuses,
 ) -> None:
@@ -98,6 +99,11 @@ def run_task_backlog_lint(
                 fail(
                     f"signal promoted memory missing keys: {payload['signal_id']} -> "
                     + ", ".join(missing_memory_keys)
+                )
+            elif payload["memory_promotion_reason"] not in allowed_promotion_reasons:
+                fail(
+                    f"signal memory_promotion_reason invalid: "
+                    f"{payload['signal_id']} -> {payload['memory_promotion_reason']}"
                 )
         elif memory_state == "rejected":
             missing_rejection_keys = sorted({"memory_decision_at", "memory_rejection_reason"} - payload.keys())
