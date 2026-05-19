@@ -79,7 +79,7 @@ export function createViewerAuthSurfaceModule({
         : "guest session has already been superseded by a hosted-issued player identity";
     }
     if (isHostedPublicJoinHint(deploymentHint)) {
-      return auth.error || "this browser is still guest-only; hosted public join must issue a player identity before low-risk interaction unlocks";
+      return auth.error || "this browser is still guest-only; hosted public join must complete hosted account login before low-risk interaction unlocks";
     }
     return auth.error || "viewer auth bootstrap is unavailable, so the browser cannot leave guest session";
   }
@@ -90,15 +90,15 @@ export function createViewerAuthSurfaceModule({
         return "player interaction is currently unlocked through legacy viewer auth bootstrap in trusted preview mode";
       }
       if (auth.registrationStatus === "registered") {
-        return "player interaction is unlocked through hosted-issued player_id + browser-local ephemeral Ed25519 session";
+        return "player interaction is unlocked through hosted-issued player_id + browser device session plus an in-memory browser-generated Ed25519 session key";
       }
       if (auth.registrationStatus === "registering" || auth.registrationStatus === "issued") {
-        return "browser-local hosted identity is ready; runtime player-session registration is still in progress";
+        return "browser device session is ready; runtime player-session registration is still in progress";
       }
       return auth.error || "hosted player identity exists, but runtime registration still needs recovery";
     }
     if (isHostedPublicJoinHint(deploymentHint)) {
-      return auth.error || "player session upgrade/login is still pending hosted issue";
+      return auth.error || "player session upgrade/login is still pending hosted account verification";
     }
     return auth.error || "viewer auth bootstrap is missing or incomplete";
   }
@@ -127,13 +127,13 @@ export function createViewerAuthSurfaceModule({
         return {
           status: "preview_backend_reauth_available",
           reason:
-            "hosted preview backend reauth is available after the browser-local player_session has completed runtime registration for prompt_control",
+            "hosted preview backend reauth is available after the browser device-session-backed player_session has completed runtime registration for prompt_control",
         };
       }
       return {
         status: "issued_pending_register",
         reason:
-          "hosted preview backend reauth stays pending until the browser-local player_session finishes runtime registration",
+          "hosted preview backend reauth stays pending until the browser device-session-backed player_session finishes runtime registration",
       };
     }
     if (promptPolicy.availability === "trusted_local_preview_only") {
@@ -272,7 +272,7 @@ export function createViewerAuthSurfaceModule({
       ? state.auth.available
         ? state.auth.source === "legacy_viewer_auth_bootstrap"
           ? "legacy_viewer_auth_bootstrap+hosted_access_hint"
-          : "hosted_player_issue+browser_local_ephemeral_key"
+          : "hosted_player_issue+browser_local_device_session"
         : "hosted_access_hint"
       : state.auth.available
         ? state.auth.source
@@ -321,12 +321,12 @@ export function createViewerAuthSurfaceModule({
         ? state.auth.source === "legacy_viewer_auth_bootstrap"
           ? "reconnect still depends on the current preview bootstrap; hosted player-session reconnect/release is available only after switching away from legacy bootstrap"
           : state.auth.registrationStatus === "registered"
-            ? "page reload will reuse the browser-local hosted key and attempt reconnect_sync first"
-            : "browser-local hosted key is persisted, but runtime session restore is still pending this page load"
+            ? "page reload will reuse the hosted device session, mint a fresh browser session key, and attempt reconnect_sync first"
+            : "hosted device session is persisted locally, but runtime player-session restore is still pending this page load"
         : isHostedPublicJoinHint(deploymentHint)
           ? buildHostedRecoveryHint("en")?.detail
             || "hosted public join recovers by acquiring a player_session first, then re-registering it through reconnect_sync"
-          : "page reload is possible once viewer auth bootstrap or hosted player-session issue succeeds",
+          : "page reload is possible once viewer auth bootstrap or hosted account login succeeds",
     };
   }
 
@@ -368,10 +368,10 @@ export function createViewerAuthSurfaceModule({
         title: localeText(locale, "当前浏览器已主动释放会话", "This browser already released its session"),
         detail: localeText(
           locale,
-          "当前 player_session 已在本地释放。重新申请一个新的 hosted player session 后，viewer 会再做 reconnect_sync。",
-          "The current player_session was released locally. Acquire a fresh hosted player session and viewer will attempt reconnect_sync again.",
+          "当前 player_session 已在本地释放。重新登录 Hosted Account 并领取新的 player_session 后，viewer 会再做 reconnect_sync。",
+          "The current player_session was released locally. Re-login to the hosted account, acquire a fresh player session, and viewer will attempt reconnect_sync again.",
         ),
-        cta: localeText(locale, "重新申请 Hosted Player Session", "Re-acquire Hosted Player Session"),
+        cta: localeText(locale, "重新登录 Hosted Account", "Re-login to Hosted Account"),
       };
     }
     if (revokeReason === "agent_already_bound" || errorText.includes("agent is already bound")) {
@@ -392,8 +392,8 @@ export function createViewerAuthSurfaceModule({
         title: localeText(locale, "Runtime 注册没有完成", "Runtime registration did not finish"),
         detail: localeText(
           locale,
-          "浏览器已经拿到 hosted identity，但 runtime register/reconnect 失败。请先重试 issue/reconnect，再检查 launcher/runtime 日志。",
-          "The browser already received a hosted identity, but runtime register/reconnect failed. Retry issue/reconnect first, then inspect launcher/runtime logs.",
+          "浏览器已经拿到 hosted identity，但 runtime register/reconnect 失败。请重新登录 Hosted Account 并重试注册 / reconnect，再检查 launcher/runtime 日志。",
+          "The browser already received a hosted identity, but runtime register/reconnect failed. Re-login to the hosted account and retry register / reconnect, then inspect launcher/runtime logs.",
         ),
         cta: localeText(locale, "重试注册 / reconnect", "Retry register / reconnect"),
       };
@@ -404,10 +404,10 @@ export function createViewerAuthSurfaceModule({
         title: localeText(locale, "当前会话已被回收", "The current session was revoked"),
         detail: localeText(
           locale,
-          `运行时或操作员 ${revokedBy} 已回收当前浏览器会话，原因是 ${revokeReason || errorText || "unknown"}。需要重新申请一个新的 Hosted Player Session，玩法、聊天和 prompt 才能继续。`,
-          `The runtime or operator revoked this browser session by ${revokedBy}. Reason: ${revokeReason || errorText || "unknown"}. You need to acquire a fresh hosted player session before gameplay, chat, or prompt actions can continue.`,
+          `运行时或操作员 ${revokedBy} 已回收当前浏览器会话，原因是 ${revokeReason || errorText || "unknown"}。需要重新登录 Hosted Account 并领取新的 player_session，玩法、聊天和 prompt 才能继续。`,
+          `The runtime or operator revoked this browser session by ${revokedBy}. Reason: ${revokeReason || errorText || "unknown"}. You need to re-login to the hosted account and acquire a fresh player session before gameplay, chat, or prompt actions can continue.`,
         ),
-        cta: localeText(locale, "重新申请 Hosted Player Session", "Re-acquire Hosted Player Session"),
+        cta: localeText(locale, "重新登录 Hosted Account", "Re-login to Hosted Account"),
       };
     }
     return {
@@ -415,10 +415,10 @@ export function createViewerAuthSurfaceModule({
       title: localeText(locale, "当前浏览器还没有 player_session", "This browser still has no player_session"),
       detail: localeText(
         locale,
-        "当前 hosted public join 需要先 issue player_session，再让 runtime 完成 register/reconnect。",
-        "Hosted public join must issue a player_session first, then let runtime finish register/reconnect.",
+        "当前 hosted public join 需要先完成 Hosted Account 登录并领取 player_session，再让 runtime 完成 register/reconnect。",
+        "Hosted public join must complete hosted account login and acquire a player_session first, then let runtime finish register/reconnect.",
       ),
-      cta: localeText(locale, "申请 Hosted Player Session", "Acquire Hosted Player Session"),
+      cta: localeText(locale, "登录 Hosted Account", "Login to Hosted Account"),
     };
   }
 
