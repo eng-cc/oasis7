@@ -1,0 +1,23 @@
+task_uid: task_32a955cb401e4a269f72113db4fa0371
+title: "completion claim verification helper"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-superpowers-workflow-borrowing
+execution_log_path: .pm/tasks/task_32a955cb401e4a269f72113db4fa0371.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+related_prd:
+  - PRD-ENGINEERING-031
+acceptance:
+  - "Add a repo-owned helper that executes verification commands immediately before completion/test/PR-ready claims."
+  - "Block claim-ready output when the fresh verification command fails, and emit machine-readable status."
+  - "Document the helper in PM/workflow surfaces and cover it with repo-owned regression tests."
+handoff_to: []
+updated_at: 2026-05-19T18:15:27+08:00
+last_started_at: 2026-05-19T17:37:31+08:00
+last_closed_at: 2026-05-19T18:15:27+08:00

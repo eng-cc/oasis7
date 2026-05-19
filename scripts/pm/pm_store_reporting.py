@@ -516,6 +516,11 @@ def build_workflow_checklist(
                 reason=f"triaged_reflections={pending_reflections}",
             )
         add(
+            "fresh-claim-verification",
+            "在宣称“完成 / 测试通过 / 可提 PR”前，先用 claim-ready helper 立即重跑一条 fresh verification 命令；旧结果、局部结果或 agent 自报成功都不能替代当前回合的执行证据。",
+            command="./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command '<fresh verification command>'",
+        )
+        add(
             "prepare-pr-review",
             "默认评审边界在 GitHub PR：完成 commit 后通过 `./scripts/prepare-task-pr.sh` 执行 PR preflight / create，并以 required checks + review/approval 作为正式 review 流程；本地不再要求额外的 pre-commit review 脚本。",
             command="./scripts/prepare-task-pr.sh",
