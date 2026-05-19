@@ -23,6 +23,28 @@
     - `npm --prefix crates/oasis7_viewer run test:ui`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] hosted-account-identity-broker-server (PRD-P2P-029) [test_tier_required]: 在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server，提供手机号/邮箱 login challenge、稳定 `hosted_account_id -> player_id` 映射持久化、验证后换发 `device_session + player_session`，并把 viewer hosted onboarding 改成 phone/email + OTP 表单。 Trace: .pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.yaml
+  - 产物文件:
+    - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher/static_http.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
+    - `crates/oasis7/src/hosted_access.rs`
+    - `crates/oasis7_viewer/software_safe_src/legacy_core.js`
+    - `crates/oasis7_viewer/software_safe_src/main.jsx`
+    - `crates/oasis7_viewer/software_safe_src/main.test.jsx`
+    - `crates/oasis7_viewer/software_safe.js`
+    - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_ -- --nocapture`
+    - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `npm --prefix crates/oasis7_viewer run test:ui`
+    - `npm --prefix crates/oasis7_viewer run build:software-safe`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ### 后续切片
 - `runtime_engineer` + `viewer_engineer` / hosted-account-identity-broker:
@@ -113,8 +135,9 @@
 ## 当前结论
 - 结论-1: 对 `hosted_public_join` 而言，“手机号/邮箱登录 + 中心化托管密钥 + 可选自托管升级”是比“让普通玩家保存公私钥”更合适的正式产品路径。
 - 结论-2: 中心化 KMS 不是直接替代全部产品语义；更准确的落法是 `identity broker + custody service + sign API`，KMS/HSM 作为 custody backend 的实现选项，而不是前端/运行时直接耦合的唯一接口。
-- 结论-3: 当前代码已经完成第一刀 `device_session` 收口：launcher grant 新增 `device_session_id`，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`，刷新页后只保留 `device_session` handle，并按需在页内重新生成临时 Ed25519 session key；但 hosted account、手机号/邮箱登录、custody sign API 与真正的托管签名后端仍未实现。
-- 结论-4: 托管身份仅面向 player plane；node / validator / governance signer 继续沿用独立 custody/governance 专题。
+- 结论-3: 当前代码已经完成两刀 hosted identity 基线：其一是 `device_session` 收口，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`；其二是中心化 hosted account 登录 server，`oasis7_game_launcher` 现已提供 phone/email login challenge、稳定 `hosted_account_id -> player_id` 持久化和登录后换发 `device_session + player_session` 的 public route，viewer 也已改成 hosted account 登录表单。
+- 结论-4: 当前登录投递仍是 preview transport：server 仅支持 `preview_inline` 或 `server_log_only` 这两种 repo-owned challenge delivery mode，还没有接真实短信/邮件 provider。
+- 结论-5: 托管身份仅面向 player plane；node / validator / governance signer 继续沿用独立 custody/governance 专题。
 
 ## 依赖
 - `doc/p2p/prd.md`
@@ -137,5 +160,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 优先执行 `hosted-account-identity-broker`，把 hosted account、手机号/邮箱 OTP/magic link/passkey、`hosted_account_id -> player_id` 绑定与跨设备恢复落成代码真值；随后推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
+- 下一步: 优先把 `hosted-account-identity-broker` 从 preview transport 推进到真实 delivery provider，补 `magic link/passkey`、挑战发送配额与恢复/冻结策略；随后推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
 - 最近更新: 2026-05-18

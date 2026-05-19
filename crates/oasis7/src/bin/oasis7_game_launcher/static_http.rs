@@ -1,3 +1,8 @@
+use super::hosted_account_identity::{
+    HostedAccountIdentityBroker, HostedAccountLoginCompleteResponse,
+    HostedAccountLoginStartResponse, HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE,
+    HOSTED_ACCOUNT_LOGIN_START_ROUTE,
+};
 use super::hosted_player_session::{
     HostedPlayerSessionAdmissionResponse, HostedPlayerSessionIssueResponse,
     HostedPlayerSessionIssuer, HostedPlayerSessionReleaseResponse,
@@ -25,6 +30,7 @@ pub(super) fn handle_http_connection(
     default_viewer_player_id: Option<&str>,
     deployment_mode: DeploymentMode,
     hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
+    hosted_account_broker: &Arc<Mutex<HostedAccountIdentityBroker>>,
 ) -> Result<(), String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
@@ -55,14 +61,19 @@ pub(super) fn handle_http_connection(
     let is_refresh_route = path_only == HOSTED_PLAYER_SESSION_REFRESH_ROUTE;
     let is_issue_route = path_only == HOSTED_PLAYER_SESSION_ISSUE_ROUTE;
     let is_release_route = path_only == HOSTED_PLAYER_SESSION_RELEASE_ROUTE;
+    let is_login_start_route = path_only == HOSTED_ACCOUNT_LOGIN_START_ROUTE;
+    let is_login_complete_route = path_only == HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE;
     let is_strong_auth_grant_route = path_only == HOSTED_STRONG_AUTH_GRANT_ROUTE
         || path_only == HOSTED_PROMPT_CONTROL_STRONG_AUTH_GRANT_ROUTE;
     let is_hosted_player_route = is_admission_route
         || is_refresh_route
         || is_issue_route
         || is_release_route
+        || is_login_start_route
+        || is_login_complete_route
         || is_strong_auth_grant_route;
-    let allow_post = is_release_route || is_refresh_route;
+    let allow_post =
+        is_release_route || is_refresh_route || is_login_start_route || is_login_complete_route;
     if !method.eq_ignore_ascii_case("GET")
         && !head_only
         && !(allow_post && method.eq_ignore_ascii_case("POST"))
@@ -110,6 +121,34 @@ pub(super) fn handle_http_connection(
         )?;
         write_json_response(&mut stream, 200, &response, head_only)
             .map_err(|err| format!("failed to write hosted session release response: {err}"))?;
+        return Ok(());
+    }
+    if is_login_start_route {
+        let login_channel = parse_query_value(target, "channel").unwrap_or_default();
+        let login_hint = parse_query_value(target, "handle").unwrap_or_default();
+        let response = start_hosted_account_login(
+            deployment_mode,
+            login_channel.as_str(),
+            login_hint.as_str(),
+            hosted_account_broker,
+        )?;
+        write_json_response(&mut stream, 200, &response, head_only)
+            .map_err(|err| format!("failed to write hosted account login start response: {err}"))?;
+        return Ok(());
+    }
+    if is_login_complete_route {
+        let challenge_id = parse_query_value(target, "challenge_id").unwrap_or_default();
+        let otp_code = parse_query_value(target, "otp_code").unwrap_or_default();
+        let response = complete_hosted_account_login(
+            deployment_mode,
+            challenge_id.as_str(),
+            otp_code.as_str(),
+            hosted_session_issuer,
+            hosted_account_broker,
+        )?;
+        write_json_response(&mut stream, 200, &response, head_only).map_err(|err| {
+            format!("failed to write hosted account login complete response: {err}")
+        })?;
         return Ok(());
     }
     if is_strong_auth_grant_route {
@@ -173,6 +212,34 @@ pub(super) fn handle_http_connection(
     }
 
     Ok(())
+}
+
+fn start_hosted_account_login(
+    deployment_mode: DeploymentMode,
+    login_channel: &str,
+    login_hint: &str,
+    hosted_account_broker: &Arc<Mutex<HostedAccountIdentityBroker>>,
+) -> Result<HostedAccountLoginStartResponse, String> {
+    let mut broker = hosted_account_broker
+        .lock()
+        .map_err(|_| "hosted account broker lock poisoned".to_string())?;
+    Ok(broker.start_login(deployment_mode, login_channel, login_hint))
+}
+
+fn complete_hosted_account_login(
+    deployment_mode: DeploymentMode,
+    challenge_id: &str,
+    otp_code: &str,
+    hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
+    hosted_account_broker: &Arc<Mutex<HostedAccountIdentityBroker>>,
+) -> Result<HostedAccountLoginCompleteResponse, String> {
+    let mut broker = hosted_account_broker
+        .lock()
+        .map_err(|_| "hosted account broker lock poisoned".to_string())?;
+    let mut issuer = hosted_session_issuer
+        .lock()
+        .map_err(|_| "hosted session issuer lock poisoned".to_string())?;
+    Ok(broker.complete_login(deployment_mode, challenge_id, otp_code, &mut issuer))
 }
 
 fn reconcile_hosted_runtime_presence(

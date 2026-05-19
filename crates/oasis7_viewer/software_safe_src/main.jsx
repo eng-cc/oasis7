@@ -141,6 +141,110 @@ function CalloutCard(props) {
   );
 }
 
+function HostedLoginForm(props) {
+  const locale = () => props.locale ?? uiLocale();
+  return (
+    <div class="stack">
+      <div class="control-grid">
+        <div class="field">
+          <label for={props.channelId ?? "hosted-login-channel"}>
+            {tr(locale(), "登录渠道", "Login Channel")}
+          </label>
+          <select
+            id={props.channelId ?? "hosted-login-channel"}
+            value={core.state.hostedLogin.channel}
+            onChange={(event) => {
+              core.state.hostedLogin.channel = String(event.currentTarget.value || "email").trim() || "email";
+              core.state.hostedLogin.error = null;
+              core.state.hostedLogin.challengeId = null;
+              core.state.hostedLogin.maskedLoginHint = null;
+              core.state.hostedLogin.deliveryMode = null;
+              core.state.hostedLogin.previewCode = null;
+              core.state.hostedLogin.code = "";
+              core.state.hostedLogin.expiresAtUnixMs = null;
+              core.state.hostedLogin.accountExists = false;
+              core.requestRender();
+            }}
+          >
+            <option value="email">{tr(locale(), "邮箱", "Email")}</option>
+            <option value="phone">{tr(locale(), "手机号", "Phone")}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for={props.handleId ?? "hosted-login-handle"}>
+            {tr(locale(), "手机号或邮箱", "Phone or Email")}
+          </label>
+          <input
+            id={props.handleId ?? "hosted-login-handle"}
+            type="text"
+            autocomplete="off"
+            value={core.state.hostedLogin.handle}
+            onInput={(event) => {
+              core.state.hostedLogin.handle = String(event.currentTarget.value || "");
+              core.state.hostedLogin.error = null;
+              core.requestRender();
+            }}
+          />
+        </div>
+      </div>
+      <div class="toolbar">
+        <button
+          data-auth-action="start-login"
+          disabled={core.state.hostedLogin.startInFlight}
+          onClick={() => {
+            void core.startHostedAccountLogin();
+          }}
+        >
+          {tr(locale(), "请求登录验证码", "Request Login Code")}
+        </button>
+      </div>
+      <Show when={core.state.hostedLogin.challengeId}>
+        <div class="badge-row">
+          <Badge>{`challenge=${core.state.hostedLogin.challengeId}`}</Badge>
+          <Badge>{`target=${core.state.hostedLogin.maskedLoginHint || "-"}`}</Badge>
+          <Badge>{`delivery=${core.state.hostedLogin.deliveryMode || "-"}`}</Badge>
+          <Badge>{core.state.hostedLogin.accountExists ? "account=existing" : "account=new"}</Badge>
+        </div>
+        <Show when={core.state.hostedLogin.previewCode}>
+          <div class="badge-row">
+            <Badge class="badge badge--accent">{`previewCode=${core.state.hostedLogin.previewCode}`}</Badge>
+          </div>
+        </Show>
+        <div class="field">
+          <label for={props.codeId ?? "hosted-login-code"}>
+            {tr(locale(), "验证码", "Verification Code")}
+          </label>
+          <input
+            id={props.codeId ?? "hosted-login-code"}
+            type="text"
+            autocomplete="off"
+            value={core.state.hostedLogin.code}
+            onInput={(event) => {
+              core.state.hostedLogin.code = String(event.currentTarget.value || "");
+              core.state.hostedLogin.error = null;
+              core.requestRender();
+            }}
+          />
+        </div>
+        <div class="toolbar">
+          <button
+            data-auth-action="complete-login"
+            disabled={core.state.hostedLogin.completeInFlight || core.state.auth.issueInFlight}
+            onClick={() => {
+              void core.completeHostedAccountLogin();
+            }}
+          >
+            {tr(locale(), "登录并领取玩家会话", "Sign In and Acquire Player Session")}
+          </button>
+        </div>
+      </Show>
+      <Show when={core.state.hostedLogin.error}>
+        <EmptyState>{core.state.hostedLogin.error}</EmptyState>
+      </Show>
+    </div>
+  );
+}
+
 function EmptyEntityRecoveryCard(props) {
   const locale = () => props.locale ?? uiLocale();
   const gameplay = () => (typeof props.gameplay === "function" ? props.gameplay() : props.gameplay);
@@ -809,38 +913,15 @@ function WorldSummaryPanel() {
             {hostedRecoveryHint()?.detail || state.auth.rebindNotice || authSurface().currentTierReason}
           </EmptyState>
           <Show when={hostedRecoveryHint()}>
-            {(hint) => (
-              <div class="toolbar">
-                <button
-                  data-auth-action="retry-issue"
-                  disabled={state.auth.issueInFlight}
-                  onClick={() => {
-                    void core.retryHostedPlayerIdentityIssue();
-                  }}
-                >
-                  {hint().cta}
-                </button>
-              </div>
-            )}
+            {(hint) => <EmptyState>{hint().detail}</EmptyState>}
           </Show>
           <Show
             when={
               !state.auth.available
               && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
-              && !hostedRecoveryHint()
             }
           >
-            <div class="toolbar">
-              <button
-                data-auth-action="retry-issue"
-                disabled={state.auth.issueInFlight}
-                onClick={() => {
-                  void core.retryHostedPlayerIdentityIssue();
-                }}
-              >
-                {tr(locale(), "领取玩家会话", "Acquire Player Session")}
-              </button>
-            </div>
+            <HostedLoginForm locale={locale()} />
           </Show>
           <Show when={state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap"}>
             <div class="toolbar">
@@ -967,36 +1048,6 @@ function WorldSummaryPanel() {
             <Badge>{state.auth.pendingForceRebind ? "rebind=forcing" : "rebind=idle"}</Badge>
           </div>
           <div class="toolbar">
-            <Show when={hostedRecoveryHint()}>
-              {(hint) => (
-                <button
-                  data-auth-action="retry-issue"
-                  disabled={state.auth.issueInFlight}
-                  onClick={() => {
-                    void core.retryHostedPlayerIdentityIssue();
-                  }}
-                >
-                  {hint().cta}
-                </button>
-              )}
-            </Show>
-            <Show
-              when={
-                !state.auth.available
-                && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
-                && !hostedRecoveryHint()
-              }
-            >
-              <button
-                data-auth-action="retry-issue"
-                disabled={state.auth.issueInFlight}
-                onClick={() => {
-                  void core.retryHostedPlayerIdentityIssue();
-                }}
-              >
-                {tr(locale(), "领取玩家会话", "Acquire Player Session")}
-              </button>
-            </Show>
             <Show when={state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap"}>
               <button
                 data-auth-action="logout"
@@ -1008,6 +1059,22 @@ function WorldSummaryPanel() {
               </button>
             </Show>
           </div>
+          <Show when={hostedRecoveryHint()}>
+            {(hint) => <EmptyState>{hint().detail}</EmptyState>}
+          </Show>
+          <Show
+            when={
+              !state.auth.available
+              && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+            }
+          >
+            <HostedLoginForm
+              locale={locale()}
+              channelId="diag-hosted-login-channel"
+              handleId="diag-hosted-login-handle"
+              codeId="diag-hosted-login-code"
+            />
+          </Show>
           <Show when={state.auth.recoveryErrorCode || state.auth.recoveryErrorMessage}>
             <div class="badge-row">
               <Badge class="badge badge--warn">{`recoveryError=${state.auth.recoveryErrorCode || "-"}`}</Badge>

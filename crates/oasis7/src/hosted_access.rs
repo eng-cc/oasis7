@@ -270,6 +270,8 @@ pub(super) fn web_launcher_public_endpoints() -> &'static [&'static str] {
         "/healthz",
         "/api/public/player-session/admission",
         "/api/public/player-session/refresh",
+        "/api/public/hosted-account/login/start",
+        "/api/public/hosted-account/login/complete",
         "/api/public/state",
         "/api/public/player-session/issue",
         "/api/public/player-session/release",
@@ -410,5 +412,13 @@ mod tests {
         assert!(web_launcher_public_endpoints().contains(&"/api/public/strong-auth/grant"));
         assert!(!web_launcher_public_endpoints()
             .contains(&"/api/public/strong-auth/grant/prompt-control"));
+    }
+
+    #[test]
+    fn web_launcher_public_endpoints_expose_hosted_account_login_routes() {
+        assert!(web_launcher_public_endpoints().contains(&"/api/public/hosted-account/login/start"));
+        assert!(
+            web_launcher_public_endpoints().contains(&"/api/public/hosted-account/login/complete")
+        );
     }
 }
