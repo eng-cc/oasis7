@@ -151,7 +151,7 @@ const emittedFiles = (await listFilesRecursively(tempOutDir))
   .map((filePath) => relative(tempOutDir, filePath))
   .sort();
 if (emittedFiles.length !== 1 || emittedFiles[0] !== "viewer.js") {
-  throw new Error(`unexpected software_safe bundle outputs: ${emittedFiles.join(", ") || "(none)"}`);
+  throw new Error(`unexpected viewer canonical bundle outputs: ${emittedFiles.join(", ") || "(none)"}`);
 }
 await copyFile(builtBundlePath, finalCanonicalBundlePath);
 await writeFile(finalCompatBundlePath, compatBundleContents(), "utf8");
