@@ -1,15 +1,15 @@
 # Public Testnet Live-Candidate Endpoint Deploy (2026-05-19)
 
-审计轮次: 2
+审计轮次: 3
 
 ## Meta
 - 责任角色:
   - `runtime_engineer`
 - 当前结论:
   - `runtime_bootstrap=pass`
-  - `public_rpc_ready=partial`
-  - `explorer_public_ready=partial`
-  - `overall_readiness=partial`
+  - `public_rpc_ready=pass`
+  - `explorer_public_ready=pass`
+  - `overall_readiness=block`
 - worktree:
   - `task/p2p-public-testnet-live-candidate-endpoint-deploy`
 - 对应 world:
@@ -43,7 +43,13 @@
 4. 纠正端点口径：
   - 初始尝试曾错误把非 testnet 专用域名写进 manifest endpoint refs。
   - 在收到“`t2t` 不能用于 testnet”的更正后，本轮已把 manifest endpoint refs 收回为未分配 testnet 公网入口的 placeholder，不再把 `t2t` 作为 testnet 证据。
-5. 重启：
+5. 改用 `IP:port` 公网入口：
+  - ECS sequencer `STATUS_BIND` 从 `127.0.0.1:6631` 改为 `0.0.0.0:6631`
+  - ECS storage `STATUS_BIND` 从 `127.0.0.1:6632` 改为 `0.0.0.0:6632`
+  - formal manifest endpoint refs 改为：
+    - `rpc_ref=http://39.104.204.172:6631/v1/chain/status`
+    - `explorer_ref=http://39.104.205.67:6632/v1/chain/explorer/overview`
+6. 重启：
   - `systemctl restart oasis7-testnet-sequencer.service`
   - `systemctl restart oasis7-testnet-storage.service`
 
@@ -58,8 +64,8 @@
   - `network_tier.tier=public_testnet`
   - `network_tier.status=rehearsal`
   - `network_tier.bootstrap_peer_count=3`
-  - `network_tier.rpc_ref=https://public-testnet.example.invalid/rpc`
-  - `network_tier.explorer_ref=https://public-testnet.example.invalid/explorer`
+  - `network_tier.rpc_ref=http://39.104.204.172:6631/v1/chain/status`
+  - `network_tier.explorer_ref=http://39.104.205.67:6632/v1/chain/explorer/overview`
   - `committed_height` 与 `network_committed_height` 继续推进
 
 ### ECS storage `39.104.205.67`
@@ -72,14 +78,32 @@
   - `network_tier.tier=public_testnet`
   - `network_tier.status=rehearsal`
   - `network_tier.bootstrap_peer_count=3`
-  - `network_tier.rpc_ref=https://public-testnet.example.invalid/rpc`
-  - `network_tier.explorer_ref=https://public-testnet.example.invalid/explorer`
+  - `network_tier.rpc_ref=http://39.104.204.172:6631/v1/chain/status`
+  - `network_tier.explorer_ref=http://39.104.205.67:6632/v1/chain/explorer/overview`
   - `committed_height` 与 `network_committed_height` 继续推进
 
+## 公网验证
+1. 从当前控制机直接访问 RPC：
+  - `curl http://39.104.204.172:6631/v1/chain/status`
+  - 返回 `ok=true`
+  - 返回 `node_id=triad-testnet-sequencer`
+  - 返回 `last_error=null`
+  - 返回 `network_tier.tier=public_testnet`
+2. 从当前控制机直接访问第二个节点状态：
+  - `curl http://39.104.205.67:6632/v1/chain/status`
+  - 返回 `ok=true`
+  - 返回 `node_id=triad-testnet-storage`
+  - 返回 `last_error=null`
+  - 返回 `network_tier.tier=public_testnet`
+3. 从当前控制机直接访问 explorer 概览：
+  - `curl http://39.104.205.67:6632/v1/chain/explorer/overview`
+  - 返回 `ok=true`
+  - 返回 `latest_height=4826`
+  - 返回 `world_id=oasis7-public-testnet-parallel-20260518`
+
 ## 边界更正
-1. `t2t.oasis7.tech` 不是 testnet 专用域名。
-2. 因此本轮不能把任何基于 `t2t` 的 nginx 代理或 TLS 观测当作 `public_rpc_ready` / `explorer_public_ready` 的有效证据。
-3. 这次部署真正新增的，只是“远端 live runtime 已实际加载 formal `public_testnet` manifest”，而不是“testnet 公网入口已经就绪”。
+1. `t2t.oasis7.tech` 不是 testnet 专用域名，因此本轮不再使用它作为任何 testnet readiness 证据。
+2. 这次改为用公网 `IP:port` 直接验证 testnet RPC / explorer，而不是借用非 testnet 专用域名。
 
 ## Readiness 收口
 1. `runtime_bootstrap`
@@ -88,15 +112,15 @@
     - 2026-05-18 的本地三节点 formal manifest rehearsal 已确认该 lane 可 `pass`
     - 本轮又补充确认两台 ECS 的 live runtime 已实际加载 formal `public_testnet` manifest
 2. `public_rpc_ready`
-  - `partial`
+  - `pass`
   - 依据:
-    - 这次部署证明远端 runtime 已经有能力挂 formal endpoint policy
-    - 但当前没有正确的 testnet 专用公网入口，因此不能记 `pass`
+    - `http://39.104.204.172:6631/v1/chain/status` 已从当前控制机直接返回 `ok=true`
+    - live status 中 `network_tier.rpc_ref` 已与该公网入口一致
 3. `explorer_public_ready`
-  - `partial`
+  - `pass`
   - 依据:
-    - runtime explorer API 本身存在，且可继续作为后续 testnet 专用入口的上游
-    - 但当前没有正确的 testnet 专用公网入口，因此不能记 `pass`
+    - `http://39.104.205.67:6632/v1/chain/explorer/overview` 已从当前控制机直接返回 `ok=true`
+    - live status 中 `network_tier.explorer_ref` 已与该公网入口一致
 4. `faucet_guard_ready`
   - `partial`
   - 依据:
@@ -117,5 +141,5 @@
 
 ## 结论
 1. 这次“进一步做部署”已经把两台阿里云上的 testnet 节点推进成了实际加载 formal `public_testnet` manifest 的 live runtime。
-2. 但由于没有 testnet 专用公网域名，本轮不能把 `public_rpc_ready` 或 `explorer_public_ready` 推进成 `pass`。
-3. 因而截至本轮，能确认新增的是“formal manifest live load”这层事实；不能确认新增的是“公网入口已经合规可用”。
+2. 这次通过公网 `IP:port` 直接验证，已经把 `public_rpc_ready` 与 `explorer_public_ready` 推进成 `pass`，不依赖 testnet 专用域名。
+3. 当前仍然不能放行为 `ready_for_live_candidate`，因为 `faucet_guard_ready`、`reset_policy_announced`、`claims_boundary_review`、`shared_devnet_pass` 还没有补齐。
