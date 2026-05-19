@@ -38,7 +38,7 @@
 
 ## Recommended Skills
 - 主技能：`tdd-test-writer`、`agent-browser`，用于先写失败测试、执行 Web 闭环回归与沉淀最小复现路径。
-- 常复用技能：`documentation-writer`，用于整理测试卡、失败签名、发布阻断结论和回归建议。
+- 常复用技能：`humanizer-zh`，用于收紧中文失败签名、发布阻断结论和回归建议的表达。
 - 使用约定：角色决定 owner，技能决定方法；技能可以帮助构造验证手段，但不替代 QA 对阻断、放行与回归范围的独立判断。
 
 ## Checklist

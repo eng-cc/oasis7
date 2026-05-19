@@ -1,0 +1,26 @@
+task_uid: task_e4d000db4c064cfc8a6487c453c41453
+title: "skill replacement rationalization"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-skill-replacement-rationalization
+execution_log_path: .pm/tasks/task_e4d000db4c064cfc8a6487c453c41453.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - AGENTS.md
+  - .agents/skills/prd/SKILL.md
+doc_refs:
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.design.md
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.project.md
+related_prd:
+  - PRD-ENGINEERING-032
+acceptance:
+  - "Freeze current .agents/skills inventory into keep/replace/retire buckets with repo-specific rationale."
+  - "Retire or replace at least one low-coupling local skill surface that is redundant with repo-native instructions or upstream generic skills."
+  - "Update engineering tracking plus validation evidence for the chosen skill-surface changes."
+handoff_to: []
+updated_at: 2026-05-19T19:44:00+08:00
+last_started_at: 2026-05-19T19:27:22+08:00
+last_closed_at: 2026-05-19T19:44:00+08:00

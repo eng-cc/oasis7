@@ -16,7 +16,7 @@
 - 保留现有页面视觉设计优点：深色科技基调、Hero 动态网格、分层卡片、证据切换与滚动 reveal 动效。
 - 保持中英文页面结构同构，保证首页与文档中心口径一致。
 
-## 视觉方向（frontend-ui-ux）
+## 视觉方向（viewer visual ideation）
 - Purpose：让首次访问者在 30 秒内理解项目既是可玩的游戏系统，也是可扩展的 WASM 游戏引擎。
 - Tone：industrial/utilitarian + editorial（工业科技感 + 清晰信息层级）。
 - Constraints：纯静态页面（HTML/CSS/JS），继续兼容现有 `site/assets/app.js` 交互标记。
