@@ -7,11 +7,10 @@ use super::{emit_stderr_or_event, Level};
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
+use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -101,7 +100,7 @@ pub(super) struct HostedAccountIdentityBroker {
     delivery_mode: String,
     smtp_config: Option<HostedLoginSmtpConfig>,
     next_challenge_sequence: u64,
-    otp_secret: u64,
+    otp_secret: [u8; 32],
     recent_start_timestamps_by_factor: BTreeMap<String, VecDeque<u64>>,
     pending_challenges: BTreeMap<String, PendingHostedLoginChallenge>,
 }
@@ -132,6 +131,23 @@ struct HostedLoginStartBlock {
     error_code: String,
     error: String,
     retry_after_seconds: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct ReservedHostedLoginStart {
+    factor_key: String,
+    issued_at_unix_ms: u64,
+    challenge: PendingHostedLoginChallenge,
+    response_challenge: HostedAccountLoginChallengeSnapshot,
+    delivery_plan: HostedLoginDeliveryPlan,
+}
+
+#[derive(Debug, Clone)]
+enum HostedLoginDeliveryPlan {
+    PreviewInline,
+    ServerLogOnly,
+    Smtp(HostedLoginSmtpConfig),
+    SmtpUnavailable,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -174,7 +190,7 @@ impl HostedAccountIdentityBroker {
             delivery_mode,
             smtp_config,
             next_challenge_sequence: 0,
-            otp_secret: now_unix_ms() ^ 0xa5a5_1357_5a5a_c3c3,
+            otp_secret: random_otp_secret(),
             recent_start_timestamps_by_factor: BTreeMap::new(),
             pending_challenges: BTreeMap::new(),
         })
@@ -189,7 +205,7 @@ impl HostedAccountIdentityBroker {
             delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
             smtp_config: None,
             next_challenge_sequence: 0,
-            otp_secret: now_unix_ms() ^ 0x5a5a_c3c3_a5a5_1357,
+            otp_secret: [0x5a; 32],
             recent_start_timestamps_by_factor: BTreeMap::new(),
             pending_challenges: BTreeMap::new(),
         })
@@ -202,20 +218,20 @@ impl HostedAccountIdentityBroker {
             delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
             smtp_config: None,
             next_challenge_sequence: 0,
-            otp_secret: 0,
+            otp_secret: [0u8; 32],
             recent_start_timestamps_by_factor: BTreeMap::new(),
             pending_challenges: BTreeMap::new(),
         }
     }
 
-    pub(super) fn start_login(
+    pub(super) fn reserve_login_start(
         &mut self,
         deployment_mode: DeploymentMode,
         login_channel: &str,
         login_hint: &str,
-    ) -> HostedAccountLoginStartResponse {
+    ) -> Result<ReservedHostedLoginStart, HostedAccountLoginStartResponse> {
         if deployment_mode != DeploymentMode::HostedPublicJoin {
-            return HostedAccountLoginStartResponse {
+            return Err(HostedAccountLoginStartResponse {
                 ok: false,
                 error_code: Some("hosted_account_login_disabled".to_string()),
                 error: Some(
@@ -224,46 +240,46 @@ impl HostedAccountIdentityBroker {
                 retry_after_seconds: None,
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
-            };
+            });
         }
         self.prune_expired_challenges();
         let Some(channel) = normalize_login_channel(login_channel) else {
-            return HostedAccountLoginStartResponse {
+            return Err(HostedAccountLoginStartResponse {
                 ok: false,
                 error_code: Some("unsupported_login_channel".to_string()),
                 error: Some("login_channel must be email".to_string()),
                 retry_after_seconds: None,
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
-            };
+            });
         };
         let Some(normalized_login_hint) = normalize_login_hint(channel, login_hint) else {
-            return HostedAccountLoginStartResponse {
+            return Err(HostedAccountLoginStartResponse {
                 ok: false,
                 error_code: Some("login_hint_invalid".to_string()),
                 error: Some(format!("{channel} login_hint is invalid")),
                 retry_after_seconds: None,
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
-            };
+            });
         };
         if let Some(block) = self.login_start_block(channel, normalized_login_hint.as_str()) {
-            return HostedAccountLoginStartResponse {
+            return Err(HostedAccountLoginStartResponse {
                 ok: false,
                 error_code: Some(block.error_code),
                 error: Some(block.error),
                 retry_after_seconds: Some(block.retry_after_seconds),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 challenge: None,
-            };
+            });
         }
         let issued_at_unix_ms = now_unix_ms();
         self.next_challenge_sequence = self.next_challenge_sequence.saturating_add(1);
         let factor_key = factor_key(channel, normalized_login_hint.as_str());
         let challenge_id =
             build_login_challenge_id(issued_at_unix_ms, self.next_challenge_sequence);
-        let otp_code = build_preview_otp_code(
-            self.otp_secret,
+        let otp_code = build_login_otp_code(
+            &self.otp_secret,
             challenge_id.as_str(),
             normalized_login_hint.as_str(),
         );
@@ -278,10 +294,48 @@ impl HostedAccountIdentityBroker {
             expires_at_unix_ms,
             failed_attempts: 0,
         };
-        if let Err(err) = self.deliver_login_challenge(&challenge) {
+        self.recent_start_timestamps_by_factor
+            .entry(factor_key.clone())
+            .or_default()
+            .push_back(issued_at_unix_ms);
+        self.pending_challenges
+            .insert(challenge_id.clone(), challenge.clone());
+        let response_challenge = HostedAccountLoginChallengeSnapshot {
+            challenge_id,
+            login_channel: channel.to_string(),
+            masked_login_hint,
+            delivery_mode: self.delivery_mode.clone(),
+            expires_at_unix_ms,
+            preview_code: if self.delivery_mode == HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE {
+                Some(otp_code)
+            } else {
+                None
+            },
+        };
+        Ok(ReservedHostedLoginStart {
+            factor_key,
+            issued_at_unix_ms,
+            challenge,
+            response_challenge,
+            delivery_plan: self.delivery_plan(),
+        })
+    }
+
+    pub(super) fn start_login(
+        &mut self,
+        deployment_mode: DeploymentMode,
+        login_channel: &str,
+        login_hint: &str,
+    ) -> HostedAccountLoginStartResponse {
+        let reserved = match self.reserve_login_start(deployment_mode, login_channel, login_hint) {
+            Ok(reserved) => reserved,
+            Err(response) => return response,
+        };
+        if let Err(err) = reserved.deliver() {
+            self.rollback_reserved_login_start(&reserved);
             let log_message = format!(
                 "hosted account login delivery failed: channel={} target={} reason={err}",
-                challenge.login_channel, challenge.masked_login_hint
+                reserved.challenge.login_channel, reserved.challenge.masked_login_hint
             );
             emit_stderr_or_event(
                 Level::ERROR,
@@ -297,30 +351,29 @@ impl HostedAccountIdentityBroker {
                 challenge: None,
             };
         }
-        self.recent_start_timestamps_by_factor
-            .entry(factor_key)
-            .or_default()
-            .push_back(issued_at_unix_ms);
+        reserved.success_response(deployment_mode)
+    }
+
+    pub(super) fn rollback_reserved_login_start(&mut self, reserved: &ReservedHostedLoginStart) {
         self.pending_challenges
-            .insert(challenge_id.clone(), challenge);
-        HostedAccountLoginStartResponse {
-            ok: true,
-            error_code: None,
-            error: None,
-            retry_after_seconds: None,
-            deployment_mode: deployment_mode.as_str().to_string(),
-            challenge: Some(HostedAccountLoginChallengeSnapshot {
-                challenge_id,
-                login_channel: channel.to_string(),
-                masked_login_hint,
-                delivery_mode: self.delivery_mode.clone(),
-                expires_at_unix_ms,
-                preview_code: if self.delivery_mode == HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE {
-                    Some(otp_code)
+            .remove(reserved.challenge.challenge_id.as_str());
+        if let Some(timestamps) = self
+            .recent_start_timestamps_by_factor
+            .get_mut(reserved.factor_key.as_str())
+        {
+            let mut removed = false;
+            timestamps.retain(|issued_at_unix_ms| {
+                if !removed && *issued_at_unix_ms == reserved.issued_at_unix_ms {
+                    removed = true;
+                    false
                 } else {
-                    None
-                },
-            }),
+                    true
+                }
+            });
+            if timestamps.is_empty() {
+                self.recent_start_timestamps_by_factor
+                    .remove(reserved.factor_key.as_str());
+            }
         }
     }
 
@@ -562,32 +615,60 @@ impl HostedAccountIdentityBroker {
         None
     }
 
-    fn deliver_login_challenge(
-        &self,
-        challenge: &PendingHostedLoginChallenge,
-    ) -> Result<(), String> {
+    fn delivery_plan(&self) -> HostedLoginDeliveryPlan {
         match self.delivery_mode.as_str() {
-            HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE => Ok(()),
-            HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY => {
+            HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY => HostedLoginDeliveryPlan::ServerLogOnly,
+            HOSTED_LOGIN_DELIVERY_MODE_SMTP => self
+                .smtp_config
+                .clone()
+                .map(HostedLoginDeliveryPlan::Smtp)
+                .unwrap_or(HostedLoginDeliveryPlan::SmtpUnavailable),
+            _ => HostedLoginDeliveryPlan::PreviewInline,
+        }
+    }
+}
+
+impl ReservedHostedLoginStart {
+    pub(super) fn deliver(&self) -> Result<(), String> {
+        match &self.delivery_plan {
+            HostedLoginDeliveryPlan::PreviewInline => Ok(()),
+            HostedLoginDeliveryPlan::ServerLogOnly => {
                 emit_delivery_notice(
-                    challenge.login_channel.as_str(),
-                    challenge.masked_login_hint.as_str(),
-                    challenge.otp_code.as_str(),
+                    self.challenge.login_channel.as_str(),
+                    self.challenge.masked_login_hint.as_str(),
+                    self.challenge.challenge_id.as_str(),
                 );
                 Ok(())
             }
-            HOSTED_LOGIN_DELIVERY_MODE_SMTP => self
-                .smtp_config
-                .as_ref()
-                .ok_or_else(|| {
-                    "smtp delivery mode selected without a resolved SMTP configuration".to_string()
-                })?
-                .send_login_code(
-                    challenge.normalized_login_hint.as_str(),
-                    challenge.otp_code.as_str(),
-                ),
-            other => Err(format!("unsupported hosted login delivery mode `{other}`")),
+            HostedLoginDeliveryPlan::Smtp(config) => config.send_login_code(
+                self.challenge.normalized_login_hint.as_str(),
+                self.challenge.otp_code.as_str(),
+            ),
+            HostedLoginDeliveryPlan::SmtpUnavailable => {
+                Err("smtp delivery mode selected without a resolved SMTP configuration".to_string())
+            }
         }
+    }
+
+    pub(super) fn success_response(
+        &self,
+        deployment_mode: DeploymentMode,
+    ) -> HostedAccountLoginStartResponse {
+        HostedAccountLoginStartResponse {
+            ok: true,
+            error_code: None,
+            error: None,
+            retry_after_seconds: None,
+            deployment_mode: deployment_mode.as_str().to_string(),
+            challenge: Some(self.response_challenge.clone()),
+        }
+    }
+
+    pub(super) fn masked_target(&self) -> (&str, &str) {
+        (
+            self.challenge.login_channel.as_str(),
+            self.challenge.masked_login_hint.as_str(),
+        )
     }
 }
 
@@ -793,9 +874,9 @@ fn normalize_delivery_mode(raw: Option<&str>) -> String {
     }
 }
 
-fn emit_delivery_notice(channel: &str, masked_login_hint: &str, otp_code: &str) {
+fn emit_delivery_notice(channel: &str, masked_login_hint: &str, challenge_id: &str) {
     let message = format!(
-        "hosted account login challenge issued: channel={channel} target={masked_login_hint} otp={otp_code}"
+        "hosted account login challenge issued: channel={channel} target={masked_login_hint} challenge_id={challenge_id}"
     );
     emit_stderr_or_event(
         Level::INFO,
@@ -891,16 +972,25 @@ fn build_login_challenge_id(issued_at_unix_ms: u64, sequence: u64) -> String {
     format!("hosted-login-challenge-{issued_at_unix_ms:016x}-{sequence:08x}")
 }
 
-fn build_preview_otp_code(
-    otp_secret: u64,
+fn random_otp_secret() -> [u8; 32] {
+    let mut secret = [0u8; 32];
+    OsRng.fill_bytes(&mut secret);
+    secret
+}
+
+fn build_login_otp_code(
+    otp_secret: &[u8; 32],
     challenge_id: &str,
     normalized_login_hint: &str,
 ) -> String {
-    let mut hasher = DefaultHasher::new();
-    otp_secret.hash(&mut hasher);
-    challenge_id.hash(&mut hasher);
-    normalized_login_hint.hash(&mut hasher);
-    format!("{:06}", hasher.finish() % 1_000_000)
+    let mut input = Vec::with_capacity(challenge_id.len() + normalized_login_hint.len() + 1);
+    input.extend_from_slice(challenge_id.as_bytes());
+    input.push(0);
+    input.extend_from_slice(normalized_login_hint.as_bytes());
+    let digest = blake3::keyed_hash(otp_secret, input.as_slice());
+    let mut prefix = [0u8; 8];
+    prefix.copy_from_slice(&digest.as_bytes()[..8]);
+    format!("{:06}", u64::from_le_bytes(prefix) % 1_000_000)
 }
 
 fn build_hosted_account_id(sequence: u64) -> String {
