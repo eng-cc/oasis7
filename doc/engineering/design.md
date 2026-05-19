@@ -27,6 +27,7 @@
 - `doc-governance/*`：定义 `doc/` 文档树的组织规范、默认阅读面减重规则与早期文档治理收口。
 - `rust-governance/*`：定义 Rust 体量治理、冻结基线与结构切片 burn-down 规则。
 - `prd-review/*`：定义全量审读/治理台账与进度追踪。
+- `self-evolution/*`：定义 repo-native `.pm` 工作流、自我进化 memory 补强，以及外部 agent workflow 借鉴的 adopted / rejected / deferred 治理边界。
 
 ### 3.2 工程治理执行链路
 - 规范定义：`doc/engineering/doc-governance/*`、`doc/engineering/rust-governance/*`、`doc/engineering/governance/*`
