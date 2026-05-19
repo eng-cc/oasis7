@@ -16,7 +16,7 @@ use oasis7::runtime::{
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
-#[path = "oasis7_testnet_faucet_support.rs"]
+#[path = "oasis7_testnet_faucet/support.rs"]
 mod faucet_support;
 
 use faucet_support::{
@@ -1140,5 +1140,5 @@ fn print_help() {
 }
 
 #[cfg(test)]
-#[path = "oasis7_testnet_faucet_tests.rs"]
+#[path = "oasis7_testnet_faucet/tests.rs"]
 mod tests;
