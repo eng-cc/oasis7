@@ -24,7 +24,7 @@
   - 对外可见: 静态网页、世界只读快照、guest/player session 入口、低风险 gameplay 输入
   - 不可见: operator control API、长期 signer、custody backend
 - `identity plane`
-  - 负责邮箱登录、OTP / magic link、device session、account recovery、rate limit
+  - 负责邮箱登录、OTP、device session、account recovery、rate limit
   - 输出: `hosted_account_id`, `device_session_id`, `player_session`
 - `custody plane`
   - 负责 `signer_ref`、托管签名、step-up 授权、风险策略、审计日志
@@ -75,7 +75,7 @@
 - 禁止:
   - 托管 signer 明文私钥
   - node signer / governance signer / host key
-  - 原始 OTP、magic link token、长期 step-up token
+  - 原始 OTP、长期 step-up token
 - 兼容过渡:
   - hosted 浏览器当前只保留设备会话材料与页内临时 key；旧版 `localStorage privateKey` 残留会在读取时被清洗。
   - 后续切到真实邮件 provider / custody sign lane 时，仍应保留旧缓存迁移与提示逻辑，避免历史浏览器状态漂移回长期密钥路径。
@@ -144,7 +144,7 @@
 - 当前未成立:
   - managed custody sign lane
   - self-custody bind / transfer-out 正式能力
-  - 真实邮件 delivery provider / magic link / 风控冻结与恢复 runbook
+  - 风控冻结与恢复 runbook
 - 结论:
   - 当前仍是 `limited playable technical preview`
   - 本文描述的托管身份方向已有第一版实现，但距离生产级 hosted login / managed custody 仍有明显缺口

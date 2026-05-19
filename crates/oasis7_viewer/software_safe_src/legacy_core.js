@@ -116,6 +116,7 @@ export const state = {
     previewCode: null,
     code: "",
     expiresAtUnixMs: null,
+    retryAfterSeconds: null,
     accountExists: false,
     startInFlight: false,
     completeInFlight: false,
@@ -2806,6 +2807,7 @@ async function startHostedAccountLogin() {
   }
   state.hostedLogin.startInFlight = true;
   state.hostedLogin.error = null;
+  state.hostedLogin.retryAfterSeconds = null;
   render();
   try {
     const response = await fetch(HOSTED_ACCOUNT_LOGIN_START_ROUTE, {
@@ -2822,7 +2824,14 @@ async function startHostedAccountLogin() {
     });
     const payload = await response.json();
     if (!response.ok || !payload?.ok || !payload?.challenge?.challenge_id) {
-      throw new Error(payload?.error || payload?.error_code || `hosted account login start failed with HTTP ${response.status}`);
+      const retryAfterSeconds = payload?.retry_after_seconds == null ? null : Number(payload.retry_after_seconds);
+      const baseMessage = payload?.error || payload?.error_code || `hosted account login start failed with HTTP ${response.status}`;
+      const message = retryAfterSeconds && Number.isFinite(retryAfterSeconds)
+        ? `${baseMessage} (retry in ${retryAfterSeconds}s)`
+        : baseMessage;
+      const hostedLoginError = new Error(message);
+      hostedLoginError.hostedLoginRetryAfterSeconds = retryAfterSeconds;
+      throw hostedLoginError;
     }
     state.hostedLogin.challengeId = String(payload.challenge.challenge_id || "").trim() || null;
     state.hostedLogin.maskedLoginHint = String(payload.challenge.masked_login_hint || "").trim() || null;
@@ -2830,6 +2839,7 @@ async function startHostedAccountLogin() {
     state.hostedLogin.previewCode = String(payload.challenge.preview_code || "").trim() || null;
     state.hostedLogin.code = state.hostedLogin.previewCode || "";
     state.hostedLogin.expiresAtUnixMs = payload?.challenge?.expires_at_unix_ms == null ? null : Number(payload.challenge.expires_at_unix_ms);
+    state.hostedLogin.retryAfterSeconds = null;
     state.hostedLogin.accountExists = false;
     state.hostedLogin.startInFlight = false;
     state.hostedLogin.completeInFlight = false;
@@ -2838,6 +2848,9 @@ async function startHostedAccountLogin() {
     return { ok: true, challengeId: state.hostedLogin.challengeId };
   } catch (error) {
     state.hostedLogin.startInFlight = false;
+    if (error?.hostedLoginRetryAfterSeconds != null) {
+      state.hostedLogin.retryAfterSeconds = Number(error.hostedLoginRetryAfterSeconds);
+    }
     state.hostedLogin.error = String(error);
     render();
     return { ok: false, reason: state.hostedLogin.error };
