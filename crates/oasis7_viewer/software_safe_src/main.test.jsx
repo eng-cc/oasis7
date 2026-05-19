@@ -273,15 +273,18 @@ describe("viewer web ui automation baseline", () => {
         core.state.auth.error = "session_revoked";
         core.state.auth.revokeReason = "qa-kick";
         core.state.auth.revokedBy = "qa";
+        core.state.hostedLogin.handle = "player@example.com";
       },
     });
 
     screen.getByText("Runtime Diagnostics").click();
-    expect(screen.getAllByRole("button", { name: "Re-acquire Hosted Player Session" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Request Login Code" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Login Channel").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Phone or Email").length).toBeGreaterThan(0);
     expect(screen.getByText("upgrade_after_player_session")).toBeInTheDocument();
     expect(
       screen.getAllByText(
-        "The runtime or operator revoked this browser session by qa. Reason: qa-kick. You need to acquire a fresh hosted player session before gameplay, chat, or prompt actions can continue.",
+        "The runtime or operator revoked this browser session by qa. Reason: qa-kick. You need to re-login to the hosted account and acquire a fresh player session before gameplay, chat, or prompt actions can continue.",
       ).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();

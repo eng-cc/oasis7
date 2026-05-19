@@ -255,6 +255,22 @@ impl HostedPlayerSessionIssuer {
         &mut self,
         deployment_mode: DeploymentMode,
     ) -> HostedPlayerSessionIssueResponse {
+        self.issue_internal(deployment_mode, None)
+    }
+
+    pub(super) fn issue_for_player(
+        &mut self,
+        deployment_mode: DeploymentMode,
+        player_id: &str,
+    ) -> HostedPlayerSessionIssueResponse {
+        self.issue_internal(deployment_mode, Some(player_id))
+    }
+
+    fn issue_internal(
+        &mut self,
+        deployment_mode: DeploymentMode,
+        player_id_override: Option<&str>,
+    ) -> HostedPlayerSessionIssueResponse {
         let contract = hosted_player_access_contract(deployment_mode);
         self.prune_old_timestamps();
         self.prune_expired_slots();
@@ -308,7 +324,12 @@ impl HostedPlayerSessionIssuer {
         self.next_sequence = self.next_sequence.saturating_add(1);
         self.issued_players_total = self.issued_players_total.saturating_add(1);
         self.issue_timestamps_unix_ms.push_back(issued_at_unix_ms);
-        let player_id = build_player_id(issued_at_unix_ms, self.next_sequence);
+        let player_id = player_id_override
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| build_player_id(issued_at_unix_ms, self.next_sequence));
+        let _ = self.release_slot_for_player(player_id.as_str(), true);
         let device_session_id = build_device_session_id(issued_at_unix_ms, self.next_sequence);
         let release_token = build_release_token(issued_at_unix_ms, self.next_sequence);
         self.active_release_tokens_by_player
@@ -575,6 +596,18 @@ mod tests {
         assert_eq!(response.admission.effective_player_sessions, 1);
         assert_eq!(response.admission.issued_players_total, 1);
         assert_eq!(response.admission.issued_in_current_window, 1);
+    }
+
+    #[test]
+    fn hosted_player_session_issue_for_player_reuses_stable_player_id() {
+        let mut issuer = HostedPlayerSessionIssuer::default();
+        let first = issuer.issue_for_player(DeploymentMode::HostedPublicJoin, "stable-player-1");
+        let second = issuer.issue_for_player(DeploymentMode::HostedPublicJoin, "stable-player-1");
+        let first_grant = first.grant.expect("first grant");
+        let second_grant = second.grant.expect("second grant");
+        assert_eq!(first_grant.player_id, "stable-player-1");
+        assert_eq!(second_grant.player_id, "stable-player-1");
+        assert_ne!(first_grant.release_token, second_grant.release_token);
     }
 
     #[test]

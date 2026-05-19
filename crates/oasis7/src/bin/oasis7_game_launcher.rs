@@ -20,6 +20,8 @@ use tracing::{error, info, Level};
 mod cli;
 #[path = "../hosted_access.rs"]
 mod hosted_access;
+#[path = "oasis7_game_launcher/hosted_account_identity.rs"]
+mod hosted_account_identity;
 #[path = "oasis7_game_launcher/hosted_player_session.rs"]
 mod hosted_player_session;
 #[path = "oasis7_game_launcher/hosted_strong_auth.rs"]
@@ -39,6 +41,7 @@ use cli::{
     uses_provider_http_transport,
 };
 use hosted_access::{DeploymentMode, DEFAULT_DEPLOYMENT_MODE};
+use hosted_account_identity::HostedAccountIdentityBroker;
 use hosted_player_session::HostedPlayerSessionIssuer;
 use oasis7::viewer::VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID;
 use runtime_paths::{
@@ -539,6 +542,7 @@ fn start_static_http_server(
     let live_bind = Arc::new(live_bind.to_string());
     let default_viewer_player_id = Arc::new(default_viewer_player_id.map(ToOwned::to_owned));
     let hosted_session_issuer = Arc::new(Mutex::new(HostedPlayerSessionIssuer::default()));
+    let hosted_account_broker = Arc::new(Mutex::new(HostedAccountIdentityBroker::from_env()?));
     let runtime_presence_join_handle = if deployment_mode == DeploymentMode::HostedPublicJoin {
         let stop_requested = Arc::clone(&stop_requested);
         let live_bind = Arc::clone(&live_bind);
@@ -557,6 +561,7 @@ fn start_static_http_server(
             live_bind,
             default_viewer_player_id,
             hosted_session_issuer,
+            hosted_account_broker,
             stop_rx,
         ) {
             let _ = error_tx.send(err);
@@ -579,6 +584,7 @@ fn run_static_http_loop(
     live_bind: Arc<String>,
     default_viewer_player_id: Arc<Option<String>>,
     hosted_session_issuer: Arc<Mutex<HostedPlayerSessionIssuer>>,
+    hosted_account_broker: Arc<Mutex<HostedAccountIdentityBroker>>,
     stop_rx: Receiver<()>,
 ) -> Result<(), String> {
     loop {
@@ -594,6 +600,7 @@ fn run_static_http_loop(
                 let default_viewer_player_id = Arc::clone(&default_viewer_player_id);
                 let deployment_mode = deployment_mode;
                 let hosted_session_issuer = Arc::clone(&hosted_session_issuer);
+                let hosted_account_broker = Arc::clone(&hosted_account_broker);
                 thread::spawn(move || {
                     if let Err(err) = handle_http_connection(
                         stream,
@@ -602,6 +609,7 @@ fn run_static_http_loop(
                         default_viewer_player_id.as_deref(),
                         deployment_mode,
                         &hosted_session_issuer,
+                        &hosted_account_broker,
                     ) {
                         let stderr_message =
                             format!("warning: static HTTP connection failed: {err}");

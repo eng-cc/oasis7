@@ -569,6 +569,28 @@
     - `npm --prefix crates/oasis7_viewer run test:ui`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] hosted-account-identity-broker-server (PRD-P2P-029) [test_tier_required]: 为 `hosted_public_join` 落地中心化 hosted account 登录 server，提供手机号/邮箱 login challenge、稳定 `hosted_account_id -> player_id` 持久化和登录完成后的 `device_session + player_session` 换发，并将正式 Web 入口从“直接领 player session”改成 hosted account 登录表单。 Trace: .pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.yaml
+  - 产物文件:
+    - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher/static_http.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
+    - `crates/oasis7/src/hosted_access.rs`
+    - `crates/oasis7_viewer/software_safe_src/legacy_core.js`
+    - `crates/oasis7_viewer/software_safe_src/main.jsx`
+    - `crates/oasis7_viewer/software_safe_src/main.test.jsx`
+    - `crates/oasis7_viewer/software_safe.js`
+    - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_ -- --nocapture`
+    - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `npm --prefix crates/oasis7_viewer run test:ui`
+    - `npm --prefix crates/oasis7_viewer run build:software-safe`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] bridge-binding-and-route-contract (PRD-P2P-TBRIDGE-001) [test_tier_required]: 为独立 `bridge-service` 落地最小 runtime slice，提供绑定 API、deposit route API、repo-owned 状态持久化、活跃 route 复用 / 过期与冲突错误语义，作为后续 watcher / `bridge_ledger` / LetAI OpenAPI adapter 的前置基线。 Trace: .pm/tasks/task_e56e4cfdb9534919a6f7bc7c6ba62ee9.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_newapi_bridge_service.rs`
@@ -825,6 +847,7 @@
 
 ## 状态
 - 更新日期: 2026-05-18
+- 最新完成: `hosted-account-identity-broker-server`（已在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server：支持 phone/email login challenge、稳定 `hosted_account_id -> player_id` 持久化，以及登录完成后换发 `device_session + player_session`；viewer 正式入口也已改成 hosted account 登录表单。当前 challenge delivery 仍是 preview `preview_inline/server_log_only`，尚未接真实短信/邮件 provider。）
 - 最新完成: `hosted-browser-device-session-recovery`（已把 `hosted_public_join` 的 viewer/launcher 第一刀落成代码真值：launcher grant 新增 `device_session_id`，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`，刷新页后仅保留 `device_session` handle，并按需重新生成页内临时 Ed25519 session key 以完成 reconnect/register。）
 - 最新完成: `hosted-managed-identity-doc-freeze`（已新增 hosted_public_join 托管身份 / 托管密钥专题三件套，正式冻结 hosted account、手机号/邮箱登录、`signer_ref`、device session、step-up auth 与自托管升级边界；当前剩余缺口集中在 hosted account 登录入口与托管签名后端。）
 - 最新完成: `newapi-auto-credit-closure`（已把 `oasis7_newapi_bridge_service` 收口为 LetAI OpenAPI 真链路：新增持久化 `bridge_ledger`、explorer poll watcher、block-height confirmation、exact-match `--pricing-rule` 折算、`platform_user_id/platform_project_id/token_key/external_order_id`、user upsert、project/token 创建、topup、query verification 与 retry/manual-review 状态机。）
