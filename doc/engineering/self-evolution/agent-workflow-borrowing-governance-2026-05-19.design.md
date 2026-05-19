@@ -23,6 +23,10 @@
 2. 作为某个模块专题的 optional design technique reference。
 
 ## 3. 决策矩阵
+### 3.0 `superpowers` 当前 skill inventory 快照
+当前 `main` 分支可见 skill 为：
+`brainstorming`、`dispatching-parallel-agents`、`executing-plans`、`finishing-a-development-branch`、`receiving-code-review`、`requesting-code-review`、`subagent-driven-development`、`systematic-debugging`、`test-driven-development`、`using-git-worktrees`、`using-superpowers`、`verification-before-completion`、`writing-plans`、`writing-skills`。
+
 ### 3.1 Adopted
 - workflow behavior evals:
   - 理由：oasis7 已有大量 workflow 文档与 helper，但还缺少“agent 是否真按规则做”的 repo-owned 行为验证层。
@@ -50,6 +54,24 @@
 - contributor anti-slop contract 的正式 PR 模板化
 
 这些都必须等 adopted 的 repo-owned truth 稳定后再重开。
+
+### 3.4 Skill-to-decision mapping
+| superpowers skill | decision | current handling in oasis7 |
+| --- | --- | --- |
+| `verification-before-completion` | adopted | 已落地为 `scripts/pm/claim-ready.sh` 和 claim 前 fresh verification 契约。 |
+| `using-git-worktrees` | adopted | 已由 `./scripts/new-task-worktree.sh` 和 root `AGENTS.md` 的 worktree 规则覆盖。 |
+| `requesting-code-review` | adopted | 已映射到 `prepare-task-pr` + GitHub PR review 默认边界。 |
+| `receiving-code-review` | adopted | 已映射到 `pr-review-thread-closeout.sh` 与 review fix/verify loop。 |
+| `finishing-a-development-branch` | adopted | 已映射到 `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链。 |
+| `systematic-debugging` | deferred | 认可其调试顺序，但尚未形成 repo-owned debugging playbook/helper。 |
+| `dispatching-parallel-agents` | deferred | 只保留为显式授权下的 bounded `spawn_agent` 参考，不升为默认流程。 |
+| `executing-plans` | deferred | 当前先依赖 `project.md`/`.pm` 的正式计划真值，暂不再引入单独执行会话契约。 |
+| `writing-skills` | deferred | 等本地 skill surface 稳定后再决定是否需要 repo-owned 作者手册。 |
+| `brainstorming` | rejected | 仅 salvage 其 visual-companion 子模式；其 universal pre-step 语义不进入默认流程。 |
+| `subagent-driven-development` | rejected | fresh subagent-per-task + two-stage review 不进入当前默认主链。 |
+| `test-driven-development` | rejected | universal TDD 不作为仓库默认门禁。 |
+| `writing-plans` | rejected | 不允许在 `prd.md`/`project.md`/`.pm` 之外再引入第二套默认计划真值。 |
+| `using-superpowers` | rejected | 外部 bootstrap 不能取代 `AGENTS.md + .pm + GitHub PR review`。 |
 
 ## 4. Follow-up 映射
 ### 4.1 Workflow behavior eval harness

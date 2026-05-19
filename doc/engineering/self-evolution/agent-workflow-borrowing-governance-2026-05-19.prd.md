@@ -46,8 +46,26 @@
 | Completion verification gate | `claim_type`、`required_command`、`freshness_rule`、`allowed_evidence`、`blocked_phrases` | 在 owner 宣称“完成/通过/可合并”前，要求 fresh 跑验证并读取结果；失败时只能报告实际状态 | `undefined -> documented -> helper-backed -> smoke-verified` | 每条 claim 必须映射到一个完整命令；禁止 partial evidence 替代 | 全体 owner 遵守；`qa_engineer` 可阻断 |
 | Visual companion contract | `applicability`、`artifact_kind=wireframe|layout_compare|IA_mockup|diagram`、`handoff_boundary`、`non_goal` | 只在 UI-heavy 设计前置阶段可选启用；完成方向确认后回到 repo-owned实现/回归链路 | `optional -> used -> retired` | 仅当“看比读更清楚”时启用；不涉及实现时不强制 | `viewer_engineer` 决定是否启用；producer 审核边界 |
 | Deferred packaging track | `target_harness`、`distribution_mode`、`bootstrap_contract`、`eval_requirement` | 只有当 repo-owned workflow 与 eval 稳定后，才允许评估 pluginization/multi-harness packaging | `deferred -> re-opened -> adopted/rejected` | 先本仓库真值，再分发形态 | `producer_system_designer` 开题，相关平台 owner 联审 |
+- Superpowers skill decision table | `skill_name`、`decision`、`oasis7_mapping`、`rationale` | 对 `obra/superpowers` 当前 `main` 分支的每个 skill 明确 adopted/rejected/deferred，并写清映射对象或限域边界 | `inventory_snapshot -> adopted/rejected/deferred -> superseded` | 先看是否会引入第二套 workflow 真值，再看是否已有更强 repo-native 等价物 | 仅 `producer_system_designer` 可冻结正式结论；相关 owner 联审 |
+- Current `superpowers` skill matrix (`main` snapshot on 2026-05-19):
+| skill | decision | oasis7 mapping | rationale |
+| --- | --- | --- | --- |
+| `verification-before-completion` | adopted | repo-owned `scripts/pm/claim-ready.sh` + PR/closeout claim checklist | 与当前 evidence-first 收口完全同向，且已能落到 fresh verification helper。 |
+| `using-git-worktrees` | adopted | `./scripts/new-task-worktree.sh` + root `AGENTS.md` 的“一需求一 worktree”规则 | 与当前隔离执行模型一致；仓库内已有更强的 repo-native 原子 bootstrap。 |
+| `requesting-code-review` | adopted | `./scripts/prepare-task-pr.sh` + GitHub PR review 默认边界 | “收口前显式请求 review” 与当前默认 PR 主链一致，只是不照搬其 reviewer-dispatch 语义。 |
+| `receiving-code-review` | adopted | `./scripts/pr-review-thread-closeout.sh` + same-PR review fix/verify loop | 强调先验证评论、再修复、再回看 PR 状态，和当前 review-thread closeout 方向一致。 |
+| `finishing-a-development-branch` | adopted | `task-closeout -> prepare-task-pr -> merge/cleanup` 现有 repo-owned 收口链 | 其“分支收尾、决定如何集成”的结构可直接映射到当前标准收口主链。 |
+| `systematic-debugging` | deferred | future debugging/playbook follow-up | 价值高，但当前 borrowing 专题还没把“bug/debug 契约”落成 repo-owned helper 或 QA playbook。 |
+| `dispatching-parallel-agents` | deferred | bounded `spawn_agent` usage under explicit authorization | 可借其拆分原则，但不能回流成默认 subagent-first 工作流。 |
+| `executing-plans` | deferred | future plan-execution follow-up if a repo-owned contract is needed | 可用于“已有正式计划后的执行会话”，但当前仓库已经有 `project.md`/`.pm`，不急于再引入单独会话契约。 |
+| `writing-skills` | deferred | future local skill-authoring governance | 适合等本地 skill surface 进一步收缩后，再决定是否引入成正式作者手册。 |
+| `brainstorming` | rejected | only the visual-companion subpattern is salvaged into `viewer-visual-companion-pilot-followup` | skill 自带“任何创意工作都必须先用”的强门禁，和当前直接执行节奏冲突。 |
+| `subagent-driven-development` | rejected | none | 默认 fresh subagent-per-task + 双阶段 review 与当前显式 `spawn_agent` 语义、GitHub PR 默认边界冲突。 |
+| `test-driven-development` | rejected | none | universal TDD 不适合当前 `test_tier_required/full`、文档治理和脚本任务的实际粒度。 |
+| `writing-plans` | rejected | none | 若把它升成默认前置，会与现有 `prd.md` / `project.md` / `.pm` 形成第二套计划真值。 |
+| `using-superpowers` | rejected | none | 外部 bootstrap 不能取代当前 `AGENTS.md + .pm + GitHub PR review` 主链。 |
 - Acceptance Criteria:
-  - AC-1: 专题必须明确写出 `superpowers` 首批 adopted / rejected / deferred 清单，且每项都带 rationale。
+  - AC-1: 专题必须明确写出 `superpowers` 当前 `main` 分支 skill inventory 的 adopted / rejected / deferred 清单，且每项都带 rationale 与 oasis7 mapping。
   - AC-2: adopted 项至少形成三条正式 follow-up：workflow behavior eval harness、completion-claim verification gate、Viewer visual companion pilot。
   - AC-3: rejected 项必须显式覆盖与 oasis7 当前默认流程冲突的三类外部规则：强制 brainstorming gate、默认 fresh subagent+两轮 review、无条件 universal TDD。
   - AC-4: deferred 项必须把 multi-harness pluginization 与自动 skill bootstrap 维持在“非当前默认流程”边界，不得混入 root `AGENTS.md` 现行口径。
