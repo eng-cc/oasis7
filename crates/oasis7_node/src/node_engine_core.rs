@@ -444,9 +444,6 @@ impl PosNodeEngine {
     ) -> Result<PosDecision, NodeError> {
         let slot = self.next_slot;
         let epoch = self.slot_epoch(slot);
-        let committed_actions =
-            drain_ordered_consensus_actions(&mut self.pending_consensus_actions);
-        let action_root = compute_consensus_action_root(committed_actions.as_slice())?;
         let proposer_id = self
             .expected_proposer(slot)
             .ok_or_else(|| NodeError::Consensus {
@@ -455,6 +452,9 @@ impl PosNodeEngine {
         if proposer_id != node_id {
             return self.idle_pending_decision();
         }
+        let committed_actions =
+            drain_ordered_consensus_actions(&mut self.pending_consensus_actions);
+        let action_root = compute_consensus_action_root(committed_actions.as_slice())?;
         let parent_block_hash = self
             .last_committed_block_hash
             .as_deref()

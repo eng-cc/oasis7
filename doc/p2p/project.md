@@ -793,7 +793,8 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-08
+- 更新日期: 2026-05-19
+- 最新完成: `public-testnet-faucet-service`（已在现有两台 ECS `public_testnet` 基础设施上完成真实 guarded faucet 部署：`faucet_ref` 现指向 `http://39.104.204.172:6681/`，两节点已用修过的 runtime 做协调冷重置并重新导入 `2-validator` governance manifest、重新注入 faucet genesis/claim；同时修复 `PosNodeEngine::propose_next_head()` 在非 proposer slot 提前 drain `pending_consensus_actions` 导致 transfer/faucet claim 静默丢失并最终 `timeout` 的共识 bug。当前外部 `POST /claim` 到 `oc:pk:2222...2222` 已实测 `confirmed`，但 `/v1/chain/balances` 仍不是 faucet 热钱包真值面，应继续以 `transfer/accounts`/`explorer/address`/world snapshot 为准。）
 - 最新完成: `newapi-auto-credit-closure`（已把 `oasis7_newapi_bridge_service` 收口为 LetAI OpenAPI 真链路：新增持久化 `bridge_ledger`、explorer poll watcher、block-height confirmation、exact-match `--pricing-rule` 折算、`platform_user_id/platform_project_id/token_key/external_order_id`、user upsert、project/token 创建、topup、query verification 与 retry/manual-review 状态机。）
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
