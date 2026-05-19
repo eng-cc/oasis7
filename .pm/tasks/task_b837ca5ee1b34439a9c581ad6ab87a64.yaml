@@ -1,5 +1,5 @@
 task_uid: task_b837ca5ee1b34439a9c581ad6ab87a64
-title: "hosted account identity broker server for phone or email login"
+title: "hosted account identity broker server for email login"
 owner_role: runtime_engineer
 worktree_hint: /home/scc/worktrees/oasis7-p2p-hosted-public-join-centralized-kms-login
 execution_log_path: .pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.execution.md
@@ -18,7 +18,7 @@ doc_refs:
 related_prd:
   - PRD-P2P-029
 acceptance:
-  - "implement a centralized hosted-account identity broker route set for phone-or-email login on hosted_public_join"
+  - "implement a centralized hosted-account identity broker route set for email login on hosted_public_join"
   - "persist hosted_account_id to stable player_id bindings and exchange verified login for device_session plus player_session grant"
   - "wire viewer hosted onboarding to the new login flow without restoring browser long-lived private-key persistence"
 handoff_to: []

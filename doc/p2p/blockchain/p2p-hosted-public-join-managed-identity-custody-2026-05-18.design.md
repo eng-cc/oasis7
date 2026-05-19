@@ -13,10 +13,10 @@
 ## 2. 当前代码真值
 | 维度 | 当前状态 | 设计结论 |
 | --- | --- | --- |
-| Hosted session issue | `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs` 只管理 `player_id/release_token`、slot lease、refresh/release | 已有 public player session 骨架，但还不是 hosted account 体系 |
+| Hosted session issue | `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs` 已管理 `player_id/device_session_id/release_token`、slot lease、refresh/release，并支持稳定 `player_id` 的复用发放 | public player session 与 device-session recovery 基线已落地，但 `signer_ref`/custody sign lane 仍未进入正式 contract |
 | Hosted strong auth | `crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs` 通过 `OASIS7_HOSTED_STRONG_AUTH_*` + `approval_code` 给特定 `action_id` 出 preview grant | 已有 backend reauth 前置，但不是正式 custody sign lane |
 | Legacy bootstrap off for hosted | `crates/oasis7/src/bin/oasis7_game_launcher/oasis7_game_launcher_tests.rs` 已断言 `hosted_public_join` 不再解析 viewer auth bootstrap | hosted 模式已停止从 `config.toml` 或 env 直注 host key 到浏览器 |
-| Browser local persistence | `crates/oasis7_viewer/software_safe.js` 仍把 `playerId/publicKey/privateKey/releaseToken` 写入 `localStorage` | hosted player 目前仍带有浏览器长期材料 debt，需要由 device-session 模型替代 |
+| Browser local persistence | `crates/oasis7_viewer/software_safe.js` 现仅持久化 `hostedAccountId/playerId/deviceSessionId/releaseToken/sessionEpoch/issuedAtUnixMs`，旧版 `privateKey` 残留会在读取时清洗掉 | hosted 浏览器已不再把长期私钥写入 `localStorage`；当前剩余缺口是邮件投递与 custody sign，而不是浏览器长期材料 debt |
 | Viewer auth bootstrap implementation | `crates/oasis7/src/bin/oasis7_web_launcher/viewer_auth_bootstrap.rs` 仍保留从 env / `config.toml` 读取 `node.private_key` 的 trusted-local 路径 | 该能力继续只属于 trusted-local preview，不得回流到 hosted product 默认路径 |
 
 ## 3. 目标平面拆分
@@ -77,8 +77,8 @@
   - node signer / governance signer / host key
   - 原始 OTP、magic link token、长期 step-up token
 - 兼容过渡:
-  - 当前 `software_safe.js` 中的 `localStorage privateKey` 视为 preview-only debt。
-  - 切换到正式方案后，浏览器只保留设备会话材料；若旧缓存仍存在，应在登录升级时清理并提示迁移。
+  - hosted 浏览器当前只保留设备会话材料与页内临时 key；旧版 `localStorage privateKey` 残留会在读取时被清洗。
+  - 后续切到真实邮件 provider / custody sign lane 时，仍应保留旧缓存迁移与提示逻辑，避免历史浏览器状态漂移回长期密钥路径。
 
 ## 7. 风险分级与出签策略
 | 动作类 | 示例 | 浏览器本地可完成 | 需要 step-up | 需要 custody sign |
@@ -139,11 +139,12 @@
 - 当前已成立:
   - `hosted_public_join` 已禁止 legacy host key bootstrap 直接进入 hosted mode
   - public player session / preview strong-auth contract 已存在
+  - hosted account 邮箱登录 broker 已落地，viewer 正式入口已切到 hosted account login
+  - hosted 浏览器已切到 `device_session + in-memory ephemeral Ed25519` 恢复模型，不再持久化 hosted player 私钥
 - 当前未成立:
-  - hosted account / 邮箱登录
   - managed custody sign lane
-  - browser local private-key debt 清退
   - self-custody bind / transfer-out 正式能力
+  - 真实邮件 delivery provider / magic link / 风控冻结与恢复 runbook
 - 结论:
   - 当前仍是 `limited playable technical preview`
-  - 本文定义的是最合适的目标态，不是已完成实现
+  - 本文描述的托管身份方向已有第一版实现，但距离生产级 hosted login / managed custody 仍有明显缺口

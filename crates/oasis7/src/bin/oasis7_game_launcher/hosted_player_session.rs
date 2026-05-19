@@ -306,6 +306,18 @@ impl HostedPlayerSessionIssuer {
                 grant: None,
             };
         }
+        let issued_at_unix_ms = now_unix_ms();
+        self.next_sequence = self.next_sequence.saturating_add(1);
+        let player_id = player_id_override
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| build_player_id(issued_at_unix_ms, self.next_sequence));
+        let _ = self.release_slot_for_player(player_id.as_str(), true);
+        admission = self.admission_snapshot(
+            contract.admission.issue_rate_limit_per_minute,
+            contract.admission.max_player_sessions,
+        );
         if admission.effective_player_sessions >= admission.max_player_sessions {
             return HostedPlayerSessionIssueResponse {
                 ok: false,
@@ -320,16 +332,8 @@ impl HostedPlayerSessionIssuer {
             };
         }
 
-        let issued_at_unix_ms = now_unix_ms();
-        self.next_sequence = self.next_sequence.saturating_add(1);
         self.issued_players_total = self.issued_players_total.saturating_add(1);
         self.issue_timestamps_unix_ms.push_back(issued_at_unix_ms);
-        let player_id = player_id_override
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| build_player_id(issued_at_unix_ms, self.next_sequence));
-        let _ = self.release_slot_for_player(player_id.as_str(), true);
         let device_session_id = build_device_session_id(issued_at_unix_ms, self.next_sequence);
         let release_token = build_release_token(issued_at_unix_ms, self.next_sequence);
         self.active_release_tokens_by_player

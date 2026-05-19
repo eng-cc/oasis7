@@ -51,9 +51,9 @@
   - SC-19: 当前本机 + 2 ECS real-env triad 必须具备一条可审计的“三节点等权 validator”落地路径，明确 validator set、signer binding、static bootstrap、same-window snapshot evidence 与 residual legacy service naming 的边界；当 execution world 已存在 `governance_finality_signer_registry` 时，节点启动/恢复必须优先从该 world-state registry 恢复 validator membership 与 signer binding，而不是继续把 role-separated `observer + sequencer + storage` 或 operator-local env 当成唯一真值拓扑。
   - SC-20: `oasis7` 可以通过独立部署的 bridge-service，把已确认的 `OC` 充值映射为 LetAI Run OpenAPI 的用户额度与动态项目 `token_key`，同时冻结“只支持 one-way service-credit bridge，不是公开兑换所、不是 AMM、也不支持自动提现回 OC”的对外口径。
   - SC-21: `hosted_public_join` 必须具备一条对普通玩家友好的正式身份路径：默认允许邮箱 hosted login、托管 player signer 与后续自托管升级；浏览器不再被要求作为长期玩家私钥保管面。
-  - SC-21: validator / finality signer 必须具备一条正式的治理准入流程，至少覆盖 `apply -> approved_candidate -> probation_ready -> active -> rotate/revoke`，并明确 world-state registry 才是正式激活真值；`--node-validator*` 与 operator-local env 只能作为 bootstrap 或显式运维覆盖。
-  - SC-22: p2p 模块必须具备一套正式的公共主链式网络分层机制，明确 `local_devnet -> shared_devnet -> public_testnet -> mainnet` 的 tier 边界、manifest 真值与 claims/promotion 规则，避免把 shared release-train 与正式 testnet/mainnet 继续混写。
-  - SC-23: `public_testnet` 必须具备一条 repo-owned readiness review 路径，能把“只有 skeleton manifest”与“具备 live candidate evidence”明确区分，避免把 placeholder endpoint 或模板证据误报为可部署结论。
+  - SC-22: validator / finality signer 必须具备一条正式的治理准入流程，至少覆盖 `apply -> approved_candidate -> probation_ready -> active -> rotate/revoke`，并明确 world-state registry 才是正式激活真值；`--node-validator*` 与 operator-local env 只能作为 bootstrap 或显式运维覆盖。
+  - SC-23: p2p 模块必须具备一套正式的公共主链式网络分层机制，明确 `local_devnet -> shared_devnet -> public_testnet -> mainnet` 的 tier 边界、manifest 真值与 claims/promotion 规则，避免把 shared release-train 与正式 testnet/mainnet 继续混写。
+  - SC-24: `public_testnet` 必须具备一条 repo-owned readiness review 路径，能把“只有 skeleton manifest”与“具备 live candidate evidence”明确区分，避免把 placeholder endpoint 或模板证据误报为可部署结论。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -194,7 +194,7 @@
   - AC-36: `mainchain-token-newapi-quota-bridge-2026-05-06` 专题文档落盘并映射任务链，明确 `one-way OC -> LetAI Run OpenAPI quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、动态 project/`token_key`、query verification 与 manual review 风控，以及“不支持自动提现/不承诺公开兑换所”边界。
   - AC-37: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 专题文档与 repo-owned skeleton 必须落盘并映射任务链 `formal-network-tiers-testnet-mechanism (PRD-P2P-028)`，明确 `local_devnet/shared_devnet/public_testnet/mainnet` 四层模型、`network_tier_manifest` 字段集合、`public_testnet` 的 public RPC/explorer/faucet/reset 语义，以及 `mainnet` 的 `no faucet + frozen reset + MAINNET-1~4` gate。
   - AC-38: `p2p-hosted-public-join-managed-identity-custody-2026-05-18` 专题文档必须落盘并映射任务链 `hosted-managed-identity-doc-freeze (PRD-P2P-029)`，明确 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、托管退出与“默认不让玩家管理裸私钥”的正式产品边界。
-  - AC-38: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`，并对 placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 保持阻断。
+  - AC-39: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`，并对 placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 保持阻断。
 - Non-Goals:
   - 不在本 PRD 细化 viewer UI 交互。
   - 不替代 runtime 内核的模块执行细节设计。

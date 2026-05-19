@@ -5,8 +5,13 @@ use super::hosted_player_session::{
 };
 use super::{emit_stderr_or_event, Level};
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
+use std::hash::{Hash, Hasher};
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -20,6 +25,7 @@ const HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY: &str = "server_log_only";
 const LOGIN_CHALLENGE_TTL_MS: u64 = 10 * 60 * 1000;
 const LOGIN_START_RATE_LIMIT_WINDOW_MS: u64 = 60_000;
 const LOGIN_START_RATE_LIMIT_PER_HANDLE: u64 = 3;
+const LOGIN_CHALLENGE_MAX_ATTEMPTS: u8 = 5;
 
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct HostedAccountLoginStartResponse {
@@ -66,7 +72,6 @@ pub(super) struct HostedAccountLoginChallengeSnapshot {
     pub(super) masked_login_hint: String,
     pub(super) delivery_mode: String,
     pub(super) expires_at_unix_ms: u64,
-    pub(super) account_exists: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) preview_code: Option<String>,
 }
@@ -77,6 +82,7 @@ pub(super) struct HostedAccountIdentityBroker {
     store: HostedAccountStore,
     delivery_mode: String,
     next_challenge_sequence: u64,
+    otp_secret: u64,
     recent_start_timestamps_by_factor: BTreeMap<String, VecDeque<u64>>,
     pending_challenges: BTreeMap<String, PendingHostedLoginChallenge>,
 }
@@ -89,6 +95,7 @@ struct PendingHostedLoginChallenge {
     masked_login_hint: String,
     otp_code: String,
     expires_at_unix_ms: u64,
+    failed_attempts: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -124,6 +131,7 @@ impl HostedAccountIdentityBroker {
                     .as_deref(),
             ),
             next_challenge_sequence: 0,
+            otp_secret: now_unix_ms() ^ 0xa5a5_1357_5a5a_c3c3,
             recent_start_timestamps_by_factor: BTreeMap::new(),
             pending_challenges: BTreeMap::new(),
         })
@@ -137,9 +145,22 @@ impl HostedAccountIdentityBroker {
             store,
             delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
             next_challenge_sequence: 0,
+            otp_secret: now_unix_ms() ^ 0x5a5a_c3c3_a5a5_1357,
             recent_start_timestamps_by_factor: BTreeMap::new(),
             pending_challenges: BTreeMap::new(),
         })
+    }
+
+    pub(super) fn disabled() -> Self {
+        Self {
+            store_path: PathBuf::new(),
+            store: HostedAccountStore::default(),
+            delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
+            next_challenge_sequence: 0,
+            otp_secret: 0,
+            recent_start_timestamps_by_factor: BTreeMap::new(),
+            pending_challenges: BTreeMap::new(),
+        }
     }
 
     pub(super) fn start_login(
@@ -195,13 +216,13 @@ impl HostedAccountIdentityBroker {
         let factor_key = factor_key(channel, normalized_login_hint.as_str());
         let challenge_id =
             build_login_challenge_id(issued_at_unix_ms, self.next_challenge_sequence);
-        let otp_code = build_preview_otp_code(issued_at_unix_ms, self.next_challenge_sequence);
+        let otp_code = build_preview_otp_code(
+            self.otp_secret,
+            challenge_id.as_str(),
+            normalized_login_hint.as_str(),
+        );
         let masked_login_hint = mask_login_hint(channel, normalized_login_hint.as_str());
         let expires_at_unix_ms = issued_at_unix_ms.saturating_add(LOGIN_CHALLENGE_TTL_MS);
-        let account_exists = self
-            .store
-            .account_id_by_factor
-            .contains_key(factor_key.as_str());
         self.recent_start_timestamps_by_factor
             .entry(factor_key)
             .or_default()
@@ -213,6 +234,7 @@ impl HostedAccountIdentityBroker {
             masked_login_hint: masked_login_hint.clone(),
             otp_code: otp_code.clone(),
             expires_at_unix_ms,
+            failed_attempts: 0,
         };
         self.pending_challenges
             .insert(challenge_id.clone(), challenge);
@@ -233,7 +255,6 @@ impl HostedAccountIdentityBroker {
                 masked_login_hint,
                 delivery_mode: self.delivery_mode.clone(),
                 expires_at_unix_ms,
-                account_exists,
                 preview_code: if self.delivery_mode == HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE {
                     Some(otp_code)
                 } else {
@@ -276,7 +297,7 @@ impl HostedAccountIdentityBroker {
                 admission: None,
             };
         }
-        let Some(challenge) = self.pending_challenges.remove(normalized_challenge_id) else {
+        let Some(mut challenge) = self.pending_challenges.remove(normalized_challenge_id) else {
             return HostedAccountLoginCompleteResponse {
                 ok: false,
                 error_code: Some("challenge_not_found".to_string()),
@@ -299,12 +320,30 @@ impl HostedAccountIdentityBroker {
             };
         }
         if challenge.otp_code != otp_code.trim() {
-            self.pending_challenges
-                .insert(challenge.challenge_id.clone(), challenge);
+            challenge.failed_attempts = challenge.failed_attempts.saturating_add(1);
+            let locked = challenge.failed_attempts >= LOGIN_CHALLENGE_MAX_ATTEMPTS;
+            if !locked {
+                self.pending_challenges
+                    .insert(challenge.challenge_id.clone(), challenge);
+            }
             return HostedAccountLoginCompleteResponse {
                 ok: false,
-                error_code: Some("otp_code_invalid".to_string()),
-                error: Some("login verification code is invalid".to_string()),
+                error_code: Some(
+                    if locked {
+                        "otp_code_locked"
+                    } else {
+                        "otp_code_invalid"
+                    }
+                    .to_string(),
+                ),
+                error: Some(
+                    if locked {
+                        "login challenge locked after too many invalid attempts"
+                    } else {
+                        "login verification code is invalid"
+                    }
+                    .to_string(),
+                ),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 account: None,
                 grant: None,
@@ -468,12 +507,44 @@ fn save_store(path: &Path, store: &HostedAccountStore) -> Result<(), String> {
     }
     let raw = serde_json::to_string_pretty(store)
         .map_err(|err| format!("failed to serialize hosted account store: {err}"))?;
-    fs::write(path, raw).map_err(|err| {
-        format!(
-            "failed to write hosted account store `{}`: {err}",
-            path.display()
-        )
-    })
+    #[cfg(unix)]
+    {
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|err| {
+                format!(
+                    "failed to open hosted account store `{}`: {err}",
+                    path.display()
+                )
+            })?;
+        file.write_all(raw.as_bytes()).map_err(|err| {
+            format!(
+                "failed to write hosted account store `{}`: {err}",
+                path.display()
+            )
+        })?;
+        file.set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|err| {
+                format!(
+                    "failed to secure hosted account store permissions `{}`: {err}",
+                    path.display()
+                )
+            })?;
+        return Ok(());
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(path, raw).map_err(|err| {
+            format!(
+                "failed to write hosted account store `{}`: {err}",
+                path.display()
+            )
+        })
+    }
 }
 
 fn normalize_delivery_mode(raw: Option<&str>) -> String {
@@ -553,8 +624,16 @@ fn build_login_challenge_id(issued_at_unix_ms: u64, sequence: u64) -> String {
     format!("hosted-login-challenge-{issued_at_unix_ms:016x}-{sequence:08x}")
 }
 
-fn build_preview_otp_code(issued_at_unix_ms: u64, sequence: u64) -> String {
-    format!("{:06}", ((issued_at_unix_ms ^ sequence) % 1_000_000))
+fn build_preview_otp_code(
+    otp_secret: u64,
+    challenge_id: &str,
+    normalized_login_hint: &str,
+) -> String {
+    let mut hasher = DefaultHasher::new();
+    otp_secret.hash(&mut hasher);
+    challenge_id.hash(&mut hasher);
+    normalized_login_hint.hash(&mut hasher);
+    format!("{:06}", hasher.finish() % 1_000_000)
 }
 
 fn build_hosted_account_id(sequence: u64) -> String {
@@ -664,13 +743,60 @@ mod tests {
             "player@example.com",
         );
         let challenge = start.challenge.expect("challenge");
+        let wrong_code = if challenge.preview_code.as_deref() == Some("000000") {
+            "000001"
+        } else {
+            "000000"
+        };
         let response = broker.complete_login(
             DeploymentMode::HostedPublicJoin,
             challenge.challenge_id.as_str(),
-            "000000",
+            wrong_code,
             &mut issuer,
         );
         assert!(!response.ok);
         assert_eq!(response.error_code.as_deref(), Some("otp_code_invalid"));
+    }
+
+    #[test]
+    fn hosted_account_login_complete_locks_after_repeated_invalid_otp() {
+        let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("otp-lock"))
+            .expect("broker");
+        let mut issuer = HostedPlayerSessionIssuer::default();
+        let start = broker.start_login(
+            DeploymentMode::HostedPublicJoin,
+            "email",
+            "player@example.com",
+        );
+        let challenge = start.challenge.expect("challenge");
+        let wrong_code = if challenge.preview_code.as_deref() == Some("000000") {
+            "000001"
+        } else {
+            "000000"
+        };
+        for _ in 0..(LOGIN_CHALLENGE_MAX_ATTEMPTS - 1) {
+            let response = broker.complete_login(
+                DeploymentMode::HostedPublicJoin,
+                challenge.challenge_id.as_str(),
+                wrong_code,
+                &mut issuer,
+            );
+            assert_eq!(response.error_code.as_deref(), Some("otp_code_invalid"));
+        }
+        let locked = broker.complete_login(
+            DeploymentMode::HostedPublicJoin,
+            challenge.challenge_id.as_str(),
+            wrong_code,
+            &mut issuer,
+        );
+        assert_eq!(locked.error_code.as_deref(), Some("otp_code_locked"));
+
+        let missing = broker.complete_login(
+            DeploymentMode::HostedPublicJoin,
+            challenge.challenge_id.as_str(),
+            challenge.preview_code.as_deref().unwrap_or_default(),
+            &mut issuer,
+        );
+        assert_eq!(missing.error_code.as_deref(), Some("challenge_not_found"));
     }
 }

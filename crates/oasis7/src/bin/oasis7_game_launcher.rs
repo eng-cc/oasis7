@@ -542,7 +542,13 @@ fn start_static_http_server(
     let live_bind = Arc::new(live_bind.to_string());
     let default_viewer_player_id = Arc::new(default_viewer_player_id.map(ToOwned::to_owned));
     let hosted_session_issuer = Arc::new(Mutex::new(HostedPlayerSessionIssuer::default()));
-    let hosted_account_broker = Arc::new(Mutex::new(HostedAccountIdentityBroker::from_env()?));
+    let hosted_account_broker = Arc::new(Mutex::new(
+        if deployment_mode == DeploymentMode::HostedPublicJoin {
+            HostedAccountIdentityBroker::from_env()?
+        } else {
+            HostedAccountIdentityBroker::disabled()
+        },
+    ));
     let runtime_presence_join_handle = if deployment_mode == DeploymentMode::HostedPublicJoin {
         let stop_requested = Arc::clone(&stop_requested);
         let live_bind = Arc::clone(&live_bind);

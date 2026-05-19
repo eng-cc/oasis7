@@ -47,10 +47,6 @@
     - `git diff --check`
 
 ### 后续切片
-- `runtime_engineer` + `viewer_engineer` / hosted-account-identity-broker:
-  - 目标: 落地 hosted account、邮箱 OTP/magic link、`hosted_account_id` 与 `player_id` 绑定、设备识别与恢复流程。
-- `runtime_engineer` + `viewer_engineer` / device-session-and-runtime-binding:
-  - 目标: 用 `device_session` 替换当前浏览器 `privateKey` 持久化，打通 player-session refresh/rebind/recovery 与 runtime entity binding。
 - `runtime_engineer` / managed-custody-sign-api:
   - 目标: 建立 `signer_ref`、custody sign API、runtime 验签与审计记录，替代当前 preview `approval_code + env signer` 的长期方案。
 - `runtime_engineer` + `viewer_engineer` + `qa_engineer` / step-up-auth-and-risk-policy:
