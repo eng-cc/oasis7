@@ -2328,6 +2328,27 @@ function resetHostedLoginChallenge() {
   state.hostedLogin.accountExists = false;
   state.hostedLogin.completeInFlight = false;
 }
+function authHasSigningKeyMaterial(auth) {
+  return !!String(auth?.publicKey || "").trim() && !!String(auth?.privateKey || "").trim();
+}
+async function ensureHostedAuthSigningKey(auth = state.auth) {
+  if (!auth?.available || auth.source === "legacy_viewer_auth_bootstrap") {
+    return auth;
+  }
+  if (authHasSigningKeyMaterial(auth)) {
+    return auth;
+  }
+  const keypair = await generateEphemeralEd25519Keypair();
+  auth.publicKey = keypair.publicKey;
+  auth.privateKey = keypair.privateKey;
+  auth.registrationStatus = "issued";
+  auth.runtimeStatus = "recovery_pending_key";
+  auth.syncInFlight = false;
+  auth.recoveryErrorCode = null;
+  auth.recoveryErrorMessage = null;
+  persistHostedPlayerSession(auth);
+  return auth;
+}
 async function refreshHostedAdmissionState() {
   if (String(state.hostedAccess?.deployment_mode || "").trim() !== "hosted_public_join") {
     state.hostedAdmission = null;
@@ -3374,12 +3395,13 @@ async function retryHostedPlayerIdentityIssue() {
   };
 }
 async function requestHostedStrongAuthGrant(actionId, agentId) {
-  const playerId = String(state.auth.playerId || "").trim();
-  const publicKey = String(state.auth.publicKey || "").trim();
+  const auth = await ensureHostedAuthSigningKey(state.auth);
+  const playerId = String(auth.playerId || "").trim();
+  const publicKey = String(auth.publicKey || "").trim();
   const releaseToken = String(state.auth.releaseToken || "").trim();
   const approvalCode = String(state.strongAuth.approvalCode || "").trim();
   if (!playerId || !publicKey || !releaseToken) {
-    throw new Error("hosted strong-auth grant requires an active player_session with release token");
+    throw new Error("hosted strong-auth grant requires an active player_session with release token and browser session signing key");
   }
   if (!approvalCode) {
     throw new Error("backend approval code is required before hosted strong auth can be granted");
@@ -3410,10 +3432,11 @@ async function requestHostedStrongAuthGrant(actionId, agentId) {
   state.strongAuth.lastGrantError = null;
   return payload.grant;
 }
-function sendReconnectSync() {
+async function sendReconnectSync() {
   if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap") {
     return;
   }
+  const auth = await ensureHostedAuthSigningKey(state.auth);
   state.auth.syncInFlight = true;
   state.auth.registrationStatus = "registering";
   state.auth.runtimeStatus = "probing";
@@ -3424,8 +3447,8 @@ function sendReconnectSync() {
     command: {
       mode: "reconnect_sync",
       request: {
-        player_id: state.auth.playerId,
-        session_pubkey: state.auth.publicKey
+        player_id: auth.playerId,
+        session_pubkey: auth.publicKey
       }
     }
   });
@@ -3531,7 +3554,7 @@ function syncHostedPlayerSessionOnConnect() {
   if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap" || state.auth.syncInFlight) {
     return;
   }
-  sendReconnectSync();
+  void sendReconnectSync();
 }
 function clearPendingSessionRegisterWaiter(error = null) {
   if (!pendingSessionRegisterWaiter) {
@@ -3544,6 +3567,7 @@ function clearPendingSessionRegisterWaiter(error = null) {
   }
 }
 async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
+  const auth = state.auth.source === "legacy_viewer_auth_bootstrap" ? state.auth : await ensureHostedAuthSigningKey(state.auth);
   const normalizedRequestedAgentId = String(requestedAgentId || "").trim() || null;
   if (state.auth.source !== "legacy_viewer_auth_bootstrap") {
     state.auth.registrationStatus = "registering";
@@ -3558,8 +3582,8 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   state.auth.pendingRequestedAgentId = normalizedRequestedAgentId;
   state.auth.pendingForceRebind = forceRebind === true;
   const request = {
-    player_id: state.auth.playerId,
-    public_key: state.auth.publicKey
+    player_id: auth.playerId,
+    public_key: auth.publicKey
   };
   if (normalizedRequestedAgentId) {
     request.requested_agent_id = normalizedRequestedAgentId;
@@ -3567,7 +3591,7 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   if (forceRebind === true) {
     request.force_rebind = true;
   }
-  request.auth = await buildSessionRegisterAuthProof(request, state.auth);
+  request.auth = await buildSessionRegisterAuthProof(request, auth);
   sendJson({
     type: "authoritative_recovery",
     command: {
