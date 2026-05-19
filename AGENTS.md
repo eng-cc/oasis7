@@ -76,10 +76,12 @@
    4. PR 合入后，必须立即同步本地 `main` 并回收对应 task `worktree` 与 branch；若当前 shell 仍停在 source `worktree`，先切走再删除
    5. 若 PR preflight / create 失败，先在任务 `worktree` 解决分支落后、push 或验证问题，再重试
    6. 若当前 PR 收到 review comments，优先通过 `./scripts/pr-review-thread-closeout.sh --unresolved-only` 盘点 unresolved threads；修复并 push 后，再显式用 `--resolve-thread <id>` 或 `--resolve-all-unresolved` 收口线程，并单独复核 `reviewDecision` / `mergeStateStatus`，不要把“thread 已 resolve”当作“PR 已可合并”
+   7. 若当前 PR / 当前 `worktree` 的 owner task 尚未 close，且 review comment 仍属于同一 owner、同一 PRD、同一验证面内的窄修复，默认继续复用该 task 与同一个 execution log，不要机械再开 `.pm` follow-up task；只有原 task 已 close，或 comment 导致 owner / scope / test boundary 明显扩张时，才新开 follow-up task
 
 13. 当前 `project.md` 还有后续任务时，不要中断
    1. 当前 task 完成后，先完成 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID>`（或等价的 `workflow-report --phase close` + `move-task --to-status done|deferred` 手工链）、commit、PR/merge、本地 `main` 同步与 source `worktree` 清理，再判断是否进入下一个 task
    2. 若 `project.md` 仍有后续任务，默认为下一个 task 重新创建独立 `worktree` 与 `.pm` task；只有用户明确授权复用当前 `worktree` 时，才允许不切新环境
+   3. “下一个 task” 只指新的独立需求切片；若同一 PR 在原 task close 前只收到同 owner / 同 PRD / 同验证面的 review comment，则继续复用原 task，不把 review 回合误建成新的并列 task
 
 ## 工程架构
 - 各个子模块各自闭环基础模块功能

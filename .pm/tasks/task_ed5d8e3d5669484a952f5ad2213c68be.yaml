@@ -1,0 +1,18 @@
+task_uid: task_ed5d8e3d5669484a952f5ad2213c68be
+title: "reduce same-pr pm task proliferation"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-pm-task-reuse-governance
+execution_log_path: .pm/tasks/task_ed5d8e3d5669484a952f5ad2213c68be.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-19T10:08:37+08:00
+last_started_at: 2026-05-19T10:05:43+08:00
+last_closed_at: 2026-05-19T10:08:37+08:00
