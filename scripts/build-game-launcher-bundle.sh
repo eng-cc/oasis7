@@ -286,7 +286,7 @@ else
   run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.html" "$BUNDLE_WEB_DIR/index.html"
   run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.html" "$BUNDLE_WEB_DIR/viewer.html"
   run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.html" "$BUNDLE_WEB_DIR/software_safe.html"
-  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.js" "$BUNDLE_WEB_DIR/viewer.js"
+  run cp "$ROOT_DIR/crates/oasis7_viewer/viewer.js" "$BUNDLE_WEB_DIR/viewer.js"
   run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.js" "$BUNDLE_WEB_DIR/software_safe.js"
   run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" "$BUNDLE_WEB_DIR/software_safe_first_agent_claim_evidence.html"
   run cp "$ROOT_DIR/crates/oasis7_viewer/favicon.ico" "$BUNDLE_WEB_DIR/favicon.ico"

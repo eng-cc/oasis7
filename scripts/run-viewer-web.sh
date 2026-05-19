@@ -63,7 +63,7 @@ mkdir -p "$DIST_DIR"
 cp "$VIEWER_DIR/software_safe.html" "$DIST_DIR/index.html"
 cp "$VIEWER_DIR/software_safe.html" "$DIST_DIR/viewer.html"
 cp "$VIEWER_DIR/software_safe.html" "$DIST_DIR/software_safe.html"
-cp "$VIEWER_DIR/software_safe.js" "$DIST_DIR/viewer.js"
+cp "$VIEWER_DIR/viewer.js" "$DIST_DIR/viewer.js"
 cp "$VIEWER_DIR/software_safe.js" "$DIST_DIR/software_safe.js"
 cp "$VIEWER_DIR/software_safe_first_agent_claim_evidence.html" \
   "$DIST_DIR/software_safe_first_agent_claim_evidence.html"

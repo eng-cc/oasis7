@@ -15,11 +15,11 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, "software_safe_src/main.jsx"),
       formats: ["es"],
-      fileName: () => "software_safe"
+      fileName: () => "viewer"
     },
     rollupOptions: {
       output: {
-        entryFileNames: "software_safe.js",
+        entryFileNames: "viewer.js",
         inlineDynamicImports: true
       }
     }

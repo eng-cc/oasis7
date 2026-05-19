@@ -1,3 +1,7 @@
+import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
+import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
+import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
+
 const TEST_API_GLOBAL_NAME = "__AW_TEST__";
 const RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
 const VIEWER_RENDER_MODE = "viewer";
@@ -14,8 +18,6 @@ const HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admiss
 const HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
 const HOSTED_PLAYER_SESSION_ISSUE_ROUTE = "/api/public/player-session/issue";
 const HOSTED_PLAYER_SESSION_RELEASE_ROUTE = "/api/public/player-session/release";
-const HOSTED_ACCOUNT_LOGIN_START_ROUTE = "/api/public/hosted-account/login/start";
-const HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE = "/api/public/hosted-account/login/complete";
 const HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
 const HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 30000;
 const DEFAULT_WS_ADDR = "ws://127.0.0.1:5011";
@@ -82,11 +84,7 @@ export const state = {
   selectedObject: null,
   auth: {
     available: false,
-    hostedAccountId: null,
     playerId: null,
-    loginChannel: null,
-    maskedLoginHint: null,
-    deviceSessionId: null,
     publicKey: null,
     privateKey: null,
     releaseToken: null,
@@ -106,21 +104,6 @@ export const state = {
     pendingRequestedAgentId: null,
     pendingForceRebind: false,
     rebindNotice: null,
-  },
-  hostedLogin: {
-    channel: "email",
-    handle: "",
-    challengeId: null,
-    maskedLoginHint: null,
-    deliveryMode: null,
-    previewCode: null,
-    code: "",
-    expiresAtUnixMs: null,
-    retryAfterSeconds: null,
-    accountExists: false,
-    startInFlight: false,
-    completeInFlight: false,
-    error: null,
   },
   promptDraft: {
     agentId: null,
@@ -353,216 +336,61 @@ function trimFixed(value, digits) {
   return fixed.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
 }
 
-function formatPhysicalDistanceCm(value, locale = state.uiLocale) {
-  const numeric = normalizeFiniteNumber(value);
-  if (numeric == null) {
-    return null;
-  }
-  const absolute = Math.abs(numeric);
-  if (absolute >= 100_000) {
-    const km = numeric / 100_000;
-    const label = trimFixed(km, Math.abs(km) >= 100 ? 0 : Math.abs(km) >= 10 ? 1 : 2);
-    return `${label} km`;
-  }
-  if (absolute >= 100) {
-    const meters = numeric / 100;
-    const label = trimFixed(
-      meters,
-      Math.abs(meters) >= 100 ? 0 : Math.abs(meters) >= 10 ? 1 : 2,
-    );
-    return `${label} m`;
-  }
-  return `${trimFixed(numeric, 0)} cm`;
-}
+const {
+  formatPhysicalDistanceCm,
+  formatWorldPositionCm,
+  buildWorldScaleSurface,
+  detectRendererMeta,
+} = createViewerWorldScaleModule({
+  documentRef: document,
+  state,
+  isLocaleZh,
+  normalizeFiniteNumber,
+  finitePositionComponents,
+  trimFixed,
+  getSearchParams,
+  softwareRendererMarkers: SOFTWARE_RENDERER_MARKERS,
+  softwareSafeRenderModeAlias: SOFTWARE_SAFE_RENDER_MODE_ALIAS,
+  viewerRenderMode: VIEWER_RENDER_MODE,
+});
 
-function formatWorldPositionCm(pos, locale = state.uiLocale) {
-  if (!pos || typeof pos !== "object") {
-    return null;
-  }
-  const x = formatPhysicalDistanceCm(pos.x_cm, locale);
-  const y = formatPhysicalDistanceCm(pos.y_cm, locale);
-  const z = formatPhysicalDistanceCm(pos.z_cm, locale);
-  if (!x || !y || !z) {
-    return null;
-  }
-  return `x=${x} · y=${y} · z=${z}`;
-}
+const {
+  authDeploymentHint,
+  buildAuthSurfaceModel,
+  buildHostedActionMatrixView,
+  buildHostedRecoveryHint,
+  buildSemanticCapability,
+  hostedActionPolicy,
+  resolveHostedAccessHint,
+} = createViewerAuthSurfaceModule({
+  getSearchParams,
+  localeText,
+  selectedAgentInteractionMode: () => selectedAgentInteractionMode(),
+  state,
+  windowRef: window,
+});
 
-function distanceCmBetweenPositions(a, b) {
-  const left = finitePositionComponents(a);
-  const right = finitePositionComponents(b);
-  if (!left || !right) {
-    return null;
-  }
-  const dx = left.x - right.x;
-  const dy = left.y - right.y;
-  const dz = left.z - right.z;
-  return Math.max(0, Math.round(Math.sqrt((dx * dx) + (dy * dy) + (dz * dz))));
-}
-
-function locationRadiusCm(location) {
-  return normalizeFiniteNumber(location?.profile?.radius_cm);
-}
-
-function snapshotSpaceConfig() {
-  const space = state.snapshot?.config?.space;
-  return space && typeof space === "object" ? space : null;
-}
-
-function selectedWorldAnchor() {
-  const selected = state.selectedObject;
-  if (selected && selected.pos) {
-    return {
-      kind: state.selectedKind || "location",
-      id: state.selectedId || selected.id || selected.name || "selected",
-      pos: selected.pos,
-      radiusCm: locationRadiusCm(selected),
-      locationId: selected.location_id || selected.id || null,
-    };
-  }
-
-  const locations = Object.values(state.snapshot?.model?.locations || {});
-  const fallback = locations.find((location) => location?.pos);
-  if (!fallback) {
-    return null;
-  }
-  return {
-    kind: "location",
-    id: fallback.id || fallback.name || "location",
-    pos: fallback.pos,
-    radiusCm: locationRadiusCm(fallback),
-    locationId: fallback.id || null,
-  };
-}
-
-function buildWorldScaleSurface(locale = state.uiLocale) {
-  const isZh = isLocaleZh(locale);
-  const space = snapshotSpaceConfig();
-  const anchor = selectedWorldAnchor();
-  const locations = Object.values(state.snapshot?.model?.locations || {})
-    .filter((location) => location?.id && location?.pos);
-
-  const nearestLocations = anchor
-    ? locations
-      .filter((location) => location.id !== anchor.locationId)
-      .map((location) => {
-        const distanceCm = distanceCmBetweenPositions(anchor.pos, location.pos);
-        return {
-          id: location.id,
-          name: location.name || location.id,
-          distanceCm,
-          distanceLabel: formatPhysicalDistanceCm(distanceCm, locale),
-          radiusCm: locationRadiusCm(location),
-          radiusLabel: formatPhysicalDistanceCm(locationRadiusCm(location), locale),
-        };
-      })
-      .filter((location) => location.distanceCm != null)
-      .sort((left, right) => left.distanceCm - right.distanceCm)
-      .slice(0, 3)
-    : [];
-
-  const physicalTruth = {
-    canonicalUnitLabel: formatPhysicalDistanceCm(1, locale),
-    canonicalUnitDetail: isZh
-      ? "世界位置、距离、半径和尺寸的正式真值都按整数厘米存储。"
-      : "World positions, distances, radii, and sizes are stored as integer centimeters.",
-    worldBoundsLabel: space
-      ? `${formatPhysicalDistanceCm(space.width_cm, locale)} × ${formatPhysicalDistanceCm(space.depth_cm, locale)} × ${formatPhysicalDistanceCm(space.height_cm, locale)}`
-      : null,
-    worldBoundsDetail: space
-      ? isZh
-        ? "来自 snapshot.config.space 的真实世界边界。"
-        : "Physical world bounds derived from snapshot.config.space."
-      : isZh
-        ? "当前快照没有发布 world bounds。"
-        : "The current snapshot does not publish world bounds yet.",
-    anchor: anchor
-      ? {
-          kind: anchor.kind,
-          id: anchor.id,
-          label: anchor.kind === "agent"
-            ? (isZh ? "当前选中 Agent 锚点" : "Selected agent anchor")
-            : (isZh ? "当前选中地点锚点" : "Selected location anchor"),
-          positionLabel: formatWorldPositionCm(anchor.pos, locale),
-          radiusCm: anchor.radiusCm,
-          radiusLabel: anchor.radiusCm == null ? null : formatPhysicalDistanceCm(anchor.radiusCm, locale),
-          locationId: anchor.locationId,
-        }
-      : null,
-    nearestLocations,
-  };
-
-  const presentationScale = {
-    markerTruthNote: isZh
-      ? "3D marker、2D overview map 和 halo 允许为了可读性被放大；请把距离/半径标签当成真值，不要把屏幕上的直径当成真实几何尺寸。"
-      : "3D markers, the 2D overview map, and halos may be enlarged for readability. Treat the distance/radius labels as truth; do not read on-screen diameter as real geometry size.",
-    zoomTruthNote: isZh
-      ? "overview/detail 的 zoom tier 只切换表现语义，不会改写世界的厘米真值。"
-      : "Overview/detail zoom tiers only switch presentation semantics; they do not rewrite centimeter truth in the world model.",
-    softwareSafeNote: isZh
-      ? "viewer 主入口优先给出文字和数值真值；更底层的 visual QA viewer 可以更夸张，但不应覆盖这里的物理标签。"
-      : "The viewer entry prioritizes textual and numeric truth. Lower-level visual QA surfaces may exaggerate more aggressively, but they should not override the physical labels here.",
-  };
-
-  return {
-    physicalTruth,
-    presentationScale,
-  };
-}
-
-function detectRendererMeta() {
-  const params = getSearchParams();
-  const reasonFromQuery = params.get("viewer_reason") || params.get("software_safe_reason");
-  const requestedRenderMode = String(params.get("render_mode") || "").trim().toLowerCase();
-  const meta = {
-    renderMode:
-      requestedRenderMode === SOFTWARE_SAFE_RENDER_MODE_ALIAS || requestedRenderMode === VIEWER_RENDER_MODE
-        ? VIEWER_RENDER_MODE
-        : VIEWER_RENDER_MODE,
-    rendererClass: "none",
-    viewerReason: reasonFromQuery || "direct_viewer_entry",
-    renderer: null,
-    vendor: null,
-    webglVersion: null,
-  };
-
-  try {
-    const canvas = document.createElement("canvas");
-    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
-    if (!gl) {
-      meta.rendererClass = "none";
-      meta.viewerReason = reasonFromQuery || "webgl_unavailable";
-      return meta;
-    }
-    meta.webglVersion = gl.getParameter(gl.VERSION) || null;
-    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
-    if (debugInfo) {
-      meta.renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || null;
-      meta.vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || null;
-    }
-    const rendererText = String(meta.renderer || "").toLowerCase();
-    if (SOFTWARE_RENDERER_MARKERS.some((marker) => rendererText.includes(marker))) {
-      meta.rendererClass = "software";
-    } else {
-      meta.rendererClass = "unknown";
-    }
-  } catch (error) {
-    meta.rendererClass = "none";
-    meta.renderer = String(error);
-  }
-  return meta;
-}
+const {
+  buildGameplaySummary,
+  describePromptVersionState,
+  describeSemanticFeedback,
+  snapshotControlFeedback,
+  snapshotSemanticFeedback,
+} = createViewerFeedbackModule({
+  clone,
+  feedbackBadgeClass,
+  hostedActionPolicy,
+  isLocaleZh,
+  localeText,
+  state,
+});
 
 function resolveAuthBootstrap() {
   const raw = window[VIEWER_AUTH_BOOTSTRAP_OBJECT];
   if (!raw || typeof raw !== "object") {
     return {
       available: false,
-      hostedAccountId: null,
       playerId: null,
-      loginChannel: null,
-      maskedLoginHint: null,
-      deviceSessionId: null,
       publicKey: null,
       privateKey: null,
       releaseToken: null,
@@ -594,11 +422,7 @@ function resolveAuthBootstrap() {
   if (!playerId || !publicKey || !privateKey) {
     return {
       available: false,
-      hostedAccountId: null,
       playerId: playerId || null,
-      loginChannel: null,
-      maskedLoginHint: null,
-      deviceSessionId: null,
       publicKey: publicKey || null,
       privateKey: privateKey || null,
       releaseToken: null,
@@ -622,11 +446,7 @@ function resolveAuthBootstrap() {
   }
   return {
     available: true,
-    hostedAccountId: null,
     playerId,
-    loginChannel: null,
-    maskedLoginHint: null,
-    deviceSessionId: null,
     publicKey,
     privateKey,
     releaseToken: null,
@@ -664,18 +484,16 @@ function hostedPlayerSessionStorageKey() {
 }
 
 function persistHostedPlayerSession(auth) {
-  if (!auth?.available || !auth?.playerId || auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!auth?.available || !auth?.playerId || !auth?.publicKey || !auth?.privateKey || auth.source === "legacy_viewer_auth_bootstrap") {
     return;
   }
   try {
     window.localStorage?.setItem(
       hostedPlayerSessionStorageKey(),
       JSON.stringify({
-        hostedAccountId: auth.hostedAccountId || null,
         playerId: auth.playerId,
-        loginChannel: auth.loginChannel || null,
-        maskedLoginHint: auth.maskedLoginHint || null,
-        deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
+        publicKey: auth.publicKey,
+        privateKey: auth.privateKey,
         releaseToken: auth.releaseToken || null,
         issuedAtUnixMs: auth.issuedAtUnixMs || null,
         sessionEpoch: auth.sessionEpoch || null,
@@ -699,38 +517,19 @@ function resolveStoredHostedPlayerSession() {
       return null;
     }
     const parsed = JSON.parse(raw);
-    const hostedAccountId = String(parsed?.hostedAccountId || parsed?.hosted_account_id || "").trim();
     const playerId = String(parsed?.playerId || "").trim();
-    const loginChannel = String(parsed?.loginChannel || parsed?.login_channel || "").trim();
-    const maskedLoginHint = String(parsed?.maskedLoginHint || parsed?.masked_login_hint || "").trim();
+    const publicKey = String(parsed?.publicKey || "").trim().toLowerCase();
+    const privateKey = String(parsed?.privateKey || "").trim().toLowerCase();
     const releaseToken = String(parsed?.releaseToken || "").trim();
-    const deviceSessionId = String(parsed?.deviceSessionId || parsed?.device_session_id || parsed?.releaseToken || "").trim();
-    if (!playerId || !releaseToken) {
+    if (!playerId || !publicKey || !privateKey || !releaseToken) {
       clearHostedPlayerSession();
       return null;
     }
-    window.localStorage?.setItem(
-      hostedPlayerSessionStorageKey(),
-      JSON.stringify({
-        hostedAccountId: hostedAccountId || null,
-        playerId,
-        loginChannel: loginChannel || null,
-        maskedLoginHint: maskedLoginHint || null,
-        deviceSessionId: deviceSessionId || releaseToken,
-        releaseToken,
-        issuedAtUnixMs: parsed?.issuedAtUnixMs ?? null,
-        sessionEpoch: parsed?.sessionEpoch ?? null,
-      }),
-    );
     return {
       available: true,
-      hostedAccountId: hostedAccountId || null,
       playerId,
-      loginChannel: loginChannel || null,
-      maskedLoginHint: maskedLoginHint || null,
-      deviceSessionId: deviceSessionId || releaseToken,
-      publicKey: null,
-      privateKey: null,
+      publicKey,
+      privateKey,
       releaseToken,
       error: null,
       revokeReason: null,
@@ -761,41 +560,6 @@ function resolveViewerAuthState() {
     return bootstrap;
   }
   return resolveStoredHostedPlayerSession() || bootstrap;
-}
-
-function resetHostedLoginChallenge() {
-  state.hostedLogin.channel = "email";
-  state.hostedLogin.challengeId = null;
-  state.hostedLogin.maskedLoginHint = null;
-  state.hostedLogin.deliveryMode = null;
-  state.hostedLogin.previewCode = null;
-  state.hostedLogin.code = "";
-  state.hostedLogin.expiresAtUnixMs = null;
-  state.hostedLogin.accountExists = false;
-  state.hostedLogin.completeInFlight = false;
-}
-
-function authHasSigningKeyMaterial(auth) {
-  return !!String(auth?.publicKey || "").trim() && !!String(auth?.privateKey || "").trim();
-}
-
-async function ensureHostedAuthSigningKey(auth = state.auth) {
-  if (!auth?.available || auth.source === "legacy_viewer_auth_bootstrap") {
-    return auth;
-  }
-  if (authHasSigningKeyMaterial(auth)) {
-    return auth;
-  }
-  const keypair = await generateEphemeralEd25519Keypair();
-  auth.publicKey = keypair.publicKey;
-  auth.privateKey = keypair.privateKey;
-  auth.registrationStatus = "issued";
-  auth.runtimeStatus = "recovery_pending_key";
-  auth.syncInFlight = false;
-  auth.recoveryErrorCode = null;
-  auth.recoveryErrorMessage = null;
-  persistHostedPlayerSession(auth);
-  return auth;
 }
 
 async function refreshHostedAdmissionState() {
@@ -872,405 +636,6 @@ function syncHostedSessionRefreshLoop() {
   }, HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS);
 }
 
-function resolveHostedAccessHint() {
-  const raw = getSearchParams().get("hosted_access");
-  if (!raw) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function hostnameFromUrl(raw) {
-  const value = String(raw || "").trim();
-  if (!value) return null;
-  try {
-    return new URL(value, window.location.href).hostname || null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function isLoopbackHostname(raw) {
-  const value = String(raw || "").trim().toLowerCase();
-  return value === "localhost" || value === "127.0.0.1" || value === "::1" || value === "[::1]";
-}
-
-function authDeploymentHint(auth) {
-  const hostedMode = String(state.hostedAccess?.deployment_mode || "").trim();
-  if (hostedMode === "hosted_public_join") {
-    if (auth.available && auth.source === "legacy_viewer_auth_bootstrap") {
-      return "hosted_public_join_contract_with_legacy_bootstrap";
-    }
-    return auth.available
-      ? "hosted_public_join_contract_with_browser_session"
-      : "hosted_public_join_contract";
-  }
-  if (hostedMode === "trusted_local_only") {
-    return auth.available ? "trusted_local_contract" : "trusted_local_contract_guest";
-  }
-  const params = getSearchParams();
-  const wsHost = hostnameFromUrl(state.wsUrl || params.get("ws") || params.get("addr") || "");
-  const pageHost = String(window.location.hostname || "").trim();
-  const remoteOriginLikely = [pageHost, wsHost].filter(Boolean).some((host) => !isLoopbackHostname(host));
-  if (auth.available) {
-    return remoteOriginLikely ? "remote_origin_legacy_bootstrap" : "trusted_local_preview";
-  }
-  return remoteOriginLikely ? "hosted_public_join_likely" : "guest_only_or_missing_bootstrap";
-}
-
-function isHostedPublicJoinHint(deploymentHint) {
-  return [
-    "hosted_public_join_contract",
-    "hosted_public_join_contract_with_browser_session",
-    "hosted_public_join_contract_with_legacy_bootstrap",
-    "hosted_public_join_likely",
-  ].includes(deploymentHint);
-}
-
-function hostedActionPolicy(actionId) {
-  const normalizedActionId = actionId === "prompt_control"
-    ? "prompt_control_apply"
-    : actionId;
-  return state.hostedAccess?.action_matrix?.find((policy) => policy?.action_id === normalizedActionId) || null;
-}
-
-function guestSessionReason(auth, deploymentHint) {
-  if (auth.available) {
-    return auth.source === "legacy_viewer_auth_bootstrap"
-      ? "guest session has already been superseded by the current preview player auth lane"
-      : "guest session has already been superseded by a hosted-issued player identity";
-  }
-  if (isHostedPublicJoinHint(deploymentHint)) {
-    return auth.error || "this browser is still guest-only; hosted public join must complete hosted account login before low-risk interaction unlocks";
-  }
-  return auth.error || "viewer auth bootstrap is unavailable, so the browser cannot leave guest session";
-}
-
-function playerSessionReason(auth, deploymentHint) {
-  if (auth.available) {
-    if (auth.source === "legacy_viewer_auth_bootstrap") {
-      return "player interaction is currently unlocked through legacy viewer auth bootstrap in trusted preview mode";
-    }
-    if (auth.registrationStatus === "registered") {
-      return "player interaction is unlocked through hosted-issued player_id + browser device session plus an in-memory browser-generated Ed25519 session key";
-    }
-    if (auth.registrationStatus === "registering" || auth.registrationStatus === "issued") {
-      return "browser device session is ready; runtime player-session registration is still in progress";
-    }
-    return auth.error || "hosted player identity exists, but runtime registration still needs recovery";
-  }
-  if (isHostedPublicJoinHint(deploymentHint)) {
-    return auth.error || "player session upgrade/login is still pending hosted account verification";
-  }
-  return auth.error || "viewer auth bootstrap is missing or incomplete";
-}
-
-function strongAuthReason() {
-  return "strong auth remains a separate upgrade plane; viewer already supports hosted player-session issue/reconnect/release, but backend reauth stays preview-only for prompt_control and still does not unlock hosted-ready asset/governance proofs";
-}
-
-function buildStrongAuthTier(promptCapability) {
-  const promptPolicy = hostedActionPolicy("prompt_control");
-  if (!promptPolicy || promptPolicy.required_auth !== "strong_auth") {
-    return {
-      status: "separate_upgrade_plane",
-      reason: strongAuthReason(),
-    };
-  }
-  if (promptPolicy.availability === "public_player_plane_with_backend_reauth_preview") {
-    if (!state.auth.available) {
-      return {
-        status: "upgrade_after_player_session",
-        reason:
-          "hosted preview backend reauth is available on this join lane after the browser acquires a player_session",
-      };
-    }
-    if (state.auth.registrationStatus === "registered") {
-      return {
-        status: "preview_backend_reauth_available",
-        reason:
-          "hosted preview backend reauth is available after the browser device-session-backed player_session has completed runtime registration for prompt_control",
-      };
-    }
-    return {
-      status: "issued_pending_register",
-      reason:
-        "hosted preview backend reauth stays pending until the browser device-session-backed player_session finishes runtime registration",
-    };
-  }
-  if (promptPolicy.availability === "trusted_local_preview_only") {
-    return {
-      status: state.auth.available ? "active_legacy_preview" : "trusted_local_only",
-      reason:
-        "trusted_local_preview keeps prompt_control on the legacy local preview lane; hosted/public strong_auth still remains outside this window",
-    };
-  }
-  return {
-    status: "blocked_until_strong_auth",
-    reason: promptPolicy.reason || strongAuthReason(),
-  };
-}
-
-function isStrongAuthSensitiveAction(actionId) {
-  const policy = hostedActionPolicy(actionId);
-  if (policy) {
-    return policy.required_auth === "strong_auth";
-  }
-  return actionId === "prompt_control" || actionId === "main_token_transfer";
-}
-
-function buildSemanticCapability(actionId) {
-  const observerOnly = selectedAgentInteractionMode() === "observer_only";
-  const deploymentHint = authDeploymentHint(state.auth);
-  const strongAuthSensitive = isStrongAuthSensitiveAction(actionId);
-  const policy = hostedActionPolicy(actionId);
-  if (observerOnly) {
-    return {
-      actionId,
-      enabled: false,
-      code: "observer_only",
-      reason:
-        "selected agent runs through the provider-backed loopback bridge; viewer stays observer-only for prompt/chat on this lane",
-    };
-  }
-  if (policy) {
-    if (policy.required_auth === "strong_auth") {
-      const isLocalPreviewOnly = policy.availability === "trusted_local_preview_only";
-      const isBackendGrantPreview = policy.availability === "public_player_plane_with_backend_reauth_preview";
-      if (isLocalPreviewOnly && state.auth.available && !isHostedPublicJoinHint(deploymentHint)) {
-        return {
-          actionId,
-          enabled: true,
-          code: null,
-          reason: policy.reason || "trusted local preview currently allows this strong-auth-marked action through preview bootstrap",
-        };
-      }
-      if (isBackendGrantPreview && state.auth.available) {
-        return {
-          actionId,
-          enabled: true,
-          code: null,
-          reason: policy.reason || `${actionId} is available through browser-local player auth plus backend re-authorization`,
-        };
-      }
-      if (isBackendGrantPreview && !state.auth.available) {
-        return {
-          actionId,
-          enabled: false,
-          code: "auth_level_insufficient",
-          reason: `${actionId} requires player_session before backend re-authorization can upgrade it to strong_auth`,
-        };
-      }
-      return {
-        actionId,
-        enabled: false,
-        code: "strong_auth_required",
-        reason: policy.reason || strongAuthReason(),
-      };
-    }
-    if (!state.auth.available) {
-      return {
-        actionId,
-        enabled: false,
-        code: "auth_level_insufficient",
-        reason: `${actionId} requires ${policy.required_auth}; current browser remains guest_session only`,
-      };
-    }
-    return {
-      actionId,
-      enabled: true,
-      code: null,
-      reason: policy.reason || `${actionId} is allowed on the ${policy.required_auth} lane`,
-    };
-  }
-  if (strongAuthSensitive && isHostedPublicJoinHint(deploymentHint)) {
-    const hostedStrongAuthReason = state.auth.available
-      ? `${actionId} still requires strong_auth on the hosted public join path; this browser only has a legacy preview player_session, so backend re-authorization or a private operator plane must take over`
-      : `${actionId} requires strong_auth on the hosted public join path; acquire a player_session first, then complete the hosted re-authorization step for this action`;
-    return {
-      actionId,
-      enabled: false,
-      code: "strong_auth_required",
-      reason: hostedStrongAuthReason,
-    };
-  }
-  if (strongAuthSensitive && state.auth.available && deploymentHint === "remote_origin_legacy_bootstrap") {
-    return {
-      actionId,
-      enabled: false,
-      code: "strong_auth_required",
-      reason: `${actionId} is blocked on remote-origin legacy bootstrap; hosted/public prompt control must move to strong_auth or private operator plane`,
-    };
-  }
-  if (!state.auth.available) {
-    const reason = isHostedPublicJoinHint(deploymentHint)
-      ? `${actionId} requires player_session; this browser is still guest_session only on the hosted public join path`
-      : `${actionId} requires viewer auth bootstrap; current status: ${state.auth.error || "missing"}`;
-    return {
-      actionId,
-      enabled: false,
-      code: "auth_level_insufficient",
-      reason,
-    };
-  }
-  return {
-    actionId,
-    enabled: true,
-    code: null,
-    reason: strongAuthSensitive
-      ? "prompt_control stays enabled only in trusted_local_preview via legacy viewer auth bootstrap; hosted/public strong_auth remains pending"
-      : "player_session is active via legacy viewer auth bootstrap preview",
-  };
-}
-
-function buildAuthSurfaceModel() {
-  const deploymentHint = authDeploymentHint(state.auth);
-  const promptCapability = buildSemanticCapability("prompt_control");
-  const chatCapability = buildSemanticCapability("agent_chat");
-  const mainTokenTransferCapability = buildSemanticCapability("main_token_transfer");
-  const strongAuthTier = buildStrongAuthTier(promptCapability);
-  const currentTier = state.auth.available ? "player_session" : "guest_session";
-  const source = state.hostedAccess
-    ? state.auth.available
-      ? state.auth.source === "legacy_viewer_auth_bootstrap"
-        ? "legacy_viewer_auth_bootstrap+hosted_access_hint"
-        : "hosted_player_issue+browser_local_device_session"
-      : "hosted_access_hint"
-    : state.auth.available
-      ? state.auth.source
-      : "guest_only";
-  return {
-    deploymentHint,
-    source,
-    currentTier,
-    currentTierReason:
-      currentTier === "player_session"
-        ? playerSessionReason(state.auth, deploymentHint)
-        : guestSessionReason(state.auth, deploymentHint),
-    tiers: [
-      {
-        id: "guest_session",
-        label: "guest_session",
-        status: state.auth.available ? "superseded" : "active",
-        reason: guestSessionReason(state.auth, deploymentHint),
-      },
-      {
-        id: "player_session",
-        label: "player_session",
-        status: state.auth.available
-          ? state.auth.source === "legacy_viewer_auth_bootstrap"
-            ? "active_legacy_preview"
-            : state.auth.registrationStatus === "registered"
-              ? "active_hosted_session"
-              : "issued_pending_register"
-          : "not_issued",
-        reason: playerSessionReason(state.auth, deploymentHint),
-      },
-      {
-        id: "strong_auth",
-        label: "strong_auth",
-        status: strongAuthTier.status,
-        reason: strongAuthTier.reason,
-      },
-    ],
-    capabilities: {
-      prompt_control: promptCapability,
-      agent_chat: chatCapability,
-      main_token_transfer: mainTokenTransferCapability,
-      strong_auth_actions: mainTokenTransferCapability,
-    },
-    reconnect: state.auth.available
-      ? state.auth.source === "legacy_viewer_auth_bootstrap"
-        ? "reconnect still depends on the current preview bootstrap; hosted player-session reconnect/release is available only after switching away from legacy bootstrap"
-        : state.auth.registrationStatus === "registered"
-          ? "page reload will reuse the hosted device session, mint a fresh browser session key, and attempt reconnect_sync first"
-          : "hosted device session is persisted locally, but runtime player-session restore is still pending this page load"
-      : isHostedPublicJoinHint(deploymentHint)
-        ? buildHostedRecoveryHint("en")?.detail
-          || "hosted public join recovers by verifying the hosted account, acquiring a player_session, then re-registering it through reconnect_sync"
-        : "page reload is possible once viewer auth bootstrap or hosted account login succeeds",
-  };
-}
-
-function buildHostedActionMatrixView() {
-  const matrix = Array.isArray(state.hostedAccess?.action_matrix)
-    ? state.hostedAccess.action_matrix
-    : [];
-  return matrix.map((policy) => {
-    const actionId = String(policy?.action_id || "").trim();
-    const capability = buildSemanticCapability(actionId);
-    return {
-      actionId,
-      requiredAuth: String(policy?.required_auth || "").trim() || "unknown",
-      availability: String(policy?.availability || "").trim() || "unknown",
-      reason: String(policy?.reason || capability.reason || "").trim(),
-      enabled: capability.enabled === true,
-      code: capability.code || null,
-      capabilityReason: capability.reason || null,
-    };
-  });
-}
-
-function buildHostedRecoveryHint(locale = state.uiLocale) {
-  if (String(state.hostedAccess?.deployment_mode || "").trim() !== "hosted_public_join") {
-    return null;
-  }
-  if (state.auth.available) {
-    return null;
-  }
-  const errorText = String(state.auth.error || "").trim();
-  const revokeReason = String(state.auth.revokeReason || "").trim();
-  const revokedBy = String(state.auth.revokedBy || "").trim();
-  if (!errorText) {
-    return null;
-  }
-  if (errorText.includes("released locally")) {
-    return {
-      kind: "released",
-      title: isLocaleZh(locale) ? "托管玩家会话已释放" : "Hosted player session released",
-      detail: isLocaleZh(locale)
-        ? "当前浏览器已经在本地释放托管玩家席位。若要继续试玩，需要重新完成托管账户登录并获取新的玩家会话。"
-        : "This browser returned its hosted player slot locally. Re-login to the hosted account and acquire a fresh player session if you want to resume gameplay.",
-      cta: isLocaleZh(locale) ? "重新登录托管账户" : "Re-login to Hosted Account",
-    };
-  }
-  if (errorText.includes("revoked") || revokeReason || revokedBy) {
-    const actorText = revokedBy ? ` by ${revokedBy}` : "";
-    const reasonText = revokeReason
-      ? ` Reason: ${revokeReason}.`
-      : "";
-    return {
-      kind: "revoked",
-      title: isLocaleZh(locale) ? "托管玩家会话已被撤销" : "Hosted player session was revoked",
-      detail: isLocaleZh(locale)
-        ? `运行时或操作者撤销了这个浏览器会话${actorText}.${reasonText} 继续进行玩法、聊天或 prompt 操作前，需要重新登录托管账户并获取新的玩家会话。`
-        : `The runtime or operator revoked this browser session${actorText}.${reasonText} You need to re-login to the hosted account and acquire a fresh player session before gameplay, chat, or prompt actions can continue.`,
-      cta: isLocaleZh(locale) ? "重新登录托管账户" : "Re-login to Hosted Account",
-    };
-  }
-  if (errorText.includes("session_not_found") || errorText.includes("not found")) {
-    return {
-      kind: "missing",
-      title: isLocaleZh(locale) ? "运行时中找不到托管玩家会话" : "Hosted player session is missing from runtime",
-      detail: isLocaleZh(locale)
-        ? "浏览器本地只保留了 device session，但运行时已经不再识别这个会话。请重新登录托管账户，获取新的玩家会话并重新注册。"
-        : "The browser only retained the local device-session handle, but the runtime no longer recognizes this session. Re-login to the hosted account, acquire a fresh player session, and register again.",
-      cta: isLocaleZh(locale) ? "重新登录托管账户" : "Re-login to Hosted Account",
-    };
-  }
-  return {
-    kind: "guest",
-    title: isLocaleZh(locale) ? "托管玩家会话不可用" : "Hosted player session is unavailable",
-    detail: errorText,
-    cta: isLocaleZh(locale) ? "登录托管账户" : "Login to Hosted Account",
-  };
-}
-
 function nextRequestId() {
   requestId += 1;
   return requestId;
@@ -1279,644 +644,6 @@ function nextRequestId() {
 function nextAuthNonce() {
   authNonceCounter += 1;
   return Date.now() + authNonceCounter;
-}
-
-function snapshotControlFeedback(feedback) {
-  if (!feedback) return null;
-  return {
-    id: feedback.id,
-    action: feedback.action,
-    accepted: feedback.accepted,
-    stage: feedback.stage,
-    reason: feedback.reason,
-    hint: feedback.hint,
-    effect: feedback.effect,
-    deltaLogicalTime: feedback.deltaLogicalTime || 0,
-    deltaEventSeq: feedback.deltaEventSeq || 0,
-    deltaTraceCount: feedback.deltaTraceCount || 0,
-  };
-}
-
-function snapshotSemanticFeedback(feedback) {
-  if (!feedback) return null;
-  return {
-    id: feedback.id,
-    kind: feedback.kind,
-    action: feedback.action,
-    agentId: feedback.agentId || null,
-    accepted: feedback.accepted,
-    stage: feedback.stage,
-    ok: feedback.ok,
-    reason: feedback.reason || null,
-    effect: feedback.effect || null,
-    response: clone(feedback.response) || null,
-  };
-}
-
-function semanticFeedbackCode(feedback) {
-  if (feedback?.stage !== "error") {
-    return null;
-  }
-  const responseCode = String(feedback?.response?.code || "").trim();
-  if (responseCode) {
-    return responseCode;
-  }
-  const effectCode = String(feedback?.effect || "").trim();
-  return effectCode || null;
-}
-
-function semanticFeedbackMessage(feedback) {
-  const responseMessage = String(feedback?.response?.message || "").trim();
-  if (responseMessage) {
-    return responseMessage;
-  }
-  const reason = String(feedback?.reason || "").trim();
-  return reason || null;
-}
-
-function formatPromptVersionLabel(value) {
-  return `v${Math.max(0, Math.floor(Number(value || 0)))}`;
-}
-
-function humanizePromptField(field) {
-  return String(field || "")
-    .trim()
-    .replaceAll("_", " ");
-}
-
-function summarizeAppliedFields(feedback) {
-  const fields = Array.isArray(feedback?.response?.applied_fields)
-    ? feedback.response.applied_fields
-        .map(humanizePromptField)
-        .filter(Boolean)
-    : [];
-  if (!fields.length) {
-    return null;
-  }
-  return fields.join(", ");
-}
-
-function describeSemanticFeedback(feedback, locale = state.uiLocale) {
-  if (!feedback) {
-    return null;
-  }
-  const code = semanticFeedbackCode(feedback);
-  const diagnostics = semanticFeedbackMessage(feedback);
-  const description = {
-    label: feedback.stage || "idle",
-    summary: feedback.effect || diagnostics || (isLocaleZh(locale) ? "反馈已更新。" : "Feedback updated."),
-    detail: null,
-    code,
-    diagnostics,
-    badgeClass: feedbackBadgeClass(feedback),
-  };
-
-  if (feedback.stage === "error") {
-    if (code === "llm_init_failed") {
-      description.label = isLocaleZh(locale) ? "LLM 不可用" : "LLM unavailable";
-      description.summary = isLocaleZh(locale)
-        ? "当前栈没有可用的 LLM 配置，因此无法开始聊天。"
-        : "Chat cannot start because this stack has no usable LLM configuration.";
-      description.detail =
-        isLocaleZh(locale)
-          ? "请把 model、base URL 和 API key 写入当前 config.toml 或 OASIS7_LLM_* 环境变量，然后重启 launcher 栈。"
-          : "Add model, base URL, and API key to the active config.toml or OASIS7_LLM_* env, then restart the launcher stack.";
-      return description;
-    }
-    if (code === "target_version_not_found") {
-      description.label = isLocaleZh(locale) ? "找不到回滚目标" : "Rollback target missing";
-      description.summary = isLocaleZh(locale)
-        ? "当前 Agent 没有这个可回滚版本。"
-        : "The selected rollback version is not available for this agent.";
-      description.detail = isLocaleZh(locale)
-        ? "请先刷新 prompt 状态，或改选一个真实存在的保存版本后再重试。"
-        : "Refresh prompt state or choose an existing saved version before retrying.";
-      return description;
-    }
-    if (code === "rollback_noop") {
-      description.label = isLocaleZh(locale) ? "回滚无变化" : "Rollback noop";
-      description.summary = isLocaleZh(locale)
-        ? "这个回滚目标不会改变当前 prompt。"
-        : "That rollback target would not change the current prompt.";
-      description.detail = isLocaleZh(locale)
-        ? "只有在你确实要恢复不同 prompt 内容时，才需要选择更旧的版本。"
-        : "Pick an older version only when you need to restore different prompt content.";
-      return description;
-    }
-    if (feedback.kind === "prompt") {
-      description.label = isLocaleZh(locale) ? "Prompt 失败" : "Prompt failed";
-      description.summary = isLocaleZh(locale)
-        ? "Prompt 控制没有完成。"
-        : "Prompt control did not complete.";
-      description.detail = isLocaleZh(locale)
-        ? "展开诊断可查看后端拒绝的具体原因。"
-        : "Open diagnostics for the exact backend rejection.";
-      return description;
-    }
-    if (feedback.kind === "chat") {
-      description.label = isLocaleZh(locale) ? "聊天失败" : "Chat failed";
-      description.summary = isLocaleZh(locale)
-        ? "Agent 聊天没有完成。"
-        : "Agent chat did not complete.";
-      description.detail = isLocaleZh(locale)
-        ? "展开诊断可查看后端拒绝的具体原因。"
-        : "Open diagnostics for the exact backend rejection.";
-      return description;
-    }
-    if (feedback.kind === "gameplay_action") {
-      description.label = isLocaleZh(locale) ? "玩法动作失败" : "Gameplay action failed";
-      description.summary = isLocaleZh(locale)
-        ? "正式玩法动作没有完成。"
-        : "The gameplay action did not complete.";
-      description.detail = isLocaleZh(locale)
-        ? "展开诊断可查看 runtime 返回的拒绝原因。"
-        : "Open diagnostics for the runtime rejection details.";
-      return description;
-    }
-    description.label = code || "Request failed";
-    description.summary = diagnostics || (isLocaleZh(locale) ? "请求失败。" : "The request failed.");
-    description.detail = isLocaleZh(locale)
-      ? "展开诊断可查看后端原始载荷。"
-      : "Open diagnostics for the raw backend payload.";
-    return description;
-  }
-
-  if (feedback.kind === "prompt") {
-    const version = Number(feedback?.response?.version || 0);
-    const appliedFields = summarizeAppliedFields(feedback);
-    if (feedback.stage === "preview_ack") {
-      description.label = isLocaleZh(locale) ? "预览已就绪" : "Preview ready";
-      description.summary = isLocaleZh(locale)
-        ? `Prompt 预览已基于 ${formatPromptVersionLabel(version)} 准备完成。`
-        : `Prompt preview is ready from ${formatPromptVersionLabel(version)}.`;
-      description.detail = isLocaleZh(locale)
-        ? "应用前请先检查返回的摘要或 prompt 字段。"
-        : "Review the returned digest or prompt fields before applying.";
-      return description;
-    }
-    if (feedback.stage === "apply_ack") {
-      description.label = isLocaleZh(locale) ? "Prompt 已保存" : "Prompt saved";
-      description.summary = isLocaleZh(locale)
-        ? `Prompt 改动已保存为 ${formatPromptVersionLabel(version)}。`
-        : `Prompt changes are now saved as ${formatPromptVersionLabel(version)}.`;
-      description.detail = appliedFields
-        ? (isLocaleZh(locale) ? `已应用字段：${appliedFields}。` : `Applied fields: ${appliedFields}.`)
-        : (isLocaleZh(locale) ? "Prompt 改动已被接受并持久化。" : "Prompt changes were accepted and persisted.");
-      return description;
-    }
-    if (feedback.stage === "rollback_ack") {
-      const restoredVersion = Number(feedback?.response?.rolled_back_to_version || 0);
-      description.label = isLocaleZh(locale) ? "回滚已应用" : "Rollback applied";
-      description.summary =
-        isLocaleZh(locale)
-          ? `当前生效 prompt 已保存为 ${formatPromptVersionLabel(version)}，其内容恢复自 ${formatPromptVersionLabel(restoredVersion)}。`
-          : `Active prompt is now saved as ${formatPromptVersionLabel(version)} after restoring content from ${formatPromptVersionLabel(restoredVersion)}.`;
-      description.detail =
-        isLocaleZh(locale)
-          ? "回滚会生成一个新的保存版本；下面输入框指向的是下一次回滚目标，不是刚刚恢复出来的版本。"
-          : "Rollback creates a new saved version; the rollback input below points to the next target, not the version that was just restored.";
-      return description;
-    }
-    description.label = isLocaleZh(locale) ? "Prompt 进行中" : "Prompt in progress";
-    description.summary = feedback.effect || (isLocaleZh(locale) ? "Prompt 请求正在处理。" : "Prompt request is in flight.");
-    description.detail = isLocaleZh(locale)
-      ? "请等待 ack/error 返回后再发起下一次 prompt 操作。"
-      : "Wait for ack/error before issuing another prompt action.";
-    return description;
-  }
-
-  if (feedback.kind === "chat") {
-    if (feedback.stage === "ack") {
-      const acceptedAtTick = Number(feedback?.response?.accepted_at_tick || 0);
-      description.label = isLocaleZh(locale) ? "聊天已受理" : "Chat accepted";
-      description.summary = isLocaleZh(locale)
-        ? `消息已在 tick ${acceptedAtTick} 进入 runtime 队列。`
-        : `Message entered the runtime queue at tick ${acceptedAtTick}.`;
-      description.detail = isLocaleZh(locale)
-        ? "请查看 Message Flow，确认玩家出站消息和后续 Agent 回应。"
-        : "Watch Message Flow for the outbound player message and any inbound agent reply.";
-      return description;
-    }
-    description.label = isLocaleZh(locale) ? "聊天进行中" : "Chat in progress";
-    description.summary = feedback.effect || (isLocaleZh(locale) ? "聊天请求正在处理。" : "Chat request is in flight.");
-    description.detail = isLocaleZh(locale)
-      ? "请等待 ack/error 返回后再发送下一条消息。"
-      : "Wait for ack/error before sending another message.";
-    return description;
-  }
-
-  if (feedback.kind === "gameplay_action") {
-    if (feedback.stage === "ack") {
-      const acceptedAtTick = Number(feedback?.response?.accepted_at_tick || 0);
-      description.label = isLocaleZh(locale) ? "玩法动作已受理" : "Gameplay action accepted";
-      description.summary = isLocaleZh(locale)
-        ? `动作已在 tick ${acceptedAtTick} 进入 runtime 队列。`
-        : `The action entered the runtime queue at tick ${acceptedAtTick}.`;
-      description.detail = feedback?.response?.message
-        || (isLocaleZh(locale)
-          ? "请继续观察 gameplay feedback 或刷新后的快照。"
-          : "Watch gameplay feedback or the refreshed snapshot for the next world-state change.");
-      return description;
-    }
-    description.label = isLocaleZh(locale) ? "玩法动作进行中" : "Gameplay action in progress";
-    description.summary = feedback.effect || (isLocaleZh(locale) ? "玩法动作请求正在处理。" : "Gameplay action request is in flight.");
-    description.detail = isLocaleZh(locale)
-      ? "请等待 ack/error 或新的 gameplay 快照反馈。"
-      : "Wait for ack/error or a new gameplay snapshot update.";
-    return description;
-  }
-
-  return description;
-}
-
-function describePromptVersionState(feedback = state.lastPromptFeedback, locale = state.uiLocale) {
-  const currentVersion = Math.max(0, Math.floor(Number(state.promptDraft.currentVersion || 0)));
-  const nextRollbackTargetVersion = Math.max(
-    0,
-    Math.floor(Number(state.promptDraft.rollbackTargetVersion || 0)),
-  );
-  const responseVersion = Number(feedback?.response?.version);
-  const ackVersion = Number.isFinite(responseVersion) ? Math.max(0, Math.floor(responseVersion)) : currentVersion;
-  const responseRollbackVersion = Number(feedback?.response?.rolled_back_to_version);
-  const restoredFromVersion =
-    feedback?.stage === "rollback_ack" && Number.isFinite(responseRollbackVersion)
-      ? Math.max(0, Math.floor(responseRollbackVersion))
-      : null;
-  const summary = restoredFromVersion == null
-    ? (isLocaleZh(locale)
-        ? `当前生效 prompt 版本是 ${formatPromptVersionLabel(currentVersion)}。`
-        : `Active prompt version is ${formatPromptVersionLabel(currentVersion)}.`)
-    : (isLocaleZh(locale)
-        ? `当前生效 prompt 版本是 ${formatPromptVersionLabel(currentVersion)}；内容恢复自 ${formatPromptVersionLabel(restoredFromVersion)}。`
-        : `Active prompt version is ${formatPromptVersionLabel(currentVersion)}; content was restored from ${formatPromptVersionLabel(restoredFromVersion)}.`);
-  const detail = restoredFromVersion == null
-    ? (isLocaleZh(locale)
-        ? `回滚输入框默认指向下一次目标 ${formatPromptVersionLabel(nextRollbackTargetVersion)}。`
-        : `The rollback input defaults to the next target ${formatPromptVersionLabel(nextRollbackTargetVersion)}.`)
-    : (isLocaleZh(locale)
-        ? `这次回滚生成了新的保存版本 ${formatPromptVersionLabel(ackVersion)}。下面输入框现在指向下一次目标 ${formatPromptVersionLabel(nextRollbackTargetVersion)}，不是刚恢复的版本。`
-        : `The rollback created a new saved version ${formatPromptVersionLabel(ackVersion)}. The input below now points to the next target ${formatPromptVersionLabel(nextRollbackTargetVersion)}, not the restored version.`);
-  return {
-    currentVersion,
-    nextRollbackTargetVersion,
-    ackVersion,
-    restoredFromVersion,
-    summary,
-    detail,
-  };
-}
-
-function buildGameplaySummary(locale = state.uiLocale) {
-  const gameplay = state.snapshot?.player_gameplay;
-  if (!gameplay || typeof gameplay !== "object") {
-    return null;
-  }
-
-  const agents = Object.keys(state.snapshot?.model?.agents || {});
-  const locations = Object.keys(state.snapshot?.model?.locations || {});
-  const missingAgents = agents.length === 0;
-  const missingLocations = locations.length === 0;
-  const emptyEntityBlocker = missingAgents || missingLocations
-    ? (() => {
-        const missing = [];
-        if (missingAgents) {
-          missing.push(isLocaleZh(locale) ? "Agent" : "agents");
-        }
-        if (missingLocations) {
-          missing.push(isLocaleZh(locale) ? "地点" : "locations");
-        }
-        const missingLabel = missing.join(isLocaleZh(locale) ? " / " : "/");
-        return {
-          blockerKind: "runtime_snapshot_empty_entities",
-          blockerDetail: isLocaleZh(locale)
-            ? `runtime 已发布玩法进度，但当前快照没有 ${missingLabel}，formal web entry 暂时无法继续。`
-            : `Runtime published gameplay progress, but the current snapshot has no ${missingLabel}; the formal web entry cannot continue yet.`,
-          nextStepHint: isLocaleZh(locale)
-            ? "先刷新快照；如果实体仍然为空，请修复或重启 runtime world bootstrap 后再继续。"
-            : "Request a fresh snapshot first. If entities stay empty, repair or restart the runtime world bootstrap before continuing.",
-          disabledReason: isLocaleZh(locale)
-            ? `当前快照缺少 ${missingLabel}；刷新快照或修复 runtime bootstrap 后再试。`
-            : `Current snapshot is missing ${missingLabel}; refresh the snapshot or repair runtime bootstrap before retrying.`,
-        };
-      })()
-    : null;
-
-  const progressRaw = Number(gameplay.progress_percent);
-  const progressPercent = Number.isFinite(progressRaw)
-    ? Math.max(0, Math.min(100, Math.floor(progressRaw)))
-    : null;
-  const acceptedIntentId = gameplay.accepted_intent_id || null;
-  const intentSummary = gameplay.intent_summary || null;
-  const intentScope = gameplay.intent_scope || null;
-  const intentTarget = gameplay.intent_target || null;
-  const statusReason = gameplay.status_reason || null;
-  const lastWorldChange = gameplay.last_world_change || null;
-  const resumeAnchor = gameplay.resume_anchor || null;
-  const resumeNextStep = gameplay.resume_next_step || null;
-  const availableActions = Array.isArray(gameplay.available_actions)
-    ? gameplay.available_actions
-      .map((action) => ({
-        actionId: action?.action_id || null,
-        label: action?.label || null,
-        protocolAction: action?.protocol_action || null,
-        targetAgentId: action?.target_agent_id || null,
-        disabledReason:
-          action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot"
-            ? action?.disabled_reason || null
-            : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
-        executeKind:
-          action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot"
-            ? "request_snapshot"
-            : action?.protocol_action === "live_control.step"
-              ? "step"
-              : action?.protocol_action === "live_control.play"
-                ? "play"
-                : action?.protocol_action === "gameplay_action.submit"
-                  ? "gameplay_action"
-                  : action?.protocol_action === "agent_chat"
-                    ? "agent_chat"
-                    : "unsupported",
-      }))
-    : [];
-  const recentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object"
-    ? {
-        action: gameplay.recent_feedback.action || null,
-        stage: gameplay.recent_feedback.stage || null,
-        effect: gameplay.recent_feedback.effect || null,
-        reason: gameplay.recent_feedback.reason || null,
-        hint: gameplay.recent_feedback.hint || null,
-        deltaLogicalTime: Number(gameplay.recent_feedback.delta_logical_time || 0),
-        deltaEventSeq: Number(gameplay.recent_feedback.delta_event_seq || 0),
-      }
-    : null;
-  const runtimeBlockerKind = gameplay.blocker_kind || null;
-  const runtimeBlockerDetail = gameplay.blocker_detail || null;
-  const runtimeAlreadyPublishedEmptyEntityBlocker =
-    runtimeBlockerKind === "runtime_snapshot_empty_entities";
-  const resolvedStageStatus = emptyEntityBlocker ? "blocked" : gameplay.stage_status || null;
-  const resolvedBlockerKind = runtimeAlreadyPublishedEmptyEntityBlocker
-    ? runtimeBlockerKind
-    : emptyEntityBlocker
-      ? emptyEntityBlocker.blockerKind
-      : runtimeBlockerKind;
-  const resolvedBlockerDetail = runtimeAlreadyPublishedEmptyEntityBlocker
-    ? runtimeBlockerDetail || emptyEntityBlocker?.blockerDetail || null
-    : emptyEntityBlocker
-      ? emptyEntityBlocker.blockerDetail
-      : runtimeBlockerDetail;
-  const executionState = emptyEntityBlocker
-    ? "blocked"
-    : gameplay.execution_state
-    || (() => {
-      const recentStage = String(recentFeedback?.stage || "").trim().toLowerCase();
-      if (["accepted", "submitted", "queued", "ack"].includes(recentStage)) {
-        return "accepted";
-      }
-      if (recentStage === "rejected") {
-        return "rejected";
-      }
-      if (["blocked", "completed_no_progress"].includes(recentStage)) {
-        return "blocked";
-      }
-      if (recentStage === "completed_advanced") {
-        return "completed";
-      }
-      if (resolvedStageStatus === "blocked") {
-        return "blocked";
-      }
-      if (resolvedStageStatus === "branch_ready") {
-        return "completed";
-      }
-      return "executing";
-    })();
-  const executionStateLabel = (() => {
-    switch (executionState) {
-      case "accepted":
-        return localeText(locale, "已接受", "Accepted");
-      case "blocked":
-        return localeText(locale, "已阻塞", "Blocked");
-      case "completed":
-        return localeText(locale, "已完成", "Completed");
-      case "rejected":
-        return localeText(locale, "已拒绝", "Rejected");
-      default:
-        return localeText(locale, "执行中", "Executing");
-    }
-  })();
-  const executionStateMachine = [
-    { id: "accepted", label: localeText(locale, "已接受", "Accepted") },
-    { id: "executing", label: localeText(locale, "执行中", "Executing") },
-    { id: "blocked", label: localeText(locale, "已阻塞", "Blocked") },
-    { id: "completed", label: localeText(locale, "已完成", "Completed") },
-    { id: "rejected", label: localeText(locale, "已拒绝", "Rejected") },
-  ];
-  const executionCauseKind = emptyEntityBlocker
-    ? "world_constraint"
-    : gameplay.causality_kind
-    || (() => {
-      if (executionState === "accepted") return "queued_for_execution";
-      if (executionState === "rejected") return "request_rejected";
-      if (executionState === "blocked") return "world_constraint";
-      if (executionState === "completed") return "goal_progressed";
-      return null;
-    })();
-  const executionCauseLabel = (() => {
-    switch (executionCauseKind) {
-      case "queued_for_execution":
-        return localeText(locale, "等待执行", "Queued for Execution");
-      case "world_constraint":
-        return localeText(locale, "世界约束", "World Constraint");
-      case "agent_override":
-        return localeText(locale, "Agent 改走了别的允许路径", "Agent Chose Differently");
-      case "goal_progressed":
-        return localeText(locale, "世界已推进", "World Progressed");
-      case "request_rejected":
-        return localeText(locale, "请求被拒绝", "Request Rejected");
-      default:
-        return null;
-    }
-  })();
-  const executionCauseDetail = emptyEntityBlocker
-    ? resolvedBlockerDetail || emptyEntityBlocker.blockerDetail || null
-    : gameplay.causality_detail
-    || (() => {
-      if (executionState === "blocked") {
-        return resolvedBlockerDetail || recentFeedback?.reason || null;
-      }
-      if (executionState === "accepted") {
-        return recentFeedback?.hint || recentFeedback?.effect || null;
-      }
-      if (executionState === "completed") {
-        return recentFeedback?.effect || gameplay.progress_detail || null;
-      }
-      if (executionState === "rejected") {
-        return recentFeedback?.reason || null;
-      }
-      return null;
-    })();
-  const executionSummary = (() => {
-    if (executionCauseKind === "agent_override") {
-      return localeText(
-        locale,
-        "本次目标已推动世界继续前进，但执行它的 Agent 最终采用了另一条被允许的计划。",
-        "This goal still advanced the world, but the acting agent finished it through a different allowed plan.",
-      );
-    }
-    switch (executionState) {
-      case "accepted":
-        return localeText(
-          locale,
-          "最新一条目标相关指令已经入队，正在等待 committed world delta 或后续回执。",
-          "The latest goal-affecting command is queued and waiting for committed world delta or follow-up feedback.",
-        );
-      case "blocked":
-        return localeText(
-          locale,
-          "当前目标没有继续推进，主要原因已经被归入可修复的 blocker taxonomy。",
-          "The current goal is not moving forward; the primary reason is now grouped into a repairable blocker taxonomy.",
-        );
-      case "completed":
-        return localeText(
-          locale,
-          "当前目标最近一次执行已经产生世界级结果，可以决定是继续放大、恢复，还是切到下一条主线。",
-          "The current goal's latest execution already produced a world-level result; you can now amplify it, recover it, or pivot to the next line.",
-        );
-      case "rejected":
-        return localeText(
-          locale,
-          "最新请求在执行前被拒绝，需要先修正请求本身或权限/模式前提。",
-          "The latest request was rejected before execution; fix the request itself or its permission/mode prerequisites first.",
-        );
-      default:
-        return localeText(
-          locale,
-          "当前目标正在执行中，先盯住状态机、主因果和下一步，再决定是否继续推进。",
-          "The current goal is executing; read the state machine, primary causality, and next step before pushing again.",
-        );
-    }
-  })();
-  const blockerLabel = (() => {
-    switch (resolvedBlockerKind) {
-      case "material_shortage":
-        return localeText(locale, "缺料", "Missing Material");
-      case "power_shortage":
-        return localeText(locale, "缺电", "Missing Power");
-      case "governance_gate":
-        return localeText(locale, "治理限制", "Governance Restriction");
-      case "no_progress":
-        return localeText(locale, "没有前进", "No Forward Progress");
-      case "llm_required":
-        return localeText(locale, "缺少玩法能力", "Missing Gameplay Capability");
-      case "runtime_sync_unavailable":
-        return localeText(locale, "运行时同步不可用", "Runtime Sync Unavailable");
-      case "execution_world_not_ready":
-        return localeText(locale, "执行世界未就绪", "Execution World Not Ready");
-      case "runtime_snapshot_empty_entities":
-        return localeText(locale, "空快照", "Empty Snapshot");
-      default:
-        return resolvedBlockerKind || null;
-    }
-  })();
-  const recommendedAction = availableActions
-    .filter((action) => !action.disabledReason)
-    .sort((left, right) => {
-      const priority = (action) => {
-        switch (action.executeKind) {
-          case "gameplay_action":
-            return 0;
-          case "step":
-            return 1;
-          case "play":
-            return 2;
-          case "request_snapshot":
-            return 3;
-          case "agent_chat":
-            return 4;
-          default:
-            return 5;
-        }
-      };
-      return priority(left) - priority(right);
-    })[0] || null;
-  const acceptedIntentSummary = intentSummary
-    || acceptedIntentId
-    || localeText(
-      locale,
-      "还没有一条被正式接受的玩家意图",
-      "No player-facing accepted intent yet",
-    );
-  const acceptedIntentDetail = (() => {
-    if (lastWorldChange) {
-      return lastWorldChange;
-    }
-    if (statusReason) {
-      return statusReason;
-    }
-    if (recentFeedback?.hint) {
-      return recentFeedback.hint;
-    }
-    return localeText(
-      locale,
-      "先提交一个玩法动作，再看系统如何确认、推进或阻塞它。",
-      "Submit one gameplay action first, then read how the system confirms, advances, or blocks it.",
-    );
-  })();
-  const narrativeNextStep = emptyEntityBlocker
-    ? emptyEntityBlocker.nextStepHint
-    : gameplay.next_step_hint || resumeNextStep || null;
-  const narrativeBlockerDetail = resolvedBlockerDetail || statusReason || recentFeedback?.reason || null;
-
-  return {
-    stageId: gameplay.stage_id || null,
-    stageStatus: resolvedStageStatus,
-    acceptedIntentId,
-    acceptedIntentSummary,
-    acceptedIntentScope: intentScope,
-    acceptedIntentTarget: intentTarget,
-    acceptedIntentDetail,
-    statusReason,
-    lastWorldChange,
-    resumeAnchor,
-    resumeNextStep,
-    executionState,
-    executionStateLabel,
-    executionStateMachine,
-    executionSummary,
-    executionCauseKind,
-    executionCauseLabel,
-    executionCauseDetail,
-    goalId: gameplay.goal_id || null,
-    goalKind: gameplay.goal_kind || null,
-    goalTitle: gameplay.goal_title || null,
-    objective: gameplay.objective || null,
-    progressDetail: gameplay.progress_detail || null,
-    progressPercent,
-    blockerKind: resolvedBlockerKind,
-    blockerLabel,
-    blockerDetail: resolvedBlockerDetail,
-    blockerSupplementalDetail: emptyEntityBlocker && runtimeBlockerDetail && !runtimeAlreadyPublishedEmptyEntityBlocker
-      ? runtimeBlockerDetail
-      : null,
-    nextStepHint: runtimeAlreadyPublishedEmptyEntityBlocker
-      ? gameplay.next_step_hint || emptyEntityBlocker?.nextStepHint || resumeNextStep || null
-      : emptyEntityBlocker
-        ? emptyEntityBlocker.nextStepHint
-        : gameplay.next_step_hint || resumeNextStep || null,
-    branchHint: gameplay.branch_hint || null,
-    narrativeBlockerDetail,
-    narrativeNextStep,
-    entityCounts: {
-      agents: agents.length,
-      locations: locations.length,
-    },
-    availableActions,
-    recommendedAction,
-    recentFeedback,
-    agentClaim: clone(gameplay.agent_claim),
-    assetGovernanceHandoff: isLocaleZh(locale)
-      ? "资产 / 治理动作仍在单独 lane 处理；viewer 这里不会直接暴露主代币转账表单。"
-      : "Asset/governance actions remain a separate lane. viewer exposes no main token transfer form here.",
-  };
 }
 
 function getState() {
@@ -2793,124 +1520,34 @@ function canAutoIssueHostedPlayerSession() {
     && state.auth.source !== "legacy_viewer_auth_bootstrap";
 }
 
-async function startHostedAccountLogin() {
-  if (!canAutoIssueHostedPlayerSession()) {
-    return { ok: false, reason: "hosted account login is unavailable on this lane" };
-  }
-  const channel = "email";
-  state.hostedLogin.channel = channel;
-  const handle = String(state.hostedLogin.handle || "").trim();
-  if (!handle) {
-    state.hostedLogin.error = "email is required before login can start";
-    render();
-    return { ok: false, reason: state.hostedLogin.error };
-  }
-  state.hostedLogin.startInFlight = true;
-  state.hostedLogin.error = null;
-  state.hostedLogin.retryAfterSeconds = null;
-  render();
-  try {
-    const response = await fetch(HOSTED_ACCOUNT_LOGIN_START_ROUTE, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        channel,
-        handle,
-      }),
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload?.ok || !payload?.challenge?.challenge_id) {
-      const retryAfterSeconds = payload?.retry_after_seconds == null ? null : Number(payload.retry_after_seconds);
-      const baseMessage = payload?.error || payload?.error_code || `hosted account login start failed with HTTP ${response.status}`;
-      const message = retryAfterSeconds && Number.isFinite(retryAfterSeconds)
-        ? `${baseMessage} (retry in ${retryAfterSeconds}s)`
-        : baseMessage;
-      const hostedLoginError = new Error(message);
-      hostedLoginError.hostedLoginRetryAfterSeconds = retryAfterSeconds;
-      throw hostedLoginError;
-    }
-    state.hostedLogin.challengeId = String(payload.challenge.challenge_id || "").trim() || null;
-    state.hostedLogin.maskedLoginHint = String(payload.challenge.masked_login_hint || "").trim() || null;
-    state.hostedLogin.deliveryMode = String(payload.challenge.delivery_mode || "").trim() || null;
-    state.hostedLogin.previewCode = String(payload.challenge.preview_code || "").trim() || null;
-    state.hostedLogin.code = state.hostedLogin.previewCode || "";
-    state.hostedLogin.expiresAtUnixMs = payload?.challenge?.expires_at_unix_ms == null ? null : Number(payload.challenge.expires_at_unix_ms);
-    state.hostedLogin.retryAfterSeconds = null;
-    state.hostedLogin.accountExists = false;
-    state.hostedLogin.startInFlight = false;
-    state.hostedLogin.completeInFlight = false;
-    state.hostedLogin.error = null;
-    render();
-    return { ok: true, challengeId: state.hostedLogin.challengeId };
-  } catch (error) {
-    state.hostedLogin.startInFlight = false;
-    if (error?.hostedLoginRetryAfterSeconds != null) {
-      state.hostedLogin.retryAfterSeconds = Number(error.hostedLoginRetryAfterSeconds);
-    }
-    state.hostedLogin.error = String(error);
-    render();
-    return { ok: false, reason: state.hostedLogin.error };
-  }
-}
-
-async function ensureHostedPlayerAuthAvailable() {
-  return state.auth;
-}
-
-async function completeHostedAccountLogin() {
+async function issueHostedPlayerIdentity() {
   if (!canAutoIssueHostedPlayerSession()) {
     return state.auth;
   }
-  if (state.auth.available) {
-    return state.auth;
-  }
-  const challengeId = String(state.hostedLogin.challengeId || "").trim();
-  const otpCode = String(state.hostedLogin.code || "").trim();
-  if (!challengeId || !otpCode) {
-    state.hostedLogin.error = "verification code is required before hosted login can complete";
-    render();
+  if (state.auth.available || state.auth.issueInFlight) {
     return state.auth;
   }
   state.auth.issueInFlight = true;
-  state.hostedLogin.completeInFlight = true;
-  state.hostedLogin.error = null;
   state.auth.error = null;
   render();
   try {
-    const response = await fetch(HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE, {
-      method: "POST",
+    const response = await fetch(HOSTED_PLAYER_SESSION_ISSUE_ROUTE, {
+      method: "GET",
       cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        challenge_id: challengeId,
-        otp_code: otpCode,
-      }),
+      headers: { Accept: "application/json" },
     });
     const payload = await response.json();
-    if (!response.ok || !payload?.ok || !payload?.grant?.player_id || !payload?.account?.hosted_account_id) {
+    if (!response.ok || !payload?.ok || !payload?.grant?.player_id) {
       if (payload?.admission) {
         state.hostedAdmission = clone(payload.admission);
       }
-      throw new Error(payload?.error || payload?.error_code || `hosted account login complete failed with HTTP ${response.status}`);
+      throw new Error(payload?.error || payload?.error_code || `hosted player-session issue failed with HTTP ${response.status}`);
     }
     state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
     const keypair = await generateEphemeralEd25519Keypair();
     state.auth = {
       available: true,
-      hostedAccountId: String(payload.account.hosted_account_id || "").trim() || null,
       playerId: String(payload.grant.player_id || "").trim(),
-      loginChannel: String(payload.account.login_channel || "").trim() || null,
-      maskedLoginHint: String(payload.account.masked_login_hint || "").trim() || null,
-      deviceSessionId: String(payload.grant.device_session_id || "").trim()
-        || String(payload.grant.release_token || "").trim()
-        || null,
       publicKey: keypair.publicKey,
       privateKey: keypair.privateKey,
       releaseToken: String(payload.grant.release_token || "").trim() || null,
@@ -2932,44 +1569,42 @@ async function completeHostedAccountLogin() {
       rebindNotice: null,
     };
     persistHostedPlayerSession(state.auth);
-    resetHostedLoginChallenge();
-    state.hostedLogin.startInFlight = false;
-    state.hostedLogin.error = null;
     render();
     return state.auth;
   } catch (error) {
     state.auth.issueInFlight = false;
-    state.hostedLogin.completeInFlight = false;
-    state.hostedLogin.error = String(error);
     state.auth.error = String(error);
     render();
     return state.auth;
   }
 }
 
-async function issueHostedPlayerIdentity() {
-  return completeHostedAccountLogin();
+async function ensureHostedPlayerAuthAvailable() {
+  if (state.auth.available) {
+    return state.auth;
+  }
+  if (canAutoIssueHostedPlayerSession()) {
+    return issueHostedPlayerIdentity();
+  }
+  return state.auth;
 }
 
 async function retryHostedPlayerIdentityIssue() {
   if (!canAutoIssueHostedPlayerSession()) {
-    return { ok: false, reason: "hosted account login is unavailable on this lane" };
+    return { ok: false, reason: "hosted public player-session issue is unavailable on this lane" };
   }
-  const auth = state.hostedLogin.challengeId
-    ? await completeHostedAccountLogin()
-    : await startHostedAccountLogin();
+  const auth = await issueHostedPlayerIdentity();
   render();
   return {
-    ok: auth?.available === true || auth?.ok === true,
-    playerId: auth?.playerId || null,
-    error: auth?.error || state.hostedLogin.error,
+    ok: auth.available,
+    playerId: auth.playerId,
+    error: auth.error,
   };
 }
 
 async function requestHostedStrongAuthGrant(actionId, agentId) {
-  const auth = await ensureHostedAuthSigningKey(state.auth);
-  const playerId = String(auth.playerId || "").trim();
-  const publicKey = String(auth.publicKey || "").trim();
+  const playerId = String(state.auth.playerId || "").trim();
+  const publicKey = String(state.auth.publicKey || "").trim();
   const releaseToken = String(state.auth.releaseToken || "").trim();
   const approvalCode = String(state.strongAuth.approvalCode || "").trim();
   if (!playerId || !publicKey || !releaseToken) {
@@ -3008,11 +1643,7 @@ async function requestHostedStrongAuthGrant(actionId, agentId) {
 }
 
 function sendReconnectSync() {
-  if (
-    !state.auth.available
-    || state.auth.source === "legacy_viewer_auth_bootstrap"
-    || !authHasSigningKeyMaterial(state.auth)
-  ) {
+  if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap") {
     return;
   }
   state.auth.syncInFlight = true;
@@ -3081,23 +1712,18 @@ async function releaseHostedPlayerSlot() {
 function resetHostedPlayerAuthState(errorMessage = null, revocationMeta = null) {
   stopHostedSessionRefreshLoop();
   clearHostedPlayerSession();
-  resetHostedLoginChallenge();
   const bootstrap = resolveAuthBootstrap();
   const revokeReason = String(revocationMeta?.revokeReason || "").trim() || null;
   const revokedBy = String(revocationMeta?.revokedBy || "").trim() || null;
   state.auth = bootstrap.available
-      ? bootstrap
-      : {
+    ? bootstrap
+    : {
         ...bootstrap,
         source: "guest_only",
         registrationStatus: "guest",
         error: errorMessage,
         revokeReason,
         revokedBy,
-        hostedAccountId: null,
-        loginChannel: null,
-        maskedLoginHint: null,
-        deviceSessionId: null,
         sessionEpoch: null,
         issuedAtUnixMs: null,
         releaseToken: null,
@@ -3145,11 +1771,10 @@ async function logoutHostedPlayerSession() {
   return { ok: true };
 }
 
-async function syncHostedPlayerSessionOnConnect() {
+function syncHostedPlayerSessionOnConnect() {
   if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap" || state.auth.syncInFlight) {
     return;
   }
-  await ensureHostedAuthSigningKey(state.auth);
   sendReconnectSync();
 }
 
@@ -3178,10 +1803,9 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   }
   state.auth.pendingRequestedAgentId = normalizedRequestedAgentId;
   state.auth.pendingForceRebind = forceRebind === true;
-  const auth = await ensureHostedAuthSigningKey(state.auth);
   const request = {
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
+    player_id: state.auth.playerId,
+    public_key: state.auth.publicKey,
   };
   if (normalizedRequestedAgentId) {
     request.requested_agent_id = normalizedRequestedAgentId;
@@ -3189,7 +1813,7 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   if (forceRebind === true) {
     request.force_rebind = true;
   }
-  request.auth = await buildSessionRegisterAuthProof(request, auth);
+  request.auth = await buildSessionRegisterAuthProof(request, state.auth);
   sendJson({
     type: "authoritative_recovery",
     command: {
@@ -3546,9 +2170,6 @@ function sendPromptControl(mode, payload = null) {
       feedback.effect = "registering player session";
       render();
       await ensureRegisteredPlayerSession(agentId);
-      request.player_id = state.auth.playerId;
-      request.public_key = state.auth.publicKey;
-      request.updated_by = state.auth.playerId;
       let strongAuthGrant = null;
       if (String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join") {
         feedback.stage = "authorizing";
@@ -3971,6 +2592,10 @@ async function recoverHostedSessionFromError(error) {
     void releaseHostedPlayerSlot().catch(() => {});
     resetHostedPlayerAuthState(error?.message || code || "hosted player session failed");
     render();
+    await issueHostedPlayerIdentity();
+    if (state.auth.available) {
+      await ensureRegisteredPlayerSession(latestRequestedAgentId());
+    }
   }
 }
 
@@ -4279,8 +2904,6 @@ function renderSummary() {
     && (state.auth.pendingForceRebind
       || state.auth.runtimeStatus === "rebind_retrying"
       || state.auth.runtimeStatus === "rebind_registering");
-  const showHostedLoginForm = !state.auth.available
-    && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
   elements.centerPanel.innerHTML = `
     <div class="stack">
       <div class="badge-row">
@@ -4385,42 +3008,14 @@ function renderSummary() {
                 <span class="badge">${escapeHtml(hostedRecoveryHint.title)}</span>
               </div>
               <div class="empty">${escapeHtml(hostedRecoveryHint.detail)}</div>
+              <div class="toolbar"><button data-auth-action="retry-issue" ${state.auth.issueInFlight ? "disabled" : ""}>${escapeHtml(hostedRecoveryHint.cta)}</button></div>
             </div>
           </div>`
         : ""}
-      ${showHostedLoginForm
-        ? `<div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
-            <div class="panel__header"><div class="panel__title">Hosted Account Login</div></div>
-            <div class="panel__body stack">
-              <div class="empty">Hosted public join now upgrades guest access through a centralized email login before acquiring a player session.</div>
-              <div class="control-grid">
-                <div class="field">
-                  <label for="hosted-login-handle">Email</label>
-                  <input id="hosted-login-handle" type="email" autocomplete="email" value="${escapeHtml(state.hostedLogin.handle || "")}" />
-                </div>
-              </div>
-              <div class="toolbar"><button data-auth-action="start-login" ${state.hostedLogin.startInFlight ? "disabled" : ""}>Request Login Code</button></div>
-              ${state.hostedLogin.challengeId
-                ? `<div class="badge-row">
-                    <span class="badge">challenge=${escapeHtml(state.hostedLogin.challengeId)}</span>
-                    <span class="badge">target=${escapeHtml(state.hostedLogin.maskedLoginHint || "-")}</span>
-                    <span class="badge">delivery=${escapeHtml(state.hostedLogin.deliveryMode || "-")}</span>
-                    <span class="badge">${escapeHtml(state.hostedLogin.accountExists ? "account=existing" : "account=new")}</span>
-                  </div>
-                  ${state.hostedLogin.previewCode
-                    ? `<div class="badge-row"><span class="badge badge--accent">previewCode=${escapeHtml(state.hostedLogin.previewCode)}</span></div>`
-                    : ""}
-                  <div class="field">
-                    <label for="hosted-login-code">Verification Code</label>
-                    <input id="hosted-login-code" type="text" autocomplete="off" value="${escapeHtml(state.hostedLogin.code || "")}" />
-                  </div>
-                  <div class="toolbar"><button data-auth-action="complete-login" ${state.hostedLogin.completeInFlight || state.auth.issueInFlight ? "disabled" : ""}>Sign In and Acquire Player Session</button></div>`
-                : ""}
-              ${state.hostedLogin.error
-                ? `<div class="empty">${escapeHtml(state.hostedLogin.error)}</div>`
-                : ""}
-            </div>
-          </div>`
+      ${!state.auth.available && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+        ? hostedRecoveryHint
+          ? ""
+          : `<div class="toolbar"><button data-auth-action="retry-issue" ${state.auth.issueInFlight ? "disabled" : ""}>Acquire Hosted Player Session</button></div>`
         : ""}
       ${state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap"
         ? `<div class="toolbar"><button data-auth-action="logout">Release Hosted Player Session</button></div>`
@@ -4828,33 +3423,11 @@ function bindEvents() {
         void logoutHostedPlayerSession();
         return;
       }
-      if (action === "start-login") {
-        void startHostedAccountLogin();
-        return;
-      }
-      if (action === "complete-login") {
-        void completeHostedAccountLogin();
-        return;
-      }
       if (action === "retry-issue") {
         void retryHostedPlayerIdentityIssue();
       }
     });
   });
-  const hostedLoginHandle = document.getElementById("hosted-login-handle");
-  if (hostedLoginHandle) {
-    hostedLoginHandle.addEventListener("input", (event) => {
-      state.hostedLogin.handle = String(event.target.value || "");
-      state.hostedLogin.error = null;
-    });
-  }
-  const hostedLoginCode = document.getElementById("hosted-login-code");
-  if (hostedLoginCode) {
-    hostedLoginCode.addEventListener("input", (event) => {
-      state.hostedLogin.code = String(event.target.value || "");
-      state.hostedLogin.error = null;
-    });
-  }
 }
 
 function render() {
@@ -4907,8 +3480,6 @@ function installTestApi() {
     setStrongAuthApprovalCode,
     injectSnapshot,
     logoutHostedPlayerSession,
-    startHostedAccountLogin,
-    completeHostedAccountLogin,
     retryHostedPlayerIdentityIssue,
     reportFatalError,
   };
@@ -5013,8 +3584,6 @@ export {
   renderDetails,
   reportFatalError,
   resourceSummary,
-  startHostedAccountLogin,
-  completeHostedAccountLogin,
   retryHostedPlayerIdentityIssue,
   runSteps,
   select,

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, copyFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,8 +8,9 @@ const viewerRoot = resolve(scriptsDir, "..");
 const workspaceRoot = resolve(viewerRoot, "..", "..");
 const tempOutDir = resolve(viewerRoot, ".software-safe-build");
 const softwareSafeSrcDir = resolve(viewerRoot, "software_safe_src");
-const builtBundlePath = resolve(tempOutDir, "software_safe.js");
-const finalBundlePath = resolve(viewerRoot, "software_safe.js");
+const builtBundlePath = resolve(tempOutDir, "viewer.js");
+const finalCanonicalBundlePath = resolve(viewerRoot, "viewer.js");
+const finalCompatBundlePath = resolve(viewerRoot, "software_safe.js");
 const pixelWorldRuntimeDir = resolve(viewerRoot, "pixel-world-bridge");
 const pixelWorldRuntimeSourcePath = resolve(softwareSafeSrcDir, "pixel_world_runtime_module_wasm.js");
 const pixelWorldRuntimeModulePath = resolve(pixelWorldRuntimeDir, "pixel_world_bridge.js");
@@ -137,14 +138,23 @@ async function listFilesRecursively(dirPath) {
   return files;
 }
 
+function compatBundleContents() {
+  return [
+    "// Generated compat alias; canonical bundle truth lives in ./viewer.js.",
+    "import \"./viewer.js\";",
+    "",
+  ].join("\n");
+}
+
 await access(builtBundlePath);
 const emittedFiles = (await listFilesRecursively(tempOutDir))
   .map((filePath) => relative(tempOutDir, filePath))
   .sort();
-if (emittedFiles.length !== 1 || emittedFiles[0] !== "software_safe.js") {
+if (emittedFiles.length !== 1 || emittedFiles[0] !== "viewer.js") {
   throw new Error(`unexpected software_safe bundle outputs: ${emittedFiles.join(", ") || "(none)"}`);
 }
-await copyFile(builtBundlePath, finalBundlePath);
+await copyFile(builtBundlePath, finalCanonicalBundlePath);
+await writeFile(finalCompatBundlePath, compatBundleContents(), "utf8");
 await runChecked("env", [
   "-u",
   "RUSTC_WRAPPER",
@@ -172,4 +182,4 @@ await runChecked(wasmBindgenCommand, [
 await copyFile(pixelWorldRuntimeSourcePath, pixelWorldRuntimeModulePath);
 await rm(tempOutDir, { recursive: true, force: true });
 
-console.log(`software_safe build finalized: ${finalBundlePath}`);
+console.log(`software_safe build finalized: ${finalCanonicalBundlePath}`);
