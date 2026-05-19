@@ -112,6 +112,11 @@ if [[ -n "$traffic_profile" ]]; then
   cmd+=(--traffic-profile "$traffic_profile")
 fi
 
+network_tier_manifest_path="${NETWORK_TIER_MANIFEST_PATH:-}"
+if [[ -n "$network_tier_manifest_path" ]]; then
+  cmd+=(--network-tier-manifest "$network_tier_manifest_path")
+fi
+
 traffic_monitor_enable="${TRAFFIC_MONITOR_ENABLE:-0}"
 traffic_monitor_interval_secs="${TRAFFIC_MONITOR_INTERVAL_SECS:-60}"
 traffic_monitor_window_minutes="${TRAFFIC_MONITOR_WINDOW_MINUTES:-10}"
