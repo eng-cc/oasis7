@@ -143,7 +143,7 @@
 | `using-superpowers` | rejected | 外部 bootstrap 与当前 root workflow 真值冲突 | 触发说明、skill 发现习惯 | 必须先转成 repo-owned trigger governance，再评估 |
 | `dispatching-parallel-agents` | deferred | 若默认启用会冲击显式 `spawn_agent` 边界 | parallel task decomposition | 需先证明多 agent 仍遵守 worktree/task/review 边界 |
 | `executing-plans` | deferred | 可能和正式 project/task 执行链重复 | 有计划后的执行 discipline | 需先证明它只是执行层，不会成为第二套计划真值 |
-| `writing-skills` | deferred | 分发/作者规范容易先于治理真值 | skill authoring checklist | 需等本地 skill surface 稳定后再引入 |
+| `writing-skills` | deferred | 分发/作者规范容易先于治理真值 | 已限域翻译为本地 skill authoring skill、template、checklist 与入口说明 | 仅继续保留 authoring surface；upstream TDD/subagent gate 与分发部署部分仍 deferred |
 
 ## 5. 后续互借的优先级
 

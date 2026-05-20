@@ -62,7 +62,7 @@
 | `systematic-debugging` | adopted | repo-owned `.agents/skills/systematic-debugging` | 价值高且不引入第二套 workflow 真值；现已收口成 repo-owned debugging skill。 |
 | `dispatching-parallel-agents` | deferred | bounded `spawn_agent` usage under explicit authorization | 可借其拆分原则，但不能回流成默认 subagent-first 工作流。 |
 | `executing-plans` | deferred | future plan-execution follow-up if a repo-owned contract is needed | 可用于“已有正式计划后的执行会话”，但当前仓库已经有 `project.md`/`.pm`，不急于再引入单独会话契约。 |
-| `writing-skills` | deferred | future local skill-authoring governance | 适合等本地 skill surface 进一步收缩后，再决定是否引入成正式作者手册。 |
+| `writing-skills` | deferred | bounded local skill-authoring governance (`.agents/skills/README.md` + `writing-repo-owned-skills` + template/checklist) | 已借 authoring surface，但 upstream 的 TDD/subagent gate、分发与部署部分仍保持 deferred。 |
 | `brainstorming` | rejected | only the visual-companion subpattern is salvaged into `viewer-visual-companion-pilot-followup` | skill 自带“任何创意工作都必须先用”的强门禁，和当前直接执行节奏冲突。 |
 | `subagent-driven-development` | rejected | none | 默认 fresh subagent-per-task + 双阶段 review 与当前显式 `spawn_agent` 语义、GitHub PR 默认边界冲突。 |
 | `test-driven-development` | rejected | none | universal TDD 不适合当前 `test_tier_required/full`、文档治理和脚本任务的实际粒度。 |

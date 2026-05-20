@@ -1,0 +1,23 @@
+task_uid: task_ababcdcdc9694fa59acb8b1f0c5116df
+title: "skill authoring surface tightening"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-skill-authoring-surface-tightening
+execution_log_path: .pm/tasks/task_ababcdcdc9694fa59acb8b1f0c5116df.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.project.md
+  - .agents/skills
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-032
+acceptance:
+  - "repo-owned skill authoring guide or checklist lands under .agents/skills"
+  - "skill template captures frontmatter and section conventions derived from bounded writing-skills borrowing"
+  - "skill governance docs record what was borrowed and what remains deferred"
+handoff_to: []
+updated_at: 2026-05-20T18:17:49+08:00
+last_started_at: 2026-05-20T18:07:00+08:00
+last_closed_at: 2026-05-20T18:17:49+08:00

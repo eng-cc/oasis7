@@ -69,6 +69,7 @@
   - 已新增四个 repo-owned workflow skills：`verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`，并把它们接回 borrowing / skill inventory 文档真值。
   - 已新增 `superpowers-conflict-reconciliation-2026-05-20.md`，把“为什么冲突”和“未来怎样局部互借”明确落成 explanation/reference 文档。
   - 已把 `writing-plans` 的可 salvage 部分收口成 repo-owned planning surface：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板与 lightweight planning self-checklist。
+  - 已把 `writing-skills` 的 authoring surface 收口成 repo-owned 入口：`.agents/skills/README.md`、`writing-repo-owned-skills`、template 与 checklist；但 upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。
 - 下一步:
   - 优先推进 `workflow-behavior-eval-harness-followup`，先验证当前 engineering 主链是否能被 agent 稳定执行出来。
   - Viewer 方向仅在下一轮明确结构/视觉题时，按需启动 `viewer-visual-companion-pilot-followup`。
