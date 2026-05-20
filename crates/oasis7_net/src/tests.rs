@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 #[cfg(feature = "libp2p")]
+#[path = "tests_libp2p_discovery.rs"]
+mod libp2p_discovery_tests;
+#[cfg(feature = "libp2p")]
 #[path = "tests_libp2p_helpers.rs"]
 mod libp2p_test_helpers;
 #[cfg(feature = "libp2p")]
@@ -10,8 +13,6 @@ mod libp2p_traffic_tests;
 mod module_fetch_tests;
 use super::*;
 use crate::util::to_canonical_cbor;
-#[cfg(feature = "libp2p")]
-use libp2p_test_helpers::{loopback_test_bootstrap, loopback_test_peer};
 use oasis7_proto::distributed as proto_distributed;
 use oasis7_proto::distributed_dht::{DistributedDht as _, SignedPeerRecord};
 use oasis7_proto::distributed_net as proto_net;
@@ -267,185 +268,6 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
     wait_until("gossipsub deliver", deadline, || {
         sub2.drain().iter().any(|msg| msg == b"hello")
     });
-}
-
-#[cfg(feature = "libp2p")]
-#[test]
-fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
-    use std::time::{Duration, Instant};
-
-    use libp2p::Multiaddr;
-    use oasis7_proto::distributed_dht::{
-        PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass, PeerRecord,
-    };
-
-    fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
-        while Instant::now() < deadline {
-            if condition() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        panic!("timed out waiting for condition: {what}");
-    }
-
-    fn default_peer_record(node_id: &str) -> PeerRecord {
-        PeerRecord {
-            peer_id: String::new(),
-            node_id: node_id.to_string(),
-            world_id: "world-discovery".to_string(),
-            network_id: "world-discovery".to_string(),
-            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
-            deployment_mode: PeerDeploymentMode::Private,
-            reachability_class: PeerReachabilityClass::Private,
-            direct_addrs: Vec::new(),
-            hole_punch_addrs: Vec::new(),
-            relay_addrs: Vec::new(),
-            discovery_sources: vec![
-                PeerDiscoverySource::StaticBootstrap,
-                PeerDiscoverySource::Dht,
-            ],
-            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
-            source_operator: None,
-            source_asn: None,
-            published_at_ms: 0,
-            ttl_ms: 60_000,
-        }
-    }
-
-    let bootstrap = loopback_test_bootstrap(true);
-    let deadline = Instant::now() + Duration::from_secs(10);
-    wait_until("bootstrap listening", deadline, || {
-        !bootstrap.listening_addrs().is_empty()
-    });
-    let bootstrap_addr: Multiaddr = bootstrap
-        .listening_addrs()
-        .into_iter()
-        .find(|addr| addr.to_string().contains("127.0.0.1"))
-        .expect("bootstrap addr")
-        .with(libp2p::multiaddr::Protocol::P2p(bootstrap.peer_id().into()));
-
-    let publisher = loopback_test_peer(
-        vec![bootstrap_addr.clone()],
-        default_peer_record("publisher"),
-    );
-    wait_until("publisher connected bootstrap", deadline, || {
-        publisher.connected_peers().contains(&bootstrap.peer_id())
-    });
-
-    let seeker = loopback_test_peer(vec![bootstrap_addr], default_peer_record("seeker"));
-    wait_until("seeker connected bootstrap", deadline, || {
-        seeker.connected_peers().contains(&bootstrap.peer_id())
-    });
-
-    let publisher_peer_id = publisher.peer_id();
-    let discovery_deadline = Instant::now() + Duration::from_secs(10);
-    while Instant::now() < discovery_deadline {
-        if seeker.connected_peers().contains(&publisher_peer_id) {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    panic!(
-        "timed out waiting for seeker discovers publisher; seeker_peers={:?}; seeker_errors={:?}; publisher_peers={:?}; publisher_errors={:?}; bootstrap_errors={:?}",
-        seeker.connected_peers(),
-        seeker.debug_errors(),
-        publisher.connected_peers(),
-        publisher.debug_errors(),
-        bootstrap.debug_errors(),
-    );
-}
-
-#[cfg(feature = "libp2p")]
-#[test]
-fn libp2p_rendezvous_discovery_acquires_peer_from_bootstrap_registration() {
-    use std::time::{Duration, Instant};
-
-    use libp2p::Multiaddr;
-    use oasis7_proto::distributed_dht::{
-        PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass, PeerRecord,
-    };
-
-    fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
-        while Instant::now() < deadline {
-            if condition() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        panic!("timed out waiting for condition: {what}");
-    }
-
-    fn rendezvous_peer_record(node_id: &str) -> PeerRecord {
-        PeerRecord {
-            peer_id: String::new(),
-            node_id: node_id.to_string(),
-            world_id: "world-rendezvous".to_string(),
-            network_id: "world-rendezvous".to_string(),
-            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
-            deployment_mode: PeerDeploymentMode::Private,
-            reachability_class: PeerReachabilityClass::Private,
-            direct_addrs: Vec::new(),
-            hole_punch_addrs: Vec::new(),
-            relay_addrs: Vec::new(),
-            discovery_sources: vec![
-                PeerDiscoverySource::StaticBootstrap,
-                PeerDiscoverySource::Rendezvous,
-            ],
-            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
-            source_operator: None,
-            source_asn: None,
-            published_at_ms: 0,
-            ttl_ms: 60_000,
-        }
-    }
-
-    let bootstrap = loopback_test_bootstrap(true);
-    let deadline = Instant::now() + Duration::from_secs(10);
-    wait_until("bootstrap listening", deadline, || {
-        !bootstrap.listening_addrs().is_empty()
-    });
-    let bootstrap_addr: Multiaddr = bootstrap
-        .listening_addrs()
-        .into_iter()
-        .find(|addr| addr.to_string().contains("127.0.0.1"))
-        .expect("bootstrap addr")
-        .with(libp2p::multiaddr::Protocol::P2p(bootstrap.peer_id().into()));
-
-    let seeker = loopback_test_peer(
-        vec![bootstrap_addr.clone()],
-        rendezvous_peer_record("seeker"),
-    );
-    wait_until("seeker connected bootstrap", deadline, || {
-        seeker.connected_peers().contains(&bootstrap.peer_id())
-    });
-
-    let publisher = loopback_test_peer(vec![bootstrap_addr], rendezvous_peer_record("publisher"));
-    wait_until("publisher connected bootstrap", deadline, || {
-        publisher.connected_peers().contains(&bootstrap.peer_id())
-    });
-
-    let publisher_peer_id = publisher.peer_id();
-    let discovery_deadline = Instant::now() + Duration::from_secs(10);
-    while Instant::now() < discovery_deadline {
-        let seeker_errors = seeker.debug_errors();
-        if seeker.connected_peers().contains(&publisher_peer_id)
-            && seeker_errors
-                .iter()
-                .any(|line| line.contains("libp2p rendezvous discovered registrations"))
-        {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    panic!(
-        "timed out waiting for seeker rendezvous-discovers publisher; seeker_peers={:?}; seeker_errors={:?}; publisher_peers={:?}; publisher_errors={:?}; bootstrap_errors={:?}",
-        seeker.connected_peers(),
-        seeker.debug_errors(),
-        publisher.connected_peers(),
-        publisher.debug_errors(),
-        bootstrap.debug_errors(),
-    );
 }
 
 #[test]

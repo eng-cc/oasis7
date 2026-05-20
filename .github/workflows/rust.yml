@@ -56,6 +56,9 @@ jobs:
           echo "run_oasis7_required_tests=${{ steps.scope.outputs.run_oasis7_required_tests }}"
           echo "run_consensus_tests=${{ steps.scope.outputs.run_consensus_tests }}"
           echo "run_distfs_tests=${{ steps.scope.outputs.run_distfs_tests }}"
+          echo "run_oasis7_node_tests=${{ steps.scope.outputs.run_oasis7_node_tests }}"
+          echo "run_oasis7_net_tests=${{ steps.scope.outputs.run_oasis7_net_tests }}"
+          echo "run_oasis7_net_libp2p_tests=${{ steps.scope.outputs.run_oasis7_net_libp2p_tests }}"
           echo "run_viewer_contract_tests=${{ steps.scope.outputs.run_viewer_contract_tests }}"
           echo "run_viewer_wasm_check=${{ steps.scope.outputs.run_viewer_wasm_check }}"
           echo "run_launcher_web_build=${{ steps.scope.outputs.run_launcher_web_build }}"
@@ -76,7 +79,7 @@ jobs:
         if: ${{ steps.scope.outputs.needs_node == 'true' }}
         run: npm ci --prefix crates/oasis7_viewer
       - uses: Swatinem/rust-cache@v2
-        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' }}
+        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_oasis7_node_tests == 'true' || steps.scope.outputs.run_oasis7_net_tests == 'true' || steps.scope.outputs.run_oasis7_net_libp2p_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' }}
         with:
           shared-key: ci-required-gate-v1
       - name: Install trunk
@@ -103,6 +106,9 @@ jobs:
           OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
           OASIS7_CI_RUN_CONSENSUS_TESTS: ${{ steps.scope.outputs.run_consensus_tests }}
           OASIS7_CI_RUN_DISTFS_TESTS: ${{ steps.scope.outputs.run_distfs_tests }}
+          OASIS7_CI_RUN_OASIS7_NODE_TESTS: ${{ steps.scope.outputs.run_oasis7_node_tests }}
+          OASIS7_CI_RUN_OASIS7_NET_TESTS: ${{ steps.scope.outputs.run_oasis7_net_tests }}
+          OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS: ${{ steps.scope.outputs.run_oasis7_net_libp2p_tests }}
           OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS: ${{ steps.scope.outputs.run_viewer_contract_tests }}
           OASIS7_CI_RUN_VIEWER_WASM_CHECK: ${{ steps.scope.outputs.run_viewer_wasm_check }}
           OASIS7_CI_RUN_LAUNCHER_WEB_BUILD: ${{ steps.scope.outputs.run_launcher_web_build }}

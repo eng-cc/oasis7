@@ -166,6 +166,7 @@
 - [x] workflow-helper-review-followup (PRD-ENGINEERING-021) [test_tier_required]: 收口当前 workflow friction burn-down PR `#145` 的 review comments，补齐 workflow helpers 的 shell quoting、回归测试、临时文件传递与 rebase helper trap 作用域修复，并把当前 PR 的 review-thread closeout 从“列评论”推进到“可验证的代码修复 + resolve 预备态”。 Trace: .pm/tasks/task_c8c2d3e2eb75489abdc764c9ac9f5979.yaml
 - [x] tracing-baseline (PRD-ENGINEERING-001/003) [test_tier_required]: 为 `oasis7` native runtime 入口建立最小结构化 tracing 基线，新增共享初始化 helper，并在 `viewer_live / viewer_server / chain_runtime / web_launcher` 与关键 viewer/libp2p 热路径接入统一日志入口。 Trace: .pm/tasks/task_83306ab3aa274d06b1402a8ddcea7af3.yaml
 - [x] end-to-end-product-runtime-tracing (PRD-ENGINEERING-001/003) [test_tier_required]: 在当前 tracing baseline 之上，把 `game_launcher / web_launcher / viewer_live / chain_runtime / provider_local_bridge / newapi_bridge_service` 这一条主产品运行链补齐为可传播的结构化 tracing，会话级 `trace_session_id` 需能从父进程传递到子进程，并将关键连接/回收/奖励 runtime 热路径的 stderr 告警统一接入 fallback helper。 Trace: .pm/tasks/task_6ff11b8818bb47e8ae063658d321ba8d.yaml
+- [ ] required-gate-runtime-support-coverage (PRD-ENGINEERING-021) [test_tier_required]: 让 GitHub `required-gate` 在 planner 命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时实际执行 `oasis7_node`、`oasis7_net` 与 `oasis7_net --features libp2p` support tests，并同步对齐 `prepare-task-pr` 推荐命令与 `testing-manual` 口径。 Trace: .pm/tasks/task_ec27ba7d019549d4b4692bd648a1cf09.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`

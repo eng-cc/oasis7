@@ -1,0 +1,23 @@
+task_uid: task_ec27ba7d019549d4b4692bd648a1cf09
+title: "required gate runtime support coverage"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-required-gate-runtime-support-coverage
+execution_log_path: .pm/tasks/task_ec27ba7d019549d4b4692bd648a1cf09.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - scripts/ci-tests.sh
+  - scripts/plan-rust-required-scope.sh
+  - .github/workflows/rust.yml
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-021
+acceptance:
+  - "PR required gate runs oasis7_node/oasis7_net support tests when runtime support crates are in scope."
+  - "Changed-path planner and local required recommendation remain aligned with the actual required gate coverage."
+handoff_to: []
+updated_at: 2026-05-20T18:46:20+08:00
+last_started_at: 2026-05-20T17:55:42+08:00
+last_closed_at: 2026-05-20T18:46:20+08:00

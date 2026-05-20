@@ -292,12 +292,13 @@ if [[ -x "./scripts/plan-rust-required-scope.sh" ]]; then
     LOCAL_REQUIRED_CHANGED_PATH_COUNT="${RUST_SCOPE_PLAN[changed_path_count]:-0}"
     LOCAL_REQUIRED_CHANGED_PATHS="${RUST_SCOPE_PLAN[changed_paths]:-}"
     LOCAL_REQUIRED_REASON_SUMMARY="${RUST_SCOPE_PLAN[reason_summary]:-}"
-    if [[ "$LOCAL_REQUIRED_SCOPE" == "full" ]]; then
-      LOCAL_REQUIRED_COMMAND="./scripts/ci-tests.sh required"
-    else
+    if [[ "$LOCAL_REQUIRED_SCOPE" != "minimal" ]]; then
       LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=${RUST_SCOPE_PLAN[run_oasis7_required_tests]:-false} \
 OASIS7_CI_RUN_CONSENSUS_TESTS=${RUST_SCOPE_PLAN[run_consensus_tests]:-false} \
 OASIS7_CI_RUN_DISTFS_TESTS=${RUST_SCOPE_PLAN[run_distfs_tests]:-false} \
+OASIS7_CI_RUN_OASIS7_NODE_TESTS=${RUST_SCOPE_PLAN[run_oasis7_node_tests]:-false} \
+OASIS7_CI_RUN_OASIS7_NET_TESTS=${RUST_SCOPE_PLAN[run_oasis7_net_tests]:-false} \
+OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=${RUST_SCOPE_PLAN[run_oasis7_net_libp2p_tests]:-false} \
 OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=${RUST_SCOPE_PLAN[run_viewer_contract_tests]:-false} \
 OASIS7_CI_RUN_VIEWER_WASM_CHECK=${RUST_SCOPE_PLAN[run_viewer_wasm_check]:-false} \
 OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=${RUST_SCOPE_PLAN[run_launcher_web_build]:-false} \

@@ -828,6 +828,8 @@ pub(super) fn handle_peer_record_response(
                         local_peer_id,
                         tried_proxies,
                     );
+                } else {
+                    cached_peer_record_cooldowns.remove(&peer_id);
                 }
             }
         }

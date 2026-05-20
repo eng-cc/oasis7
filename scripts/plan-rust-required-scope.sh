@@ -16,6 +16,9 @@ run_full=0
 run_oasis7_required_tests=0
 run_consensus_tests=0
 run_distfs_tests=0
+run_oasis7_node_tests=0
+run_oasis7_net_tests=0
+run_oasis7_net_libp2p_tests=0
 run_viewer_contract_tests=0
 run_viewer_wasm_check=0
 run_launcher_web_build=0
@@ -56,6 +59,9 @@ mark_full() {
   run_oasis7_required_tests=1
   run_consensus_tests=1
   run_distfs_tests=1
+  run_oasis7_node_tests=1
+  run_oasis7_net_tests=1
+  run_oasis7_net_libp2p_tests=1
   run_viewer_contract_tests=1
   run_viewer_wasm_check=1
   run_launcher_web_build=1
@@ -74,6 +80,17 @@ mark_consensus() {
 
 mark_distfs() {
   run_distfs_tests=1
+  append_reason "$1"
+}
+
+mark_node() {
+  run_oasis7_node_tests=1
+  append_reason "$1"
+}
+
+mark_net() {
+  run_oasis7_net_tests=1
+  run_oasis7_net_libp2p_tests=1
   append_reason "$1"
 }
 
@@ -180,10 +197,10 @@ classify_changed_path() {
       mark_distfs "distfs:${path}"
       ;;
     crates/oasis7_node|crates/oasis7_node/*|crates/oasis7_node/**/*)
-      mark_runtime "node:${path}"
+      mark_node "node:${path}"
       ;;
     crates/oasis7_net|crates/oasis7_net/*|crates/oasis7_net/**/*)
-      mark_runtime "net:${path}"
+      mark_net "net:${path}"
       ;;
     crates/oasis7_viewer|crates/oasis7_viewer/*|crates/oasis7_viewer/**/*)
       mark_viewer "viewer:${path}"
@@ -252,6 +269,9 @@ elif [[ \
   "$run_oasis7_required_tests" -eq 1 || \
   "$run_consensus_tests" -eq 1 || \
   "$run_distfs_tests" -eq 1 || \
+  "$run_oasis7_node_tests" -eq 1 || \
+  "$run_oasis7_net_tests" -eq 1 || \
+  "$run_oasis7_net_libp2p_tests" -eq 1 || \
   "$run_viewer_contract_tests" -eq 1 || \
   "$run_viewer_wasm_check" -eq 1 || \
   "$run_launcher_web_build" -eq 1 \
@@ -275,6 +295,9 @@ emit_output() {
     echo "run_oasis7_required_tests=$([[ "$run_oasis7_required_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_consensus_tests=$([[ "$run_consensus_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_distfs_tests=$([[ "$run_distfs_tests" -eq 1 ]] && echo true || echo false)"
+    echo "run_oasis7_node_tests=$([[ "$run_oasis7_node_tests" -eq 1 ]] && echo true || echo false)"
+    echo "run_oasis7_net_tests=$([[ "$run_oasis7_net_tests" -eq 1 ]] && echo true || echo false)"
+    echo "run_oasis7_net_libp2p_tests=$([[ "$run_oasis7_net_libp2p_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_contract_tests=$([[ "$run_viewer_contract_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)"
     echo "run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
@@ -296,6 +319,9 @@ scope=$scope
 run_oasis7_required_tests=$([[ "$run_oasis7_required_tests" -eq 1 ]] && echo true || echo false)
 run_consensus_tests=$([[ "$run_consensus_tests" -eq 1 ]] && echo true || echo false)
 run_distfs_tests=$([[ "$run_distfs_tests" -eq 1 ]] && echo true || echo false)
+run_oasis7_node_tests=$([[ "$run_oasis7_node_tests" -eq 1 ]] && echo true || echo false)
+run_oasis7_net_tests=$([[ "$run_oasis7_net_tests" -eq 1 ]] && echo true || echo false)
+run_oasis7_net_libp2p_tests=$([[ "$run_oasis7_net_libp2p_tests" -eq 1 ]] && echo true || echo false)
 run_viewer_contract_tests=$([[ "$run_viewer_contract_tests" -eq 1 ]] && echo true || echo false)
 run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)
 run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)

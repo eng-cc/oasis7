@@ -506,6 +506,7 @@ fn runtime_gossip_replication_with_signature_applies_files() {
         .expect("tick a")
         .with_pos_config(pos_config.clone())
         .expect("pos config a")
+        .with_auto_attest_all_validators(true)
         .with_gossip_optional(addr_a, vec![addr_b])
         .with_replication(signed_replication_config(dir_a.clone(), 11));
     let config_b = NodeConfig::new("node-b", "world-signed", NodeRole::Observer)
