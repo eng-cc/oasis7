@@ -139,7 +139,7 @@
 | `brainstorming` | rejected | 把设计前置变成 universal gate | visual companion、IA/wireframe 对比 | 仅在 Viewer 等 UI-heavy 专题内按需启用 |
 | `subagent-driven-development` | rejected | 默认 fresh subagent-per-task + local review ritual | 任务拆分、上下文最小化 | 需先有 repo-owned multi-agent behavior eval |
 | `test-driven-development` | rejected | universal TDD 与 `test_tier_required/full` 不匹配 | 行为先验、失败先行思维 | 仅在特定实现域作为按需 skill，而非 root 默认规则 |
-| `writing-plans` | rejected | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 拆分风格、执行顺序显式化 | 只能翻译为 repo-owned planning checklist，不得替代现有文档链 |
+| `writing-plans` | rejected | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 已限域翻译为 `project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板和 planning self-checklist | 只能继续作为 repo-owned planning surface，不得替代现有文档链 |
 | `using-superpowers` | rejected | 外部 bootstrap 与当前 root workflow 真值冲突 | 触发说明、skill 发现习惯 | 必须先转成 repo-owned trigger governance，再评估 |
 | `dispatching-parallel-agents` | deferred | 若默认启用会冲击显式 `spawn_agent` 边界 | parallel task decomposition | 需先证明多 agent 仍遵守 worktree/task/review 边界 |
 | `executing-plans` | deferred | 可能和正式 project/task 执行链重复 | 有计划后的执行 discipline | 需先证明它只是执行层，不会成为第二套计划真值 |

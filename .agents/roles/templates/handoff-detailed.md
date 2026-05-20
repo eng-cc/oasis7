@@ -39,6 +39,14 @@
 - 工作项 2：
 - 工作项 3：
 
+## Atomic Steps
+| Step | Action | Validation Command | Expected Result |
+| --- | --- | --- | --- |
+| 1 |  |  |  |
+| 2 |  |  |  |
+| 3 |  |  |  |
+| 4 |  |  |  |
+
 ## Expected Outputs
 - 代码改动：
 - 文档回写：

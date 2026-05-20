@@ -11,6 +11,7 @@
 - [x] completion-claim-verification-helper (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-002) [test_tier_required]: 落地 repo-owned `scripts/pm/claim-ready.sh`，把“fresh verification before completion claims”收成可执行 helper，并同步接入 `prepare-task-pr` 推荐输出、PM close checklist、README 与 shell regression。 Trace: .pm/tasks/task_32a955cb401e4a269f72113db4fa0371.yaml
 - [x] superpowers-skill-localization (PRD-ENGINEERING-031) [test_tier_required]: 将 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch` 四个已裁定可借鉴项本地化为 repo-owned skills，并同步回写 borrowing / skill inventory 文档真值。 Trace: .pm/tasks/task_6a10c37fc1fe4528a1b3cda4a43721c6.yaml
 - [x] superpowers-conflict-reconciliation-doc (PRD-ENGINEERING-031) [test_tier_required]: 新增冲突/互借参考文档，明确 `rejected` / `deferred` skill 的冲突类型、可 salvage 子模式与 reopen 条件，避免后续 reopen 时重新从零梳理。 Trace: .pm/tasks/task_b7b2e89a1bec4fd0a38615773ce91af3.yaml
+- [x] workflow-planning-surface-tightening (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-005) [test_tier_required]: 将 `writing-plans` 的可 salvage 部分翻译成 repo-owned planning surface，补 `project.md` 的 `File Structure / Affected Paths` 规则、handoff 原子步骤模板和 lightweight planning self-checklist，并同步回写 workflow-borrowing 专题与 engineering 根项目。 Trace: .pm/tasks/task_9bb4396c9add4868897fbf4dbfea61d9.yaml
 
 ## Planned Follow-ups
 - `workflow-behavior-eval-harness-followup` (`PRD-ENGINEERING-AWB-001`, target `test_tier_required + test_tier_full`): 为 `new-task-worktree -> workflow-report -> task-closeout -> prepare-task-pr -> review-thread-closeout` 建立 repo-owned agent behavior eval harness，验证主链规则在真实 agent 回合中被遵守。启动时需创建独立 `.pm` task 与 worktree。
@@ -28,10 +29,35 @@
 - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md`
 - `AGENTS.md`
 - `.agents/roles/*.md`
+- `.agents/roles/templates/handoff-brief.md`
+- `.agents/roles/templates/handoff-detailed.md`
+- `.agents/roles/templates/planning-self-checklist.md`
 - `testing-manual.md`
 
+## File Structure / Affected Paths
+- 改动路径:
+  - `AGENTS.md`
+  - `.agents/roles/templates/handoff-brief.md`
+  - `.agents/roles/templates/handoff-detailed.md`
+  - `.agents/roles/templates/planning-self-checklist.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
+  - `doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md`
+  - `doc/engineering/project.md`
+- 只读依赖:
+  - `.agents/skills/prd/SKILL.md`
+  - `.agents/skills/prd/check.md`
+- 验证入口:
+  - `./scripts/pm/lint.sh`
+  - `./scripts/doc-governance-check.sh`
+  - `git diff --check`
+- 正式回写面:
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
+  - `doc/engineering/project.md`
+
 ## 状态
-- 更新日期: 2026-05-19
+- 更新日期: 2026-05-20
 - 当前阶段: planned
 - 当前任务: `workflow-behavior-eval-harness-followup`
 - 阻塞项:
@@ -42,6 +68,7 @@
   - 已落地 `completion-claim-verification-helper`，新增 `scripts/pm/claim-ready.sh`，并把 helper 接入 `prepare-task-pr` 推荐输出、PM close checklist、README 与 shell regression。
   - 已新增四个 repo-owned workflow skills：`verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`，并把它们接回 borrowing / skill inventory 文档真值。
   - 已新增 `superpowers-conflict-reconciliation-2026-05-20.md`，把“为什么冲突”和“未来怎样局部互借”明确落成 explanation/reference 文档。
+  - 已把 `writing-plans` 的可 salvage 部分收口成 repo-owned planning surface：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板与 lightweight planning self-checklist。
 - 下一步:
   - 优先推进 `workflow-behavior-eval-harness-followup`，先验证当前 engineering 主链是否能被 agent 稳定执行出来。
   - Viewer 方向仅在下一轮明确结构/视觉题时，按需启动 `viewer-visual-companion-pilot-followup`。
