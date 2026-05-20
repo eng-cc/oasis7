@@ -258,11 +258,15 @@ impl HostedAccountTablestoreBackend {
     }
 
     fn from_config(config: HostedAccountTablestoreConfig) -> Result<Self, String> {
+        let (instance_name, region) =
+            parse_tablestore_instance_and_region(config.endpoint.as_str())?;
         let mut builder = OtsClient::builder(
             config.access_key_id.as_str(),
             config.access_key_secret.as_str(),
         )
-        .endpoint(config.endpoint.as_str());
+        .endpoint(config.endpoint.as_str())
+        .instance_name(instance_name.as_str())
+        .region(region.as_str());
         if let Some(token) = config.sts_token.as_deref() {
             builder = builder.sts_token(token);
         }
@@ -720,6 +724,24 @@ fn unix_ms_to_i64(value: u64) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
 }
 
+fn parse_tablestore_instance_and_region(endpoint: &str) -> Result<(String, String), String> {
+    let trimmed = endpoint.trim();
+    let normalized = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"))
+        .unwrap_or(trimmed);
+    let host = normalized.split('/').next().unwrap_or(normalized).trim();
+    let mut parts = host.split('.');
+    let instance_name = parts.next().unwrap_or("").trim();
+    let region = parts.next().unwrap_or("").trim();
+    if instance_name.is_empty() || region.is_empty() {
+        return Err(format!(
+            "hosted account tablestore endpoint `{endpoint}` must include instance name and region"
+        ));
+    }
+    Ok((instance_name.to_string(), region.to_string()))
+}
+
 fn has_tablestore_lookup<F>(lookup: &mut F) -> bool
 where
     F: FnMut(&str) -> Option<String>,
@@ -863,5 +885,25 @@ mod tests {
         assert_eq!(config.table_name, "login_accounts");
         assert_eq!(config.sts_token.as_deref(), Some("sts"));
         assert!(!config.auto_create);
+    }
+
+    #[test]
+    fn parse_tablestore_instance_and_region_accepts_public_endpoint() {
+        let (instance_name, region) = parse_tablestore_instance_and_region(
+            "https://oasis7-account.cn-hangzhou.ots.aliyuncs.com",
+        )
+        .expect("public endpoint");
+        assert_eq!(instance_name, "oasis7-account");
+        assert_eq!(region, "cn-hangzhou");
+    }
+
+    #[test]
+    fn parse_tablestore_instance_and_region_accepts_internal_endpoint() {
+        let (instance_name, region) = parse_tablestore_instance_and_region(
+            "https://oasis7-account.cn-hangzhou.ots-internal.aliyuncs.com",
+        )
+        .expect("internal endpoint");
+        assert_eq!(instance_name, "oasis7-account");
+        assert_eq!(region, "cn-hangzhou");
     }
 }
