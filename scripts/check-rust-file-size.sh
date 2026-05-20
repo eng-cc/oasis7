@@ -12,7 +12,7 @@ usage() {
 Usage: ./scripts/check-rust-file-size.sh
 
 Checks:
-  1. Scan tracked Rust source/test files under crates/ and identify files > 1200 lines.
+  1. Scan tracked first-party Rust source/test files under crates/ and tools/ and identify files > 1200 lines.
   2. Require the current oversized Rust scan to be empty.
   3. Require the current split-part/include!-based structural slicing scan to be empty.
 
@@ -63,6 +63,10 @@ path_matches_structural_slice_pattern() {
   [[ "$path" =~ $STRUCTURAL_SLICE_PATTERN ]]
 }
 
+scan_tracked_first_party_rust_files() {
+  git ls-files 'crates/**/*.rs' 'tools/**/*.rs'
+}
+
 scan_current_oversized_files() {
   local path line_count kind
   while IFS= read -r path; do
@@ -73,7 +77,7 @@ scan_current_oversized_files() {
       kind=$(classify_rust_file_kind "$path")
       printf '%s\t%s\t%s\n' "$kind" "$path" "$line_count"
     fi
-  done < <(git ls-files 'crates/**/*.rs')
+  done < <(scan_tracked_first_party_rust_files)
 }
 
 scan_current_structural_slice_entries() {
@@ -93,7 +97,7 @@ scan_current_structural_slice_entries() {
         fi
       fi
     done < "$path"
-  done < <(git ls-files 'crates/**/*.rs')
+  done < <(scan_tracked_first_party_rust_files)
 }
 
 current_scan_tmp=$(mktemp)
