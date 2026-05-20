@@ -313,10 +313,13 @@ impl HostedAccountTablestoreBackend {
     fn table_exists(&mut self) -> Result<bool, String> {
         let client = self.client.clone();
         let table_name = self.table_name.clone();
-        let tables = self.run_ots("list hosted account tablestore tables", async move {
-            client.list_table().send().await
-        })?;
-        Ok(tables.iter().any(|name| name == table_name.as_str()))
+        match self.run_ots("describe hosted account tablestore table", async move {
+            client.describe_table(table_name.as_str()).send().await
+        }) {
+            Ok(_) => Ok(true),
+            Err(err) if is_tablestore_missing_table_error(err.as_str()) => Ok(false),
+            Err(err) => Err(err),
+        }
     }
 
     fn record_verified_login(
@@ -742,6 +745,14 @@ fn parse_tablestore_instance_and_region(endpoint: &str) -> Result<(String, Strin
     Ok((instance_name.to_string(), region.to_string()))
 }
 
+fn is_tablestore_missing_table_error(error: &str) -> bool {
+    error.contains("OTSObjectNotExist")
+        || error.contains("ObjectNotExist")
+        || error.contains("TableNotExist")
+        || error.contains("table not exist")
+        || error.contains("does not exist")
+}
+
 fn has_tablestore_lookup<F>(lookup: &mut F) -> bool
 where
     F: FnMut(&str) -> Option<String>,
@@ -905,5 +916,19 @@ mod tests {
         .expect("internal endpoint");
         assert_eq!(instance_name, "oasis7-account");
         assert_eq!(region, "cn-hangzhou");
+    }
+
+    #[test]
+    fn tablestore_missing_table_error_matches_api_code() {
+        assert!(is_tablestore_missing_table_error(
+            "describe hosted account tablestore table failed: API response error. code: OTSObjectNotExist, message: Requested table does not exist."
+        ));
+    }
+
+    #[test]
+    fn tablestore_missing_table_error_rejects_acl_failure() {
+        assert!(!is_tablestore_missing_table_error(
+            "describe hosted account tablestore table failed: API response error. code: OTSAuthFailed, message: Request denied by instance ACL policies."
+        ));
     }
 }
