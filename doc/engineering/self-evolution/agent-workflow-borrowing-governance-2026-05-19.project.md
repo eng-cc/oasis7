@@ -12,6 +12,7 @@
 - [x] superpowers-skill-localization (PRD-ENGINEERING-031) [test_tier_required]: 将 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch` 四个已裁定可借鉴项本地化为 repo-owned skills，并同步回写 borrowing / skill inventory 文档真值。 Trace: .pm/tasks/task_6a10c37fc1fe4528a1b3cda4a43721c6.yaml
 - [x] superpowers-conflict-reconciliation-doc (PRD-ENGINEERING-031) [test_tier_required]: 新增冲突/互借参考文档，明确 `rejected` / `deferred` skill 的冲突类型、可 salvage 子模式与 reopen 条件，避免后续 reopen 时重新从零梳理。 Trace: .pm/tasks/task_b7b2e89a1bec4fd0a38615773ce91af3.yaml
 - [x] workflow-planning-surface-tightening (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-005) [test_tier_required]: 将 `writing-plans` 的可 salvage 部分翻译成 repo-owned planning surface，补 `project.md` 的 `File Structure / Affected Paths` 规则、handoff 原子步骤模板和 lightweight planning self-checklist，并同步回写 workflow-borrowing 专题与 engineering 根项目。 Trace: .pm/tasks/task_9bb4396c9add4868897fbf4dbfea61d9.yaml
+- [x] workflow-execution-surface-tightening (PRD-ENGINEERING-031) [test_tier_required]: 将 upstream `executing-plans` 的可 salvage 部分翻译成 repo-owned execution surface，新增 `.agents/skills/executing-project-tasks`，并在 `AGENTS.md` 固化 execution gap review、逐步验证与 blocker handling 规则，同时同步回写 workflow-borrowing 专题与冲突文档真值。 Trace: .pm/tasks/task_2538f5756ad44d6ea7d1c890852389c6.yaml
 
 ## Planned Follow-ups
 - `workflow-behavior-eval-harness-followup` (`PRD-ENGINEERING-AWB-001`, target `test_tier_required + test_tier_full`): 为 `new-task-worktree -> workflow-report -> task-closeout -> prepare-task-pr -> review-thread-closeout` 建立 repo-owned agent behavior eval harness，验证主链规则在真实 agent 回合中被遵守。启动时需创建独立 `.pm` task 与 worktree。
@@ -28,6 +29,8 @@
 - `doc/world-simulator/project.md`
 - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md`
 - `AGENTS.md`
+- `.agents/skills/README.md`
+- `.agents/skills/executing-project-tasks/SKILL.md`
 - `.agents/roles/*.md`
 - `.agents/roles/templates/handoff-brief.md`
 - `.agents/roles/templates/handoff-detailed.md`
@@ -37,9 +40,12 @@
 ## File Structure / Affected Paths
 - 改动路径:
   - `AGENTS.md`
+  - `.agents/skills/README.md`
+  - `.agents/skills/executing-project-tasks/SKILL.md`
   - `.agents/roles/templates/handoff-brief.md`
   - `.agents/roles/templates/handoff-detailed.md`
   - `.agents/roles/templates/planning-self-checklist.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md`
   - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
   - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
   - `doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md`
@@ -69,6 +75,7 @@
   - 已新增四个 repo-owned workflow skills：`verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`，并把它们接回 borrowing / skill inventory 文档真值。
   - 已新增 `superpowers-conflict-reconciliation-2026-05-20.md`，把“为什么冲突”和“未来怎样局部互借”明确落成 explanation/reference 文档。
   - 已把 `writing-plans` 的可 salvage 部分收口成 repo-owned planning surface：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板与 lightweight planning self-checklist。
+  - 已把 `executing-plans` 的可 salvage 部分收口成 repo-owned execution surface：新增 `.agents/skills/executing-project-tasks`，并把 execution gap review、逐步验证与 blocker handling 接回 `AGENTS.md` 主链。
   - 已把 `writing-skills` 的 authoring surface 收口成 repo-owned 入口：`.agents/skills/README.md`、`writing-repo-owned-skills`、template 与 checklist；但 upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。
 - 下一步:
   - 优先推进 `workflow-behavior-eval-harness-followup`，先验证当前 engineering 主链是否能被 agent 稳定执行出来。

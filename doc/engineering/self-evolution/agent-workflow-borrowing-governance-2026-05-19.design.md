@@ -65,7 +65,7 @@
 | `finishing-a-development-branch` | adopted | 已映射到 `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链，以及同名 repo-owned skill。 |
 | `systematic-debugging` | adopted | 已本地化为 repo-owned debugging skill，不再停留在 deferred playbook。 |
 | `dispatching-parallel-agents` | deferred | 只保留为显式授权下的 bounded `spawn_agent` 参考，不升为默认流程。 |
-| `executing-plans` | deferred | 当前先依赖 `project.md`/`.pm` 的正式计划真值，暂不再引入单独执行会话契约。 |
+| `executing-plans` | deferred | 已限域翻译为 `.agents/skills/executing-project-tasks` 与 `AGENTS.md` 的执行规则；upstream 的单独执行会话契约仍不引入。 |
 | `writing-skills` | deferred | 等本地 skill surface 稳定后再决定是否需要 repo-owned 作者手册。 |
 | `brainstorming` | rejected | 仅 salvage 其 visual-companion 子模式；其 universal pre-step 语义不进入默认流程。 |
 | `subagent-driven-development` | rejected | fresh subagent-per-task + two-stage review 不进入当前默认主链。 |
@@ -98,6 +98,7 @@
   - `.agents/skills/systematic-debugging`
   - `.agents/skills/receiving-code-review`
   - `.agents/skills/finishing-a-development-branch`
+  - `.agents/skills/executing-project-tasks`
 - 约束：
   - 这些 skill 必须继续绑定 repo-owned helper 和正式 workflow 文档。
   - 不能把 skill 文案提升为新的独立真值系统。

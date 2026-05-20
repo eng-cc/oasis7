@@ -39,7 +39,10 @@
    1. 所有代码和功能（含 UI）都必须可测试
    2. 测试统一分 `test_tier_required` / `test_tier_full`
    3. 套件矩阵统一参考 `testing-manual.md`
-   4. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还要评估是否需要 `liveops_community` 回流
+   4. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
+   5. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
+   6. 若步骤说明不清、真实影响面超出当前计划，或同一验证连续失败且没有新信息，不得继续猜测实现；必须先报告 blocker，并明确需要补哪一条文档/决策/输入
+   7. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还要评估是否需要 `liveops_community` 回流
 
 6. 角色协作规则
    1. `producer_system_designer` 管目标、规则、资源与玩法口径

@@ -142,7 +142,7 @@
 | `writing-plans` | rejected | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 已限域翻译为 `project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板和 planning self-checklist | 只能继续作为 repo-owned planning surface，不得替代现有文档链 |
 | `using-superpowers` | rejected | 外部 bootstrap 与当前 root workflow 真值冲突 | 触发说明、skill 发现习惯 | 必须先转成 repo-owned trigger governance，再评估 |
 | `dispatching-parallel-agents` | deferred | 若默认启用会冲击显式 `spawn_agent` 边界 | parallel task decomposition | 需先证明多 agent 仍遵守 worktree/task/review 边界 |
-| `executing-plans` | deferred | 可能和正式 project/task 执行链重复 | 有计划后的执行 discipline | 需先证明它只是执行层，不会成为第二套计划真值 |
+| `executing-plans` | deferred | 若整包引入，仍会和正式 project/task 执行链重复 | 已限域借鉴为 `.agents/skills/executing-project-tasks`、execution gap review、逐步验证、明确 blocker handling | upstream 的单独执行会话包装与默认收尾假设继续保持 deferred，不得升级为第二套计划真值 |
 | `writing-skills` | deferred | 分发/作者规范容易先于治理真值 | 已限域翻译为本地 skill authoring skill、template、checklist 与入口说明 | 仅继续保留 authoring surface；upstream TDD/subagent gate 与分发部署部分仍 deferred |
 
 ## 5. 后续互借的优先级
@@ -151,7 +151,7 @@
 
 1. 先做 `deferred` 中最接近当前主链的可控部分
    - `dispatching-parallel-agents` 的 bounded decomposition 原则
-   - `executing-plans` 的“已有正式计划后的执行 discipline”
+   - `executing-plans` 的“已有正式计划后的执行 discipline”，这部分现已收口成 `.agents/skills/executing-project-tasks`；剩余 session packaging 仍 deferred
 2. 再做 `rejected` 里最容易局部 salvage 的子模式
    - `brainstorming` 的 visual companion
    - `test-driven-development` 的 behavior-first 子集
