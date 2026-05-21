@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] viewer-live-integration-flake-burn-down (PRD-WORLD_RUNTIME-001) [test_tier_full]: 移除 `scripts/ci-tests.sh` 对 `live_server_accepts_client_and_emits_snapshot_and_event` 的历史 `skip + 单测重跑 + retry` 特殊路径，确认该 full-tier 集成回归在当前代码上已可直接并入 `cargo test -p oasis7 --tests --features "test_tier_full,wasmtime,viewer_live_integration"` 单次入口。 Trace: .pm/tasks/task_0a012bf9b85b417bb56d591969a07d36.yaml
 - [x] first-agent-claim-auto-grant (PRD-WORLD_RUNTIME-040) [test_tier_required]: 将首个 agent `slot-1` claim 从“申请/审核/批准后再发 grant”改为“专用池余额足够时在 `ClaimAgent` 路径自动补足 restricted starter funding 并原子完成认领”；viewer / API 同步移除旧审批 surface，只保留 dedicated pool auto-funding 直连 claim 真值。 Trace: .pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`
@@ -722,6 +723,7 @@
 - 更新日期: 2026-04-18
 - 当前状态: in_progress（provider/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~058` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `viewer-live-integration-flake-burn-down`（已删除 `scripts/ci-tests.sh full` 对 `live_server_accepts_client_and_emits_snapshot_and_event` 的历史 `--skip + 定向重跑 + 3 次 retry` workaround；在当前代码快照上，本地连续 3 次定向执行 `cargo test -p oasis7 --features "test_tier_full,wasmtime,viewer_live_integration" --test viewer_live_integration live_server_accepts_client_and_emits_snapshot_and_event -- --nocapture` 均稳定通过，因此 full-tier 现回到单次 `oasis7 --tests` 入口。）
 - 最新完成: `builtin-wasm-integer-centimeter-contract`（已把 `m1_*` builtin wasm 的厘米坐标边界收紧到整数合同：模块内主表示改为整数厘米，动作/事件 JSON 入口拒绝 fractional cm，旧的整值浮点 module state 仍可兼容读取，并把新的 module state / observability sample 统一回写为整数厘米。）
 - 最新完成: `node-observability-system`（已为 `/v1/chain/status` 增加 `observability` 摘要与结构化 alerts，把 peer 连接数、peer health 分布、network lag、storage/reward degraded 收口为单一真值；`oasis7_web_launcher` 和 `oasis7_client_launcher` 现直接透传并显示节点观测卡片，repo-owned `scripts/oasis7-node-observability-report.sh` 可把 live status 与最近 traffic window 合成 operator 报告。）
 - 最新完成: `wasm-observability-timing-metrics`（专题三件套之外，首期 MVP 实现也已落地：`tools/wasm_build_suite` 现写出 build timing，`oasis7_wasm_executor` / `oasis7_wasm_router` 现维护 cumulative snapshot，`oasis7_chain_runtime` 已暴露 `/v1/chain/status.wasm`，repo-owned summary 入口也已补齐最小版本；顶层 `wasm.degraded_reason` 现可显式暴露 build 子段部分降级，避免把 build 真值缺口静默吞掉。）
