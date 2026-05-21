@@ -8,6 +8,7 @@
 - [x] formal-network-tiers-testnet-mechanism (PRD-P2P-028) [test_tier_required]: 新建“正式网络分层与 testnet 机制”专题 PRD / design / project，并在同一专题内补齐 `network_tier_manifest` runtime/launcher 接线、repo-owned validate/smoke/exit-review、example manifests 与 public-testnet rehearsal/exit-review 模板。 Trace: .pm/tasks/task_7021c28970ef4f40b0367563df7f1e32.yaml
 - [x] formal-public-testnet-readiness-gate (PRD-P2P-028) [test_tier_required]: 在 formal network tier 机制之上追加 `public_testnet` readiness review follow-up，补齐 repo-owned lane gate、placeholder-safe endpoint 判定、seven-lane rehearsal 模板与 skeleton evidence scaffold，确保当前仓库只能把真实 lane/evidence 推进到 `ready_for_live_candidate`。 Trace: .pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.yaml
 - [x] formal-public-testnet-live-candidate-checklist (PRD-P2P-028) [test_tier_required]: 为当前 `specified_skeleton_only` 状态补一份 repo-owned companion runbook，冻结 `public_testnet` 从 skeleton 到 `ready_for_live_candidate` 的 seven-lane checklist、最小 evidence、canonical 命令、硬阻断条件与 claim boundary，避免“还差什么”只停留在聊天结论。 Trace: .pm/tasks/task_3f0ab6e26c034d42bedcecf38d066fb2.yaml
+- [x] formal-public-testnet-claims-boundary-review (PRD-P2P-028) [test_tier_required]: 补齐 repo-owned `qa_engineer` claims boundary review evidence，把 live `public_testnet` 的 allowed/denied claims、guarded faucet 边界与 aggregate readiness 不可越界口径固定成正式 QA verdict，并新增非 template lanes TSV 供后续 readiness review 复用。 Trace: .pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.yaml
 
 ### 后续切片
 - `runtime_engineer` / TIER-2:
@@ -15,6 +16,7 @@
 - `qa_engineer` + `liveops_community` / TIER-3:
   - 已完成 skeleton：建立 first `public_testnet` rehearsal / exit-review 模板，并补 `network-tier-exit-review.sh` 作为 formal gate 汇总入口。
   - 已完成 readiness gate：新增 `network-tier-public-testnet-readiness.sh`、lane scaffold 与 skeleton evidence placeholder，可把 `public_testnet` 从“只有 manifest skeleton”与“具备 live candidate lane evidence”区分开。
+  - 已完成 claims review：新增 repo-owned `public-testnet-claims-boundary-review-2026-05-21.md` 与实际 lanes TSV，确认当前公开口径可放行到 `public_testnet/resettable/guarded faucet/non-mainnet`，但 aggregate readiness 仍不得越过 `shared_devnet_pass`。
 - `producer_system_designer` / TIER-3.5:
   - 已完成 checklist：新增 companion runbook，把 seven-lane owner、最小 evidence、执行顺序、canonical 命令与禁止 claims 冻结成单一入口。
 - `producer_system_designer` + `runtime_engineer` / TIER-4:
@@ -24,7 +26,7 @@
 - 当前阶段:
   - 游戏阶段口径: `limited playable technical preview`
   - 安全阶段口径: `crypto-hardened preview`
-  - formal network-tier verdict: `specified_skeleton_only`
+  - formal network-tier verdict: `block`
 - 当前完成范围:
   - 已冻结 `local_devnet -> shared_devnet -> public_testnet -> mainnet` 四层模型。
   - 已落地 `network_tier_manifest` repo-owned create/validate、smoke、exit review 与 example manifests。
@@ -32,10 +34,11 @@
   - 已补 `shared_devnet/public_testnet/mainnet` 的 genesis/bootstrap example refs，以及 `public_testnet` rehearsal / exit-review 模板。
   - 已补 `public_testnet` readiness review 入口：repo-owned lane scaffold、skeleton evidence placeholder 与 `specified_skeleton_only|partial|block|ready_for_live_candidate` verdict 脚本。
   - 已补 `public_testnet` live-candidate companion runbook，统一回答“当前还差哪些 lane / evidence / claims review 才能进入 live candidate”。
-  - 已明确 `shared_devnet` 仍是 shared release-train，不等于 live public testnet。
+  - 已建立 live `public_testnet` 的 public RPC / explorer / guarded faucet / reset-policy / claims-boundary evidence，其中 `claims_boundary_review` 已有独立 `qa_engineer` verdict。
+  - 已明确 `shared_devnet` 仍是 shared release-train，不等于 live public testnet；aggregate readiness 仍不能跳过 `shared_devnet_pass`。
 - 当前缺口:
-  - 仓库里还没有 live `public_testnet` 的 public RPC/explorer/faucet/reset evidence。
-  - `public_testnet` readiness review 目前仍只能输出 skeleton / placeholder 结论，尚未接入真实 live candidate lane evidence。
+  - `shared_devnet_pass` 仍未满足，因此 formal `public_testnet` 仍不能进入 `ready_for_live_candidate`。
+  - live candidate manifest / bundle / lanes TSV 仍未统一冻结成单一 repo-owned readiness run input；当前 repo 真值仍分布在 dated evidence 与 lane refs 中。
   - `mainnet` 仍停留在 `MAINNET-1~4` readiness planning / partial execution 前阶段，仓库当前只有 formal manifest + gate skeleton。
 
 ## 依赖
@@ -76,11 +79,16 @@
 - `doc/testing/templates/public-testnet-exit-review-template.md`
 - `doc/testing/templates/public-testnet-readiness-lanes.example.tsv`
 - `doc/testing/evidence/public-testnet-skeleton-example.md`
+- `doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`
+- `doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md`
+- `doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md`
+- `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv`
 - `doc/p2p/prd.md`
 - `doc/p2p/project.md`
 - `doc/p2p/prd.index.md`
 - `testing-manual.md`
 - `.pm/tasks/task_3f0ab6e26c034d42bedcecf38d066fb2.execution.md`
+- `.pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.execution.md`
 
 ## 验收命令（本轮）
 - `./scripts/network-tier-manifest-smoke.sh`
@@ -91,6 +99,7 @@
 - `./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-mainnet.example.json`
 - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
 - `rg -n "ready_for_live_candidate|specified_skeleton_only|seven-lane|claim boundary" doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md testing-manual.md doc/p2p/prd.md doc/p2p/project.md`
+- `rg -n "claims_boundary_review|allowed_claims|denied_claims|ready_for_live_candidate" doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
 - `env -u RUSTC_WRAPPER cargo check -p oasis7`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 build_oasis7_chain_runtime_args_prefers_network_tier_manifest_when_present`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 build_chain_runtime_args_uses_network_tier_manifest_when_present`
@@ -101,5 +110,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 基础 formal mechanism、readiness gate 与 live-candidate checklist 已补齐；后续只在建立真实 live `public_testnet` lane evidence 与 `MAINNET-1~4` 实证时再推进，不得把当前 skeleton/runtime 接线或 checklist 文档误报为 live `public_testnet` / `mainnet`。
-- 最近更新: 2026-05-18
+- 下一步: 当前应优先补 formal `shared_devnet_pass`；在该前置条件满足前，`public_testnet` 即使已有 live endpoint/faucet/claims evidence，也仍不得提升为 `ready_for_live_candidate`。
+- 最近更新: 2026-05-21

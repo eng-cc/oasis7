@@ -539,6 +539,19 @@
     - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] formal-public-testnet-claims-boundary-review (PRD-P2P-028) [test_tier_required]: 为 live `public_testnet` 新增 repo-owned `qa_engineer` claims boundary review，正式审查当前 public RPC/explorer/faucet/reset 公开面是否仍停留在 `public_testnet/resettable/guarded faucet/non-mainnet` 边界；同时新增非 template lanes TSV，把 `claims_boundary_review` 与 `faucet_guard_ready` 的当前 repo 真值从“聊天结论”提升为可复用的 lane evidence。 Trace: .pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.yaml
+  - 产物文件:
+    - `doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md`
+    - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv`
+    - `doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+    - `doc/p2p/project.md`
+    - `testing-manual.md`
+    - `.pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "claims_boundary_review|allowed claims|denied claims|ready_for_live_candidate|production_oc_settlement|mainnet_live" doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 新增“hosted_public_join 托管身份 / 托管密钥与邮箱登录”专题 PRD / design / project，并把 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、自托管升级与 player-custody trust boundary 纳入模块追踪。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
   - 产物文件:
     - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`

@@ -1,0 +1,8 @@
+# lane_id	owner	status	evidence_path	note
+shared_devnet_pass	qa_engineer	partial	doc/testing/evidence/shared-network-shared-devnet-follow-up-promotion-record-2026-03-24.md	formal shared_devnet overall gate is still partial and promotion remains on hold
+public_rpc_ready	runtime_engineer	pass	doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md	public status endpoint is reachable from the control host and matches the live manifest refs
+explorer_public_ready	liveops_community	pass	doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md	public explorer overview is reachable from the control host and matches the live manifest refs
+faucet_guard_ready	liveops_community	pass	doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md	guarded faucet boundary is evidenced by live amount cooldown and account-format controls
+reset_policy_announced	producer_system_designer	pass	doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md	public reset-policy announcement is already cited in the live endpoint deploy evidence
+runtime_bootstrap	runtime_engineer	pass	doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md	live runtime loads the formal public_testnet manifest and continues advancing
+claims_boundary_review	qa_engineer	pass	doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md	QA reviewed allowed denied claims and confirmed current public wording stays below mainnet and live-candidate boundaries
