@@ -539,6 +539,19 @@
     - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] formal-public-testnet-claims-boundary-review (PRD-P2P-028) [test_tier_required]: 为 live `public_testnet` 新增 repo-owned `qa_engineer` claims boundary review，正式审查当前 public RPC/explorer/faucet/reset 公开面是否仍停留在 `public_testnet/resettable/guarded faucet/non-mainnet` 边界；同时新增非 template lanes TSV，把 `claims_boundary_review` 与 `faucet_guard_ready` 的当前 repo 真值从“聊天结论”提升为可复用的 lane evidence。 Trace: .pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.yaml
+  - 产物文件:
+    - `doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md`
+    - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv`
+    - `doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+    - `doc/p2p/project.md`
+    - `testing-manual.md`
+    - `.pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "claims_boundary_review|allowed claims|denied claims|ready_for_live_candidate|production_oc_settlement|mainnet_live" doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 新增“hosted_public_join 托管身份 / 托管密钥与邮箱登录”专题 PRD / design / project，并把 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、自托管升级与 player-custody trust boundary 纳入模块追踪。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
   - 产物文件:
     - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
@@ -858,7 +871,8 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-19
+- 更新日期: 2026-05-21
+- 最新完成: `formal-public-testnet-claims-boundary-review`（已新增 repo-owned `qa_engineer` claims verdict：当前 live `public_testnet` 可公开表述为 `public_testnet` / `resettable_test_network` / guarded faucet test surface，但仍明确禁止 `mainnet_live`、`production_oc_settlement`、`public validator admission is open` 与 `ready_for_live_candidate` 等越界口径；同时新增 `public-testnet-live-candidate-lanes-2026-05-21.tsv`，把 `claims_boundary_review=pass`、`faucet_guard_ready=pass` 与 `shared_devnet_pass=partial` 的当前 lane 真值固定成非 template evidence，因此 aggregate readiness 仍继续保持 `block`。）
 - 最新完成: `public-testnet-faucet-service`（已在现有两台 ECS `public_testnet` 基础设施上完成真实 guarded faucet 部署：`faucet_ref` 现指向 `http://39.104.204.172:6681/`，两节点已用修过的 runtime 做协调冷重置并重新导入 `2-validator` governance manifest、重新注入 faucet genesis/claim；同时修复 `PosNodeEngine::propose_next_head()` 在非 proposer slot 提前 drain `pending_consensus_actions` 导致 transfer/faucet claim 静默丢失并最终 `timeout` 的共识 bug。当前外部 `POST /claim` 到 `oc:pk:2222...2222` 已实测 `confirmed`，但 `/v1/chain/balances` 仍不是 faucet 热钱包真值面，应继续以 `transfer/accounts`/`explorer/address`/world snapshot 为准。）
 - 最新完成: `hosted-account-identity-broker-server`（已在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server：支持 email login challenge、稳定 `hosted_account_id -> player_id` 持久化，以及登录完成后换发 `device_session + player_session`；viewer 正式入口也已改成 hosted account 登录表单。当前 challenge delivery 已支持 `preview_inline` / `server_log_only` / `smtp`，其中 `smtp` 通过 `OASIS7_HOSTED_LOGIN_SMTP_*` 环境变量接真实邮件 provider，默认可对接 Aliyun DirectMail `smtpdm.aliyun.com:465`；OTP start 路径也已补最小 resend cooldown、短窗/长窗配额与 `retry_after_seconds` 反馈，不再只靠单一 `3/min` 限流。）
 - 最新完成: `hosted-browser-device-session-recovery`（已把 `hosted_public_join` 的 viewer/launcher 第一刀落成代码真值：launcher grant 新增 `device_session_id`，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`，刷新页后仅保留 `device_session` handle，并按需重新生成页内临时 Ed25519 session key 以完成 reconnect/register。）
