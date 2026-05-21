@@ -19,7 +19,7 @@
 `new-task-worktree -> workflow-report start -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR review/approval -> review-thread closeout`
 
 因此本专题只允许两种输出：
-1. 作为 repo-owned helper/eval/smoke 的 follow-up。
+1. 作为 repo-owned helper / skill / eval / smoke 的 follow-up。
 2. 作为某个模块专题的 optional design technique reference。
 
 ## 3. 决策矩阵
@@ -66,7 +66,7 @@
 | `systematic-debugging` | adopted | 已本地化为 repo-owned debugging skill，不再停留在 deferred playbook。 |
 | `dispatching-parallel-agents` | deferred | 只保留为显式授权下的 bounded `spawn_agent` 参考，不升为默认流程。 |
 | `executing-plans` | deferred | 已限域翻译为 `.agents/skills/executing-project-tasks` 与 `AGENTS.md` 的执行规则；upstream 的单独执行会话契约仍不引入。 |
-| `writing-skills` | deferred | 等本地 skill surface 稳定后再决定是否需要 repo-owned 作者手册。 |
+| `writing-skills` | deferred | 已限域翻译为 `.agents/skills/README.md`、`writing-repo-owned-skills`、template/checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。 |
 | `brainstorming` | rejected | 仅 salvage 其 visual-companion 子模式；其 universal pre-step 语义不进入默认流程。 |
 | `subagent-driven-development` | rejected | fresh subagent-per-task + two-stage review 不进入当前默认主链。 |
 | `test-driven-development` | rejected | universal TDD 不作为仓库默认门禁。 |

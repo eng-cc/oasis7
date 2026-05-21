@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: 外部 agent workflow 方法论已经开始提供成套的规划、TDD、subagent、browser companion 与 PR 收口建议；但 oasis7 现有 repo-native 真值链是 `AGENTS.md + .agents/roles + .pm + GitHub PR review`。如果不先冻结“哪些可借鉴、哪些冲突、哪些仅可选”，后续很容易把外部 skill 文案或 harness 习惯误写成当前仓库默认流程。
-- Proposed Solution: 在 `engineering/self-evolution` 下建立正式专题，首批以 `obra/superpowers` 为样本，冻结 adopted / rejected / deferred 边界，并把 adopted 项只转译为 repo-owned follow-up：workflow behavior eval harness、completion-claim fresh verification gate、Viewer Web 设计阶段的 optional visual companion。
+- Proposed Solution: 在 `engineering/self-evolution` 下建立正式专题，首批以 `obra/superpowers` 为样本，冻结 adopted / rejected / deferred 边界，并把 adopted 项转译为 repo-owned follow-up：workflow behavior eval harness、completion-claim fresh verification gate、Viewer Web 设计阶段的 optional visual companion；同时把 `writing-plans`、`executing-plans`、`writing-skills` 的可 salvage 部分收口成 repo-owned planning、execution 与 skill-authoring surface。
 - Success Criteria:
   - SC-1: `superpowers` 首批借鉴项 100% 进入 `adopted / rejected / deferred` 三态矩阵，并为每项给出理由与 repo-owned target object。
   - SC-2: 每个 adopted 项都必须映射到一个 repo-owned follow-up task 或明确的模块参考入口，不允许停留在“聊天建议”层。
@@ -17,6 +17,7 @@
   - SC-4: Viewer Web 视觉/结构类专题必须明确：browser-based visual companion 仅是前置设计手段，不替代 `agent-browser` 回归、repo-owned UI regression 或正式实现 task。
   - SC-5: 外部 workflow 借鉴不得引入新的运行态真值系统，不得替代 `.pm`、`project.md`、task execution log 或 GitHub PR review。
   - SC-6: 从 `writing-plans` salvage 的 planning discipline 必须被翻译成 repo-owned 规划约束：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板、以及轻量 planning 自检；它们只能补强现有真值链，不能形成第二套计划系统。
+  - SC-7: 从 `executing-plans` 与 `writing-skills` salvage 的 execution / authoring discipline 必须被翻译成 repo-owned surface，并明确哪些 upstream 部分仍保持 deferred，避免文档继续停留在“未来可能吸收”的过时口径。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -72,7 +73,7 @@
 | `using-superpowers` | rejected | none | 外部 bootstrap 不能取代当前 `AGENTS.md + .pm + GitHub PR review` 主链。 |
 - Acceptance Criteria:
   - AC-1: 专题必须明确写出 `superpowers` 当前 `main` 分支 skill inventory 的 adopted / rejected / deferred 清单，且每项都带 rationale 与 oasis7 mapping。
-  - AC-2: adopted 项至少形成三条正式 follow-up：workflow behavior eval harness、completion-claim verification gate、Viewer visual companion pilot；其中 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch` 允许进一步落为本地 repo-owned skills。
+  - AC-2: adopted 项至少形成三条正式 follow-up：workflow behavior eval harness、completion-claim verification gate、Viewer visual companion pilot；同时 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`executing-project-tasks` 已允许并落为本地 repo-owned skills。
   - AC-3: rejected 项必须显式覆盖与 oasis7 当前默认流程冲突的三类外部规则：强制 brainstorming gate、默认 fresh subagent+两轮 review、无条件 universal TDD。
   - AC-4: deferred 项必须把 multi-harness pluginization 与自动 skill bootstrap 维持在“非当前默认流程”边界，不得混入 root `AGENTS.md` 现行口径。
   - AC-5: `engineering` 根入口、主项目、文件级索引和 `world-simulator` Viewer 后续参考口径必须完成回写。
@@ -87,7 +88,7 @@
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements:
-  - repo-owned shell/PM helpers：承接 adopted 的 workflow closeout、PR preflight、review-thread closeout 与 future completion gate。
+  - repo-owned shell/PM helpers：承接 adopted 的 workflow closeout、PR preflight、review-thread closeout 与已落地的 completion gate / claim helper。
   - `agent-browser`：仅服务于 adopted 的 visual companion pilot 和现有 Web 回归，不作为默认万能工作流。
   - workflow behavior eval fixtures：后续用于证明 agent 在真实回合中是否遵守规则。
 - Evaluation Strategy:
@@ -139,9 +140,11 @@
 - Phased Rollout:
   - MVP: 建立本专题三件套，冻结 `superpowers` 的 adopted / rejected / deferred 边界，并回写 engineering / Viewer 参考口径。
   - v1.1: 实施 workflow behavior eval harness，优先覆盖主链 workflow helpers。
-  - v1.2: 实施 completion-claim verification gate，建立 repo-owned helper/checklist/smoke。
+  - v1.2 (completed): 已实施 completion-claim verification gate，建立 repo-owned helper/checklist/smoke。
   - v1.3: 在下一轮 Viewer Web 结构/视觉专题中试点 visual companion，验证其作为 optional ideation layer 的收益。
-  - v1.4: 将 `writing-plans` 的结构化拆分纪律翻译成 repo-owned planning surface，补齐 `project.md` affected-paths、handoff atomic steps 和 lightweight self-check。
+  - v1.4 (completed): 已将 `writing-plans` 的结构化拆分纪律翻译成 repo-owned planning surface，补齐 `project.md` affected-paths、handoff atomic steps 和 lightweight self-check。
+  - v1.5 (completed): 已将 `executing-plans` 的执行纪律翻译成 repo-owned execution surface，补齐 execution gap review、逐步验证与 blocker handling。
+  - v1.6 (completed, bounded): 已将 `writing-skills` 的 authoring surface 收口成 repo-owned skill authoring entry points、template 与 checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。
   - v2.0: 在 repo-owned behavior/eval 稳定后，再决定是否重开 multi-harness workflow packaging 评估。
 - Technical Risks:
   - 风险-1: 若只冻结 adopted 项、不补 repo-owned eval，最终会退化成“又一份 workflow 口号”。

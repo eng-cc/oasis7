@@ -1,0 +1,24 @@
+task_uid: task_a8a7260e7ed74f288f29d8609e8f75e1
+title: "pr 250 doc truth refresh"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-superpowers-workflow-borrowing
+execution_log_path: .pm/tasks/task_a8a7260e7ed74f288f29d8609e8f75e1.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+  - doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-031
+acceptance:
+  - "PR #250 中 borrowing 相关文档的过时表述被回写到当前仓库真值"
+  - "已吸收的 planning / execution / skill-authoring surface 不再被写成未来态"
+  - "remaining deferred 边界仍保持明确，没有把 upstream 整包误写成 adopted"
+handoff_to: []
+updated_at: 2026-05-21T10:19:48+08:00
+last_started_at: 2026-05-21T10:15:35+08:00
+last_closed_at: 2026-05-21T10:19:48+08:00
