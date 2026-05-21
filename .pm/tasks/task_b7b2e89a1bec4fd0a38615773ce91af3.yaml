@@ -1,0 +1,24 @@
+task_uid: task_b7b2e89a1bec4fd0a38615773ce91af3
+title: "document superpowers workflow conflicts and reconciliation paths"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-superpowers-conflict-reconciliation-doc
+execution_log_path: .pm/tasks/task_b7b2e89a1bec4fd0a38615773ce91af3.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+doc_refs:
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+  - doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md
+related_prd:
+  - PRD-ENGINEERING-031
+acceptance:
+  - "Add a formal conflict document describing which superpowers skills conflict with oasis7 workflow truth."
+  - "Document future reconciliation or bounded borrowing paths for each conflict class."
+  - "Pass pm-lint, doc-governance-check, and diff hygiene after the document lands."
+handoff_to: []
+updated_at: 2026-05-20T16:06:51+08:00
+last_started_at: 2026-05-20T15:59:26+08:00
+last_closed_at: 2026-05-20T16:06:51+08:00

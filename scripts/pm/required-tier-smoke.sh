@@ -566,6 +566,11 @@ if any(item.get("id") == "codex-review" for item in workflow_close["checklist"])
     raise SystemExit("workflow close checklist should no longer require local codex review")
 if not any(item.get("id") == "prepare-pr-review" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should point to GitHub PR review as the default review boundary")
+if not any(item.get("id") == "fresh-claim-verification" for item in workflow_close["checklist"]):
+    raise SystemExit("workflow close checklist should require fresh claim verification before PR-readiness claims")
+claim_verify_items = [item for item in workflow_close["checklist"] if item.get("id") == "fresh-claim-verification"]
+if claim_verify_items[0].get("command") != "./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command '<fresh verification command>'":
+    raise SystemExit("workflow close checklist should point to claim-ready helper with an explicit verification placeholder")
 prepare_items = [item for item in workflow_close["checklist"] if item.get("id") == "prepare-pr-review"]
 if prepare_items[0].get("command") != "./scripts/prepare-task-pr.sh":
     raise SystemExit("workflow close PR review checklist should point to prepare-task-pr.sh")

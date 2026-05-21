@@ -29,6 +29,13 @@
 - 接收方交付物 2：
 - 需要回写的正式文档 / task execution log：
 
+## Atomic Steps
+| Step | Action | Validation Command | Expected Result |
+| --- | --- | --- | --- |
+| 1 |  |  |  |
+| 2 |  |  |  |
+| 3 |  |  |  |
+
 ## Done Definition
 - [ ] 满足验收点 1
 - [ ] 满足验收点 2

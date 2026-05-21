@@ -39,6 +39,7 @@
 - `./scripts/new-task-worktree.sh --pm-owner-role ... --pm-title ... --pm-source-ref ...`：在创建 task worktree 的同时，切到目标 worktree 内原子完成 `new-task -> move-task committed -> workflow-report start`，避免 `.pm` task 误写回 source worktree。
 - `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done(deferred)` 之间同步迁移 task file、task registry 与 owner backlog 条目。
 - `./scripts/pm/task-closeout.sh`：默认 close-phase helper；在 task 已 start 且 execution log 已回写后，统一执行 `workflow-report close -> move-task done|deferred -> pm lint`，再进入 commit / `prepare-task-pr.sh`。
+- `./scripts/pm/claim-ready.sh`：在宣称“完成 / 测试通过 / 可提 PR / 可合并”前，立即执行 fresh verification command；只有本次运行成功，才允许输出 claim-ready 结论。
 - `./scripts/pm/task-execution-log-lint.sh`：校验 task execution log 的路径、标题格式、角色名和条目完整性。
 - `./scripts/pm/promote-memory.sh`：从 signal 提升 active memory，或显式将噪声 signal 标记为 rejected / deferred。
 - `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
@@ -65,6 +66,7 @@
 工作流接入基础用法：
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
 - 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID>`；若需要手工拆步，再执行 `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`
+- fresh verification claim：`./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "<fresh verification command>"`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
 - GitHub PR preflight / 默认评审边界：`./scripts/prepare-task-pr.sh`
 - 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`

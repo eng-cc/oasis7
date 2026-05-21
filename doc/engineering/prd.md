@@ -70,6 +70,7 @@
   - SC-30: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须是 git-ignored 的本地生成视图，不再作为 Git 提交真值；engineering 根 `project.md` 不再承担手工 `最新完成` 长列表热点，新任务在 `project.md` 中默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，而不是新增 `TASK-XXX-123` 这类顺序编号；每个新任务项还必须固定提供 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）以追溯 canonical runtime task。
   - SC-31: 根 `AGENTS.md`、`.agents/roles/*.md` 与 `.agents/roles/templates/*.md` 必须对 `.pm` task 创建顺序、task execution log canonical 路径和“一个 task 收口后再开下一 task”的语义维持单一口径；当前态检查项不得再要求回写 `doc/devlog/YYYY-MM-DD.md`。
   - SC-32: 既有 `project.md` 中已经存在的顺序任务编号可作为历史追踪保留，不要求批量迁移；但新增任务项不得再把顺序编号当默认格式回流到正式项目页。
+  - SC-33: 外部 agent workflow/methodology 借鉴必须先在 `engineering/self-evolution` 专题中冻结 adopted / rejected / deferred 边界，并把 adopted 项转译为 repo-owned helper/eval/module follow-up；不得直接把外部 bootstrap、universal brainstorming/subagent/TDD 规则写成 oasis7 当前默认流程。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -107,6 +108,8 @@
   - PRD-ENGINEERING-028: As a 项目经理/P2P owner, I want a canonical `doc/p2p/node/` path entrypoint, so that I can navigate the densest `p2p` hotspot path by intent instead of scanning nearly 70 files blindly.
   - PRD-ENGINEERING-029: As a 项目经理/Testing owner, I want a canonical `doc/testing/evidence/` path entrypoint, so that I can navigate the densest testing hotspot path by intent instead of scanning nearly 50 evidence files blindly.
   - PRD-ENGINEERING-030: As a 项目经理/README owner, I want a canonical `doc/readme/governance/` path entrypoint, so that I can navigate the densest readme hotspot path by intent instead of scanning nearly 100 governance docs blindly.
+  - PRD-ENGINEERING-031: As a `producer_system_designer`, I want external agent workflow patterns benchmarked against oasis7's repo-native execution chain, so that we only adopt the parts that strengthen evidence, workflow verification, or UI ideation without replacing `.pm`, owner roles, or GitHub PR review.
+  - PRD-ENGINEERING-032: As a repo workflow owner, I want the current local skill inventory frozen into keep/replace/retire/defer buckets, so that role cards and engineering docs no longer recommend low-value or workflow-conflicting skill surfaces.
 - Critical User Flows:
   1. Flow-ENG-001: `提交前执行必要测试/门禁 -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> 进入 required checks + review/approval`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
@@ -122,6 +125,7 @@
   12. Flow-ENG-012: `模块文档体量超过可读阈值 -> 先区分活跃真值 / 审计留痕 / 历史归档 / 兼容跳转 -> 收紧 README / prd.index / 根入口默认暴露面 -> 再按优先级拆后续减重任务`
   13. Flow-ENG-013: `入口减重已完成但文档总量/热点路径/历史 backlog 继续增长 -> 运行 scripts/doc-inventory-report.sh -> 判断属于历史压缩/路径级治理/近限文件拆分中的哪一类 -> 再切独立 worktree 建 follow-up task`
   14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap；若 canonical `main` worktree 根存在本地 `config.toml`，则同步复制到新 task worktree，避免 active-LLM / harness 复现因缺配置偏离 `main`）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> `task-closeout.sh`（或等价的 `workflow-report close -> move-task --to-status done|deferred -> pm lint` 手工链）-> commit -> prepare-task-pr -> 若 PR 收到 review comments，则用 `pr-review-thread-closeout.sh` 盘点/resolve thread 并重新检查 PR state -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
+  15. Flow-ENG-015: `评估外部 agent workflow repo/skill -> 将模式写入 adopted/rejected/deferred 矩阵 -> 只有 adopted 项才允许转成 repo-owned follow-up（helper/eval/optional module technique）-> 对 rejected/deferred 项显式保持非默认边界`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -143,6 +147,7 @@
 | 角色名白名单校验 | 角色名、来源文件、白名单来源 | 校验 task execution log / handoff 中角色名是否存在于 `.agents/roles/*.md` | `pass/fail` | 以角色文件名去后缀为唯一 canonical name | 治理维护者维护角色清单，提交者必须修复别名 |
 | 文件化项目管理层 | 角色 registry、role memory/backlog、signal inbox、task registry、stage/gate 文件、task workflow evidence | 在仓库内维护 `.pm/` 运行态对象，并通过脚本做 scaffold/lint/report/promote/set-stage | `planned -> scaffolded -> adopted -> audited` | 默认按 `role_name`、`priority`、`updated_at` 排序；高严重度 signal 优先提升 | 治理维护者维护结构，owner role 维护自身 memory/backlog，producer 维护正式阶段结论 |
 | `.pm` task canonical identity | `task_uid`、`task_path`、`execution_log_path`、`working_memory_path`、`updated_at` | 创建 task 时直接生成不依赖中心序号的 `task_uid`；所有脚本按 `task_uid` 读写 canonical 对象，并在需要时重建 registry/backlog 视图 | `created -> tracked -> migrated -> closed` | `task_uid` 只负责稳定身份；排序依旧按 `priority`、`updated_at`、`owner_role`，不再依赖顺序号 | owner role 与治理维护者可创建/迁移；任何脚本不得要求中心分配 `TASK-PM-xxxx` 才能写 task |
+| 外部 agent workflow 借鉴矩阵 | `source_name`、`pattern`、`decision`、`rationale`、`target_object`、`followup_ref` | 先在 `self-evolution` 专题中冻结 adopted / rejected / deferred，再决定是否拆 repo-owned helper/eval/module follow-up | `proposed -> adopted/rejected/deferred -> superseded` | adopted 项必须映射 repo-owned follow-up；rejected/deferred 不得回流 root 默认流程 | `producer_system_designer` 冻结结论；相关 owner 联审 |
 - Acceptance Criteria:
   - AC-1: engineering PRD 明确文件约束、脚本约束、测试分层约束。
   - AC-2: engineering project 文档维护任务拆解与状态。
@@ -184,6 +189,7 @@
   - AC-29: 根 `AGENTS.md`、角色职责卡与 handoff 模板必须显式要求“先创建/绑定 `.pm` task，再执行 `workflow-report --phase start`”，并明确一个 task 收口后若继续 `project.md` 下一个任务，默认重新开独立 `worktree` 与 `.pm` task；任何当前态 checklist 不得再把 `doc/devlog/*.md` 当必写项。
   - AC-29A: `scripts/new-task-worktree.sh` 必须提供可选的 task-worktree 原子 bootstrap 入口；当传入 owner role / title / source refs 时，task file、execution log 与 `last_started_at` 只允许写入目标 worktree，不得污染 source worktree；若 canonical `main` worktree 根存在本地 `config.toml`，新建 task worktree 时也必须同步复制该文件，但保持其 git-ignored 本地配置属性不变。
   - AC-30: 自本规则生效后，模块 `project.md` 新增任务项必须默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，并固定包含 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）字段追溯运行态对象；推荐单行模板为 `- [ ] topic-slug (PRD-XXX) [test_tier_required|full]: <summary>. Trace: .pm/tasks/task_<32hex>.yaml`。已存在的 `TASK-*` 顺序编号条目可保留为历史记录，但不作为新增任务格式继续扩散。
+  - AC-31: 外部 agent workflow/methodology 借鉴必须在 `engineering/self-evolution` 专题中形成 adopted / rejected / deferred 矩阵，并至少对 adopted 项给出 repo-owned follow-up 或模块参考边界；外部 bootstrap、universal brainstorming/subagent/TDD 规则不得未经专题裁决直接写成当前 root workflow 口径。
 - Non-Goals:
   - 不定义 gameplay/p2p/runtime 业务规则。
   - 不替代模块内部测试策略。
@@ -212,6 +218,9 @@
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
   - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
   - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
   - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md`
@@ -329,6 +338,7 @@
 | PRD-ENGINEERING-028 | `p2p-node-path-governance` | `test_tier_required` | `p2p-node-path-governance` 专题三件套、`doc/p2p/node/README.md` 首读分流、`doc/p2p/README.md` / `doc/p2p/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `p2p/node` 热点子域入口、`PRD-ENGINEERING-025` 第三条 follow-up 收口与后续 `testing` 路径级治理 |
 | PRD-ENGINEERING-029 | `testing-evidence-path-governance` | `test_tier_required` | `testing-evidence-path-governance` 专题三件套、`doc/testing/evidence/README.md` 首读分流、`doc/testing/README.md` / `doc/testing/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `testing/evidence` 热点子域入口、`PRD-ENGINEERING-025` 第四条 follow-up 收口与后续季度复核 |
 | PRD-ENGINEERING-030 | `readme-governance-path-governance` | `test_tier_required` | `readme-governance-path-governance` 专题三件套、`doc/readme/governance/README.md` 首读分流、`doc/readme/README.md` / `doc/readme/prd.index.md` / `doc/readme/project.md` / engineering 根入口回写、`doc-governance-check` 通过 | `readme/governance` 热点子域入口、`PRD-ENGINEERING-025` 第五条 follow-up 收口与后续季度复核 |
+| PRD-ENGINEERING-032 | `skill-replacement-rationalization` | `test_tier_required` | skill rationalization 专题三件套、低耦合 skill 删除、角色卡/活跃文档引用清理、`doc-governance-check`、`pm-lint` 与 `git diff --check` 通过 | `.agents/skills` 本地维护面、角色卡推荐 skill 真实性与 engineering/self-evolution 治理边界 |
 
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

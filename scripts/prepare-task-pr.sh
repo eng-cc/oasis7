@@ -11,8 +11,9 @@ Usage: ./scripts/prepare-task-pr.sh [source-branch] [options]
 
 Validate one task branch for GitHub PR closure, print the exact PR command, and
 optionally push the branch plus open the PR through `gh`. The preflight summary
-also reports a local required-gate validation recommendation plus planner
-reason summary derived from the current changed-path scope.
+also reports a local required-gate validation recommendation, a claim-ready
+helper command for fresh PR-readiness verification, plus planner reason summary
+derived from the current changed-path scope.
 
 Default conventions:
 - source branch: current branch
@@ -283,6 +284,7 @@ LOCAL_REQUIRED_CHANGED_PATH_COUNT=0
 LOCAL_REQUIRED_CHANGED_PATHS=""
 LOCAL_REQUIRED_REASON_SUMMARY=""
 LOCAL_REQUIRED_COMMAND=""
+CLAIM_READY_COMMAND=""
 LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
 if [[ -x "./scripts/plan-rust-required-scope.sh" ]]; then
@@ -304,6 +306,7 @@ OASIS7_CI_RUN_VIEWER_WASM_CHECK=${RUST_SCOPE_PLAN[run_viewer_wasm_check]:-false}
 OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=${RUST_SCOPE_PLAN[run_launcher_web_build]:-false} \
 ./scripts/ci-tests.sh required"
     fi
+    CLAIM_READY_COMMAND="$(render_cmd "./scripts/pm/claim-ready.sh" "--claim-type" "ready_for_pr" "--verify-command" "$LOCAL_REQUIRED_COMMAND")"
   fi
 fi
 
@@ -366,7 +369,7 @@ if [[ "$CREATE_PR" == "1" ]]; then
 fi
 
 SUMMARY_JSON="$(
-python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$REQUEST_REVIEW_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$(printf '%s;' "${LOCAL_REQUIRED_EXTRA_COMMANDS[@]:-}")" <<'PY'
+python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$REQUEST_REVIEW_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$(printf '%s;' "${LOCAL_REQUIRED_EXTRA_COMMANDS[@]:-}")" <<'PY'
 from __future__ import annotations
 
 import json
@@ -374,7 +377,7 @@ import sys
 
 changed_paths = [path for path in sys.argv[22].split(";") if path]
 reason_items = [reason for reason in sys.argv[23].split(";") if reason]
-extra_commands = [cmd for cmd in sys.argv[25].split(";") if cmd]
+extra_commands = [cmd for cmd in sys.argv[26].split(";") if cmd]
 
 payload = {
     "source_branch": sys.argv[1],
@@ -402,6 +405,7 @@ payload = {
         "reason_summary": sys.argv[23] or None,
         "reason_items": reason_items,
         "recommended_required_command": sys.argv[24] or None,
+        "recommended_claim_ready_command": sys.argv[25] or None,
         "recommended_extra_commands": extra_commands,
     },
 }
@@ -449,6 +453,9 @@ if [[ -n "$LOCAL_REQUIRED_REASON_SUMMARY" ]]; then
 fi
 if [[ -n "$LOCAL_REQUIRED_COMMAND" ]]; then
   echo "- recommended required command: $LOCAL_REQUIRED_COMMAND"
+fi
+if [[ -n "$CLAIM_READY_COMMAND" ]]; then
+  echo "- recommended claim-ready command: $CLAIM_READY_COMMAND"
 fi
 if [[ "${#LOCAL_REQUIRED_EXTRA_COMMANDS[@]}" -gt 0 ]]; then
   for extra_cmd in "${LOCAL_REQUIRED_EXTRA_COMMANDS[@]}"; do

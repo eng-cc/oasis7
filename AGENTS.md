@@ -30,13 +30,19 @@
 4. 先更新 `prd.md`，再拆 `project.md`
    1. 需求、行为、边界变化时必须先更新 `prd.md`
    2. `project.md` 必须写清 PRD-ID、任务、依赖、状态和测试层级；新增任务项默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，不再新增 `TASK-XXX-123` 这类顺序编号作为项目页默认写法，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）指向运行态 task；推荐模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`。项目页标识只用于人类规划与检索，`.pm` `task_uid` 仍是唯一真值
-   3. handoff 只用于协作，不替代 PRD / project 正式追踪
+   3. 非 trivial 的 `project.md` 规划必须增加 `File Structure / Affected Paths` 段，至少列出预计改动路径、只读依赖路径、验证入口和需要回写的正式文档路径，避免执行时再临时猜测影响面
+   4. 复杂任务或跨角色 handoff 必须把实现拆成原子步骤；每一步至少写清动作、验证命令、预期结果。优先复用 `./.agents/roles/templates/handoff-brief.md`、`./.agents/roles/templates/handoff-detailed.md`
+   5. 进入实施前先做轻量 planning 自检，至少确认三件事：没有残留 `TBD/TODO/placeholder/待补` 等占位词；每条需求或验收点都有对应任务项/验证方法；PRD-ID、task slug、关键路径和文档内命名保持一致。可直接复用 `./.agents/roles/templates/planning-self-checklist.md`
+   6. handoff 只用于协作，不替代 PRD / project 正式追踪
 
 5. 按任务闭环执行代码、文档、测试
    1. 所有代码和功能（含 UI）都必须可测试
    2. 测试统一分 `test_tier_required` / `test_tier_full`
    3. 套件矩阵统一参考 `testing-manual.md`
-   4. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还要评估是否需要 `liveops_community` 回流
+   4. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
+   5. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
+   6. 若步骤说明不清、真实影响面超出当前计划，或同一验证连续失败且没有新信息，不得继续猜测实现；必须先报告 blocker，并明确需要补哪一条文档/决策/输入
+   7. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还要评估是否需要 `liveops_community` 回流
 
 6. 角色协作规则
    1. `producer_system_designer` 管目标、规则、资源与玩法口径

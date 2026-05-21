@@ -42,7 +42,7 @@
 
 ## Recommended Skills
 - 主技能：`prd`、`game-architect`，用于定义 Why/What/Done、拆清规则边界与验收口径。
-- 常复用技能：`game-changing-features`、`game-design-theory`、`documentation-writer`，用于做版本取舍、玩法判断与文档表达收口。
+- 常复用技能：`game-design-theory`、`humanizer-zh`、`writing-repo-owned-skills`，用于做玩法判断、文档压缩、中文口径收口，以及新增/改写本地 skill surface 时保持 repo truth。
 - 使用约定：角色决定 owner，技能决定方法；可借用其他技能提升产出，但不得替代本职责卡中的 owner 边界与完成定义。
 
 ## Checklist
