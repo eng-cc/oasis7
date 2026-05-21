@@ -1,0 +1,22 @@
+task_uid: task_0a012bf9b85b417bb56d591969a07d36
+title: "stabilize viewer live integration full-tier regression"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-viewer-live-integration-flake-burn-down
+execution_log_path: .pm/tasks/task_0a012bf9b85b417bb56d591969a07d36.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - scripts/ci-tests.sh
+  - crates/oasis7/tests/viewer_live_integration.rs
+  - doc/world-runtime/project.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_RUNTIME-001
+acceptance:
+  - "viewer_live_integration full-tier path runs without skip plus retry special case"
+  - "runtime docs and project trace the regression closure"
+handoff_to: []
+updated_at: 2026-05-21T20:29:06+08:00
+last_started_at: 2026-05-21T11:06:27+08:00
+last_closed_at: 2026-05-21T20:29:06+08:00

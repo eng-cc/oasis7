@@ -90,10 +90,7 @@ run_oasis7_required_tier_tests() {
 }
 
 run_oasis7_full_tier_tests() {
-  run_cargo test -p oasis7 --tests --features "test_tier_full,wasmtime,viewer_live_integration" -- --skip live_server_accepts_client_and_emits_snapshot_and_event
-  run_with_retries 3 \
-    run_cargo test -p oasis7 --features "test_tier_full,wasmtime,viewer_live_integration" \
-      --test viewer_live_integration live_server_accepts_client_and_emits_snapshot_and_event -- --nocapture
+  run_cargo test -p oasis7 --tests --features "test_tier_full,wasmtime,viewer_live_integration"
 }
 
 run_oasis7_consensus_tests() {
