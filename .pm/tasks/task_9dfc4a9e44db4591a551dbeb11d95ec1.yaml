@@ -1,0 +1,24 @@
+task_uid: task_9dfc4a9e44db4591a551dbeb11d95ec1
+title: "superpowers conflict skill table refresh"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-superpowers-conflict-skill-table-refresh
+execution_log_path: .pm/tasks/task_9dfc4a9e44db4591a551dbeb11d95ec1.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+doc_refs:
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-031
+acceptance:
+  - "skill-by-skill conflict table reflects already absorbed planning/execution/skill-authoring surfaces"
+  - "table keeps remaining deferred and reopen conditions aligned with current borrowing governance"
+handoff_to: []
+updated_at: 2026-05-21T20:39:05+08:00
+last_started_at: 2026-05-21T20:22:52+08:00
+last_closed_at: 2026-05-21T20:39:05+08:00

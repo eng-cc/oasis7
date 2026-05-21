@@ -135,16 +135,22 @@
 
 ## 4. Skill-by-skill 冲突与互借表
 
+说明：
+
+- `当前状态` 跟随 upstream skill 整体裁决，不因为局部 salvage 已落地就改成 `adopted`
+- `可借鉴部分` 优先写已经收口到 repo-owned surface 的内容，再补 still-open 的 bounded borrowing
+- `重开条件` 只描述 remaining deferred / rejected 部分何时允许继续推进
+
 | skill | 当前状态 | 直接冲突 | 可借鉴部分 | 重开条件 |
 | --- | --- | --- | --- | --- |
 | `brainstorming` | rejected | 把设计前置变成 universal gate | visual companion、IA/wireframe 对比 | 仅在 Viewer 等 UI-heavy 专题内按需启用 |
 | `subagent-driven-development` | rejected | 默认 fresh subagent-per-task + local review ritual | 任务拆分、上下文最小化 | 需先有 repo-owned multi-agent behavior eval |
 | `test-driven-development` | rejected | universal TDD 与 `test_tier_required/full` 不匹配 | 行为先验、失败先行思维 | 仅在特定实现域作为按需 skill，而非 root 默认规则 |
-| `writing-plans` | rejected | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 已限域翻译为 `project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板和 planning self-checklist | 只能继续作为 repo-owned planning surface，不得替代现有文档链 |
+| `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 已完成 bounded borrowing：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板和 planning self-checklist | 剩余 skill 本体只有在不再竞争正式计划真值时，才允许继续局部 salvage；不得回退为默认前置计划系统 |
 | `using-superpowers` | rejected | 外部 bootstrap 与当前 root workflow 真值冲突 | 触发说明、skill 发现习惯 | 必须先转成 repo-owned trigger governance，再评估 |
 | `dispatching-parallel-agents` | deferred | 若默认启用会冲击显式 `spawn_agent` 边界 | parallel task decomposition | 需先证明多 agent 仍遵守 worktree/task/review 边界 |
-| `executing-plans` | deferred | 若整包引入，仍会和正式 project/task 执行链重复 | 已限域借鉴为 `.agents/skills/executing-project-tasks`、execution gap review、逐步验证、明确 blocker handling | upstream 的单独执行会话包装与默认收尾假设继续保持 deferred，不得升级为第二套计划真值 |
-| `writing-skills` | deferred | 分发/作者规范容易先于治理真值 | 已限域翻译为 `.agents/skills/README.md`、`writing-repo-owned-skills`、template、checklist 与 trigger-entry 说明 | 仅继续保留 authoring surface；upstream TDD/subagent gate 与分发部署部分仍 deferred |
+| `executing-plans` | deferred（整体 skill） | 若整包引入，仍会和正式 project/task 执行链重复 | 已完成 bounded borrowing：`.agents/skills/executing-project-tasks`、execution gap review、逐步验证、明确 blocker handling | 剩余 upstream 单独执行会话包装与默认收尾假设继续保持 deferred，不得升级为第二套计划真值 |
+| `writing-skills` | deferred（整体 skill） | 分发/作者规范容易先于治理真值 | 已完成 bounded borrowing：`.agents/skills/README.md`、`writing-repo-owned-skills`、template、checklist 与 trigger-entry 说明 | 剩余 upstream TDD/subagent gate 与分发部署部分仍 deferred；只有在本地 skill / helper / eval 真值稳定后才允许重开 |
 
 ## 5. 后续互借的优先级
 
