@@ -119,7 +119,7 @@ MVP 最小 smoke：
 
 当前已实测通过的 MVP 证据：
 1. 2026-05-20 已在 ECS 上验证 `https://oasis7.cn-huhehaote.vpc.tablestore.aliyuncs.com` 可达。
-2. 同一邮箱 `cc@ncuhome.tech` 在 launcher 重启前后两次登录，返回同一个 `hosted_account_id=oasis-account-00000001` 与 `player_id=hosted-player-account-00000001`。
+2. 同一测试邮箱在 launcher 重启前后两次登录，返回同一个 `hosted_account_id=oasis-account-00000001` 与 `player_id=hosted-player-account-00000001`。
 
 常见失败签名：
 1. `OTSAuthFailed: Request denied by instance ACL policies`
