@@ -29,7 +29,7 @@ const HOSTED_ACCOUNT_TABLESTORE_AUTO_CREATE_ENV: &str =
     "OASIS7_HOSTED_ACCOUNT_TABLESTORE_AUTO_CREATE";
 const ALIYUN_OTS_ENDPOINT_ENV: &str = "ALIYUN_OTS_ENDPOINT";
 const ALIYUN_OTS_AK_ID_ENV: &str = "ALIYUN_OTS_AK_ID";
-const ALIYUN_OTS_AK_SECRET_ENV: &str = "ALIYUN_OTS_AK_SEC";
+const ALIYUN_OTS_AK_SECRET_ENV: &str = "ALIYUN_OTS_AK_SECRET";
 const ALIYUN_OTS_STS_TOKEN_ENV: &str = "ALIYUN_OTS_STS_TOKEN";
 const HOSTED_ACCOUNT_TABLESTORE_DEFAULT_TABLE: &str = "oasis7_hosted_account_identity";
 const HOSTED_ACCOUNT_TABLESTORE_FACTOR_BUCKET: &str = "factor";
@@ -222,6 +222,7 @@ impl FileHostedAccountStoreBackend {
                 build_hosted_account_id(self.store.next_account_sequence)
             });
         let record = if let Some(record) = self.store.accounts_by_id.get_mut(account_id.as_str()) {
+            record.masked_login_hint = masked_login_hint.to_string();
             record.last_verified_at_unix_ms = verified_at_unix_ms;
             record.status = "active".to_string();
             record.clone()
@@ -301,24 +302,28 @@ impl HostedAccountTablestoreBackend {
             .max_versions(1)
             .allow_update(true);
         let client = self.client.clone();
-        match self.run_ots("create hosted account tablestore table", async move {
-            client.create_table(request).send().await
-        }) {
+        match self.run_ots_raw(async move { client.create_table(request).send().await }) {
             Ok(_) => Ok(()),
-            Err(err) if err.contains("AlreadyExist") || err.contains("already exist") => Ok(()),
-            Err(err) => Err(err),
+            Err(err) if ots_error_code_contains(&err, "AlreadyExist") => Ok(()),
+            Err(err) => Err(format_ots_error(
+                "create hosted account tablestore table",
+                err,
+            )),
         }
     }
 
     fn table_exists(&mut self) -> Result<bool, String> {
         let client = self.client.clone();
         let table_name = self.table_name.clone();
-        match self.run_ots("describe hosted account tablestore table", async move {
-            client.describe_table(table_name.as_str()).send().await
-        }) {
+        match self
+            .run_ots_raw(async move { client.describe_table(table_name.as_str()).send().await })
+        {
             Ok(_) => Ok(true),
-            Err(err) if is_tablestore_missing_table_error(err.as_str()) => Ok(false),
-            Err(err) => Err(err),
+            Err(err) if is_tablestore_missing_table_error(&err) => Ok(false),
+            Err(err) => Err(format_ots_error(
+                "describe hosted account tablestore table",
+                err,
+            )),
         }
     }
 
@@ -413,12 +418,10 @@ impl HostedAccountTablestoreBackend {
             .row(row)
             .row_condition(RowExistenceExpectation::ExpectNotExist);
         let client = self.client.clone();
-        match self.run_ots("create hosted account factor row", async move {
-            client.put_row(request).send().await
-        }) {
+        match self.run_ots_raw(async move { client.put_row(request).send().await }) {
             Ok(_) => Ok(true),
-            Err(err) if err.contains("OTSConditionCheckFail") => Ok(false),
-            Err(err) => Err(err),
+            Err(err) if ots_error_code_contains(&err, "OTSConditionCheckFail") => Ok(false),
+            Err(err) => Err(format_ots_error("create hosted account factor row", err)),
         }
     }
 
@@ -463,9 +466,15 @@ impl HostedAccountTablestoreBackend {
     where
         Fut: Future<Output = Result<T, OtsError>>,
     {
-        self.runtime
-            .block_on(future)
-            .map_err(|err| format!("{context} failed: {err}"))
+        self.run_ots_raw(future)
+            .map_err(|err| format_ots_error(context, err))
+    }
+
+    fn run_ots_raw<T, Fut>(&mut self, future: Fut) -> Result<T, OtsError>
+    where
+        Fut: Future<Output = Result<T, OtsError>>,
+    {
+        self.runtime.block_on(future)
     }
 }
 
@@ -745,12 +754,21 @@ fn parse_tablestore_instance_and_region(endpoint: &str) -> Result<(String, Strin
     Ok((instance_name.to_string(), region.to_string()))
 }
 
-fn is_tablestore_missing_table_error(error: &str) -> bool {
-    error.contains("OTSObjectNotExist")
-        || error.contains("ObjectNotExist")
-        || error.contains("TableNotExist")
-        || error.contains("table not exist")
-        || error.contains("does not exist")
+fn format_ots_error(context: &str, err: OtsError) -> String {
+    format!("{context} failed: {err}")
+}
+
+fn ots_error_code_contains(err: &OtsError, needle: &str) -> bool {
+    match err {
+        OtsError::ApiError(api_error) => api_error.code.contains(needle),
+        _ => false,
+    }
+}
+
+fn is_tablestore_missing_table_error(err: &OtsError) -> bool {
+    ots_error_code_contains(err, "OTSObjectNotExist")
+        || ots_error_code_contains(err, "ObjectNotExist")
+        || ots_error_code_contains(err, "TableNotExist")
 }
 
 fn has_tablestore_lookup<F>(lookup: &mut F) -> bool
@@ -764,6 +782,12 @@ where
             ALIYUN_OTS_ENDPOINT_ENV,
             HOSTED_ACCOUNT_TABLESTORE_AK_ID_ENV,
             ALIYUN_OTS_AK_ID_ENV,
+            HOSTED_ACCOUNT_TABLESTORE_AK_SECRET_ENV,
+            ALIYUN_OTS_AK_SECRET_ENV,
+            HOSTED_ACCOUNT_TABLESTORE_STS_TOKEN_ENV,
+            ALIYUN_OTS_STS_TOKEN_ENV,
+            HOSTED_ACCOUNT_TABLESTORE_TABLE_ENV,
+            HOSTED_ACCOUNT_TABLESTORE_AUTO_CREATE_ENV,
         ],
     )
     .is_some()
@@ -850,6 +874,16 @@ mod tests {
     }
 
     #[test]
+    fn hosted_account_store_backend_mode_auto_detects_tablestore_from_secret_only() {
+        let mode = HostedAccountStoreBackendMode::from_lookup(|key| match key {
+            HOSTED_ACCOUNT_TABLESTORE_AK_SECRET_ENV => Some("secret-only".to_string()),
+            _ => None,
+        })
+        .expect("mode");
+        assert_eq!(mode, HostedAccountStoreBackendMode::Tablestore);
+    }
+
+    #[test]
     fn hosted_account_tablestore_config_uses_generic_env_fallbacks() {
         let config = HostedAccountTablestoreConfig::from_lookup(|key| match key {
             ALIYUN_OTS_ENDPOINT_ENV => {
@@ -920,15 +954,57 @@ mod tests {
 
     #[test]
     fn tablestore_missing_table_error_matches_api_code() {
-        assert!(is_tablestore_missing_table_error(
-            "describe hosted account tablestore table failed: API response error. code: OTSObjectNotExist, message: Requested table does not exist."
-        ));
+        assert!(is_tablestore_missing_table_error(&OtsError::ApiError(
+            Box::new(aliyun_tablestore_rs::protos::Error {
+                code: "OTSObjectNotExist".to_string(),
+                message: Some("Requested table does not exist.".to_string()),
+                access_denied_detail: None,
+            },)
+        )));
     }
 
     #[test]
     fn tablestore_missing_table_error_rejects_acl_failure() {
-        assert!(!is_tablestore_missing_table_error(
-            "describe hosted account tablestore table failed: API response error. code: OTSAuthFailed, message: Request denied by instance ACL policies."
+        assert!(!is_tablestore_missing_table_error(&OtsError::ApiError(
+            Box::new(aliyun_tablestore_rs::protos::Error {
+                code: "OTSAuthFailed".to_string(),
+                message: Some("Request denied by instance ACL policies.".to_string()),
+                access_denied_detail: None,
+            },)
+        )));
+    }
+
+    #[test]
+    fn file_backend_updates_masked_login_hint_on_reverify() {
+        let store_path = std::env::temp_dir().join(format!(
+            "oasis7-hosted-account-store-backend-test-{}-{}.json",
+            std::process::id(),
+            "masked-login-hint"
         ));
+        let _ = std::fs::remove_file(&store_path);
+        let mut backend =
+            HostedAccountStoreBackend::with_file_store_path(store_path.clone()).expect("backend");
+        let first = backend
+            .record_verified_login(
+                "email:test@example.test",
+                "email",
+                "test@example.test",
+                "te***@example.test",
+                1000,
+            )
+            .expect("first");
+        let second = backend
+            .record_verified_login(
+                "email:test@example.test",
+                "email",
+                "test@example.test",
+                "t***@example.test",
+                2000,
+            )
+            .expect("second");
+        assert_eq!(first.hosted_account_id, second.hosted_account_id);
+        assert_eq!(first.player_id, second.player_id);
+        assert_eq!(second.masked_login_hint, "t***@example.test");
+        let _ = std::fs::remove_file(store_path);
     }
 }
