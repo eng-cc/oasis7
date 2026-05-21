@@ -153,6 +153,7 @@
 - 结论-3: 当前代码已经完成两刀 hosted identity 基线：其一是 `device_session` 收口，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`；其二是中心化 hosted account 登录 server，`oasis7_game_launcher` 现已提供 email login challenge、稳定 `hosted_account_id -> player_id` 持久化和登录后换发 `device_session + player_session` 的 public route，viewer 也已改成 hosted account 登录表单。
 - 结论-4: 当前登录投递已具备真实邮件链路：server 现支持 `preview_inline`、`server_log_only` 与 `smtp` 三种 challenge delivery mode，其中 `smtp` 通过 `OASIS7_HOSTED_LOGIN_SMTP_*` 环境变量加载配置，默认可对接 Aliyun DirectMail `smtpdm.aliyun.com:465`；同时 OTP start 路径已补 resend cooldown、短窗/长窗配额与 `retry_after_seconds` 反馈，避免前端只能盲目重试。
 - 结论-5: 当前 hosted account registry 已支持 Aliyun Tablestore 托管存储；服务端通过 `HostedAccountStoreBackend` 在 `file` 与 `tablestore` 之间切换，默认 `auto` 模式下会在检测到 `OASIS7_HOSTED_ACCOUNT_TABLESTORE_*` 或 `ALIYUN_OTS_*` 后自动启用 Tablestore。
+- 结论-5A: 2026-05-20 已在 ECS 上完成一次真实 VPC Tablestore smoke：`https://oasis7.cn-huhehaote.vpc.tablestore.aliyuncs.com` 可从部署机直连，`AUTO_CREATE=true` 时首次启动允许由 `OTSObjectNotExist` 进入自动建表；同一邮箱在 launcher 重启前后两次登录均返回同一个 `hosted_account_id` / `player_id`，证明 hosted identity MVP 的“邮箱登录 + 服务端持久化恢复”主链路已经跑通。
 - 结论-6: 托管身份仅面向 player plane；node / validator / governance signer 继续沿用独立 custody/governance 专题。
 
 ## 依赖
@@ -176,5 +177,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 优先补 SMTP + Tablestore 组合链路的 staging/live smoke、恢复/冻结策略与运维 runbook；随后推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
-- 最近更新: 2026-05-19
+- 下一步: SMTP + Tablestore 组合链路的 live smoke 与 MVP runbook 已补齐；接下来优先补 recovery/freeze/revoke 的 hosted account 运维策略，再推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
+- 最近更新: 2026-05-20
