@@ -83,7 +83,7 @@
 
 未来何时可重开：
 
-- 仅当这些内容能被翻译成 repo-owned skill authoring / trigger governance，而不是继续引用外部 bootstrap 本身。
+- 当前 `writing-skills` 的 authoring / trigger surface 已经被翻译成 repo-owned 入口；若要重开这里的剩余部分，只能针对 upstream 仍未采纳的 bootstrap、分发部署或其他会竞争 root truth 的内容，而不是回退去重新依赖外部 bootstrap 本身。
 
 ### 3.3 默认 subagent 协作冲突
 
@@ -121,16 +121,17 @@
 
 与 oasis7 的冲突点：
 
-- 当前 repo-owned truth 还在持续收紧；若先做 bootstrap / packaging，很容易出现“看起来可用，但无法审计谁是正式规则”的反向漂移。
+- 当前 repo-owned truth 虽然已经补齐了 planning / execution / skill-authoring surface，但分发与部署边界仍未稳定；若先做 bootstrap / packaging，仍然容易出现“看起来可用，但无法审计谁是正式规则”的反向漂移。
 
 可 salvage 的部分：
 
 - skill 目录组织方式
 - authoring checklist
+- trigger wording / local-surface entrypoint 约束
 
 未来何时可重开：
 
-- 只有当 adopted skill / helper / eval 已经稳定，并且相应 owner 愿意维护 authoring / packaging 契约时。
+- `writing-skills` 的 authoring surface 已落到本地后，剩余可重开的只应是 packaging / distribution 类问题；且只有当 adopted skill / helper / eval 已经稳定，并且相应 owner 愿意维护 authoring / packaging 契约时，才应继续推进。
 
 ## 4. Skill-by-skill 冲突与互借表
 
@@ -143,23 +144,27 @@
 | `using-superpowers` | rejected | 外部 bootstrap 与当前 root workflow 真值冲突 | 触发说明、skill 发现习惯 | 必须先转成 repo-owned trigger governance，再评估 |
 | `dispatching-parallel-agents` | deferred | 若默认启用会冲击显式 `spawn_agent` 边界 | parallel task decomposition | 需先证明多 agent 仍遵守 worktree/task/review 边界 |
 | `executing-plans` | deferred | 若整包引入，仍会和正式 project/task 执行链重复 | 已限域借鉴为 `.agents/skills/executing-project-tasks`、execution gap review、逐步验证、明确 blocker handling | upstream 的单独执行会话包装与默认收尾假设继续保持 deferred，不得升级为第二套计划真值 |
-| `writing-skills` | deferred | 分发/作者规范容易先于治理真值 | 已限域翻译为本地 skill authoring skill、template、checklist 与入口说明 | 仅继续保留 authoring surface；upstream TDD/subagent gate 与分发部署部分仍 deferred |
+| `writing-skills` | deferred | 分发/作者规范容易先于治理真值 | 已限域翻译为 `.agents/skills/README.md`、`writing-repo-owned-skills`、template、checklist 与 trigger-entry 说明 | 仅继续保留 authoring surface；upstream TDD/subagent gate 与分发部署部分仍 deferred |
 
 ## 5. 后续互借的优先级
 
-如果后续真的要继续解决冲突、互相借鉴，推荐顺序不是从 `rejected` 开始，而是：
+如果后续真的要继续解决冲突、互相借鉴，推荐顺序不是从 `rejected` 开始，而是先把“还没吸收的剩余部分”和“已经完成 bounded borrowing 的部分”分开看：
 
-1. 先做 `deferred` 中最接近当前主链的可控部分
+1. 已完成 bounded borrowing、当前不需要再重开的部分
+   - `writing-plans` 的 planning surface
+   - `executing-plans` 的 execution surface
+   - `writing-skills` 的 authoring surface
+2. 先做 `deferred` 中仍未吸收、且最接近当前主链的可控部分
    - `dispatching-parallel-agents` 的 bounded decomposition 原则
-   - `executing-plans` 的“已有正式计划后的执行 discipline”，这部分现已收口成 `.agents/skills/executing-project-tasks`；剩余 session packaging 仍 deferred
-2. 再做 `rejected` 里最容易局部 salvage 的子模式
+   - `executing-plans` / `writing-skills` 剩余未吸收的 packaging、distribution 或 session-contract 部分，但前提仍是它们不形成第二套真值
+3. 再做 `rejected` 里最容易局部 salvage 的子模式
    - `brainstorming` 的 visual companion
    - `test-driven-development` 的 behavior-first 子集
-3. 最后才碰第二套真值风险最高的内容
+4. 最后才碰第二套真值风险最高的内容
    - `writing-plans`
    - `using-superpowers`
 
-原因很简单：前两类最多是“局部 technique 还没落成 repo-owned”，最后一类则直接碰 root workflow 真值。
+原因很简单：第一类已经有 repo-owned 落点，不应再被误写成“未来可能借”；第二、三类最多是“局部 technique 还没完全落成 repo-owned”；最后一类则直接碰 root workflow 真值。
 
 ## 6. 允许重开的判定标准
 
