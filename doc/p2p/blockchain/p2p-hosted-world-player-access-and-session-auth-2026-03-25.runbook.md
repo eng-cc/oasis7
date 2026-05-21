@@ -93,6 +93,42 @@
 2. 从公网玩家视角访问上述 operator 路径，应统一失败或返回 `operator_plane_only`，而不是进入控制台。
 3. 对外公告、群消息、文档里只出现玩家 join URL，不出现 operator 地址。
 
+## 5A. 邮箱登录 + Tablestore MVP 最小运行法
+当 `hosted_public_join` 已启用中心化 hosted account 邮箱登录时，operator 至少满足下面 7 条：
+
+1. `OASIS7_HOSTED_ACCOUNT_STORE_BACKEND` 推荐显式设为 `tablestore` 或 `auto`。
+2. `OASIS7_HOSTED_ACCOUNT_TABLESTORE_ENDPOINT` 必须指向当前机器真实可达的 endpoint。
+   - 若走 VPC，先确认 `https://<instance>.<region>.vpc.tablestore.aliyuncs.com:443` 能从部署机连通。
+   - 不能把“能解析 DNS”误当成“能访问实例”。
+3. 若未显式指定 `OASIS7_HOSTED_ACCOUNT_TABLESTORE_TABLE`，当前默认表名是 `oasis7_hosted_account_identity`。
+4. 首次启动若表还不存在，`OASIS7_HOSTED_ACCOUNT_TABLESTORE_AUTO_CREATE=true` 时允许先出现一次 `OTSObjectNotExist`，随后自动建表并继续启动。
+5. 面向真实玩家时，`OASIS7_HOSTED_LOGIN_DELIVERY_MODE` 应切到 `smtp`。
+   - `preview_inline` 只适合 smoke / staging，不适合公开玩家入口。
+6. SMTP 与 Tablestore 要分开看待：
+   - SMTP 负责把 OTP 送出去。
+   - Tablestore 负责把 `hosted_account_id -> player_id` 稳定落盘。
+7. 不要在对外公告里把这条链路称为 `production custody` 或“稳定大规模可用”。
+
+MVP 最小 smoke：
+1. 启动 `oasis7_game_launcher --deployment-mode hosted_public_join`。
+2. 对同一邮箱调用一次 `/api/public/hosted-account/login/start` 和 `/api/public/hosted-account/login/complete`。
+3. 记录返回的 `hosted_account_id` 与 `player_id`。
+4. 重启 launcher。
+5. 对同一邮箱再次完成一次登录。
+6. 两次若返回同一个 `hosted_account_id` 与 `player_id`，即可判定“邮箱登录 + 账户持久化”主链路成立。
+
+当前已实测通过的 MVP 证据：
+1. 2026-05-20 已在 ECS 上验证 `https://oasis7.cn-huhehaote.vpc.tablestore.aliyuncs.com` 可达。
+2. 同一邮箱 `cc@ncuhome.tech` 在 launcher 重启前后两次登录，返回同一个 `hosted_account_id=oasis-account-00000001` 与 `player_id=hosted-player-account-00000001`。
+
+常见失败签名：
+1. `OTSAuthFailed: Request denied by instance ACL policies`
+   - 说明实例 ACL / instance policy 仍未放通。
+2. 访问 `*.vpc.tablestore.aliyuncs.com:443` 出现 `TCP timeout`
+   - 说明部署机不在可达该 VPC endpoint 的网络里。
+3. `hosted account tablestore table <...> does not exist and auto create is disabled`
+   - 说明要么先建表，要么打开 `AUTO_CREATE`。
+
 ## 6. 如何判断自己分享错了
 下面任一条成立，都按“误分享 operator URL / operator 面暴露”处理：
 
@@ -154,6 +190,7 @@
 - 当前 `main_token_transfer` 仍不能通过 hosted public join 放行。
 - 当前 hosted `prompt_control` 只是 preview-grade backend reauth，不是 production custody。
 - 当前 operator 仍以 loopback private control plane 为主；即使走远程 tunnel，也只能把受控 operator 面留在私网或人工链路内。
+- 当前邮箱登录 + Tablestore 只证明了 hosted identity MVP 主链路已通，不等于 SMTP、并发、freeze/recovery、监控告警和大规模运维都已完成。
 
 ## 11. 当前推荐执行法
 - 小范围分享时：

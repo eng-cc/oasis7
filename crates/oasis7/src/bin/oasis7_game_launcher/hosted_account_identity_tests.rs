@@ -71,7 +71,7 @@ fn hosted_account_login_complete_reuses_stable_player_id() {
     assert_ne!(first_grant.release_token, second_grant.release_token);
 
     let reloaded = HostedAccountIdentityBroker::with_store_path(path).expect("reloaded broker");
-    assert_eq!(reloaded.store.accounts_by_id.len(), 1);
+    assert_eq!(reloaded.persisted_account_count(), 1);
 }
 
 #[test]
