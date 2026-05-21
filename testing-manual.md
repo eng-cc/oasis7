@@ -990,9 +990,10 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - 只有 manifest、没有 lane evidence 时，`specified_skeleton_only` 仍只代表 skeleton，不代表可部署。
   - 要进入 live candidate 评审，至少要补齐 `shared_devnet_pass/public_rpc_ready/explorer_public_ready/faucet_guard_ready/reset_policy_announced/runtime_bootstrap/claims_boundary_review` 七条 lane。
   - 其中 `shared_devnet_pass` 只指 formal `shared_devnet` overall gate `pass`：`./scripts/shared-network-track-gate.sh --track shared_devnet` 的 required lanes 必须全部 `pass`；局部 lane 已有进展但整体仍为 `partial` 时，不得把这条 lane 记为满足。
-  - 按仓库当前已冻结 evidence，`shared_devnet` 最近固定结论仍是 `gate_result=partial`、`promotion_recommendation=hold_promotion`，因此 `shared_devnet_pass` 目前仍未满足，`public_testnet` 仍停留在 `specified_skeleton_only` 边界。
+  - 按仓库当前已冻结 evidence，`shared_devnet` 最近固定结论仍是 `gate_result=partial`、`promotion_recommendation=hold_promotion`，因此 `shared_devnet_pass` 目前仍未满足；即便 live `public_testnet` 已有 RPC/explorer/faucet/reset/claims evidence，aggregate readiness 仍应保持 `block`。
   - 示例 lane scaffold: `doc/testing/templates/public-testnet-readiness-lanes.example.tsv`
   - 示例 placeholder evidence: `doc/testing/evidence/public-testnet-skeleton-example.md`
+  - 当前 live lane evidence: `doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`、`doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md`、`doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md`、`doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv`
   - companion checklist/runbook: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
 - 当前边界：
   - `shared_devnet` 没有 public RPC/explorer/faucet/reset contract 时，不得叫 `public_testnet`

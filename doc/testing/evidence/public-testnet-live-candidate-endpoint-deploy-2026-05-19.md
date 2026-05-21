@@ -141,7 +141,12 @@
   - 依据:
     - 仍沿用既有 repo 证据状态，没有被这次部署替代
 
+## 2026-05-21 QA addendum
+1. `doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md` 已补 repo-owned `qa_engineer` claims verdict。
+2. 因此 `claims_boundary_review` 这条 lane 不再依赖 `#249` 的 reset announcement 单独代偿。
+3. 该补充不会改变本文件主结论：aggregate readiness 仍受 `shared_devnet_pass` 未满足约束。
+
 ## 结论
 1. 这次“进一步做部署”已经把两台阿里云上的 testnet 节点推进成了实际加载 formal `public_testnet` manifest 的 live runtime。
 2. 这次通过公网 `IP:port` 直接验证，已经把 `public_rpc_ready` 与 `explorer_public_ready` 推进成 `pass`，不依赖 testnet 专用域名。
-3. 当前仍然不能放行为 `ready_for_live_candidate`，因为 `faucet_guard_ready`、`claims_boundary_review`、`shared_devnet_pass` 还没有补齐，且 manifest 里的 `faucet_ref` 仍是 placeholder。
+3. 当前仍然不能放行为 `ready_for_live_candidate`，因为 `shared_devnet_pass` 还没有补齐；`faucet_guard_ready` 与 `claims_boundary_review` 已在后续 repo-owned evidence 中补齐，但 manifest 里的 `faucet_ref` 仍是 placeholder，aggregate readiness 仍保持 `block`。

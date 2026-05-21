@@ -1,0 +1,24 @@
+task_uid: task_e74e62daf53a45d0bc24ac2d520bb1b3
+title: "public testnet claims boundary review"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review
+execution_log_path: .pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md
+  - doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md
+  - doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md
+doc_refs:
+  - doc/p2p/project.md
+  - testing-manual.md
+related_prd:
+  - PRD-P2P-028
+acceptance:
+  - "Produce repo-owned QA claims boundary review evidence for live public_testnet endpoints and denylist boundaries"
+  - "Update readiness tracking so claims_boundary_review no longer depends on reset announcement alone"
+handoff_to: []
+updated_at: 2026-05-21T10:31:21+08:00
+last_started_at: 2026-05-21T10:13:35+08:00
+last_closed_at: 2026-05-21T10:31:20+08:00
