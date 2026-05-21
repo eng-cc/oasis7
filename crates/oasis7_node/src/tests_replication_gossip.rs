@@ -504,13 +504,28 @@ fn runtime_gossip_replication_syncs_distfs_commit_files() {
     let mut runtime_b = NodeRuntime::new(config_b);
     runtime_a.start().expect("start a");
     runtime_b.start().expect("start b");
-    thread::sleep(Duration::from_millis(220));
+
+    let store_b = LocalCasStore::new(dir_b.join("store"));
+    let replicated = wait_until(Instant::now() + Duration::from_secs(3), || {
+        store_b
+            .list_files()
+            .map(|files| {
+                files
+                    .iter()
+                    .any(|item| item.path.starts_with("consensus/commits/"))
+                    && dir_b.join("replication_guard.json").exists()
+            })
+            .unwrap_or(false)
+    });
+    let files = store_b.list_files().expect("list files");
 
     runtime_a.stop().expect("stop a");
     runtime_b.stop().expect("stop b");
 
-    let store_b = LocalCasStore::new(dir_b.join("store"));
-    let files = store_b.list_files().expect("list files");
+    assert!(
+        replicated,
+        "expected gossip replication to apply commit files and guard, got files={files:?}"
+    );
     assert!(files
         .iter()
         .any(|item| item.path.starts_with("consensus/commits/")));
@@ -562,13 +577,27 @@ fn runtime_network_replication_syncs_distfs_commit_files() {
         .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
     runtime_a.start().expect("start a");
     runtime_b.start().expect("start b");
-    thread::sleep(Duration::from_millis(220));
+
+    let store_b = LocalCasStore::new(dir_b.join("store"));
+    let replicated = wait_until(Instant::now() + Duration::from_secs(3), || {
+        store_b
+            .list_files()
+            .map(|files| {
+                files
+                    .iter()
+                    .any(|item| item.path.starts_with("consensus/commits/"))
+            })
+            .unwrap_or(false)
+    });
+    let files = store_b.list_files().expect("list files");
 
     runtime_a.stop().expect("stop a");
     runtime_b.stop().expect("stop b");
 
-    let store_b = LocalCasStore::new(dir_b.join("store"));
-    let files = store_b.list_files().expect("list files");
+    assert!(
+        replicated,
+        "expected network replication to apply commit files, got files={files:?}"
+    );
     assert!(files
         .iter()
         .any(|item| item.path.starts_with("consensus/commits/")));
