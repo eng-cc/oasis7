@@ -10,10 +10,12 @@
 - [x] formal-public-testnet-live-candidate-checklist (PRD-P2P-028) [test_tier_required]: 为当前 `specified_skeleton_only` 状态补一份 repo-owned companion runbook，冻结 `public_testnet` 从 skeleton 到 `ready_for_live_candidate` 的 seven-lane checklist、最小 evidence、canonical 命令、硬阻断条件与 claim boundary，避免“还差什么”只停留在聊天结论。 Trace: .pm/tasks/task_3f0ab6e26c034d42bedcecf38d066fb2.yaml
 - [x] formal-public-testnet-claims-boundary-review (PRD-P2P-028) [test_tier_required]: 补齐 repo-owned `qa_engineer` claims boundary review evidence，把 live `public_testnet` 的 allowed/denied claims、guarded faucet 边界与 aggregate readiness 不可越界口径固定成正式 QA verdict，并新增非 template lanes TSV 供后续 readiness review 复用。 Trace: .pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.yaml
 - [x] formal-public-testnet-ecs-evidence-harvest (PRD-P2P-028) [test_tier_required]: 把 current live candidate manifest / bundle / bootstrap peers 镜像成 repo-owned readiness 输入，并执行一轮 same-window ECS + local freshness audit；若 public endpoint 仍可达但 runtime/config 已漂移，则必须把对应 public lanes 收紧回 `partial/block`，不延续旧 `pass`。 Trace: .pm/tasks/task_49d6af52e31d404eb80999993eb71b98.yaml
+- [x] formal-public-testnet-local-observer-contract-sync (PRD-P2P-028) [test_tier_required]: 为 root-owned 本机 `oasis7-testnet-observer.service` 补 repo-owned local contract sync 脚本，要求从两台 ECS 的 live two-validator env 推导出本机 observer 应使用的 validator/signer/bootstrap/manifest 合同，并显式记录“当前会话无 `/opt` 写权限，因此只能先交付可执行同步路径，不能伪报 live apply 已完成”。 Trace: .pm/tasks/task_dfb4d70a28884617b1506fa6570b34fc.yaml
 
 ### 后续切片
 - `runtime_engineer` / TIER-2:
   - 已完成：把 `network_tier_manifest` 接到 runtime/network profile 选择、genesis/bootstrap/ref 校验与启动入口，并把 formal tier 暴露到 `/v1/chain/status` 与 launcher passthrough。
+  - 已完成 local sync path：新增 `scripts/p2p-public-testnet-local-observer-sync.sh`，可从 fresh ECS env 推导并安装本机 observer 所需的 two-validator contract、formal manifest 与 repo-owned `start-node.sh`。
 - `qa_engineer` + `liveops_community` / TIER-3:
   - 已完成 skeleton：建立 first `public_testnet` rehearsal / exit-review 模板，并补 `network-tier-exit-review.sh` 作为 formal gate 汇总入口。
   - 已完成 readiness gate：新增 `network-tier-public-testnet-readiness.sh`、lane scaffold 与 skeleton evidence placeholder，可把 `public_testnet` 从“只有 manifest skeleton”与“具备 live candidate lane evidence”区分开。
@@ -38,10 +40,12 @@
   - 已补 `public_testnet` live-candidate companion runbook，统一回答“当前还差哪些 lane / evidence / claims review 才能进入 live candidate”。
   - 已建立 live `public_testnet` 的 public RPC / explorer / guarded faucet / reset-policy / claims-boundary evidence，其中 `claims_boundary_review` 已有独立 `qa_engineer` verdict。
   - 已把 current live candidate manifest / bundle / bootstrap peers 镜像回 repo-owned evidence，可作为 readiness review 的单一运行输入。
+  - 已把 local observer remediation 收口成 repo-owned sync 脚本与 operator evidence，避免继续依赖 `/opt` 手改。
   - 已明确 `shared_devnet` 仍是 shared release-train，不等于 live public testnet；aggregate readiness 仍不能跳过 `shared_devnet_pass`。
 - 当前缺口:
   - `shared_devnet_pass` 仍未满足，因此 formal `public_testnet` 仍不能进入 `ready_for_live_candidate`。
   - 2026-05-22 freshness audit 证明当前 live runtime 已发生 config drift：本机 observer 未加载 formal manifest、仍保留三 validator/三 signer 合同，而 ECS manifest 已收口到两 validator；同窗 triad snapshot 因此落到 `partial_with_local_validator_blocker`。
+  - 当前会话无法直接写入 root-owned `/opt/oasis7/p2p-testnet-local/**`，因此 local observer 的 repo-side sync 路径虽已补齐，但 live apply / restart 仍待具备主机写权限的 operator 执行。
   - ECS sequencer 当前还存在 `execution driver missing predecessor record for non-contiguous committed height` 运行态错误，因此即使 public endpoint 仍可访问，也不能把 `runtime_bootstrap` 或相关 public lane 继续记为健康 `pass`。
   - `mainnet` 仍停留在 `MAINNET-1~4` readiness planning / partial execution 前阶段，仓库当前只有 formal manifest + gate skeleton。
 
@@ -91,7 +95,9 @@
 - `doc/testing/evidence/public-testnet-live-candidate-bootstrap-peers-2026-05-22.txt`
 - `doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
 - `doc/testing/evidence/public-testnet-ecs-freshness-audit-2026-05-22.md`
+- `doc/testing/evidence/public-testnet-local-observer-contract-sync-2026-05-22.md`
 - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
+- `scripts/p2p-public-testnet-local-observer-sync.sh`
 - `doc/p2p/prd.md`
 - `doc/p2p/project.md`
 - `doc/p2p/prd.index.md`
@@ -110,6 +116,9 @@
 - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`
 - `./scripts/network-tier-manifest.sh validate --manifest doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
 - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json --lanes-tsv doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
+- `bash -n scripts/p2p-public-testnet-local-observer-sync.sh`
+- `./scripts/p2p-public-testnet-local-observer-sync.sh render --local-env .tmp/p2p_testnet_reality/20260522-100229/nodes/local_node/node.env --sequencer-env .tmp/p2p_testnet_reality/20260522-100229/nodes/sequencer_ecs/node.env --storage-env .tmp/p2p_testnet_reality/20260522-100229/nodes/storage_ecs/node.env --manifest-path /opt/oasis7/p2p-testnet-local/config/network-tier-public-testnet-live-candidate.json`
+- `tmpdir="$(mktemp -d)" && mkdir -p "$tmpdir/app/config" "$tmpdir/app/bin" && cp .tmp/p2p_testnet_reality/20260522-100229/nodes/local_node/node.env "$tmpdir/app/config/node.env" && ./scripts/p2p-public-testnet-local-observer-sync.sh apply --local-env "$tmpdir/app/config/node.env" --sequencer-env .tmp/p2p_testnet_reality/20260522-100229/nodes/sequencer_ecs/node.env --storage-env .tmp/p2p_testnet_reality/20260522-100229/nodes/storage_ecs/node.env --manifest-path /opt/oasis7/p2p-testnet-local/config/network-tier-public-testnet-live-candidate.json --manifest-source doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json --manifest-dest "$tmpdir/app/config/network-tier-public-testnet-live-candidate.json" --start-script-dest "$tmpdir/app/bin/start-node.sh" --backup-dir "$tmpdir/backups"`
 - `P2PARCH6_SEQ_SSH_PASSWORD='***' P2PARCH6_STORAGE_SSH_PASSWORD='***' ./scripts/p2p-real-env-triad-snapshot.sh --samples 2 --interval-secs 3 --out-dir .tmp/p2p_testnet_reality --world-id oasis7-public-testnet-parallel-20260518 --local-service oasis7-testnet-observer.service --local-status-url http://127.0.0.1:6633/v1/chain/status --local-health-url http://127.0.0.1:6633/healthz --local-env-file /opt/oasis7/p2p-testnet-local/config/node.env --sequencer-target root@39.104.204.172 --sequencer-service oasis7-testnet-sequencer.service --sequencer-status-url http://127.0.0.1:6631/v1/chain/status --sequencer-health-url http://127.0.0.1:6631/healthz --sequencer-env-file /opt/oasis7/p2p-testnet/config/node.env --storage-target root@39.104.205.67 --storage-service oasis7-testnet-storage.service --storage-status-url http://127.0.0.1:6632/v1/chain/status --storage-health-url http://127.0.0.1:6632/healthz --storage-env-file /opt/oasis7/p2p-testnet/config/node.env`
 - `rg -n "ready_for_live_candidate|specified_skeleton_only|seven-lane|claim boundary" doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md testing-manual.md doc/p2p/prd.md doc/p2p/project.md`
 - `rg -n "claims_boundary_review|allowed_claims|denied_claims|ready_for_live_candidate" doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
@@ -123,5 +132,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 当前除 `shared_devnet_pass` 之外，还必须先修正本机 observer 与 ECS 两侧的 manifest/validator drift，并清掉 sequencer predecessor-gap runtime error；在这些 live runtime blocker 被修平前，`public_testnet` 即使已有 public endpoint/faucet/claims evidence，也仍不得提升为 `ready_for_live_candidate`。
+- 下一步: 当前除 `shared_devnet_pass` 之外，还必须先由具备 `/opt/oasis7/p2p-testnet-local/**` 写权限的 operator 执行 local observer contract sync 并重启服务，再清掉 sequencer predecessor-gap runtime error；在这些 live runtime blocker 被修平前，`public_testnet` 即使已有 public endpoint/faucet/claims evidence，也仍不得提升为 `ready_for_live_candidate`。
 - 最近更新: 2026-05-22
