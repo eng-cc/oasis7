@@ -278,6 +278,17 @@
     - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime`
     - `./scripts/p2p-longrun-soak.sh --profile soak_release --topologies triad_distributed --duration-secs 300 --no-prewarm --max-stall-secs 240 --max-lag-p95 50 --max-distfs-failure-ratio 0.1 --chaos-continuous-enable --chaos-continuous-interval-secs 30 --chaos-continuous-start-sec 30 --chaos-continuous-max-events 8 --chaos-continuous-actions restart,pause --chaos-continuous-seed 1772284566 --chaos-continuous-restart-down-secs 1 --chaos-continuous-pause-duration-secs 2 --out-dir .tmp/release_gate_p2p_v051_fix`
     - `./scripts/release-gate.sh --out-dir .tmp/release_gate_web_v051_fix_rerun3 --skip-ci-full --skip-sync --skip-s9 --skip-s10`
+- [x] release-web-preflight-config-shadow (PRD-TESTING-002/003) [test_tier_required]: 修复 `Release Packages` run `26290255692` 的 `release-gate-web` 假阴性：`viewer-primary-web-entry-regression.sh` 在 root 缺失 canonical `config.toml` 时，会让 launcher/chain runtime 自动生成一份只含 `[node]` keypair 的 ignored `config.toml`；同一 workflow 后续 `viewer-software-safe-step-regression.sh` 再走 `run-game-test` 时，`release-gate-web-strict.sh` 需要显式传 `--skip-llm-provider-preflight`，把 software-safe phase 收口为“stack bootstrap 后的 UI/blocker contract 验证”而不是外部 LLM provider 活性检查，同时 primary-entry 必须在退出时清理自己生成的 node-only `config.toml`，避免把前一阶段遗留副作用误判成 Web 回归。 Trace: .pm/tasks/task_b7097f476e674a429469a98d6ae36794.yaml
+  - 产物文件:
+    - `scripts/release-gate-web-strict.sh`
+    - `scripts/viewer-primary-web-entry-regression.sh`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_b7097f476e674a429469a98d6ae36794.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/release-gate-web-strict.sh scripts/viewer-primary-web-entry-regression.sh`
+    - `./scripts/viewer-primary-web-entry-regression.sh --help >/dev/null`
+    - `./scripts/release-gate-web-strict.sh --scenario llm_bootstrap --out-dir .tmp/release_gate_web_preflight_shadow --headed`
 - [x] release-node24-actions (PRD-TESTING-002/003) [test_tier_required]: 升级 `Release Packages` workflow 中触发 Node.js 20 deprecation warning 的 GitHub Actions runtime，确保 `release-gate-*` / `build-web-dist` / `package-native` 产物上传不再依赖 Node 20，并保持 release 资产链路语义不变。 Trace: .pm/tasks/task_62acc2d0e69649dc81eeae2c3954bd67.yaml
   - 产物文件:
     - `.github/workflows/release-packages.yml`
