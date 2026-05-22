@@ -47,3 +47,7 @@ Example:
 ## 2026-05-22 22:12:19 CST / producer_system_designer
 - 完成内容: 继续压缩旧的 self-evolution design 文档：将 `file-based-self-evolution-management-2026-03-30.design.md`、`memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`、`role-long-term-memory-2026-03-30.design.md` 改写为“只保留唯一设计信息”的短版，保留 canonical object model、recall/source policy、memory schema 与 role-topic 边界，删除 goals/current-state/phase-rollout/deliverables 等已由 PRD/project 承担的重复区块。
 - 遗留事项: 若还要继续减重，下一步应优先检查这三份旧 PRD 是否还能压 `Executive Summary` / `Roadmap` / `Decision Log`，但不要动对象字段、验证矩阵或 role/topic 白名单。
+
+## 2026-05-22 22:27:10 CST / producer_system_designer
+- 完成内容: 继续压缩三份旧 self-evolution PRD：将 `file-based-*`、`memory-inspired-*`、`role-long-term-memory-*` 的 `Executive Summary`、`Risks & Roadmap` 与 `Decision Log` 改成更短的“当前问题 / 当前解法 / 已完成主链 / 稳定化目标”表达，删除重复版本流水账和冗长理由句，但保留 success criteria、功能矩阵、验证追踪表和决策 ID。
+- 遗留事项: 若还要继续减重，下一步只适合继续压缩少数 user stories / critical flows 的句长；不应改动对象字段、验证矩阵、`role/topic` allowlist 或 adoption/rejection 边界。

@@ -8,8 +8,8 @@
 - 对应标准执行入口: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
 
 ## 1. Executive Summary
-- Problem Statement: 当前仓库已经具备 `PRD / project / handoff / worktree` 等治理部件，但过程日志仍停留在集中式日表语义，和 `.pm` 的 task-centric 结构脱节。7 个标准角色的跨天状态、阶段判断、候选任务池与真实反馈回流仍依赖人工拼接日表与散落文档，无法支撑项目自我进化。
-- Proposed Solution: 在仓库内新增一套基于文件、可审计、可在 worktree 中独立演化的项目管理层，作为 `engineering/self-evolution` 专题长期治理对象。该层以 Git 为存储、以 `.pm/` 为运行态目录，统一承载角色 memory、角色 backlog、signal inbox、task registry、stage gate 与自动化脚本，并与既有 `doc/` 正式文档体系保持分工；其中 registry/backlog 视图进一步降级为 git-ignored 的本地生成文件，只保留 canonical task file 作为提交真值。
+- Problem Statement: 当前仓库已有 `PRD / project / handoff / worktree` 主链，但跨天状态、阶段判断、候选任务池和真实反馈回流仍依赖人工拼接散落文档，缺少一个 task-centric、可审计的运行态层。
+- Proposed Solution: 在仓库内建立基于文件的 `.pm/` 运行层，统一承载 role memory、role backlog、signal inbox、task registry、stage/gate 与 workflow scripts，并继续与 `doc/` 正式文档分层；registry/backlog 只保留为 git-ignored 本地重建视图，canonical task file 仍是提交真值。
 - Success Criteria:
   - SC-1: 首批 7 个标准角色全部具备独立长期 memory namespace 和 backlog 容器，且角色扩容时无需修改历史文件结构。
   - SC-2: 进入长期 memory 的记录 100% 带有 `source_refs`、`effective_at`、`last_reviewed_at` 和 `status(active/superseded)` 字段，不再直接把集中式日表条目当最终真值。
@@ -162,13 +162,15 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP: 建立 `engineering/self-evolution` 专题三件套、`.pm/` 目录骨架、role registry 和 task registry 模板。
-  - v1.1: 打通 `signal inbox -> candidate task` 基础链路，优先覆盖 `qa_engineer` 和 `liveops_community`。
-  - v2.0: 完成 7 个标准角色的长期 memory/backlog 收口，并交付 stage/gate 汇总脚本。
-  - v2.1: 建立 `task execution log -> signal -> memory/task -> doc backflow` 的固定操作规约与 required-tier lint。
-  - v2.2: 建立 `workflow-report` 统一入口，并接入 `AGENTS.md`、角色职责卡、`new-task-worktree.sh`、commit 前快照式 `codex exec review --uncommitted` 规则与 smoke，使 `.pm` 成为默认执行链路。
-  - v2.3: 将 `.pm` task identity 从顺序 `TASK-PM-xxxx` 迁移到 `task_uid` 单一真值，并将 registry/backlog 收敛为扫描重建视图。
-  - v3.0: 在角色扩容、阶段评审和多 worktree 并行场景下稳定运行，形成仓库级自我进化操作层。
+  - MVP: 建立专题三件套、`.pm/` 骨架、role registry 与 task registry 模板。
+  - 已完成的主链收口:
+    - `signal inbox -> candidate task`
+    - 7 个标准角色的长期 memory / backlog
+    - `task execution log -> signal -> memory/task -> doc backflow` 规约
+    - `workflow-report` 统一入口与 GitHub PR review 默认收口
+    - `task_uid` 单一身份与 git-ignored 本地视图重建
+  - 稳定化目标:
+    - 在角色扩容、阶段评审和多 worktree 并行场景下继续验证
 - Technical Risks:
   - 风险-1: `.pm/` 与 `doc/` 双层体系若分工不清，会产生第二真值和重复维护。
   - 风险-2: 过早追求自动化，可能让错误 signal 进入长期 memory/backlog，反而放大噪声。
@@ -191,16 +193,16 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-SE-001 | 在仓库内建立文件化项目管理层 `.pm/` | 直接接入外部 PM/SaaS 作为真值 | 当前仓库已有 Git/worktree/文档治理体系，先在本地闭环成本更低、审计一致性更强。 |
-| DEC-SE-002 | 任务过程日志收敛到 `.pm/tasks/task_<32hex>.execution.md`，长期 memory/backlog 下沉到 `.pm/` | 继续维护集中式日表，或让 task log / memory 共用自由文本文件 | `.pm` 已以 task 为基本执行单元，task-local log 更利于 worktree 隔离、lint、signal promotion 与 task 追溯。 |
-| DEC-SE-003 | 采用 role memory + role backlog + signal inbox + task registry + stage/gate 五对象模型 | 仅做一份共享任务清单 | 自我进化需要同时解决长期记忆、候选任务、阶段判断和真实反馈回流，单一清单不够。 |
-| DEC-SE-004 | memory 支持 `superseded` 生命周期和 source refs | 直接覆盖旧结论 | 角色判断和阶段口径会演化，必须保留历史链路。 |
-| DEC-SE-005 | 首期禁止外部网络依赖，脚本与真值全部在仓库内运行 | 依赖远程数据库、消息队列或托管服务 | 当前目标是仓库内最强自治，不是平台集成展示。 |
-| DEC-SE-006 | 用 `workflow-report` 把 `role/memory/stage/signal` 四类视图收敛成统一 workflow 入口 | 继续要求 owner 手工组合多个低层 report / promote 命令 | 基础脚本已经齐全，真正缺的是默认操作入口；若不收敛入口，`.pm` 仍会停留在“可用但不默认使用”。 |
-| DEC-SE-007 | `.pm/stage/current.yaml` / `gate.yaml` 是阶段当前态唯一真值，并通过 `set-stage` 统一更新 | 继续允许 producer memory 单独表达当前阶段，再由 stage-report 被动拼接 | 当前阶段是裁决输入，不是历史注释；若不把 current state 固定到 stage 文件，report 会继续出现“memory 说有阶段、stage 文件却是 null”的分叉。 |
-| DEC-SE-008 | `workflow-report --phase start|close --task-uid <TASK-UID>` 显式回写 task workflow evidence | 依赖当前 worktree / branch 名做隐式任务猜测 | `.pm` 已要求单任务单 worktree，但 task/worktree 命名并不总是一一可逆；显式 `task_uid` 更可审计，也更适合 lint/smoke。 |
-| DEC-SE-009 | `.pm` task canonical identity 收敛为去中心分配的 `task_uid`，registry/backlog 退化为由 canonical task 对象扫描重建的视图 | 继续让顺序 `TASK-PM-xxxx` 同时承担主键、文件名、registry 索引和人类展示号 | 顺序号一旦承担多重职责，就会在多 worktree 并发创建 task 时产生结构性 rebase 冲突；`task_uid` 可以把冲突面收敛到真正被并发编辑的 task 对象。 |
-| DEC-SE-010 | registry/backlog 视图继续保留原路径契约，但降级为 git-ignored 的本地生成文件，由 `sync-views.sh` 与 PM 读路径自动重建 | 继续把这些共享视图文件作为 Git 跟踪真值提交，或额外迁移到一套全新路径契约 | 保留原路径能最大化兼容现有 report/lint/roles registry，而改成本地生成文件后，多 worktree rebase 不再需要人工合并这些热点 YAML。 |
+| DEC-SE-001 | 在仓库内建立文件化项目管理层 `.pm/` | 直接接入外部 PM/SaaS 作为真值 | 本地 Git/worktree 闭环更符合当前审计和隔离要求。 |
+| DEC-SE-002 | 任务过程日志收敛到 `.pm/tasks/task_<32hex>.execution.md`，长期 memory/backlog 下沉到 `.pm/` | 继续维护集中式日表，或让 task log / memory 共用自由文本文件 | task-local log 更利于 worktree 隔离、lint 和 signal promotion。 |
+| DEC-SE-003 | 采用 role memory + role backlog + signal inbox + task registry + stage/gate 五对象模型 | 仅做一份共享任务清单 | 自我进化需要同时覆盖长期记忆、候选任务、阶段判断和反馈回流。 |
+| DEC-SE-004 | memory 支持 `superseded` 生命周期和 source refs | 直接覆盖旧结论 | 历史裁决必须可回放。 |
+| DEC-SE-005 | 首期禁止外部网络依赖，脚本与真值全部在仓库内运行 | 依赖远程数据库、消息队列或托管服务 | 当前目标是仓库内自治，而不是平台集成展示。 |
+| DEC-SE-006 | 用 `workflow-report` 收敛 `role/memory/stage/signal` 视图为统一 workflow 入口 | 继续要求 owner 手工组合多个低层 report / promote 命令 | 基础脚本已齐，真正缺的是默认入口。 |
+| DEC-SE-007 | `.pm/stage/current.yaml` / `gate.yaml` 是阶段当前态唯一真值，并通过 `set-stage` 统一更新 | 继续允许 producer memory 单独表达当前阶段，再由 stage-report 被动拼接 | 当前阶段必须固定到 stage 文件，避免 memory 与 report 分叉。 |
+| DEC-SE-008 | `workflow-report --phase start|close --task-uid <TASK-UID>` 显式回写 task workflow evidence | 依赖当前 worktree / branch 名做隐式任务猜测 | 显式 `task_uid` 更可审计，也更适合 lint/smoke。 |
+| DEC-SE-009 | `.pm` task canonical identity 收敛为去中心分配的 `task_uid`，registry/backlog 退化为由 canonical task 对象扫描重建的视图 | 继续让顺序 `TASK-PM-xxxx` 同时承担主键、文件名、registry 索引和人类展示号 | `task_uid` 能把多 worktree 冲突面收敛到真实并发编辑对象。 |
+| DEC-SE-010 | registry/backlog 视图保留原路径契约，但降级为 git-ignored 的本地生成文件 | 继续把这些共享视图文件作为 Git 跟踪真值提交，或迁移到全新路径契约 | 这样能兼容现有 report/lint，同时去掉热点 YAML 合并冲突。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:

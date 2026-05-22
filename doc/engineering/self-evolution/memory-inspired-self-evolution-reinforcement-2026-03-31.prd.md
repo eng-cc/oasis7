@@ -8,8 +8,8 @@
 - 对应标准执行入口: `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
 
 ## 1. Executive Summary
-- Problem Statement: 当前 `self-evolution` 与长期 memory 专题已经冻结了 `.pm/` 文件真值、role memory schema 与 `signal -> memory/task` 基础链路，但仍缺少两层关键规格：一是“外部 memory/reflective agent 方案里哪些值得借鉴、哪些必须拒绝”；二是“做事过程中的会话/临时判断该如何被记录，而不污染长期 memory”。若不先冻结这层借鉴与分层边界，后续很容易把“记忆增强”“反思归纳”“过程笔记”“自我进化自治”混成一个不受控的大口袋。
-- Proposed Solution: 在 `engineering/self-evolution` 子专题中，对 `memoryOSS` 与论文《Hindsight》做结构化对照，并新增 `working_memory` 与 `conversation transcript analysis` 分层。明确 oasis7 只借鉴记忆分类、预算化召回、namespace 隔离、会话到工作记忆的提炼与反思审核链路；对 Codex/engineering task，phase 1 允许从 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl` 读取 raw evidence，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，但默认不把“同一 live session 自读”当作收口路径。owner 若确实要从 `.codex` transcript 提炼 `working_memory`，必须显式提供 `--session-id`，或显式传 `--allow-auto-session` 做 opt-in；同时暂不把 wrapper 导出的 transcript artifact 设为前置依赖，也不允许 agent 直接绕过 owner/worktree/QA 链路执行高风险改动。
+- Problem Statement: 当前 `.pm/` 和长期 memory 主题已经冻结了文件真值和 `signal -> memory/task` 基础链路，但还缺少“外部 memory/reflective agent 方案如何限域借鉴”以及“会话/临时判断如何沉淀而不污染长期 memory”这两层规格。
+- Proposed Solution: 引入 `memoryOSS` 与《Hindsight》的结构化 borrowing topic，并新增 `working_memory` 与 transcript analysis 分层。oasis7 只借鉴记忆分类、预算化召回、namespace 隔离与会话到工作记忆的提炼链路；`.codex` transcript 只作为显式 opt-in 的 raw evidence 输入，必须先进入 `working_memory` 或 `signal`，不能直接改写长期 memory 或正式真值。
 - Success Criteria:
   - SC-1: 新专题明确区分 `memory_kind = fact | experience | summary | belief` 四类记忆，并给出与现有 `.pm/roles/*/memory/*.yaml` 的字段映射。
   - SC-2: 对 `belief`/暂定判断类记忆，100% 定义 `confidence`、`review_due_at`、`superseded_by`/`superseded_at` 等审计字段，不允许无限期以“猜测”身份停留为 active 真值。
@@ -142,11 +142,13 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP: 建立本专题 `prd/design/project`，冻结 adopted/rejected/deferred 边界与对象映射。
-  - v1.1: 扩展 memory schema，增加 `memory_kind`、`review_due_at`、`recall_priority` 等字段及 lint/report。
-  - v2.0: 为 `workflow-report` / `memory-report` 增加 recall profile 与预算化输出。
-  - v2.1: 建立 `working_memory` 与会话分析契约，定义 `显式 session 选择/显式 opt-in auto-resolution + ~/.codex/session_index.jsonl + history.jsonl (+ sessions rollout fallback) -> working_memory -> reflection signal` 的 canonical 路径，并为后续 wrapper artifact 留出替换位。
-  - v3.0: 建立 recall/working_memory/reflection smoke 与质量评估基线，验证噪声率、复发率、stale belief 与 working_memory 残留指标。
+  - MVP: 建立专题三件套，冻结 adopted/rejected/deferred 边界与对象映射。
+  - 已完成的主链补强:
+    - memory schema 扩展：`memory_kind`、`review_due_at`、`recall_priority`
+    - recall profile 与预算化输出
+    - `working_memory` + transcript analysis 契约
+  - 稳定化目标:
+    - 建立 recall / working_memory / reflection smoke 与质量评估基线
 - Technical Risks:
   - 风险-1: 记忆分类过细但没有预算约束，会把 `workflow-report` 重新做成“第二份全文索引”。
   - 风险-2: 把 `belief` 误当正式事实，会放大错误判断并污染阶段评审。
@@ -167,13 +169,13 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-MIR-001 | 借鉴外部方案的对象模型与工程习惯，但继续以 `.pm/` + `doc/` 为真值 | 直接接入 `memoryOSS` 或其他外部 memory 产品为运行态真值 | oasis7 当前最重要的是可审计、可离线、可 worktree 隔离的治理链，而不是产品化 memory 服务。 |
-| DEC-MIR-002 | 采用 `fact/experience/summary/belief` 四类记忆作为补强方向 | 继续只保留单一 `summary` 语义 | 单一 summary 不足以表达已证事实、经验模式、综合摘要与暂定判断的不同治理要求。 |
-| DEC-MIR-003 | 反思结果先走 signal/owner review，再提升为 memory/task | 允许 agent 把 reflection 直接写入正式 memory 或 PRD | 直接写真值会绕过 owner、QA 与 stage 审计链，风险过高。 |
-| DEC-MIR-004 | 召回必须预算化并按 phase/role/kind 控制 | 允许 agent 自由检索并全量注入历史记忆 | 无预算的长上下文会放大噪声和相互矛盾记忆，不符合 oasis7 的 deterministic governance 目标。 |
-| DEC-MIR-005 | 对 `belief` 施加 review_due_at 与 superseded 约束 | 把 `belief` 与 `fact` 一视同仁长期保留 active | 暂定判断本质上是待验证假设，必须更快过期和复核。 |
-| DEC-MIR-006 | 将会话/过程记忆先落到 task-scoped `working_memory` | 直接把 transcript 或中间推理写入长期 memory | 过程认知变化快、噪声高，且主要服务于当前任务，不适合直接变成长期真值。 |
-| DEC-MIR-007 | Codex/engineering task 的 phase 1 允许读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，但默认必须显式指定 `session_id`；只有显式 `--allow-auto-session` 才允许 registry/worktree pattern 自动解析 | 继续把“读取当前/最近 live session”当成默认收口路径；或先要求 wrapper 导出 `output/.../<task_uid>.jsonl` 作为唯一 transcript 来源 | 当前环境已存在可直接读取的本地 Codex 会话索引与 rollout 存档，所以可以继续复用现成 raw evidence；但同一 live session 的隐式自读不够优雅且容易引入自污染/审计歧义，因此改为显式 opt-in。 |
+| DEC-MIR-001 | 借鉴外部方案的对象模型与工程习惯，但继续以 `.pm/` + `doc/` 为真值 | 直接接入 `memoryOSS` 或其他外部 memory 产品为运行态真值 | 当前优先级是可审计、可离线、可 worktree 隔离的治理链。 |
+| DEC-MIR-002 | 采用 `fact/experience/summary/belief` 四类记忆作为补强方向 | 继续只保留单一 `summary` 语义 | 单一 summary 无法区分事实、经验、摘要与暂定判断。 |
+| DEC-MIR-003 | 反思结果先走 signal/owner review，再提升为 memory/task | 允许 agent 把 reflection 直接写入正式 memory 或 PRD | 直接写真值会绕过 owner、QA 与 stage 审计链。 |
+| DEC-MIR-004 | 召回必须预算化并按 phase/role/kind 控制 | 允许 agent 自由检索并全量注入历史记忆 | 无预算长上下文会放大噪声和矛盾记忆。 |
+| DEC-MIR-005 | 对 `belief` 施加 `review_due_at` 与 superseded 约束 | 把 `belief` 与 `fact` 一视同仁长期保留 active | 暂定判断本质上是待验证假设。 |
+| DEC-MIR-006 | 将会话/过程记忆先落到 task-scoped `working_memory` | 直接把 transcript 或中间推理写入长期 memory | 过程认知变化快、噪声高，主要服务当前任务。 |
+| DEC-MIR-007 | Codex/engineering task 的 phase 1 允许读取本地 `.codex` transcript，但默认必须显式指定 `session_id`；只有显式 `--allow-auto-session` 才允许自动解析 | 继续把“读取当前/最近 live session”当成默认收口路径；或先要求 wrapper artifact 作为唯一 transcript 来源 | 当前环境已有可读本地 transcript，但 live session 自读仍需显式 opt-in 才能避免自污染和审计歧义。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:
