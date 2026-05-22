@@ -1,7 +1,7 @@
 # task_de7dbd97ffdb485eb4a869cc8ac0673a Execution Log
 
 - task_uid: task_de7dbd97ffdb485eb4a869cc8ac0673a
-- title: formalize superpowers workflow borrowings
+- title: superpowers workflow borrowing rollout aggregate
 - owner_role: producer_system_designer
 - worktree_hint: /home/scc/worktrees/oasis7-engineering-superpowers-workflow-borrowing
 
@@ -22,4 +22,8 @@ Example:
 
 ## 2026-05-22 17:08:46 CST / producer_system_designer
 - 完成内容: 将 1 个已关闭微任务并档回当前聚合 task，合并 source_refs/doc_refs/related_prd/acceptance 等元数据，并删除重复 canonical task 文件。
+- 遗留事项: 后续若同一工作流再出现仅承担 truth refresh / doc sync 的一次性微任务，应先把正式 project/topic Trace 收口到 survivor，再执行 compact-task-group。
+
+## 2026-05-22 17:30:12 CST / producer_system_designer
+- 完成内容: 将 15 个已关闭微任务并档回当前聚合 task，合并 source_refs/doc_refs/related_prd/acceptance 等元数据，并删除重复 canonical task 文件。
 - 遗留事项: 后续若同一工作流再出现仅承担 truth refresh / doc sync 的一次性微任务，应先把正式 project/topic Trace 收口到 survivor，再执行 compact-task-group。
