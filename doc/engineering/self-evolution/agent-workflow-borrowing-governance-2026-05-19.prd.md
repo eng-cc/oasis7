@@ -8,8 +8,8 @@
 - 对应标准执行入口: `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
 
 ## 1. Executive Summary
-- Problem Statement: 外部 agent workflow 方法论已经开始提供成套的规划、TDD、subagent、browser companion 与 PR 收口建议；而 oasis7 现有 repo-native 真值链虽然稳定，但此前仍把多角色 subagent 协作放在“显式授权、局部借鉴”的保守边界上。若不把哪些 subagent 模式可升为默认、哪些仍必须拒绝写成正式规则，后续很容易在默认编排、owner/task 真值和 review 边界上继续摇摆。
-- Proposed Solution: 在 `engineering/self-evolution` 下把 `obra/superpowers` 的借鉴治理继续推进一层：保留 adopted / rejected / deferred 矩阵，但将 `brainstorming`、`dispatching-parallel-agents`、`subagent-driven-development` 与 `test-driven-development` 分别限域翻译为 repo-owned bounded brainstorming、默认角色编排、subagent-driven execution，以及 behavior-first testing contract；同时将 upstream `using-superpowers` 中真正有价值的“process-skill routing order”翻译为 repo-owned workflow router，负责把 bounded brainstorming、TDD、execution、verification 与 closeout 串成一条默认流程，而不引入外部 bootstrap。整体仍保持单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链，并继续把 `writing-plans`、`executing-plans`、`writing-skills` 的可 salvage 部分收口成 repo-owned planning、execution 与 skill-authoring surface。
+- Problem Statement: 外部 agent workflow repo 已提供成套的 planning、TDD、subagent、visual companion 与 closeout 语义；若 oasis7 不把哪些模式可变成默认、哪些仍必须拒绝写成正式规则冻结下来，默认编排、owner/task 真值和 review 边界会继续漂移。
+- Proposed Solution: 保留 adopted / rejected / deferred 矩阵，只把与当前主链兼容的部分翻译成 repo-owned surface：bounded brainstorming、默认角色 subagent 编排、bounded subagent-driven execution、behavior-first testing、workflow router，以及 planning / execution / skill-authoring surface。整体继续维持单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链；外部 bootstrap、第二套计划真值、universal ceremony 与 packaging-before-governance 继续拒绝或 deferred。
 - Success Criteria:
   - SC-1: `superpowers` 首批借鉴项 100% 进入 `adopted / rejected / deferred` 三态矩阵，并为每项给出理由与 repo-owned target object。
   - SC-2: 每个 adopted 项都必须映射到一个 repo-owned follow-up task 或明确的模块参考入口，不允许停留在“聊天建议”层。
@@ -167,20 +167,22 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP: 建立本专题三件套，冻结 `superpowers` 的 adopted / rejected / deferred 边界，并回写 engineering / Viewer 参考口径。
-  - v1.1: 实施 workflow behavior eval harness，优先覆盖主链 workflow helpers。
-  - v1.2 (completed): 已实施 completion-claim verification gate，建立 repo-owned helper/checklist/smoke。
-  - v1.3: 在下一轮 Viewer Web 结构/视觉专题中试点 visual companion，验证其作为 optional ideation layer 的收益。
-  - v1.4 (completed): 已将 `writing-plans` 的结构化拆分纪律翻译成 repo-owned planning surface，补齐 `project.md` affected-paths、handoff atomic steps 和 lightweight self-check。
-  - v1.5 (completed): 已将 `executing-plans` 的执行纪律翻译成 repo-owned execution surface，补齐 execution gap review、逐步验证与 blocker handling。
-  - v1.6 (completed, bounded): 已将 `writing-skills` 的 authoring surface 收口成 repo-owned skill authoring entry points、template 与 checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。
-  - v1.7 (completed, bounded): 已将 `dispatching-parallel-agents` 翻译成 repo-owned 默认角色 subagent 编排层，并把边界固定为 `producer_system_designer` orchestrator + 单 owner/task/worktree/PR 真值。
-  - v1.8 (completed, bounded): 已将 `subagent-driven-development` 翻译成 repo-owned 默认 subagent-driven execution，要求所有分析 / 实现 / 验证 / 补充 review 切片都回收到同一 owner/task/worktree/PR 真值，并继续拒绝 fresh subagent-per-task + local two-stage review ritual。
-  - v1.9 (completed, bounded): 已把默认 subagent-driven execution 从“原则性 adopted”推进到 root workflow contract：`AGENTS.md`、角色卡、handoff template 与 planning checklist 现已显式要求 `slice type / write scope / return contract / integration order`。
-  - v1.10 (completed, bounded): 已将 `test-driven-development` 翻译成 repo-owned behavior-first testing contract：只对行为变更且存在稳定自动化 harness 的任务默认要求 RED/回归先行，并在 root workflow、handoff template、skill README 与 `tdd-test-writer` skill 中写清适用条件与 skip reason。
-  - v1.11 (completed, bounded): 已将 `brainstorming` 翻译成 repo-owned bounded brainstorming contract：只在任务仍需定方向、拆 scope 或比较方案时启用 2-3 方案对比与推荐方向，并把 optional visual companion 与正式文档回写边界接回 root workflow、handoff/planning surface 与本地 `bounded-brainstorming` skill。
-  - v1.12 (completed, bounded): 已将 `using-superpowers` 中可借的 process-skill routing order 翻译成 repo-owned workflow router：新增本地 `repo-owned-workflow-router` skill，并把 `brainstorming -> TDD -> execution -> verification -> closeout` 的 phase order 接回 root `AGENTS.md` 与 skill README，同时继续拒绝外部 bootstrap。
-  - v2.0: 在 repo-owned behavior/eval 稳定后，再决定是否重开 multi-harness workflow packaging 评估。
+  - MVP（completed）: 建立本专题三件套，冻结 `superpowers` 的 adopted / rejected / deferred 边界，并回写 engineering / Viewer 参考口径。
+  - 已完成的 bounded adoption:
+    - completion-claim verification gate
+    - `writing-plans` -> repo-owned planning surface
+    - `executing-plans` -> repo-owned execution surface
+    - `writing-skills` -> repo-owned skill authoring surface
+    - `dispatching-parallel-agents` -> 默认角色 subagent 编排
+    - `subagent-driven-development` -> 默认 subagent-driven execution
+    - `test-driven-development` -> behavior-first testing contract
+    - `brainstorming` -> bounded brainstorming contract
+    - `using-superpowers` 的 process-skill routing order -> repo-owned workflow router
+  - 剩余 follow-up:
+    - workflow behavior eval harness：优先覆盖主链 workflow helpers
+    - Viewer visual companion pilot：仅在下一轮结构/视觉专题里验证 optional ideation 收益
+  - Deferred reopen:
+    - multi-harness workflow packaging：仅在 repo-owned behavior/eval 稳定后重开
 - Technical Risks:
   - 风险-1: 若只冻结 adopted 项、不补 repo-owned eval，最终会退化成“又一份 workflow 口号”。
   - 风险-2: 若不明确 rejected 项，外部 repo 的强制 ceremony 容易被误当成当前默认流程。
@@ -205,19 +207,19 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-AWB-001 | 只借鉴结构化 workflow patterns，并把 adopted 项转成 repo-owned follow-up | 直接把 `superpowers` 当默认 bootstrap 或当前流程真值 | oasis7 当前真值已经是 `AGENTS.md + .pm + GitHub PR review`，不能再平行引入第二条主链。 |
-| DEC-AWB-002 | 采用 repo-owned workflow behavior eval 作为首批落地点 | 只更新文档口径，不验证 agent 实际是否遵守 | 这类借鉴的真正风险在于“文档和真实 agent 行为脱钩”。 |
-| DEC-AWB-003 | 采用 fresh verification before completion claim 的治理方向 | 继续允许 owner 用旧结果、局部结果或 agent 自报成功来宣称完成 | 当前仓库已经高度依赖 evidence-first 收口，这项借鉴与现有方向一致且补短板明显。 |
-| DEC-AWB-004 | visual companion 只作为 Viewer 等 UI-heavy 设计题的 optional ideation layer | 把 browser ideation 升级成所有实现题的 universal gate | oasis7 用户指令风格偏直接执行，强制设计门禁会与现有节奏冲突。 |
-| DEC-AWB-005 | 将 multi-harness pluginization 保持 deferred | 在 repo-owned eval 稳定前立即推进 Codex/OpenCode packaging | 分发形态不应跑在治理真值前面。 |
-| DEC-AWB-006 | 明确拒绝 universal brainstorming / fresh subagent-per-task / universal TDD 三类默认规则 | 以“外部方法论更完整”为理由整体照搬 | 这些规则与 oasis7 当前的 owner 授权、默认 role-subagent 编排边界、测试分层和用户操作节奏存在直接冲突。 |
-| DEC-AWB-007 | 将 `writing-plans` 的可 salvage 部分限域翻译为 `project.md` affected paths、handoff atomic steps 和 lightweight self-check | 继续把 `writing-plans` 整体维持在“只有理论价值”的 rejected 状态，或反向把它升成新的默认计划入口 | 这样既保留执行纪律的增益，又不引入第二套计划真值。 |
-| DEC-AWB-008 | 将 `executing-plans` 的可 salvage 部分限域翻译为 repo-owned execution skill 与 root execution 规则 | 继续把它停留在“未来也许有用”的纯 deferred 口头结论，或反向引入单独执行会话契约 | 当前真正有价值的是“已有正式计划后的执行 discipline”，而不是新的计划存储或 session 包装。 |
-| DEC-AWB-009 | 将 `dispatching-parallel-agents` 改判为 adopted，但只落成 `producer_system_designer` orchestrator + role subagents 的默认编排层 | 继续保持 deferred，或直接升级成无 owner / 无 scope 的自由多 agent swarm | 当前用户与仓库都需要默认多角色协作，但正式真值仍必须维持为 owner/task/worktree/PR 单链。 |
-| DEC-AWB-010 | 将 `subagent-driven-development` 改判为 adopted（bounded），但只吸收“同一真值链内的 subagent-driven execution”，继续拒绝 fresh subagent-per-task + local two-stage review ritual | 继续保持 rejected，或整体照搬其 fresh-subagent / local-review ceremony | 当前用户已经要求把角色协作做成默认行为；可兼容的 repo-native 部分是执行切片与上下文最小化，而不是再造本地评审主链。 |
-| DEC-AWB-011 | 将 `test-driven-development` 改判为 adopted（bounded），但只吸收“行为变更 + 稳定自动化 harness”上的 behavior-first / regression-first contract，并允许显式 skip reason | 继续保持整体 rejected，或把 universal TDD 升成所有任务的硬门禁 | 当前仓库真正缺的是“何时必须让自动化行为证据走在实现前面”的统一口径，而不是把所有文档/治理/无稳定 harness 任务都强拉进 RED-GREEN。 |
-| DEC-AWB-012 | 将 `brainstorming` 改判为 adopted（bounded），但只吸收“按需 scope decomposition + 2-3 方案对比 + 推荐方向 + optional visual companion”，继续拒绝 universal gate、逐段审批与强制转入 `writing-plans` | 继续保持整体 rejected，或把 brainstorming 升成所有任务的 mandatory pre-step | 当前仓库真正缺的是“什么时候应该先定方向再动手”的统一口径，而不是让所有任务都先进入创意 ceremony。 |
-| DEC-AWB-013 | 保持 `using-superpowers` 的外部 bootstrap 语义 rejected，但把其中“串联本地 workflow skill 的 phase order”翻译成 repo-owned workflow router | 继续保持 `using-superpowers` 完全无落点，或整体采纳为对话默认入口 | 当前仓库真正缺的是“把已经 adopted 的本地流程 skill 串起来”的总入口，而不是重新依赖外部 bootstrap。 |
+| DEC-AWB-001 | 只借鉴结构化 workflow patterns，并把 adopted 项转成 repo-owned follow-up | 直接把 `superpowers` 当默认 bootstrap 或当前流程真值 | 当前真值已是 `AGENTS.md + .pm + GitHub PR review`，不能再并行引入第二条主链。 |
+| DEC-AWB-002 | 采用 repo-owned workflow behavior eval 作为首批落地点 | 只更新文档口径，不验证 agent 实际是否遵守 | 风险核心是“文档结论”和真实 agent 行为脱钩。 |
+| DEC-AWB-003 | 采用 fresh verification before completion claim 的治理方向 | 继续允许 owner 用旧结果、局部结果或 agent 自报成功来宣称完成 | 这与现有 evidence-first 收口同向，而且能补当前 claim 边界短板。 |
+| DEC-AWB-004 | visual companion 只作为 Viewer 等 UI-heavy 设计题的 optional ideation layer | 把 browser ideation 升级成所有实现题的 universal gate | 强制设计门禁会破坏当前直接执行节奏。 |
+| DEC-AWB-005 | 将 multi-harness pluginization 保持 deferred | 在 repo-owned eval 稳定前立即推进 Codex/OpenCode packaging | 分发形态不能跑在治理真值前面。 |
+| DEC-AWB-006 | 明确拒绝 universal brainstorming / fresh subagent-per-task / universal TDD 三类默认规则 | 以“外部方法论更完整”为理由整体照搬 | 这些规则直接冲突当前 owner 授权、subagent 边界、测试分层和用户节奏。 |
+| DEC-AWB-007 | 将 `writing-plans` 的可 salvage 部分限域翻译为 `project.md` affected paths、handoff atomic steps 和 lightweight self-check | 继续把 `writing-plans` 整体维持在“只有理论价值”的 rejected 状态，或反向把它升成新的默认计划入口 | 保留执行纪律增益，同时避免第二套计划真值。 |
+| DEC-AWB-008 | 将 `executing-plans` 的可 salvage 部分限域翻译为 repo-owned execution skill 与 root execution 规则 | 继续把它停留在“未来也许有用”的纯 deferred 口头结论，或反向引入单独执行会话契约 | 真正值得借的是执行 discipline，不是新的计划存储或 session 包装。 |
+| DEC-AWB-009 | 将 `dispatching-parallel-agents` 改判为 adopted，但只落成 `producer_system_designer` orchestrator + role subagents 的默认编排层 | 继续保持 deferred，或直接升级成无 owner / 无 scope 的自由多 agent swarm | 仓库需要默认多角色协作，但正式真值仍必须维持 owner/task/worktree/PR 单链。 |
+| DEC-AWB-010 | 将 `subagent-driven-development` 改判为 adopted（bounded），但只吸收“同一真值链内的 subagent-driven execution”，继续拒绝 fresh subagent-per-task + local two-stage review ritual | 继续保持 rejected，或整体照搬其 fresh-subagent / local-review ceremony | 可兼容的是执行切片与上下文最小化，不是再造本地评审主链。 |
+| DEC-AWB-011 | 将 `test-driven-development` 改判为 adopted（bounded），但只吸收“行为变更 + 稳定自动化 harness”上的 behavior-first / regression-first contract，并允许显式 skip reason | 继续保持整体 rejected，或把 universal TDD 升成所有任务的硬门禁 | 真正缺的是“何时必须让自动化行为证据先行”的统一口径。 |
+| DEC-AWB-012 | 将 `brainstorming` 改判为 adopted（bounded），但只吸收“按需 scope decomposition + 2-3 方案对比 + 推荐方向 + optional visual companion”，继续拒绝 universal gate、逐段审批与强制转入 `writing-plans` | 继续保持整体 rejected，或把 brainstorming 升成所有任务的 mandatory pre-step | 真正缺的是“何时应先定方向再动手”的统一口径。 |
+| DEC-AWB-013 | 保持 `using-superpowers` 的外部 bootstrap 语义 rejected，但把其中“串联本地 workflow skill 的 phase order”翻译成 repo-owned workflow router | 继续保持 `using-superpowers` 完全无落点，或整体采纳为对话默认入口 | 真正缺的是串联已 adopted 本地 skill 的总入口，而不是重新依赖外部 bootstrap。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:

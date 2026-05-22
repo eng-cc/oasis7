@@ -35,3 +35,7 @@ Example:
 ## 2026-05-22 17:43:16 CST / producer_system_designer
 - 完成内容: 将 `superpowers-conflict-reconciliation-2026-05-20.md` 继续压缩为“真值链、冲突类型、skill-by-skill 表、重开标准”四块，移除重复的 reconcile 过程叙述，只保留当前冲突边界、已吸收部分与 reopen 条件。
 - 遗留事项: 若还要继续减重，下一步只适合局部压缩 borrowing PRD 的 roadmap/decision 叙述；不应破坏其规格、验收和追踪矩阵完整性。
+
+## 2026-05-22 21:21:04 CST / producer_system_designer
+- 完成内容: 继续瘦身 `agent-workflow-borrowing-governance-2026-05-19.prd.md`，将 `Executive Summary`、`Phased Rollout` 与 `Decision Log` 压成“当前裁决 + 已完成 adoption + 剩余 reopen”表达，去掉重复版本流水账与冗长理由句，但保留 success criteria、验证矩阵与决策 ID。
+- 遗留事项: 若还要继续减重，只适合再压缩个别 user-story / flow 句长；不应改动 functional matrix、validation traceability 或 PRD-ID 对应关系。
