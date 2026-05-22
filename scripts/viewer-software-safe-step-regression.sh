@@ -509,7 +509,6 @@ if [[ "$auto_progress_observed" != "true" ]]; then
       return Number(snapshot?.logicalTime || 0) > ${before_logical_time}
         || Number(snapshot?.eventSeq || 0) > ${before_event_seq}
         || stage === 'completed_advanced'
-        || stage === 'completed_timeout'
         || stage === 'completed_no_progress'
         || stage === 'blocked';
     })()" "$PROGRESS_TIMEOUT_MS" || true
