@@ -29,24 +29,14 @@
 ## File Structure / Affected Paths
 - 改动路径:
   - `AGENTS.md`
+  - `.agents/roles/producer_system_designer.md`
+  - `.agents/roles/templates/{handoff-brief,handoff-detailed,planning-self-checklist}.md`
   - `.agents/skills/README.md`
-  - `.agents/skills/bounded-brainstorming/SKILL.md`
-  - `.agents/skills/executing-project-tasks/SKILL.md`
-  - `.agents/skills/repo-owned-workflow-router/SKILL.md`
-  - `.agents/skills/tdd-test-writer/SKILL.md`
-  - `.agents/skills/writing-repo-owned-skills/SKILL.md`
+  - `.agents/skills/{bounded-brainstorming,executing-project-tasks,repo-owned-workflow-router,tdd-test-writer,writing-repo-owned-skills}/SKILL.md`
   - `.agents/skills/templates/SKILL.template.md`
   - `.agents/skills/checklists/skill-authoring-checklist.md`
-  - `.agents/roles/producer_system_designer.md`
-  - `.agents/roles/templates/handoff-brief.md`
-  - `.agents/roles/templates/handoff-detailed.md`
-  - `.agents/roles/templates/planning-self-checklist.md`
-  - `doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.prd.md`
-  - `doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.design.md`
-  - `doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.project.md`
-  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md`
-  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
-  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
+  - `doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.{prd,design,project}.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.{prd,design,project}.md`
   - `doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md`
   - `doc/engineering/project.md`
 - 只读依赖:
@@ -66,13 +56,12 @@
 - 更新日期: 2026-05-22
 - 当前阶段: planned
 - 当前任务: `generic-game-skill-mirror-retirement-followup`
+- 阅读面说明: 本页只保留 inventory 治理任务、保留/替换边界与下一步；逐 slice 过程证据统一回到对应 `Trace: .pm/tasks/task_<32hex>.yaml` 与 `.execution.md`
 - 阻塞项:
   - `generic-game-skill-mirror-retirement-followup` 仍需先盘清每个 generic mirror 的实际引用面与是否保留上游同步机制。
 - 最新完成:
-  - 已建立 skill rationalization 专题三件套，并完成 `documentation-writer`、`frontend-ui-ux`、`game-changing-features` 三个低耦合 skill surface 的退役与角色卡同步。
-  - 已把 `writing-skills` 的可 salvage 部分收口成 repo-owned skill authoring surface：新增 `.agents/skills/README.md`、`writing-repo-owned-skills`、template 与 checklist；其中 authoring 结构、trigger wording 与 supporting-file discipline 已被吸收，但它自身的安装/发布包装与第二套工作流主链仍未采纳。
-  - 已将 `tdd-test-writer` 的边界从“待评估”收口为 root workflow 的 bounded behavior-first contract：行为变更且有稳定自动化 harness 的任务默认先走 RED/回归测试或记录 skip reason，但它不升级为 universal TDD gate。
-  - 已新增 repo-owned `bounded-brainstorming` skill，并将 upstream `brainstorming` 的可借部分收口为 root workflow 的 bounded ideation contract：只有方向仍模糊、需要拆 scope、做 2-3 方案对比或判断 visual companion 是否值得启用时才进入该 skill；它不升级为 universal brainstorming gate。
-  - 已新增 repo-owned `repo-owned-workflow-router` skill，并将 upstream `using-superpowers` 里可借的 process-skill routing order 收口为非 trivial task 的默认 workflow entrypoint；保留的是本地 phase-order 路由，不是外部 bootstrap。
+  - 已完成 skill inventory 基线冻结，并退役 `documentation-writer`、`frontend-ui-ux`、`game-changing-features` 三个低耦合 surface；角色卡与工程入口已同步清理悬空引用。
+  - 已完成 skill authoring 与 borrowed workflow surface 的本地化：`writing-repo-owned-skills`、template、checklist、`bounded-brainstorming`、`tdd-test-writer` 与 `repo-owned-workflow-router` 现已作为 repo-owned skill / entrypoint 保留在 inventory 内。
+  - 已完成与 borrowing/conflict 主题的真值对齐：`writing-skills`、`brainstorming`、`test-driven-development`、`using-superpowers` 的可借部分已全部翻译到本地 surface，剩余 bootstrap / universal gate / distribution 语义继续保持 deferred 或 rejected。
 - 下一步:
   - 优先判断 generic game-skill mirror 簇是否应整体改成“上游跟踪清单”，而不是继续本地长期维护。
