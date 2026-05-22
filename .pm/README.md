@@ -15,6 +15,7 @@
 - `.pm/` 不得重写正式 `prd.md` / `project.md` 真值。
 - `.pm/tasks/task_<32hex>.execution.md` 是任务过程日志的 canonical 位置；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 视图提升。
 - task 的唯一身份是 `task_uid`；`.pm/registry/tasks.yaml` 与 role backlog 只保留可扫描重建视图，并作为 git-ignored 的本地生成文件存在，不再承担仓库提交真值。
+- 同一 owner / 同一工作流下若出现仅承担 truth refresh、doc sync 或中段 burn-down 留痕的已关闭微任务，必须先把 `project.md` / topic project 的 Trace 收口到 survivor task，再通过 `./scripts/pm/compact-task-group.sh` 并档；不允许在正式文档仍引用 dropped task UID 时直接删除 canonical task 文件。
 - stage/gate、signal、task `source_refs` 与 memory `source_refs` 不得再把 `doc/devlog/*.md` 当运行态 source_ref；历史 `doc/devlog/*.md` 仅作归档参考，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
 - 首批角色以 `.agents/roles/*.md` 为单一事实源。
 
@@ -58,6 +59,7 @@
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
 - `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
 - `./scripts/pm/sync-views.sh`：从 `.pm/tasks/*.yaml` 扫描重建本地 task registry 与 role backlog 视图；lint/report/read-path 会在需要时自动刷新这些 git-ignored 视图。
+- `./scripts/pm/compact-task-group.sh`：在 survivor task 已保留正式 Trace 的前提下，将同一 owner 的 `done/deferred` 微任务安全并档回一个聚合 task；命令会阻断仍被 tracked 文档引用的 dropped task UID，合并 survivor 元数据，删除重复 canonical task 文件，并重建本地生成视图。
 - `./scripts/pm/rebase-conflict-helper.sh`：在 active rebase 期间只读盘点 `.pm/**` 未合并路径，并把 `.pm/inbox/signals.jsonl` 的安全自动修复边界收口为“保留 upstream signal id、仅重编号 branch-local 冲突项”；若冲突命中 `.pm/registry/tasks.yaml` 或 `.pm/roles/*/backlog/*.yaml` 这类本地生成视图，helper 只提示“保留 `main` 删除，再执行 `./scripts/pm/sync-views.sh`”，不自动替用户覆盖 canonical task/memory/stage 真值。
 - `./scripts/pm/migrate-task-identity.sh`：将旧的 `TASK-PM-xxxx` task/working_memory/source_ref 一次性迁到 `task_uid` canonical 模型，并重建 registry/backlog 视图。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `seed evidence -> task execution log -> signal -> task -> memory -> stage report` required-tier 验证链。
@@ -146,6 +148,8 @@ required-tier 验证入口：
 - `./scripts/pm/required-tier-smoke.sh --json`
 - `./scripts/pm/new-task-worktree-bootstrap-smoke.sh`
 - `./scripts/pm/new-task-worktree-bootstrap-smoke.sh --json`
+- `./scripts/pm/task-compaction-smoke.sh`
+- `./scripts/pm/task-compaction-smoke.sh --json`
 
 full-tier 验证入口：
 - `./scripts/pm/memory-regression-smoke.sh`

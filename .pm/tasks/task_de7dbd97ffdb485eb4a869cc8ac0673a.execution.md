@@ -19,3 +19,7 @@ Example:
 ## 2026-05-19 20:29:03 CST / producer_system_designer
 - 完成内容: 补抓 `obra/superpowers` 当前 `main` 分支的完整 skill inventory（共 14 项），并将每个 skill 的 adopted / rejected / deferred 决策、oasis7 映射对象与理由正式回写到 borrowing PRD / design；不再只停留在 pattern 级结论，避免后续把未审过的单个 skill 误当成默认可借鉴项。
 - 遗留事项: 若后续 `superpowers` 新增或重命名 skill，需要在新的 borrowing review 中重跑 inventory snapshot，而不是默认为沿用本轮矩阵。
+
+## 2026-05-22 17:08:46 CST / producer_system_designer
+- 完成内容: 将 1 个已关闭微任务并档回当前聚合 task，合并 source_refs/doc_refs/related_prd/acceptance 等元数据，并删除重复 canonical task 文件。
+- 遗留事项: 后续若同一工作流再出现仅承担 truth refresh / doc sync 的一次性微任务，应先把正式 project/topic Trace 收口到 survivor，再执行 compact-task-group。

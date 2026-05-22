@@ -10,14 +10,22 @@ source_refs:
   - doc/engineering/prd.md
   - doc/engineering/project.md
   - doc/world-simulator/project.md
-doc_refs: []
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+  - doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md
+doc_refs:
+  - doc/engineering/project.md
 related_prd:
   - PRD-ENGINEERING-021
   - PRD-ENGINEERING-022
+  - PRD-ENGINEERING-031
 acceptance:
   - "Freeze adopted/rejected/deferred superpowers borrowings for oasis7 workflow."
   - "Add formal follow-up tasks for workflow evals, completion verification, and viewer visual companion."
+  - "PR #250 中 borrowing 相关文档的过时表述被回写到当前仓库真值"
+  - "已吸收的 planning / execution / skill-authoring surface 不再被写成未来态"
+  - "remaining deferred 边界仍保持明确，没有把 upstream 整包误写成 adopted"
 handoff_to: []
-updated_at: 2026-05-19T17:12:36+08:00
+updated_at: 2026-05-22T17:08:46+08:00
 last_started_at: 2026-05-19T16:53:53+08:00
 last_closed_at: 2026-05-19T17:12:36+08:00

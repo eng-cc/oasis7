@@ -71,6 +71,7 @@
   - SC-31: 根 `AGENTS.md`、`.agents/roles/*.md` 与 `.agents/roles/templates/*.md` 必须对 `.pm` task 创建顺序、task execution log canonical 路径和“一个 task 收口后再开下一 task”的语义维持单一口径；当前态检查项不得再要求回写 `doc/devlog/YYYY-MM-DD.md`。
   - SC-32: 既有 `project.md` 中已经存在的顺序任务编号可作为历史追踪保留，不要求批量迁移；但新增任务项不得再把顺序编号当默认格式回流到正式项目页。
   - SC-33: 外部 agent workflow/methodology 借鉴必须先在 `engineering/self-evolution` 专题中冻结 adopted / rejected / deferred 边界，并把 adopted 项转译为 repo-owned helper/eval/module follow-up；不得直接把外部 bootstrap、universal brainstorming/subagent/TDD 规则写成 oasis7 当前默认流程。
+  - SC-34: `.pm` 必须提供 repo-owned task compaction 能力：当同一 owner / 同一工作流下出现仅承担 truth refresh、doc sync 或中段 burn-down 留痕的已关闭微任务时，必须能在正式 `project.md` / topic project Trace 已收口到 survivor task 后，把重复 canonical task 文件安全并档回单个聚合 task，而不是长期保留成 task 膨胀噪声。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -190,6 +191,7 @@
   - AC-29A: `scripts/new-task-worktree.sh` 必须提供可选的 task-worktree 原子 bootstrap 入口；当传入 owner role / title / source refs 时，task file、execution log 与 `last_started_at` 只允许写入目标 worktree，不得污染 source worktree；若 canonical `main` worktree 根存在本地 `config.toml`，新建 task worktree 时也必须同步复制该文件，但保持其 git-ignored 本地配置属性不变。
   - AC-30: 自本规则生效后，模块 `project.md` 新增任务项必须默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，并固定包含 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）字段追溯运行态对象；推荐单行模板为 `- [ ] topic-slug (PRD-XXX) [test_tier_required|full]: <summary>. Trace: .pm/tasks/task_<32hex>.yaml`。已存在的 `TASK-*` 顺序编号条目可保留为历史记录，但不作为新增任务格式继续扩散。
   - AC-31: 外部 agent workflow/methodology 借鉴必须在 `engineering/self-evolution` 专题中形成 adopted / rejected / deferred 矩阵，并至少对 adopted 项给出 repo-owned follow-up 或模块参考边界；外部 bootstrap、universal brainstorming/subagent/TDD 规则不得未经专题裁决直接写成当前 root workflow 口径。
+  - AC-32: `scripts/pm/compact-task-group.sh` 必须只允许 compaction `done/deferred` 的 dropped task，要求 survivor 与 dropped task 同 owner_role，并在 repo 仍存在 dropped task UID 的 tracked 引用时直接失败；成功后必须合并 survivor 元数据、删除 dropped `.pm/tasks/<uid>.yaml` 与 `.execution.md`、重建 task registry/backlog 视图，并提供至少一条 focused smoke 覆盖“先因文档引用失败、Trace 收口后成功并档”的路径。
 - Non-Goals:
   - 不定义 gameplay/p2p/runtime 业务规则。
   - 不替代模块内部测试策略。

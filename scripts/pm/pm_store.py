@@ -5,6 +5,7 @@ import argparse
 import json
 import pathlib
 import re
+import subprocess
 import sys
 import uuid
 from collections import OrderedDict
@@ -88,6 +89,13 @@ WORKING_MEMORY_ENTRY_KINDS = {
     "open_question",
     "next_step",
 }
+COMPACTED_TASK_LIST_FIELDS = (
+    "source_refs",
+    "doc_refs",
+    "related_prd",
+    "acceptance",
+    "handoff_to",
+)
 TASK_EXECUTION_LOG_ENTRY_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) CST / ([a-z_][a-z0-9_]*)$")
 REDACTION_PATTERNS = [
     (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "[REDACTED_EMAIL]"),
@@ -173,6 +181,18 @@ def task_file_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
     return root / task_relative_path(task_uid)
 
 
+def unique_str_list(values: list[object]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        item = str(value)
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
+
+
 def find_task_file(root: pathlib.Path, task_uid: str) -> tuple[pathlib.Path, OrderedDict[str, object]]:
     path = task_file_path(root, task_uid)
     if not path.is_file():
@@ -209,6 +229,199 @@ def task_registry_path(root: pathlib.Path) -> pathlib.Path:
 
 def role_backlog_path(root: pathlib.Path, role: str, file_status: str) -> pathlib.Path:
     return root / f".pm/roles/{role}/backlog/{file_status}.yaml"
+
+
+def is_generated_task_view_relative_path(relative_path: str) -> bool:
+    parts = pathlib.PurePosixPath(relative_path.replace("\\", "/")).parts
+    if parts == (".pm", "registry", "tasks.yaml"):
+        return True
+    return (
+        len(parts) == 5
+        and parts[0] == ".pm"
+        and parts[1] == "roles"
+        and parts[3] == "backlog"
+        and parts[4] in {"candidate.yaml", "committed.yaml", "blocked.yaml", "done.yaml"}
+    )
+
+
+def iter_reference_scan_paths(root: pathlib.Path) -> list[tuple[pathlib.Path, str]]:
+    try:
+        output = subprocess.check_output(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        paths = []
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            if ".git" in path.parts:
+                continue
+            paths.append((path, str(path.relative_to(root)).replace("\\", "/")))
+        return paths
+
+    paths = []
+    for raw_path in output.decode("utf-8").split("\0"):
+        if not raw_path:
+            continue
+        paths.append((root / raw_path, raw_path))
+    return paths
+
+
+def find_task_uid_references(
+    root: pathlib.Path,
+    task_uids: list[str],
+    *,
+    skipped_relative_paths: set[str],
+) -> list[str]:
+    hits: list[str] = []
+    for path, relative_path in iter_reference_scan_paths(root):
+        normalized_path = relative_path.replace("\\", "/")
+        if normalized_path in skipped_relative_paths:
+            continue
+        if is_generated_task_view_relative_path(normalized_path):
+            continue
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            matched_task_uids = [task_uid for task_uid in task_uids if task_uid in line]
+            for task_uid in matched_task_uids:
+                hits.append(f"{normalized_path}:{line_no}: {task_uid}")
+    return hits
+
+
+def append_execution_log_entry(
+    root: pathlib.Path,
+    execution_log_relative_path: str,
+    *,
+    role: str,
+    completed: str,
+    pending: str,
+) -> None:
+    path = root / execution_log_relative_path
+    if not path.is_file():
+        raise ValueError(f"task execution log missing: {execution_log_relative_path}")
+
+    existing = path.read_text(encoding="utf-8")
+    separator = ""
+    if existing and not existing.endswith("\n\n"):
+        separator = "\n" if existing.endswith("\n") else "\n\n"
+    heading = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    entry = "\n".join(
+        [
+            f"## {heading} CST / {role}",
+            f"- 完成内容: {completed}",
+            f"- 遗留事项: {pending}",
+            "",
+        ]
+    )
+    path.write_text(existing + separator + entry, encoding="utf-8")
+
+
+def compact_task_group(
+    root: pathlib.Path,
+    *,
+    survivor_task_uid: str,
+    dropped_task_uids: list[str],
+) -> dict[str, object]:
+    if not dropped_task_uids:
+        raise ValueError("compact-task-group requires at least one --drop-task-uid")
+
+    unique_dropped_task_uids = unique_str_list(dropped_task_uids)
+    if survivor_task_uid in unique_dropped_task_uids:
+        raise ValueError("survivor task must not also be dropped")
+
+    survivor_path, survivor_fields = find_task_file(root, survivor_task_uid)
+    survivor_owner_role = str(survivor_fields.get("owner_role") or "")
+    survivor_execution_log_path = str(survivor_fields.get("execution_log_path") or "")
+    if survivor_execution_log_path != task_execution_log_relative_path(survivor_task_uid):
+        raise ValueError(f"survivor task execution_log_path mismatch: {survivor_task_uid}")
+
+    dropped_records: list[tuple[str, pathlib.Path, pathlib.Path, OrderedDict[str, object]]] = []
+    skipped_relative_paths = {
+        str(survivor_path.relative_to(root)).replace("\\", "/"),
+        survivor_execution_log_path,
+    }
+
+    for task_uid in unique_dropped_task_uids:
+        task_path, task_fields = find_task_file(root, task_uid)
+        owner_role = str(task_fields.get("owner_role") or "")
+        if owner_role != survivor_owner_role:
+            raise ValueError(
+                f"compact-task-group owner_role mismatch: {task_uid} -> {owner_role} != {survivor_owner_role}"
+            )
+        status = str(task_fields.get("status") or "")
+        if status not in {"done", "deferred"}:
+            raise ValueError(f"compact-task-group only accepts done/deferred dropped tasks: {task_uid} -> {status}")
+        execution_log_relative_path = str(task_fields.get("execution_log_path") or "")
+        expected_execution_log_path = task_execution_log_relative_path(task_uid)
+        if execution_log_relative_path != expected_execution_log_path:
+            raise ValueError(
+                f"compact-task-group execution_log_path mismatch: {task_uid} -> "
+                f"{execution_log_relative_path or '(missing)'} != {expected_execution_log_path}"
+            )
+        execution_log_path = root / execution_log_relative_path
+        if not execution_log_path.is_file():
+            raise ValueError(f"compact-task-group missing execution log: {execution_log_relative_path}")
+        dropped_records.append((task_uid, task_path, execution_log_path, task_fields))
+        skipped_relative_paths.add(str(task_path.relative_to(root)).replace("\\", "/"))
+        skipped_relative_paths.add(execution_log_relative_path)
+
+    reference_hits = find_task_uid_references(
+        root,
+        unique_dropped_task_uids,
+        skipped_relative_paths=skipped_relative_paths,
+    )
+    if reference_hits:
+        preview = reference_hits[:20]
+        remainder = len(reference_hits) - len(preview)
+        message = "\n".join(preview)
+        if remainder > 0:
+            message += f"\n... plus {remainder} more reference(s)"
+        raise ValueError(
+            "compact-task-group blocked by remaining tracked references; "
+            "update project/topic docs and other repo truth first:\n"
+            f"{message}"
+        )
+
+    for field in COMPACTED_TASK_LIST_FIELDS:
+        merged_values = list(survivor_fields.get(field) or [])
+        for _, _, _, task_fields in dropped_records:
+            merged_values.extend(list(task_fields.get(field) or []))
+        survivor_fields[field] = unique_str_list(merged_values)
+
+    updated_at = now_iso()
+    survivor_fields["updated_at"] = updated_at
+    dump_mapping_document(survivor_path, survivor_fields)
+    append_execution_log_entry(
+        root,
+        survivor_execution_log_path,
+        role=survivor_owner_role,
+        completed=(
+            f"将 {len(dropped_records)} 个已关闭微任务并档回当前聚合 task，"
+            "合并 source_refs/doc_refs/related_prd/acceptance 等元数据，并删除重复 canonical task 文件。"
+        ),
+        pending=(
+            "后续若同一工作流再出现仅承担 truth refresh / doc sync 的一次性微任务，"
+            "应先把正式 project/topic Trace 收口到 survivor，再执行 compact-task-group。"
+        ),
+    )
+
+    deleted_paths: list[str] = []
+    for _, task_path, execution_log_path, _ in dropped_records:
+        task_path.unlink()
+        execution_log_path.unlink()
+        deleted_paths.append(str(task_path.relative_to(root)))
+        deleted_paths.append(str(execution_log_path.relative_to(root)))
+
+    rebuild_task_views(root)
+    return {
+        "survivor_task_uid": survivor_task_uid,
+        "dropped_task_uids": unique_dropped_task_uids,
+        "deleted_paths": deleted_paths,
+        "updated_at": updated_at,
+    }
 
 
 def rebuild_task_views(root: pathlib.Path) -> None:
@@ -2155,6 +2368,22 @@ def cmd_move_task(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compact_task_group(args: argparse.Namespace) -> int:
+    result = compact_task_group(
+        args.root,
+        survivor_task_uid=args.survivor_task_uid,
+        dropped_task_uids=list(args.drop_task_uid),
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(
+            "compact-task-group: compacted "
+            f"{len(result['dropped_task_uids'])} task(s) into {result['survivor_task_uid']}"
+        )
+    return 0
+
+
 def cmd_supersede_memory(args: argparse.Namespace) -> int:
     root = args.root
     updated_at = now_iso()
@@ -2499,6 +2728,7 @@ def main() -> int:
             "cmd_workflow_report": cmd_workflow_report,
             "cmd_promote_memory": cmd_promote_memory,
             "cmd_move_task": cmd_move_task,
+            "cmd_compact_task_group": cmd_compact_task_group,
             "cmd_supersede_memory": cmd_supersede_memory,
             "cmd_stage_report": cmd_stage_report,
             "cmd_stage_lint": cmd_stage_lint,
