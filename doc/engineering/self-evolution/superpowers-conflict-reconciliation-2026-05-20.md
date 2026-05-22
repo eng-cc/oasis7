@@ -99,6 +99,7 @@
 
 - 默认协作模式已改为 `producer_system_designer` orchestrator + 标准角色 subagents。
 - 默认实施模式已改为 bounded subagent-driven execution：分析、实现、验证与补充 review 可交给角色 subagent，但都必须回收到同一 owner / `.pm` task / canonical worktree / GitHub PR 主链。
+- handoff / planning surface 已补 `slice type`、`write scope`、`return contract` 与 `integration order` 字段，避免默认 subagent-driven 流程停留在口头约定。
 - 角色 subagent 的输出必须回收到单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链。
 
 与 oasis7 仍然冲突的点：
@@ -153,7 +154,7 @@
 | skill | 当前状态 | 直接冲突 | 可借鉴部分 | 重开条件 |
 | --- | --- | --- | --- | --- |
 | `brainstorming` | rejected | 把设计前置变成 universal gate | visual companion、IA/wireframe 对比 | 仅在 Viewer 等 UI-heavy 专题内按需启用 |
-| `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task + local review ritual、或把 subagent 扩成独立真值持有者 | 已完成 bounded borrowing：默认 subagent-driven execution、任务拆分、上下文最小化、实现/验证/补充 review 切片 | 仅剩 local review ritual 等 rejected 部分；只有在正式 PR review 边界变化且 repo-owned multi-agent eval 稳定后才应重开 |
+| `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task + local review ritual、或把 subagent 扩成独立真值持有者 | 已完成 bounded borrowing：默认 subagent-driven execution、任务拆分、上下文最小化、实现/验证/补充 review 切片，以及 `slice type / write scope / return contract / integration order` contract | 仅剩 local review ritual 等 rejected 部分；只有在正式 PR review 边界变化且 repo-owned multi-agent eval 稳定后才应重开 |
 | `test-driven-development` | rejected | universal TDD 与 `test_tier_required/full` 不匹配 | 行为先验、失败先行思维 | 仅在特定实现域作为按需 skill，而非 root 默认规则 |
 | `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 已完成 bounded borrowing：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板和 planning self-checklist | 剩余 skill 本体只有在不再竞争正式计划真值时，才允许继续局部 salvage；不得回退为默认前置计划系统 |
 | `using-superpowers` | rejected | 外部 bootstrap 与当前 root workflow 真值冲突 | 触发说明、skill 发现习惯 | 必须先转成 repo-owned trigger governance，再评估 |

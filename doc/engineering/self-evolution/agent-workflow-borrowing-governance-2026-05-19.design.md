@@ -96,8 +96,11 @@
 - 覆盖面：
   - root `AGENTS.md`
   - `.agents/roles/producer_system_designer.md`
-  - task handoff / execution log 中的 subagent write-scope 约束
-- 目标：让多角色 subagent 与默认 subagent-driven execution 一起成为默认协作方式，但不把它扩成平行 task/worktree/review 真值。
+  - `.agents/roles/templates/handoff-brief.md`
+  - `.agents/roles/templates/handoff-detailed.md`
+  - `.agents/roles/templates/planning-self-checklist.md`
+  - task handoff / execution log 中的 subagent write-scope 与 return-contract 约束
+- 目标：让多角色 subagent 与默认 subagent-driven execution 一起成为默认协作方式，并把“slice type / write scope / return contract / integration order / owner integration”落成 root workflow contract；但不把它扩成平行 task/worktree/review 真值。
 
 ### 4.3 Completion-claim verification gate
 - owner 倾向：`producer_system_designer` + `qa_engineer`
@@ -137,6 +140,6 @@
 ## 6. 风险控制
 - 任何 adopted 项如果没有 repo-owned follow-up，就仍视为未落地。
 - 任何 rejected 项如果重新出现在 root workflow 文档中，应视为治理回弹。
-- 任何默认 role-subagent 协作如果没有 owner、write scope 或 handoff 记录，应视为越界。
+- 任何默认 role-subagent 协作如果没有 owner、write scope、return contract 或 handoff 记录，应视为越界。
 - 任何 visual companion 使用如果绕过实现 task / regression / PR review，应视为越界。
 - 任何已本地化 skill 如果与 `AGENTS.md`、`.pm` helper 或 engineering 专题口径漂移，应视为 inventory truth drift。

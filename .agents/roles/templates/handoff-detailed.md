@@ -34,6 +34,14 @@
 - 上游依赖：
 - 现有测试 / 证据：
 
+## Subagent Contract
+- Slice Type: `analysis | implementation | verification | supplemental_review | liveops_feedback`
+- Write Scope:
+- Read-Only Dependencies:
+- Return Contract:
+- Integration Owner:
+- Integration Order:
+
 ## Requested Work
 - 工作项 1：
 - 工作项 2：
@@ -52,10 +60,12 @@
 - 文档回写：
 - 测试记录：
 - task execution log：
+- subagent 回传物类型：
 
 ## Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对上游 / 下游角色
+- [ ] write scope / return contract / integration order 已被遵守
 - [ ] 对应 `prd.md` / `project.md` 已回写
 - [ ] 对应 `.pm/tasks/<TASK-UID>.execution.md` 已记录
 - [ ] required/full 测试证据已补齐

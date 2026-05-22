@@ -85,6 +85,7 @@
   - AC-5: deferred 项必须把 multi-harness pluginization 与自动 skill bootstrap 维持在“非当前默认流程”边界，不得混入 root `AGENTS.md` 现行口径。
   - AC-6: `engineering` 根入口、主项目、文件级索引和 `world-simulator` Viewer 后续参考口径必须完成回写。
   - AC-7: 默认 subagent 编排与 bounded subagent-driven execution 都不得直接修改 owner/review/task 真值；所有 adopted 项都必须以 repo-owned root rule、skill、helper 或 follow-up task 落地。
+  - AC-7A: root workflow 与 handoff template 必须显式要求每个默认 subagent slice 声明 `slice type / write scope / return contract / integration owner`，复杂场景还需补 `integration order`；若缺任一项，不得宣称符合默认 subagent-driven 流程。
   - AC-8: `writing-plans` 的可 salvage 部分必须被收口成 repo-owned planning surface，而不是继续停留在“以后可以借”的抽象结论。
   - AC-9: `executing-plans` 的可 salvage 部分必须被收口成 repo-owned execution surface：进入实施前先做 execution gap review、实施时按原子步骤逐步验证、遇到 blocker 明确停下并回写真值。
 - Non-Goals:
@@ -127,7 +128,7 @@
 - Edge Cases & Error Handling:
   - adopted 项仍停留在聊天结论：必须视为未完成，直到进入正式 project/task 追踪。
   - 外部规则与当前流程局部相似但默认假设不同：必须按 repo truth 重写，不允许直接复述原规则。
-  - 默认角色 subagent 或 subagent-driven execution 未声明 owner、write scope 或 handoff：视为未绑定真值，不得执行并行写入或宣称流程合规。
+  - 默认角色 subagent 或 subagent-driven execution 未声明 owner、write scope、return contract 或 handoff：视为未绑定真值，不得执行并行写入或宣称流程合规。
   - visual companion 被误升级为所有需求的 mandatory pre-step：必须回退到 optional 设计辅助边界。
   - completion verification gate 只验证部分命令或旧结果：视为无效 evidence，不得宣称完成。
   - workflow eval 只验证静态文案而不验证 agent 行为：视为 coverage 不足，不得声称 adopted 项已经落地。
@@ -138,6 +139,7 @@
   - NFR-AWB-2: adopted 项不得引入新的在线依赖、外部真值或多 harness bootstrap 作为当前默认前提。
   - NFR-AWB-3: workflow behavior eval 的首批覆盖必须至少命中 task-worktree、closeout、PR preflight、review-thread closeout 四段主链。
   - NFR-AWB-3A: 默认角色 subagent 编排与 bounded subagent-driven execution 不得改变 `workflow-report start/close`、`.pm` task 状态、task execution log 记录责任人与 GitHub PR review 正式边界。
+  - NFR-AWB-3B: 默认 subagent-driven 流程必须能在 handoff / planning surface 中回放出每个 slice 的 write scope、return contract 与 integration order，避免“已经派了 subagent，但无法审计它被要求交付什么”。
   - NFR-AWB-4: visual companion pilot 不得增加 world-simulator Viewer 默认 required gate 的在线依赖。
   - NFR-AWB-5: planning surface tightening 不得要求额外在线依赖、外部 bootstrap 或第二套 plan storage；所有新增约束必须落在现有 repo-owned 文档和模板里。
   - NFR-AWB-6: execution surface tightening 不得绕开 `project.md` / `.pm` / task execution log / GitHub PR review，也不得把 step-level verification 替换成事后总结式宣称。
@@ -156,12 +158,13 @@
   - v1.6 (completed, bounded): 已将 `writing-skills` 的 authoring surface 收口成 repo-owned skill authoring entry points、template 与 checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。
   - v1.7 (completed, bounded): 已将 `dispatching-parallel-agents` 翻译成 repo-owned 默认角色 subagent 编排层，并把边界固定为 `producer_system_designer` orchestrator + 单 owner/task/worktree/PR 真值。
   - v1.8 (completed, bounded): 已将 `subagent-driven-development` 翻译成 repo-owned 默认 subagent-driven execution，要求所有分析 / 实现 / 验证 / 补充 review 切片都回收到同一 owner/task/worktree/PR 真值，并继续拒绝 fresh subagent-per-task + local two-stage review ritual。
+  - v1.9 (completed, bounded): 已把默认 subagent-driven execution 从“原则性 adopted”推进到 root workflow contract：`AGENTS.md`、角色卡、handoff template 与 planning checklist 现已显式要求 `slice type / write scope / return contract / integration order`。
   - v2.0: 在 repo-owned behavior/eval 稳定后，再决定是否重开 multi-harness workflow packaging 评估。
 - Technical Risks:
   - 风险-1: 若只冻结 adopted 项、不补 repo-owned eval，最终会退化成“又一份 workflow 口号”。
   - 风险-2: 若不明确 rejected 项，外部 repo 的强制 ceremony 容易被误当成当前默认流程。
   - 风险-3: 若 visual companion 没有严格限域，可能把 Viewer 设计题和一般实现题混成统一前置门禁。
-  - 风险-4: 若默认角色 subagent 没有 write scope / owner 约束，会造成 overlapping writes、`.pm` 漂移或 review 责任不清。
+  - 风险-4: 若默认角色 subagent 没有 write scope / owner / return contract 约束，会造成 overlapping writes、`.pm` 漂移或 review 责任不清。
   - 风险-5: 若 packaging 先于 repo-owned truth 稳定，会造成“可分发但不可审计”的反向漂移。
 
 ## 6. Validation & Decision Record
@@ -173,7 +176,7 @@
 | PRD-ENGINEERING-AWB-003 | `viewer-visual-companion-pilot-followup` | `test_tier_required` | Viewer Web 前置 mockup/IA 对比样例、实现 task handoff、后续 `agent-browser`/repo-owned regression 不回退 | `world-simulator/viewer` 设计前置链路 |
 | PRD-ENGINEERING-AWB-004 | `multi-harness-workflow-packaging-deferred` | `test_tier_required` | 仅验证 deferred 口径与 reopen 条件是否写清 | pluginization / harness distribution 边界 |
 | PRD-ENGINEERING-AWB-005 | `workflow-planning-surface-tightening` | `test_tier_required` | `AGENTS.md` 规则、handoff 模板、planning self-checklist、topic/root project 回写与文档治理校验 | `engineering` planning / handoff / review 准备链路 |
-| PRD-ENGINEERING-AWB-006 | `default-role-subagent-orchestration`、`role-subagent-local-validation`、`subagent-driven-default-reconciliation`、`workflow-behavior-eval-harness-followup` | `test_tier_required` + `test_tier_full` | `AGENTS.md` 默认 orchestrator/subagent 规则与 bounded subagent-driven execution、borrowing/conflict 文档改判、后续 multi-agent behavior eval | `engineering` 多角色协作、owner/task/worktree/PR 真值边界 |
+| PRD-ENGINEERING-AWB-006 | `default-role-subagent-orchestration`、`role-subagent-local-validation`、`subagent-driven-default-reconciliation`、`subagent-driven-default-workflow-rollout`、`workflow-behavior-eval-harness-followup` | `test_tier_required` + `test_tier_full` | `AGENTS.md` 默认 orchestrator/subagent 规则与 bounded subagent-driven execution、handoff/planning contract、borrowing/conflict 文档改判、后续 multi-agent behavior eval | `engineering` 多角色协作、owner/task/worktree/PR 真值边界 |
 | PRD-ENGINEERING-031 | `workflow-execution-surface-tightening` | `test_tier_required` | repo-owned execution skill、`AGENTS.md` execution rule、workflow-borrowing / conflict doc 回写与文档治理校验 | `engineering` task 执行、逐步验证与 blocker handling 链路 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

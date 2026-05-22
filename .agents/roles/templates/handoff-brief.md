@@ -24,6 +24,13 @@
 - 已知约束：
 - 依赖前置项：
 
+## Subagent Contract
+- Slice Type: `analysis | implementation | verification | supplemental_review | liveops_feedback`
+- Write Scope:
+- Read-Only Dependencies:
+- Return Contract:
+- Integration Owner:
+
 ## Expected Output
 - 接收方交付物 1：
 - 接收方交付物 2：
@@ -49,6 +56,7 @@
 ## Validation
 - 建议测试层级：`test_tier_required` / `test_tier_full`
 - 建议验证命令：
+- 预期回传证据：
 
 ## Notes
 - 其他补充：

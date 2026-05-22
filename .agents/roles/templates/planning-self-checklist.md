@@ -18,6 +18,8 @@
   - `PRD-ID`、task slug、`.pm` task、分支 / worktree 名、文档标题、关键路径引用前后一致
 - [ ] 原子步骤足够细
   - 接手人不需要额外口头补充，就能按步骤执行、验证、回写
+- [ ] subagent slices 已定义清楚
+  - 若默认派生角色 subagent，必须写清每个 slice 的类型、write scope、return contract 和 integration order
 
 ## Optional Checks
 

@@ -28,6 +28,7 @@
    4. 仓库已启用 `.pm/` 运行层时，若当前需求尚未绑定 task，优先在目标 task worktree 内通过 `./scripts/new-task-worktree.sh ... --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>` 一次性完成 `.pm` bootstrap；若手动执行，则也必须先 `cd` 到目标 worktree，再通过 `./scripts/pm/new-task.sh` 或 `python3 ./scripts/pm/pm_store.py new-task . --owner-role <owner_role> ...` 创建 `.pm` task，并按需要执行 `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status committed`，把任务放入 owner backlog
    5. 进入实施前执行 `./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`，把 `last_started_at` 写入当前任务，再读取该角色 backlog / memory / pending signals / stage 摘要后开始编辑；纯阶段评审时，才允许省略 `--task-uid`
    6. 若 `producer_system_designer` 默认派生多个角色 subagent，开始前必须为每个 subagent 明确目标、输入、输出、验证方式与 write scope；若 write scope 不是 disjoint 的，就只能串行，不得并行落地
+   7. 默认 subagent-driven development 进入实施前，owner 还必须明确四件事：每个 subagent slice 的类型（分析 / 实现 / 验证 / 补充 review / 口径回流）、预期回传物（patch / findings / evidence / handoff）、集成顺序，以及最终由谁在 canonical worktree 上完成正式回写
 
 4. 先更新 `prd.md`，再拆 `project.md`
    1. 需求、行为、边界变化时必须先更新 `prd.md`
@@ -42,10 +43,11 @@
    2. 测试统一分 `test_tier_required` / `test_tier_full`
    3. 套件矩阵统一参考 `testing-manual.md`
    4. 跨角色或非 trivial task 默认按 bounded subagent-driven development 推进：由 `producer_system_designer` 将分析、实现、验证、补充 review 切成角色 subagent 任务，再由主会话把结果集成回同一 owner / `.pm` task / worktree / PR 主链
-   5. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
-   6. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
-   7. 若步骤说明不清、真实影响面超出当前计划，或同一验证连续失败且没有新信息，不得继续猜测实现；必须先报告 blocker，并明确需要补哪一条文档/决策/输入
-   8. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还要评估是否需要 `liveops_community` 回流
+   5. 默认流程顺序是：owner 做 execution gap review -> 按需要派生角色 subagent -> subagent 按声明好的 write scope / return contract 交付 patch、findings 或 evidence -> owner 在 canonical worktree 集成并运行 fresh verification -> 必要时再派生补充 review / QA / liveops 子任务 -> 回写 PRD / project / execution log / `.pm`
+   6. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
+   7. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
+   8. 若步骤说明不清、真实影响面超出当前计划，或同一验证连续失败且没有新信息，不得继续猜测实现；必须先报告 blocker，并明确需要补哪一条文档/决策/输入
+   9. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还要评估是否需要 `liveops_community` 回流
 
 6. 角色协作规则
    1. `producer_system_designer` 管目标、规则、资源与玩法口径
@@ -55,8 +57,9 @@
    5. 默认协作模式是 `producer_system_designer` orchestrator + 角色 subagents；主会话负责决策、派工、集成与正式回写
    6. 任一需求仍只有一个 owner role、一个 `.pm` task、一个 canonical task worktree 和一个正式 PR；角色 subagent 不能各自创建平行真值
    7. 非 owner role 的 subagent 默认交付分析、实现切片、验证、补充 review 或对外口径回流；若需要实际并行写入，必须先在 `project.md`、handoff 或 task execution log 中声明 disjoint write scope
-   8. 正式评审边界仍是 GitHub PR review；subagent review 只能补强，不得替代 required checks + review/approval
-   9. 跨角色交付时，发起方写 handoff，接收方确认 done，最终 owner 回写 PRD / project / task execution log
+   8. 每个 subagent slice 都必须有明确 return contract：至少写清回传的是 patch、findings、验证证据还是 review 结论；若没有 return contract，就不应派发
+   9. 正式评审边界仍是 GitHub PR review；subagent review 只能补强，不得替代 required checks + review/approval
+   10. 跨角色交付时，发起方写 handoff，接收方确认 done，最终 owner 回写 PRD / project / task execution log
 
 7. 改完后必须回写文档
    1. 保证代码 / 测试 / 文档可追溯到 PRD-ID
