@@ -112,6 +112,10 @@ systemctl restart oasis7-testnet-observer.service
   - `/opt/oasis7/p2p-testnet-local/config/public-testnet-live-candidate-bundle-2026-05-22.json`
   - `runtime_build.sha256=d1046485ae71a794cf0f5fb78561bd6068363ca53aee3ccac384d831829c07e8`
 8. 这说明当前剩余问题已不再是“local contract 未生效”或“binary 还没对齐”，而是更深一层的 release/runtime input drift。
+9. 随后又做了一次更强的 live 复现：把本机 `STORAGE_ROOT` 也迁出并重启 observer。
+  - backup: `/opt/oasis7/p2p-testnet-local/backups/storage-reset-20260522-164319`
+  - 结果：local `execution_store_root` 已降到近空白状态，但 `/v1/chain/status` 仍立即回到同一条 `gap sync height 15 execution hash validation failed`
+  - 这说明“仅仅是本机旧 CAS/blob 没清掉”不足以解释当前分叉，问题至少还包含上游 peer truth 或更深的执行恢复输入漂移。
 
 ## Remaining live blocker
 1. local observer 现在可以加载 formal manifest、two-validator contract，并且 current runtime binary 也已与 ECS hash 对齐。
@@ -119,6 +123,7 @@ systemctl restart oasis7-testnet-observer.service
   - `shared_devnet_pass` 仍未满足
   - local observer 在 height 15 持续出现 execution hash mismatch
   - live current binary hash 与 mirrored candidate bundle `runtime_build.sha256` 仍不一致
+  - 即使额外清空了本机 `STORAGE_ROOT`，同一条 height-15 mismatch 也会立即复现
 3. 因此这条任务虽然已完成 local contract sync 与 repo-owned reset path，但还不能把本机 runtime 记成健康 `pass`，也不能把 aggregate `public_testnet` readiness 提升为可用。
 
 ## Boundaries

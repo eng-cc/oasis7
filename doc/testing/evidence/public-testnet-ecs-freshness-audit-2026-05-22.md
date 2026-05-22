@@ -154,3 +154,4 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - `runtime_bootstrap` remains `block`, but no longer because the local observer is missing the formal manifest
   - the deeper blocker is now release/runtime input drift: binary parity alone does not restore execution parity
   - `public_rpc_ready` / `explorer_public_ready` / `faucet_guard_ready` should remain `partial` until the height-15 execution split is cleared and a fresh same-window external claim is revalidated
+  - a later controlled reset of local `STORAGE_ROOT` also failed to clear the split, so the remaining drift is no longer explainable as “local stale CAS only”

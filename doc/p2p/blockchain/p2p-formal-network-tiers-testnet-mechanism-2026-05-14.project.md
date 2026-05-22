@@ -48,6 +48,7 @@
   - 2026-05-22 13:25 CST 已实际清掉本机 observer 的 manifest/validator drift：当前 local status 已加载 `network_tier.tier=public_testnet` 与 `bootstrap_peer_count=2`。
   - 2026-05-22 16:31 CST further recheck：`fetch-commit authorization failed` 与 writer-switch stale-state 已不再是主阻断；即使 local current runtime binary 已与两台 ECS 对齐为 `2f836980834da470882fef4ca7ab0598c984acfc42565d574acf2cd19c474cfe`，本机仍在 `height 15` 持续报 execution hash mismatch。
   - mirrored candidate bundle `/opt/oasis7/p2p-testnet-local/config/public-testnet-live-candidate-bundle-2026-05-22.json` 仍声明 `runtime_build.sha256=d1046485ae71a794cf0f5fb78561bd6068363ca53aee3ccac384d831829c07e8`，说明 live candidate bundle 与 current runtime 真值本身也在漂移。
+  - 2026-05-22 16:43 CST extra live reset：即使把本机 `STORAGE_ROOT` 迁出到 `/opt/oasis7/p2p-testnet-local/backups/storage-reset-20260522-164319` 后重启，local 仍会立刻回到同一条 `height 15` mismatch；因此“本机旧 CAS/blob 没清掉”不是单独根因。
   - ECS sequencer 的 predecessor-gap 历史错误虽然不是本机当前唯一故障签名，但 live runtime 仍未形成可对外宣称“已健康收敛”的执行真值，因此即使 public endpoint 仍可访问，也不能把 `runtime_bootstrap` 或相关 public lane 继续记为健康 `pass`。
   - `mainnet` 仍停留在 `MAINNET-1~4` readiness planning / partial execution 前阶段，仓库当前只有 formal manifest + gate skeleton。
 
@@ -134,5 +135,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 当前除 `shared_devnet_pass` 之外，还必须先找出导致 local/ECS 在 `height 15` 分叉的 release/runtime input drift，至少要同时收敛 current runtime binary、mirrored candidate bundle、execution snapshot/blob truth；在这些 live runtime blocker 被修平前，`public_testnet` 即使已有 public endpoint/faucet/claims evidence，也仍不得提升为 `ready_for_live_candidate`。
+- 下一步: 当前除 `shared_devnet_pass` 之外，还必须优先隔离或修复上游 peer truth 分叉，尤其是 `39.104.204.172` 仍停在 `committed_height=7209` 且报 predecessor-gap，而 `39.104.205.67` 已推进到 `13750`；在 healthy peer 单源复现或 sequencer repair 完成前，`public_testnet` 即使已有 public endpoint/faucet/claims evidence，也仍不得提升为 `ready_for_live_candidate`。
 - 最近更新: 2026-05-22
