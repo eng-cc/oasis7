@@ -38,28 +38,6 @@ run() {
   "$@"
 }
 
-run_with_retries() {
-  local max_attempts=$1
-  shift
-  local attempt=1
-  local exit_code=0
-  while (( attempt <= max_attempts )); do
-    set +e
-    "$@"
-    exit_code=$?
-    set -e
-    if [[ "$exit_code" -eq 0 ]]; then
-      return 0
-    fi
-    if (( attempt == max_attempts )); then
-      return "$exit_code"
-    fi
-    echo "retry: attempt $attempt/$max_attempts failed (exit=$exit_code), retrying..." >&2
-    attempt=$((attempt + 1))
-    sleep 1
-  done
-}
-
 run_cargo() {
   if [[ "${CI_VERBOSE:-}" == "1" ]]; then
     run env -u RUSTC_WRAPPER cargo "$@" --verbose
