@@ -5,6 +5,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
 required_scripts=(
+  "scripts/check-script-executable-bits.sh"
   "scripts/release-gate.sh"
   "scripts/release-gate-web-strict.sh"
   "scripts/viewer-primary-web-entry-regression.sh"
