@@ -7,7 +7,7 @@
   - `runtime_engineer`
 - 当前结论:
   - repo-owned local observer sync path: `pass`
-  - live apply on this machine: `blocked_by_root_owned_opt`
+  - live apply on this machine: `pass_with_followup_blocker`
 - 关联现网:
   - local service: `oasis7-testnet-observer.service`
   - local stack root: `/opt/oasis7/p2p-testnet-local`
@@ -59,24 +59,34 @@
   - repo-owned `start-node.sh` installed into temp `bin/`
   - backup copies written into temp `backups/`
 
-## Live apply blocker
-1. Current session can read but cannot write:
-  - `/opt/oasis7/p2p-testnet-local`
-  - `/opt/oasis7/p2p-testnet-local/config`
-  - `/opt/oasis7/p2p-testnet-local/bin`
-2. Ownership is currently `root:root`, so this PR cannot honestly claim that local observer has already been resynced on-host.
-3. The remaining operator step is:
+## 2026-05-22 live apply
+1. 本机会话随后拿到本机 sudo 权限，并已实际执行：
 ```bash
 ./scripts/p2p-public-testnet-local-observer-sync.sh apply \
   --local-env /opt/oasis7/p2p-testnet-local/config/node.env \
-  --sequencer-env <fresh sequencer node.env> \
-  --storage-env <fresh storage node.env> \
+  --sequencer-env .tmp/p2p_testnet_reality/20260522-100229/nodes/sequencer_ecs/node.env \
+  --storage-env .tmp/p2p_testnet_reality/20260522-100229/nodes/storage_ecs/node.env \
   --manifest-path /opt/oasis7/p2p-testnet-local/config/network-tier-public-testnet-live-candidate.json \
   --manifest-source doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json
 systemctl restart oasis7-testnet-observer.service
 ```
+2. live apply 期间脚本又补了两项必要修正：
+  - manifest 安装时会把 `release_candidate_bundle_ref`、`genesis_ref`、`bootstrap_peer_ref` 本地化到 `/opt/oasis7/p2p-testnet-local/config/`
+  - `REPLICATION_REMOTE_WRITERS_CSV` 改为复用 ECS `node.env` 的纯 hex allowlist
+3. 当前 live status 已确认：
+  - `systemctl is-active oasis7-testnet-observer.service` -> `active`
+  - `network_tier.source_path=/opt/oasis7/p2p-testnet-local/config/network-tier-public-testnet-live-candidate.json`
+  - `network_tier.tier=public_testnet`
+  - `network_tier.bootstrap_peer_count=2`
+4. 这证明本机 observer 的 formal manifest / two-validator contract 已经真实生效，而不是停留在离线 render。
+
+## Remaining live blocker
+1. local observer 仍未追平链高，当前最新错误是：
+  - `fetch-commit authorization failed: requester_public_key_hex=8971af...`
+2. 这说明当前 remaining blocker 已从“本机未加载 manifest / 合同漂移”切换成“ECS fetch-commit 授权面不接受本机 requester key”。
+3. 因此这条任务虽然已完成 local contract sync，但还不能把本机 runtime 记成健康 `pass`。
 
 ## Boundaries
 1. This task only closes the repo-owned local observer sync path.
-2. It does not clear the separate ECS sequencer blocker `execution driver missing predecessor record for non-contiguous committed height`.
-3. Therefore even after this script lands, aggregate `public_testnet` readiness still remains `block` until live apply completes and the sequencer runtime error is cleared.
+2. It does not clear the new local fetch-commit authorization blocker, nor the separate ECS sequencer blocker `execution driver missing predecessor record for non-contiguous committed height`.
+3. Therefore even after this script lands and live apply completes, aggregate `public_testnet` readiness still remains `block`.
