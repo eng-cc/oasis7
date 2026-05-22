@@ -552,6 +552,22 @@
     - `rg -n "claims_boundary_review|allowed claims|denied claims|ready_for_live_candidate|production_oc_settlement|mainnet_live" doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] formal-public-testnet-ecs-evidence-harvest (PRD-P2P-028) [test_tier_required]: 将 current live candidate manifest / bundle / bootstrap peers 镜像成 repo-owned readiness 输入，并用 same-window ECS + local triad freshness audit 复核当前 lane 真值；若 public endpoint 仍可达但 runtime/config 已漂移，则必须把 `public_rpc_ready/explorer_public_ready/faucet_guard_ready/runtime_bootstrap` 收紧回 `partial/block`。 Trace: .pm/tasks/task_49d6af52e31d404eb80999993eb71b98.yaml
+  - 产物文件:
+    - `doc/testing/evidence/public-testnet-live-candidate-bundle-2026-05-22.json`
+    - `doc/testing/evidence/public-testnet-live-candidate-bootstrap-peers-2026-05-22.txt`
+    - `doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
+    - `doc/testing/evidence/public-testnet-ecs-freshness-audit-2026-05-22.md`
+    - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_49d6af52e31d404eb80999993eb71b98.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/network-tier-manifest.sh validate --manifest doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
+    - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json --lanes-tsv doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
+    - `P2PARCH6_SEQ_SSH_PASSWORD='***' P2PARCH6_STORAGE_SSH_PASSWORD='***' ./scripts/p2p-real-env-triad-snapshot.sh --samples 2 --interval-secs 3 --out-dir .tmp/p2p_testnet_reality --world-id oasis7-public-testnet-parallel-20260518 --local-service oasis7-testnet-observer.service --local-status-url http://127.0.0.1:6633/v1/chain/status --local-health-url http://127.0.0.1:6633/healthz --local-env-file /opt/oasis7/p2p-testnet-local/config/node.env --sequencer-target root@39.104.204.172 --sequencer-service oasis7-testnet-sequencer.service --sequencer-status-url http://127.0.0.1:6631/v1/chain/status --sequencer-health-url http://127.0.0.1:6631/healthz --sequencer-env-file /opt/oasis7/p2p-testnet/config/node.env --storage-target root@39.104.205.67 --storage-service oasis7-testnet-storage.service --storage-status-url http://127.0.0.1:6632/v1/chain/status --storage-health-url http://127.0.0.1:6632/healthz --storage-env-file /opt/oasis7/p2p-testnet/config/node.env`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 新增“hosted_public_join 托管身份 / 托管密钥与邮箱登录”专题 PRD / design / project，并把 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、自托管升级与 player-custody trust boundary 纳入模块追踪。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
   - 产物文件:
     - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
