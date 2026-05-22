@@ -1,0 +1,22 @@
+task_uid: task_b518025590ae4e998726066eb862e17c
+title: "p2p subscribe ack and udp gossip hardening"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-subscribe-ack-udp-gossip-hardening
+execution_log_path: .pm/tasks/task_b518025590ae4e998726066eb862e17c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/prd.md
+  - doc/p2p/project.md
+doc_refs: []
+related_prd:
+  - PRD-P2P-001
+  - PRD-P2P-003
+acceptance:
+  - "libp2p subscribe reports backend failure to callers instead of silently returning a dead subscription"
+  - "udp gossip replication path rejects or handles oversize/partial-send behavior explicitly instead of silent truncation or partial fan-out ambiguity"
+handoff_to: []
+updated_at: 2026-05-22T21:11:43+08:00
+last_started_at: 2026-05-22T20:58:02+08:00
+last_closed_at: 2026-05-22T21:11:43+08:00

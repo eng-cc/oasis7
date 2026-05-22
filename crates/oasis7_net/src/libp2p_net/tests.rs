@@ -20,6 +20,7 @@ mod active_set_candidate_tests;
 mod admissible_request_peers_tests;
 mod discovery_peer_record_tests;
 mod peer_record_tests;
+mod subscribe_ack_tests;
 mod transport_path_refresh_tests;
 
 fn signed_discovery_peer_record(
@@ -691,8 +692,15 @@ fn process_discovered_peer_record_dials_candidate_peer() {
 fn try_send_command_reports_queue_disconnect() {
     let (sender, receiver) = mpsc::channel(1);
     drop(receiver);
-    let err = try_send_command(&sender, Command::Subscribe("topic-a".to_string()))
-        .expect_err("send must fail once receiver is dropped");
+    let (response, _response_rx) = oneshot::channel();
+    let err = try_send_command(
+        &sender,
+        Command::Subscribe {
+            topic: "topic-a".to_string(),
+            response,
+        },
+    )
+    .expect_err("send must fail once receiver is dropped");
     assert!(matches!(
         err,
         WorldError::NetworkProtocolUnavailable { ref protocol }
