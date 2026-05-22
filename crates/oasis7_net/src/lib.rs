@@ -108,7 +108,8 @@ pub use replica_maintenance::{
 #[cfg(feature = "libp2p")]
 pub use libp2p_net::error_mapping::{
     classify_world_error_availability, world_error_is_missing_handler,
-    world_error_is_retryable_connection_gap, Libp2pAvailabilityClass,
+    world_error_is_publish_failure, world_error_is_retryable_connection_gap,
+    Libp2pAvailabilityClass,
 };
 
 #[cfg(feature = "libp2p")]
