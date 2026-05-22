@@ -66,7 +66,12 @@ USAGE
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --scenario)
-      SCENARIO="${2:-}"
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "error: --scenario requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      SCENARIO="$2"
       shift 2
       ;;
     --bundle-dir)

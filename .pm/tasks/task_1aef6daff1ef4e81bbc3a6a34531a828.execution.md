@@ -23,3 +23,7 @@ Example:
 ## 2026-05-22 16:49:02 CST / qa_engineer
 - 完成内容: 补跑 `web_strict` 时继续挖出两个被 `rg` 更早遮住的 Web blocker：`release-gate-web-strict.sh` 会把 `--scenario llm_bootstrap` 透传到 `viewer-software-safe-step-regression.sh`，但 `run-game-test.sh` 之前不接受该参数；同时 `viewer-software-safe-step-regression.sh` 自身曾从正式 `step -> completed_advanced + world delta` 合约退化成“只等自然推进”，与 `doc/testing/prd.md` / `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 的 canonical contract 不一致。已修复 `run-game-test.sh` 的 `--scenario` 支持，并恢复 software-safe step 回归在无自然推进时主动发送一次 canonical `step` 再判定 formal progress。补充验证已通过：`.tmp/release_gate_web_v051_fix_rerun3/20260522-170231/release-gate-summary.md` 为 `Overall: PASS`，其中 `web_strict: passed (ok)`；`.tmp/release_gate_web_v051_fix_rerun3/20260522-170231/web_strict/software-safe-step/20260522-170251/software-safe-step-summary.md` 为 `ok=True`、`logicalTimeAdvanced=True`、`eventSeqAdvanced=True`。
 - 遗留事项: 待执行 task closeout、提交 PR、合入 `main` 后打新 tag 重新触发 release。
+
+## 2026-05-22 17:24:00 CST / qa_engineer
+- 完成内容: 响应 PR `#265` review comment，修复 `scripts/run-game-test.sh` 在 `set -euo pipefail` 下对 `--scenario` 缺参时会直接 `shift 2` 的签名，改为显式输出 `error: --scenario requires a value` 并附 usage。回归验证已通过：`bash -n scripts/run-game-test.sh`，以及 `./scripts/run-game-test.sh --scenario` 现在稳定返回 `rc=1` 且输出明确错误，不再抛裸 shell 异常。
+- 遗留事项: 待 follow-up commit/push，并 resolve 该条 review thread。
