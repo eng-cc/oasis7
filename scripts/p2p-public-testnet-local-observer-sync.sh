@@ -29,6 +29,9 @@ Description:
   two-validator ECS env files. The rendered env preserves local-only binds,
   storage paths, and player-entry settings, while replacing validator,
   signer, bootstrap-peer, and manifest settings with the live ECS contract.
+  When apply mode installs a manifest source from the repo, it also localizes
+  runtime_refs files into the target config directory and rewrites the manifest
+  to point at those local copies.
 EOF
 }
 
@@ -118,6 +121,17 @@ append_if_present() {
   fi
 }
 
+repo_root=$(cd "$script_dir/.." && pwd)
+
+resolve_repo_ref() {
+  local ref=$1
+  if [[ "$ref" = /* ]]; then
+    printf '%s' "$ref"
+  else
+    printf '%s/%s' "$repo_root" "$ref"
+  fi
+}
+
 render_env() {
   local local_env=$1
   local sequencer_env=$2
@@ -144,13 +158,16 @@ render_env() {
   storage_role=$(required_value "$storage_env" NODE_ROLE)
   [[ "$seq_role" == "$storage_role" ]] || die "NODE_ROLE mismatch between ECS env files"
 
-  local gossip_peers replication_peers
+  local gossip_peers replication_peers replication_remote_writers
   gossip_peers=$(join_unique_csv \
     "$(required_value "$storage_env" NODE_GOSSIP_PEERS_CSV)" \
     "$(required_value "$sequencer_env" NODE_GOSSIP_PEERS_CSV)")
   replication_peers=$(join_unique_csv \
     "$(required_value "$storage_env" REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV)" \
     "$(required_value "$sequencer_env" REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV)")
+  replication_remote_writers=$(join_unique_csv \
+    "$(required_value "$storage_env" REPLICATION_REMOTE_WRITERS_CSV)" \
+    "$(required_value "$sequencer_env" REPLICATION_REMOTE_WRITERS_CSV)")
 
   local pos_slot_clock_genesis
   pos_slot_clock_genesis=$(required_value "$sequencer_env" POS_SLOT_CLOCK_GENESIS_UNIX_MS)
@@ -196,7 +213,7 @@ EXECUTION_RECORDS_DIR=$(required_value "$local_env" EXECUTION_RECORDS_DIR)
 STORAGE_ROOT=$(required_value "$local_env" STORAGE_ROOT)
 REPLICATION_NETWORK_LISTEN_ADDRS_CSV=$(required_value "$local_env" REPLICATION_NETWORK_LISTEN_ADDRS_CSV)
 REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=$replication_peers
-REPLICATION_REMOTE_WRITERS_CSV=$seq_signers
+REPLICATION_REMOTE_WRITERS_CSV=$replication_remote_writers
 TRAFFIC_MONITOR_ENABLE=$(required_value "$local_env" TRAFFIC_MONITOR_ENABLE)
 TRAFFIC_MONITOR_INTERVAL_SECS=$(required_value "$local_env" TRAFFIC_MONITOR_INTERVAL_SECS)
 TRAFFIC_MONITOR_WINDOW_MINUTES=$(required_value "$local_env" TRAFFIC_MONITOR_WINDOW_MINUTES)
@@ -226,6 +243,43 @@ write_rendered_env() {
 
   mkdir -p "$(dirname "$out_path")"
   printf '%s' "$rendered" > "$out_path"
+}
+
+localize_manifest_runtime_refs() {
+  local manifest_source=$1
+  local manifest_dest=$2
+
+  python3 - "$manifest_source" "$manifest_dest" "$repo_root" <<'PY'
+import json
+import os
+import shutil
+import sys
+
+manifest_source, manifest_dest, repo_root = sys.argv[1:4]
+manifest_dest = os.path.abspath(manifest_dest)
+manifest_dir = os.path.dirname(manifest_dest)
+
+with open(manifest_source, "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+
+runtime_refs = data.get("runtime_refs", {})
+for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref"):
+    ref = runtime_refs.get(key)
+    if not ref:
+        continue
+    source = ref if os.path.isabs(ref) else os.path.join(repo_root, ref)
+    if not os.path.isfile(source):
+        raise SystemExit(f"missing manifest runtime ref source: {source}")
+    target_name = os.path.basename(ref)
+    target = os.path.join(manifest_dir, target_name)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.copy2(source, target)
+    runtime_refs[key] = target_name
+
+with open(manifest_dest, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, ensure_ascii=True, indent=2)
+    fh.write("\n")
+PY
 }
 
 mode=${1:-}
@@ -342,7 +396,7 @@ if [[ -n "$manifest_source" ]]; then
   if [[ -f "$manifest_dest" ]]; then
     cp "$manifest_dest" "$backup_dir/$(basename "$manifest_dest").before"
   fi
-  cp "$manifest_source" "$manifest_dest"
+  localize_manifest_runtime_refs "$manifest_source" "$manifest_dest"
 fi
 
 if [[ -n "$start_script_dest" ]]; then

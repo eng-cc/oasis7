@@ -153,6 +153,7 @@
 4. 当前正确的 local remediation 入口已经收口到：
   - `scripts/p2p-public-testnet-local-observer-sync.sh`
   - `doc/testing/evidence/public-testnet-local-observer-contract-sync-2026-05-22.md`
+5. 截至 2026-05-22 13:25 CST，本机 observer 已经通过上述脚本完成 live apply，并成功加载 `public_testnet` manifest；当前剩余 blocker 已转成 `fetch-commit authorization failed`，不再是“local host 仍未接 formal contract”。
 
 ## 结论
 1. 这次“进一步做部署”已经把两台阿里云上的 testnet 节点推进成了实际加载 formal `public_testnet` manifest 的 live runtime。
