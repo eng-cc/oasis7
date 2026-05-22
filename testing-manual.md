@@ -71,6 +71,7 @@
 - 入口 A：`scripts/ci-tests.sh`（主流程）
 - `commit`：
   - `./scripts/doc-governance-check.sh`
+  - `./scripts/check-script-executable-bits.sh`
   - `./scripts/check-rust-file-size.sh`
   - `cargo fmt --check`
   - `cargo test -p oasis7_consensus --lib`
@@ -80,6 +81,7 @@
   - 用途：本地 `pre-commit` 默认 commit baseline；不包含 `cargo test -p oasis7 --tests --features test_tier_required`，但包含 repo-owned Viewer Web contract + Solid 组件锚点回归。
 - `required`：
   - `./scripts/doc-governance-check.sh`
+  - `./scripts/check-script-executable-bits.sh`
   - `./scripts/check-rust-file-size.sh`
   - `cargo fmt --check`
   - `cargo test -p oasis7 --tests --features test_tier_required`
@@ -169,6 +171,7 @@
 ### S0：基础门禁套件（L0）
 ```bash
 ./scripts/doc-governance-check.sh
+./scripts/check-script-executable-bits.sh
 ./scripts/check-rust-file-size.sh
 env -u RUSTC_WRAPPER cargo fmt --all -- --check
 env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown
@@ -191,7 +194,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 ./scripts/ci-tests.sh commit
 ```
 - 覆盖重点：
-  - 文档治理、Rust 文件体量、`cargo fmt --check`
+  - 文档治理、release 关键脚本执行位、Rust 文件体量、`cargo fmt --check`
   - `oasis7_consensus` / `oasis7_distfs` 轻量 support crate
   - `software_safe` feedback contract regression
 - 边界：
@@ -208,6 +211,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - `oasis7_viewer_live` 二进制测试
   - viewer offline integration
   - 分布式基础子系统（轻量）：`oasis7_consensus`、`oasis7_distfs`
+  - release 关键脚本执行位前置校验，避免只在 `release-gate-web` / `package-native` runner 上才暴露 `Permission denied`
   - `oasis7_viewer` 全量单测 + wasm 编译检查
   - 适用场景：PR/CI required gate，以及本地 landing 前需要显式补跑 `oasis7 --tests` required shard 或 viewer Rust 长跑的改动
 
