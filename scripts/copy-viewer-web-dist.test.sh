@@ -26,6 +26,8 @@ cmp "$viewer_root/software_safe.js" "$dist_dir/software_safe.js"
 cmp "$viewer_root/software_safe.html" "$dist_dir/index.html"
 cmp "$viewer_root/software_safe.html" "$dist_dir/viewer.html"
 cmp "$viewer_root/software_safe.html" "$dist_dir/software_safe.html"
+cmp "$viewer_root/software_safe_first_agent_claim_evidence.html" "$dist_dir/software_safe_first_agent_claim_evidence.html"
+cmp "$viewer_root/favicon.ico" "$dist_dir/favicon.ico"
 cmp "$viewer_root/pixel-world-bridge/pixel_world_bridge.js" "$dist_dir/pixel-world-bridge/pixel_world_bridge.js"
 
 echo "copy-viewer-web-dist.test: OK"
