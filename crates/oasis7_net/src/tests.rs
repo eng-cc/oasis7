@@ -270,6 +270,27 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
     });
 }
 
+#[cfg(feature = "libp2p")]
+#[test]
+fn libp2p_publish_surfaces_gossipsub_failures() {
+    let net = Libp2pNetwork::new(Libp2pNetworkConfig::default());
+    let _sub = net.subscribe("aw.publish.fail").expect("subscribe");
+
+    let err = net
+        .publish("aw.publish.fail", b"payload")
+        .expect_err("publish without peers should fail");
+    match err {
+        WorldError::NetworkProtocolUnavailable { protocol } => {
+            assert!(protocol.contains("libp2p publish failed topic=aw.publish.fail"));
+        }
+        other => panic!("unexpected publish error: {other:?}"),
+    }
+    assert!(
+        net.published().is_empty(),
+        "failed publish should not be recorded"
+    );
+}
+
 #[test]
 fn in_memory_dht_stores_providers() {
     let dht = InMemoryDht::new();

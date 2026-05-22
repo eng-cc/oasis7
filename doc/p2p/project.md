@@ -1,6 +1,6 @@
 # p2p PRD Project
 
-审计轮次: 13
+审计轮次: 14
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-P2P-001 (PRD-P2P-001) [test_tier_required]: 完成 p2p PRD 改写，建立分布式系统设计入口。
@@ -824,6 +824,26 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_node libp2p_replication_network -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `./scripts/check-rust-file-size.sh`
+- [x] p2p-network-runtime-hardening (PRD-P2P-001/003) [test_tier_required]: 收口 `libp2p` gossip publish 静默失败与 node replication fallback 分类分叉；`publish()` 现在必须同步回传 gossipsub 失败，失败 publish 不得继续写入 `published`/成功流量统计，且 retryable connection gap / missing handler / route unavailable 的判定统一沉淀到 `oasis7_net` availability classifier 与 node 侧稳定 reason prefix。 Trace: .pm/tasks/task_4d597c77a31b4411864f998159d8d5ec.yaml
+  - 产物文件:
+    - `crates/oasis7_net/src/lib.rs`
+    - `crates/oasis7_net/src/libp2p_net.rs`
+    - `crates/oasis7_net/src/libp2p_net/api.rs`
+    - `crates/oasis7_net/src/libp2p_net/error_mapping.rs`
+    - `crates/oasis7_net/src/libp2p_net/runtime_loop.rs`
+    - `crates/oasis7_net/src/tests.rs`
+    - `crates/oasis7_node/src/libp2p_replication_network.rs`
+    - `crates/oasis7_node/src/network_bridge.rs`
+    - `crates/oasis7_node/src/replication_probe_gate.rs`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_4d597c77a31b4411864f998159d8d5ec.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net --features libp2p --lib`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib`
+    - `./scripts/doc-governance-check.sh`
+    - `./scripts/check-rust-file-size.sh`
+    - `git diff --check`
 - [x] issue-182-replication-lib-regressions (PRD-P2P-001/003) [test_tier_required]: 修复 GitHub issue `#182` 中剩余的 `oasis7_node --lib` regression，收口 gossip restart socket 释放、replication topic isolation 测试边界与 signed fetch handler 测试角色假设，恢复 `oasis7_node --lib` 全绿。 Trace: .pm/tasks/task_b4c03075497348cfbcf30fcb4c970226.yaml
   - 产物文件:
     - `crates/oasis7_node/src/lib.rs`
@@ -873,7 +893,8 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-21
+- 更新日期: 2026-05-22
+- 最新完成: `p2p-network-runtime-hardening`（已把 `libp2p` gossip publish 从 fire-and-forget 改成对调用方同步返回成功/失败：当 `gossipsub.publish()` 因无路由、无连接或 topic 不可用而失败时，`published`/成功流量统计不再假成功，调用方会得到显式 `WorldError`。同时把 retryable connection gap / missing handler / route unavailable 的判定统一收敛到 `oasis7_net` availability classifier 与 node 侧稳定 reason prefix，避免 `oasis7_net/oasis7_node` 多层重复猜自由文本错误串。）
 - 最新完成: `public-testnet-faucet-service`（已在现有两台 ECS `public_testnet` 基础设施上完成真实 guarded faucet 部署：`faucet_ref` 现指向 `http://39.104.204.172:6681/`，两节点已用修过的 runtime 做协调冷重置并重新导入 `2-validator` governance manifest、重新注入 faucet genesis/claim；同时修复 `PosNodeEngine::propose_next_head()` 在非 proposer slot 提前 drain `pending_consensus_actions` 导致 transfer/faucet claim 静默丢失并最终 `timeout` 的共识 bug。当前外部 `POST /claim` 到 `oc:pk:2222...2222` 已实测 `confirmed`，但 `/v1/chain/balances` 仍不是 faucet 热钱包真值面，应继续以 `transfer/accounts`/`explorer/address`/world snapshot 为准。）
 - 最新完成: `hosted-account-tablestore-backend`（已把 `oasis7_game_launcher` 的 hosted account 服务端持久化抽成 `file/tablestore` 双 backend：默认 `auto` 模式下无 OTS 配置走本地文件，有 `OASIS7_HOSTED_ACCOUNT_TABLESTORE_*` 或 `ALIYUN_OTS_*` 时自动切到 Aliyun Tablestore；新 backend 基于 `aliyun-tablestore-rs`，支持自动建表和 `hosted_account_id -> player_id` 映射持久化，不影响现有邮箱 OTP 登录语义。）
 - 最新完成: `hosted-account-identity-broker-server`（已在 `oasis7_game_launcher` 的 public HTTP 面落地中心化 hosted account 登录 server：支持 email login challenge、稳定 `hosted_account_id -> player_id` 持久化，以及登录完成后换发 `device_session + player_session`；viewer 正式入口也已改成 hosted account 登录表单。当前 challenge delivery 已支持 `preview_inline` / `server_log_only` / `smtp`，其中 `smtp` 通过 `OASIS7_HOSTED_LOGIN_SMTP_*` 环境变量接真实邮件 provider，默认可对接 Aliyun DirectMail `smtpdm.aliyun.com:465`；OTP start 路径也已补最小 resend cooldown、短窗/长窗配额与 `retry_after_seconds` 反馈，不再只靠单一 `3/min` 限流。）

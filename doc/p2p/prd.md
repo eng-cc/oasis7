@@ -1,6 +1,6 @@
 # p2p PRD
 
-审计轮次: 13
+审计轮次: 14
 
 ## 目标
 - 建立 p2p 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -197,6 +197,7 @@
   - AC-38: `p2p-hosted-public-join-managed-identity-custody-2026-05-18` 专题文档必须落盘并映射任务链 `hosted-managed-identity-doc-freeze (PRD-P2P-029)`，明确 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、托管退出与“默认不让玩家管理裸私钥”的正式产品边界。
   - AC-39: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`，并对 placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 保持阻断。
   - AC-40: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结 seven-lane owner/evidence/check 命令/claim boundary 与当前 `specified_skeleton_only` 边界。
+  - AC-41: `p2p-network-runtime-hardening` 必须让 `libp2p` gossip `publish()` 在路由或连接不可用时向调用方同步返回失败，且失败 publish 不得继续记入 `published` 事件或成功流量统计；同时 replication request 的 retry/fallback/cooldown 判定必须收敛到共享 availability classifier 与稳定 reason prefix，不再在 `oasis7_net`/`oasis7_node` 多处重复猜测自由文本错误串。
 - Non-Goals:
   - 不在本 PRD 细化 viewer UI 交互。
   - 不替代 runtime 内核的模块执行细节设计。
@@ -258,6 +259,8 @@
   - 私网节点离网：若家宽 / NAT / CGNAT 节点因缺少公网入站而被默认判定为不可参与，则必须回到覆盖网络架构重审，而不是继续追加静态 peer 补丁。
   - relay 单点依赖：若 private/validator_hidden 节点只剩单一 relay-domain 路径，必须直接降级 verdict，不得继续声称已具备 public-chain-grade mixed-topology。
   - 拓扑安全退化：若 active peer set 集中于单一 operator、ASN 或 `/24`，则必须触发 anti-eclipse 阻断，而不是只要“能连上”就放行。
+  - publish 假成功：若 `gossipsub.publish()` 因无路由、无连接或 topic 不可用失败，调用方必须拿到显式错误，且该消息不得继续记入“已发布”事件或成功出站流量统计。
+  - fallback 误分类：若 replication fallback 仍依赖多层自由文本 contains 匹配，就可能把可等待的 availability gap、不可等待的 route unavailable 与真正 unsupported handler 混成同一类；判定必须收敛到共享 classifier 与稳定 prefix。
   - 权限混层：若 guest/player session 在没有强鉴权的情况下能执行资产转账、治理或高风险 prompt/control，则必须回退到 hosted-world 权限设计审查。
   - admission 失控：若 public join 在没有 `max_guest/max_player/rate_limit/world_full_policy` 的情况下无界签发 session，则必须回退到 hosted-world admission 设计审查。
   - bridge 错配：若 bridge-service 无法把一笔 `OC` 入账唯一映射到一个 LetAI `platform_user_id`、`platform_project_id`、`external_order_id` 或 `token_key`，则必须停在 `manual_review`，不得把共享收款账户上的模糊入账自动折算成 quota。
@@ -308,9 +311,9 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-P2P-001 | TASK-P2P-001/002/005 | `test_tier_required` | 网络/共识/存储联合验收清单检查 | 协议边界与跨 crate 兼容 |
+| PRD-P2P-001 | TASK-P2P-001/002/005 + p2p-network-runtime-hardening | `test_tier_required` | 网络/共识/存储联合验收清单检查 + `libp2p publish/fallback` 定向回归 | 协议边界、跨 crate 兼容与网络错误语义一致性 |
 | PRD-P2P-002 | TASK-P2P-002/003/005 | `test_tier_required` + `test_tier_full` | S9/S10 长跑与恢复演练 | 多节点稳定性与故障恢复 |
-| PRD-P2P-003 | TASK-P2P-003/004/005 | `test_tier_full` | 签名与治理链路审计检查 | 资产安全与发布风险控制 |
+| PRD-P2P-003 | TASK-P2P-003/004/005 + p2p-network-runtime-hardening | `test_tier_required` + `test_tier_full` | 签名与治理链路审计检查 + replication availability 分类/回退边界回归 | 资产安全、发布风险控制与节点侧 fallback claim 一致性 |
 | PRD-P2P-004 | TASK-P2P-006/007 | `test_tier_required` + `test_tier_full` | 轻客户端 intent/finality/challenge/reconnect 闭环验证 | 移动端接入、公平性与可用性 |
 | PRD-P2P-005 | TASK-P2P-008 | `test_tier_required` + `test_tier_full` | 固定时间槽单调性/漏槽/重启恢复/未来槽拒绝回归 | 共识时间语义、提案与投票窗口 |
 | PRD-P2P-006 | TASK-P2P-009 | `test_tier_required` + `test_tier_full` | 槽内 tick 相位门控、动态调度等待与跨节点节拍回归 | 共识提案节奏、runtime 调度与可观测 |
@@ -393,3 +396,4 @@
 | DEC-P2P-017 | hosted world 采用 `public player plane / private control plane / signer plane` + `guest/player/strong-auth` 梯度 | 继续把 join/control/signer 混在单一 web bootstrap 里，或用 invite-only 代替安全边界 | hosted world 的核心问题是信任面混层，不先拆平面和能力就无法安全支持“一个玩家部署、另一个玩家通过网页进入”。 |
 | DEC-P2P-018 | 先冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，再单开专题迁移 runtime/account 真值 | 在未评审 API/UI/兼容性影响前直接顺手改 runtime symbol / account prefix | 产品名、symbol、链上字段和客户端展示面属于不同治理层；先冻结 public naming，才能把后续 runtime 改动收成独立可审计任务。 |
 | DEC-P2P-019 | 在独立迁移专题中，把当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一切到 `OC` / `oc:pk:` | 继续让 `AWT` / `awt:pk:` 作为现行真值，或只改产品名不改 runtime/account | 当前 public naming 已冻结，继续双轨会让 API、viewer/client、liveops 与审计口径长期分叉；需要一次把 runtime/account 当前真值收口。 |
+| DEC-P2P-020 | `libp2p` 可用性错误分类统一沉淀在 `oasis7_net`，由 node 侧消费共享 classifier 与稳定 reason prefix；`publish()` 改为同步回传 gossipsub 失败 | 继续 fire-and-forget publish，或让 `oasis7_node`/probe gate 各自重复字符串匹配 | 这条路径直接决定 replication fallback、waitable gap 与 unsupported handler 的 claim；若 publish 仍可静默成功、fallback 仍靠重复猜字符串，网络故障会在跨 crate 边界被误报或漏报。 |

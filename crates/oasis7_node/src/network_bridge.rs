@@ -3,6 +3,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use oasis7_net::world_error_is_retryable_connection_gap;
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
     classify_network_protocol, DistributedNetwork, NetworkLane, NetworkLaneOperation,
@@ -659,7 +660,36 @@ fn decode_consensus_message(payload: &[u8]) -> Option<GossipMessage> {
 }
 
 fn network_err(err: WorldError) -> NodeError {
+    if world_error_is_retryable_connection_gap(&err) {
+        return NodeError::Replication {
+            reason: format!(
+                "replication network availability gap: {}",
+                replication_network_error_detail(&err)
+            ),
+        };
+    }
+    if let WorldError::NetworkProtocolUnavailable { .. } = &err {
+        return NodeError::Replication {
+            reason: format!(
+                "replication network route unavailable: {}",
+                replication_network_error_detail(&err)
+            ),
+        };
+    }
     NodeError::Replication {
         reason: format!("replication network error: {err:?}"),
+    }
+}
+
+fn replication_network_error_detail(err: &WorldError) -> &str {
+    match err {
+        WorldError::NetworkProtocolUnavailable { protocol } => protocol.as_str(),
+        WorldError::NetworkRequestFailed { message, .. } => message.as_str(),
+        WorldError::DistributedValidationFailed { reason } => reason.as_str(),
+        WorldError::BlobNotFound { content_hash } => content_hash.as_str(),
+        WorldError::BlobHashMismatch { actual, .. } => actual.as_str(),
+        WorldError::BlobHashInvalid { content_hash } => content_hash.as_str(),
+        WorldError::Io(message) | WorldError::Serde(message) => message.as_str(),
+        WorldError::SignatureKeyInvalid => "invalid signature key",
     }
 }
