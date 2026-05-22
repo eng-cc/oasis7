@@ -112,6 +112,14 @@ pub fn world_error_is_missing_handler(err: &WorldError) -> bool {
     )
 }
 
+pub fn world_error_is_publish_failure(err: &WorldError) -> bool {
+    matches!(
+        err,
+        WorldError::NetworkProtocolUnavailable { protocol }
+            if protocol.starts_with("libp2p publish failed topic=")
+    )
+}
+
 fn classify_protocol_unavailable(protocol: &str) -> Libp2pAvailabilityClass {
     if protocol.contains("handler missing") || protocol.starts_with('/') {
         Libp2pAvailabilityClass::MissingHandler
@@ -213,5 +221,18 @@ mod tests {
         });
         assert_eq!(response.code, DistributedErrorCode::ErrBadRequest);
         assert!(!response.retryable);
+    }
+
+    #[test]
+    fn publish_failure_classifies_as_other_availability() {
+        let err = WorldError::NetworkProtocolUnavailable {
+            protocol: "libp2p publish failed topic=aw.publish.fail: InsufficientPeers".to_string(),
+        };
+        assert_eq!(
+            classify_world_error_availability(&err),
+            Libp2pAvailabilityClass::Other
+        );
+        assert!(!world_error_is_retryable_connection_gap(&err));
+        assert!(!world_error_is_missing_handler(&err));
     }
 }

@@ -835,9 +835,7 @@
     - `crates/oasis7_node/src/libp2p_replication_network.rs`
     - `crates/oasis7_node/src/network_bridge.rs`
     - `crates/oasis7_node/src/replication_probe_gate.rs`
-    - `doc/p2p/prd.md`
-    - `doc/p2p/project.md`
-    - `.pm/tasks/task_4d597c77a31b4411864f998159d8d5ec.execution.md`
+    - `doc/p2p/prd.md`, `doc/p2p/project.md`, `.pm/tasks/task_4d597c77a31b4411864f998159d8d5ec.execution.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_net --features libp2p --lib`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib`

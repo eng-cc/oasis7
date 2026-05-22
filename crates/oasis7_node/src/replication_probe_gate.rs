@@ -103,23 +103,19 @@ impl PosNodeEngine {
     }
 }
 
-const REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX: &str = "replication network availability gap: ";
-const REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX: &str =
-    "replication network route unavailable: ";
-
 fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
     let NodeError::Replication { reason } = err else {
         return false;
     };
-    reason.starts_with(REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
-        || reason.starts_with(REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
+    reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
+        || reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
 }
 
 pub(super) fn replication_request_waitable_connection_gap(err: &NodeError) -> bool {
     let NodeError::Replication { reason } = err else {
         return false;
     };
-    reason.starts_with(REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
+    reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
 }
 
 #[cfg(test)]
@@ -130,7 +126,8 @@ mod tests {
     fn provider_aware_fallback_treats_no_admissible_peers_as_retryable() {
         let err = NodeError::Replication {
             reason: format!(
-                "{REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX}libp2p-replication no admissible connected peers for protocol /aw/node/replication/fetch-blob/1.0.0"
+                "{}libp2p-replication no admissible connected peers for protocol /aw/node/replication/fetch-blob/1.0.0",
+                crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX
             ),
         };
         assert!(should_fallback_provider_aware_replication_request(&err));
@@ -141,7 +138,8 @@ mod tests {
     fn provider_aware_fallback_treats_route_unavailable_as_retryable() {
         let err = NodeError::Replication {
             reason: format!(
-                "{REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX}simulated provider route unavailable"
+                "{}simulated provider route unavailable",
+                crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX
             ),
         };
         assert!(should_fallback_provider_aware_replication_request(&err));

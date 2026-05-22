@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use oasis7_net::world_error_is_retryable_connection_gap;
+use oasis7_net::{world_error_is_publish_failure, world_error_is_retryable_connection_gap};
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
     classify_network_protocol, DistributedNetwork, NetworkLane, NetworkLaneOperation,
@@ -28,6 +28,10 @@ pub(crate) const DEFAULT_CONSENSUS_ATTESTATION_TOPIC_SUFFIX: &str = "consensus.a
 pub(crate) const DEFAULT_CONSENSUS_COMMIT_TOPIC_SUFFIX: &str = "consensus.commit";
 const FETCH_COMMIT_SUCCESS_CACHE_AFTER_MS: u64 = 5_000;
 const FETCH_COMMIT_SUCCESS_CACHE_MAX_ENTRIES: usize = 64;
+pub(crate) const REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX: &str =
+    "replication network availability gap: ";
+pub(crate) const REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX: &str =
+    "replication network route unavailable: ";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FetchCommitSuccessCacheKey {
@@ -474,6 +478,19 @@ mod tests {
     use oasis7_distfs::FileReplicationRecord;
 
     #[test]
+    fn publish_failure_stays_generic_replication_error() {
+        let err = network_err(WorldError::NetworkProtocolUnavailable {
+            protocol: "libp2p publish failed topic=aw.publish.fail: InsufficientPeers".to_string(),
+        });
+        assert_eq!(
+            err,
+            NodeError::Replication {
+                reason: "replication network error: NetworkProtocolUnavailable { protocol: \"libp2p publish failed topic=aw.publish.fail: InsufficientPeers\" }".to_string(),
+            }
+        );
+    }
+
+    #[test]
     fn cacheable_fetch_commit_success_response_drops_payload_allocation() {
         let mut payload = Vec::with_capacity(4096);
         payload.extend_from_slice(b"replicated-commit-payload");
@@ -663,15 +680,20 @@ fn network_err(err: WorldError) -> NodeError {
     if world_error_is_retryable_connection_gap(&err) {
         return NodeError::Replication {
             reason: format!(
-                "replication network availability gap: {}",
+                "{REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX}{}",
                 replication_network_error_detail(&err)
             ),
+        };
+    }
+    if world_error_is_publish_failure(&err) {
+        return NodeError::Replication {
+            reason: format!("replication network error: {err:?}"),
         };
     }
     if let WorldError::NetworkProtocolUnavailable { .. } = &err {
         return NodeError::Replication {
             reason: format!(
-                "replication network route unavailable: {}",
+                "{REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX}{}",
                 replication_network_error_detail(&err)
             ),
         };
