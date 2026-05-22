@@ -16,9 +16,10 @@
 - [x] workflow-borrowing-doc-truth-refresh (PRD-ENGINEERING-031) [test_tier_required]: 更新当前 PR 中已过时的 borrowing 文档表述，使 planning / execution / skill-authoring 已落地事实与 remaining deferred 边界一致，并回写 topic/root project 与 `.pm` trace。 Trace: .pm/tasks/task_a8a7260e7ed74f288f29d8609e8f75e1.yaml
 - [x] superpowers-conflict-doc-truth-refresh (PRD-ENGINEERING-031) [test_tier_required]: 更新 `superpowers-conflict-reconciliation-2026-05-20.md` 中关于已吸收 bounded borrowing 与 remaining deferred 的过时表述，并把这次 explanation/reference 真值刷新回写到 topic project 与 `.pm` trace。 Trace: .pm/tasks/task_4925899a77d840edad803ba3aed4fe0d.yaml
 - [x] superpowers-conflict-skill-table-refresh (PRD-ENGINEERING-031) [test_tier_required]: 更新 `superpowers-conflict-reconciliation-2026-05-20.md` 的 skill-by-skill 表，使 upstream 整体裁决、已完成 bounded borrowing 与 remaining deferred 条件在表内显式分离，并回写 topic project 与 `.pm` trace。 Trace: .pm/tasks/task_9dfc4a9e44db4591a551dbeb11d95ec1.yaml
+- [x] default-role-subagent-orchestration (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-006) [test_tier_required]: 将 `dispatching-parallel-agents` 从 deferred 改判为 adopted（bounded），把它翻译成 repo-owned 默认 `producer_system_designer` orchestrator + role subagents 规则，并回写 `AGENTS.md`、角色卡、borrowing 专题与冲突文档。 Trace: .pm/tasks/task_9a5b1adca6a945c9ba1d48e19b77bf83.yaml
 
 ## Planned Follow-ups
-- `workflow-behavior-eval-harness-followup` (`PRD-ENGINEERING-AWB-001`, target `test_tier_required + test_tier_full`): 为 `new-task-worktree -> workflow-report -> task-closeout -> prepare-task-pr -> review-thread-closeout` 建立 repo-owned agent behavior eval harness，验证主链规则在真实 agent 回合中被遵守。启动时需创建独立 `.pm` task 与 worktree。
+- `workflow-behavior-eval-harness-followup` (`PRD-ENGINEERING-AWB-001/006`, target `test_tier_required + test_tier_full`): 为 `new-task-worktree -> workflow-report -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout` 建立 repo-owned agent behavior eval harness，验证默认角色 subagent 主链在真实 agent 回合中被遵守。启动时需创建独立 `.pm` task 与 worktree。
 - `viewer-visual-companion-pilot-followup` (`PRD-ENGINEERING-AWB-003/PRD-WORLD_SIMULATOR-046`, target `test_tier_required`): 在 Viewer Web 下一轮结构/视觉专题中试点 browser-based visual companion，先产出 IA/wireframe/layout compare 再切实现 task，同时保持 `agent-browser` / repo-owned UI regression 仍是正式验证面。启动时需创建独立 `.pm` task 与 worktree。
 - `multi-harness-workflow-packaging-deferred` (`PRD-ENGINEERING-AWB-004`, target `test_tier_required`): 在 repo-owned workflow helpers 与 evals 稳定后，再评估是否需要为 Codex/OpenCode 等 harness 做 workflow packaging；未到该阶段前保持 deferred。若重开，必须先新建专题 task。
 
@@ -32,6 +33,7 @@
 - `doc/world-simulator/project.md`
 - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md`
 - `AGENTS.md`
+- `.agents/roles/producer_system_designer.md`
 - `.agents/skills/README.md`
 - `.agents/skills/executing-project-tasks/SKILL.md`
 - `.agents/roles/*.md`
@@ -43,6 +45,7 @@
 ## File Structure / Affected Paths
 - 改动路径:
   - `AGENTS.md`
+  - `.agents/roles/producer_system_designer.md`
   - `.agents/skills/README.md`
   - `.agents/skills/executing-project-tasks/SKILL.md`
   - `.agents/roles/templates/handoff-brief.md`
@@ -70,7 +73,7 @@
 - 当前阶段: planned
 - 当前任务: `workflow-behavior-eval-harness-followup`
 - 阻塞项:
-  - `workflow-behavior-eval-harness-followup` 仍需决定 fixture 形态与“真实 agent 行为”采样面。
+  - `workflow-behavior-eval-harness-followup` 仍需决定 fixture 形态，以及如何采样默认 `producer orchestrator + role subagents` 主链行为。
   - `viewer-visual-companion-pilot-followup` 必须等下一轮明确的 Viewer Web 设计任务创建后再绑定独立 `.pm` task。
 - 最新完成:
   - 已建立专题三件套，冻结 `superpowers` 的 adopted / rejected / deferred 边界，并将 adopted 项与已决定吸收的 bounded borrowing 收口为 repo-owned follow-up / local surfaces。
@@ -83,6 +86,7 @@
   - 已更新当前 PR 中过时的 borrowing 文档表述，消除“未来态 roadmap / 四个 skill / 仅三条 follow-up”等与仓库现状不符的描述。
   - 已更新 `superpowers-conflict-reconciliation-2026-05-20.md`，把“已完成的 bounded borrowing”和“仍然 deferred 的剩余部分”拆开写清，避免继续把 planning / execution / skill-authoring surface 误当成未来互借项。
   - 已更新 `superpowers-conflict-reconciliation-2026-05-20.md` 的 skill-by-skill 表，在表内显式区分 upstream 整体裁决、已完成 bounded borrowing 与 remaining deferred 条件，避免继续误读 `writing-plans` / `executing-plans` / `writing-skills` 为“尚未吸收”。
+  - 已将 `dispatching-parallel-agents` 从 deferred 改判为 adopted（bounded），并把默认多角色协作翻译成 root `AGENTS.md` 的 `producer_system_designer` orchestrator + role subagents 规则，同时保留单 owner / task / worktree / PR 真值边界。
 - 下一步:
-  - 优先推进 `workflow-behavior-eval-harness-followup`，先验证当前 engineering 主链是否能被 agent 稳定执行出来。
+  - 优先推进 `workflow-behavior-eval-harness-followup`，先验证默认 `producer orchestrator + role subagents` 主链是否能被 agent 稳定执行出来。
   - Viewer 方向仅在下一轮明确结构/视觉题时，按需启动 `viewer-visual-companion-pilot-followup`。

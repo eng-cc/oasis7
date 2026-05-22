@@ -8,16 +8,17 @@
 - 对应标准执行入口: `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
 
 ## 1. Executive Summary
-- Problem Statement: 外部 agent workflow 方法论已经开始提供成套的规划、TDD、subagent、browser companion 与 PR 收口建议；但 oasis7 现有 repo-native 真值链是 `AGENTS.md + .agents/roles + .pm + GitHub PR review`。如果不先冻结“哪些可借鉴、哪些冲突、哪些仅可选”，后续很容易把外部 skill 文案或 harness 习惯误写成当前仓库默认流程。
-- Proposed Solution: 在 `engineering/self-evolution` 下建立正式专题，首批以 `obra/superpowers` 为样本，冻结 adopted / rejected / deferred 边界，并把 adopted 项转译为 repo-owned follow-up：workflow behavior eval harness、completion-claim fresh verification gate、Viewer Web 设计阶段的 optional visual companion；同时把 `writing-plans`、`executing-plans`、`writing-skills` 的可 salvage 部分收口成 repo-owned planning、execution 与 skill-authoring surface。
+- Problem Statement: 外部 agent workflow 方法论已经开始提供成套的规划、TDD、subagent、browser companion 与 PR 收口建议；而 oasis7 现有 repo-native 真值链虽然稳定，但此前仍把多角色 subagent 协作放在“显式授权、局部借鉴”的保守边界上。若不把哪些 subagent 模式可升为默认、哪些仍必须拒绝写成正式规则，后续很容易在默认编排、owner/task 真值和 review 边界上继续摇摆。
+- Proposed Solution: 在 `engineering/self-evolution` 下把 `obra/superpowers` 的借鉴治理继续推进一层：保留 adopted / rejected / deferred 矩阵，但将 `dispatching-parallel-agents` 限域翻译为 repo-owned 默认“`producer_system_designer` orchestrator + role subagents”规则，同时保持单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链；并继续把 `writing-plans`、`executing-plans`、`writing-skills` 的可 salvage 部分收口成 repo-owned planning、execution 与 skill-authoring surface。
 - Success Criteria:
   - SC-1: `superpowers` 首批借鉴项 100% 进入 `adopted / rejected / deferred` 三态矩阵，并为每项给出理由与 repo-owned target object。
   - SC-2: 每个 adopted 项都必须映射到一个 repo-owned follow-up task 或明确的模块参考入口，不允许停留在“聊天建议”层。
-  - SC-3: 与 oasis7 当前默认流程冲突的外部规则必须被显式拒绝或限域，包括“任何改动都先 brainstorming”“任何任务都默认 fresh subagent + 两轮 review”“任何改动都硬性 TDD”。
+  - SC-3: `dispatching-parallel-agents` 必须被翻译成 repo-owned 默认角色编排层：`producer_system_designer` 负责 orchestrate，其他六个标准角色默认作为 subagent 参与，但不得打破单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链。
   - SC-4: Viewer Web 视觉/结构类专题必须明确：browser-based visual companion 仅是前置设计手段，不替代 `agent-browser` 回归、repo-owned UI regression 或正式实现 task。
-  - SC-5: 外部 workflow 借鉴不得引入新的运行态真值系统，不得替代 `.pm`、`project.md`、task execution log 或 GitHub PR review。
+  - SC-5: 外部 workflow 借鉴不得引入新的运行态真值系统；默认 subagent 编排只能叠加在现有 `.pm`、`project.md`、task execution log 与 GitHub PR review 之上。
   - SC-6: 从 `writing-plans` salvage 的 planning discipline 必须被翻译成 repo-owned 规划约束：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板、以及轻量 planning 自检；它们只能补强现有真值链，不能形成第二套计划系统。
   - SC-7: 从 `executing-plans` 与 `writing-skills` salvage 的 execution / authoring discipline 必须被翻译成 repo-owned surface，并明确哪些 upstream 部分仍保持 deferred，避免文档继续停留在“未来可能吸收”的过时口径。
+  - SC-8: 仍与当前主链冲突的外部规则必须被显式拒绝，包括“fresh subagent-per-task + local two-stage review ritual”“universal brainstorming gate”“universal TDD”。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -25,9 +26,11 @@
   - `agent_engineer`：需要把 adopted 项转成 repo-owned helper、eval 或 skill，而不是照搬第三方话术。
   - `qa_engineer`：需要对“agent 是否真的遵守流程”建立可复现验证，而不接受口头宣称。
   - `viewer_engineer`：需要一条适用于 UI-heavy 设计题的 optional visual ideation 手段，但不希望它升级为所有实现前的硬门禁。
+  - 全体角色 owner / contributor：需要知道“默认成为 subagent”后各自能做什么、不能越过哪条真值边界。
 - User Scenarios & Frequency:
   - 外部 workflow 方案评估：每次准备借鉴新的 agent methodology、plugin 或 workflow 契约时执行。
   - 工程工作流补强：每次准备新增 workflow helper、评估 harness 或 completion gate 时执行。
+  - 默认多角色任务编排：每次 `producer_system_designer` 需要跨 runtime/wasm/agent/viewer/qa/liveops 协作推进一个 task 时执行。
   - Viewer Web 结构/视觉迭代前置设计：只在涉及线框图、结构对比、信息层级验证的任务中按需执行。
 - User Stories:
   - PRD-ENGINEERING-AWB-001: As a `producer_system_designer`, I want every external workflow pattern classified as adopted, rejected, or deferred, so that oasis7 only evolves by explicit governance decisions.
@@ -35,19 +38,22 @@
   - PRD-ENGINEERING-AWB-003: As a `viewer_engineer`, I want an optional visual companion pattern for UI-heavy design loops, so that I can compare IA/wireframe options before implementation without turning browser ideation into a universal gate.
   - PRD-ENGINEERING-AWB-004: As a workflow maintainer, I want multi-harness packaging and pluginization held in deferred status until repo-owned behavior and evals are stable, so that distribution does not outrun governance truth.
   - PRD-ENGINEERING-AWB-005: As a workflow maintainer, I want repo-owned planning surfaces to require affected paths, atomic validation steps, and a lightweight self-check, so that `writing-plans` discipline strengthens execution without replacing `prd.md` / `project.md` / `.pm`.
+  - PRD-ENGINEERING-AWB-006: As a `producer_system_designer`, I want every standard role to participate as a default subagent under one orchestrator, so that multi-role collaboration becomes the normal execution mode without creating parallel task/worktree/review truth.
 - Critical User Flows:
   1. Flow-AWB-001: `producer_system_designer` 评估外部 workflow repo -> 提取 planning / review / verification / visual-companion / packaging 模式 -> 冻结 adopted / rejected / deferred 矩阵 -> 只将 adopted 项回写为 repo-owned follow-up。
-  2. Flow-AWB-002: adopted 的 workflow 行为补强进入 `engineering` 主项目 -> 形成 helper/eval/smoke -> 以 repo truth 验证 agent 是否真的遵守 `new-task-worktree -> workflow-report -> task-closeout -> prepare-task-pr -> review-thread-closeout`。
+  2. Flow-AWB-002: adopted 的 workflow 行为补强进入 `engineering` 主项目 -> 形成 helper/eval/smoke/root rule -> 以 repo truth 验证 agent 是否真的遵守 `new-task-worktree -> workflow-report -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout`。
   3. Flow-AWB-003: adopted 的 completion gate 在任务收口前要求 fresh verification evidence -> owner 只有在命令已重新执行并读取结果后，才可宣称“通过/完成/可提 PR”。
   4. Flow-AWB-004: Viewer Web 新一轮结构/视觉专题开始前，若问题本身包含 wireframe/IA/布局对比，则可先启用 visual companion 产出浏览器侧 mockup；确认方向后再创建实现 task，并继续按现有 `agent-browser` / repo-owned UI regression 收口。
-  5. Flow-AWB-005: 外部 workflow 若要求替换现有 owner role、GitHub PR review 默认边界或 `.pm` task 真值，则直接标记 rejected；若只是 distribution/packaging 问题，则列入 deferred，不提前修改当前仓库默认流程。
-  6. Flow-AWB-006: 当 `writing-plans` 的结构化拆分被判定值得借鉴时，owner 先把它翻译为 repo-owned planning surface：在 `project.md` 写 `File Structure / Affected Paths`，在 handoff 写原子步骤、验证命令和预期结果，再按轻量 self-checklist 清掉占位词、遗漏 task 和命名漂移后才进入实现。
-  7. Flow-AWB-007: 当任务已经具备 `project.md` / handoff / `.pm` truth 且准备开始实施时，owner 先做一次 execution gap review，确认影响面、步骤、验证和命名一致性，再按原子步骤逐步执行并在每一步后读取实际验证结果；若遇到 scope drift 或重复失败，则先报告 blocker 而不是继续猜测。
+  5. Flow-AWB-005: 当一个 task 需要多角色协作时，`producer_system_designer` 默认派生所需角色 subagent -> 为每个 subagent 明确目标、输入、输出、验证方式与 write scope -> 若 write scope 不互斥则串行，若互斥则可限域并行 -> 所有结果统一回收到同一 owner / `.pm` task / canonical worktree / PR。
+  6. Flow-AWB-006: 外部 workflow 若要求替换现有 owner role、GitHub PR review 默认边界或 `.pm` task 真值，则直接标记 rejected；若能翻译成“默认角色 subagent 编排但不替代正式真值”，则允许 adopted；若只是 distribution/packaging 问题，则列入 deferred。
+  7. Flow-AWB-007: 当 `writing-plans` 的结构化拆分被判定值得借鉴时，owner 先把它翻译为 repo-owned planning surface：在 `project.md` 写 `File Structure / Affected Paths`，在 handoff 写原子步骤、验证命令和预期结果，再按轻量 self-checklist 清掉占位词、遗漏 task 和命名漂移后才进入实现。
+  8. Flow-AWB-008: 当任务已经具备 `project.md` / handoff / `.pm` truth 且准备开始实施时，owner 先做一次 execution gap review，确认影响面、步骤、验证和命名一致性，再按原子步骤逐步执行并在每一步后读取实际验证结果；若遇到 scope drift 或重复失败，则先报告 blocker 而不是继续猜测。
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | External workflow inspiration matrix | `source_name`、`source_ref`、`pattern`、`decision=adopted|rejected|deferred`、`rationale`、`target_object`、`followup_ref` | 评估外部 repo/skill 后必须逐项入表；只有 `adopted` 才允许继续拆 follow-up | `proposed -> adopted/rejected/deferred -> superseded` | 先按 `decision`，再按对当前默认流程影响范围排序 | 仅 `producer_system_designer` 可冻结正式结论；相关 owner 联审 |
 | Workflow behavior eval contract | `workflow_path`、`fixture_scope`、`expected_agent_behavior`、`verification_surface`、`failure_signature` | 为 adopted 的 workflow rules 建立 repo-owned eval/smoke，验证 agent 在真实回合中是否遵守 | `planned -> implemented -> required/full gated` | 先覆盖主链路，再补压力场景和 drift 场景 | `agent_engineer`/`qa_engineer` 实现，producer 冻结验收口径 |
+| Default role-subagent orchestration contract | `orchestrator_role=producer_system_designer`、`owner_role`、`subagent_role`、`write_scope`、`handoff_ref`、`review_boundary` | 默认由 `producer_system_designer` 派生所需角色 subagent；subagent 仅在声明好的边界内分析、实现、验证或回流，结果统一回收到 owner | `not_needed -> dispatched -> returned -> integrated -> closed` | 先保证单 owner / 单 task / 单 worktree，再决定是否允许 disjoint 并行写入 | `producer_system_designer` 冻结边界；owner 决定合流；`qa_engineer`/`liveops_community` 可阻断 claim 或对外口径 |
 | Completion verification gate | `claim_type`、`required_command`、`freshness_rule`、`allowed_evidence`、`blocked_phrases` | 在 owner 宣称“完成/通过/可合并”前，要求 fresh 跑验证并读取结果；失败时只能报告实际状态 | `undefined -> documented -> helper-backed -> smoke-verified` | 每条 claim 必须映射到一个完整命令；禁止 partial evidence 替代 | 全体 owner 遵守；`qa_engineer` 可阻断 |
 | Visual companion contract | `applicability`、`artifact_kind=wireframe|layout_compare|IA_mockup|diagram`、`handoff_boundary`、`non_goal` | 只在 UI-heavy 设计前置阶段可选启用；完成方向确认后回到 repo-owned实现/回归链路 | `optional -> used -> retired` | 仅当“看比读更清楚”时启用；不涉及实现时不强制 | `viewer_engineer` 决定是否启用；producer 审核边界 |
 | Planning surface tightening contract | `affected_paths`、`read_only_dependencies`、`validation_entrypoints`、`doc_writebacks`、`atomic_steps`、`planning_self_check` | 对复杂 task 把 `writing-plans` 的执行纪律翻译成 repo-owned `project.md`/handoff/checklist 约束，不新建并行计划系统 | `implicit -> documented -> template-backed -> enforced by review` | 先要求影响面可见，再要求步骤和验证可执行，最后检查命名/占位词一致性 | `producer_system_designer` 冻结规则；各 owner 按 task 落地 |
@@ -63,26 +69,27 @@
 | `receiving-code-review` | adopted | repo-owned `.agents/skills/receiving-code-review` + `./scripts/pr-review-thread-closeout.sh` + same-PR review fix/verify loop | 强调先验证评论、再修复、再回看 PR 状态，和当前 review-thread closeout 方向一致；现已本地化为 skill。 |
 | `finishing-a-development-branch` | adopted | repo-owned `.agents/skills/finishing-a-development-branch` + `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链 | 其“分支收尾、决定如何集成”的结构可直接映射到当前标准收口主链，且现已本地化为 skill。 |
 | `systematic-debugging` | adopted | repo-owned `.agents/skills/systematic-debugging` | 价值高且不引入第二套 workflow 真值；现已收口成 repo-owned debugging skill。 |
-| `dispatching-parallel-agents` | deferred | bounded `spawn_agent` usage under explicit authorization | 可借其拆分原则，但不能回流成默认 subagent-first 工作流。 |
+| `dispatching-parallel-agents` | adopted | repo-owned 默认 `producer_system_designer` orchestrator + role subagents，要求单 owner / 单 `.pm` task / 单 canonical worktree / GitHub PR review 真值 | 可借其拆分原则，但必须翻译成受限的 repo-native 角色编排，而不是无边界 swarm。 |
 | `executing-plans` | deferred | bounded local execution surface: `.agents/skills/executing-project-tasks` + `AGENTS.md` execution-gap rules + existing `finishing-a-development-branch` closeout path | 已借到“已有正式计划后的执行 discipline”：先做 plan-gap review、按原子步骤推进、逐步验证、遇到 blocker 明确停下；但 upstream 的单独执行会话包装与末尾 handoff 假设仍不作为新的默认真值。 |
 | `writing-skills` | deferred | bounded local skill-authoring governance (`.agents/skills/README.md` + `writing-repo-owned-skills` + template/checklist) | 已借 authoring surface，但 upstream 的 TDD/subagent gate、分发与部署部分仍保持 deferred。 |
 | `brainstorming` | rejected | only the visual-companion subpattern is salvaged into `viewer-visual-companion-pilot-followup` | skill 自带“任何创意工作都必须先用”的强门禁，和当前直接执行节奏冲突。 |
-| `subagent-driven-development` | rejected | none | 默认 fresh subagent-per-task + 双阶段 review 与当前显式 `spawn_agent` 语义、GitHub PR 默认边界冲突。 |
+| `subagent-driven-development` | rejected | none | 默认 fresh subagent-per-task + 双阶段 review 与当前默认 role-subagent 编排层、GitHub PR 默认边界冲突。 |
 | `test-driven-development` | rejected | none | universal TDD 不适合当前 `test_tier_required/full`、文档治理和脚本任务的实际粒度。 |
 | `writing-plans` | rejected | repo-owned `File Structure / Affected Paths` + handoff atomic-step templates + planning self-checklist | skill 本体仍不能升成默认前置，但其结构化拆分纪律已被限域翻译为当前 planning surface。 |
 | `using-superpowers` | rejected | none | 外部 bootstrap 不能取代当前 `AGENTS.md + .pm + GitHub PR review` 主链。 |
 - Acceptance Criteria:
   - AC-1: 专题必须明确写出 `superpowers` 当前 `main` 分支 skill inventory 的 adopted / rejected / deferred 清单，且每项都带 rationale 与 oasis7 mapping。
-  - AC-2: adopted 项至少形成三条正式 follow-up：workflow behavior eval harness、completion-claim verification gate、Viewer visual companion pilot；同时 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`executing-project-tasks` 已允许并落为本地 repo-owned skills。
-  - AC-3: rejected 项必须显式覆盖与 oasis7 当前默认流程冲突的三类外部规则：强制 brainstorming gate、默认 fresh subagent+两轮 review、无条件 universal TDD。
-  - AC-4: deferred 项必须把 multi-harness pluginization 与自动 skill bootstrap 维持在“非当前默认流程”边界，不得混入 root `AGENTS.md` 现行口径。
-  - AC-5: `engineering` 根入口、主项目、文件级索引和 `world-simulator` Viewer 后续参考口径必须完成回写。
-  - AC-6: 本专题不得直接修改当前默认 owner/review/task truth；所有 adopted 项只允许以 repo-owned follow-up 继续推进。
-  - AC-7: `writing-plans` 的可 salvage 部分必须被收口成 repo-owned planning surface，而不是继续停留在“以后可以借”的抽象结论。
-  - AC-8: `executing-plans` 的可 salvage 部分必须被收口成 repo-owned execution surface：进入实施前先做 execution gap review、实施时按原子步骤逐步验证、遇到 blocker 明确停下并回写真值。
+  - AC-2: adopted 项至少形成四条正式落点：workflow behavior eval harness、completion-claim verification gate、Viewer visual companion pilot、以及 root `AGENTS.md` 的默认 role-subagent orchestration 规则；同时 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`executing-project-tasks` 已允许并落为本地 repo-owned skills。
+  - AC-3: `dispatching-parallel-agents` 必须在正式文档中从 deferred 改判为 adopted，并明确它只等于“默认角色 subagent 编排”，不等于“fresh subagent-per-task + 本地两阶段 review”。
+  - AC-4: rejected 项必须显式覆盖与 oasis7 当前默认流程冲突的三类外部规则：强制 brainstorming gate、默认 fresh subagent+两轮 review、无条件 universal TDD。
+  - AC-5: deferred 项必须把 multi-harness pluginization 与自动 skill bootstrap 维持在“非当前默认流程”边界，不得混入 root `AGENTS.md` 现行口径。
+  - AC-6: `engineering` 根入口、主项目、文件级索引和 `world-simulator` Viewer 后续参考口径必须完成回写。
+  - AC-7: 默认 subagent 编排不得直接修改 owner/review/task 真值；所有 adopted 项都必须以 repo-owned root rule、skill、helper 或 follow-up task 落地。
+  - AC-8: `writing-plans` 的可 salvage 部分必须被收口成 repo-owned planning surface，而不是继续停留在“以后可以借”的抽象结论。
+  - AC-9: `executing-plans` 的可 salvage 部分必须被收口成 repo-owned execution surface：进入实施前先做 execution gap review、实施时按原子步骤逐步验证、遇到 blocker 明确停下并回写真值。
 - Non-Goals:
   - 不把 `superpowers` 或其他外部 workflow repo 直接接入为 oasis7 当前默认 bootstrap。
-  - 不在本期修改 `AGENTS.md` 的主链路为“brainstorming first”或“subagent-first”。
+  - 不把“默认角色 subagent 编排”放宽成无 owner、无 write-scope、无 worktree 约束的自由 swarm。
   - 不让 visual companion 替代 `agent-browser`、repo-owned UI regression 或 GitHub PR review。
   - 不在本期实现 multi-harness plugin packaging。
 
@@ -98,8 +105,8 @@
 
 ## 4. Technical Specifications
 - Architecture Overview:
-  - 本专题只负责“借鉴边界”和“follow-up mapping”，不直接改写当前 workflow 入口。
-  - adopted 项统一通过 repo-owned helper、eval、smoke 或模块专题 follow-up 落地；rejected 项明确写入 guardrail；deferred 项保持在 backlog，不进入默认主链。
+  - 本专题负责“借鉴边界”和“repo-owned workflow 映射”；在保留单 owner / task / review 真值的前提下，允许把默认多角色 subagent 编排接回当前 workflow 入口。
+  - adopted 项统一通过 repo-owned helper、eval、smoke、root rule 或模块专题 follow-up 落地；rejected 项明确写入 guardrail；deferred 项保持在 backlog，不进入默认主链。
   - Viewer 方向的 visual companion 只作为 `world-simulator/viewer` 专题的前置设计辅助手段，和实现 task、browser regression、repo-owned UI 测试分层存在。
 - Integration Points:
   - `AGENTS.md`
@@ -120,6 +127,7 @@
 - Edge Cases & Error Handling:
   - adopted 项仍停留在聊天结论：必须视为未完成，直到进入正式 project/task 追踪。
   - 外部规则与当前流程局部相似但默认假设不同：必须按 repo truth 重写，不允许直接复述原规则。
+  - 默认角色 subagent 未声明 owner、write scope 或 handoff：视为未绑定真值，不得执行并行写入或宣称流程合规。
   - visual companion 被误升级为所有需求的 mandatory pre-step：必须回退到 optional 设计辅助边界。
   - completion verification gate 只验证部分命令或旧结果：视为无效 evidence，不得宣称完成。
   - workflow eval 只验证静态文案而不验证 agent 行为：视为 coverage 不足，不得声称 adopted 项已经落地。
@@ -129,12 +137,13 @@
   - NFR-AWB-1: 借鉴矩阵中的每一条 adopted / rejected / deferred 结论都必须可通过正式文档回放。
   - NFR-AWB-2: adopted 项不得引入新的在线依赖、外部真值或多 harness bootstrap 作为当前默认前提。
   - NFR-AWB-3: workflow behavior eval 的首批覆盖必须至少命中 task-worktree、closeout、PR preflight、review-thread closeout 四段主链。
+  - NFR-AWB-3A: 默认角色 subagent 编排不得改变 `workflow-report start/close`、`.pm` task 状态、task execution log 记录责任人与 GitHub PR review 正式边界。
   - NFR-AWB-4: visual companion pilot 不得增加 world-simulator Viewer 默认 required gate 的在线依赖。
   - NFR-AWB-5: planning surface tightening 不得要求额外在线依赖、外部 bootstrap 或第二套 plan storage；所有新增约束必须落在现有 repo-owned 文档和模板里。
   - NFR-AWB-6: execution surface tightening 不得绕开 `project.md` / `.pm` / task execution log / GitHub PR review，也不得把 step-level verification 替换成事后总结式宣称。
 - Security & Privacy:
   - 外部 workflow 借鉴只保留结构化治理结论与公开来源链接，不导入第三方服务或隐式权限提升。
-  - adopted 的 completion gate 必须继续遵守当前仓库的显式 owner、review、task traceability 规则。
+  - adopted 的 completion gate 与默认 role-subagent orchestration 都必须继续遵守当前仓库的显式 owner、review、task traceability 规则。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
@@ -145,12 +154,14 @@
   - v1.4 (completed): 已将 `writing-plans` 的结构化拆分纪律翻译成 repo-owned planning surface，补齐 `project.md` affected-paths、handoff atomic steps 和 lightweight self-check。
   - v1.5 (completed): 已将 `executing-plans` 的执行纪律翻译成 repo-owned execution surface，补齐 execution gap review、逐步验证与 blocker handling。
   - v1.6 (completed, bounded): 已将 `writing-skills` 的 authoring surface 收口成 repo-owned skill authoring entry points、template 与 checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。
+  - v1.7 (completed, bounded): 已将 `dispatching-parallel-agents` 翻译成 repo-owned 默认角色 subagent 编排层，并把边界固定为 `producer_system_designer` orchestrator + 单 owner/task/worktree/PR 真值。
   - v2.0: 在 repo-owned behavior/eval 稳定后，再决定是否重开 multi-harness workflow packaging 评估。
 - Technical Risks:
   - 风险-1: 若只冻结 adopted 项、不补 repo-owned eval，最终会退化成“又一份 workflow 口号”。
   - 风险-2: 若不明确 rejected 项，外部 repo 的强制 ceremony 容易被误当成当前默认流程。
   - 风险-3: 若 visual companion 没有严格限域，可能把 Viewer 设计题和一般实现题混成统一前置门禁。
-  - 风险-4: 若 packaging 先于 repo-owned truth 稳定，会造成“可分发但不可审计”的反向漂移。
+  - 风险-4: 若默认角色 subagent 没有 write scope / owner 约束，会造成 overlapping writes、`.pm` 漂移或 review 责任不清。
+  - 风险-5: 若 packaging 先于 repo-owned truth 稳定，会造成“可分发但不可审计”的反向漂移。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
@@ -161,6 +172,7 @@
 | PRD-ENGINEERING-AWB-003 | `viewer-visual-companion-pilot-followup` | `test_tier_required` | Viewer Web 前置 mockup/IA 对比样例、实现 task handoff、后续 `agent-browser`/repo-owned regression 不回退 | `world-simulator/viewer` 设计前置链路 |
 | PRD-ENGINEERING-AWB-004 | `multi-harness-workflow-packaging-deferred` | `test_tier_required` | 仅验证 deferred 口径与 reopen 条件是否写清 | pluginization / harness distribution 边界 |
 | PRD-ENGINEERING-AWB-005 | `workflow-planning-surface-tightening` | `test_tier_required` | `AGENTS.md` 规则、handoff 模板、planning self-checklist、topic/root project 回写与文档治理校验 | `engineering` planning / handoff / review 准备链路 |
+| PRD-ENGINEERING-AWB-006 | `default-role-subagent-orchestration`、`workflow-behavior-eval-harness-followup` | `test_tier_required` + `test_tier_full` | `AGENTS.md` 默认 orchestrator/subagent 规则、borrowing/conflict 文档改判、后续 multi-agent behavior eval | `engineering` 多角色协作、owner/task/worktree/PR 真值边界 |
 | PRD-ENGINEERING-031 | `workflow-execution-surface-tightening` | `test_tier_required` | repo-owned execution skill、`AGENTS.md` execution rule、workflow-borrowing / conflict doc 回写与文档治理校验 | `engineering` task 执行、逐步验证与 blocker handling 链路 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
@@ -170,9 +182,10 @@
 | DEC-AWB-003 | 采用 fresh verification before completion claim 的治理方向 | 继续允许 owner 用旧结果、局部结果或 agent 自报成功来宣称完成 | 当前仓库已经高度依赖 evidence-first 收口，这项借鉴与现有方向一致且补短板明显。 |
 | DEC-AWB-004 | visual companion 只作为 Viewer 等 UI-heavy 设计题的 optional ideation layer | 把 browser ideation 升级成所有实现题的 universal gate | oasis7 用户指令风格偏直接执行，强制设计门禁会与现有节奏冲突。 |
 | DEC-AWB-005 | 将 multi-harness pluginization 保持 deferred | 在 repo-owned eval 稳定前立即推进 Codex/OpenCode packaging | 分发形态不应跑在治理真值前面。 |
-| DEC-AWB-006 | 明确拒绝 universal brainstorming / fresh subagent-per-task / universal TDD 三类默认规则 | 以“外部方法论更完整”为理由整体照搬 | 这些规则与 oasis7 当前的 owner 授权、spawn 语义、测试分层和用户操作节奏存在直接冲突。 |
+| DEC-AWB-006 | 明确拒绝 universal brainstorming / fresh subagent-per-task / universal TDD 三类默认规则 | 以“外部方法论更完整”为理由整体照搬 | 这些规则与 oasis7 当前的 owner 授权、默认 role-subagent 编排边界、测试分层和用户操作节奏存在直接冲突。 |
 | DEC-AWB-007 | 将 `writing-plans` 的可 salvage 部分限域翻译为 `project.md` affected paths、handoff atomic steps 和 lightweight self-check | 继续把 `writing-plans` 整体维持在“只有理论价值”的 rejected 状态，或反向把它升成新的默认计划入口 | 这样既保留执行纪律的增益，又不引入第二套计划真值。 |
 | DEC-AWB-008 | 将 `executing-plans` 的可 salvage 部分限域翻译为 repo-owned execution skill 与 root execution 规则 | 继续把它停留在“未来也许有用”的纯 deferred 口头结论，或反向引入单独执行会话契约 | 当前真正有价值的是“已有正式计划后的执行 discipline”，而不是新的计划存储或 session 包装。 |
+| DEC-AWB-009 | 将 `dispatching-parallel-agents` 改判为 adopted，但只落成 `producer_system_designer` orchestrator + role subagents 的默认编排层 | 继续保持 deferred，或直接升级成无 owner / 无 scope 的自由多 agent swarm | 当前用户与仓库都需要默认多角色协作，但正式真值仍必须维持为 owner/task/worktree/PR 单链。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:

@@ -14,13 +14,14 @@
 - `project.md`：把 adopted 项拆成 repo-owned follow-up，明确 owner、测试层级与依赖。
 - 本设计文档：说明为什么这样分层，以及 adopted 项如何接回当前仓库主链。
 
-### 2.2 当前主链不变
-外部借鉴不得替换当前默认执行链：
-`new-task-worktree -> workflow-report start -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR review/approval -> review-thread closeout`
+### 2.2 当前主链保留，但允许增加默认编排层
+外部借鉴不得替换当前默认执行链；现在允许在实现阶段前后叠加 repo-owned 默认角色编排层：
+`new-task-worktree -> workflow-report start -> producer orchestrate / role subagent dispatch -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR review/approval -> review-thread closeout`
 
-因此本专题只允许两种输出：
+因此本专题只允许三种输出：
 1. 作为 repo-owned helper / skill / eval / smoke 的 follow-up。
-2. 作为某个模块专题的 optional design technique reference。
+2. 作为 root workflow 的 repo-owned default orchestration rule。
+3. 作为某个模块专题的 optional design technique reference。
 
 ## 3. 决策矩阵
 ### 3.0 `superpowers` 当前 skill inventory 快照
@@ -37,12 +38,15 @@
 - visual companion:
   - 理由：Viewer Web 等 UI-heavy 题在结构和信息层级比对上确实适合浏览器侧 mockup。
   - 限域：只用于设计前置，不进入默认实现门禁。
+- default role-subagent orchestration:
+  - 理由：oasis7 已经天然按标准角色分工，用户也明确希望“各角色默认就是 subagent”；因此更合理的 adopted 方式不是保持 deferred，而是把它翻译成 repo-owned 编排层。
+  - 限域：只能是 `producer_system_designer` orchestrator + 标准角色 subagents；必须保留单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链。
 
 ### 3.2 Rejected
 - universal brainstorming gate:
   - 与 oasis7 用户的直接执行节奏冲突。
 - fresh subagent per task + two-stage review as default:
-  - 与当前显式 `spawn_agent` 语义和 GitHub PR review 默认边界冲突。
+  - 与当前默认 `producer_system_designer` orchestrator + role subagents 模式，以及 GitHub PR review 默认边界冲突。
 - universal TDD:
   - 与当前 `test_tier_required/full`、文档/脚本/治理任务的现实粒度不匹配。
 - external bootstrap as current truth:
@@ -64,7 +68,7 @@
 | `receiving-code-review` | adopted | 已映射到 `pr-review-thread-closeout.sh`、review fix/verify loop，以及同名 repo-owned skill。 |
 | `finishing-a-development-branch` | adopted | 已映射到 `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链，以及同名 repo-owned skill。 |
 | `systematic-debugging` | adopted | 已本地化为 repo-owned debugging skill，不再停留在 deferred playbook。 |
-| `dispatching-parallel-agents` | deferred | 只保留为显式授权下的 bounded `spawn_agent` 参考，不升为默认流程。 |
+| `dispatching-parallel-agents` | adopted | 已映射到 root `AGENTS.md` 的默认 `producer_system_designer` orchestrator + role subagents 规则；并要求单 owner / `.pm` / worktree / PR 真值。 |
 | `executing-plans` | deferred | 已限域翻译为 `.agents/skills/executing-project-tasks` 与 `AGENTS.md` 的执行规则；upstream 的单独执行会话契约仍不引入。 |
 | `writing-skills` | deferred | 已限域翻译为 `.agents/skills/README.md`、`writing-repo-owned-skills`、template/checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。 |
 | `brainstorming` | rejected | 仅 salvage 其 visual-companion 子模式；其 universal pre-step 语义不进入默认流程。 |
@@ -84,7 +88,15 @@
   - `scripts/pr-review-thread-closeout.sh`
 - 目标：验证 agent 在真实对话/fixture 下是否走对主链，而不是只打印“建议”。
 
-### 4.2 Completion-claim verification gate
+### 4.2 Default role-subagent orchestration
+- owner 倾向：`producer_system_designer`
+- 覆盖面：
+  - root `AGENTS.md`
+  - `.agents/roles/producer_system_designer.md`
+  - task handoff / execution log 中的 subagent write-scope 约束
+- 目标：让多角色 subagent 成为默认协作方式，但不把它扩成平行 task/worktree/review 真值。
+
+### 4.3 Completion-claim verification gate
 - owner 倾向：`producer_system_designer` + `qa_engineer`
 - 覆盖面：
   - 完成宣称
@@ -92,7 +104,7 @@
   - 可提 PR / 可合并宣称
 - 目标：把“claim 之前必须 fresh verify”固定成 repo-owned 可执行契约。
 
-### 4.2A Localized workflow skills
+### 4.3A Localized workflow skills
 - 当前已本地化：
   - `.agents/skills/verification-before-completion`
   - `.agents/skills/systematic-debugging`
@@ -103,7 +115,7 @@
   - 这些 skill 必须继续绑定 repo-owned helper 和正式 workflow 文档。
   - 不能把 skill 文案提升为新的独立真值系统。
 
-### 4.3 Viewer visual companion pilot
+### 4.4 Viewer visual companion pilot
 - owner 倾向：`viewer_engineer`
 - 接入点：
   - `world-simulator/viewer` 的下一轮结构/视觉专题
@@ -122,5 +134,6 @@
 ## 6. 风险控制
 - 任何 adopted 项如果没有 repo-owned follow-up，就仍视为未落地。
 - 任何 rejected 项如果重新出现在 root workflow 文档中，应视为治理回弹。
+- 任何默认 role-subagent 协作如果没有 owner、write scope 或 handoff 记录，应视为越界。
 - 任何 visual companion 使用如果绕过实现 task / regression / PR review，应视为越界。
 - 任何已本地化 skill 如果与 `AGENTS.md`、`.pm` helper 或 engineering 专题口径漂移，应视为 inventory truth drift。

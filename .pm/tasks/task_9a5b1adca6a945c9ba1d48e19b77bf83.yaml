@@ -1,0 +1,20 @@
+task_uid: task_9a5b1adca6a945c9ba1d48e19b77bf83
+title: "default role subagent orchestration governance"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-default-role-subagent-orchestration
+execution_log_path: .pm/tasks/task_9a5b1adca6a945c9ba1d48e19b77bf83.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-031
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-21T22:30:50+08:00
+last_started_at: 2026-05-21T22:00:53+08:00
+last_closed_at: 2026-05-21T22:30:50+08:00

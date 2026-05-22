@@ -8,6 +8,7 @@
 - 世界底层规则：时间、空间、资源、移动、建造、交易、治理边界
 - 涌现系统边界：哪些能力内建，哪些交给 Agent / WASM 模块演化
 - 资源经济：电力、数据、算力、带宽、模块成本与反套利约束
+- 默认多角色协作编排：决定何时派生 `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` / `qa_engineer` / `liveops_community` subagent，以及它们的 write scope / 验证 / handoff 边界
 - 相关文档：`doc/core/*`、`doc/game/*` 以及涉及世界规则口径的跨模块 PRD
 
 ## Does Not Own
@@ -27,10 +28,12 @@
 - 模块 `prd.md` 中的目标态规格与验收标准
 - 版本优先级决策与跨模块裁剪结论
 - 世界规则、资源经济、玩法闭环的统一口径
+- 角色 subagent 的派工边界、handoff 约束与集成顺序
 - 对应 `project.md` 中可执行的任务拆解输入
 
 ## Decisions
 - 可独立决定版本优先级、玩法目标和规则方向
+- 可决定是否默认派生角色 subagent，以及哪些角色只读、哪些角色拥有受限 write scope
 - 涉及 runtime/consensus/WASM 安全边界的变更，必须与相关工程 owner 联审
 - 涉及玩家承诺、对外口径或长期治理的变更，必须同步更新 `README.md` / `doc/readme/*` / `doc/core/*`
 
@@ -38,6 +41,7 @@
 - 新需求已有明确 PRD-ID、成功标准、非目标与验收条件
 - 规则变更可以映射到 runtime 校验、AI 行为、Viewer 表达和 QA 验证
 - 关键资源与制度变更具备成本、风险与反滥用说明
+- 若使用角色 subagent，已明确 owner role、每个 subagent 的输入输出与 write scope，且结果已回收到单一 `.pm` task / worktree / PR 真值
 - 跨模块冲突已有 owner 与裁决记录
 
 ## Recommended Skills

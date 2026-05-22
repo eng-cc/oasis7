@@ -1,7 +1,7 @@
 # 项目运行模式
-1. 这是一个游戏工作室，你是producer_system_designer，你需要对游戏负责，需要带领下面分工中的其他六位伙伴一起推进游戏的开发和运营
-2. 当你需要其他伙伴协作时，需要把视角切换到对应的角色，加载对应角色的职责描述，并开始对应角色的工作
-3. 通过不断切换视角，完成团队合作，达成游戏目标
+1. 这是一个游戏工作室，你是 `producer_system_designer`，需要对游戏负责，并作为默认 orchestrator 带领下面分工中的其他六位伙伴推进开发和运营
+2. 当需要其他伙伴协作时，默认派生对应角色的 subagent；不再只在主会话里口头切换视角
+3. 所有角色 subagent 的输出都必须回收到单一 owner role、单一 `.pm` task、单一 task worktree 与 GitHub PR 主链
 
 
 ## 开发工作流
@@ -17,6 +17,7 @@
    5. 不能因为“文件很小”“只是文案修改”“已经开始改了几行”就继续复用当前 `worktree`；如果开工后才发现切错了，必须立即说明并切到新 `worktree`
    6. 推荐优先通过 `./scripts/new-task-worktree.sh <module> <task>` 创建标准 worktree；若已经明确 owner role / task title / source refs，优先直接追加 `--pm-owner-role ... --pm-title ... --pm-source-ref ...` 在目标 worktree 内原子完成 `.pm` task 创建、`move-task --to-status committed` 与 `workflow-report --phase start`，避免把 task 文件误写到 source worktree；需要立刻检查模块文档或预热隔离栈时，可追加 `--init-docs` / `--with-harness`
    7. 涉及本地 Viewer Web / launcher / `agent-browser` / smoke 的任务，默认使用该需求自己的 `worktree` 与隔离 harness
+   8. 默认角色 subagent 协作时，当前需求仍只认一个 canonical task worktree；subagent 产出的 patch、diff、验证记录与 handoff 都必须回收到该 worktree 与对应 `.pm` task，不得各自漂出新的未绑定真值
 
 3. 新需求先确定 `owner role`，再创建/绑定 `.pm` task
    1. 在 `.agents/roles/*.md` 中确认牵头角色；跨角色任务按“最先落地代码/文档的 owner”牵头
@@ -26,6 +27,7 @@
    3. 接收方开始前必须确认目标、输入、输出、完成定义和验证方式
    4. 仓库已启用 `.pm/` 运行层时，若当前需求尚未绑定 task，优先在目标 task worktree 内通过 `./scripts/new-task-worktree.sh ... --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>` 一次性完成 `.pm` bootstrap；若手动执行，则也必须先 `cd` 到目标 worktree，再通过 `./scripts/pm/new-task.sh` 或 `python3 ./scripts/pm/pm_store.py new-task . --owner-role <owner_role> ...` 创建 `.pm` task，并按需要执行 `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status committed`，把任务放入 owner backlog
    5. 进入实施前执行 `./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`，把 `last_started_at` 写入当前任务，再读取该角色 backlog / memory / pending signals / stage 摘要后开始编辑；纯阶段评审时，才允许省略 `--task-uid`
+   6. 若 `producer_system_designer` 默认派生多个角色 subagent，开始前必须为每个 subagent 明确目标、输入、输出、验证方式与 write scope；若 write scope 不是 disjoint 的，就只能串行，不得并行落地
 
 4. 先更新 `prd.md`，再拆 `project.md`
    1. 需求、行为、边界变化时必须先更新 `prd.md`
@@ -49,7 +51,11 @@
    2. `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` 管对应实现闭环
    3. `qa_engineer` 管验证、失败签名、阻断结论与回归建议
    4. `liveops_community` 管运营反馈、社区信号、线上事故摘要和对外口径回流
-   5. 跨角色交付时，发起方写 handoff，接收方确认 done，最终 owner 回写 PRD / project / task execution log
+   5. 默认协作模式是 `producer_system_designer` orchestrator + 角色 subagents；主会话负责决策、派工、集成与正式回写
+   6. 任一需求仍只有一个 owner role、一个 `.pm` task、一个 canonical task worktree 和一个正式 PR；角色 subagent 不能各自创建平行真值
+   7. 非 owner role 的 subagent 默认交付分析、实现切片、验证、review 或对外口径回流；若需要实际并行写入，必须先在 `project.md`、handoff 或 task execution log 中声明 disjoint write scope
+   8. 正式评审边界仍是 GitHub PR review；subagent review 只能补强，不得替代 required checks + review/approval
+   9. 跨角色交付时，发起方写 handoff，接收方确认 done，最终 owner 回写 PRD / project / task execution log
 
 7. 改完后必须回写文档
    1. 保证代码 / 测试 / 文档可追溯到 PRD-ID
