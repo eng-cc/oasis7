@@ -842,6 +842,7 @@
     - `./scripts/doc-governance-check.sh`
     - `./scripts/check-rust-file-size.sh`
     - `git diff --check`
+- [x] subscribe-ack-udp-gossip-hardening (PRD-P2P-001/003) [test_tier_required]: 收口 `libp2p subscribe` dead-subscription 假成功与 UDP gossip datagram 语义歧义；`subscribe()` 现在必须等待底层 gossipsub ack 成功后才返回 `NetworkSubscription`，失败时同步向调用方报错；UDP gossip 现在显式拒绝超大 replication datagram、把接收缓冲提升到完整 UDP payload 上限，并在 fan-out 遇到单个 `send_to` 失败时继续尝试剩余 peer 后返回汇总 partial-failure。 Trace: .pm/tasks/task_b518025590ae4e998726066eb862e17c.yaml
 - [x] issue-182-replication-lib-regressions (PRD-P2P-001/003) [test_tier_required]: 修复 GitHub issue `#182` 中剩余的 `oasis7_node --lib` regression，收口 gossip restart socket 释放、replication topic isolation 测试边界与 signed fetch handler 测试角色假设，恢复 `oasis7_node --lib` 全绿。 Trace: .pm/tasks/task_b4c03075497348cfbcf30fcb4c970226.yaml
   - 产物文件:
     - `crates/oasis7_node/src/lib.rs`

@@ -198,6 +198,7 @@
   - AC-39: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`，并对 placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 保持阻断。
   - AC-40: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结 seven-lane owner/evidence/check 命令/claim boundary 与当前 `specified_skeleton_only` 边界。
   - AC-41: `p2p-network-runtime-hardening` 必须让 `libp2p` gossip `publish()` 在路由或连接不可用时向调用方同步返回失败，且失败 publish 不得继续记入 `published` 事件或成功流量统计；同时 replication request 的 retry/fallback/cooldown 判定必须收敛到共享 availability classifier 与稳定 reason prefix，不再在 `oasis7_net`/`oasis7_node` 多处重复猜测自由文本错误串。
+  - AC-42: `subscribe-ack-udp-gossip-hardening` 必须让 `libp2p` `subscribe()` 只有在底层 gossipsub 真正订阅成功后才向调用方返回 `NetworkSubscription`；若后端拒绝订阅，调用方必须同步收到失败而不是拿到 dead subscription。与此同时，UDP gossip 路径必须显式拒绝超出 datagram 上限的 replication 消息、把接收缓冲提升到覆盖完整 UDP payload、并在 fan-out 遇到单点 `send_to` 失败时继续尝试其余 peer 后返回汇总错误，而不是靠 4KB 截断或“第一个错误即提前退出”的旧语义。
 - Non-Goals:
   - 不在本 PRD 细化 viewer UI 交互。
   - 不替代 runtime 内核的模块执行细节设计。

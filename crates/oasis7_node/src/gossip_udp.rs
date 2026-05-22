@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 use crate::replication::GossipReplicationMessage;
 use crate::{NodeError, NodeGossipConfig};
 
+const MAX_GOSSIP_DATAGRAM_PAYLOAD_BYTES: usize = 65_507;
+const MAX_GOSSIP_RECV_BUFFER_BYTES: usize = 65_535;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum GossipMessage {
@@ -140,27 +143,42 @@ impl GossipEndpoint {
         let bytes = serde_json::to_vec(&envelope).map_err(|err| NodeError::Gossip {
             reason: format!("serialize gossip message failed: {}", err),
         })?;
+        if bytes.len() > MAX_GOSSIP_DATAGRAM_PAYLOAD_BYTES {
+            return Err(NodeError::Gossip {
+                reason: format!(
+                    "gossip datagram too large bytes={} max={MAX_GOSSIP_DATAGRAM_PAYLOAD_BYTES}",
+                    bytes.len()
+                ),
+            });
+        }
         self.broadcast_bytes(kind, &bytes)
     }
 
     fn broadcast_bytes(&self, kind: &str, bytes: &[u8]) -> Result<(), NodeError> {
         let peers = self.snapshot_peers()?;
         let mut sent_datagrams = 0u64;
+        let mut failures = Vec::new();
         for peer in &peers {
             match self.socket.send_to(bytes, peer) {
                 Ok(_) => sent_datagrams = sent_datagrams.saturating_add(1),
-                Err(err) => {
-                    if sent_datagrams > 0 {
-                        self.record_outbound(kind, bytes.len(), sent_datagrams);
-                    }
-                    return Err(NodeError::Gossip {
-                        reason: format!("send_to {} failed: {}", peer, err),
-                    });
-                }
+                Err(err) => failures.push(format!("send_to {} failed: {}", peer, err)),
             }
         }
-        self.record_outbound(kind, bytes.len(), sent_datagrams);
-        Ok(())
+        if sent_datagrams > 0 {
+            self.record_outbound(kind, bytes.len(), sent_datagrams);
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(NodeError::Gossip {
+                reason: format!(
+                    "gossip broadcast partial failure sent={} failed={} first_error={}",
+                    sent_datagrams,
+                    failures.len(),
+                    failures[0]
+                ),
+            })
+        }
     }
 
     pub(crate) fn remember_peer(&self, peer: SocketAddr) -> Result<(), NodeError> {
@@ -180,7 +198,7 @@ impl GossipEndpoint {
     }
 
     pub(crate) fn drain_messages(&self) -> Result<Vec<ReceivedGossipMessage>, NodeError> {
-        let mut buf = [0u8; 4096];
+        let mut buf = [0u8; MAX_GOSSIP_RECV_BUFFER_BYTES];
         let mut messages = Vec::new();
         loop {
             match self.socket.recv_from(&mut buf) {
@@ -432,18 +450,23 @@ mod tests {
     }
 
     #[test]
-    fn gossip_endpoint_records_partial_outbound_success_before_error() {
+    fn gossip_endpoint_continues_broadcast_after_intermediate_send_error() {
         let socket_a = UdpSocket::bind("127.0.0.1:0").expect("bind a");
         let socket_b = UdpSocket::bind("127.0.0.1:0").expect("bind b");
+        let socket_c = UdpSocket::bind("127.0.0.1:0").expect("bind c");
         let addr_a = socket_a.local_addr().expect("addr a");
         let addr_b = socket_b.local_addr().expect("addr b");
+        let addr_c = socket_c.local_addr().expect("addr c");
         drop(socket_a);
         drop(socket_b);
+        drop(socket_c);
 
         let invalid_peer: SocketAddr = "255.255.255.255:1".parse().expect("invalid peer");
         let endpoint_a =
-            GossipEndpoint::bind(&gossip_config(addr_a, vec![addr_b, invalid_peer])).expect("a");
+            GossipEndpoint::bind(&gossip_config(addr_a, vec![addr_b, invalid_peer, addr_c]))
+                .expect("a");
         let endpoint_b = GossipEndpoint::bind(&gossip_config(addr_b, vec![addr_a])).expect("b");
+        let endpoint_c = GossipEndpoint::bind(&gossip_config(addr_c, vec![addr_a])).expect("c");
 
         let err = endpoint_a
             .broadcast_commit(&GossipCommitMessage {
@@ -464,22 +487,72 @@ mod tests {
                 signature_hex: None,
             })
             .expect_err("partial send should surface send_to error");
-        assert!(matches!(err, NodeError::Gossip { .. }));
+        assert!(matches!(
+            err,
+            NodeError::Gossip { ref reason }
+                if reason.contains("partial failure")
+                    && reason.contains("sent=2")
+                    && reason.contains("failed=1")
+        ));
 
         thread::sleep(Duration::from_millis(20));
 
-        let received = endpoint_b.drain_messages().expect("drain");
-        assert_eq!(received.len(), 1);
+        let received_b = endpoint_b.drain_messages().expect("drain b");
+        let received_c = endpoint_c.drain_messages().expect("drain c");
+        assert_eq!(received_b.len(), 1);
+        assert_eq!(received_c.len(), 1);
 
         let outbound = endpoint_a.traffic_metrics_snapshot();
-        assert_eq!(outbound.totals.outbound.datagrams, 1);
+        assert_eq!(outbound.totals.outbound.datagrams, 2);
         assert!(outbound.totals.outbound.payload_bytes > 0);
         assert_eq!(
             outbound
                 .by_kind
                 .get("commit")
                 .map(|lane| lane.outbound.datagrams),
-            Some(1)
+            Some(2)
         );
+    }
+
+    #[test]
+    fn gossip_endpoint_rejects_oversized_replication_datagram_before_send() {
+        let socket_a = UdpSocket::bind("127.0.0.1:0").expect("bind a");
+        let socket_b = UdpSocket::bind("127.0.0.1:0").expect("bind b");
+        let addr_a = socket_a.local_addr().expect("addr a");
+        let addr_b = socket_b.local_addr().expect("addr b");
+        drop(socket_a);
+        drop(socket_b);
+
+        let endpoint_a = GossipEndpoint::bind(&gossip_config(addr_a, vec![addr_b])).expect("a");
+        let err = endpoint_a
+            .broadcast_replication(&GossipReplicationMessage {
+                version: 1,
+                world_id: "w".to_string(),
+                node_id: "node-a".to_string(),
+                record: oasis7_distfs::FileReplicationRecord {
+                    world_id: "w".to_string(),
+                    writer_id: "writer-a".to_string(),
+                    writer_epoch: 1,
+                    sequence: 1,
+                    path: "consensus/commits/0001.json".to_string(),
+                    content_hash: "hash-1".to_string(),
+                    size_bytes: (MAX_GOSSIP_DATAGRAM_PAYLOAD_BYTES + 1) as u64,
+                    updated_at_ms: 1,
+                },
+                payload: vec![0_u8; MAX_GOSSIP_DATAGRAM_PAYLOAD_BYTES + 1],
+                public_key_hex: None,
+                signature_hex: None,
+            })
+            .expect_err("oversized replication datagram must be rejected");
+        assert!(matches!(
+            err,
+            NodeError::Gossip { ref reason }
+                if reason.contains("gossip datagram too large")
+                    && reason.contains(&format!("max={MAX_GOSSIP_DATAGRAM_PAYLOAD_BYTES}"))
+        ));
+
+        let outbound = endpoint_a.traffic_metrics_snapshot();
+        assert_eq!(outbound.totals.outbound.datagrams, 0);
+        assert_eq!(outbound.totals.outbound.payload_bytes, 0);
     }
 }
