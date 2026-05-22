@@ -27,3 +27,7 @@ Example:
 ## 2026-05-22 17:24:00 CST / qa_engineer
 - 完成内容: 响应 PR `#265` review comment，修复 `scripts/run-game-test.sh` 在 `set -euo pipefail` 下对 `--scenario` 缺参时会直接 `shift 2` 的签名，改为显式输出 `error: --scenario requires a value` 并附 usage。回归验证已通过：`bash -n scripts/run-game-test.sh`，以及 `./scripts/run-game-test.sh --scenario` 现在稳定返回 `rc=1` 且输出明确错误，不再抛裸 shell 异常。
 - 遗留事项: 待 follow-up commit/push，并 resolve 该条 review thread。
+
+## 2026-05-22 20:52:42 CST / qa_engineer
+- 完成内容: 响应后续 PR `#265` review comment，删除 `scripts/viewer-software-safe-step-regression.sh` 中对不存在 viewer control feedback stage `completed_timeout` 的等待分支，改为仅接受 repo 当前真实 contract：`completed_advanced` / `completed_no_progress` / `blocked`，以及正向 `logicalTime` / `eventSeq` delta。验证已通过：`bash -n scripts/viewer-software-safe-step-regression.sh`，并用 `rg -n "completed_timeout" scripts/viewer-software-safe-step-regression.sh` 确认该死分支已清除。
+- 遗留事项: 待 follow-up commit/push，并 resolve 该条 review thread。
