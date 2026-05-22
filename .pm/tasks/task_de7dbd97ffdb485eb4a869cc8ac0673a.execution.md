@@ -27,3 +27,7 @@ Example:
 ## 2026-05-22 17:30:12 CST / producer_system_designer
 - 完成内容: 将 15 个已关闭微任务并档回当前聚合 task，合并 source_refs/doc_refs/related_prd/acceptance 等元数据，并删除重复 canonical task 文件。
 - 遗留事项: 后续若同一工作流再出现仅承担 truth refresh / doc sync 的一次性微任务，应先把正式 project/topic Trace 收口到 survivor，再执行 compact-task-group。
+
+## 2026-05-22 17:37:38 CST / producer_system_designer
+- 完成内容: 继续瘦身当前 superpowers PR 文档，将 root/topic project 中按 slice 逐条展开的中间过程信息压成高层 outcome rows，并把状态区收口为“当前真值 + 下一步”，避免 aggregate task 已建立后仍在项目页重复保留过细过程叙述。
+- 遗留事项: 若后续还要继续减重，优先处理 explanation/reference 文档中的重复 reconcile 叙述，但不要删掉 adopted / deferred / rejected 边界与 reopen 条件。
