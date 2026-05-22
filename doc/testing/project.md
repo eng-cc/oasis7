@@ -175,6 +175,19 @@
     - `./scripts/check-windows-paths.sh`
     - `git ls-files '.github/instructions/*'`
     - `git diff --check`
+- [x] release-script-executable-mode-gate (PRD-TESTING-002/003) [test_tier_required]: 修复 `release-gate-web` 只在 GitHub Linux runner 上暴露的 shell 执行位漂移，补 `scripts/check-script-executable-bits.sh` 并接入 `scripts/ci-tests.sh` 的 commit/required gate，让 release 关键脚本在进入 `release-gate-web` / `package-native` 前就能阻断 `Permission denied`。 Trace: .pm/tasks/task_81b8b3dfddd3487e9733600aad78806d.yaml
+  - 产物文件:
+    - `scripts/check-script-executable-bits.sh`
+    - `scripts/ci-tests.sh`
+    - `scripts/release-gate-web-strict.sh`
+    - `testing-manual.md`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/check-script-executable-bits.sh scripts/ci-tests.sh scripts/release-gate-web-strict.sh`
+    - `./scripts/check-script-executable-bits.sh`
+    - `git ls-files --stage scripts/check-script-executable-bits.sh scripts/release-gate-web-strict.sh`
+    - `rg -n "check-script-executable-bits|release-script-executable-mode-gate|AC-9C" scripts/ci-tests.sh testing-manual.md doc/testing/prd.md doc/testing/project.md`
 - [x] TASK-TESTING-057 (PRD-TESTING-WEB-001/002/003) [test_tier_required]: 为 `renderMode=software_safe` 补专用 prompt/chat 回归方案与 `viewer-software-safe-chat-regression.sh`，覆盖 apply/rollback/chat ack、消息流采样以及 `agent_spoke` 缺失签名。
   - 产物文件:
     - `scripts/viewer-software-safe-chat-regression.sh`
