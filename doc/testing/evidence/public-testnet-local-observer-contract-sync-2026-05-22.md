@@ -127,18 +127,39 @@ systemctl restart oasis7-testnet-observer.service
     - `local_state=fd1dc428d79a813d808a21025fbe47579f8448242604975487a98305eb42ab37`
     - `peer_state=1e3b53a30f7e0bd4f464531dd716d17996c23e8d50b8cd56a6e180cd14e14717`
 11. 这进一步排除了“只是被坏 sequencer 污染”的解释：即使只向当前健康 peer `39.104.205.67` gap sync，本机也无法通过 `height 15`。
+12. 2026-05-22 21:44 CST 起继续把 repo-owned operator 路径扩展到 `seed-from-remote`，并在本机真实执行多轮 healthy-storage seed：
+  - 远端来源固定为 `root@39.104.205.67`
+  - 新脚本现在会在 healthy storage 上先 staging 一份静态 seed，再回传到本机；其中 `execution-records` / `storage` 通过 tar stream 回传，避免 `scp -r` 在大量小文件上长期卡死
+  - 本轮真实补齐了 `execution-world`、`execution-world-simulator-mirror`、`execution-records`、`storage` 与 `reward-runtime-execution-bridge-state.json`
+13. 这条 seed 路径先后把主阻断继续前移了两次：
+  - 仅 seed `execution-world` + bridge state 时，本机已不再卡在 `load execution world` 或 `height 15`，而是前移成 `execution driver received stale height: context=1 state=14520`
+  - 再把 `execution-records` + `storage` 一起 seed 后，`/v1/chain/status` 现已能稳定报出：
+    - `storage.replay_summary.retained_height_count=14600`
+    - `storage.replay_summary.earliest_retained_height=1`
+    - `storage.replay_summary.latest_checkpoint_height=14592`
+14. 当前 latest live blocker 也因此被收敛成新的单点：
+  - 本机 service 现可恢复 `active`
+  - 但 `last_error` 已变为 `execution driver restore snapshot ref 914c684fcb1be0e1d14d4219e25c099faded7f7683c866200474c9e5dc9e15b6 failed at height 1: BlobNotFound`
+  - 也就是说，当前 local observer 已经拿到 healthy storage 的 current retained records / checkpoints / store mirror，但 driver 仍从 `height 1` 触发 stale-height restore，而该高度所需的 snapshot blob 并不在当前保留集里
+15. 这说明新的剩余问题已不再是：
+  - formal manifest / validator contract drift
+  - 本机 execution-world 缺 sidecar 文件
+  - 单纯的 `scp`/seed 传输抖动
+  - 甚至也不再只是 `height 15` peer mismatch 本身
+16. 当前真正未闭环的是“本地恢复入口如何与 healthy peer 当前保留策略对齐”：
+  - 要么 observer 启动时不应再从 `context=1` 触发恢复
+  - 要么必须提供一套包含更早 snapshot ref 的 recovery seed，而不是只镜像 current retained store
 
 ## Remaining live blocker
 1. local observer 现在可以加载 formal manifest、two-validator contract，并且 current runtime binary 也已与 ECS hash 对齐。
 2. 当前 remaining blocker 是：
   - `shared_devnet_pass` 仍未满足
-  - local observer 在 height 15 持续出现 execution hash mismatch
+  - local observer 最新已前移到 `height 1` restore `BlobNotFound`，说明 current retained store 无法直接满足本机 stale-height recovery
   - live current binary hash 与 mirrored candidate bundle `runtime_build.sha256` 仍不一致
-  - 即使额外清空了本机 `STORAGE_ROOT`，同一条 height-15 mismatch 也会立即复现
-  - 即使把上游 peer 收窄为单一 healthy storage，本机也仍会在 `height 15` 复现同一条 execution split
+  - healthy storage 的 current retained set 虽然可支撑自己继续推进，但还不足以让本机 observer 从现有启动入口直接复位到同一 committed context
 3. 因此这条任务虽然已完成 local contract sync 与 repo-owned reset path，但还不能把本机 runtime 记成健康 `pass`，也不能把 aggregate `public_testnet` readiness 提升为可用。
 
 ## Boundaries
 1. This task only closes the repo-owned local observer sync path.
-2. It does not clear the remaining height-15 execution mismatch, nor the broader live-candidate release/runtime drift that still separates the local observer from current network execution truth.
+2. It does not clear the remaining stale-height recovery boundary, nor the broader live-candidate release/runtime drift that still separates the local observer from current network execution truth.
 3. Therefore even after this script lands and live apply completes, aggregate `public_testnet` readiness still remains `block`.

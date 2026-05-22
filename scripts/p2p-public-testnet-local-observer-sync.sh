@@ -28,6 +28,13 @@ Usage:
     --local-env <path> \
     [--backup-dir <path>]
 
+  SSHPASS=<remote-password> \
+  ./scripts/p2p-public-testnet-local-observer-sync.sh seed-from-remote \
+    --local-env <path> \
+    --remote-host <user@host> \
+    [--remote-env <path>] \
+    [--backup-dir <path>]
+
 Description:
   Derive the local public_testnet observer env contract from the current
   two-validator ECS env files. The rendered env preserves local-only binds,
@@ -37,7 +44,12 @@ Description:
   runtime_refs files into the target config directory and rewrites the manifest
   to point at those local copies. reset-state backs up and clears the local
   observer's replicated execution state so a drifted pre-sync history can be
-  rebuilt from the current two-validator network contract.
+  rebuilt from the current two-validator network contract. seed-from-remote
+  bypasses replay-from-genesis by copying the healthy peer's current execution
+  world, simulator mirror, and bridge state into the local observer tree so
+  the observer can resume from the healthy peer's current execution head. It
+  intentionally seeds only the current head, not a full historical recovery
+  archive, and requires sshpass-compatible credentials via SSHPASS.
 EOF
 }
 
@@ -140,6 +152,272 @@ resolved_env_value() {
   ') || die "missing or unresolved $key in $env_file"
 
   printf '%s' "$value"
+}
+
+require_command() {
+  local command_name=$1
+  command -v "$command_name" >/dev/null 2>&1 || die "missing command: $command_name"
+}
+
+sshpass_ssh() {
+  require_command ssh
+  require_command sshpass
+  [[ -n "${SSHPASS:-}" ]] || die "SSHPASS is required for remote access"
+
+  local remote_host=$1
+  shift
+  sshpass -e ssh \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    "$remote_host" \
+    "$@"
+}
+
+sshpass_scp_from_remote() {
+  require_command scp
+  [[ -n "${SSHPASS:-}" ]] || die "SSHPASS is required for remote access"
+
+  local remote_spec=$1
+  local local_path=$2
+  shift 2
+
+  mkdir -p "$(dirname "$local_path")"
+  sshpass -e scp \
+    -q \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    "$@" \
+    "$remote_spec" \
+    "$local_path" \
+    < /dev/null
+}
+
+stream_remote_tar_dir_to_local() {
+  require_command tar
+
+  local remote_host=$1
+  local remote_dir=$2
+  local local_parent_dir=$3
+  local remote_cmd
+
+  mkdir -p "$local_parent_dir"
+  printf -v remote_cmd \
+    'tar -C %q -cf - %q' \
+    "$(dirname "$remote_dir")" \
+    "$(basename "$remote_dir")"
+  sshpass_ssh "$remote_host" "$remote_cmd" | tar -C "$local_parent_dir" -xf -
+}
+
+stage_remote_seed_tree() {
+  local remote_host=$1
+  local remote_stack_root=$2
+  local remote_execution_world_dir=$3
+  local remote_execution_records_dir=$4
+  local remote_storage_root=$5
+  local remote_simulator_dir=$6
+  local remote_execution_bridge_state_path=$7
+  local remote_script remote_cmd
+
+  remote_script=$(cat <<'PY'
+import json
+import os
+import shutil
+import sys
+import tempfile
+import time
+
+stack_root = os.environ["REMOTE_STACK_ROOT"]
+execution_world_dir = os.environ["REMOTE_EXECUTION_WORLD_DIR"]
+execution_records_dir = os.environ["REMOTE_EXECUTION_RECORDS_DIR"]
+storage_root = os.environ["REMOTE_STORAGE_ROOT"]
+simulator_dir = os.environ["REMOTE_SIMULATOR_DIR"]
+bridge_state_path = os.environ["REMOTE_EXECUTION_BRIDGE_STATE_PATH"]
+stage_root = os.path.join(stack_root, "tmp")
+os.makedirs(stage_root, exist_ok=True)
+
+def link_or_copy(src: str, dst: str) -> None:
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+def copy_file(src: str, dst: str) -> None:
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.copy2(src, dst)
+
+for attempt in range(1, 6):
+    stage_dir = tempfile.mkdtemp(prefix="local-observer-seed.", dir=stage_root)
+    try:
+        execution_world_stage = os.path.join(stage_dir, "execution-world")
+        execution_records_stage = os.path.join(stage_dir, "execution-records")
+        storage_stage = os.path.join(stage_dir, "storage")
+        simulator_stage = os.path.join(stage_dir, "execution-world-simulator-mirror")
+        bridge_stage_dir = os.path.join(stage_dir, "chain-runtime")
+        os.makedirs(execution_world_stage, exist_ok=True)
+        os.makedirs(execution_records_stage, exist_ok=True)
+        os.makedirs(storage_stage, exist_ok=True)
+        os.makedirs(simulator_stage, exist_ok=True)
+        os.makedirs(bridge_stage_dir, exist_ok=True)
+
+        copy_file(
+            os.path.join(execution_world_dir, "snapshot.json"),
+            os.path.join(execution_world_stage, "snapshot.json"),
+        )
+        copy_file(
+            os.path.join(execution_world_dir, "journal.json"),
+            os.path.join(execution_world_stage, "journal.json"),
+        )
+
+        module_registry_path = os.path.join(execution_world_dir, "module_registry.json")
+        if os.path.isfile(module_registry_path):
+            copy_file(
+                module_registry_path,
+                os.path.join(execution_world_stage, "module_registry.json"),
+            )
+
+        archive_index_path = os.path.join(execution_world_dir, "tick-consensus.archive.index.json")
+        if os.path.isfile(archive_index_path):
+            copy_file(
+                archive_index_path,
+                os.path.join(execution_world_stage, "tick-consensus.archive.index.json"),
+            )
+            with open(
+                os.path.join(execution_world_stage, "snapshot.json"),
+                "r",
+                encoding="utf-8",
+            ) as fh:
+                snapshot_payload = json.load(fh)
+            with open(
+                os.path.join(execution_world_stage, "tick-consensus.archive.index.json"),
+                "r",
+                encoding="utf-8",
+            ) as fh:
+                archive_index = json.load(fh)
+            if snapshot_payload.get("tick_consensus_hot_from_tick") != archive_index.get(
+                "hot_from_tick"
+            ) or snapshot_payload.get("tick_consensus_hot_to_tick") != archive_index.get(
+                "hot_to_tick"
+            ):
+                raise RuntimeError("tick consensus archive hot range drift during remote staging")
+            indexed_record_count = sum(
+                int(segment.get("record_count", 0))
+                for segment in archive_index.get("archived_segments", [])
+            )
+            if snapshot_payload.get("tick_consensus_archived_record_count") != indexed_record_count:
+                raise RuntimeError(
+                    "tick consensus archive record count drift during remote staging"
+                )
+            for segment in archive_index.get("archived_segments", []):
+                relative_path = segment.get("relative_path")
+                if not relative_path:
+                    continue
+                source_path = os.path.join(execution_world_dir, relative_path)
+                if not os.path.isfile(source_path):
+                    raise FileNotFoundError(source_path)
+                copy_file(
+                    source_path,
+                    os.path.join(execution_world_stage, relative_path),
+                )
+
+        archive_path = os.path.join(execution_world_dir, "tick-consensus.archive.json")
+        if os.path.isfile(archive_path):
+            copy_file(
+                archive_path,
+                os.path.join(execution_world_stage, "tick-consensus.archive.json"),
+            )
+
+        modules_dir = os.path.join(execution_world_dir, "modules")
+        if os.path.isdir(modules_dir):
+            shutil.copytree(
+                modules_dir,
+                os.path.join(execution_world_stage, "modules"),
+                copy_function=shutil.copy2,
+            )
+
+        shutil.copytree(
+            execution_records_dir,
+            execution_records_stage,
+            dirs_exist_ok=True,
+            copy_function=shutil.copy2,
+        )
+        shutil.copytree(
+            storage_root,
+            storage_stage,
+            dirs_exist_ok=True,
+            copy_function=link_or_copy,
+        )
+
+        copy_file(
+            os.path.join(simulator_dir, "snapshot.json"),
+            os.path.join(simulator_stage, "snapshot.json"),
+        )
+        copy_file(
+            os.path.join(simulator_dir, "journal.json"),
+            os.path.join(simulator_stage, "journal.json"),
+        )
+        copy_file(
+            bridge_state_path,
+            os.path.join(bridge_stage_dir, os.path.basename(bridge_state_path)),
+        )
+
+        print(stage_dir, end="")
+        sys.exit(0)
+    except (FileNotFoundError, RuntimeError):
+        shutil.rmtree(stage_dir, ignore_errors=True)
+        if attempt == 5:
+            raise
+        time.sleep(0.2)
+    except Exception:
+        shutil.rmtree(stage_dir, ignore_errors=True)
+        raise
+PY
+)
+
+  remote_cmd=$(cat <<EOF
+env REMOTE_STACK_ROOT=$(printf '%q' "$remote_stack_root") REMOTE_EXECUTION_WORLD_DIR=$(printf '%q' "$remote_execution_world_dir") REMOTE_EXECUTION_RECORDS_DIR=$(printf '%q' "$remote_execution_records_dir") REMOTE_STORAGE_ROOT=$(printf '%q' "$remote_storage_root") REMOTE_SIMULATOR_DIR=$(printf '%q' "$remote_simulator_dir") REMOTE_EXECUTION_BRIDGE_STATE_PATH=$(printf '%q' "$remote_execution_bridge_state_path") python3 - <<'PY'
+$remote_script
+PY
+EOF
+)
+
+  sshpass_ssh "$remote_host" "$remote_cmd"
+}
+
+cleanup_remote_seed_tree() {
+  local remote_host=$1
+  local remote_stage_dir=$2
+  local remote_cmd
+
+  [[ -n "$remote_stage_dir" ]] || return 0
+
+  remote_cmd=$(cat <<EOF
+env REMOTE_STAGE_DIR=$(printf '%q' "$remote_stage_dir") python3 - <<'PY'
+import os
+import shutil
+
+stage_dir = os.environ["REMOTE_STAGE_DIR"]
+if stage_dir:
+    shutil.rmtree(stage_dir, ignore_errors=True)
+PY
+EOF
+)
+
+  sshpass_ssh "$remote_host" "$remote_cmd" >/dev/null 2>&1 || true
+}
+
+remote_resolved_env_value() {
+  local remote_host=$1
+  local remote_env=$2
+  local key=$3
+  local remote_cmd
+  printf -v remote_cmd \
+    'env REMOTE_ENV=%q KEY_NAME=%q bash -lc %q' \
+    "$remote_env" \
+    "$key" \
+    'source "$REMOTE_ENV" && value="${!KEY_NAME:-}" && [[ -n "$value" ]] && printf "%s" "$value"'
+  sshpass_ssh "$remote_host" "$remote_cmd" \
+    || die "missing or unresolved remote $key in $remote_env via $remote_host"
 }
 
 repo_root=$(cd "$script_dir/.." && pwd)
@@ -313,6 +591,132 @@ reset_local_state() {
   printf 'backup_dir=%s\n' "$backup_dir"
 }
 
+seed_local_state_from_remote() {
+  local local_env=$1
+  local remote_host=$2
+  local remote_env=$3
+  local backup_dir=$4
+
+  local local_stack_root local_node_id local_execution_world_dir local_execution_records_dir
+  local local_storage_root local_replication_root local_execution_bridge_state_path
+  local local_simulator_dir
+  local remote_stack_root remote_node_id remote_execution_world_dir remote_execution_records_dir
+  local remote_storage_root remote_execution_bridge_state_path remote_simulator_dir
+  local remote_stage_dir
+
+  local_stack_root=$(resolved_env_value "$local_env" STACK_ROOT)
+  local_node_id=$(resolved_env_value "$local_env" NODE_ID)
+  local_execution_world_dir=$(resolved_env_value "$local_env" EXECUTION_WORLD_DIR)
+  local_execution_records_dir=$(resolved_env_value "$local_env" EXECUTION_RECORDS_DIR)
+  local_storage_root=$(resolved_env_value "$local_env" STORAGE_ROOT)
+  local_replication_root="$local_stack_root/output/node-distfs/$local_node_id"
+  local_execution_bridge_state_path="$local_stack_root/output/chain-runtime/$local_node_id/reward-runtime-execution-bridge-state.json"
+  local_simulator_dir="${local_execution_world_dir}-simulator-mirror"
+
+  remote_stack_root=$(remote_resolved_env_value "$remote_host" "$remote_env" STACK_ROOT)
+  remote_node_id=$(remote_resolved_env_value "$remote_host" "$remote_env" NODE_ID)
+  remote_execution_world_dir=$(remote_resolved_env_value "$remote_host" "$remote_env" EXECUTION_WORLD_DIR)
+  remote_execution_records_dir=$(remote_resolved_env_value "$remote_host" "$remote_env" EXECUTION_RECORDS_DIR)
+  remote_storage_root=$(remote_resolved_env_value "$remote_host" "$remote_env" STORAGE_ROOT)
+  remote_execution_bridge_state_path="$remote_stack_root/output/chain-runtime/$remote_node_id/reward-runtime-execution-bridge-state.json"
+  remote_simulator_dir="${remote_execution_world_dir}-simulator-mirror"
+
+  [[ "$remote_execution_world_dir" == "$remote_stack_root"/data/* ]] \
+    || die "remote execution world dir must live under remote stack root data/: $remote_execution_world_dir"
+
+  if [[ -z "$backup_dir" ]]; then
+    backup_dir="$local_stack_root/backups/local-observer-remote-seed-$(date +%Y%m%d-%H%M%S)"
+  fi
+
+  mkdir -p "$backup_dir"
+
+  backup_and_remove_path "$local_execution_world_dir" "$backup_dir/execution-world"
+  backup_and_remove_path "$local_simulator_dir" "$backup_dir/execution-world-simulator-mirror"
+  backup_and_remove_path "$local_execution_records_dir" "$backup_dir/execution-records"
+  backup_and_remove_path "$local_storage_root" "$backup_dir/storage"
+  backup_and_remove_path "$local_replication_root" "$backup_dir/node-distfs/$local_node_id"
+  backup_and_remove_path \
+    "$local_execution_bridge_state_path" \
+    "$backup_dir/chain-runtime/$local_node_id/$(basename "$local_execution_bridge_state_path")"
+
+  mkdir -p "$(dirname "$local_execution_bridge_state_path")"
+  mkdir -p "$local_execution_records_dir" "$local_storage_root"
+  mkdir -p "$local_execution_world_dir" "$local_simulator_dir"
+
+  remote_stage_dir=$(stage_remote_seed_tree \
+    "$remote_host" \
+    "$remote_stack_root" \
+    "$remote_execution_world_dir" \
+    "$remote_execution_records_dir" \
+    "$remote_storage_root" \
+    "$remote_simulator_dir" \
+    "$remote_execution_bridge_state_path")
+
+  sshpass_scp_from_remote \
+    "$remote_host:$remote_stage_dir/execution-world/snapshot.json" \
+    "$local_execution_world_dir/snapshot.json"
+  sshpass_scp_from_remote \
+    "$remote_host:$remote_stage_dir/execution-world/journal.json" \
+    "$local_execution_world_dir/journal.json"
+  if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/execution-records"; then
+    stream_remote_tar_dir_to_local \
+      "$remote_host" \
+      "$remote_stage_dir/execution-records" \
+      "$(dirname "$local_execution_records_dir")"
+  fi
+  if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/storage"; then
+    stream_remote_tar_dir_to_local \
+      "$remote_host" \
+      "$remote_stage_dir/storage" \
+      "$(dirname "$local_storage_root")"
+  fi
+
+  if sshpass_ssh "$remote_host" test -f "$remote_stage_dir/execution-world/module_registry.json"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/execution-world/module_registry.json" \
+      "$local_execution_world_dir/module_registry.json"
+  fi
+  if sshpass_ssh "$remote_host" test -f "$remote_stage_dir/execution-world/tick-consensus.archive.index.json"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/execution-world/tick-consensus.archive.index.json" \
+      "$local_execution_world_dir/tick-consensus.archive.index.json"
+  fi
+  if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/execution-world/tick-consensus.archive.segments"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/execution-world/tick-consensus.archive.segments" \
+      "$local_execution_world_dir/" \
+      -r
+  fi
+  if sshpass_ssh "$remote_host" test -f "$remote_stage_dir/execution-world/tick-consensus.archive.json"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/execution-world/tick-consensus.archive.json" \
+      "$local_execution_world_dir/tick-consensus.archive.json"
+  fi
+  if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/execution-world/modules"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/execution-world/modules" \
+      "$local_execution_world_dir/" \
+      -r
+  fi
+
+  sshpass_scp_from_remote \
+    "$remote_host:$remote_stage_dir/execution-world-simulator-mirror/snapshot.json" \
+    "$local_simulator_dir/snapshot.json"
+  sshpass_scp_from_remote \
+    "$remote_host:$remote_stage_dir/execution-world-simulator-mirror/journal.json" \
+    "$local_simulator_dir/journal.json"
+  sshpass_scp_from_remote \
+    "$remote_host:$remote_stage_dir/chain-runtime/$(basename "$local_execution_bridge_state_path")" \
+    "$local_execution_bridge_state_path"
+
+  cleanup_remote_seed_tree "$remote_host" "$remote_stage_dir"
+
+  printf 'seeded local observer state from %s\n' "$remote_host"
+  printf 'remote_env=%s\n' "$remote_env"
+  printf 'remote_node_id=%s\n' "$remote_node_id"
+  printf 'backup_dir=%s\n' "$backup_dir"
+}
+
 localize_manifest_runtime_refs() {
   local manifest_source=$1
   local manifest_dest=$2
@@ -367,6 +771,8 @@ manifest_dest=""
 start_script_source="$script_dir/p2p-triad-node-start.sh"
 start_script_dest=""
 backup_dir=""
+remote_host=""
+remote_env=""
 
 while (( $# > 0 )); do
   case "$1" in
@@ -408,6 +814,14 @@ while (( $# > 0 )); do
       ;;
     --backup-dir)
       backup_dir=${2:-}
+      shift 2
+      ;;
+    --remote-host)
+      remote_host=${2:-}
+      shift 2
+      ;;
+    --remote-env)
+      remote_env=${2:-}
       shift 2
       ;;
     -h|--help)
@@ -489,6 +903,15 @@ case "$mode" in
     [[ -n "$local_env" ]] || die "--local-env is required"
     require_file "$local_env"
     reset_local_state "$local_env" "$backup_dir"
+    ;;
+  seed-from-remote)
+    [[ -n "$local_env" ]] || die "--local-env is required"
+    [[ -n "$remote_host" ]] || die "--remote-host is required"
+    require_file "$local_env"
+    if [[ -z "$remote_env" ]]; then
+      remote_env="/opt/oasis7/p2p-testnet/config/node.env"
+    fi
+    seed_local_state_from_remote "$local_env" "$remote_host" "$remote_env" "$backup_dir"
     ;;
   *)
     die "unknown mode: $mode"
