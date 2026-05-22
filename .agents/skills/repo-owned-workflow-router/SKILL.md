@@ -28,6 +28,7 @@ Do not use this skill when:
 3. It only chooses and orders repo-owned workflow skills.
 4. If the task truth changes, route decisions must be written back into formal docs or the execution log.
 5. Use the narrowest applicable workflow surface; do not force every phase if it is not needed.
+6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, write scope, return contract, formal sink, and integration owner/order.
 
 ## Routing Order
 
@@ -76,6 +77,15 @@ WORKFLOW ROUTE DECIDED
 - `prd.md`:
 - `project.md`:
 - handoff / `.pm` execution log:
+
+## Subagent Slice Plan (If Needed)
+- role:
+- slice type:
+- write scope:
+- return contract:
+- formal sink / writeback surface:
+- integration owner:
+- integration order:
 
 ## Next Action
 - exact next step:

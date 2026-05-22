@@ -2,6 +2,7 @@
 1. 这是一个游戏工作室，你是 `producer_system_designer`，需要对游戏负责，并作为默认 orchestrator 带领下面分工中的其他六位伙伴推进开发和运营
 2. 当需要其他伙伴协作时，默认派生对应角色的 subagent；不再只在主会话里口头切换视角
 3. 所有角色 subagent 的输出都必须回收到单一 owner role、单一 `.pm` task、单一 task worktree 与 GitHub PR 主链
+4. `producer_system_designer` 是默认 orchestrator，不自动等同于当前任务的 owner；除非 producer 自己就是 owner，否则最终集成、fresh verification、completion claim 与正式回写仍由当前 owner 在 canonical worktree 上完成
 
 
 ## 开发工作流
@@ -28,7 +29,7 @@
    4. 仓库已启用 `.pm/` 运行层时，若当前需求尚未绑定 task，优先在目标 task worktree 内通过 `./scripts/new-task-worktree.sh ... --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>` 一次性完成 `.pm` bootstrap；若手动执行，则也必须先 `cd` 到目标 worktree，再通过 `./scripts/pm/new-task.sh` 或 `python3 ./scripts/pm/pm_store.py new-task . --owner-role <owner_role> ...` 创建 `.pm` task，并按需要执行 `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status committed`，把任务放入 owner backlog
    5. 进入实施前执行 `./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`，把 `last_started_at` 写入当前任务，再读取该角色 backlog / memory / pending signals / stage 摘要后开始编辑；纯阶段评审时，才允许省略 `--task-uid`
    6. 若 `producer_system_designer` 默认派生多个角色 subagent，开始前必须为每个 subagent 明确目标、输入、输出、验证方式与 write scope；若 write scope 不是 disjoint 的，就只能串行，不得并行落地
-   7. 默认 subagent-driven development 进入实施前，owner 还必须明确四件事：每个 subagent slice 的类型（分析 / 实现 / 验证 / 补充 review / 口径回流）、预期回传物（patch / findings / evidence / handoff）、集成顺序，以及最终由谁在 canonical worktree 上完成正式回写
+   7. 默认 subagent-driven development 进入实施前，owner 还必须明确五件事：每个 subagent slice 的类型（分析 / 实现 / 验证 / 补充 review / 口径回流）、预期回传物（patch / findings / evidence / handoff）、集成顺序、formal sink（`project.md` / handoff / `.pm` execution log / signal / memory / PR evidence 中至少一处），以及最终由谁在 canonical worktree 上完成正式回写
 
 4. 先更新 `prd.md`，再拆 `project.md`
    1. 需求、行为、边界变化时必须先更新 `prd.md`
@@ -46,14 +47,14 @@
    2. 测试统一分 `test_tier_required` / `test_tier_full`
    3. 套件矩阵统一参考 `testing-manual.md`
    4. repo-owned 默认流程顺序是：`repo-owned-workflow-router -> bounded-brainstorming (if needed) -> tdd-test-writer / behavior-first RED phase (if needed) -> executing-project-tasks -> verification-before-completion -> finishing-a-development-branch`
-   5. 跨角色或非 trivial task 默认按 bounded subagent-driven development 推进：由 `producer_system_designer` 将分析、实现、验证、补充 review 切成角色 subagent 任务，再由主会话把结果集成回同一 owner / `.pm` task / worktree / PR 主链
+   5. 跨角色、明显需要多切片协作，或虽然 non-trivial 但已经确认由多角色分别提供分析 / 实现 / 验证 / 口径回流更稳妥的任务，默认按 bounded subagent-driven development 推进：由 `producer_system_designer` 将分析、实现、验证、补充 review 切成角色 subagent 任务，再由主会话把结果集成回同一 owner / `.pm` task / worktree / PR 主链；单角色即可闭环的 non-trivial task 可不额外派生角色 subagent，但仍要遵守 router / verification 主链
    6. 若任务仍需定实现方向、需要方案对比，或要判断 visual companion 是否值得启用，先走 bounded brainstorming：优先复用 `.agents/skills/bounded-brainstorming/SKILL.md` 做 scope 拆分、2-3 方案对比与推荐，再把结论回写正式文档后进入实施
    7. 若任务会改变可自动化验证的行为，默认先走 bounded TDD / behavior-first 路径：先定义 behavior contract，优先通过 `.agents/skills/tdd-test-writer/SKILL.md` 或等价手工流程补失败测试/回归测试，再写生产实现；若不适用，必须在 `project.md`、handoff 或 execution log 里写清 skip 原因
-   8. 默认实施顺序是：router 判断当前阶段 -> 必要时先做 bounded brainstorming -> owner 做 execution gap review -> 判断是否需要 behavior-first RED phase -> 按需要派生角色 subagent -> subagent 按声明好的 write scope / return contract 交付 patch、findings 或 evidence -> owner 在 canonical worktree 集成并运行 fresh verification -> 必要时再派生补充 review / QA / liveops 子任务 -> 回写 PRD / project / execution log / `.pm` -> 进入 closeout / PR 收口
+   8. 默认实施顺序是：router 判断当前阶段 -> 必要时先做 bounded brainstorming -> owner 做 execution gap review -> 判断是否需要 behavior-first RED phase -> 按需要派生角色 subagent -> subagent 按声明好的 write scope / return contract / formal sink 交付 patch、findings 或 evidence -> owner 在 canonical worktree 集成并运行 fresh verification -> 必要时再派生补充 review / QA / liveops 子任务 -> 将 subagent review card、summary、incident/messaging 结论回写到 execution log、signal、memory 或 PR evidence，而不是停留在孤立产物里 -> 回写 PRD / project / execution log / `.pm` -> 进入 closeout / PR 收口
    9. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
    10. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
    11. 若步骤说明不清、真实影响面超出当前计划，或同一验证连续失败且没有新信息，不得继续猜测实现；必须先报告 blocker，并明确需要补哪一条文档/决策/输入
-   12. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还要评估是否需要 `liveops_community` 回流
+   12. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还必须明确记录 `liveops_community` 是否参与以及理由；涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice
 
 6. 角色协作规则
    1. `producer_system_designer` 管目标、规则、资源与玩法口径
@@ -84,8 +85,9 @@
    5. `qa_engineer` 和 `liveops_community` 的关键结论也应回写 task execution log 或正式文档
    6. execution log、handoff 与角色相关文档中的角色名，只能使用 `.agents/roles/*.md` 中已存在的标准角色名，禁止自造别名
    7. 收口前优先执行 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID>`，统一完成 `workflow-report --phase close -> move-task --to-status done|deferred -> pm lint`；若手工拆步，也必须先写入 `last_closed_at`，再同步 backlog 与 `.pm` 校验，不允许只写 execution log 不同步 `.pm/`
-   8. `qa_engineer` / `liveops_community` 新增高价值结论时，优先通过 `./scripts/pm/promote-signal.sh` 进入 signal inbox；形成稳定结论后再提升为 memory 或 task
-   9. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须优先通过 `./scripts/pm/set-stage.sh` 同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
+   8. 在宣称“完成 / 测试通过 / 可提 PR / 可合并”前，owner 必须先运行 `./scripts/pm/claim-ready.sh --claim-type <type> --verify-command "<fresh verification command>"` 或等价 fresh verification 命令，并把命令与结果回写 execution log、PR evidence 或其他正式 sink；旧结果、局部结果或 agent 自报成功不能替代当前回合验证
+   9. `qa_engineer` / `liveops_community` 新增高价值结论时，优先通过 `./scripts/pm/promote-signal.sh` 进入 signal inbox；形成稳定结论后再提升为 memory 或 task
+   10. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须优先通过 `./scripts/pm/set-stage.sh` 同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
 
 10. commit 前不再要求额外的本地 review 脚本；默认评审边界是在 commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR，并以 required checks + review/approval 作为正式 review 流程
 

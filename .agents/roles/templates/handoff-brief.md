@@ -44,6 +44,7 @@
 - Write Scope:
 - Read-Only Dependencies:
 - Return Contract:
+- Formal Sink / Writeback Surface:
 - Integration Owner:
 
 ## Expected Output
@@ -71,6 +72,7 @@
 ## Validation
 - 建议测试层级：`test_tier_required` / `test_tier_full`
 - 建议验证命令：
+- Claim-Ready Command (If This Slice Supports Completion Claim):
 - 预期回传证据：
 
 ## Notes

@@ -51,3 +51,7 @@ Example:
 ## 2026-05-22 22:27:10 CST / producer_system_designer
 - 完成内容: 继续压缩三份旧 self-evolution PRD：将 `file-based-*`、`memory-inspired-*`、`role-long-term-memory-*` 的 `Executive Summary`、`Risks & Roadmap` 与 `Decision Log` 改成更短的“当前问题 / 当前解法 / 已完成主链 / 稳定化目标”表达，删除重复版本流水账和冗长理由句，但保留 success criteria、功能矩阵、验证追踪表和决策 ID。
 - 遗留事项: 若还要继续减重，下一步只适合继续压缩少数 user stories / critical flows 的句长；不应改动对象字段、验证矩阵、`role/topic` allowlist 或 adoption/rejection 边界。
+
+## 2026-05-22 23:08:41 CST / producer_system_designer
+- 完成内容: 按新默认流程派生 `agent_engineer`、`qa_engineer`、`viewer_engineer`、`liveops_community` 四个角色 subagent 评估当前 subagent-driven workflow 合理性；综合结论为“主链基本合理，但需补边界”，并据此收紧 `AGENTS.md`、router skill、handoff 模板与 `.pm/README.md`，明确 producer 与 owner 分工、subagent formal sink、liveops 强触发，以及 fresh verification / claim-ready writeback 要求；随后执行 `./scripts/pm/lint.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check` 全部通过。
+- 遗留事项: `task-closeout.sh` 仍未结构性强制 fresh verification，`workflow behavior eval harness` 也还没把多 agent 主链做成可回放的行为级证明；若后续要把这套流程从“文档默认”继续升级为“硬门禁默认”，应优先补这两处。
