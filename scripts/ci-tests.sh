@@ -97,11 +97,13 @@ run_oasis7_llm_baseline_fixture_smoke() {
 
 run_oasis7_viewer_software_safe_feedback_contract_tests() {
   run node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs
+  run ./scripts/copy-viewer-web-dist.test.sh
+  run ./scripts/agent-browser-viewer-dist-freshness-test.sh
   run npm --prefix crates/oasis7_viewer run test:ui
 }
 
 run_oasis7_viewer_software_safe_build() {
-  run npm --prefix crates/oasis7_viewer run build:software-safe
+  run ./scripts/build-viewer-software-safe.sh
 }
 
 run_oasis7_client_launcher_web_build() {

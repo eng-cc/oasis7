@@ -101,25 +101,9 @@ async function resolveWasmBindgenCommand() {
   if (await wasmBindgenVersionMatches(wasmBindgenCliPath, wasmBindgenVersion)) {
     return wasmBindgenCliPath;
   }
-
-  console.log(`wasm-bindgen cli missing or stale; installing wasm-bindgen-cli ${wasmBindgenVersion}`);
-  await runChecked("env", [
-    "-u",
-    "RUSTC_WRAPPER",
-    "cargo",
-    "install",
-    "--locked",
-    "wasm-bindgen-cli",
-    "--version",
-    wasmBindgenVersion,
-    "--root",
-    cachedRoot,
-  ]);
-
-  if (!(await wasmBindgenVersionMatches(cachedCliPath, wasmBindgenVersion))) {
-    throw new Error(`failed to provision wasm-bindgen ${wasmBindgenVersion} under ${cachedRoot}`);
-  }
-  return cachedCliPath;
+  throw new Error(
+    `missing wasm-bindgen ${wasmBindgenVersion}; run ./scripts/ensure-wasm-bindgen-cli.sh --print-bin and retry the viewer build`,
+  );
 }
 
 async function listFilesRecursively(dirPath) {

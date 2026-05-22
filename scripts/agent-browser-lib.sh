@@ -272,22 +272,34 @@ PY
   fi
 
   mkdir -p "$rebuilt_dir"
-  echo "+ npm --prefix $repo_root/crates/oasis7_viewer run build:software-safe" >&2
-  (
-    cd "$repo_root"
-    npm --prefix crates/oasis7_viewer run build:software-safe
-  ) >&2
-  cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/index.html"
-  cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/viewer.html"
-  cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/software_safe.html"
-  cp "$repo_root/crates/oasis7_viewer/viewer.js" "$rebuilt_dir/viewer.js"
-  cp "$repo_root/crates/oasis7_viewer/software_safe.js" "$rebuilt_dir/software_safe.js"
-  cp "$repo_root/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
-    "$rebuilt_dir/software_safe_first_agent_claim_evidence.html"
-  cp "$repo_root/crates/oasis7_viewer/favicon.ico" "$rebuilt_dir/favicon.ico"
-  if [[ -d "$repo_root/crates/oasis7_viewer/pixel-world-bridge" ]]; then
-    rm -rf "$rebuilt_dir/pixel-world-bridge"
-    cp -R "$repo_root/crates/oasis7_viewer/pixel-world-bridge" "$rebuilt_dir/pixel-world-bridge"
+  if [[ -x "$repo_root/scripts/build-viewer-software-safe.sh" ]]; then
+    echo "+ $repo_root/scripts/build-viewer-software-safe.sh" >&2
+    (
+      cd "$repo_root"
+      ./scripts/build-viewer-software-safe.sh
+    ) >&2
+  else
+    echo "+ npm --prefix $repo_root/crates/oasis7_viewer run build:software-safe" >&2
+    (
+      cd "$repo_root"
+      npm --prefix crates/oasis7_viewer run build:software-safe
+    ) >&2
+  fi
+  if [[ -x "$repo_root/scripts/copy-viewer-web-dist.sh" ]]; then
+    "$repo_root/scripts/copy-viewer-web-dist.sh" --dist-dir "$rebuilt_dir" >&2
+  else
+    cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/index.html"
+    cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/viewer.html"
+    cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/software_safe.html"
+    cp "$repo_root/crates/oasis7_viewer/viewer.js" "$rebuilt_dir/viewer.js"
+    cp "$repo_root/crates/oasis7_viewer/software_safe.js" "$rebuilt_dir/software_safe.js"
+    cp "$repo_root/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
+      "$rebuilt_dir/software_safe_first_agent_claim_evidence.html"
+    cp "$repo_root/crates/oasis7_viewer/favicon.ico" "$rebuilt_dir/favicon.ico"
+    if [[ -d "$repo_root/crates/oasis7_viewer/pixel-world-bridge" ]]; then
+      rm -rf "$rebuilt_dir/pixel-world-bridge"
+      cp -R "$repo_root/crates/oasis7_viewer/pixel-world-bridge" "$rebuilt_dir/pixel-world-bridge"
+    fi
   fi
   printf '%s
 ' "$rebuilt_dir"

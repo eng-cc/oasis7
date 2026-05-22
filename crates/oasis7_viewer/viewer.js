@@ -1590,6 +1590,264 @@ function createViewerFeedbackModule({
     snapshotSemanticFeedback: snapshotSemanticFeedback2
   };
 }
+function buildDefaultAuthState(overrides = {}) {
+  return {
+    available: false,
+    hostedAccountId: null,
+    playerId: null,
+    loginChannel: null,
+    maskedLoginHint: null,
+    deviceSessionId: null,
+    publicKey: null,
+    privateKey: null,
+    releaseToken: null,
+    error: null,
+    revokeReason: null,
+    revokedBy: null,
+    source: "guest_only",
+    registrationStatus: "guest",
+    sessionEpoch: null,
+    issuedAtUnixMs: null,
+    recoveryErrorCode: null,
+    recoveryErrorMessage: null,
+    issueInFlight: false,
+    syncInFlight: false,
+    runtimeStatus: "guest",
+    boundAgentId: null,
+    pendingRequestedAgentId: null,
+    pendingForceRebind: false,
+    rebindNotice: null,
+    ...overrides
+  };
+}
+function createViewerHostedAuthStateModule({
+  hostedPlayerSessionStoragePrefix,
+  initialWsUrl: initialWsUrl2,
+  viewerAuthBootstrapObject,
+  viewerAuthPrivateKey,
+  viewerAuthPublicKey,
+  viewerPlayerIdKey,
+  windowRef
+}) {
+  function resolveAuthBootstrap2() {
+    const raw = windowRef[viewerAuthBootstrapObject];
+    if (!raw || typeof raw !== "object") {
+      return buildDefaultAuthState({
+        error: "viewer auth bootstrap is unavailable"
+      });
+    }
+    const playerId = String(raw[viewerPlayerIdKey] || "").trim();
+    const publicKey = String(raw[viewerAuthPublicKey] || "").trim().toLowerCase();
+    const privateKey = String(raw[viewerAuthPrivateKey] || "").trim().toLowerCase();
+    if (!playerId || !publicKey || !privateKey) {
+      return buildDefaultAuthState({
+        playerId: playerId || null,
+        publicKey: publicKey || null,
+        privateKey: privateKey || null,
+        error: "viewer auth bootstrap is incomplete"
+      });
+    }
+    return buildDefaultAuthState({
+      available: true,
+      playerId,
+      publicKey,
+      privateKey,
+      source: "legacy_viewer_auth_bootstrap",
+      registrationStatus: "registered",
+      sessionEpoch: 1,
+      runtimeStatus: "legacy_preview",
+      error: null
+    });
+  }
+  function hostedPlayerSessionStorageKey() {
+    return `${hostedPlayerSessionStoragePrefix}:${initialWsUrl2()}`;
+  }
+  function persistHostedPlayerSession2(auth) {
+    if (!auth?.available || !auth?.playerId || auth.source === "legacy_viewer_auth_bootstrap") {
+      return;
+    }
+    try {
+      windowRef.localStorage?.setItem(
+        hostedPlayerSessionStorageKey(),
+        JSON.stringify({
+          hostedAccountId: auth.hostedAccountId || null,
+          playerId: auth.playerId,
+          loginChannel: auth.loginChannel || null,
+          maskedLoginHint: auth.maskedLoginHint || null,
+          deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
+          releaseToken: auth.releaseToken || null,
+          issuedAtUnixMs: auth.issuedAtUnixMs || null,
+          sessionEpoch: auth.sessionEpoch || null
+        })
+      );
+    } catch (_) {
+    }
+  }
+  function clearHostedPlayerSession2() {
+    try {
+      windowRef.localStorage?.removeItem(hostedPlayerSessionStorageKey());
+    } catch (_) {
+    }
+  }
+  function resolveStoredHostedPlayerSession() {
+    try {
+      const raw = windowRef.localStorage?.getItem(hostedPlayerSessionStorageKey());
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw);
+      const hostedAccountId = String(parsed?.hostedAccountId || parsed?.hosted_account_id || "").trim();
+      const playerId = String(parsed?.playerId || "").trim();
+      const loginChannel = String(parsed?.loginChannel || parsed?.login_channel || "").trim();
+      const maskedLoginHint = String(parsed?.maskedLoginHint || parsed?.masked_login_hint || "").trim();
+      const releaseToken = String(parsed?.releaseToken || "").trim();
+      const deviceSessionId = String(
+        parsed?.deviceSessionId || parsed?.device_session_id || parsed?.releaseToken || ""
+      ).trim();
+      if (!playerId || !releaseToken) {
+        clearHostedPlayerSession2();
+        return null;
+      }
+      windowRef.localStorage?.setItem(
+        hostedPlayerSessionStorageKey(),
+        JSON.stringify({
+          hostedAccountId: hostedAccountId || null,
+          playerId,
+          loginChannel: loginChannel || null,
+          maskedLoginHint: maskedLoginHint || null,
+          deviceSessionId: deviceSessionId || releaseToken,
+          releaseToken,
+          issuedAtUnixMs: parsed?.issuedAtUnixMs ?? null,
+          sessionEpoch: parsed?.sessionEpoch ?? null
+        })
+      );
+      return buildDefaultAuthState({
+        available: true,
+        hostedAccountId: hostedAccountId || null,
+        playerId,
+        loginChannel: loginChannel || null,
+        maskedLoginHint: maskedLoginHint || null,
+        deviceSessionId: deviceSessionId || releaseToken,
+        releaseToken,
+        source: "hosted_browser_storage",
+        registrationStatus: "issued",
+        sessionEpoch: parsed?.sessionEpoch == null ? null : Number(parsed.sessionEpoch),
+        issuedAtUnixMs: parsed?.issuedAtUnixMs == null ? null : Number(parsed.issuedAtUnixMs),
+        runtimeStatus: "issued",
+        error: null
+      });
+    } catch (_) {
+      clearHostedPlayerSession2();
+      return null;
+    }
+  }
+  function resolveViewerAuthState2() {
+    const bootstrap2 = resolveAuthBootstrap2();
+    if (bootstrap2.available) {
+      return bootstrap2;
+    }
+    return resolveStoredHostedPlayerSession() || bootstrap2;
+  }
+  function authHasSigningKeyMaterial2(auth) {
+    return !!String(auth?.publicKey || "").trim() && !!String(auth?.privateKey || "").trim();
+  }
+  return {
+    authHasSigningKeyMaterial: authHasSigningKeyMaterial2,
+    clearHostedPlayerSession: clearHostedPlayerSession2,
+    persistHostedPlayerSession: persistHostedPlayerSession2,
+    resolveAuthBootstrap: resolveAuthBootstrap2,
+    resolveViewerAuthState: resolveViewerAuthState2
+  };
+}
+function createViewerLocalePreferencesModule({
+  documentRef,
+  getSearchParams: getSearchParams2,
+  normalizeUiLocale: normalizeUiLocale2,
+  promptOverridesVisibilityStoragePrefix,
+  renderViewer,
+  state: state2,
+  uiLocaleStoragePrefix,
+  windowRef
+}) {
+  function uiLocaleStorageKey() {
+    return `${uiLocaleStoragePrefix}:${windowRef.location.pathname || "viewer.html"}`;
+  }
+  function persistUiLocale(locale) {
+    try {
+      windowRef.localStorage?.setItem(uiLocaleStorageKey(), locale);
+    } catch (_) {
+    }
+  }
+  function resolveStoredUiLocale() {
+    try {
+      return normalizeUiLocale2(windowRef.localStorage?.getItem(uiLocaleStorageKey()));
+    } catch (_) {
+      return null;
+    }
+  }
+  function resolveInitialUiLocale2() {
+    const params = getSearchParams2();
+    return normalizeUiLocale2(params.get("locale") || params.get("language")) || resolveStoredUiLocale() || "en";
+  }
+  function promptOverridesVisibilityStorageKey() {
+    return `${promptOverridesVisibilityStoragePrefix}:${windowRef.location.pathname || "viewer.html"}`;
+  }
+  function persistPromptOverridesVisibility(visible) {
+    try {
+      windowRef.localStorage?.setItem(promptOverridesVisibilityStorageKey(), visible ? "1" : "0");
+    } catch (_) {
+    }
+  }
+  function resolveStoredPromptOverridesVisibility2() {
+    try {
+      return windowRef.localStorage?.getItem(promptOverridesVisibilityStorageKey()) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+  function applyUiLocaleToDocument2(locale) {
+    documentRef.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+  }
+  function updateUiLocaleQuery(locale) {
+    const url = new URL(windowRef.location.href);
+    url.searchParams.set("locale", locale);
+    url.searchParams.delete("language");
+    windowRef.history.replaceState({}, "", url.toString());
+  }
+  function setViewerLocale2(locale) {
+    const normalized = normalizeUiLocale2(locale);
+    if (!normalized) {
+      return state2.uiLocale;
+    }
+    state2.uiLocale = normalized;
+    persistUiLocale(normalized);
+    applyUiLocaleToDocument2(normalized);
+    updateUiLocaleQuery(normalized);
+    renderViewer();
+    return state2.uiLocale;
+  }
+  function toggleViewerLocale() {
+    return setViewerLocale2(state2.uiLocale === "zh" ? "en" : "zh");
+  }
+  function setPromptOverridesVisible2(visible) {
+    state2.promptOverridesVisible = !!visible;
+    persistPromptOverridesVisibility(state2.promptOverridesVisible);
+    renderViewer();
+    return state2.promptOverridesVisible;
+  }
+  function togglePromptOverridesVisible2() {
+    return setPromptOverridesVisible2(!state2.promptOverridesVisible);
+  }
+  return {
+    applyUiLocaleToDocument: applyUiLocaleToDocument2,
+    resolveInitialUiLocale: resolveInitialUiLocale2,
+    resolveStoredPromptOverridesVisibility: resolveStoredPromptOverridesVisibility2,
+    setPromptOverridesVisible: setPromptOverridesVisible2,
+    setViewerLocale: setViewerLocale2,
+    togglePromptOverridesVisible: togglePromptOverridesVisible2,
+    toggleViewerLocale
+  };
+}
 function createViewerWorldScaleModule({
   documentRef,
   state: state2,
@@ -1950,76 +2208,26 @@ function normalizeUiLocale(raw) {
 function isLocaleZh(locale = state.uiLocale) {
   return normalizeUiLocale(locale) === "zh";
 }
-function uiLocaleStorageKey() {
-  return `${UI_LOCALE_STORAGE_PREFIX}:${window.location.pathname || "viewer.html"}`;
-}
-function persistUiLocale(locale) {
-  try {
-    window.localStorage?.setItem(uiLocaleStorageKey(), locale);
-  } catch (_) {
-  }
-}
-function resolveStoredUiLocale() {
-  try {
-    return normalizeUiLocale(window.localStorage?.getItem(uiLocaleStorageKey()));
-  } catch (_) {
-    return null;
-  }
-}
-function resolveInitialUiLocale() {
-  const params = getSearchParams();
-  return normalizeUiLocale(params.get("locale") || params.get("language")) || resolveStoredUiLocale() || "en";
-}
 function localeText(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
-function promptOverridesVisibilityStorageKey() {
-  return `${PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX}:${window.location.pathname || "viewer.html"}`;
-}
-function persistPromptOverridesVisibility(visible) {
-  try {
-    window.localStorage?.setItem(promptOverridesVisibilityStorageKey(), visible ? "1" : "0");
-  } catch (_) {
-  }
-}
-function resolveStoredPromptOverridesVisibility() {
-  try {
-    const raw = window.localStorage?.getItem(promptOverridesVisibilityStorageKey());
-    return raw === "1";
-  } catch (_) {
-    return false;
-  }
-}
-function applyUiLocaleToDocument(locale) {
-  document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-}
-function updateUiLocaleQuery(locale) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("locale", locale);
-  url.searchParams.delete("language");
-  window.history.replaceState({}, "", url.toString());
-}
-function setViewerLocale(locale) {
-  const normalized = normalizeUiLocale(locale);
-  if (!normalized) {
-    return state.uiLocale;
-  }
-  state.uiLocale = normalized;
-  persistUiLocale(normalized);
-  applyUiLocaleToDocument(normalized);
-  updateUiLocaleQuery(normalized);
-  render();
-  return state.uiLocale;
-}
-function setPromptOverridesVisible(visible) {
-  state.promptOverridesVisible = !!visible;
-  persistPromptOverridesVisibility(state.promptOverridesVisible);
-  render();
-  return state.promptOverridesVisible;
-}
-function togglePromptOverridesVisible() {
-  return setPromptOverridesVisible(!state.promptOverridesVisible);
-}
+const {
+  applyUiLocaleToDocument,
+  resolveInitialUiLocale,
+  resolveStoredPromptOverridesVisibility,
+  setPromptOverridesVisible,
+  setViewerLocale,
+  togglePromptOverridesVisible
+} = createViewerLocalePreferencesModule({
+  documentRef: document,
+  getSearchParams,
+  normalizeUiLocale,
+  promptOverridesVisibilityStoragePrefix: PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX,
+  renderViewer: render,
+  state,
+  uiLocaleStoragePrefix: UI_LOCALE_STORAGE_PREFIX,
+  windowRef: window
+});
 function getSelectedSearch() {
   return selectedSearch;
 }
@@ -2119,97 +2327,6 @@ const {
   localeText,
   state
 });
-function resolveAuthBootstrap() {
-  const raw = window[VIEWER_AUTH_BOOTSTRAP_OBJECT];
-  if (!raw || typeof raw !== "object") {
-    return {
-      available: false,
-      hostedAccountId: null,
-      playerId: null,
-      loginChannel: null,
-      maskedLoginHint: null,
-      deviceSessionId: null,
-      publicKey: null,
-      privateKey: null,
-      releaseToken: null,
-      error: "viewer auth bootstrap is unavailable",
-      revokeReason: null,
-      revokedBy: null,
-      source: "guest_only",
-      registrationStatus: "guest",
-      sessionEpoch: null,
-      issuedAtUnixMs: null,
-      recoveryErrorCode: null,
-      recoveryErrorMessage: null,
-      issueInFlight: false,
-      syncInFlight: false,
-      runtimeStatus: "guest",
-      boundAgentId: null,
-      pendingRequestedAgentId: null,
-      pendingForceRebind: false,
-      rebindNotice: null
-    };
-  }
-  const playerId = String(raw[VIEWER_PLAYER_ID_KEY] || "").trim();
-  const publicKey = String(raw[VIEWER_AUTH_PUBLIC_KEY] || "").trim().toLowerCase();
-  const privateKey = String(raw[VIEWER_AUTH_PRIVATE_KEY] || "").trim().toLowerCase();
-  if (!playerId || !publicKey || !privateKey) {
-    return {
-      available: false,
-      hostedAccountId: null,
-      playerId: playerId || null,
-      loginChannel: null,
-      maskedLoginHint: null,
-      deviceSessionId: null,
-      publicKey: publicKey || null,
-      privateKey: privateKey || null,
-      releaseToken: null,
-      error: "viewer auth bootstrap is incomplete",
-      revokeReason: null,
-      revokedBy: null,
-      source: "guest_only",
-      registrationStatus: "guest",
-      sessionEpoch: null,
-      issuedAtUnixMs: null,
-      recoveryErrorCode: null,
-      recoveryErrorMessage: null,
-      issueInFlight: false,
-      syncInFlight: false,
-      runtimeStatus: "guest",
-      boundAgentId: null,
-      pendingRequestedAgentId: null,
-      pendingForceRebind: false,
-      rebindNotice: null
-    };
-  }
-  return {
-    available: true,
-    hostedAccountId: null,
-    playerId,
-    loginChannel: null,
-    maskedLoginHint: null,
-    deviceSessionId: null,
-    publicKey,
-    privateKey,
-    releaseToken: null,
-    error: null,
-    revokeReason: null,
-    revokedBy: null,
-    source: "legacy_viewer_auth_bootstrap",
-    registrationStatus: "registered",
-    sessionEpoch: 1,
-    issuedAtUnixMs: null,
-    recoveryErrorCode: null,
-    recoveryErrorMessage: null,
-    issueInFlight: false,
-    syncInFlight: false,
-    runtimeStatus: "legacy_preview",
-    boundAgentId: null,
-    pendingRequestedAgentId: null,
-    pendingForceRebind: false,
-    rebindNotice: null
-  };
-}
 function initialWsUrl() {
   const params = getSearchParams();
   return normalizeWsAddr(params.get("ws") || params.get("addr") || DEFAULT_WS_ADDR);
@@ -2218,105 +2335,21 @@ function shouldConnectViewerWs() {
   const mode = String(getSearchParams().get("connect") || "").trim().toLowerCase();
   return mode !== "0" && mode !== "false" && mode !== "off";
 }
-function hostedPlayerSessionStorageKey() {
-  return `${HOSTED_PLAYER_SESSION_STORAGE_PREFIX}:${initialWsUrl()}`;
-}
-function persistHostedPlayerSession(auth) {
-  if (!auth?.available || !auth?.playerId || auth.source === "legacy_viewer_auth_bootstrap") {
-    return;
-  }
-  try {
-    window.localStorage?.setItem(
-      hostedPlayerSessionStorageKey(),
-      JSON.stringify({
-        hostedAccountId: auth.hostedAccountId || null,
-        playerId: auth.playerId,
-        loginChannel: auth.loginChannel || null,
-        maskedLoginHint: auth.maskedLoginHint || null,
-        deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
-        releaseToken: auth.releaseToken || null,
-        issuedAtUnixMs: auth.issuedAtUnixMs || null,
-        sessionEpoch: auth.sessionEpoch || null
-      })
-    );
-  } catch (_) {
-  }
-}
-function clearHostedPlayerSession() {
-  try {
-    window.localStorage?.removeItem(hostedPlayerSessionStorageKey());
-  } catch (_) {
-  }
-}
-function resolveStoredHostedPlayerSession() {
-  try {
-    const raw = window.localStorage?.getItem(hostedPlayerSessionStorageKey());
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    const hostedAccountId = String(parsed?.hostedAccountId || parsed?.hosted_account_id || "").trim();
-    const playerId = String(parsed?.playerId || "").trim();
-    const loginChannel = String(parsed?.loginChannel || parsed?.login_channel || "").trim();
-    const maskedLoginHint = String(parsed?.maskedLoginHint || parsed?.masked_login_hint || "").trim();
-    const releaseToken = String(parsed?.releaseToken || "").trim();
-    const deviceSessionId = String(parsed?.deviceSessionId || parsed?.device_session_id || parsed?.releaseToken || "").trim();
-    if (!playerId || !releaseToken) {
-      clearHostedPlayerSession();
-      return null;
-    }
-    window.localStorage?.setItem(
-      hostedPlayerSessionStorageKey(),
-      JSON.stringify({
-        hostedAccountId: hostedAccountId || null,
-        playerId,
-        loginChannel: loginChannel || null,
-        maskedLoginHint: maskedLoginHint || null,
-        deviceSessionId: deviceSessionId || releaseToken,
-        releaseToken,
-        issuedAtUnixMs: parsed?.issuedAtUnixMs ?? null,
-        sessionEpoch: parsed?.sessionEpoch ?? null
-      })
-    );
-    return {
-      available: true,
-      hostedAccountId: hostedAccountId || null,
-      playerId,
-      loginChannel: loginChannel || null,
-      maskedLoginHint: maskedLoginHint || null,
-      deviceSessionId: deviceSessionId || releaseToken,
-      publicKey: null,
-      privateKey: null,
-      releaseToken,
-      error: null,
-      revokeReason: null,
-      revokedBy: null,
-      source: "hosted_browser_storage",
-      registrationStatus: "issued",
-      sessionEpoch: parsed?.sessionEpoch == null ? null : Number(parsed.sessionEpoch),
-      issuedAtUnixMs: parsed?.issuedAtUnixMs == null ? null : Number(parsed.issuedAtUnixMs),
-      recoveryErrorCode: null,
-      recoveryErrorMessage: null,
-      issueInFlight: false,
-      syncInFlight: false,
-      runtimeStatus: "issued",
-      boundAgentId: null,
-      pendingRequestedAgentId: null,
-      pendingForceRebind: false,
-      rebindNotice: null
-    };
-  } catch (_) {
-    clearHostedPlayerSession();
-    return null;
-  }
-}
-function resolveViewerAuthState() {
-  const bootstrap2 = resolveAuthBootstrap();
-  if (bootstrap2.available) {
-    return bootstrap2;
-  }
-  return resolveStoredHostedPlayerSession() || bootstrap2;
-}
+const {
+  authHasSigningKeyMaterial,
+  clearHostedPlayerSession,
+  persistHostedPlayerSession,
+  resolveAuthBootstrap,
+  resolveViewerAuthState
+} = createViewerHostedAuthStateModule({
+  hostedPlayerSessionStoragePrefix: HOSTED_PLAYER_SESSION_STORAGE_PREFIX,
+  initialWsUrl,
+  viewerAuthBootstrapObject: VIEWER_AUTH_BOOTSTRAP_OBJECT,
+  viewerAuthPrivateKey: VIEWER_AUTH_PRIVATE_KEY,
+  viewerAuthPublicKey: VIEWER_AUTH_PUBLIC_KEY,
+  viewerPlayerIdKey: VIEWER_PLAYER_ID_KEY,
+  windowRef: window
+});
 function resetHostedLoginChallenge() {
   state.hostedLogin.channel = "email";
   state.hostedLogin.challengeId = null;
@@ -2327,9 +2360,6 @@ function resetHostedLoginChallenge() {
   state.hostedLogin.expiresAtUnixMs = null;
   state.hostedLogin.accountExists = false;
   state.hostedLogin.completeInFlight = false;
-}
-function authHasSigningKeyMaterial(auth) {
-  return !!String(auth?.publicKey || "").trim() && !!String(auth?.privateKey || "").trim();
 }
 async function ensureHostedAuthSigningKey(auth = state.auth) {
   if (!auth?.available || auth.source === "legacy_viewer_auth_bootstrap") {
