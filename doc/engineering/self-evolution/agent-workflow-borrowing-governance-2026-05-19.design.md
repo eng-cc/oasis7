@@ -56,7 +56,8 @@
   - 只作为 UI-heavy 设计题的 optional ideation layer
   - 不替代 `agent-browser`、repo-owned regression 或正式实现 task
 - workflow behavior eval harness:
-  - 是 adopted follow-up，但仍属于后续验证层
+  - 已落为 `scripts/pm/workflow-behavior-eval.sh`
+  - 通过 task-worktree bootstrap smoke、subagent contract surface 校验、PM closeout/claim gate smoke、PR preflight fixture 与 review-thread closeout fixture 证明主链仍可回放
   - 作用是证明 agent 真正遵守主链，而不是再造新的对话流程
 
 ## 3. 继续拒绝或 deferred 的设计边界

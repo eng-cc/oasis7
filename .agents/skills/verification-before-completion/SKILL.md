@@ -62,7 +62,7 @@ Do not collapse multi-check state into a blanket "ready" claim unless every requ
 ## Oasis7-Specific Checks
 
 - Doc / PM work: `./scripts/pm/lint.sh`, `./scripts/doc-governance-check.sh`, `git diff --check`
-- Task closeout readiness: `./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID>`
+- Task closeout readiness: `./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`
 - PR readiness: `./scripts/prepare-task-pr.sh`
 
 ## Guardrails

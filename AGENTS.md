@@ -84,7 +84,7 @@
    4. 多角色并行或接力时，必须显式标注角色；推荐格式：`## YYYY-MM-DD HH:MM:SS CST / role_name`
    5. `qa_engineer` 和 `liveops_community` 的关键结论也应回写 task execution log 或正式文档
    6. execution log、handoff 与角色相关文档中的角色名，只能使用 `.agents/roles/*.md` 中已存在的标准角色名，禁止自造别名
-   7. 收口前优先执行 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID>`，统一完成 `workflow-report --phase close -> move-task --to-status done|deferred -> pm lint`；若手工拆步，也必须先写入 `last_closed_at`，再同步 backlog 与 `.pm` 校验，不允许只写 execution log 不同步 `.pm/`
+   7. 收口前优先执行 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`；默认 `done` closeout 只有在 fresh verification 已于当前回合成功执行后，才允许继续写入 `workflow-report --phase close -> move-task --to-status done -> pm lint`。若 task 要收口到 `deferred`，才允许不带 `--verify-command`；若手工拆步，也必须先完成等价 fresh verification，再写入 `last_closed_at` 并同步 backlog 与 `.pm` 校验，不允许只写 execution log 不同步 `.pm/`
    8. 在宣称“完成 / 测试通过 / 可提 PR / 可合并”前，owner 必须先运行 `./scripts/pm/claim-ready.sh --claim-type <type> --verify-command "<fresh verification command>"` 或等价 fresh verification 命令，并把命令与结果回写 execution log、PR evidence 或其他正式 sink；旧结果、局部结果或 agent 自报成功不能替代当前回合验证
    9. `qa_engineer` / `liveops_community` 新增高价值结论时，优先通过 `./scripts/pm/promote-signal.sh` 进入 signal inbox；形成稳定结论后再提升为 memory 或 task
    10. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须优先通过 `./scripts/pm/set-stage.sh` 同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
@@ -102,7 +102,7 @@
    6. 若当前 PR 收到 review comments，优先通过 `./scripts/pr-review-thread-closeout.sh --unresolved-only` 盘点 unresolved threads；修复并 push 后，再显式用 `--resolve-thread <id>` 或 `--resolve-all-unresolved` 收口线程，并单独复核 `reviewDecision` / `mergeStateStatus`，不要把“thread 已 resolve”当作“PR 已可合并”
 
 13. 当前 `project.md` 还有后续任务时，不要中断
-   1. 当前 task 完成后，先完成 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID>`（或等价的 `workflow-report --phase close` + `move-task --to-status done|deferred` 手工链）、commit、PR/merge、本地 `main` 同步与 source `worktree` 清理，再判断是否进入下一个 task
+   1. 当前 task 完成后，先完成 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`（或等价的“fresh verification -> workflow-report --phase close -> move-task --to-status done|deferred -> pm lint”手工链）、commit、PR/merge、本地 `main` 同步与 source `worktree` 清理，再判断是否进入下一个 task
    2. 若 `project.md` 仍有后续任务，默认为下一个 task 重新创建独立 `worktree` 与 `.pm` task；只有用户明确授权复用当前 `worktree` 时，才允许不切新环境
 
 ## 工程架构

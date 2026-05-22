@@ -14,9 +14,9 @@
 - [x] default-role-subagent-rollout (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-006) [test_tier_required]: 将默认协作收口为 `producer_system_designer` orchestrator + role subagents，并把 bounded subagent-driven execution、local validation 和 handoff `write scope / return contract / integration order` 约束接回 root workflow。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
 - [x] bounded-testing-and-brainstorming (PRD-ENGINEERING-031/PRD-ENGINEERING-032/PRD-ENGINEERING-AWB-003/007/008) [test_tier_required]: 将 `test-driven-development` 和 `brainstorming` 分别收口为 bounded TDD 与 bounded brainstorming，只保留 behavior-first / option-framing / optional visual companion 等 repo-owned 可承接部分。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
 - [x] repo-owned-workflow-router (PRD-ENGINEERING-031/PRD-ENGINEERING-032/PRD-ENGINEERING-AWB-009) [test_tier_required]: 将 `using-superpowers` 中可借的 process-skill routing order 翻译成本地 workflow router，并把默认 phase order 接回 `AGENTS.md`、`.agents/skills/README.md` 与相关 topic docs。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
+- [x] workflow-behavior-eval-and-closeout-hardening (PRD-ENGINEERING-AWB-001/002/006) [test_tier_required]: 将 `task-closeout.sh` 收紧为 `done` closeout 前必须 fresh verify，并新增 `scripts/pm/workflow-behavior-eval.sh`，把 task-worktree bootstrap、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 收口成 repo-owned eval。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
 
 ## Planned Follow-ups
-- `workflow-behavior-eval-harness-followup` (`PRD-ENGINEERING-AWB-001/006`, target `test_tier_required + test_tier_full`): 为 `new-task-worktree -> workflow-report -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout` 建立 repo-owned agent behavior eval harness，验证默认角色 subagent 主链在真实 agent 回合中被遵守。启动时需创建独立 `.pm` task 与 worktree。
 - `viewer-visual-companion-pilot-followup` (`PRD-ENGINEERING-AWB-003/PRD-WORLD_SIMULATOR-046`, target `test_tier_required`): 在 Viewer Web 下一轮结构/视觉专题中试点 browser-based visual companion，先产出 IA/wireframe/layout compare 再切实现 task，同时保持 `agent-browser` / repo-owned UI regression 仍是正式验证面。启动时需创建独立 `.pm` task 与 worktree。
 - `multi-harness-workflow-packaging-deferred` (`PRD-ENGINEERING-AWB-004`, target `test_tier_required`): 在 repo-owned workflow helpers 与 evals 稳定后，再评估是否需要为 Codex/OpenCode 等 harness 做 workflow packaging；未到该阶段前保持 deferred。若重开，必须先新建专题 task。
 
@@ -50,6 +50,6 @@
 ## 状态
 - 更新日期: 2026-05-22
 - 当前阶段: planned
-- 当前任务: `workflow-behavior-eval-harness-followup`
-- 关键缺口: `workflow-behavior-eval-harness-followup` 仍需把当前人工多角色试跑收口成可重复 fixture；`viewer-visual-companion-pilot-followup` 仍需等待下一轮明确的 Viewer 设计题。
-- 下一步: 优先推进 `workflow-behavior-eval-harness-followup`；Viewer 方向只在下一轮结构/视觉专题中按需启动 `viewer-visual-companion-pilot-followup`。
+- 当前任务: `viewer-visual-companion-pilot-followup`
+- 关键缺口: workflow behavior eval 与 closeout fresh verification gate 已落为 repo-owned helper / eval，但 `viewer-visual-companion-pilot-followup` 仍需等待下一轮明确的 Viewer 设计题。
+- 下一步: 仅在下一轮结构/视觉专题中按需启动 `viewer-visual-companion-pilot-followup`；multi-harness packaging 继续保持 deferred。

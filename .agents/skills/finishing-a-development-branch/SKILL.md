@@ -23,7 +23,7 @@ Use this skill when code and docs are already updated and you are moving into br
 3. Close the task:
 
 ```bash
-./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID>
+./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"
 ```
 
 4. Commit exactly this task slice.

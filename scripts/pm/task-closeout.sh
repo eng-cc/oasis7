@@ -13,6 +13,7 @@ commit or PR creation.
 
 Default conventions:
 - final task status: done
+- when closing to `done`, fresh verification is mandatory before any close-phase writeback
 - verify PM structure: yes
 - standard path: append execution log -> task-closeout.sh -> commit -> prepare-task-pr
 
@@ -20,12 +21,15 @@ Options:
   --role <role>           Owner role for `workflow-report --phase close`
   --task-uid <task_uid>   Task to close
   --to-status <status>    Final task status: done or deferred (default: done)
+  --verify-command <cmd>  Fresh verification command to execute before `done` closeout
+  --claim-type <type>     Claim type for verification: task_complete|tests_passed|ready_for_pr|ready_for_merge
+                          (default: task_complete)
   --no-lint               Skip final `./scripts/pm/lint.sh`
   --json                  Print machine-readable JSON summary only
   -h, --help              Show help
 
 Examples:
-  ./scripts/pm/task-closeout.sh --role producer_system_designer --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  ./scripts/pm/task-closeout.sh --role producer_system_designer --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --verify-command "./scripts/doc-governance-check.sh"
   ./scripts/pm/task-closeout.sh --role qa_engineer --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --to-status deferred --json
 USAGE
 }
@@ -38,6 +42,8 @@ die() {
 ROLE=""
 TASK_UID=""
 TARGET_STATUS="done"
+VERIFY_COMMAND=""
+CLAIM_TYPE="task_complete"
 RUN_LINT=1
 OUTPUT_JSON=0
 
@@ -53,6 +59,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --to-status)
       TARGET_STATUS="${2:-}"
+      shift 2
+      ;;
+    --verify-command)
+      VERIFY_COMMAND="${2:-}"
+      shift 2
+      ;;
+    --claim-type)
+      CLAIM_TYPE="${2:-}"
       shift 2
       ;;
     --no-lint)
@@ -76,6 +90,9 @@ done
 [[ -n "$ROLE" ]] || die "--role is required"
 [[ -n "$TASK_UID" ]] || die "--task-uid is required"
 [[ "$TARGET_STATUS" == "done" || "$TARGET_STATUS" == "deferred" ]] || die "--to-status must be done or deferred"
+if [[ "$TARGET_STATUS" == "done" && -z "$VERIFY_COMMAND" ]]; then
+  die "--verify-command is required when --to-status is done"
+fi
 
 PRECHECK_JSON="$(python3 - "$ROOT_DIR" "$TASK_UID" "$TARGET_STATUS" <<'PY'
 from __future__ import annotations
@@ -129,6 +146,32 @@ print(json.dumps(payload, ensure_ascii=True))
 PY
 )"
 
+if [[ -n "$VERIFY_COMMAND" ]]; then
+  CLAIM_READY_JSON="$("$ROOT_DIR/scripts/pm/claim-ready.sh" --claim-type "$CLAIM_TYPE" --verify-command "$VERIFY_COMMAND" --json)"
+else
+  CLAIM_READY_JSON="$(python3 - "$TARGET_STATUS" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+target_status = sys.argv[1]
+payload = {
+    "claim_type": None,
+    "verify_command": None,
+    "verified_at": None,
+    "verification_exit_code": None,
+    "status": "skipped",
+    "allowed_to_claim": target_status != "done",
+    "claim_message": "Fresh verification skipped because closeout target status is deferred.",
+    "blocked_phrase": None,
+    "success_phrase": None,
+}
+print(json.dumps(payload, ensure_ascii=False))
+PY
+)"
+fi
+
 WORKFLOW_CLOSE_JSON="$("$ROOT_DIR/scripts/pm/workflow-report.sh" --phase close --role "$ROLE" --task-uid "$TASK_UID" --json)"
 MOVE_JSON="$("$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$TASK_UID" --to-status "$TARGET_STATUS" --json)"
 
@@ -141,7 +184,7 @@ else
   PM_LINT_STATUS="skipped"
 fi
 
-RESULT_JSON="$(python3 - "$ROOT_DIR" "$ROLE" "$PM_LINT_STATUS" "$PRECHECK_JSON" "$WORKFLOW_CLOSE_JSON" "$MOVE_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$ROOT_DIR" "$ROLE" "$PM_LINT_STATUS" "$PRECHECK_JSON" "$CLAIM_READY_JSON" "$WORKFLOW_CLOSE_JSON" "$MOVE_JSON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -168,8 +211,9 @@ root = Path(sys.argv[1])
 role = sys.argv[2]
 pm_lint_status = sys.argv[3]
 precheck = json.loads(sys.argv[4])
-workflow_close = json.loads(sys.argv[5])
-move_task = json.loads(sys.argv[6])
+claim_verification = json.loads(sys.argv[5])
+workflow_close = json.loads(sys.argv[6])
+move_task = json.loads(sys.argv[7])
 
 task_path = root / precheck["task_path"]
 fields = parse_task_file(task_path)
@@ -184,6 +228,7 @@ payload = {
     "target_status": precheck["target_status"],
     "last_started_at": fields.get("last_started_at"),
     "last_closed_at": fields.get("last_closed_at"),
+    "claim_verification": claim_verification,
     "pm_lint": {
         "status": pm_lint_status,
         "ran": pm_lint_status != "skipped",
@@ -217,6 +262,9 @@ print(f"- final_status: {payload['final_status']}")
 print(f"- execution_log_path: {payload['execution_log_path']}")
 print(f"- last_started_at: {payload['last_started_at']}")
 print(f"- last_closed_at: {payload['last_closed_at']}")
+print(f"- claim_verification_status: {payload['claim_verification']['status']}")
+print(f"- claim_type: {payload['claim_verification']['claim_type']}")
+print(f"- verify_command: {payload['claim_verification']['verify_command']}")
 print(f"- pm_lint: {payload['pm_lint']['status']}")
 print(f"- next_step: {payload['recommended_next_command']}")
 PY

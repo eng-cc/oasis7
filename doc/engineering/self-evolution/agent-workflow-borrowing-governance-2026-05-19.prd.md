@@ -110,7 +110,7 @@
 - Tool Requirements:
   - repo-owned shell/PM helpers：承接 adopted 的 workflow closeout、PR preflight、review-thread closeout 与已落地的 completion gate / claim helper。
   - `agent-browser`：仅服务于 adopted 的 visual companion pilot 和现有 Web 回归，不作为默认万能工作流。
-  - workflow behavior eval fixtures：后续用于证明 agent 在真实回合中是否遵守规则。
+  - workflow behavior eval fixtures：由 `scripts/pm/workflow-behavior-eval.sh` 统一调用 task-worktree bootstrap smoke、subagent contract surface 校验、PM runtime smoke、`prepare-task-pr.test.sh` 与 `pr-review-thread-closeout.test.sh`，用于证明 agent 在真实 workflow helper 主链上是否仍遵守规则。
 - Evaluation Strategy:
   - 以 repo-owned eval/smoke 验证 adopted workflow rules 是否被 agent 实际执行。
   - 以 targeted fresh verification checks 验证 completion claims 是否具备足够证据。
@@ -170,6 +170,7 @@
   - MVP（completed）: 建立本专题三件套，冻结 `superpowers` 的 adopted / rejected / deferred 边界，并回写 engineering / Viewer 参考口径。
   - 已完成的 bounded adoption:
     - completion-claim verification gate
+    - workflow behavior eval harness
     - `writing-plans` -> repo-owned planning surface
     - `executing-plans` -> repo-owned execution surface
     - `writing-skills` -> repo-owned skill authoring surface
@@ -179,7 +180,6 @@
     - `brainstorming` -> bounded brainstorming contract
     - `using-superpowers` 的 process-skill routing order -> repo-owned workflow router
   - 剩余 follow-up:
-    - workflow behavior eval harness：优先覆盖主链 workflow helpers
     - Viewer visual companion pilot：仅在下一轮结构/视觉专题里验证 optional ideation 收益
   - Deferred reopen:
     - multi-harness workflow packaging：仅在 repo-owned behavior/eval 稳定后重开
@@ -194,14 +194,14 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-ENGINEERING-AWB-001 | `agent-workflow-borrowing-governance`、`workflow-behavior-eval-harness-followup` | `test_tier_required` + `test_tier_full` | adopted/rejected/deferred 矩阵、repo-owned agent behavior eval、主链 workflow helper 回放 | `engineering` workflow 主链、agent 行为一致性 |
+| PRD-ENGINEERING-AWB-001 | `agent-workflow-borrowing-governance`、`workflow-behavior-eval-and-closeout-hardening` | `test_tier_required` + `test_tier_full` | adopted/rejected/deferred 矩阵、repo-owned agent behavior eval、主链 workflow helper 回放 | `engineering` workflow 主链、agent 行为一致性 |
 | PRD-ENGINEERING-AWB-002 | `completion-claim-verification-followup` | `test_tier_required` | fresh verification claim checklist/helper/smoke、失败签名与阻断文案 | task closeout、PR preflight、QA 报告口径 |
 | PRD-ENGINEERING-AWB-003 | `viewer-visual-companion-pilot-followup` | `test_tier_required` | Viewer Web 前置 mockup/IA 对比样例、实现 task handoff、后续 `agent-browser`/repo-owned regression 不回退 | `world-simulator/viewer` 设计前置链路 |
 | PRD-ENGINEERING-AWB-008 | `bounded-brainstorming-workflow-rollout` | `test_tier_required` | `AGENTS.md` 的 bounded brainstorming rule、handoff/planning option-framing 字段、本地 `bounded-brainstorming` skill，以及 borrowing/conflict/skill-surface 文档改判 | `engineering` 的方向探索、scope decomposition 与 optional visual ideation 边界 |
 | PRD-ENGINEERING-AWB-009 | `repo-owned-workflow-router` | `test_tier_required` | root `AGENTS.md` 的 phase order、`.agents/skills/repo-owned-workflow-router`、`.agents/skills/README.md` 入口，以及 borrowing/conflict/skill-surface 文档对齐 | `engineering` 的端到端流程路由、阶段切换与本地 process-skill 组合 |
 | PRD-ENGINEERING-AWB-004 | `multi-harness-workflow-packaging-deferred` | `test_tier_required` | 仅验证 deferred 口径与 reopen 条件是否写清 | pluginization / harness distribution 边界 |
 | PRD-ENGINEERING-AWB-005 | `workflow-planning-surface-tightening` | `test_tier_required` | `AGENTS.md` 规则、handoff 模板、planning self-checklist、topic/root project 回写与文档治理校验 | `engineering` planning / handoff / review 准备链路 |
-| PRD-ENGINEERING-AWB-006 | `default-role-subagent-orchestration`、`role-subagent-local-validation`、`subagent-driven-default-reconciliation`、`subagent-driven-default-workflow-rollout`、`workflow-behavior-eval-harness-followup` | `test_tier_required` + `test_tier_full` | `AGENTS.md` 默认 orchestrator/subagent 规则与 bounded subagent-driven execution、handoff/planning contract、borrowing/conflict 文档改判、后续 multi-agent behavior eval | `engineering` 多角色协作、owner/task/worktree/PR 真值边界 |
+| PRD-ENGINEERING-AWB-006 | `default-role-subagent-orchestration`、`role-subagent-local-validation`、`subagent-driven-default-reconciliation`、`subagent-driven-default-workflow-rollout`、`workflow-behavior-eval-and-closeout-hardening` | `test_tier_required` + `test_tier_full` | `AGENTS.md` 默认 orchestrator/subagent 规则与 bounded subagent-driven execution、handoff/planning contract、borrowing/conflict 文档改判、repo-owned multi-agent behavior eval | `engineering` 多角色协作、owner/task/worktree/PR 真值边界 |
 | PRD-ENGINEERING-AWB-007 | `bounded-tdd-workflow-rollout` | `test_tier_required` | `AGENTS.md` 的 behavior-first testing rule、handoff/planning/test-skill 回写、borrowing/conflict 文档改判与技能边界对齐 | `engineering` 行为变更类实现任务、自动化回归与 skip-reason 审计边界 |
 | PRD-ENGINEERING-031 | `workflow-execution-surface-tightening` | `test_tier_required` | repo-owned execution skill、`AGENTS.md` execution rule、workflow-borrowing / conflict doc 回写与文档治理校验 | `engineering` task 执行、逐步验证与 blocker handling 链路 |
 - Decision Log:
