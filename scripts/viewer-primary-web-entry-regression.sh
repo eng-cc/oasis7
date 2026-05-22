@@ -323,12 +323,21 @@ live_args=(
   "--no-open-browser"
 )
 
+root_config_path="$repo_root/config.toml"
+root_config_existed=0
+if [[ -f "$root_config_path" ]]; then
+  root_config_existed=1
+fi
+
 launcher_pid=""
 cleanup() {
   set +e
   if [[ -n "$launcher_pid" ]]; then
     kill "$launcher_pid" >/dev/null 2>&1 || true
     wait "$launcher_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ "$root_config_existed" -eq 0 && -f "$root_config_path" ]]; then
+    rm -f "$root_config_path" >/dev/null 2>&1 || true
   fi
   ab_cmd "${run_id}-default" close >/dev/null 2>&1 || true
   ab_cmd "${run_id}-auto" close >/dev/null 2>&1 || true

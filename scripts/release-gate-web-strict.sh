@@ -70,6 +70,7 @@ echo "+ ./scripts/viewer-primary-web-entry-regression.sh --scenario $SCENARIO --
 
 echo "+ ./scripts/viewer-software-safe-step-regression.sh --scenario $SCENARIO --out-dir $OUT_DIR/software-safe-step ${browser_mode[*]}"
 ./scripts/viewer-software-safe-step-regression.sh \
+  --skip-llm-provider-preflight \
   --scenario "$SCENARIO" \
   --out-dir "$OUT_DIR/software-safe-step" \
   "${browser_mode[@]}"
