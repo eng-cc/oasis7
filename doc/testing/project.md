@@ -263,6 +263,21 @@
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo build --target wasm32-unknown-unknown --manifest-path crates/oasis7_client_launcher/Cargo.toml --release --bin oasis7_client_launcher`
     - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
+- [x] release-gate-web-soak-hardening (PRD-TESTING-002/003) [test_tier_required]: 修复 `Release Packages` run `26276289822` 的多层假阴性：移除 `viewer-software-safe-step-regression.sh` 对未使用 `rg` 的硬依赖；补齐 `release-gate-web-strict -> viewer-software-safe-step-regression -> run-game-test` 的 `--scenario` 参数 contract；恢复 software-safe step 回归在“无自然推进”时主动发 canonical `step` 并接受 `completed_advanced` + 正向 world delta 的正式判据；同时让 `p2p-longrun-soak.sh` 在 restart/pause chaos 后等待节点恢复到健康态再恢复采样，并把实际恢复窗口计入 `chaos_exempt_secs`，避免把预期瞬态记成 `last_error_samples` / `http_failure_samples`。 Trace: .pm/tasks/task_1aef6daff1ef4e81bbc3a6a34531a828.yaml
+  - 产物文件:
+    - `scripts/run-game-test.sh`
+    - `scripts/viewer-software-safe-step-regression.sh`
+    - `scripts/p2p-longrun-soak.sh`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_1aef6daff1ef4e81bbc3a6a34531a828.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/viewer-software-safe-step-regression.sh scripts/run-game-test.sh scripts/p2p-longrun-soak.sh`
+    - `./scripts/viewer-software-safe-step-regression.sh --help >/dev/null`
+    - `! rg -n "\\brg\\b" scripts/viewer-software-safe-step-regression.sh`
+    - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime`
+    - `./scripts/p2p-longrun-soak.sh --profile soak_release --topologies triad_distributed --duration-secs 300 --no-prewarm --max-stall-secs 240 --max-lag-p95 50 --max-distfs-failure-ratio 0.1 --chaos-continuous-enable --chaos-continuous-interval-secs 30 --chaos-continuous-start-sec 30 --chaos-continuous-max-events 8 --chaos-continuous-actions restart,pause --chaos-continuous-seed 1772284566 --chaos-continuous-restart-down-secs 1 --chaos-continuous-pause-duration-secs 2 --out-dir .tmp/release_gate_p2p_v051_fix`
+    - `./scripts/release-gate.sh --out-dir .tmp/release_gate_web_v051_fix_rerun3 --skip-ci-full --skip-sync --skip-s9 --skip-s10`
 - [x] release-node24-actions (PRD-TESTING-002/003) [test_tier_required]: 升级 `Release Packages` workflow 中触发 Node.js 20 deprecation warning 的 GitHub Actions runtime，确保 `release-gate-*` / `build-web-dist` / `package-native` 产物上传不再依赖 Node 20，并保持 release 资产链路语义不变。 Trace: .pm/tasks/task_62acc2d0e69649dc81eeae2c3954bd67.yaml
   - 产物文件:
     - `.github/workflows/release-packages.yml`

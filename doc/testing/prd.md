@@ -179,7 +179,9 @@
   - 数据异常：日志格式破损时保留原始文件并标记解析失败。
   - Windows 非法路径：若 tracked path 含 Windows 非法字符、保留名或尾随空格/点，必须在 Linux required gate 先阻断，不允许等到 Windows runner checkout 才暴露。
   - release 脚本丢执行位：若 release 关键 `.sh` 的 tracked mode 漂移为 `100644` 或 worktree 不可执行，必须在 commit/required gate 先阻断，不允许等到 `release-gate-web` 或 `package-native` runner 才暴露。
+  - release Web runner 依赖漂移：若 `viewer-software-safe-step-regression.sh` 未实际使用 `rg` 等额外 CLI，则不得把它们声明为硬依赖，避免 `release-gate-web` 因 runner 预装工具差异报假阴性。
   - release Web 文案断言大小写漂移：若 `agent-browser get text body` 因 CSS `text-transform` 或渲染层实现差异返回全大写文本，`viewer-primary-web-entry-regression.sh` 仍必须按大小写不敏感方式识别 `Formal Gameplay Summary` 与 action handoff surface，避免 release gate 对已存在内容报假阴性。
+  - release soak chaos 恢复采样：`p2p-longrun-soak.sh` 在 restart/pause chaos 后，必须先等目标节点恢复到 `healthz/status/balances` 可读、`running=true` 且 `last_error/load_error` 清空，再把后续样本记入 gate；恢复窗口要计入 `chaos_exempt_secs`，避免把预期瞬态误记成 `last_error_samples` / `http_failure_samples`。
   - 迁移断链：文档改名后若引用未同步，需在同批次修复并复测。
   - 创世语义误读：若把 `protocol:*` custody account 误当成已初始化 treasury bucket，QA 必须直接阻断。
   - 流通口径漂移：若创世参数表未显式声明 `genesis_liquid=0` 或首年外部释放上限，视为配置不完整。
