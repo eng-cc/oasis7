@@ -487,6 +487,7 @@ fn runtime_gossip_replication_syncs_distfs_commit_files() {
         .expect("tick a")
         .with_pos_validators(validators.clone())
         .expect("validators a")
+        .with_auto_attest_all_validators(true)
         .with_gossip_optional(addr_a, vec![addr_b])
         .with_replication_root(dir_a.clone())
         .expect("replication a");
@@ -496,6 +497,7 @@ fn runtime_gossip_replication_syncs_distfs_commit_files() {
         .expect("tick b")
         .with_pos_validators(validators)
         .expect("validators b")
+        .with_auto_attest_all_validators(true)
         .with_gossip_optional(addr_b, vec![addr_a])
         .with_replication_root(dir_b.clone())
         .expect("replication b");
