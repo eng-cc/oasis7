@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::fs;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
@@ -12,6 +13,8 @@ use oasis7_node::{
 };
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 use oasis7_proto::storage_profile::StorageProfile;
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 use super::distfs_probe_runtime::{parse_distfs_probe_runtime_option, DistfsProbeRuntimeConfig};
 
@@ -463,10 +466,95 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     }
     if let Some(manifest_path) = options.network_tier_manifest_path.as_ref() {
         let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path())?;
+        validate_current_runtime_hash_against_network_tier_bundle(
+            manifest_path.as_path(),
+            &loaded,
+        )?;
         options.loaded_network_tier_manifest = Some(loaded);
     }
 
     Ok(options)
+}
+
+#[derive(Debug, Deserialize)]
+struct NetworkTierReleaseCandidateBundle {
+    runtime_build: NetworkTierRuntimeBuildRef,
+}
+
+#[derive(Debug, Deserialize)]
+struct NetworkTierRuntimeBuildRef {
+    sha256: String,
+}
+
+fn validate_current_runtime_hash_against_network_tier_bundle(
+    manifest_path: &Path,
+    loaded: &LoadedNetworkTierManifest,
+) -> Result<(), String> {
+    let bundle_path = resolve_network_tier_runtime_ref_path(
+        manifest_path,
+        loaded
+            .manifest
+            .runtime_refs
+            .release_candidate_bundle_ref
+            .as_str(),
+    );
+    let bundle_bytes = fs::read(bundle_path.as_path()).map_err(|err| {
+        format!(
+            "read network tier release_candidate_bundle_ref {} failed: {err}",
+            bundle_path.display()
+        )
+    })?;
+    let bundle: NetworkTierReleaseCandidateBundle = serde_json::from_slice(bundle_bytes.as_slice())
+        .map_err(|err| {
+            format!(
+                "parse network tier release_candidate_bundle_ref {} failed: {err}",
+                bundle_path.display()
+            )
+        })?;
+    let expected_sha256 = bundle.runtime_build.sha256.trim().to_ascii_lowercase();
+    if expected_sha256.is_empty() {
+        return Err(format!(
+            "network tier release_candidate_bundle_ref {} missing runtime_build.sha256",
+            bundle_path.display()
+        ));
+    }
+
+    let current_exe = std::env::current_exe()
+        .map_err(|err| format!("resolve current runtime executable path failed: {err}"))?;
+    let current_bytes = fs::read(current_exe.as_path()).map_err(|err| {
+        format!(
+            "read current runtime executable {} failed: {err}",
+            current_exe.display()
+        )
+    })?;
+    let actual_sha256 = sha256_hex(current_bytes.as_slice());
+    if actual_sha256 != expected_sha256 {
+        return Err(format!(
+            "network tier runtime bundle hash mismatch: executable={} actual_sha256={} bundle_path={} expected_sha256={}",
+            current_exe.display(),
+            actual_sha256,
+            bundle_path.display(),
+            expected_sha256
+        ));
+    }
+    Ok(())
+}
+
+fn resolve_network_tier_runtime_ref_path(manifest_path: &Path, raw_ref: &str) -> PathBuf {
+    let candidate = PathBuf::from(raw_ref);
+    if candidate.is_absolute() {
+        return candidate;
+    }
+    manifest_path
+        .parent()
+        .map(|parent| parent.join(candidate.clone()))
+        .unwrap_or(candidate)
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
 }
 
 pub(super) fn p2p_auto_detection_from_options(

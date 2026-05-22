@@ -17,6 +17,7 @@
   - 已完成：把 `network_tier_manifest` 接到 runtime/network profile 选择、genesis/bootstrap/ref 校验与启动入口，并把 formal tier 暴露到 `/v1/chain/status` 与 launcher passthrough。
   - 已完成 local sync path：新增 `scripts/p2p-public-testnet-local-observer-sync.sh`，并已实际把本机 observer 收口到 two-validator contract、formal manifest 与 repo-owned `start-node.sh`。
   - 已完成 operator reset path：同一脚本已新增 `reset-state`，可 repo-owned 备份并清空 local observer 的 execution world / execution records / distfs replication root / reward execution bridge state。
+  - 已完成 runtime drift guard：`oasis7_chain_runtime` 现会在加载 `--network-tier-manifest` 时同步读取 `release_candidate_bundle_ref`，强校验 `runtime_build.sha256` 与当前可执行文件一致；若 bundle/runtime 漂移，启动阶段直接 fail closed，不再把问题拖到后续 replay/gap-sync 才暴露。
 - `qa_engineer` + `liveops_community` / TIER-3:
   - 已完成 skeleton：建立 first `public_testnet` rehearsal / exit-review 模板，并补 `network-tier-exit-review.sh` 作为 formal gate 汇总入口。
   - 已完成 readiness gate：新增 `network-tier-public-testnet-readiness.sh`、lane scaffold 与 skeleton evidence placeholder，可把 `public_testnet` 从“只有 manifest skeleton”与“具备 live candidate lane evidence”区分开。
@@ -47,7 +48,7 @@
   - `shared_devnet_pass` 仍未满足，因此 formal `public_testnet` 仍不能进入 `ready_for_live_candidate`。
   - 2026-05-22 13:25 CST 已实际清掉本机 observer 的 manifest/validator drift：当前 local status 已加载 `network_tier.tier=public_testnet` 与 `bootstrap_peer_count=2`。
   - 2026-05-22 16:31 CST further recheck：`fetch-commit authorization failed` 与 writer-switch stale-state 已不再是主阻断；即使 local current runtime binary 已与两台 ECS 对齐为 `2f836980834da470882fef4ca7ab0598c984acfc42565d574acf2cd19c474cfe`，本机仍在 `height 15` 持续报 execution hash mismatch。
-  - mirrored candidate bundle `/opt/oasis7/p2p-testnet-local/config/public-testnet-live-candidate-bundle-2026-05-22.json` 仍声明 `runtime_build.sha256=d1046485ae71a794cf0f5fb78561bd6068363ca53aee3ccac384d831829c07e8`，说明 live candidate bundle 与 current runtime 真值本身也在漂移。
+  - mirrored candidate bundle `/opt/oasis7/p2p-testnet-local/config/public-testnet-live-candidate-bundle-2026-05-22.json` 仍声明 `runtime_build.sha256=d1046485ae71a794cf0f5fb78561bd6068363ca53aee3ccac384d831829c07e8`，说明 live candidate bundle 与 current runtime 真值本身也在漂移；仓库现已补启动期 hash guard，因此这类漂移后续会被直接拦在 startup，而不是继续伪装成“节点能起但 replay 过程中才出错”。
   - 2026-05-22 16:43 CST extra live reset：即使把本机 `STORAGE_ROOT` 迁出到 `/opt/oasis7/p2p-testnet-local/backups/storage-reset-20260522-164319` 后重启，local 仍会立刻回到同一条 `height 15` mismatch；因此“本机旧 CAS/blob 没清掉”不是单独根因。
   - 2026-05-22 16:55 CST single-peer isolation：即使把本机上游收窄到当前健康 storage `39.104.205.67`，再做 `reset-state` 后仍原样复现 `height 15` mismatch；因此“只是被坏 sequencer 污染”也不能解释本机分叉。
   - 2026-05-22 16:57 CST sequencer reset：`39.104.204.172` 在受控清空 execution/storage 状态后只短暂恢复到 `committed_height=3`，随后又立刻掉回 `last_applied=3 incoming=13795 predecessor=13794`；这说明坏 sequencer 也不能靠简单 replay-from-genesis 自愈。
