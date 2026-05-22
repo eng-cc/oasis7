@@ -41,6 +41,9 @@
 - default role-subagent orchestration:
   - 理由：oasis7 已经天然按标准角色分工，用户也明确希望“各角色默认就是 subagent”；因此更合理的 adopted 方式不是保持 deferred，而是把它翻译成 repo-owned 编排层。
   - 限域：只能是 `producer_system_designer` orchestrator + 标准角色 subagents；必须保留单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链。
+- bounded subagent-driven execution:
+  - 理由：在默认角色编排之上，当前用户也希望实施本身默认由 subagent slices 推进，而不是主会话独占所有分析 / 实现 / 验证 / review。
+  - 限域：只允许把分析、实现、验证与补充 review 切给角色 subagent，并全部回收到同一 owner / `.pm` task / canonical worktree / GitHub PR；不要求 fresh subagent-per-task，也不引入本地双阶段 review 主链。
 
 ### 3.2 Rejected
 - universal brainstorming gate:
@@ -69,10 +72,10 @@
 | `finishing-a-development-branch` | adopted | 已映射到 `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链，以及同名 repo-owned skill。 |
 | `systematic-debugging` | adopted | 已本地化为 repo-owned debugging skill，不再停留在 deferred playbook。 |
 | `dispatching-parallel-agents` | adopted | 已映射到 root `AGENTS.md` 的默认 `producer_system_designer` orchestrator + role subagents 规则；并要求单 owner / `.pm` / worktree / PR 真值。 |
+| `subagent-driven-development` | adopted | 已映射到 root `AGENTS.md` 的 bounded subagent-driven execution：分析 / 实现 / 验证 / 补充 review 切片全部回收到同一 owner / `.pm` / worktree / PR 真值。 |
 | `executing-plans` | deferred | 已限域翻译为 `.agents/skills/executing-project-tasks` 与 `AGENTS.md` 的执行规则；upstream 的单独执行会话契约仍不引入。 |
 | `writing-skills` | deferred | 已限域翻译为 `.agents/skills/README.md`、`writing-repo-owned-skills`、template/checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。 |
 | `brainstorming` | rejected | 仅 salvage 其 visual-companion 子模式；其 universal pre-step 语义不进入默认流程。 |
-| `subagent-driven-development` | rejected | fresh subagent-per-task + two-stage review 不进入当前默认主链。 |
 | `test-driven-development` | rejected | universal TDD 不作为仓库默认门禁。 |
 | `writing-plans` | rejected | 不允许在 `prd.md`/`project.md`/`.pm` 之外再引入第二套默认计划真值。 |
 | `using-superpowers` | rejected | 外部 bootstrap 不能取代 `AGENTS.md + .pm + GitHub PR review`。 |
@@ -88,13 +91,13 @@
   - `scripts/pr-review-thread-closeout.sh`
 - 目标：验证 agent 在真实对话/fixture 下是否走对主链，而不是只打印“建议”。
 
-### 4.2 Default role-subagent orchestration
+### 4.2 Default role-subagent orchestration and subagent-driven execution
 - owner 倾向：`producer_system_designer`
 - 覆盖面：
   - root `AGENTS.md`
   - `.agents/roles/producer_system_designer.md`
   - task handoff / execution log 中的 subagent write-scope 约束
-- 目标：让多角色 subagent 成为默认协作方式，但不把它扩成平行 task/worktree/review 真值。
+- 目标：让多角色 subagent 与默认 subagent-driven execution 一起成为默认协作方式，但不把它扩成平行 task/worktree/review 真值。
 
 ### 4.3 Completion-claim verification gate
 - owner 倾向：`producer_system_designer` + `qa_engineer`

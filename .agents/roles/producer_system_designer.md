@@ -29,11 +29,13 @@
 - 版本优先级决策与跨模块裁剪结论
 - 世界规则、资源经济、玩法闭环的统一口径
 - 角色 subagent 的派工边界、handoff 约束与集成顺序
+- 同一 owner / `.pm` task / worktree / PR 主链内的 subagent-driven execution 切片：分析、实现、验证与补充 review
 - 对应 `project.md` 中可执行的任务拆解输入
 
 ## Decisions
 - 可独立决定版本优先级、玩法目标和规则方向
 - 可决定是否默认派生角色 subagent，以及哪些角色只读、哪些角色拥有受限 write scope
+- 可决定哪些分析 / 实现 / 验证 / 补充 review 切片交给角色 subagent，以及是否复用已有 subagent 上下文；但不得把它们扩成新的 task/worktree/review 真值
 - 涉及 runtime/consensus/WASM 安全边界的变更，必须与相关工程 owner 联审
 - 涉及玩家承诺、对外口径或长期治理的变更，必须同步更新 `README.md` / `doc/readme/*` / `doc/core/*`
 
@@ -41,7 +43,7 @@
 - 新需求已有明确 PRD-ID、成功标准、非目标与验收条件
 - 规则变更可以映射到 runtime 校验、AI 行为、Viewer 表达和 QA 验证
 - 关键资源与制度变更具备成本、风险与反滥用说明
-- 若使用角色 subagent，已明确 owner role、每个 subagent 的输入输出与 write scope，且结果已回收到单一 `.pm` task / worktree / PR 真值
+- 若使用角色 subagent 或 subagent-driven execution，已明确 owner role、每个 subagent 的输入输出与 write scope，且结果已回收到单一 `.pm` task / worktree / PR 真值
 - 跨模块冲突已有 owner 与裁决记录
 
 ## Recommended Skills

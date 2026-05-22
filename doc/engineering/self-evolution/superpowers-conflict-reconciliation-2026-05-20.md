@@ -86,9 +86,9 @@
 
 - 当前 `writing-skills` 的 authoring / trigger surface 已经被翻译成 repo-owned 入口；若要重开这里的剩余部分，只能针对 upstream 仍未采纳的 bootstrap、分发部署或其他会竞争 root truth 的内容，而不是回退去重新依赖外部 bootstrap 本身。
 
-### 3.3 默认 subagent 协作的剩余冲突
+### 3.3 默认 subagent 协作的已吸收部分与剩余冲突
 
-这类 skill 讨论的是 agent dispatch 如何成为默认开发方式；其中一部分已经被 oasis7 吸收，剩下冲突的是越界部分。
+这类 skill 讨论的是 agent dispatch 如何成为默认开发方式；现在 `dispatching-parallel-agents` 和 `subagent-driven-development` 都已有 bounded adoption，剩下冲突的是仍然越界的 ceremony 与真值扩张部分。
 
 受影响 skill：
 
@@ -98,23 +98,25 @@
 已完成的 reconcile：
 
 - 默认协作模式已改为 `producer_system_designer` orchestrator + 标准角色 subagents。
+- 默认实施模式已改为 bounded subagent-driven execution：分析、实现、验证与补充 review 可交给角色 subagent，但都必须回收到同一 owner / `.pm` task / canonical worktree / GitHub PR 主链。
 - 角色 subagent 的输出必须回收到单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链。
 
 与 oasis7 仍然冲突的点：
 
-- `subagent-driven-development` 式的 fresh subagent-per-task + local two-stage review ritual 仍与当前正式 PR review 边界冲突。
+- `subagent-driven-development` 剩余的 fresh subagent-per-task + local two-stage review ritual 仍与当前正式 PR review 边界冲突。
 - 多 agent 并行若没有 task / file ownership 边界，仍然容易和 `.pm` task 及 worktree 隔离原则冲突。
 - 任何把 subagent 放大成独立真值持有者的做法，仍会冲击 owner / task / review 责任链。
 
 已 salvage 的部分：
 
 - 默认角色 subagent 编排
+- 默认 subagent-driven execution
 - 把可并行子任务拆成 disjoint write scope 的原则
 - reviewer / implementer 分离时的上下文最小化习惯
 
 未来何时可重开剩余部分：
 
-- 仅当某个 repo-owned eval 已能证明 agent 在多任务并行下仍遵守 worktree、task、review 边界，且不再依赖 local two-stage review ritual。
+- 仅当某个 repo-owned eval 已能证明 agent 在多任务并行下仍遵守 worktree、task、review 边界，且仓库正式 review 边界本身发生变化，才应重新评估 local two-stage review ritual 这类剩余 rejected 部分。
 
 ### 3.4 分发先于治理冲突
 
@@ -151,7 +153,7 @@
 | skill | 当前状态 | 直接冲突 | 可借鉴部分 | 重开条件 |
 | --- | --- | --- | --- | --- |
 | `brainstorming` | rejected | 把设计前置变成 universal gate | visual companion、IA/wireframe 对比 | 仅在 Viewer 等 UI-heavy 专题内按需启用 |
-| `subagent-driven-development` | rejected | 默认 fresh subagent-per-task + local review ritual | 任务拆分、上下文最小化 | 需先有 repo-owned multi-agent behavior eval |
+| `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task + local review ritual、或把 subagent 扩成独立真值持有者 | 已完成 bounded borrowing：默认 subagent-driven execution、任务拆分、上下文最小化、实现/验证/补充 review 切片 | 仅剩 local review ritual 等 rejected 部分；只有在正式 PR review 边界变化且 repo-owned multi-agent eval 稳定后才应重开 |
 | `test-driven-development` | rejected | universal TDD 与 `test_tier_required/full` 不匹配 | 行为先验、失败先行思维 | 仅在特定实现域作为按需 skill，而非 root 默认规则 |
 | `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 已完成 bounded borrowing：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板和 planning self-checklist | 剩余 skill 本体只有在不再竞争正式计划真值时，才允许继续局部 salvage；不得回退为默认前置计划系统 |
 | `using-superpowers` | rejected | 外部 bootstrap 与当前 root workflow 真值冲突 | 触发说明、skill 发现习惯 | 必须先转成 repo-owned trigger governance，再评估 |
@@ -167,6 +169,7 @@
    - `writing-plans` 的 planning surface
    - `executing-plans` 的 execution surface
    - `writing-skills` 的 authoring surface
+   - `dispatching-parallel-agents` 与 `subagent-driven-development` 的 bounded 默认角色编排 / subagent-driven execution
 2. 先做 `deferred` 中仍未吸收、且最接近当前主链的可控部分
    - `executing-plans` / `writing-skills` 剩余未吸收的 packaging、distribution 或 session-contract 部分，但前提仍是它们不形成第二套真值
    - `dispatching-parallel-agents` 剩余的 harness packaging / swarm 扩张部分，但前提仍是 bounded 默认编排已被 eval 证明稳定
@@ -196,7 +199,7 @@
 这份文档不做以下事情：
 
 - 不为缺少 owner / write-scope / review 边界的自由 swarm 背书。
-- 不直接把任何 `rejected` skill 改成 adopted。
+- 不单凭这份冲突说明文档自行裁决 skill；正式状态仍以 borrowing PRD / project 为准。
 - 不为尚未启动的 reopen 项伪造新的实现任务。
 - 不把“冲突存在”误写成“永远不能互借”。
 
