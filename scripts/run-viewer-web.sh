@@ -57,20 +57,9 @@ fi
 
 (
   cd "$ROOT_DIR"
-  npm --prefix crates/oasis7_viewer run build:software-safe >/dev/null
+  ./scripts/build-viewer-software-safe.sh >/dev/null
 )
 mkdir -p "$DIST_DIR"
-cp "$VIEWER_DIR/software_safe.html" "$DIST_DIR/index.html"
-cp "$VIEWER_DIR/software_safe.html" "$DIST_DIR/viewer.html"
-cp "$VIEWER_DIR/software_safe.html" "$DIST_DIR/software_safe.html"
-cp "$VIEWER_DIR/viewer.js" "$DIST_DIR/viewer.js"
-cp "$VIEWER_DIR/software_safe.js" "$DIST_DIR/software_safe.js"
-cp "$VIEWER_DIR/software_safe_first_agent_claim_evidence.html" \
-  "$DIST_DIR/software_safe_first_agent_claim_evidence.html"
-cp "$VIEWER_DIR/favicon.ico" "$DIST_DIR/favicon.ico"
-if [[ -d "$VIEWER_DIR/pixel-world-bridge" ]]; then
-  rm -rf "$DIST_DIR/pixel-world-bridge"
-  cp -R "$VIEWER_DIR/pixel-world-bridge" "$DIST_DIR/pixel-world-bridge"
-fi
+"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" --dist-dir "$DIST_DIR"
 
 exec python3 -m http.server "$PORT" --bind "$ADDRESS" --directory "$DIST_DIR"
