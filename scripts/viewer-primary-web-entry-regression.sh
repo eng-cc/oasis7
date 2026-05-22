@@ -363,8 +363,8 @@ default_url_final=$(normalize_eval_token "$(ab_cmd "$default_session" get url)")
 [[ "$(state_render_mode "$default_state")" == "viewer" ]] || { echo "error: default route did not land in viewer" >&2; exit 1; }
 state_reason_matches_any "$default_state" "primary_web_entry" "direct_viewer_entry" || { echo "error: default route reason mismatch: $(state_reason "$default_state")" >&2; exit 1; }
 [[ "$default_url_final" == "http://${viewer_host}:${viewer_port}/"* ]] || { echo "error: default route escaped viewer host: $default_url_final" >&2; exit 1; }
-grep -q "Formal Gameplay Summary" "$default_body_path" || { echo "error: default route body missing Formal Gameplay Summary" >&2; exit 1; }
-grep -Eq "Missing Action Handoff|Actions Not Exposed On This Page" "$default_body_path" || { echo "error: default route body missing action handoff surface" >&2; exit 1; }
+grep -qi "Formal Gameplay Summary" "$default_body_path" || { echo "error: default route body missing Formal Gameplay Summary" >&2; exit 1; }
+grep -Eqi "Missing Action Handoff|Actions Not Exposed On This Page" "$default_body_path" || { echo "error: default route body missing action handoff surface" >&2; exit 1; }
 
 ab_open "$auto_session" "$headed" "$auto_url" >/dev/null
 ab_cmd "$auto_session" wait --load networkidle >/dev/null 2>&1 || true

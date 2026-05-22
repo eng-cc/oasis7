@@ -311,6 +311,18 @@
     - 历史验收记录：`bash -n scripts/viewer-release-qa-loop.sh`
     - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
     - 历史验收记录：`./scripts/viewer-release-qa-loop.sh --scenario llm_bootstrap --out-dir .tmp/release_gate_web_fix --headed`
+- [x] release-web-entry-text-casefold (PRD-TESTING-002/003) [test_tier_required]: 修复 `release-gate-web` 的 primary entry 文案断言假阴性；当 `agent-browser get text body` 因渲染层/CSS `text-transform` 返回全大写文本时，`viewer-primary-web-entry-regression.sh` 仍需识别 `Formal Gameplay Summary` 与 action handoff surface，不得把已存在内容误判成缺失。 Trace: .pm/tasks/task_a720e2fb03dd44369766bb4aa43cdf03.yaml
+  - 产物文件:
+    - `scripts/viewer-primary-web-entry-regression.sh`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_a720e2fb03dd44369766bb4aa43cdf03.yaml`
+    - `.pm/tasks/task_a720e2fb03dd44369766bb4aa43cdf03.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/viewer-primary-web-entry-regression.sh`
+    - `./scripts/viewer-primary-web-entry-regression.sh --help`
+    - `printf 'FORMAL GAMEPLAY SUMMARY\nACTIONS NOT EXPOSED ON THIS PAGE\n' | grep -qi 'Formal Gameplay Summary'`
+    - `printf 'FORMAL GAMEPLAY SUMMARY\nACTIONS NOT EXPOSED ON THIS PAGE\n' | grep -Eqi 'Missing Action Handoff|Actions Not Exposed On This Page'`
 - [x] shared-network-ecs-triad-chain-status-metrics-rollout (PRD-TESTING-002/003) [test_tier_required]: 归档三节点链状态指标部署与采样证据，冻结 `8e605366` release/sha256、same-window triad snapshot、最近 `10` 分钟 traffic window，以及新增 `/v1/chain/status` `transactions` / `consensus.recent_finality_latency` / `pending_proposal` / `pending_consensus_actions` contract 的 live 三节点证据。 Trace: .pm/tasks/task_c2def8d52baa4fe5a1b1df64e19a6305.yaml
   - 产物文件:
     - `doc/testing/evidence/shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md`
