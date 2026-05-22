@@ -29,6 +29,9 @@
 `brainstorming`、`dispatching-parallel-agents`、`executing-plans`、`finishing-a-development-branch`、`receiving-code-review`、`requesting-code-review`、`subagent-driven-development`、`systematic-debugging`、`test-driven-development`、`using-git-worktrees`、`using-superpowers`、`verification-before-completion`、`writing-plans`、`writing-skills`。
 
 ### 3.1 Adopted
+- repo-owned workflow router:
+  - 理由：当前 repo 已经有一组分段的 process skills，但还缺少“先判断该走哪一段”的总入口；upstream `using-superpowers` 真正值得借的是这里的编排顺序，不是外部 bootstrap。
+  - 目标：新增一个本地 workflow router，把 ideation、TDD、execution、verification、closeout 串成 repo-owned phase order。
 - workflow behavior evals:
   - 理由：oasis7 已有大量 workflow 文档与 helper，但还缺少“agent 是否真按规则做”的 repo-owned 行为验证层。
   - 目标：把主链 workflow helpers 转成 eval fixture 与 pressure-case smoke。
@@ -84,7 +87,7 @@
 | `writing-skills` | deferred | 已限域翻译为 `.agents/skills/README.md`、`writing-repo-owned-skills`、template/checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。 |
 | `brainstorming` | adopted | 已映射到 root `AGENTS.md` 的 bounded brainstorming contract：任务仍需定方向时，允许 scope decomposition、2-3 方案对比、推荐方向与 optional visual companion，但不变成 universal gate。 |
 | `writing-plans` | rejected | 不允许在 `prd.md`/`project.md`/`.pm` 之外再引入第二套默认计划真值。 |
-| `using-superpowers` | rejected | 外部 bootstrap 不能取代 `AGENTS.md + .pm + GitHub PR review`。 |
+| `using-superpowers` | rejected（overall bootstrap） | 外部 bootstrap 不能取代 `AGENTS.md + .pm + GitHub PR review`，但其中的 process-skill routing order 已被翻译成 repo-owned workflow router。 |
 
 ## 4. Follow-up 映射
 ### 4.1 Workflow behavior eval harness
@@ -96,6 +99,14 @@
   - `scripts/prepare-task-pr.sh`
   - `scripts/pr-review-thread-closeout.sh`
 - 目标：验证 agent 在真实对话/fixture 下是否走对主链，而不是只打印“建议”。
+
+### 4.1A Repo-owned workflow router
+- owner 倾向：`producer_system_designer`
+- 覆盖面：
+  - root `AGENTS.md`
+  - `.agents/skills/repo-owned-workflow-router/SKILL.md`
+  - `.agents/skills/README.md`
+- 目标：为非 trivial task 提供一个 repo-owned 总入口，负责判断当前应该进入 bounded brainstorming、TDD、execution、verification 还是 closeout，而不是要求使用者手工拼接整条流程。
 
 ### 4.2 Default role-subagent orchestration and subagent-driven execution
 - owner 倾向：`producer_system_designer`
@@ -168,6 +179,7 @@
 ## 6. 风险控制
 - 任何 adopted 项如果没有 repo-owned follow-up，就仍视为未落地。
 - 任何 rejected 项如果重新出现在 root workflow 文档中，应视为治理回弹。
+- 任何 repo-owned workflow router 如果重新依赖外部 bootstrap、或把阶段判断写成聊天建议而不回接 root workflow，应视为治理回弹。
 - 任何 bounded brainstorming 如果没有 option framing、推荐方向或正式文档回写，应视为仍停留在聊天层。
 - 任何默认 role-subagent 协作如果没有 owner、write scope、return contract 或 handoff 记录，应视为越界。
 - 任何声称采用 behavior-first TDD 的任务如果没有 RED command、目标测试面或 skip reason，应视为越界。

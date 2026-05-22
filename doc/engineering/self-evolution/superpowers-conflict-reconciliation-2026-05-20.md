@@ -91,10 +91,15 @@
 
 - skill 发现和说明方式
 - 对“何时触发某类 skill”做更明确约束
+- upstream `using-superpowers` 里“先决定当前应进入哪段 process skill”的路由顺序
+
+- 已完成的 reconcile：
+
+- 已将 `using-superpowers` 中唯一值得保留的 process-skill routing order 翻译成 repo-owned workflow router：新增 `.agents/skills/repo-owned-workflow-router`，并把 `bounded-brainstorming -> tdd-test-writer -> executing-project-tasks -> verification-before-completion -> finishing-a-development-branch` 的默认 phase order 接回 root `AGENTS.md` 与 `.agents/skills/README.md`。
 
 未来何时可重开：
 
-- 当前 `writing-skills` 的 authoring / trigger surface 已经被翻译成 repo-owned 入口；若要重开这里的剩余部分，只能针对 upstream 仍未采纳的 bootstrap、分发部署或其他会竞争 root truth 的内容，而不是回退去重新依赖外部 bootstrap 本身。
+- 当前 `writing-skills` 的 authoring / trigger surface，以及 `using-superpowers` 的 process-skill routing order 都已经被翻译成 repo-owned 入口；若要重开这里的剩余部分，只能针对 upstream 仍未采纳的 bootstrap、分发部署或其他会竞争 root truth 的内容，而不是回退去重新依赖外部 bootstrap 本身。
 
 ### 3.3 默认 subagent 协作的已吸收部分与剩余冲突
 
@@ -167,7 +172,7 @@
 | `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task + local review ritual、或把 subagent 扩成独立真值持有者 | 已完成 bounded borrowing：默认 subagent-driven execution、任务拆分、上下文最小化、实现/验证/补充 review 切片，以及 `slice type / write scope / return contract / integration order` contract | 仅剩 local review ritual 等 rejected 部分；只有在正式 PR review 边界变化且 repo-owned multi-agent eval 稳定后才应重开 |
 | `test-driven-development` | adopted（bounded） | universal TDD mandatory gate、或对无稳定 harness 的任务强套 RED-phase | 已完成 bounded borrowing：behavior-first / regression-first contract、`tdd-test-writer` skill、RED command or skip reason 约束 | 仅剩 universal gate 等 rejected 部分；只有在更细的局部领域验证稳定后才应继续扩张 |
 | `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 已完成 bounded borrowing：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板和 planning self-checklist | 剩余 skill 本体只有在不再竞争正式计划真值时，才允许继续局部 salvage；不得回退为默认前置计划系统 |
-| `using-superpowers` | rejected | 外部 bootstrap 与当前 root workflow 真值冲突 | 触发说明、skill 发现习惯 | 必须先转成 repo-owned trigger governance，再评估 |
+| `using-superpowers` | rejected（overall bootstrap） | 外部 bootstrap 与当前 root workflow 真值冲突 | 已完成 bounded borrowing：repo-owned workflow router、触发说明、skill 发现习惯与本地 phase-order 入口 | 剩余 bootstrap / packaging / 第二套 workflow truth 语义继续 rejected；不得回退为外部默认入口 |
 | `dispatching-parallel-agents` | adopted（bounded） | 无 owner / 无 write-scope 的自由并行仍冲突 | 已完成 bounded borrowing：默认 `producer_system_designer` orchestrator + role subagents、parallel task decomposition、disjoint write scope 约束 | 剩余 harness packaging 或无边界 swarm 语义仍需 repo-owned multi-agent eval 后才允许继续扩张 |
 | `executing-plans` | deferred（整体 skill） | 若整包引入，仍会和正式 project/task 执行链重复 | 已完成 bounded borrowing：`.agents/skills/executing-project-tasks`、execution gap review、逐步验证、明确 blocker handling | 剩余 upstream 单独执行会话包装与默认收尾假设继续保持 deferred，不得升级为第二套计划真值 |
 | `writing-skills` | deferred（整体 skill） | 分发/作者规范容易先于治理真值 | 已完成 bounded borrowing：`.agents/skills/README.md`、`writing-repo-owned-skills`、template、checklist 与 trigger-entry 说明 | 剩余 upstream TDD/subagent gate 与分发部署部分仍 deferred；只有在本地 skill / helper / eval 真值稳定后才允许重开 |
@@ -180,6 +185,7 @@
    - `writing-plans` 的 planning surface
    - `executing-plans` 的 execution surface
    - `writing-skills` 的 authoring surface
+   - `using-superpowers` 的 repo-owned workflow router
    - `dispatching-parallel-agents` 与 `subagent-driven-development` 的 bounded 默认角色编排 / subagent-driven execution
 2. 先做 `deferred` 中仍未吸收、且最接近当前主链的可控部分
    - `executing-plans` / `writing-skills` 剩余未吸收的 packaging、distribution 或 session-contract 部分，但前提仍是它们不形成第二套真值
@@ -188,7 +194,7 @@
    - 当前已不再需要把 `brainstorming` 当 reopen 起点；其 bounded ideation discipline 已吸收，剩余只是不应扩张的 rejected ceremony
 4. 最后才碰第二套真值风险最高的内容
    - `writing-plans`
-   - `using-superpowers`
+   - `using-superpowers` 剩余的 bootstrap / packaging 本体
 
 原因很简单：第一类已经有 repo-owned 落点，不应再被误写成“未来可能借”；第二、三类最多是“局部 technique 还没完全落成 repo-owned”；最后一类则直接碰 root workflow 真值。
 

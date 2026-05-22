@@ -22,6 +22,7 @@
 - [x] subagent-driven-default-workflow-rollout (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-006) [test_tier_required]: 将默认 subagent-driven execution 从原则层推进到 root workflow contract，补齐 `AGENTS.md` 的步骤化主链、handoff 模板的 `slice type / write scope / return contract / integration order` 字段，以及 planning checklist 的对应自检项。 Trace: .pm/tasks/task_a15cb9cb2832431b952c2fc9b400388d.yaml
 - [x] bounded-tdd-workflow-rollout (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-007/PRD-ENGINEERING-032) [test_tier_required]: 将 `test-driven-development` 从 rejected 改判为 adopted（bounded），把 behavior-first / regression-first contract 接回 root workflow、handoff/planning surface、`.agents/skills/README.md` 与 `tdd-test-writer` skill，同时收口 skill-surface replacement 中关于 `tdd-test-writer` 的待评估边界。 Trace: .pm/tasks/task_64823ec488b648cbb95cc99ed0f4bdfc.yaml
 - [x] bounded-brainstorming-workflow-rollout (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-003/PRD-ENGINEERING-AWB-008/PRD-ENGINEERING-032/PRD-ENGINEERING-032D) [test_tier_required]: 将 `brainstorming` 从 rejected 改判为 adopted（bounded），把 scope decomposition / option framing / optional visual companion 接回 root workflow、handoff/planning surface、`.agents/skills/README.md` 与本地 `bounded-brainstorming` skill，同时保留 universal gate / 逐段审批 / 强制转入 `writing-plans` 为 rejected。 Trace: .pm/tasks/task_3cad85765a3447488acba03d163126d2.yaml
+- [x] repo-owned-workflow-router (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-009/PRD-ENGINEERING-032/PRD-ENGINEERING-032E) [test_tier_required]: 将 `using-superpowers` 中可借的 process-skill routing order 翻译成 repo-owned workflow router，新增 `.agents/skills/repo-owned-workflow-router`，并把默认 phase order 接回 root `AGENTS.md`、skill README 与 borrowing/conflict/skill-surface 文档真值，同时继续拒绝外部 bootstrap。 Trace: .pm/tasks/task_f305aa614deb4c959d45ffa81599cfb3.yaml
 
 ## Planned Follow-ups
 - `workflow-behavior-eval-harness-followup` (`PRD-ENGINEERING-AWB-001/006`, target `test_tier_required + test_tier_full`): 为 `new-task-worktree -> workflow-report -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout` 建立 repo-owned agent behavior eval harness，验证默认角色 subagent 主链在真实 agent 回合中被遵守。启动时需创建独立 `.pm` task 与 worktree。
@@ -56,6 +57,7 @@
   - `.agents/skills/README.md`
   - `.agents/skills/bounded-brainstorming/SKILL.md`
   - `.agents/skills/executing-project-tasks/SKILL.md`
+  - `.agents/skills/repo-owned-workflow-router/SKILL.md`
   - `.agents/skills/tdd-test-writer/SKILL.md`
   - `.agents/roles/templates/handoff-brief.md`
   - `.agents/roles/templates/handoff-detailed.md`
@@ -104,6 +106,7 @@
   - 已将默认 subagent-driven execution 进一步落成 root workflow contract：`AGENTS.md`、角色卡、handoff 模板与 planning checklist 现已显式要求 `slice type / write scope / return contract / integration order`，避免默认流程只停留在 adopted 原则。
   - 已将 `test-driven-development` 从 rejected 改判为 adopted（bounded），把行为变更且有稳定自动化 harness 的任务默认收口为 behavior-first / regression-first contract；同时保持 universal TDD rejected，并把 `tdd-test-writer` 的边界接回 root workflow、handoff/planning surface 与 skill inventory 真值。
   - 已将 `brainstorming` 从 rejected 改判为 adopted（bounded），把“方向仍模糊时的 scope decomposition + 2-3 方案对比 + 推荐方向 + optional visual companion”收口为 root workflow、handoff/planning surface 与本地 `bounded-brainstorming` skill，同时继续拒绝 universal brainstorming gate、逐段审批与强制转入 `writing-plans`。
+  - 已将 `using-superpowers` 中唯一值得保留的 process-skill routing order 收口为 repo-owned workflow router：新增 `.agents/skills/repo-owned-workflow-router`，并把 `brainstorming -> TDD -> execution -> verification -> closeout` 接回 root `AGENTS.md` 与 `.agents/skills/README.md`，同时继续拒绝外部 bootstrap 本体。
 - 下一步:
   - 优先推进 `workflow-behavior-eval-harness-followup`，把本轮已完成的人工多角色试跑收口成可重复的 fixture、采样面与 failure signature，验证默认 `producer orchestrator + role subagents` 主链是否能被 agent 稳定执行出来。
   - Viewer 方向仅在下一轮明确结构/视觉题时，按需启动 `viewer-visual-companion-pilot-followup`。

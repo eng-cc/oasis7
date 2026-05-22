@@ -39,6 +39,7 @@
   - SC-3: `agent-browser`、`prd`、`xiaohongshu*` 等 repo-owned 或明确场景专属 skill 的保留边界被显式写清，不与通用 skill 混为同类。
   - SC-4: 外部/上游 skill 的借鉴必须继续服从 `worktree -> .pm -> PRD/project -> tests -> GitHub PR` 单一主链，不得因为“skill 更完整”而引入第二套默认流程。
   - SC-5: `writing-skills` 的可 salvage 部分必须被翻译成 repo-owned skill authoring surface，包括本地 authoring entrypoint、template、checklist 与 bounded borrowing 说明，而不是继续停留在泛化 deferred。
+  - SC-6: 若某个 upstream workflow skill 的可借部分已经被正式收口为 repo-owned local skill，则 `.agents/skills` inventory、README 入口与治理文档必须同步把它记录为已保留的 repo-owned surface，而不是继续停留在“仅 borrowing 文档存在”的悬空状态。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -51,11 +52,13 @@
   - PRD-ENGINEERING-032B: As a maintainer, I want generic upstream skills either replaced by repository-owned guidance or explicitly deferred, so that local maintenance cost does not grow faster than repo-specific value.
   - PRD-ENGINEERING-032C: As a maintainer, I want a repo-owned skill authoring surface for `.agents/skills`, so that future local skills follow consistent trigger wording, template structure, and verification rules without importing upstream workflow wholesale.
   - PRD-ENGINEERING-032D: As a workflow owner, I want bounded borrowed workflow patterns that survive governance to land as repo-owned local skills, so that roles can trigger them directly without re-reading the full borrowing topic.
+  - PRD-ENGINEERING-032E: As a workflow owner, I want the repo-owned workflow-router skill kept in the local inventory as the default entrypoint for non-trivial workflow chaining, so that upstream `using-superpowers` routing value is preserved without importing its external bootstrap.
 - Critical User Flows:
   1. `盘点当前 .agents/skills inventory -> 读取角色卡/工程入口/活跃文档引用 -> 判断 skill 是否 repo-owned、generic-but-compatible、generic-and-conflicting`
   2. `对每个 skill 冻结 keep / replace / retire / defer -> 只对 low-coupling retire/replacement 执行本轮文件面收口 -> 其余高耦合 generic mirror 先保留并记录 deferred`
   3. `若 skill 被 retire -> 同步更新角色卡、活跃文档与工程入口 -> 复跑文档/PM 门禁，确保没有残留悬空引用`
   4. `若 upstream skill 只适合局部借鉴 -> 先抽出 repo-owned authoring/template/checklist surface -> 明确哪些内容 adopted、哪些仍 deferred/rejected -> 再把本地 skill inventory 和角色卡接回真值`
+  5. `若 upstream workflow routing 被收口为 repo-owned local skill -> 将该 skill 接回 README / AGENTS phase order / topic project trace -> 明确“保留的是本地入口，不是上游 bootstrap”`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -69,6 +72,7 @@
   - AC-3: `agent-browser`、`prd`、`xiaohongshu`、`xiaohongshu-note-analyzer`、`gpt-image-2`、`humanizer-zh`，以及后续新增的 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`tdd-test-writer`、`bounded-brainstorming`，其保留理由都必须显式记录为 repo-owned 或明确场景专属。
   - AC-4: 对 generic game-skill 镜像簇若未本轮删除，必须标记为 `defer` 并说明“为何先不动”。
   - AC-5: 本轮必须为 `.agents/skills` 增加 repo-owned authoring surface，至少包含本地 skill、template、checklist 与入口说明，并明确 upstream `writing-skills` 哪些部分仍未采纳。
+  - AC-6: `repo-owned-workflow-router` 必须被显式记录为保留的 repo-owned workflow surface，并在 `.agents/skills/README.md`、root `AGENTS.md` 和相关治理文档中保持同一默认 phase-order 口径。
 - Non-Goals:
   - 不在本轮重写全部 generic game-skill 内容。
   - 不把所有 skill 能力迁回系统提示词。
@@ -107,6 +111,7 @@
 | PRD-ENGINEERING-032 | `skill-replacement-rationalization` | `test_tier_required` | inventory matrix、角色卡/活跃文档引用清理、`doc-governance-check`、`pm-lint`、`git diff --check` | `.agents/skills`、`.agents/roles`、engineering 根入口 |
 | PRD-ENGINEERING-032C | `skill-authoring-surface-tightening` | `test_tier_required` | 本地 skill authoring skill、template、checklist、README、topic/root project 回写与治理校验 | `.agents/skills`、角色卡、skill 治理专题 |
 | PRD-ENGINEERING-032D | `brainstorming-skill-boundary-reconciliation`、`tdd-skill-boundary-reconciliation` | `test_tier_required` | bounded borrowed workflow skill、本地 trigger/README、topic/root project 与 borrowing/conflict 文档对齐 | `.agents/skills`、workflow skill surface、engineering 治理专题 |
+| PRD-ENGINEERING-032E | `workflow-router-skill-reconciliation` | `test_tier_required` | `repo-owned-workflow-router`、`.agents/skills/README.md`、root `AGENTS.md` phase order、borrowing/conflict/skill-surface 文档与 `.pm` trace 对齐 | `.agents/skills`、workflow entrypoint surface、engineering 治理专题 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -115,6 +120,7 @@
 | DEC-SKILL-003 | 对与当前默认流程冲突的通用 skill 直接 retire | 保留 skill 但继续在角色卡中推荐 | 会继续制造“存在即推荐”的误导。 |
 | DEC-SKILL-004 | 对已在 borrowing 专题中裁定为可借鉴、且能直接绑定 repo-owned helper / workflow truth 的 skill，允许新增为本地 repo-owned skill | 只在 borrowing 文档里记录 adopted 结论，不把 skill surface 真正落盘 | 若 adopted 项始终不进入 `.agents/skills/`，角色层就无法稳定触发这些 repo-native 工作流。 |
 | DEC-SKILL-005 | 将 `writing-skills` 只收敛为 repo-owned authoring surface，不引入其完整 TDD/subagent gate | 要么完全不借，要么整套照搬 upstream skill | 当前真正缺的是本地 skill 作者入口与结构纪律，不是再造一条与主链竞争的 skill deployment 流程。 |
+| DEC-SKILL-006 | 将 `using-superpowers` 里唯一值得保留的 process-skill routing order 收口为本地 `repo-owned-workflow-router` skill | 完全不落本地 skill，或把 `using-superpowers` 整体 bootstrap 直接保留 | 当前角色真正需要的是本地 workflow 总入口；若不落本地 skill，路由只会继续散落在 borrowing 说明里；若整体保留 upstream bootstrap，又会重新制造第二套默认流程真值。 |
 
 ## 结论
 - 🟢 Ready

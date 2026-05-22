@@ -13,6 +13,7 @@
 - `agent-browser`
 - `bounded-brainstorming`
 - `prd`
+- `repo-owned-workflow-router`
 - `tdd-test-writer`
 - `xiaohongshu`
 - `xiaohongshu-note-analyzer`
@@ -62,9 +63,11 @@
 - `frontend-ui-ux` -> 系统级前端指令 + `agent-browser` + `gpt-image-2`
 - `game-changing-features` -> `prd` + `game-design-theory` + `content-creation`
 - `brainstorming` -> `bounded-brainstorming` + root `AGENTS.md` 的 bounded ideation rule + optional visual companion boundary
+- `using-superpowers` -> `repo-owned-workflow-router` + root `AGENTS.md` 的 default phase order + `.agents/skills/README.md` workflow entrypoint
 - `tdd-test-writer` -> 保留为本地 skill，但其默认适用边界由 root workflow 的 bounded behavior-first testing contract 约束；不再作为“待单独决定”的悬空项
 
 ## 5. 风险控制
 - 任何被 retire 的 skill 若仍在角色卡中出现，视为治理未收口。
 - `defer` 不等于“继续推荐为主技能”；后续如需再收缩，应优先先改角色卡，再删文件。
 - 历史 `doc/devlog` 中出现的旧 skill 名称保留为归档痕迹，不作为活跃引用清理对象。
+- `repo-owned-workflow-router` 只能保留本地 phase-order 路由价值；若重新把它写成外部 bootstrap 或第二套 workflow 真值，视为越界。
