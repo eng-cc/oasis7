@@ -31,3 +31,7 @@ Example:
 ## 2026-05-22 17:37:38 CST / producer_system_designer
 - 完成内容: 继续瘦身当前 superpowers PR 文档，将 root/topic project 中按 slice 逐条展开的中间过程信息压成高层 outcome rows，并把状态区收口为“当前真值 + 下一步”，避免 aggregate task 已建立后仍在项目页重复保留过细过程叙述。
 - 遗留事项: 若后续还要继续减重，优先处理 explanation/reference 文档中的重复 reconcile 叙述，但不要删掉 adopted / deferred / rejected 边界与 reopen 条件。
+
+## 2026-05-22 17:43:16 CST / producer_system_designer
+- 完成内容: 将 `superpowers-conflict-reconciliation-2026-05-20.md` 继续压缩为“真值链、冲突类型、skill-by-skill 表、重开标准”四块，移除重复的 reconcile 过程叙述，只保留当前冲突边界、已吸收部分与 reopen 条件。
+- 遗留事项: 若还要继续减重，下一步只适合局部压缩 borrowing PRD 的 roadmap/decision 叙述；不应破坏其规格、验收和追踪矩阵完整性。
