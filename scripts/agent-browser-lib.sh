@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/viewer-web-dist-contract.sh"
+
 require_cmd() {
   local cmd=$1
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -193,6 +195,7 @@ resolve_viewer_static_dir_for_web_closure() {
   local dist_dir="$repo_root/crates/oasis7_viewer/dist"
   local dist_index="$dist_dir/index.html"
   local rebuilt_dir
+  local source_metadata_json
 
   if [[ "$out_dir" = /* ]]; then
     rebuilt_dir="$out_dir/web-dist"
@@ -200,54 +203,36 @@ resolve_viewer_static_dir_for_web_closure() {
     rebuilt_dir="$repo_root/$out_dir/web-dist"
   fi
 
-  if [[ -f "$dist_index" ]] && python3 - "$repo_root" "$dist_dir" <<'PY'
+  source_metadata_json=$(viewer_web_dist_source_metadata_json "$repo_root")
+
+  if [[ -f "$dist_index" ]] && python3 - "$source_metadata_json" "$dist_dir" "$(viewer_web_dist_manifest_name)" <<'PY'
 from __future__ import annotations
 
-import filecmp
+import json
 import sys
 from pathlib import Path
 
-repo_root = Path(sys.argv[1]).resolve()
+current = json.loads(sys.argv[1])
 dist_dir = Path(sys.argv[2]).resolve()
-viewer_root = repo_root / "crates/oasis7_viewer"
+manifest_name = sys.argv[3]
+manifest_path = dist_dir / manifest_name
 
-required_files = [
-    ("software_safe.html", "index.html"),
-    ("software_safe.html", "viewer.html"),
-    ("software_safe.html", "software_safe.html"),
-    ("viewer.js", "viewer.js"),
-    ("software_safe.js", "software_safe.js"),
-    ("software_safe_first_agent_claim_evidence.html", "software_safe_first_agent_claim_evidence.html"),
-    ("favicon.ico", "favicon.ico"),
-]
-
-for source_rel, dist_rel in required_files:
-    source_path = viewer_root / source_rel
-    dist_path = dist_dir / dist_rel
-    if not source_path.is_file() or not dist_path.is_file():
-        raise SystemExit(1)
-    if not filecmp.cmp(source_path, dist_path, shallow=False):
-        raise SystemExit(1)
-
-source_bridge_dir = viewer_root / "pixel-world-bridge"
-dist_bridge_dir = dist_dir / "pixel-world-bridge"
-
-source_bridge_files = sorted(
-    candidate.relative_to(source_bridge_dir).as_posix()
-    for candidate in source_bridge_dir.rglob("*")
-    if candidate.is_file()
-)
-dist_bridge_files = sorted(
-    candidate.relative_to(dist_bridge_dir).as_posix()
-    for candidate in dist_bridge_dir.rglob("*")
-    if candidate.is_file()
-) if dist_bridge_dir.is_dir() else []
-
-if source_bridge_files != dist_bridge_files:
+if not manifest_path.is_file():
     raise SystemExit(1)
 
-for rel in source_bridge_files:
-    if not filecmp.cmp(source_bridge_dir / rel, dist_bridge_dir / rel, shallow=False):
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if manifest.get("sourceFingerprint") != current.get("sourceFingerprint"):
+    raise SystemExit(1)
+
+dist_files = manifest.get("distFiles")
+if not isinstance(dist_files, dict) or not dist_files:
+    raise SystemExit(1)
+
+for rel, metadata in dist_files.items():
+    candidate = dist_dir / rel
+    if not candidate.is_file():
+        raise SystemExit(1)
+    if candidate.stat().st_size != metadata.get("size"):
         raise SystemExit(1)
 PY
   then
@@ -297,6 +282,7 @@ PY
       cp -R "$repo_root/crates/oasis7_viewer/pixel-world-bridge" "$rebuilt_dir/pixel-world-bridge"
     fi
   fi
+  viewer_web_dist_write_manifest "$repo_root" "$rebuilt_dir"
   printf '%s
 ' "$rebuilt_dir"
 }

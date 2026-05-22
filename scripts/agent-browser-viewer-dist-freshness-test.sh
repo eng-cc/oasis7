@@ -92,6 +92,11 @@ if [[ ! -f "$expected_dir/pixel-world-bridge/pixel_world_bridge.js" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$expected_dir/.oasis7-viewer-dist-manifest.json" ]]; then
+  echo "expected rebuilt dist manifest at $expected_dir/.oasis7-viewer-dist-manifest.json" >&2
+  exit 1
+fi
+
 if ! grep -Fq 'npm --prefix' "$tmp_repo/stderr.log"; then
   echo "expected freshness helper to trigger viewer rebuild" >&2
   cat "$tmp_repo/stderr.log" >&2
