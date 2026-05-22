@@ -103,26 +103,23 @@ impl PosNodeEngine {
     }
 }
 
+const REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX: &str = "replication network availability gap: ";
+const REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX: &str =
+    "replication network route unavailable: ";
+
 fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
     let NodeError::Replication { reason } = err else {
         return false;
     };
-    reason.contains("NetworkProtocolUnavailable")
-        || reason.contains("libp2p-replication no admissible connected peers for protocol")
-        || reason.contains("libp2p-replication no connected providers for protocol")
-        || reason.contains("libp2p-replication no connected peers for protocol")
-        || (reason.contains("NetworkRequestFailed")
-            && reason.contains("NetworkProtocolUnavailable"))
+    reason.starts_with(REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
+        || reason.starts_with(REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
 }
 
 pub(super) fn replication_request_waitable_connection_gap(err: &NodeError) -> bool {
     let NodeError::Replication { reason } = err else {
         return false;
     };
-    reason.contains("no admissible connected peers for protocol")
-        || reason.contains("no connected peers for protocol")
-        || reason.contains("no connected providers for protocol")
-        || reason.contains("no healthy provider for protocol")
+    reason.starts_with(REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
 }
 
 #[cfg(test)]
@@ -132,12 +129,23 @@ mod tests {
     #[test]
     fn provider_aware_fallback_treats_no_admissible_peers_as_retryable() {
         let err = NodeError::Replication {
-            reason:
-                "NetworkProtocolUnavailable { protocol: \"libp2p-replication no admissible connected peers for protocol /aw/node/replication/fetch-blob/1.0.0\" }"
-                    .to_string(),
+            reason: format!(
+                "{REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX}libp2p-replication no admissible connected peers for protocol /aw/node/replication/fetch-blob/1.0.0"
+            ),
         };
         assert!(should_fallback_provider_aware_replication_request(&err));
         assert!(replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_treats_route_unavailable_as_retryable() {
+        let err = NodeError::Replication {
+            reason: format!(
+                "{REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX}simulated provider route unavailable"
+            ),
+        };
+        assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
     }
 }
 
