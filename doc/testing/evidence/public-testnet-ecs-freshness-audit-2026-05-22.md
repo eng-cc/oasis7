@@ -137,3 +137,20 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - realign the local observer to the two-validator manifest contract
   - then resolve the ECS sequencer predecessor-gap runtime fault
   - only after that should the public lanes be reconsidered for promotion.
+
+## 2026-05-22 operator addendum
+- Later on 2026-05-22, the local observer was actually realigned and restarted through the repo-owned operator path:
+  - `scripts/p2p-public-testnet-local-observer-sync.sh apply`
+  - `scripts/p2p-public-testnet-local-observer-sync.sh reset-state`
+- This cleared the earlier “local host still runs old three-validator contract” finding from the morning audit:
+  - `network_tier.tier=public_testnet`
+  - `network_tier.bootstrap_peer_count=2`
+  - `fetch-commit authorization failed` is no longer the dominant live error
+- However, aggregate readiness did not improve. The later live truth became:
+  - local current runtime binary hash matches both ECS nodes: `2f836980834da470882fef4ca7ab0598c984acfc42565d574acf2cd19c474cfe`
+  - mirrored bundle file `/opt/oasis7/p2p-testnet-local/config/public-testnet-live-candidate-bundle-2026-05-22.json` still declares `runtime_build.sha256=d1046485ae71a794cf0f5fb78561bd6068363ca53aee3ccac384d831829c07e8`
+  - local status still fails on `gap sync height 15 execution hash validation failed`
+- Updated interpretation:
+  - `runtime_bootstrap` remains `block`, but no longer because the local observer is missing the formal manifest
+  - the deeper blocker is now release/runtime input drift: binary parity alone does not restore execution parity
+  - `public_rpc_ready` / `explorer_public_ready` / `faucet_guard_ready` should remain `partial` until the height-15 execution split is cleared and a fresh same-window external claim is revalidated

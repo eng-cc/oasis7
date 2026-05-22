@@ -1,6 +1,6 @@
 # Public Testnet Local Observer Contract Sync (2026-05-22)
 
-审计轮次: 1
+审计轮次: 2
 
 ## Summary
 - 责任角色:
@@ -80,13 +80,48 @@ systemctl restart oasis7-testnet-observer.service
   - `network_tier.bootstrap_peer_count=2`
 4. 这证明本机 observer 的 formal manifest / two-validator contract 已经真实生效，而不是停留在离线 render。
 
+## 2026-05-22 operator follow-up
+1. 为了把“旧 observer 残留执行状态”也纳入 repo-owned 修复路径，脚本新增了：
+```bash
+./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
+  --local-env /opt/oasis7/p2p-testnet-local/config/node.env
+```
+2. `reset-state` 会解析 `node.env` 中带 `$STACK_ROOT/...` 的实际路径，并备份后清空：
+  - `EXECUTION_WORLD_DIR`
+  - `EXECUTION_RECORDS_DIR`
+  - `STACK_ROOT/output/node-distfs/$NODE_ID`
+  - `STACK_ROOT/output/chain-runtime/$NODE_ID/reward-runtime-execution-bridge-state.json`
+3. 该命令已在本机多次真实执行，备份目录写入：
+  - `/opt/oasis7/p2p-testnet-local/backups/local-observer-state-reset-*`
+4. 在此之后，两类较早期 blocker 已经不再是当前主阻断：
+  - `fetch-commit authorization failed`
+  - `replication writer switch must start at sequence 1`
+5. 随后又核对并对齐了 runtime binary：
+  - local current binary `sha256=2f836980834da470882fef4ca7ab0598c984acfc42565d574acf2cd19c474cfe`
+  - ECS sequencer current binary `sha256=2f836980834da470882fef4ca7ab0598c984acfc42565d574acf2cd19c474cfe`
+  - ECS storage current binary `sha256=2f836980834da470882fef4ca7ab0598c984acfc42565d574acf2cd19c474cfe`
+6. 即使 binary 已与两台 ECS 对齐，本机仍在 height 15 失败：
+  - runtime restart 一度先报 `execution driver restore snapshot ref ... BlobNotFound`
+  - 当前 `/v1/chain/status` 持续报 `gap sync height 15 execution hash validation failed`
+  - mismatch 真值：
+    - `local_block=a7d0bf881a9bbb51404114ba45aab399645e3cad45371ed9e1490ed06761df74`
+    - `peer_block=1ccaf35534e06f4238a50fd719eaffa2ca2fa23e841ec4b28171c0877efd7517`
+    - `local_state=fd1dc428d79a813d808a21025fbe47579f8448242604975487a98305eb42ab37`
+    - `peer_state=1e3b53a30f7e0bd4f464531dd716d17996c23e8d50b8cd56a6e180cd14e14717`
+7. 同窗还确认 repo mirror 的 candidate bundle 仍写着另一份 runtime hash：
+  - `/opt/oasis7/p2p-testnet-local/config/public-testnet-live-candidate-bundle-2026-05-22.json`
+  - `runtime_build.sha256=d1046485ae71a794cf0f5fb78561bd6068363ca53aee3ccac384d831829c07e8`
+8. 这说明当前剩余问题已不再是“local contract 未生效”或“binary 还没对齐”，而是更深一层的 release/runtime input drift。
+
 ## Remaining live blocker
-1. local observer 仍未追平链高，当前最新错误是：
-  - `fetch-commit authorization failed: requester_public_key_hex=8971af...`
-2. 这说明当前 remaining blocker 已从“本机未加载 manifest / 合同漂移”切换成“ECS fetch-commit 授权面不接受本机 requester key”。
-3. 因此这条任务虽然已完成 local contract sync，但还不能把本机 runtime 记成健康 `pass`。
+1. local observer 现在可以加载 formal manifest、two-validator contract，并且 current runtime binary 也已与 ECS hash 对齐。
+2. 当前 remaining blocker 是：
+  - `shared_devnet_pass` 仍未满足
+  - local observer 在 height 15 持续出现 execution hash mismatch
+  - live current binary hash 与 mirrored candidate bundle `runtime_build.sha256` 仍不一致
+3. 因此这条任务虽然已完成 local contract sync 与 repo-owned reset path，但还不能把本机 runtime 记成健康 `pass`，也不能把 aggregate `public_testnet` readiness 提升为可用。
 
 ## Boundaries
 1. This task only closes the repo-owned local observer sync path.
-2. It does not clear the new local fetch-commit authorization blocker, nor the separate ECS sequencer blocker `execution driver missing predecessor record for non-contiguous committed height`.
+2. It does not clear the remaining height-15 execution mismatch, nor the broader live-candidate release/runtime drift that still separates the local observer from current network execution truth.
 3. Therefore even after this script lands and live apply completes, aggregate `public_testnet` readiness still remains `block`.

@@ -24,6 +24,10 @@ Usage:
     [--start-script-dest <path>] \
     [--backup-dir <path>]
 
+  ./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
+    --local-env <path> \
+    [--backup-dir <path>]
+
 Description:
   Derive the local public_testnet observer env contract from the current
   two-validator ECS env files. The rendered env preserves local-only binds,
@@ -31,7 +35,9 @@ Description:
   signer, bootstrap-peer, and manifest settings with the live ECS contract.
   When apply mode installs a manifest source from the repo, it also localizes
   runtime_refs files into the target config directory and rewrites the manifest
-  to point at those local copies.
+  to point at those local copies. reset-state backs up and clears the local
+  observer's replicated execution state so a drifted pre-sync history can be
+  rebuilt from the current two-validator network contract.
 EOF
 }
 
@@ -119,6 +125,21 @@ append_if_present() {
   if [[ -n "$value" ]]; then
     printf '%s=%s\n' "$key" "$value"
   fi
+}
+
+resolved_env_value() {
+  local env_file=$1
+  local key=$2
+  local value
+
+  value=$(ENV_FILE="$env_file" KEY_NAME="$key" bash -lc '
+    source "$ENV_FILE"
+    value="${!KEY_NAME:-}"
+    [[ -n "$value" ]] || exit 1
+    printf "%s" "$value"
+  ') || die "missing or unresolved $key in $env_file"
+
+  printf '%s' "$value"
 }
 
 repo_root=$(cd "$script_dir/.." && pwd)
@@ -245,6 +266,53 @@ write_rendered_env() {
   printf '%s' "$rendered" > "$out_path"
 }
 
+backup_and_remove_path() {
+  local path=$1
+  local backup_target=$2
+
+  if [[ ! -e "$path" ]]; then
+    printf 'skipped missing %s\n' "$path"
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$backup_target")"
+  mv "$path" "$backup_target"
+  printf 'backed up %s -> %s\n' "$path" "$backup_target"
+}
+
+reset_local_state() {
+  local local_env=$1
+  local backup_dir=$2
+
+  local local_stack_root node_id execution_world_dir execution_records_dir
+  local replication_root execution_bridge_state_path
+  local storage_root
+
+  local_stack_root=$(resolved_env_value "$local_env" STACK_ROOT)
+  node_id=$(resolved_env_value "$local_env" NODE_ID)
+  execution_world_dir=$(resolved_env_value "$local_env" EXECUTION_WORLD_DIR)
+  execution_records_dir=$(resolved_env_value "$local_env" EXECUTION_RECORDS_DIR)
+  storage_root=$(resolved_env_value "$local_env" STORAGE_ROOT)
+  replication_root="$local_stack_root/output/node-distfs/$node_id"
+  execution_bridge_state_path="$local_stack_root/output/chain-runtime/$node_id/reward-runtime-execution-bridge-state.json"
+
+  if [[ -z "$backup_dir" ]]; then
+    backup_dir="$local_stack_root/backups/local-observer-state-reset-$(date +%Y%m%d-%H%M%S)"
+  fi
+
+  mkdir -p "$backup_dir"
+
+  backup_and_remove_path "$execution_world_dir" "$backup_dir/execution-world"
+  backup_and_remove_path "$execution_records_dir" "$backup_dir/execution-records"
+  backup_and_remove_path "$replication_root" "$backup_dir/node-distfs/$node_id"
+  backup_and_remove_path \
+    "$execution_bridge_state_path" \
+    "$backup_dir/chain-runtime/$node_id/$(basename "$execution_bridge_state_path")"
+
+  printf 'preserved storage_root=%s\n' "$storage_root"
+  printf 'backup_dir=%s\n' "$backup_dir"
+}
+
 localize_manifest_runtime_refs() {
   local manifest_source=$1
   local manifest_dest=$2
@@ -352,66 +420,77 @@ while (( $# > 0 )); do
   esac
 done
 
-[[ "$mode" == "render" || "$mode" == "apply" ]] || die "unknown mode: $mode"
-[[ -n "$local_env" ]] || die "--local-env is required"
-[[ -n "$sequencer_env" ]] || die "--sequencer-env is required"
-[[ -n "$storage_env" ]] || die "--storage-env is required"
-[[ -n "$manifest_path" ]] || die "--manifest-path is required"
+case "$mode" in
+  render|apply)
+    [[ -n "$local_env" ]] || die "--local-env is required"
+    [[ -n "$sequencer_env" ]] || die "--sequencer-env is required"
+    [[ -n "$storage_env" ]] || die "--storage-env is required"
+    [[ -n "$manifest_path" ]] || die "--manifest-path is required"
 
-require_file "$local_env"
-require_file "$sequencer_env"
-require_file "$storage_env"
+    require_file "$local_env"
+    require_file "$sequencer_env"
+    require_file "$storage_env"
 
-rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path")
+    rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path")
 
-if [[ "$mode" == "render" ]]; then
-  write_rendered_env "$rendered_env" "$out_path"
-  exit 0
-fi
+    if [[ "$mode" == "render" ]]; then
+      write_rendered_env "$rendered_env" "$out_path"
+      exit 0
+    fi
 
-require_file "$start_script_source"
+    require_file "$start_script_source"
 
-local_stack_root=$(required_value "$local_env" STACK_ROOT)
-if [[ -z "$manifest_dest" && -n "$manifest_source" ]]; then
-  manifest_dest=$manifest_path
-fi
-if [[ -z "$start_script_dest" ]]; then
-  start_script_dest="$local_stack_root/bin/start-node.sh"
-fi
-if [[ -z "$backup_dir" ]]; then
-  backup_dir="$local_stack_root/backups/local-observer-contract-sync-$(date +%Y%m%d-%H%M%S)"
-fi
+    local_stack_root=$(required_value "$local_env" STACK_ROOT)
+    if [[ -z "$manifest_dest" && -n "$manifest_source" ]]; then
+      manifest_dest=$manifest_path
+    fi
+    if [[ -z "$start_script_dest" ]]; then
+      start_script_dest="$local_stack_root/bin/start-node.sh"
+    fi
+    if [[ -z "$backup_dir" ]]; then
+      backup_dir="$local_stack_root/backups/local-observer-contract-sync-$(date +%Y%m%d-%H%M%S)"
+    fi
 
-mkdir -p "$backup_dir"
+    mkdir -p "$backup_dir"
 
-cp "$local_env" "$backup_dir/node.env.before"
-tmp_env="$backup_dir/node.env.rendered"
-printf '%s' "$rendered_env" > "$tmp_env"
-cp "$tmp_env" "$local_env"
+    cp "$local_env" "$backup_dir/node.env.before"
+    tmp_env="$backup_dir/node.env.rendered"
+    printf '%s' "$rendered_env" > "$tmp_env"
+    cp "$tmp_env" "$local_env"
 
-if [[ -n "$manifest_source" ]]; then
-  require_file "$manifest_source"
-  [[ -n "$manifest_dest" ]] || die "--manifest-dest is required when --manifest-source is set"
-  mkdir -p "$(dirname "$manifest_dest")"
-  if [[ -f "$manifest_dest" ]]; then
-    cp "$manifest_dest" "$backup_dir/$(basename "$manifest_dest").before"
-  fi
-  localize_manifest_runtime_refs "$manifest_source" "$manifest_dest"
-fi
+    if [[ -n "$manifest_source" ]]; then
+      require_file "$manifest_source"
+      [[ -n "$manifest_dest" ]] || die "--manifest-dest is required when --manifest-source is set"
+      mkdir -p "$(dirname "$manifest_dest")"
+      if [[ -f "$manifest_dest" ]]; then
+        cp "$manifest_dest" "$backup_dir/$(basename "$manifest_dest").before"
+      fi
+      localize_manifest_runtime_refs "$manifest_source" "$manifest_dest"
+    fi
 
-if [[ -n "$start_script_dest" ]]; then
-  mkdir -p "$(dirname "$start_script_dest")"
-  if [[ -f "$start_script_dest" ]]; then
-    cp "$start_script_dest" "$backup_dir/$(basename "$start_script_dest").before"
-  fi
-  install -m 0755 "$start_script_source" "$start_script_dest"
-fi
+    if [[ -n "$start_script_dest" ]]; then
+      mkdir -p "$(dirname "$start_script_dest")"
+      if [[ -f "$start_script_dest" ]]; then
+        cp "$start_script_dest" "$backup_dir/$(basename "$start_script_dest").before"
+      fi
+      install -m 0755 "$start_script_source" "$start_script_dest"
+    fi
 
-printf 'updated %s\n' "$local_env"
-if [[ -n "$manifest_source" ]]; then
-  printf 'installed manifest to %s\n' "$manifest_dest"
-fi
-if [[ -n "$start_script_dest" ]]; then
-  printf 'installed start script to %s\n' "$start_script_dest"
-fi
-printf 'backup_dir=%s\n' "$backup_dir"
+    printf 'updated %s\n' "$local_env"
+    if [[ -n "$manifest_source" ]]; then
+      printf 'installed manifest to %s\n' "$manifest_dest"
+    fi
+    if [[ -n "$start_script_dest" ]]; then
+      printf 'installed start script to %s\n' "$start_script_dest"
+    fi
+    printf 'backup_dir=%s\n' "$backup_dir"
+    ;;
+  reset-state)
+    [[ -n "$local_env" ]] || die "--local-env is required"
+    require_file "$local_env"
+    reset_local_state "$local_env" "$backup_dir"
+    ;;
+  *)
+    die "unknown mode: $mode"
+    ;;
+esac

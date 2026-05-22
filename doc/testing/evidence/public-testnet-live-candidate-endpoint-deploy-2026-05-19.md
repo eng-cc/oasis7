@@ -153,7 +153,9 @@
 4. 当前正确的 local remediation 入口已经收口到：
   - `scripts/p2p-public-testnet-local-observer-sync.sh`
   - `doc/testing/evidence/public-testnet-local-observer-contract-sync-2026-05-22.md`
-5. 截至 2026-05-22 13:25 CST，本机 observer 已经通过上述脚本完成 live apply，并成功加载 `public_testnet` manifest；当前剩余 blocker 已转成 `fetch-commit authorization failed`，不再是“local host 仍未接 formal contract”。
+5. 截至 2026-05-22 13:25 CST，本机 observer 已经通过上述脚本完成 live apply，并成功加载 `public_testnet` manifest。
+6. 截至 2026-05-22 16:31 CST，`fetch-commit authorization failed` 与 writer-switch stale-state 已不再是主阻断；repo-owned `reset-state` 也已加入同一脚本并执行过多轮 live reset。
+7. 但当前本机仍在 `height 15` 卡住 execution hash mismatch，且 live current runtime binary hash 已与 ECS 对齐、却仍与 mirrored candidate bundle 的 `runtime_build.sha256` 分叉。因此这份 2026-05-19 endpoint deploy 证据只能继续证明公网入口存在，不能证明 triad runtime 已健康收敛。
 
 ## 结论
 1. 这次“进一步做部署”已经把两台阿里云上的 testnet 节点推进成了实际加载 formal `public_testnet` manifest 的 live runtime。

@@ -10,12 +10,13 @@
 - [x] formal-public-testnet-live-candidate-checklist (PRD-P2P-028) [test_tier_required]: 为当前 `specified_skeleton_only` 状态补一份 repo-owned companion runbook，冻结 `public_testnet` 从 skeleton 到 `ready_for_live_candidate` 的 seven-lane checklist、最小 evidence、canonical 命令、硬阻断条件与 claim boundary，避免“还差什么”只停留在聊天结论。 Trace: .pm/tasks/task_3f0ab6e26c034d42bedcecf38d066fb2.yaml
 - [x] formal-public-testnet-claims-boundary-review (PRD-P2P-028) [test_tier_required]: 补齐 repo-owned `qa_engineer` claims boundary review evidence，把 live `public_testnet` 的 allowed/denied claims、guarded faucet 边界与 aggregate readiness 不可越界口径固定成正式 QA verdict，并新增非 template lanes TSV 供后续 readiness review 复用。 Trace: .pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.yaml
 - [x] formal-public-testnet-ecs-evidence-harvest (PRD-P2P-028) [test_tier_required]: 把 current live candidate manifest / bundle / bootstrap peers 镜像成 repo-owned readiness 输入，并执行一轮 same-window ECS + local freshness audit；若 public endpoint 仍可达但 runtime/config 已漂移，则必须把对应 public lanes 收紧回 `partial/block`，不延续旧 `pass`。 Trace: .pm/tasks/task_49d6af52e31d404eb80999993eb71b98.yaml
-- [x] formal-public-testnet-local-observer-contract-sync (PRD-P2P-028) [test_tier_required]: 为 root-owned 本机 `oasis7-testnet-observer.service` 补 repo-owned local contract sync 脚本，要求从两台 ECS 的 live two-validator env 推导出本机 observer 应使用的 validator/signer/bootstrap/manifest 合同，并显式记录“当前会话无 `/opt` 写权限，因此只能先交付可执行同步路径，不能伪报 live apply 已完成”。 Trace: .pm/tasks/task_dfb4d70a28884617b1506fa6570b34fc.yaml
+- [x] formal-public-testnet-local-observer-contract-sync (PRD-P2P-028) [test_tier_required]: 为 root-owned 本机 `oasis7-testnet-observer.service` 补 repo-owned local contract sync 脚本与 `reset-state` operator 入口，从两台 ECS 的 live two-validator env 推导出本机 observer 应使用的 validator/signer/bootstrap/manifest 合同，并把 live apply 后剩余的 execution drift 继续固化成 repo-owned blocker 证据。 Trace: .pm/tasks/task_dfb4d70a28884617b1506fa6570b34fc.yaml
 
 ### 后续切片
 - `runtime_engineer` / TIER-2:
   - 已完成：把 `network_tier_manifest` 接到 runtime/network profile 选择、genesis/bootstrap/ref 校验与启动入口，并把 formal tier 暴露到 `/v1/chain/status` 与 launcher passthrough。
   - 已完成 local sync path：新增 `scripts/p2p-public-testnet-local-observer-sync.sh`，并已实际把本机 observer 收口到 two-validator contract、formal manifest 与 repo-owned `start-node.sh`。
+  - 已完成 operator reset path：同一脚本已新增 `reset-state`，可 repo-owned 备份并清空 local observer 的 execution world / execution records / distfs replication root / reward execution bridge state。
 - `qa_engineer` + `liveops_community` / TIER-3:
   - 已完成 skeleton：建立 first `public_testnet` rehearsal / exit-review 模板，并补 `network-tier-exit-review.sh` 作为 formal gate 汇总入口。
   - 已完成 readiness gate：新增 `network-tier-public-testnet-readiness.sh`、lane scaffold 与 skeleton evidence placeholder，可把 `public_testnet` 从“只有 manifest skeleton”与“具备 live candidate lane evidence”区分开。
@@ -45,8 +46,9 @@
 - 当前缺口:
   - `shared_devnet_pass` 仍未满足，因此 formal `public_testnet` 仍不能进入 `ready_for_live_candidate`。
   - 2026-05-22 13:25 CST 已实际清掉本机 observer 的 manifest/validator drift：当前 local status 已加载 `network_tier.tier=public_testnet` 与 `bootstrap_peer_count=2`。
-  - 当前 local blocker 已切换成 `fetch-commit authorization failed: requester_public_key_hex=8971af...`；也就是说，remaining 问题不再是 local contract 未生效，而是 ECS fetch-commit 授权面没有接受本机 requester key。
-  - ECS sequencer 当前还存在 `execution driver missing predecessor record for non-contiguous committed height` 运行态错误，因此即使 public endpoint 仍可访问，也不能把 `runtime_bootstrap` 或相关 public lane 继续记为健康 `pass`。
+  - 2026-05-22 16:31 CST further recheck：`fetch-commit authorization failed` 与 writer-switch stale-state 已不再是主阻断；即使 local current runtime binary 已与两台 ECS 对齐为 `2f836980834da470882fef4ca7ab0598c984acfc42565d574acf2cd19c474cfe`，本机仍在 `height 15` 持续报 execution hash mismatch。
+  - mirrored candidate bundle `/opt/oasis7/p2p-testnet-local/config/public-testnet-live-candidate-bundle-2026-05-22.json` 仍声明 `runtime_build.sha256=d1046485ae71a794cf0f5fb78561bd6068363ca53aee3ccac384d831829c07e8`，说明 live candidate bundle 与 current runtime 真值本身也在漂移。
+  - ECS sequencer 的 predecessor-gap 历史错误虽然不是本机当前唯一故障签名，但 live runtime 仍未形成可对外宣称“已健康收敛”的执行真值，因此即使 public endpoint 仍可访问，也不能把 `runtime_bootstrap` 或相关 public lane 继续记为健康 `pass`。
   - `mainnet` 仍停留在 `MAINNET-1~4` readiness planning / partial execution 前阶段，仓库当前只有 formal manifest + gate skeleton。
 
 ## 依赖
@@ -132,5 +134,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 当前除 `shared_devnet_pass` 之外，还必须先修正两台 ECS 对本机 `triad-testnet-local` requester key 的 fetch-commit 授权面，再清掉 sequencer predecessor-gap runtime error；在这些 live runtime blocker 被修平前，`public_testnet` 即使已有 public endpoint/faucet/claims evidence，也仍不得提升为 `ready_for_live_candidate`。
+- 下一步: 当前除 `shared_devnet_pass` 之外，还必须先找出导致 local/ECS 在 `height 15` 分叉的 release/runtime input drift，至少要同时收敛 current runtime binary、mirrored candidate bundle、execution snapshot/blob truth；在这些 live runtime blocker 被修平前，`public_testnet` 即使已有 public endpoint/faucet/claims evidence，也仍不得提升为 `ready_for_live_candidate`。
 - 最近更新: 2026-05-22
