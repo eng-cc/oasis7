@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+source "$ROOT_DIR/scripts/viewer-web-dist-contract.sh"
 VIEWER_ROOT="$ROOT_DIR/crates/oasis7_viewer"
 DIST_DIR=""
 
@@ -59,15 +60,14 @@ require_file() {
 software_safe_html="$VIEWER_ROOT/software_safe.html"
 viewer_js="$VIEWER_ROOT/viewer.js"
 compat_js="$VIEWER_ROOT/software_safe.js"
-claim_evidence_html="$VIEWER_ROOT/software_safe_first_agent_claim_evidence.html"
-favicon_ico="$VIEWER_ROOT/favicon.ico"
 pixel_world_bridge_dir="$VIEWER_ROOT/pixel-world-bridge"
 
 require_file "$software_safe_html"
 require_file "$viewer_js"
 require_file "$compat_js"
-require_file "$claim_evidence_html"
-require_file "$favicon_ico"
+while read -r source_rel _; do
+  require_file "$VIEWER_ROOT/$source_rel"
+done < <(viewer_web_dist_contract_pairs)
 
 if ! grep -Fq 'src="./viewer.js"' "$software_safe_html"; then
   echo "error: software_safe.html no longer points at canonical viewer.js" >&2
@@ -83,15 +83,13 @@ if cmp -s "$viewer_js" "$compat_js"; then
 fi
 
 mkdir -p "$DIST_DIR"
-cp "$software_safe_html" "$DIST_DIR/index.html"
-cp "$software_safe_html" "$DIST_DIR/viewer.html"
-cp "$software_safe_html" "$DIST_DIR/software_safe.html"
-cp "$viewer_js" "$DIST_DIR/viewer.js"
-cp "$compat_js" "$DIST_DIR/software_safe.js"
-cp "$claim_evidence_html" "$DIST_DIR/software_safe_first_agent_claim_evidence.html"
-cp "$favicon_ico" "$DIST_DIR/favicon.ico"
+while read -r source_rel dist_rel; do
+  cp "$VIEWER_ROOT/$source_rel" "$DIST_DIR/$dist_rel"
+done < <(viewer_web_dist_contract_pairs)
 
 if [[ -d "$pixel_world_bridge_dir" ]]; then
   rm -rf "$DIST_DIR/pixel-world-bridge"
   cp -R "$pixel_world_bridge_dir" "$DIST_DIR/pixel-world-bridge"
 fi
+
+viewer_web_dist_write_manifest "$ROOT_DIR" "$DIST_DIR"

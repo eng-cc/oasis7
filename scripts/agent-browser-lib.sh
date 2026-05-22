@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/viewer-web-dist-contract.sh"
+
 require_cmd() {
   local cmd=$1
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -192,11 +194,8 @@ resolve_viewer_static_dir_for_web_closure() {
 
   local dist_dir="$repo_root/crates/oasis7_viewer/dist"
   local dist_index="$dist_dir/index.html"
-  local runtime_source_dir="$repo_root/crates/oasis7_viewer/pixel-world-bridge"
-  local runtime_dist_js="$dist_dir/pixel-world-bridge/pixel_world_bridge.js"
-  local newest_source=0
-  local dist_mtime=0
   local rebuilt_dir
+  local source_metadata_json
 
   if [[ "$out_dir" = /* ]]; then
     rebuilt_dir="$out_dir/web-dist"
@@ -204,60 +203,42 @@ resolve_viewer_static_dir_for_web_closure() {
     rebuilt_dir="$repo_root/$out_dir/web-dist"
   fi
 
-  if [[ -f "$dist_index" ]]; then
-    dist_mtime=$(stat -c %Y "$dist_index" 2>/dev/null || echo 0)
-  fi
+  source_metadata_json=$(viewer_web_dist_source_metadata_json "$repo_root")
 
-  newest_source=$(python3 - "$repo_root" <<'PY'
+  if [[ -f "$dist_index" ]] && python3 - "$source_metadata_json" "$dist_dir" "$(viewer_web_dist_manifest_name)" <<'PY'
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
-repo_root = Path(sys.argv[1]).resolve()
-scope = [
-    "Cargo.toml",
-    "Cargo.lock",
-    "crates/oasis7_viewer/software_safe.html",
-    "crates/oasis7_viewer/viewer.js",
-    "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html",
-    "crates/oasis7_viewer/package.json",
-    "crates/oasis7_viewer/package-lock.json",
-    "crates/oasis7_viewer/vite.software-safe.config.mjs",
-    "crates/oasis7_viewer/scripts",
-    "crates/pixel_world_bridge/Cargo.toml",
-    "crates/pixel_world_bridge/src",
-    "crates/oasis7_viewer/software_safe_src",
-    "crates/oasis7_viewer/favicon.ico",
-    "crates/oasis7_proto/Cargo.toml",
-    "crates/oasis7_proto/src",
-]
+current = json.loads(sys.argv[1])
+dist_dir = Path(sys.argv[2]).resolve()
+manifest_name = sys.argv[3]
+manifest_path = dist_dir / manifest_name
 
-latest = 0
-for entry in scope:
-    path = repo_root / entry
-    if path.is_dir():
-        candidates = sorted(candidate for candidate in path.rglob("*") if candidate.is_file())
-    elif path.is_file():
-        candidates = [path]
-    else:
-        candidates = []
-    for candidate in candidates:
-        latest = max(latest, int(candidate.stat().st_mtime))
+if not manifest_path.is_file():
+    raise SystemExit(1)
 
-print(latest)
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if manifest.get("sourceFingerprint") != current.get("sourceFingerprint"):
+    raise SystemExit(1)
+
+dist_files = manifest.get("distFiles")
+if not isinstance(dist_files, dict) or not dist_files:
+    raise SystemExit(1)
+
+for rel, metadata in dist_files.items():
+    candidate = dist_dir / rel
+    if not candidate.is_file():
+        raise SystemExit(1)
+    if candidate.stat().st_size != metadata.get("size"):
+        raise SystemExit(1)
 PY
-)
-  newest_source=${newest_source:-0}
-
-  if [[ -f "$dist_index" && "$dist_mtime" -ge "$newest_source" ]]; then
-    if [[ -d "$runtime_source_dir" && ! -f "$runtime_dist_js" ]]; then
-      :
-    else
-      printf '%s
+  then
+    printf '%s
 ' "$dist_dir"
-      return 0
-    fi
+    return 0
   fi
 
   if ! command -v npm >/dev/null 2>&1; then
@@ -301,6 +282,7 @@ PY
       cp -R "$repo_root/crates/oasis7_viewer/pixel-world-bridge" "$rebuilt_dir/pixel-world-bridge"
     fi
   fi
+  viewer_web_dist_write_manifest "$repo_root" "$rebuilt_dir"
   printf '%s
 ' "$rebuilt_dir"
 }
