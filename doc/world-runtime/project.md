@@ -114,6 +114,7 @@
     - `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_build_suite/Cargo.toml -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] wasm-source-hash-dependency-closure (PRD-WORLD_RUNTIME-021) [test_tier_required]: 将 `source_hash` 从模块目录白名单提升为“模块源码 + 本地 `path` 依赖闭包”，并让 `tools/wasm_build_suite` 与 `sync_builtin_wasm_identity` 共用同一 source-hash 计算逻辑。 Trace: .pm/tasks/task_075b812172914487a06a93bda125bc9f.yaml
 - [x] TASK-WORLD_RUNTIME-047 (PRD-WORLD_RUNTIME-020/021/022) [test_tier_required]: 将 builtin wasm materializer、release manifest fallback 与 DistFS root override 的 runtime env key 默认优先切到 `OASIS7_BUILTIN_WASM_*`，并移除旧品牌 fallback，收口运行时取件/抓取/编译回退链路的低风险内部标识迁移。
   - 产物文件:
     - `doc/world-runtime/prd.md`

@@ -10,6 +10,7 @@
 - [x] WDBP-1 (PRD-WORLD_RUNTIME-020/021) [test_tier_required]: 新增 pinned WASM builder image（`docker/wasm-builder/Dockerfile`）与 host wrapper，固定 `linux-x86_64` container platform 作为 canonical publish build 平台。
 - [x] WDBP-2 (PRD-WORLD_RUNTIME-020/021) [test_tier_required]: 将现有 `tools/wasm_build_suite` 收敛到容器内执行，输出 build receipt，并把 manifest 从多宿主 keyed token 迁移为单 canonical token `linux-x86_64=<sha256>`。
 - [x] WDBP-2.1 (PRD-WORLD_RUNTIME-020/021) [test_tier_required]: 将 host wrapper、builder image、sync/check、CI summary 与 build suite 的 operator env key 收口到 `OASIS7_WASM_*` 当前入口，并移除旧品牌 wasm 运行入口。
+- [x] wasm-source-hash-dependency-closure (PRD-WORLD_RUNTIME-021) [test_tier_required]: 将 `source_hash` 从“模块目录白名单”收紧为“模块源码 + 本地 `path` 依赖闭包”，并让 `tools/wasm_build_suite` 与 `sync_builtin_wasm_identity` 共用同一计算逻辑。 Trace: .pm/tasks/task_075b812172914487a06a93bda125bc9f.yaml
 - [ ] WDBP-3 (PRD-WORLD_RUNTIME-021/022) [test_tier_required + test_tier_full]: 将 identity / release evidence / CI summary / release gate 全面切换为 Docker canonical hash，对 macOS/Linux 只比较容器输出，不再比较 host-native 输出。
   - [x] WDBP-3.1 (PRD-WORLD_RUNTIME-021) [test_tier_required]: 固化 stable gate / full-tier cross-host evidence 的双层结论模型，并让 `wasm-release-evidence-report` 输出 `expected_runners/received_runners/cross_host_evidence_pending`。
   - [ ] WDBP-3.2 (PRD-WORLD_RUNTIME-021/022) [test_tier_full]: 补齐真实 Docker-capable `darwin-arm64` summary 导入链路，使 release evidence 至少包含 `linux-x86_64 + darwin-arm64` 两类 runner 输入。
@@ -47,6 +48,7 @@
   - `scripts/build-wasm-module.sh`、`scripts/sync-m1-builtin-wasm-artifacts.sh`、`scripts/ci-m1-wasm-summary.sh`、`tools/wasm_build_suite` 与 `docker/wasm-builder/Dockerfile` 现已只读取/写入 `OASIS7_WASM_*` 当前入口，避免 operator 脚本与容器镜像继续扩散旧前缀。
   - runtime `builtin_wasm_materializer`、`m1/m4/m5_builtin_wasm_artifact` 与 `runtime/world/release_manifest` 现已只读取 `OASIS7_BUILTIN_WASM_*` 当前入口，避免构建链路已迁移后 runtime materialize/fetch/fallback 仍停留在旧前缀。
   - `tools/wasm_build_suite` 已新增 `build receipt`、`source_hash`、`build_manifest_hash`、`builder_image_digest` 与 `container_platform` 输出；builtin `m1/m4/m5` hash manifest 已全部改写为单 canonical token `linux-x86_64=<sha256>`。
+  - `2026-05-22` 已补 `wasm-source-hash-dependency-closure`：`source_hash` 现通过共享 `oasis7_wasm_build` helper 基于 `cargo metadata --filter-platform wasm32-unknown-unknown` 计算模块与本地 `path` 依赖闭包；`tools/wasm_build_suite` 与 `sync_builtin_wasm_identity` 不再各自维护目录白名单实现。
   - `crates/oasis7_distfs/src/bin/sync_builtin_wasm_identity.rs` 已切换为 receipt 驱动 identity 生成；写路径只输出 canonical token，读路径仍兼容 legacy multi-token manifest。
   - `scripts/ci-m1-wasm-summary.sh` 与 `scripts/ci-verify-m1-wasm-summaries.py` 已区分 `host_platform` 与 `canonical_platform`，并新增 `receipt_evidence + identity_build_recipe` 对账；当前 CI 对账口径改为“不同宿主只比较 Docker canonical 输出与一致的 receipt/build recipe 证据”。
   - runtime `ModuleReleaseSubmitAttestation -> apply` 现已显式绑定 `builder_image_digest + container_platform + canonicalizer_version`；release gate 会拒绝阈值 attestation 间的 receipt evidence 不一致，且要求 attestation 的 `source_hash/build_manifest_hash/wasm_hash` 与 manifest identity 对齐。

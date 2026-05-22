@@ -11,7 +11,7 @@
 - Success Criteria:
   - SC-1: 同一 commit 在 macOS 与 Linux 上通过同一 pinned Docker builder image 构建时，得到的 canonical packaged wasm hash 一致率为 `100%`。
   - SC-2: 发布级模块工件只产生一个 canonical publish hash，来源固定为 `linux-x86_64` 容器构建；宿主平台不再写入独立发布 hash。
-  - SC-3: build receipt 必须能追溯 `builder_image_ref + builder_image_digest + container_platform + source_hash + build_manifest_hash + wasm_hash + canonicalizer_version`。
+  - SC-3: build receipt 必须能追溯 `builder_image_ref + builder_image_digest + container_platform + source_hash(含模块本地 path 依赖闭包) + build_manifest_hash + wasm_hash + canonicalizer_version`。
   - SC-4: runtime 与节点执行路径默认只接受 Docker canonical build 产生的 wasm binary 与其 identity/release evidence，不要求节点重新编译源码。
   - SC-5: `ModuleSourcePackage` 的生产发布路径不得继续依赖 runtime 进程在宿主机直接编译；必须迁移到同一 Docker builder 或显式 gated 为 dev/test only。
   - SC-6: 发布候选要宣称“跨宿主 determinism 已收口”时，必须归档至少一条 `linux-x86_64` 与一条 Docker-capable `darwin-arm64` 的 canonical summary / release evidence；Linux-only gate 只能代表稳定基线，不能代表跨宿主 closure。
@@ -49,7 +49,7 @@
 | --- | --- | --- | --- | --- | --- |
 | canonical Docker builder | `builder_image_ref`、`builder_image_digest`、`container_platform=linux-x86_64`、`workspace_mount`、`out_dir` | host wrapper 统一调用 `docker run`，所有 publishable 构建都走容器 | `requested -> container_started -> built/failed` | 同一源码与镜像 digest 必须输出同一 canonical hash | 发布级构建只能由受控 builder image 执行 |
 | host wrapper script | `module_id`、`manifest_path`、`profile`、`out_dir`、`docker_binary` | 本地与 CI 都执行同一 wrapper，而不是各自直接跑 cargo | `raw_host -> wrapper -> containerized` | host OS 不进入 publish hash 计算 | publishable 构建只允许 Docker path；无 host-native fallback |
-| build receipt | `source_hash`、`build_manifest_hash`、`builder_image_digest`、`container_platform`、`canonicalizer_version`、`wasm_hash` | 容器构建结束后写出 receipt 并供 identity / release evidence 消费 | `built -> receipted -> verified` | 任一字段变化都必须改变 `build_manifest_hash` 或 receipt digest | receipt 为发布与审计必需，不是可选日志 |
+| build receipt | `source_hash`、`build_manifest_hash`、`builder_image_digest`、`container_platform`、`canonicalizer_version`、`wasm_hash` | 容器构建结束后写出 receipt 并供 identity / release evidence 消费 | `built -> receipted -> verified` | `source_hash` 必须覆盖模块源码与本地 `path` 依赖闭包；任一字段变化都必须改变 `build_manifest_hash` 或 receipt digest | receipt 为发布与审计必需，不是可选日志 |
 | publish hash manifest | `module_id linux-x86_64=<sha256>` | sync/check 仅更新和验证 canonical container hash | `built -> checked/synced -> published` | 发布级 manifest 只允许一个 canonical token；`darwin-arm64` 不再写入发布清单 | 本地默认只读；CI 不写 manifest |
 | identity / release evidence | `module_id`、`source_hash`、`build_manifest_hash`、`builder_image_digest`、`wasm_hash` | 生成 identity manifest、attestation、release manifest 引用 | `metadata-ready -> signed/verified` | identity 绑定容器镜像与源码输入，不绑定宿主平台 | 生产验证由 release/trust root 决定 |
 | source package policy | `source_bundle_hash`、`compile_mode=external-builder|dev-only` | 生产路径提交到外部 builder；runtime 直编仅限 dev/test | `submitted -> queued_for_build -> built/rejected` | 生产不得继续走 runtime host compile；dev/test 路径显式 gated | 仅受控发布节点可产出 publishable artifact |
@@ -59,7 +59,7 @@
   - AC-2 (PRD-WORLD_RUNTIME-020): builder image 必须封装 Rust toolchain、`rust-src`、`wasm32-unknown-unknown` 目标、linker/canonicalizer 所需依赖，并把这些版本信息收敛到 `build_manifest_hash`。
   - AC-3 (PRD-WORLD_RUNTIME-020): `scripts/build-wasm-module.sh` 的 canonical path 必须改为 Docker wrapper；publishable 构建不再保留 host-native cargo fallback。
   - AC-4 (PRD-WORLD_RUNTIME-021): 发布级 hash manifest 目标态只允许写入单个 canonical token：`linux-x86_64=<sha256>`；`darwin-arm64` 不再作为发布 hash 来源。
-  - AC-5 (PRD-WORLD_RUNTIME-021): build receipt 至少绑定 `builder_image_digest + container_platform + source_hash + build_manifest_hash + wasm_hash + canonicalizer_version`，并进入 identity/release evidence。
+  - AC-5 (PRD-WORLD_RUNTIME-021): build receipt 至少绑定 `builder_image_digest + container_platform + source_hash(含本地 path 依赖闭包) + build_manifest_hash + wasm_hash + canonicalizer_version`，并进入 identity/release evidence。
   - AC-6 (PRD-WORLD_RUNTIME-022): multi-runner CI 必须比较“相同 Docker builder 在不同宿主上产出的 canonical hash”，而不是继续比较 host-native cargo 输出。
   - AC-7 (PRD-WORLD_RUNTIME-022): runtime 与节点执行路径默认只接受 canonical Docker build 产物；节点不通过重新编译源码参与执行合法性判断。
   - AC-8 (PRD-WORLD_RUNTIME-022): `compile_module_artifact_from_source` 的生产路径必须迁移到外部 Docker builder 或直接禁用；runtime 进程内 host 直编只允许在 dev/test 模式下显式开启。

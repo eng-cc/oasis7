@@ -1,3 +1,4 @@
+use oasis7_wasm_build::DEFAULT_WASM_TARGET;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -298,118 +299,9 @@ fn parse_canonical_platforms(raw_csv: &str) -> Vec<String> {
     items
 }
 
-fn is_whitelisted_source_file(module_rel: &Path) -> bool {
-    if module_rel == Path::new("Cargo.toml")
-        || module_rel == Path::new("Cargo.lock")
-        || module_rel == Path::new("build.rs")
-    {
-        return true;
-    }
-
-    let Some(first) = module_rel.components().next() else {
-        return false;
-    };
-    matches!(
-        first.as_os_str().to_str(),
-        Some("src" | "wit" | ".cargo" | "assets")
-    )
-}
-
-fn collect_source_files_for_hash(module_dir: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut files = Vec::new();
-
-    for rel in ["Cargo.toml", "Cargo.lock", "build.rs"] {
-        let path = module_dir.join(rel);
-        if path.is_file() {
-            files.push(path);
-        }
-    }
-
-    for root in ["src", "wit", ".cargo", "assets"] {
-        collect_files_recursively(module_dir, module_dir.join(root).as_path(), &mut files)?;
-    }
-
-    if files.is_empty() {
-        return Err(format!(
-            "source whitelist produced no tracked files module_dir={}",
-            module_dir.display()
-        ));
-    }
-
-    files.sort_by(|left, right| {
-        let left_rel = left.strip_prefix(module_dir).unwrap_or(left.as_path());
-        let right_rel = right.strip_prefix(module_dir).unwrap_or(right.as_path());
-        left_rel.to_string_lossy().cmp(&right_rel.to_string_lossy())
-    });
-    files.dedup();
-
-    Ok(files)
-}
-
-fn compute_source_hash(module_dir: &Path, source_manifest_rel: &str) -> Result<String, String> {
-    let files = collect_source_files_for_hash(module_dir)?;
-
-    let mut hasher = Sha256::new();
-    hasher.update(format!("source_manifest_rel={source_manifest_rel}\n").as_bytes());
-
-    for file in files {
-        let rel = file.strip_prefix(module_dir).map_err(|error| {
-            format!(
-                "failed to strip module dir prefix {}: {error}",
-                file.display()
-            )
-        })?;
-        let bytes = fs::read(&file)
-            .map_err(|error| format!("failed to read source file {}: {error}", file.display()))?;
-        let digest = sha256_hex(&bytes);
-        hasher.update(format!("module_file:{}:{}\n", rel.to_string_lossy(), digest).as_bytes());
-    }
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
-fn collect_files_recursively(
-    module_dir: &Path,
-    dir: &Path,
-    output: &mut Vec<PathBuf>,
-) -> Result<(), String> {
-    let entries = match fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => {
-            return Err(format!(
-                "failed to read source dir {}: {error}",
-                dir.display()
-            ))
-        }
-    };
-
-    for entry in entries {
-        let entry = entry
-            .map_err(|error| format!("failed to iterate source dir {}: {error}", dir.display()))?;
-        let path = entry.path();
-        let file_type = entry
-            .file_type()
-            .map_err(|error| format!("failed to stat source path {}: {error}", path.display()))?;
-        if file_type.is_dir() {
-            collect_files_recursively(module_dir, path.as_path(), output)?;
-            continue;
-        }
-        if !file_type.is_file() {
-            continue;
-        }
-        let rel = path.strip_prefix(module_dir).map_err(|error| {
-            format!(
-                "failed to strip source root prefix path={} module_dir={} err={error}",
-                path.display(),
-                module_dir.display()
-            )
-        })?;
-        if is_whitelisted_source_file(rel) {
-            output.push(path);
-        }
-    }
-
-    Ok(())
+fn compute_source_hash(module_manifest_path: &Path) -> Result<String, String> {
+    oasis7_wasm_build::compute_source_hash(module_manifest_path, DEFAULT_WASM_TARGET)
+        .map_err(|error| format!("source hash closure failed: {error}"))
 }
 
 fn module_set_from_ids(module_ids: &[String]) -> String {
@@ -460,14 +352,6 @@ fn expected_manifest(options: &Options) -> Result<IdentityManifest, String> {
                 module_manifest_path.display()
             ));
         }
-
-        let Some(module_dir) = module_manifest_path.parent() else {
-            return Err(format!(
-                "module manifest has no parent module_id={} path={}",
-                module_id,
-                module_manifest_path.display()
-            ));
-        };
 
         let hash_tokens = hash_manifest
             .get(module_id)
@@ -534,12 +418,7 @@ fn expected_manifest(options: &Options) -> Result<IdentityManifest, String> {
             ));
         }
 
-        let source_manifest_rel = module_manifest_path
-            .strip_prefix(module_dir)
-            .unwrap_or(module_manifest_path.as_path())
-            .to_string_lossy()
-            .to_string();
-        let source_hash = compute_source_hash(module_dir, source_manifest_rel.as_str())?;
+        let source_hash = compute_source_hash(&module_manifest_path)?;
         if source_hash != receipt.source_hash {
             return Err(format!(
                 "build receipt source_hash mismatch module_id={} expected={} actual={} path={}",
@@ -774,5 +653,61 @@ fn main() {
         eprintln!("error: {error}");
         eprintln!("{}", usage());
         std::process::exit(2);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{prefix}-{}-{nanos}", std::process::id()))
+    }
+
+    fn write_file(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent dirs");
+        }
+        fs::write(path, contents).expect("write file");
+    }
+
+    #[test]
+    fn sync_source_hash_tracks_local_path_dependency_changes() {
+        let root = unique_temp_dir("oasis7-distfs-source-hash");
+        write_file(
+            &root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"module\", \"shared\"]\nresolver = \"2\"\n",
+        );
+        write_file(
+            &root.join("module/Cargo.toml"),
+            "[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
+        );
+        write_file(
+            &root.join("module/src/lib.rs"),
+            "pub fn call() -> u32 { fixture_shared::value() }\n",
+        );
+        write_file(
+            &root.join("shared/Cargo.toml"),
+            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        );
+        write_file(
+            &root.join("shared/src/lib.rs"),
+            "pub fn value() -> u32 { 1 }\n",
+        );
+
+        let manifest_path = root.join("module/Cargo.toml");
+        let initial = compute_source_hash(&manifest_path).expect("initial source hash");
+        write_file(
+            &root.join("shared/src/lib.rs"),
+            "pub fn value() -> u32 { 2 }\n",
+        );
+        let changed = compute_source_hash(&manifest_path).expect("changed source hash");
+        assert_ne!(initial, changed);
+        let _ = fs::remove_dir_all(root);
     }
 }
