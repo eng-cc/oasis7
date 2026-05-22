@@ -34,6 +34,14 @@
 - 上游依赖：
 - 现有测试 / 证据：
 
+## Behavior-First Test Plan
+- Behavior Contract:
+- Target Test Files / Test Surface:
+- RED Verification Command:
+- Expected RED Failure:
+- GREEN / Safety Command:
+- Skip Reason If Not Applicable:
+
 ## Subagent Contract
 - Slice Type: `analysis | implementation | verification | supplemental_review | liveops_feedback`
 - Write Scope:
@@ -65,6 +73,7 @@
 ## Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对上游 / 下游角色
+- [ ] behavior-first RED plan 已执行，或 skip 原因已写清
 - [ ] write scope / return contract / integration order 已被遵守
 - [ ] 对应 `prd.md` / `project.md` 已回写
 - [ ] 对应 `.pm/tasks/<TASK-UID>.execution.md` 已记录

@@ -20,6 +20,8 @@
   - 接手人不需要额外口头补充，就能按步骤执行、验证、回写
 - [ ] subagent slices 已定义清楚
   - 若默认派生角色 subagent，必须写清每个 slice 的类型、write scope、return contract 和 integration order
+- [ ] 行为变更任务已定义 behavior-first 测试路径
+  - 若会改产品/运行时/交互行为，必须写清目标测试文件/测试面、RED 命令或 skip 原因
 
 ## Optional Checks
 

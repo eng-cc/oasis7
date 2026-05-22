@@ -36,18 +36,20 @@
    3. 非 trivial 的 `project.md` 规划必须增加 `File Structure / Affected Paths` 段，至少列出预计改动路径、只读依赖路径、验证入口和需要回写的正式文档路径，避免执行时再临时猜测影响面
    4. 复杂任务或跨角色 handoff 必须把实现拆成原子步骤；每一步至少写清动作、验证命令、预期结果。优先复用 `./.agents/roles/templates/handoff-brief.md`、`./.agents/roles/templates/handoff-detailed.md`
    5. 进入实施前先做轻量 planning 自检，至少确认三件事：没有残留 `TBD/TODO/placeholder/待补` 等占位词；每条需求或验收点都有对应任务项/验证方法；PRD-ID、task slug、关键路径和文档内命名保持一致。可直接复用 `./.agents/roles/templates/planning-self-checklist.md`
-   6. handoff 只用于协作，不替代 PRD / project 正式追踪
+   6. 若任务会改变可自动化验证的产品/运行时/交互行为，规划里还必须先明确 behavior contract、目标测试文件/测试面、窄 scope RED 命令或 skip 原因；纯文档、治理、无稳定 harness 的任务不强行套 TDD，但必须写清为何跳过
+   7. handoff 只用于协作，不替代 PRD / project 正式追踪
 
 5. 按任务闭环执行代码、文档、测试
    1. 所有代码和功能（含 UI）都必须可测试
    2. 测试统一分 `test_tier_required` / `test_tier_full`
    3. 套件矩阵统一参考 `testing-manual.md`
    4. 跨角色或非 trivial task 默认按 bounded subagent-driven development 推进：由 `producer_system_designer` 将分析、实现、验证、补充 review 切成角色 subagent 任务，再由主会话把结果集成回同一 owner / `.pm` task / worktree / PR 主链
-   5. 默认流程顺序是：owner 做 execution gap review -> 按需要派生角色 subagent -> subagent 按声明好的 write scope / return contract 交付 patch、findings 或 evidence -> owner 在 canonical worktree 集成并运行 fresh verification -> 必要时再派生补充 review / QA / liveops 子任务 -> 回写 PRD / project / execution log / `.pm`
-   6. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
-   7. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
-   8. 若步骤说明不清、真实影响面超出当前计划，或同一验证连续失败且没有新信息，不得继续猜测实现；必须先报告 blocker，并明确需要补哪一条文档/决策/输入
-   9. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还要评估是否需要 `liveops_community` 回流
+   5. 若任务会改变可自动化验证的行为，默认先走 bounded TDD / behavior-first 路径：先定义 behavior contract，优先通过 `.agents/skills/tdd-test-writer/SKILL.md` 或等价手工流程补失败测试/回归测试，再写生产实现；若不适用，必须在 `project.md`、handoff 或 execution log 里写清 skip 原因
+   6. 默认流程顺序是：owner 做 execution gap review -> 判断是否需要 behavior-first RED phase -> 按需要派生角色 subagent -> subagent 按声明好的 write scope / return contract 交付 patch、findings 或 evidence -> owner 在 canonical worktree 集成并运行 fresh verification -> 必要时再派生补充 review / QA / liveops 子任务 -> 回写 PRD / project / execution log / `.pm`
+   7. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
+   8. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
+   9. 若步骤说明不清、真实影响面超出当前计划，或同一验证连续失败且没有新信息，不得继续猜测实现；必须先报告 blocker，并明确需要补哪一条文档/决策/输入
+   10. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还要评估是否需要 `liveops_community` 回流
 
 6. 角色协作规则
    1. `producer_system_designer` 管目标、规则、资源与玩法口径

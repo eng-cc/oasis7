@@ -59,6 +59,14 @@
 - `writing-plans` 里的结构化拆分习惯
 - `test-driven-development` 里的“先证明行为再落实现”思路
 
+已完成的 reconcile：
+
+- `test-driven-development` 已改为 adopted（bounded）：只把 behavior-first / regression-first contract 接回“行为变更且存在稳定自动化 harness”的实现任务。
+
+与 oasis7 仍然冲突的点：
+
+- `test-driven-development` 的 universal mandatory pre-step 语义仍与当前 `test_tier_required/full` 分层、文档/治理任务粒度和无稳定 harness 场景冲突。
+
 未来何时可重开：
 
 - 只有当某个子领域明确需要额外前置步骤，而且该步骤被限制在局部专题内，而不是回流为 root 默认规则。
@@ -155,7 +163,7 @@
 | --- | --- | --- | --- | --- |
 | `brainstorming` | rejected | 把设计前置变成 universal gate | visual companion、IA/wireframe 对比 | 仅在 Viewer 等 UI-heavy 专题内按需启用 |
 | `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task + local review ritual、或把 subagent 扩成独立真值持有者 | 已完成 bounded borrowing：默认 subagent-driven execution、任务拆分、上下文最小化、实现/验证/补充 review 切片，以及 `slice type / write scope / return contract / integration order` contract | 仅剩 local review ritual 等 rejected 部分；只有在正式 PR review 边界变化且 repo-owned multi-agent eval 稳定后才应重开 |
-| `test-driven-development` | rejected | universal TDD 与 `test_tier_required/full` 不匹配 | 行为先验、失败先行思维 | 仅在特定实现域作为按需 skill，而非 root 默认规则 |
+| `test-driven-development` | adopted（bounded） | universal TDD mandatory gate、或对无稳定 harness 的任务强套 RED-phase | 已完成 bounded borrowing：behavior-first / regression-first contract、`tdd-test-writer` skill、RED command or skip reason 约束 | 仅剩 universal gate 等 rejected 部分；只有在更细的局部领域验证稳定后才应继续扩张 |
 | `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 已完成 bounded borrowing：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板和 planning self-checklist | 剩余 skill 本体只有在不再竞争正式计划真值时，才允许继续局部 salvage；不得回退为默认前置计划系统 |
 | `using-superpowers` | rejected | 外部 bootstrap 与当前 root workflow 真值冲突 | 触发说明、skill 发现习惯 | 必须先转成 repo-owned trigger governance，再评估 |
 | `dispatching-parallel-agents` | adopted（bounded） | 无 owner / 无 write-scope 的自由并行仍冲突 | 已完成 bounded borrowing：默认 `producer_system_designer` orchestrator + role subagents、parallel task decomposition、disjoint write scope 约束 | 剩余 harness packaging 或无边界 swarm 语义仍需 repo-owned multi-agent eval 后才允许继续扩张 |
@@ -176,7 +184,6 @@
    - `dispatching-parallel-agents` 剩余的 harness packaging / swarm 扩张部分，但前提仍是 bounded 默认编排已被 eval 证明稳定
 3. 再做 `rejected` 里最容易局部 salvage 的子模式
    - `brainstorming` 的 visual companion
-   - `test-driven-development` 的 behavior-first 子集
 4. 最后才碰第二套真值风险最高的内容
    - `writing-plans`
    - `using-superpowers`

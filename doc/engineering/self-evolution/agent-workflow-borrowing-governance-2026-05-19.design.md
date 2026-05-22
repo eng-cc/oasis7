@@ -44,6 +44,9 @@
 - bounded subagent-driven execution:
   - 理由：在默认角色编排之上，当前用户也希望实施本身默认由 subagent slices 推进，而不是主会话独占所有分析 / 实现 / 验证 / review。
   - 限域：只允许把分析、实现、验证与补充 review 切给角色 subagent，并全部回收到同一 owner / `.pm` task / canonical worktree / GitHub PR；不要求 fresh subagent-per-task，也不引入本地双阶段 review 主链。
+- bounded behavior-first TDD:
+  - 理由：当前仓库已经有 `tdd-test-writer` skill 与多角色测试推荐，但 root workflow 还缺“哪些实现任务默认先补失败测试/回归测试”的正式口径。
+  - 限域：只适用于行为变更且存在稳定自动化 harness 的实现任务；要求先写/补 RED-phase 测试或明确 skip reason，但不把 universal TDD 提升成所有任务的 mandatory pre-step。
 
 ### 3.2 Rejected
 - universal brainstorming gate:
@@ -73,10 +76,10 @@
 | `systematic-debugging` | adopted | 已本地化为 repo-owned debugging skill，不再停留在 deferred playbook。 |
 | `dispatching-parallel-agents` | adopted | 已映射到 root `AGENTS.md` 的默认 `producer_system_designer` orchestrator + role subagents 规则；并要求单 owner / `.pm` / worktree / PR 真值。 |
 | `subagent-driven-development` | adopted | 已映射到 root `AGENTS.md` 的 bounded subagent-driven execution：分析 / 实现 / 验证 / 补充 review 切片全部回收到同一 owner / `.pm` / worktree / PR 真值。 |
+| `test-driven-development` | adopted | 已映射到 root `AGENTS.md` 的 bounded behavior-first testing contract：行为变更且存在稳定自动化 harness 时，默认先做 RED-phase 测试或记录 skip reason。 |
 | `executing-plans` | deferred | 已限域翻译为 `.agents/skills/executing-project-tasks` 与 `AGENTS.md` 的执行规则；upstream 的单独执行会话契约仍不引入。 |
 | `writing-skills` | deferred | 已限域翻译为 `.agents/skills/README.md`、`writing-repo-owned-skills`、template/checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。 |
 | `brainstorming` | rejected | 仅 salvage 其 visual-companion 子模式；其 universal pre-step 语义不进入默认流程。 |
-| `test-driven-development` | rejected | universal TDD 不作为仓库默认门禁。 |
 | `writing-plans` | rejected | 不允许在 `prd.md`/`project.md`/`.pm` 之外再引入第二套默认计划真值。 |
 | `using-superpowers` | rejected | 外部 bootstrap 不能取代 `AGENTS.md + .pm + GitHub PR review`。 |
 
@@ -110,6 +113,17 @@
   - 可提 PR / 可合并宣称
 - 目标：把“claim 之前必须 fresh verify”固定成 repo-owned 可执行契约。
 
+### 4.3B Bounded behavior-first testing
+- owner 倾向：`producer_system_designer` + `qa_engineer`
+- 覆盖面：
+  - root `AGENTS.md`
+  - `.agents/roles/templates/handoff-brief.md`
+  - `.agents/roles/templates/handoff-detailed.md`
+  - `.agents/roles/templates/planning-self-checklist.md`
+  - `.agents/skills/README.md`
+  - `.agents/skills/tdd-test-writer/SKILL.md`
+- 目标：让行为变更且有稳定自动化 harness 的实现任务默认先补 RED-phase 测试/回归测试或明确 skip reason，但不把 universal TDD 扩成所有任务的 mandatory gate。
+
 ### 4.3A Localized workflow skills
 - 当前已本地化：
   - `.agents/skills/verification-before-completion`
@@ -141,5 +155,6 @@
 - 任何 adopted 项如果没有 repo-owned follow-up，就仍视为未落地。
 - 任何 rejected 项如果重新出现在 root workflow 文档中，应视为治理回弹。
 - 任何默认 role-subagent 协作如果没有 owner、write scope、return contract 或 handoff 记录，应视为越界。
+- 任何声称采用 behavior-first TDD 的任务如果没有 RED command、目标测试面或 skip reason，应视为越界。
 - 任何 visual companion 使用如果绕过实现 task / regression / PR review，应视为越界。
 - 任何已本地化 skill 如果与 `AGENTS.md`、`.pm` helper 或 engineering 专题口径漂移，应视为 inventory truth drift。

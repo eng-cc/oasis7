@@ -7,6 +7,22 @@ description: Writes failing tests first for test-driven development and hands of
 
 Use this skill to complete the RED phase of TDD: define behavior with tests first, verify they fail for the right reason, then hand off implementation with objective pass criteria.
 
+## Oasis7 Bounded Usage
+
+Use this skill by default only when all of the following are true:
+
+- the task changes product, runtime, API, or UI behavior
+- there is a stable automated test surface for that behavior
+- a narrow RED command can be run locally in the current task worktree
+
+Do not treat this skill as a universal gate for:
+
+- documentation / governance / planning-only tasks
+- pure refactors with no behavior change
+- tasks whose only verification surface is manual, flaky, or not yet repo-owned
+
+When you skip RED phase in oasis7, record the skip reason in `project.md`, handoff, or `.pm/tasks/<TASK-UID>.execution.md`.
+
 ## When To Use
 
 Use this skill when the user asks for:
@@ -15,6 +31,8 @@ Use this skill when the user asks for:
 - TDD / RED-GREEN-REFACTOR workflow
 - writing tests that implementation agents must satisfy
 - bugfixes that need regression tests before code changes
+
+Also use it in oasis7 when a behavior-changing implementation task already has a stable automated harness and the repo workflow needs a behavior-first guard before production edits.
 
 ## Required Rules
 
@@ -25,6 +43,7 @@ Use this skill when the user asks for:
 5. Failures must come from missing or incorrect production behavior, not broken tests.
 6. Prefer deterministic, targeted test commands over full-suite runs when possible.
 7. For bugfix tasks, add a regression test that captures the reported failure mode.
+8. In oasis7, this skill complements `test_tier_required/full`; it does not replace them.
 
 ## Workflow
 

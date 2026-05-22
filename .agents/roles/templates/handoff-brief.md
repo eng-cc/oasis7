@@ -24,6 +24,14 @@
 - 已知约束：
 - 依赖前置项：
 
+## Behavior-First Test Plan
+- Behavior Contract:
+- Target Test Files / Test Surface:
+- RED Verification Command:
+- Expected RED Failure:
+- GREEN / Safety Command:
+- Skip Reason If Not Applicable:
+
 ## Subagent Contract
 - Slice Type: `analysis | implementation | verification | supplemental_review | liveops_feedback`
 - Write Scope:

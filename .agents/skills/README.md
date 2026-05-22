@@ -33,6 +33,7 @@
 
 ## Workflow Execution Entry Points
 
+- 行为变更类实现任务、且存在稳定自动化测试面时：`.agents/skills/tdd-test-writer/SKILL.md`
 - 已有正式 `project.md` / handoff / `.pm` task 后进入实施：`.agents/skills/executing-project-tasks/SKILL.md`
 - 接近完成、准备宣称“通过 / 完成 / 可提 PR”时：`.agents/skills/verification-before-completion/SKILL.md`
 - 已完成实现、准备 closeout / commit / PR 收口时：`.agents/skills/finishing-a-development-branch/SKILL.md`

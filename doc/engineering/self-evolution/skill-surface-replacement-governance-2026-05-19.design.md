@@ -12,6 +12,7 @@
 ### 2.1 Keep
 - `agent-browser`
 - `prd`
+- `tdd-test-writer`
 - `xiaohongshu`
 - `xiaohongshu-note-analyzer`
 - `gpt-image-2`
@@ -41,7 +42,6 @@
 - `optimization-performance`
 - `particle-systems`
 - `synchronization-algorithms`
-- `tdd-test-writer`
 
 这些 skill 仍有方法论价值，但要么承载多个角色卡推荐，要么与当前工程验证实践有交叉，批量删除成本高于本轮收益，因此先 defer。
 
@@ -60,6 +60,7 @@
 - `documentation-writer` -> repo-native 文档规则 + `prd` + `humanizer-zh`
 - `frontend-ui-ux` -> 系统级前端指令 + `agent-browser` + `gpt-image-2`
 - `game-changing-features` -> `prd` + `game-design-theory` + `content-creation`
+- `tdd-test-writer` -> 保留为本地 skill，但其默认适用边界由 root workflow 的 bounded behavior-first testing contract 约束；不再作为“待单独决定”的悬空项
 
 ## 5. 风险控制
 - 任何被 retire 的 skill 若仍在角色卡中出现，视为治理未收口。
