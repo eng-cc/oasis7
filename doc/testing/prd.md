@@ -179,6 +179,7 @@
   - 数据异常：日志格式破损时保留原始文件并标记解析失败。
   - Windows 非法路径：若 tracked path 含 Windows 非法字符、保留名或尾随空格/点，必须在 Linux required gate 先阻断，不允许等到 Windows runner checkout 才暴露。
   - release 脚本丢执行位：若 release 关键 `.sh` 的 tracked mode 漂移为 `100644` 或 worktree 不可执行，必须在 commit/required gate 先阻断，不允许等到 `release-gate-web` 或 `package-native` runner 才暴露。
+  - release Web 文案断言大小写漂移：若 `agent-browser get text body` 因 CSS `text-transform` 或渲染层实现差异返回全大写文本，`viewer-primary-web-entry-regression.sh` 仍必须按大小写不敏感方式识别 `Formal Gameplay Summary` 与 action handoff surface，避免 release gate 对已存在内容报假阴性。
   - 迁移断链：文档改名后若引用未同步，需在同批次修复并复测。
   - 创世语义误读：若把 `protocol:*` custody account 误当成已初始化 treasury bucket，QA 必须直接阻断。
   - 流通口径漂移：若创世参数表未显式声明 `genesis_liquid=0` 或首年外部释放上限，视为配置不完整。
@@ -220,8 +221,8 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-TESTING-001 | TASK-TESTING-001/002/005/006 | `test_tier_required` | S0~S10 触发矩阵核验、手册一致性检查 | 分层测试入口与执行标准 |
-| PRD-TESTING-002 | TASK-TESTING-002/003/006/053/054/055/056/release-windows-invalid-path-blocker/release-script-executable-mode-gate/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` + `test_tier_full` | 证据模板抽样、发布前必填字段检查、release workflow 复用链路核验、runtime gate shard 聚合验证、required-gate changed-path planner 回归、launcher Web build 命中/未命中验证，以及 Windows checkout 兼容路径扫描与 release 关键脚本执行位扫描 | 发布链路可信性与可复现性 |
-| PRD-TESTING-003 | TASK-TESTING-003/004/006/053/054/055/056/release-windows-invalid-path-blocker/release-script-executable-mode-gate/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build/playability-player-leverage-evidence-rubric/shared-player-gameplay-contract-parity | `test_tier_full` | 趋势指标回顾、缺陷逃逸复盘、release 关键路径对比，以及 required-gate scope 剪裁后的长期时延观察、launcher Web build 逃逸缺陷回归、Windows checkout 失败签名回归、release 脚本执行位失败签名回归、gameplay evidence 的 `player leverage` / `world_activity_only` 抽样审查，以及 Web/`pure_api` 共享 `snapshot.player_gameplay` contract 的 QA 复核 | 长期质量治理与发布风险控制 |
+| PRD-TESTING-002 | TASK-TESTING-002/003/006/053/054/055/056/release-windows-invalid-path-blocker/release-script-executable-mode-gate/release-web-entry-text-casefold/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` + `test_tier_full` | 证据模板抽样、发布前必填字段检查、release workflow 复用链路核验、runtime gate shard 聚合验证、required-gate changed-path planner 回归、launcher Web build 命中/未命中验证，以及 Windows checkout 兼容路径扫描、release 关键脚本执行位扫描与 Web 入口文案大小写漂移回归 | 发布链路可信性与可复现性 |
+| PRD-TESTING-003 | TASK-TESTING-003/004/006/053/054/055/056/release-windows-invalid-path-blocker/release-script-executable-mode-gate/release-web-entry-text-casefold/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build/playability-player-leverage-evidence-rubric/shared-player-gameplay-contract-parity | `test_tier_full` | 趋势指标回顾、缺陷逃逸复盘、release 关键路径对比，以及 required-gate scope 剪裁后的长期时延观察、launcher Web build 逃逸缺陷回归、Windows checkout 失败签名回归、release 脚本执行位失败签名回归、Web 入口文案大小写漂移回归，以及 gameplay evidence 的 `player leverage` / `world_activity_only` 抽样审查与 Web/`pure_api` 共享 `snapshot.player_gameplay` contract 的 QA 复核 | 长期质量治理与发布风险控制 |
 | PRD-TESTING-004 | TASK-TESTING-007/008/009/010/011/012/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/035/036/059/060/061 | `test_tier_required` | 原文约束点映射审查、命名与引用回归检查、历史专题标题零残留校验、活跃专题当前真值命名回归检查 | 专题文档可维护性与追溯一致性 |
 | PRD-TESTING-005 | TASK-TESTING-037/038/039/040/wasm-determinism-gate-ondemand-scope | `test_tier_required` | keyed manifest/strict policy/changed-path scope planner/多 runner required checks/identity 输入收敛回归 | builtin wasm 发布链路稳定性 |
 | PRD-TESTING-006 | TASK-TESTING-062 | `test_tier_required` | token 创世参数表审计清单、执行模板、p2p/testing 模块追踪回写 | 主链 Token 创世冻结与经济配置门禁 |
