@@ -157,25 +157,31 @@ impl GossipEndpoint {
     fn broadcast_bytes(&self, kind: &str, bytes: &[u8]) -> Result<(), NodeError> {
         let peers = self.snapshot_peers()?;
         let mut sent_datagrams = 0u64;
-        let mut failures = Vec::new();
+        let mut failure_count = 0usize;
+        let mut first_error = None;
         for peer in &peers {
             match self.socket.send_to(bytes, peer) {
                 Ok(_) => sent_datagrams = sent_datagrams.saturating_add(1),
-                Err(err) => failures.push(format!("send_to {} failed: {}", peer, err)),
+                Err(err) => {
+                    failure_count = failure_count.saturating_add(1);
+                    if first_error.is_none() {
+                        first_error = Some(format!("send_to {} failed: {}", peer, err));
+                    }
+                }
             }
         }
         if sent_datagrams > 0 {
             self.record_outbound(kind, bytes.len(), sent_datagrams);
         }
-        if failures.is_empty() {
+        if failure_count == 0 {
             Ok(())
         } else {
             Err(NodeError::Gossip {
                 reason: format!(
                     "gossip broadcast partial failure sent={} failed={} first_error={}",
                     sent_datagrams,
-                    failures.len(),
-                    failures[0]
+                    failure_count,
+                    first_error.as_deref().unwrap_or("unknown")
                 ),
             })
         }
