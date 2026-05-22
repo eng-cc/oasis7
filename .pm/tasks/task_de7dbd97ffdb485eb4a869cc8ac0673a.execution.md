@@ -39,3 +39,7 @@ Example:
 ## 2026-05-22 21:21:04 CST / producer_system_designer
 - 完成内容: 继续瘦身 `agent-workflow-borrowing-governance-2026-05-19.prd.md`，将 `Executive Summary`、`Phased Rollout` 与 `Decision Log` 压成“当前裁决 + 已完成 adoption + 剩余 reopen”表达，去掉重复版本流水账与冗长理由句，但保留 success criteria、验证矩阵与决策 ID。
 - 遗留事项: 若还要继续减重，只适合再压缩个别 user-story / flow 句长；不应改动 functional matrix、validation traceability 或 PRD-ID 对应关系。
+
+## 2026-05-22 22:02:15 CST / producer_system_designer
+- 完成内容: 继续收缩 `doc/engineering/self-evolution`，将 `agent-workflow-borrowing-governance-2026-05-19.design.md` 与 `skill-surface-replacement-governance-2026-05-19.design.md` 改写为“设计定位 / 落地层 / 风险边界 / 使用方式”短版，删除与对应 PRD、project、conflict 文档重复的逐 skill 决策流水账。
+- 遗留事项: 目录里更老的 `file-based-*`、`memory-inspired-*`、`role-long-term-memory-*` 三组文档仍承载更原始的 schema/object/process 说明；若后续要继续砍，应先确认它们是否已有新的 repo-owned 真值替代。

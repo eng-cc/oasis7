@@ -6,33 +6,55 @@
 审计轮次: 1
 
 ## 1. 设计定位
-本专题负责把当前 `.agents/skills/` 拆成两类：一类是 repo-owned 或明确场景专属的保留资产，另一类是低耦合或 generic mirror 的可替换表面。目标不是“把 skill 全删掉”，而是先让角色卡和仓库真值不再推荐错误的 skill。
 
-## 2. 分层策略
+这份设计文档只回答两个问题：
+
+1. 哪些本地 skill surface 仍应作为 repo-owned / scene-specific 资产保留。
+2. 哪些 generic 或低耦合 surface 应被 replacement / retirement / defer 处理。
+
+逐项 inventory 判定、验收口径和项目追踪已经在 PRD/project 中冻结，这里不再重复流水账。
+
+## 2. 分桶设计
+
 ### 2.1 Keep
-- `agent-browser`
-- `bounded-brainstorming`
-- `prd`
-- `repo-owned-workflow-router`
-- `tdd-test-writer`
-- `xiaohongshu`
-- `xiaohongshu-note-analyzer`
-- `gpt-image-2`
-- `humanizer-zh`
 
-这些 skill 要么带明确的 repo workflow 依赖，要么对应第三方平台/图像链路等专属能力，不适合作为本轮精简目标。
+以下类型继续保留：
+
+- repo-owned workflow surfaces
+  - `agent-browser`
+  - `bounded-brainstorming`
+  - `repo-owned-workflow-router`
+  - `tdd-test-writer`
+- repo-owned or scenario-specific content surfaces
+  - `prd`
+  - `xiaohongshu`
+  - `xiaohongshu-note-analyzer`
+  - `gpt-image-2`
+  - `humanizer-zh`
+
+保留标准只有两个：
+
+1. 与当前仓库 workflow / script / platform 强绑定
+2. 明确承载本地场景专属能力，而不是通用方法论镜像
 
 ### 2.2 Retire
+
+本轮已经退役的低耦合 surface：
+
 - `documentation-writer`
 - `frontend-ui-ux`
 - `game-changing-features`
 
-共同特征：
-- 方法论通用，几乎没有 repo-specific 约束。
-- 与当前系统级前端/文档/执行指令重复，或者默认输出路径/交互节奏与仓库真值冲突。
-- 引用面小，适合本轮直接删除并同步角色卡。
+共同原因：
+
+- 几乎没有 repo-specific 约束
+- 与当前系统级指令、角色卡或 repo-owned workflow 表面重复
+- 继续保留只会制造“存在即推荐”的误导
 
 ### 2.3 Defer
+
+以下 generic game-skill mirror 先保持 deferred：
+
 - `asset-optimization`
 - `audio-systems`
 - `game-architect`
@@ -45,29 +67,28 @@
 - `particle-systems`
 - `synchronization-algorithms`
 
-这些 skill 仍有方法论价值，但要么承载多个角色卡推荐，要么与当前工程验证实践有交叉，批量删除成本高于本轮收益，因此先 defer。
+defer 的含义不是继续推荐，而是：
 
-## 3. 本轮实现边界
-### 3.1 删除文件面
-- 删除 `documentation-writer`
-- 删除 `frontend-ui-ux`
-- 删除 `game-changing-features`
+- 这批 skill 的删除成本高于当前收益
+- 需要先清真实引用面，再决定是否整体降为“上游跟踪清单”
 
-### 3.2 同步回写
-- 更新 `.agents/roles/*.md` 中的推荐 skill
-- 清理活跃文档中对被退役 skill 的显式命名
-- 更新 engineering 根入口，让 skill rationalization 成为正式治理专题
+## 3. Replacement Surface
 
-## 4. Replacement Surface
 - `documentation-writer` -> repo-native 文档规则 + `prd` + `humanizer-zh`
 - `frontend-ui-ux` -> 系统级前端指令 + `agent-browser` + `gpt-image-2`
 - `game-changing-features` -> `prd` + `game-design-theory` + `content-creation`
-- `brainstorming` -> `bounded-brainstorming` + root `AGENTS.md` 的 bounded ideation rule + optional visual companion boundary
-- `using-superpowers` -> `repo-owned-workflow-router` + root `AGENTS.md` 的 default phase order + `.agents/skills/README.md` workflow entrypoint
-- `tdd-test-writer` -> 保留为本地 skill，但其默认适用边界由 root workflow 的 bounded behavior-first testing contract 约束；不再作为“待单独决定”的悬空项
+- `brainstorming` -> `bounded-brainstorming` + root workflow 的 bounded ideation rule
+- `using-superpowers` -> `repo-owned-workflow-router` + root workflow phase order
+- `writing-skills` -> repo-owned skill authoring surface、template、checklist 与 README entrypoint
 
-## 5. 风险控制
-- 任何被 retire 的 skill 若仍在角色卡中出现，视为治理未收口。
-- `defer` 不等于“继续推荐为主技能”；后续如需再收缩，应优先先改角色卡，再删文件。
-- 历史 `doc/devlog` 中出现的旧 skill 名称保留为归档痕迹，不作为活跃引用清理对象。
-- `repo-owned-workflow-router` 只能保留本地 phase-order 路由价值；若重新把它写成外部 bootstrap 或第二套 workflow 真值，视为越界。
+## 4. 风险控制
+
+- 被 retire 的 skill 若仍出现在角色卡或活跃文档，视为治理未收口
+- defer 不等于继续推荐；后续如要再删，先清角色卡和活跃引用
+- repo-owned workflow router 只能保留本地 phase-order 价值，不能回退成外部 bootstrap
+- repo-owned skill authoring surface 只能补强本地 authoring discipline，不能再造第二套 workflow 真值
+
+## 5. 使用方式
+
+- 看正式 inventory 判定、验收与决策：读 `skill-surface-replacement-governance-2026-05-19.prd.md`
+- 看当前任务与 follow-up：读 `skill-surface-replacement-governance-2026-05-19.project.md`

@@ -2,186 +2,109 @@
 
 - 对应需求文档: `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
 - 对应项目管理文档: `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
+- 冲突 / 互借参考: `doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md`
 
 审计轮次: 1
 
 ## 1. 设计定位
-本专题负责把外部 agent workflow 方法论转成 oasis7 可审计的治理输入，而不是把第三方 repo 直接接进当前默认流程。首批样本是 `obra/superpowers`，但产出必须是 repo-owned 的 adopted / rejected / deferred 决策和后续任务，不是对外部 skill 文案的镜像复制。
 
-## 2. 结构分层
-### 2.1 决策层
-- `prd.md`：冻结哪些模式 adopted、哪些 rejected、哪些 deferred。
-- `project.md`：把 adopted 项拆成 repo-owned follow-up，明确 owner、测试层级与依赖。
-- 本设计文档：说明为什么这样分层，以及 adopted 项如何接回当前仓库主链。
+这份设计文档不再重复逐 skill 裁决和 rollout 历史。它只说明一件事：
 
-### 2.2 当前主链保留，但允许增加默认编排层
-外部借鉴不得替换当前默认执行链；现在允许在实现阶段前后叠加 repo-owned 默认角色编排层：
+- PRD 冻结 adopted / rejected / deferred 与验收边界。
+- project 追踪 repo-owned rollout 和后续 follow-up。
+- 本设计文档只解释 adopted 项如何接回当前 repo 主链，以及哪些冲突必须继续挡在设计层之外。
+
+## 2. 设计落点
+
+### 2.1 不可替换的主链
+
+外部 workflow 借鉴不得替换当前默认执行链：
+
 `new-task-worktree -> workflow-report start -> producer orchestrate / role subagent dispatch -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR review/approval -> review-thread closeout`
 
-因此本专题只允许三种输出：
-1. 作为 repo-owned helper / skill / eval / smoke 的 follow-up。
-2. 作为 root workflow 的 repo-owned default orchestration rule。
-3. 作为某个模块专题的 optional design technique reference。
+因此 adopted 项只能以三种形态落地：
 
-## 3. 决策矩阵
-### 3.0 `superpowers` 当前 skill inventory 快照
-当前 `main` 分支可见 skill 为：
-`brainstorming`、`dispatching-parallel-agents`、`executing-plans`、`finishing-a-development-branch`、`receiving-code-review`、`requesting-code-review`、`subagent-driven-development`、`systematic-debugging`、`test-driven-development`、`using-git-worktrees`、`using-superpowers`、`verification-before-completion`、`writing-plans`、`writing-skills`。
+1. repo-owned helper / skill / eval / smoke
+2. root workflow 的 repo-owned default orchestration rule
+3. 模块专题里的 optional technique reference
 
-### 3.1 Adopted
-- repo-owned workflow router:
-  - 理由：当前 repo 已经有一组分段的 process skills，但还缺少“先判断该走哪一段”的总入口；upstream `using-superpowers` 真正值得借的是这里的编排顺序，不是外部 bootstrap。
-  - 目标：新增一个本地 workflow router，把 ideation、TDD、execution、verification、closeout 串成 repo-owned phase order。
-- workflow behavior evals:
-  - 理由：oasis7 已有大量 workflow 文档与 helper，但还缺少“agent 是否真按规则做”的 repo-owned 行为验证层。
-  - 目标：把主链 workflow helpers 转成 eval fixture 与 pressure-case smoke。
-- verification before completion:
-  - 理由：与当前 evidence-first 收口方向一致，而且能直接减少“没 fresh 验证就宣称完成”的漂移。
-  - 目标：形成 claim type -> required command -> allowed evidence 的 repo-owned helper/checklist/smoke。
-- visual companion:
-  - 理由：Viewer Web 等 UI-heavy 题在结构和信息层级比对上确实适合浏览器侧 mockup。
-  - 限域：只用于设计前置，不进入默认实现门禁。
-- bounded brainstorming:
-  - 理由：当前真正可借的是“先判断 scope 是否过大、是否需要 2-3 方案对比、是否值得用 visual companion”，而不是把 brainstorming 变成所有任务的 mandatory first step。
-  - 限域：只适用于方向仍模糊、范围过大或本质上偏产品 / 架构 / UI 取舍的任务；必须回写 `prd.md` / `project.md` / handoff / execution log，不得停留在聊天里。
+### 2.2 已吸收的设计层
+
+当前已吸收并接回主链的只有以下几层：
+
+- workflow router:
+  - 负责把 `brainstorming -> TDD -> execution -> verification -> closeout` 串成 repo-owned phase order
+  - 只路由本地 skills 和 root workflow，不引入外部 bootstrap
 - default role-subagent orchestration:
-  - 理由：oasis7 已经天然按标准角色分工，用户也明确希望“各角色默认就是 subagent”；因此更合理的 adopted 方式不是保持 deferred，而是把它翻译成 repo-owned 编排层。
-  - 限域：只能是 `producer_system_designer` orchestrator + 标准角色 subagents；必须保留单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链。
+  - 固定为 `producer_system_designer` orchestrator + 标准角色 subagents
+  - 保留单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链
 - bounded subagent-driven execution:
-  - 理由：在默认角色编排之上，当前用户也希望实施本身默认由 subagent slices 推进，而不是主会话独占所有分析 / 实现 / 验证 / review。
-  - 限域：只允许把分析、实现、验证与补充 review 切给角色 subagent，并全部回收到同一 owner / `.pm` task / canonical worktree / GitHub PR；不要求 fresh subagent-per-task，也不引入本地双阶段 review 主链。
-- bounded behavior-first TDD:
-  - 理由：当前仓库已经有 `tdd-test-writer` skill 与多角色测试推荐，但 root workflow 还缺“哪些实现任务默认先补失败测试/回归测试”的正式口径。
-  - 限域：只适用于行为变更且存在稳定自动化 harness 的实现任务；要求先写/补 RED-phase 测试或明确 skip reason，但不把 universal TDD 提升成所有任务的 mandatory pre-step。
+  - 允许把分析、实现、验证、补充 review 切成 subagent slices
+  - 每个 slice 必须写清 `slice type / write scope / return contract / integration order`
+- bounded brainstorming:
+  - 只在方向仍模糊、范围过大或问题本身偏产品 / 架构 / UI 取舍时启用
+  - 产出必须回写 `prd.md` / `project.md` / handoff / execution log
+- bounded behavior-first testing:
+  - 只约束“行为变更且存在稳定自动化 harness”的实现任务
+  - 要么给出 RED command，要么显式写 skip reason
+- completion-claim verification:
+  - 任何“完成 / 通过 / 可提 PR”都必须先跑 fresh verification 并读取结果
 
-### 3.2 Rejected
-- universal brainstorming gate:
-  - 与 oasis7 用户的直接执行节奏冲突。
-- fresh subagent per task + two-stage review as default:
-  - 与当前默认 `producer_system_designer` orchestrator + role subagents 模式，以及 GitHub PR review 默认边界冲突。
-- universal TDD:
-  - 与当前 `test_tier_required/full`、文档/脚本/治理任务的现实粒度不匹配。
-- external bootstrap as current truth:
-  - 不能让 plugin bootstrap 取代 `AGENTS.md`、`.pm` 和 repo-owned docs。
+### 2.3 可保留但不是默认门禁的层
 
-### 3.3 Deferred
+- Viewer visual companion:
+  - 只作为 UI-heavy 设计题的 optional ideation layer
+  - 不替代 `agent-browser`、repo-owned regression 或正式实现 task
+- workflow behavior eval harness:
+  - 是 adopted follow-up，但仍属于后续验证层
+  - 作用是证明 agent 真正遵守主链，而不是再造新的对话流程
+
+## 3. 继续拒绝或 deferred 的设计边界
+
+### 3.1 继续拒绝
+
+以下内容继续被挡在设计层之外：
+
+- external bootstrap 作为默认入口
+- `prd.md` / `project.md` / `.pm` 之外的第二套计划真值
+- universal brainstorming gate
+- universal TDD gate
+- fresh subagent-per-task + local two-stage review ritual
+- 任何让 subagent 成为独立真值持有者的编排方式
+
+### 3.2 继续 deferred
+
+以下内容只有在 repo-owned truth 和 eval 稳定后才允许重开：
+
 - multi-harness workflow packaging
-- auto-trigger/bootstrap distribution
-- contributor anti-slop contract 的正式 PR 模板化
+- auto-trigger / bootstrap distribution
+- 更重的 contributor anti-slop contract 模板化
 
-这些都必须等 adopted 的 repo-owned truth 稳定后再重开。
+重开时仍必须满足：
 
-### 3.4 Skill-to-decision mapping
-| superpowers skill | decision | current handling in oasis7 |
-| --- | --- | --- |
-| `verification-before-completion` | adopted | 已落地为 `scripts/pm/claim-ready.sh`、claim 前 fresh verification 契约，以及同名 repo-owned skill。 |
-| `using-git-worktrees` | adopted | 已由 `./scripts/new-task-worktree.sh` 和 root `AGENTS.md` 的 worktree 规则覆盖。 |
-| `requesting-code-review` | adopted | 已映射到 `prepare-task-pr` + GitHub PR review 默认边界。 |
-| `receiving-code-review` | adopted | 已映射到 `pr-review-thread-closeout.sh`、review fix/verify loop，以及同名 repo-owned skill。 |
-| `finishing-a-development-branch` | adopted | 已映射到 `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链，以及同名 repo-owned skill。 |
-| `systematic-debugging` | adopted | 已本地化为 repo-owned debugging skill，不再停留在 deferred playbook。 |
-| `dispatching-parallel-agents` | adopted | 已映射到 root `AGENTS.md` 的默认 `producer_system_designer` orchestrator + role subagents 规则；并要求单 owner / `.pm` / worktree / PR 真值。 |
-| `subagent-driven-development` | adopted | 已映射到 root `AGENTS.md` 的 bounded subagent-driven execution：分析 / 实现 / 验证 / 补充 review 切片全部回收到同一 owner / `.pm` / worktree / PR 真值。 |
-| `test-driven-development` | adopted | 已映射到 root `AGENTS.md` 的 bounded behavior-first testing contract：行为变更且存在稳定自动化 harness 时，默认先做 RED-phase 测试或记录 skip reason。 |
-| `executing-plans` | deferred | 已限域翻译为 `.agents/skills/executing-project-tasks` 与 `AGENTS.md` 的执行规则；upstream 的单独执行会话契约仍不引入。 |
-| `writing-skills` | deferred | 已限域翻译为 `.agents/skills/README.md`、`writing-repo-owned-skills`、template/checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。 |
-| `brainstorming` | adopted | 已映射到 root `AGENTS.md` 的 bounded brainstorming contract：任务仍需定方向时，允许 scope decomposition、2-3 方案对比、推荐方向与 optional visual companion，但不变成 universal gate。 |
-| `writing-plans` | rejected | 不允许在 `prd.md`/`project.md`/`.pm` 之外再引入第二套默认计划真值。 |
-| `using-superpowers` | rejected（overall bootstrap） | 外部 bootstrap 不能取代 `AGENTS.md + .pm + GitHub PR review`，但其中的 process-skill routing order 已被翻译成 repo-owned workflow router。 |
+1. 不替代 `AGENTS.md`、`.pm`、task execution log、GitHub PR review
+2. 有明确 owner、验证面和回写面
+3. 落点必须是 helper / skill / eval / optional technique，而不是新的真值系统
 
-## 4. Follow-up 映射
-### 4.1 Workflow behavior eval harness
-- owner 倾向：`agent_engineer` + `qa_engineer`
-- 覆盖面：
-  - `scripts/new-task-worktree.sh`
-  - `scripts/pm/workflow-report.sh`
-  - `scripts/pm/task-closeout.sh`
-  - `scripts/prepare-task-pr.sh`
-  - `scripts/pr-review-thread-closeout.sh`
-- 目标：验证 agent 在真实对话/fixture 下是否走对主链，而不是只打印“建议”。
+## 4. 写回与风险控制
 
-### 4.1A Repo-owned workflow router
-- owner 倾向：`producer_system_designer`
-- 覆盖面：
-  - root `AGENTS.md`
-  - `.agents/skills/repo-owned-workflow-router/SKILL.md`
-  - `.agents/skills/README.md`
-- 目标：为非 trivial task 提供一个 repo-owned 总入口，负责判断当前应该进入 bounded brainstorming、TDD、execution、verification 还是 closeout，而不是要求使用者手工拼接整条流程。
+### 4.1 正式写回面
 
-### 4.2 Default role-subagent orchestration and subagent-driven execution
-- owner 倾向：`producer_system_designer`
-- 覆盖面：
-  - root `AGENTS.md`
-  - `.agents/roles/producer_system_designer.md`
-  - `.agents/roles/templates/handoff-brief.md`
-  - `.agents/roles/templates/handoff-detailed.md`
-  - `.agents/roles/templates/planning-self-checklist.md`
-  - task handoff / execution log 中的 subagent write-scope 与 return-contract 约束
-- 目标：让多角色 subagent 与默认 subagent-driven execution 一起成为默认协作方式，并把“slice type / write scope / return contract / integration order / owner integration”落成 root workflow contract；但不把它扩成平行 task/worktree/review 真值。
+- root workflow: `AGENTS.md`
+- local skills: `.agents/skills/README.md` 与对应 repo-owned skills
+- role collaboration: `.agents/roles/*.md` 与 handoff/planning templates
+- topic truth: 本专题 `prd.md`、`project.md`、conflict reference
 
-### 4.3 Completion-claim verification gate
-- owner 倾向：`producer_system_designer` + `qa_engineer`
-- 覆盖面：
-  - 完成宣称
-  - 测试通过宣称
-  - 可提 PR / 可合并宣称
-- 目标：把“claim 之前必须 fresh verify”固定成 repo-owned 可执行契约。
+### 4.2 风险控制
 
-### 4.3A Bounded brainstorming
-- owner 倾向：`producer_system_designer`
-- 覆盖面：
-  - root `AGENTS.md`
-  - `.agents/skills/bounded-brainstorming/SKILL.md`
-  - `.agents/skills/README.md`
-  - `.agents/roles/templates/handoff-brief.md`
-  - `.agents/roles/templates/handoff-detailed.md`
-  - `.agents/roles/templates/planning-self-checklist.md`
-- 目标：让任务在仍需定方向、拆 scope 或比较方案时，有一个 repo-owned 的 bounded brainstorming 入口；但不引入逐段审批、独立 spec 流程或强制转入 `writing-plans`。
+- adopted 项若没有 repo-owned 落点，视为未真正 adopted
+- rejected 项若重新出现在 root workflow，视为治理回弹
+- subagent 协作若缺少 owner、write scope 或 return contract，视为越界
+- brainstorming / TDD 若被写成所有任务的 mandatory pre-step，视为越界
+- visual companion 若绕过实现 task / regression / PR review，视为越界
 
-### 4.3B Bounded behavior-first testing
-- owner 倾向：`producer_system_designer` + `qa_engineer`
-- 覆盖面：
-  - root `AGENTS.md`
-  - `.agents/roles/templates/handoff-brief.md`
-  - `.agents/roles/templates/handoff-detailed.md`
-  - `.agents/roles/templates/planning-self-checklist.md`
-  - `.agents/skills/README.md`
-  - `.agents/skills/tdd-test-writer/SKILL.md`
-- 目标：让行为变更且有稳定自动化 harness 的实现任务默认先补 RED-phase 测试/回归测试或明确 skip reason，但不把 universal TDD 扩成所有任务的 mandatory gate。
+## 5. 使用方式
 
-### 4.3A Localized workflow skills
-- 当前已本地化：
-  - `.agents/skills/verification-before-completion`
-  - `.agents/skills/systematic-debugging`
-  - `.agents/skills/receiving-code-review`
-  - `.agents/skills/finishing-a-development-branch`
-  - `.agents/skills/executing-project-tasks`
-- 约束：
-  - 这些 skill 必须继续绑定 repo-owned helper 和正式 workflow 文档。
-  - 不能把 skill 文案提升为新的独立真值系统。
-
-### 4.4 Viewer visual companion pilot
-- owner 倾向：`viewer_engineer`
-- 接入点：
-  - `world-simulator/viewer` 的下一轮结构/视觉专题
-  - 仅在 IA、wireframe、layout compare、state diagram 等内容上使用
-- 非目标：
-  - 不替代 `agent-browser`
-  - 不替代 repo-owned Solid/browser regression
-  - 不替代实现 task
-
-## 5. 模块回链策略
-- `engineering/prd.md`：增加“外部 agent workflow 借鉴治理”顶层规则。
-- `engineering/project.md`：增加当前专题建档任务。
-- `engineering/prd.index.md` / `README.md`：把专题接入 `self-evolution` 可达入口。
-- `world-simulator/project.md` 与对应 Viewer topic project：只补“下一轮可参考”的边界说明，不提前伪造新的实现 task。
-
-## 6. 风险控制
-- 任何 adopted 项如果没有 repo-owned follow-up，就仍视为未落地。
-- 任何 rejected 项如果重新出现在 root workflow 文档中，应视为治理回弹。
-- 任何 repo-owned workflow router 如果重新依赖外部 bootstrap、或把阶段判断写成聊天建议而不回接 root workflow，应视为治理回弹。
-- 任何 bounded brainstorming 如果没有 option framing、推荐方向或正式文档回写，应视为仍停留在聊天层。
-- 任何默认 role-subagent 协作如果没有 owner、write scope、return contract 或 handoff 记录，应视为越界。
-- 任何声称采用 behavior-first TDD 的任务如果没有 RED command、目标测试面或 skip reason，应视为越界。
-- 任何 visual companion 使用如果绕过实现 task / regression / PR review，应视为越界。
-- 任何已本地化 skill 如果与 `AGENTS.md`、`.pm` helper 或 engineering 专题口径漂移，应视为 inventory truth drift。
+- 看正式裁决：读 `agent-workflow-borrowing-governance-2026-05-19.prd.md`
+- 看当前 rollout 和 follow-up：读 `agent-workflow-borrowing-governance-2026-05-19.project.md`
+- 看逐 skill 冲突、已吸收部分和 reopen 条件：读 `superpowers-conflict-reconciliation-2026-05-20.md`
