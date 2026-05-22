@@ -13,9 +13,15 @@ trap cleanup EXIT
 mkdir -p \
   "$tmp_repo/bin" \
   "$tmp_repo/crates/oasis7_viewer/dist" \
-  "$tmp_repo/crates/oasis7_proto/src"
+  "$tmp_repo/crates/oasis7_proto/src" \
+  "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge"
 
 printf '<!doctype html>old dist\n' > "$tmp_repo/crates/oasis7_viewer/dist/index.html"
+printf '<!doctype html>old dist\n' > "$tmp_repo/crates/oasis7_viewer/dist/viewer.html"
+printf '<!doctype html>old dist\n' > "$tmp_repo/crates/oasis7_viewer/dist/software_safe.html"
+printf 'console.log("dist viewer old");\n' > "$tmp_repo/crates/oasis7_viewer/dist/viewer.js"
+printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/dist/software_safe.js"
+printf '<!doctype html>claim evidence old\n' > "$tmp_repo/crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html"
 printf 'console.log("viewer changed");\n' > "$tmp_repo/crates/oasis7_viewer/viewer.js"
 printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.js"
 printf '<!doctype html>software safe\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.html"
@@ -31,7 +37,9 @@ mkdir -p \
 printf 'console.log("finalize");\n' > "$tmp_repo/crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs"
 printf 'console.log("src");\n' > "$tmp_repo/crates/oasis7_viewer/software_safe_src/main.jsx"
 printf 'export function createPixelWorldBridge() {}\n' > "$tmp_repo/crates/oasis7_viewer/pixel-world-bridge/pixel_world_bridge.js"
+printf 'export function createPixelWorldBridge() { return \"old\"; }\n' > "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/pixel_world_bridge.js"
 printf 'icon\n' > "$tmp_repo/crates/oasis7_viewer/favicon.ico"
+printf 'icon\n' > "$tmp_repo/crates/oasis7_viewer/dist/favicon.ico"
 printf '[package]\nname = "pixel_world_bridge"\nversion = "0.0.0"\n' > "$tmp_repo/crates/pixel_world_bridge/Cargo.toml"
 printf 'pub fn ping() {}\n' > "$tmp_repo/crates/pixel_world_bridge/src/lib.rs"
 printf '[package]\nname = "oasis7_proto"\nversion = "0.0.0"\n' > "$tmp_repo/crates/oasis7_proto/Cargo.toml"
@@ -39,8 +47,21 @@ printf 'pub const VIEWER_PROTOCOL_VERSION: u32 = 1;\n' > "$tmp_repo/crates/oasis
 printf '# lock\n' > "$tmp_repo/Cargo.lock"
 printf '[workspace]\nmembers = []\n' > "$tmp_repo/Cargo.toml"
 
-touch -d '2026-03-16 00:00:00' "$tmp_repo/crates/oasis7_viewer/dist/index.html"
-touch -d '2026-03-17 00:00:00' "$tmp_repo/crates/oasis7_viewer/viewer.js"
+touch -d '2026-03-17 00:00:00' \
+  "$tmp_repo/crates/oasis7_viewer/dist/index.html" \
+  "$tmp_repo/crates/oasis7_viewer/dist/viewer.html" \
+  "$tmp_repo/crates/oasis7_viewer/dist/software_safe.html" \
+  "$tmp_repo/crates/oasis7_viewer/dist/viewer.js" \
+  "$tmp_repo/crates/oasis7_viewer/dist/software_safe.js" \
+  "$tmp_repo/crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html" \
+  "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/pixel_world_bridge.js" \
+  "$tmp_repo/crates/oasis7_viewer/dist/favicon.ico" \
+  "$tmp_repo/crates/oasis7_viewer/viewer.js" \
+  "$tmp_repo/crates/oasis7_viewer/software_safe.js" \
+  "$tmp_repo/crates/oasis7_viewer/software_safe.html" \
+  "$tmp_repo/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
+  "$tmp_repo/crates/oasis7_viewer/pixel-world-bridge/pixel_world_bridge.js" \
+  "$tmp_repo/crates/oasis7_viewer/favicon.ico"
 
 cat > "$tmp_repo/bin/npm" <<'NPM'
 #!/usr/bin/env bash

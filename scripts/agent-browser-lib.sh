@@ -192,10 +192,6 @@ resolve_viewer_static_dir_for_web_closure() {
 
   local dist_dir="$repo_root/crates/oasis7_viewer/dist"
   local dist_index="$dist_dir/index.html"
-  local runtime_source_dir="$repo_root/crates/oasis7_viewer/pixel-world-bridge"
-  local runtime_dist_js="$dist_dir/pixel-world-bridge/pixel_world_bridge.js"
-  local newest_source=0
-  local dist_mtime=0
   local rebuilt_dir
 
   if [[ "$out_dir" = /* ]]; then
@@ -204,60 +200,60 @@ resolve_viewer_static_dir_for_web_closure() {
     rebuilt_dir="$repo_root/$out_dir/web-dist"
   fi
 
-  if [[ -f "$dist_index" ]]; then
-    dist_mtime=$(stat -c %Y "$dist_index" 2>/dev/null || echo 0)
-  fi
-
-  newest_source=$(python3 - "$repo_root" <<'PY'
+  if [[ -f "$dist_index" ]] && python3 - "$repo_root" "$dist_dir" <<'PY'
 from __future__ import annotations
 
+import filecmp
 import sys
 from pathlib import Path
 
 repo_root = Path(sys.argv[1]).resolve()
-scope = [
-    "Cargo.toml",
-    "Cargo.lock",
-    "crates/oasis7_viewer/software_safe.html",
-    "crates/oasis7_viewer/viewer.js",
-    "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html",
-    "crates/oasis7_viewer/package.json",
-    "crates/oasis7_viewer/package-lock.json",
-    "crates/oasis7_viewer/vite.software-safe.config.mjs",
-    "crates/oasis7_viewer/scripts",
-    "crates/pixel_world_bridge/Cargo.toml",
-    "crates/pixel_world_bridge/src",
-    "crates/oasis7_viewer/software_safe_src",
-    "crates/oasis7_viewer/favicon.ico",
-    "crates/oasis7_proto/Cargo.toml",
-    "crates/oasis7_proto/src",
+dist_dir = Path(sys.argv[2]).resolve()
+viewer_root = repo_root / "crates/oasis7_viewer"
+
+required_files = [
+    ("software_safe.html", "index.html"),
+    ("software_safe.html", "viewer.html"),
+    ("software_safe.html", "software_safe.html"),
+    ("viewer.js", "viewer.js"),
+    ("software_safe.js", "software_safe.js"),
+    ("software_safe_first_agent_claim_evidence.html", "software_safe_first_agent_claim_evidence.html"),
+    ("favicon.ico", "favicon.ico"),
 ]
 
-latest = 0
-for entry in scope:
-    path = repo_root / entry
-    if path.is_dir():
-        candidates = sorted(candidate for candidate in path.rglob("*") if candidate.is_file())
-    elif path.is_file():
-        candidates = [path]
-    else:
-        candidates = []
-    for candidate in candidates:
-        latest = max(latest, int(candidate.stat().st_mtime))
+for source_rel, dist_rel in required_files:
+    source_path = viewer_root / source_rel
+    dist_path = dist_dir / dist_rel
+    if not source_path.is_file() or not dist_path.is_file():
+        raise SystemExit(1)
+    if not filecmp.cmp(source_path, dist_path, shallow=False):
+        raise SystemExit(1)
 
-print(latest)
-PY
+source_bridge_dir = viewer_root / "pixel-world-bridge"
+dist_bridge_dir = dist_dir / "pixel-world-bridge"
+
+source_bridge_files = sorted(
+    candidate.relative_to(source_bridge_dir).as_posix()
+    for candidate in source_bridge_dir.rglob("*")
+    if candidate.is_file()
 )
-  newest_source=${newest_source:-0}
+dist_bridge_files = sorted(
+    candidate.relative_to(dist_bridge_dir).as_posix()
+    for candidate in dist_bridge_dir.rglob("*")
+    if candidate.is_file()
+) if dist_bridge_dir.is_dir() else []
 
-  if [[ -f "$dist_index" && "$dist_mtime" -ge "$newest_source" ]]; then
-    if [[ -d "$runtime_source_dir" && ! -f "$runtime_dist_js" ]]; then
-      :
-    else
-      printf '%s
+if source_bridge_files != dist_bridge_files:
+    raise SystemExit(1)
+
+for rel in source_bridge_files:
+    if not filecmp.cmp(source_bridge_dir / rel, dist_bridge_dir / rel, shallow=False):
+        raise SystemExit(1)
+PY
+  then
+    printf '%s
 ' "$dist_dir"
-      return 0
-    fi
+    return 0
   fi
 
   if ! command -v npm >/dev/null 2>&1; then

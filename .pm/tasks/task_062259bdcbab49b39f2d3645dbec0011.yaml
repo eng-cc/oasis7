@@ -1,0 +1,18 @@
+task_uid: task_062259bdcbab49b39f2d3645dbec0011
+title: "repair release web dist freshness gating"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-release-web-dist-freshness
+execution_log_path: .pm/tasks/task_062259bdcbab49b39f2d3645dbec0011.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - scripts/agent-browser-lib.sh
+  - scripts/agent-browser-viewer-dist-freshness-test.sh
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-22T23:04:36+08:00
+last_started_at: 2026-05-22T22:53:34+08:00
+last_closed_at: 2026-05-22T23:04:36+08:00
