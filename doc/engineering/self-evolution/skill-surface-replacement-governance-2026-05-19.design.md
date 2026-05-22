@@ -11,6 +11,7 @@
 ## 2. 分层策略
 ### 2.1 Keep
 - `agent-browser`
+- `bounded-brainstorming`
 - `prd`
 - `tdd-test-writer`
 - `xiaohongshu`
@@ -60,6 +61,7 @@
 - `documentation-writer` -> repo-native 文档规则 + `prd` + `humanizer-zh`
 - `frontend-ui-ux` -> 系统级前端指令 + `agent-browser` + `gpt-image-2`
 - `game-changing-features` -> `prd` + `game-design-theory` + `content-creation`
+- `brainstorming` -> `bounded-brainstorming` + root `AGENTS.md` 的 bounded ideation rule + optional visual companion boundary
 - `tdd-test-writer` -> 保留为本地 skill，但其默认适用边界由 root workflow 的 bounded behavior-first testing contract 约束；不再作为“待单独决定”的悬空项
 
 ## 5. 风险控制

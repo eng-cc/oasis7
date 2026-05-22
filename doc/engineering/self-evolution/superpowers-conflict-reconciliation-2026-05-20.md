@@ -61,10 +61,12 @@
 
 已完成的 reconcile：
 
+- `brainstorming` 已改为 adopted（bounded）：只把“scope 是否需要拆分、是否需要 2-3 方案对比、是否需要 optional visual companion、以及推荐方向必须回写正式文档”的 ideation discipline 接回 root workflow 与本地 `bounded-brainstorming` skill。
 - `test-driven-development` 已改为 adopted（bounded）：只把 behavior-first / regression-first contract 接回“行为变更且存在稳定自动化 harness”的实现任务。
 
 与 oasis7 仍然冲突的点：
 
+- `brainstorming` 的 universal mandatory pre-step、逐段审批和强制转入 `writing-plans` 仍与当前直接执行节奏和正式计划真值冲突。
 - `test-driven-development` 的 universal mandatory pre-step 语义仍与当前 `test_tier_required/full` 分层、文档/治理任务粒度和无稳定 harness 场景冲突。
 
 未来何时可重开：
@@ -161,7 +163,7 @@
 
 | skill | 当前状态 | 直接冲突 | 可借鉴部分 | 重开条件 |
 | --- | --- | --- | --- | --- |
-| `brainstorming` | rejected | 把设计前置变成 universal gate | visual companion、IA/wireframe 对比 | 仅在 Viewer 等 UI-heavy 专题内按需启用 |
+| `brainstorming` | adopted（bounded） | universal gate、逐段审批、或强制转入 `writing-plans` | 已完成 bounded borrowing：scope decomposition、2-3 方案对比、推荐方向、optional visual companion 与本地 `bounded-brainstorming` skill | 仅剩 universal gate / ceremony 扩张部分保持 rejected；只有在局部专题被证明稳定后才应继续扩张 |
 | `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task + local review ritual、或把 subagent 扩成独立真值持有者 | 已完成 bounded borrowing：默认 subagent-driven execution、任务拆分、上下文最小化、实现/验证/补充 review 切片，以及 `slice type / write scope / return contract / integration order` contract | 仅剩 local review ritual 等 rejected 部分；只有在正式 PR review 边界变化且 repo-owned multi-agent eval 稳定后才应重开 |
 | `test-driven-development` | adopted（bounded） | universal TDD mandatory gate、或对无稳定 harness 的任务强套 RED-phase | 已完成 bounded borrowing：behavior-first / regression-first contract、`tdd-test-writer` skill、RED command or skip reason 约束 | 仅剩 universal gate 等 rejected 部分；只有在更细的局部领域验证稳定后才应继续扩张 |
 | `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | 已完成 bounded borrowing：`project.md` 的 `File Structure / Affected Paths`、handoff 原子步骤模板和 planning self-checklist | 剩余 skill 本体只有在不再竞争正式计划真值时，才允许继续局部 salvage；不得回退为默认前置计划系统 |
@@ -183,7 +185,7 @@
    - `executing-plans` / `writing-skills` 剩余未吸收的 packaging、distribution 或 session-contract 部分，但前提仍是它们不形成第二套真值
    - `dispatching-parallel-agents` 剩余的 harness packaging / swarm 扩张部分，但前提仍是 bounded 默认编排已被 eval 证明稳定
 3. 再做 `rejected` 里最容易局部 salvage 的子模式
-   - `brainstorming` 的 visual companion
+   - 当前已不再需要把 `brainstorming` 当 reopen 起点；其 bounded ideation discipline 已吸收，剩余只是不应扩张的 rejected ceremony
 4. 最后才碰第二套真值风险最高的内容
    - `writing-plans`
    - `using-superpowers`

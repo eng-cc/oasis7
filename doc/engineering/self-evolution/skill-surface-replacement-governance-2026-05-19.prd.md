@@ -50,6 +50,7 @@
   - PRD-ENGINEERING-032A: As a role owner, I want low-coupling generic skills retired when repo-native instructions already cover the same ground, so that recommended skills no longer point at stale or conflicting surfaces.
   - PRD-ENGINEERING-032B: As a maintainer, I want generic upstream skills either replaced by repository-owned guidance or explicitly deferred, so that local maintenance cost does not grow faster than repo-specific value.
   - PRD-ENGINEERING-032C: As a maintainer, I want a repo-owned skill authoring surface for `.agents/skills`, so that future local skills follow consistent trigger wording, template structure, and verification rules without importing upstream workflow wholesale.
+  - PRD-ENGINEERING-032D: As a workflow owner, I want bounded borrowed workflow patterns that survive governance to land as repo-owned local skills, so that roles can trigger them directly without re-reading the full borrowing topic.
 - Critical User Flows:
   1. `盘点当前 .agents/skills inventory -> 读取角色卡/工程入口/活跃文档引用 -> 判断 skill 是否 repo-owned、generic-but-compatible、generic-and-conflicting`
   2. `对每个 skill 冻结 keep / replace / retire / defer -> 只对 low-coupling retire/replacement 执行本轮文件面收口 -> 其余高耦合 generic mirror 先保留并记录 deferred`
@@ -65,7 +66,7 @@
 - Acceptance Criteria:
   - AC-1: 当前 skill inventory 中必须明确写出至少一批 `retire` 项，并给出对应 replacement surface。
   - AC-2: 本轮至少完成 1 组以上低耦合 skill surface 的正式退役，并清理角色卡中的直接引用。
-  - AC-3: `agent-browser`、`prd`、`xiaohongshu`、`xiaohongshu-note-analyzer`、`gpt-image-2`、`humanizer-zh`，以及后续新增的 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`，其保留理由都必须显式记录为 repo-owned 或明确场景专属。
+  - AC-3: `agent-browser`、`prd`、`xiaohongshu`、`xiaohongshu-note-analyzer`、`gpt-image-2`、`humanizer-zh`，以及后续新增的 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`tdd-test-writer`、`bounded-brainstorming`，其保留理由都必须显式记录为 repo-owned 或明确场景专属。
   - AC-4: 对 generic game-skill 镜像簇若未本轮删除，必须标记为 `defer` 并说明“为何先不动”。
   - AC-5: 本轮必须为 `.agents/skills` 增加 repo-owned authoring surface，至少包含本地 skill、template、checklist 与入口说明，并明确 upstream `writing-skills` 哪些部分仍未采纳。
 - Non-Goals:
@@ -105,6 +106,7 @@
 | --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-032 | `skill-replacement-rationalization` | `test_tier_required` | inventory matrix、角色卡/活跃文档引用清理、`doc-governance-check`、`pm-lint`、`git diff --check` | `.agents/skills`、`.agents/roles`、engineering 根入口 |
 | PRD-ENGINEERING-032C | `skill-authoring-surface-tightening` | `test_tier_required` | 本地 skill authoring skill、template、checklist、README、topic/root project 回写与治理校验 | `.agents/skills`、角色卡、skill 治理专题 |
+| PRD-ENGINEERING-032D | `brainstorming-skill-boundary-reconciliation`、`tdd-skill-boundary-reconciliation` | `test_tier_required` | bounded borrowed workflow skill、本地 trigger/README、topic/root project 与 borrowing/conflict 文档对齐 | `.agents/skills`、workflow skill surface、engineering 治理专题 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

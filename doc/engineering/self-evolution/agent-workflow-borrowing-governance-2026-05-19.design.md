@@ -38,6 +38,9 @@
 - visual companion:
   - 理由：Viewer Web 等 UI-heavy 题在结构和信息层级比对上确实适合浏览器侧 mockup。
   - 限域：只用于设计前置，不进入默认实现门禁。
+- bounded brainstorming:
+  - 理由：当前真正可借的是“先判断 scope 是否过大、是否需要 2-3 方案对比、是否值得用 visual companion”，而不是把 brainstorming 变成所有任务的 mandatory first step。
+  - 限域：只适用于方向仍模糊、范围过大或本质上偏产品 / 架构 / UI 取舍的任务；必须回写 `prd.md` / `project.md` / handoff / execution log，不得停留在聊天里。
 - default role-subagent orchestration:
   - 理由：oasis7 已经天然按标准角色分工，用户也明确希望“各角色默认就是 subagent”；因此更合理的 adopted 方式不是保持 deferred，而是把它翻译成 repo-owned 编排层。
   - 限域：只能是 `producer_system_designer` orchestrator + 标准角色 subagents；必须保留单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链。
@@ -79,7 +82,7 @@
 | `test-driven-development` | adopted | 已映射到 root `AGENTS.md` 的 bounded behavior-first testing contract：行为变更且存在稳定自动化 harness 时，默认先做 RED-phase 测试或记录 skip reason。 |
 | `executing-plans` | deferred | 已限域翻译为 `.agents/skills/executing-project-tasks` 与 `AGENTS.md` 的执行规则；upstream 的单独执行会话契约仍不引入。 |
 | `writing-skills` | deferred | 已限域翻译为 `.agents/skills/README.md`、`writing-repo-owned-skills`、template/checklist；upstream 的 TDD/subagent gate 与分发部署部分仍保持 deferred。 |
-| `brainstorming` | rejected | 仅 salvage 其 visual-companion 子模式；其 universal pre-step 语义不进入默认流程。 |
+| `brainstorming` | adopted | 已映射到 root `AGENTS.md` 的 bounded brainstorming contract：任务仍需定方向时，允许 scope decomposition、2-3 方案对比、推荐方向与 optional visual companion，但不变成 universal gate。 |
 | `writing-plans` | rejected | 不允许在 `prd.md`/`project.md`/`.pm` 之外再引入第二套默认计划真值。 |
 | `using-superpowers` | rejected | 外部 bootstrap 不能取代 `AGENTS.md + .pm + GitHub PR review`。 |
 
@@ -112,6 +115,17 @@
   - 测试通过宣称
   - 可提 PR / 可合并宣称
 - 目标：把“claim 之前必须 fresh verify”固定成 repo-owned 可执行契约。
+
+### 4.3A Bounded brainstorming
+- owner 倾向：`producer_system_designer`
+- 覆盖面：
+  - root `AGENTS.md`
+  - `.agents/skills/bounded-brainstorming/SKILL.md`
+  - `.agents/skills/README.md`
+  - `.agents/roles/templates/handoff-brief.md`
+  - `.agents/roles/templates/handoff-detailed.md`
+  - `.agents/roles/templates/planning-self-checklist.md`
+- 目标：让任务在仍需定方向、拆 scope 或比较方案时，有一个 repo-owned 的 bounded brainstorming 入口；但不引入逐段审批、独立 spec 流程或强制转入 `writing-plans`。
 
 ### 4.3B Bounded behavior-first testing
 - owner 倾向：`producer_system_designer` + `qa_engineer`
@@ -154,6 +168,7 @@
 ## 6. 风险控制
 - 任何 adopted 项如果没有 repo-owned follow-up，就仍视为未落地。
 - 任何 rejected 项如果重新出现在 root workflow 文档中，应视为治理回弹。
+- 任何 bounded brainstorming 如果没有 option framing、推荐方向或正式文档回写，应视为仍停留在聊天层。
 - 任何默认 role-subagent 协作如果没有 owner、write scope、return contract 或 handoff 记录，应视为越界。
 - 任何声称采用 behavior-first TDD 的任务如果没有 RED command、目标测试面或 skip reason，应视为越界。
 - 任何 visual companion 使用如果绕过实现 task / regression / PR review，应视为越界。

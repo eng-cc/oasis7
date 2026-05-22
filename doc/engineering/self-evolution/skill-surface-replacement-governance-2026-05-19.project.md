@@ -9,6 +9,7 @@
 - [x] skill-replacement-rationalization (PRD-ENGINEERING-032) [test_tier_required]: 冻结当前 `.agents/skills/` inventory 的 keep/replace/retire/defer 矩阵，并退役 `documentation-writer`、`frontend-ui-ux`、`game-changing-features` 三个低耦合 skill surface，同步回写角色卡、活跃文档与 engineering 根入口。 Trace: .pm/tasks/task_e4d000db4c064cfc8a6487c453c41453.yaml
 - [x] skill-authoring-surface-tightening (PRD-ENGINEERING-032/PRD-ENGINEERING-032C) [test_tier_required]: 将 upstream `writing-skills` 的可 salvage 部分翻译成 repo-owned skill authoring surface，新增本地 authoring entrypoint、template、checklist 与 bounded borrowing 说明，并同步回写 skill 治理专题、角色卡与 engineering 根项目。 Trace: .pm/tasks/task_ababcdcdc9694fa59acb8b1f0c5116df.yaml
 - [x] tdd-skill-boundary-reconciliation (PRD-ENGINEERING-032/PRD-ENGINEERING-AWB-007) [test_tier_required]: 将 `tdd-test-writer` 从“待单独评估”收口为已绑定 root workflow 的 bounded skill：仅用于行为变更且存在稳定自动化 harness 的任务，并通过 `AGENTS.md`、handoff/planning surface 与 borrowing/conflict 文档固定其默认适用边界。 Trace: .pm/tasks/task_64823ec488b648cbb95cc99ed0f4bdfc.yaml
+- [x] brainstorming-skill-boundary-reconciliation (PRD-ENGINEERING-032/PRD-ENGINEERING-032D/PRD-ENGINEERING-AWB-008) [test_tier_required]: 将 upstream `brainstorming` 从“只保留 visual companion 子模式”的 rejected 状态收口为 repo-owned `bounded-brainstorming` skill：仅用于方向仍模糊、需要 scope decomposition / option framing 或判断是否需要 visual companion 的任务，并通过 `AGENTS.md`、handoff/planning surface 与 borrowing/conflict 文档固定其默认适用边界。 Trace: .pm/tasks/task_3cad85765a3447488acba03d163126d2.yaml
 
 ## Planned Follow-ups
 - `generic-game-skill-mirror-retirement-followup` (`PRD-ENGINEERING-032`, target `test_tier_required`): 继续评估 `asset-optimization` 到 `synchronization-algorithms` 这一组 generic game-skill mirror 是否转成“上游跟踪清单”而非本地长期维护。
@@ -28,6 +29,8 @@
 - 改动路径:
   - `AGENTS.md`
   - `.agents/skills/README.md`
+  - `.agents/skills/bounded-brainstorming/SKILL.md`
+  - `.agents/skills/executing-project-tasks/SKILL.md`
   - `.agents/skills/tdd-test-writer/SKILL.md`
   - `.agents/skills/writing-repo-owned-skills/SKILL.md`
   - `.agents/skills/templates/SKILL.template.md`
@@ -39,6 +42,7 @@
   - `doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.prd.md`
   - `doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.design.md`
   - `doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.project.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md`
   - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
   - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
   - `doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md`
@@ -66,5 +70,6 @@
   - 已建立 skill rationalization 专题三件套，并完成 `documentation-writer`、`frontend-ui-ux`、`game-changing-features` 三个低耦合 skill surface 的退役与角色卡同步。
   - 已把 `writing-skills` 的可 salvage 部分收口成 repo-owned skill authoring surface：新增 `.agents/skills/README.md`、`writing-repo-owned-skills`、template 与 checklist；其中 authoring 结构、trigger wording 与 supporting-file discipline 已被吸收，但它自身的安装/发布包装与第二套工作流主链仍未采纳。
   - 已将 `tdd-test-writer` 的边界从“待评估”收口为 root workflow 的 bounded behavior-first contract：行为变更且有稳定自动化 harness 的任务默认先走 RED/回归测试或记录 skip reason，但它不升级为 universal TDD gate。
+  - 已新增 repo-owned `bounded-brainstorming` skill，并将 upstream `brainstorming` 的可借部分收口为 root workflow 的 bounded ideation contract：只有方向仍模糊、需要拆 scope、做 2-3 方案对比或判断 visual companion 是否值得启用时才进入该 skill；它不升级为 universal brainstorming gate。
 - 下一步:
   - 优先判断 generic game-skill mirror 簇是否应整体改成“上游跟踪清单”，而不是继续本地长期维护。

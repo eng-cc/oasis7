@@ -24,6 +24,13 @@
 - 已知约束：
 - 依赖前置项：
 
+## Brainstorming / Option Framing
+- Need Bounded Brainstorming:
+- Scope Split / Decomposition:
+- Options Considered (2-3):
+- Recommended Direction:
+- Visual Companion Need / Non-Need:
+
 ## Behavior-First Test Plan
 - Behavior Contract:
 - Target Test Files / Test Surface:

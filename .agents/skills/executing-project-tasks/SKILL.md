@@ -16,7 +16,7 @@ Use this skill when:
 Do not use this skill when:
 
 - the task still lacks a real plan and first needs `prd.md` / `project.md` updates
-- the user explicitly asked for brainstorming, architecture exploration, or plan-only output
+- the user explicitly asked for brainstorming, architecture exploration, or plan-only output; use `.agents/skills/bounded-brainstorming/SKILL.md` first
 - you are already in final closeout mode and should switch to `finishing-a-development-branch`
 
 ## Core Workflow

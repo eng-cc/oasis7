@@ -34,6 +34,15 @@
 - 上游依赖：
 - 现有测试 / 证据：
 
+## Brainstorming / Option Framing
+- Need Bounded Brainstorming:
+- Scope Split / Decomposition:
+- Option 1:
+- Option 2:
+- Option 3 (If Needed):
+- Recommended Direction:
+- Visual Companion Need / Non-Need:
+
 ## Behavior-First Test Plan
 - Behavior Contract:
 - Target Test Files / Test Surface:
@@ -73,6 +82,7 @@
 ## Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对上游 / 下游角色
+- [ ] 若任务存在方向/范围不确定性，bounded brainstorming 的方案对比与推荐方向已写清
 - [ ] behavior-first RED plan 已执行，或 skip 原因已写清
 - [ ] write scope / return contract / integration order 已被遵守
 - [ ] 对应 `prd.md` / `project.md` 已回写
