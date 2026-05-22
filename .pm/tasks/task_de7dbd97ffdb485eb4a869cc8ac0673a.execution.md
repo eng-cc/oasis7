@@ -43,3 +43,7 @@ Example:
 ## 2026-05-22 22:02:15 CST / producer_system_designer
 - 完成内容: 继续收缩 `doc/engineering/self-evolution`，将 `agent-workflow-borrowing-governance-2026-05-19.design.md` 与 `skill-surface-replacement-governance-2026-05-19.design.md` 改写为“设计定位 / 落地层 / 风险边界 / 使用方式”短版，删除与对应 PRD、project、conflict 文档重复的逐 skill 决策流水账。
 - 遗留事项: 目录里更老的 `file-based-*`、`memory-inspired-*`、`role-long-term-memory-*` 三组文档仍承载更原始的 schema/object/process 说明；若后续要继续砍，应先确认它们是否已有新的 repo-owned 真值替代。
+
+## 2026-05-22 22:12:19 CST / producer_system_designer
+- 完成内容: 继续压缩旧的 self-evolution design 文档：将 `file-based-self-evolution-management-2026-03-30.design.md`、`memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`、`role-long-term-memory-2026-03-30.design.md` 改写为“只保留唯一设计信息”的短版，保留 canonical object model、recall/source policy、memory schema 与 role-topic 边界，删除 goals/current-state/phase-rollout/deliverables 等已由 PRD/project 承担的重复区块。
+- 遗留事项: 若还要继续减重，下一步应优先检查这三份旧 PRD 是否还能压 `Executive Summary` / `Roadmap` / `Decision Log`，但不要动对象字段、验证矩阵或 role/topic 白名单。
