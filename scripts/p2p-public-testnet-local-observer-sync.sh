@@ -208,14 +208,30 @@ stream_remote_tar_dir_to_local() {
   sshpass_ssh "$remote_host" "$remote_cmd" | tar -C "$local_parent_dir" -xf -
 }
 
+stream_remote_tar_contents_to_local() {
+  require_command tar
+
+  local remote_host=$1
+  local remote_dir=$2
+  local local_dir=$3
+  local remote_cmd
+
+  mkdir -p "$local_dir"
+  printf -v remote_cmd \
+    'tar -C %q -cf - .' \
+    "$remote_dir"
+  sshpass_ssh "$remote_host" "$remote_cmd" | tar -C "$local_dir" -xf -
+}
+
 stage_remote_seed_tree() {
   local remote_host=$1
   local remote_stack_root=$2
   local remote_execution_world_dir=$3
   local remote_execution_records_dir=$4
   local remote_storage_root=$5
-  local remote_simulator_dir=$6
-  local remote_execution_bridge_state_path=$7
+  local remote_replication_root=$6
+  local remote_simulator_dir=$7
+  local remote_execution_bridge_state_path=$8
   local remote_script remote_cmd
 
   remote_script=$(cat <<'PY'
@@ -230,6 +246,7 @@ stack_root = os.environ["REMOTE_STACK_ROOT"]
 execution_world_dir = os.environ["REMOTE_EXECUTION_WORLD_DIR"]
 execution_records_dir = os.environ["REMOTE_EXECUTION_RECORDS_DIR"]
 storage_root = os.environ["REMOTE_STORAGE_ROOT"]
+replication_root = os.environ["REMOTE_REPLICATION_ROOT"]
 simulator_dir = os.environ["REMOTE_SIMULATOR_DIR"]
 bridge_state_path = os.environ["REMOTE_EXECUTION_BRIDGE_STATE_PATH"]
 stage_root = os.path.join(stack_root, "tmp")
@@ -252,11 +269,13 @@ for attempt in range(1, 6):
         execution_world_stage = os.path.join(stage_dir, "execution-world")
         execution_records_stage = os.path.join(stage_dir, "execution-records")
         storage_stage = os.path.join(stage_dir, "storage")
+        replication_stage = os.path.join(stage_dir, "replication-root")
         simulator_stage = os.path.join(stage_dir, "execution-world-simulator-mirror")
         bridge_stage_dir = os.path.join(stage_dir, "chain-runtime")
         os.makedirs(execution_world_stage, exist_ok=True)
         os.makedirs(execution_records_stage, exist_ok=True)
         os.makedirs(storage_stage, exist_ok=True)
+        os.makedirs(replication_stage, exist_ok=True)
         os.makedirs(simulator_stage, exist_ok=True)
         os.makedirs(bridge_stage_dir, exist_ok=True)
 
@@ -347,6 +366,12 @@ for attempt in range(1, 6):
             dirs_exist_ok=True,
             copy_function=link_or_copy,
         )
+        shutil.copytree(
+            replication_root,
+            replication_stage,
+            dirs_exist_ok=True,
+            copy_function=link_or_copy,
+        )
 
         copy_file(
             os.path.join(simulator_dir, "snapshot.json"),
@@ -375,7 +400,7 @@ PY
 )
 
   remote_cmd=$(cat <<EOF
-env REMOTE_STACK_ROOT=$(printf '%q' "$remote_stack_root") REMOTE_EXECUTION_WORLD_DIR=$(printf '%q' "$remote_execution_world_dir") REMOTE_EXECUTION_RECORDS_DIR=$(printf '%q' "$remote_execution_records_dir") REMOTE_STORAGE_ROOT=$(printf '%q' "$remote_storage_root") REMOTE_SIMULATOR_DIR=$(printf '%q' "$remote_simulator_dir") REMOTE_EXECUTION_BRIDGE_STATE_PATH=$(printf '%q' "$remote_execution_bridge_state_path") python3 - <<'PY'
+env REMOTE_STACK_ROOT=$(printf '%q' "$remote_stack_root") REMOTE_EXECUTION_WORLD_DIR=$(printf '%q' "$remote_execution_world_dir") REMOTE_EXECUTION_RECORDS_DIR=$(printf '%q' "$remote_execution_records_dir") REMOTE_STORAGE_ROOT=$(printf '%q' "$remote_storage_root") REMOTE_REPLICATION_ROOT=$(printf '%q' "$remote_replication_root") REMOTE_SIMULATOR_DIR=$(printf '%q' "$remote_simulator_dir") REMOTE_EXECUTION_BRIDGE_STATE_PATH=$(printf '%q' "$remote_execution_bridge_state_path") python3 - <<'PY'
 $remote_script
 PY
 EOF
@@ -601,7 +626,8 @@ seed_local_state_from_remote() {
   local local_storage_root local_replication_root local_execution_bridge_state_path
   local local_simulator_dir
   local remote_stack_root remote_node_id remote_execution_world_dir remote_execution_records_dir
-  local remote_storage_root remote_execution_bridge_state_path remote_simulator_dir
+  local remote_storage_root remote_replication_root remote_execution_bridge_state_path
+  local remote_simulator_dir
   local remote_stage_dir
 
   local_stack_root=$(resolved_env_value "$local_env" STACK_ROOT)
@@ -618,6 +644,7 @@ seed_local_state_from_remote() {
   remote_execution_world_dir=$(remote_resolved_env_value "$remote_host" "$remote_env" EXECUTION_WORLD_DIR)
   remote_execution_records_dir=$(remote_resolved_env_value "$remote_host" "$remote_env" EXECUTION_RECORDS_DIR)
   remote_storage_root=$(remote_resolved_env_value "$remote_host" "$remote_env" STORAGE_ROOT)
+  remote_replication_root="$remote_stack_root/output/node-distfs/$remote_node_id"
   remote_execution_bridge_state_path="$remote_stack_root/output/chain-runtime/$remote_node_id/reward-runtime-execution-bridge-state.json"
   remote_simulator_dir="${remote_execution_world_dir}-simulator-mirror"
 
@@ -640,7 +667,7 @@ seed_local_state_from_remote() {
     "$backup_dir/chain-runtime/$local_node_id/$(basename "$local_execution_bridge_state_path")"
 
   mkdir -p "$(dirname "$local_execution_bridge_state_path")"
-  mkdir -p "$local_execution_records_dir" "$local_storage_root"
+  mkdir -p "$local_execution_records_dir" "$local_storage_root" "$local_replication_root"
   mkdir -p "$local_execution_world_dir" "$local_simulator_dir"
 
   remote_stage_dir=$(stage_remote_seed_tree \
@@ -649,6 +676,7 @@ seed_local_state_from_remote() {
     "$remote_execution_world_dir" \
     "$remote_execution_records_dir" \
     "$remote_storage_root" \
+    "$remote_replication_root" \
     "$remote_simulator_dir" \
     "$remote_execution_bridge_state_path")
 
@@ -669,6 +697,12 @@ seed_local_state_from_remote() {
       "$remote_host" \
       "$remote_stage_dir/storage" \
       "$(dirname "$local_storage_root")"
+  fi
+  if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/replication-root"; then
+    stream_remote_tar_contents_to_local \
+      "$remote_host" \
+      "$remote_stage_dir/replication-root" \
+      "$local_replication_root"
   fi
 
   if sshpass_ssh "$remote_host" test -f "$remote_stage_dir/execution-world/module_registry.json"; then

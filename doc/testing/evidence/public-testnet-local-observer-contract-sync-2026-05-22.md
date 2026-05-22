@@ -149,14 +149,32 @@ systemctl restart oasis7-testnet-observer.service
 16. 当前真正未闭环的是“本地恢复入口如何与 healthy peer 当前保留策略对齐”：
   - 要么 observer 启动时不应再从 `context=1` 触发恢复
   - 要么必须提供一套包含更早 snapshot ref 的 recovery seed，而不是只镜像 current retained store
+17. 2026-05-22 23:00 CST 继续把 `seed-from-remote` 修到 replication-root 级别：
+  - 新脚本不再只备份并清空本机 `output/node-distfs/$NODE_ID`，而是会把 healthy storage `output/node-distfs/triad-testnet-storage` 的完整 staged 副本回传到本机 `output/node-distfs/triad-testnet-local`
+  - live seed 完成后，本机 `node_pos_state.json` 不再是零态，已恢复为：
+    - `committed_height=14680`
+    - `last_execution_height=14680`
+    - `last_execution_state_root=469bbd116eb69735146274d41a90b1191ca38b64e4eb7edb2aae40f63fda6d7a`
+  - 本机 `output/node-distfs/triad-testnet-local` 也从先前的 `8.0K` 增长到 `83M`，`/v1/chain/status` 同步暴露 `storage.bytes_by_dir.replication_root=36687803`
+18. 这一步实际清掉了“卡死”签名：
+  - `oasis7-testnet-observer.service` 已重新稳定 `active`
+  - `/v1/chain/status` 当前 `last_error=null`
+  - `consensus.committed_height=14680`
+  - `storage.replay_summary.latest_checkpoint_height=14656`
+  - 已不再复现 `execution driver restore snapshot ref ... failed at height 1: BlobNotFound`
+19. 但这一步还没有让本机重新追平当前 healthy storage 头部：
+  - 同窗 healthy storage `39.104.205.67` 已到 `committed_height=14702`
+  - 本机在额外 25 秒窗口后仍停在 `committed_height=14680`
+  - 当前 `known_peer_heads=0`、`last_status=pending`、`last_error=null`
+  - 也就是说，“启动即死循环”已被修掉，但“seed 后继续追平 live head”仍是下一层待解问题
 
 ## Remaining live blocker
 1. local observer 现在可以加载 formal manifest、two-validator contract，并且 current runtime binary 也已与 ECS hash 对齐。
 2. 当前 remaining blocker 是：
   - `shared_devnet_pass` 仍未满足
-  - local observer 最新已前移到 `height 1` restore `BlobNotFound`，说明 current retained store 无法直接满足本机 stale-height recovery
+  - local observer 已不再报 `height 1` restore `BlobNotFound`，但 seed 后仍停在 `committed_height=14680`，没有继续追上 healthy storage `14702`
   - live current binary hash 与 mirrored candidate bundle `runtime_build.sha256` 仍不一致
-  - healthy storage 的 current retained set 虽然可支撑自己继续推进，但还不足以让本机 observer 从现有启动入口直接复位到同一 committed context
+  - healthy storage 的 current retained set 现在已经足够让本机从同一 committed context 起步，但 observer 仍没有继续拿到 peer head 并追平 live 最新高度
 3. 因此这条任务虽然已完成 local contract sync 与 repo-owned reset path，但还不能把本机 runtime 记成健康 `pass`，也不能把 aggregate `public_testnet` readiness 提升为可用。
 
 ## Boundaries
