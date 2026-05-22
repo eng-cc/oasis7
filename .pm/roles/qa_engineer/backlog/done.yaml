@@ -424,12 +424,3 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_e74e62daf53a45d0bc24ac2d520bb1b3.yaml
-  - task_uid: task_81b8b3dfddd3487e9733600aad78806d
-    title: "fix release web strict gate script execute bit regression"
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance: []
-    handoff_to: []
-    status: done
-    task_path: .pm/tasks/task_81b8b3dfddd3487e9733600aad78806d.yaml
