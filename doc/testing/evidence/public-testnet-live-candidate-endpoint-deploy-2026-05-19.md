@@ -146,6 +146,14 @@
 2. 因此 `claims_boundary_review` 这条 lane 不再依赖 `#249` 的 reset announcement 单独代偿。
 3. 该补充不会改变本文件主结论：aggregate readiness 仍受 `shared_devnet_pass` 未满足约束。
 
+## 2026-05-22 operator correction
+1. 本文件的拓扑描述包含了本机 `oasis7-testnet-observer.service`，但 2026-05-19 当天真正执行的 repo-owned deploy 动作只覆盖了两台 ECS。
+2. 后续 fresh audit 证明本机 `/opt/oasis7/p2p-testnet-local` 仍保留旧的三 validator / 三 signer 合同，也没有 `NETWORK_TIER_MANIFEST_PATH`。
+3. 因此不能再把“2026-05-19 endpoint deploy”理解为三节点全部已收口到同一份 formal `public_testnet` contract。
+4. 当前正确的 local remediation 入口已经收口到：
+  - `scripts/p2p-public-testnet-local-observer-sync.sh`
+  - `doc/testing/evidence/public-testnet-local-observer-contract-sync-2026-05-22.md`
+
 ## 结论
 1. 这次“进一步做部署”已经把两台阿里云上的 testnet 节点推进成了实际加载 formal `public_testnet` manifest 的 live runtime。
 2. 这次通过公网 `IP:port` 直接验证，已经把 `public_rpc_ready` 与 `explorer_public_ready` 推进成 `pass`，不依赖 testnet 专用域名。
