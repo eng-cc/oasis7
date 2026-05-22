@@ -116,6 +116,17 @@ systemctl restart oasis7-testnet-observer.service
   - backup: `/opt/oasis7/p2p-testnet-local/backups/storage-reset-20260522-164319`
   - 结果：local `execution_store_root` 已降到近空白状态，但 `/v1/chain/status` 仍立即回到同一条 `gap sync height 15 execution hash validation failed`
   - 这说明“仅仅是本机旧 CAS/blob 没清掉”不足以解释当前分叉，问题至少还包含上游 peer truth 或更深的执行恢复输入漂移。
+10. 随后继续做 single-source 隔离，把本机 peer contract 暂时收窄到健康 storage 节点：
+  - backup: `/opt/oasis7/p2p-testnet-local/backups/single-peer-isolation-20260522-165533`
+  - `NODE_GOSSIP_PEERS_CSV=39.104.205.67:6732`
+  - `REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/39.104.205.67/tcp/6832`
+  - 之后再次执行 `reset-state` 并重启 observer，当前 `/v1/chain/status` 仍固定停在 `committed_height=14`
+  - 同一条 mismatch 仍原样复现：
+    - `local_block=a7d0bf881a9bbb51404114ba45aab399645e3cad45371ed9e1490ed06761df74`
+    - `peer_block=1ccaf35534e06f4238a50fd719eaffa2ca2fa23e841ec4b28171c0877efd7517`
+    - `local_state=fd1dc428d79a813d808a21025fbe47579f8448242604975487a98305eb42ab37`
+    - `peer_state=1e3b53a30f7e0bd4f464531dd716d17996c23e8d50b8cd56a6e180cd14e14717`
+11. 这进一步排除了“只是被坏 sequencer 污染”的解释：即使只向当前健康 peer `39.104.205.67` gap sync，本机也无法通过 `height 15`。
 
 ## Remaining live blocker
 1. local observer 现在可以加载 formal manifest、two-validator contract，并且 current runtime binary 也已与 ECS hash 对齐。
@@ -124,6 +135,7 @@ systemctl restart oasis7-testnet-observer.service
   - local observer 在 height 15 持续出现 execution hash mismatch
   - live current binary hash 与 mirrored candidate bundle `runtime_build.sha256` 仍不一致
   - 即使额外清空了本机 `STORAGE_ROOT`，同一条 height-15 mismatch 也会立即复现
+  - 即使把上游 peer 收窄为单一 healthy storage，本机也仍会在 `height 15` 复现同一条 execution split
 3. 因此这条任务虽然已完成 local contract sync 与 repo-owned reset path，但还不能把本机 runtime 记成健康 `pass`，也不能把 aggregate `public_testnet` readiness 提升为可用。
 
 ## Boundaries

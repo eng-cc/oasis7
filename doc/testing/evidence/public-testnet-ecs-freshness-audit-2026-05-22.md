@@ -155,3 +155,26 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - the deeper blocker is now release/runtime input drift: binary parity alone does not restore execution parity
   - `public_rpc_ready` / `explorer_public_ready` / `faucet_guard_ready` should remain `partial` until the height-15 execution split is cleared and a fresh same-window external claim is revalidated
   - a later controlled reset of local `STORAGE_ROOT` also failed to clear the split, so the remaining drift is no longer explainable as “local stale CAS only”
+  - even after temporarily isolating the local observer to the single healthy storage peer `39.104.205.67`, the same `height 15` execution mismatch still reproduced, so the split is not reducible to “the bad sequencer was the only corrupt upstream”
+  - a controlled reset on the ECS sequencer also did not yield stable replay: it briefly came back healthy at low height, then immediately regressed to `last_applied=3 incoming=13795 predecessor=13794`
+
+## 2026-05-22 sequencer reset addendum
+- 为了验证“只要清掉坏 sequencer 本地状态就能重新追上 healthy storage”这个假设，当前会话对 `39.104.204.172` 做了受控状态重置。
+- 备份目录：
+  - `/opt/oasis7/p2p-testnet/backups/sequencer-state-reset-20260522-165747`
+- 备份并迁出的路径：
+  - `/opt/oasis7/p2p-testnet/data/execution-world`
+  - `/opt/oasis7/p2p-testnet/data/execution-records`
+  - `/opt/oasis7/p2p-testnet/data/storage`
+  - `/opt/oasis7/p2p-testnet/output/node-distfs/triad-testnet-sequencer`
+  - `/opt/oasis7/p2p-testnet/output/chain-runtime/triad-testnet-sequencer/reward-runtime-execution-bridge-state.json`
+- 重启后短窗观测：
+  - sequencer `/v1/chain/status` 一度恢复为 `last_error=null`
+  - `committed_height=3`
+  - `network_committed_height=3`
+- 但不到一个采样窗口，它就重新掉回 predecessor-gap：
+  - `last_error=node execution error: execution driver missing predecessor record for non-contiguous committed height: last_applied=3 incoming=13795 predecessor=13794`
+  - 与此同时，storage `39.104.205.67` 仍继续健康推进到 `committed_height=13795`
+- 结论：
+  - 当前 live split 不是“把 sequencer 清零一次就会自愈”的简单故障
+  - 更可能是历史 execution replay / checkpoint 恢复输入已经与今天的 live chain truth 不兼容
