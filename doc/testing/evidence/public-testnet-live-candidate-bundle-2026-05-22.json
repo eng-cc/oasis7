@@ -1,0 +1,34 @@
+{
+  "schema_version": "oasis7.release_candidate_bundle.v1",
+  "candidate_id": "public-testnet-live-candidate-20260519",
+  "track": "public_testnet",
+  "created_at": "2026-05-19T01:10:35Z",
+  "repo_root": "/home/scc/worktrees/oasis7-p2p-public-testnet-live-candidate-endpoint-deploy",
+  "git_commit": "e5d717607bc3769e5b216afd6496ca2163312a76",
+  "git_worktree_dirty": true,
+  "runtime_build": {
+    "ref": "/home/scc/worktrees/oasis7-p2p-public-testnet-three-node-deploy-readiness/target/debug/oasis7_chain_runtime",
+    "resolved_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-three-node-deploy-readiness/target/debug/oasis7_chain_runtime",
+    "kind": "file",
+    "sha256": "d1046485ae71a794cf0f5fb78561bd6068363ca53aee3ccac384d831829c07e8",
+    "size_bytes": 850351920
+  },
+  "world_snapshot": {
+    "ref": "output/public-testnet-live-candidate/world-snapshot-placeholder.json",
+    "resolved_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-live-candidate-endpoint-deploy/output/public-testnet-live-candidate/world-snapshot-placeholder.json",
+    "kind": "file",
+    "sha256": "594c56b1dae6d16951a2b291d877320a554bca4bcc0ff0fa90f487277548e611",
+    "size_bytes": 63
+  },
+  "governance_manifest": {
+    "ref": "output/public-testnet-live-candidate/governance-manifest-placeholder.json",
+    "resolved_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-live-candidate-endpoint-deploy/output/public-testnet-live-candidate/governance-manifest-placeholder.json",
+    "kind": "file",
+    "sha256": "7cebe2afd4557a8ccabdf98ccd7ce3df60638c17c3ceba16884b1f1bcdd6b337",
+    "size_bytes": 68
+  },
+  "evidence_refs": [],
+  "notes": [
+    "Aliyun-backed public endpoint rehearsal candidate"
+  ]
+}
