@@ -81,13 +81,13 @@
        - 验证命令: `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
        - 预期结果: PRD 明确分层，不再只描述 SMTP/Tablestore 可用性。
     2. 将 operator runbook 收口为分环境最小配置、禁止 shortcut 和 promotion gate。
-       - 验证命令: `rg -n "5B\\. 分环境执行清单|dev 环境|staging 环境|production 环境|promotion gate" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
+       - 验证命令: `rg -n "5B\. 分环境执行清单|dev 环境|staging 环境|production 环境|promotion gate" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
        - 预期结果: runbook 能回答“测试环境和正式环境怎么分、不能混什么、升生产前要验什么”。
     3. 同步模块 project 与 execution log，保留 task trace 和 fresh verification 入口。
        - 验证命令: `rg -n "hosted-account-env-tiering|task_ad5cbac95aa54e26a9fa7d7558380750" doc/p2p/project.md .pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md`
        - 预期结果: 模块追踪和 task 过程可回溯。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G|hosted-account-env-tiering|5B\\. 分环境执行清单|promotion gate" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/project.md .pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md`
+    - `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G|hosted-account-env-tiering|5B\. 分环境执行清单|promotion gate" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/project.md .pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 
