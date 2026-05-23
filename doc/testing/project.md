@@ -289,6 +289,16 @@
     - `bash -n scripts/release-gate-web-strict.sh scripts/viewer-primary-web-entry-regression.sh`
     - `./scripts/viewer-primary-web-entry-regression.sh --help >/dev/null`
     - `./scripts/release-gate-web-strict.sh --scenario llm_bootstrap --out-dir .tmp/release_gate_web_preflight_shadow --headed`
+- [x] release-web-strict-live-progress-retry (PRD-TESTING-002/003) [test_tier_required]: 修复 `Release Packages` run `26297891385` 的 `release-gate-web` 串行假阴性：`release-gate-web-strict.sh` 先跑 headed `viewer-primary-web-entry-regression`，再跑 `viewer-software-safe-step-regression` 时，不再复用同一组 launcher/web/viewer 端口；software-safe step phase 改为独立端口 + headless 浏览器，并在 `step` 长时间停留 `queued` 且无 world delta 时补发一次 canonical `play` fallback，避免把前一阶段残留 listener 或 headed live-control stall 误判成 release 回归。 Trace: .pm/tasks/task_bca86dc8b045420baf35b7e28414818c.yaml
+  - 产物文件:
+    - `scripts/release-gate-web-strict.sh`
+    - `scripts/viewer-software-safe-step-regression.sh`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_bca86dc8b045420baf35b7e28414818c.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/release-gate-web-strict.sh scripts/viewer-software-safe-step-regression.sh`
+    - `xvfb-run -a ./scripts/release-gate-web-strict.sh --scenario llm_bootstrap --out-dir /tmp/release-gate-web-strict-xvfb-mixed-clean --headed`
 - [x] release-node24-actions (PRD-TESTING-002/003) [test_tier_required]: 升级 `Release Packages` workflow 中触发 Node.js 20 deprecation warning 的 GitHub Actions runtime，确保 `release-gate-*` / `build-web-dist` / `package-native` 产物上传不再依赖 Node 20，并保持 release 资产链路语义不变。 Trace: .pm/tasks/task_62acc2d0e69649dc81eeae2c3954bd67.yaml
   - 产物文件:
     - `.github/workflows/release-packages.yml`

@@ -132,6 +132,7 @@ state_event_seq() { json_get "$1" eventSeq; }
 state_blocker_kind() { json_get "$1" gameplaySummary.blockerKind; }
 state_blocker_detail() { json_get "$1" gameplaySummary.blockerDetail; }
 state_stage_status() { json_get "$1" gameplaySummary.stageStatus; }
+state_last_control_stage() { json_get "$1" lastControlFeedback.stage; }
 
 wait_for_api() {
   local timeout_ms=${1:-20000}
@@ -537,6 +538,51 @@ if [[ "$auto_progress_observed" != "true" ]]; then
       explicit_blocker_state=true
     elif [[ "${stage_status:-}" == "blocked" ]]; then
       explicit_blocker_state=true
+    fi
+
+    if [[ "$auto_progress_observed" != "true" && "$explicit_blocker_state" != "true" && "$(state_last_control_stage "$after_progress_state")" == "queued" ]]; then
+      log_note resume_play
+      ab_eval "$session" "window.__AW_TEST__?.sendControl?.('play', null) ?? null" >>"$ab_log" 2>&1 || true
+      wait_for_js_true "(() => {
+        const snapshot = window.__AW_TEST__?.getState?.();
+        const feedback = snapshot?.lastControlFeedback;
+        const stage = String(feedback?.stage || '');
+        if (feedback?.action !== 'play') {
+          return Number(snapshot?.logicalTime || 0) > ${before_logical_time}
+            || Number(snapshot?.eventSeq || 0) > ${before_event_seq};
+        }
+        return Number(snapshot?.logicalTime || 0) > ${before_logical_time}
+          || Number(snapshot?.eventSeq || 0) > ${before_event_seq}
+          || stage === 'completed_advanced'
+          || stage === 'completed_no_progress'
+          || stage === 'blocked';
+      })()" "$PROGRESS_TIMEOUT_MS" || true
+
+      after_progress_state=$(ab_state)
+      after_logical_time=$(state_logical_time "$after_progress_state")
+      after_event_seq=$(state_event_seq "$after_progress_state")
+      after_logical_time=${after_logical_time:-0}
+      after_event_seq=${after_event_seq:-0}
+      logical_time_advanced=false
+      event_seq_advanced=false
+      if (( ${after_logical_time%%.*} > ${before_logical_time%%.*} )); then
+        logical_time_advanced=true
+      fi
+      if (( ${after_event_seq%%.*} > ${before_event_seq%%.*} )); then
+        event_seq_advanced=true
+      fi
+      auto_progress_observed=false
+      if [[ "$logical_time_advanced" == "true" || "$event_seq_advanced" == "true" ]]; then
+        auto_progress_observed=true
+      fi
+      stage_status=$(state_stage_status "$after_progress_state")
+      blocker_kind=$(state_blocker_kind "$after_progress_state")
+      blocker_detail=$(state_blocker_detail "$after_progress_state")
+      if [[ -n "${blocker_kind:-}" && "$blocker_kind" != "null" ]]; then
+        explicit_blocker_state=true
+      elif [[ "${stage_status:-}" == "blocked" ]]; then
+        explicit_blocker_state=true
+      fi
     fi
   fi
 
