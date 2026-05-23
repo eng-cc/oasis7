@@ -74,6 +74,21 @@ fn kernel_snapshot_roundtrip_preserves_player_auth_nonce_state() {
 }
 
 #[test]
+fn kernel_snapshot_roundtrip_preserves_intel_ttl_configuration() {
+    let config = WorldConfig::default();
+    let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
+    let (mut kernel, _) = initialize_kernel(config, init).expect("init ok");
+
+    kernel.set_intel_ttl_ticks(7);
+
+    let snapshot = kernel.snapshot();
+    let journal = kernel.journal_snapshot();
+    let restored = WorldKernel::from_snapshot(snapshot, journal).expect("restore ok");
+
+    assert_eq!(restored.intel_ttl_ticks(), 7);
+}
+
+#[test]
 fn kernel_snapshot_roundtrip_keeps_fragment_profile() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -390,6 +405,30 @@ fn snapshot_agent_kinematics_defaults_when_legacy_field_is_missing() {
         .get("agent-1")
         .expect("restored agent exists");
     assert_eq!(restored.kinematics, AgentKinematics::default());
+}
+
+#[test]
+fn snapshot_intel_ttl_ticks_defaults_when_legacy_field_is_missing() {
+    let mut kernel = WorldKernel::new();
+    kernel.set_intel_ttl_ticks(9);
+
+    let snapshot = kernel.snapshot();
+    let mut value: serde_json::Value =
+        serde_json::from_str(&snapshot.to_json().expect("snapshot to json"))
+            .expect("parse snapshot json");
+    value
+        .as_object_mut()
+        .expect("snapshot object")
+        .remove("intel_ttl_ticks");
+
+    let migrated = WorldSnapshot::from_json(
+        &serde_json::to_string(&value).expect("serialize migrated snapshot"),
+    )
+    .expect("load legacy snapshot without intel ttl");
+    let restored =
+        WorldKernel::from_snapshot(migrated, kernel.journal_snapshot()).expect("restore");
+
+    assert_eq!(restored.intel_ttl_ticks(), 0);
 }
 
 #[test]

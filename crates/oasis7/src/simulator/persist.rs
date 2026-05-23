@@ -397,6 +397,8 @@ pub struct WorldSnapshot {
     pub player_gameplay: Option<PlayerGameplaySnapshot>,
     #[serde(default)]
     pub chunk_runtime: ChunkRuntimeConfig,
+    #[serde(default)]
+    pub intel_ttl_ticks: WorldTime,
     pub next_event_id: WorldEventId,
     pub next_action_id: ActionId,
     pub pending_actions: Vec<ActionEnvelope>,

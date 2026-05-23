@@ -7,6 +7,27 @@ use super::super::types::{CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAP
 use super::WorldKernel;
 
 impl WorldKernel {
+    fn restore_persisted_state(
+        snapshot: WorldSnapshot,
+        journal_events: Vec<super::WorldEvent>,
+    ) -> Self {
+        Self {
+            time: snapshot.time,
+            config: snapshot.config.sanitized(),
+            next_event_id: snapshot.next_event_id,
+            next_action_id: snapshot.next_action_id,
+            pending_actions: VecDeque::from(snapshot.pending_actions),
+            journal: journal_events,
+            model: snapshot.model,
+            chunk_runtime: snapshot.chunk_runtime,
+            intel_ttl_ticks: snapshot.intel_ttl_ticks,
+            // Runtime-only caches and hooks are intentionally rebuilt per process.
+            intel_cache: Default::default(),
+            last_intent_batch_report: None,
+            rule_hooks: Default::default(),
+        }
+    }
+
     pub fn snapshot(&self) -> WorldSnapshot {
         WorldSnapshot {
             version: SNAPSHOT_VERSION,
@@ -17,6 +38,7 @@ impl WorldKernel {
             runtime_snapshot: None,
             player_gameplay: None,
             chunk_runtime: self.chunk_runtime.clone(),
+            intel_ttl_ticks: self.intel_ttl_ticks,
             next_event_id: self.next_event_id,
             next_action_id: self.next_action_id,
             pending_actions: self.pending_actions.iter().cloned().collect(),
@@ -43,20 +65,7 @@ impl WorldKernel {
                 actual: journal.events.len(),
             });
         }
-        Ok(Self {
-            time: snapshot.time,
-            config: snapshot.config.sanitized(),
-            next_event_id: snapshot.next_event_id,
-            next_action_id: snapshot.next_action_id,
-            pending_actions: VecDeque::from(snapshot.pending_actions),
-            journal: journal.events,
-            model: snapshot.model,
-            chunk_runtime: snapshot.chunk_runtime,
-            intel_ttl_ticks: 0,
-            intel_cache: Default::default(),
-            last_intent_batch_report: None,
-            rule_hooks: Default::default(),
-        })
+        Ok(Self::restore_persisted_state(snapshot, journal.events))
     }
 
     pub fn replay_from_snapshot(
@@ -77,25 +86,13 @@ impl WorldKernel {
             });
         }
 
-        let mut kernel = Self {
-            time: snapshot.time,
-            config: snapshot.config.sanitized(),
-            next_event_id: snapshot.next_event_id,
-            next_action_id: snapshot.next_action_id,
-            pending_actions: VecDeque::from(snapshot.pending_actions),
-            journal: journal.events.clone(),
-            model: snapshot.model,
-            chunk_runtime: snapshot.chunk_runtime,
-            intel_ttl_ticks: 0,
-            intel_cache: Default::default(),
-            last_intent_batch_report: None,
-            rule_hooks: Default::default(),
-        };
+        let journal_len = snapshot.journal_len;
+        let mut kernel = Self::restore_persisted_state(snapshot, journal.events.clone());
 
-        for event in journal.events.iter().skip(snapshot.journal_len) {
+        for event in journal.events.iter().skip(journal_len) {
             kernel.apply_event(event)?;
         }
-        let events_after_snapshot = journal.events.len() - snapshot.journal_len;
+        let events_after_snapshot = journal.events.len() - journal_len;
         if events_after_snapshot > 0 {
             kernel.next_action_id = kernel
                 .next_action_id
