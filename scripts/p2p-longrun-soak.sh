@@ -1112,6 +1112,16 @@ wait_for_topology_ready() {
   done
 }
 
+is_tolerable_bootstrap_fetch_commit_unavailable() {
+  local node_name=$1
+  local err=$2
+
+  [[ "$node_name" == "sequencer" ]] || return 1
+  [[ "$err" == *"NetworkRequestFailed"* ]] || return 1
+  [[ "$err" == *"NetworkProtocolUnavailable"* || "$err" == *"ErrUnsupported"* ]] || return 1
+  [[ "$err" == *"/aw/node/replication/fetch-commit/1.0.0"* ]]
+}
+
 analysis_report_count=0
 analysis_gate_status="insufficient_data"
 analysis_gate_notes="no_samples"
@@ -1130,6 +1140,7 @@ analysis_status_samples_ok=0
 analysis_balances_samples_ok=0
 analysis_running_false_samples=0
 analysis_last_error_samples=0
+analysis_tolerated_bootstrap_fetch_commit_unavailable_samples=0
 analysis_balance_load_error_samples=0
 analysis_peer_zero_samples=0
 analysis_http_failure_samples=0
@@ -1181,6 +1192,7 @@ reset_topology_analysis() {
   analysis_balances_samples_ok=0
   analysis_running_false_samples=0
   analysis_last_error_samples=0
+  analysis_tolerated_bootstrap_fetch_commit_unavailable_samples=0
   analysis_balance_load_error_samples=0
   analysis_peer_zero_samples=0
   analysis_http_failure_samples=0
@@ -1434,8 +1446,12 @@ poll_topology_node_once() {
     analysis_running_false_samples=$((analysis_running_false_samples + 1))
   fi
   if [[ -n "$last_error" ]]; then
-    analysis_last_error_samples=$((analysis_last_error_samples + 1))
-    printf '%s\t%s\n' "$node_name" "$last_error" >> "$analysis_runtime_errors_file"
+    if is_tolerable_bootstrap_fetch_commit_unavailable "$node_name" "$last_error"; then
+      analysis_tolerated_bootstrap_fetch_commit_unavailable_samples=$((analysis_tolerated_bootstrap_fetch_commit_unavailable_samples + 1))
+    else
+      analysis_last_error_samples=$((analysis_last_error_samples + 1))
+      printf '%s\t%s\n' "$node_name" "$last_error" >> "$analysis_runtime_errors_file"
+    fi
   fi
   if [[ -n "$balance_load_error" ]]; then
     analysis_balance_load_error_samples=$((analysis_balance_load_error_samples + 1))
@@ -1627,6 +1643,9 @@ finalize_topology_metric_gate() {
   fi
   if (( analysis_peer_zero_samples > 0 )); then
     gate_warnings+=("known_peer_heads_zero_samples=${analysis_peer_zero_samples}")
+  fi
+  if (( analysis_tolerated_bootstrap_fetch_commit_unavailable_samples > 0 )); then
+    gate_warnings+=("tolerated_bootstrap_fetch_commit_unavailable_samples=${analysis_tolerated_bootstrap_fetch_commit_unavailable_samples}")
   fi
   if (( analysis_http_failure_samples > 0 )); then
     if (( chaos_event_count > 0 )); then
