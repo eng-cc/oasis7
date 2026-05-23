@@ -122,6 +122,17 @@ def build_parser(
     move_task.add_argument("--json", action="store_true")
     move_task.set_defaults(func=handlers["cmd_move_task"])
 
+    record_task_claim_verification = subparsers.add_parser("record-task-claim-verification")
+    record_task_claim_verification.add_argument("root", type=pathlib.Path)
+    add_task_uid_argument(record_task_claim_verification, required=True)
+    record_task_claim_verification.add_argument("--claim-type", required=True)
+    record_task_claim_verification.add_argument("--verify-command", required=True)
+    record_task_claim_verification.add_argument("--verified-at", required=True)
+    record_task_claim_verification.add_argument("--verification-exit-code", required=True, type=int)
+    record_task_claim_verification.add_argument("--verification-status", required=True)
+    record_task_claim_verification.add_argument("--json", action="store_true")
+    record_task_claim_verification.set_defaults(func=handlers["cmd_record_task_claim_verification"])
+
     compact_task_group = subparsers.add_parser("compact-task-group")
     compact_task_group.add_argument("root", type=pathlib.Path)
     compact_task_group.add_argument("--survivor-task-uid", required=True)
