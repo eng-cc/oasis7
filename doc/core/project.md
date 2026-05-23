@@ -323,53 +323,13 @@
 - 模块进展补充（2026-03-10 / runtime）: 已向 `runtime_engineer` 发起 `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md`，要求优先补齐候选级 runtime P0 实测证据。
 
 ## 状态
-- 更新日期: 2026-04-07
+- 更新日期: 2026-05-23
 - 当前状态: active
 - 下一任务: `TASK-CORE-054`
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 最新完成: `TASK-CORE-053`（历史上已将唯一正式 Web 入口从旧命名收口到当前 `viewer` canonical 名称，并保留 `pure_api` 的一等公民 no-UI 角色；`software_safe` 仅保留兼容 alias。）
-- 最新完成: `TASK-CORE-051`（已将 `non-3D / 2D 优先` 收口为 delivery priority / interaction scope 话术，并明确 `software_safe` 才是弱图形玩家访问模式。）
-- 最新完成: `TASK-CORE-055`（已将活跃结构层的旧 provider branding 继续收口到 `provider_loopback_http` / `oasis7_provider_*` / `oasis7_provider_agent`，退役 alias 不再作为当前 operator-facing 真值。）
-- 最新完成: `TASK-CORE-052`（已将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_* + agent_execution_lane` 结构化 taxonomy，并把 `agent_direct_connect/provider_loopback_http` 降为兼容 alias。）
-- 最新完成: `TASK-CORE-032`（已将 core 模块地图中的当前 crate 路径真值统一收口到 `oasis7*` 目录与包名）。
-- 最新完成: `TASK-CORE-049`（已将 `pure_api` 从 no-LLM 可玩口径回收为 LLM-required formal gameplay，并同步 core/README/testing/manual/game/world-simulator 当前入口与脚本帮助文本。）
-- 最新完成: `TASK-CORE-050`（已将旧单字段 provider mode 收口为 `agent_direct_connect` 接入方式、`provider_loopback_http` provider implementation 与 execution lane 三层，并同步 core/world-simulator/testing 文档和 launcher/client launcher 用户文案。）
-- 最新完成: `TASK-CORE-005`（已完成 ROUND-001~ROUND-008 一致性审查链路收口、任务归档与 QA handoff）。
-- 最新完成: `TASK-CORE-016`（已完成下一轮跨模块优先级清单与第一优先级选择）。
-- 最新完成: `TASK-CORE-017`（已完成发布候选 readiness 统一入口定义）。
-- 最新完成: `TASK-CORE-018`（已完成首份候选级 readiness 看板实例化）。
-- 最新完成: `TASK-CORE-019`（已完成版本级候选扩展与首份 version board）。
-- 最新完成: `TASK-CORE-020`（已完成版本级 runtime 联合证据首轮绑定）。
-- 最新完成: `TASK-CORE-021`（已完成真实版本级 soak 样本绑定，并将版本级候选总状态提升为 `ready`）。
-- 最新完成: `TASK-CORE-022`（已完成版本候选正式 go/no-go 评审记录，并固化 QA / LiveOps 交接入口）。
-- 最新完成: `TASK-CORE-023`（已完成文档总入口公开阅读路径同步，并更新到 `2026-03-11`）。
-- 最新完成: `TASK-CORE-024`（已修正 core 文件级索引并补齐本轮新增专题入口）。
-- 最新完成: `TASK-CORE-025`（已清理 core 主项目中的串位产物块，恢复任务区结构一致性）。
-- 最新完成: `TASK-CORE-026`（已同步 core 模块目录索引并补齐活跃专题入口）。
-- 最新完成: `TASK-CORE-027`（已清理工程总入口兼容跳转重复条目）。
-- 最新完成: `TASK-CORE-028`（历史上已建立玩家访问模式总契约；当前活跃口径已冻结为 `viewer / pure_api` 双模式，其中 `software_safe` 仅保留兼容 alias，并明确 mode / execution lane 分层口径。）
-- 最新完成: `TASK-CORE-029`（已完成 `testing-manual`、`world-simulator`、`game` 与 `testing` 的下游术语回写，现行口径收口为 `viewer / pure_api` 双模式与 execution lane 的跨模块分层。）
-- 最新完成: `TASK-CORE-030`（已完成 core / viewer 活跃入口与实际窗口标题的 `oasis7` 品牌收口）。
-- 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts`、`world-runtime` 的活跃专题品牌收口）。
-- 最新完成: `TASK-CORE-033`（已建立 ROUND-009 小分母治理台账，冻结消费入口/手册语义 focused scope 与问题池）。
-- 最新完成: `TASK-CORE-034`（已为 Viewer 与 Web UI 闭环建立 canonical `*.manual.md` 入口，并完成首批 README / static docs hub / ROUND-009 台账回写。）
-- 最新完成: `TASK-CORE-035`（已为 repo / 工程总入口 / 静态 docs hub 补齐按目标进入的阅读路径，首批收口 `I9-001` 的高频入口对象。）
-- 最新完成: `TASK-CORE-036`（已为 `readme` 模块入口显式拆分 `canonical / runbook / material / execution_log`，首批收口 `I9-003` 的边界混用问题。）
-- 最新完成: `TASK-CORE-037`（已将 `ui_review_result` 明确为活跃评审样本池，并补齐根级例外目录的进入/退出条件。）
-- 最新完成: `TASK-CORE-038`（已为 `world-simulator` README 增加按目标进入分流，并明确 README / `prd.index.md` / canonical Viewer 手册 / 公开静态镜像的职责边界。）
-- 最新完成: `TASK-CORE-039`（已为 `site` README 补齐 site 模块、公开 docs hub、手册镜像策略与仓库权威手册之间的入口映射。）
-- 最新完成: `TASK-CORE-040`（ROUND-009 已完成 QA 复审，focused scope 终态冻结为 `15 aligned + 8 deferred`，无新增阻断。）
-- 最新完成: `TASK-CORE-041`（已建立 ROUND-010 小分母治理台账，从 ROUND-009 deferred 项中冻结 `world-runtime / p2p / scripts / game / playability_test_result / headless-runtime` 六个模块 README。）
-- 最新完成: `TASK-CORE-042`（已为 `world-runtime` README 增加任务导向入口，并明确 README、长表索引与高频 runtime/wasm/module 专题的阅读边界。）
-- 最新完成: `TASK-CORE-043`（已为 `p2p` README 增加任务导向入口，并明确 README、长表索引与主链安全 / hosted world / token-governance signer 高频专题的阅读边界。）
-- 最新完成: `TASK-CORE-044`（已为 `scripts` README 补齐 task-worktree bootstrap / landing / harness 的轻量入口映射，并明确 README / 长表索引 / 高频脚本专题边界。）
-- 最新完成: `TASK-CORE-045`（已为 `game` README 增加轻量“从这里开始”，明确产品目标、执行追踪、玩法总览、试玩口径与高频 claim 规则专题之间的阅读顺序。）
-- 最新完成: `TASK-CORE-046`（已为 `playability_test_result` README 增加 evidence-first 入口，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序。）
-- 最新完成: `TASK-CORE-047`（已为 `headless-runtime` README 增加命名迁移后的轻量入口，明确 `nonviewer` 历史专题、检查清单、模板目录与执行追踪之间的阅读顺序。）
-- 最新完成: `TASK-CORE-048`（ROUND-010 已完成 QA 复审与关轮，focused scope 终态冻结为 `6 aligned + 0 deferred`，无新增阻断。）
-- 最新完成: `TASK-CORE-030`（已完成 core 活跃专题标题、Viewer 活跃手册与实际 Viewer 窗口/Web 标题的 `oasis7` 品牌对齐，并保留旧实现名仅作 internal compatibility naming 说明）。
-- 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts` 与 `world-runtime` 仍可读历史专题标题的 `oasis7` 品牌收口，未触碰内部实现兼容名）。
-- 说明: 本文档仅维护 core 设计执行状态；过程记录在 `doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-09.md`、`doc/devlog/2026-03-10.md`、`doc/devlog/2026-03-11.md` 与 `doc/devlog/2026-03-19.md`。
+- 当前执行窗口: 继续以 `TASK-CORE-054` 为主；跨模块阶段判断、发布候选口径与入口治理仍以本页任务清单和对应专题 project 为准。
+- 最近完成的入口治理、taxonomy 收口与 readiness 建模不再在这里逐条滚动播报；统一回看对应专题 `*.project.md` 与 `.pm/tasks/*.execution.md`。
+- 说明: 本文档只保留当前执行窗口与下一步判断；历史完成态继续以任务清单、专题 project 与 execution log 为准。
 
 ## 阶段收口执行顺序（PRD-CORE-004）
 1. `TASK-CORE-013`: 对齐模块级下一任务与阻断条件，确保 P0/P1/P2 在各自 project 中可执行。

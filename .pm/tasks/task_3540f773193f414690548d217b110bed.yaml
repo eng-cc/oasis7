@@ -1,0 +1,23 @@
+task_uid: task_3540f773193f414690548d217b110bed
+title: "reduce documentation redundancy across redirects readmes and project pages"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-doc-redundancy-burn-down
+execution_log_path: .pm/tasks/task_3540f773193f414690548d217b110bed.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/project.md
+  - doc/README.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-025
+acceptance:
+  - "root legacy redirects use minimal redirect structure only"
+  - "module README landing pages stop duplicating long topic inventories and shared rules"
+  - "module project pages keep active truth and drop completed historical bulk"
+handoff_to: []
+updated_at: 2026-05-23T20:17:42+08:00
+last_started_at: 2026-05-23T20:02:34+08:00
+last_closed_at: 2026-05-23T20:17:42+08:00
