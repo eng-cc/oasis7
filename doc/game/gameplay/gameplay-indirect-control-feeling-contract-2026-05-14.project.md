@@ -15,27 +15,30 @@
 
 | topic slug | owner role | status | 目标 |
 | --- | --- | --- | --- |
+| `runtime-bounded-response-fallback-contract` | `runtime_engineer` | `completed` | 已把 `response_window_class`、`stalled_reason`、`escalation_hint` 与 `fallback_action_*` 下沉到 canonical truth，并用 snapshot/persist 定向测试阻断 accepted intent 后的连续静默等待灰区。 |
 | `viewer-control-feeling-surface-alignment` | `viewer_engineer` | `completed` | 已收口 headed Web/UI 首屏与续玩面，把 accepted intent、主因果、后果与下一步作为正式玩家 surface。 |
 | `agent-control-feeling-reprioritize-contract` | `agent_engineer` | `planned` | 对齐 dual-mode / action contract 的 interrupt、reprioritize、override explanation 与 handoff 语义。 |
-| `qa-control-feeling-matrix` | `qa_engineer` | `planned` | 建立 control-feeling matrix，给每条 guarantee 定义 pass/blocker 签名，并接入 trust/capability 样本复核。 |
+| `qa-control-feeling-and-anti-grind-matrix` | `qa_engineer` | `completed` | 已建立跨 `PRD-GAME-014/015` 的 guarantee 矩阵，绑定 silent-wait、world-activity-only、grind-only 与 forced-dependency blocker 的 formal sample、判据与当前 verdict。 |
 
 ## 任务建议标题（给后续 owner 直接开 task 用）
 
 | topic slug | owner role | 建议标题 |
 | --- | --- | --- |
+| `runtime-bounded-response-fallback-contract` | `runtime_engineer` | Align bounded-response and fallback truth for indirect control |
 | `runtime-control-feeling-canonical-contract` | `runtime_engineer` | Align canonical accepted-intent and causality contract for indirect control |
 | `viewer-control-feeling-surface-alignment` | `viewer_engineer` | Make player-facing agency surface explicit in headed Web and software_safe |
 | `agent-control-feeling-reprioritize-contract` | `agent_engineer` | Align reprioritize and override semantics with indirect-control contract |
-| `qa-control-feeling-matrix` | `qa_engineer` | Build control-feeling matrix and blocker signatures for formal gameplay lanes |
+| `qa-control-feeling-and-anti-grind-matrix` | `qa_engineer` | Build a cross-lane control-feeling and anti-grind blocker matrix |
 
 ## Handoff Matrix
 
 | topic slug | 发起角色 | 接收角色 | 输入 | 期望输出 |
 | --- | --- | --- | --- | --- |
+| `runtime-bounded-response-fallback-contract` | `producer_system_designer` | `runtime_engineer` | `PRD-GAME-014` 新增的 bounded-response / fallback 合同、高风险修补结论、现有 `player_gameplay` truth | `stalled/escalation/fallback` canonical 字段、静默等待阻断规则与定向验证 |
 | `runtime-control-feeling-canonical-contract` | `producer_system_designer` | `runtime_engineer` | `PRD-GAME-014` guarantees、现有 `player_gameplay`/goal/blocker taxonomy、trust gate blocker 签名 | canonical accepted intent / causality / resume truth 与定向验证 |
 | `viewer-control-feeling-surface-alignment` | `producer_system_designer` | `viewer_engineer` | guarantees、首屏噪音治理现状、headed Web/UI 与 `software_safe` 现有 surface | agency surface 对齐稿、UI 语义回归与玩家入口说明 |
 | `agent-control-feeling-reprioritize-contract` | `producer_system_designer` | `agent_engineer` | dual-mode/action contract、override 与 prompt-control 现状、future embodied 边界 | reprioritize / override / interruption 语义对账结果 |
-| `qa-control-feeling-matrix` | `producer_system_designer` | `qa_engineer` | runtime/viewer/agent 对账产物、active-LLM 正式样本入口、pure API parity 现状 | control-feeling matrix、guarantee-level pass/block 结论与 blocker 归档 |
+| `qa-control-feeling-and-anti-grind-matrix` | `producer_system_designer` | `qa_engineer` | runtime/viewer/agent 对账产物、active-LLM 正式样本入口、`PRD-GAME-015` leverage/grind 判据 | cross-lane matrix、guarantee-level pass/block 结论与 blocker 归档 |
 
 ## 验收命令（草案）
 
@@ -49,11 +52,15 @@
 - `viewer-control-feeling-surface-alignment` / surface 对齐
   - `rg -n "accepted intent|next step|blocked|override|resume" crates/oasis7_viewer crates/oasis7/src/bin/oasis7_pure_api_client.rs`
   - headed Web/UI 与 pure API 人工复核 agency surface
+- `runtime-bounded-response-fallback-contract` / bounded-response truth
+  - `rg -n "response_window|stalled|fallback|reprioritize|escalation" crates/oasis7/src/viewer/runtime_live crates/oasis7/src`
+  - 定向 runtime / snapshot 测试与静默等待升级语义对账
 - `agent-control-feeling-reprioritize-contract` / agent reprioritize contract
   - `rg -n "override|reprioritize|interrupt|prompt_control|accepted" doc/world-simulator/llm crates/oasis7/src/simulator`
   - `git diff --check`
-- `qa-control-feeling-matrix` / QA matrix
+- `qa-control-feeling-and-anti-grind-matrix` / QA matrix
   - active-LLM trust/capability 样本复核
+  - mature-world small-player / `world_activity_only` / `grind_only` 抽样
   - pure API parity 抽样
   - 输出 guarantee-level blocker 签名
 
@@ -72,9 +79,12 @@
 - `agent-control-feeling-reprioritize-contract`
   - [ ] interrupt / reprioritize / override explanation 已具备正式 contract
   - [ ] dual-mode / action contract 不再隐含“AI 自己改道但不解释”的灰区
-- `qa-control-feeling-matrix`
-  - [ ] QA control-feeling matrix 已建立
-  - [ ] 每条 guarantee 的 blocker 签名可稳定复现并回写
+- `runtime-bounded-response-fallback-contract`
+  - [x] `response_window_class`、`stalled_reason`、`escalation_hint` 与 `fallback_action_*` 已进入 canonical surface
+  - [x] accepted intent 后的连续静默等待不再伪装成普通 executing
+- `qa-control-feeling-and-anti-grind-matrix`
+  - [x] QA cross-lane matrix 已建立
+  - [x] `silent wait without fallback`、`world_activity_only`、`grind_only` 与 `forced dependency` blocker 签名可稳定复现并回写
 
 ## 依赖
 

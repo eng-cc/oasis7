@@ -229,6 +229,118 @@ fn player_gameplay_primary_blocker(
         .or_else(|| status_reason.cloned())
 }
 
+fn player_gameplay_response_window_class(
+    gameplay: &PlayerGameplaySnapshot,
+    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+) -> Option<String> {
+    if let Some(feedback) = recent_feedback {
+        return Some(match feedback.stage.as_str() {
+            "accepted" | "submitted" | "queued" | "ack" => {
+                "waiting_for_committed_progress".to_string()
+            }
+            "completed_no_progress" => "stalled_needs_escalation".to_string(),
+            "blocked" => "blocked_needs_repair".to_string(),
+            "rejected" => "request_rejected".to_string(),
+            "completed_advanced" => "resolved".to_string(),
+            _ => match gameplay.execution_state {
+                PlayerGameplayExecutionState::Accepted => "waiting_for_committed_progress",
+                PlayerGameplayExecutionState::Blocked => "blocked_needs_repair",
+                PlayerGameplayExecutionState::Rejected => "request_rejected",
+                PlayerGameplayExecutionState::Completed => "resolved",
+                PlayerGameplayExecutionState::Executing => "watch_next_tick",
+            }
+            .to_string(),
+        });
+    }
+
+    match gameplay.execution_state {
+        PlayerGameplayExecutionState::Accepted => {
+            Some("waiting_for_committed_progress".to_string())
+        }
+        PlayerGameplayExecutionState::Blocked => Some("blocked_needs_repair".to_string()),
+        PlayerGameplayExecutionState::Rejected => Some("request_rejected".to_string()),
+        PlayerGameplayExecutionState::Completed => Some("resolved".to_string()),
+        PlayerGameplayExecutionState::Executing => None,
+    }
+}
+
+fn player_gameplay_stalled_reason(
+    gameplay: &PlayerGameplaySnapshot,
+    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+) -> Option<String> {
+    recent_feedback
+        .filter(|feedback| matches!(feedback.stage.as_str(), "completed_no_progress" | "blocked"))
+        .and_then(|feedback| feedback.reason.clone())
+        .or_else(|| {
+            (gameplay.execution_state == PlayerGameplayExecutionState::Blocked)
+                .then(|| {
+                    gameplay
+                        .blocker_detail
+                        .clone()
+                        .or_else(|| gameplay.blocker_kind.clone())
+                })
+                .flatten()
+        })
+}
+
+fn player_gameplay_escalation_hint(
+    gameplay: &PlayerGameplaySnapshot,
+    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+) -> Option<String> {
+    recent_feedback
+        .filter(|feedback| {
+            matches!(
+                feedback.stage.as_str(),
+                "accepted" | "submitted" | "queued" | "ack" | "completed_no_progress" | "blocked"
+            )
+        })
+        .and_then(|feedback| feedback.hint.clone())
+        .or_else(|| {
+            (gameplay.execution_state == PlayerGameplayExecutionState::Blocked
+                || gameplay.execution_state == PlayerGameplayExecutionState::Accepted)
+                .then(|| gameplay.next_step_hint.clone())
+        })
+}
+
+fn player_gameplay_fallback_action(
+    gameplay: &PlayerGameplaySnapshot,
+    response_window_class: Option<&str>,
+) -> Option<(String, String)> {
+    let enabled_actions: Vec<&PlayerGameplayAction> = gameplay
+        .available_actions
+        .iter()
+        .filter(|action| action.disabled_reason.is_none())
+        .collect();
+    if enabled_actions.is_empty() {
+        return None;
+    }
+
+    let request_snapshot = enabled_actions
+        .iter()
+        .find(|action| action.protocol_action == "request_snapshot")
+        .copied();
+    let advance_step = enabled_actions
+        .iter()
+        .find(|action| action.action_id == "advance_step")
+        .copied();
+    let resume_play = enabled_actions
+        .iter()
+        .find(|action| action.action_id == "resume_play")
+        .copied();
+
+    let preferred = match response_window_class {
+        Some("waiting_for_committed_progress") => advance_step.or(resume_play).or(request_snapshot),
+        Some("stalled_needs_escalation") | Some("blocked_needs_repair") => {
+            request_snapshot.or(advance_step).or(resume_play)
+        }
+        Some("request_rejected") => request_snapshot.or(advance_step).or(resume_play),
+        _ => None,
+    }
+    .or_else(|| enabled_actions.first().copied())?;
+
+    Some((preferred.action_id.clone(), preferred.label.clone()))
+}
+
 fn derive_player_gameplay_execution_state(
     stage_status: PlayerGameplayStageStatus,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
@@ -334,6 +446,14 @@ fn finalize_player_gameplay_snapshot(
     gameplay.last_world_change = player_gameplay_last_world_change(&gameplay, recent_feedback);
     gameplay.resume_anchor = Some(format!("{} ({})", gameplay.goal_title, gameplay.goal_id));
     gameplay.primary_blocker = player_gameplay_primary_blocker(&gameplay, status_reason.as_ref());
+    gameplay.response_window_class =
+        player_gameplay_response_window_class(&gameplay, recent_feedback);
+    gameplay.stalled_reason = player_gameplay_stalled_reason(&gameplay, recent_feedback);
+    gameplay.escalation_hint = player_gameplay_escalation_hint(&gameplay, recent_feedback);
+    let fallback_action =
+        player_gameplay_fallback_action(&gameplay, gameplay.response_window_class.as_deref());
+    gameplay.fallback_action_id = fallback_action.as_ref().map(|(id, _)| id.clone());
+    gameplay.fallback_action_label = fallback_action.map(|(_, label)| label);
     gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
     gameplay
 }
@@ -393,6 +513,11 @@ pub(super) fn build_player_gameplay_snapshot(
             branch_hint: None,
             resume_anchor: None,
             primary_blocker: None,
+            response_window_class: None,
+            stalled_reason: None,
+            escalation_hint: None,
+            fallback_action_id: None,
+            fallback_action_label: None,
             resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
@@ -481,6 +606,11 @@ pub(super) fn build_player_gameplay_snapshot(
                 branch_hint: None,
                 resume_anchor: None,
                 primary_blocker: None,
+                response_window_class: None,
+                stalled_reason: None,
+                escalation_hint: None,
+                fallback_action_id: None,
+                fallback_action_label: None,
                 resume_next_step: None,
                 available_actions,
                 recent_feedback: recent_feedback.cloned(),
@@ -496,8 +626,12 @@ pub(super) fn build_player_gameplay_snapshot(
         && !has_first_output
         && latest_blocker.is_none()
     {
-        available_actions[0].label =
-            "Advance 1 step to create the first world feedback".to_string();
+        if let Some(action) = available_actions
+            .iter_mut()
+            .find(|action| action.action_id == "advance_step")
+        {
+            action.label = "Advance 1 step to create the first world feedback".to_string();
+        }
         return finalize(PlayerGameplaySnapshot {
             stage_id: PlayerGameplayStageId::FirstSessionLoop,
             stage_status: PlayerGameplayStageStatus::Active,
@@ -522,6 +656,11 @@ pub(super) fn build_player_gameplay_snapshot(
             branch_hint: None,
             resume_anchor: None,
             primary_blocker: None,
+            response_window_class: None,
+            stalled_reason: None,
+            escalation_hint: None,
+            fallback_action_id: None,
+            fallback_action_label: None,
             resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
@@ -578,6 +717,11 @@ pub(super) fn build_player_gameplay_snapshot(
             branch_hint: None,
             resume_anchor: None,
             primary_blocker: None,
+            response_window_class: None,
+            stalled_reason: None,
+            escalation_hint: None,
+            fallback_action_id: None,
+            fallback_action_label: None,
             resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
@@ -637,6 +781,11 @@ pub(super) fn build_player_gameplay_snapshot(
                     branch_hint: None,
                     resume_anchor: None,
                     primary_blocker: None,
+                    response_window_class: None,
+                    stalled_reason: None,
+                    escalation_hint: None,
+                    fallback_action_id: None,
+                    fallback_action_label: None,
                     resume_next_step: None,
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
@@ -671,6 +820,11 @@ pub(super) fn build_player_gameplay_snapshot(
                     ),
                     resume_anchor: None,
                     primary_blocker: None,
+                    response_window_class: None,
+                    stalled_reason: None,
+                    escalation_hint: None,
+                    fallback_action_id: None,
+                    fallback_action_label: None,
                     resume_next_step: None,
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
@@ -705,6 +859,11 @@ pub(super) fn build_player_gameplay_snapshot(
                     ),
                     resume_anchor: None,
                     primary_blocker: None,
+                    response_window_class: None,
+                    stalled_reason: None,
+                    escalation_hint: None,
+                    fallback_action_id: None,
+                    fallback_action_label: None,
                     resume_next_step: None,
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
@@ -739,6 +898,11 @@ pub(super) fn build_player_gameplay_snapshot(
             branch_hint: None,
             resume_anchor: None,
             primary_blocker: None,
+            response_window_class: None,
+            stalled_reason: None,
+            escalation_hint: None,
+            fallback_action_id: None,
+            fallback_action_label: None,
             resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
@@ -771,6 +935,11 @@ pub(super) fn build_player_gameplay_snapshot(
             branch_hint: None,
             resume_anchor: None,
             primary_blocker: None,
+            response_window_class: None,
+            stalled_reason: None,
+            escalation_hint: None,
+            fallback_action_id: None,
+            fallback_action_label: None,
             resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
@@ -803,6 +972,11 @@ pub(super) fn build_player_gameplay_snapshot(
             branch_hint: None,
             resume_anchor: None,
             primary_blocker: None,
+            response_window_class: None,
+            stalled_reason: None,
+            escalation_hint: None,
+            fallback_action_id: None,
+            fallback_action_label: None,
             resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
@@ -834,6 +1008,11 @@ pub(super) fn build_player_gameplay_snapshot(
         branch_hint: None,
         resume_anchor: None,
         primary_blocker: None,
+        response_window_class: None,
+        stalled_reason: None,
+        escalation_hint: None,
+        fallback_action_id: None,
+        fallback_action_label: None,
         resume_next_step: None,
         available_actions,
         recent_feedback: recent_feedback.cloned(),

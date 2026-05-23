@@ -42,6 +42,7 @@
   - SC-9: 纯 API 客户端与 UI 客户端在信息粒度、可执行动作和持续游玩能力上具备可审计的等价性，不再只是探针式协议入口。
   - SC-10: 当前阶段与下一阶段准入门禁具备统一专题 PRD；在 headed Web/UI、pure API、no-UI、longrun/recovery 和 liveops 口径全部收口前，不得把项目对外升级为 `closed beta`。
   - SC-11: 新增尺度语义专题 PRD，明确“世界物理真值采用厘米整数合同”与“当前玩家主路线仍是间接控制文明模拟”之间的边界，不把 `1cm` 误写成 Minecraft 式逐块直接操作承诺。
+  - SC-12: 当前间接控制主路线必须继续满足 bounded-response / clear-fallback / anti-passive-control 约束，且 mature-world 小玩家承接必须证明 `player leverage` 增长而非仅靠重复工业体量 grind。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -217,6 +218,8 @@
   - NFR-GAME-19: `PRD-GAME-013` 所覆盖的 active 文档与玩家入口 100% 必须区分物理真值、coarse-grained 子系统分辨率、玩家动作粒度与表现层夸张，不允许把 `1cm` 直接包装成当前 block-editing 主玩法承诺。
   - NFR-GAME-20: `PRD-GAME-014` 所覆盖的 headed Web/UI 与 pure API 正式玩家入口 100% 必须具备 accepted intent、主因果、主阻塞/override reason 与 next-step/recovery 语义，不允许只剩“世界有变化”或原始日志。
   - NFR-GAME-21: `PRD-GAME-015` 所覆盖的 mature-world 小玩家路线 100% 必须显式区分 `player leverage` 与 `world activity only`，且不得把“立即加入 major power”写成唯一继续路径；区域影响力也不得偷渡成 global governance 权力。
+  - NFR-GAME-22: `PRD-GAME-014` 所覆盖的正式间接控制 surface，在 accepted intent 之后不得连续出现无主因果、无升级建议的静默等待；若当前动作未形成有效推进，必须回写 `blocked / stalled / reprioritize / fallback` 之一。
+  - NFR-GAME-23: `PRD-GAME-015` 所覆盖的 mature-world 小玩家样本，不得只以“产量更高/库存更多”证明继续可玩；每个正式样本都必须附带新的 leverage class、区域用途或恢复后新选择的证据。
 - Security & Privacy: gameplay 不直接处理密钥；涉及玩家反馈与行为数据时遵循最小化采集与脱敏记录。
 
 ## 5. Risks & Roadmap

@@ -459,6 +459,11 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
             "Recover sustainable capability (post_onboarding.recover_capability)".to_string(),
         ),
         primary_blocker: Some("iron input exhausted at factory-0".to_string()),
+        response_window_class: Some("stalled_needs_escalation".to_string()),
+        stalled_reason: Some("latest command did not create forward progress".to_string()),
+        escalation_hint: Some("repair the line, then advance again".to_string()),
+        fallback_action_id: None,
+        fallback_action_label: None,
         resume_next_step: Some("Replenish upstream materials and advance again.".to_string()),
         available_actions: Vec::new(),
         recent_feedback: Some(PlayerGameplayRecentFeedback {
