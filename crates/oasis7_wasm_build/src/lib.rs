@@ -163,10 +163,7 @@ fn read_cargo_metadata(
         "--filter-platform".to_string(),
         target.to_string(),
     ];
-    let lock_path = manifest_path
-        .parent()
-        .map(|parent| parent.join("Cargo.lock"))
-        .filter(|path| path.exists());
+    let lock_path = find_lockfile_for_metadata(manifest_path);
     if lock_path.is_some() {
         args.push("--locked".to_string());
     }
@@ -185,6 +182,18 @@ fn read_cargo_metadata(
         });
     }
     serde_json::from_slice(&output.stdout).map_err(SourceHashError::MetadataJson)
+}
+
+fn find_lockfile_for_metadata(manifest_path: &Path) -> Option<PathBuf> {
+    let mut current = manifest_path.parent();
+    while let Some(dir) = current {
+        let lock_path = dir.join("Cargo.lock");
+        if lock_path.exists() {
+            return Some(lock_path);
+        }
+        current = dir.parent();
+    }
+    None
 }
 
 fn workspace_root(
@@ -490,6 +499,19 @@ mod tests {
 
         let hash = compute_source_hash(&manifest_path, DEFAULT_WASM_TARGET).expect("source hash");
         assert!(!hash.is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn find_lockfile_for_metadata_searches_workspace_ancestors() {
+        let root = unique_temp_dir("oasis7-wasm-build-lockfile");
+        let manifest_path = write_fixture_workspace(&root, "pub fn value() -> u32 { 1 }\n", None);
+        let workspace_lock = root.join("Cargo.lock");
+        write_file(&workspace_lock, "# lockfile\n");
+
+        let found = find_lockfile_for_metadata(&manifest_path);
+        assert_eq!(found.as_deref(), Some(workspace_lock.as_path()));
+
         let _ = fs::remove_dir_all(root);
     }
 }
