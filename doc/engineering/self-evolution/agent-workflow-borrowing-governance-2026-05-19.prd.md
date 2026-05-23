@@ -180,6 +180,7 @@
     - `brainstorming` -> bounded brainstorming contract
     - `using-superpowers` 的 process-skill routing order -> repo-owned workflow router
   - 剩余 follow-up:
+    - workflow enforcement audit follow-up：把 helper 输出升级为 `.pm` task 真值，并让底层 `done` 状态迁移直接拒绝无 fresh verification evidence 的 closeout
     - Viewer visual companion pilot：仅在下一轮结构/视觉专题里验证 optional ideation 收益
   - Deferred reopen:
     - multi-harness workflow packaging：仅在 repo-owned behavior/eval 稳定后重开
@@ -195,7 +196,7 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-AWB-001 | `agent-workflow-borrowing-governance`、`workflow-behavior-eval-and-closeout-hardening` | `test_tier_required` + `test_tier_full` | adopted/rejected/deferred 矩阵、repo-owned agent behavior eval、主链 workflow helper 回放 | `engineering` workflow 主链、agent 行为一致性 |
-| PRD-ENGINEERING-AWB-002 | `completion-claim-verification-followup` | `test_tier_required` | fresh verification claim checklist/helper/smoke、失败签名与阻断文案 | task closeout、PR preflight、QA 报告口径 |
+| PRD-ENGINEERING-AWB-002 | `workflow-enforcement-audit-followup` | `test_tier_required` | fresh verification claim checklist/helper/smoke、task file evidence 持久化、低层 `move-task done` 绕过阻断与失败签名 | task closeout、PR preflight、QA 报告口径、`.pm` 状态机真值 |
 | PRD-ENGINEERING-AWB-003 | `viewer-visual-companion-pilot-followup` | `test_tier_required` | Viewer Web 前置 mockup/IA 对比样例、实现 task handoff、后续 `agent-browser`/repo-owned regression 不回退 | `world-simulator/viewer` 设计前置链路 |
 | PRD-ENGINEERING-AWB-008 | `bounded-brainstorming-workflow-rollout` | `test_tier_required` | `AGENTS.md` 的 bounded brainstorming rule、handoff/planning option-framing 字段、本地 `bounded-brainstorming` skill，以及 borrowing/conflict/skill-surface 文档改判 | `engineering` 的方向探索、scope decomposition 与 optional visual ideation 边界 |
 | PRD-ENGINEERING-AWB-009 | `repo-owned-workflow-router` | `test_tier_required` | root `AGENTS.md` 的 phase order、`.agents/skills/repo-owned-workflow-router`、`.agents/skills/README.md` 入口，以及 borrowing/conflict/skill-surface 文档对齐 | `engineering` 的端到端流程路由、阶段切换与本地 process-skill 组合 |

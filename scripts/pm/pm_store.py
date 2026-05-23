@@ -105,6 +105,13 @@ REDACTION_PATTERNS = [
     ),
     (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._-]{10,}\b"), "Bearer [REDACTED_TOKEN]"),
 ]
+TASK_VERIFICATION_FIELD_NAMES = (
+    "last_claim_type",
+    "last_verify_command",
+    "last_verified_at",
+    "last_verification_exit_code",
+    "last_verification_status",
+)
 
 
 def now_iso() -> str:
@@ -514,6 +521,12 @@ def find_registry_task(root: pathlib.Path, task_uid: str) -> tuple[OrderedDict[s
 
 def load_task_context(root: pathlib.Path, task_uid: str) -> dict[str, object]:
     _, task_fields = find_task_file(root, task_uid)
+    verification_exit_code = task_fields.get("last_verification_exit_code")
+    if verification_exit_code not in {None, ""}:
+        try:
+            verification_exit_code = int(verification_exit_code)
+        except (TypeError, ValueError):
+            pass
     return {
         "task_uid": task_uid,
         "owner_role": task_fields.get("owner_role"),
@@ -524,6 +537,11 @@ def load_task_context(root: pathlib.Path, task_uid: str) -> dict[str, object]:
         "execution_log_path": task_fields.get("execution_log_path"),
         "last_started_at": task_fields.get("last_started_at"),
         "last_closed_at": task_fields.get("last_closed_at"),
+        "last_claim_type": task_fields.get("last_claim_type"),
+        "last_verify_command": task_fields.get("last_verify_command"),
+        "last_verified_at": task_fields.get("last_verified_at"),
+        "last_verification_exit_code": verification_exit_code,
+        "last_verification_status": task_fields.get("last_verification_status"),
         "updated_at": task_fields.get("updated_at"),
     }
 
@@ -580,6 +598,28 @@ def record_task_workflow_phase(root: pathlib.Path, task_uid: str, role: str, pha
         task_fields["last_closed_at"] = updated_at
     task_fields["updated_at"] = updated_at
 
+    dump_mapping_document(task_path, task_fields)
+    rebuild_task_views(root)
+    return load_task_context(root, task_uid)
+
+
+def record_task_claim_verification(
+    root: pathlib.Path,
+    task_uid: str,
+    *,
+    claim_type: str,
+    verify_command: str,
+    verified_at: str,
+    verification_exit_code: int,
+    verification_status: str,
+) -> dict[str, object]:
+    task_path, task_fields = find_task_file(root, task_uid)
+    task_fields["last_claim_type"] = claim_type
+    task_fields["last_verify_command"] = verify_command
+    task_fields["last_verified_at"] = verified_at
+    task_fields["last_verification_exit_code"] = verification_exit_code
+    task_fields["last_verification_status"] = verification_status
+    task_fields["updated_at"] = now_iso()
     dump_mapping_document(task_path, task_fields)
     rebuild_task_views(root)
     return load_task_context(root, task_uid)
@@ -1597,6 +1637,16 @@ def ordered_task_fields(fields: OrderedDict[str, object], task_uid: str) -> Orde
         ordered["last_started_at"] = rewritten.get("last_started_at")
     if "last_closed_at" in rewritten:
         ordered["last_closed_at"] = rewritten.get("last_closed_at")
+    if "last_claim_type" in rewritten:
+        ordered["last_claim_type"] = rewritten.get("last_claim_type")
+    if "last_verify_command" in rewritten:
+        ordered["last_verify_command"] = rewritten.get("last_verify_command")
+    if "last_verified_at" in rewritten:
+        ordered["last_verified_at"] = rewritten.get("last_verified_at")
+    if "last_verification_exit_code" in rewritten:
+        ordered["last_verification_exit_code"] = rewritten.get("last_verification_exit_code")
+    if "last_verification_status" in rewritten:
+        ordered["last_verification_status"] = rewritten.get("last_verification_status")
     ordered["updated_at"] = rewritten.get("updated_at")
     for key, value in rewritten.items():
         if key in ordered or key == "task_id":
@@ -2348,6 +2398,53 @@ def cmd_move_task(args: argparse.Namespace) -> int:
     owner_role = str(task_fields.get("owner_role") or "")
     current_status = str(task_fields.get("status") or "")
     target_status = args.to_status
+    if target_status == "done":
+        last_started_at = str(task_fields.get("last_started_at") or "")
+        last_closed_at = str(task_fields.get("last_closed_at") or "")
+        last_verified_at = str(task_fields.get("last_verified_at") or "")
+        last_verification_status = str(task_fields.get("last_verification_status") or "")
+        last_claim_type = str(task_fields.get("last_claim_type") or "")
+        last_verify_command = str(task_fields.get("last_verify_command") or "")
+        raw_exit_code = task_fields.get("last_verification_exit_code")
+        if not last_started_at:
+            raise ValueError(f"done closeout requires last_started_at before status move: {args.task_uid}")
+        if not last_closed_at:
+            raise ValueError(f"done closeout requires last_closed_at before status move: {args.task_uid}")
+        if not last_verified_at:
+            raise ValueError(f"done closeout requires last_verified_at before status move: {args.task_uid}")
+        if last_verification_status != "verified":
+            raise ValueError(
+                f"done closeout requires verified claim evidence before status move: {args.task_uid}"
+            )
+        if last_claim_type != "task_complete":
+            raise ValueError(
+                f"done closeout requires task_complete claim evidence before status move: {args.task_uid}"
+            )
+        if not last_verify_command:
+            raise ValueError(
+                f"done closeout requires last_verify_command before status move: {args.task_uid}"
+            )
+        try:
+            verification_exit_code = int(raw_exit_code)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"done closeout requires numeric last_verification_exit_code before status move: {args.task_uid}"
+            ) from None
+        if verification_exit_code != 0:
+            raise ValueError(
+                f"done closeout requires zero-exit claim evidence before status move: {args.task_uid}"
+            )
+        started_at = datetime.fromisoformat(last_started_at)
+        closed_at = datetime.fromisoformat(last_closed_at)
+        verified_at = datetime.fromisoformat(last_verified_at)
+        if verified_at < started_at:
+            raise ValueError(
+                f"done closeout verification predates current workflow start: {args.task_uid}"
+            )
+        if closed_at < verified_at:
+            raise ValueError(
+                f"done closeout recorded close before verification evidence: {args.task_uid}"
+            )
     task_fields["status"] = target_status
     task_fields["updated_at"] = updated_at
 
@@ -2712,6 +2809,26 @@ def build_stage_report(root: pathlib.Path) -> dict[str, object]:
 def cmd_stage_report(args: argparse.Namespace) -> int:
     return cmd_stage_report_helper(args, build_stage_report_impl=build_stage_report)
 
+
+def cmd_record_task_claim_verification(args: argparse.Namespace) -> int:
+    result = record_task_claim_verification(
+        args.root,
+        args.task_uid,
+        claim_type=args.claim_type,
+        verify_command=args.verify_command,
+        verified_at=args.verified_at,
+        verification_exit_code=args.verification_exit_code,
+        verification_status=args.verification_status,
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(
+            "record-task-claim-verification: wrote "
+            f"{args.task_uid} {args.claim_type} {args.verification_status}"
+        )
+    return 0
+
 def main() -> int:
     parser = build_parser(
         handlers={
@@ -2738,6 +2855,7 @@ def main() -> int:
             "cmd_promote_working_memory_signal": cmd_promote_working_memory_signal,
             "cmd_working_memory_autoflow": cmd_working_memory_autoflow,
             "cmd_migrate_task_identity": cmd_migrate_task_identity,
+            "cmd_record_task_claim_verification": cmd_record_task_claim_verification,
         },
         default_memory_review_stale_days=DEFAULT_MEMORY_REVIEW_STALE_DAYS,
         default_working_memory_expires_days=DEFAULT_WORKING_MEMORY_EXPIRES_DAYS,
