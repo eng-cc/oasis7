@@ -54,8 +54,9 @@
    9. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
    10. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
    11. 原子步骤默认要同时记录四项证据：`Action`、`Validation Command`、`Expected Result`、`Actual Result`；若出现偏差，还要补 `Blocker / Next Action`，并回写到 handoff、`project.md` 或 `.pm/tasks/<TASK-UID>.execution.md` 中的正式 sink。
-   12. 若同一验证连续失败两次且没有新信息，必须停止猜测实现并切换为 blocker 口径：明确当前步骤、已执行验证、失败签名，以及需要补哪一条文档/决策/输入后才能继续。
-   12. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还必须明确记录 `liveops_community` 是否参与以及理由；涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice
+   12. 对 `2026-05-23` 起按当前 execution-log 模板启动的 task，execution log 每个条目除 `完成内容 / 遗留事项` 外，还必须显式写出 `Action / Validation Command / Expected Result / Actual Result / Blocker / Next Action`；没有 blocker 时写 `none`，验证不适用时也必须写明原因，避免只留下事后总结式宣称。
+   13. 若步骤说明不清、真实影响面超出当前计划，或同一验证连续失败两次且没有新信息，必须停止猜测实现并切换为 blocker 口径：明确当前步骤、已执行验证、失败签名，以及需要补哪一条文档/决策/输入后才能继续。
+   14. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还必须明确记录 `liveops_community` 是否参与以及理由；涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice
 
 6. 角色协作规则
    1. `producer_system_designer` 管目标、规则、资源与玩法口径
@@ -81,7 +82,7 @@
 9. 每个任务完成后都要写日志并跑对应测试
    1. 执行日志 canonical 路径为 `.pm/tasks/<TASK-UID>.execution.md`；不再新增集中式 `doc/devlog/YYYY-MM-DD.md`
    2. 一个任务只维护一个 execution log 文件；多角色协作时继续在条目级标注角色，不按角色拆文件
-   3. 日志至少包含：日期、时刻、角色、完成内容、遗留事项
+   3. 日志至少包含：日期、时刻、角色、完成内容、遗留事项；对 `2026-05-23` 起按当前 execution-log 模板启动的 task，还必须为每个条目补齐 `Action / Validation Command / Expected Result / Actual Result / Blocker / Next Action`
    4. 多角色并行或接力时，必须显式标注角色；推荐格式：`## YYYY-MM-DD HH:MM:SS CST / role_name`
    5. `qa_engineer` 和 `liveops_community` 的关键结论也应回写 task execution log 或正式文档
    6. execution log、handoff 与角色相关文档中的角色名，只能使用 `.agents/roles/*.md` 中已存在的标准角色名，禁止自造别名

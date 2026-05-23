@@ -1,0 +1,27 @@
+task_uid: task_4c9d1a0350034138bbc49f8b93cf321c
+title: "pm lint step evidence enforcement"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-pm-step-evidence-lint
+execution_log_path: .pm/tasks/task_4c9d1a0350034138bbc49f8b93cf321c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+  - doc/engineering/project.md
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+related_prd:
+  - PRD-ENGINEERING-AWB-002
+  - PRD-ENGINEERING-031
+acceptance:
+  - "pm task lint rejects execution-log entries that claim atomic execution without actual-result evidence"
+  - "repo-owned docs record the new enforcement boundary and backward-compatibility rule"
+  - "fresh pm/doc governance verification passes in the task worktree"
+handoff_to: []
+updated_at: 2026-05-23T19:33:29+08:00
+last_started_at: 2026-05-23T19:15:22+08:00
+last_closed_at: 2026-05-23T19:33:29+08:00

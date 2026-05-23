@@ -213,6 +213,11 @@ cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
 ## 2026-03-30 22:30:00 CST / qa_engineer
 - 完成内容: viewer smoke blocked on startup bridge init.
 - 遗留事项: needs escalation into candidate task and stage gate.
+- Action: 记录 viewer smoke 启动阻断并将其提升到 blocked task。
+- Validation Command: PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" --source-type bootstrap_evidence --source-ref .pm/evidence/bootstrap.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup bridge init" --create-task --json
+- Expected Result: 生成 candidate task 与 execution log 证据，后续可以转 blocked 并挂到 stage gate。
+- Actual Result: 已生成 task、execution log 与 bootstrap evidence 引用，随后任务被转入 blocked backlog。
+- Blocker / Next Action: needs escalation into candidate task and stage gate.
 EOF
 
 MOVE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" \
@@ -511,6 +516,11 @@ cat > "$TMPDIR/$CLOSEOUT_TASK_LOG_PATH" <<EOF
 ## 2026-03-30 22:50:00 CST / qa_engineer
 - 完成内容: prepared a started task for one-command closeout validation.
 - 遗留事项: helper should close the task and keep PM lint green.
+- Action: 为 task-closeout helper 准备一个已启动的 committed task。
+- Validation Command: PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$CLOSEOUT_TASK_UID" --json
+- Expected Result: task 记录 fresh last_started_at，后续 task-closeout.sh 只在提供 --verify-command 时允许收口到 done。
+- Actual Result: smoke task 已成功进入 started committed 状态，随后用它验证 closeout helper 的 verify-command 强制要求。
+- Blocker / Next Action: helper should close the task and keep PM lint green.
 EOF
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$CLOSEOUT_TASK_UID" --to-status committed >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$CLOSEOUT_TASK_UID" --json >/dev/null
@@ -554,6 +564,57 @@ print(
 PY
 )"
 TASK_CLOSEOUT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" --role qa_engineer --task-uid "$CLOSEOUT_TASK_UID" --verify-command "printf 'closeout verification ok\n'" --json)"
+
+MISSING_ACTUAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
+  --owner-role qa_engineer \
+  --title "missing actual result lint fixture" \
+  --priority P2 \
+  --source-ref .pm/evidence/bootstrap.md \
+  --json)"
+MISSING_ACTUAL_TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$MISSING_ACTUAL_JSON")"
+MISSING_ACTUAL_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["execution_log_path"])' <<<"$MISSING_ACTUAL_JSON")"
+cat > "$TMPDIR/$MISSING_ACTUAL_LOG_PATH" <<EOF
+# $MISSING_ACTUAL_TASK_UID Execution Log
+
+- task_uid: $MISSING_ACTUAL_TASK_UID
+- title: missing actual result lint fixture
+- owner_role: qa_engineer
+- worktree_hint: null
+
+<!-- Append entries using:
+Example:
+  ## YYYY-MM-DD HH:MM:SS CST / role_name
+  - 完成内容: ...
+  - 遗留事项: ...
+  - Action: ...
+  - Validation Command: ...
+  - Expected Result: ...
+  - Actual Result: ...
+  - Blocker / Next Action: ...
+-->
+
+## 2026-05-23 00:05:00 CST / qa_engineer
+- 完成内容: prepared a negative fixture for step-evidence lint.
+- 遗留事项: lint should reject this entry because Actual Result is missing.
+- Action: 为 task-execution-log-lint 构造缺失 Actual Result 的 started task。
+- Validation Command: PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-execution-log-lint.sh"
+- Expected Result: lint 以明确的 missing Actual Result failure 拒绝该 task。
+- Blocker / Next Action: remove the fixture after the negative assertion if future smoke refactors need a clean PM root.
+EOF
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$MISSING_ACTUAL_TASK_UID" --to-status committed >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$MISSING_ACTUAL_TASK_UID" --json >/dev/null
+set +e
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-execution-log-lint.sh" >/dev/null 2>"$TMPDIR/task-execution-log-missing-actual.err"
+TASK_EXECUTION_LOG_MISSING_ACTUAL_STATUS=$?
+set -e
+if [[ "$TASK_EXECUTION_LOG_MISSING_ACTUAL_STATUS" == "0" ]]; then
+  echo "required-tier-smoke: expected task-execution-log-lint to reject a started task missing Actual Result" >&2
+  exit 1
+fi
+if ! rg -q "missing Actual Result" "$TMPDIR/task-execution-log-missing-actual.err"; then
+  echo "required-tier-smoke: expected missing Actual Result failure signature" >&2
+  exit 1
+fi
 
 RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" "$TASK_CLOSEOUT_MISSING_VERIFY_STATUS" "$TASK_CLOSEOUT_NO_VERIFY_STATE_JSON" <<'PY'
 from __future__ import annotations

@@ -201,7 +201,7 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-AWB-001 | `agent-workflow-borrowing-governance`、`workflow-behavior-eval-and-closeout-hardening` | `test_tier_required` + `test_tier_full` | adopted/rejected/deferred 矩阵、repo-owned agent behavior eval、主链 workflow helper 回放 | `engineering` workflow 主链、agent 行为一致性 |
-| PRD-ENGINEERING-AWB-002 | `completion-claim-verification-followup` | `test_tier_required` | fresh verification claim checklist/helper/smoke、失败签名与阻断文案 | task closeout、PR preflight、QA 报告口径 |
+| PRD-ENGINEERING-AWB-002 | `completion-claim-verification-followup`、`pm-step-evidence-lint-defaulting` | `test_tier_required` | fresh verification claim checklist/helper/smoke、execution-log step evidence lint、失败签名与阻断文案 | task closeout、PR preflight、QA 报告口径 |
 | PRD-ENGINEERING-AWB-003 | `viewer-visual-companion-pilot-followup` | `test_tier_required` | Viewer Web 前置 mockup/IA 对比样例、实现 task handoff、后续 `agent-browser`/repo-owned regression 不回退 | `world-simulator/viewer` 设计前置链路 |
 | PRD-ENGINEERING-AWB-010 | `repo-owned-review-request-followup` | `test_tier_required` | `requesting-repo-owned-review` skill、root workflow trigger wording、review packet writeback 与治理文档对齐 | `engineering` 的 commit 前高风险 diff 补充 review 链路 |
 | PRD-ENGINEERING-AWB-008 | `bounded-brainstorming-workflow-rollout` | `test_tier_required` | `AGENTS.md` 的 bounded brainstorming rule、handoff/planning option-framing 字段、本地 `bounded-brainstorming` skill，以及 borrowing/conflict/skill-surface 文档改判 | `engineering` 的方向探索、scope decomposition 与 optional visual ideation 边界 |
@@ -210,7 +210,7 @@
 | PRD-ENGINEERING-AWB-005 | `workflow-planning-surface-tightening` | `test_tier_required` | `AGENTS.md` 规则、handoff 模板、planning self-checklist、topic/root project 回写与文档治理校验 | `engineering` planning / handoff / review 准备链路 |
 | PRD-ENGINEERING-AWB-006 | `default-role-subagent-orchestration`、`role-subagent-local-validation`、`subagent-driven-default-reconciliation`、`subagent-driven-default-workflow-rollout`、`workflow-behavior-eval-and-closeout-hardening` | `test_tier_required` + `test_tier_full` | `AGENTS.md` 默认 orchestrator/subagent 规则与 bounded subagent-driven execution、handoff/planning contract、borrowing/conflict 文档改判、repo-owned multi-agent behavior eval | `engineering` 多角色协作、owner/task/worktree/PR 真值边界 |
 | PRD-ENGINEERING-AWB-007 | `bounded-tdd-workflow-rollout` | `test_tier_required` | `AGENTS.md` 的 behavior-first testing rule、handoff/planning/test-skill 回写、borrowing/conflict 文档改判与技能边界对齐 | `engineering` 行为变更类实现任务、自动化回归与 skip-reason 审计边界 |
-| PRD-ENGINEERING-031 | `workflow-execution-surface-tightening` | `test_tier_required` | repo-owned execution skill、`AGENTS.md` execution rule、workflow-borrowing / conflict doc 回写与文档治理校验 | `engineering` task 执行、逐步验证与 blocker handling 链路 |
+| PRD-ENGINEERING-031 | `workflow-execution-surface-tightening`、`pm-step-evidence-lint-defaulting` | `test_tier_required` | repo-owned execution skill、`AGENTS.md` execution rule、execution-log step evidence lint、workflow-borrowing / conflict doc 回写与文档治理校验 | `engineering` task 执行、逐步验证与 blocker handling 链路 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

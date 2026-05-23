@@ -320,6 +320,11 @@ cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
 ## 2026-03-31 10:00:00 CST / qa_engineer
 - 完成内容: memory regression smoke fixture.
 - 遗留事项: stale blocker still needs review.
+- Action: 为 memory regression smoke 准备一个 started task execution log。
+- Validation Command: PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$TASK_UID" --json
+- Expected Result: 任务拥有可被 pm-lint 验证的 started execution-log entry，并可作为 memory/source-ref 回放面。
+- Actual Result: smoke fixture task 已写入 execution log 并在后续转入 committed -> blocked，供 memory/report lint 复用。
+- Blocker / Next Action: stale blocker still needs review.
 EOF
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$TASK_UID" --to-status committed >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$TASK_UID" --json >/dev/null
@@ -532,13 +537,16 @@ if [[ "$OUTPUT_JSON" == "1" ]]; then
   exit 0
 fi
 
-python3 - <<'PY' "$RESULT_JSON"
+RESULT_JSON_PATH="$TMPDIR/result.json"
+printf '%s\n' "$RESULT_JSON" > "$RESULT_JSON_PATH"
+
+python3 - "$RESULT_JSON_PATH" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
 
-payload = json.loads(sys.argv[1])
+payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
 print("memory regression smoke: OK")
 print(f"- temp_root: {payload['temp_root']}")
 print(f"- active_count: {payload['report']['counts']['active']}")

@@ -45,6 +45,7 @@ from pm_store_task_lint import run_task_backlog_lint as run_task_backlog_lint_he
 TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
 TASK_STATUSES = {"candidate", "committed", "blocked", "done", "deferred"}
 LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
+TASK_EXECUTION_STEP_EVIDENCE_EFFECTIVE_AT = datetime.fromisoformat("2026-05-23T00:00:00+08:00")
 ALLOWED_SIGNAL_STATES = {"new", "triaged", "promoted_candidate_task", "discarded", "deferred"}
 ALLOWED_MEMORY_PROMOTION_STATES = {"pending", "promoted", "rejected", "deferred"}
 ALLOWED_PROMOTION_REASONS = {
@@ -298,6 +299,11 @@ def append_execution_log_entry(
     role: str,
     completed: str,
     pending: str,
+    action: str,
+    validation_command: str,
+    expected_result: str,
+    actual_result: str,
+    blocker_next_action: str,
 ) -> None:
     path = root / execution_log_relative_path
     if not path.is_file():
@@ -313,6 +319,11 @@ def append_execution_log_entry(
             f"## {heading} CST / {role}",
             f"- 完成内容: {completed}",
             f"- 遗留事项: {pending}",
+            f"- Action: {action}",
+            f"- Validation Command: {validation_command}",
+            f"- Expected Result: {expected_result}",
+            f"- Actual Result: {actual_result}",
+            f"- Blocker / Next Action: {blocker_next_action}",
             "",
         ]
     )
@@ -405,6 +416,17 @@ def compact_task_group(
         pending=(
             "后续若同一工作流再出现仅承担 truth refresh / doc sync 的一次性微任务，"
             "应先把正式 project/topic Trace 收口到 survivor，再执行 compact-task-group。"
+        ),
+        action="并档同 owner 的已关闭微任务并同步 survivor task 元数据。",
+        validation_command="python3 scripts/pm/pm_store.py compact-task-group <survivor_task_uid> --drop-task-uid <task_uid> [...更多 task_uid]",
+        expected_result="survivor task 合并 source_refs/doc_refs/related_prd/acceptance，dropped task 文件与 execution log 被安全删除。",
+        actual_result=(
+            f"已将 {len(dropped_records)} 个 closed micro-task 并档回 survivor task，"
+            "并删除对应 canonical task 文件与 execution log。"
+        ),
+        blocker_next_action=(
+            "none; 若未来还需并档同类微任务，先把正式 project/topic Trace 收口到 survivor，"
+            "再重复执行 compact-task-group。"
         ),
     )
 
@@ -556,6 +578,11 @@ def init_task_execution_log(
                 "  ## YYYY-MM-DD HH:MM:SS CST / role_name",
                 "  - 完成内容: ...",
                 "  - 遗留事项: ...",
+                "  - Action: ...",
+                "  - Validation Command: ...",
+                "  - Expected Result: ...",
+                "  - Actual Result: ...",
+                "  - Blocker / Next Action: ...",
                 "-->",
                 "",
             ]
@@ -2237,6 +2264,7 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
         role_backlog_path=role_backlog_path,
         backlog_file_for_status=backlog_file_for_status,
         task_execution_log_entry_re=TASK_EXECUTION_LOG_ENTRY_RE,
+        step_evidence_effective_at=TASK_EXECUTION_STEP_EVIDENCE_EFFECTIVE_AT,
         allowed_signal_states=ALLOWED_SIGNAL_STATES,
         allowed_memory_promotion_states=ALLOWED_MEMORY_PROMOTION_STATES,
         allowed_promotion_reasons=ALLOWED_PROMOTION_REASONS,
