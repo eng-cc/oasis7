@@ -92,7 +92,7 @@
 ## 3. Technical Requirements
 - Architecture Overview: 最合适的 hosted_public_join 目标态不是“让浏览器代持真正的玩家私钥”，也不是“强迫用户第一次进游戏就接外部钱包”，而是把登录、设备会话、托管签名和后续自托管升级拆成四层。
   - `identity broker`: 处理邮箱 OTP、rate limit 与登录风险控制。
-  - `account registry`: 保存 `hosted_account_id -> player_id/signer_ref/device bindings` 映射。
+  - `account registry`: 保存 `hosted_account_id -> player_id/signer_ref/device bindings` 映射；当前 hosted account 第一版实现允许 `file` 与 `Aliyun Tablestore` 双 backend，并约定 hosted 部署默认应优先落到服务端托管表存储而不是单机 JSON。
   - `session broker`: 用已验证账户换发 `player_session` 与设备短期 key challenge，服务于 runtime register/reconnect。
   - `custody service`: 只暴露 `prepare_sign/approve_sign/finalize_sign` 或等价 sign API；底层可以是 KMS/HSM 直管密钥，也可以是 KMS-wrapped sealed-key backend，但浏览器不能直接拿到长期 signer。
   - `policy engine`: 对 action class、设备风险、step-up 结果、冷却期与风控状态做统一判定。
@@ -106,6 +106,7 @@
   - `sign_authorization`: `authz_id`, `signer_ref`, `action_id`, `step_up_method`, `approved_at`, `expires_at`, `audit_id`
   - `custody_audit_log`: `audit_id`, `account_id`, `event_type`, `actor`, `reason`, `evidence_ref`, `created_at`
 - Integration Points:
+  - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_store_backend.rs`
   - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
   - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs`
   - `crates/oasis7/src/bin/oasis7_web_launcher/viewer_auth_bootstrap.rs`
@@ -118,6 +119,8 @@
 - Edge Cases & Error Handling:
   - 若邮箱重复绑定到多个 hosted account，必须提供 canonical merge / reject 规则，不能静默创建分叉账户。
   - 若浏览器丢失 device session，但账户因子仍有效，必须允许重新登录恢复，而不是要求用户回忆旧私钥。
+  - 若 hosted 部署配置了 `OASIS7_HOSTED_ACCOUNT_STORE_BACKEND=tablestore`，或 `auto` 模式下检测到 `OASIS7_HOSTED_ACCOUNT_TABLESTORE_*` / `ALIYUN_OTS_*`，但 endpoint/AK/table 条件不完整，server 必须在启动期显式报错，而不是静默回退到错误 backend。
+  - 若 Tablestore 表不存在，服务端可以在 `auto_create=true` 时自动建表；若关闭自动建表，则必须以明确错误阻断启动，避免把 hosted account 持久化退化成隐式 best-effort。
   - 若 KMS/HSM 不直接支持运行时签名算法，custody backend 可以退化为 KMS-wrapped sealed key，但对上层仍必须保持“只暴露 sign API，不暴露长期私钥”的契约。
   - 若风控判定高风险设备登录，必须把账户状态切到 `step_up_required` 或 `frozen_review`，不得继续自动签发高权限 session。
   - 若托管到自托管迁移尚未完成，managed 与 self-custody 不得并行对同一高风险动作出签，必须有单一 source of truth。

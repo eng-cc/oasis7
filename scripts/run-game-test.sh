@@ -10,6 +10,7 @@ VIEWER_PORT="4173"
 LIVE_BIND_ADDR="127.0.0.1:5023"
 WEB_BRIDGE_ADDR="127.0.0.1:5011"
 ENABLE_LLM="1"
+SCENARIO="llm_bootstrap"
 VIEWER_STATIC_DIR="web"
 CHAIN_ENABLED="1"
 CHAIN_NODE_ID=""
@@ -38,6 +39,7 @@ Development fallback:
 - source oasis7_game_launcher via cargo run with the same runtime defaults
 
 Options:
+  --scenario <name>        Launcher scenario (default: llm_bootstrap)
   --bundle-dir <path>      Use packaged bundle <path>/run-game.sh (recommended for producer/release playtests)
   --viewer-host <host>     Viewer HTTP host (default: 127.0.0.1)
   --viewer-port <port>     Viewer HTTP port (default: 4173)
@@ -63,6 +65,15 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --scenario)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "error: --scenario requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      SCENARIO="$2"
+      shift 2
+      ;;
     --bundle-dir)
       BUNDLE_DIR="${2:-}"
       shift 2
@@ -150,6 +161,11 @@ done
 
 if [[ -z "$VIEWER_HOST" || -z "$VIEWER_PORT" || -z "$LIVE_BIND_ADDR" || -z "$WEB_BRIDGE_ADDR" || -z "$VIEWER_STATIC_DIR" ]]; then
   echo "error: empty argument is not allowed" >&2
+  exit 1
+fi
+
+if [[ -z "$SCENARIO" ]]; then
+  echo "error: --scenario cannot be empty" >&2
   exit 1
 fi
 
@@ -412,7 +428,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 WORLD_ARGS=(
-  --scenario llm_bootstrap
+  --scenario "$SCENARIO"
   --live-bind "$LIVE_BIND_ADDR"
   --web-bind "$WEB_BRIDGE_ADDR"
   --viewer-host "$VIEWER_HOST"

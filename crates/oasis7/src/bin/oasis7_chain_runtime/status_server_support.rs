@@ -259,6 +259,16 @@ fn handle_chain_status_connection(
         return Ok(());
     }
 
+    if main_token_submit_api::maybe_handle_main_token_submit_request(
+        &mut stream,
+        &buffer[..bytes],
+        &runtime,
+        method,
+        path,
+    )? {
+        return Ok(());
+    }
+
     if method.eq_ignore_ascii_case("POST") && path == "/v1/chain/feedback/submit" {
         let body = match extract_http_json_body(&buffer[..bytes]) {
             Ok(body) => body,

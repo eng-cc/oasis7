@@ -99,9 +99,25 @@ BUNDLE_DIR="$(resolve_abs_path "$BUNDLE_DIR")"
 
 require_path "$BUNDLE_DIR/bin" dir
 require_path "$BUNDLE_DIR/web/index.html" file
+require_path "$BUNDLE_DIR/web/viewer.js" file
+require_path "$BUNDLE_DIR/web/software_safe.js" file
 require_path "$BUNDLE_DIR/web-launcher/index.html" file
 require_path "$BUNDLE_DIR/README.txt" file
 require_path "$BUNDLE_DIR/.oasis7-bundle-manifest.json" file
+
+if ! grep -Fq 'src="./viewer.js"' "$BUNDLE_DIR/web/index.html"; then
+  echo "error: release web entrypoint no longer references canonical viewer.js" >&2
+  exit 1
+fi
+if ! grep -Fq 'import "./viewer.js";' "$BUNDLE_DIR/web/software_safe.js"; then
+  echo "error: release web compat entrypoint no longer aliases viewer.js" >&2
+  exit 1
+fi
+if cmp -s "$BUNDLE_DIR/web/viewer.js" "$BUNDLE_DIR/web/software_safe.js"; then
+  echo "error: release web canonical and compat bundles unexpectedly match byte-for-byte" >&2
+  exit 1
+fi
+
 case "$PLATFORM" in
   linux-x64)
     require_path "$BUNDLE_DIR/run-client.sh" executable

@@ -8,7 +8,7 @@ mod config;
 mod connection_lifecycle;
 mod constructor_support;
 mod discovery;
-mod error_mapping;
+pub(crate) mod error_mapping;
 mod kad_queries;
 mod peer_manager;
 mod peer_manager_active_set;

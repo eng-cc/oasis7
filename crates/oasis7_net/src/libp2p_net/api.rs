@@ -241,14 +241,30 @@ fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
 
 impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
     fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        let (sender, receiver) = oneshot::channel();
         self.enqueue_command(Command::Publish {
             topic: topic.to_string(),
             payload: payload.to_vec(),
-        })
+            response: sender,
+        })?;
+        futures::executor::block_on(receiver).map_err(|_| {
+            WorldError::NetworkProtocolUnavailable {
+                protocol: "libp2p".to_string(),
+            }
+        })?
     }
 
     fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
-        self.enqueue_command(Command::Subscribe(topic.to_string()))?;
+        let (sender, receiver) = oneshot::channel();
+        self.enqueue_command(Command::Subscribe {
+            topic: topic.to_string(),
+            response: sender,
+        })?;
+        futures::executor::block_on(receiver).map_err(|_| {
+            WorldError::NetworkProtocolUnavailable {
+                protocol: "libp2p".to_string(),
+            }
+        })??;
         Ok(NetworkSubscription::new(
             topic.to_string(),
             Arc::clone(&self.inbox),

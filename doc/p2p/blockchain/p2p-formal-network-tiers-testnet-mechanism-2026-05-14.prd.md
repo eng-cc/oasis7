@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md`
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
 
-审计轮次: 1
+审计轮次: 2
 ## 1. Executive Summary
 - Problem Statement: oasis7 现在已有 `shared_devnet/staging/canary` 的 shared release-train 最小机制，也已有 mainnet-grade readiness 文档，但两者之间还缺一层正式的公共主链式网络分层。结果是 `shared_devnet` 容易被误读成 testnet，而 `mainnet` 又容易被误读成“等 mainnet gates 文档齐了就能直接上线”。
 - Proposed Solution: 冻结一份 producer-owned 的正式网络分层 PRD，明确 `local_devnet -> shared_devnet -> public_testnet -> mainnet` 的层级、各层 network manifest 真值、faucet/reset/validator/claims policy 边界，以及 repo-owned script/config skeleton，让后续 runtime、QA、liveops 都围绕同一套 tier contract 接线。
@@ -13,6 +13,7 @@
   - SC-3: `mainnet` 必须明确绑定 `no faucet + no reset + frozen genesis + governance registry + MAINNET readiness gates`，不得与 `public_testnet` 共用“可随时重置”的语义。
   - SC-4: 仓库内必须落地 repo-owned skeleton：network-tier manifest create/validate 脚本、smoke、example manifests 与 `testing-manual` 入口。
   - SC-5: 本专题必须明确当前结论仍是 `specified_skeleton_only`；建档与脚本骨架不等于已存在 live `public_testnet` 或 live `mainnet`。
+  - SC-6: 本专题必须补一份 repo-owned `public_testnet` live-candidate companion checklist/runbook，把 seven-lane readiness gate、owner、最小 evidence、canonical 命令与 claim boundary 冻结成可执行入口，避免“还差什么”只停留在聊天结论。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -32,7 +33,7 @@
   - PRD-P2P-TIER-004: As a `liveops_community`, I want claims boundaries tied to tier state, so that external communication stays behind execution truth.
 - Critical User Flows:
   1. Flow-P2P-TIER-001: `producer` 先为某一网络层生成 `network_tier_manifest`，固定 tier、network id、genesis、candidate bundle、endpoint policy 与 claims boundary。
-  2. Flow-P2P-TIER-002: `runtime_engineer` 以 `shared_devnet pass` 和 pinned bundle 为输入，提出 `public_testnet` manifest，声明 public RPC/explorer/faucet/reset/validator admission。
+  2. Flow-P2P-TIER-002: `runtime_engineer` 以 formal `shared_devnet` overall gate `pass` 和 pinned bundle 为输入，提出 `public_testnet` manifest，声明 public RPC/explorer/faucet/reset/validator admission；这里的 `shared_devnet pass` 只指 `shared-network-track-gate.sh --track shared_devnet` 的 required lanes 全部 `pass`，不接受局部 lane `pass/partial` 组合替代。
   3. Flow-P2P-TIER-003: `qa_engineer` 对照 manifest 与 gate 结论决定该 tier 是 `planned/specified_skeleton_only/rehearsal/live` 中哪一档，并决定是否允许 public claims。
   4. Flow-P2P-TIER-004: `mainnet` 申请时，系统必须同时检查 `public_testnet exit review + MAINNET-1~4 + frozen genesis + no-reset commitment`；任一缺失即阻断。
 - Functional Specification Matrix:
@@ -52,6 +53,7 @@
   - AC-6: `testing-manual.md` 必须新增正式 network-tier skeleton 入口，并明确当前仍无 live `public_testnet` / `mainnet`。
   - AC-7: 本专题必须明确 `public_testnet` 的资产与 faucet 只用于 rehearsal/test surface，不得被写成 `OC` 的 mainnet 价值承诺。
   - AC-8: 本专题必须明确当前 verdict 为 `specified_skeleton_only`；本轮不部署真实公共 testnet，不提升 public claims，不宣称 mainnet ready。
+  - AC-9: 必须新增 companion runbook，至少列出 `shared_devnet_pass/public_rpc_ready/explorer_public_ready/faucet_guard_ready/reset_policy_announced/runtime_bootstrap/claims_boundary_review` 七条 lane 的 owner、最小 evidence、阻断条件、建议执行顺序与 canonical 命令，并明确在真实证据补齐前仍只能维持 `specified_skeleton_only`。
 - Non-Goals:
   - 不在本专题内直接部署 live `public_testnet` 或 live `mainnet`。
   - 不在本专题内落 runtime 的多 network profile 切换实现。
@@ -69,6 +71,7 @@
   - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
   - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+  - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
   - `testing-manual.md`
   - `scripts/release-candidate-bundle.sh`
   - `scripts/shared-network-track-gate.sh`
@@ -89,7 +92,7 @@
 ## 5. Risks & Roadmap
 - Phased Rollout:
   - MVP: 冻结四层网络模型、manifest schema、claims boundary 与 repo-owned skeleton。
-  - v1.1: 把 `shared_devnet pass -> public_testnet planned` 的 promotion gate 与 runbook 正式接线。
+  - v1.1: 把 `shared-network-track-gate.sh --track shared_devnet` overall `pass` -> `public_testnet planned` 的 promotion gate 与 runbook 正式接线，避免把 shared-devnet 的局部 lane 进展误读成可进入 public-testnet manifest 的前置条件。
   - v1.2: 落第一轮 public testnet rehearsal，补齐 public RPC/explorer/faucet/reset evidence。
   - v2.0: 在 `public_testnet` exit review 与 `MAINNET-1~4` 全绿后，再讨论 mainnet manifest 激活。
 - Technical Risks:

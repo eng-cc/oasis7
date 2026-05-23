@@ -1,0 +1,24 @@
+task_uid: task_c17f29ac72924980800f6f7f87b460aa
+title: "public_testnet three-node deploy readiness audit"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-public-testnet-three-node-deploy-readiness
+execution_log_path: .pm/tasks/task_c17f29ac72924980800f6f7f87b460aa.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md
+  - doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md
+  - testing-manual.md
+  - scripts/network-tier-public-testnet-readiness.sh
+doc_refs: []
+related_prd:
+  - PRD-P2P-028
+acceptance:
+  - "Deploy a three-node public_testnet candidate or nearest repo-supported equivalent and capture runtime evidence"
+  - "Re-evaluate which public_testnet readiness lanes can be confirmed pass from live evidence"
+  - "Do not overclaim lanes that still require shared_devnet/faucet/reset/claims governance proof"
+handoff_to: []
+updated_at: 2026-05-18T22:34:59+08:00
+last_started_at: 2026-05-18T22:16:31+08:00
+last_closed_at: 2026-05-18T22:34:58+08:00

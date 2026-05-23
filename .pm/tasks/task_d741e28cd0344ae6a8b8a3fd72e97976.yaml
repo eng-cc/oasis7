@@ -1,0 +1,27 @@
+task_uid: task_d741e28cd0344ae6a8b8a3fd72e97976
+title: "extend rust-size gate coverage beyond crates-only scan"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-rust-size-tools-gate-coverage
+execution_log_path: .pm/tasks/task_d741e28cd0344ae6a8b8a3fd72e97976.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md
+  - scripts/check-rust-file-size.sh
+doc_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md
+related_prd:
+  - PRD-ENGINEERING-R1200-001
+  - PRD-ENGINEERING-R1200-003
+  - PRD-ENGINEERING-R1200-005
+acceptance:
+  - "rust-size gate fails when tracked non-third_party Rust outside crates exceeds 1200 lines"
+  - "rust-size gate continues ignoring target and third_party generated/vendor code"
+  - "engineering rust-governance docs describe the expanded scan scope and task trace"
+handoff_to: []
+updated_at: 2026-05-20T16:22:24+08:00
+last_started_at: 2026-05-20T16:03:12+08:00
+last_closed_at: 2026-05-20T16:22:24+08:00

@@ -743,6 +743,7 @@ declare -A chaos_continuous_events_executed_by_topology=()
 declare -A feedback_events_executed_by_topology=()
 declare -A feedback_events_success_by_topology=()
 declare -A feedback_events_failed_by_topology=()
+chaos_last_exempt_secs=0
 
 stop_active_processes() {
   if [[ "$active_cleanup_done" -eq 1 ]]; then
@@ -929,6 +930,49 @@ relaunch_node_from_saved_command() {
   return 0
 }
 
+wait_for_node_post_chaos_recovery() {
+  local node_name=$1
+  local timeout_secs=$2
+  local idx status_url balances_url healthz_url
+  local running last_error rr_last_error balance_load_error
+  local status_json balances_json
+  local deadline=$(( $(date +%s) + timeout_secs ))
+
+  if ! idx=$(find_node_index_by_name "$node_name"); then
+    echo "node not found for recovery wait: $node_name" >&2
+    return 1
+  fi
+  status_url=${node_status_url_by_name[$node_name]:-}
+  balances_url=${node_balances_url_by_name[$node_name]:-}
+  if [[ -z "$status_url" ]] || [[ -z "$balances_url" ]]; then
+    echo "missing node status metadata for recovery wait: $node_name" >&2
+    return 1
+  fi
+  healthz_url="${status_url%/v1/chain/status}/healthz"
+
+  while :; do
+    if ! kill -0 "${active_pids[$idx]}" >/dev/null 2>&1; then
+      echo "node exited during recovery wait: $node_name" >&2
+      return 1
+    fi
+    if curl -fsS --max-time "$curl_timeout_secs" "$healthz_url" >/dev/null 2>&1 \
+      && status_json=$(curl -fsS --max-time "$curl_timeout_secs" "$status_url" 2>/dev/null) \
+      && balances_json=$(curl -fsS --max-time "$curl_timeout_secs" "$balances_url" 2>/dev/null); then
+      running=$(jq -r '.running // false' <<< "$status_json")
+      last_error=$(jq -r '.last_error // empty' <<< "$status_json")
+      rr_last_error=$(jq -r '.reward_runtime.last_error // empty' <<< "$status_json")
+      balance_load_error=$(jq -r '.load_error // empty' <<< "$balances_json")
+      if [[ "$running" == "true" ]] && [[ -z "$last_error" ]] && [[ -z "$rr_last_error" ]] && [[ -z "$balance_load_error" ]]; then
+        return 0
+      fi
+    fi
+    if (( $(date +%s) >= deadline )); then
+      return 1
+    fi
+    sleep 1
+  done
+}
+
 execute_chaos_event() {
   local topology=$1
   local event_id=$2
@@ -937,7 +981,10 @@ execute_chaos_event() {
   local at_sec=$5
   local down_secs=$6
   local duration_secs=$7
-  local idx pid
+  local idx pid recovery_timeout_secs event_started_sec event_completed_sec
+
+  chaos_last_exempt_secs=0
+  event_started_sec=$(date +%s)
 
   if ! idx=$(find_node_index_by_name "$node_name"); then
     log_chaos_event "$topology" "$event_id" "failed" "$action" "$node_name" "node_not_found"
@@ -961,7 +1008,6 @@ execute_chaos_event() {
         log_chaos_event "$topology" "$event_id" "failed" "$action" "$node_name" "relaunch_failed"
         return 1
       fi
-      log_chaos_event "$topology" "$event_id" "completed" "$action" "$node_name" "new_pid=${active_pids[$idx]}"
       ;;
     pause|disconnect)
       log_chaos_event "$topology" "$event_id" "start" "$action" "$node_name" "at_sec=$at_sec,duration_secs=$duration_secs,pid=$pid"
@@ -980,13 +1026,29 @@ execute_chaos_event() {
         log_chaos_event "$topology" "$event_id" "failed" "$action" "$node_name" "sigcont_failed"
         return 1
       fi
-      log_chaos_event "$topology" "$event_id" "completed" "$action" "$node_name" "pid=$pid"
       ;;
     *)
       log_chaos_event "$topology" "$event_id" "failed" "$action" "$node_name" "unknown_action"
       return 1
       ;;
   esac
+
+  recovery_timeout_secs=$((startup_timeout_secs + poll_interval_secs + curl_timeout_secs))
+  if ! wait_for_node_post_chaos_recovery "$node_name" "$recovery_timeout_secs"; then
+    log_chaos_event "$topology" "$event_id" "failed" "$action" "$node_name" "recovery_timeout=${recovery_timeout_secs}s"
+    return 1
+  fi
+
+  event_completed_sec=$(date +%s)
+  chaos_last_exempt_secs=$((event_completed_sec - event_started_sec))
+  if (( chaos_last_exempt_secs < 0 )); then
+    chaos_last_exempt_secs=0
+  fi
+  if [[ "$action" == "restart" ]]; then
+    log_chaos_event "$topology" "$event_id" "completed" "$action" "$node_name" "new_pid=${active_pids[$idx]},exempt_secs=${chaos_last_exempt_secs}"
+  else
+    log_chaos_event "$topology" "$event_id" "completed" "$action" "$node_name" "pid=${active_pids[$idx]},exempt_secs=${chaos_last_exempt_secs}"
+  fi
 
   return 0
 }
@@ -1933,12 +1995,7 @@ run_topology() {
           break 2
         fi
 
-        local exempt_secs=0
-        if [[ "$event_action" == "restart" ]]; then
-          exempt_secs=$event_down_secs
-        else
-          exempt_secs=$event_duration_secs
-        fi
+        local exempt_secs=$chaos_last_exempt_secs
         chaos_exempt_secs_by_topology["$topology"]=$(( ${chaos_exempt_secs_by_topology[$topology]:-0} + exempt_secs ))
         chaos_events_executed_by_topology["$topology"]=$(( ${chaos_events_executed_by_topology[$topology]:-0} + 1 ))
         chaos_plan_events_executed_by_topology["$topology"]=$(( ${chaos_plan_events_executed_by_topology[$topology]:-0} + 1 ))
@@ -1978,12 +2035,7 @@ run_topology() {
             break 2
           fi
 
-          local generated_exempt_secs=0
-          if [[ "$generated_action" == "restart" ]]; then
-            generated_exempt_secs=$generated_down_secs
-          else
-            generated_exempt_secs=$generated_duration_secs
-          fi
+          local generated_exempt_secs=$chaos_last_exempt_secs
           chaos_exempt_secs_by_topology["$topology"]=$(( ${chaos_exempt_secs_by_topology[$topology]:-0} + generated_exempt_secs ))
           chaos_events_executed_by_topology["$topology"]=$(( ${chaos_events_executed_by_topology[$topology]:-0} + 1 ))
           chaos_continuous_events_executed_by_topology["$topology"]=$(( ${chaos_continuous_events_executed_by_topology[$topology]:-0} + 1 ))

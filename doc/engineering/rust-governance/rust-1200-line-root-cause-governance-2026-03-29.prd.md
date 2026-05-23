@@ -43,7 +43,7 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| Rust 超限扫描 | `path`、`line_count`、`is_test` | 执行 `scripts/check-rust-file-size.sh` 输出当前超限列表 | `pass/fail` | 先按 `is_test`，再按 `line_count desc` | 所有人可执行；任何提交都不得豁免 |
+| Rust 超限扫描 | `path`、`line_count`、`is_test` | 执行 `scripts/check-rust-file-size.sh` 输出当前超限列表 | `pass/fail` | 扫描 tracked 的首方 Rust 文件（当前为 `crates/**` 与 `tools/**`），显式排除 `third_party/**`、`vendor-*` 与生成目录；结果先按 `is_test`，再按 `line_count desc` | 所有人可执行；任何提交都不得豁免 |
 | 归零门禁 | `oversized_count`、`structural_slice_count`、`limit` | 若当前超限或结构切片扫描非 0 则阻断 | `pass/fail` | 任一计数非 0 即失败 | 所有人受限；无 allowlist |
 | burn-down 迁移 | `touched_path`、`before_lines`、`after_lines`、`target_module_dir`、`shrink_reason` | 对最后存量 god module 做语义拆分并补齐验证 | `planned -> verified -> retired` | `after_lines` 必须 <= 1200，旧职责需迁到真实子模块 | 触碰者必须满足；评审者不可豁免 |
 | split-part 禁止规则 | `new_file_path`、`naming_pattern`、`parent_module`、`migration_ticket` | 检查新增 `split_part/part1/part2/include!` 完成态并阻断 | `pass/fail` | 新增命名违规优先报错；存量文件允许在治理批次中逐步消化 | 所有人受限；仅主题治理任务可在迁移中短暂保留 |
@@ -69,7 +69,7 @@
 ## 4. Technical Specifications
 - Architecture Overview:
   - 治理入口层：`doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.{prd,design,project}.md` 定义规则、批次和追踪。
-  - 扫描与门禁层：`scripts/check-rust-file-size.sh` 作为单一事实源，负责扫描 `crates/**/src/*.rs` 与测试文件并要求当前超限结果为 0；`scripts/ci-tests.sh required` 调用该脚本。
+  - 扫描与门禁层：`scripts/check-rust-file-size.sh` 作为单一事实源，负责扫描 tracked 的首方 Rust 文件（当前覆盖 `crates/**/*.rs` 与 `tools/**/*.rs`），并显式排除 `third_party/**`、`vendor-*` 与 `target/**` 等 vendored/生成目录；脚本要求当前超限结果为 0，`scripts/ci-tests.sh required` 调用该脚本。
   - 退役层：`doc/.governance/rust-oversized-file-baseline.tsv` 与 `doc/.governance/rust-structural-slicing-baseline.tsv` 已删除，仓库不再维护任何 Rust 文件体量 allowlist。
   - 迁移层：以目录模块（`mod.rs + 子模块文件`）或按职责拆分的独立模块替代 `include!` 分段；每次迁移必须在 project 中定义目标边界与回归集。
   - 验证层：每批治理至少执行 `test_tier_required` 定向回归，涉及 viewer live、链运行时或 launcher 等关键入口时追加 `test_tier_full`、脚本 smoke 或 Web 闭环验证。

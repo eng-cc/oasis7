@@ -45,6 +45,7 @@ fn runtime_network_replication_respects_topic_isolation() {
         .expect("tick b")
         .with_pos_config(pos_config)
         .expect("pos config b")
+        .with_allow_local_proposals(false)
         .with_replication(signed_replication_config(dir_b.clone(), 82));
 
     let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
@@ -64,13 +65,18 @@ fn runtime_network_replication_respects_topic_isolation() {
     runtime_a.start().expect("start a");
     runtime_b.start().expect("start b");
     thread::sleep(Duration::from_millis(220));
+    let snapshot_b = runtime_b.snapshot();
 
     runtime_a.stop().expect("stop a");
     runtime_b.stop().expect("stop b");
 
-    let store_b = LocalCasStore::new(dir_b.join("store"));
-    let files = store_b.list_files().expect("list files");
-    assert!(files.is_empty());
+    assert_eq!(
+        snapshot_b.consensus.known_peer_heads, 0,
+        "topic-isolated observer should not learn peer heads: committed_height={} network_committed_height={} last_error={:?}",
+        snapshot_b.consensus.committed_height,
+        snapshot_b.consensus.network_committed_height,
+        snapshot_b.last_error
+    );
 
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);

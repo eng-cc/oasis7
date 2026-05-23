@@ -175,6 +175,19 @@
     - `./scripts/check-windows-paths.sh`
     - `git ls-files '.github/instructions/*'`
     - `git diff --check`
+- [x] release-script-executable-mode-gate (PRD-TESTING-002/003) [test_tier_required]: 修复 `release-gate-web` 只在 GitHub Linux runner 上暴露的 shell 执行位漂移，补 `scripts/check-script-executable-bits.sh` 并接入 `scripts/ci-tests.sh` 的 commit/required gate，让 release 关键脚本在进入 `release-gate-web` / `package-native` 前就能阻断 `Permission denied`。 Trace: .pm/tasks/task_81b8b3dfddd3487e9733600aad78806d.yaml
+  - 产物文件:
+    - `scripts/check-script-executable-bits.sh`
+    - `scripts/ci-tests.sh`
+    - `scripts/release-gate-web-strict.sh`
+    - `testing-manual.md`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/check-script-executable-bits.sh scripts/ci-tests.sh scripts/release-gate-web-strict.sh`
+    - `./scripts/check-script-executable-bits.sh`
+    - `git ls-files --stage scripts/check-script-executable-bits.sh scripts/release-gate-web-strict.sh`
+    - `rg -n "check-script-executable-bits|release-script-executable-mode-gate|AC-9C" scripts/ci-tests.sh testing-manual.md doc/testing/prd.md doc/testing/project.md`
 - [x] TASK-TESTING-057 (PRD-TESTING-WEB-001/002/003) [test_tier_required]: 为 `renderMode=software_safe` 补专用 prompt/chat 回归方案与 `viewer-software-safe-chat-regression.sh`，覆盖 apply/rollback/chat ack、消息流采样以及 `agent_spoke` 缺失签名。
   - 产物文件:
     - `scripts/viewer-software-safe-chat-regression.sh`
@@ -250,6 +263,42 @@
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo build --target wasm32-unknown-unknown --manifest-path crates/oasis7_client_launcher/Cargo.toml --release --bin oasis7_client_launcher`
     - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
+- [x] release-gate-web-soak-hardening (PRD-TESTING-002/003) [test_tier_required]: 修复 `Release Packages` run `26276289822` 的多层假阴性：移除 `viewer-software-safe-step-regression.sh` 对未使用 `rg` 的硬依赖；补齐 `release-gate-web-strict -> viewer-software-safe-step-regression -> run-game-test` 的 `--scenario` 参数 contract；恢复 software-safe step 回归在“无自然推进”时主动发 canonical `step` 并接受 `completed_advanced` + 正向 world delta 的正式判据；同时让 `p2p-longrun-soak.sh` 在 restart/pause chaos 后等待节点恢复到健康态再恢复采样，并把实际恢复窗口计入 `chaos_exempt_secs`，避免把预期瞬态记成 `last_error_samples` / `http_failure_samples`。 Trace: .pm/tasks/task_1aef6daff1ef4e81bbc3a6a34531a828.yaml
+  - 产物文件:
+    - `scripts/run-game-test.sh`
+    - `scripts/viewer-software-safe-step-regression.sh`
+    - `scripts/p2p-longrun-soak.sh`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_1aef6daff1ef4e81bbc3a6a34531a828.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/viewer-software-safe-step-regression.sh scripts/run-game-test.sh scripts/p2p-longrun-soak.sh`
+    - `./scripts/viewer-software-safe-step-regression.sh --help >/dev/null`
+    - `! rg -n "\\brg\\b" scripts/viewer-software-safe-step-regression.sh`
+    - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime`
+    - `./scripts/p2p-longrun-soak.sh --profile soak_release --topologies triad_distributed --duration-secs 300 --no-prewarm --max-stall-secs 240 --max-lag-p95 50 --max-distfs-failure-ratio 0.1 --chaos-continuous-enable --chaos-continuous-interval-secs 30 --chaos-continuous-start-sec 30 --chaos-continuous-max-events 8 --chaos-continuous-actions restart,pause --chaos-continuous-seed 1772284566 --chaos-continuous-restart-down-secs 1 --chaos-continuous-pause-duration-secs 2 --out-dir .tmp/release_gate_p2p_v051_fix`
+    - `./scripts/release-gate.sh --out-dir .tmp/release_gate_web_v051_fix_rerun3 --skip-ci-full --skip-sync --skip-s9 --skip-s10`
+- [x] release-web-preflight-config-shadow (PRD-TESTING-002/003) [test_tier_required]: 修复 `Release Packages` run `26290255692` 的 `release-gate-web` 假阴性：`viewer-primary-web-entry-regression.sh` 在 root 缺失 canonical `config.toml` 时，会让 launcher/chain runtime 自动生成一份只含 `[node]` keypair 的 ignored `config.toml`；同一 workflow 后续 `viewer-software-safe-step-regression.sh` 再走 `run-game-test` 时，`release-gate-web-strict.sh` 需要显式传 `--skip-llm-provider-preflight`，把 software-safe phase 收口为“stack bootstrap 后的 UI/blocker contract 验证”而不是外部 LLM provider 活性检查，同时 primary-entry 必须在退出时清理自己生成的 node-only `config.toml`，避免把前一阶段遗留副作用误判成 Web 回归。 Trace: .pm/tasks/task_b7097f476e674a429469a98d6ae36794.yaml
+  - 产物文件:
+    - `scripts/release-gate-web-strict.sh`
+    - `scripts/viewer-primary-web-entry-regression.sh`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_b7097f476e674a429469a98d6ae36794.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/release-gate-web-strict.sh scripts/viewer-primary-web-entry-regression.sh`
+    - `./scripts/viewer-primary-web-entry-regression.sh --help >/dev/null`
+    - `./scripts/release-gate-web-strict.sh --scenario llm_bootstrap --out-dir .tmp/release_gate_web_preflight_shadow --headed`
+- [x] release-web-strict-live-progress-retry (PRD-TESTING-002/003) [test_tier_required]: 修复 `Release Packages` run `26297891385` 的 `release-gate-web` 串行假阴性：`release-gate-web-strict.sh` 先跑 headed `viewer-primary-web-entry-regression`，再跑 `viewer-software-safe-step-regression` 时，不再复用同一组 launcher/web/viewer 端口；software-safe step phase 改为独立端口 + headless 浏览器，并在 `step` 长时间停留 `queued` 且无 world delta 时补发一次 canonical `play` fallback，避免把前一阶段残留 listener 或 headed live-control stall 误判成 release 回归。 Trace: .pm/tasks/task_bca86dc8b045420baf35b7e28414818c.yaml
+  - 产物文件:
+    - `scripts/release-gate-web-strict.sh`
+    - `scripts/viewer-software-safe-step-regression.sh`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_bca86dc8b045420baf35b7e28414818c.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/release-gate-web-strict.sh scripts/viewer-software-safe-step-regression.sh`
+    - `xvfb-run -a ./scripts/release-gate-web-strict.sh --scenario llm_bootstrap --out-dir /tmp/release-gate-web-strict-xvfb-mixed-clean --headed`
 - [x] release-node24-actions (PRD-TESTING-002/003) [test_tier_required]: 升级 `Release Packages` workflow 中触发 Node.js 20 deprecation warning 的 GitHub Actions runtime，确保 `release-gate-*` / `build-web-dist` / `package-native` 产物上传不再依赖 Node 20，并保持 release 资产链路语义不变。 Trace: .pm/tasks/task_62acc2d0e69649dc81eeae2c3954bd67.yaml
   - 产物文件:
     - `.github/workflows/release-packages.yml`
@@ -298,6 +347,18 @@
     - 历史验收记录：`bash -n scripts/viewer-release-qa-loop.sh`
     - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
     - 历史验收记录：`./scripts/viewer-release-qa-loop.sh --scenario llm_bootstrap --out-dir .tmp/release_gate_web_fix --headed`
+- [x] release-web-entry-text-casefold (PRD-TESTING-002/003) [test_tier_required]: 修复 `release-gate-web` 的 primary entry 文案断言假阴性；当 `agent-browser get text body` 因渲染层/CSS `text-transform` 返回全大写文本时，`viewer-primary-web-entry-regression.sh` 仍需识别 `Formal Gameplay Summary` 与 action handoff surface，不得把已存在内容误判成缺失。 Trace: .pm/tasks/task_a720e2fb03dd44369766bb4aa43cdf03.yaml
+  - 产物文件:
+    - `scripts/viewer-primary-web-entry-regression.sh`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_a720e2fb03dd44369766bb4aa43cdf03.yaml`
+    - `.pm/tasks/task_a720e2fb03dd44369766bb4aa43cdf03.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/viewer-primary-web-entry-regression.sh`
+    - `./scripts/viewer-primary-web-entry-regression.sh --help`
+    - `printf 'FORMAL GAMEPLAY SUMMARY\nACTIONS NOT EXPOSED ON THIS PAGE\n' | grep -qi 'Formal Gameplay Summary'`
+    - `printf 'FORMAL GAMEPLAY SUMMARY\nACTIONS NOT EXPOSED ON THIS PAGE\n' | grep -Eqi 'Missing Action Handoff|Actions Not Exposed On This Page'`
 - [x] shared-network-ecs-triad-chain-status-metrics-rollout (PRD-TESTING-002/003) [test_tier_required]: 归档三节点链状态指标部署与采样证据，冻结 `8e605366` release/sha256、same-window triad snapshot、最近 `10` 分钟 traffic window，以及新增 `/v1/chain/status` `transactions` / `consensus.recent_finality_latency` / `pending_proposal` / `pending_consensus_actions` contract 的 live 三节点证据。 Trace: .pm/tasks/task_c2def8d52baa4fe5a1b1df64e19a6305.yaml
   - 产物文件:
     - `doc/testing/evidence/shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md`

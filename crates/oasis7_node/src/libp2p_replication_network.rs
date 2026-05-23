@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
 use oasis7_net::{
-    Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
+    world_error_is_missing_handler, world_error_is_retryable_connection_gap, Libp2pNetwork,
+    Libp2pNetworkConfig, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
 };
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse};
@@ -691,17 +692,7 @@ fn replication_peer_health_issue_label(issue: oasis7_net::PeerManagerHealthIssue
 }
 
 fn peer_error_indicates_unsupported_protocol(err: &WorldError) -> bool {
-    match err {
-        WorldError::NetworkRequestFailed { code, message, .. } => {
-            matches!(code, DistributedErrorCode::ErrUnsupported)
-                && peer_error_message_indicates_missing_handler(message)
-                && !peer_error_message_indicates_retryable_connection_gap(message)
-        }
-        WorldError::NetworkProtocolUnavailable { protocol } => {
-            peer_error_message_indicates_missing_handler(protocol)
-        }
-        _ => false,
-    }
+    world_error_is_missing_handler(err) && !world_error_is_retryable_connection_gap(err)
 }
 
 fn peer_error_indicates_protocol_retry_cooldown(protocol: &str, err: &WorldError) -> bool {
@@ -730,31 +721,7 @@ fn peer_error_indicates_fetch_commit_not_found_retry_cooldown(
 }
 
 fn peer_error_indicates_retryable_connection_gap(err: &WorldError) -> bool {
-    match err {
-        WorldError::NetworkProtocolUnavailable { protocol } => {
-            peer_error_message_indicates_retryable_connection_gap(protocol)
-        }
-        WorldError::NetworkRequestFailed { message, .. } => {
-            peer_error_message_indicates_retryable_connection_gap(message)
-        }
-        _ => false,
-    }
-}
-
-fn peer_error_message_indicates_retryable_connection_gap(message: &str) -> bool {
-    message.contains("is not connected for protocol")
-        || message.contains("no connected peers for protocol")
-        || message.contains("no admissible connected peers for protocol")
-        || message.contains("no connected providers for protocol")
-        || message.contains("no healthy provider for protocol")
-        || message.contains("no healthy connected providers for protocol")
-        || message.contains("request failed: ConnectionClosed")
-        || message.contains("request failed: DialFailure")
-        || message.contains("request failed: Timeout")
-}
-
-fn peer_error_message_indicates_missing_handler(message: &str) -> bool {
-    message.contains("handler missing") || message.starts_with('/')
+    world_error_is_retryable_connection_gap(err)
 }
 
 fn rotated_peers(peers: &[PeerId], cursor: usize) -> Vec<PeerId> {

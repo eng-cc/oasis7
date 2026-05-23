@@ -282,18 +282,8 @@ else
   ensure_command npm
   run rm -rf "$BUNDLE_WEB_DIR"
   run mkdir -p "$BUNDLE_WEB_DIR"
-  run bash -lc "cd '$ROOT_DIR' && npm --prefix crates/oasis7_viewer run build:software-safe"
-  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.html" "$BUNDLE_WEB_DIR/index.html"
-  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.html" "$BUNDLE_WEB_DIR/viewer.html"
-  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.html" "$BUNDLE_WEB_DIR/software_safe.html"
-  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.js" "$BUNDLE_WEB_DIR/viewer.js"
-  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.js" "$BUNDLE_WEB_DIR/software_safe.js"
-  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" "$BUNDLE_WEB_DIR/software_safe_first_agent_claim_evidence.html"
-  run cp "$ROOT_DIR/crates/oasis7_viewer/favicon.ico" "$BUNDLE_WEB_DIR/favicon.ico"
-  if [[ -d "$ROOT_DIR/crates/oasis7_viewer/pixel-world-bridge" ]]; then
-    run rm -rf "$BUNDLE_WEB_DIR/pixel-world-bridge"
-    run cp -R "$ROOT_DIR/crates/oasis7_viewer/pixel-world-bridge" "$BUNDLE_WEB_DIR/pixel-world-bridge"
-  fi
+  run "$ROOT_DIR/scripts/build-viewer-software-safe.sh"
+  run "$ROOT_DIR/scripts/copy-viewer-web-dist.sh" --dist-dir "$BUNDLE_WEB_DIR"
 fi
 
 # 3) Prepare launcher web dist (prebuilt artifact preferred; trunk build fallback).

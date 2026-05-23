@@ -33,7 +33,7 @@ scope = [
     "crates/oasis7_proto/Cargo.toml",
     "crates/oasis7_proto/src",
     "crates/oasis7_viewer/software_safe.html",
-    "crates/oasis7_viewer/software_safe.js",
+    "crates/oasis7_viewer/viewer.js",
     "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html",
     "crates/oasis7_viewer/package.json",
     "crates/oasis7_viewer/package-lock.json",
@@ -124,7 +124,7 @@ def hash_exact(rel_path: str) -> tuple[str | None, str | None]:
     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
     return candidate.relative_to(bundle_dir).as_posix(), digest
 
-viewer_js_path, viewer_js_sha256 = hash_first("web/*.js")
+viewer_js_path, viewer_js_sha256 = hash_exact("web/viewer.js")
 viewer_wasm_path, viewer_wasm_sha256 = hash_first("web/*.wasm")
 pixel_world_runtime_module_path, pixel_world_runtime_module_sha256 = hash_exact(
     "web/pixel-world-bridge/pixel_world_bridge.js"

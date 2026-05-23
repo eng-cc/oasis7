@@ -506,6 +506,7 @@ fn runtime_gossip_replication_with_signature_applies_files() {
         .expect("tick a")
         .with_pos_config(pos_config.clone())
         .expect("pos config a")
+        .with_auto_attest_all_validators(true)
         .with_gossip_optional(addr_a, vec![addr_b])
         .with_replication(signed_replication_config(dir_a.clone(), 11));
     let config_b = NodeConfig::new("node-b", "world-signed", NodeRole::Observer)
@@ -655,13 +656,22 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
     let mut runtime_b = NodeRuntime::new(build_config_b());
     runtime_a.start().expect("start a first");
     runtime_b.start().expect("start b first");
-    thread::sleep(Duration::from_millis(220));
+    let guard_path = dir_b.join("replication_guard.json");
+    let guard_ready = wait_until(Instant::now() + Duration::from_secs(3), || {
+        fs::read(&guard_path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<SingleWriterReplicationGuard>(&bytes).ok())
+            .is_some_and(|guard| guard.last_sequence >= 1)
+    });
     let snapshot_b_first = runtime_b.snapshot();
     runtime_a.stop().expect("stop a first");
     runtime_b.stop().expect("stop b first");
+    assert!(
+        guard_ready,
+        "replication guard did not persist before first stop"
+    );
     assert!(snapshot_b_first.last_error.is_none());
 
-    let guard_path = dir_b.join("replication_guard.json");
     let guard_before: SingleWriterReplicationGuard =
         serde_json::from_slice(&fs::read(&guard_path).expect("read guard before"))
             .expect("parse guard before");
@@ -769,11 +779,20 @@ fn runtime_network_replication_accepts_writer_failover_with_epoch_rotation() {
         .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
     runtime_a.start().expect("start a");
     runtime_b.start().expect("start b with a");
-    thread::sleep(Duration::from_millis(220));
+    let guard_path = dir_b.join("replication_guard.json");
+    let guard_ready = wait_until(Instant::now() + Duration::from_secs(3), || {
+        fs::read(&guard_path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<SingleWriterReplicationGuard>(&bytes).ok())
+            .is_some_and(|guard| guard.last_sequence >= 1 && guard.writer_epoch >= 1)
+    });
     runtime_a.stop().expect("stop a");
     runtime_b.stop().expect("stop b after a");
+    assert!(
+        guard_ready,
+        "initial replication guard did not persist before failover snapshot"
+    );
 
-    let guard_path = dir_b.join("replication_guard.json");
     let guard_before: SingleWriterReplicationGuard =
         serde_json::from_slice(&fs::read(&guard_path).expect("read guard before"))
             .expect("parse guard before");
@@ -787,9 +806,18 @@ fn runtime_network_replication_accepts_writer_failover_with_epoch_rotation() {
         .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
     runtime_c.start().expect("start c");
     runtime_b.start().expect("start b with c");
-    thread::sleep(Duration::from_millis(260));
+    let failover_ready = wait_until(Instant::now() + Duration::from_secs(3), || {
+        fs::read(&guard_path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<SingleWriterReplicationGuard>(&bytes).ok())
+            .is_some_and(|guard| guard.writer_epoch > guard_before.writer_epoch)
+    });
     runtime_c.stop().expect("stop c");
     runtime_b.stop().expect("stop b after c");
+    assert!(
+        failover_ready,
+        "failover guard epoch did not advance before second stop"
+    );
 
     let guard_after: SingleWriterReplicationGuard =
         serde_json::from_slice(&fs::read(&guard_path).expect("read guard after"))

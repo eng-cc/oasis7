@@ -57,8 +57,12 @@ pub(super) enum Command {
     Publish {
         topic: String,
         payload: Vec<u8>,
+        response: oneshot::Sender<Result<(), WorldError>>,
     },
-    Subscribe(String),
+    Subscribe {
+        topic: String,
+        response: oneshot::Sender<Result<(), WorldError>>,
+    },
     Dial(Multiaddr),
     Request {
         protocol: String,
@@ -513,41 +517,75 @@ pub(super) fn handle_command(
     } = state;
 
     match command {
-        Some(Command::Publish { topic, payload }) => {
+        Some(Command::Publish {
+            topic,
+            payload,
+            response,
+        }) => {
             let payload_len = payload.len();
             let message = NetworkMessage {
                 topic: topic.clone(),
                 payload: payload.clone(),
             };
-            push_bounded_clone(
-                ctx.event_published,
-                message,
-                ctx.max_published_messages,
-                "lock published",
-            );
             let topic_handle = IdentTopic::new(&topic);
-            let _ = swarm
+            match swarm
                 .behaviour_mut()
                 .gossipsub
-                .publish(topic_handle, payload);
-            record_gossip_outbound(ctx.event_traffic_metrics, topic.as_str(), payload_len);
+                .publish(topic_handle, payload)
+            {
+                Ok(_) => {
+                    push_bounded_clone(
+                        ctx.event_published,
+                        message,
+                        ctx.max_published_messages,
+                        "lock published",
+                    );
+                    record_gossip_outbound(ctx.event_traffic_metrics, topic.as_str(), payload_len);
+                    let _ = response.send(Ok(()));
+                }
+                Err(err) => {
+                    let error = WorldError::NetworkProtocolUnavailable {
+                        protocol: format!("libp2p publish failed topic={topic}: {err}"),
+                    };
+                    push_bounded_clone(
+                        ctx.event_errors,
+                        format!("libp2p publish failed topic={topic}: {err}"),
+                        ctx.max_error_messages,
+                        "lock errors",
+                    );
+                    let _ = response.send(Err(error));
+                }
+            }
             CommandOutcome::Continue
         }
-        Some(Command::Subscribe(topic)) => {
+        Some(Command::Subscribe { topic, response }) => {
             if subscriptions.insert(topic.clone()) {
                 let topic_handle = IdentTopic::new(topic.clone());
-                if swarm
-                    .behaviour_mut()
-                    .gossipsub
-                    .subscribe(&topic_handle)
-                    .is_ok()
-                {
-                    let inbox_limit = classify_network_topic(topic.as_str())
-                        .map(|lane| lane.default_subscription_inbox_messages())
-                        .unwrap_or(DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES);
-                    topic_inbox_limits.insert(topic.clone(), inbox_limit);
-                    topic_map.insert(topic_handle.hash(), topic);
+                match swarm.behaviour_mut().gossipsub.subscribe(&topic_handle) {
+                    Ok(_) => {
+                        let inbox_limit = classify_network_topic(topic.as_str())
+                            .map(|lane| lane.default_subscription_inbox_messages())
+                            .unwrap_or(DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES);
+                        topic_inbox_limits.insert(topic.clone(), inbox_limit);
+                        topic_map.insert(topic_handle.hash(), topic);
+                        let _ = response.send(Ok(()));
+                    }
+                    Err(err) => {
+                        subscriptions.remove(&topic);
+                        let error = WorldError::NetworkProtocolUnavailable {
+                            protocol: format!("libp2p subscribe failed topic={topic}: {err}"),
+                        };
+                        push_bounded_clone(
+                            ctx.event_errors,
+                            format!("libp2p subscribe failed topic={topic}: {err}"),
+                            ctx.max_error_messages,
+                            "lock errors",
+                        );
+                        let _ = response.send(Err(error));
+                    }
                 }
+            } else {
+                let _ = response.send(Ok(()));
             }
             CommandOutcome::Continue
         }

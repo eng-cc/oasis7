@@ -675,13 +675,10 @@ fn runtime_network_replication_gap_sync_fetch_commit_success_cache_expires() {
         .expect("second sync");
     assert_eq!(*request_count.lock().expect("lock request count"), 1);
 
-    let expiry_deadline = Instant::now() + Duration::from_secs(5);
-    wait_until(expiry_deadline, || {
-        engine
-            .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
-            .expect("post-expiry sync");
-        *request_count.lock().expect("lock request count") == 2
-    });
+    thread::sleep(Duration::from_millis(300));
+    engine
+        .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
+        .expect("post-expiry sync");
     assert_eq!(*request_count.lock().expect("lock request count"), 2);
 
     let _ = fs::remove_dir_all(&dir_remote);

@@ -731,4 +731,5 @@ fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
 
     assert!(pending_peer_record_requests.is_empty());
     assert!(!pending_cached_peer_records.contains(&target_peer_id));
+    assert!(!cached_peer_record_cooldowns.contains_key(&target_peer_id));
 }

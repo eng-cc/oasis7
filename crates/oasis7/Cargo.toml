@@ -20,6 +20,7 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+aliyun-tablestore-rs = { version = "0.1.2", default-features = false, features = ["rust-tls"] }
 oasis7_distfs = { path = "../oasis7_distfs" }
 oasis7_launcher_ui = { path = "../oasis7_launcher_ui" }
 oasis7_node = { path = "../oasis7_node" }
