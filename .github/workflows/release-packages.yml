@@ -274,6 +274,8 @@ jobs:
         with:
           shared-key: release-packages-web-wasm-v2
           cache-on-failure: true
+      - name: Install trunk
+        run: cargo install trunk --locked
       - name: Build web dists
         run: |
           mkdir -p output/release/web-dist output/release/web-launcher-dist
