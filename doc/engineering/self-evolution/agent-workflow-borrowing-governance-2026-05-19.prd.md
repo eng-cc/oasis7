@@ -59,7 +59,7 @@
   9. Flow-AWB-009: 当任务会改变可自动化验证的行为时，owner 先定义 behavior contract -> 选择窄 scope RED 命令与目标测试文件/测试面 -> 优先通过 `tdd-test-writer` 或等价手工流程让新测试先失败 -> 再落生产实现并复跑同一命令转绿；若任务不适合 RED，则必须写明 skip 原因并继续走现有 evidence-first 主链。
   10. Flow-AWB-010: 当任务方向仍模糊、范围过大，或本质上是产品 / 架构 / UI 取舍题时，owner 先做 bounded brainstorming -> 判断是否需要拆 scope、是否需要 2-3 方案对比、是否值得用 visual companion -> 选定推荐方向后再回写 `prd.md` / `project.md` / handoff / execution log，并进入现有 implementation/verification 主链。
   11. Flow-AWB-011: 当 diff 属于 major feature、跨角色收敛前的高风险切片，或 commit 前 claim risk 明显偏高时，owner 先发起 repo-owned review request -> 明确 review scope、review question、expected return contract 与 formal sink -> 收到 `findings / no_findings / residual_risk` 后再进入 `claim-ready`、commit 或 GitHub PR 下一步。
-  11. Flow-AWB-011: 当一个非 trivial task 启动时，owner 先通过 repo-owned workflow router 判断当前阶段 -> 依次决定是否需要 bounded brainstorming、behavior-first TDD、execution、verification-before-completion 与 finishing-a-development-branch -> 每一步只路由到本地 skill / root workflow surface，不生成新的 bootstrap/spec/task truth。
+  12. Flow-AWB-012: 当一个非 trivial task 启动时，owner 先通过 repo-owned workflow router 判断当前阶段 -> 依次决定是否需要 bounded brainstorming、behavior-first TDD、execution、verification-before-completion 与 finishing-a-development-branch -> 每一步只路由到本地 skill / root workflow surface，不生成新的 bootstrap/spec/task truth。
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |

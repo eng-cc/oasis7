@@ -188,17 +188,21 @@ else
 fi
 
 RESULT_JSON_FILE="$(mktemp)"
+PRECHECK_JSON_FILE="$RESULT_JSON_FILE.precheck"
+CLAIM_READY_JSON_FILE="$RESULT_JSON_FILE.claim"
+WORKFLOW_CLOSE_JSON_FILE="$RESULT_JSON_FILE.workflow"
+MOVE_JSON_FILE="$RESULT_JSON_FILE.move"
 cleanup_result_json() {
-  rm -f "$RESULT_JSON_FILE"
+  rm -f "$RESULT_JSON_FILE" "$PRECHECK_JSON_FILE" "$CLAIM_READY_JSON_FILE" "$WORKFLOW_CLOSE_JSON_FILE" "$MOVE_JSON_FILE"
 }
 trap cleanup_result_json EXIT
 
-printf '%s\n' "$PRECHECK_JSON" >"$RESULT_JSON_FILE.precheck"
-printf '%s\n' "$CLAIM_READY_JSON" >"$RESULT_JSON_FILE.claim"
-printf '%s\n' "$WORKFLOW_CLOSE_JSON" >"$RESULT_JSON_FILE.workflow"
-printf '%s\n' "$MOVE_JSON" >"$RESULT_JSON_FILE.move"
+printf '%s\n' "$PRECHECK_JSON" >"$PRECHECK_JSON_FILE"
+printf '%s\n' "$CLAIM_READY_JSON" >"$CLAIM_READY_JSON_FILE"
+printf '%s\n' "$WORKFLOW_CLOSE_JSON" >"$WORKFLOW_CLOSE_JSON_FILE"
+printf '%s\n' "$MOVE_JSON" >"$MOVE_JSON_FILE"
 
-python3 - "$ROOT_DIR" "$ROLE" "$PM_LINT_STATUS" "$RESULT_JSON_FILE.precheck" "$RESULT_JSON_FILE.claim" "$RESULT_JSON_FILE.workflow" "$RESULT_JSON_FILE.move" "$RESULT_JSON_FILE" <<'PY'
+python3 - "$ROOT_DIR" "$ROLE" "$PM_LINT_STATUS" "$PRECHECK_JSON_FILE" "$CLAIM_READY_JSON_FILE" "$WORKFLOW_CLOSE_JSON_FILE" "$MOVE_JSON_FILE" "$RESULT_JSON_FILE" <<'PY'
 from __future__ import annotations
 
 import json
@@ -256,7 +260,6 @@ result_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encodin
 PY
 
 RESULT_JSON="$(cat "$RESULT_JSON_FILE")"
-rm -f "$RESULT_JSON_FILE.precheck" "$RESULT_JSON_FILE.claim" "$RESULT_JSON_FILE.workflow" "$RESULT_JSON_FILE.move"
 
 if [[ "$OUTPUT_JSON" == "1" ]]; then
   printf '%s\n' "$RESULT_JSON"

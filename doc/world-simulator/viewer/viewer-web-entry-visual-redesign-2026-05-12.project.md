@@ -21,7 +21,7 @@
 - `testing-manual.md`
 
 ## 状态
-- 更新日期: 2026-05-13
+- 更新日期: 2026-05-23
 - 当前状态: done
 - 下一任务: 若重启下一轮 Web 入口结构/视觉专题，先执行 `viewer-visual-companion-pilot-followup` contract：产出至少 2-3 个 IA / wireframe / layout compare artifact，明确推荐方向与不选路径，把结论回写到新的 task execution log、handoff 或本项目文档后，再创建新的实现 task。
 - 最新完成: `viewer-web-pixel-world-wasm-only`
