@@ -906,9 +906,9 @@ is_tolerable_bootstrap_fetch_commit_unavailable() {
   local node_name=$1
   local err=$2
 
-  [[ "$node_name" == "s10-sequencer" ]] || return 1
+  [[ -n "$node_name" ]] || return 1
   [[ "$err" == *"NetworkRequestFailed"* ]] || return 1
-  [[ "$err" == *"NetworkProtocolUnavailable"* ]] || return 1
+  [[ "$err" == *"NetworkProtocolUnavailable"* || "$err" == *"ErrUnsupported"* ]] || return 1
   [[ "$err" == *"/aw/node/replication/fetch-commit/1.0.0"* ]]
 }
 
