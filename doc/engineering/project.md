@@ -176,6 +176,7 @@
 - [x] tracing-baseline (PRD-ENGINEERING-001/003) [test_tier_required]: 为 `oasis7` native runtime 入口建立最小结构化 tracing 基线，新增共享初始化 helper，并在 `viewer_live / viewer_server / chain_runtime / web_launcher` 与关键 viewer/libp2p 热路径接入统一日志入口。 Trace: .pm/tasks/task_83306ab3aa274d06b1402a8ddcea7af3.yaml
 - [x] end-to-end-product-runtime-tracing (PRD-ENGINEERING-001/003) [test_tier_required]: 在当前 tracing baseline 之上，把 `game_launcher / web_launcher / viewer_live / chain_runtime / provider_local_bridge / newapi_bridge_service` 这一条主产品运行链补齐为可传播的结构化 tracing，会话级 `trace_session_id` 需能从父进程传递到子进程，并将关键连接/回收/奖励 runtime 热路径的 stderr 告警统一接入 fallback helper。 Trace: .pm/tasks/task_6ff11b8818bb47e8ae063658d321ba8d.yaml
 - [x] viewer-web-build-tech-debt-burn-down (PRD-ENGINEERING-001/002/021) [test_tier_required]: 收口 viewer web build/release 链的 canonical bundle 真值，新增显式 `wasm-bindgen` setup helper，降低 `legacy_core.js` 的浏览器状态耦合，并补齐对应脚本回归。 Trace: .pm/tasks/task_07ef03a5ce6a41b1bb0d139360ef5c74.yaml
+- [x] doc-redundancy-burn-down (PRD-ENGINEERING-025) [test_tier_required]: 收口 root legacy redirect、engineering landing README 与模块 project 状态区中的重复真值，保留 active truth，把完成历史回收为 topic project / `.pm` trace。 Trace: .pm/tasks/task_3540f773193f414690548d217b110bed.yaml
 - [ ] required-gate-runtime-support-coverage (PRD-ENGINEERING-021) [test_tier_required]: 让 GitHub `required-gate` 在 planner 命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时实际执行 `oasis7_node`、`oasis7_net` 与 `oasis7_net --features libp2p` support tests，并同步对齐 `prepare-task-pr` 推荐命令与 `testing-manual` 口径。 Trace: .pm/tasks/task_ec27ba7d019549d4b4692bd648a1cf09.yaml
 
 ## 依赖
@@ -239,29 +240,11 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-24
+- 更新日期: 2026-05-23
 - 当前状态: active
-- 下一任务: 当前这一轮的季度复核已完成；根据 `2026-04-24` 的 `bash ./scripts/doc-inventory-report.sh` 快照，下一条 follow-up 应优先拆分 near-limit active project docs，先处理 `doc/world-simulator/project.md`（1000 行）与 `doc/readme/project.md`（978 行），而不是继续横向扩新的路径级治理或停留在 review placeholder。
+- 下一任务: 当前入口减重切片已收口；后续仍优先按 `scripts/doc-inventory-report.sh` 结果继续拆分 near-limit active project docs，先看 `doc/world-simulator/project.md` 与 `doc/readme/project.md`。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
-- 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
-- 当前规范补充: 已完成 `TASK-ENGINEERING-106`，冻结“活跃真值 / 审计留痕 / 历史归档 / 兼容跳转”四层消费模型，并明确默认阅读面先减重、后迁路径的执行顺序。
-- 当前规范补充: 已完成 `doc-corpus-maintenance-governance (PRD-ENGINEERING-025)`，明确文档治理债已进入“入口减重之后的存量维护成本”阶段；后续优先基于 `scripts/doc-inventory-report.sh` 判断 `doc/devlog` backlog、热点路径与 near-limit 文件，而不是继续以“入口已清爽”判定治理完成。
-- 当前规范补充: 已完成 `devlog-history-compaction (PRD-ENGINEERING-026)`，为 `doc/devlog` 增加 canonical archive 入口 `doc/devlog/README.md`，将历史回溯从“按天盲扫”收口为“按月导航 + 高体量热点表”，并保持所有日文件原样保留。
-- 当前规范补充: 已完成 `world-simulator-viewer-path-governance (PRD-ENGINEERING-027)`，为 `doc/world-simulator/viewer/` 增加 canonical 子域入口 `doc/world-simulator/viewer/README.md`，将进入热点路径后的默认阅读方式从“文件系统平铺浏览”收口为“按问题分流 + 定向检索”。
-- 当前规范补充: 已完成 `p2p-node-path-governance (PRD-ENGINEERING-028)`，为 `doc/p2p/node/` 增加 canonical 子域入口 `doc/p2p/node/README.md`，将进入 `p2p` 最高密度热点路径后的默认阅读方式从“文件系统平铺浏览”收口为“按问题分流 + 定向检索”。
-- 当前规范补充: 已完成 `testing-evidence-path-governance (PRD-ENGINEERING-029)`，为 `doc/testing/evidence/` 增加 canonical 子域入口 `doc/testing/evidence/README.md`，将进入 `testing` 最高密度热点路径后的默认阅读方式从“文件系统平铺浏览”收口为“按问题分流 + 定向检索”。
-- 当前规范补充: 已完成 `readme-governance-path-governance (PRD-ENGINEERING-030)`，为 `doc/readme/governance/` 增加 canonical 子域入口 `doc/readme/governance/README.md`，将进入 `readme` 最高密度热点路径后的默认阅读方式从“若干具体 runbook/material 直链”收口为“按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流 + 定向检索”。
-- 当前季度复核快照: `bash ./scripts/doc-inventory-report.sh` 于 `2026-04-24` 复算得到 `doc/` 总量 `1764`、`doc/devlog` `57`、`world-simulator=553`、`p2p=270`、`testing=180`；热点子目录仍以 `doc/world-simulator/viewer=297`、`doc/readme/governance=98`、`doc/world-simulator/launcher=86` 为主，但当前更急的是 near-limit active docs：`doc/world-simulator/project.md=1000`、`doc/readme/project.md=978`、`doc/core/reviews/round-006-reviewed-files.md=932`、`doc/core/reviews/round-007-reviewed-files.md=906`。
-- 当前规范补充: 已完成 `TASK-ENGINEERING-115`，确认 `scripts / playability_test_result / headless-runtime` 现有入口已能稳定承担低密度模块首读分流，本轮只压掉重复入口与 `engineering/scripts` 的长名单噪音，不继续追加模块级迁移。
-- 当前规范补充: 已完成 `TASK-ENGINEERING-116`，将 `doc-structure-standard`、`doc-surface-area-governance`、早期文档治理收口专题与 Rust 体量治理专题从 `engineering` 根目录下沉到 `doc-governance/` 与 `rust-governance/`，并移除相应 root allowlist 残留。
-- 当前治理切片: `TASK-ENGINEERING-PMVIEW-001` 已完成，`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为 git-ignored 本地生成视图，engineering 根项目页也已从手工 `最新完成` 热点改成“当前任务 + topic project / `.pm/tasks` 追溯”模式。
-- 当前流程补充: 已完成 `drop-local-review-script`，默认评审边界已完全切到 GitHub PR review；`workflow-report` close、required-tier smoke、`.pm/README` 与 `AGENTS.md` 不再要求本地 snapshot review 脚本。
-- 当前流程补充: 已完成 `repo-owned-workflow-router`，非 trivial task 现在默认先经过本地 workflow router，再按 `bounded-brainstorming -> behavior-first TDD -> executing-project-tasks -> verification-before-completion -> finishing-a-development-branch` 进入后续阶段；继续明确拒绝 `using-superpowers` 的外部 bootstrap 本体。
-- 当前治理切片: 已完成 `shrink-near-limit-rust-hotspots`，对 `llm_sidecar.rs`、`oasis7_node/src/lib.rs`、`oasis7_provider_parity_bench.rs`、`oasis7_wasm_router/src/lib.rs`、`self_guided.rs` 做预防性职责拆分；当前 5 个热点文件已降到 `858 / 841 / 981 / 860 / 1131` 行，继续维持 Rust 体量零扫描。
-- 当前治理切片: 已完成 `engineering-project-truth-drift-sync`，将 `TASK-ENGINEERING-054~057` 与 `rust-1200-line-root-cause-governance-2026-03-29.project.md` 的完成态重新对齐，并把根项目页状态区“下一任务”改回季度复核/库存复算的真实后续。
-- 当前治理切片: 已完成 `quarterly-doc-inventory-review-followup`，当前 root decision 已从“待季度复核”推进到“near-limit active project docs 拆分优先”；后续如要继续扩 `core/reviews`、`world-simulator/launcher` 或新的路径级治理，需另开独立 follow-up task。
-- 当前治理切片: 已完成 `workflow-helper-review-followup`，当前 PR `#145` 的 review comments 已收口到明确代码修复边界：`worktree-gc-report` 输出的 cleanup commands 改为 shell-quoted，`pr-review-thread-closeout` 不再把完整评论 JSON 通过 argv 传给 Python，`pm/rebase-conflict-helper` 也不再留下函数级全局 `RETURN` trap。
-- 近期完成项不再在本页按时间顺序手工追加；为避免多 worktree 热点冲突，最近收口统一以对应 topic `*.project.md` 与 `.pm/tasks/task_<32hex>.yaml` 为准。
-- 近期完成: `TASK-ENGINEERING-104/103/102/101/100/096` 已分别完成 Rust 超限基线回写、working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
-- 说明: 本文档只保留当前执行窗口与近期完成项。更早的完成历史继续以本页勾选任务清单、专题 project 文档与 `.pm/tasks/task_<32hex>.execution.md` 为准。
+- 当前治理重点: 已完成 root redirect 最小化、engineering README landing 收紧，以及模块 project 状态区去历史播报墙；后续治理继续优先处理 near-limit active docs。
+- 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
+- 已完成的治理专题、季度复核与流程迁移不再在本页逐条滚动播报；统一回看对应 topic `*.project.md`、`.pm/tasks/task_<32hex>.yaml` 与 execution log。
+- 说明: 本文档只保留当前执行窗口、下一步与判断口径；历史完成态继续以本页任务清单和专题 project 真值为准。
