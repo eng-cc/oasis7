@@ -1,0 +1,18 @@
+task_uid: task_67de23e6aaf44099b0bf87d3f4d08996
+title: "Stabilize release soak chaos metric gate"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-testing-release-soak-chaos-metric-gate
+execution_log_path: .pm/tasks/task_67de23e6aaf44099b0bf87d3f4d08996.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - .github/workflows/release-packages.yml
+  - scripts/release-gate.sh
+  - scripts/p2p-longrun-soak.sh
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-23T13:07:15+08:00
+last_started_at: 2026-05-23T13:07:15+08:00
