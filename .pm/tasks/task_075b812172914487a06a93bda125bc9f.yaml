@@ -1,0 +1,24 @@
+task_uid: task_075b812172914487a06a93bda125bc9f
+title: "close wasm source hash local dependency coverage"
+owner_role: wasm_platform_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-wasm-source-hash-dependency-closure
+execution_log_path: .pm/tasks/task_075b812172914487a06a93bda125bc9f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-runtime/project.md
+doc_refs:
+  - doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md
+  - doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md
+related_prd:
+  - PRD-WORLD_RUNTIME-021
+  - PRD-WORLD_RUNTIME-022
+acceptance:
+  - "tools/wasm_build_suite source_hash changes when local path dependencies used by a wasm module change"
+  - "sync_builtin_wasm_identity verifies the same source hash closure as build-suite output"
+  - "repo-owned wasm identity/build verification tests cover local dependency drift"
+handoff_to: []
+updated_at: 2026-05-22T22:45:39+08:00
+last_started_at: 2026-05-22T22:26:38+08:00
+last_closed_at: 2026-05-22T22:45:39+08:00

@@ -9,6 +9,7 @@ members = [
     "crates/oasis7_node",
     "crates/pixel_world_bridge",
     "crates/oasis7_proto",
+    "crates/oasis7_wasm_build",
     "crates/oasis7_wasm_abi",
     "crates/oasis7_wasm_executor",
     "crates/oasis7_wasm_sdk",

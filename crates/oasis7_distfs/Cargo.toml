@@ -8,6 +8,7 @@ path = "src/lib.rs"
 
 [dependencies]
 oasis7_proto = { path = "../oasis7_proto" }
+oasis7_wasm_build = { path = "../oasis7_wasm_build" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_cbor = "0.11"

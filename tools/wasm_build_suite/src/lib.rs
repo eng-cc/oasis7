@@ -6,6 +6,7 @@ mod env_prefix_tests;
 pub use build_timing::BuildTimingSnapshot;
 
 use build_util::{canonical_or_original, elapsed_ms, normalize_artifact_name, now_unix_ms};
+use oasis7_wasm_build::DEFAULT_WASM_TARGET;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::env;
@@ -341,7 +342,7 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
     })?;
     let wasm_hash_sha256 = sha256_hex(&canonical_wasm_bytes);
     let source_manifest_path = manifest_path.to_string_lossy().to_string();
-    let source_hash = compute_source_hash(package, &metadata, &manifest_path)?;
+    let source_hash = compute_source_hash(&manifest_path, request.target.as_str())?;
     let wasm_toolchain = wasm_env_value_or_default("TOOLCHAIN", "");
     let wasm_build_std = wasm_env_value_or_default("BUILD_STD", "0");
     let wasm_build_std_components =
@@ -684,112 +685,10 @@ fn compute_build_manifest_hash(
     Ok(sha256_hex(bytes.as_slice()))
 }
 
-fn compute_source_hash(
-    _package: &CargoPackage,
-    _metadata: &CargoMetadata,
-    manifest_path: &Path,
-) -> Result<String, BuildError> {
-    let module_manifest_path = canonical_or_original(manifest_path);
-    let Some(module_dir) = module_manifest_path.parent() else {
-        return Err(BuildError::MetadataInvalid(format!(
-            "manifest has no parent: {}",
-            module_manifest_path.display()
-        )));
-    };
-    let source_manifest_rel = module_manifest_path
-        .strip_prefix(module_dir)
-        .unwrap_or(module_manifest_path.as_path())
-        .to_string_lossy()
-        .to_string();
-
-    let files = collect_source_files_for_hash(module_dir)?;
-    let mut hasher = Sha256::new();
-    hasher.update(format!("source_manifest_rel={source_manifest_rel}\n").as_bytes());
-    for file in files {
-        let rel = file.strip_prefix(module_dir).map_err(|_| {
-            BuildError::MetadataInvalid(format!(
-                "failed to strip module dir prefix path={} module_dir={}",
-                file.display(),
-                module_dir.display()
-            ))
-        })?;
-        let bytes = fs::read(&file).map_err(|source| BuildError::Io {
-            path: Some(file.clone()),
-            source,
-        })?;
-        hasher.update(
-            format!(
-                "module_file:{}:{}\n",
-                rel.to_string_lossy(),
-                sha256_hex(&bytes)
-            )
-            .as_bytes(),
-        );
-    }
-
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
-fn collect_source_files_for_hash(module_dir: &Path) -> Result<Vec<PathBuf>, BuildError> {
-    let mut files = Vec::new();
-
-    for root_file in ["Cargo.toml", "Cargo.lock", "build.rs"] {
-        let path = module_dir.join(root_file);
-        if path.is_file() {
-            files.push(path);
-        }
-    }
-
-    for whitelisted_dir in ["src", "wit", ".cargo", "assets"] {
-        let root = module_dir.join(whitelisted_dir);
-        collect_files_recursively(root.as_path(), &mut files)?;
-    }
-
-    files.sort_by(|left, right| left.to_string_lossy().cmp(&right.to_string_lossy()));
-    files.dedup();
-
-    if files.is_empty() {
-        return Err(BuildError::MetadataInvalid(format!(
-            "source whitelist produced no files under {}",
-            module_dir.display()
-        )));
-    }
-
-    Ok(files)
-}
-
-fn collect_files_recursively(dir: &Path, output: &mut Vec<PathBuf>) -> Result<(), BuildError> {
-    let entries = match fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(source) => {
-            return Err(BuildError::Io {
-                path: Some(dir.to_path_buf()),
-                source,
-            });
-        }
-    };
-
-    for entry in entries {
-        let entry = entry.map_err(|source| BuildError::Io {
-            path: Some(dir.to_path_buf()),
-            source,
-        })?;
-        let path = entry.path();
-        let file_type = entry.file_type().map_err(|source| BuildError::Io {
-            path: Some(path.clone()),
-            source,
-        })?;
-        if file_type.is_dir() {
-            collect_files_recursively(path.as_path(), output)?;
-            continue;
-        }
-        if file_type.is_file() {
-            output.push(path);
-        }
-    }
-
-    Ok(())
+fn compute_source_hash(manifest_path: &Path, target: &str) -> Result<String, BuildError> {
+    oasis7_wasm_build::compute_source_hash(manifest_path, target).map_err(|error| {
+        BuildError::MetadataInvalid(format!("source hash closure failed: {error}"))
+    })
 }
 
 fn run_cargo_build(manifest_path: &Path, target: &str, profile: &str) -> Result<(), BuildError> {
@@ -1100,5 +999,54 @@ mod tests {
         for value in ["0", "false", "off", "", "random"] {
             assert!(!parse_truthy(value), "value should be falsey: {value}");
         }
+    }
+
+    #[test]
+    fn source_hash_tracks_local_path_dependency_changes() {
+        let root = std::env::temp_dir().join(format!(
+            "wasm-build-suite-source-hash-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("module/src")).expect("create module dir");
+        fs::create_dir_all(root.join("shared/src")).expect("create shared dir");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"module\", \"shared\"]\nresolver = \"2\"\n",
+        )
+        .expect("write workspace manifest");
+        fs::write(
+            root.join("module/Cargo.toml"),
+            "[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
+        )
+        .expect("write module manifest");
+        fs::write(
+            root.join("module/src/lib.rs"),
+            "pub fn call() -> u32 { fixture_shared::value() }\n",
+        )
+        .expect("write module source");
+        fs::write(
+            root.join("shared/Cargo.toml"),
+            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .expect("write shared manifest");
+        fs::write(
+            root.join("shared/src/lib.rs"),
+            "pub fn value() -> u32 { 1 }\n",
+        )
+        .expect("write shared source");
+
+        let manifest_path = root.join("module/Cargo.toml");
+        let initial =
+            compute_source_hash(&manifest_path, DEFAULT_WASM_TARGET).expect("initial source hash");
+        fs::write(
+            root.join("shared/src/lib.rs"),
+            "pub fn value() -> u32 { 2 }\n",
+        )
+        .expect("rewrite shared source");
+        let changed =
+            compute_source_hash(&manifest_path, DEFAULT_WASM_TARGET).expect("changed source hash");
+        assert_ne!(initial, changed);
+        let _ = fs::remove_dir_all(root);
     }
 }

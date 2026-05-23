@@ -8,5 +8,8 @@
 !tools/
 !tools/wasm_build_suite/
 !tools/wasm_build_suite/**
+!crates/
+!crates/oasis7_wasm_build/
+!crates/oasis7_wasm_build/**
 tools/wasm_build_suite/target
 tools/wasm_build_suite/templates/minimal_module/target
