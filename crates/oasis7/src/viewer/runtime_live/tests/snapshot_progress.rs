@@ -365,6 +365,20 @@ fn compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedba
         gameplay.resume_next_step.as_deref(),
         Some("Request a snapshot, advance 1 step, then inspect the new delta and events.")
     );
+    assert_eq!(
+        gameplay.response_window_class.as_deref(),
+        Some("waiting_for_committed_progress")
+    );
+    assert_eq!(gameplay.stalled_reason, None);
+    assert_eq!(
+        gameplay.escalation_hint.as_deref(),
+        Some("advance 1-2 steps to apply the queued gameplay action")
+    );
+    assert_eq!(gameplay.fallback_action_id.as_deref(), Some("advance_step"));
+    assert_eq!(
+        gameplay.fallback_action_label.as_deref(),
+        Some("Advance 1 step to create the first world feedback")
+    );
 }
 
 #[test]
@@ -934,4 +948,24 @@ fn compat_snapshot_keeps_post_onboarding_no_progress_after_confirmed_progress() 
         "completed_no_progress"
     );
     assert_eq!(gameplay.blocker_kind.as_deref(), Some("no_progress"));
+    assert_eq!(
+        gameplay.response_window_class.as_deref(),
+        Some("stalled_needs_escalation")
+    );
+    assert_eq!(
+        gameplay.stalled_reason.as_deref(),
+        Some("latest command did not create forward progress")
+    );
+    assert_eq!(
+        gameplay.escalation_hint.as_deref(),
+        Some("inspect blockers before retrying play")
+    );
+    assert_eq!(
+        gameplay.fallback_action_id.as_deref(),
+        Some("request_snapshot")
+    );
+    assert_eq!(
+        gameplay.fallback_action_label.as_deref(),
+        Some("Refresh gameplay snapshot")
+    );
 }

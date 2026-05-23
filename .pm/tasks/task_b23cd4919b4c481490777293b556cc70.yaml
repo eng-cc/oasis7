@@ -1,0 +1,26 @@
+task_uid: task_b23cd4919b4c481490777293b556cc70
+title: "gameplay high-risk design hardening"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-game-gameplay-high-risk-design-hardening
+execution_log_path: .pm/tasks/task_b23cd4919b4c481490777293b556cc70.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/prd.md
+  - doc/game/gameplay/gameplay-top-level-design.prd.md
+  - doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md
+  - doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md
+doc_refs: []
+related_prd:
+  - PRD-GAME-012
+  - PRD-GAME-014
+  - PRD-GAME-015
+acceptance:
+  - "top-level gameplay docs clarify bounded-response micro loop guarantees, anti-passive control requirements, and failure-to-recovery design rails"
+  - "mature-world small-player lane explicitly blocks forced-major-power dependency and grind-only progression"
+  - "economic readability and first-win contracts define visible value, sinks, and anti-opaque-growth guidance"
+handoff_to: []
+updated_at: 2026-05-23T19:12:35+08:00
+last_started_at: 2026-05-23T17:29:19+08:00
+last_closed_at: 2026-05-23T19:12:35+08:00

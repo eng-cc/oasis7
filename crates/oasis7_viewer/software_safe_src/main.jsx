@@ -82,6 +82,9 @@ function MetricCard(props) {
     <div class="metric">
       <div class="metric__label">{props.label}</div>
       <div class="metric__value">{props.value}</div>
+      <Show when={props.detail}>
+        <div class="feedback-detail" style="margin-top:8px;">{props.detail}</div>
+      </Show>
       <Show when={props.children}>
         <div class="badge-row" style="margin-top:8px;">
           {props.children}
@@ -749,6 +752,37 @@ function WorldSummaryPanel() {
                   </div>
                 </Show>
               </EventCard>
+              <PanelSection
+                title={tr(locale(), "能力经济可读性", "Capability Economics")}
+                eyebrow={tr(locale(), "为什么这一步值得继续", "Why This Step Is Worth Continuing")}
+                meta={tr(locale(), "把当前玩法翻译成显式的投入 / 产出 / 新用途 / 修复动作 / 下一步价值，避免工业成长继续退化成只看库存与产量。", "Translate the current loop into explicit input / output / new use / repair move / next value so industrial growth does not collapse into stockpile and throughput alone.")}
+              >
+                <div class="summary-grid">
+                  <MetricCard
+                    label={tr(locale(), "投入", "Input")}
+                    value={gameplay().economicSurface?.input || tr(locale(), "待发布", "not published")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "产出", "Output")}
+                    value={gameplay().economicSurface?.output || tr(locale(), "待发布", "not published")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "新用途", "New Use")}
+                    value={gameplay().economicSurface?.unlockedValue || tr(locale(), "待发布", "not published")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "修复动作", "Repair Move")}
+                    value={gameplay().economicSurface?.repairAction || tr(locale(), "待发布", "not published")}
+                    detail={gameplay().economicSurface?.blockerLabel
+                      ? tr(locale(), `当前阻塞归类: ${gameplay().economicSurface.blockerLabel}`, `Current blocker class: ${gameplay().economicSurface.blockerLabel}`)
+                      : null}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "下一步价值", "Next Value")}
+                    value={gameplay().economicSurface?.nextValue || tr(locale(), "待发布", "not published")}
+                  />
+                </div>
+              </PanelSection>
               <Show when={gameplay().recentFeedback}>
                 {(feedback) => (
                   <EventCard

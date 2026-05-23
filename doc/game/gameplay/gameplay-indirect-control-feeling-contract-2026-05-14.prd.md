@@ -47,14 +47,16 @@
 | --- | --- | --- | --- | --- | --- |
 | 意图可见性保证 | `accepted_intent_id`、`intent_summary`、`intent_scope`、`intent_target`、`intent_age_ms` | 玩家发出 `play/step/select/gameplay_action/prompt_control` 后，界面或 API 必须能回读当前被接受的主意图 | `implicit -> acknowledged -> stale/replaced` | 最近一次仍有效的 accepted intent 优先；若被新意图取代，旧意图必须显式标记 `replaced` | 已认证玩家可见自己的当前主意图；不得暴露他人私有 prompt 细节 |
 | 因果反馈保证 | `execution_status`、`status_reason`、`blocker_type`、`override_reason`、`last_world_change` | 玩家查看当前结果时，必须看到 “accepted / executing / blocked / overridden / completed_no_progress / completed_with_progress” 之一 | `acknowledged -> executing -> blocked/overridden/completed_*` | 当前主目标相关的执行状态优先于历史日志噪音；同一时刻只高亮 1 个主因果 | 玩家可读；runtime/canonical snapshot 为真值来源，Viewer/API 不得各算一套 |
+| bounded-response 与 fallback 保证 | `response_window_class`、`stalled_reason`、`escalation_hint`、`fallback_action_id`、`fallback_action_label` | 若 accepted intent 未形成有效推进，系统必须在一个 bounded-response 窗口内把当前状态升级成 `stalled / blocked / reprioritize_recommended / fallback_ready` 之一 | `acknowledged -> executing -> stalled/escalation_ready -> reprioritized/recovered` | 不允许连续静默等待；同一主意图至多允许 1 次“继续观察”类弱反馈，之后必须升级为明确 fallback 或重排建议 | 正式玩家可见；runtime 提供真值，Viewer/API 只负责表达 |
 | 可打断与重排保证 | `can_interrupt`、`can_reprioritize`、`replacement_intent_summary`、`handoff_result` | 提供 `focus goal`、重新选目标、重新提交 prompt/动作等显式重排入口；不允许只剩“等 AI 自己继续” | `continuing -> interrupt_requested -> reprioritized / resume_required` | 当前主阻塞若持续存在且玩家可采取更高收益动作，应优先暴露 reprioritize hook | 正式玩家可对自己的主意图重排；不允许越权改动其他玩家/组织控制面 |
 | 后果可读性保证 | `cost_summary`、`progress_delta`、`world_change_summary`、`next_step_hint` | 每次关键动作后必须给出“付出了什么 / 世界改变了什么 / 下一步最该做什么” | `opaque -> readable -> decision_ready` | 当前主目标相关的成本、产出、阻塞、恢复优先于调试日志与次级事件 | 玩家可读；系统生成，owner 冻结字段语义 |
 | 恢复与续玩保证 | `resume_anchor`、`last_accepted_intent`、`primary_blocker`、`resume_next_step` | 玩家重连或回流时，直接恢复当前 agency surface，不要求先读原始事件流 | `fresh_session -> resumed -> replanned` | 优先恢复主目标链最近一次 accepted intent；若旧意图已失效，必须显式写出失效原因 | 已认证玩家可恢复自己的续玩面板/API 字段 |
 
 - Acceptance Criteria:
-  - AC-1: 本专题至少冻结 4 条 control-feeling guarantees，其中至少 3 条具备可直接验收的字段、状态与失败签名。
+  - AC-1: 本专题至少冻结 5 条 control-feeling guarantees，其中至少 4 条具备可直接验收的字段、状态与失败签名。
   - AC-2: “间接控制仍然像控制”在本专题中被具体定义为：玩家始终能回答 `我让系统做了什么 / 系统有没有接受 / 为什么现在这样 / 我下一步该做什么`，而不是只看到世界在变化。
   - AC-3: 当前正式主路线不要求玩家获得第一人称逐帧操控；但若 accepted intent、主因果、打断重排或续玩恢复四者缺一，则不得宣称 control-feeling 合格。
+  - AC-3A: 若 accepted intent 之后连续出现无主因果、无升级解释、无 fallback 建议的静默等待，则即便世界仍在 tick，也必须判定为 agency weakened。
   - AC-4: 本专题必须显式承接 `PRD-GAME-012` 第 4 条 lane“间接控制因果与下一步”，并解释它与 `PRD-GAME-004` 微循环反馈可见性、`PRD-GAME-007` PostOnboarding、`PRD-GAME-008` pure API parity 的边界。
   - AC-5: headed Web/UI 与 pure API 都必须具备同等级的 agency surface；API 可以更简洁，但不允许缺少 accepted intent、主因果、阻塞分类或 next-step 语义。
   - AC-6: 若系统只是展示原始日志、世界 tick 或泛化状态，而不能把主意图和当前结果绑定到同一语义面，则判定为 control-feeling 失败。
@@ -104,6 +106,7 @@
 - Edge Cases & Error Handling:
   - accepted intent 已被新动作替换，但表面仍像旧意图在执行：必须显式标记 `replaced` 或 `reprioritized`，否则判定为因果漂移。
   - agent 因世界约束自行改道，但玩家只看到“执行了别的事”而没有 override reason：判定为 agency break，而不是普通日志缺失。
+  - accepted intent 已确认，但连续超过一个 bounded-response 窗口仍只有弱反馈或泛化 loading：必须升级为 `stalled`、`blocked` 或显式 fallback 建议，不能继续伪装成“正常执行中”。
   - world 有变化，但当前主目标没有任何 progress/cost/next-step 解释：不得把“世界活着”视为 control-feeling pass。
   - pure API 能读到 stage/goal，却读不到 accepted intent 或 interruption hook：判定为 parity 不完整，不得宣称 API 也满足 control-feeling 合同。
   - 玩家重连后只能从 raw history 猜测最近状态，而没有恢复锚点：判定为 resume guarantee 失败。
@@ -115,6 +118,7 @@
   - NFR-CFC-3: 任何导致 accepted intent 与当前世界结果脱钩、且没有 override/replaced 解释的回归，都必须被 QA 标记为 blocker，而不是低优先级文案问题。
   - NFR-CFC-4: control-feeling 合同验证必须可在 fresh bundle 本地复跑，并能区分 formal active-LLM lane 与 debug/probe lane。
   - NFR-CFC-5: 本专题下所有 follow-up 结论必须继续遵守当前 claim envelope，不得借“控制感合同已定义”扩大对外承诺。
+  - NFR-CFC-6: 在正式玩家 surface 上，单个 accepted intent 不得连续经历两次无 fallback 的静默等待周期；若第一次弱反馈后仍无有效推进，第二次必须升级为 `reprioritize`、`repair` 或 `fallback_ready`。
 - Security & Privacy:
   - 本专题不新增玩家隐私采集；accepted intent 与 resume anchor 只要求表达 canonical 玩家状态，不要求暴露私有 prompt 全文或实现内部 trace。
 

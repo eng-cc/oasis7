@@ -50,6 +50,7 @@
 | specialization pack | `specialization_id`、`input_profile`、`output_profile`、`regional_usefulness`、`switch_cost_class`、`org_independence_level` | 玩家从默认 local operator 主线切到 1 条短周期专业化角色 | `unselected -> selected -> delivering -> stable` | 先 local survival，再 specialization；默认避免一开始把玩家导向深治理/大战争 | `agent_engineer` / `viewer_engineer` 对齐；`producer_system_designer` 裁决专业化边界 |
 | limited-scope regional influence | `influence_surface_id`、`influence_scope`、`influence_cap`、`expires_on_inactivity`、`converts_to_global_governance` | 玩家通过区域性持续贡献获得有限影响力或优先级 | `locked -> visible -> earned -> decays_on_inactivity` | 区域影响力必须小于 global governance / alliance leadership；默认随停摆或长期闲置衰减 | 不得直接等价为 global vote power、主链治理权或 major-power membership |
 | recovery path | `failure_signature`、`recovery_option_id`、`restoration_scope`、`fallback_specialization_id`、`requires_major_power_sponsorship` | 玩家遭遇 claim/产线/区域性挤压失败时，系统给出恢复或改道选项 | `healthy -> disrupted -> recoverable -> restored/pivoted` | 优先提供低成本修复、局部重建或改道；默认不要求先加入大组织 | `requires_major_power_sponsorship` 默认应为 `no`；只有更高阶路线才允许提升依赖 |
+| anti-grind leverage progression | `leverage_class`、`new_option_unlocked`、`regional_dependency_reduced`、`same_loop_repeat_count`、`grind_only_flag` | 系统在每个阶段 checkpoint 明确玩家拿到的新选择、新议价位或新恢复弹性，而不是只显示“再生产更多” | `unclear -> improving -> differentiated / grind_only` | 连续重复同一生产循环但没有新增 leverage class 时，必须判为 `grind_only` 风险；优先暴露更短周期的新用途或恢复后新分支 | `producer_system_designer` 冻结判据；runtime/viewer/QA 对账 |
 | mature-world guardrails | `world_activity_only`、`major_power_dependency_status`、`regional_pressure_level`、`return_hook` | QA / playability surface 明确区分“世界很活跃”和“玩家仍然有 lane” | `unclear -> bounded -> verified` | 只要 `world_activity_only=yes` 或 `major_power_dependency_status=forced`，该样本就不能支撑 lane `pass` | `qa_engineer` 守门，`producer_system_designer` 最终裁决 |
 
 - Acceptance Criteria:
@@ -60,6 +61,7 @@
   - AC-5: 文档必须明确 `limited-scope regional influence` 的边界：它可以改变局部优先级、区域可见度或区域性机会，但不能直接等价为 global governance 权力。
   - AC-6: 文档必须定义 recoverable failure path；当玩家遭遇停机、claim 丢失、局部竞争失败或区域压力时，不得要求“只能投靠大组织”作为唯一继续路径。
   - AC-7: `player leverage != world activity` 的约束必须进入本专题完成定义；任何 lane `pass` 都必须回答 `player_action / world_change_due_to_player / return_hook`。
+  - AC-7A: 任一阶段 checkpoint 都必须回答“玩家获得了什么新的 leverage class”；如果答案只剩“产量更高/库存更多”，而没有新区域用途、新恢复弹性、新议价位或新选择空间，则该 checkpoint 不能判定为 lane success。
   - AC-8: 本专题必须显式声明不改变当前 `PRD-GAME-012` 的 early-retention 主优先级，也不把 `#165` 写成当前 stage 或 preview claim envelope 的升级依据。
   - AC-9: `game` 根 PRD / project、`gameplay` 主文档、`README`、`prd.index` 与当前 task execution log 必须能互链到 `PRD-GAME-015`。
   - AC-10: 至少拆出 `producer_system_designer`、`runtime_engineer`、`viewer_engineer`、`agent_engineer`、`qa_engineer` 五类后续任务，并给出 `test_tier_required` / `test_tier_full` 验收方向。
@@ -102,6 +104,7 @@
 - Edge Cases & Error Handling:
   - 区域内已有大型组织垄断：lane 仍需给出局部独立价值和恢复路径，而不是默认判定“新玩家只能加入他们”。
   - 玩家完成 first capability，但 local site 因缺料/停机/战乱无法继续：必须提供恢复或改道选项，不能让 lane 直接失效。
+  - 玩家继续玩只能重复同一条工业循环、但没有新局部用途、恢复弹性或谈判空间：必须标记 `grind_only_flag=yes`，并要求系统给出 specialization / repair / pivot，而不是继续鼓励“再刷一会儿”。
   - 世界很活跃，但玩家没有造成明确世界变化：必须标记 `world_activity_only=yes`，且不得把该样本判为 lane success。
   - 玩家主动加入大型组织：允许，但文档必须说明这属于 voluntary escalation，而不是 lane 的强制前提。
   - 玩家失去首个 claim 或 starter industrial node：必须至少保留一条小规模 rebuild / pivot path，而不是把失败等同于“重新开号”。
@@ -112,6 +115,7 @@
   - NFR-SPL-3: 任一正式 lane 不得把“立即加入 major power”作为唯一 entry requirement；若出现该依赖，默认判定为 lane contract 失败。
   - NFR-SPL-4: `limited-scope regional influence` 100% 必须与 global governance / alliance leadership 分开定义，不得偷渡成更强权力口径。
   - NFR-SPL-5: 本专题不得改写当前 `limited playable technical preview` claim envelope，也不得用来替代 `PRD-GAME-012` 的 trust/capability 样本。
+  - NFR-SPL-6: 任一正式 small-player lane 样本都必须声明 `leverage_class`，且连续两个 checkpoint 不得只重复同一种收益形态；若没有新增用途、恢复力或局部影响类型，则必须升级为 grind 风险。
 - Security & Privacy:
   - 本专题不新增额外账号权限或经济旁路；仍遵循现有 claim / restricted starter / governance 审计边界。
 

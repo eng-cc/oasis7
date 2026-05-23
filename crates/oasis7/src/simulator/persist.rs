@@ -234,6 +234,16 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_blocker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_window_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stalled_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escalation_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_action_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_action_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_next_step: Option<String>,
     #[serde(default)]
     pub available_actions: Vec<PlayerGameplayAction>,
@@ -283,6 +293,16 @@ struct PlayerGameplaySnapshotSerde {
     resume_anchor: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     primary_blocker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    response_window_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    stalled_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    escalation_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fallback_action_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fallback_action_label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     resume_next_step: Option<String>,
     #[serde(default)]
@@ -349,6 +369,11 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             branch_hint: legacy.branch_hint,
             resume_anchor: legacy.resume_anchor,
             primary_blocker: legacy.primary_blocker,
+            response_window_class: legacy.response_window_class,
+            stalled_reason: legacy.stalled_reason,
+            escalation_hint: legacy.escalation_hint,
+            fallback_action_id: legacy.fallback_action_id,
+            fallback_action_label: legacy.fallback_action_label,
             resume_next_step: legacy.resume_next_step,
             available_actions: legacy.available_actions,
             recent_feedback: legacy.recent_feedback,

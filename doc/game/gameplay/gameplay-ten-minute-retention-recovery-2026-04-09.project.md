@@ -22,6 +22,7 @@
 | `TASK-GAME-063` | `runtime_engineer` | Ship the first capability package after PostOnboarding |
 | `TASK-GAME-064` | `viewer_engineer` | Reduce first-screen noise and surface player-facing consequences/rewards |
 | `TASK-GAME-065` | `qa_engineer` | Establish active-LLM 10-minute trust gate and keep capability verdict separate |
+| `viewer-economic-readability-first-capability-surface` | `viewer_engineer` | Make the first-capability economy and player value legible |
 
 ## Handoff Matrix
 
@@ -31,6 +32,7 @@
 | `TASK-GAME-063` | `producer_system_designer` | `runtime_engineer` | 工业引导卡组、`PostOnboarding` 阶段口径、M4 工业链目标 | 首个持续能力 canonical 状态、事件与恢复逻辑 |
 | `TASK-GAME-064` | `producer_system_designer` | `viewer_engineer` | 首屏主目标优先级、噪音样本、当前奖励反馈缺口 | 主界面信息层级与反馈可见化收口 |
 | `TASK-GAME-065` | `producer_system_designer` | `qa_engineer` | active-LLM 正式 lane 定义、debug lane 边界、阶段当前真值 | `10-minute trust gate` 的 `continue_playing / hold` 裁决，以及与 capability verdict 分开的归档 |
+| `viewer-economic-readability-first-capability-surface` | `producer_system_designer` | `viewer_engineer` | 高风险修补后的经济可读性要求、first capability 样本、当前 player_gameplay surface | 玩家可见的 `投入/产出/价值/修复/下一步` surface 与回归证据 |
 
 ## 验收命令（草案）
 
@@ -53,6 +55,10 @@
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer push_feedback_toast_uses_runtime_industry_friendly_detail -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer sync_agent_chatter_bubbles_formats_runtime_industry_feedback -- --nocapture`
   - headed Web/UI 首屏截图对比与 Mission HUD/summary/toast/chatter 人工复核
+- `viewer-economic-readability-first-capability-surface` / 经济可读性与 capability value surface
+  - `rg -n "cost|output|value|repair|next step|first capability" crates/oasis7_viewer crates/oasis7/src/bin/oasis7_pure_api_client.rs`
+  - headed Web/UI 与 pure API 人工复核 `投入 / 产出 / 新用途 / 修复动作 / 下一步价值`
+  - `git diff --check`
 - `TASK-GAME-065` / 10 分钟 trust gate
   - active-LLM 正式 lane：至少 3 轮 `./scripts/run-game-test.sh` + headed Web/UI 10 分钟 trust 样本
   - `software_safe` floor：至少 1 轮正式入口复核
@@ -74,6 +80,9 @@
 - `TASK-GAME-064`
   - [x] 首屏主目标不再被无关历史噪音/operator 语义抢焦点
   - [x] 玩家能直接读到代价、阻塞、恢复和奖励
+- `viewer-economic-readability-first-capability-surface`
+  - [ ] 玩家能直接读懂 first capability 的 `投入 / 产出 / 新用途 / 修复动作 / 下一步价值`
+  - [ ] 工业成长反馈不再主要依赖库存/产量上涨
 - `TASK-GAME-065`
   - [x] QA 已区分 active-LLM 正式 lane 与 debug/probe lane
   - [x] `software_safe` formal floor 已在 real-main-config rerun 中恢复

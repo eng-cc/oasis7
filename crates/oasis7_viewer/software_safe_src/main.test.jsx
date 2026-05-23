@@ -195,6 +195,9 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getAllByText("Accepted Intent").length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText("Queue build_factory_smelter_mk1 for agent-0").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Capability Economics")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Repair Move")).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/The gating input is the material chain/i)).toBeInTheDocument();
     expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Missing Material")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Recommended Action")).toBeInTheDocument();
