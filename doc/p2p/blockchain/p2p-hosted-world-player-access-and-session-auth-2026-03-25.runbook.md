@@ -129,6 +129,58 @@ MVP 最小 smoke：
 3. `hosted account tablestore table <...> does not exist and auto create is disabled`
    - 说明要么先建表，要么打开 `AUTO_CREATE`。
 
+## 5B. 分环境执行清单
+如果你准备把这条 hosted account 中心化服务给测试用户或真实玩家用，不要只想“有没有一个服务器能跑起来”；最小真值应是 `dev/staging/production` 三层各自独立。
+
+### dev 环境
+- 目标:
+  - 本地开发、结构验证、单机 smoke。
+- 允许:
+  - `OASIS7_HOSTED_ACCOUNT_STORE_BACKEND=file`，或无 OTS 配置时的 `auto` 本地 fallback。
+  - `OASIS7_HOSTED_LOGIN_DELIVERY_MODE=preview_inline|server_log_only`。
+  - 手工测试邮箱、一次性 OTP、无对外公告的局部验证。
+- 禁止:
+  - 复用 staging/production 的 SMTP、Tablestore、strong-auth signer、approval code。
+  - 把 dev URL 发给外部测试用户并称为“可试用环境”。
+- 最小验证:
+  - 登录 start/complete 能走通。
+  - 页面能拿到 `player_session`。
+  - 本地重启后是否保持同一账号映射，可作为可选 smoke，但不是对外 claims 依据。
+
+### staging 环境
+- 目标:
+  - 受控测试用户试用、上线前回归、operator 演练。
+- 要求:
+  - 独立 SMTP。
+  - 独立 `hosted_account_id -> player_id` 存储面，优先独立 Tablestore/table；若暂时用 file backend，也必须独立路径和独立数据。
+  - 独立 strong-auth/custody secret、approval code、风控阈值、监控与 incident channel。
+  - 只允许受控测试用户进入，不允许直接升级 public claims。
+- 最小验证:
+  1. 同一邮箱跨 launcher 重启后仍返回同一个 `hosted_account_id/player_id`。
+  2. 真实 OTP 能送达目标测试邮箱，而不是只看 server log。
+  3. Runbook 中的 revoke / recovery / 误分享 first-response 至少演练一次。
+  4. 对外口径仍保持 `preview`、`受控试用`、`不是正式玩家发布`。
+
+### production 环境
+- 目标:
+  - 面向真实外部玩家的正式 hosted account 服务面。
+- 硬要求:
+  - `OASIS7_HOSTED_LOGIN_DELIVERY_MODE=smtp`；不得使用 `preview_inline` 或 `server_log_only`。
+  - 独立正式 SMTP、独立正式 account store/table、独立正式 strong-auth/custody secret。
+  - 已有 staging fresh smoke、operator runbook 演练、claims review 和发布决策。
+  - 审计、监控、告警、备份、恢复与 incident owner 已明确。
+- 禁止 shortcut:
+  - 不能把 staging table 改个域名就当 production。
+  - 不能共享 staging OTP 邮箱、approval code、Tablestore 表或 file store。
+  - 不能在未完成 claims review 时把“受控试用可用”升级成“公开可用”。
+
+### promotion gate
+只有满足下面 4 条，才允许从 staging 升到 production 口径：
+1. `SMTP`、`account store`、`strong-auth/custody secret` 已独立。
+2. fresh smoke 已在 staging 当前回合跑过，并保留证据。
+3. runbook 的 revoke/recovery/误分享演练至少完成一轮。
+4. `producer_system_designer` 明确批准对外 claims，不再只停留在 operator 自报可用。
+
 ## 6. 如何判断自己分享错了
 下面任一条成立，都按“误分享 operator URL / operator 面暴露”处理：
 
@@ -191,6 +243,7 @@ MVP 最小 smoke：
 - 当前 hosted `prompt_control` 只是 preview-grade backend reauth，不是 production custody。
 - 当前 operator 仍以 loopback private control plane 为主；即使走远程 tunnel，也只能把受控 operator 面留在私网或人工链路内。
 - 当前邮箱登录 + Tablestore 只证明了 hosted identity MVP 主链路已通，不等于 SMTP、并发、freeze/recovery、监控告警和大规模运维都已完成。
+- 当前没有完成分环境独立前，不得把“有测试环境可试用”偷换成“正式环境已经准备好”。
 
 ## 11. 当前推荐执行法
 - 小范围分享时：

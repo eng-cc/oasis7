@@ -40,6 +40,7 @@
   - SC-5: 玩家默认不需要保存或输入原始公私钥；如需自托管，必须走显式的 `bind external wallet` 或 `transfer-out to self-custody` 流程，而不是把托管私钥直接回流到浏览器。
   - SC-6: 本专题必须与 `PRD-P2P-023 hosted-world session auth` 和 `PRD-P2P-017 signer custody` 形成清晰边界：只覆盖 hosted player identity/custody，不覆盖 node、validator、governance signer 的生产托管。
   - SC-7: `doc/p2p/prd.md`、`doc/p2p/project.md` 与本专题三件套完成映射，后续实现任务可直接挂到统一真值。
+  - SC-8: hosted account 中心化服务必须冻结至少 `dev/staging/production` 三层环境边界；登录投递、账户存储、强鉴权 signer、风控阈值、对外 claims 与验证命令不得跨层混用。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -116,6 +117,21 @@
   - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
   - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
   - `testing-manual.md`
+- Environment Tiering Contract:
+  - `dev`:
+    - 目标: 本地开发、结构验证、单机 smoke。
+    - 允许: `OASIS7_HOSTED_ACCOUNT_STORE_BACKEND=file` 或无 OTS 配置下的 `auto` fallback，`OASIS7_HOSTED_LOGIN_DELIVERY_MODE=preview_inline|server_log_only`，临时测试邮箱，最小手工 smoke。
+    - 禁止: 对外宣称为真实玩家入口；复用 staging/production 的 SMTP、Tablestore、strong-auth signer 或 approval code。
+  - `staging`:
+    - 目标: 受控测试用户试用、回归、演练、上线前 smoke。
+    - 允许: 独立的 SMTP、独立的 Tablestore/file store、独立 signer/approval 配置、受控测试账号与 operator 演练。
+    - 要求: 至少完成“同一邮箱跨重启保持同一 `hosted_account_id/player_id`”和“真实 OTP 可送达”两条验证；对外口径仍是 preview/受控试用。
+    - 禁止: 与 production 共用邮箱投递、账户表、signer、风控阈值或 incident channel。
+  - `production`:
+    - 目标: 面向真实外部玩家的正式 hosted account 服务面。
+    - 要求: 必须使用独立真实 SMTP、独立托管账户存储、独立强鉴权 signer/custody 后端、正式告警与审计；不得启用 `preview_inline` 或 `server_log_only`。
+    - 要求: 上线前必须先通过 staging fresh smoke、operator runbook 演练与 claims review；production 只能共享“已批准的发布工件”，不能共享 staging 数据面。
+    - 禁止: 复用 staging/dev 的邮箱、OTP、account store、approval code、tablestore table 或对外 claims。
 - Edge Cases & Error Handling:
   - 若邮箱重复绑定到多个 hosted account，必须提供 canonical merge / reject 规则，不能静默创建分叉账户。
   - 若浏览器丢失 device session，但账户因子仍有效，必须允许重新登录恢复，而不是要求用户回忆旧私钥。
@@ -132,6 +148,7 @@
   - NFR-P2P-029-4: `managed custody` 默认适用于 hosted player surface，不得被误扩展为 node/governance/validator signer 方案。
   - NFR-P2P-029-5: 用户默认看到的是 `Oasis ID` / 账户状态 / custody mode，而不是原始公钥命名。
   - NFR-P2P-029-6: 本专题完成前，仓内与对外口径不得声称“任意新用户已经默认拥有安全托管钱包并可直接进行资产动作”。
+  - NFR-P2P-029-7: `dev/staging/production` 必须是独立环境面；至少隔离 SMTP、account store/table、signer/approval secret、风控阈值和对外 claims，不得只靠“不同 URL”假装分环境。
 - Security & Privacy: 邮箱、设备标识和签名授权记录都属于敏感身份数据。本专题允许记录账户 ID、factor 类型、掩码后的联系方式、signer 引用、公钥摘要、step-up 与审计事件；禁止把真实 OTP、原始私钥、seed 或长期签名材料写入仓库、前端 bootstrap、日志与测试证据。
 
 ## 4. Risks & Roadmap
@@ -159,6 +176,7 @@
 | PRD-P2P-029-D | device-session-and-runtime-binding / step-up-auth-and-risk-policy | `test_tier_required` | viewer UX、设备会话存储、step-up 状态与错误反馈回归 | 前端登录/重连/敏感动作文案 |
 | PRD-P2P-029-E | qa-abuse-and-liveops-runbook | `test_tier_required` + `test_tier_full` | 盗号、设备丢失、重复绑定、风控冻结、撤销与恢复 runbook | 运营事故、QA 阻断 |
 | PRD-P2P-029-F | external-wallet-bind-and-transfer-out | `test_tier_required` + `test_tier_full` | self-custody 升级、wallet bind、transfer-out 冷却与审计回归 | 账户迁移、custody exit |
+| PRD-P2P-029-G | hosted-account-env-tiering | `test_tier_required` | 文档冻结 `dev/staging/production` 边界；`rg -n "preview_inline|staging|production|tablestore|smtp|claims"` 覆盖 PRD/project/runbook；`./scripts/doc-governance-check.sh` + `git diff --check` | 环境隔离、试用/正式口径、operator 上线清单 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
