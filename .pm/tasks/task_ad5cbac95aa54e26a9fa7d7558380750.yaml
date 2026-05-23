@@ -1,0 +1,24 @@
+task_uid: task_ad5cbac95aa54e26a9fa7d7558380750
+title: "hosted account service environment tiering checklist"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-hosted-account-env-tiering
+execution_log_path: .pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md
+  - doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md
+  - doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md
+doc_refs:
+  - doc/p2p/project.md
+related_prd:
+  - PRD-P2P-029
+acceptance:
+  - "PRD and project freeze distinct dev staging production boundaries for hosted account identity, SMTP, storage, keys, and claims."
+  - "Operator runbook defines minimum config and forbidden shortcuts for each environment tier."
+  - "Module project entry records the new task and verification command."
+handoff_to: []
+updated_at: 2026-05-23T22:48:00+08:00
+last_started_at: 2026-05-23T22:43:02+08:00
+last_closed_at: 2026-05-23T22:48:00+08:00
