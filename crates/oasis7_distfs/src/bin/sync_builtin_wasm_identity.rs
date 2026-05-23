@@ -4,7 +4,6 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
