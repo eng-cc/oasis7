@@ -367,7 +367,7 @@ jobs:
             "${RUNNER_TEMP}/appimagetool/appimagetool"
           echo "${RUNNER_TEMP}/appimagetool" >> "${GITHUB_PATH}"
       - name: Download web dist artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: release-web-dists
           path: output/release
@@ -466,7 +466,7 @@ jobs:
           fi
           echo "value=${tag}" >> "${GITHUB_OUTPUT}"
       - name: Download packaged assets
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           pattern: release-asset-*
           path: output/release/assets
@@ -490,7 +490,7 @@ jobs:
             oasis7-windows-x64.exe \
             > oasis7-checksums.txt
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.value }}
           name: oasis7 ${{ steps.tag.outputs.value }}
