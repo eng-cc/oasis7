@@ -25,8 +25,8 @@ node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs
 (
   cd crates/oasis7_viewer
   npm run test:ui -- software_safe_src/main.test.jsx
-  npm run build:software-safe
 )
 
+./scripts/build-viewer-software-safe.sh
 ./scripts/doc-governance-check.sh
 git diff --check

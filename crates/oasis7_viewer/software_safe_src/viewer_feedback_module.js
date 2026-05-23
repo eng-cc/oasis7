@@ -77,19 +77,6 @@ export function createViewerFeedbackModule({
       .replaceAll("-", "");
   }
 
-  function preferredAvailableAction(actions, preferredIds = []) {
-    if (!Array.isArray(actions) || !actions.length) {
-      return null;
-    }
-    for (const actionId of preferredIds) {
-      const matched = actions.find((action) => action?.actionId === actionId && !action?.disabledReason);
-      if (matched) {
-        return matched;
-      }
-    }
-    return actions.find((action) => !action?.disabledReason) || actions[0] || null;
-  }
-
   function buildGameplayEconomicSurface({
     locale,
     gameplay,
