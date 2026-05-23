@@ -15,9 +15,11 @@
 - [x] bounded-testing-and-brainstorming (PRD-ENGINEERING-031/PRD-ENGINEERING-032/PRD-ENGINEERING-AWB-003/007/008) [test_tier_required]: 将 `test-driven-development` 和 `brainstorming` 分别收口为 bounded TDD 与 bounded brainstorming，只保留 behavior-first / option-framing / optional visual companion 等 repo-owned 可承接部分。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
 - [x] repo-owned-workflow-router (PRD-ENGINEERING-031/PRD-ENGINEERING-032/PRD-ENGINEERING-AWB-009) [test_tier_required]: 将 `using-superpowers` 中可借的 process-skill routing order 翻译成本地 workflow router，并把默认 phase order 接回 `AGENTS.md`、`.agents/skills/README.md` 与相关 topic docs。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
 - [x] workflow-behavior-eval-and-closeout-hardening (PRD-ENGINEERING-AWB-001/002/006) [test_tier_required]: 将 `task-closeout.sh` 收紧为 `done` closeout 前必须 fresh verify，并新增 `scripts/pm/workflow-behavior-eval.sh`，把 task-worktree bootstrap、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 收口成 repo-owned eval。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
+- [ ] superpowers-further-absorption-followup (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-003/005/010) [test_tier_required]: 补齐 repo-owned review-request surface、把 visual companion follow-up 收紧为可执行 pilot contract，并把 execution step evidence 升级为 `Action / Validation Command / Expected Result / Actual Result` + blocker escalation 的正式约束。 Trace: .pm/tasks/task_e737a3094e824f43a8c4e24e6564ea2a.yaml
 
 ## Planned Follow-ups
-- `viewer-visual-companion-pilot-followup` (`PRD-ENGINEERING-AWB-003/PRD-WORLD_SIMULATOR-046`, target `test_tier_required`): 在 Viewer Web 下一轮结构/视觉专题中试点 browser-based visual companion，先产出 IA/wireframe/layout compare 再切实现 task，同时保持 `agent-browser` / repo-owned UI regression 仍是正式验证面。启动时需创建独立 `.pm` task 与 worktree。
+- `viewer-visual-companion-pilot-followup` (`PRD-ENGINEERING-AWB-003/PRD-WORLD_SIMULATOR-046`, target `test_tier_required`): 在 Viewer Web 下一轮结构/视觉专题中试点 browser-based visual companion，必须先产出 IA/wireframe/layout compare artifact、明确推荐方向与不选路径，再切实现 task；artifact 与结论至少回写到 `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md`、新的 task execution log 或 handoff 之一，同时保持 `agent-browser` / repo-owned UI regression 仍是正式验证面。启动时需创建独立 `.pm` task 与 worktree。
+- `repo-owned-review-request-followup` (`PRD-ENGINEERING-AWB-010`, target `test_tier_required`): 为 high-risk local diff 引入 bounded repo-owned review-request surface，要求 review packet 固定写明 trigger/scope/question/return contract/formal sink，并把 `findings / no_findings / residual_risk` 与 GitHub PR readiness 明确分开。
 - `multi-harness-workflow-packaging-deferred` (`PRD-ENGINEERING-AWB-004`, target `test_tier_required`): 在 repo-owned workflow helpers 与 evals 稳定后，再评估是否需要为 Codex/OpenCode 等 harness 做 workflow packaging；未到该阶段前保持 deferred。若重开，必须先新建专题 task。
 
 ## 依赖
@@ -42,14 +44,14 @@
 - `testing-manual.md`
 
 ## File Structure / Affected Paths
-- 主要改动路径: `AGENTS.md`、`.agents/roles/templates/*.md`、`.agents/skills/{bounded-brainstorming,executing-project-tasks,repo-owned-workflow-router,tdd-test-writer,README.md}`、`doc/engineering/self-evolution/*superpowers*`、`doc/engineering/project.md`
+- 主要改动路径: `AGENTS.md`、`.agents/roles/templates/*.md`、`.agents/skills/{bounded-brainstorming,executing-project-tasks,repo-owned-workflow-router,requesting-repo-owned-review,tdd-test-writer,README.md}`、`doc/engineering/self-evolution/*superpowers*`、`doc/engineering/project.md`、`doc/world-simulator/{project.md,viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md}`
 - 只读依赖: `.agents/skills/prd/SKILL.md`、`.agents/skills/prd/check.md`
 - 验证入口: `./scripts/pm/lint.sh`、`./scripts/doc-governance-check.sh`、`git diff --check`
 - 正式回写面: `agent-workflow-borrowing-governance-2026-05-19.{prd,project}.md`、`doc/engineering/project.md`
 
 ## 状态
-- 更新日期: 2026-05-22
+- 更新日期: 2026-05-23
 - 当前阶段: planned
-- 当前任务: `viewer-visual-companion-pilot-followup`
-- 关键缺口: workflow behavior eval 与 closeout fresh verification gate 已落为 repo-owned helper / eval，但 `viewer-visual-companion-pilot-followup` 仍需等待下一轮明确的 Viewer 设计题。
-- 下一步: 仅在下一轮结构/视觉专题中按需启动 `viewer-visual-companion-pilot-followup`；multi-harness packaging 继续保持 deferred。
+- 当前任务: `superpowers-further-absorption-followup`
+- 关键缺口: `requesting-code-review` 仍缺 repo-owned request surface，visual companion 虽已 adopted 但需要 concrete pilot contract，execution step evidence 仍需从“计划验证”收紧为“实际结果 + blocker escalation”。
+- 下一步: 完成 `superpowers-further-absorption-followup` 后，仅在下一轮结构/视觉专题中按 contract 启动 `viewer-visual-companion-pilot-followup`；multi-harness packaging 继续保持 deferred。

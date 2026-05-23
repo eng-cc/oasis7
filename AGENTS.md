@@ -50,10 +50,11 @@
    5. 跨角色、明显需要多切片协作，或虽然 non-trivial 但已经确认由多角色分别提供分析 / 实现 / 验证 / 口径回流更稳妥的任务，默认按 bounded subagent-driven development 推进：由 `producer_system_designer` 将分析、实现、验证、补充 review 切成角色 subagent 任务，再由主会话把结果集成回同一 owner / `.pm` task / worktree / PR 主链；单角色即可闭环的 non-trivial task 可不额外派生角色 subagent，但仍要遵守 router / verification 主链
    6. 若任务仍需定实现方向、需要方案对比，或要判断 visual companion 是否值得启用，先走 bounded brainstorming：优先复用 `.agents/skills/bounded-brainstorming/SKILL.md` 做 scope 拆分、2-3 方案对比与推荐，再把结论回写正式文档后进入实施
    7. 若任务会改变可自动化验证的行为，默认先走 bounded TDD / behavior-first 路径：先定义 behavior contract，优先通过 `.agents/skills/tdd-test-writer/SKILL.md` 或等价手工流程补失败测试/回归测试，再写生产实现；若不适用，必须在 `project.md`、handoff 或 execution log 里写清 skip 原因
-   8. 默认实施顺序是：router 判断当前阶段 -> 必要时先做 bounded brainstorming -> owner 做 execution gap review -> 判断是否需要 behavior-first RED phase -> 按需要派生角色 subagent -> subagent 按声明好的 write scope / return contract / formal sink 交付 patch、findings 或 evidence -> owner 在 canonical worktree 集成并运行 fresh verification -> 必要时再派生补充 review / QA / liveops 子任务 -> 将 subagent review card、summary、incident/messaging 结论回写到 execution log、signal、memory 或 PR evidence，而不是停留在孤立产物里 -> 回写 PRD / project / execution log / `.pm` -> 进入 closeout / PR 收口
+   8. 默认实施顺序是：router 判断当前阶段 -> 必要时先做 bounded brainstorming -> owner 做 execution gap review -> 判断是否需要 behavior-first RED phase -> 按需要派生角色 subagent -> subagent 按声明好的 write scope / return contract / formal sink 交付 patch、findings 或 evidence -> owner 在 canonical worktree 集成并运行 fresh verification -> 若当前 diff 属于 major feature、跨角色收敛前的高风险切片，或 commit 前 claim risk 明显偏高，优先通过 `.agents/skills/requesting-repo-owned-review/SKILL.md` 发起一次补充 repo-owned review，并把 findings / no-findings / residual risk 回写到 execution log 或 PR evidence -> 必要时再派生补充 review / QA / liveops 子任务 -> 将 subagent review card、summary、incident/messaging 结论回写到 execution log、signal、memory 或 PR evidence，而不是停留在孤立产物里 -> 回写 PRD / project / execution log / `.pm` -> 进入 closeout / PR 收口
    9. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
    10. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
-   11. 若步骤说明不清、真实影响面超出当前计划，或同一验证连续失败且没有新信息，不得继续猜测实现；必须先报告 blocker，并明确需要补哪一条文档/决策/输入
+   11. 原子步骤默认要同时记录四项证据：`Action`、`Validation Command`、`Expected Result`、`Actual Result`；若出现偏差，还要补 `Blocker / Next Action`，并回写到 handoff、`project.md` 或 `.pm/tasks/<TASK-UID>.execution.md` 中的正式 sink。
+   12. 若同一验证连续失败两次且没有新信息，必须停止猜测实现并切换为 blocker 口径：明确当前步骤、已执行验证、失败签名，以及需要补哪一条文档/决策/输入后才能继续。
    12. 影响体验、对外口径或线上行为的变更，除 `qa_engineer` 外，还必须明确记录 `liveops_community` 是否参与以及理由；涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice
 
 6. 角色协作规则
@@ -90,6 +91,7 @@
    10. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须优先通过 `./scripts/pm/set-stage.sh` 同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
 
 10. commit 前不再要求额外的本地 review 脚本；默认评审边界是在 commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR，并以 required checks + review/approval 作为正式 review 流程
+   1. 若在 commit 前需要补充 repo-owned review，只能作为高风险 diff 的补强证据，不得替代 GitHub PR review、required checks 或 review/approval 主链。
 
 11. 每个任务（写文档也算）一个 commit；若用户明确要求“先不要提交”，则只保留本地改动，但仍要完成文档与测试闭环
 

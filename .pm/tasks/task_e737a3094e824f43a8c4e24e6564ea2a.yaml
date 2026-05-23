@@ -1,0 +1,23 @@
+task_uid: task_e737a3094e824f43a8c4e24e6564ea2a
+title: "superpowers further absorption followup"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-superpowers-further-absorption
+execution_log_path: .pm/tasks/task_e737a3094e824f43a8c4e24e6564ea2a.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+  - AGENTS.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-031
+acceptance:
+  - "Add a repo-owned review-request surface that strengthens but does not replace GitHub PR review."
+  - "Promote the visual companion pilot from planned follow-up to a concrete scoped pilot contract for the next Viewer visual task."
+  - "Tighten execution-step evidence so atomic steps carry action verify expected actual records and blocker escalation rules."
+handoff_to: []
+updated_at: 2026-05-23T18:41:46+08:00
+last_started_at: 2026-05-23T18:33:54+08:00
+last_closed_at: 2026-05-23T18:41:46+08:00

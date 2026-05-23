@@ -35,8 +35,15 @@ Do not use this skill when:
 3. If the gap review fails, update the existing repo truth first instead of inventing a side plan.
 4. Execute one atomic step at a time.
 5. After each meaningful step, run the named verification for that step and inspect the result directly.
-6. Record important blockers, behavior changes, and verification outcomes in the task execution log or formal docs when they affect task truth.
-7. When scope is implemented and verified, switch to `finishing-a-development-branch` for closeout, commit, PR prep, review handling, and cleanup.
+6. Record each meaningful step with explicit step evidence:
+   - action
+   - verification command
+   - expected result
+   - actual result
+   - blocker / next action when they diverge
+7. If the same verification fails twice in a row without new information, stop execution and switch to explicit blocker reporting.
+8. Record important blockers, behavior changes, and verification outcomes in the task execution log or formal docs when they affect task truth.
+9. When scope is implemented and verified, switch to `finishing-a-development-branch` for closeout, commit, PR prep, review handling, and cleanup.
 
 ## Oasis7-Specific Surfaces
 
@@ -75,6 +82,7 @@ When blocked, lead with:
 
 - Do not create a second planning system outside `prd.md` / `project.md` / `.pm`.
 - Do not batch many unverified steps and only test at the very end if step-level verification was available.
+- Do not record only planned validation; step evidence must include the actual observed result.
 - Do not continue through ambiguity by silently choosing one interpretation.
 - Do not treat this skill as a replacement for final closeout; use `finishing-a-development-branch` when implementation is done.
 
