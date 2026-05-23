@@ -61,6 +61,7 @@ browser_mode=(--headless)
 if [[ "$HEADED" -eq 1 ]]; then
   browser_mode=(--headed)
 fi
+step_browser_mode=(--headless)
 
 echo "+ ./scripts/viewer-primary-web-entry-regression.sh --scenario $SCENARIO --out-dir $OUT_DIR/primary-entry ${browser_mode[*]}"
 ./scripts/viewer-primary-web-entry-regression.sh \
@@ -68,9 +69,13 @@ echo "+ ./scripts/viewer-primary-web-entry-regression.sh --scenario $SCENARIO --
   --out-dir "$OUT_DIR/primary-entry" \
   "${browser_mode[@]}"
 
-echo "+ ./scripts/viewer-software-safe-step-regression.sh --skip-llm-provider-preflight --scenario $SCENARIO --out-dir $OUT_DIR/software-safe-step ${browser_mode[*]}"
+echo "+ ./scripts/viewer-software-safe-step-regression.sh --skip-llm-provider-preflight --scenario $SCENARIO --out-dir $OUT_DIR/software-safe-step ${step_browser_mode[*]}"
 ./scripts/viewer-software-safe-step-regression.sh \
   --skip-llm-provider-preflight \
   --scenario "$SCENARIO" \
+  --live-bind 127.0.0.1:5033 \
+  --web-bind 127.0.0.1:5021 \
+  --chain-status-bind 127.0.0.1:5131 \
+  --viewer-port 4273 \
   --out-dir "$OUT_DIR/software-safe-step" \
-  "${browser_mode[@]}"
+  "${step_browser_mode[@]}"
