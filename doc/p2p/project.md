@@ -892,7 +892,7 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-22
+- 更新日期: 2026-05-23
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
 - 当前活跃子线: hosted world / hosted account、public testnet、bridge/newapi、network tier 和主链代币口径都已有独立 topic `*.project.md`；本页状态区不再逐条复述各子线最近完成项。

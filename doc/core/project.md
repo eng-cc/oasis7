@@ -323,7 +323,7 @@
 - 模块进展补充（2026-03-10 / runtime）: 已向 `runtime_engineer` 发起 `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md`，要求优先补齐候选级 runtime P0 实测证据。
 
 ## 状态
-- 更新日期: 2026-04-07
+- 更新日期: 2026-05-23
 - 当前状态: active
 - 下一任务: `TASK-CORE-054`
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。

@@ -6,8 +6,8 @@
 - [x] world-simulator-legacy-redirect-minimal-shell (PRD-ENGINEERING-025) [test_tier_required]: 保留兼容跳转，并将正文继续收口到 `doc/world-simulator/` 主入口。 Trace: .pm/tasks/task_3540f773193f414690548d217b110bed.yaml
 
 ## 依赖
-- `doc/world-simulator.prd.md`
-- `doc/world-simulator.design.md`
+- `doc/world-simulator/prd.md`
+- `doc/world-simulator/design.md`
 - `doc/world-simulator/project.md`
 
 ## 状态

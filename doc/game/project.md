@@ -200,12 +200,12 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-07
+- 更新日期: 2026-05-23
 - 当前状态: in_progress
 - 下一任务: `#160` 当前 repo-side formal blocker 已收口；后续只在需要时由对应 owner 继续维护更宽的 retention / control-feeling / liveops 跟踪，不再把 `PostOnboarding -> first capability gate` 当作当前未解 blocker。
 - 已登记待排任务: 2026-04-15 的 `trust gate = hold / capability gate = not_run` 现在仅保留为历史 baseline。当前 fresh formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`；若后续再次回退，必须以新样本单独重开，而不是继续复用旧 blocker 文案。
 - 当前切片进展: `task_8d2e20dd7f5c47fd8303ff55159227ba` 已修复 launcher execution-world ready contract：fresh `run-game-test --json-ready` 现在会在 `NodeRuntimeExecutionDriver` 初始化时先为 execution world / simulator mirror 落盘 `snapshot.json` 与 `journal.json`，因此当前 `main` 不再因 `reward-runtime-execution-world` 缺少初始持久化文件而在 Viewer HTTP ready 前退出。该切片只清除 startup blocker，不单独改写 trust gate / capability gate verdict。
-- 当前切片进展: `task_1dbcc087ae374721aa0928de3cd240e2` 已在独立 validation worktree 复用 real-provider `config.toml`，并通过 shared active-LLM stack `20260415-223459` 进行 trust gate 复验；两次 `software_safe` floor probe（`20260415-224143` / `20260415-224312`）都命中同一签名：`step_request.accepted=true` 但长期停留 `stage=queued`，没有 terminal `lastControlFeedback`，且 `logicalTime=1` / `eventSeq=0` 不推进。因此本轮 trust gate 仍为 `hold`，后续 `first capability gate` 未进入。
+- 历史样本（2026-04-15）: `task_1dbcc087ae374721aa0928de3cd240e2` 曾在独立 validation worktree 复用 real-provider `config.toml`，并通过 shared active-LLM stack `20260415-223459` 进行 trust gate 复验；当时两次 `software_safe` floor probe（`20260415-224143` / `20260415-224312`）都命中同一签名：`step_request.accepted=true` 但长期停留 `stage=queued`，没有 terminal `lastControlFeedback`，且 `logicalTime=1` / `eventSeq=0` 不推进。因此当时样本结论为 `trust gate = hold`、`first capability gate = not_run`。
 - 口径更新（2026-05-17）: `PRD-GAME-012` 的正式 verdict 继续保持双层：`10-minute trust gate` 与 `first capability gate` 分开判定。2026-04-15 的 `trust gate = hold / capability gate = not_run` 只保留为历史 baseline；当前 fresh active-LLM formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`，证据见 `doc/testing/evidence/issue-160-first-capability-closeout-2026-05-17.md`。
 - 当前切片进展: `task_7bdbbf9839c74c9eb7bb8c7c161e87de`、`task_fb967ddaadde459786e286b484bc4b0c`、`task_319c1fc645b04dd185f3afb45dcd00ee`、`task_ed2dd76639264739a61a25c0d89c3352` 已分别收口 runtime-live 映射回退、短暂 LLM failure 放大、smelter-first industrial schema 漂移与能力链真值误判；这些修复支撑当前 gate 恢复，但不替代后续 fresh sample。
 - 最近完成的 retention、claim、preview 和 pure-api 收口不再在本页状态区逐条滚动播报；统一回看对应 gameplay topic `*.project.md`、测试 evidence 与 `.pm/tasks/*.execution.md`。
