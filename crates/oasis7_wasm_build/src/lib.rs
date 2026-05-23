@@ -101,8 +101,8 @@ pub fn compute_source_hash(manifest_path: &Path, target: &str) -> Result<String,
         .to_string_lossy()
         .to_string();
     let metadata = read_cargo_metadata(&manifest_path, target)?;
-    let workspace_root = workspace_root(&metadata, &manifest_path);
     let package_dirs = collect_local_package_dirs(&metadata, &manifest_path)?;
+    let workspace_root = workspace_root(&metadata, &manifest_path, &package_dirs);
     let mut hasher = Sha256::new();
     hasher.update(format!("source_manifest_rel={source_manifest_rel}\n").as_bytes());
 
@@ -187,15 +187,26 @@ fn read_cargo_metadata(
     serde_json::from_slice(&output.stdout).map_err(SourceHashError::MetadataJson)
 }
 
-fn workspace_root(metadata: &CargoMetadata, manifest_path: &Path) -> PathBuf {
-    if metadata.workspace_root.trim().is_empty() {
+fn workspace_root(
+    metadata: &CargoMetadata,
+    manifest_path: &Path,
+    package_dirs: &[PathBuf],
+) -> PathBuf {
+    let metadata_root = if metadata.workspace_root.trim().is_empty() {
         manifest_path
             .parent()
             .map(canonical_or_original)
             .unwrap_or_else(|| canonical_or_original(manifest_path))
     } else {
         canonical_or_original(Path::new(metadata.workspace_root.as_str()))
+    };
+    if package_dirs
+        .iter()
+        .all(|package_dir| package_dir.starts_with(&metadata_root))
+    {
+        return metadata_root;
     }
+    common_ancestor(package_dirs).unwrap_or(metadata_root)
 }
 
 fn collect_local_package_dirs(
@@ -275,6 +286,32 @@ fn collect_source_files_for_hash(package_dir: &Path) -> Result<Vec<PathBuf>, Sou
         return Err(SourceHashError::NoTrackedFiles(package_dir.to_path_buf()));
     }
     Ok(files)
+}
+
+fn common_ancestor(paths: &[PathBuf]) -> Option<PathBuf> {
+    let mut iter = paths.iter();
+    let first = iter.next()?.components().collect::<Vec<_>>();
+    let mut common_len = first.len();
+    for path in iter {
+        let components = path.components().collect::<Vec<_>>();
+        let shared = first
+            .iter()
+            .zip(components.iter())
+            .take_while(|(left, right)| left == right)
+            .count();
+        common_len = common_len.min(shared);
+        if common_len == 0 {
+            break;
+        }
+    }
+    if common_len == 0 {
+        return None;
+    }
+    let mut root = PathBuf::new();
+    for component in first.into_iter().take(common_len) {
+        root.push(component.as_os_str());
+    }
+    Some(root)
 }
 
 fn collect_files_recursively(dir: &Path, output: &mut Vec<PathBuf>) -> Result<(), SourceHashError> {
@@ -393,6 +430,26 @@ mod tests {
         root.join("module/Cargo.toml")
     }
 
+    fn write_fixture_split_workspace(root: &Path) -> PathBuf {
+        write_file(
+            &root.join("module/Cargo.toml"),
+            "[workspace]\n\n[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
+        );
+        write_file(
+            &root.join("module/src/lib.rs"),
+            "pub fn call() -> u32 { fixture_shared::value() }\n",
+        );
+        write_file(
+            &root.join("shared/Cargo.toml"),
+            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        );
+        write_file(
+            &root.join("shared/src/lib.rs"),
+            "pub fn value() -> u32 { 1 }\n",
+        );
+        root.join("module/Cargo.toml")
+    }
+
     #[test]
     fn source_hash_changes_when_local_path_dependency_changes() {
         let root = unique_temp_dir("oasis7-wasm-build-source-hash");
@@ -423,6 +480,16 @@ mod tests {
         let unchanged = compute_source_hash(&manifest_path, DEFAULT_WASM_TARGET)
             .expect("unchanged source hash");
         assert_eq!(initial, unchanged);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn source_hash_allows_local_path_dependencies_outside_metadata_workspace_root() {
+        let root = unique_temp_dir("oasis7-wasm-build-split-workspace");
+        let manifest_path = write_fixture_split_workspace(&root);
+
+        let hash = compute_source_hash(&manifest_path, DEFAULT_WASM_TARGET).expect("source hash");
+        assert!(!hash.is_empty());
         let _ = fs::remove_dir_all(root);
     }
 }
