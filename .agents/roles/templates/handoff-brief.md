@@ -53,11 +53,13 @@
 - 需要回写的正式文档 / task execution log：
 
 ## Atomic Steps
-| Step | Action | Validation Command | Expected Result |
-| --- | --- | --- | --- |
-| 1 |  |  |  |
-| 2 |  |  |  |
-| 3 |  |  |  |
+| Step | Action | Validation Command | Expected Result | Actual Result | Blocker / Next Action |
+| --- | --- | --- | --- | --- | --- |
+| 1 |  |  |  |  |  |
+| 2 |  |  |  |  |  |
+| 3 |  |  |  |  |  |
+
+> 若同一验证连续失败两次且没有新信息，必须在 `Blocker / Next Action` 明确写出失败签名和需要补的文档/决策/输入，而不是继续猜测实现。
 
 ## Done Definition
 - [ ] 满足验收点 1

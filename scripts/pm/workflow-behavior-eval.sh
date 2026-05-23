@@ -63,6 +63,7 @@ checks = [
             "`producer_system_designer` orchestrator + 角色 subagents",
             "formal sink",
             "liveops_community` 必须参与至少一个 slice",
+            "requesting-repo-owned-review/SKILL.md",
         ],
     ),
     (
@@ -82,6 +83,15 @@ checks = [
             "- Formal Sink / Writeback Surface:",
             "- Integration Owner:",
             "- Integration Order:",
+        ],
+    ),
+    (
+        root / ".agents/skills/requesting-repo-owned-review/SKILL.md",
+        [
+            "Repo-owned review is a supplement, not a replacement.",
+            "findings",
+            "no_findings",
+            "residual_risk",
         ],
     ),
     (
@@ -187,6 +197,7 @@ payload = {
     "expected_agent_behavior": [
         "task worktree bootstrap stays source-clean and starts the target task",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
+        "high-risk local diffs can request repo-owned review packets without replacing GitHub PR review",
         "done closeout refuses to proceed without fresh verification",
         "PR preflight stays the default GitHub PR entrypoint",
         "review-thread closeout reports unresolved/resolved thread state without conflating merge readiness",
@@ -195,6 +206,7 @@ payload = {
     "failure_signature": [
         "task-closeout allows done closeout without verify-command",
         "subagent contract markers disappear from AGENTS or handoff/router surfaces",
+        "repo-owned review-request surface disappears or stops separating local review from GitHub review",
         "prepare-task-pr local fixture no longer creates the expected PR command path",
         "review-thread closeout helper stops reporting unresolved/resolved state correctly",
     ],

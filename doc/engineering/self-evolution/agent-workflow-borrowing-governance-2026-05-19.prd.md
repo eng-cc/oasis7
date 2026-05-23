@@ -21,6 +21,8 @@
   - SC-8: 仍与当前主链冲突的外部规则必须被显式拒绝，包括“fresh subagent-per-task + local two-stage review ritual”“universal brainstorming gate”“universal TDD”。
   - SC-9: 从 `brainstorming` salvage 的 ideation discipline 必须被翻译成 repo-owned bounded brainstorming surface：只在范围仍模糊、需要 2-3 方案对比、或问题本身偏视觉/结构时启用；结论必须回写 `prd.md` / `project.md` / handoff / execution log，不能停留在聊天里，也不能强制逐段审批。
   - SC-10: 从 `using-superpowers` salvage 的流程编排价值必须被翻译成 repo-owned workflow router：负责判断何时进入 bounded brainstorming、behavior-first TDD、execution、verification 与 closeout；它只能路由本地 skill 和 root workflow，不能成为新的外部 bootstrap 或第二套真值。
+  - SC-11: `requesting-code-review` 不得继续停留在 adopted 的口头裁定；必须补一个 repo-owned review-request surface，明确何时触发、回传 `findings / no_findings / residual_risk` 哪一种结果，以及这些结果落到哪个 formal sink。
+  - SC-12: execution surface 必须把 step-level evidence 从“计划要跑什么”收紧为“实际观察到了什么”，原子步骤至少记录 `Action / Validation Command / Expected Result / Actual Result`，并在重复失败时显式升级 blocker。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -44,6 +46,7 @@
   - PRD-ENGINEERING-AWB-007: As a behavior-changing feature owner, I want stable implementation tasks to default to behavior-first tests or regression-first verification, so that automated evidence leads production changes without turning universal TDD into a hard gate.
   - PRD-ENGINEERING-AWB-008: As a workflow owner, I want ambiguous or design-heavy tasks to support bounded brainstorming before implementation, so that scope decomposition, option comparison, and optional visual exploration happen intentionally without becoming a universal ceremony.
   - PRD-ENGINEERING-AWB-009: As a workflow owner, I want the repo-owned workflow skills chained through one local router, so that non-trivial tasks enter the right phase in the right order without depending on external bootstrap instructions.
+  - PRD-ENGINEERING-AWB-010: As a workflow owner, I want a repo-owned review-request surface for high-risk local diffs, so that review packets and residual risk are explicit before commit or before GitHub review without creating a second formal review chain.
 - Critical User Flows:
   1. Flow-AWB-001: `producer_system_designer` 评估外部 workflow repo -> 提取 planning / review / verification / visual-companion / packaging 模式 -> 冻结 adopted / rejected / deferred 矩阵 -> 只将 adopted 项回写为 repo-owned follow-up。
   2. Flow-AWB-002: adopted 的 workflow 行为补强进入 `engineering` 主项目 -> 形成 helper/eval/smoke/root rule -> 以 repo truth 验证 agent 是否真的遵守 `new-task-worktree -> workflow-report -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout`。
@@ -55,7 +58,8 @@
   8. Flow-AWB-008: 当任务已经具备 `project.md` / handoff / `.pm` truth 且准备开始实施时，owner 先做一次 execution gap review，确认影响面、步骤、验证和命名一致性，再按原子步骤逐步执行并在每一步后读取实际验证结果；若遇到 scope drift 或重复失败，则先报告 blocker 而不是继续猜测。
   9. Flow-AWB-009: 当任务会改变可自动化验证的行为时，owner 先定义 behavior contract -> 选择窄 scope RED 命令与目标测试文件/测试面 -> 优先通过 `tdd-test-writer` 或等价手工流程让新测试先失败 -> 再落生产实现并复跑同一命令转绿；若任务不适合 RED，则必须写明 skip 原因并继续走现有 evidence-first 主链。
   10. Flow-AWB-010: 当任务方向仍模糊、范围过大，或本质上是产品 / 架构 / UI 取舍题时，owner 先做 bounded brainstorming -> 判断是否需要拆 scope、是否需要 2-3 方案对比、是否值得用 visual companion -> 选定推荐方向后再回写 `prd.md` / `project.md` / handoff / execution log，并进入现有 implementation/verification 主链。
-  11. Flow-AWB-011: 当一个非 trivial task 启动时，owner 先通过 repo-owned workflow router 判断当前阶段 -> 依次决定是否需要 bounded brainstorming、behavior-first TDD、execution、verification-before-completion 与 finishing-a-development-branch -> 每一步只路由到本地 skill / root workflow surface，不生成新的 bootstrap/spec/task truth。
+  11. Flow-AWB-011: 当 diff 属于 major feature、跨角色收敛前的高风险切片，或 commit 前 claim risk 明显偏高时，owner 先发起 repo-owned review request -> 明确 review scope、review question、expected return contract 与 formal sink -> 收到 `findings / no_findings / residual_risk` 后再进入 `claim-ready`、commit 或 GitHub PR 下一步。
+  12. Flow-AWB-012: 当一个非 trivial task 启动时，owner 先通过 repo-owned workflow router 判断当前阶段 -> 依次决定是否需要 bounded brainstorming、behavior-first TDD、execution、verification-before-completion 与 finishing-a-development-branch -> 每一步只路由到本地 skill / root workflow surface，不生成新的 bootstrap/spec/task truth。
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -76,7 +80,7 @@
 | --- | --- | --- | --- |
 | `verification-before-completion` | adopted | repo-owned `.agents/skills/verification-before-completion` + `scripts/pm/claim-ready.sh` + PR/closeout claim checklist | 与当前 evidence-first 收口完全同向，且现已同时具备 fresh verification helper 与本地 skill 入口。 |
 | `using-git-worktrees` | adopted | `./scripts/new-task-worktree.sh` + root `AGENTS.md` 的“一需求一 worktree”规则 | 与当前隔离执行模型一致；仓库内已有更强的 repo-native 原子 bootstrap。 |
-| `requesting-code-review` | adopted | `./scripts/prepare-task-pr.sh` + GitHub PR review 默认边界 | “收口前显式请求 review” 与当前默认 PR 主链一致，只是不照搬其 reviewer-dispatch 语义。 |
+| `requesting-code-review` | adopted（bounded） | repo-owned review-request surface + `./scripts/prepare-task-pr.sh` + GitHub PR review 默认边界 | “收口前显式请求 review” 与当前默认 PR 主链一致；只吸收高风险本地 diff 的 review-request packet，不照搬 upstream 的 universal reviewer-dispatch ritual。 |
 | `receiving-code-review` | adopted | repo-owned `.agents/skills/receiving-code-review` + `./scripts/pr-review-thread-closeout.sh` + same-PR review fix/verify loop | 强调先验证评论、再修复、再回看 PR 状态，和当前 review-thread closeout 方向一致；现已本地化为 skill。 |
 | `finishing-a-development-branch` | adopted | repo-owned `.agents/skills/finishing-a-development-branch` + `task-closeout -> prepare-task-pr -> merge/cleanup` 收口链 | 其“分支收尾、决定如何集成”的结构可直接映射到当前标准收口主链，且现已本地化为 skill。 |
 | `systematic-debugging` | adopted | repo-owned `.agents/skills/systematic-debugging` | 价值高且不引入第二套 workflow 真值；现已收口成 repo-owned debugging skill。 |
@@ -90,7 +94,7 @@
 | `using-superpowers` | rejected（overall bootstrap） | repo-owned workflow router：`.agents/skills/repo-owned-workflow-router` + `AGENTS.md` 的默认 phase order + `.agents/skills/README.md` entrypoint | 外部 bootstrap 不能取代当前主链，但其中“先选对本地 process skill 再进入下一阶段”的编排价值已被翻译成 repo-owned router。 |
 - Acceptance Criteria:
   - AC-1: 专题必须明确写出 `superpowers` 当前 `main` 分支 skill inventory 的 adopted / rejected / deferred 清单，且每项都带 rationale 与 oasis7 mapping。
-  - AC-2: adopted 项至少形成八条正式落点：workflow behavior eval harness、completion-claim verification gate、Viewer visual companion pilot、root `AGENTS.md` 的 repo-owned workflow router、bounded brainstorming 规则、默认 role-subagent orchestration 规则、bounded subagent-driven execution 规则，以及 bounded behavior-first testing contract；同时 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`executing-project-tasks`、`tdd-test-writer`、`bounded-brainstorming` 与 `repo-owned-workflow-router` 已允许并落为本地 repo-owned skills / workflow entry points。
+  - AC-2: adopted 项至少形成九条正式落点：workflow behavior eval harness、completion-claim verification gate、Viewer visual companion pilot、root `AGENTS.md` 的 repo-owned workflow router、bounded brainstorming 规则、默认 role-subagent orchestration 规则、bounded subagent-driven execution 规则、repo-owned review-request surface，以及 bounded behavior-first testing contract；同时 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`executing-project-tasks`、`tdd-test-writer`、`bounded-brainstorming`、`requesting-repo-owned-review` 与 `repo-owned-workflow-router` 已允许并落为本地 repo-owned skills / workflow entry points。
   - AC-3: `brainstorming`、`dispatching-parallel-agents`、`subagent-driven-development`、`test-driven-development` 与 repo-owned workflow router 必须在正式文档中被翻译为 adopted（bounded），并明确它们只等于“按需启用的 bounded brainstorming + 默认角色 subagent 编排 + 同一真值链内的 subagent-driven execution + 行为变更任务上的 bounded behavior-first testing + 本地 phase routing”，不等于“强制 brainstorming gate + fresh subagent-per-task + 本地两阶段 review + 无条件 universal TDD + 外部 bootstrap”。
   - AC-4: rejected 项必须显式覆盖与 oasis7 当前默认流程冲突的三类外部规则：强制 brainstorming gate、fresh subagent-per-task + local two-stage review ritual、无条件 universal TDD。
   - AC-5: deferred 项必须把 multi-harness pluginization 与自动 skill bootstrap 维持在“非当前默认流程”边界，不得混入 root `AGENTS.md` 现行口径。
@@ -115,6 +119,7 @@
   - 以 repo-owned eval/smoke 验证 adopted workflow rules 是否被 agent 实际执行。
   - 以 targeted fresh verification checks 验证 completion claims 是否具备足够证据。
   - 以 Viewer Web 专题前置设计样例验证 visual companion 是否真能降低结构/视觉分歧，而不是只增加 ceremony。
+  - 以至少一个 high-risk local diff 的 review-request packet 验证 repo-owned review surface 是否真能沉淀 findings / residual risk，而不是继续停留在 adopted 口号。
 
 ## 4. Technical Specifications
 - Architecture Overview:
@@ -180,7 +185,9 @@
     - `brainstorming` -> bounded brainstorming contract
     - `using-superpowers` 的 process-skill routing order -> repo-owned workflow router
   - 剩余 follow-up:
-    - Viewer visual companion pilot：仅在下一轮结构/视觉专题里验证 optional ideation 收益
+    - workflow enforcement audit follow-up：把 helper 输出升级为 `.pm` task 真值，并让底层 `done` 状态迁移直接拒绝无 fresh verification evidence 的 closeout
+    - Viewer visual companion pilot：仅在下一轮结构/视觉专题里验证 optional ideation 收益，并要求 IA / wireframe / layout compare artifact 与 formal writeback
+    - repo-owned review-request surface：只对 high-risk local diff 启用，验证 review packet、return contract 与 formal sink 不会漂成第二条正式 review 主链
   - Deferred reopen:
     - multi-harness workflow packaging：仅在 repo-owned behavior/eval 稳定后重开
 - Technical Risks:
@@ -195,15 +202,16 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-AWB-001 | `agent-workflow-borrowing-governance`、`workflow-behavior-eval-and-closeout-hardening` | `test_tier_required` + `test_tier_full` | adopted/rejected/deferred 矩阵、repo-owned agent behavior eval、主链 workflow helper 回放 | `engineering` workflow 主链、agent 行为一致性 |
-| PRD-ENGINEERING-AWB-002 | `completion-claim-verification-followup` | `test_tier_required` | fresh verification claim checklist/helper/smoke、失败签名与阻断文案 | task closeout、PR preflight、QA 报告口径 |
+| PRD-ENGINEERING-AWB-002 | `completion-claim-verification-followup`、`pm-step-evidence-lint-defaulting`、`workflow-enforcement-audit-followup` | `test_tier_required` | fresh verification claim checklist/helper/smoke、execution-log step evidence lint、task file evidence 持久化、低层 `move-task done` 绕过阻断与失败签名 | task closeout、PR preflight、QA 报告口径、`.pm` 状态机真值 |
 | PRD-ENGINEERING-AWB-003 | `viewer-visual-companion-pilot-followup` | `test_tier_required` | Viewer Web 前置 mockup/IA 对比样例、实现 task handoff、后续 `agent-browser`/repo-owned regression 不回退 | `world-simulator/viewer` 设计前置链路 |
+| PRD-ENGINEERING-AWB-010 | `repo-owned-review-request-followup` | `test_tier_required` | `requesting-repo-owned-review` skill、root workflow trigger wording、review packet writeback 与治理文档对齐 | `engineering` 的 commit 前高风险 diff 补充 review 链路 |
 | PRD-ENGINEERING-AWB-008 | `bounded-brainstorming-workflow-rollout` | `test_tier_required` | `AGENTS.md` 的 bounded brainstorming rule、handoff/planning option-framing 字段、本地 `bounded-brainstorming` skill，以及 borrowing/conflict/skill-surface 文档改判 | `engineering` 的方向探索、scope decomposition 与 optional visual ideation 边界 |
 | PRD-ENGINEERING-AWB-009 | `repo-owned-workflow-router` | `test_tier_required` | root `AGENTS.md` 的 phase order、`.agents/skills/repo-owned-workflow-router`、`.agents/skills/README.md` 入口，以及 borrowing/conflict/skill-surface 文档对齐 | `engineering` 的端到端流程路由、阶段切换与本地 process-skill 组合 |
 | PRD-ENGINEERING-AWB-004 | `multi-harness-workflow-packaging-deferred` | `test_tier_required` | 仅验证 deferred 口径与 reopen 条件是否写清 | pluginization / harness distribution 边界 |
 | PRD-ENGINEERING-AWB-005 | `workflow-planning-surface-tightening` | `test_tier_required` | `AGENTS.md` 规则、handoff 模板、planning self-checklist、topic/root project 回写与文档治理校验 | `engineering` planning / handoff / review 准备链路 |
 | PRD-ENGINEERING-AWB-006 | `default-role-subagent-orchestration`、`role-subagent-local-validation`、`subagent-driven-default-reconciliation`、`subagent-driven-default-workflow-rollout`、`workflow-behavior-eval-and-closeout-hardening` | `test_tier_required` + `test_tier_full` | `AGENTS.md` 默认 orchestrator/subagent 规则与 bounded subagent-driven execution、handoff/planning contract、borrowing/conflict 文档改判、repo-owned multi-agent behavior eval | `engineering` 多角色协作、owner/task/worktree/PR 真值边界 |
 | PRD-ENGINEERING-AWB-007 | `bounded-tdd-workflow-rollout` | `test_tier_required` | `AGENTS.md` 的 behavior-first testing rule、handoff/planning/test-skill 回写、borrowing/conflict 文档改判与技能边界对齐 | `engineering` 行为变更类实现任务、自动化回归与 skip-reason 审计边界 |
-| PRD-ENGINEERING-031 | `workflow-execution-surface-tightening` | `test_tier_required` | repo-owned execution skill、`AGENTS.md` execution rule、workflow-borrowing / conflict doc 回写与文档治理校验 | `engineering` task 执行、逐步验证与 blocker handling 链路 |
+| PRD-ENGINEERING-031 | `workflow-execution-surface-tightening`、`pm-step-evidence-lint-defaulting` | `test_tier_required` | repo-owned execution skill、`AGENTS.md` execution rule、execution-log step evidence lint、workflow-borrowing / conflict doc 回写与文档治理校验 | `engineering` task 执行、逐步验证与 blocker handling 链路 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -220,6 +228,7 @@
 | DEC-AWB-011 | 将 `test-driven-development` 改判为 adopted（bounded），但只吸收“行为变更 + 稳定自动化 harness”上的 behavior-first / regression-first contract，并允许显式 skip reason | 继续保持整体 rejected，或把 universal TDD 升成所有任务的硬门禁 | 真正缺的是“何时必须让自动化行为证据先行”的统一口径。 |
 | DEC-AWB-012 | 将 `brainstorming` 改判为 adopted（bounded），但只吸收“按需 scope decomposition + 2-3 方案对比 + 推荐方向 + optional visual companion”，继续拒绝 universal gate、逐段审批与强制转入 `writing-plans` | 继续保持整体 rejected，或把 brainstorming 升成所有任务的 mandatory pre-step | 真正缺的是“何时应先定方向再动手”的统一口径。 |
 | DEC-AWB-013 | 保持 `using-superpowers` 的外部 bootstrap 语义 rejected，但把其中“串联本地 workflow skill 的 phase order”翻译成 repo-owned workflow router | 继续保持 `using-superpowers` 完全无落点，或整体采纳为对话默认入口 | 真正缺的是串联已 adopted 本地 skill 的总入口，而不是重新依赖外部 bootstrap。 |
+| DEC-AWB-014 | 将 `requesting-code-review` 落成 bounded repo-owned review-request surface，只在高风险 local diff/claim risk 场景启用，并强制回写 findings/no-findings/residual-risk | 继续维持 adopted 但无本地落点，或照搬 upstream 的 every-task reviewer-dispatch ritual | 当前缺的是真正可回放的 review request sink，而不是再造一条 universal local review 主链。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:

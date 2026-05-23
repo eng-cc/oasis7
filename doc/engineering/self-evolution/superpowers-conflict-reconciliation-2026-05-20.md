@@ -143,6 +143,7 @@
 | skill | 当前状态 | 直接冲突 | 已吸收的部分 | 剩余重开条件 |
 | --- | --- | --- | --- | --- |
 | `brainstorming` | adopted（bounded） | universal gate、逐段审批、强制转入 `writing-plans` | `bounded-brainstorming`、scope decomposition、2-3 方案对比、推荐方向、optional visual companion | 只允许在局部专题内扩张；不得回流成 root mandatory pre-step |
+| `requesting-code-review` | adopted（bounded） | every-task reviewer ritual、把本地 review 提升为正式评审主链 | `requesting-repo-owned-review`、review packet、`findings / no_findings / residual_risk` formal sink | 只允许补强 high-risk local diff；不得替代 GitHub PR review |
 | `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task、local review ritual、subagent 独立真值化 | bounded subagent-driven execution、任务拆分、上下文最小化、write-scope / return-contract contract | 仅当 repo-owned multi-agent eval 稳定且 review 边界变化时重开 |
 | `test-driven-development` | adopted（bounded） | universal TDD gate、对无稳定 harness 任务强套 RED | behavior-first / regression-first contract、`tdd-test-writer`、RED command or skip reason | 只允许在更细局部领域继续扩张；不得升成 universal gate |
 | `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | `File Structure / Affected Paths`、handoff 原子步骤、planning self-checklist | 只有在不竞争正式计划真值时才允许继续局部 salvage |

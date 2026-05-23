@@ -21,12 +21,13 @@ Claim types:
 Options:
   --claim-type <type>        Claim category to guard
   --verify-command <cmd>     Fresh verification command to execute via `bash -lc`
+  --task-uid <task_uid>      Persist the verification result into one task file
   --json                     Print machine-readable JSON summary
   -h, --help                 Show help
 
 Examples:
   ./scripts/pm/claim-ready.sh --claim-type tests_passed --verify-command "./scripts/doc-governance-check.sh"
-  ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=false ./scripts/ci-tests.sh required" --json
+  ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=false ./scripts/ci-tests.sh required" --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --json
 USAGE
 }
 
@@ -38,6 +39,7 @@ die() {
 CLAIM_TYPE=""
 VERIFY_COMMAND=""
 OUTPUT_JSON=0
+TASK_UID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -52,6 +54,10 @@ while [[ $# -gt 0 ]]; do
     --json)
       OUTPUT_JSON=1
       shift
+      ;;
+    --task-uid)
+      TASK_UID="${2:-}"
+      shift 2
       ;;
     -h|--help)
       usage
@@ -121,7 +127,7 @@ if [[ "$VERIFY_EXIT_CODE" != "0" ]]; then
 fi
 
 RESULT_JSON="$(
-python3 - "$CLAIM_LABEL" "$VERIFY_COMMAND" "$VERIFIED_AT" "$VERIFY_EXIT_CODE" "$STATUS" "$ALLOWED_TO_CLAIM" "$CLAIM_MESSAGE" "$BLOCKED_PHRASE" "$SUCCESS_PHRASE" <<'PY'
+python3 - "$CLAIM_LABEL" "$VERIFY_COMMAND" "$VERIFIED_AT" "$VERIFY_EXIT_CODE" "$STATUS" "$ALLOWED_TO_CLAIM" "$CLAIM_MESSAGE" "$BLOCKED_PHRASE" "$SUCCESS_PHRASE" "$TASK_UID" <<'PY'
 from __future__ import annotations
 
 import json
@@ -137,10 +143,21 @@ payload = {
     "claim_message": sys.argv[7],
     "blocked_phrase": sys.argv[8],
     "success_phrase": sys.argv[9],
+    "task_uid": sys.argv[10] or None,
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
 )"
+
+if [[ -n "$TASK_UID" ]]; then
+  "$ROOT_DIR/scripts/pm/pm_store.py" record-task-claim-verification "$ROOT_DIR" \
+    --task-uid "$TASK_UID" \
+    --claim-type "$CLAIM_LABEL" \
+    --verify-command "$VERIFY_COMMAND" \
+    --verified-at "$VERIFIED_AT" \
+    --verification-exit-code "$VERIFY_EXIT_CODE" \
+    --verification-status "$STATUS" >/dev/null
+fi
 
 if [[ "$OUTPUT_JSON" == "1" ]]; then
   printf '%s\n' "$RESULT_JSON"

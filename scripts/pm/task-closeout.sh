@@ -93,6 +93,9 @@ done
 if [[ "$TARGET_STATUS" == "done" && -z "$VERIFY_COMMAND" ]]; then
   die "--verify-command is required when --to-status is done"
 fi
+if [[ "$TARGET_STATUS" == "done" && "$CLAIM_TYPE" != "task_complete" ]]; then
+  die "--claim-type must be task_complete when --to-status is done"
+fi
 
 PRECHECK_JSON="$(python3 - "$ROOT_DIR" "$TASK_UID" "$TARGET_STATUS" <<'PY'
 from __future__ import annotations
@@ -147,7 +150,7 @@ PY
 )"
 
 if [[ -n "$VERIFY_COMMAND" ]]; then
-  CLAIM_READY_JSON="$("$ROOT_DIR/scripts/pm/claim-ready.sh" --claim-type "$CLAIM_TYPE" --verify-command "$VERIFY_COMMAND" --json)"
+  CLAIM_READY_JSON="$("$ROOT_DIR/scripts/pm/claim-ready.sh" --claim-type "$CLAIM_TYPE" --verify-command "$VERIFY_COMMAND" --task-uid "$TASK_UID" --json)"
 else
   CLAIM_READY_JSON="$(python3 - "$TARGET_STATUS" <<'PY'
 from __future__ import annotations
@@ -184,7 +187,22 @@ else
   PM_LINT_STATUS="skipped"
 fi
 
-RESULT_JSON="$(python3 - "$ROOT_DIR" "$ROLE" "$PM_LINT_STATUS" "$PRECHECK_JSON" "$CLAIM_READY_JSON" "$WORKFLOW_CLOSE_JSON" "$MOVE_JSON" <<'PY'
+RESULT_JSON_FILE="$(mktemp)"
+PRECHECK_JSON_FILE="$RESULT_JSON_FILE.precheck"
+CLAIM_READY_JSON_FILE="$RESULT_JSON_FILE.claim"
+WORKFLOW_CLOSE_JSON_FILE="$RESULT_JSON_FILE.workflow"
+MOVE_JSON_FILE="$RESULT_JSON_FILE.move"
+cleanup_result_json() {
+  rm -f "$RESULT_JSON_FILE" "$PRECHECK_JSON_FILE" "$CLAIM_READY_JSON_FILE" "$WORKFLOW_CLOSE_JSON_FILE" "$MOVE_JSON_FILE"
+}
+trap cleanup_result_json EXIT
+
+printf '%s\n' "$PRECHECK_JSON" >"$PRECHECK_JSON_FILE"
+printf '%s\n' "$CLAIM_READY_JSON" >"$CLAIM_READY_JSON_FILE"
+printf '%s\n' "$WORKFLOW_CLOSE_JSON" >"$WORKFLOW_CLOSE_JSON_FILE"
+printf '%s\n' "$MOVE_JSON" >"$MOVE_JSON_FILE"
+
+python3 - "$ROOT_DIR" "$ROLE" "$PM_LINT_STATUS" "$PRECHECK_JSON_FILE" "$CLAIM_READY_JSON_FILE" "$WORKFLOW_CLOSE_JSON_FILE" "$MOVE_JSON_FILE" "$RESULT_JSON_FILE" <<'PY'
 from __future__ import annotations
 
 import json
@@ -210,10 +228,11 @@ def parse_task_file(path: Path) -> dict[str, str]:
 root = Path(sys.argv[1])
 role = sys.argv[2]
 pm_lint_status = sys.argv[3]
-precheck = json.loads(sys.argv[4])
-claim_verification = json.loads(sys.argv[5])
-workflow_close = json.loads(sys.argv[6])
-move_task = json.loads(sys.argv[7])
+precheck = json.loads(Path(sys.argv[4]).read_text(encoding="utf-8"))
+claim_verification = json.loads(Path(sys.argv[5]).read_text(encoding="utf-8"))
+workflow_close = json.loads(Path(sys.argv[6]).read_text(encoding="utf-8"))
+move_task = json.loads(Path(sys.argv[7]).read_text(encoding="utf-8"))
+result_path = Path(sys.argv[8])
 
 task_path = root / precheck["task_path"]
 fields = parse_task_file(task_path)
@@ -237,22 +256,24 @@ payload = {
     "workflow_close": workflow_close,
     "move_task": move_task,
 }
-print(json.dumps(payload, ensure_ascii=True, indent=2))
+result_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
 PY
-)"
+
+RESULT_JSON="$(cat "$RESULT_JSON_FILE")"
 
 if [[ "$OUTPUT_JSON" == "1" ]]; then
   printf '%s\n' "$RESULT_JSON"
   exit 0
 fi
 
-python3 - "$RESULT_JSON" <<'PY'
+python3 - "$RESULT_JSON_FILE" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
-payload = json.loads(sys.argv[1])
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 
 print("task closeout summary")
 print(f"- task_uid: {payload['task_uid']}")

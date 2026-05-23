@@ -149,6 +149,11 @@ for path in root.glob(".pm/tasks/*.execution.md"):
             "## YYYY-MM-DD HH:MM:SS CST / role_name",
             "- 完成内容: ...",
             "- 遗留事项: ...",
+            "- Action: ...",
+            "- Validation Command: ...",
+            "- Expected Result: ...",
+            "- Actual Result: ...",
+            "- Blocker / Next Action: ...",
             "-->",
         }
     ]
@@ -161,6 +166,11 @@ for path in root.glob(".pm/tasks/*.execution.md"):
         handle.write("\n## 2026-03-31 18:00:00 CST / producer_system_designer\n")
         handle.write("- 完成内容: smoke fixture seeded a minimal execution-log entry for lint compatibility.\n")
         handle.write("- 遗留事项: none.\n")
+        handle.write("- Action: 为 codex-working-memory smoke 补一条 started execution-log entry。\n")
+        handle.write("- Validation Command: PM_ROOT_DIR=\"$TMPDIR\" \"$ROOT_DIR/scripts/pm/lint.sh\"\n")
+        handle.write("- Expected Result: pm-lint 可在 autoflow 产物上通过 execution-log 结构校验。\n")
+        handle.write("- Actual Result: 已回填一条完整 entry，供后续 working-memory autoflow 与 pm-lint 使用。\n")
+        handle.write("- Blocker / Next Action: none.\n")
 PY
 
 cat > "$TMPDIR/.codex/session_index.jsonl" <<'EOF'
@@ -319,6 +329,11 @@ for item in payload.get("task_actions", []):
             "## YYYY-MM-DD HH:MM:SS CST / role_name",
             "- 完成内容: ...",
             "- 遗留事项: ...",
+            "- Action: ...",
+            "- Validation Command: ...",
+            "- Expected Result: ...",
+            "- Actual Result: ...",
+            "- Blocker / Next Action: ...",
             "-->",
         }
     ]
@@ -327,6 +342,11 @@ for item in payload.get("task_actions", []):
         handle.write("\n## 2026-03-31 18:10:00 CST / producer_system_designer\n")
         handle.write("- 完成内容: smoke fixture backfilled the created candidate task execution log so pm-lint can validate the autoflow output.\n")
         handle.write("- 遗留事项: none.\n")
+        handle.write("- Action: 为 autoflow 新建 candidate task 回填完整 execution-log entry。\n")
+        handle.write("- Validation Command: PM_ROOT_DIR=\"$TMPDIR\" \"$ROOT_DIR/scripts/pm/lint.sh\"\n")
+        handle.write("- Expected Result: newly created candidate task 具备可通过 pm-lint 的 execution-log 结构。\n")
+        handle.write("- Actual Result: 已为该 task 回填完整 entry，后续 pm-lint 与 working-memory report 正常通过。\n")
+        handle.write("- Blocker / Next Action: none.\n")
 PY
 
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-lint.sh" >/dev/null

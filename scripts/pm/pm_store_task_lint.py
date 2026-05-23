@@ -6,6 +6,10 @@ import sys
 from collections import OrderedDict
 from datetime import datetime
 
+# Forward-only rollout: historical done tasks are not backfilled, but any task
+# closed after this enforcement task started must carry persisted claim evidence.
+TASK_CLAIM_EVIDENCE_ENFORCEMENT_START = datetime.fromisoformat("2026-05-23T21:30:23+08:00")
+
 
 def run_task_backlog_lint(
     root: pathlib.Path,
@@ -23,6 +27,7 @@ def run_task_backlog_lint(
     role_backlog_path,
     backlog_file_for_status,
     task_execution_log_entry_re,
+    step_evidence_effective_at,
     allowed_signal_states,
     allowed_memory_promotion_states,
     allowed_promotion_reasons,
@@ -215,11 +220,29 @@ def run_task_backlog_lint(
                 datetime.fromisoformat(str(value))
             except ValueError:
                 fail(f"task file invalid {key}: {task_uid} -> {value}")
+        verified_at = fields.get("last_verified_at")
+        if verified_at not in {None, ""}:
+            try:
+                datetime.fromisoformat(str(verified_at))
+            except ValueError:
+                fail(f"task file invalid last_verified_at: {task_uid} -> {verified_at}")
+        verification_status = fields.get("last_verification_status")
+        if verification_status not in {None, "", "verified", "blocked"}:
+            fail(f"task file invalid last_verification_status: {task_uid} -> {verification_status}")
+        verification_exit_code = fields.get("last_verification_exit_code")
+        if verification_exit_code not in {None, ""}:
+            try:
+                int(str(verification_exit_code))
+            except ValueError:
+                fail(
+                    f"task file invalid last_verification_exit_code: "
+                    f"{task_uid} -> {verification_exit_code}"
+                )
         if fields.get("last_started_at") not in {None, ""} and fields.get("last_closed_at") not in {None, ""}:
             try:
                 started_at = datetime.fromisoformat(str(fields["last_started_at"]))
                 closed_at = datetime.fromisoformat(str(fields["last_closed_at"]))
-                if closed_at < started_at:
+                if status in {"done", "deferred"} and closed_at < started_at:
                     fail(f"task file close precedes start: {task_uid}")
             except ValueError:
                 pass
@@ -227,6 +250,66 @@ def run_task_backlog_lint(
             fail(f"task file missing last_started_at for started workflow task: {task_uid}")
         if status in {"done", "deferred"} and fields.get("last_closed_at") in {None, ""}:
             fail(f"task file missing last_closed_at for closed workflow task: {task_uid}")
+        require_done_claim_evidence = False
+        if status == "done" and fields.get("last_closed_at") not in {None, ""}:
+            try:
+                closed_dt = datetime.fromisoformat(str(fields["last_closed_at"]))
+            except ValueError:
+                closed_dt = None
+            require_done_claim_evidence = (
+                closed_dt is not None and closed_dt >= TASK_CLAIM_EVIDENCE_ENFORCEMENT_START
+            )
+        if require_done_claim_evidence:
+            required_verification_keys = (
+                "last_claim_type",
+                "last_verify_command",
+                "last_verified_at",
+                "last_verification_exit_code",
+                "last_verification_status",
+            )
+            missing_verification_keys = [
+                key for key in required_verification_keys if fields.get(key) in {None, ""}
+            ]
+            if missing_verification_keys:
+                fail(
+                    f"task file missing claim verification fields for done task: "
+                    f"{task_uid} -> {', '.join(missing_verification_keys)}"
+                )
+            if fields.get("last_claim_type") != "task_complete":
+                fail(
+                    f"task file done status requires task_complete claim evidence: "
+                    f"{task_uid} -> {fields.get('last_claim_type')}"
+                )
+            if fields.get("last_verification_status") != "verified":
+                fail(
+                    f"task file done status requires verified claim evidence: "
+                    f"{task_uid} -> {fields.get('last_verification_status')}"
+                )
+            if fields.get("last_verification_exit_code") not in {None, ""}:
+                try:
+                    if int(str(fields["last_verification_exit_code"])) != 0:
+                        fail(
+                            f"task file done status requires zero exit code claim evidence: "
+                            f"{task_uid} -> {fields.get('last_verification_exit_code')}"
+                        )
+                except ValueError:
+                    pass
+            if fields.get("last_verified_at") not in {None, ""} and fields.get("last_started_at") not in {None, ""}:
+                try:
+                    verified_dt = datetime.fromisoformat(str(fields["last_verified_at"]))
+                    started_dt = datetime.fromisoformat(str(fields["last_started_at"]))
+                    if verified_dt < started_dt:
+                        fail(f"task file done verification predates start: {task_uid}")
+                except ValueError:
+                    pass
+            if fields.get("last_verified_at") not in {None, ""} and fields.get("last_closed_at") not in {None, ""}:
+                try:
+                    verified_dt = datetime.fromisoformat(str(fields["last_verified_at"]))
+                    closed_dt = datetime.fromisoformat(str(fields["last_closed_at"]))
+                    if closed_dt < verified_dt:
+                        fail(f"task file done close precedes verification: {task_uid}")
+                except ValueError:
+                    pass
         execution_log_path = str(fields.get("execution_log_path") or "")
         expected_execution_log_path = task_execution_log_relative_path(task_uid)
         if execution_log_path != expected_execution_log_path:
@@ -239,28 +322,65 @@ def run_task_backlog_lint(
         if not execution_log_file.is_file():
             fail(f"task execution log missing: {task_uid} -> {execution_log_path}")
             continue
+        execution_log_text = execution_log_file.read_text(encoding="utf-8")
+        template_supports_step_evidence = "  - Action: ..." in execution_log_text
+        require_step_evidence = False
+        started_at_raw = fields.get("last_started_at")
+        if started_at_raw not in {None, ""}:
+            try:
+                require_step_evidence = (
+                    template_supports_step_evidence
+                    and datetime.fromisoformat(str(started_at_raw)) >= step_evidence_effective_at
+                )
+            except ValueError:
+                pass
         require_entry = status in {"blocked", "done", "deferred"} or fields.get("last_started_at") not in {None, ""}
         entry_count = 0
         active_entry_line: int | None = None
         entry_has_done = False
         entry_has_pending = False
-        for line_no, raw_line in enumerate(execution_log_file.read_text(encoding="utf-8").splitlines(), start=1):
+        entry_has_action = False
+        entry_has_validation = False
+        entry_has_expected = False
+        entry_has_actual = False
+        entry_has_blocker = False
+
+        def has_nonempty_value(raw_line: str, prefix: str) -> bool:
+            return bool(raw_line[len(prefix) :].strip())
+
+        def flush_entry(line_no: int) -> None:
+            if not entry_has_done:
+                fail(f"{execution_log_path}:{line_no}: execution log entry missing 完成内容 for {task_uid}")
+            if not entry_has_pending:
+                fail(f"{execution_log_path}:{line_no}: execution log entry missing 遗留事项 for {task_uid}")
+            if not require_step_evidence:
+                return
+            if not entry_has_action:
+                fail(f"{execution_log_path}:{line_no}: execution log entry missing Action for {task_uid}")
+            if not entry_has_validation:
+                fail(f"{execution_log_path}:{line_no}: execution log entry missing Validation Command for {task_uid}")
+            if not entry_has_expected:
+                fail(f"{execution_log_path}:{line_no}: execution log entry missing Expected Result for {task_uid}")
+            if not entry_has_actual:
+                fail(f"{execution_log_path}:{line_no}: execution log entry missing Actual Result for {task_uid}")
+            if not entry_has_blocker:
+                fail(f"{execution_log_path}:{line_no}: execution log entry missing Blocker / Next Action for {task_uid}")
+
+        for line_no, raw_line in enumerate(execution_log_text.splitlines(), start=1):
             if raw_line.startswith("## "):
                 if active_entry_line is not None:
-                    if not entry_has_done:
-                        fail(
-                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_uid}"
-                        )
-                    if not entry_has_pending:
-                        fail(
-                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_uid}"
-                        )
+                    flush_entry(active_entry_line)
                 match = task_execution_log_entry_re.fullmatch(raw_line)
                 if not match:
                     fail(f"{execution_log_path}:{line_no}: invalid execution log heading for {task_uid}")
                     active_entry_line = None
                     entry_has_done = False
                     entry_has_pending = False
+                    entry_has_action = False
+                    entry_has_validation = False
+                    entry_has_expected = False
+                    entry_has_actual = False
+                    entry_has_blocker = False
                     continue
                 role_name = match.group(3)
                 if role_name not in roles:
@@ -269,6 +389,11 @@ def run_task_backlog_lint(
                 active_entry_line = line_no
                 entry_has_done = False
                 entry_has_pending = False
+                entry_has_action = False
+                entry_has_validation = False
+                entry_has_expected = False
+                entry_has_actual = False
+                entry_has_blocker = False
                 continue
             if active_entry_line is None:
                 continue
@@ -276,11 +401,18 @@ def run_task_backlog_lint(
                 entry_has_done = True
             elif raw_line.startswith("- 遗留事项:"):
                 entry_has_pending = True
+            elif raw_line.startswith("- Action:") and has_nonempty_value(raw_line, "- Action:"):
+                entry_has_action = True
+            elif raw_line.startswith("- Validation Command:") and has_nonempty_value(raw_line, "- Validation Command:"):
+                entry_has_validation = True
+            elif raw_line.startswith("- Expected Result:") and has_nonempty_value(raw_line, "- Expected Result:"):
+                entry_has_expected = True
+            elif raw_line.startswith("- Actual Result:") and has_nonempty_value(raw_line, "- Actual Result:"):
+                entry_has_actual = True
+            elif raw_line.startswith("- Blocker / Next Action:") and has_nonempty_value(raw_line, "- Blocker / Next Action:"):
+                entry_has_blocker = True
         if active_entry_line is not None:
-            if not entry_has_done:
-                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_uid}")
-            if not entry_has_pending:
-                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_uid}")
+            flush_entry(active_entry_line)
         if require_entry and entry_count == 0:
             fail(f"task execution log requires at least one entry: {task_uid}")
 
