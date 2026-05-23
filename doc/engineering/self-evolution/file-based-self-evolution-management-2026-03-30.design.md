@@ -5,75 +5,19 @@
 
 审计轮次: 7
 
-## 目标
-- 在仓库内建立一套不依赖外部服务的文件化项目管理运行层，为 7 个标准角色及后续扩展角色提供长期 memory/backlog。
-- 将 `.pm/` 与现有 `doc/` 正式文档体系分层，确保“运行态项目管理”和“正式规格文档”各自收口。
+## 1. 设计定位
 
-## 当前现状
-- 当前仓库已有：
-  - `doc/**/prd.md` 与专题 `*.prd.md`：负责 Why/What/Done。
-  - `doc/**/project.md` 与专题 `*.project.md`：负责 How/When/Who。
-  - `.pm/tasks/<task_uid>.execution.md`：负责 task-local 过程记录。
-  - `.agents/roles/*.md`：负责 7 个标准角色职责边界。
-  - `AGENTS.md` 与 worktree 脚本：负责 owner role、handoff 和隔离执行。
-- 当前缺口：
-  - 没有角色长期 memory namespace。
-  - 没有 role backlog/source signal/stage gate 的统一运行态结构。
-  - QA/liveops 信号仍主要依赖人工阅读日志或正式文档后再整理。
-  - 阶段评审输入分散在多个文档与证据文件中，无法一键汇总。
-  - `.pm/registry/tasks.yaml` 与 role backlog 虽然在口径上已经是“扫描重建视图”，但此前仍作为 Git 跟踪文件提交，导致多 worktree 并发时继续形成热点冲突。
+这份设计文档只保留 `.pm/` 运行层仍需要的结构设计与流程约束，不再重复 PRD 的背景、project 的 rollout、或历史阶段流水账。
 
-## 目标完成态
-- 在仓库根目录建立 `.pm/`：
-```text
-.pm/
-  roles/
-    producer_system_designer/
-      memory/
-        active.yaml
-        superseded.yaml
-      backlog/
-        candidate.yaml
-        committed.yaml
-        blocked.yaml
-        done.yaml
-    runtime_engineer/
-    wasm_platform_engineer/
-    agent_engineer/
-    viewer_engineer/
-    qa_engineer/
-    liveops_community/
-  tasks/
-    task_2f9d....yaml
-    task_2f9d....execution.md
-  inbox/
-    signals.jsonl
-  stage/
-    current.yaml
-    gate.yaml
-  registry/
-    roles.yaml
-    tasks.yaml
-  templates/
-    task.yaml
-    memory.yaml
-    signal.json
-```
-- 在 `scripts/pm/` 建立脚本入口：
-  - `scaffold.sh`
-  - `new-task.sh`
-  - `promote-signal.sh`
-  - `sync-views.sh`
-  - `lint.sh`
-  - `stage-report.sh`
-  - `role-report.sh`
-  - `workflow-report.sh`
+`doc/**` 继续负责规格与计划，`.pm/` 只负责运行态对象、视图重建和流程留痕。
 
-## 对象设计
-### 1. Role Registry
-- 文件：`.pm/registry/roles.yaml`
-- 用途：统一枚举当前启用角色及其存储路径。
-- 最小字段：
+## 2. Canonical Object Model
+
+### 2.1 Role Registry
+
+- 文件: `.pm/registry/roles.yaml`
+- 作用: 枚举当前启用角色及其存储路径
+- 最小字段:
   - `role_name`
   - `memory_active_path`
   - `memory_superseded_path`
@@ -81,13 +25,14 @@
   - `is_active`
   - `introduced_at`
 
-### 2. Role Memory
-- 文件：`.pm/roles/<role>/memory/active.yaml`、`.pm/roles/<role>/memory/superseded.yaml`
-- 设计原则：
-  - active 和 superseded 分文件，避免高频冲突。
-  - 每条记录必须带 source refs 和时间范围。
-  - 不做全文 RAG；首期只做可审计、可 lint 的结构化记录。
-- 最小字段：
+### 2.2 Role Memory
+
+- 文件: `.pm/roles/<role>/memory/{active,superseded}.yaml`
+- 约束:
+  - active / superseded 分文件
+  - 每条记录必须带 `source_refs`
+  - 不做全文 RAG，只保留可审计结构化记录
+- 最小字段:
   - `id`
   - `topic`
   - `summary`
@@ -97,16 +42,19 @@
   - `status`
   - `superseded_by`
 
-### 3. Role Backlog
-- 文件：`.pm/roles/<role>/backlog/{candidate,committed,blocked,done}.yaml`
-- Git 策略：这些文件是 git-ignored 的本地生成视图；不存在时由 `sync-views.sh` / PM 读写命令自动重建。
-- 状态固定：
+### 2.3 Role Backlog
+
+- 文件: `.pm/roles/<role>/backlog/{candidate,committed,blocked,done}.yaml`
+- 视图策略:
+  - 这些 backlog 文件是 git-ignored 本地生成视图
+  - 缺失时由 `sync-views.sh` 或任一 PM 读写命令自动重建
+- 固定状态:
   - `candidate`
   - `committed`
   - `blocked`
   - `done`
   - `deferred` 通过条目字段表达，不单独拆文件
-- 最小字段：
+- 最小字段:
   - `task_uid`
   - `title`
   - `priority`
@@ -116,12 +64,13 @@
   - `handoff_to`
   - `status`
 
-### 4. Signal Inbox
-- 文件：`.pm/inbox/signals.jsonl`
-- 设计原则：
-  - 追加写入，适合事件流。
-  - 由 promotion 脚本决定是否进入长期 memory 或 task registry。
-- 最小字段：
+### 2.4 Signal Inbox
+
+- 文件: `.pm/inbox/signals.jsonl`
+- 设计原则:
+  - 只追加写入
+  - promotion 决定是否进入长期 memory 或 task registry
+- 最小字段:
   - `signal_id`
   - `source_type`
   - `source_ref`
@@ -130,14 +79,16 @@
   - `summary`
   - `promotion_state`
 
-### 5. Task Registry
-- 文件：`.pm/tasks/<task_uid>.yaml` 与 `.pm/registry/tasks.yaml`
-- 设计原则：
-  - canonical task object 只存在于 `.pm/tasks/<task_uid>.yaml`。
-  - `task_uid` 由本地生成，不依赖中心分配器或顺序号。
-  - registry/backlog 只做扫描重建视图，不再承担任务主键真值。
-  - `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 改为 git-ignored 本地生成文件；它们可以被删掉并按需重建，Git rebase 不再需要人工合并这些视图。
-- 最小字段：
+### 2.5 Task Registry
+
+- canonical object: `.pm/tasks/<task_uid>.yaml`
+- 重建视图: `.pm/registry/tasks.yaml`
+- 约束:
+  - 任务主键真值只存在于 canonical task file
+  - `task_uid` 本地生成，不依赖顺序号
+  - registry / backlog 只做扫描重建视图，不承担主键真值
+  - `.pm/registry/tasks.yaml` 与 backlog 视图均为 git-ignored 本地缓存
+- 最小字段:
   - `task_uid`
   - `owner_role`
   - `status`
@@ -147,101 +98,76 @@
   - `acceptance`
   - `updated_at`
 
-### 6. Stage / Gate
-- 文件：`.pm/stage/current.yaml`、`.pm/stage/gate.yaml`
-- 用途：
-  - 汇总当前阶段、claim envelope、lane 状态、blocking tasks。
-  - 作为制作人阶段评审和对外口径复核的输入层。
- - 约束：
-   - `.pm/stage/*.yaml` 是阶段“当前态”唯一真值；producer/shared active memory 只保留裁决依据或快照，不再单独定义当前阶段。
-   - producer 修改阶段结论时统一通过 `set-stage.sh` 写回 `current/gate` 两份文件，并同步 `updated_from`、`decision_date` 与 blocker 集。
-   - lint 必须阻断“active memory 仍声称存在 `stage.current` / `gate.claim_envelope`，但 stage 文件为空或缺来源”的漂移状态。
+### 2.6 Stage / Gate
 
-## 流程设计
-### Flow A: task execution log 提升
-1. 角色完成任务并写 `.pm/tasks/<task_uid>.execution.md`
-2. `promote-signal.sh` 把高价值条目写入 `.pm/inbox/signals.jsonl`
-3. owner 决定：
-   - 提升为 role memory
-   - 提升为 candidate task
-   - 标记为 discarded/deferred
+- 文件: `.pm/stage/current.yaml`、`.pm/stage/gate.yaml`
+- 作用:
+  - 汇总当前阶段、claim envelope、lane 状态与 blocking tasks
+  - 作为阶段评审与对外口径复核输入
+- 约束:
+  - `.pm/stage/*.yaml` 是阶段当前态唯一真值
+  - producer/shared active memory 只保留裁决依据，不单独定义当前阶段
+  - producer 修改阶段时统一通过 `set-stage.sh`
+  - lint 必须阻断 stage 文件与 memory/claim 口径漂移
 
-### Flow B: QA / LiveOps 反馈回流
-1. QA 或 liveops 写入 signal
-2. script / owner 把信号归到对应 role hint
-3. 若影响阶段或对外口径，则同步更新 `.pm/stage/gate.yaml`
-4. producer 在阶段评审时读取汇总报告
+## 3. Workflow Integration
 
-### Flow C: 结论 supersede
+### 3.1 Signal -> Memory / Task
+
+1. 角色写 `.pm/tasks/<task_uid>.execution.md`
+2. `promote-signal.sh` 提炼高价值条目写入 `.pm/inbox/signals.jsonl`
+3. owner 决定将 signal 提升为:
+   - role memory
+   - candidate task
+   - discarded / deferred
+
+### 3.2 QA / LiveOps Feedback
+
+1. QA 或 liveops 写 signal
+2. script / owner 归到对应 `role_hint`
+3. 若影响阶段或对外口径，同步更新 `.pm/stage/gate.yaml`
+4. producer 在 review 阶段读取汇总报告
+
+### 3.3 Supersede Chain
+
 1. 新结论进入 active memory
 2. 旧结论转入 superseded
-3. 写入 `superseded_by`
-4. lint 校验链路和 source refs 仍有效
+3. 记录 `superseded_by`
+4. lint 校验链路和 `source_refs`
 
-### Flow D: 工作流接入
-1. owner 在新 task worktree 中执行 `workflow-report.sh --phase start --role <owner> --task-uid <task_uid>`
-2. 脚本先聚合 role backlog、memory stale、pending signals 与 stage/gate 摘要，构建 report/checklist 成功后再把 `last_started_at` 回写到 canonical task file，避免失败时留下假证据
-3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner> --task-uid <task_uid>`，按 checklist 回写 task execution log、signal、memory 与 backlog；其中 working_memory 提示按当前 task 统计，零条目时先暴露 `codex-working-memory` bootstrap 入口
-4. 完成 commit 后，owner 通过 `./scripts/prepare-task-pr.sh` 执行 GitHub PR preflight / create；默认评审边界是 GitHub PR 的 required checks + review/approval，而不是额外的本地 pre-commit review 脚本
-5. 若 owner 需要额外做本地 diff review，只能作为任务级自主加码，不能静默回流成 `.pm` close checklist 的硬门禁
-6. 本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景
-7. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending
-8. `sync-views.sh` 或任一 PM 读路径在需要时自动从 canonical task files 重建本地 registry/backlog 视图；若这些视图文件缺失，不视为仓库损坏，只视为本地缓存待重建。
+### 3.4 Workflow Report Hookup
 
-## 分阶段实施
-### Phase 1: 骨架
-- 建 `.pm/` 目录与 registry/template
-- 打通 lint 和 scaffold
+1. `workflow-report.sh --phase start --role <owner> --task-uid <task_uid>`
+   - 先聚合 backlog、memory stale、pending signals 与 stage/gate 摘要
+   - 成功构建报告后再写 `last_started_at`
+2. `workflow-report.sh --phase close --role <owner> --task-uid <task_uid>`
+   - 回写 task execution log、signal、memory 与 backlog
+   - working memory 为空时暴露 bootstrap 入口，而不是静默跳过
+3. commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR review
+4. `workflow-report.sh --phase review --role <owner>`
+   - producer 额外聚合全部角色 pending signals
+5. `sync-views.sh` 在需要时重建 registry/backlog 本地视图
 
-### Phase 2: 信号与任务
-- 打通 signal inbox 与 task registry
-- 优先服务 `qa_engineer` / `liveops_community`
+## 4. Script Surface
 
-### Phase 3: 全角色 memory/backlog
-- 为 7 个角色全部落位
-- 建立 superseded 规则
+- `scaffold.sh`: 建 `.pm/` 骨架与模板
+- `new-task.sh`: 创建 canonical task file
+- `promote-signal.sh`: 将高价值条目送入 signal inbox
+- `sync-views.sh`: 从 canonical task files 重建 backlog / registry 本地视图
+- `lint.sh`: 校验字段、链路、source refs 与 stage drift
+- `stage-report.sh`: 聚合阶段视图
+- `role-report.sh`: 聚合角色 backlog / memory / stale
+- `workflow-report.sh`: 统一 start / close / review 三段入口
 
-### Phase 4: 阶段评审
-- 建立 `stage-report.sh`
-- 把阶段输入收敛成可审计文件
+## 5. 风险控制
 
-### Phase 5: 角色视图
-- 建立 `role-report.sh`
-- 让每个 owner 可以直接读取本角色 backlog、blocked tasks、active memory 与 `needs_review` 清单
+- `.pm/` 若退化成自由文本日记层: 用结构化字段和 lint 阻断
+- `.pm/` 若与 `doc/` 形成重复真值: 保持“运行态 vs 正式规格”分层
+- 角色扩容导致 schema 失控: 通过 registry 驱动接入，不把角色数量编码进文件结构
+- worktree 并发冲突回弹: 只允许 canonical task object 冲突，视图文件必须可删可重建
 
-### Phase 6: 工作流接入
-- 建立 `workflow-report.sh`
-- 建立 `set-stage.sh` / `stage-lint`，把阶段当前态与 drift 检查收敛到正式入口
-- 将 `.pm` 默认操作序列接入 `AGENTS.md`、角色职责卡与 `new-task-worktree.sh`
-- 在 close checklist 中强制加入“commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR review”这一默认收口动作
-- required/full smoke 必须覆盖 `workflow-report --task-uid` 留痕、stage drift 阻断与 signal pending 视图
+## 6. 使用方式
 
-## 验证策略
-- 结构验证：
-  - `scripts/pm/lint.sh`
-  - `git diff --check`
-  - `./scripts/doc-governance-check.sh`
-- 功能验证：
-  - 手工构造 signal -> promote -> task/memory -> workflow/role/stage report 样例链路
-  - 验证新角色注册无需修改历史 schema
-- 回归验证：
-  - 确认 `.pm/` 不与 `doc/` 形成重复真值
-  - 确认 worktree 间修改只会在真正并发编辑同一 canonical task object 时冲突，而不会因顺序 task id 分配冲突
-
-## 风险与缓解
-- 风险：`.pm/` 退化成另一份自由文本日记层
-  - 缓解：所有记录必须结构化并带状态，不允许自由流水文本替代 task/memory 对象。
-- 风险：`.pm/` 退化成另一份 `project.md`
-  - 缓解：明确 `.pm/` 是运行态，正式规格和正式任务定义仍留在 `doc/`。
-- 风险：角色扩容时 schema 失控
-  - 缓解：registry 驱动角色接入，文件结构不编码固定 7 角色。
-
-## 交付物
-- `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
-- `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
-- `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
-- `doc/engineering/prd.md`
-- `doc/engineering/project.md`
-- `doc/engineering/prd.index.md`
-- `doc/engineering/README.md`
-- `.pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.execution.md`
+- 看正式规格与验收: `file-based-self-evolution-management-2026-03-30.prd.md`
+- 看 rollout / follow-up: `file-based-self-evolution-management-2026-03-30.project.md`
+- 看 `.pm/` 仍然需要遵守的对象与流程约束: 本文档

@@ -53,7 +53,7 @@
   - SC-22: `self-evolution` 后续补强在借鉴外部 memory/reflective-agent 方案时，必须显式冻结 adopted / rejected / deferred 边界，且不引入外部真值系统替代 `.pm/`。
   - SC-23: 默认评审边界必须是 commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR，并以 required checks + review/approval 作为正式 review 流程。
   - SC-24: 本地不再要求额外的 `codex-review-snapshot` 或其他 commit 前 review 脚本作为默认步骤；若 owner 额外做本地 diff review，只能作为自主加码，不得回写成仓库硬门禁。
-  - SC-24A: 根 `AGENTS.md`、engineering 主 PRD、`self-evolution` 正式追踪、`.pm/README` 与 `workflow-report` close checklist 必须对该流程维持单一口径：默认通过 `./scripts/pm/task-closeout.sh` 执行 `workflow-report close -> move-task -> pm lint`，随后 `commit -> prepare-task-pr -> GitHub PR review/approval`；若 owner 选择手工拆步，也必须与该 helper 的底层顺序保持等价。
+  - SC-24A: 根 `AGENTS.md`、engineering 主 PRD、`self-evolution` 正式追踪、`.pm/README` 与 `workflow-report` close checklist 必须对该流程维持单一口径：默认通过 `./scripts/pm/task-closeout.sh --verify-command "<fresh verification command>"` 执行“fresh verification -> `workflow-report close -> move-task -> pm lint`”，随后 `commit -> prepare-task-pr -> GitHub PR review/approval`；若 owner 选择手工拆步，也必须与该 helper 的底层顺序保持等价。
   - SC-24B: required-tier smoke 必须断言 close checklist 不再要求 `codex-review-snapshot.sh`，而是把 GitHub PR preflight / review 边界指向 `./scripts/prepare-task-pr.sh`。
   - SC-24C: 默认最终合流路径必须是 GitHub PR，而不是直接本地 landing 到 `main`；`./scripts/land-task-worktree.sh` 只保留给用户明确要求的 local-only / fallback 场景。
   - SC-24D: 同一 PR 内的 review comment follow-up 必须存在 repo-owned helper，用于统一盘点 unresolved review threads、执行显式 resolve，并在每轮操作后分别报告 `reviewDecision`、`mergeStateStatus` 与 unresolved thread 数，避免把“thread 已关”误报成“PR 可合并”。
@@ -70,6 +70,8 @@
   - SC-30: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须是 git-ignored 的本地生成视图，不再作为 Git 提交真值；engineering 根 `project.md` 不再承担手工 `最新完成` 长列表热点，新任务在 `project.md` 中默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，而不是新增 `TASK-XXX-123` 这类顺序编号；每个新任务项还必须固定提供 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）以追溯 canonical runtime task。
   - SC-31: 根 `AGENTS.md`、`.agents/roles/*.md` 与 `.agents/roles/templates/*.md` 必须对 `.pm` task 创建顺序、task execution log canonical 路径和“一个 task 收口后再开下一 task”的语义维持单一口径；当前态检查项不得再要求回写 `doc/devlog/YYYY-MM-DD.md`。
   - SC-32: 既有 `project.md` 中已经存在的顺序任务编号可作为历史追踪保留，不要求批量迁移；但新增任务项不得再把顺序编号当默认格式回流到正式项目页。
+  - SC-33: 外部 agent workflow/methodology 借鉴必须先在 `engineering/self-evolution` 专题中冻结 adopted / rejected / deferred 边界，并把 adopted 项转译为 repo-owned helper/eval/module follow-up；不得直接把外部 bootstrap、universal brainstorming/subagent/TDD 规则写成 oasis7 当前默认流程。
+  - SC-34: `.pm` 必须提供 repo-owned task compaction 能力：当同一 owner / 同一工作流下出现仅承担 truth refresh、doc sync 或中段 burn-down 留痕的已关闭微任务时，必须能在正式 `project.md` / topic project Trace 已收口到 survivor task 后，把重复 canonical task 文件安全并档回单个聚合 task，而不是长期保留成 task 膨胀噪声。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -107,6 +109,8 @@
   - PRD-ENGINEERING-028: As a 项目经理/P2P owner, I want a canonical `doc/p2p/node/` path entrypoint, so that I can navigate the densest `p2p` hotspot path by intent instead of scanning nearly 70 files blindly.
   - PRD-ENGINEERING-029: As a 项目经理/Testing owner, I want a canonical `doc/testing/evidence/` path entrypoint, so that I can navigate the densest testing hotspot path by intent instead of scanning nearly 50 evidence files blindly.
   - PRD-ENGINEERING-030: As a 项目经理/README owner, I want a canonical `doc/readme/governance/` path entrypoint, so that I can navigate the densest readme hotspot path by intent instead of scanning nearly 100 governance docs blindly.
+  - PRD-ENGINEERING-031: As a `producer_system_designer`, I want external agent workflow patterns benchmarked against oasis7's repo-native execution chain, so that we only adopt the parts that strengthen evidence, workflow verification, or UI ideation without replacing `.pm`, owner roles, or GitHub PR review.
+  - PRD-ENGINEERING-032: As a repo workflow owner, I want the current local skill inventory frozen into keep/replace/retire/defer buckets, so that role cards and engineering docs no longer recommend low-value or workflow-conflicting skill surfaces.
 - Critical User Flows:
   1. Flow-ENG-001: `提交前执行必要测试/门禁 -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> 进入 required checks + review/approval`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
@@ -121,7 +125,8 @@
   11. Flow-ENG-011: owner 创建 `.pm` task -> 系统本地生成 merge-stable `task_uid` -> task file / execution log / working_memory / stage blocker 全部按 `task_uid` 引用 -> registry/backlog 视图由扫描重建并只落在 git-ignored 本地文件 -> rebase/landing 不再因顺序 task id 分配或共享视图 YAML 产生结构性冲突
   12. Flow-ENG-012: `模块文档体量超过可读阈值 -> 先区分活跃真值 / 审计留痕 / 历史归档 / 兼容跳转 -> 收紧 README / prd.index / 根入口默认暴露面 -> 再按优先级拆后续减重任务`
   13. Flow-ENG-013: `入口减重已完成但文档总量/热点路径/历史 backlog 继续增长 -> 运行 scripts/doc-inventory-report.sh -> 判断属于历史压缩/路径级治理/近限文件拆分中的哪一类 -> 再切独立 worktree 建 follow-up task`
-  14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap；若 canonical `main` worktree 根存在本地 `config.toml`，则同步复制到新 task worktree，避免 active-LLM / harness 复现因缺配置偏离 `main`）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> `task-closeout.sh`（或等价的 `workflow-report close -> move-task --to-status done|deferred -> pm lint` 手工链）-> commit -> prepare-task-pr -> 若 PR 收到 review comments，则用 `pr-review-thread-closeout.sh` 盘点/resolve thread 并重新检查 PR state -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
+  14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap；若 canonical `main` worktree 根存在本地 `config.toml`，则同步复制到新 task worktree，避免 active-LLM / harness 复现因缺配置偏离 `main`）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> `task-closeout.sh --verify-command "<fresh verification command>"`（或等价的“fresh verification -> `workflow-report close -> move-task --to-status done|deferred -> pm lint`”手工链）-> commit -> prepare-task-pr -> 若 PR 收到 review comments，则用 `pr-review-thread-closeout.sh` 盘点/resolve thread 并重新检查 PR state -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
+  15. Flow-ENG-015: `评估外部 agent workflow repo/skill -> 将模式写入 adopted/rejected/deferred 矩阵 -> 只有 adopted 项才允许转成 repo-owned follow-up（helper/eval/optional module technique）-> 对 rejected/deferred 项显式保持非默认边界`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -143,6 +148,7 @@
 | 角色名白名单校验 | 角色名、来源文件、白名单来源 | 校验 task execution log / handoff 中角色名是否存在于 `.agents/roles/*.md` | `pass/fail` | 以角色文件名去后缀为唯一 canonical name | 治理维护者维护角色清单，提交者必须修复别名 |
 | 文件化项目管理层 | 角色 registry、role memory/backlog、signal inbox、task registry、stage/gate 文件、task workflow evidence | 在仓库内维护 `.pm/` 运行态对象，并通过脚本做 scaffold/lint/report/promote/set-stage | `planned -> scaffolded -> adopted -> audited` | 默认按 `role_name`、`priority`、`updated_at` 排序；高严重度 signal 优先提升 | 治理维护者维护结构，owner role 维护自身 memory/backlog，producer 维护正式阶段结论 |
 | `.pm` task canonical identity | `task_uid`、`task_path`、`execution_log_path`、`working_memory_path`、`updated_at` | 创建 task 时直接生成不依赖中心序号的 `task_uid`；所有脚本按 `task_uid` 读写 canonical 对象，并在需要时重建 registry/backlog 视图 | `created -> tracked -> migrated -> closed` | `task_uid` 只负责稳定身份；排序依旧按 `priority`、`updated_at`、`owner_role`，不再依赖顺序号 | owner role 与治理维护者可创建/迁移；任何脚本不得要求中心分配 `TASK-PM-xxxx` 才能写 task |
+| 外部 agent workflow 借鉴矩阵 | `source_name`、`pattern`、`decision`、`rationale`、`target_object`、`followup_ref` | 先在 `self-evolution` 专题中冻结 adopted / rejected / deferred，再决定是否拆 repo-owned helper/eval/module follow-up | `proposed -> adopted/rejected/deferred -> superseded` | adopted 项必须映射 repo-owned follow-up；rejected/deferred 不得回流 root 默认流程 | `producer_system_designer` 冻结结论；相关 owner 联审 |
 - Acceptance Criteria:
   - AC-1: engineering PRD 明确文件约束、脚本约束、测试分层约束。
   - AC-2: engineering project 文档维护任务拆解与状态。
@@ -184,6 +190,8 @@
   - AC-29: 根 `AGENTS.md`、角色职责卡与 handoff 模板必须显式要求“先创建/绑定 `.pm` task，再执行 `workflow-report --phase start`”，并明确一个 task 收口后若继续 `project.md` 下一个任务，默认重新开独立 `worktree` 与 `.pm` task；任何当前态 checklist 不得再把 `doc/devlog/*.md` 当必写项。
   - AC-29A: `scripts/new-task-worktree.sh` 必须提供可选的 task-worktree 原子 bootstrap 入口；当传入 owner role / title / source refs 时，task file、execution log 与 `last_started_at` 只允许写入目标 worktree，不得污染 source worktree；若 canonical `main` worktree 根存在本地 `config.toml`，新建 task worktree 时也必须同步复制该文件，但保持其 git-ignored 本地配置属性不变。
   - AC-30: 自本规则生效后，模块 `project.md` 新增任务项必须默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，并固定包含 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）字段追溯运行态对象；推荐单行模板为 `- [ ] topic-slug (PRD-XXX) [test_tier_required|full]: <summary>. Trace: .pm/tasks/task_<32hex>.yaml`。已存在的 `TASK-*` 顺序编号条目可保留为历史记录，但不作为新增任务格式继续扩散。
+  - AC-31: 外部 agent workflow/methodology 借鉴必须在 `engineering/self-evolution` 专题中形成 adopted / rejected / deferred 矩阵，并至少对 adopted 项给出 repo-owned follow-up 或模块参考边界；外部 bootstrap、universal brainstorming/subagent/TDD 规则不得未经专题裁决直接写成当前 root workflow 口径。
+  - AC-32: `scripts/pm/compact-task-group.sh` 必须只允许 compaction `done/deferred` 的 dropped task，要求 survivor 与 dropped task 同 owner_role，并在 repo 仍存在 dropped task UID 的 tracked 引用时直接失败；成功后必须合并 survivor 元数据、删除 dropped `.pm/tasks/<uid>.yaml` 与 `.execution.md`、重建 task registry/backlog 视图，并提供至少一条 focused smoke 覆盖“先因文档引用失败、Trace 收口后成功并档”的路径。
 - Non-Goals:
   - 不定义 gameplay/p2p/runtime 业务规则。
   - 不替代模块内部测试策略。
@@ -212,6 +220,9 @@
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md`
+  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
   - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
   - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
   - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md`
@@ -318,7 +329,7 @@
 | PRD-ENGINEERING-019 | TASK-ENGINEERING-033/096 | `test_tier_required` | task execution log 规则、任务级留痕格式与角色标记要求一致性检查 | 任务过程可追溯性与角色责任可读性 |
 | PRD-ENGINEERING-020 | TASK-ENGINEERING-034/096 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 task execution log 角色标签检查 | 角色命名一致性与防漂移能力 |
 | PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099/100/101/102/103/109/115/TASK-ENGINEERING-PMVIEW-001 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、GitHub PR review 默认流程文案一致性、`prepare-task-pr` 默认流程文案一致性、task-scoped working_memory checklist 回归、角色扩容回归验证、repo-local `.codex/config.toml` 默认执行配置与 `.gitignore` 精确例外校验，以及 runtime `source_ref(s)` / `updated_from` 的非-`doc/devlog` 约束、`codex-working-memory` 默认显式 session 选择要求、task identity 迁移/重建视图验证、git-ignored 本地视图自动重建验证，以及根 `AGENTS.md` / 角色卡 / handoff 模板的任务创建顺序与 execution log 单一口径校验 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
-| PRD-ENGINEERING-021 | task-closeout-helper | `test_tier_required` | `bash -n scripts/pm/task-closeout.sh scripts/pm/required-tier-smoke.sh`、`./scripts/pm/task-closeout.sh --help`、`./scripts/pm/required-tier-smoke.sh`、`./scripts/pm/lint.sh`、文档口径一致性检查 | 仓库内默认 close-phase、`.pm` runtime bookkeeping 与 GitHub PR 前收口路径 |
+| PRD-ENGINEERING-021 | task-closeout-helper | `test_tier_required` | `bash -n scripts/pm/task-closeout.sh scripts/pm/required-tier-smoke.sh scripts/pm/workflow-behavior-eval.sh`、`./scripts/pm/task-closeout.sh --help`、`./scripts/pm/required-tier-smoke.sh`、`./scripts/pm/workflow-behavior-eval.sh`、`./scripts/pm/lint.sh`、文档口径一致性检查 | 仓库内默认 close-phase、fresh verification gate、`.pm` runtime bookkeeping 与 GitHub PR 前收口路径 |
 | PRD-ENGINEERING-021 | pm-rebase-conflict-helper | `test_tier_required` | `bash -n scripts/pm/rebase-conflict-helper.sh scripts/pm/rebase-conflict-helper.test.sh`、`./scripts/pm/rebase-conflict-helper.sh --help`、`./scripts/pm/rebase-conflict-helper.sh --json`、`./scripts/pm/rebase-conflict-helper.test.sh`、`./scripts/pm/lint.sh`、文档口径一致性检查 | `.pm` rebase 冲突分类、signals collision 安全自动修复与 generated-view 删除真值边界 |
 | PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091/103 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、默认禁用当前 live session 隐式自读、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
 | PRD-ENGINEERING-023 | TASK-ENGINEERING-099 | `test_tier_required` + `test_tier_full` | `task_uid` 迁移、registry/backlog 重建、旧 TASK-PM 数据升级与多 worktree rebase 回归验证 | `.pm` task identity、working_memory/session 追踪、stage blocker 引用 |
@@ -329,6 +340,7 @@
 | PRD-ENGINEERING-028 | `p2p-node-path-governance` | `test_tier_required` | `p2p-node-path-governance` 专题三件套、`doc/p2p/node/README.md` 首读分流、`doc/p2p/README.md` / `doc/p2p/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `p2p/node` 热点子域入口、`PRD-ENGINEERING-025` 第三条 follow-up 收口与后续 `testing` 路径级治理 |
 | PRD-ENGINEERING-029 | `testing-evidence-path-governance` | `test_tier_required` | `testing-evidence-path-governance` 专题三件套、`doc/testing/evidence/README.md` 首读分流、`doc/testing/README.md` / `doc/testing/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `testing/evidence` 热点子域入口、`PRD-ENGINEERING-025` 第四条 follow-up 收口与后续季度复核 |
 | PRD-ENGINEERING-030 | `readme-governance-path-governance` | `test_tier_required` | `readme-governance-path-governance` 专题三件套、`doc/readme/governance/README.md` 首读分流、`doc/readme/README.md` / `doc/readme/prd.index.md` / `doc/readme/project.md` / engineering 根入口回写、`doc-governance-check` 通过 | `readme/governance` 热点子域入口、`PRD-ENGINEERING-025` 第五条 follow-up 收口与后续季度复核 |
+| PRD-ENGINEERING-032 | `skill-replacement-rationalization` | `test_tier_required` | skill rationalization 专题三件套、低耦合 skill 删除、角色卡/活跃文档引用清理、`doc-governance-check`、`pm-lint` 与 `git diff --check` 通过 | `.agents/skills` 本地维护面、角色卡推荐 skill 真实性与 engineering/self-evolution 治理边界 |
 
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

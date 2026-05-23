@@ -1,0 +1,83 @@
+task_uid: task_de7dbd97ffdb485eb4a869cc8ac0673a
+title: "superpowers workflow borrowing rollout aggregate"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-superpowers-workflow-borrowing
+execution_log_path: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - doc/world-simulator/project.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+  - doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md
+  - .agents/roles/templates/handoff-brief.md
+  - .agents/roles/templates/handoff-detailed.md
+  - .agents/skills
+  - AGENTS.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md
+  - .agents/skills/tdd-test-writer/SKILL.md
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.project.md
+  - .agents/skills/README.md
+  - .agents/skills/prd/SKILL.md
+  - .pm/README.md
+  - scripts/pm/pm_store.py
+  - scripts/pm/task-closeout.sh
+doc_refs:
+  - doc/engineering/project.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.prd.md
+  - doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.design.md
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.project.md
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-022
+  - PRD-ENGINEERING-031
+  - PRD-ENGINEERING-AWB-006
+  - PRD-ENGINEERING-AWB-007
+  - PRD-ENGINEERING-032
+  - PRD-ENGINEERING-AWB-003
+  - PRD-ENGINEERING-AWB-008
+  - PRD-ENGINEERING-032D
+  - PRD-ENGINEERING-AWB-009
+  - PRD-ENGINEERING-032E
+acceptance:
+  - "Freeze adopted/rejected/deferred superpowers borrowings for oasis7 workflow."
+  - "Add formal follow-up tasks for workflow evals, completion verification, and viewer visual companion."
+  - "PR #250 中 borrowing 相关文档的过时表述被回写到当前仓库真值"
+  - "已吸收的 planning / execution / skill-authoring surface 不再被写成未来态"
+  - "remaining deferred 边界仍保持明确，没有把 upstream 整包误写成 adopted"
+  - "Add a repo-owned helper that executes verification commands immediately before completion/test/PR-ready claims."
+  - "Block claim-ready output when the fresh verification command fails, and emit machine-readable status."
+  - "Document the helper in PM/workflow surfaces and cover it with repo-owned regression tests."
+  - "Add four repo-owned skills adapted from superpowers: verification-before-completion, systematic-debugging, receiving-code-review, finishing-a-development-branch."
+  - "Wire the new skills into formal engineering borrowing governance and current skill inventory truth."
+  - "Pass pm-lint, doc-governance-check, and diff hygiene after the new skill surfaces land."
+  - "Add a formal conflict document describing which superpowers skills conflict with oasis7 workflow truth."
+  - "Document future reconciliation or bounded borrowing paths for each conflict class."
+  - "Pass pm-lint, doc-governance-check, and diff hygiene after the document lands."
+  - "superpowers-conflict-reconciliation doc reflects current absorbed planning/execution/skill-authoring surfaces"
+  - "remaining deferred and reopen conditions stay aligned with current borrowing governance"
+  - "skill-by-skill conflict table reflects already absorbed planning/execution/skill-authoring surfaces"
+  - "table keeps remaining deferred and reopen conditions aligned with current borrowing governance"
+  - "project guidance adds File Structure or Affected Paths guidance"
+  - "handoff templates add atomic steps with validation command and expected result fields"
+  - "planning guidance adds a lightweight self-checklist for placeholders, task coverage, and naming consistency"
+  - "repo-owned execution skill or checklist lands for tasks with existing project and pm truth"
+  - "execution surface requires plan-gap review, step-level verification, and explicit blocker handling"
+  - "workflow borrowing docs record what was borrowed from executing-plans and what remains deferred"
+  - "repo-owned skill authoring guide or checklist lands under .agents/skills"
+  - "skill template captures frontmatter and section conventions derived from bounded writing-skills borrowing"
+  - "skill governance docs record what was borrowed and what remains deferred"
+  - "Freeze current .agents/skills inventory into keep/replace/retire buckets with repo-specific rationale."
+  - "Retire or replace at least one low-coupling local skill surface that is redundant with repo-native instructions or upstream generic skills."
+  - "Update engineering tracking plus validation evidence for the chosen skill-surface changes."
+handoff_to: []
+updated_at: 2026-05-22T17:30:12+08:00
+last_started_at: 2026-05-19T16:53:53+08:00
+last_closed_at: 2026-05-19T17:12:36+08:00

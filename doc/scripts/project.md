@@ -262,18 +262,20 @@
     - `./scripts/worktree-gc-report.test.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] task-closeout-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pm/task-closeout.sh`，把 `workflow-report --phase close`、`move-task --to-status done|deferred` 与 `.pm` 结构校验收成一个单命令 close-phase helper，减少 commit 前手工串联收口步骤。 Trace: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.yaml
+- [x] task-closeout-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pm/task-closeout.sh`，把“fresh verification（done closeout 必填）-> `workflow-report --phase close` -> `move-task --to-status done|deferred` -> `.pm` 结构校验”收成一个单命令 close-phase helper，并补一条 `scripts/pm/workflow-behavior-eval.sh` 统一回归 task-worktree/closeout/PR/review-thread 主链。 Trace: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.yaml
   - 产物文件:
     - `scripts/pm/task-closeout.sh`
+    - `scripts/pm/workflow-behavior-eval.sh`
     - `scripts/pm/required-tier-smoke.sh`
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/README.md`
     - `.pm/README.md`
   - 验收命令 (`test_tier_required`):
-    - `bash -n scripts/pm/task-closeout.sh scripts/pm/required-tier-smoke.sh`
+    - `bash -n scripts/pm/task-closeout.sh scripts/pm/required-tier-smoke.sh scripts/pm/workflow-behavior-eval.sh`
     - `./scripts/pm/task-closeout.sh --help`
     - `./scripts/pm/required-tier-smoke.sh`
+    - `./scripts/pm/workflow-behavior-eval.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] pr-review-thread-closeout-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pr-review-thread-closeout.sh`，统一盘点当前 PR 的 review threads、按显式 thread id 或 unresolved 批次执行 resolve，并在每次操作后回报 `reviewDecision` / `mergeStateStatus`，减少 same-PR comment closeout 对临时 GraphQL 命令的依赖。 Trace: .pm/tasks/task_dffc87cc3a724052829c0364e0e11bbb.yaml
@@ -416,7 +418,7 @@
 - 最新完成: `pm-rebase-conflict-helper`（已新增 `scripts/pm/rebase-conflict-helper.sh`，用于统一分类 `.pm/**` rebase 冲突，并只在 active rebase 中安全自动修复 `signals.jsonl` 的 signal-id 碰撞。）
 - 最新完成: `prepare-task-pr-local-required-recommendation`（已让 `scripts/prepare-task-pr.sh` 在 PR preflight 阶段直接输出 changed-path 对齐的本地 required 验证建议，但不自动执行推荐命令。）
 - 最新完成: `prepare-task-pr-planner-reason-summary`（已让 `scripts/prepare-task-pr.sh` 在 PR preflight 阶段同时输出 changed-path planner 的 `reason_summary` 与拆分后的 `reason_items[]`。）
-- 最新完成: `task-closeout-helper`（已新增 `scripts/pm/task-closeout.sh`，把 `workflow-report close`、`move-task done|deferred` 与 `.pm` lint 收成一个单命令 close-phase helper。）
+- 最新完成: `task-closeout-helper`（已将 `scripts/pm/task-closeout.sh` 收紧为“done closeout 必须先 fresh verify”，并新增 `scripts/pm/workflow-behavior-eval.sh` 统一回归 task-worktree/closeout/PR/review-thread 主链。）
 - 最新完成: `worktree-lifecycle-report`（已新增只读 `worktree-gc-report.sh`，用于统一汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，减少已完成 task worktree 长期滞留。）
 - 最新完成: `TASK-SCRIPTS-024`（已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `land-task-worktree.sh` 与旧 landing 专题统一降级为 compatibility / fallback。）
 - 最新完成: `TASK-SCRIPTS-023`（builtin wasm-heavy runtime 闭环已从 required/pre-commit 路径下放到 `test_tier_full`，required 重新只承载轻量核心基线。）

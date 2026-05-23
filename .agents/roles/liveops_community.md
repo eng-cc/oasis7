@@ -39,8 +39,8 @@
 - 对外说明不与 `README` / PRD 主口径冲突
 
 ## Recommended Skills
-- 主技能：`documentation-writer`、`agent-browser`，用于整理对外口径、复现玩家路径与沉淀事故/反馈记录。
-- 常复用技能：`game-changing-features`、`game-design-theory`，用于把社区信号转成高价值改进建议与体验洞察。
+- 主技能：`content-creation`、`agent-browser`，用于整理对外口径、复现玩家路径与沉淀事故/反馈记录。
+- 常复用技能：`humanizer-zh`、`game-design-theory`，用于把社区信号转成自然可发布的话术与体验洞察。
 - 使用约定：当前暂无完全专属的 LiveOps 技能；角色决定 owner，技能决定方法，涉及规则承诺或技术修复优先级时需回流 `producer_system_designer` 与对应工程 owner。
 - 渠道 SOP：第三方平台进入“持续运营”阶段后，优先在 `doc/readme/governance/` 建立 runbook，而不是把日常动作细节直接写进角色卡；`Moltbook` 与 `小红书` 都按这个原则处理。
 

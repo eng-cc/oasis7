@@ -8,6 +8,7 @@
 - 世界底层规则：时间、空间、资源、移动、建造、交易、治理边界
 - 涌现系统边界：哪些能力内建，哪些交给 Agent / WASM 模块演化
 - 资源经济：电力、数据、算力、带宽、模块成本与反套利约束
+- 默认多角色协作编排：决定何时派生 `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` / `qa_engineer` / `liveops_community` subagent，以及它们的 write scope / 验证 / handoff 边界
 - 相关文档：`doc/core/*`、`doc/game/*` 以及涉及世界规则口径的跨模块 PRD
 
 ## Does Not Own
@@ -27,10 +28,15 @@
 - 模块 `prd.md` 中的目标态规格与验收标准
 - 版本优先级决策与跨模块裁剪结论
 - 世界规则、资源经济、玩法闭环的统一口径
+- 角色 subagent 的派工边界、handoff 约束与集成顺序
+- 同一 owner / `.pm` task / worktree / PR 主链内的 subagent-driven execution 切片：分析、实现、验证与补充 review
 - 对应 `project.md` 中可执行的任务拆解输入
 
 ## Decisions
 - 可独立决定版本优先级、玩法目标和规则方向
+- 可决定是否默认派生角色 subagent，以及哪些角色只读、哪些角色拥有受限 write scope
+- 可决定哪些分析 / 实现 / 验证 / 补充 review 切片交给角色 subagent，以及是否复用已有 subagent 上下文；但不得把它们扩成新的 task/worktree/review 真值
+- 可决定 subagent slice 的 return contract 与 integration order，但最终必须由 owner 在 canonical worktree 上完成正式集成与 fresh verification
 - 涉及 runtime/consensus/WASM 安全边界的变更，必须与相关工程 owner 联审
 - 涉及玩家承诺、对外口径或长期治理的变更，必须同步更新 `README.md` / `doc/readme/*` / `doc/core/*`
 
@@ -38,11 +44,13 @@
 - 新需求已有明确 PRD-ID、成功标准、非目标与验收条件
 - 规则变更可以映射到 runtime 校验、AI 行为、Viewer 表达和 QA 验证
 - 关键资源与制度变更具备成本、风险与反滥用说明
+- 若使用角色 subagent 或 subagent-driven execution，已明确 owner role、每个 subagent 的输入输出与 write scope，且结果已回收到单一 `.pm` task / worktree / PR 真值
+- 若按默认 subagent-driven 流程推进，已明确每个 subagent slice 的类型、return contract、integration order，且 owner 已在 canonical worktree 上完成正式集成
 - 跨模块冲突已有 owner 与裁决记录
 
 ## Recommended Skills
 - 主技能：`prd`、`game-architect`，用于定义 Why/What/Done、拆清规则边界与验收口径。
-- 常复用技能：`game-changing-features`、`game-design-theory`、`documentation-writer`，用于做版本取舍、玩法判断与文档表达收口。
+- 常复用技能：`game-design-theory`、`humanizer-zh`、`writing-repo-owned-skills`，用于做玩法判断、文档压缩、中文口径收口，以及新增/改写本地 skill surface 时保持 repo truth。
 - 使用约定：角色决定 owner，技能决定方法；可借用其他技能提升产出，但不得替代本职责卡中的 owner 边界与完成定义。
 
 ## Checklist

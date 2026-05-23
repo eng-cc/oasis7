@@ -15,6 +15,7 @@
 - `.pm/` 不得重写正式 `prd.md` / `project.md` 真值。
 - `.pm/tasks/task_<32hex>.execution.md` 是任务过程日志的 canonical 位置；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 视图提升。
 - task 的唯一身份是 `task_uid`；`.pm/registry/tasks.yaml` 与 role backlog 只保留可扫描重建视图，并作为 git-ignored 的本地生成文件存在，不再承担仓库提交真值。
+- 同一 owner / 同一工作流下若出现仅承担 truth refresh、doc sync 或中段 burn-down 留痕的已关闭微任务，必须先把 `project.md` / topic project 的 Trace 收口到 survivor task，再通过 `./scripts/pm/compact-task-group.sh` 并档；不允许在正式文档仍引用 dropped task UID 时直接删除 canonical task 文件。
 - stage/gate、signal、task `source_refs` 与 memory `source_refs` 不得再把 `doc/devlog/*.md` 当运行态 source_ref；历史 `doc/devlog/*.md` 仅作归档参考，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
 - 首批角色以 `.agents/roles/*.md` 为单一事实源。
 
@@ -38,7 +39,8 @@
 - `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/task_<32hex>.yaml` 与对应 `.pm/tasks/task_<32hex>.execution.md`，并重建 task registry 与 owner 的 `backlog/candidate.yaml` 视图。
 - `./scripts/new-task-worktree.sh --pm-owner-role ... --pm-title ... --pm-source-ref ...`：在创建 task worktree 的同时，切到目标 worktree 内原子完成 `new-task -> move-task committed -> workflow-report start`，避免 `.pm` task 误写回 source worktree。
 - `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done(deferred)` 之间同步迁移 task file、task registry 与 owner backlog 条目。
-- `./scripts/pm/task-closeout.sh`：默认 close-phase helper；在 task 已 start 且 execution log 已回写后，统一执行 `workflow-report close -> move-task done|deferred -> pm lint`，再进入 commit / `prepare-task-pr.sh`。
+- `./scripts/pm/task-closeout.sh`：默认 close-phase helper；在 task 已 start 且 execution log 已回写后，若目标状态是 `done`，必须先执行当前回合 fresh verification，然后才统一执行 `workflow-report close -> move-task done|deferred -> pm lint`，再进入 commit / `prepare-task-pr.sh`。
+- `./scripts/pm/claim-ready.sh`：在宣称“完成 / 测试通过 / 可提 PR / 可合并”前，立即执行 fresh verification command；只有本次运行成功，才允许输出 claim-ready 结论。
 - `./scripts/pm/task-execution-log-lint.sh`：校验 task execution log 的路径、标题格式、角色名和条目完整性。
 - `./scripts/pm/promote-memory.sh`：从 signal 提升 active memory，或显式将噪声 signal 标记为 rejected / deferred。
 - `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
@@ -57,6 +59,7 @@
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
 - `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
 - `./scripts/pm/sync-views.sh`：从 `.pm/tasks/*.yaml` 扫描重建本地 task registry 与 role backlog 视图；lint/report/read-path 会在需要时自动刷新这些 git-ignored 视图。
+- `./scripts/pm/compact-task-group.sh`：在 survivor task 已保留正式 Trace 的前提下，将同一 owner 的 `done/deferred` 微任务安全并档回一个聚合 task；命令会阻断仍被 tracked 文档引用的 dropped task UID，合并 survivor 元数据，删除重复 canonical task 文件，并重建本地生成视图。
 - `./scripts/pm/rebase-conflict-helper.sh`：在 active rebase 期间只读盘点 `.pm/**` 未合并路径，并把 `.pm/inbox/signals.jsonl` 的安全自动修复边界收口为“保留 upstream signal id、仅重编号 branch-local 冲突项”；若冲突命中 `.pm/registry/tasks.yaml` 或 `.pm/roles/*/backlog/*.yaml` 这类本地生成视图，helper 只提示“保留 `main` 删除，再执行 `./scripts/pm/sync-views.sh`”，不自动替用户覆盖 canonical task/memory/stage 真值。
 - `./scripts/pm/migrate-task-identity.sh`：将旧的 `TASK-PM-xxxx` task/working_memory/source_ref 一次性迁到 `task_uid` canonical 模型，并重建 registry/backlog 视图。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `seed evidence -> task execution log -> signal -> task -> memory -> stage report` required-tier 验证链。
@@ -64,13 +67,17 @@
 
 工作流接入基础用法：
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
-- 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID>`；若需要手工拆步，再执行 `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`
+- 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`；若需要手工拆步，再执行“fresh verification” + `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`
+- fresh verification claim：`./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "<fresh verification command>"`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
 - GitHub PR preflight / 默认评审边界：`./scripts/prepare-task-pr.sh`
 - 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
 - `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
 - 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令；收口时优先使用 `task-closeout.sh` 完成 close-phase，再在 commit 后立即进入 `prepare-task-pr.sh`，由 GitHub PR 的 required checks + review/approval 承担默认评审边界。`prepare-task-pr.sh` 还会基于当前 changed paths 给出一条本地 required 验证建议与 planner `reason_summary`，但这些输出只负责推荐/解释，不自动执行，也不改写 `./scripts/ci-tests.sh required/full` 的既有语义。
+- `./scripts/pm/workflow-behavior-eval.sh`：repo-owned workflow behavior eval 入口；把 task-worktree bootstrap、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 串成一条可重复的本地验证链。
+- role subagent 产出的 patch、review card、summary、incident note 或 messaging brief，只有在被 owner 回写到 `project.md`、handoff、`.pm/tasks/<TASK-UID>.execution.md`、signal/memory，或 PR evidence 中至少一处后，才算进入 canonical 主链；孤立产物本身不构成正式收口证据。
+- 若 slice 类型是 `liveops_feedback`、`supplemental_review` 或其他非代码反馈，收口前仍必须明确它的 formal sink：至少要么 `promote-signal` / `promote-memory`，要么在 execution log / PR evidence 中留下可追溯引用。
 - 若 owner / title / source refs 已明确，优先直接用 `./scripts/new-task-worktree.sh <module> <task> --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>` 一次性进入目标 worktree 并留下 `last_started_at`；只有在需要手工拆步时，才分开执行 `new-task.sh` / `workflow-report.sh` / `move-task.sh`，或显式跳过 `task-closeout.sh`。
 - 默认最终合流路径是 GitHub PR；本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景，不再是 `.pm` 默认收口路径。
 - `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为本地生成视图；它们会被 PM 命令自动刷新，但不应再作为 Git 冲突解决对象或人工真值手改。
@@ -144,6 +151,10 @@ required-tier 验证入口：
 - `./scripts/pm/required-tier-smoke.sh --json`
 - `./scripts/pm/new-task-worktree-bootstrap-smoke.sh`
 - `./scripts/pm/new-task-worktree-bootstrap-smoke.sh --json`
+- `./scripts/pm/workflow-behavior-eval.sh`
+- `./scripts/pm/workflow-behavior-eval.sh --json`
+- `./scripts/pm/task-compaction-smoke.sh`
+- `./scripts/pm/task-compaction-smoke.sh --json`
 
 full-tier 验证入口：
 - `./scripts/pm/memory-regression-smoke.sh`

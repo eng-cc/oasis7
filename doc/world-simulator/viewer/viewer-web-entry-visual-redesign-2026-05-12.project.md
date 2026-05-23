@@ -23,7 +23,7 @@
 ## 状态
 - 更新日期: 2026-05-13
 - 当前状态: done
-- 下一任务: `none`
+- 下一任务: 若重启下一轮 Web 入口结构/视觉专题，先按 `PRD-ENGINEERING-031` 的 optional visual companion 边界产出 IA/wireframe/layout compare，再创建新的实现 task。
 - 最新完成: `viewer-web-pixel-world-wasm-only`
 - 最新完成: `viewer-web-pixel-world-content-density`
 

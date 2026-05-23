@@ -16,7 +16,12 @@ trap cleanup EXIT
 SMOKE_WORKTREE="$TMPDIR/smoke-worktree"
 SMOKE_BRANCH="temp/prepare-pr-copilot-test"
 
-"$REAL_GIT" -C "$ROOT_DIR" worktree add "$SMOKE_WORKTREE" -b "$SMOKE_BRANCH" HEAD >/dev/null
+"$REAL_GIT" -C "$ROOT_DIR" worktree add "$SMOKE_WORKTREE" -b "$SMOKE_BRANCH" refs/remotes/origin/main >/dev/null
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --allow-empty --no-verify -m "test: prepare-task-pr smoke fixture" >/dev/null
 
 mkdir -p "$TMPDIR/bin"
 cat > "$TMPDIR/bin/git" <<EOF

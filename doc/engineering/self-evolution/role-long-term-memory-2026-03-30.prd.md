@@ -8,8 +8,8 @@
 - 对应标准执行入口: `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md`
 
 ## 1. Executive Summary
-- Problem Statement: 即使 `.pm/` 文件化项目管理层落地，若“长期 memory”只被笼统定义为 role memory 文件，而没有单独冻结对象模型、promote 规则、`superseded` 生命周期和查询边界，它很容易退化成另一份 task execution log、另一份 task list，或另一份无法稳定被脚本消费的自由文本笔记。
-- Proposed Solution: 在 `engineering/self-evolution` 下新增“角色长期记忆自建方案”专题，单独冻结长期 memory 的目标、对象层次、状态机、promotion/supersede 规则、字段 schema、脚本契约和验证口径。该专题明确长期 memory 是“结构化的、可审计的、以 source-backed 结论为核心的项目语义层”，不承担正式 PRD 真值，也不承担任务执行真值。
+- Problem Statement: 即使 `.pm/` 已落地，如果长期 memory 只被笼统定义为 role memory 文件，而没有独立冻结对象模型、promotion 规则、`superseded` 生命周期和查询边界，它仍会退化成另一份 task log、task list 或脚本无法稳定消费的自由文本笔记。
+- Proposed Solution: 单独建立“角色长期记忆自建方案”专题，冻结长期 memory 的 schema、promotion/supersede 规则、role-topic allowlist、脚本契约和验证口径。长期 memory 只承载 source-backed 的结构化项目语义，不承担正式 PRD 真值，也不承担任务执行真值。
 - Success Criteria:
   - SC-1: 首批 7 个标准角色全部具备结构一致的长期 memory 容器，且每条 active 记录 100% 带 `id`、`role`、`topic`、`summary`、`source_refs`、`effective_at`、`last_reviewed_at`、`status`。
   - SC-2: 被新结论取代的记录 100% 走 `superseded` 生命周期，带 `superseded_by` 和 `superseded_at`，不得原地覆盖丢失历史。
@@ -140,10 +140,13 @@
 ## 5. Risks & Roadmap
 - Phased Rollout:
   - MVP: 冻结 memory schema、active/superseded 模型和脚本契约。
-  - v1.1: 为 `producer_system_designer` / `qa_engineer` / `liveops_community` 建立首批 memory 模板和样例。
-  - v2.0: 覆盖 7 个标准角色和 shared memory。
-  - v2.1: 打通 `signal -> memory -> backlog/stage` 引用链和 lint/report。
-  - v2.2: 冻结 role topic allowlist、promotion_reason 扩展白名单与 close-phase 记忆抽取 checklist，并同步角色职责卡与 workflow-report。
+  - 已完成的主链补强:
+    - 首批角色 memory 模板与样例
+    - 7 个标准角色与 shared memory 覆盖
+    - `signal -> memory -> backlog/stage` 引用链和 lint/report
+    - role topic allowlist、`promotion_reason` 白名单与 close-phase 记忆抽取 checklist
+  - 稳定化目标:
+    - 继续和角色职责卡、`workflow-report`、stage/backlog 引用保持一致
 - Technical Risks:
   - 风险-1: 没有 promotion 门槛，memory 会迅速被流水日志污染。
   - 风险-2: 没有 superseded 机制，历史裁决会被覆盖丢失。
@@ -161,12 +164,12 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-MEM-001 | 长期 memory 自建在仓库内文件层 | 直接引入外部 memory 产品为真值 | 当前仓库以 Git/worktree 为核心协作环境，本地文件更符合审计与隔离模型。 |
-| DEC-MEM-002 | active/superseded 双层模型 | 只保留当前最新记录 | 历史结论与阶段判断需要可回放，不能靠覆盖更新。 |
+| DEC-MEM-001 | 长期 memory 自建在仓库内文件层 | 直接引入外部 memory 产品为真值 | 本地文件更符合当前 Git/worktree 审计与隔离模型。 |
+| DEC-MEM-002 | active/superseded 双层模型 | 只保留当前最新记录 | 历史结论与阶段判断需要可回放。 |
 | DEC-MEM-003 | memory 只接收高价值语义结论 | 把全部 execution log 内容都提升为 memory | 否则 memory 很快退化成流水日志。 |
-| DEC-MEM-004 | memory 与 backlog 分层 | 用一套对象同时表达记忆和任务 | 长期结论与执行状态的变更频率、字段和权限都不同。 |
-| DEC-MEM-005 | 按角色冻结 `topic` allowlist 与允许的 `promotion_reason` 范围 | 继续只靠 owner 临场判断决定什么能进 memory | 当前空 memory 的根因之一是角色缺少稳定语义边界；先冻结 allowlist 才能降低“写什么都不对”的犹豫成本。 |
-| DEC-MEM-006 | close phase 强制执行统一记忆抽取三问 | 继续把“是否沉淀 memory”留给 owner 自行想起 | 如果 close checklist 不显式暴露该动作，长期 memory 只会在少数自觉角色中出现，无法成为默认工作流。 |
+| DEC-MEM-004 | memory 与 backlog 分层 | 用一套对象同时表达记忆和任务 | 长期结论与执行状态的字段、频率和权限都不同。 |
+| DEC-MEM-005 | 按角色冻结 `topic` allowlist 与允许的 `promotion_reason` 范围 | 继续只靠 owner 临场判断决定什么能进 memory | 先冻结语义边界，才能减少“写什么都不对”的犹豫和漂移。 |
+| DEC-MEM-006 | close phase 强制执行统一记忆抽取三问 | 继续把“是否沉淀 memory”留给 owner 自行想起 | checklist 不显式暴露，长期 memory 就不会成为默认工作流。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:

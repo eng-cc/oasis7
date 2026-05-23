@@ -39,8 +39,8 @@
 - 文档、界面、接口行为一致
 
 ## Recommended Skills
-- 主技能：`frontend-ui-ux`、`agent-browser`，用于 Viewer/Web 交互实现、可用性打磨与闭环自动化。
-- 常复用技能：`tdd-test-writer`、`documentation-writer`，用于关键交互回归与使用说明维护。
+- 主技能：`agent-browser`、`gpt-image-2`，用于 Viewer/Web 闭环自动化与 UI-heavy 题的前置视觉比较。
+- 常复用技能：`tdd-test-writer`、`humanizer-zh`，用于关键交互回归与中文界面/说明文案收口。
 - 使用约定：角色决定 owner，技能决定方法；即便复用浏览器或测试技能，也不能绕过 runtime 权限边界与玩家控制面约束。
 
 ## Checklist

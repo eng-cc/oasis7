@@ -24,10 +24,40 @@
 - 已知约束：
 - 依赖前置项：
 
+## Brainstorming / Option Framing
+- Need Bounded Brainstorming:
+- Scope Split / Decomposition:
+- Options Considered (2-3):
+- Recommended Direction:
+- Visual Companion Need / Non-Need:
+
+## Behavior-First Test Plan
+- Behavior Contract:
+- Target Test Files / Test Surface:
+- RED Verification Command:
+- Expected RED Failure:
+- GREEN / Safety Command:
+- Skip Reason If Not Applicable:
+
+## Subagent Contract
+- Slice Type: `analysis | implementation | verification | supplemental_review | liveops_feedback`
+- Write Scope:
+- Read-Only Dependencies:
+- Return Contract:
+- Formal Sink / Writeback Surface:
+- Integration Owner:
+
 ## Expected Output
 - 接收方交付物 1：
 - 接收方交付物 2：
 - 需要回写的正式文档 / task execution log：
+
+## Atomic Steps
+| Step | Action | Validation Command | Expected Result |
+| --- | --- | --- | --- |
+| 1 |  |  |  |
+| 2 |  |  |  |
+| 3 |  |  |  |
 
 ## Done Definition
 - [ ] 满足验收点 1
@@ -42,6 +72,8 @@
 ## Validation
 - 建议测试层级：`test_tier_required` / `test_tier_full`
 - 建议验证命令：
+- Claim-Ready Command (If This Slice Supports Completion Claim):
+- 预期回传证据：
 
 ## Notes
 - 其他补充：

@@ -122,6 +122,13 @@ def build_parser(
     move_task.add_argument("--json", action="store_true")
     move_task.set_defaults(func=handlers["cmd_move_task"])
 
+    compact_task_group = subparsers.add_parser("compact-task-group")
+    compact_task_group.add_argument("root", type=pathlib.Path)
+    compact_task_group.add_argument("--survivor-task-uid", required=True)
+    compact_task_group.add_argument("--drop-task-uid", action="append", default=[])
+    compact_task_group.add_argument("--json", action="store_true")
+    compact_task_group.set_defaults(func=handlers["cmd_compact_task_group"])
+
     supersede_memory = subparsers.add_parser("supersede-memory")
     supersede_memory.add_argument("root", type=pathlib.Path)
     supersede_memory.add_argument("--scope", choices=("role", "shared"), default="role")

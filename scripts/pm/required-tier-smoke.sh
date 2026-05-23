@@ -12,7 +12,7 @@ usage() {
 Usage: ./scripts/pm/required-tier-smoke.sh [--json] [--keep-temp]
 
 Run an isolated required-tier validation chain for the file-based PM runtime:
-  seed evidence -> task execution log -> signal -> task/memory -> blocked task -> workflow/role/stage report -> task closeout helper
+  seed evidence -> task execution log -> signal -> task/memory -> blocked task -> workflow/role/stage report -> task closeout helper with fresh verification
 
 Options:
   --json       Print machine-readable JSON summary
@@ -496,7 +496,7 @@ CLOSEOUT_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --priority P2 \
   --source-ref .pm/evidence/bootstrap.md \
   --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md \
-  --acceptance "task closeout helper can close the task in one command" \
+  --acceptance "task closeout helper can close the task only after fresh verification" \
   --json)"
 CLOSEOUT_TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$CLOSEOUT_TASK_JSON")"
 CLOSEOUT_TASK_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["execution_log_path"])' <<<"$CLOSEOUT_TASK_JSON")"
@@ -514,9 +514,48 @@ cat > "$TMPDIR/$CLOSEOUT_TASK_LOG_PATH" <<EOF
 EOF
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$CLOSEOUT_TASK_UID" --to-status committed >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$CLOSEOUT_TASK_UID" --json >/dev/null
-TASK_CLOSEOUT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" --role qa_engineer --task-uid "$CLOSEOUT_TASK_UID" --json)"
+set +e
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" --role qa_engineer --task-uid "$CLOSEOUT_TASK_UID" > /dev/null 2>"$TMPDIR/task-closeout-missing-verify.err"
+TASK_CLOSEOUT_MISSING_VERIFY_STATUS=$?
+set -e
+if [[ "$TASK_CLOSEOUT_MISSING_VERIFY_STATUS" == "0" ]]; then
+  echo "required-tier-smoke: expected task-closeout to reject done closeout without --verify-command" >&2
+  exit 1
+fi
+TASK_CLOSEOUT_NO_VERIFY_STATE_JSON="$(python3 - "$TMPDIR" "$CLOSEOUT_TASK_UID" <<'PY'
+from __future__ import annotations
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+task_uid = sys.argv[2]
+task_path = root / ".pm" / "tasks" / f"{task_uid}.yaml"
+
+fields = {}
+for raw in task_path.read_text(encoding="utf-8").splitlines():
+    if not raw or raw.startswith(" ") or raw.startswith("-"):
+        continue
+    key, sep, value = raw.partition(":")
+    if not sep:
+        continue
+    fields[key.strip()] = value.strip()
+
+print(
+    json.dumps(
+        {
+            "status": fields.get("status"),
+            "last_closed_at": fields.get("last_closed_at"),
+        },
+        ensure_ascii=False,
+    )
+)
+PY
+)"
+TASK_CLOSEOUT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" --role qa_engineer --task-uid "$CLOSEOUT_TASK_UID" --verify-command "printf 'closeout verification ok\n'" --json)"
+
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" "$TASK_CLOSEOUT_MISSING_VERIFY_STATUS" "$TASK_CLOSEOUT_NO_VERIFY_STATE_JSON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -540,6 +579,8 @@ workflow_review = json.loads(sys.argv[16])
 stage_report = json.loads(sys.argv[17])
 task_closeout = json.loads(sys.argv[18])
 closeout_task_uid = sys.argv[19]
+missing_verify_status = int(sys.argv[20])
+missing_verify_state = json.loads(sys.argv[21])
 
 if workflow_start["signal_summary"]["pending_count"] != 0:
     raise SystemExit("qa workflow start should not treat rejected signal as pending")
@@ -566,6 +607,11 @@ if any(item.get("id") == "codex-review" for item in workflow_close["checklist"])
     raise SystemExit("workflow close checklist should no longer require local codex review")
 if not any(item.get("id") == "prepare-pr-review" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should point to GitHub PR review as the default review boundary")
+if not any(item.get("id") == "fresh-claim-verification" for item in workflow_close["checklist"]):
+    raise SystemExit("workflow close checklist should require fresh claim verification before PR-readiness claims")
+claim_verify_items = [item for item in workflow_close["checklist"] if item.get("id") == "fresh-claim-verification"]
+if claim_verify_items[0].get("command") != "./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command '<fresh verification command>'":
+    raise SystemExit("workflow close checklist should point to claim-ready helper with an explicit verification placeholder")
 prepare_items = [item for item in workflow_close["checklist"] if item.get("id") == "prepare-pr-review"]
 if prepare_items[0].get("command") != "./scripts/prepare-task-pr.sh":
     raise SystemExit("workflow close PR review checklist should point to prepare-task-pr.sh")
@@ -588,6 +634,12 @@ if not any(item.get("id") == "autoflow-working-memory" for item in workflow_clos
     raise SystemExit("workflow close with seeded working_memory should suggest autoflow for task-scoped working_memory")
 if regen_role_report["roles"]["qa_engineer"]["backlog_counts"]["blocked"] != 1:
     raise SystemExit("regenerated role report should keep qa blocked count")
+if missing_verify_status == 0:
+    raise SystemExit("task closeout helper should fail when done closeout omits --verify-command")
+if missing_verify_state["status"] != "committed":
+    raise SystemExit("task closeout helper should leave task status unchanged when verification is missing")
+if missing_verify_state["last_closed_at"] not in {None, "null"}:
+    raise SystemExit("task closeout helper should not write last_closed_at when verification is missing")
 if task_closeout["task_uid"] != closeout_task_uid:
     raise SystemExit("task closeout helper should report the closed task uid")
 if task_closeout["previous_status"] != "committed":
@@ -596,6 +648,12 @@ if task_closeout["final_status"] != "done":
     raise SystemExit("task closeout helper should move the task to done by default")
 if not task_closeout["last_closed_at"]:
     raise SystemExit("task closeout helper should record last_closed_at")
+if task_closeout["claim_verification"]["status"] != "verified":
+    raise SystemExit("task closeout helper should include verified claim evidence after fresh verification")
+if task_closeout["claim_verification"]["claim_type"] != "task_complete":
+    raise SystemExit("task closeout helper should default to task_complete claim verification")
+if task_closeout["claim_verification"]["verify_command"] != "printf 'closeout verification ok\\n'":
+    raise SystemExit("task closeout helper should report the exact fresh verification command")
 if task_closeout["pm_lint"]["status"] != "ok":
     raise SystemExit("task closeout helper should run pm lint by default")
 if task_closeout["recommended_next_command"] != "./scripts/prepare-task-pr.sh":

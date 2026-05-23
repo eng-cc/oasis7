@@ -34,20 +34,58 @@
 - 上游依赖：
 - 现有测试 / 证据：
 
+## Brainstorming / Option Framing
+- Need Bounded Brainstorming:
+- Scope Split / Decomposition:
+- Option 1:
+- Option 2:
+- Option 3 (If Needed):
+- Recommended Direction:
+- Visual Companion Need / Non-Need:
+
+## Behavior-First Test Plan
+- Behavior Contract:
+- Target Test Files / Test Surface:
+- RED Verification Command:
+- Expected RED Failure:
+- GREEN / Safety Command:
+- Skip Reason If Not Applicable:
+
+## Subagent Contract
+- Slice Type: `analysis | implementation | verification | supplemental_review | liveops_feedback`
+- Write Scope:
+- Read-Only Dependencies:
+- Return Contract:
+- Formal Sink / Writeback Surface:
+- Integration Owner:
+- Integration Order:
+
 ## Requested Work
 - 工作项 1：
 - 工作项 2：
 - 工作项 3：
+
+## Atomic Steps
+| Step | Action | Validation Command | Expected Result |
+| --- | --- | --- | --- |
+| 1 |  |  |  |
+| 2 |  |  |  |
+| 3 |  |  |  |
+| 4 |  |  |  |
 
 ## Expected Outputs
 - 代码改动：
 - 文档回写：
 - 测试记录：
 - task execution log：
+- subagent 回传物类型：
 
 ## Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对上游 / 下游角色
+- [ ] 若任务存在方向/范围不确定性，bounded brainstorming 的方案对比与推荐方向已写清
+- [ ] behavior-first RED plan 已执行，或 skip 原因已写清
+- [ ] write scope / return contract / integration order 已被遵守
 - [ ] 对应 `prd.md` / `project.md` 已回写
 - [ ] 对应 `.pm/tasks/<TASK-UID>.execution.md` 已记录
 - [ ] required/full 测试证据已补齐
@@ -60,6 +98,7 @@
 ## Validation Plan
 - 测试层级：`test_tier_required` / `test_tier_full`
 - 验证命令：
+- Claim-Ready Command (If This Slice Supports Completion Claim):
 - 预期结果：
 - 回归影响范围：
 
