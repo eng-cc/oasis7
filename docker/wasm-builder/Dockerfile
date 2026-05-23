@@ -38,6 +38,7 @@ RUN rustup toolchain install "${WASM_TOOLCHAIN}" --profile minimal --component r
 
 WORKDIR /opt/oasis7
 COPY tools/wasm_build_suite /opt/oasis7/tools/wasm_build_suite
+COPY crates/oasis7_wasm_build /opt/oasis7/crates/oasis7_wasm_build
 COPY scripts/build-wasm-module.sh /opt/oasis7/scripts/build-wasm-module.sh
 
 RUN chmod +x /opt/oasis7/scripts/build-wasm-module.sh \
