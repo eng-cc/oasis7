@@ -14,11 +14,13 @@ candidates without mutating anything.
 
 Options:
   --json           Print machine-readable JSON with all discovered worktrees
+  --footprint      Include per-worktree target/node_modules disk usage
   --prunable-only  Limit human-readable output to cleanup candidates only
   -h, --help       Show this help
 
 Examples:
   ./scripts/worktree-gc-report.sh
+  ./scripts/worktree-gc-report.sh --footprint --prunable-only
   ./scripts/worktree-gc-report.sh --prunable-only
   ./scripts/worktree-gc-report.sh --json
 USAGE
@@ -28,11 +30,16 @@ wh_require_git_worktree
 
 OUTPUT_JSON=0
 PRUNABLE_ONLY=0
+INCLUDE_FOOTPRINT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --json)
       OUTPUT_JSON=1
+      shift
+      ;;
+    --footprint)
+      INCLUDE_FOOTPRINT=1
       shift
       ;;
     --prunable-only)
@@ -55,7 +62,7 @@ COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
 CANONICAL_REPO_ROOT="$(cd "$COMMON_GIT_DIR/.." && pwd -P)"
 CURRENT_WORKTREE="$(pwd -P)"
 
-python3 - "$COMMON_GIT_DIR" "$CANONICAL_REPO_ROOT" "$CURRENT_WORKTREE" "$PRUNABLE_ONLY" "$OUTPUT_JSON" <<'PY'
+python3 - "$COMMON_GIT_DIR" "$CANONICAL_REPO_ROOT" "$CURRENT_WORKTREE" "$PRUNABLE_ONLY" "$OUTPUT_JSON" "$INCLUDE_FOOTPRINT" <<'PY'
 from __future__ import annotations
 
 import json
@@ -70,6 +77,7 @@ repo_root = Path(sys.argv[2]).resolve()
 current_worktree = Path(sys.argv[3]).resolve()
 prunable_only = sys.argv[4] == "1"
 output_json = sys.argv[5] == "1"
+include_footprint = sys.argv[6] == "1"
 
 
 def run(*args: str) -> str:
@@ -78,6 +86,37 @@ def run(*args: str) -> str:
 
 def shell_command(*parts: str) -> str:
     return " ".join(shlex.quote(part) for part in parts)
+
+
+def human_size(size_bytes: int | None) -> str | None:
+    if size_bytes is None:
+        return None
+    units = ["B", "KiB", "MiB", "GiB", "TiB"]
+    value = float(size_bytes)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024
+
+
+def dir_size_bytes(path: Path) -> int | None:
+    if not path.exists():
+        return 0
+    result = subprocess.run(
+        ["du", "-sk", str(path)],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    raw_size = result.stdout.split(None, 1)[0] if result.stdout.strip() else ""
+    if not raw_size.isdigit():
+        return None
+    return int(raw_size) * 1024
 
 
 def parse_porcelain() -> list[dict[str, object]]:
@@ -165,6 +204,8 @@ entries: list[dict[str, object]] = []
 cleanup_candidates: list[dict[str, object]] = []
 dirty_count = 0
 prunable_count = 0
+known_target_bytes = 0
+known_node_modules_bytes = 0
 
 for record in records:
     path_value = str(record["worktree"])
@@ -188,6 +229,19 @@ for record in records:
     latest_task = None
     if task_matches:
         latest_task = sorted(task_matches, key=lambda item: item.get("updated_at", ""))[-1]
+
+    target_bytes = None
+    node_modules_bytes = None
+    total_footprint_bytes = None
+    if include_footprint and exists:
+        target_bytes = dir_size_bytes(path_obj / "target")
+        node_modules_bytes = dir_size_bytes(path_obj / "crates" / "oasis7_viewer" / "node_modules")
+        known_parts = [value for value in (target_bytes, node_modules_bytes) if value is not None]
+        total_footprint_bytes = sum(known_parts) if len(known_parts) == 2 else None
+        if target_bytes is not None:
+            known_target_bytes += target_bytes
+        if node_modules_bytes is not None:
+            known_node_modules_bytes += node_modules_bytes
 
     cleanup_reasons: list[str] = []
     cleanup_commands: list[str] = []
@@ -243,6 +297,15 @@ for record in records:
         "branch_delete_candidate": branch_delete_candidate,
         "cleanup_commands": cleanup_commands,
     }
+    if include_footprint:
+        entry["footprint"] = {
+            "target_bytes": target_bytes,
+            "target_human": human_size(target_bytes),
+            "viewer_node_modules_bytes": node_modules_bytes,
+            "viewer_node_modules_human": human_size(node_modules_bytes),
+            "known_total_bytes": total_footprint_bytes,
+            "known_total_human": human_size(total_footprint_bytes),
+        }
     entries.append(entry)
     if cleanup_candidate:
         cleanup_candidates.append(entry)
@@ -258,6 +321,18 @@ payload = {
     },
     "entries": entries,
 }
+if include_footprint:
+    payload["summary"].update(
+        {
+            "footprint_included": True,
+            "known_target_bytes": known_target_bytes,
+            "known_target_human": human_size(known_target_bytes),
+            "known_viewer_node_modules_bytes": known_node_modules_bytes,
+            "known_viewer_node_modules_human": human_size(known_node_modules_bytes),
+            "known_footprint_bytes": known_target_bytes + known_node_modules_bytes,
+            "known_footprint_human": human_size(known_target_bytes + known_node_modules_bytes),
+        }
+    )
 
 if output_json:
     print(json.dumps(payload, ensure_ascii=True, indent=2))
@@ -270,6 +345,10 @@ print(f"- total_worktrees: {len(entries)}")
 print(f"- prunable_worktrees: {prunable_count}")
 print(f"- dirty_worktrees: {dirty_count}")
 print(f"- cleanup_candidates: {len(cleanup_candidates)}")
+if include_footprint:
+    print(f"- known_target_size: {human_size(known_target_bytes)}")
+    print(f"- known_viewer_node_modules_size: {human_size(known_node_modules_bytes)}")
+    print(f"- known_worktree_cache_size: {human_size(known_target_bytes + known_node_modules_bytes)}")
 
 shown = cleanup_candidates if prunable_only else entries
 if not shown:
@@ -303,6 +382,14 @@ for entry in shown:
         print(
             "    pm_task: "
             f"{entry['pm_task_uid']} ({entry['pm_task_status']}) {entry['pm_task_title']}"
+        )
+    footprint = entry.get("footprint")
+    if include_footprint and isinstance(footprint, dict):
+        print(
+            "    footprint: "
+            f"target={footprint['target_human']}, "
+            f"viewer_node_modules={footprint['viewer_node_modules_human']}, "
+            f"known_total={footprint['known_total_human']}"
         )
     if entry["cleanup_candidate"]:
         print(f"    cleanup_reasons: {', '.join(entry['cleanup_reasons'])}")

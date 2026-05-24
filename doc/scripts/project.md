@@ -209,6 +209,22 @@
     - `rg -n "cargo-dev\\.sh|env -u RUSTC_WRAPPER cargo|CARGO_TARGET_DIR" AGENTS.md doc/scripts/prd.md doc/scripts/project.md testing-manual.md scripts/cargo-dev.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] shared-cargo-dev-cache-default (PRD-SCRIPTS-009) [test_tier_required]: 将 task worktree 开发态 Rust 命令口径从“可用 `cargo-dev.sh`”收紧为“默认优先 `cargo-dev.sh`”，并让 `worktree-gc-report.sh --footprint` 暴露各 worktree 的 `target` / Viewer `node_modules` 体量，便于先清理最大缓存而不破坏正式验收边界。 Trace: .pm/tasks/task_aedd1a89aef141f1b366c7a09398a6a7.yaml
+  - 产物文件:
+    - `scripts/worktree-gc-report.sh`
+    - `scripts/worktree-gc-report.test.sh`
+    - `AGENTS.md`
+    - `testing-manual.md`
+    - `doc/scripts/README.md`
+    - `doc/scripts/project.md`
+    - `doc/engineering/project.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/worktree-gc-report.sh scripts/worktree-gc-report.test.sh scripts/cargo-dev.sh`
+    - `./scripts/worktree-gc-report.test.sh`
+    - `./scripts/worktree-gc-report.sh --json --footprint`
+    - `./scripts/cargo-dev.sh --print-target-dir`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-SCRIPTS-023 (PRD-SCRIPTS-001/002) [test_tier_required]: 将 builtin wasm-heavy runtime 闭环从 required/pre-commit 路径下放到 `test_tier_full`，恢复 required 只承载轻量核心基线的口径。
   - 产物文件:
     - `crates/oasis7/src/runtime/tests/mod.rs`
@@ -412,6 +428,7 @@
  - 更新日期: 2026-04-24
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `shared-cargo-dev-cache-default`（已将开发态 Rust 命令默认入口收紧到 `scripts/cargo-dev.sh`，并为 `worktree-gc-report.sh` 增加 `--footprint`，可只读统计每个 worktree 的 `target` 与 Viewer `node_modules` 体量。）
 - 最新完成: `workflow-helper-review-followup`（已收口 PR `#145` review comments：`worktree-gc-report` 的 cleanup 命令改为 shell-quoted 并补合同测试，`pr-review-thread-closeout` 改为通过临时文件传递 PR/thread JSON，`pm/rebase-conflict-helper` 不再泄漏全局 `RETURN` trap。）
 - 最新完成: `web-ui-automation-light-smoke`（已新增 `scripts/viewer-software-safe-step-regression-smoke.sh`，用 fixture 页面复用真 `agent-browser` 回归 `viewer-software-safe-step-regression.sh` 的最小 Web/UI automation 契约，无需起完整 runtime 栈。）
 - 最新完成: `pr-review-thread-closeout-helper`（已新增 `scripts/pr-review-thread-closeout.sh`，统一盘点/resolve 当前 PR review threads，并在每次操作后重新回报 `reviewDecision` / `mergeStateStatus`。）

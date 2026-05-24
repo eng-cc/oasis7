@@ -152,6 +152,7 @@
 - [x] shrink-near-limit-rust-hotspots (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 对 5 个逼近 1200 行阈值的 Rust 热点文件执行预防性职责拆分，抽离 `llm_sidecar` runtime support、`oasis7_node` consensus/replica maintenance support、`self_guided` storage、`oasis7_provider_parity_bench` io support 与 `oasis7_wasm_router` filtering，避免零扫描门禁回弹。 Trace: .pm/tasks/task_fd49238273e0447d8189df40519a51b0.yaml
 - [x] engineering-project-truth-drift-sync (PRD-ENGINEERING-030/PRD-ENGINEERING-R1200-005) [test_tier_required]: 修正 engineering 根 `project.md` 对 `TASK-ENGINEERING-054~057` 与 Rust 1200 行治理专题 project 的完成态漂移，并把状态区“下一任务”从已完成的 `readme-governance-path-governance` 改回季度复核/库存复算的真实后续。 Trace: .pm/tasks/task_52d37909a424425096c7f2084383eb78.yaml
 - [x] workflow-friction-priority-burn-down (PRD-ENGINEERING-021) [test_tier_required]: 冻结 9 项当前开发流程优化项的优先级，并启动第 1 优先级的 worktree 生命周期治理，新增 repo-owned `scripts/worktree-gc-report.sh` 入口用于盘点 prunable/closed task worktree cleanup 候选。 Trace: .pm/tasks/task_58bd1608d4ea4703a6dbc10febed36b2.yaml
+- [x] shared-cargo-dev-cache-default (PRD-ENGINEERING-021/PRD-SCRIPTS-009) [test_tier_required]: 将 task worktree 开发态 Rust 命令默认收敛到 `scripts/cargo-dev.sh` 共享 target，并扩展 `worktree-gc-report.sh --footprint` 只读暴露各 worktree 的 `target` / Viewer `node_modules` 缓存体量，保留 required/full、deterministic wasm 与 release 的原始 cargo 验收边界。 Trace: .pm/tasks/task_aedd1a89aef141f1b366c7a09398a6a7.yaml
 - [x] task-closeout-helper (PRD-ENGINEERING-021) [test_tier_required]: 新增 `scripts/pm/task-closeout.sh`，将“fresh verification（done closeout 必填）-> `.pm` close-phase 的 `workflow-report close -> move-task done|deferred -> pm lint`”收成单命令 helper，并将 scripts / PM / workflow 文档口径统一到“helper 优先、手工链等价”。 Trace: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.yaml
 - [x] pm-store-modularization-slice (PRD-ENGINEERING-001/003) [test_tier_required]: 将 `scripts/pm/pm_store.py` 的文档读写与 CLI subparser 装配抽离到 sibling modules，并在同一主任务内补齐 `scripts/pm/lint.sh` 对新 sibling modules 的显式存在检查与 `py_compile` 语法检查，降低 4200 行单体脚本的结构耦合，同时保持 `.pm` 数据契约与 workflow 行为不变。 Trace: .pm/tasks/task_c8d0c65b8084497ca56858c7a987c339.yaml
 - [x] pm-store-three-domain-followup (PRD-ENGINEERING-001/003) [test_tier_required]: 继续将 `task backlog lint`、`stage report/lint/cmd`、`workflow/memory/role/reflection report` 三组逻辑从 `scripts/pm/pm_store.py` 抽到 sibling modules，并同步把新模块纳入 `pm-lint` 结构门禁，进一步压缩单体脚本而不改变 `.pm` workflow 行为。 Trace: .pm/tasks/task_71ecfb84cbfd48c9a12ee5e408518f7f.yaml
@@ -246,6 +247,7 @@
 - 更新日期: 2026-05-23
 - 当前状态: active
 - 下一任务: 当前入口减重切片已收口；后续仍优先按 `scripts/doc-inventory-report.sh` 结果继续拆分 near-limit active project docs，先看 `doc/world-simulator/project.md` 与 `doc/readme/project.md`。
+- 最新完成: `shared-cargo-dev-cache-default`（已把 task worktree 开发态 Rust 命令默认入口收紧到 `scripts/cargo-dev.sh`，并让 worktree 生命周期报告可选统计重型缓存体量，减少多 worktree 重复编译与存储浪费。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: 已完成 root redirect 最小化、engineering README landing 收紧，以及模块 project 状态区去历史播报墙；后续治理继续优先处理 near-limit active docs。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。

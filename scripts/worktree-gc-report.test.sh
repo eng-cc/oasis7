@@ -16,10 +16,12 @@ CLEAN_WORKTREE="$TMPDIR/task worktree with spaces"
 BROKEN_WORKTREE="$TMPDIR/broken-worktree"
 PRUNABLE_WORKTREE="$TMPDIR/prunable-worktree"
 
-mkdir -p "$TEST_REPO/scripts" "$TEST_REPO/.pm/tasks" "$TEST_REPO/.git" "$TMPDIR/bin" "$CLEAN_WORKTREE" "$BROKEN_WORKTREE"
+mkdir -p "$TEST_REPO/scripts" "$TEST_REPO/.pm/tasks" "$TEST_REPO/.git" "$TMPDIR/bin" "$CLEAN_WORKTREE/target" "$CLEAN_WORKTREE/crates/oasis7_viewer/node_modules" "$BROKEN_WORKTREE"
 cp "$ROOT_DIR/scripts/worktree-gc-report.sh" "$TEST_REPO/scripts/worktree-gc-report.sh"
 cp "$ROOT_DIR/scripts/worktree-harness-lib.sh" "$TEST_REPO/scripts/worktree-harness-lib.sh"
 chmod +x "$TEST_REPO/scripts/worktree-gc-report.sh"
+printf 'target-cache' > "$CLEAN_WORKTREE/target/sample.bin"
+printf 'node-cache' > "$CLEAN_WORKTREE/crates/oasis7_viewer/node_modules/sample.bin"
 
 cat > "$TEST_REPO/.pm/tasks/task_11111111111111111111111111111111.yaml" <<EOF
 task_uid: task_11111111111111111111111111111111
@@ -82,9 +84,11 @@ EOF
 chmod +x "$TMPDIR/bin/git"
 
 REPORT_FILE="$TMPDIR/worktree-gc-report.json"
-(cd "$TEST_REPO" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json > "$REPORT_FILE")
+NO_FOOTPRINT_REPORT_FILE="$TMPDIR/worktree-gc-report-no-footprint.json"
+(cd "$TEST_REPO" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json --footprint > "$REPORT_FILE")
+(cd "$TEST_REPO" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json > "$NO_FOOTPRINT_REPORT_FILE")
 
-python3 - "$REPORT_FILE" "$TEST_REPO" "$CLEAN_WORKTREE" "$BROKEN_WORKTREE" "$PRUNABLE_WORKTREE" <<'PY'
+python3 - "$REPORT_FILE" "$NO_FOOTPRINT_REPORT_FILE" "$TEST_REPO" "$CLEAN_WORKTREE" "$BROKEN_WORKTREE" "$PRUNABLE_WORKTREE" <<'PY'
 from __future__ import annotations
 
 import json
@@ -92,18 +96,31 @@ import sys
 from pathlib import Path
 
 report_path = Path(sys.argv[1])
-repo_root = str(Path(sys.argv[2]).resolve())
-clean_worktree = str(Path(sys.argv[3]).resolve())
-broken_worktree = str(Path(sys.argv[4]).resolve())
-prunable_worktree = str(Path(sys.argv[5]).resolve())
+no_footprint_report_path = Path(sys.argv[2])
+repo_root = str(Path(sys.argv[3]).resolve())
+clean_worktree = str(Path(sys.argv[4]).resolve())
+broken_worktree = str(Path(sys.argv[5]).resolve())
+prunable_worktree = str(Path(sys.argv[6]).resolve())
 
 payload = json.loads(report_path.read_text(encoding="utf-8"))
-if payload["summary"] != {
+no_footprint_payload = json.loads(no_footprint_report_path.read_text(encoding="utf-8"))
+if "footprint_included" in no_footprint_payload["summary"]:
+    raise SystemExit(f"non-footprint summary should not gain footprint keys: {no_footprint_payload['summary']}")
+if any("footprint" in entry for entry in no_footprint_payload["entries"]):
+    raise SystemExit("non-footprint entries should not gain footprint keys")
+expected_summary = {
     "total_worktrees": 4,
     "prunable_worktrees": 1,
     "dirty_worktrees": 0,
     "cleanup_candidates": 2,
-}:
+    "footprint_included": True,
+}
+for key, value in expected_summary.items():
+    if payload["summary"].get(key) != value:
+        raise SystemExit(f"unexpected summary {key}: {payload['summary']}")
+if not isinstance(payload["summary"].get("known_target_bytes"), int):
+    raise SystemExit(f"expected target footprint summary: {payload['summary']}")
+if not isinstance(payload["summary"].get("known_viewer_node_modules_bytes"), int):
     raise SystemExit(f"unexpected summary: {payload['summary']}")
 
 entries = {entry["path"]: entry for entry in payload["entries"]}
@@ -111,6 +128,10 @@ entries = {entry["path"]: entry for entry in payload["entries"]}
 clean_entry = entries[clean_worktree]
 if clean_entry["pm_task_status"] != "done":
     raise SystemExit(f"expected done task for clean worktree: {clean_entry}")
+if not clean_entry["footprint"] or clean_entry["footprint"]["target_bytes"] <= 0:
+    raise SystemExit(f"expected clean worktree target footprint: {clean_entry}")
+if clean_entry["footprint"]["viewer_node_modules_bytes"] <= 0:
+    raise SystemExit(f"expected clean worktree node_modules footprint: {clean_entry}")
 expected_remove = f"git -C '{repo_root}' worktree remove -f '{clean_worktree}'"
 expected_branch = "git -C '{}' branch -d 'task/review$(rm)'".format(repo_root)
 if clean_entry["cleanup_commands"] != [expected_remove, expected_branch]:
