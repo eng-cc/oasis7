@@ -12,7 +12,7 @@ Use this skill to decide which repo-owned workflow surface should drive the next
 Use this skill when:
 
 - `default-workflow-bootstrap` has already classified the work as non-trivial and task truth now exists
-- a new non-trivial task is starting
+- a bootstrapped non-trivial task is starting implementation or needs phase selection
 - you are unsure which local workflow skill should apply next
 - the task needs to move across multiple phases, such as ideation -> implementation -> verification -> closeout
 - the user wants the whole workflow chained together rather than treated as isolated skills

@@ -43,3 +43,12 @@ Example:
 - Expected Result: task file恢复为 `last_claim_type: task_complete` 且 `last_closed_at >= last_verified_at`；`pm-lint` 通过；`ready_for_pr` claim 成功但不再污染 closed task 的 canonical evidence。
 - Actual Result: task file now shows `last_claim_type: task_complete`, `last_verified_at: 2026-05-23T23:49:33+08:00`, `last_closed_at: 2026-05-24T09:51:35+08:00`; `pm-lint` returned OK; branch-level `ready_for_pr` claim returned `allowed_to_claim: true`.
 - Blocker / Next Action: none; commit and run PR preflight.
+
+## 2026-05-24 10:11:30 CST / producer_system_designer
+- 完成内容: 收到 PR #283 review comments 后，修正 router 触发条件文案与 task `related_prd` 的 `AWB-009`/`AWB-009A` 漂移。
+- 遗留事项: 修复后重跑 focused verification、push，并显式 resolve 对应 review thread。
+- Action: 将 `repo-owned-workflow-router` 的 “When to Use” 第二条改成只面向已 bootstrap 的 non-trivial task；将 `.pm` task file 的 `related_prd` 从 `PRD-ENGINEERING-AWB-009` 改回 `PRD-ENGINEERING-AWB-009A`。
+- Validation Command: `./scripts/pm/workflow-behavior-eval.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check`
+- Expected Result: review comment 对应的两处真值收敛；workflow eval、PM lint、doc governance 与 diff check 均继续通过。
+- Actual Result: `repo-owned-workflow-router` 的 “When to Use” 第二条已改为仅面向已 bootstrap 的 non-trivial task；task yaml 的 `related_prd` 已改为 `PRD-ENGINEERING-AWB-009A`；`./scripts/pm/workflow-behavior-eval.sh` passed；`./scripts/doc-governance-check.sh` passed；`git diff --check` passed；`./scripts/pm/lint.sh` failed only on unrelated upstream done task `task_ad5cbac95aa54e26a9fa7d7558380750` missing canonical claim verification fields already present on `origin/main`.
+- Blocker / Next Action: 外部 blocker 为 upstream `.pm` drift，不在本次 review fix scope；继续按最小改动提交、push，并在远端更新后显式 resolve 两个 review thread。

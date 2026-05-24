@@ -15,10 +15,10 @@ doc_refs: []
 related_prd:
   - PRD-ENGINEERING-021
   - PRD-ENGINEERING-031
-  - PRD-ENGINEERING-AWB-009
+  - PRD-ENGINEERING-AWB-009A
 acceptance: []
 handoff_to: []
-updated_at: 2026-05-24T09:51:35+08:00
+updated_at: 2026-05-24T23:21:26+08:00
 last_started_at: 2026-05-23T23:25:23+08:00
 last_claim_type: task_complete
 last_verify_command: "./scripts/pm/workflow-behavior-eval.sh && ./scripts/doc-governance-check.sh && git diff --check"
