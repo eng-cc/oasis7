@@ -1,0 +1,32 @@
+task_uid: task_aedd1a89aef141f1b366c7a09398a6a7
+title: "default shared cargo dev cache for task worktrees"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-scripts-shared-cargo-dev-cache-default
+execution_log_path: .pm/tasks/task_aedd1a89aef141f1b366c7a09398a6a7.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/scripts/prd.md
+  - doc/scripts/project.md
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - testing-manual.md
+  - scripts/cargo-dev.sh
+doc_refs: []
+related_prd:
+  - PRD-SCRIPTS-009
+  - PRD-ENGINEERING-021
+acceptance:
+  - "development cargo commands in task workflow docs default to cargo-dev shared target where safe"
+  - "cleanup reporting exposes per-worktree Rust target and viewer node_modules footprint without deleting data"
+  - "deterministic wasm and release cargo paths remain canonical raw cargo commands"
+handoff_to: []
+updated_at: 2026-05-24T09:57:34+08:00
+last_started_at: 2026-05-23T23:49:32+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/worktree-gc-report.sh scripts/worktree-gc-report.test.sh scripts/cargo-dev.sh && ./scripts/worktree-gc-report.test.sh && ./scripts/worktree-gc-report.sh --json --footprint >/tmp/oasis7-worktree-footprint.json && ./scripts/cargo-dev.sh --print-target-dir && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && git diff --check"
+last_verified_at: 2026-05-24T09:57:33+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-24T09:57:34+08:00
