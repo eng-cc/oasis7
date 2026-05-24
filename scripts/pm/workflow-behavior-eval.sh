@@ -11,7 +11,8 @@ usage() {
 Usage: ./scripts/pm/workflow-behavior-eval.sh [--json]
 
 Run the repo-owned workflow behavior eval for the default oasis7 task chain:
-  new-task-worktree -> workflow-report -> producer orchestrate / role subagent dispatch
+  default-workflow-bootstrap -> new-task-worktree -> workflow-report
+  -> repo-owned-workflow-router -> producer orchestrate / role subagent dispatch
   -> task-closeout -> prepare-task-pr -> review-thread-closeout
 
 This eval reuses isolated fixture tests and PM smokes so the main chain stays
@@ -58,8 +59,21 @@ root = Path(sys.argv[1])
 
 checks = [
     (
+        root / ".agents/skills/default-workflow-bootstrap/SKILL.md",
+        [
+            "## Task Classification",
+            "## Isolation Decision",
+            "## Task Truth",
+            "## Routed Next Phase",
+            "./scripts/new-task-worktree.sh",
+            "./.agents/skills/repo-owned-workflow-router/SKILL.md",
+        ],
+    ),
+    (
         root / "AGENTS.md",
         [
+            "default-workflow-bootstrap",
+            "判断 trivial/non-trivial、是否已具备隔离 task worktree / `.pm` task 真值",
             "`producer_system_designer` orchestrator + 角色 subagents",
             "formal sink",
             "liveops_community` 必须参与至少一个 slice",
@@ -139,6 +153,14 @@ required_tier = json.loads(sys.argv[3])
 
 segments = [
     {
+        "id": "default_workflow_bootstrap_surface",
+        "command": "python contract check over default bootstrap / AGENTS surfaces",
+        "status": subagent_contract["status"],
+        "evidence": {
+            "surface_count": len(subagent_contract["surfaces"]),
+        },
+    },
+    {
         "id": "task_worktree",
         "command": "./scripts/pm/new-task-worktree-bootstrap-smoke.sh --json",
         "status": "passed",
@@ -192,9 +214,11 @@ segments = [
 ]
 
 payload = {
-    "workflow_path": "new-task-worktree -> workflow-report -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
-    "fixture_scope": "repo-owned isolated worktree bootstrap smoke, PM runtime smoke, contract-surface checks, and fake-gh PR helper tests",
+    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
+    "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, PM runtime smoke, and fake-gh PR helper tests",
     "expected_agent_behavior": [
+        "new non-trivial work first routes through a repo-owned bootstrap surface rather than an external bootstrap",
+        "bootstrap distinguishes trivial vs non-trivial work and ensures isolated task truth exists before routing",
         "task worktree bootstrap stays source-clean and starts the target task",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
         "high-risk local diffs can request repo-owned review packets without replacing GitHub PR review",
@@ -204,6 +228,7 @@ payload = {
     ],
     "verification_surface": [segment["id"] for segment in segments],
     "failure_signature": [
+        "default bootstrap surface disappears or no longer points new non-trivial work into repo-owned task truth",
         "task-closeout allows done closeout without verify-command",
         "subagent contract markers disappear from AGENTS or handoff/router surfaces",
         "repo-owned review-request surface disappears or stops separating local review from GitHub review",

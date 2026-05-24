@@ -1,0 +1,28 @@
+task_uid: task_aafdb461ebbc4d9bbe882c58e8553e67
+title: "repo-owned default workflow bootstrap"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-default-workflow-bootstrap
+execution_log_path: .pm/tasks/task_aafdb461ebbc4d9bbe882c58e8553e67.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-031
+  - PRD-ENGINEERING-AWB-009
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-24T09:51:35+08:00
+last_started_at: 2026-05-23T23:25:23+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-behavior-eval.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-05-23T23:49:33+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-24T09:51:35+08:00

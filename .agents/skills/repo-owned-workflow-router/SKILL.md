@@ -1,6 +1,6 @@
 ---
 name: repo-owned-workflow-router
-description: Use at the start of any non-trivial task, or whenever you need to decide which repo-owned workflow skill applies next. Routes the task through bounded brainstorming, behavior-first TDD, execution, verification, and closeout without replacing oasis7 root truth.
+description: Use after default workflow bootstrap has established task truth, or whenever you need to decide which repo-owned workflow skill applies next. Routes the task through bounded brainstorming, behavior-first TDD, execution, verification, and closeout without replacing oasis7 root truth.
 ---
 
 # Repo-Owned Workflow Router
@@ -11,6 +11,7 @@ Use this skill to decide which repo-owned workflow surface should drive the next
 
 Use this skill when:
 
+- `default-workflow-bootstrap` has already classified the work as non-trivial and task truth now exists
 - a new non-trivial task is starting
 - you are unsure which local workflow skill should apply next
 - the task needs to move across multiple phases, such as ideation -> implementation -> verification -> closeout

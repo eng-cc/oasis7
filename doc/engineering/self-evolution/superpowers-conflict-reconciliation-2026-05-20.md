@@ -79,7 +79,7 @@
 
 已吸收的部分：
 
-- `using-superpowers` 中的 process-skill routing order 已翻译成 `.agents/skills/repo-owned-workflow-router`
+- `using-superpowers` 中的 process-skill routing order 已翻译成 `.agents/skills/default-workflow-bootstrap` + `.agents/skills/repo-owned-workflow-router`
 - `writing-skills` 的 authoring / trigger surface 已翻译成本地 authoring surface
 
 仍保持冲突的部分：
@@ -147,7 +147,7 @@
 | `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task、local review ritual、subagent 独立真值化 | bounded subagent-driven execution、任务拆分、上下文最小化、write-scope / return-contract contract | 仅当 repo-owned multi-agent eval 稳定且 review 边界变化时重开 |
 | `test-driven-development` | adopted（bounded） | universal TDD gate、对无稳定 harness 任务强套 RED | behavior-first / regression-first contract、`tdd-test-writer`、RED command or skip reason | 只允许在更细局部领域继续扩张；不得升成 universal gate |
 | `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | `File Structure / Affected Paths`、handoff 原子步骤、planning self-checklist | 只有在不竞争正式计划真值时才允许继续局部 salvage |
-| `using-superpowers` | rejected（overall bootstrap） | 外部 bootstrap 与当前 root workflow 真值冲突 | `repo-owned-workflow-router`、触发说明、skill 发现习惯 | bootstrap / packaging / 第二套入口语义继续 rejected |
+| `using-superpowers` | rejected（overall bootstrap） | 外部 bootstrap 与当前 root workflow 真值冲突 | `default-workflow-bootstrap`、`repo-owned-workflow-router`、触发说明、skill 发现习惯 | bootstrap / packaging / 第二套入口语义继续 rejected |
 | `dispatching-parallel-agents` | adopted（bounded） | 无 owner / 无 write-scope 的自由并行 | `producer_system_designer` orchestrator + role subagents、parallel task decomposition、disjoint write scope | 仅当 multi-agent eval 稳定后，才应继续评估 swarm / packaging 扩张 |
 | `executing-plans` | deferred（整体 skill） | 整包引入会与正式 project/task 执行链重复 | `.agents/skills/executing-project-tasks`、execution gap review、逐步验证、blocker handling | 剩余会话包装与默认收尾假设继续 deferred |
 | `writing-skills` | deferred（整体 skill） | 分发/作者规范容易先于治理真值 | `.agents/skills/README.md`、`writing-repo-owned-skills`、template、checklist | 剩余分发部署与上游 gate 部分继续 deferred |
