@@ -117,6 +117,15 @@ MVP 最小 smoke：
 5. 对同一邮箱再次完成一次登录。
 6. 两次若返回同一个 `hosted_account_id` 与 `player_id`，即可判定“邮箱登录 + 账户持久化”主链路成立。
 
+推荐自动化入口：
+1. 本地 required smoke：
+   - `bash ./scripts/hosted-account-staging-smoke.sh --mode local`
+2. staging live smoke：
+   - `bash ./scripts/hosted-account-staging-smoke.sh --mode staging --login-handle <test-email> --otp-fetch-command <cmd>`
+3. 说明：
+   - 同一脚本会统一验证 `login/start -> login/complete -> player-session/release -> launcher restart -> stable account continuity`，并输出 summary artifact。
+   - `--otp-fetch-command` 需要打印当前 challenge 对应的 6 位 OTP；脚本会把 `HOSTED_ACCOUNT_LOGIN_HANDLE`、`HOSTED_ACCOUNT_CHALLENGE_ID` 与 `HOSTED_ACCOUNT_LOGIN_ATTEMPT` 透传给该命令。
+
 当前已实测通过的 MVP 证据：
 1. 2026-05-20 已在 ECS 上验证 `https://oasis7.cn-huhehaote.vpc.tablestore.aliyuncs.com` 可达。
 2. 同一测试邮箱在 launcher 重启前后两次登录，返回同一个 `hosted_account_id=oasis-account-00000001` 与 `player_id=hosted-player-account-00000001`。
@@ -160,6 +169,10 @@ MVP 最小 smoke：
   2. 真实 OTP 能送达目标测试邮箱，而不是只看 server log。
   3. Runbook 中的 revoke / recovery / 误分享 first-response 至少演练一次。
   4. 对外口径仍保持 `preview`、`受控试用`、`不是正式玩家发布`。
+- 推荐自动化链路:
+  1. `./scripts/ci-tests.sh required`
+  2. `bash ./scripts/hosted-account-staging-smoke.sh --mode staging --login-handle <test-email> --otp-fetch-command <cmd>`
+  3. 再补一次 `revoke/recovery/误分享 first-response` operator drill，避免把 live smoke 误写成“已覆盖全部事故面”。
 
 ### production 环境
 - 目标:

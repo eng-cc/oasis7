@@ -629,6 +629,20 @@
     - `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G|hosted-account-env-tiering|5B\. 分环境执行清单|promotion gate" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/project.md .pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] hosted-account-staging-automation (PRD-P2P-029-G) [test_tier_required]: 补齐 hosted account 的 repo-owned 自动化链路，新增 `scripts/hosted-account-staging-smoke.sh`，让本地 required `preview_inline` smoke 与 staging `smtp + continuity` live smoke 复用同一入口，并把该入口接入 `scripts/ci-tests.sh required`。 Trace: .pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.yaml
+  - 产物文件:
+    - `scripts/hosted-account-staging-smoke.sh`
+    - `scripts/ci-tests.sh`
+    - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+    - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/hosted-account-staging-smoke.sh`
+    - `bash ./scripts/hosted-account-staging-smoke.sh --mode local`
+    - `rg -n "hosted account local smoke|OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE" scripts/ci-tests.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] bridge-binding-and-route-contract (PRD-P2P-TBRIDGE-001) [test_tier_required]: 为独立 `bridge-service` 落地最小 runtime slice，提供绑定 API、deposit route API、repo-owned 状态持久化、活跃 route 复用 / 过期与冲突错误语义，作为后续 watcher / `bridge_ledger` / LetAI OpenAPI adapter 的前置基线。 Trace: .pm/tasks/task_e56e4cfdb9534919a6f7bc7c6ba62ee9.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_newapi_bridge_service.rs`

@@ -1,0 +1,27 @@
+task_uid: task_f445927d10234bada7bb7058a1d2f5d0
+title: "complete hosted account staging automation chain"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-hosted-account-staging-automation
+execution_log_path: .pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/project.md
+doc_refs:
+  - doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md
+  - doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md
+related_prd:
+  - PRD-P2P-029-G
+acceptance:
+  - "Hosted account staging has a repo-owned repeatable automation entrypoint beyond ignored live smoke."
+  - "Runbook and project docs point to the same staging automation commands and evidence boundary."
+handoff_to: []
+updated_at: 2026-05-24T10:16:12+08:00
+last_started_at: 2026-05-24T09:50:00+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && env OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=false OASIS7_CI_RUN_CONSENSUS_TESTS=false OASIS7_CI_RUN_DISTFS_TESTS=false OASIS7_CI_RUN_OASIS7_NODE_TESTS=false OASIS7_CI_RUN_OASIS7_NET_TESTS=false OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=false OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=false OASIS7_CI_RUN_VIEWER_WASM_CHECK=false OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=false bash ./scripts/ci-tests.sh required && git diff --check"
+last_verified_at: 2026-05-24T10:16:11+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-24T10:16:12+08:00

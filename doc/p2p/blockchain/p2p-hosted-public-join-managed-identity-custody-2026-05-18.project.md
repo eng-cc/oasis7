@@ -90,6 +90,36 @@
     - `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G|hosted-account-env-tiering|5B\. 分环境执行清单|promotion gate" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/project.md .pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] hosted-account-staging-automation (PRD-P2P-029-G) [test_tier_required]: 新增 repo-owned `scripts/hosted-account-staging-smoke.sh`，把 hosted account 的本地 required smoke 与 staging `smtp + store continuity` live smoke 收成同一条自动化入口，并把命令统一回写到 operator runbook 与模块 project。 Trace: .pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.yaml
+  - File Structure / Affected Paths:
+    - 正式回写:
+      - `scripts/hosted-account-staging-smoke.sh`
+      - `scripts/ci-tests.sh`
+      - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+      - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
+      - `doc/p2p/project.md`
+      - `.pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.execution.md`
+    - 只读依赖:
+      - `crates/oasis7/src/bin/oasis7_game_launcher/static_http.rs`
+      - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs`
+      - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_store_backend.rs`
+      - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
+  - 原子步骤:
+    1. 新增 hosted account smoke 脚本，自动完成 `login/start -> login/complete -> player-session/release -> launcher restart -> stable account continuity`。
+       - 验证命令: `bash ./scripts/hosted-account-staging-smoke.sh --mode local`
+       - 预期结果: 本地 `preview_inline + file backend` smoke 通过，并生成 summary artifact。
+    2. 将本地 smoke 接入 repo-owned required 自动化，同时保留 staging `smtp + otp-fetch-command` 入口。
+       - 验证命令: `bash -n scripts/hosted-account-staging-smoke.sh && rg -n "hosted account local smoke|OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE" scripts/ci-tests.sh`
+       - 预期结果: `./scripts/ci-tests.sh required` 拥有稳定的本地 hosted account e2e smoke，而 staging 继续复用同一脚本。
+    3. 回写 operator runbook 和 hosted account project，明确 staging 自动化链路与证据边界。
+       - 验证命令: `rg -n "hosted-account-staging-smoke.sh|staging 自动化链路|ci-tests.sh required" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/project.md`
+       - 预期结果: 文档能够直接回答“repo-owned 自动化链路怎么跑”。
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/hosted-account-staging-smoke.sh`
+    - `bash ./scripts/hosted-account-staging-smoke.sh --mode local`
+    - `rg -n "hosted account local smoke|OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE" scripts/ci-tests.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ### 后续切片
 - `runtime_engineer` / managed-custody-sign-api:
@@ -180,6 +210,7 @@
 - 结论-4: 当前登录投递已具备真实邮件链路：server 现支持 `preview_inline`、`server_log_only` 与 `smtp` 三种 challenge delivery mode，其中 `smtp` 通过 `OASIS7_HOSTED_LOGIN_SMTP_*` 环境变量加载配置，默认可对接 Aliyun DirectMail `smtpdm.aliyun.com:465`；同时 OTP start 路径已补 resend cooldown、短窗/长窗配额与 `retry_after_seconds` 反馈，避免前端只能盲目重试。
 - 结论-5: 当前 hosted account registry 已支持 Aliyun Tablestore 托管存储；服务端通过 `HostedAccountStoreBackend` 在 `file` 与 `tablestore` 之间切换，默认 `auto` 模式下会在检测到 `OASIS7_HOSTED_ACCOUNT_TABLESTORE_*` 或 `ALIYUN_OTS_*` 后自动启用 Tablestore。
 - 结论-5A: 2026-05-20 已在 ECS 上完成一次真实 VPC Tablestore smoke：`https://oasis7.cn-huhehaote.vpc.tablestore.aliyuncs.com` 可从部署机直连，`AUTO_CREATE=true` 时首次启动允许由 `OTSObjectNotExist` 进入自动建表；同一邮箱在 launcher 重启前后两次登录均返回同一个 `hosted_account_id` / `player_id`，证明 hosted identity MVP 的“邮箱登录 + 服务端持久化恢复”主链路已经跑通。
+- 结论-5B: 当前已补 repo-owned `scripts/hosted-account-staging-smoke.sh`。同一脚本在本地会默认跑 `preview_inline + file backend` 的 required smoke，并输出 summary artifact；切到 `--mode staging --delivery-mode smtp --otp-fetch-command <cmd>` 后，可直接验证 staging 环境里的真实 OTP 与跨重启 account continuity，不再需要临时拼散命令。
 - 结论-6: 托管身份仅面向 player plane；node / validator / governance signer 继续沿用独立 custody/governance 专题。
 - 结论-7: hosted account 服务从现在起必须按 `dev/staging/production` 分层执行；环境分层的最小真值不是“不同 URL”，而是 SMTP、account store、strong-auth/custody secret、风控阈值和对外 claims 的独立隔离。
 
@@ -204,5 +235,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: SMTP + Tablestore 组合链路的 live smoke 与 MVP runbook 已补齐；接下来优先补 recovery/freeze/revoke 的 hosted account 运维策略，再推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
+- 下一步: repo-owned hosted account smoke 已补齐；接下来优先补 staging 的 revoke/recovery operator drill 证据与自动化封装，再推进 `managed-custody-sign-api`，把高风险动作从 preview `approval_code + env signer` 迁移到正式托管签名后端。
 - 最近更新: 2026-05-23
