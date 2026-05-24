@@ -80,10 +80,29 @@ PY
   return 1
 }
 
+is_tcp_listener_open() {
+  local host=$1
+  local port=$2
+  wait_for_tcp_listener "$host" "$port" 1
+}
+
+require_tool() {
+  local tool=$1
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "error: required tool is missing: $tool" >&2
+    exit 1
+  }
+}
+
 json_field() {
   local path=$1
   local filter=$2
   jq -r "$filter" "$path"
+}
+
+urlencode() {
+  local value=$1
+  jq -rn --arg value "$value" '$value | @uri'
 }
 
 extract_otp_code() {
@@ -224,6 +243,10 @@ if [[ -z "$store_backend" ]]; then
   fi
 fi
 
+require_tool python3
+require_tool jq
+require_tool curl
+
 run_dir="$out_root/$run_id"
 mkdir -p "$run_dir"
 
@@ -277,6 +300,11 @@ trap cleanup EXIT INT TERM
 
 start_launcher() {
   local log_path=$1
+  is_tcp_listener_open "$viewer_host" "$viewer_port" && {
+    echo "error: launcher HTTP port is already in use before start: ${viewer_host}:${viewer_port}" >&2
+    return 1
+  }
+
   local -a env_cmd=(env)
   env_cmd+=("OASIS7_HOSTED_LOGIN_DELIVERY_MODE=$delivery_mode")
   env_cmd+=("OASIS7_VIEWER_LIVE_BIN=$viewer_live_bin")
@@ -297,11 +325,22 @@ start_launcher() {
     --chain-disable \
     --no-open-browser >"$log_path" 2>&1 &
   launcher_pid=$!
-  wait_for_tcp_listener "$viewer_host" "$viewer_port" "$startup_timeout_secs" || {
-    echo "error: timeout waiting for launcher HTTP listener on ${viewer_host}:${viewer_port}" >&2
-    tail -n 120 "$log_path" >&2 || true
-    return 1
-  }
+  local step
+  for step in $(seq 1 "$startup_timeout_secs"); do
+    if ! kill -0 "$launcher_pid" >/dev/null 2>&1; then
+      echo "error: launcher exited before opening ${viewer_host}:${viewer_port}" >&2
+      tail -n 120 "$log_path" >&2 || true
+      return 1
+    fi
+    if is_tcp_listener_open "$viewer_host" "$viewer_port"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "error: timeout waiting for launcher HTTP listener on ${viewer_host}:${viewer_port}" >&2
+  tail -n 120 "$log_path" >&2 || true
+  return 1
 }
 
 stop_launcher() {
@@ -393,7 +432,8 @@ run_login_round() {
 
   post_json \
     "/api/public/hosted-account/login/start" \
-    "{\"channel\":\"email\",\"handle\":\"$login_handle\"}" \
+    "$(jq -cn --arg channel "email" --arg handle "$login_handle" \
+      '{channel: $channel, handle: $handle}')" \
     "$start_path"
 
   local start_ok=""
@@ -411,7 +451,8 @@ run_login_round() {
   challenge_id=$(json_field "$start_path" '.challenge.challenge_id // empty')
   post_json \
     "/api/public/hosted-account/login/complete" \
-    "{\"challenge_id\":\"$challenge_id\",\"otp_code\":\"$otp_code\"}" \
+    "$(jq -cn --arg challenge_id "$challenge_id" --arg otp_code "$otp_code" \
+      '{challenge_id: $challenge_id, otp_code: $otp_code}')" \
     "$complete_path"
 
   local complete_ok=""
@@ -437,7 +478,7 @@ run_login_round() {
 
   post_query \
     "/api/public/player-session/release" \
-    "player_id=$player_id&release_token=$release_token" \
+    "player_id=$(urlencode "$player_id")&release_token=$(urlencode "$release_token")" \
     "$release_path"
   local release_ok=""
   release_ok=$(json_field "$release_path" '.ok')
