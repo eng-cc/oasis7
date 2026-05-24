@@ -34,23 +34,24 @@
 4. 先更新 `prd.md`，再拆 `project.md`
    1. 需求、行为、边界变化时必须先更新 `prd.md`
    2. `project.md` 必须写清 PRD-ID、任务、依赖、状态和测试层级；新增任务项默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，不再新增 `TASK-XXX-123` 这类顺序编号作为项目页默认写法，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）指向运行态 task；推荐模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`。项目页标识只用于人类规划与检索，`.pm` `task_uid` 仍是唯一真值
-   3. 非 trivial task 默认先经过 repo-owned workflow router 一次：优先用 `./.agents/skills/repo-owned-workflow-router/SKILL.md` 判断当前是否应进入 bounded brainstorming、behavior-first TDD、execution、verification 或 closeout，而不是把这些流程 skill 当成彼此孤立的入口
-   4. 非 trivial 的 `project.md` 规划必须增加 `File Structure / Affected Paths` 段，至少列出预计改动路径、只读依赖路径、验证入口和需要回写的正式文档路径，避免执行时再临时猜测影响面
-   5. 复杂任务或跨角色 handoff 必须把实现拆成原子步骤；每一步至少写清动作、验证命令、预期结果。优先复用 `./.agents/roles/templates/handoff-brief.md`、`./.agents/roles/templates/handoff-detailed.md`
-   6. 进入实施前先做轻量 planning 自检，至少确认三件事：没有残留 `TBD/TODO/placeholder/待补` 等占位词；每条需求或验收点都有对应任务项/验证方法；PRD-ID、task slug、关键路径和文档内命名保持一致。可直接复用 `./.agents/roles/templates/planning-self-checklist.md`
-   7. 若任务仍然偏模糊、范围过大，或本质上是产品 / 架构 / UI 取舍题，先做 bounded brainstorming：判断是否需要 scope 拆分、给出 2-3 个方案与推荐方向，并只在问题本身是视觉/结构问题时才启用 visual companion；所选方向必须回写到 `prd.md`、`project.md`、handoff 或 execution log，不能停留在聊天里
-   8. 若任务会改变可自动化验证的产品/运行时/交互行为，规划里还必须先明确 behavior contract、目标测试文件/测试面、窄 scope RED 命令或 skip 原因；纯文档、治理、无稳定 harness 的任务不强行套 TDD，但必须写清为何跳过
-   9. handoff 只用于协作，不替代 PRD / project 正式追踪
+   3. 非 trivial task 默认先经过 repo-owned `default-workflow-bootstrap`：优先用 `./.agents/skills/default-workflow-bootstrap/SKILL.md` 判断 trivial/non-trivial、是否已具备隔离 task worktree / `.pm` task 真值，以及下一步是否需要新开 worktree、绑定 owner role 与正式文档入口；只有在 bootstrap 确认 task truth 已就绪后，才进入后续 workflow surface
+   4. bootstrap 已确认 task truth 就绪后，非 trivial task 默认再经过 repo-owned workflow router 一次：优先用 `./.agents/skills/repo-owned-workflow-router/SKILL.md` 判断当前是否应进入 bounded brainstorming、behavior-first TDD、execution、verification 或 closeout，而不是把这些流程 skill 当成彼此孤立的入口
+   5. 非 trivial 的 `project.md` 规划必须增加 `File Structure / Affected Paths` 段，至少列出预计改动路径、只读依赖路径、验证入口和需要回写的正式文档路径，避免执行时再临时猜测影响面
+   6. 复杂任务或跨角色 handoff 必须把实现拆成原子步骤；每一步至少写清动作、验证命令、预期结果。优先复用 `./.agents/roles/templates/handoff-brief.md`、`./.agents/roles/templates/handoff-detailed.md`
+   7. 进入实施前先做轻量 planning 自检，至少确认三件事：没有残留 `TBD/TODO/placeholder/待补` 等占位词；每条需求或验收点都有对应任务项/验证方法；PRD-ID、task slug、关键路径和文档内命名保持一致。可直接复用 `./.agents/roles/templates/planning-self-checklist.md`
+   8. 若任务仍然偏模糊、范围过大，或本质上是产品 / 架构 / UI 取舍题，先做 bounded brainstorming：判断是否需要 scope 拆分、给出 2-3 个方案与推荐方向，并只在问题本身是视觉/结构问题时才启用 visual companion；所选方向必须回写到 `prd.md`、`project.md`、handoff 或 execution log，不能停留在聊天里
+   9. 若任务会改变可自动化验证的产品/运行时/交互行为，规划里还必须先明确 behavior contract、目标测试文件/测试面、窄 scope RED 命令或 skip 原因；纯文档、治理、无稳定 harness 的任务不强行套 TDD，但必须写清为何跳过
+   10. handoff 只用于协作，不替代 PRD / project 正式追踪
 
 5. 按任务闭环执行代码、文档、测试
    1. 所有代码和功能（含 UI）都必须可测试
    2. 测试统一分 `test_tier_required` / `test_tier_full`
    3. 套件矩阵统一参考 `testing-manual.md`
-   4. repo-owned 默认流程顺序是：`repo-owned-workflow-router -> bounded-brainstorming (if needed) -> tdd-test-writer / behavior-first RED phase (if needed) -> executing-project-tasks -> verification-before-completion -> finishing-a-development-branch`
+   4. repo-owned 默认流程顺序是：`default-workflow-bootstrap -> repo-owned-workflow-router -> bounded-brainstorming (if needed) -> tdd-test-writer / behavior-first RED phase (if needed) -> executing-project-tasks -> verification-before-completion -> finishing-a-development-branch`
    5. 跨角色、明显需要多切片协作，或虽然 non-trivial 但已经确认由多角色分别提供分析 / 实现 / 验证 / 口径回流更稳妥的任务，默认按 bounded subagent-driven development 推进：由 `producer_system_designer` 将分析、实现、验证、补充 review 切成角色 subagent 任务，再由主会话把结果集成回同一 owner / `.pm` task / worktree / PR 主链；单角色即可闭环的 non-trivial task 可不额外派生角色 subagent，但仍要遵守 router / verification 主链
    6. 若任务仍需定实现方向、需要方案对比，或要判断 visual companion 是否值得启用，先走 bounded brainstorming：优先复用 `.agents/skills/bounded-brainstorming/SKILL.md` 做 scope 拆分、2-3 方案对比与推荐，再把结论回写正式文档后进入实施
    7. 若任务会改变可自动化验证的行为，默认先走 bounded TDD / behavior-first 路径：先定义 behavior contract，优先通过 `.agents/skills/tdd-test-writer/SKILL.md` 或等价手工流程补失败测试/回归测试，再写生产实现；若不适用，必须在 `project.md`、handoff 或 execution log 里写清 skip 原因
-   8. 默认实施顺序是：router 判断当前阶段 -> 必要时先做 bounded brainstorming -> owner 做 execution gap review -> 判断是否需要 behavior-first RED phase -> 按需要派生角色 subagent -> subagent 按声明好的 write scope / return contract / formal sink 交付 patch、findings 或 evidence -> owner 在 canonical worktree 集成并运行 fresh verification -> 若当前 diff 属于 major feature、跨角色收敛前的高风险切片，或 commit 前 claim risk 明显偏高，优先通过 `.agents/skills/requesting-repo-owned-review/SKILL.md` 发起一次补充 repo-owned review，并把 findings / no-findings / residual risk 回写到 execution log 或 PR evidence -> 必要时再派生补充 review / QA / liveops 子任务 -> 将 subagent review card、summary、incident/messaging 结论回写到 execution log、signal、memory 或 PR evidence，而不是停留在孤立产物里 -> 回写 PRD / project / execution log / `.pm` -> 进入 closeout / PR 收口
+   8. 默认实施顺序是：bootstrap 判断 trivial/non-trivial、隔离状态与 task truth -> router 判断当前阶段 -> 必要时先做 bounded brainstorming -> owner 做 execution gap review -> 判断是否需要 behavior-first RED phase -> 按需要派生角色 subagent -> subagent 按声明好的 write scope / return contract / formal sink 交付 patch、findings 或 evidence -> owner 在 canonical worktree 集成并运行 fresh verification -> 若当前 diff 属于 major feature、跨角色收敛前的高风险切片，或 commit 前 claim risk 明显偏高，优先通过 `.agents/skills/requesting-repo-owned-review/SKILL.md` 发起一次补充 repo-owned review，并把 findings / no-findings / residual risk 回写到 execution log 或 PR evidence -> 必要时再派生补充 review / QA / liveops 子任务 -> 将 subagent review card、summary、incident/messaging 结论回写到 execution log、signal、memory 或 PR evidence，而不是停留在孤立产物里 -> 回写 PRD / project / execution log / `.pm` -> 进入 closeout / PR 收口
    9. 对已有 `project.md` / handoff / `.pm` task 的任务，进入实现前先做一次简短 execution gap review：确认影响路径、原子步骤、验证入口、PRD-ID / task slug / 关键命名已经对齐；若缺项明显，先回写正式文档再改代码
    10. 实施时优先按原子步骤推进；每完成一个有独立风险的步骤，就立即运行该步骤对应的验证命令或检查预期结果，不要把所有验证都堆到最后
    11. 原子步骤默认要同时记录四项证据：`Action`、`Validation Command`、`Expected Result`、`Actual Result`；若出现偏差，还要补 `Blocker / Next Action`，并回写到 handoff、`project.md` 或 `.pm/tasks/<TASK-UID>.execution.md` 中的正式 sink。
