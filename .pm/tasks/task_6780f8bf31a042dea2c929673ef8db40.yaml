@@ -14,9 +14,9 @@ acceptance: []
 handoff_to: []
 updated_at: 2026-05-23T23:38:46+08:00
 last_started_at: 2026-05-23T23:17:56+08:00
-last_claim_type: ready_for_pr
+last_claim_type: task_complete
 last_verify_command: "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=true OASIS7_CI_RUN_CONSENSUS_TESTS=false OASIS7_CI_RUN_DISTFS_TESTS=false OASIS7_CI_RUN_OASIS7_NODE_TESTS=false OASIS7_CI_RUN_OASIS7_NET_TESTS=false OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=false OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=false OASIS7_CI_RUN_VIEWER_WASM_CHECK=false OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=true ./scripts/ci-tests.sh required"
 last_verified_at: 2026-05-23T23:38:46+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
-last_closed_at: 2026-05-23T23:27:19+08:00
+last_closed_at: 2026-05-23T23:38:46+08:00
