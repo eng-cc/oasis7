@@ -626,6 +626,7 @@ fn query_runtime_bound_players_reads_snapshot_bindings() {
             runtime_snapshot: None,
             player_gameplay: None,
             chunk_runtime: Default::default(),
+            intel_ttl_ticks: 0,
             next_event_id: 0,
             next_action_id: 0,
             pending_actions: Vec::new(),

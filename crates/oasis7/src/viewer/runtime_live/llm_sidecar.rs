@@ -733,6 +733,7 @@ impl RuntimeLlmSidecar {
             runtime_snapshot: Some(runtime_snapshot),
             player_gameplay: None,
             chunk_runtime: ChunkRuntimeConfig::default(),
+            intel_ttl_ticks: 0,
             next_event_id,
             next_action_id,
             pending_actions: Vec::new(),

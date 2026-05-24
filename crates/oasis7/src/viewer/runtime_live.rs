@@ -932,6 +932,7 @@ impl ViewerRuntimeLiveServer {
             runtime_snapshot: Some(runtime_snapshot),
             player_gameplay: Some(player_gameplay),
             chunk_runtime: ChunkRuntimeConfig::default(),
+            intel_ttl_ticks: 0,
             next_event_id,
             next_action_id,
             pending_actions: Vec::new(),
