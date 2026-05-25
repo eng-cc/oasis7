@@ -109,3 +109,18 @@ flowchart TD
 - **v1.0.0 (2026-05-25)**
   - Created single source-of-truth workflow spec with phase diagram, role boundary, required/optional gates, and rollback paths.
   - Established policy: workflow changes must update this document first, then sync scripts/docs/skills.
+
+
+## 8. Semantic Migration Checklist
+This checklist records whether key legacy `AGENTS.md` workflow semantics were preserved here to avoid policy loss during deduplication.
+
+- [x] Single owner / single `.pm` task / single worktree / single PR chain.
+- [x] Dedicated worktree-by-default and explicit-reuse-only policy.
+- [x] Owner role selection and `.pm` task binding before implementation.
+- [x] Mandatory execution evidence fields and blocker recording.
+- [x] Current-round fresh verification before completion claim.
+- [x] Closeout command chain and `done` verification strictness.
+- [x] GitHub PR + required checks + review/approval as formal review boundary.
+- [x] PR review fix loop: fix -> re-verify -> resolve threads -> merge claim.
+
+If any item above changes, update this file first and then sync downstream docs/skills/scripts.
