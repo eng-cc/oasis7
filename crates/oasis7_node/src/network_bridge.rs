@@ -32,6 +32,7 @@ pub(crate) const REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX: &str =
     "replication network availability gap: ";
 pub(crate) const REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX: &str =
     "replication network route unavailable: ";
+const FETCH_COMMIT_GENERIC_ROUTE_ATTEMPTS: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FetchCommitSuccessCacheKey {
@@ -313,8 +314,62 @@ impl ReplicationNetworkEndpoint {
         if let Some(response) = self.cached_fetch_commit_success_response(request) {
             return Ok(GapSyncFetchCommitResponse { response });
         }
-        let response = self.request_json(REPLICATION_FETCH_COMMIT_PROTOCOL, request)?;
-        Ok(GapSyncFetchCommitResponse { response })
+        let mut last_err = None;
+        let mut response = match self.request_json(REPLICATION_FETCH_COMMIT_PROTOCOL, request) {
+            Ok(response) => response,
+            Err(err) => {
+                last_err = Some(err);
+                FetchCommitResponse {
+                    found: false,
+                    message: None,
+                }
+            }
+        };
+        if !response.found {
+            let mut peer_ids = self.network.connected_peer_ids();
+            peer_ids.sort();
+            peer_ids.dedup();
+            peer_ids.retain(|peer_id| !peer_id.trim().is_empty());
+            for peer_id in peer_ids {
+                let provider_route = [peer_id];
+                match self.request_json_with_providers::<FetchCommitRequest, FetchCommitResponse>(
+                    REPLICATION_FETCH_COMMIT_PROTOCOL,
+                    request,
+                    provider_route.as_slice(),
+                ) {
+                    Ok(candidate) => {
+                        if candidate.found {
+                            response = candidate;
+                            last_err = None;
+                            break;
+                        }
+                        response = candidate;
+                        last_err = None;
+                    }
+                    Err(err) => {
+                        last_err = Some(err);
+                    }
+                }
+            }
+        }
+        for _ in 1..FETCH_COMMIT_GENERIC_ROUTE_ATTEMPTS {
+            if response.found {
+                break;
+            }
+            match self.request_json(REPLICATION_FETCH_COMMIT_PROTOCOL, request) {
+                Ok(candidate) => {
+                    response = candidate;
+                    last_err = None;
+                }
+                Err(err) => {
+                    last_err = Some(err);
+                }
+            }
+        }
+        if response.found || last_err.is_none() {
+            return Ok(GapSyncFetchCommitResponse { response });
+        }
+        Err(last_err.expect("gap-sync fetch-commit last_err should exist"))
     }
 
     pub(crate) fn remember_validated_fetch_commit_success(

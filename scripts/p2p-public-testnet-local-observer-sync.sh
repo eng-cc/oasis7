@@ -175,6 +175,7 @@ sshpass_ssh() {
 
 sshpass_scp_from_remote() {
   require_command scp
+  require_command sshpass
   [[ -n "${SSHPASS:-}" ]] || die "SSHPASS is required for remote access"
 
   local remote_spec=$1

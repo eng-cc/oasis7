@@ -46,16 +46,10 @@
   - 已明确 `shared_devnet` 仍是 shared release-train，不等于 live public testnet；aggregate readiness 仍不能跳过 `shared_devnet_pass`。
 - 当前缺口:
   - `shared_devnet_pass` 仍未满足，因此 formal `public_testnet` 仍不能进入 `ready_for_live_candidate`。
-  - 2026-05-22 13:25 CST 已实际清掉本机 observer 的 manifest/validator drift：当前 local status 已加载 `network_tier.tier=public_testnet` 与 `bootstrap_peer_count=2`。
-  - 2026-05-22 22:26 CST latest recheck：repo-owned `seed-from-remote` 已可把 healthy storage 的 current `execution-world`、`execution-records`、`storage` 与 bridge state 拉回本机，local replay 摘要也已前移到 `retained_height_count=14600 / latest_checkpoint_height=14592`；但 observer 仍会从 `context=1` 触发 stale-height restore，并在 `height 1` 报 `execution driver restore snapshot ref ... BlobNotFound`。
-  - 2026-05-22 23:00 CST latest recheck：`seed-from-remote` 已继续补齐 remote `output/node-distfs/<node>`，本机 `node_pos_state.json` 现已恢复到 `committed_height=14680 / last_execution_height=14680`，`replication_root` 也从先前的 `8K` 涨到 `36.7MB`，`/v1/chain/status` 当前 `last_error=null`，说明“height 1 BlobNotFound 卡死”已经被清掉。
-  - 但同窗 healthy storage `39.104.205.67` 已到 `committed_height=14702`，本机在额外 25 秒窗口后仍停在 `14680` 且 `known_peer_heads=0` / `last_status=pending`；因此剩余 blocker 已从“启动即死循环”前移成“seed 后仍未重新追平 live head”。
-  - mirrored candidate bundle `/opt/oasis7/p2p-testnet-local/config/public-testnet-live-candidate-bundle-2026-05-22.json` 仍声明 `runtime_build.sha256=d1046485ae71a794cf0f5fb78561bd6068363ca53aee3ccac384d831829c07e8`，说明 live candidate bundle 与 current runtime 真值本身也在漂移；仓库现已补启动期 hash guard，因此这类漂移后续会被直接拦在 startup，而不是继续伪装成“节点能起但 replay 过程中才出错”。
-  - 2026-05-22 16:43 CST extra live reset：即使把本机 `STORAGE_ROOT` 迁出到 `/opt/oasis7/p2p-testnet-local/backups/storage-reset-20260522-164319` 后重启，local 仍会立刻回到同一条 `height 15` mismatch；因此“本机旧 CAS/blob 没清掉”不是单独根因。
-  - 2026-05-22 16:55 CST single-peer isolation：即使把本机上游收窄到当前健康 storage `39.104.205.67`，再做 `reset-state` 后仍原样复现 `height 15` mismatch；因此“只是被坏 sequencer 污染”也不能解释本机分叉。
-  - 2026-05-22 16:57 CST sequencer reset：`39.104.204.172` 在受控清空 execution/storage 状态后只短暂恢复到 `committed_height=3`，随后又立刻掉回 `last_applied=3 incoming=13795 predecessor=13794`；这说明坏 sequencer 也不能靠简单 replay-from-genesis 自愈。
-  - 结合上述 `height 1` `BlobNotFound`，当前更准确的 blocker 已经是“本机恢复入口与 healthy peer retention window 不兼容”：仅镜像 current retained store 仍不足以让 observer 从现有启动路径直接复位到 live committed context。
-  - ECS sequencer 的 predecessor-gap 历史错误虽然不是本机当前唯一故障签名，但现在已经有额外证据说明：local 与 sequencer 两端都无法仅靠“清空后重放”恢复到 healthy storage 的现网真值，因此即使 public endpoint 仍可访问，也不能把 `runtime_bootstrap` 或相关 public lane 继续记为健康 `pass`。
+  - 2026-05-23 已把 shared-devnet triad 的历史坏链做受控冷重建，详见 `doc/testing/evidence/shared-network-shared-devnet-triad-reset-recovery-2026-05-23.md`；当前三节点已在 fresh chain 上恢复推进，最近样本窗口为本机 `24 -> 26`、ECS sequencer `24 -> 27`、ECS storage `24 -> 26`，且 `last_error` 均为 `null`。
+  - 因此“observer 启动恢复起点 vs healthy peer retention window”“sequencer predecessor-gap replay”这一组 live runtime blocker 已不再是当前 formal `public_testnet` 的第一阻断。
+  - 但这次恢复针对的是 shared-devnet triad 运行态，不等于 formal `shared_devnet_pass` 自动满足；当前 repo 仍缺 shared-network overall gate 的正式 `pass` 证据。
+  - mirrored candidate bundle/runtime drift guard、public endpoint/faucet/claims evidence 仍然有价值，但在 `shared_devnet_pass` 未正式转绿前，只能证明“具备公开测试入口与边界控制”，不能把 formal `public_testnet` 提升到 `ready_for_live_candidate`。
   - `mainnet` 仍停留在 `MAINNET-1~4` readiness planning / partial execution 前阶段，仓库当前只有 formal manifest + gate skeleton。
 
 ## 依赖
@@ -141,5 +135,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 当前除 `shared_devnet_pass` 之外，还必须优先修复“observer 启动恢复起点 vs healthy peer retention window”这条历史恢复边界，并继续处理 `39.104.204.172` 的 predecessor-gap；在本机能从 current retained checkpoint/head 稳定复位到 live committed context，且 sequencer repair 完成前，`public_testnet` 即使已有 public endpoint/faucet/claims evidence，也仍不得提升为 `ready_for_live_candidate`。
-- 最近更新: 2026-05-22
+- 下一步: 当前第一阻断已经收敛回 formal `shared_devnet_pass` 本身。shared-devnet triad 运行态已在 2026-05-23 冷重建后恢复健康，`rollback_target_ready` 与 `multi_entry_closure` 也已在当前 live-reset candidate 上转绿；但仍需要按 shared-network gate 正式补齐 `shared_access`、`mixed_topology_baseline`、`governance_live_drill`、`short_window_longrun` 的 `pass` evidence。在该前置条件满足前，`public_testnet` 即使已有 public endpoint/faucet/claims evidence，也仍不得提升为 `ready_for_live_candidate`。
+- 最近更新: 2026-05-23

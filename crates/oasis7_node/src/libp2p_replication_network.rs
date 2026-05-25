@@ -502,6 +502,17 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
         )
     }
 
+    fn connected_peer_ids(&self) -> Vec<String> {
+        let mut peers = self
+            .connected_peers()
+            .into_iter()
+            .map(|peer_id| peer_id.to_string())
+            .collect::<Vec<_>>();
+        peers.sort();
+        peers.dedup();
+        peers
+    }
+
     fn request_with_providers(
         &self,
         protocol: &str,

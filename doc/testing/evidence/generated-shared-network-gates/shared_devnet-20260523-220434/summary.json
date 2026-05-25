@@ -1,0 +1,92 @@
+{
+  "schema_version": "oasis7.shared_network_track_gate.v1",
+  "track": "shared_devnet",
+  "generated_at": "2026-05-23T14:04:35Z",
+  "candidate_bundle_path": "doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json",
+  "candidate_bundle_resolved_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json",
+  "candidate_id": "shared-devnet-live-reset-20260523-01",
+  "candidate_track": "shared_devnet",
+  "candidate_git_commit": "d59e892ad1deb8cc612a56af67ce08e6c5d7ff97",
+  "candidate_validation": {
+    "candidate_id": "shared-devnet-live-reset-20260523-01",
+    "track": "shared_devnet",
+    "git_commit": "d59e892ad1deb8cc612a56af67ce08e6c5d7ff97",
+    "git_worktree_dirty": true,
+    "bundle_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json",
+    "validation": "ok"
+  },
+  "lanes_tsv_path": "doc/testing/evidence/shared-network-shared-devnet-live-reset-lanes-2026-05-23.tsv",
+  "lanes_tsv_resolved_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-live-reset-lanes-2026-05-23.tsv",
+  "required_lanes": [
+    "candidate_bundle_integrity",
+    "shared_access",
+    "multi_entry_closure",
+    "mixed_topology_baseline",
+    "governance_live_drill",
+    "short_window_longrun",
+    "rollback_target_ready"
+  ],
+  "missing_required_lanes": [],
+  "lane_count": 7,
+  "lanes": [
+    {
+      "lane_id": "candidate_bundle_integrity",
+      "owner": "qa_engineer",
+      "status": "pass",
+      "evidence_path": "doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json",
+      "resolved_evidence_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json",
+      "note": "current live-reset candidate bundle validates for the 2026-05-23 triad"
+    },
+    {
+      "lane_id": "shared_access",
+      "owner": "qa_engineer",
+      "status": "pass",
+      "evidence_path": "doc/testing/evidence/shared-network-shared-devnet-shared-access-2026-05-23.md",
+      "resolved_evidence_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-shared-access-2026-05-23.md",
+      "note": "cloud shared endpoint, operator handoff, and same-window independent access evidence are now pinned for the 2026-05-23 candidate window"
+    },
+    {
+      "lane_id": "multi_entry_closure",
+      "owner": "qa_engineer",
+      "status": "pass",
+      "evidence_path": "doc/testing/evidence/shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md",
+      "resolved_evidence_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md",
+      "note": "current candidate has same-window headed web plus no-ui plus pure-api closure evidence after the 2026-05-23 live reset"
+    },
+    {
+      "lane_id": "mixed_topology_baseline",
+      "owner": "qa_engineer",
+      "status": "partial",
+      "evidence_path": "doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md",
+      "resolved_evidence_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md",
+      "note": "only audited partial mixed-topology baseline exists; no current same-window uplift decision is pinned"
+    },
+    {
+      "lane_id": "governance_live_drill",
+      "owner": "runtime_engineer",
+      "status": "partial",
+      "evidence_path": "doc/testing/evidence/shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md",
+      "resolved_evidence_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md",
+      "note": "historical governance drill exists but no same-window post-reset governance recheck is pinned for this candidate"
+    },
+    {
+      "lane_id": "short_window_longrun",
+      "owner": "runtime_engineer",
+      "status": "partial",
+      "evidence_path": "doc/testing/evidence/shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md",
+      "resolved_evidence_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md",
+      "note": "fresh post-reset candidate has not yet re-run current S9 or S10 short-window evidence"
+    },
+    {
+      "lane_id": "rollback_target_ready",
+      "owner": "liveops_community",
+      "status": "pass",
+      "evidence_path": "doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md",
+      "resolved_evidence_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md",
+      "note": "bootstrap_restore_ready fallback is now fully pinned for the current live-reset candidate"
+    }
+  ],
+  "gate_result": "partial",
+  "promotion_recommendation": "hold_promotion",
+  "run_dir": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/generated-shared-network-gates/shared_devnet-20260523-220434"
+}

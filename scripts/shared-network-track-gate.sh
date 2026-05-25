@@ -119,9 +119,11 @@ import sys
 from datetime import datetime, timezone
 
 track = sys.argv[1]
-candidate_bundle_path = pathlib.Path(sys.argv[2]).resolve()
+candidate_bundle_arg = sys.argv[2]
+candidate_bundle_path = pathlib.Path(candidate_bundle_arg).resolve()
 candidate_validation_path = pathlib.Path(sys.argv[3]).resolve()
-lanes_tsv_path = pathlib.Path(sys.argv[4]).resolve()
+lanes_tsv_arg = sys.argv[4]
+lanes_tsv_path = pathlib.Path(lanes_tsv_arg).resolve()
 summary_json_path = pathlib.Path(sys.argv[5]).resolve()
 summary_md_path = pathlib.Path(sys.argv[6]).resolve()
 run_dir = pathlib.Path(sys.argv[7]).resolve()
@@ -221,12 +223,14 @@ summary = {
     "schema_version": "oasis7.shared_network_track_gate.v1",
     "track": track,
     "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "candidate_bundle_path": str(candidate_bundle_path),
+    "candidate_bundle_path": candidate_bundle_arg,
+    "candidate_bundle_resolved_path": str(candidate_bundle_path),
     "candidate_id": candidate_bundle.get("candidate_id"),
     "candidate_track": candidate_bundle.get("track"),
     "candidate_git_commit": candidate_bundle.get("git_commit"),
     "candidate_validation": candidate_validation,
-    "lanes_tsv_path": str(lanes_tsv_path),
+    "lanes_tsv_path": lanes_tsv_arg,
+    "lanes_tsv_resolved_path": str(lanes_tsv_path),
     "required_lanes": required_lanes[track],
     "missing_required_lanes": missing_required_lanes,
     "lane_count": len(lanes),
@@ -246,7 +250,7 @@ lines = [
     "",
     f"- Track: `{track}`",
     f"- Candidate ID: `{summary['candidate_id']}`",
-    f"- Candidate bundle: `{candidate_bundle_path}`",
+    f"- Candidate bundle: `{candidate_bundle_arg}`",
     f"- Gate result: `{gate_result}`",
     f"- Promotion recommendation: `{promotion_recommendation}`",
     "",

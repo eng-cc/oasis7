@@ -16,6 +16,21 @@ impl NodeExecutionHook for FailExecutionHook {
     }
 }
 
+struct PassthroughExecutionHook;
+
+impl NodeExecutionHook for PassthroughExecutionHook {
+    fn on_commit(
+        &mut self,
+        context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        Ok(NodeExecutionCommitResult {
+            execution_height: context.height,
+            execution_block_hash: format!("exec-block-{}", context.height),
+            execution_state_root: format!("exec-state-{}", context.height),
+        })
+    }
+}
+
 #[test]
 fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
     let dir_remote = temp_dir("successor-probe-execution-fail-remote");
@@ -35,7 +50,7 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
     let local_replication_config = signed_replication_config(dir_local.clone(), 151)
         .with_remote_writer_allowlist(vec![remote_public_key_hex])
         .expect("local remote writer allowlist");
-    let config = NodeConfig::new("node-b", world_id, NodeRole::Sequencer)
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Observer)
         .expect("config")
         .with_tick_interval(Duration::from_millis(10))
         .expect("tick")
@@ -185,7 +200,7 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
     let local_replication_config = signed_replication_config(dir_local.clone(), 153)
         .with_remote_writer_allowlist(vec![remote_public_key_hex])
         .expect("local remote writer allowlist");
-    let config = NodeConfig::new("node-b", world_id, NodeRole::Sequencer)
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Observer)
         .expect("config")
         .with_tick_interval(Duration::from_millis(10))
         .expect("tick")
@@ -309,6 +324,107 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
     assert!(
         matches!(retry_err, NodeError::Execution { ref reason } if reason.contains("forced execution failure at height 1")),
         "unexpected gap sync retry error: {retry_err:?}"
+    );
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
+fn out_of_order_replication_ingest_does_not_advance_contiguous_persisted_cursor() {
+    let dir_remote = temp_dir("out-of-order-repl-ingest-remote");
+    let dir_local = temp_dir("out-of-order-repl-ingest-local");
+    let world_id = "world-out-of-order-repl-ingest";
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let (_, remote_public_key_hex) = deterministic_keypair_hex(154);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 154)],
+    );
+    let local_replication_config = signed_replication_config(dir_local.clone(), 155)
+        .with_remote_writer_allowlist(vec![remote_public_key_hex])
+        .expect("local remote writer allowlist");
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(local_replication_config.clone());
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let endpoint = ReplicationNetworkEndpoint::new(&handle, world_id, true, &config.network_policy)
+        .expect("endpoint");
+    let mut remote_replication = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir_remote.clone(), 154),
+        "node-a",
+    )
+    .expect("remote replication runtime");
+
+    for height in [1_u64, 3_u64] {
+        let decision = PosDecision {
+            height,
+            slot: height - 1,
+            epoch: 0,
+            status: PosConsensusStatus::Committed,
+            block_hash: format!("block-{height}"),
+            action_root: empty_action_root(),
+            committed_actions: Vec::new(),
+            approved_stake: 100,
+            rejected_stake: 0,
+            required_stake: 67,
+            total_stake: 100,
+        };
+        let execution_block_hash = format!("exec-block-{height}");
+        let execution_state_root = format!("exec-state-{height}");
+        let message = remote_replication
+            .build_local_commit_message(
+                "node-a",
+                world_id,
+                1_000 + height as i64,
+                &decision,
+                Some(execution_block_hash.as_str()),
+                Some(execution_state_root.as_str()),
+            )
+            .expect("build local commit message")
+            .expect("commit payload");
+        network
+            .publish(
+                super::network_bridge::default_replication_topic(world_id).as_str(),
+                serde_json::to_vec(&message)
+                    .expect("serialize replication message")
+                    .as_slice(),
+            )
+            .expect("publish replication message");
+    }
+
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let mut replication =
+        super::replication::ReplicationRuntime::new(&local_replication_config, "node-b")
+            .expect("local replication runtime");
+    let mut hook = PassthroughExecutionHook;
+    engine
+        .ingest_network_replications(
+            &endpoint,
+            "node-b",
+            world_id,
+            Some(&mut replication),
+            Some(&mut hook),
+        )
+        .expect("ingest replication messages");
+
+    assert_eq!(engine.replication_persisted_height, 1);
+    assert_eq!(engine.committed_height, 1);
+    assert_eq!(
+        replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted commit height"),
+        1,
+        "out-of-order replication ingest must not advance the persisted cursor past the contiguous boundary",
     );
 
     let _ = fs::remove_dir_all(&dir_remote);

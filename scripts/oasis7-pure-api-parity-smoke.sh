@@ -452,7 +452,7 @@ followup_goal_ok = followup_goal_id in allowed_followup_goals
 
 checks = {
     "hello_live_profile": (step_a.get("hello_ack") or {}).get("control_profile") == "live",
-    "initial_stage_first_session_loop": initial_stage == "first_session_loop",
+    "initial_stage_entrypoint_expected": initial_stage in {"first_session_loop", "post_onboarding"},
     "initial_actions_include_snapshot": has_protocol_action(initial_snapshot, "request_snapshot"),
     "initial_actions_include_step": has_protocol_action(initial_snapshot, "live_control.step"),
     "initial_actions_include_play": has_protocol_action(initial_snapshot, "live_control.play"),

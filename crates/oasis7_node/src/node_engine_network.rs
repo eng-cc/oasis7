@@ -324,6 +324,11 @@ impl PosNodeEngine {
             rejected_stake: 0,
             status: PosConsensusStatus::Pending,
         };
+        // A higher proposal implies its predecessor chain must already exist remotely,
+        // so replication gap sync should backfill up to height-1 before this proposal commits.
+        self.network_committed_height = self
+            .network_committed_height
+            .max(proposal.height.saturating_sub(1));
         self.insert_attestation(
             &mut proposal,
             &message.proposer_id,

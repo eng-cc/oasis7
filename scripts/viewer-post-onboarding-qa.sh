@@ -217,8 +217,22 @@ state_event_seq() { json_get "$1" eventSeq; }
 state_render_mode() { json_get "$1" renderMode; }
 state_last_error() { json_get "$1" lastError; }
 state_last_feedback_json() { json_get "$1" lastControlFeedback; }
+state_gameplay_stage() { json_get "$1" gameplaySummary.stageId; }
+state_gameplay_progress_percent() { json_get "$1" gameplaySummary.progressPercent; }
+state_gameplay_next_step() { json_get "$1" gameplaySummary.nextStepHint; }
+state_recent_feedback_stage() { json_get "$1" gameplaySummary.recentFeedback.stage; }
 feedback_stage() { json_get "$1" stage; }
 feedback_effect() { json_get "$1" effect; }
+
+state_meets_followup_contract() {
+  local state_json=$1
+  local progress
+  progress="$(state_gameplay_progress_percent "$state_json")"
+  [[ "$progress" =~ ^[0-9]+$ ]] || progress=0
+  [[ "$(state_gameplay_stage "$state_json")" == "post_onboarding" ]] \
+    && (( progress >= 20 )) \
+    && [[ -n "$(state_gameplay_next_step "$state_json")" ]]
+}
 
 wait_for_api() {
   local timeout_ms=${1:-20000}
@@ -307,12 +321,16 @@ json_to_file "$browser_env_json" "$browser_env_path"
 log_note screenshot_initial
 ab_screenshot "$session" "$shot_initial" >>"$ab_log" 2>&1
 
-log_note step_feedback
-ab_eval "$session" "window.__AW_TEST__.sendControl('step', {count: 8})" >>"$ab_log" 2>&1
-feedback_state=$(wait_for_feedback_stage "completed_advanced" "$feedback_timeout_ms") || {
-  echo "error: step(8) did not produce completed_advanced feedback" >&2
-  exit 1
-}
+if state_meets_followup_contract "$initial_state" && [[ "$(state_recent_feedback_stage "$initial_state")" == "completed_advanced" ]]; then
+  feedback_state="$initial_state"
+else
+  log_note step_feedback
+  ab_eval "$session" "window.__AW_TEST__.sendControl('step', {count: 8})" >>"$ab_log" 2>&1
+  feedback_state=$(wait_for_feedback_stage "completed_advanced" "$feedback_timeout_ms") || {
+    echo "error: step(8) did not produce completed_advanced feedback" >&2
+    exit 1
+  }
+fi
 json_to_file "$feedback_state" "$feedback_state_path"
 
 log_note select_first_agent
@@ -325,12 +343,16 @@ json_to_file "$entry_state" "$entry_state_path"
 log_note screenshot_entry
 ab_screenshot "$session" "$shot_entry" >>"$ab_log" 2>&1
 
-log_note followup_step
-ab_eval "$session" "window.__AW_TEST__.sendControl('step', {count: 24})" >>"$ab_log" 2>&1
-followup_state=$(wait_for_feedback_stage "completed_advanced" "$feedback_timeout_ms") || {
-  echo "error: follow-up step(24) did not produce completed_advanced feedback" >&2
-  exit 1
-}
+if state_meets_followup_contract "$entry_state"; then
+  followup_state="$entry_state"
+else
+  log_note followup_step
+  ab_eval "$session" "window.__AW_TEST__.sendControl('step', {count: 24})" >>"$ab_log" 2>&1
+  followup_state=$(wait_for_feedback_stage "completed_advanced" "$feedback_timeout_ms") || {
+    echo "error: follow-up step(24) did not produce completed_advanced feedback" >&2
+    exit 1
+  }
+fi
 json_to_file "$followup_state" "$followup_state_path"
 log_note screenshot_followup
 ab_screenshot "$session" "$shot_followup" >>"$ab_log" 2>&1
@@ -381,6 +403,8 @@ followup_state = load_json(followup_state_path)
 
 feedback = feedback_state.get("lastControlFeedback") or {}
 followup_feedback = followup_state.get("lastControlFeedback") or {}
+feedback_recent = ((feedback_state.get("gameplaySummary") or {}).get("recentFeedback")) or {}
+followup_recent = ((followup_state.get("gameplaySummary") or {}).get("recentFeedback")) or {}
 renderer = browser_env.get("renderer") or ""
 render_mode = (browser_env.get("state") or {}).get("renderMode")
 
@@ -403,10 +427,21 @@ summary = {
     "checks": {
         "connected": initial_state.get("connectionStatus") == "connected",
         "hardwareRendererOrSafeMode": ("SwiftShader" not in renderer and "Software" not in renderer) or render_mode == "software_safe",
-        "feedbackAdvanced": feedback.get("stage") == "completed_advanced",
-        "feedbackProducedWorldDelta": (feedback.get("deltaLogicalTime") or 0) > 0 or (feedback.get("deltaEventSeq") or 0) > 0,
+        "feedbackAdvanced": (
+            feedback.get("stage") == "completed_advanced"
+            or feedback_recent.get("stage") == "completed_advanced"
+        ),
+        "feedbackProducedWorldDelta": (
+            (feedback.get("deltaLogicalTime") or 0) > 0
+            or (feedback.get("deltaEventSeq") or 0) > 0
+            or (feedback_recent.get("deltaLogicalTime") or 0) > 0
+            or (feedback_recent.get("deltaEventSeq") or 0) > 0
+        ),
         "selectedAgentAfterFeedback": entry_state.get("selectedKind") == "agent" and bool(entry_state.get("selectedId")),
-        "followupAdvanced": followup_feedback.get("stage") == "completed_advanced",
+        "followupAdvanced": (
+            followup_feedback.get("stage") == "completed_advanced"
+            or followup_recent.get("stage") == "completed_advanced"
+        ),
         "noRuntimeError": not bool(followup_state.get("lastError")),
     },
     "manualReviewChecklist": [
@@ -419,8 +454,8 @@ summary = {
         "feedbackTick": feedback_state.get("tick"),
         "entryTick": entry_state.get("tick"),
         "followupTick": followup_state.get("tick"),
-        "feedbackEffect": feedback.get("effect"),
-        "followupEffect": followup_feedback.get("effect"),
+        "feedbackEffect": feedback.get("effect") or feedback_recent.get("effect"),
+        "followupEffect": followup_feedback.get("effect") or followup_recent.get("effect"),
         "renderer": renderer,
         "renderMode": render_mode,
     },

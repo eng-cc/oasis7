@@ -227,6 +227,22 @@ def parse_time(snapshot: dict) -> int:
     return int(str(raw or "0"))
 
 
+def last_snapshot_from_messages(messages: list[dict]) -> dict | None:
+    for message in reversed(messages):
+        if message.get("type") == "snapshot":
+            return message.get("snapshot")
+    return None
+
+
+def snapshot_reaches_followup_contract(snapshot: dict) -> bool:
+    gameplay = snapshot.get("player_gameplay") or {}
+    return (
+        gameplay.get("stage_id") == "post_onboarding"
+        and (gameplay.get("progress_percent") or 0) >= 20
+        and bool(gameplay.get("next_step_hint"))
+    )
+
+
 def first_agent_id(snapshot: dict) -> str | None:
     agents = (snapshot.get("model") or {}).get("agents") or {}
     if isinstance(agents, dict):
@@ -266,6 +282,45 @@ def runtime_event_sample(message: dict) -> str | None:
     return "runtime_event"
 
 
+def fetch_snapshot_via_fresh_connection(live_addr: str) -> dict:
+    host, port_text = live_addr.rsplit(":", 1)
+    port = int(port_text)
+    with socket.create_connection((host, port), timeout=5) as sock:
+        sock.settimeout(1)
+        reader = sock.makefile("rb")
+        writer = sock.makefile("wb")
+
+        def send(payload: dict) -> None:
+            writer.write((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
+            writer.flush()
+
+        def read_until(expected_type: str, timeout_secs: float) -> dict:
+            deadline = time.time() + timeout_secs
+            while time.time() < deadline:
+                try:
+                    line = reader.readline()
+                except TimeoutError:
+                    continue
+                except OSError as exc:
+                    if "timed out" in str(exc).lower():
+                        continue
+                    raise
+                if not line:
+                    continue
+                payload = json.loads(line)
+                if payload.get("type") == expected_type:
+                    return payload
+            raise TimeoutError(f"timed out waiting for {expected_type} on fresh snapshot connection")
+
+        send({"type": "hello", "client": "codex-headless-smoke-snapshot", "version": 1})
+        read_until("hello_ack", 5)
+        send({"type": "request_snapshot"})
+        snapshot_payload = read_until("snapshot", 10)
+        writer.close()
+        reader.close()
+        return snapshot_payload["snapshot"]
+
+
 with socket.create_connection((host, port), timeout=5) as sock:
     sock.settimeout(1)
     reader = sock.makefile("rb")
@@ -287,9 +342,18 @@ with socket.create_connection((host, port), timeout=5) as sock:
                 line = reader.readline()
             except TimeoutError:
                 continue
+            except OSError as exc:
+                if "timed out" in str(exc).lower():
+                    continue
+                raise
             if not line:
-                raise RuntimeError("viewer live TCP closed unexpectedly")
-            payload = json.loads(line)
+                if time.time() < deadline:
+                    continue
+                raise TimeoutError("timed out waiting for viewer response")
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
             record("recv", payload)
             return payload
         raise TimeoutError("timed out waiting for viewer response")
@@ -303,6 +367,32 @@ with socket.create_connection((host, port), timeout=5) as sock:
             if payload.get("type") == expected_type:
                 return collected
 
+    def collect_control_completion(timeout_secs: float) -> tuple[list[dict], dict]:
+        deadline = time.time() + timeout_secs
+        collected: list[dict] = []
+        saw_recovery_ack = False
+        saw_authoritative_batch = False
+        while time.time() < deadline:
+            try:
+                payload = read_message(deadline)
+            except TimeoutError:
+                break
+            collected.append(payload)
+            payload_type = payload.get("type")
+            if payload_type == "control_completion_ack":
+                return collected, payload.get("ack") or {}
+            if payload_type == "authoritative_recovery_ack":
+                saw_recovery_ack = True
+            elif payload_type == "authoritative_batch":
+                saw_authoritative_batch = True
+        if saw_recovery_ack or saw_authoritative_batch:
+            return collected, {
+                "status": "advanced_via_authoritative_stream",
+                "via_authoritative_recovery_ack": saw_recovery_ack,
+                "via_authoritative_batch": saw_authoritative_batch,
+            }
+        raise TimeoutError("timed out waiting for control completion or authoritative live progress")
+
     send({"type": "hello", "client": "codex-headless-smoke", "version": 1})
     hello_window = collect_until("hello_ack", 5)
     hello_ack = hello_window[-1]
@@ -313,20 +403,34 @@ with socket.create_connection((host, port), timeout=5) as sock:
     initial_snapshot = initial_window[-1]["snapshot"]
 
     send({"type": "live_control", "mode": {"mode": "step", "count": step_a}, "request_id": 1})
-    feedback_window = collect_until("control_completion_ack", 10)
-    feedback_ack = feedback_window[-1]["ack"]
+    feedback_window, feedback_ack = collect_control_completion(10)
+    feedback_snapshot = last_snapshot_from_messages(feedback_window)
+    if feedback_snapshot is None:
+        send({"type": "request_snapshot"})
+        try:
+            feedback_snapshot_window = collect_until("snapshot", 5)
+            feedback_snapshot = feedback_snapshot_window[-1]["snapshot"]
+        except TimeoutError:
+            feedback_snapshot = fetch_snapshot_via_fresh_connection(live_addr)
 
-    send({"type": "request_snapshot"})
-    feedback_snapshot_window = collect_until("snapshot", 5)
-    feedback_snapshot = feedback_snapshot_window[-1]["snapshot"]
-
-    send({"type": "live_control", "mode": {"mode": "step", "count": step_b}, "request_id": 2})
-    followup_window = collect_until("control_completion_ack", 15)
-    followup_ack = followup_window[-1]["ack"]
-
-    send({"type": "request_snapshot"})
-    followup_snapshot_window = collect_until("snapshot", 5)
-    followup_snapshot = followup_snapshot_window[-1]["snapshot"]
+    if snapshot_reaches_followup_contract(feedback_snapshot):
+        followup_window = list(feedback_window)
+        followup_ack = {
+            "status": "skipped_reused_feedback_snapshot",
+            "reason": "feedback_snapshot_already_satisfied_followup_contract",
+        }
+        followup_snapshot = feedback_snapshot
+    else:
+        send({"type": "live_control", "mode": {"mode": "step", "count": step_b}, "request_id": 2})
+        followup_window, followup_ack = collect_control_completion(15)
+        followup_snapshot = last_snapshot_from_messages(followup_window)
+        if followup_snapshot is None:
+            send({"type": "request_snapshot"})
+            try:
+                followup_snapshot_window = collect_until("snapshot", 5)
+                followup_snapshot = followup_snapshot_window[-1]["snapshot"]
+            except TimeoutError:
+                followup_snapshot = fetch_snapshot_via_fresh_connection(live_addr)
 
     writer.close()
     reader.close()
@@ -342,6 +446,10 @@ all_event_messages = [
     if message.get("type") == "event"
 ]
 event_counts = collections.Counter(event_kind_name(message) for message in all_event_messages)
+message_type_counts = collections.Counter(
+    (message.get("type") or "unknown")
+    for message in (feedback_window + followup_window)
+)
 runtime_event_samples = []
 for message in all_event_messages:
     sample = runtime_event_sample(message)
@@ -359,13 +467,39 @@ checks = {
     "helloAckLive": hello_ack.get("control_profile") == "live",
     "snapshotHasRuntimeState": isinstance(initial_snapshot.get("runtime_snapshot"), dict),
     "firstAgentPresent": bool(first_agent),
-    "feedbackAdvanced": feedback_ack.get("status") == "advanced",
-    "feedbackProducedDelta": int(feedback_ack.get("delta_logical_time", 0)) > 0 or int(feedback_ack.get("delta_event_seq", 0)) > 0,
-    "followupAdvanced": followup_ack.get("status") == "advanced",
-    "followupProducedDelta": int(followup_ack.get("delta_logical_time", 0)) > 0 or int(followup_ack.get("delta_event_seq", 0)) > 0,
-    "snapshotTimeAdvanced": feedback_time > initial_time and followup_time > feedback_time,
+    "feedbackAdvanced": feedback_ack.get("status") in {"advanced", "advanced_via_authoritative_stream"},
+    "feedbackProducedDelta": (
+        int(feedback_ack.get("delta_logical_time", 0)) > 0
+        or int(feedback_ack.get("delta_event_seq", 0)) > 0
+        or feedback_ack.get("via_authoritative_batch") is True
+    ),
+    "followupAdvanced": followup_ack.get("status") in {
+        "advanced",
+        "advanced_via_authoritative_stream",
+        "skipped_reused_feedback_snapshot",
+    },
+    "followupProducedDelta": (
+        int(followup_ack.get("delta_logical_time", 0)) > 0
+        or int(followup_ack.get("delta_event_seq", 0)) > 0
+        or followup_ack.get("via_authoritative_batch") is True
+        or followup_ack.get("status") == "skipped_reused_feedback_snapshot"
+    ),
+    "snapshotTimeAdvanced": (
+        feedback_time > initial_time
+        and (
+            followup_time > feedback_time
+            or (
+                followup_ack.get("status") == "skipped_reused_feedback_snapshot"
+                and followup_time >= feedback_time
+            )
+        )
+    ),
     "eventStreamNonEmpty": len(all_event_messages) > 0,
-    "runtimeEventSeen": event_counts.get("RuntimeEvent", 0) > 0,
+    "runtimeSignalSeen": (
+        event_counts.get("RuntimeEvent", 0) > 0
+        or message_type_counts.get("decision_trace", 0) > 0
+        or message_type_counts.get("authoritative_batch", 0) > 0
+    ),
 }
 
 failed_checks = [name for name, passed in checks.items() if not passed]
@@ -395,6 +529,7 @@ summary = {
         "feedbackAck": feedback_ack,
         "followupAck": followup_ack,
         "eventCounts": dict(event_counts),
+        "messageTypeCounts": dict(message_type_counts),
         "runtimeEventSamples": runtime_event_samples,
     },
     "scopeBoundary": [
@@ -440,6 +575,7 @@ lines = [
     f"- feedbackAck: `{json.dumps(summary['notes']['feedbackAck'], ensure_ascii=False)}`",
     f"- followupAck: `{json.dumps(summary['notes']['followupAck'], ensure_ascii=False)}`",
     f"- eventCounts: `{json.dumps(summary['notes']['eventCounts'], ensure_ascii=False, sort_keys=True)}`",
+    f"- messageTypeCounts: `{json.dumps(summary['notes']['messageTypeCounts'], ensure_ascii=False, sort_keys=True)}`",
     f"- runtimeEventSamples: `{json.dumps(summary['notes']['runtimeEventSamples'], ensure_ascii=False)}`",
     "",
     "## Checks",

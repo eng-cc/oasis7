@@ -277,3 +277,22 @@ fn parse_options_rejects_network_tier_manifest_when_runtime_bundle_hash_mismatch
 
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn parse_options_rejects_network_tier_manifest_when_runtime_bundle_hash_is_malformed() {
+    let (dir, manifest_path) = write_test_network_tier_manifest("not-a-sha256");
+    let err = parse_options(
+        [
+            "--network-tier-manifest",
+            manifest_path.to_string_lossy().as_ref(),
+        ]
+        .into_iter(),
+    )
+    .expect_err("parse should fail on malformed runtime bundle hash");
+    assert!(
+        err.contains("invalid runtime_build.sha256"),
+        "unexpected malformed hash error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}

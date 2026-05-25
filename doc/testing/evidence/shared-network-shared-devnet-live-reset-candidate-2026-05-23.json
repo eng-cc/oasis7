@@ -1,0 +1,57 @@
+{
+  "schema_version": "oasis7.release_candidate_bundle.v1",
+  "candidate_id": "shared-devnet-live-reset-20260523-01",
+  "track": "shared_devnet",
+  "created_at": "2026-05-23T11:11:04Z",
+  "repo_root": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review",
+  "git_commit": "d59e892ad1deb8cc612a56af67ce08e6c5d7ff97",
+  "git_worktree_dirty": true,
+  "runtime_build": {
+    "ref": "/opt/oasis7/p2p-triad-local/releases/d104864026bb-triad-full-game-nodes-20260516-213138/bin/oasis7_chain_runtime",
+    "resolved_path": "/opt/oasis7/p2p-triad-local/releases/d104864026bb-triad-full-game-nodes-20260516-213138/bin/oasis7_chain_runtime",
+    "kind": "file",
+    "sha256": "e4d6c4f262a9238856efa62cdfd421cd6d3a29fce7c87fe832295c086b8e9a03",
+    "size_bytes": 96316800
+  },
+  "world_snapshot": {
+    "ref": ".tmp/shared-devnet-live-reset-20260523-01-world",
+    "resolved_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/.tmp/shared-devnet-live-reset-20260523-01-world",
+    "kind": "directory",
+    "sha256_tree": "ba46dfbb81bac583e88d47fa5b9c150a93b7beedf5948cf7b13cd75f96a3ca68",
+    "file_count": 18,
+    "total_bytes": 238175
+  },
+  "governance_manifest": {
+    "ref": "/home/scc/Documents/keys/oasis7-governance-batch-20260323-01/public_manifest.json",
+    "resolved_path": "/home/scc/Documents/keys/oasis7-governance-batch-20260323-01/public_manifest.json",
+    "kind": "file",
+    "sha256": "9af393319bae5d7b2ed1254cb15c2eb175d114e66a7b1eb9b7134e0f973891d0",
+    "size_bytes": 7482
+  },
+  "evidence_refs": [
+    {
+      "ref": "doc/testing/evidence/shared-network-shared-devnet-triad-reset-recovery-2026-05-23.md",
+      "resolved_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-triad-reset-recovery-2026-05-23.md",
+      "kind": "file",
+      "sha256": "95f14882464faed5f4165433ee038475f997de5cceb764f3e8e2b2bacc85430d",
+      "size_bytes": 3867
+    },
+    {
+      "ref": "doc/testing/evidence/shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md",
+      "resolved_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md",
+      "kind": "file",
+      "sha256": "500df83bb471084c30f2c54a600bc8258f2c0819010d042ae4d3a1e18ebf0b60",
+      "size_bytes": 2587
+    },
+    {
+      "ref": "doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md",
+      "resolved_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md",
+      "kind": "file",
+      "sha256": "7663110718fcd61e202c8da38d0a277ec8b286489eced37b32e722f4600865f6",
+      "size_bytes": 3378
+    }
+  ],
+  "notes": [
+    "fresh shared-devnet live triad candidate after 2026-05-23 cold reset recovery"
+  ]
+}

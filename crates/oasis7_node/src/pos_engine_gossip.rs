@@ -1,6 +1,26 @@
 use super::*;
 
+const CONSENSUS_REBROADCAST_INTERVAL_MS: i64 = 1_000;
+
 impl PosNodeEngine {
+    fn should_broadcast_height(
+        &self,
+        height: u64,
+        last_height: u64,
+        last_at_ms: Option<i64>,
+        now_ms: i64,
+    ) -> bool {
+        if height > last_height {
+            return true;
+        }
+        height == last_height
+            && last_at_ms
+                .map(|last_at_ms| {
+                    now_ms.saturating_sub(last_at_ms) >= CONSENSUS_REBROADCAST_INTERVAL_MS
+                })
+                .unwrap_or(true)
+    }
+
     fn expected_player_for_validator(&self, validator_id: &str) -> Result<&str, NodeError> {
         self.validator_players
             .get(validator_id)
@@ -86,7 +106,12 @@ impl PosNodeEngine {
         if proposal.proposer_id != node_id {
             return Ok(());
         }
-        if proposal.height <= self.last_broadcast_proposal_height {
+        if !self.should_broadcast_height(
+            proposal.height,
+            self.last_broadcast_proposal_height,
+            self.last_broadcast_proposal_at_ms,
+            now_ms,
+        ) {
             return Ok(());
         }
         let mut message = GossipProposalMessage {
@@ -110,6 +135,7 @@ impl PosNodeEngine {
         }
         endpoint.broadcast_proposal(&message)?;
         self.last_broadcast_proposal_height = proposal.height;
+        self.last_broadcast_proposal_at_ms = Some(now_ms);
         Ok(())
     }
 
@@ -129,7 +155,12 @@ impl PosNodeEngine {
         if proposal.proposer_id != node_id {
             return Ok(());
         }
-        if proposal.height <= self.last_broadcast_proposal_height {
+        if !self.should_broadcast_height(
+            proposal.height,
+            self.last_broadcast_proposal_height,
+            self.last_broadcast_proposal_at_ms,
+            now_ms,
+        ) {
             return Ok(());
         }
         let mut message = GossipProposalMessage {
@@ -153,6 +184,7 @@ impl PosNodeEngine {
         }
         endpoint.publish_proposal(&message)?;
         self.last_broadcast_proposal_height = proposal.height;
+        self.last_broadcast_proposal_at_ms = Some(now_ms);
         Ok(())
     }
 
@@ -169,7 +201,12 @@ impl PosNodeEngine {
         let Some(attestation) = proposal.attestations.get(node_id) else {
             return Ok(());
         };
-        if proposal.height <= self.last_broadcast_local_attestation_height {
+        if !self.should_broadcast_height(
+            proposal.height,
+            self.last_broadcast_local_attestation_height,
+            self.last_broadcast_local_attestation_at_ms,
+            now_ms,
+        ) {
             return Ok(());
         }
 
@@ -196,6 +233,7 @@ impl PosNodeEngine {
         }
         endpoint.broadcast_attestation(&message)?;
         self.last_broadcast_local_attestation_height = proposal.height;
+        self.last_broadcast_local_attestation_at_ms = Some(now_ms);
         Ok(())
     }
 
@@ -215,7 +253,12 @@ impl PosNodeEngine {
         let Some(attestation) = proposal.attestations.get(node_id) else {
             return Ok(());
         };
-        if proposal.height <= self.last_broadcast_local_attestation_height {
+        if !self.should_broadcast_height(
+            proposal.height,
+            self.last_broadcast_local_attestation_height,
+            self.last_broadcast_local_attestation_at_ms,
+            now_ms,
+        ) {
             return Ok(());
         }
 
@@ -242,6 +285,7 @@ impl PosNodeEngine {
         }
         endpoint.publish_attestation(&message)?;
         self.last_broadcast_local_attestation_height = proposal.height;
+        self.last_broadcast_local_attestation_at_ms = Some(now_ms);
         Ok(())
     }
 
@@ -256,7 +300,12 @@ impl PosNodeEngine {
         if !matches!(decision.status, PosConsensusStatus::Committed) {
             return Ok(());
         }
-        if decision.height <= self.last_broadcast_committed_height {
+        if !self.should_broadcast_height(
+            decision.height,
+            self.last_broadcast_committed_height,
+            self.last_broadcast_committed_at_ms,
+            now_ms,
+        ) {
             return Ok(());
         }
         let (execution_block_hash, execution_state_root) =
@@ -283,6 +332,7 @@ impl PosNodeEngine {
         }
         endpoint.broadcast_commit(&message)?;
         self.last_broadcast_committed_height = decision.height;
+        self.last_broadcast_committed_at_ms = Some(now_ms);
         Ok(())
     }
 
@@ -300,7 +350,12 @@ impl PosNodeEngine {
         if !matches!(decision.status, PosConsensusStatus::Committed) {
             return Ok(());
         }
-        if decision.height <= self.last_broadcast_committed_height {
+        if !self.should_broadcast_height(
+            decision.height,
+            self.last_broadcast_committed_height,
+            self.last_broadcast_committed_at_ms,
+            now_ms,
+        ) {
             return Ok(());
         }
         let (execution_block_hash, execution_state_root) =
@@ -327,6 +382,7 @@ impl PosNodeEngine {
         }
         endpoint.publish_commit(&message)?;
         self.last_broadcast_committed_height = decision.height;
+        self.last_broadcast_committed_at_ms = Some(now_ms);
         Ok(())
     }
 }

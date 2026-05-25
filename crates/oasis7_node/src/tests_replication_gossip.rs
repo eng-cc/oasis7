@@ -460,6 +460,82 @@ fn runtime_network_consensus_syncs_peer_heads_without_udp_gossip() {
 }
 
 #[test]
+fn runtime_network_consensus_rebroadcasts_pending_proposal_to_late_joiner() {
+    let validators = vec![
+        PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 60,
+        },
+        PosValidator {
+            validator_id: "node-b".to_string(),
+            stake: 40,
+        },
+    ];
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let mut pos_config = NodePosConfig::ethereum_like(validators.clone());
+    pos_config.slot_clock_genesis_unix_ms = Some(0);
+
+    let config_a = NodeConfig::new("node-a", "world-network-late-join", NodeRole::Sequencer)
+        .expect("config a")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a");
+    let config_b = NodeConfig::new("node-b", "world-network-late-join", NodeRole::Observer)
+        .expect("config b")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_allow_local_proposals(false);
+
+    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    runtime_a.start().expect("start a");
+    let proposer_stalled = wait_until(Instant::now() + Duration::from_secs(2), || {
+        let snapshot = runtime_a.snapshot();
+        snapshot.consensus.committed_height == 0
+            && snapshot
+                .consensus
+                .pending_proposal
+                .as_ref()
+                .map(|proposal| proposal.height == 1 && proposal.proposer_id == "node-a")
+                .unwrap_or(false)
+    });
+    assert!(
+        proposer_stalled,
+        "single-node proposer did not open pending proposal before late join: {:?}",
+        runtime_a.snapshot()
+    );
+
+    let mut runtime_b = NodeRuntime::new(config_b)
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    runtime_b.start().expect("start b");
+
+    let late_joiner_committed = wait_until(Instant::now() + Duration::from_secs(6), || {
+        runtime_b.snapshot().consensus.committed_height >= 1
+    });
+
+    let snapshot_a = runtime_a.snapshot();
+    let snapshot_b = runtime_b.snapshot();
+    assert!(
+        late_joiner_committed,
+        "late joiner did not learn rebroadcast proposal: a_committed={} a_pending={:?} a_last_error={:?} b_committed={} b_pending={:?} b_last_error={:?}",
+        snapshot_a.consensus.committed_height,
+        snapshot_a.consensus.pending_proposal,
+        snapshot_a.last_error,
+        snapshot_b.consensus.committed_height,
+        snapshot_b.consensus.pending_proposal,
+        snapshot_b.last_error
+    );
+
+    runtime_a.stop().expect("stop a");
+    runtime_b.stop().expect("stop b");
+}
+
+#[test]
 fn runtime_gossip_replication_syncs_distfs_commit_files() {
     let socket_a = UdpSocket::bind("127.0.0.1:0").expect("bind a");
     let socket_b = UdpSocket::bind("127.0.0.1:0").expect("bind b");

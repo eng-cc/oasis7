@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
+use std::io::{self, BufReader, Read};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -518,16 +519,21 @@ fn validate_current_runtime_hash_against_network_tier_bundle(
             bundle_path.display()
         ));
     }
+    if !is_sha256_hex(expected_sha256.as_str()) {
+        return Err(format!(
+            "network tier release_candidate_bundle_ref {} has invalid runtime_build.sha256: expected 64 lowercase hex characters",
+            bundle_path.display()
+        ));
+    }
 
     let current_exe = std::env::current_exe()
         .map_err(|err| format!("resolve current runtime executable path failed: {err}"))?;
-    let current_bytes = fs::read(current_exe.as_path()).map_err(|err| {
+    let actual_sha256 = sha256_file_hex(current_exe.as_path()).map_err(|err| {
         format!(
-            "read current runtime executable {} failed: {err}",
+            "hash current runtime executable {} failed: {err}",
             current_exe.display()
         )
     })?;
-    let actual_sha256 = sha256_hex(current_bytes.as_slice());
     if actual_sha256 != expected_sha256 {
         return Err(format!(
             "network tier runtime bundle hash mismatch: executable={} actual_sha256={} bundle_path={} expected_sha256={}",
@@ -551,10 +557,23 @@ fn resolve_network_tier_runtime_ref_path(manifest_path: &Path, raw_ref: &str) ->
         .unwrap_or(candidate)
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+fn is_sha256_hex(raw: &str) -> bool {
+    raw.len() == 64 && raw.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn sha256_file_hex(path: &Path) -> io::Result<String> {
+    let file = fs::File::open(path)?;
+    let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hex::encode(hasher.finalize()))
 }
 
 pub(super) fn p2p_auto_detection_from_options(

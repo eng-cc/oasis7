@@ -162,9 +162,21 @@ impl PosNodeEngine {
                         committed_height
                     ),
                 })?;
-        let restored_next_height = snapshot_next_height.max(committed_successor).max(1);
         let restored_network_committed_height =
             snapshot_network_committed_height.max(committed_height);
+        let restored_next_height = snapshot_next_height
+            .max(committed_successor)
+            .min(restored_network_committed_height.saturating_add(1))
+            .max(1);
+        let restored_last_broadcast_proposal_height = last_broadcast_proposal_height
+            .min(restored_next_height.saturating_sub(1))
+            .min(restored_network_committed_height);
+        let restored_last_broadcast_local_attestation_height =
+            last_broadcast_local_attestation_height
+                .min(restored_next_height.saturating_sub(1))
+                .min(restored_network_committed_height);
+        let restored_last_broadcast_committed_height =
+            last_broadcast_committed_height.min(committed_height);
         if last_execution_block_hash.is_some() != last_execution_state_root.is_some() {
             return Err(NodeError::Replication {
                 reason: format!(
@@ -234,9 +246,10 @@ impl PosNodeEngine {
                 .max(restored_last_observed_slot.saturating_mul(self.ticks_per_slot)),
         );
         self.missed_tick_count = self.missed_tick_count.max(snapshot_missed_tick_count);
-        self.last_broadcast_proposal_height = last_broadcast_proposal_height;
-        self.last_broadcast_local_attestation_height = last_broadcast_local_attestation_height;
-        self.last_broadcast_committed_height = last_broadcast_committed_height;
+        self.last_broadcast_proposal_height = restored_last_broadcast_proposal_height;
+        self.last_broadcast_local_attestation_height =
+            restored_last_broadcast_local_attestation_height;
+        self.last_broadcast_committed_height = restored_last_broadcast_committed_height;
         self.last_committed_block_hash = restored_committed_hash;
         self.last_execution_height = last_execution_height;
         self.last_execution_block_hash = last_execution_block_hash;

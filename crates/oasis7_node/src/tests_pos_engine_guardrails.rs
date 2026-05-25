@@ -275,6 +275,44 @@ fn pos_engine_apply_decision_rejects_height_overflow_without_state_mutation() {
 }
 
 #[test]
+fn pending_far_ahead_proposal_waits_for_gap_sync_before_local_attestation_or_commit() {
+    let validators = multi_validators();
+    let config = NodeConfig::new("node-a", "world-gap-guard", NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_validators(validators)
+        .expect("validators")
+        .with_auto_attest_all_validators(true);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = 3;
+    engine.next_height = 4;
+    engine.pending = Some(PendingProposal {
+        height: 9,
+        slot: 12,
+        epoch: 0,
+        opened_at_ms: 100,
+        proposer_id: "node-b".to_string(),
+        block_hash: "remote-gap-block".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        attestations: std::collections::BTreeMap::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        status: PosConsensusStatus::Pending,
+    });
+
+    let decision = engine
+        .advance_pending_attestations(200)
+        .expect("advance pending");
+
+    assert_eq!(decision.status, PosConsensusStatus::Pending);
+    assert_eq!(engine.committed_height, 3);
+    let pending = engine.pending.as_ref().expect("pending proposal retained");
+    assert_eq!(pending.height, 9);
+    assert!(!pending.attestations.contains_key("node-a"));
+    assert_eq!(pending.approved_stake, 100);
+}
+
+#[test]
 fn pos_engine_ingest_proposal_rejects_slot_overflow_without_partial_state() {
     let config =
         NodeConfig::new("node-a", "world-overflow-proposal", NodeRole::Observer).expect("config");
@@ -464,6 +502,43 @@ fn restore_state_snapshot_clamps_future_clock_state_when_fixed_genesis_is_config
     assert_eq!(engine.next_slot, 2);
     assert_eq!(engine.last_observed_slot, 2);
     assert_eq!(engine.last_observed_tick, 23);
+}
+
+#[test]
+fn restore_state_snapshot_clamps_stale_heights_and_broadcast_cursors() {
+    let config = NodeConfig::new("node-a", "world-restore-stale-heights", NodeRole::Observer)
+        .expect("config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let snapshot = super::pos_state_store::PosNodeStateSnapshot {
+        next_height: 13_541,
+        next_slot: 5,
+        last_observed_slot: 5,
+        missed_slot_count: 0,
+        last_observed_tick: 50,
+        missed_tick_count: 0,
+        committed_height: 365,
+        network_committed_height: 366,
+        last_broadcast_proposal_height: 13_541,
+        last_broadcast_local_attestation_height: 13_541,
+        last_broadcast_committed_height: 13_541,
+        last_committed_block_hash: Some("committed-365".to_string()),
+        last_execution_height: 365,
+        last_execution_block_hash: Some("exec-365".to_string()),
+        last_execution_state_root: Some("state-365".to_string()),
+    };
+
+    engine
+        .restore_state_snapshot(snapshot, None)
+        .expect("stale snapshot should reconcile");
+
+    assert_eq!(engine.committed_height, 365);
+    assert_eq!(engine.network_committed_height, 366);
+    assert_eq!(engine.next_height, 367);
+    assert_eq!(engine.last_broadcast_proposal_height, 366);
+    assert_eq!(engine.last_broadcast_local_attestation_height, 366);
+    assert_eq!(engine.last_broadcast_committed_height, 365);
+    assert!(engine.pending.is_none());
 }
 
 #[test]
