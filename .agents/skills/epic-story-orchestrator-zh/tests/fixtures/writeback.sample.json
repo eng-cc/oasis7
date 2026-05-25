@@ -1,0 +1,34 @@
+{
+  "story_slug": "heliopause-exodus",
+  "task_mode": "chapter-card",
+  "canon_scope": "chapter",
+  "gameplay_canon_binding": {
+    "gameplay_prd_refs": ["PRD-GAME-012", "PRD-GAME-014", "PRD-GAME-015"],
+    "player_leverage": "玩家完成一次低爆炸半径的区域工业胜利，并获得新的修复/扩产选择。",
+    "world_change_due_to_player": "本地冶炼节点从停机恢复为稳定产出，区域供应链出现可见改善。",
+    "control_feeling_guarantee": "accepted intent + causality + fallback",
+    "small_player_lane_stage": "local_operator",
+    "release_claim_boundary": "limited playable technical preview; stage upgrade not implied"
+  },
+  "writeback_targets": [
+    {
+      "path": "doc/game/lore/heliopause-exodus/chapter-cards/ch-003.md",
+      "mode": "overwrite"
+    },
+    {
+      "path": "doc/game/lore/heliopause-exodus/canon-log.md",
+      "mode": "append"
+    }
+  ],
+  "artifact_refs": {
+    "world_rules": ["WR-001", "WR-004"],
+    "characters": ["CHAR-LIN-001", "CHAR-QIAO-002"],
+    "timeline": ["TL-012"],
+    "plot_beats": ["PB-007"],
+    "gameplay_prds": ["PRD-GAME-012", "PRD-GAME-014", "PRD-GAME-015"]
+  },
+  "consistency": {
+    "status": "pass",
+    "issues": []
+  }
+}

@@ -31,6 +31,10 @@
 - 模板：`.agents/skills/templates/SKILL.template.md`
 - 自检清单：`.agents/skills/checklists/skill-authoring-checklist.md`
 
+## Domain-Specific Entry Points
+
+- 中文长篇背景叙事与世界观资产编排：`.agents/skills/epic-story-orchestrator-zh/SKILL.md`
+
 ## Workflow Execution Entry Points
 
 - 启动新的 non-trivial task、需要先判断 trivial/non-trivial、检查是否必须创建 task worktree / `.pm` task，并把后续阶段接回 repo-owned 主链时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
