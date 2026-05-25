@@ -246,7 +246,7 @@ if [[ -z "$SOURCE_WORKTREE" && "$CURRENT_HEAD" == "$SOURCE_HEAD" ]]; then
 fi
 [[ -n "$SOURCE_WORKTREE" ]] || die "source branch is not checked out in any worktree: $SOURCE_BRANCH"
 ensure_clean_worktree "$SOURCE_WORKTREE" "source"
-if ! WORKFLOW_LINT_OUTPUT="$(git -C "$SOURCE_WORKTREE" ./scripts/pm/workflow-lint.sh --allow-unbound 2>&1)"; then
+if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --allow-unbound 2>&1)"; then
   cat >&2 <<EOF
 error: workflow-lint preflight failed.
 $WORKFLOW_LINT_OUTPUT

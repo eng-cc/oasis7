@@ -98,6 +98,8 @@ if len(log_lines) < 2 or log_lines[1] != "pr edit temp/prepare-pr-copilot-test -
     raise SystemExit(f"expected second gh call to request @copilot review, got: {log_lines}")
 if "fetch --quiet origin main" not in git_log_lines:
     raise SystemExit(f"expected fetch attempt in git shim log, got: {git_log_lines}")
+if any("./scripts/pm/workflow-lint.sh" in line for line in git_log_lines):
+    raise SystemExit(f"workflow-lint should run directly in the source worktree, not through git: {git_log_lines}")
 if not any(
     line.endswith("push -u origin temp/prepare-pr-copilot-test")
     or line.endswith("push origin temp/prepare-pr-copilot-test")

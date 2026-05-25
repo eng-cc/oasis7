@@ -26,7 +26,7 @@
 ## 工程架构
 - third_party 目录代码只读，禁止改写。
 - Rust 原始 cargo 入口使用：`env -u RUSTC_WRAPPER cargo ...`。
-- 本地开发态优先：`./scripts/cargo-dev.sh ...`；deterministic wasm/release 链路仍走原始 cargo。
+- 本地开发态优先：`./scripts/cargo-dev.sh ...`；通过 `./scripts/new-task-worktree.sh` 创建的新 task worktree 默认把 ignored `target` 链接到同一 repo-family shared cargo target cache；deterministic wasm/release 链路仍走原始 cargo。
 
 ## Agent 专用：UI Web 闭环调试
 - Web 闭环默认链路与约束请参考 `testing-manual.md`（S6 及补充约定）。

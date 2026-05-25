@@ -1,0 +1,29 @@
+task_uid: task_a60d245402924d32826d7139fd1aad25
+title: "share cargo cache when opening task worktrees"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-shared-worktree-cache-bootstrap
+execution_log_path: .pm/tasks/task_a60d245402924d32826d7139fd1aad25.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - scripts/new-task-worktree.sh
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-023
+acceptance:
+  - "new task worktrees inherit a shared local cargo target cache path for development commands"
+  - "deterministic wasm and release flows keep the existing CARGO_TARGET_DIR-unset boundary"
+  - "workflow docs and tests reflect the shared cache bootstrap behavior"
+handoff_to: []
+updated_at: 2026-05-25T21:58:49+08:00
+last_started_at: 2026-05-25T21:53:32+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/new-task-worktree-bootstrap-smoke.sh --json"
+last_verified_at: 2026-05-25T21:58:48+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-25T21:58:49+08:00
