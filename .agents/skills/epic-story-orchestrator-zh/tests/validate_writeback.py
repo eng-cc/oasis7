@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 from pathlib import Path
+import re
 
 p = Path('.agents/skills/epic-story-orchestrator-zh/tests/fixtures/writeback.sample.json')
 data = json.loads(p.read_text(encoding='utf-8'))
@@ -46,6 +47,26 @@ if binding_missing:
 
 if not isinstance(binding['gameplay_prd_refs'], list) or not binding['gameplay_prd_refs']:
     raise SystemExit('gameplay_canon_binding.gameplay_prd_refs must be a non-empty list')
+
+story_slug = data['story_slug']
+if not isinstance(story_slug, str) or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', story_slug):
+    raise SystemExit(f'invalid story_slug: {story_slug}')
+
+canonical_root = f'doc/game/lore/{story_slug}/'
+append_only_paths = {f'{canonical_root}canon-log.md'}
+
+for i, target in enumerate(data['writeback_targets']):
+    path = target['path']
+    if not isinstance(path, str) or path.startswith('/') or '..' in Path(path).parts:
+        raise SystemExit(f'writeback_targets[{i}] invalid path: {path}')
+    if not path.startswith(canonical_root):
+        raise SystemExit(
+            f'writeback_targets[{i}] path must stay under {canonical_root}: {path}'
+        )
+    if target['mode'] == 'append' and path not in append_only_paths:
+        raise SystemExit(f'writeback_targets[{i}] append only allowed for canon-log.md: {path}')
+    if path in append_only_paths and target['mode'] != 'append':
+        raise SystemExit(f'writeback_targets[{i}] canon-log.md must use append mode: {path}')
 
 for ref in binding['gameplay_prd_refs']:
     if not isinstance(ref, str) or not ref.startswith('PRD-GAME-'):

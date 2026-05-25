@@ -5,6 +5,12 @@ allowed-tools:
   - Read
   - Write
   - Edit
+  - Bash(git diff --check)
+  - Bash(./scripts/doc-governance-check.sh)
+  - Bash(./scripts/pm/lint.sh)
+  - Bash(python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py)
+  - Bash(bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh)
+  - Bash(rg:*)
 license: MIT
 metadata:
   language: zh-CN
