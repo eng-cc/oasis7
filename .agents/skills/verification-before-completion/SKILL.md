@@ -3,6 +3,9 @@ name: verification-before-completion
 description: Use when about to claim a task is complete, tests passed, a branch is ready for PR, or a PR is ready to merge. Requires fresh verification, direct output inspection, and use of `./scripts/pm/claim-ready.sh` when the claim can be mapped to one verification command.
 ---
 
+> Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
+
+
 # Verification Before Completion
 
 ## When to Use

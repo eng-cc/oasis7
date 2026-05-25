@@ -1,3 +1,8 @@
+# Workflow Reference (Single Source)
+- 本手册仅定义测试分层、套件入口和操作细节。
+- 流程阶段、责任边界、必需/可选 gate、失败回退路径统一以 `doc/engineering/workflow/source-of-truth.md` 为准。
+- 如测试流程规则与 source-of-truth 冲突，以 source-of-truth 为准，并先更新 source-of-truth。
+
 # oasis7: 系统性应用测试手册（Human/AI 通用）
 
 ## 目标

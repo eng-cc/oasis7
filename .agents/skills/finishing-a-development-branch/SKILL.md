@@ -3,6 +3,9 @@ name: finishing-a-development-branch
 description: "Use when implementation is done and the work needs to be closed out, committed, prepared for PR, and eventually cleaned up. Follows the oasis7 default path: task closeout, commit, PR preflight/create, review handling, merge, and worktree cleanup."
 ---
 
+> Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
+
+
 # Finishing a Development Branch
 
 ## When to Use

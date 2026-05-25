@@ -3,6 +3,9 @@ name: default-workflow-bootstrap
 description: Use at the start of any new non-trivial task to classify trivial vs non-trivial work, ensure isolated task truth exists, and hand off to the correct repo-owned workflow surface.
 ---
 
+> Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
+
+
 # Default Workflow Bootstrap
 
 Use this skill as the repo-owned first-touch entrypoint for new non-trivial work.

@@ -3,6 +3,9 @@ name: repo-owned-workflow-router
 description: Use after default workflow bootstrap has established task truth, or whenever you need to decide which repo-owned workflow skill applies next. Routes the task through bounded brainstorming, behavior-first TDD, execution, verification, and closeout without replacing oasis7 root truth.
 ---
 
+> Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
+
+
 # Repo-Owned Workflow Router
 
 Use this skill to decide which repo-owned workflow surface should drive the next phase of work.
