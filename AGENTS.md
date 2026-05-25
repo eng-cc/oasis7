@@ -15,6 +15,14 @@
    - 语义迁移核对清单：`doc/engineering/workflow/source-of-truth.md#8-semantic-migration-checklist`
 4. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
 
+### Workflow Eval Contract Markers
+本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
+
+- `default-workflow-bootstrap`: 新 non-trivial 工作必须先经过 repo-owned bootstrap，判断 trivial/non-trivial、是否已具备隔离 task worktree / `.pm` task 真值，再进入后续 workflow surface。
+- 默认协作口径：`producer_system_designer` orchestrator + 角色 subagents；所有 subagent slice 必须声明 write scope、return contract、integration owner/order，并把 formal sink 回写到 project、handoff、`.pm` execution log、signal、memory 或 PR evidence 中至少一处。
+- 高风险或大 diff 收敛前，补充 review 入口是 `.agents/skills/requesting-repo-owned-review/SKILL.md`；它只补强 GitHub PR review、required checks 与 review/approval 主链。
+- 涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice。
+
 ## 工程架构
 - third_party 目录代码只读，禁止改写。
 - Rust 原始 cargo 入口使用：`env -u RUSTC_WRAPPER cargo ...`。
