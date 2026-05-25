@@ -44,6 +44,10 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
 
     assert!(discovered_peer_records.contains_key(&peer_id));
     assert!(last_dialed_transport_paths.contains_key(&peer_id));
+    let suspect_dialed_path = last_dialed_transport_paths
+        .get(&peer_id)
+        .cloned()
+        .expect("suspect record should queue an initial dial path");
 
     super::super::discovery::process_discovered_peer_record(
         &mut swarm,
@@ -59,6 +63,26 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
     .expect("process upgraded peer record");
 
     assert!(last_dialed_transport_paths.contains_key(&peer_id));
+    let upgraded_dialed_path = last_dialed_transport_paths
+        .get(&peer_id)
+        .cloned()
+        .expect("upgraded record should keep dial eligibility");
+    assert_eq!(upgraded_dialed_path, suspect_dialed_path);
+    let upgraded_sources = discovered_peer_records
+        .get(&peer_id)
+        .map(|record| record.record.discovery_sources.clone())
+        .expect("upgraded peer record should stay cached");
+    let mut upgraded_source_labels: Vec<_> = upgraded_sources
+        .iter()
+        .map(|source| peer_manager::discovery_source_label(*source))
+        .collect();
+    upgraded_source_labels.sort_unstable();
+    assert_eq!(upgraded_source_labels, ["dht", "rendezvous"]);
+    assert_eq!(
+        upgraded_sources.len(),
+        upgraded_source_labels.len(),
+        "upgraded discovery sources should not duplicate entries"
+    );
 }
 
 #[test]
