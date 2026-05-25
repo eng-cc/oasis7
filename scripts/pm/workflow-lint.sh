@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/pm/workflow-lint.sh [--task-uid <task_uid>]
+Usage: ./scripts/pm/workflow-lint.sh [--task-uid <task_uid>] [--allow-unbound]
 
 Static consistency checks for the current task:
 - exactly one .pm task binding
@@ -18,15 +18,17 @@ USAGE
 }
 
 TASK_UID=""
+ALLOW_UNBOUND=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --task-uid) TASK_UID="${2:-}"; shift 2 ;;
+    --allow-unbound) ALLOW_UNBOUND=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "workflow-lint: unknown arg: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-python3 - "$ROOT_DIR" "$TASK_UID" <<'PY'
+python3 - "$ROOT_DIR" "$TASK_UID" "$ALLOW_UNBOUND" <<'PY'
 from __future__ import annotations
 import pathlib
 import subprocess
@@ -34,6 +36,7 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 explicit_uid = sys.argv[2].strip()
+allow_unbound = sys.argv[3] == "1"
 sys.path.insert(0, str(root / "scripts" / "pm"))
 from pm_store_docio import load_mapping_document  # type: ignore
 
@@ -60,6 +63,10 @@ else:
     bound = active or by_hint
 
 if len(bound) != 1:
+    if allow_unbound and len(bound) == 0 and not explicit_uid:
+        print("workflow-lint: SKIP (no bound task in current worktree)")
+        print("fix: task worktree should set worktree_hint, or pass --task-uid for explicit lint")
+        raise SystemExit(0)
     msg = [f"workflow-lint: expected exactly one bound task, found {len(bound)}"]
     msg.append("fix: pass --task-uid <task_uid> or set task worktree_hint to current branch/worktree")
     if not explicit_uid:
