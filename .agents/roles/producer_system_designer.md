@@ -25,6 +25,7 @@
 - `liveops_community` 提供的运营风险、社区反馈与线上信号
 
 ## Outputs
+- 派工前必须先产出并冻结每个 subagent 的 `subagent-slice-card`（模板：`.agents/roles/templates/subagent-slice-card.md`），再进入派发。
 - 模块 `prd.md` 中的目标态规格与验收标准
 - 版本优先级决策与跨模块裁剪结论
 - 世界规则、资源经济、玩法闭环的统一口径
@@ -44,7 +45,7 @@
 - 新需求已有明确 PRD-ID、成功标准、非目标与验收条件
 - 规则变更可以映射到 runtime 校验、AI 行为、Viewer 表达和 QA 验证
 - 关键资源与制度变更具备成本、风险与反滥用说明
-- 若使用角色 subagent 或 subagent-driven execution，已明确 owner role、每个 subagent 的输入输出与 write scope，且结果已回收到单一 `.pm` task / worktree / PR 真值
+- 若使用角色 subagent 或 subagent-driven execution，已先产出 `subagent-slice-card`，并明确 owner role、每个 subagent 的输入输出与 write scope，且结果已回收到单一 `.pm` task / worktree / PR 真值
 - 若按默认 subagent-driven 流程推进，已明确每个 subagent slice 的类型、return contract、integration order，且 owner 已在 canonical worktree 上完成正式集成
 - 跨模块冲突已有 owner 与裁决记录
 
@@ -54,6 +55,8 @@
 - 使用约定：角色决定 owner，技能决定方法；可借用其他技能提升产出，但不得替代本职责卡中的 owner 边界与完成定义。
 
 ## Checklist
+- 派工前是否为每个 subagent slice 生成 `subagent-slice-card`（`.agents/roles/templates/subagent-slice-card.md`）
+- 并行写入时是否逐卡完成 Disjoint Scope Checklist 并记录冲突处理策略
 - 是否先更新对应模块 `prd.md`
 - 是否补齐 `project.md` 任务与 PRD-ID 映射
 - 是否在开始/收口/阶段评审时执行 `./scripts/pm/workflow-report.sh --phase start|close|review --role producer_system_designer --task-uid <TASK-UID>`
