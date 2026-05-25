@@ -16,6 +16,7 @@ Default conventions:
 - branch: task/<module>-<task>
 - worktrees root: <repo-parent>/worktrees
 - worktree path: <worktrees root>/<repo-name>-<module>-<task>
+- cargo target: ignored `target` symlink to the repo-family shared dev cache
 - base ref: HEAD
 
 Options:
@@ -356,6 +357,9 @@ CANONICAL_CONFIG_SOURCE="$CANONICAL_REPO_ROOT/config.toml"
 TARGET_CONFIG_PATH="$TARGET_PATH/config.toml"
 CANONICAL_CONFIG_EXISTS=0
 CANONICAL_CONFIG_COPIED=0
+CARGO_SHARED_TARGET_DIR=""
+TARGET_CARGO_TARGET_PATH="$TARGET_PATH/target"
+CARGO_TARGET_LINKED=0
 
 cleanup_bootstrap_failure() {
   git worktree remove --force "$TARGET_PATH" >/dev/null 2>&1 || true
@@ -373,6 +377,29 @@ if [[ -f "$CANONICAL_CONFIG_SOURCE" ]]; then
   fi
   CANONICAL_CONFIG_COPIED=1
 fi
+
+if ! CARGO_SHARED_TARGET_DIR="$(cd "$TARGET_PATH" && ./scripts/cargo-dev.sh --print-target-dir)"; then
+  cleanup_bootstrap_failure
+  echo "error: failed to resolve shared cargo target dir from target worktree; cleaned up created worktree" >&2
+  exit 1
+fi
+
+if [[ -e "$TARGET_CARGO_TARGET_PATH" || -L "$TARGET_CARGO_TARGET_PATH" ]]; then
+  cleanup_bootstrap_failure
+  echo "error: target worktree already has a target path before shared cargo cache bootstrap: $TARGET_CARGO_TARGET_PATH" >&2
+  exit 1
+fi
+if ! mkdir -p "$CARGO_SHARED_TARGET_DIR"; then
+  cleanup_bootstrap_failure
+  echo "error: failed to create shared cargo target dir; cleaned up created worktree: $CARGO_SHARED_TARGET_DIR" >&2
+  exit 1
+fi
+if ! ln -s "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH"; then
+  cleanup_bootstrap_failure
+  echo "error: failed to link target worktree cargo target to shared cache; cleaned up created worktree" >&2
+  exit 1
+fi
+CARGO_TARGET_LINKED=1
 
 DOC_PRD_PATH=""
 DOC_PROJECT_PATH=""
@@ -466,7 +493,7 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   fi
 fi
 
-SUMMARY_JSON="$(python3 - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" "$PM_BOOTSTRAP" "$PM_OWNER_ROLE" "$PM_TITLE" "$PM_PRIORITY" "$PM_TASK_UID" "$PM_TASK_PATH" "$PM_EXECUTION_LOG_PATH" <<'PY'
+SUMMARY_JSON="$(python3 - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH" "$CARGO_TARGET_LINKED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" "$PM_BOOTSTRAP" "$PM_OWNER_ROLE" "$PM_TITLE" "$PM_PRIORITY" "$PM_TASK_UID" "$PM_TASK_PATH" "$PM_EXECUTION_LOG_PATH" <<'PY'
 from __future__ import annotations
 
 import json
@@ -490,27 +517,32 @@ payload = {
         "target_path": sys.argv[14],
         "copied": sys.argv[15] == "1",
     },
+    "cargo_cache": {
+        "shared_target_dir": sys.argv[16],
+        "target_path": sys.argv[17],
+        "linked": sys.argv[18] == "1",
+    },
 }
-if sys.argv[16] == "1":
+if sys.argv[19] == "1":
     payload["doc_checks"] = {
-        "prd": {"path": sys.argv[17], "exists": sys.argv[18] == "1"},
-        "project": {"path": sys.argv[19], "exists": sys.argv[20] == "1"},
+        "prd": {"path": sys.argv[20], "exists": sys.argv[21] == "1"},
+        "project": {"path": sys.argv[22], "exists": sys.argv[23] == "1"},
     }
-if sys.argv[21] == "1":
+if sys.argv[24] == "1":
     payload["harness"] = {
-        "bootstrap_log": sys.argv[22],
-        "state_file": sys.argv[23],
-        "status": sys.argv[24],
-        "viewer_url": sys.argv[25],
+        "bootstrap_log": sys.argv[25],
+        "state_file": sys.argv[26],
+        "status": sys.argv[27],
+        "viewer_url": sys.argv[28],
     }
-if sys.argv[26] == "1":
+if sys.argv[29] == "1":
     payload["pm_task"] = {
-        "owner_role": sys.argv[27],
-        "title": sys.argv[28],
-        "priority": sys.argv[29],
-        "task_uid": sys.argv[30],
-        "task_path": sys.argv[31],
-        "execution_log_path": sys.argv[32],
+        "owner_role": sys.argv[30],
+        "title": sys.argv[31],
+        "priority": sys.argv[32],
+        "task_uid": sys.argv[33],
+        "task_path": sys.argv[34],
+        "execution_log_path": sys.argv[35],
         "status": "committed",
         "workflow_started": True,
     }
@@ -543,6 +575,14 @@ Repo-local config:
 - source file: $([[ "$CANONICAL_CONFIG_EXISTS" == "1" ]] && printf 'present' || printf 'missing')
 - target path: $TARGET_CONFIG_PATH
 - copied: $([[ "$CANONICAL_CONFIG_COPIED" == "1" ]] && printf 'yes' || printf 'no')
+INFO
+
+cat <<INFO
+
+Cargo dev cache:
+- shared target dir: $CARGO_SHARED_TARGET_DIR
+- target path: $TARGET_CARGO_TARGET_PATH
+- linked: $([[ "$CARGO_TARGET_LINKED" == "1" ]] && printf 'yes' || printf 'no')
 INFO
 
 if [[ "$INIT_DOCS" == "1" ]]; then

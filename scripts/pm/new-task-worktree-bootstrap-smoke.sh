@@ -14,9 +14,10 @@ Usage: ./scripts/pm/new-task-worktree-bootstrap-smoke.sh [--json] [--keep-temp]
 Create a temporary task worktree, bootstrap a `.pm` task inside it through
 `new-task-worktree.sh --pm-*`, and assert that the source worktree stays
 unchanged while the target worktree receives the task files, start metadata,
-and a copied canonical main-worktree `config.toml`. When the canonical source
-checkout has no local `config.toml`, this smoke seeds a temporary fixture so
-the copy path is still covered.
+a copied canonical main-worktree `config.toml`, and an ignored `target` symlink
+to the repo-family shared cargo cache. When the canonical source checkout has no
+local `config.toml`, this smoke seeds a temporary fixture so the copy path is
+still covered.
 
 Options:
   --json       Print machine-readable JSON summary
@@ -115,6 +116,9 @@ if not pm_task:
 config_summary = payload.get("config")
 if not config_summary:
     raise SystemExit("config summary missing from new-task-worktree output")
+cargo_cache_summary = payload.get("cargo_cache")
+if not cargo_cache_summary:
+    raise SystemExit("cargo_cache summary missing from new-task-worktree output")
 
 task_path = worktree / pm_task["task_path"]
 execution_log_path = worktree / pm_task["execution_log_path"]
@@ -165,6 +169,33 @@ if config_copied and ignored_status != "!! config.toml":
 if not config_copied and ignored_status:
     raise SystemExit("target worktree reported unexpected config.toml status without canonical source file")
 
+target_path = worktree / "target"
+if not target_path.is_symlink():
+    raise SystemExit("target worktree target path is not a symlink")
+linked_target = target_path.resolve()
+reported_shared_target = Path(cargo_cache_summary["shared_target_dir"]).resolve()
+if linked_target != reported_shared_target:
+    raise SystemExit(
+        f"target symlink does not point at reported shared cargo cache: {linked_target} != {reported_shared_target}"
+    )
+if not reported_shared_target.is_dir():
+    raise SystemExit("reported shared cargo cache directory does not exist")
+if not cargo_cache_summary.get("linked"):
+    raise SystemExit("new-task-worktree summary did not report cargo target link")
+printed_shared_target = subprocess.check_output(
+    ["./scripts/cargo-dev.sh", "--print-target-dir"],
+    cwd=worktree,
+    text=True,
+).strip()
+if Path(printed_shared_target).resolve() != reported_shared_target:
+    raise SystemExit("cargo-dev shared target differs from task worktree target symlink")
+target_status = subprocess.check_output(
+    ["git", "-C", str(worktree), "status", "--short", "--ignored", "--", "target"],
+    text=True,
+).strip()
+if target_status != "!! target":
+    raise SystemExit("target symlink is not ignored in target worktree as expected")
+
 source_status_after = subprocess.check_output(
     ["git", "-C", str(root), "status", "--short"],
     text=True,
@@ -182,6 +213,8 @@ print(
             "workflow_started": True,
             "worktree_path": str(worktree),
             "config_copied": config_copied,
+            "shared_cargo_target_dir": str(reported_shared_target),
+            "target_symlinked": True,
         },
         ensure_ascii=False,
     )

@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.1.0**
+Version: **v1.2.0**
 Last Updated: **2026-05-25**
 
 ## 0. Purpose
@@ -80,6 +80,7 @@ flowchart TD
 - New demand uses a dedicated worktree by default; only explicit user authorization allows reuse.
 - Entering implementation requires owner role selection and `.pm` task binding.
 - Cross-role collaboration must converge to one owner / one `.pm` task / one canonical worktree / one PR chain.
+- Task worktrees created through `./scripts/new-task-worktree.sh` must create a git-ignored `target` symlink to the repo-family shared cargo target cache resolved by `./scripts/cargo-dev.sh --print-target-dir`, so direct cargo and the development wrapper share local build artifacts by default.
 
 ### 5.2 Execution evidence
 - Atomic steps should be recorded with `Action / Validation Command / Expected Result / Actual Result`.
@@ -103,6 +104,8 @@ flowchart TD
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.2.0 (2026-05-25)**
+  - Required new task worktrees to link ignored `target` to the repo-family shared cargo target cache.
 - **v1.1.0 (2026-05-25)**
   - Restored high-impact normative details that were previously only in `AGENTS.md` (worktree/task-truth policy, execution evidence fields, claim/closeout chain, PR/review chain).
   - Clarified semantic migration to avoid policy loss after dedup.
