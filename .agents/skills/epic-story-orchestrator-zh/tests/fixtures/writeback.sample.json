@@ -1,0 +1,25 @@
+{
+  "story_slug": "heliopause-exodus",
+  "task_mode": "chapter-card",
+  "canon_scope": "chapter",
+  "writeback_targets": [
+    {
+      "path": "doc/game/lore/heliopause-exodus/chapter-cards/ch-003.md",
+      "mode": "overwrite"
+    },
+    {
+      "path": "doc/game/lore/heliopause-exodus/canon-log.md",
+      "mode": "append"
+    }
+  ],
+  "artifact_refs": {
+    "world_rules": ["WR-001", "WR-004"],
+    "characters": ["CHAR-LIN-001", "CHAR-QIAO-002"],
+    "timeline": ["TL-012"],
+    "plot_beats": ["PB-007"]
+  },
+  "consistency": {
+    "status": "pass",
+    "issues": []
+  }
+}
