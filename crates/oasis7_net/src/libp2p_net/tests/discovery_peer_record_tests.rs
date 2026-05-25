@@ -72,17 +72,15 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
         .get(&peer_id)
         .map(|record| record.record.discovery_sources.clone())
         .expect("upgraded peer record should stay cached");
-    let upgraded_sources_set: HashSet<_> = upgraded_sources.iter().cloned().collect();
-    assert_eq!(
-        upgraded_sources_set,
-        HashSet::from([
-            crate::dht::PeerDiscoverySource::Dht,
-            crate::dht::PeerDiscoverySource::Rendezvous,
-        ])
-    );
+    let mut upgraded_source_labels: Vec<_> = upgraded_sources
+        .iter()
+        .map(|source| peer_manager::discovery_source_label(*source))
+        .collect();
+    upgraded_source_labels.sort_unstable();
+    assert_eq!(upgraded_source_labels, ["dht", "rendezvous"]);
     assert_eq!(
         upgraded_sources.len(),
-        upgraded_sources_set.len(),
+        upgraded_source_labels.len(),
         "upgraded discovery sources should not duplicate entries"
     );
 }
