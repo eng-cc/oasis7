@@ -246,6 +246,14 @@ if [[ -z "$SOURCE_WORKTREE" && "$CURRENT_HEAD" == "$SOURCE_HEAD" ]]; then
 fi
 [[ -n "$SOURCE_WORKTREE" ]] || die "source branch is not checked out in any worktree: $SOURCE_BRANCH"
 ensure_clean_worktree "$SOURCE_WORKTREE" "source"
+if ! WORKFLOW_LINT_OUTPUT="$(git -C "$SOURCE_WORKTREE" ./scripts/pm/workflow-lint.sh 2>&1)"; then
+  cat >&2 <<EOF
+error: workflow-lint preflight failed.
+$WORKFLOW_LINT_OUTPUT
+fix: apply the suggested repair command(s) above, then rerun ./scripts/prepare-task-pr.sh.
+EOF
+  exit 1
+fi
 
 if [[ "$CREATE_PR" == "1" ]]; then
   git fetch --quiet "$REMOTE_NAME" "$BASE_BRANCH"
