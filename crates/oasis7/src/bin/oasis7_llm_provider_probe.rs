@@ -298,6 +298,22 @@ mod tests {
         );
     }
 
+    fn parse_content_length_from_header_bytes(header_bytes: &[u8]) -> usize {
+        std::str::from_utf8(header_bytes)
+            .ok()
+            .and_then(|header| {
+                header.lines().find_map(|line| {
+                    let (name, value) = line.split_once(":")?;
+                    if name.trim().eq_ignore_ascii_case("content-length") {
+                        value.trim().parse::<usize>().ok()
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or(0)
+    }
+
     fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
@@ -314,19 +330,7 @@ mod tests {
             bytes.extend_from_slice(&buffer[..read]);
             if expected_len.is_none() {
                 if let Some(boundary) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
-                    let content_length = std::str::from_utf8(&bytes[..boundary])
-                        .ok()
-                        .and_then(|header| {
-                            header.lines().find_map(|line| {
-                                let (name, value) = line.split_once(":")?;
-                                if name.trim().eq_ignore_ascii_case("content-length") {
-                                    value.trim().parse::<usize>().ok()
-                                } else {
-                                    None
-                                }
-                            })
-                        })
-                        .unwrap_or(0);
+                    let content_length = parse_content_length_from_header_bytes(&bytes[..boundary]);
                     expected_len = Some(boundary + 4 + content_length);
                 }
             }
@@ -389,6 +393,18 @@ mod tests {
             let _ = stream.write_all(response.as_bytes());
         });
         format!("http://127.0.0.1:{}/v1", bind.port())
+    }
+
+    #[test]
+    fn parse_content_length_from_header_bytes_returns_value_when_utf8_header_is_valid() {
+        let request_head = b"POST /v1/responses HTTP/1.1\r\nHost: localhost\r\nContent-Length: 42";
+        assert_eq!(parse_content_length_from_header_bytes(request_head), 42);
+    }
+
+    #[test]
+    fn parse_content_length_from_header_bytes_returns_zero_for_non_utf8_header() {
+        let request_head = b"POST / HTTP/1.1\r\nContent-Length: \xff42";
+        assert_eq!(parse_content_length_from_header_bytes(request_head), 0);
     }
 
     fn spawn_slow_responses_server(response_delay: Duration) -> String {
