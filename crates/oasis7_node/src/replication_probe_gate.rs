@@ -30,7 +30,7 @@ impl PosNodeEngine {
             return Ok(last_hold_decision);
         }
 
-        match self.sync_replication_height_once(
+        match self.sync_replication_height_once_for_successor_probe(
             endpoint,
             node_id,
             world_id,

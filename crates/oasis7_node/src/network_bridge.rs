@@ -52,6 +52,12 @@ pub(crate) struct GapSyncFetchCommitResponse {
     pub response: FetchCommitResponse,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GapSyncFetchCommitRetryPolicy {
+    FullGapSync,
+    SingleProbe,
+}
+
 pub(crate) fn default_replication_topic(world_id: &str) -> String {
     format!("{DEFAULT_REPLICATION_TOPIC_PREFIX}.{world_id}.replication")
 }
@@ -303,6 +309,27 @@ impl ReplicationNetworkEndpoint {
         &self,
         request: &FetchCommitRequest,
     ) -> Result<GapSyncFetchCommitResponse, NodeError> {
+        self.request_fetch_commit_for_gap_sync_with_policy(
+            request,
+            GapSyncFetchCommitRetryPolicy::FullGapSync,
+        )
+    }
+
+    pub(crate) fn request_fetch_commit_for_gap_sync_single_probe(
+        &self,
+        request: &FetchCommitRequest,
+    ) -> Result<GapSyncFetchCommitResponse, NodeError> {
+        self.request_fetch_commit_for_gap_sync_with_policy(
+            request,
+            GapSyncFetchCommitRetryPolicy::SingleProbe,
+        )
+    }
+
+    fn request_fetch_commit_for_gap_sync_with_policy(
+        &self,
+        request: &FetchCommitRequest,
+        retry_policy: GapSyncFetchCommitRetryPolicy,
+    ) -> Result<GapSyncFetchCommitResponse, NodeError> {
         if let Some(lane) = classify_network_protocol(REPLICATION_FETCH_COMMIT_PROTOCOL) {
             validate_lane_access(
                 &self.network_policy,
@@ -352,17 +379,19 @@ impl ReplicationNetworkEndpoint {
                 }
             }
         }
-        for _ in 1..FETCH_COMMIT_GENERIC_ROUTE_ATTEMPTS {
-            if response.found {
-                break;
-            }
-            match self.request_json(REPLICATION_FETCH_COMMIT_PROTOCOL, request) {
-                Ok(candidate) => {
-                    response = candidate;
-                    last_err = None;
+        if retry_policy == GapSyncFetchCommitRetryPolicy::FullGapSync {
+            for _ in 1..FETCH_COMMIT_GENERIC_ROUTE_ATTEMPTS {
+                if response.found {
+                    break;
                 }
-                Err(err) => {
-                    last_err = Some(err);
+                match self.request_json(REPLICATION_FETCH_COMMIT_PROTOCOL, request) {
+                    Ok(candidate) => {
+                        response = candidate;
+                        last_err = None;
+                    }
+                    Err(err) => {
+                        last_err = Some(err);
+                    }
                 }
             }
         }

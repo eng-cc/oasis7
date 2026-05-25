@@ -1,3 +1,4 @@
+use crate::network_bridge::GapSyncFetchCommitResponse;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 
 use super::node_engine_core::InboundSlotWindow;
@@ -12,8 +13,48 @@ impl PosNodeEngine {
         replication_runtime: &mut ReplicationRuntime,
         height: u64,
     ) -> Result<GapSyncHeightOutcome, NodeError> {
+        self.sync_replication_height_once_with_fetch(
+            endpoint,
+            node_id,
+            world_id,
+            replication_runtime,
+            height,
+            |endpoint, request| endpoint.request_fetch_commit_for_gap_sync(request),
+        )
+    }
+
+    pub(super) fn sync_replication_height_once_for_successor_probe(
+        &self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
+        replication_runtime: &mut ReplicationRuntime,
+        height: u64,
+    ) -> Result<GapSyncHeightOutcome, NodeError> {
+        self.sync_replication_height_once_with_fetch(
+            endpoint,
+            node_id,
+            world_id,
+            replication_runtime,
+            height,
+            |endpoint, request| endpoint.request_fetch_commit_for_gap_sync_single_probe(request),
+        )
+    }
+
+    fn sync_replication_height_once_with_fetch(
+        &self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
+        replication_runtime: &mut ReplicationRuntime,
+        height: u64,
+        fetch_commit: impl FnOnce(
+            &ReplicationNetworkEndpoint,
+            &FetchCommitRequest,
+        ) -> Result<GapSyncFetchCommitResponse, NodeError>,
+    ) -> Result<GapSyncHeightOutcome, NodeError> {
         let request = replication_runtime.build_fetch_commit_request(world_id, height)?;
-        let fetch_commit = endpoint.request_fetch_commit_for_gap_sync(&request)?;
+        let fetch_commit = fetch_commit(endpoint, &request)?;
         if !fetch_commit.response.found {
             return Ok(GapSyncHeightOutcome::NotFound);
         }
