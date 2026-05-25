@@ -5,6 +5,34 @@ use super::*;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 
 impl PosNodeEngine {
+    fn advance_contiguous_replication_persisted_height(
+        &mut self,
+        replication_runtime: &ReplicationRuntime,
+        world_id: &str,
+        observed_latest_height: u64,
+    ) -> Result<(), NodeError> {
+        let mut next_height = checked_replication_successor(
+            self.replication_persisted_height,
+            "replication_persisted_height",
+            "advancing contiguous replication persisted height",
+        )?;
+        while next_height <= observed_latest_height {
+            if replication_runtime
+                .load_commit_message_by_height(world_id, next_height)?
+                .is_none()
+            {
+                break;
+            }
+            self.replication_persisted_height = next_height;
+            next_height = checked_replication_successor(
+                next_height,
+                "next_height",
+                "advancing contiguous replication persisted height cursor",
+            )?;
+        }
+        Ok(())
+    }
+
     pub(super) fn broadcast_local_replication(
         &mut self,
         gossip_endpoint: Option<&GossipEndpoint>,
@@ -280,13 +308,11 @@ impl PosNodeEngine {
                         message.record.content_hash.as_str(),
                     )?;
                     if let Some(payload) = payload_view {
-                        if replication_runtime
-                            .load_commit_message_by_height(world_id, payload.height)?
-                            .is_some()
-                        {
-                            self.replication_persisted_height =
-                                self.replication_persisted_height.max(payload.height);
-                        }
+                        self.advance_contiguous_replication_persisted_height(
+                            replication_runtime,
+                            world_id,
+                            payload.height,
+                        )?;
                     }
                 }
                 Err(err) => rejected.push(format!(
@@ -431,9 +457,13 @@ impl PosNodeEngine {
         replication_runtime: &ReplicationRuntime,
         world_id: &str,
     ) -> Result<(), NodeError> {
-        self.replication_persisted_height = self
-            .replication_persisted_height
-            .max(replication_runtime.latest_persisted_commit_height(world_id)?);
+        let observed_latest_height =
+            replication_runtime.latest_persisted_commit_height(world_id)?;
+        self.advance_contiguous_replication_persisted_height(
+            replication_runtime,
+            world_id,
+            observed_latest_height,
+        )?;
         Ok(())
     }
 }

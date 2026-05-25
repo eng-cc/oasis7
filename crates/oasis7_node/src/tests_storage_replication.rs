@@ -253,6 +253,151 @@ fn replication_gap_sync_backfills_when_consensus_height_already_advanced() {
 }
 
 #[test]
+fn proposal_ahead_updates_replication_gap_sync_target_height() {
+    let world_id = "world-gap-sync-proposal-ahead";
+    let dir_a = temp_dir("gap-sync-proposal-ahead-a");
+    let dir_b = temp_dir("gap-sync-proposal-ahead-b");
+    let (private_hex_a, public_key_a) = deterministic_keypair_hex(154);
+    let (_, public_key_b) = deterministic_keypair_hex(155);
+    let validators = vec![
+        PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 60,
+        },
+        PosValidator {
+            validator_id: "node-b".to_string(),
+            stake: 40,
+        },
+    ];
+    let pos_config =
+        signed_pos_config_with_signer_seeds(validators, &[("node-a", 154), ("node-b", 155)]);
+    let replication_config_a = signed_replication_config(dir_a.clone(), 154)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 155)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Storage)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(replication_config_b.clone());
+
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    for height in 1..=3 {
+        let decision = PosDecision {
+            height,
+            slot: height,
+            epoch: 0,
+            status: PosConsensusStatus::Committed,
+            block_hash: format!("block-{height}"),
+            action_root: empty_action_root(),
+            committed_actions: Vec::new(),
+            approved_stake: 60,
+            rejected_stake: 0,
+            required_stake: 40,
+            total_stake: 100,
+        };
+        replication_a
+            .build_local_commit_message(
+                "node-a",
+                world_id,
+                2_000 + i64::try_from(height).expect("height fits i64"),
+                &decision,
+                None,
+                None,
+            )
+            .expect("build local message")
+            .expect("message");
+    }
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let handle_a = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    register_replication_fetch_handlers(
+        &handle_a,
+        config_a.replication.as_ref().expect("repl a"),
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register fetch handlers");
+
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
+            .expect("endpoint b");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("runtime b");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("engine b");
+
+    let signing_key_a = SigningKey::from_bytes(
+        &hex::decode(private_hex_a)
+            .expect("proposal private decode")
+            .try_into()
+            .expect("proposal private len"),
+    );
+    let proposal_signer =
+        ConsensusMessageSigner::new(signing_key_a, public_key_a).expect("proposal signer");
+    let mut proposal = GossipProposalMessage {
+        version: 1,
+        world_id: world_id.to_string(),
+        node_id: "node-a".to_string(),
+        player_id: "node-a".to_string(),
+        proposer_id: "node-a".to_string(),
+        height: 4,
+        slot: 4,
+        epoch: 0,
+        block_hash: format!("{world_id}:h4:s4:pnode-a"),
+        action_root: empty_action_root(),
+        actions: Vec::new(),
+        proposed_at_ms: 4_000,
+        public_key_hex: None,
+        signature_hex: None,
+    };
+    sign_proposal_message(&mut proposal, &proposal_signer).expect("sign proposal");
+
+    engine_b
+        .ingest_proposal_message(world_id, &proposal, proposal.slot)
+        .expect("ingest proposal");
+    assert_eq!(engine_b.network_committed_height, 3);
+
+    engine_b
+        .sync_missing_replication_commits(
+            &endpoint_b,
+            "node-b",
+            world_id,
+            Some(&mut replication_b),
+            None,
+        )
+        .expect("gap sync");
+
+    assert_eq!(
+        replication_b
+            .latest_persisted_commit_height(world_id)
+            .expect("persisted height after sync"),
+        3
+    );
+    assert_eq!(engine_b.committed_height, 3);
+    assert_eq!(engine_b.network_committed_height, 3);
+    assert!(replication_b
+        .load_commit_message_by_height(world_id, 3)
+        .expect("load commit 3")
+        .is_some());
+
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
 fn observer_replication_runtime_starts_without_registering_data_service_handlers() {
     let world_id = "world-observer-lane-gate";
     let dir = temp_dir("observer-lane-gate");

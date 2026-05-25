@@ -999,7 +999,16 @@ execute_chaos_event() {
         log_chaos_event "$topology" "$event_id" "failed" "$action" "$node_name" "pid_not_alive=$pid"
         return 1
       fi
-      kill "$pid" >/dev/null 2>&1 || true
+      # Prefer SIGINT so oasis7_chain_runtime can flush reward-runtime state coherently.
+      kill -INT "$pid" >/dev/null 2>&1 || true
+      local shutdown_deadline=$(( $(date +%s) + 8 ))
+      while kill -0 "$pid" >/dev/null 2>&1; do
+        if (( $(date +%s) >= shutdown_deadline )); then
+          kill "$pid" >/dev/null 2>&1 || true
+          break
+        fi
+        sleep 1
+      done
       wait "$pid" >/dev/null 2>&1 || true
       if (( down_secs > 0 )); then
         sleep "$down_secs"

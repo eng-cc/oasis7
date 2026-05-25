@@ -97,6 +97,101 @@ fn build_gap_sync_endpoint_with_policy(
         .expect("endpoint")
 }
 
+#[derive(Clone)]
+struct PeerDirectedFetchCommitTestNetwork {
+    generic_response: super::replication::FetchCommitResponse,
+    generic_unsupported: bool,
+    peer_responses: Arc<Mutex<HashMap<String, super::replication::FetchCommitResponse>>>,
+    connected_peer_ids: Vec<String>,
+    generic_attempts: Arc<Mutex<usize>>,
+    provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
+    for PeerDirectedFetchCommitTestNetwork
+{
+    fn publish(&self, _topic: &str, _payload: &[u8]) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        Ok(NetworkSubscription::new(
+            topic.to_string(),
+            Arc::new(Mutex::new(HashMap::new())),
+        ))
+    }
+
+    fn request(&self, protocol: &str, _payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        *self.generic_attempts.lock().expect("lock generic attempts") += 1;
+        if protocol != super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: protocol.to_string(),
+            });
+        }
+        if self.generic_unsupported {
+            return Err(WorldError::NetworkRequestFailed {
+                code: DistributedErrorCode::ErrUnsupported,
+                message: super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL.to_string(),
+                retryable: false,
+            });
+        }
+        serde_json::to_vec(&self.generic_response).map_err(|err| {
+            WorldError::DistributedValidationFailed {
+                reason: format!("encode generic fetch commit response failed: {err}"),
+            }
+        })
+    }
+
+    fn connected_peer_ids(&self) -> Vec<String> {
+        self.connected_peer_ids.clone()
+    }
+
+    fn request_with_providers(
+        &self,
+        protocol: &str,
+        _payload: &[u8],
+        providers: &[String],
+    ) -> Result<Vec<u8>, WorldError> {
+        self.provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .push(providers.to_vec());
+        if protocol != super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: protocol.to_string(),
+            });
+        }
+        let peer_id =
+            providers
+                .first()
+                .cloned()
+                .ok_or_else(|| WorldError::NetworkProtocolUnavailable {
+                    protocol: "missing provider peer id".to_string(),
+                })?;
+        let response = self
+            .peer_responses
+            .lock()
+            .expect("lock peer responses")
+            .get(peer_id.as_str())
+            .cloned()
+            .unwrap_or(super::replication::FetchCommitResponse {
+                found: false,
+                message: None,
+            });
+        serde_json::to_vec(&response).map_err(|err| WorldError::DistributedValidationFailed {
+            reason: format!("encode peer-directed fetch commit response failed: {err}"),
+        })
+    }
+
+    fn register_handler(
+        &self,
+        _protocol: &str,
+        _handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+}
+
 #[test]
 fn successor_probe_at_genesis_syncs_height_one_before_local_proposal() {
     let dir_remote = temp_dir("successor-probe-genesis-remote");
@@ -742,6 +837,197 @@ fn runtime_network_replication_gap_sync_fetch_commit_cache_still_enforces_lane_a
 }
 
 #[test]
+fn gap_sync_fetch_commit_retries_after_not_found_response() {
+    let dir_remote = temp_dir("gap-sync-fetch-commit-not-found-remote");
+    let dir_local = temp_dir("gap-sync-fetch-commit-not-found-local");
+    let world_id = "world-gap-sync-fetch-commit-not-found";
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let (_, _, endpoint, message) = build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        140,
+        141,
+        Arc::clone(&network),
+    );
+    let request = signed_fetch_commit_request_for_test(world_id, 1, 141);
+    let request_count = Arc::new(Mutex::new(0usize));
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            Box::new({
+                let message = message.clone();
+                let request_count = Arc::clone(&request_count);
+                move |_payload| {
+                    let mut attempts = request_count.lock().expect("lock request count");
+                    *attempts += 1;
+                    let response = if *attempts == 1 {
+                        super::replication::FetchCommitResponse {
+                            found: false,
+                            message: None,
+                        }
+                    } else {
+                        super::replication::FetchCommitResponse {
+                            found: true,
+                            message: Some(message.clone()),
+                        }
+                    };
+                    serde_json::to_vec(&response).map_err(|err| {
+                        WorldError::DistributedValidationFailed {
+                            reason: format!("encode fetch commit response failed: {err}"),
+                        }
+                    })
+                }
+            }),
+        )
+        .expect("register fetch commit handler");
+
+    let response = endpoint
+        .request_fetch_commit_for_gap_sync(&request)
+        .expect("gap-sync fetch commit response");
+    assert!(
+        response.response.found,
+        "expected retry to return found=true"
+    );
+    assert_eq!(
+        *request_count.lock().expect("lock request count"),
+        2,
+        "expected gap sync fetch commit to retry once after found=false"
+    );
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
+fn gap_sync_fetch_commit_tries_connected_peers_after_generic_not_found() {
+    let dir_remote = temp_dir("gap-sync-fetch-commit-peer-route-remote");
+    let dir_local = temp_dir("gap-sync-fetch-commit-peer-route-local");
+    let world_id = "world-gap-sync-fetch-commit-peer-route";
+    let generic_attempts = Arc::new(Mutex::new(0usize));
+    let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let peer_responses = Arc::new(Mutex::new(HashMap::new()));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(PeerDirectedFetchCommitTestNetwork {
+        generic_response: super::replication::FetchCommitResponse {
+            found: false,
+            message: None,
+        },
+        generic_unsupported: false,
+        peer_responses: Arc::clone(&peer_responses),
+        connected_peer_ids: vec!["peer-a".to_string(), "peer-b".to_string()],
+        generic_attempts: Arc::clone(&generic_attempts),
+        provider_attempts: Arc::clone(&provider_attempts),
+    });
+    let (_, _, endpoint, message) = build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        142,
+        143,
+        Arc::clone(&network),
+    );
+    peer_responses.lock().expect("lock peer responses").insert(
+        "peer-b".to_string(),
+        super::replication::FetchCommitResponse {
+            found: true,
+            message: Some(message),
+        },
+    );
+    let request = signed_fetch_commit_request_for_test(world_id, 1, 143);
+
+    let response = endpoint
+        .request_fetch_commit_for_gap_sync(&request)
+        .expect("peer-directed gap-sync fetch commit response");
+    assert!(
+        response.response.found,
+        "expected connected peer fallback to return found=true"
+    );
+    assert_eq!(
+        *generic_attempts.lock().expect("lock generic attempts"),
+        1,
+        "expected one generic attempt before peer-directed fallback"
+    );
+    assert_eq!(
+        provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .as_slice(),
+        &[vec!["peer-a".to_string()], vec!["peer-b".to_string()],],
+        "expected gap sync to try each connected peer until one returned the commit"
+    );
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
+fn gap_sync_fetch_commit_tries_connected_peers_after_generic_unsupported() {
+    let dir_remote = temp_dir("gap-sync-fetch-commit-peer-route-unsupported-remote");
+    let dir_local = temp_dir("gap-sync-fetch-commit-peer-route-unsupported-local");
+    let world_id = "world-gap-sync-fetch-commit-peer-route-unsupported";
+    let generic_attempts = Arc::new(Mutex::new(0usize));
+    let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let peer_responses = Arc::new(Mutex::new(HashMap::new()));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(PeerDirectedFetchCommitTestNetwork {
+        generic_response: super::replication::FetchCommitResponse {
+            found: false,
+            message: None,
+        },
+        generic_unsupported: true,
+        peer_responses: Arc::clone(&peer_responses),
+        connected_peer_ids: vec!["peer-a".to_string(), "peer-b".to_string()],
+        generic_attempts: Arc::clone(&generic_attempts),
+        provider_attempts: Arc::clone(&provider_attempts),
+    });
+    let (_, _, endpoint, message) = build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        144,
+        145,
+        Arc::clone(&network),
+    );
+    peer_responses.lock().expect("lock peer responses").insert(
+        "peer-b".to_string(),
+        super::replication::FetchCommitResponse {
+            found: true,
+            message: Some(message),
+        },
+    );
+    let request = signed_fetch_commit_request_for_test(world_id, 1, 145);
+
+    let response = endpoint
+        .request_fetch_commit_for_gap_sync(&request)
+        .expect("peer-directed gap-sync fetch commit response");
+    assert!(
+        response.response.found,
+        "expected connected peer fallback to recover from generic unsupported"
+    );
+    assert_eq!(
+        *generic_attempts.lock().expect("lock generic attempts"),
+        1,
+        "expected one generic attempt before peer-directed fallback"
+    );
+    assert_eq!(
+        provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .as_slice(),
+        &[vec!["peer-a".to_string()], vec!["peer-b".to_string()],],
+        "expected gap sync to keep trying connected peers after generic unsupported"
+    );
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
 fn runtime_network_replication_gap_sync_fetches_missing_commits() {
     let world_id = "world-network-gap";
     let dir_a = temp_dir("network-gap-a");
@@ -904,121 +1190,6 @@ fn runtime_network_replication_gap_sync_fetches_missing_commits() {
         .iter()
         .any(|item| { item.path == format!("consensus/commits/{:020}.json", target_height) }));
 
-    let _ = fs::remove_dir_all(&dir_a);
-    let _ = fs::remove_dir_all(&dir_b);
-}
-
-#[test]
-fn runtime_network_replication_gap_sync_not_found_is_non_fatal() {
-    let world_id = "world-network-gap-not-found";
-    let dir_a = temp_dir("network-gap-not-found-a");
-    let dir_b = temp_dir("network-gap-not-found-b");
-    let validators = vec![
-        PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 60,
-        },
-        PosValidator {
-            validator_id: "node-b".to_string(),
-            stake: 40,
-        },
-    ];
-    let pos_config =
-        signed_pos_config_with_signer_seeds(validators, &[("node-a", 87), ("node-b", 88)]);
-    let network_impl = Arc::new(TestInMemoryNetwork::default());
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = network_impl.clone();
-
-    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
-        .expect("config a")
-        .with_tick_interval(Duration::from_millis(10))
-        .expect("tick a")
-        .with_pos_config(pos_config.clone())
-        .expect("pos config a")
-        .with_auto_attest_all_validators(true)
-        .with_replication(signed_replication_config(dir_a.clone(), 87));
-    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
-        .expect("config b")
-        .with_tick_interval(Duration::from_millis(10))
-        .expect("tick b")
-        .with_pos_config(pos_config)
-        .expect("pos config b")
-        .with_replication(signed_replication_config(dir_b.clone(), 88));
-
-    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
-    runtime_a.start().expect("start a");
-    let reached = wait_until(Instant::now() + Duration::from_secs(2), || {
-        runtime_a.snapshot().consensus.committed_height >= 3
-    });
-    assert!(reached, "sequencer did not reach target height in time");
-    let target_height = runtime_a.snapshot().consensus.committed_height;
-    runtime_a.stop().expect("stop a");
-
-    let request = signed_fetch_commit_request_for_test(world_id, target_height, 87);
-    let payload = serde_json::to_vec(&request).expect("encode commit request");
-    let response_payload = network
-        .request(
-            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
-            payload.as_slice(),
-        )
-        .expect("fetch commit");
-    let response: super::replication::FetchCommitResponse =
-        serde_json::from_slice(&response_payload).expect("decode commit response");
-    assert!(response.found, "missing high commit");
-    let high_message = response.message.expect("high commit payload");
-
-    let topic = super::network_bridge::default_replication_topic(world_id);
-    network_impl.clear_topic(topic.as_str());
-    network_impl
-        .clear_topic(super::network_bridge::default_consensus_proposal_topic(world_id).as_str());
-    network_impl
-        .clear_topic(super::network_bridge::default_consensus_attestation_topic(world_id).as_str());
-    network_impl
-        .clear_topic(super::network_bridge::default_consensus_commit_topic(world_id).as_str());
-    let high_payload = serde_json::to_vec(&high_message).expect("encode high message");
-    network
-        .publish(topic.as_str(), high_payload.as_slice())
-        .expect("publish high message");
-
-    network
-        .register_handler(
-            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
-            Box::new(move |_payload| {
-                let response = super::replication::FetchCommitResponse {
-                    found: false,
-                    message: None,
-                };
-                serde_json::to_vec(&response).map_err(|err| {
-                    WorldError::DistributedValidationFailed {
-                        reason: format!("encode fetch commit response failed: {err}"),
-                    }
-                })
-            }),
-        )
-        .expect("register commit not found handler");
-
-    let mut runtime_b = NodeRuntime::new(config_b)
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
-    runtime_b.start().expect("start b");
-    thread::sleep(Duration::from_millis(250));
-
-    let snapshot_b = runtime_b.snapshot();
-    assert!(
-        !snapshot_b
-            .last_error
-            .as_deref()
-            .map(|reason| reason.contains("gap sync height"))
-            .unwrap_or(false),
-        "not found gap sync should not be reported as fatal error"
-    );
-    assert!(
-        snapshot_b.consensus.committed_height < target_height,
-        "observer should keep waiting when target height is not found"
-    );
-
-    runtime_b.stop().expect("stop b");
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }

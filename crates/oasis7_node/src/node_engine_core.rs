@@ -118,8 +118,11 @@ impl PosNodeEngine {
             pending: None,
             auto_attest_all_validators: config.auto_attest_all_validators,
             last_broadcast_proposal_height: 0,
+            last_broadcast_proposal_at_ms: None,
             last_broadcast_local_attestation_height: 0,
+            last_broadcast_local_attestation_at_ms: None,
             last_broadcast_committed_height: 0,
+            last_broadcast_committed_at_ms: None,
             replicate_local_commits: matches!(config.role, NodeRole::Sequencer)
                 && config.replication.is_some(),
             require_peer_execution_hashes: config.require_peer_execution_hashes,
@@ -487,7 +490,18 @@ impl PosNodeEngine {
         .map_err(node_pos_error)
     }
 
-    fn advance_pending_attestations(&mut self, now_ms: i64) -> Result<PosDecision, NodeError> {
+    pub(super) fn advance_pending_attestations(
+        &mut self,
+        now_ms: i64,
+    ) -> Result<PosDecision, NodeError> {
+        if self
+            .pending
+            .as_ref()
+            .map(|proposal| proposal.height > self.committed_height.saturating_add(1))
+            .unwrap_or(false)
+        {
+            return self.idle_pending_decision();
+        }
         core_advance_pending_attestations(
             &self.validators,
             self.total_stake,

@@ -1,0 +1,56 @@
+{
+  "schema_version": "oasis7.network_tier_manifest.v1",
+  "tier": "public_testnet",
+  "status": "rehearsal",
+  "network_id": "oasis7-public-testnet-parallel-20260518",
+  "chain_id": "oasis7-public-testnet-parallel-20260518",
+  "runtime_refs": {
+    "release_candidate_bundle_ref": "doc/testing/evidence/public-testnet-live-candidate-bundle-2026-05-22.json",
+    "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
+    "bootstrap_peer_ref": "doc/testing/evidence/public-testnet-live-candidate-bootstrap-peers-2026-05-22.txt"
+  },
+  "endpoint_policy": {
+    "rpc_ref": "http://39.104.204.172:6631/v1/chain/status",
+    "explorer_ref": "http://39.104.205.67:6632/v1/chain/explorer/overview",
+    "faucet_ref": "http://39.104.204.172:6681/"
+  },
+  "validator_policy": {
+    "governance_mode": "shared_ops",
+    "validator_admission": "allowlist_or_governed_candidate",
+    "target_validator_count": 2,
+    "allow_observer_nodes": true
+  },
+  "token_policy": {
+    "symbol": "OC",
+    "faucet_mode": "guarded_testnet_faucet",
+    "reset_policy": "resettable",
+    "value_semantics": "testnet"
+  },
+  "claims_policy": {
+    "allowed_claims": [
+      "public_testnet",
+      "resettable_test_network"
+    ],
+    "denied_claims": [
+      "mainnet_live",
+      "production_oc_settlement"
+    ]
+  },
+  "promotion_policy": {
+    "promote_from": [
+      "shared_devnet"
+    ],
+    "required_gates": [
+      "shared_devnet_pass",
+      "public_rpc_ready",
+      "faucet_guard_ready",
+      "reset_policy_announced"
+    ]
+  },
+  "evidence_refs": [
+    "doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md",
+    "doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md",
+    "doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md",
+    "doc/testing/evidence/public-testnet-ecs-freshness-audit-2026-05-22.md"
+  ]
+}

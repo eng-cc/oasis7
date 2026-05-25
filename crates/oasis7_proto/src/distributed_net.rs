@@ -162,6 +162,9 @@ pub trait DistributedNetwork<E> {
     fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), E>;
     fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, E>;
     fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, E>;
+    fn connected_peer_ids(&self) -> Vec<String> {
+        Vec::new()
+    }
     fn request_with_providers(
         &self,
         protocol: &str,

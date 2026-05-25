@@ -141,7 +141,24 @@
   - 依据:
     - 仍沿用既有 repo 证据状态，没有被这次部署替代
 
+## 2026-05-21 QA addendum
+1. `doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md` 已补 repo-owned `qa_engineer` claims verdict。
+2. 因此 `claims_boundary_review` 这条 lane 不再依赖 `#249` 的 reset announcement 单独代偿。
+3. 该补充不会改变本文件主结论：aggregate readiness 仍受 `shared_devnet_pass` 未满足约束。
+
+## 2026-05-22 operator correction
+1. 本文件的拓扑描述包含了本机 `oasis7-testnet-observer.service`，但 2026-05-19 当天真正执行的 repo-owned deploy 动作只覆盖了两台 ECS。
+2. 后续 fresh audit 证明本机 `/opt/oasis7/p2p-testnet-local` 仍保留旧的三 validator / 三 signer 合同，也没有 `NETWORK_TIER_MANIFEST_PATH`。
+3. 因此不能再把“2026-05-19 endpoint deploy”理解为三节点全部已收口到同一份 formal `public_testnet` contract。
+4. 当前正确的 local remediation 入口已经收口到：
+  - `scripts/p2p-public-testnet-local-observer-sync.sh`
+  - `doc/testing/evidence/public-testnet-local-observer-contract-sync-2026-05-22.md`
+5. 截至 2026-05-22 13:25 CST，本机 observer 已经通过上述脚本完成 live apply，并成功加载 `public_testnet` manifest。
+6. 截至 2026-05-22 16:31 CST，`fetch-commit authorization failed` 与 writer-switch stale-state 已不再是主阻断；repo-owned `reset-state` 也已加入同一脚本并执行过多轮 live reset。
+7. 但当前本机仍在 `height 15` 卡住 execution hash mismatch，且 live current runtime binary hash 已与 ECS 对齐、却仍与 mirrored candidate bundle 的 `runtime_build.sha256` 分叉。因此这份 2026-05-19 endpoint deploy 证据只能继续证明公网入口存在，不能证明 triad runtime 已健康收敛。
+8. 后续镜像的 live-candidate manifest 已把 `faucet_ref` 固定为 `http://39.104.204.172:6681/`，不再是 placeholder；当前保守结论应聚焦 runtime / shared-devnet gate 仍未同时满足，而不是继续把 manifest faucet 字段称为 placeholder。
+
 ## 结论
 1. 这次“进一步做部署”已经把两台阿里云上的 testnet 节点推进成了实际加载 formal `public_testnet` manifest 的 live runtime。
 2. 这次通过公网 `IP:port` 直接验证，已经把 `public_rpc_ready` 与 `explorer_public_ready` 推进成 `pass`，不依赖 testnet 专用域名。
-3. 当前仍然不能放行为 `ready_for_live_candidate`，因为 `faucet_guard_ready`、`claims_boundary_review`、`shared_devnet_pass` 还没有补齐，且 manifest 里的 `faucet_ref` 仍是 placeholder。
+3. 当前仍然不能放行为 `ready_for_live_candidate`，因为这份 2026-05-19 endpoint evidence 只证明公网 RPC / explorer 入口存在；后续 repo-owned evidence 已补齐 `faucet_guard_ready`、`claims_boundary_review`，且 mirrored live-candidate manifest 的 `faucet_ref` 已是真实 guarded faucet URL，但 readiness 仍必须由最新 seven-lane gate 重新聚合，不能由本文件单独升级。

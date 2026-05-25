@@ -8,6 +8,7 @@ use oasis7_node::{
 };
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -23,16 +24,40 @@ fn temp_dir(label: &str) -> PathBuf {
     dir
 }
 
-fn write_test_network_tier_manifest() -> (PathBuf, PathBuf) {
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
+}
+
+fn current_test_binary_sha256() -> String {
+    let current_exe = std::env::current_exe().expect("current exe path");
+    let current_bytes = fs::read(current_exe).expect("read current exe bytes");
+    sha256_hex(current_bytes.as_slice())
+}
+
+fn write_test_network_tier_manifest(runtime_sha256: &str) -> (PathBuf, PathBuf) {
     let dir = temp_dir("manifest");
     let peers_path = dir.join("bootstrap.txt");
     let genesis_path = dir.join("genesis.json");
+    let bundle_path = dir.join("public-testnet.bundle.json");
     fs::write(
         &peers_path,
         "/ip4/127.0.0.1/tcp/4100\n/dns4/bootstrap.example/tcp/4101\n",
     )
     .expect("write peers");
     fs::write(&genesis_path, "{}\n").expect("write genesis");
+    fs::write(
+        &bundle_path,
+        format!(
+            r#"{{
+  "runtime_build": {{
+    "sha256": "{runtime_sha256}"
+  }}
+}}"#
+        ),
+    )
+    .expect("write bundle");
     let manifest_path = dir.join("manifest.json");
     fs::write(
         &manifest_path,
@@ -44,7 +69,7 @@ fn write_test_network_tier_manifest() -> (PathBuf, PathBuf) {
   "network_id": "oasis7-public-testnet",
   "chain_id": "oasis7-public-testnet",
   "runtime_refs": {{
-    "release_candidate_bundle_ref": "output/release-candidates/public-testnet.json",
+    "release_candidate_bundle_ref": "{}",
     "genesis_ref": "{}",
     "bootstrap_peer_ref": "{}"
   }},
@@ -75,6 +100,7 @@ fn write_test_network_tier_manifest() -> (PathBuf, PathBuf) {
   }},
   "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
 }}"#,
+            bundle_path.display(),
             genesis_path.display(),
             peers_path.display()
         ),
@@ -85,7 +111,8 @@ fn write_test_network_tier_manifest() -> (PathBuf, PathBuf) {
 
 #[test]
 fn parse_options_loads_network_tier_manifest_and_bootstrap_peers() {
-    let (dir, manifest_path) = write_test_network_tier_manifest();
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
     let options = parse_options(
         [
             "--network-tier-manifest",
@@ -107,7 +134,8 @@ fn parse_options_loads_network_tier_manifest_and_bootstrap_peers() {
 
 #[test]
 fn status_payload_exposes_loaded_network_tier_manifest() {
-    let (dir, manifest_path) = write_test_network_tier_manifest();
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
     let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
     let snapshot = NodeSnapshot {
         node_id: "node-a".to_string(),
@@ -224,6 +252,47 @@ fn status_payload_exposes_loaded_network_tier_manifest() {
     assert_eq!(tier.tier, "public_testnet");
     assert_eq!(tier.bootstrap_peer_count, 2);
     assert_eq!(tier.token_symbol, "OC");
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn parse_options_rejects_network_tier_manifest_when_runtime_bundle_hash_mismatches_current_binary()
+{
+    let (dir, manifest_path) = write_test_network_tier_manifest(
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    );
+    let err = parse_options(
+        [
+            "--network-tier-manifest",
+            manifest_path.to_string_lossy().as_ref(),
+        ]
+        .into_iter(),
+    )
+    .expect_err("parse should fail on runtime bundle drift");
+    assert!(
+        err.contains("network tier runtime bundle hash mismatch"),
+        "unexpected mismatch error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn parse_options_rejects_network_tier_manifest_when_runtime_bundle_hash_is_malformed() {
+    let (dir, manifest_path) = write_test_network_tier_manifest("not-a-sha256");
+    let err = parse_options(
+        [
+            "--network-tier-manifest",
+            manifest_path.to_string_lossy().as_ref(),
+        ]
+        .into_iter(),
+    )
+    .expect_err("parse should fail on malformed runtime bundle hash");
+    assert!(
+        err.contains("invalid runtime_build.sha256"),
+        "unexpected malformed hash error: {err}"
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
