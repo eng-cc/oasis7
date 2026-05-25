@@ -72,7 +72,7 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
         .get(&peer_id)
         .map(|record| record.record.discovery_sources.clone())
         .expect("upgraded peer record should stay cached");
-    let upgraded_sources_set: HashSet<_> = upgraded_sources.iter().copied().collect();
+    let upgraded_sources_set: HashSet<_> = upgraded_sources.iter().cloned().collect();
     assert_eq!(
         upgraded_sources_set,
         HashSet::from([
