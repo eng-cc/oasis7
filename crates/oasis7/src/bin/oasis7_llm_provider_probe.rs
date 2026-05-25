@@ -314,17 +314,17 @@ mod tests {
             bytes.extend_from_slice(&buffer[..read]);
             if expected_len.is_none() {
                 if let Some(boundary) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
-                    let header = std::str::from_utf8(&bytes[..boundary])
-                        .expect("request header should be utf-8");
-                    let content_length = header
-                        .lines()
-                        .find_map(|line| {
-                            let (name, value) = line.split_once(":")?;
-                            if name.trim().eq_ignore_ascii_case("content-length") {
-                                value.trim().parse::<usize>().ok()
-                            } else {
-                                None
-                            }
+                    let content_length = std::str::from_utf8(&bytes[..boundary])
+                        .ok()
+                        .and_then(|header| {
+                            header.lines().find_map(|line| {
+                                let (name, value) = line.split_once(":")?;
+                                if name.trim().eq_ignore_ascii_case("content-length") {
+                                    value.trim().parse::<usize>().ok()
+                                } else {
+                                    None
+                                }
+                            })
                         })
                         .unwrap_or(0);
                     expected_len = Some(boundary + 4 + content_length);
