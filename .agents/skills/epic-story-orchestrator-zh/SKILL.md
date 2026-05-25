@@ -38,6 +38,7 @@ metadata:
     - character-registry.md
     - timeline.md
     - plot-branches.md
+    - gameplay-canon-binding.md
     - chapter-cards/*.md
     - drafts/*.md
     - consistency-report.md
@@ -87,7 +88,8 @@ For each run, return all three blocks:
    - exact repo paths
    - operation (`create` / `update` / `append`)
 2. **Traceability map**
-   - chapter cards → `WR-*`, `CHAR-*`, `TL-*`, `PB-*`
+   - chapter cards -> `WR-*`, `CHAR-*`, `TL-*`, `PB-*`, `PRD-GAME-*`
+   - every current-game lore slice must answer `player_leverage`, `world_change_due_to_player`, and `control_feeling_guarantee`
 3. **Risk & next action**
    - blocker (`none` if absent)
    - next recommended step
@@ -114,6 +116,7 @@ Recommended artifact layout:
 - `character-registry.md`
 - `timeline.md`
 - `plot-branches.md`
+- `gameplay-canon-binding.md`
 - `chapter-cards/`
 - `drafts/`
 - `consistency-report.md`
@@ -129,6 +132,29 @@ Use stable IDs everywhere:
 - timeline events: `TL-*`
 - plot beats: `PB-*`
 - chapter cards: `CH-*`
+
+## Oasis7 Gameplay Canon Binding
+
+For oasis7 current-game background story work, this skill is a lore asset authoring layer, not a standalone fiction pipeline.
+
+Before creating or extending lore, bind the story space to current game truth:
+
+- `PRD-GAME-012`: 10-minute trust gate and first capability boundary
+- `PRD-GAME-013`: centimeter physical scale and indirect-control boundary
+- `PRD-GAME-014`: indirect-control control-feeling guarantees
+- `PRD-GAME-015`: mature-world small-player lane and `player leverage != world activity`
+- current claim envelope: `limited playable technical preview`, unless formal game docs say otherwise
+
+Required current-game lore fields:
+
+- `gameplay_prd_refs`: one or more `PRD-GAME-*`
+- `player_leverage`: what new leverage the player gains
+- `world_change_due_to_player`: what changed because of the player, not ambient world activity
+- `control_feeling_guarantee`: which accepted-intent / causality / fallback / reprioritize / resume guarantee the beat supports
+- `small_player_lane_stage`: `none`, `local_operator`, `regional_specialist`, or `limited_scope_regional_influence`
+- `release_claim_boundary`: must not upgrade stage or marketing claims by implication
+
+If a proposed lore beat cannot name the gameplay PRD refs and player leverage, keep it as brainstorm material and do not write it as canon.
 
 ## One-Pass Perfect Workflow
 
@@ -147,8 +173,10 @@ If any required field is missing, stop and request it.
 1. `world-bible.md`
 2. `character-registry.md`
 3. `timeline.md`
+4. `gameplay-canon-binding.md` for current-game lore
 
 Do not produce chapter cards or prose that rely on undefined canon.
+For current-game lore, do not produce chapter cards or prose that are not bound to `PRD-GAME-*` gameplay truth.
 
 ### 3) Plot Gate
 
@@ -157,6 +185,7 @@ Update `plot-branches.md` for major arc choices and append decision rationale to
 ### 4) Card Gate
 
 Create chapter cards before prose. Every card must cite at least one `TL-*` and one `CHAR-*`.
+For oasis7 current-game lore, every card must also cite at least one `PRD-GAME-*` and include `player_leverage`, `world_change_due_to_player`, and `release_claim_boundary`.
 
 ### 5) Draft Gate
 
@@ -201,6 +230,7 @@ This skill does **not** replace bootstrap/router/verification/closeout workflow 
 - `templates/character-registry.template.md`
 - `templates/timeline.template.md`
 - `templates/plot-branches.template.md`
+- `templates/gameplay-canon-binding.template.md`
 - `templates/chapter-card.template.md`
 - `templates/canon-log.template.md`
 - `templates/consistency-report.template.md`
@@ -212,6 +242,8 @@ This skill does **not** replace bootstrap/router/verification/closeout workflow 
 - Do not delete canon files.
 - Do not imitate a living author’s distinctive signature voice as a target.
 - Do not output giant prose dumps before card-level planning.
+- Do not write lore that contradicts current gameplay contracts or turns ambient world activity into player leverage.
+- Do not use lore to imply `closed beta`, `play now`, direct first-person control, global governance power, or broader launch readiness unless those claims already exist in current repo truth.
 - Keep default output language in Chinese unless explicitly requested otherwise.
 
 ## Verification
@@ -226,3 +258,7 @@ Run checks before claiming ready:
 For story assets, run reference scan:
 
 - `rg -n 'WR-|FAC-|LOC-|TEC-|CHAR-|TL-|PB-|CH-' doc/game/lore/<story-slug>/`
+
+For current-game lore, also scan gameplay binding:
+
+- `rg -n 'PRD-GAME-012|PRD-GAME-013|PRD-GAME-014|PRD-GAME-015|player_leverage|world_change_due_to_player|release_claim_boundary' doc/game/lore/<story-slug>/`

@@ -21,6 +21,12 @@
 - Status:
 - Findings:
 
+## Gameplay Canon Binding
+- PRD-GAME refs present:
+- player_leverage != world_activity_only:
+- control-feeling guarantee present:
+- release claim boundary preserved:
+
 ## Affected Cards/Drafts
 - CH-*:
 - Draft Paths:

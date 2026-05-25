@@ -10,6 +10,7 @@ for p in \
   "$skill_root/templates/character-registry.template.md" \
   "$skill_root/templates/timeline.template.md" \
   "$skill_root/templates/plot-branches.template.md" \
+  "$skill_root/templates/gameplay-canon-binding.template.md" \
   "$skill_root/templates/chapter-card.template.md" \
   "$skill_root/templates/canon-log.template.md" \
   "$skill_root/templates/consistency-report.template.md" \
