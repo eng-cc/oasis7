@@ -456,9 +456,11 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   for acceptance in "${PM_ACCEPTANCE[@]}"; do
     NEW_TASK_CMD+=(--acceptance "$acceptance")
   done
-  for handoff_role in "${PM_HANDOFF_TO[@]}"; do
-    NEW_TASK_CMD+=(--handoff-to "$handoff_role")
-  done
+  if [[ "${#PM_HANDOFF_TO[@]}" -gt 0 ]]; then
+    for handoff_role in "${PM_HANDOFF_TO[@]}"; do
+      NEW_TASK_CMD+=(--handoff-to "$handoff_role")
+    done
+  fi
   NEW_TASK_CMD+=(--worktree-hint "$TARGET_PATH" --json)
 
   set +e

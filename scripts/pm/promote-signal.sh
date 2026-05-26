@@ -235,21 +235,29 @@ if [[ "$CREATE_TASK" == "1" ]]; then
     --json
   )
 
-  for doc_ref in "${DOC_REFS[@]}"; do
-    TASK_ARGS+=(--doc-ref "$doc_ref")
-  done
+  if [[ "${#DOC_REFS[@]}" -gt 0 ]]; then
+    for doc_ref in "${DOC_REFS[@]}"; do
+      TASK_ARGS+=(--doc-ref "$doc_ref")
+    done
+  fi
 
-  for related_prd in "${RELATED_PRDS[@]}"; do
-    TASK_ARGS+=(--related-prd "$related_prd")
-  done
+  if [[ "${#RELATED_PRDS[@]}" -gt 0 ]]; then
+    for related_prd in "${RELATED_PRDS[@]}"; do
+      TASK_ARGS+=(--related-prd "$related_prd")
+    done
+  fi
 
-  for acceptance_item in "${ACCEPTANCE[@]}"; do
-    TASK_ARGS+=(--acceptance "$acceptance_item")
-  done
+  if [[ "${#ACCEPTANCE[@]}" -gt 0 ]]; then
+    for acceptance_item in "${ACCEPTANCE[@]}"; do
+      TASK_ARGS+=(--acceptance "$acceptance_item")
+    done
+  fi
 
-  for handoff_role in "${HANDOFF_TO[@]}"; do
-    TASK_ARGS+=(--handoff-to "$handoff_role")
-  done
+  if [[ "${#HANDOFF_TO[@]}" -gt 0 ]]; then
+    for handoff_role in "${HANDOFF_TO[@]}"; do
+      TASK_ARGS+=(--handoff-to "$handoff_role")
+    done
+  fi
 
   if [[ -n "$WORKTREE_HINT" ]]; then
     TASK_ARGS+=(--worktree-hint "$WORKTREE_HINT")

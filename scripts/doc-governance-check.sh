@@ -64,12 +64,10 @@ readonly REFERENCE_EXISTENCE_EXEMPT_DOCS=(
 readonly DOC_ROOT_MD_ALLOWLIST_FILE="doc/.governance/doc-root-md-allowlist.txt"
 readonly MODULE_ROOT_MD_ALLOWLIST_FILE="doc/.governance/module-root-md-allowlist.txt"
 
-mapfile -t CANONICAL_ROLE_NAMES < <(find .agents/roles -mindepth 1 -maxdepth 1 -type f -name '*.md' -printf '%f\n' | sed 's/\.md$//' | sort)
-declare -A CANONICAL_ROLE_NAME_SET=()
-for role_name in "${CANONICAL_ROLE_NAMES[@]}"; do
-  CANONICAL_ROLE_NAME_SET["$role_name"]=1
-done
-
+CANONICAL_ROLE_NAMES=()
+while IFS= read -r role_name; do
+  CANONICAL_ROLE_NAMES+=("$role_name")
+done < <(find .agents/roles -mindepth 1 -maxdepth 1 -type f -name '*.md' | sed 's#^.*/##; s/\.md$//' | sort)
 fail() {
   echo "doc-governance-check: FAIL: $*"
   failures=$((failures + 1))
@@ -287,7 +285,16 @@ check_doc_path_references() {
 
 is_canonical_role_name() {
   local role_name="$1"
-  [[ -n "${CANONICAL_ROLE_NAME_SET[$role_name]:-}" ]]
+  local canonical_role_name=""
+  if [[ "${#CANONICAL_ROLE_NAMES[@]}" -eq 0 ]]; then
+    return 1
+  fi
+  for canonical_role_name in "${CANONICAL_ROLE_NAMES[@]}"; do
+    if [[ "$canonical_role_name" == "$role_name" ]]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 trim_whitespace() {
@@ -371,7 +378,8 @@ check_added_project_task_row_policy() {
   local task_row_regex='^-[[:space:]]\[[ x]\][[:space:]]'
   local deprecated_task_regex='^-[[:space:]]\[[ x]\][[:space:]]TASK-'
   local new_format_regex='^- \[[ x]\] [a-z0-9]+(-[a-z0-9]+)* \(PRD-[A-Z0-9_-]+(/[A-Z0-9_-]+)*\) \[test_tier_(required|full)\]( \+ \[test_tier_(required|full)\])?: .+ Trace: \.pm/tasks/task_[0-9a-f]{32}\.yaml$'
-  declare -A removed_task_rows=()
+  local removed_task_rows=()
+  local removed_task_row_key=""
 
   while IFS= read -r line; do
     if [[ "$line" =~ ^diff[[:space:]]--git[[:space:]] ]]; then
@@ -387,7 +395,7 @@ check_added_project_task_row_policy() {
       removed_line="${line#-}"
       [[ "$removed_line" =~ $task_row_regex ]] || continue
       normalized_row="$(normalize_project_task_row_for_policy "$removed_line")"
-      removed_task_rows["${current_file}::${normalized_row}"]=1
+      removed_task_rows+=("${current_file}::${normalized_row}")
       continue
     fi
     [[ "$line" =~ ^\+[^+] ]] || continue
@@ -395,8 +403,12 @@ check_added_project_task_row_policy() {
     [[ "$added_line" =~ $task_row_regex ]] || continue
     normalized_row="$(normalize_project_task_row_for_policy "$added_line")"
 
-    if [[ -n "${removed_task_rows["${current_file}::${normalized_row}"]:-}" ]]; then
-      continue
+    if [[ "${#removed_task_rows[@]}" -gt 0 ]]; then
+      for removed_task_row_key in "${removed_task_rows[@]}"; do
+        if [[ "$removed_task_row_key" == "${current_file}::${normalized_row}" ]]; then
+          continue 2
+        fi
+      done
     fi
 
     if [[ "$added_line" =~ $deprecated_task_regex ]]; then
@@ -413,10 +425,25 @@ check_added_project_task_row_policy() {
   done <<< "$diff_blob"
 }
 
-mapfile -t all_doc_files < <(find doc -type f -name '*.md' ! -path 'doc/devlog/*' ! -path '*/archive/*' | sort)
-mapfile -t project_docs < <(find doc -type f -name '*.project.md' ! -path '*/archive/*' | sort)
-mapfile -t devlog_files < <(find doc/devlog -type f -name '*.md' | sort)
-mapfile -t handoff_template_files < <(find .agents/roles/templates -type f -name '*.md' | sort)
+all_doc_files=()
+while IFS= read -r file; do
+  all_doc_files+=("$file")
+done < <(find doc -type f -name '*.md' ! -path 'doc/devlog/*' ! -path '*/archive/*' | sort)
+
+project_docs=()
+while IFS= read -r file; do
+  project_docs+=("$file")
+done < <(find doc -type f -name '*.project.md' ! -path '*/archive/*' | sort)
+
+devlog_files=()
+while IFS= read -r file; do
+  devlog_files+=("$file")
+done < <(find doc/devlog -type f -name '*.md' | sort)
+
+handoff_template_files=()
+while IFS= read -r file; do
+  handoff_template_files+=("$file")
+done < <(find .agents/roles/templates -type f -name '*.md' | sort)
 
 if [[ ${#all_doc_files[@]} -eq 0 ]]; then
   fail "no markdown files found under doc/"
