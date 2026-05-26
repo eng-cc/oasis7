@@ -11,6 +11,7 @@ const ACTION_STOP_GAME: &str = "stop_game";
 const ACTION_START_CHAIN: &str = "start_chain";
 const ACTION_STOP_CHAIN: &str = "stop_chain";
 const ACTION_RECOVER_CHAIN: &str = "recover_chain";
+const ACTION_SET_CHAIN_NETWORK_TIER: &str = "set_chain_network_tier";
 const ACTION_SUBMIT_TRANSFER: &str = "submit_transfer";
 const ACTION_SUBMIT_FEEDBACK: &str = "submit_feedback";
 
@@ -20,6 +21,7 @@ const GUI_AGENT_ACTIONS: &[&str] = &[
     ACTION_START_CHAIN,
     ACTION_RECOVER_CHAIN,
     ACTION_STOP_CHAIN,
+    ACTION_SET_CHAIN_NETWORK_TIER,
     ACTION_SUBMIT_TRANSFER,
     ACTION_SUBMIT_FEEDBACK,
     "query_transfer_accounts",
@@ -178,6 +180,14 @@ struct GuiAgentQueryPayload {
     query_target: Option<String>,
     #[serde(default)]
     query: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GuiAgentNetworkTierPayload {
+    tier: String,
+    #[serde(default)]
+    manifest: Option<String>,
 }
 
 pub(super) fn gui_agent_capabilities_response() -> GuiAgentCapabilitiesResponse {
@@ -349,6 +359,43 @@ pub(super) fn execute_gui_agent_action(
                 ),
             }
         }
+        ACTION_SET_CHAIN_NETWORK_TIER => {
+            let payload = match parse_action_payload::<GuiAgentNetworkTierPayload>(
+                request.payload.as_ref(),
+                action,
+            ) {
+                Ok(payload) => payload,
+                Err(err) => {
+                    return action_error(state, action, request_host, "invalid_request", err, None)
+                }
+            };
+            let mut config = state.config.clone();
+            config.chain_network_tier = payload.tier;
+            if let Some(manifest) = payload.manifest {
+                config.chain_network_tier_manifest = manifest;
+            } else {
+                config.chain_network_tier_manifest.clear();
+            }
+            if let Err(err) = normalize_chain_network_tier_config(&mut config) {
+                return action_error(state, action, request_host, "invalid_request", err, None);
+            }
+            state.config = config;
+            state.append_log(format!(
+                "chain network tier switched to {}",
+                state.config.chain_network_tier
+            ));
+            poll_service_state(state);
+            action_ok(
+                state,
+                action,
+                request_host,
+                Some(serde_json::json!({
+                    "chain_network_tier": state.config.chain_network_tier,
+                    "chain_network_tier_manifest": state.config.chain_network_tier_manifest,
+                    "chain_running": state.chain_running.is_some()
+                })),
+            )
+        }
         ACTION_SUBMIT_TRANSFER => {
             let submit_request = match parse_action_payload::<ChainTransferSubmitRequest>(
                 request.payload.as_ref(),
@@ -483,12 +530,15 @@ fn parse_action_config(
         .as_object()
         .is_some_and(|object| object.contains_key("config"))
     {
-        let config_payload: GuiAgentConfigPayload = serde_json::from_value(payload.clone())
+        let mut config_payload: GuiAgentConfigPayload = serde_json::from_value(payload.clone())
             .map_err(|err| format!("parse `{action}` payload failed: {err}"))?;
+        normalize_chain_network_tier_config(&mut config_payload.config)?;
         return Ok(config_payload.config);
     }
-    serde_json::from_value(payload.clone())
-        .map_err(|err| format!("parse `{action}` payload failed: {err}"))
+    let mut config: LauncherConfig = serde_json::from_value(payload.clone())
+        .map_err(|err| format!("parse `{action}` payload failed: {err}"))?;
+    normalize_chain_network_tier_config(&mut config)?;
+    Ok(config)
 }
 
 fn parse_action_payload<T: DeserializeOwned>(

@@ -56,6 +56,7 @@ pub(super) fn issue_field_ids(issue: ConfigIssue) -> &'static [&'static str] {
         }
         ConfigIssue::ChainStatusBindInvalid => &["chain_status_bind"],
         ConfigIssue::ChainNodeIdRequired => &["chain_node_id"],
+        ConfigIssue::ChainNetworkTierInvalid => &["chain_network_tier"],
         ConfigIssue::ChainRoleInvalid => &["chain_node_role"],
         ConfigIssue::ChainP2pUserModeInvalid => &["chain_p2p_user_mode"],
         ConfigIssue::ChainPublicEntryConfirmationRequired => {
@@ -100,6 +101,10 @@ impl ClientLauncherApp {
         }
         if field.id == "chain_p2p_user_mode" {
             self.render_chain_p2p_user_mode_field(ui, label, stack_text_fields);
+            return;
+        }
+        if field.id == "chain_network_tier" {
+            self.render_chain_network_tier_field(ui, label, stack_text_fields);
             return;
         }
         if field.id == "chain_p2p_accept_public_entry" {
@@ -280,6 +285,58 @@ impl ClientLauncherApp {
                 self.config.chain_p2p_accept_public_entry = false;
             }
             self.config.chain_p2p_user_mode = selected;
+            self.config_dirty = true;
+        }
+    }
+
+    fn render_chain_network_tier_field(
+        &mut self,
+        ui: &mut egui::Ui,
+        label: &str,
+        stack_text_fields: bool,
+    ) {
+        let current = canonical_chain_network_tier(self.config.chain_network_tier.as_str())
+            .unwrap_or(DEFAULT_CHAIN_NETWORK_TIER);
+        if self.config.chain_network_tier != current {
+            self.config.chain_network_tier = current.to_string();
+            self.config_dirty = true;
+        }
+        let mut selected = current.to_string();
+
+        let render_combo = |ui: &mut egui::Ui, selected: &mut String, app: &ClientLauncherApp| {
+            egui::ComboBox::from_id_salt("chain_network_tier")
+                .selected_text(app.chain_network_tier_option_label(selected.as_str()))
+                .show_ui(ui, |ui| {
+                    for tier in ["local_devnet", "public_testnet", "mainnet"] {
+                        ui.selectable_value(
+                            selected,
+                            tier.to_string(),
+                            app.chain_network_tier_option_label(tier),
+                        );
+                    }
+                });
+        };
+
+        if stack_text_fields {
+            ui.vertical(|ui| {
+                ui.label(label);
+                render_combo(ui, &mut selected, self);
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.label(label);
+                render_combo(ui, &mut selected, self);
+            });
+        }
+        ui.small(self.tr(
+            "Public Testnet / Mainnet 当前使用仓库内 skeleton manifest；切换会影响下一次链运行时启动参数。",
+            "Public Testnet / Mainnet currently use repository skeleton manifests; switching affects the next chain runtime start.",
+        ));
+
+        if self.config.chain_network_tier != selected {
+            self.config.chain_network_tier = selected;
+            self.config.chain_network_tier_manifest.clear();
+            normalize_chain_network_tier_config(&mut self.config);
             self.config_dirty = true;
         }
     }

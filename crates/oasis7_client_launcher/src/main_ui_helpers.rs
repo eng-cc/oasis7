@@ -35,6 +35,19 @@ impl ClientLauncherApp {
         }
     }
 
+    pub(super) fn chain_network_tier_option_label(&self, tier: &str) -> &'static str {
+        match (tier, self.ui_language) {
+            ("local_devnet", UiLanguage::ZhCn) => "本地 Devnet",
+            ("local_devnet", UiLanguage::EnUs) => "Local Devnet",
+            ("public_testnet", UiLanguage::ZhCn) => "Public Testnet（skeleton）",
+            ("public_testnet", UiLanguage::EnUs) => "Public Testnet (skeleton)",
+            ("mainnet", UiLanguage::ZhCn) => "Mainnet（skeleton）",
+            ("mainnet", UiLanguage::EnUs) => "Mainnet (skeleton)",
+            (_, UiLanguage::ZhCn) => "未知网络",
+            (_, UiLanguage::EnUs) => "Unknown Network",
+        }
+    }
+
     fn p2p_probe_bool_text(&self, value: bool) -> &'static str {
         match (value, self.ui_language) {
             (true, UiLanguage::ZhCn) => "是",
