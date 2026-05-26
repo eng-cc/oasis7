@@ -60,13 +60,88 @@ mkdir -p "$TMPDIR/.pm/evidence" "$TMPDIR/.pm/shared/memory" "$TMPDIR/.pm/stage"
 python3 - "$TMPDIR" "$ROOT_DIR" <<'PY'
 from pathlib import Path
 import json
+import hashlib
+import re
 import shutil
 import sys
 
-import yaml
-
 root = Path(sys.argv[1])
 source_root = Path(sys.argv[2])
+
+
+def rewrite_missing_absolute_source_refs() -> None:
+    replacement_dir = root / ".pm/evidence/portable-source-refs"
+    absolute_ref_pattern = re.compile(r"/(?:home|Users)/[^\s\"']+")
+    for path in list((root / ".pm").rglob("*.yaml")) + list((root / ".pm").rglob("*.jsonl")):
+        text = path.read_text(encoding="utf-8")
+        replacements: dict[str, str] = {}
+        for match in absolute_ref_pattern.finditer(text):
+            raw_ref = match.group(0).rstrip(",")
+            raw_path = raw_ref.split("#", 1)[0]
+            if Path(raw_path).exists():
+                continue
+            digest = hashlib.sha256(raw_path.encode("utf-8")).hexdigest()[:16]
+            replacement = replacement_dir / f"{digest}.jsonl"
+            replacement.parent.mkdir(parents=True, exist_ok=True)
+            if not replacement.exists():
+                replacement.write_text('{"portable_placeholder": true}\n', encoding="utf-8")
+            replacements[raw_ref] = str(replacement.relative_to(root))
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        if replacements:
+            path.write_text(text, encoding="utf-8")
+
+
+rewrite_missing_absolute_source_refs()
+
+
+def parse_simple_yaml(path: Path) -> dict[str, object]:
+    parsed: dict[str, object] = {}
+    current_list_key: str | None = None
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.rstrip()
+        if not line or line.lstrip().startswith("#"):
+            continue
+        if line.startswith("  - ") and current_list_key:
+            parsed.setdefault(current_list_key, []).append(line[4:].strip().strip('"'))
+            continue
+        current_list_key = None
+        if line.startswith(" ") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        value = value.strip()
+        if value == "[]":
+            parsed[key] = []
+        elif value == "":
+            parsed[key] = []
+            current_list_key = key
+        elif value == "null":
+            parsed[key] = None
+        else:
+            parsed[key] = value.strip('"')
+    return parsed
+
+
+def iter_source_refs(path: Path):
+    current_list_key: str | None = None
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if current_list_key and stripped.startswith("- "):
+            yield stripped[2:].strip().strip('"')
+            continue
+        current_list_key = None
+        if ":" not in stripped:
+            continue
+        key, value = stripped.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if key in {"source_refs", "updated_from"} and not value:
+            current_list_key = key
+            continue
+        if key == "source_ref" and value and value != "null":
+            yield value.strip('"')
 
 
 def mirror_source_ref(source_ref: str) -> None:
@@ -92,7 +167,7 @@ def mirror_source_ref(source_ref: str) -> None:
 
 
 for task_path in (root / ".pm/tasks").glob("*.yaml"):
-    payload = yaml.safe_load(task_path.read_text(encoding="utf-8")) or {}
+    payload = parse_simple_yaml(task_path)
     for source_ref in payload.get("source_refs") or []:
         mirror_source_ref(str(source_ref))
     execution_log = payload.get("execution_log_path")
@@ -100,20 +175,15 @@ for task_path in (root / ".pm/tasks").glob("*.yaml"):
         mirror_source_ref(str(execution_log))
 
 for memory_path in list((root / ".pm/roles").glob("*/memory/*.yaml")) + list((root / ".pm/shared/memory").glob("*.yaml")):
-    payload = yaml.safe_load(memory_path.read_text(encoding="utf-8")) or {}
-    for record in payload.get("records") or []:
-        for source_ref in record.get("source_refs") or []:
-            mirror_source_ref(str(source_ref))
+    for source_ref in iter_source_refs(memory_path):
+        mirror_source_ref(str(source_ref))
 
 for working_memory_path in (root / ".pm/working_memory").glob("*.yaml"):
-    payload = yaml.safe_load(working_memory_path.read_text(encoding="utf-8")) or {}
-    for entry in payload.get("entries") or []:
-        for source_ref in entry.get("source_refs") or []:
-            mirror_source_ref(str(source_ref))
+    for source_ref in iter_source_refs(working_memory_path):
+        mirror_source_ref(str(source_ref))
 
 for stage_path in (root / ".pm/stage").glob("*.yaml"):
-    payload = yaml.safe_load(stage_path.read_text(encoding="utf-8")) or {}
-    for source_ref in payload.get("updated_from") or []:
+    for source_ref in iter_source_refs(stage_path):
         mirror_source_ref(str(source_ref))
 
 signals_path = root / ".pm/inbox/signals.jsonl"
@@ -409,12 +479,25 @@ fi
 python3 - "$TMPDIR" "$TASK_UID" <<'PY'
 from pathlib import Path
 import sys
-import yaml
 
 root = Path(sys.argv[1])
 task_uid = sys.argv[2]
 task_path = root / f".pm/tasks/{task_uid}.yaml"
-payload = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+
+
+def parse_simple_yaml(path: Path) -> dict[str, str | None]:
+    parsed: dict[str, str | None] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.rstrip()
+        if not line or line.startswith(" ") or line.lstrip().startswith("#") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        value = value.strip()
+        parsed[key] = None if value == "null" else value.strip('"')
+    return parsed
+
+
+payload = parse_simple_yaml(task_path)
 if payload.get("last_started_at") not in (None, ""):
     raise SystemExit(f"workflow-report failure should not write last_started_at for {task_uid}")
 if payload.get("last_closed_at") not in (None, ""):

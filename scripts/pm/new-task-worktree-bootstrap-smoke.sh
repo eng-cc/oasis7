@@ -107,7 +107,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-worktree = Path(sys.argv[2])
+worktree = Path(sys.argv[2]).resolve()
 source_status_before = sys.argv[3]
 payload = json.loads(__import__("os").environ["BOOTSTRAP_JSON"])
 pm_task = payload.get("pm_task")

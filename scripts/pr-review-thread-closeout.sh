@@ -300,7 +300,10 @@ PY
 refresh_threads_file
 render_report_file "$PR_VIEW_FILE" "$THREADS_FILE" "$UNRESOLVED_ONLY"
 
-mapfile -t ALL_UNRESOLVED_IDS < <(python3 - "$THREADS_FILE" <<'PY'
+ALL_UNRESOLVED_IDS=()
+while IFS= read -r thread_id; do
+  ALL_UNRESOLVED_IDS+=("$thread_id")
+done < <(python3 - "$THREADS_FILE" <<'PY'
 from __future__ import annotations
 
 import json
