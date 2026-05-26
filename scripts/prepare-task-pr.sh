@@ -217,6 +217,41 @@ warn() {
   echo "warning: $*" >&2
 }
 
+repo_full_name() {
+  gh repo view --json nameWithOwner --jq .nameWithOwner
+}
+
+pr_number_from_url() {
+  local pr_url="$1"
+  python3 - "$pr_url" <<'PY'
+from __future__ import annotations
+
+import re
+import sys
+
+match = re.search(r"/pull/([0-9]+)(?:$|[/?#])", sys.argv[1])
+if not match:
+    raise SystemExit(1)
+print(match.group(1))
+PY
+}
+
+request_copilot_review() {
+  local repo="$1"
+  local pr_number="$2"
+  local requested_logins=""
+
+  if ! gh api -X POST "repos/$repo/pulls/$pr_number/requested_reviewers" \
+    -f 'reviewers[]=chatgpt-codex-connector[bot]' >/dev/null; then
+    return 1
+  fi
+
+  requested_logins="$(gh api "repos/$repo/pulls/$pr_number/requested_reviewers" --jq '.users[].login')"
+  if ! printf '%s\n' "$requested_logins" | grep -Fxq "Copilot"; then
+    return 1
+  fi
+}
+
 plan_kv_get() {
   local output="$1"
   local key=""
@@ -353,7 +388,7 @@ CREATE_CMD_RENDERED="$(render_cmd "${CREATE_CMD[@]}")"
 REQUEST_REVIEW_CMD=()
 REQUEST_REVIEW_CMD_RENDERED=""
 if [[ "$REQUEST_COPILOT_REVIEW" == "1" ]]; then
-  REQUEST_REVIEW_CMD=("gh" "pr" "edit" "$SOURCE_BRANCH" "--add-reviewer" "@copilot")
+  REQUEST_REVIEW_CMD=("gh" "api" "-X" "POST" "repos/<repo>/pulls/<pr-number>/requested_reviewers" "-f" "reviewers[]=chatgpt-codex-connector[bot]")
   REQUEST_REVIEW_CMD_RENDERED="$(render_cmd "${REQUEST_REVIEW_CMD[@]}")"
 fi
 
@@ -377,14 +412,17 @@ if [[ "$CREATE_PR" == "1" ]]; then
   fi
   PR_URL="$("${CREATE_CMD[@]}")"
   if [[ "${#REQUEST_REVIEW_CMD[@]}" -gt 0 ]]; then
-    if ! "${REQUEST_REVIEW_CMD[@]}" >/dev/null; then
+    PR_NUMBER="$(pr_number_from_url "$PR_URL")"
+    REPO_FULL_NAME="$(repo_full_name)"
+    if ! request_copilot_review "$REPO_FULL_NAME" "$PR_NUMBER"; then
       warn "PR created, but failed to request @copilot review via: $REQUEST_REVIEW_CMD_RENDERED"
     fi
   fi
 fi
 
+LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED="$(printf '%s;' ${LOCAL_REQUIRED_EXTRA_COMMANDS[@]+"${LOCAL_REQUIRED_EXTRA_COMMANDS[@]}"})"
 SUMMARY_JSON="$(
-python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$REQUEST_REVIEW_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$(printf '%s;' "${LOCAL_REQUIRED_EXTRA_COMMANDS[@]:-}")" <<'PY'
+python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$REQUEST_REVIEW_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED" <<'PY'
 from __future__ import annotations
 
 import json
