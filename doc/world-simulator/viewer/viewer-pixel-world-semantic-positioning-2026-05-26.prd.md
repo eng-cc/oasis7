@@ -13,12 +13,14 @@
 - 当 agent 缺少坐标时，现有舞台只能把 agent 落到 renderer fallback 点，导致首屏关系线缺失，玩家难以读出 Agent 属于哪个地点。
 - 本轮不改 runtime 协议，通过 Viewer host DTO 增加确定性语义定位：有精确坐标时使用 snapshot truth；缺坐标但有 `location_id` 时派生到地点附近，并标记 `position_source=location_derived`。
 
-## 目标
+## 2. User Experience & Functionality
+
+### 2.1 目标
 - 让稀疏快照下的 pixel-world 仍能稳定显示 agent、地点和关系线。
 - 把派生位置作为 Viewer 表达层语义，不伪装成 runtime 真坐标。
 - 保持 `pixel_world_bridge` wasm-only 宿主合同、event contract、build/finalize 产物边界不变。
 
-## 范围
+### 2.2 范围
 - 范围内：
   - `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx`
   - `crates/oasis7_viewer/software_safe_src/pixel_world_host.test.jsx`
@@ -28,7 +30,7 @@
   - 修改 `pixel_world_bridge` wasm bindgen API
   - 恢复 JS renderer fallback 或改 3D Viewer
 
-## 接口 / 数据
+### 2.3 接口 / 数据
 - Viewer DTO:
   - `agents[].pos`
   - `agents[].position_source`
