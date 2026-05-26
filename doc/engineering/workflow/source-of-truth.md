@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.2.0**
-Last Updated: **2026-05-25**
+Version: **v1.2.2**
+Last Updated: **2026-05-26**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -94,6 +94,7 @@ flowchart TD
 
 ### 5.4 PR and review chain
 - Standard path is GitHub PR + required checks + review/approval.
+- PR creation helpers that request Copilot review must verify the request through GitHub's requested-reviewers API rather than relying only on `gh pr edit` exit status.
 - If review comments arrive, fix + re-verify + resolve threads before merge claim.
 - After merge, sync local `main` and clean up task worktree/branch.
 
@@ -104,6 +105,11 @@ flowchart TD
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.2.2 (2026-05-26)**
+  - Required PR helper Copilot review requests to use a verifiable requested-reviewers API path and warn when the request does not stick.
+- **v1.2.1 (2026-05-26)**
+  - Tightened macOS local workflow compatibility: workflow helpers should avoid bash 4-only builtins and GNU-only `find -printf` in default gates.
+  - Clarified that expired task-scoped working-memory entries keep structural lint coverage without requiring machine-local transcript source files to remain present.
 - **v1.2.0 (2026-05-25)**
   - Required new task worktrees to link ignored `target` to the repo-family shared cargo target cache.
 - **v1.1.0 (2026-05-25)**

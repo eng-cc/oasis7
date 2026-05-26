@@ -447,13 +447,13 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   for source_ref in "${PM_SOURCE_REFS[@]}"; do
     NEW_TASK_CMD+=(--source-ref "$source_ref")
   done
-  for doc_ref in "${PM_DOC_REFS[@]}"; do
+  for doc_ref in ${PM_DOC_REFS[@]+"${PM_DOC_REFS[@]}"}; do
     NEW_TASK_CMD+=(--doc-ref "$doc_ref")
   done
-  for related_prd in "${PM_RELATED_PRD[@]}"; do
+  for related_prd in ${PM_RELATED_PRD[@]+"${PM_RELATED_PRD[@]}"}; do
     NEW_TASK_CMD+=(--related-prd "$related_prd")
   done
-  for acceptance in "${PM_ACCEPTANCE[@]}"; do
+  for acceptance in ${PM_ACCEPTANCE[@]+"${PM_ACCEPTANCE[@]}"}; do
     NEW_TASK_CMD+=(--acceptance "$acceptance")
   done
   if [[ "${#PM_HANDOFF_TO[@]}" -gt 0 ]]; then

@@ -331,14 +331,16 @@ done <"$UNRESOLVED_IDS_FILE"
 
 THREAD_IDS_TO_RESOLVE=()
 if [[ "$RESOLVE_ALL" == "1" ]]; then
-  THREAD_IDS_TO_RESOLVE=("${ALL_UNRESOLVED_IDS[@]}")
+  if [[ "${#ALL_UNRESOLVED_IDS[@]}" -gt 0 ]]; then
+    THREAD_IDS_TO_RESOLVE=("${ALL_UNRESOLVED_IDS[@]}")
+  fi
 elif [[ "${#RESOLVE_THREAD_IDS[@]}" -gt 0 ]]; then
   THREAD_IDS_TO_RESOLVE=("${RESOLVE_THREAD_IDS[@]}")
 fi
 
 if [[ "${#THREAD_IDS_TO_RESOLVE[@]}" -gt 0 ]]; then
   for thread_id in "${THREAD_IDS_TO_RESOLVE[@]}"; do
-    if ! printf '%s\n' "${ALL_UNRESOLVED_IDS[@]}" | grep -qx "$thread_id"; then
+    if ! printf '%s\n' ${ALL_UNRESOLVED_IDS[@]+"${ALL_UNRESOLVED_IDS[@]}"} | grep -qx "$thread_id"; then
       die "thread is not currently unresolved on PR #$PR_NUMBER: $thread_id"
     fi
     gh api graphql -f query="$RESOLVE_QUERY" -F threadId="$thread_id" >/dev/null
