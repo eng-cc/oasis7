@@ -83,6 +83,16 @@ function clampWorldPosition(pos, worldBounds) {
   };
 }
 
+function deterministicHash(input) {
+  return String(input || "").split("").reduce((hash, char) => (
+    ((hash * 31) + char.charCodeAt(0)) >>> 0
+  ), 2166136261);
+}
+
+function clampRatio(value) {
+  return Math.min(1, Math.max(0, Number(value) || 0));
+}
+
 function offsetWorldPosition(anchor, worldBounds, xRatio, yRatio) {
   if (!worldBounds) {
     return null;
@@ -96,6 +106,51 @@ function offsetWorldPosition(anchor, worldBounds, xRatio, yRatio) {
     y_cm: base.y_cm + (worldBounds.depth_cm * yRatio),
     z_cm: base.z_cm || 0,
   }, worldBounds);
+}
+
+function deriveAgentPosition(agent, locationById, worldBounds) {
+  if (!agent?.location_id || !worldBounds || !locationById.has(agent.location_id)) {
+    return null;
+  }
+  const location = locationById.get(agent.location_id);
+  if (!location?.pos) {
+    return null;
+  }
+  const hash = deterministicHash(`${agent.id}:${agent.location_id}`);
+  const angle = ((hash % 360) * Math.PI) / 180;
+  const radiusCm = Math.max(
+    10_000,
+    Math.min(
+      Math.max(worldBounds.width_cm, worldBounds.depth_cm) * 0.015,
+      Number(location.radius_cm) || 35_000,
+    ),
+  );
+  return clampWorldPosition({
+    x_cm: location.pos.x_cm + (Math.cos(angle) * radiusCm),
+    y_cm: location.pos.y_cm + (Math.sin(angle) * radiusCm),
+    z_cm: location.pos.z_cm || 0,
+  }, worldBounds);
+}
+
+function resolveAgentPosition(agent, selected, locationById, worldBounds) {
+  const snapshotPosition = normalizePosition(agent.pos || (selected?.id === agent.id ? selected?.pos : null));
+  if (snapshotPosition) {
+    return {
+      pos: snapshotPosition,
+      position_source: "snapshot",
+    };
+  }
+  const derivedPosition = deriveAgentPosition(agent, locationById, worldBounds);
+  if (derivedPosition) {
+    return {
+      pos: derivedPosition,
+      position_source: "location_derived",
+    };
+  }
+  return {
+    pos: null,
+    position_source: "missing",
+  };
 }
 
 function resolveSelectionPosition(selection, agents, locations) {
@@ -121,6 +176,18 @@ function buildPixelWorldLinks(agents, locationById) {
       to: locationById.get(agent.location_id).pos,
       emphasis: 0.72,
     }));
+}
+
+function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
+  if (!pos || !worldBounds) {
+    return fallbackStyle;
+  }
+  const xPercent = 8 + (clampRatio(pos.x_cm / Math.max(1, worldBounds.width_cm)) * 84);
+  const yPercent = 10 + (clampRatio(pos.y_cm / Math.max(1, worldBounds.depth_cm)) * 78);
+  return {
+    left: `${xPercent.toFixed(1)}%`,
+    top: `${yPercent.toFixed(1)}%`,
+  };
 }
 
 function buildVisualHotspots({
@@ -285,25 +352,32 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
       ),
     }))
     .filter((location) => location.pos);
+  const locationById = new Map(locations.map((location) => [location.id, location]));
 
-  const agents = lists.agents.map((agent) => ({
-    id: agent.id,
-    label: agent.name || agent.id,
-    location_id: agent.location_id || null,
-    pos: normalizePosition(agent.pos || (selected?.id === agent.id ? selected?.pos : null)),
-    resource_summary: core.resourceSummary(agent.resources),
-    resource_score: countResourceEntries(core.resourceSummary(agent.resources)),
-    status_badges: [
-      agent.location_id ? `location=${agent.location_id}` : null,
-      agent.kind ? `kind=${agent.kind}` : null,
-    ].filter(Boolean),
-    size_hint_px: 12 + Math.min(
-      10,
-      (countResourceEntries(core.resourceSummary(agent.resources)) * 2)
-        + (agent.location_id ? 2 : 0)
-        + (agent.kind ? 1 : 0),
-    ),
-  }));
+  const agents = lists.agents.map((agent) => {
+    const resolvedPosition = resolveAgentPosition(agent, selected, locationById, worldBounds);
+    const resourceSummary = core.resourceSummary(agent.resources);
+    return {
+      id: agent.id,
+      label: agent.name || agent.id,
+      location_id: agent.location_id || null,
+      pos: resolvedPosition.pos,
+      position_source: resolvedPosition.position_source,
+      resource_summary: resourceSummary,
+      resource_score: countResourceEntries(resourceSummary),
+      status_badges: [
+        agent.location_id ? `location=${agent.location_id}` : null,
+        agent.kind ? `kind=${agent.kind}` : null,
+        resolvedPosition.position_source === "location_derived" ? "position=location_derived" : null,
+      ].filter(Boolean),
+      size_hint_px: 12 + Math.min(
+        10,
+        (countResourceEntries(resourceSummary) * 2)
+          + (agent.location_id ? 2 : 0)
+          + (agent.kind ? 1 : 0),
+      ),
+    };
+  });
 
   const selection = core.state.selectedKind && core.state.selectedId
     ? {
@@ -311,7 +385,6 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
         id: core.state.selectedId,
       }
     : null;
-  const locationById = new Map(locations.map((location) => [location.id, location]));
   const links = buildPixelWorldLinks(agents, locationById);
   const anchor = resolveSelectionPosition(selection, agents, locations)
     || agents.find((agent) => agent.pos)?.pos
@@ -412,10 +485,10 @@ function PixelWorldCanvasPlaceholder(props) {
         {(location, index) => (
           <button
             class="pixel-world-entity pixel-world-entity--location"
-            style={{
+            style={toWorldPercentStyle(location.pos, props.renderState().world_bounds, {
               left: `${12 + ((index() % 4) * 21)}%`,
               top: `${18 + (Math.floor(index() / 4) * 26)}%`,
-            }}
+            })}
             title={location.label}
             onMouseEnter={() => props.onHover({ kind: "location", id: location.id })}
             onMouseLeave={() => props.onHover(null)}
@@ -429,10 +502,11 @@ function PixelWorldCanvasPlaceholder(props) {
         {(agent, index) => (
           <button
             class="pixel-world-entity pixel-world-entity--agent"
-            style={{
+            data-position-source={agent.position_source}
+            style={toWorldPercentStyle(agent.pos, props.renderState().world_bounds, {
               left: `${18 + ((index() % 5) * 15)}%`,
               top: `${14 + (Math.floor(index() / 5) * 22)}%`,
-            }}
+            })}
             title={agent.label}
             onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
             onMouseLeave={() => props.onHover(null)}
@@ -609,7 +683,7 @@ export function PixelWorldHost(props) {
     <div class="pixel-world-host stack">
       <div class="pixel-world-host__summary">
         <div class="pixel-world-host__headline">
-          {tr(locale(), "嵌入式像素世界层（Host Skeleton）", "Embedded Pixel World Layer (Host Skeleton)")}
+          {tr(locale(), "嵌入式像素世界层", "Embedded Pixel World Layer")}
         </div>
         <div class="feedback-detail">
           {tr(
@@ -624,6 +698,7 @@ export function PixelWorldHost(props) {
         <span class="badge badge--accent">{`agents=${renderState().agents.length}`}</span>
         <span class="badge">{`links=${renderState().links.length}`}</span>
         <span class="badge">{`hotspots=${renderState().visual_hotspots.length}`}</span>
+        <span class="badge">{`derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
         <span class="badge">{renderState().world_bounds ? "world_bounds=ready" : "world_bounds=missing"}</span>
         <span class="badge">{`renderer=${rendererStatus()}`}</span>
         <span class="badge">{`runtime=${runtimeSource()}`}</span>
