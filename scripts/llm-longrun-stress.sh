@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+source "$repo_root/scripts/cargo-dev-lib.sh"
 
 print_help() {
   cat <<'USAGE'
@@ -754,13 +755,7 @@ run_scenario_to_log() {
   local scenario_report_path=$2
   local scenario_run_log_path=$3
   local -a cmd=(
-    env -u RUSTC_WRAPPER
-  )
-  if [[ -n "$llm_execute_until_auto_reenter_ticks" ]]; then
-    cmd+=("OASIS7_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS=$llm_execute_until_auto_reenter_ticks")
-  fi
-  cmd+=(
-    cargo run -p oasis7 --bin oasis7_llm_agent_demo --
+    oasis7_cargo_dev run -p oasis7 --bin oasis7_llm_agent_demo --
     "$scenario_name"
     --ticks "$ticks"
     --report-json "$scenario_report_path"
@@ -818,7 +813,11 @@ run_scenario_to_log() {
     echo "+ ${cmd[*]}"
   } >"$scenario_run_log_path"
   set +e
-  "${cmd[@]}" >>"$scenario_run_log_path" 2>&1
+  if [[ -n "$llm_execute_until_auto_reenter_ticks" ]]; then
+    OASIS7_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS="$llm_execute_until_auto_reenter_ticks" "${cmd[@]}" >>"$scenario_run_log_path" 2>&1
+  else
+    "${cmd[@]}" >>"$scenario_run_log_path" 2>&1
+  fi
   local run_exit=$?
   set -e
   return "$run_exit"
@@ -1310,13 +1309,7 @@ for scenario in "${scenarios[@]}"; do
 
   if (( parallel_mode == 0 )); then
     cmd=(
-      env -u RUSTC_WRAPPER
-    )
-    if [[ -n "$llm_execute_until_auto_reenter_ticks" ]]; then
-      cmd+=("OASIS7_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS=$llm_execute_until_auto_reenter_ticks")
-    fi
-    cmd+=(
-      cargo run -p oasis7 --bin oasis7_llm_agent_demo --
+      oasis7_cargo_dev run -p oasis7 --bin oasis7_llm_agent_demo --
       "$scenario"
       --ticks "$ticks"
       --report-json "$scenario_report_json"
@@ -1375,13 +1368,21 @@ for scenario in "${scenarios[@]}"; do
         echo "+ ${cmd[*]}"
       } | tee -a "$log_file"
       set +e
-      "${cmd[@]}" 2>&1 | tee "$scenario_log_file" | tee -a "$log_file"
+      if [[ -n "$llm_execute_until_auto_reenter_ticks" ]]; then
+        OASIS7_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS="$llm_execute_until_auto_reenter_ticks" "${cmd[@]}" 2>&1 | tee "$scenario_log_file" | tee -a "$log_file"
+      else
+        "${cmd[@]}" 2>&1 | tee "$scenario_log_file" | tee -a "$log_file"
+      fi
       run_exit=${PIPESTATUS[0]}
       set -e
     else
       echo "+ ${cmd[*]} | tee $scenario_log_file"
       set +e
-      "${cmd[@]}" 2>&1 | tee "$scenario_log_file"
+      if [[ -n "$llm_execute_until_auto_reenter_ticks" ]]; then
+        OASIS7_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS="$llm_execute_until_auto_reenter_ticks" "${cmd[@]}" 2>&1 | tee "$scenario_log_file"
+      else
+        "${cmd[@]}" 2>&1 | tee "$scenario_log_file"
+      fi
       run_exit=${PIPESTATUS[0]}
       set -e
     fi

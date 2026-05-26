@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
   cat <<'USAGE'
@@ -263,14 +264,14 @@ release_second_path="$run_dir/release-second.json"
 local_store_path="$run_dir/hosted-account-store.json"
 
 if [[ -z "$launcher_bin" ]]; then
-  launcher_bin="$repo_root/target/debug/oasis7_game_launcher"
+  launcher_bin="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_game_launcher"
 fi
 if [[ -z "$viewer_live_bin" ]]; then
-  viewer_live_bin="$repo_root/target/debug/oasis7_viewer_live"
+  viewer_live_bin="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_viewer_live"
 fi
 
 if [[ "$skip_build" != "1" ]]; then
-  env -u RUSTC_WRAPPER cargo build -q -p oasis7 --bin oasis7_game_launcher --bin oasis7_viewer_live
+  OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -q -p oasis7 --bin oasis7_game_launcher --bin oasis7_viewer_live
 fi
 
 [[ -x "$launcher_bin" ]] || {

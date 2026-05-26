@@ -160,6 +160,7 @@
   - Read-only dependencies: `scripts/cargo-dev.sh`, `.gitignore`, `scripts/worktree-harness-lib.sh`.
   - Verification entrypoints: `bash -n scripts/new-task-worktree.sh scripts/pm/new-task-worktree-bootstrap-smoke.sh`, `./scripts/pm/new-task-worktree-bootstrap-smoke.sh --json`, `./scripts/pm/lint.sh`, `./scripts/doc-governance-check.sh`, `git diff --check`.
   - Formal writeback: `doc/engineering/prd.md`, `doc/engineering/project.md`, `.pm/tasks/task_a60d245402924d32826d7139fd1aad25.execution.md`.
+- [x] local-cargo-cache-script-convergence (PRD-ENGINEERING-021/PRD-SCRIPTS-009) [test_tier_required]: 将本地 smoke / playtest / prewarm / regression / drill / longrun 脚本中仅用于开发反馈的 cargo build/test/run 收敛到 `scripts/cargo-dev-lib.sh` shared-target helper，同时保留 CI canonical required/full、deterministic wasm、release、module release acceptance 与 hash/receipt evidence 的 raw cargo 边界。 Trace: .pm/tasks/task_46ea1c81166043e3a1e3d5899b618ae6.yaml
 - [x] task-closeout-helper (PRD-ENGINEERING-021) [test_tier_required]: 新增 `scripts/pm/task-closeout.sh`，将“fresh verification（done closeout 必填）-> `.pm` close-phase 的 `workflow-report close -> move-task done|deferred -> pm lint`”收成单命令 helper，并将 scripts / PM / workflow 文档口径统一到“helper 优先、手工链等价”。 Trace: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.yaml
 - [x] pm-store-modularization-slice (PRD-ENGINEERING-001/003) [test_tier_required]: 将 `scripts/pm/pm_store.py` 的文档读写与 CLI subparser 装配抽离到 sibling modules，并在同一主任务内补齐 `scripts/pm/lint.sh` 对新 sibling modules 的显式存在检查与 `py_compile` 语法检查，降低 4200 行单体脚本的结构耦合，同时保持 `.pm` 数据契约与 workflow 行为不变。 Trace: .pm/tasks/task_c8d0c65b8084497ca56858c7a987c339.yaml
 - [x] pm-store-three-domain-followup (PRD-ENGINEERING-001/003) [test_tier_required]: 继续将 `task backlog lint`、`stage report/lint/cmd`、`workflow/memory/role/reflection report` 三组逻辑从 `scripts/pm/pm_store.py` 抽到 sibling modules，并同步把新模块纳入 `pm-lint` 结构门禁，进一步压缩单体脚本而不改变 `.pm` workflow 行为。 Trace: .pm/tasks/task_71ecfb84cbfd48c9a12ee5e408518f7f.yaml
@@ -190,6 +191,9 @@
 - [x] viewer-web-build-tech-debt-burn-down (PRD-ENGINEERING-001/002/021) [test_tier_required]: 收口 viewer web build/release 链的 canonical bundle 真值，新增显式 `wasm-bindgen` setup helper，降低 `legacy_core.js` 的浏览器状态耦合，并补齐对应脚本回归。 Trace: .pm/tasks/task_07ef03a5ce6a41b1bb0d139360ef5c74.yaml
 - [x] doc-redundancy-burn-down (PRD-ENGINEERING-025) [test_tier_required]: 收口 root legacy redirect、engineering landing README 与模块 project 状态区中的重复真值，保留 active truth，把完成历史回收为 topic project / `.pm` trace。 Trace: .pm/tasks/task_3540f773193f414690548d217b110bed.yaml
 - [ ] required-gate-runtime-support-coverage (PRD-ENGINEERING-021) [test_tier_required]: 让 GitHub `required-gate` 在 planner 命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时实际执行 `oasis7_node`、`oasis7_net` 与 `oasis7_net --features libp2p` support tests，并同步对齐 `prepare-task-pr` 推荐命令与 `testing-manual` 口径。 Trace: .pm/tasks/task_ec27ba7d019549d4b4692bd648a1cf09.yaml
+
+## File Structure / Affected Paths
+- `local-cargo-cache-script-convergence`: 预计改动 `scripts/cargo-dev-lib.sh`、`scripts/cargo-dev-lib.test.sh`、本地 smoke / playtest / prewarm 脚本、`scripts/prepare-task-pr.sh` 的 preflight 修复、`testing-manual.md`、`doc/scripts/{README.md,prd.md}`、`AGENTS.md` 与本 task execution log；只读依赖 `scripts/cargo-dev.sh`、`scripts/ci-tests.sh`、`scripts/build-wasm-module.sh`、release workflow；验证入口为 `bash -n ...`、`./scripts/cargo-dev-lib.test.sh`、相关脚本 `--help`/`--dry-run` smoke、`./scripts/prepare-task-pr.test.sh`、`./scripts/pm/lint.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check`。 Trace: .pm/tasks/task_46ea1c81166043e3a1e3d5899b618ae6.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -252,10 +256,10 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-05-23
+- 更新日期: 2026-05-26
 - 当前状态: active
 - 下一任务: 当前入口减重切片已收口；后续仍优先按 `scripts/doc-inventory-report.sh` 结果继续拆分 near-limit active project docs，先看 `doc/world-simulator/project.md` 与 `doc/readme/project.md`。
-- 最新完成: `shared-cargo-dev-cache-default`（已把 task worktree 开发态 Rust 命令默认入口收紧到 `scripts/cargo-dev.sh`，并让 worktree 生命周期报告可选统计重型缓存体量，减少多 worktree 重复编译与存储浪费。）
+- 最新完成: `local-cargo-cache-script-convergence`（已把本地 smoke / playtest / prewarm 脚本的开发态 cargo build/run 继续收敛到 shared target helper，同时保留 CI/release/deterministic wasm 的 raw cargo 边界。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: 已完成 root redirect 最小化、engineering README landing 收紧，以及模块 project 状态区去历史播报墙；后续治理继续优先处理 near-limit active docs。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。

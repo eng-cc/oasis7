@@ -90,6 +90,7 @@
   6E. Flow-SCR-006E: `workflow-behavior-eval.sh -> 跑 task-worktree bootstrap smoke -> 校验 subagent contract surface -> 跑 PM runtime/closeout smoke -> 跑 prepare-task-pr fixture test -> 跑 pr-review-thread-closeout fixture test -> 输出统一 workflow eval 摘要`
   7. Flow-SCR-007: `用户只说“先写一版 / 先不要提交 / 顺手改一下” -> 仍判定为新需求 -> 先切独立 worktree 再开始编辑；若已在错误 worktree 开工 -> 立即说明并切走`
   8. Flow-SCR-008: `cargo-dev.sh check/test/run -> 解析当前 repo family 的 shared target namespace -> 导出稳定 CARGO_TARGET_DIR -> 以 env -u RUSTC_WRAPPER cargo 执行开发态命令`
+  9. Flow-SCR-009: `local smoke / regression / drill script -> source cargo-dev-lib.sh -> 调用 oasis7_cargo_dev build/test/run -> 本地复用 shared target；CI 或显式 raw 环境回退原始 cargo target 语义`
   9. Flow-SCR-009: `worktree-gc-report.sh -> 扫描 git worktree + `.pm/tasks/*.yaml` -> 标注 prunable / closed clean worktree cleanup 候选 -> 输出只读汇总与建议命令`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
@@ -105,7 +106,7 @@
 | `.pm` rebase conflict helper | `rebase_in_progress`、`summary.total_conflicted_paths`、`summary.signals_conflicts`、`summary.generated_view_conflicts`、`summary.manual_conflicts`、`conflicts[].category`、`conflicts[].recommended_action`、`resolved_now.renumbered_signals[]` | 在 active rebase 中只读分类 `.pm/**` 未合并路径；显式 `--resolve-signals` 时仅自动修 `.pm/inbox/signals.jsonl` signal-id 冲突 | `rebase_conflicted -> classified -> signals_resolved? -> manual_resolution_pending` | `.pm/inbox/signals.jsonl` 保留 upstream ids、仅重编号 branch-local 冲突项；`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 只提示保留 `main` 删除并执行 `sync-views.sh` | `producer_system_designer` / `qa_engineer` 可读，scripts owner 维护入口 |
 | PR review thread closeout | `pr_number`、`thread_id`、`is_resolved`、`is_outdated`、`path`、`line`、`latest_comment`、`review_decision`、`merge_state_status` | 通过统一入口读取当前 PR review threads，并在显式 resolve 时批量关闭指定 unresolved thread | `reported -> patched -> resolved -> rechecked` | 默认 PR 取当前 branch 关联 PR；`--resolve-all-unresolved` 只处理当前 unresolved thread；每次 resolve 后都必须回报最新 PR state | `producer_system_designer` 定流程，scripts owner 维护入口 |
 | worktree lifecycle report | `worktree_path`、`branch`、`prunable_reason`、`dirty`、`pm_task_uid`、`pm_task_status`、`cleanup_candidate`、`cleanup_commands[]` | 通过统一入口只读盘点当前 repo 的 worktree 生命周期状态，并给出建议 cleanup 命令 | `discovered -> classified -> cleanup_candidate/retained` | 默认同时看 `git worktree list --porcelain` 与 `.pm/tasks/*.yaml`；prunable 和 closed clean worktree 优先暴露 | `producer_system_designer` 定流程，scripts owner 维护入口 |
-| shared cargo dev cache | `shared_target_dir`、`cache_namespace`、`host_triple`、`rustc_release` | 通过 `cargo-dev.sh` 为开发态 `cargo` 命令注入稳定共享 `CARGO_TARGET_DIR` | `idle -> cache_ready -> cargo_running -> success/failed` | 默认按 `git-common-dir` 派生 repo-family namespace，并按 host/toolchain 拆分目录；deterministic wasm/release 流程继续要求 `CARGO_TARGET_DIR` 为空 | 开发者可执行，scripts owner 维护入口 |
+| shared cargo dev cache | `shared_target_dir`、`cache_namespace`、`host_triple`、`rustc_release` | 通过 `cargo-dev.sh` 为手工开发态 `cargo` 命令注入稳定共享 `CARGO_TARGET_DIR`；通过 `cargo-dev-lib.sh` 为本地 smoke / regression / drill / longrun 脚本复用同一入口 | `idle -> cache_ready -> cargo_running -> success/failed` | 默认按 `git-common-dir` 派生 repo-family namespace，并按 host/toolchain 拆分目录；CI、deterministic wasm、release、hash/receipt evidence 流程继续保留原始 cargo 语义 | 开发者可执行，scripts owner 维护入口 |
 - Acceptance Criteria:
   - AC-1: scripts PRD 明确脚本分类、入口、约束。
   - AC-2: scripts project 文档维护脚本治理任务。
@@ -143,8 +144,9 @@
   - AC-21: `AGENTS.md`、`doc/scripts/prd.md` 与 task-worktree bootstrap 专题必须统一写明：文档/脚本/测试/话术改动也算新需求，不能因为改动小而复用已有 worktree。
   - AC-22: 上述正式文档必须统一列出“复用当前 worktree / 就在这里改 / 不要切新 worktree”为允许例外的显式表述，并明确“先写一版 / 先不要提交 / 顺手改一下”不构成复用授权；若已切错 worktree，必须立即切走。
   - AC-23: 新增 `scripts/cargo-dev.sh`，为本地开发态 `cargo check/test/run/build` 提供 repo-family 共享缓存入口，并默认使用 `env -u RUSTC_WRAPPER cargo ...`。
+  - AC-23A: 新增 `scripts/cargo-dev-lib.sh`，为本地 smoke / playtest / prewarm / regression / drill / longrun 脚本提供 `oasis7_cargo_dev` 与 shared-target debug binary 解析 helper；默认本地复用 `cargo-dev.sh`，但在 `CI=1`、`OASIS7_CARGO_DEV_SHARED=0` 或 `OASIS7_FORCE_RAW_CARGO=1` 时回退到原始 cargo target 语义。
   - AC-24: `scripts/cargo-dev.sh --print-target-dir` 必须输出稳定共享目录；同一 repo family 下不同 worktree 输出一致，且可通过环境变量覆盖。
-  - AC-25: 正式文档必须明确：`scripts/cargo-dev.sh` 只服务开发态缓存复用，不适用于要求 `CARGO_TARGET_DIR` 为空的 deterministic wasm / release 构建链路。
+  - AC-25: 正式文档必须明确：`scripts/cargo-dev.sh` / `scripts/cargo-dev-lib.sh` 只服务开发态缓存复用，不适用于要求 `CARGO_TARGET_DIR` 为空的 deterministic wasm / release 构建链路，也不得替代 CI canonical required/full 验收命令。
   - AC-26: 根 `AGENTS.md` 的 cargo 规则必须与 `scripts/cargo-dev.sh` / `testing-manual.md` 对齐，明确“原始 cargo 命令走 `env -u RUSTC_WRAPPER cargo ...`，开发态共享缓存可走 `./scripts/cargo-dev.sh ...`，但 deterministic wasm / release 仍必须保持 `CARGO_TARGET_DIR` 为空”。
 - Non-Goals:
   - 不在 scripts PRD 中替代业务功能设计。

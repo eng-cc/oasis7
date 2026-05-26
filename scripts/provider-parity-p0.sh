@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
 
 RUN_ID="provider_parity_$(date +%Y%m%d_%H%M%S)"
 SCENARIO="llm_bootstrap"
@@ -148,7 +149,7 @@ run_sample() {
   local sample_dir="$OUT_DIR/samples/$provider/sample_$sample_index"
   mkdir -p "$sample_dir"
 
-  local cmd=(env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_parity_bench --
+  local cmd=(oasis7_cargo_dev run -p oasis7 --bin oasis7_provider_parity_bench --
     --provider "$provider"
     --scenario "$SCENARIO"
     --scenario-id "$SCENARIO_ID"

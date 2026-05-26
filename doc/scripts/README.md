@@ -65,5 +65,5 @@
 - `scripts/worktree-gc-report.sh` 为 worktree 生命周期盘点入口；默认只读汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，不自动删除任何 worktree/branch；加 `--footprint` 时会额外统计每个 worktree 的 `target` 与 `crates/oasis7_viewer/node_modules` 体量，用于优先清理高成本缓存。
 - `scripts/viewer-software-safe-step-regression-smoke.sh` 为轻量 Web/UI automation smoke；通过临时 fixture 页面复用真 `agent-browser` 和 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime/build 的前提下先验证浏览器自动化链路与 summary/state 产物契约。
 - `scripts/land-task-worktree.sh` 仅保留给用户显式要求的 local-only / fallback 场景，不再是默认最终合流入口。
-- `scripts/cargo-dev.sh` 是本地开发态 `cargo check/test/run/build` 的默认 shared target 入口；要求 deterministic wasm / release 的脚本继续走原始 cargo 入口，保持 `CARGO_TARGET_DIR` 为空。
+- `scripts/cargo-dev.sh` 是本地开发态 `cargo check/test/run/build` 的默认 shared target 入口；`scripts/cargo-dev-lib.sh` 是本地 smoke / playtest / prewarm / regression / drill / longrun 脚本复用同一 target 的 shell helper。要求 deterministic wasm / release / CI canonical 验收链路继续走原始 cargo 入口，保持对应 `CARGO_TARGET_DIR` 边界。
 - 若默认高频脚本入口变化，需同步回写本目录“从这里开始”，避免 README 退化回纯专题目录页。
