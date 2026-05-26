@@ -713,9 +713,12 @@ def resolve_source_ref_path(root: pathlib.Path, source_ref: str) -> pathlib.Path
 def is_external_codex_session_ref(source_ref: str) -> bool:
     path = pathlib.Path(parse_reference_path(source_ref)).expanduser()
     parts = path.parts
-    if not path.is_absolute() or ".codex" not in parts or "sessions" not in parts:
+    if not path.is_absolute() or path.suffix != ".jsonl":
         return False
-    return path.suffix == ".jsonl"
+    for index, part in enumerate(parts[:-1]):
+        if part == ".codex" and index + 1 < len(parts) and parts[index + 1] == "sessions":
+            return True
+    return False
 
 
 def is_devlog_archive_reference(source_ref: str) -> bool:

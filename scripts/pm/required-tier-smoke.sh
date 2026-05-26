@@ -85,7 +85,8 @@ def rewrite_missing_absolute_source_refs() -> None:
             replacement.parent.mkdir(parents=True, exist_ok=True)
             if not replacement.exists():
                 replacement.write_text('{"portable_placeholder": true}\n', encoding="utf-8")
-            replacements[raw_ref] = str(replacement.relative_to(root))
+            fragment = raw_ref[len(raw_path):]
+            replacements[raw_ref] = f"{replacement.relative_to(root)}{fragment}"
         for old, new in replacements.items():
             text = text.replace(old, new)
         if replacements:
@@ -93,6 +94,16 @@ def rewrite_missing_absolute_source_refs() -> None:
 
 
 rewrite_missing_absolute_source_refs()
+
+
+def parse_inline_list(value: str) -> list[str] | None:
+    value = value.strip()
+    if not (value.startswith("[") and value.endswith("]")):
+        return None
+    inner = value[1:-1].strip()
+    if not inner:
+        return []
+    return [item.strip().strip('"').strip("'") for item in inner.split(",") if item.strip()]
 
 
 def parse_simple_yaml(path: Path) -> dict[str, object]:
@@ -110,8 +121,9 @@ def parse_simple_yaml(path: Path) -> dict[str, object]:
             continue
         key, value = line.split(":", 1)
         value = value.strip()
-        if value == "[]":
-            parsed[key] = []
+        inline_list = parse_inline_list(value)
+        if inline_list is not None:
+            parsed[key] = inline_list
         elif value == "":
             parsed[key] = []
             current_list_key = key
@@ -137,6 +149,11 @@ def iter_source_refs(path: Path):
         key, value = stripped.split(":", 1)
         key = key.strip()
         value = value.strip()
+        inline_list = parse_inline_list(value)
+        if key in {"source_refs", "updated_from"} and inline_list is not None:
+            for item in inline_list:
+                yield item
+            continue
         if key in {"source_refs", "updated_from"} and not value:
             current_list_key = key
             continue
