@@ -96,7 +96,7 @@ def rewrite_missing_absolute_source_refs() -> None:
 rewrite_missing_absolute_source_refs()
 
 
-def parse_inline_list(value: str) -> list[str] | None:
+def parse_inline_list(value):
     value = value.strip()
     if not (value.startswith("[") and value.endswith("]")):
         return None
@@ -106,9 +106,9 @@ def parse_inline_list(value: str) -> list[str] | None:
     return [item.strip().strip('"').strip("'") for item in inner.split(",") if item.strip()]
 
 
-def parse_simple_yaml(path: Path) -> dict[str, object]:
-    parsed: dict[str, object] = {}
-    current_list_key: str | None = None
+def parse_simple_yaml(path: Path):
+    parsed = {}
+    current_list_key = None
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.rstrip()
         if not line or line.lstrip().startswith("#"):
@@ -135,7 +135,7 @@ def parse_simple_yaml(path: Path) -> dict[str, object]:
 
 
 def iter_source_refs(path: Path):
-    current_list_key: str | None = None
+    current_list_key = None
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         stripped = raw_line.strip()
         if not stripped or stripped.startswith("#"):
@@ -502,8 +502,8 @@ task_uid = sys.argv[2]
 task_path = root / f".pm/tasks/{task_uid}.yaml"
 
 
-def parse_simple_yaml(path: Path) -> dict[str, str | None]:
-    parsed: dict[str, str | None] = {}
+def parse_simple_yaml(path: Path):
+    parsed = {}
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.rstrip()
         if not line or line.startswith(" ") or line.lstrip().startswith("#") or ":" not in line:

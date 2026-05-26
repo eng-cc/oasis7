@@ -1041,6 +1041,23 @@ def run_working_memory_lint(root: pathlib.Path) -> None:
             if not summary:
                 fail(f"{path.relative_to(root)} {entry_id} missing summary")
 
+            entry_is_expired = False
+            for key in ("captured_at", "expires_at"):
+                try:
+                    datetime.fromisoformat(str(entry.get(key)))
+                except ValueError:
+                    fail(f"{path.relative_to(root)} {entry_id} invalid timestamp: {key}={entry.get(key)}")
+
+            try:
+                captured_at = datetime.fromisoformat(str(entry.get("captured_at")))
+                expires_at = datetime.fromisoformat(str(entry.get("expires_at")))
+                if expires_at < captured_at:
+                    fail(f"{path.relative_to(root)} {entry_id} expires_at before captured_at")
+                now = datetime.now(expires_at.tzinfo).replace(microsecond=0)
+                entry_is_expired = expires_at < now
+            except ValueError:
+                pass
+
             source_refs = entry.get("source_refs")
             if not isinstance(source_refs, list) or not source_refs:
                 fail(f"{path.relative_to(root)} {entry_id} source_refs must be a non-empty list")
@@ -1053,22 +1070,8 @@ def run_working_memory_lint(root: pathlib.Path) -> None:
                         continue
                     if is_external_codex_session_ref(str(source_ref)):
                         continue
-                    if not resolved.exists():
+                    if not entry_is_expired and not resolved.exists():
                         fail(f"{path.relative_to(root)} {entry_id} source_ref missing: {resolved}")
-
-            for key in ("captured_at", "expires_at"):
-                try:
-                    datetime.fromisoformat(str(entry.get(key)))
-                except ValueError:
-                    fail(f"{path.relative_to(root)} {entry_id} invalid timestamp: {key}={entry.get(key)}")
-
-            try:
-                captured_at = datetime.fromisoformat(str(entry.get("captured_at")))
-                expires_at = datetime.fromisoformat(str(entry.get("expires_at")))
-                if expires_at < captured_at:
-                    fail(f"{path.relative_to(root)} {entry_id} expires_at before captured_at")
-            except ValueError:
-                pass
 
             promoted_to = entry.get("promoted_to")
             if not isinstance(promoted_to, list):

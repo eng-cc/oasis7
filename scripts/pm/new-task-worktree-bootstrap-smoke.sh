@@ -132,7 +132,8 @@ if "status: committed" not in task_text:
     raise SystemExit("bootstrapped task did not move to committed")
 if "last_started_at: " not in task_text or "last_started_at: null" in task_text:
     raise SystemExit("bootstrapped task missing workflow-report start timestamp")
-if f"worktree_hint: {worktree}" not in task_text:
+expected_worktree_hints = {str(worktree), str(worktree.resolve())}
+if not any(f"worktree_hint: {hint}" in task_text for hint in expected_worktree_hints):
     raise SystemExit("bootstrapped task worktree_hint does not point at target worktree")
 
 execution_log_text = execution_log_path.read_text(encoding="utf-8")

@@ -54,16 +54,30 @@ set -euo pipefail
 LOG_FILE="${TEST_GH_LOG:?}"
 printf '%s\n' "$*" >> "$LOG_FILE"
 
+if [[ "${1:-}" == "repo" && "${2:-}" == "view" ]]; then
+  printf 'example/oasis7\n'
+  exit 0
+fi
+
 if [[ "${1:-}" == "pr" && "${2:-}" == "create" ]]; then
   printf 'https://github.com/example/oasis7/pull/999\n'
   exit 0
 fi
 
-if [[ "${1:-}" == "pr" && "${2:-}" == "edit" ]]; then
+if [[ "${1:-}" == "api" && "${2:-}" == "-X" && "${3:-}" == "POST" ]]; then
   if [[ "${TEST_GH_EDIT_FAIL:-0}" == "1" ]]; then
     echo "review request unsupported" >&2
     exit 1
   fi
+  printf '{"requested_reviewers":[{"login":"Copilot"}],"requested_teams":[]}\n'
+  exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == "repos/example/oasis7/pulls/999/requested_reviewers" ]]; then
+  if [[ "${TEST_GH_REVIEW_VERIFY_EMPTY:-0}" == "1" ]]; then
+    exit 0
+  fi
+  printf 'Copilot\n'
   exit 0
 fi
 
@@ -94,8 +108,13 @@ stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
 
 if not log_lines or not log_lines[0].startswith("pr create "):
     raise SystemExit(f"expected first gh call to be pr create, got: {log_lines}")
-if len(log_lines) < 2 or log_lines[1] != "pr edit temp/prepare-pr-copilot-test --add-reviewer @copilot":
-    raise SystemExit(f"expected second gh call to request @copilot review, got: {log_lines}")
+expected_tail = [
+    "repo view --json nameWithOwner --jq .nameWithOwner",
+    "api -X POST repos/example/oasis7/pulls/999/requested_reviewers -f reviewers[]=chatgpt-codex-connector[bot]",
+    "api repos/example/oasis7/pulls/999/requested_reviewers --jq .users[].login",
+]
+if log_lines[1:] != expected_tail:
+    raise SystemExit(f"expected API-based Copilot review request, got: {log_lines}")
 if "fetch --quiet origin main" not in git_log_lines:
     raise SystemExit(f"expected fetch attempt in git shim log, got: {git_log_lines}")
 if any("./scripts/pm/workflow-lint.sh" in line for line in git_log_lines):
@@ -160,8 +179,12 @@ stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
 
 if not log_lines or log_lines[0] != "pr create --base main --head temp/prepare-pr-copilot-test --fill":
     raise SystemExit(f"expected create call even when reviewer request fails: {log_lines}")
-if len(log_lines) < 2 or log_lines[1] != "pr edit temp/prepare-pr-copilot-test --add-reviewer @copilot":
-    raise SystemExit(f"expected follow-up review request attempt on failure path: {log_lines}")
+expected_tail = [
+    "repo view --json nameWithOwner --jq .nameWithOwner",
+    "api -X POST repos/example/oasis7/pulls/999/requested_reviewers -f reviewers[]=chatgpt-codex-connector[bot]",
+]
+if log_lines[1:] != expected_tail:
+    raise SystemExit(f"expected follow-up API review request attempt on failure path: {log_lines}")
 if not any(
     line.endswith("push -u origin temp/prepare-pr-copilot-test")
     or line.endswith("push origin temp/prepare-pr-copilot-test")
@@ -170,8 +193,36 @@ if not any(
     raise SystemExit(f"expected push attempt in failure path, got: {git_log_lines}")
 if "Created PR:" not in stdout or "https://github.com/example/oasis7/pull/999" not in stdout:
     raise SystemExit("expected created PR output on reviewer failure path")
-if "warning: PR created, but failed to request @copilot review via: gh pr edit temp/prepare-pr-copilot-test --add-reviewer @copilot" not in stderr:
+if "warning: PR created, but failed to request @copilot review via: gh api -X POST 'repos/<repo>/pulls/<pr-number>/requested_reviewers' -f 'reviewers[]=chatgpt-codex-connector[bot]'" not in stderr:
     raise SystemExit(f"expected warning on reviewer failure path: {stderr}")
+PY
+
+verify_fail_log="$TMPDIR/gh-verify-fail.log"
+verify_fail_git_log="$TMPDIR/git-verify-fail.log"
+verify_fail_out="$TMPDIR/verify-fail.out"
+verify_fail_err="$TMPDIR/verify-fail.err"
+PATH="$TMPDIR/bin:$PATH" \
+TEST_GH_LOG="$verify_fail_log" \
+TEST_GIT_LOG="$verify_fail_git_log" \
+TEST_GH_REVIEW_VERIFY_EMPTY=1 \
+"$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" --create >"$verify_fail_out" 2>"$verify_fail_err"
+
+python3 - "$verify_fail_log" "$verify_fail_out" "$verify_fail_err" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+log_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+stdout = Path(sys.argv[2]).read_text(encoding="utf-8")
+stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
+
+if "Created PR:" not in stdout or "https://github.com/example/oasis7/pull/999" not in stdout:
+    raise SystemExit("expected created PR output on review verification failure path")
+if log_lines[-1] != "api repos/example/oasis7/pulls/999/requested_reviewers --jq .users[].login":
+    raise SystemExit(f"expected requested-reviewers verification call, got: {log_lines}")
+if "warning: PR created, but failed to request @copilot review via: gh api -X POST 'repos/<repo>/pulls/<pr-number>/requested_reviewers' -f 'reviewers[]=chatgpt-codex-connector[bot]'" not in stderr:
+    raise SystemExit(f"expected warning when reviewer verification does not stick: {stderr}")
 PY
 
 echo "prepare-task-pr.test: OK"
