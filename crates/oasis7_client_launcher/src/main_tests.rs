@@ -38,6 +38,7 @@ use serde_json::json;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "main_tests_explorer.rs"]
@@ -46,6 +47,27 @@ mod explorer_tests;
 mod onboarding_tests;
 #[path = "main_tests_provider_probe.rs"]
 mod provider_probe_tests;
+
+fn hosted_strong_auth_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn clear_hosted_strong_auth_env() {
+    for name in [
+        "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY",
+        "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY",
+        "OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE",
+    ] {
+        std::env::remove_var(name);
+    }
+}
+
+fn set_hosted_strong_auth_env() {
+    std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY", "public-key");
+    std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY", "private-key");
+    std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE", "approval");
+}
 #[test]
 fn parse_port_rejects_zero() {
     let err = parse_port("0", "viewer port").expect_err("should fail");
@@ -168,6 +190,9 @@ fn hosted_public_join_transfer_barrier_tracks_deployment_mode() {
 }
 #[test]
 fn build_game_url_rewrites_zero_host() {
+    let _guard = hosted_strong_auth_env_lock().lock().expect("env lock");
+    clear_hosted_strong_auth_env();
+
     let config = LaunchConfig {
         viewer_host: "0.0.0.0".to_string(),
         viewer_port: "4173".to_string(),
@@ -180,11 +205,37 @@ fn build_game_url_rewrites_zero_host() {
         "http://127.0.0.1:4173/?render_mode=viewer&ws=ws%3A%2F%2F127.0.0.1%3A5011&hosted_access="
     ));
     assert!(url.contains("%22deployment_mode%22%3A%22hosted_public_join%22"));
+    assert!(url.contains("%22verdict%22%3A%22hosted_public_join_blocked_until_strong_auth%22"));
     assert!(url.contains("%22local_chain_runtime%22%3A%22blocked_for_public_player_plane%22"));
     assert!(url.contains("%22node_admission%22%3A%22operator_managed_node_onboarding_only%22"));
 }
+
+#[test]
+fn build_game_url_hosted_access_hint_tracks_strong_auth_backend_readiness() {
+    let _guard = hosted_strong_auth_env_lock().lock().expect("env lock");
+    clear_hosted_strong_auth_env();
+    set_hosted_strong_auth_env();
+
+    let config = LaunchConfig {
+        deployment_mode: "hosted_public_join".to_string(),
+        ..LaunchConfig::default()
+    };
+    let url = build_game_url(&config);
+
+    assert!(url.contains("%22verdict%22%3A%22hosted_public_join_strong_auth_preview%22"));
+    assert!(
+        url.contains("%22availability%22%3A%22public_player_plane_with_backend_reauth_preview%22")
+    );
+    assert!(url.contains("%22action_id%22%3A%22main_token_transfer%22"));
+    assert!(url.contains("%22availability%22%3A%22blocked_until_strong_auth%22"));
+    clear_hosted_strong_auth_env();
+}
+
 #[test]
 fn build_game_url_brackets_ipv6_hosts() {
+    let _guard = hosted_strong_auth_env_lock().lock().expect("env lock");
+    clear_hosted_strong_auth_env();
+
     let config = LaunchConfig {
         viewer_host: "::1".to_string(),
         viewer_port: "4173".to_string(),

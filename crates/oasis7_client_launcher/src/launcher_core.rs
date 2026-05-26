@@ -16,6 +16,9 @@ pub(super) const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 pub(super) const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
 pub(super) const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 pub(super) const DEFAULT_PROVIDER_DISCOVERY_BASE_URL: &str = DEFAULT_AGENT_PROVIDER_URL;
+const HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
+const HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY";
+const HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE";
 
 #[path = "launcher_core_http.rs"]
 mod http_support;
@@ -751,10 +754,31 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
     let web_host = host_for_url(web_host.as_str());
     let ws_url = format!("ws://{web_host}:{web_port}");
     let is_hosted_public_join = hosted_public_join_blocks_local_chain_runtime(config);
-    let hosted_access_verdict = if is_hosted_public_join {
+    let hosted_strong_auth_backend_grant_enabled = hosted_strong_auth_backend_grant_enabled();
+    let hosted_access_verdict = if is_hosted_public_join && hosted_strong_auth_backend_grant_enabled
+    {
+        "hosted_public_join_strong_auth_preview"
+    } else if is_hosted_public_join {
         "hosted_public_join_blocked_until_strong_auth"
     } else {
         "trusted_local_only_preview"
+    };
+    let prompt_strong_auth_availability =
+        if is_hosted_public_join && hosted_strong_auth_backend_grant_enabled {
+            "public_player_plane_with_backend_reauth_preview"
+        } else if is_hosted_public_join {
+            "blocked_until_strong_auth"
+        } else {
+            "trusted_local_preview_only"
+        };
+    let prompt_strong_auth_reason = if is_hosted_public_join
+        && hosted_strong_auth_backend_grant_enabled
+    {
+        "hosted public join allows prompt_control through browser-local player auth plus short-lived backend strong-auth grant; this remains preview-grade until stronger custody lands"
+    } else if is_hosted_public_join {
+        "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
+    } else {
+        "trusted local preview may still use preview bootstrap; hosted/public strong-auth lane remains pending"
     };
     let hosted_access_hint = serde_json::json!({
         "deployment_mode": config.deployment_mode.trim(),
@@ -791,44 +815,20 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
             {
                 "action_id": "prompt_control_preview",
                 "required_auth": "strong_auth",
-                "availability": if is_hosted_public_join {
-                    "blocked_until_strong_auth"
-                } else {
-                    "trusted_local_preview_only"
-                },
-                "reason": if is_hosted_public_join {
-                    "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
-                } else {
-                    "trusted local preview may still use preview bootstrap; hosted/public strong-auth lane remains pending"
-                },
+                "availability": prompt_strong_auth_availability,
+                "reason": prompt_strong_auth_reason,
             },
             {
                 "action_id": "prompt_control_apply",
                 "required_auth": "strong_auth",
-                "availability": if is_hosted_public_join {
-                    "blocked_until_strong_auth"
-                } else {
-                    "trusted_local_preview_only"
-                },
-                "reason": if is_hosted_public_join {
-                    "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
-                } else {
-                    "trusted local preview may still use preview bootstrap; hosted/public strong-auth lane remains pending"
-                },
+                "availability": prompt_strong_auth_availability,
+                "reason": prompt_strong_auth_reason,
             },
             {
                 "action_id": "prompt_control_rollback",
                 "required_auth": "strong_auth",
-                "availability": if is_hosted_public_join {
-                    "blocked_until_strong_auth"
-                } else {
-                    "trusted_local_preview_only"
-                },
-                "reason": if is_hosted_public_join {
-                    "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
-                } else {
-                    "trusted local preview may still use preview bootstrap; hosted/public strong-auth lane remains pending"
-                },
+                "availability": prompt_strong_auth_availability,
+                "reason": prompt_strong_auth_reason,
             },
             {
                 "action_id": "main_token_transfer",
@@ -854,6 +854,18 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
         encoded_query_pair("ws", ws_url.as_str()),
         encoded_query_pair("hosted_access", hosted_access_hint.as_str()),
     )
+}
+
+fn hosted_strong_auth_backend_grant_enabled() -> bool {
+    env_non_empty(HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV)
+        && env_non_empty(HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV)
+        && env_non_empty(HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV)
+}
+
+fn env_non_empty(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
 }
 
 pub(super) fn is_loopback_host(host: &str) -> bool {
