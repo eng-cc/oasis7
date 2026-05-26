@@ -1,6 +1,10 @@
 import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
+import {
+  createInitialHostedLoginState,
+  resetHostedLoginChallenge as resetHostedLoginChallengeState,
+} from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 
@@ -113,21 +117,7 @@ export const state = {
     pendingForceRebind: false,
     rebindNotice: null,
   },
-  hostedLogin: {
-    channel: "email",
-    handle: "",
-    challengeId: null,
-    maskedLoginHint: null,
-    deliveryMode: null,
-    previewCode: null,
-    code: "",
-    expiresAtUnixMs: null,
-    retryAfterSeconds: null,
-    accountExists: false,
-    startInFlight: false,
-    completeInFlight: false,
-    error: null,
-  },
+  hostedLogin: createInitialHostedLoginState(),
   promptDraft: {
     agentId: null,
     currentVersion: 0,
@@ -370,15 +360,7 @@ const {
 });
 
 function resetHostedLoginChallenge() {
-  state.hostedLogin.channel = "email";
-  state.hostedLogin.challengeId = null;
-  state.hostedLogin.maskedLoginHint = null;
-  state.hostedLogin.deliveryMode = null;
-  state.hostedLogin.previewCode = null;
-  state.hostedLogin.code = "";
-  state.hostedLogin.expiresAtUnixMs = null;
-  state.hostedLogin.accountExists = false;
-  state.hostedLogin.completeInFlight = false;
+  resetHostedLoginChallengeState(state.hostedLogin);
 }
 
 async function ensureHostedAuthSigningKey(auth = state.auth) {

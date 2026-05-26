@@ -107,7 +107,7 @@
 - 当前允许：
   - `limited playable technical preview`
   - `crypto-hardened preview`
-  - `hosted-world player access model is specified_not_implemented`
+  - `hosted-world player access model exposes preview/blocking verdicts and is not hosted_ready`
 - 当前禁止：
   - `public hosted web multiplayer is already safe by default`
   - `join URL can be shared publicly without additional architecture work`

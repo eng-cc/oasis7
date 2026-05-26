@@ -357,7 +357,7 @@
     - `doc/p2p/README.md`
     - `doc/devlog/2026-03-25.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "public player plane|private control plane|signer plane|guest session|player session|strong auth|invite-only|gui-agent/action|admission control|specified_not_implemented" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.design.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.project.md doc/p2p/prd.md doc/p2p/project.md`
+    - `rg -n "public player plane|private control plane|signer plane|guest session|player session|strong auth|invite-only|gui-agent/action|admission control|hosted_public_join_blocked_until_strong_auth|hosted_public_join_strong_auth_preview" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.design.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.project.md doc/p2p/prd.md doc/p2p/project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-P2P-042 (PRD-P2P-001) [test_tier_required]: 修复 2026-03-27 p2p compile/CI 回归，收口 `oasis7_hosted_access` bin 布局、builtin wasm materializer/identity 产物、`oasis7_viewer` wasm32 claim 详情编译、`oasis7_chain_runtime` transfer tracker 测试串扰与 `oasis7_game_launcher` strong-auth env 锁污染，恢复 `./scripts/ci-tests.sh required` 全绿。

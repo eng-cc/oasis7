@@ -4,8 +4,6 @@ use std::sync::{Mutex, OnceLock};
 
 pub(super) const DEFAULT_DEPLOYMENT_MODE: &str = "trusted_local_only";
 #[allow(dead_code)]
-pub(super) const HOSTED_PLAYER_ACCESS_VERDICT: &str = "specified_not_implemented";
-#[allow(dead_code)]
 const DEFAULT_MAX_GUEST_SESSIONS: u64 = 32;
 #[allow(dead_code)]
 const DEFAULT_MAX_PLAYER_SESSIONS: u64 = 8;
@@ -81,6 +79,16 @@ impl DeploymentMode {
         }
     }
 
+    pub(super) fn hosted_player_access_verdict(self) -> &'static str {
+        match self {
+            Self::TrustedLocalOnly => "trusted_local_only_preview",
+            Self::HostedPublicJoin if hosted_strong_auth_backend_grant_enabled() => {
+                "hosted_public_join_strong_auth_preview"
+            }
+            Self::HostedPublicJoin => "hosted_public_join_blocked_until_strong_auth",
+        }
+    }
+
     #[allow(dead_code)]
     pub(super) fn requires_loopback_private_control(self) -> bool {
         matches!(self, Self::HostedPublicJoin)
@@ -144,7 +152,7 @@ pub(super) struct HostedViewerAccessHint {
 pub(super) fn hosted_player_access_contract(mode: DeploymentMode) -> HostedPlayerAccessContract {
     HostedPlayerAccessContract {
         deployment_mode: mode.as_str().to_string(),
-        verdict: HOSTED_PLAYER_ACCESS_VERDICT.to_string(),
+        verdict: mode.hosted_player_access_verdict().to_string(),
         browser_signer_bootstrap: mode.browser_signer_bootstrap_mode().to_string(),
         local_chain_runtime: mode.local_chain_runtime_mode().to_string(),
         node_admission: mode.node_admission_mode().to_string(),
@@ -178,7 +186,7 @@ pub(super) fn hosted_player_access_contract(mode: DeploymentMode) -> HostedPlaye
 pub(super) fn hosted_viewer_access_hint(mode: DeploymentMode) -> HostedViewerAccessHint {
     HostedViewerAccessHint {
         deployment_mode: mode.as_str().to_string(),
-        verdict: HOSTED_PLAYER_ACCESS_VERDICT.to_string(),
+        verdict: mode.hosted_player_access_verdict().to_string(),
         browser_signer_bootstrap: mode.browser_signer_bootstrap_mode().to_string(),
         local_chain_runtime: mode.local_chain_runtime_mode().to_string(),
         node_admission: mode.node_admission_mode().to_string(),
@@ -354,6 +362,28 @@ mod tests {
             .into_iter()
             .find(|policy| policy.action_id == "main_token_transfer")
             .expect("main_token_transfer policy")
+    }
+
+    #[test]
+    fn hosted_access_verdict_tracks_deployment_mode_and_backend_grant_readiness() {
+        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
+        clear_env();
+        assert_eq!(
+            hosted_viewer_access_hint(DeploymentMode::TrustedLocalOnly).verdict,
+            "trusted_local_only_preview"
+        );
+        assert_eq!(
+            hosted_viewer_access_hint(DeploymentMode::HostedPublicJoin).verdict,
+            "hosted_public_join_blocked_until_strong_auth"
+        );
+        std::env::set_var(HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV, "public-key");
+        std::env::set_var(HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV, "private-key");
+        std::env::set_var(HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV, "approval");
+        assert_eq!(
+            hosted_viewer_access_hint(DeploymentMode::HostedPublicJoin).verdict,
+            "hosted_public_join_strong_auth_preview"
+        );
+        clear_env();
     }
 
     #[test]

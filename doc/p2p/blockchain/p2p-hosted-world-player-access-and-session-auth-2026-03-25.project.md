@@ -99,7 +99,7 @@
 - 当前阶段:
   - 游戏阶段口径: `limited playable technical preview`
   - 安全阶段口径: `crypto-hardened preview`
-  - hosted-world player access verdict: `specified_not_implemented`
+  - hosted-world player access verdict: `trusted_local_only_preview` / `hosted_public_join_blocked_until_strong_auth` / `hosted_public_join_strong_auth_preview`
 - 已实现的 `TASK-P2P-041-A` P0 收口:
   - `oasis7_game_launcher --deployment-mode hosted_public_join` 会停止向公开 viewer HTML 注入长期 signer bootstrap。
   - `oasis7_web_launcher --deployment-mode hosted_public_join` 会把 `/api/state`、`/api/start`、`/api/stop`、`/api/chain/start`、`/api/chain/stop`、`/api/gui-agent/*` 与 console static 路径收口为 loopback-only private control plane。
@@ -199,7 +199,7 @@
 - `testing-manual.md`
 
 ## 验收命令（TASK-P2P-041-A P0 实装）
-- `rg -n "public player plane|private control plane|signer plane|guest session|player session|strong auth|invite-only|gui-agent/action|admission control|specified_not_implemented" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.design.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.project.md doc/p2p/prd.md doc/p2p/project.md`
+- `rg -n "public player plane|private control plane|signer plane|guest session|player session|strong auth|invite-only|gui-agent/action|admission control|hosted_public_join_blocked_until_strong_auth|hosted_public_join_strong_auth_preview" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.design.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.project.md doc/p2p/prd.md doc/p2p/project.md`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher --bin oasis7_game_launcher`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
