@@ -1958,6 +1958,37 @@ function createViewerHostedAuthStateModule({
     resolveViewerAuthState: resolveViewerAuthState2
   };
 }
+function createInitialHostedLoginState() {
+  return {
+    channel: "email",
+    handle: "",
+    challengeId: null,
+    maskedLoginHint: null,
+    deliveryMode: null,
+    previewCode: null,
+    code: "",
+    expiresAtUnixMs: null,
+    retryAfterSeconds: null,
+    accountExists: false,
+    startInFlight: false,
+    completeInFlight: false,
+    error: null
+  };
+}
+function resetHostedLoginChallenge$1(hostedLogin) {
+  if (!hostedLogin) {
+    return;
+  }
+  hostedLogin.channel = "email";
+  hostedLogin.challengeId = null;
+  hostedLogin.maskedLoginHint = null;
+  hostedLogin.deliveryMode = null;
+  hostedLogin.previewCode = null;
+  hostedLogin.code = "";
+  hostedLogin.expiresAtUnixMs = null;
+  hostedLogin.accountExists = false;
+  hostedLogin.completeInFlight = false;
+}
 function createViewerLocalePreferencesModule({
   documentRef,
   getSearchParams: getSearchParams2,
@@ -2154,7 +2185,7 @@ function createViewerWorldScaleModule({
       canonicalUnitLabel: formatPhysicalDistanceCm2(1, locale),
       canonicalUnitDetail: isZh ? "世界位置、距离、半径和尺寸的正式真值都按整数厘米存储。" : "World positions, distances, radii, and sizes are stored as integer centimeters.",
       worldBoundsLabel: space ? `${formatPhysicalDistanceCm2(space.width_cm, locale)} × ${formatPhysicalDistanceCm2(space.depth_cm, locale)} × ${formatPhysicalDistanceCm2(space.height_cm, locale)}` : null,
-      worldBoundsDetail: space ? isZh ? "来自 snapshot.config.space 的真实世界边界。" : "Physical world bounds derived from snapshot.config.space." : isZh ? "当前快照没有发布 world bounds。" : "The current snapshot does not publish world bounds yet.",
+      worldBoundsDetail: space ? isZh ? "来自 snapshot.config.space 的真实世界边界。" : "Physical world bounds from snapshot.config.space; anchor selection fallback is handled separately." : isZh ? "当前快照没有发布 world bounds。" : "The current snapshot does not publish world bounds yet.",
       anchor: anchor ? {
         kind: anchor.kind,
         id: anchor.id,
@@ -2342,21 +2373,7 @@ const state = {
     pendingForceRebind: false,
     rebindNotice: null
   },
-  hostedLogin: {
-    channel: "email",
-    handle: "",
-    challengeId: null,
-    maskedLoginHint: null,
-    deliveryMode: null,
-    previewCode: null,
-    code: "",
-    expiresAtUnixMs: null,
-    retryAfterSeconds: null,
-    accountExists: false,
-    startInFlight: false,
-    completeInFlight: false,
-    error: null
-  },
+  hostedLogin: createInitialHostedLoginState(),
   promptDraft: {
     agentId: null,
     currentVersion: 0,
@@ -2550,15 +2567,7 @@ const {
   windowRef: window
 });
 function resetHostedLoginChallenge() {
-  state.hostedLogin.channel = "email";
-  state.hostedLogin.challengeId = null;
-  state.hostedLogin.maskedLoginHint = null;
-  state.hostedLogin.deliveryMode = null;
-  state.hostedLogin.previewCode = null;
-  state.hostedLogin.code = "";
-  state.hostedLogin.expiresAtUnixMs = null;
-  state.hostedLogin.accountExists = false;
-  state.hostedLogin.completeInFlight = false;
+  resetHostedLoginChallenge$1(state.hostedLogin);
 }
 async function ensureHostedAuthSigningKey(auth = state.auth) {
   if (!auth?.available || auth.source === "legacy_viewer_auth_bootstrap") {

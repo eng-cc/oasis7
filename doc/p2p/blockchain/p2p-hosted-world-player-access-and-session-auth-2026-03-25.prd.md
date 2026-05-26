@@ -60,7 +60,7 @@
   - AC-5: 本专题必须明确：`/api/start`、`/api/stop`、`/api/chain/start`、`/api/chain/stop` 这类控制面动作不得继续作为 public player origin 的默认可达入口；`/api/gui-agent/action` 要么拆分，要么整体留在 private control plane。
   - AC-6: 本专题必须明确 guest/player session 的 admission control，至少覆盖发放速率、世界满员、会话上限和踢出策略。
   - AC-7: 本专题必须明确 invite-only 不是当前 base requirement；基础方案以 `public join + session/capability` 为主，不把 allowlist/invite 当成安全替代。
-  - AC-8: 本专题必须明确 hosted world 当前 verdict 为 `specified_not_implemented`，不会单靠建档就升级 `limited playable technical preview` 或 `crypto-hardened preview` 口径。
+  - AC-8: 本专题必须明确 hosted world 当前 verdict 只能落在 `trusted_local_only_preview`、`hosted_public_join_blocked_until_strong_auth` 或 `hosted_public_join_strong_auth_preview` 等受限状态；不会单靠建档就升级 `hosted_ready`、`limited playable technical preview` 或 `crypto-hardened preview` 口径。
   - AC-9: `doc/p2p/project.md` 必须建立 `TASK-P2P-041` 任务链，并拆出 runtime/viewer/agent/QA/LiveOps 的后续 owner。
 - Non-Goals:
   - 不在本专题内直接实现钱包接入、第三方 OAuth 或完整账户系统。
@@ -100,7 +100,7 @@
   - NFR-P2P-023-4: session 必须可过期、可撤销、可重连；默认 session TTL 必须是有限值，且不得等同于长期 signer 生命周期。
   - NFR-P2P-023-5: 所有 hosted world 敏感拒绝路径必须返回可归类错误码，如 `auth_level_insufficient`、`session_revoked`、`strong_auth_required`、`operator_plane_only`。
   - NFR-P2P-023-6: hosted world 公开 join 面必须有有界 admission control；未达到上限前可签发，会话达到上限或 world 满员时必须显式拒绝并可审计。
-  - NFR-P2P-023-7: 在 hosted world 方案真正实现前，对外口径不得声称“玩家可安全把网页公开给任何人并共玩”，统一只能描述为 `specified_not_implemented`。
+  - NFR-P2P-023-7: 在 hosted world 方案真正实现前，对外口径不得声称“玩家可安全把网页公开给任何人并共玩”，统一只能描述为受限 preview/blocking verdict，不得描述为 `hosted_ready`。
   - NFR-P2P-023-8: QA required 套件必须覆盖 session replay、expired token、revocation、admin/public URL 混淆、admission limit 和敏感按钮降级。
   - NFR-P2P-023-9: preview-grade hosted `strong_auth` 只允许把短期 backend-signed grant 暴露给浏览器；backend signer 私钥必须继续留在服务端受控环境中，不得回流到 HTML/JS/bootstrap。
 - Security & Privacy: 浏览器应被视为不可信执行面。hosted world 的根安全原则是“浏览器拿 session，不拿长期 signer；玩家入口管游玩，不管运维；强鉴权单独升级，不依赖 host node key 代签”。

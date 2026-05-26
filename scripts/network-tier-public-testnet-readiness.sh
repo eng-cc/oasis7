@@ -208,6 +208,8 @@ lanes = []
 missing_required_lanes = list(required_lanes)
 manifest_blockers = []
 lanes_tsv_path = None
+blocking_lanes = []
+partial_lanes = []
 
 bundle_ref = data["runtime_refs"]["release_candidate_bundle_ref"]
 bundle_path = resolve_ref(bundle_ref)
@@ -289,6 +291,8 @@ elif not lanes:
     gate_result = "block"
     manifest_blockers.append("lanes_tsv_required_for_non_skeleton_review")
 else:
+    blocking_lanes = [item for item in lanes if item["status"] == "block"]
+    partial_lanes = [item for item in lanes if item["status"] == "partial"]
     if data["status"] == "specified_skeleton_only":
         manifest_blockers.append(
             "manifest_status_specified_skeleton_only_requires_rehearsal_or_live"
@@ -334,6 +338,8 @@ summary = {
     "lanes_tsv_path": str(lanes_tsv_path) if lanes_tsv_path else None,
     "lane_count": len(lanes),
     "lanes": lanes,
+    "blocking_lanes": blocking_lanes,
+    "partial_lanes": partial_lanes,
     "manifest_blockers": manifest_blockers,
     "gate_result": gate_result,
     "readiness_verdict": readiness_verdict,

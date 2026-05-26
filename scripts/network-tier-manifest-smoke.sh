@@ -12,6 +12,7 @@ out_dir="$tmpdir/readiness"
 bundle_path="$tmpdir/public-testnet-smoke-bundle.json"
 skeleton_lanes_tsv="$tmpdir/public-testnet-skeleton-lanes.tsv"
 ready_lanes_tsv="$tmpdir/public-testnet-ready-lanes.tsv"
+runtime_block_lanes_tsv="$tmpdir/public-testnet-runtime-block-lanes.tsv"
 template_pass_lanes_tsv="$tmpdir/public-testnet-template-pass-lanes.tsv"
 shared_devnet_pass_evidence="$tmpdir/shared-devnet-pass-evidence.md"
 public_rpc_evidence="$tmpdir/public-rpc-ready.md"
@@ -137,6 +138,8 @@ sed -i "s|FAUCET_EVIDENCE|$faucet_evidence|g" "$ready_lanes_tsv"
 sed -i "s|RESET_POLICY_EVIDENCE|$reset_policy_evidence|g" "$ready_lanes_tsv"
 sed -i "s|RUNTIME_BOOTSTRAP_EVIDENCE|$runtime_bootstrap_evidence|g" "$ready_lanes_tsv"
 sed -i "s|CLAIMS_BOUNDARY_EVIDENCE|$claims_boundary_evidence|g" "$ready_lanes_tsv"
+cp "$ready_lanes_tsv" "$runtime_block_lanes_tsv"
+sed -i $'s|runtime_bootstrap\truntime_engineer\tpass\t|runtime_bootstrap\truntime_engineer\tblock\t|' "$runtime_block_lanes_tsv"
 
 ./scripts/network-tier-manifest.sh validate --manifest "$manifest_path" >/dev/null
 ./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-shared-devnet.example.json >/dev/null
@@ -208,6 +211,13 @@ data = json.loads(path.read_text(encoding="utf-8"))
 data["endpoint_policy"]["rpc_ref"] = "https://public-testnet-live-candidate.oasis7.network/rpc"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
+
+./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest "$manifest_path" \
+  --lanes-tsv "$runtime_block_lanes_tsv" \
+  --out-dir "$out_dir/runtime-bootstrap-block" >/dev/null
+jq -e '.readiness_verdict == "block" and .live_candidate_allowed == false and (.blocking_lanes | any(.lane_id == "runtime_bootstrap"))' \
+  "$(latest_summary "$out_dir/runtime-bootstrap-block")/summary.json" >/dev/null
 
 cp "$ready_lanes_tsv" "$template_pass_lanes_tsv"
 sed -i "s|$runtime_bootstrap_evidence|doc/testing/templates/public-testnet-rehearsal-template.md|g" "$template_pass_lanes_tsv"

@@ -190,6 +190,7 @@
 - [x] end-to-end-product-runtime-tracing (PRD-ENGINEERING-001/003) [test_tier_required]: 在当前 tracing baseline 之上，把 `game_launcher / web_launcher / viewer_live / chain_runtime / provider_local_bridge / newapi_bridge_service` 这一条主产品运行链补齐为可传播的结构化 tracing，会话级 `trace_session_id` 需能从父进程传递到子进程，并将关键连接/回收/奖励 runtime 热路径的 stderr 告警统一接入 fallback helper。 Trace: .pm/tasks/task_6ff11b8818bb47e8ae063658d321ba8d.yaml
 - [x] viewer-web-build-tech-debt-burn-down (PRD-ENGINEERING-001/002/021) [test_tier_required]: 收口 viewer web build/release 链的 canonical bundle 真值，新增显式 `wasm-bindgen` setup helper，降低 `legacy_core.js` 的浏览器状态耦合，并补齐对应脚本回归。 Trace: .pm/tasks/task_07ef03a5ce6a41b1bb0d139360ef5c74.yaml
 - [x] doc-redundancy-burn-down (PRD-ENGINEERING-025) [test_tier_required]: 收口 root legacy redirect、engineering landing README 与模块 project 状态区中的重复真值，保留 active truth，把完成历史回收为 topic project / `.pm` trace。 Trace: .pm/tasks/task_3540f773193f414690548d217b110bed.yaml
+- [x] p0-p1-technical-debt-optimization (PRD-ENGINEERING-001/021) [test_tier_required]: 收口当前审计指出的 P0/P1 技术债首轮优化，覆盖 public_testnet readiness blocker 显式化、hosted player access preview/blocking verdict 接线，以及 Viewer hosted login state 小模块拆分。 Trace: .pm/tasks/task_a669e177b927403a8a95be50e6e2bdf2.yaml
 - [ ] required-gate-runtime-support-coverage (PRD-ENGINEERING-021) [test_tier_required]: 让 GitHub `required-gate` 在 planner 命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时实际执行 `oasis7_node`、`oasis7_net` 与 `oasis7_net --features libp2p` support tests，并同步对齐 `prepare-task-pr` 推荐命令与 `testing-manual` 口径。 Trace: .pm/tasks/task_ec27ba7d019549d4b4692bd648a1cf09.yaml
 
 ## File Structure / Affected Paths
@@ -261,7 +262,7 @@
 - 下一任务: 当前入口减重切片已收口；后续仍优先按 `scripts/doc-inventory-report.sh` 结果继续拆分 near-limit active project docs，先看 `doc/world-simulator/project.md` 与 `doc/readme/project.md`。
 - 最新完成: `local-cargo-cache-script-convergence`（已把本地 smoke / playtest / prewarm 脚本的开发态 cargo build/run 继续收敛到 shared target helper，同时保留 CI/release/deterministic wasm 的 raw cargo 边界。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 当前治理重点: 已完成 root redirect 最小化、engineering README landing 收紧，以及模块 project 状态区去历史播报墙；后续治理继续优先处理 near-limit active docs。
+- 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
 - 已完成的治理专题、季度复核与流程迁移不再在本页逐条滚动播报；统一回看对应 topic `*.project.md`、`.pm/tasks/task_<32hex>.yaml` 与 execution log。
 - 说明: 本文档只保留当前执行窗口、下一步与判断口径；历史完成态继续以本页任务清单和专题 project 真值为准。

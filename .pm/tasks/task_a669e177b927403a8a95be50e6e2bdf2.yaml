@@ -1,0 +1,31 @@
+task_uid: task_a669e177b927403a8a95be50e6e2bdf2
+title: "P0/P1 technical debt optimization"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-technical-debt-p0-p1-optimization
+execution_log_path: .pm/tasks/task_a669e177b927403a8a95be50e6e2bdf2.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv
+  - crates/oasis7/src/hosted_access.rs
+  - crates/oasis7_viewer/software_safe_src/legacy_core.js
+doc_refs:
+  - doc/engineering/project.md
+  - testing-manual.md
+related_prd: []
+acceptance:
+  - "public_testnet readiness evidence/gate no longer silently treats runtime_bootstrap block as ready"
+  - "hosted player access contract exposes preview/blocking status through connected runtime or launcher evidence instead of dead-code-only specified_not_implemented truth"
+  - "viewer legacy_core first extraction reduces concentrated frontend state without changing user-facing behavior"
+handoff_to:
+  - runtime_engineer
+  - viewer_engineer
+updated_at: 2026-05-26T13:21:53+08:00
+last_started_at: 2026-05-26T13:02:58+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/network-tier-manifest-smoke.sh
+last_verified_at: 2026-05-26T13:21:52+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-26T13:21:53+08:00
