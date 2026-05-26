@@ -56,6 +56,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+bt = chr(96)
 
 checks = [
     (
@@ -73,10 +74,10 @@ checks = [
         root / "AGENTS.md",
         [
             "default-workflow-bootstrap",
-            "判断 trivial/non-trivial、是否已具备隔离 task worktree / `.pm` task 真值",
-            "`producer_system_designer` orchestrator + 角色 subagents",
+            f"判断 trivial/non-trivial、是否已具备隔离 task worktree / {bt}.pm{bt} task 真值",
+            f"{bt}producer_system_designer{bt} orchestrator + 角色 subagents",
             "formal sink",
-            "liveops_community` 必须参与至少一个 slice",
+            f"liveops_community{bt} 必须参与至少一个 slice",
             "requesting-repo-owned-review/SKILL.md",
         ],
     ),

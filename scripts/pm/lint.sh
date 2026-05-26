@@ -84,8 +84,15 @@ require_file "scripts/pm/working-memory-to-signal.sh"
 require_file "scripts/pm/workflow-report.sh"
 require_file "scripts/pm/schemas/codex-working-memory.schema.json"
 
-mapfile -t CANONICAL_ROLES < <(find .agents/roles -mindepth 1 -maxdepth 1 -type f -name '*.md' -printf '%f\n' | sed 's/\.md$//' | sort)
-mapfile -t REGISTRY_ROLES < <(sed -n 's/^  - role_name: //p' .pm/registry/roles.yaml | sort)
+CANONICAL_ROLES=()
+while IFS= read -r role; do
+  CANONICAL_ROLES+=("$role")
+done < <(find .agents/roles -mindepth 1 -maxdepth 1 -type f -name '*.md' | sed 's#^.*/##; s/\.md$//' | sort)
+
+REGISTRY_ROLES=()
+while IFS= read -r role; do
+  REGISTRY_ROLES+=("$role")
+done < <(sed -n 's/^  - role_name: //p' .pm/registry/roles.yaml | sort)
 
 if [[ "${#CANONICAL_ROLES[@]}" -ne "${#REGISTRY_ROLES[@]}" ]]; then
   fail "role count mismatch: canonical=${#CANONICAL_ROLES[@]} registry=${#REGISTRY_ROLES[@]}"

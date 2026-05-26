@@ -217,23 +217,20 @@ warn() {
   echo "warning: $*" >&2
 }
 
-load_plan_kv() {
+plan_kv_get() {
   local output="$1"
-  local map_name="$2"
-  local line=""
   local key=""
+  key="$2"
+  printf '%s\n' "$output" | sed -n "s/^${key}=//p" | head -n 1
+}
+
+plan_kv_get_default() {
+  local output="$1"
+  local key="$2"
+  local default_value="$3"
   local value=""
-
-  declare -gA "$map_name"
-  local -n plan_ref="$map_name"
-  plan_ref=()
-
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    key="${line%%=*}"
-    value="${line#*=}"
-    plan_ref["$key"]="$value"
-  done <<< "$output"
+  value="$(plan_kv_get "$output" "$key")"
+  printf '%s\n' "${value:-$default_value}"
 }
 
 ensure_branch_exists "$SOURCE_BRANCH"
@@ -297,21 +294,31 @@ LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
 if [[ -x "./scripts/plan-rust-required-scope.sh" ]]; then
   if RUST_SCOPE_OUTPUT="$(./scripts/plan-rust-required-scope.sh --event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_BRANCH" 2>/dev/null)"; then
-    load_plan_kv "$RUST_SCOPE_OUTPUT" RUST_SCOPE_PLAN
-    LOCAL_REQUIRED_SCOPE="${RUST_SCOPE_PLAN[scope]:-unavailable}"
-    LOCAL_REQUIRED_CHANGED_PATH_COUNT="${RUST_SCOPE_PLAN[changed_path_count]:-0}"
-    LOCAL_REQUIRED_CHANGED_PATHS="${RUST_SCOPE_PLAN[changed_paths]:-}"
-    LOCAL_REQUIRED_REASON_SUMMARY="${RUST_SCOPE_PLAN[reason_summary]:-}"
+    LOCAL_REQUIRED_SCOPE="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "scope")"
+    LOCAL_REQUIRED_SCOPE="${LOCAL_REQUIRED_SCOPE:-unavailable}"
+    LOCAL_REQUIRED_CHANGED_PATH_COUNT="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "changed_path_count")"
+    LOCAL_REQUIRED_CHANGED_PATH_COUNT="${LOCAL_REQUIRED_CHANGED_PATH_COUNT:-0}"
+    LOCAL_REQUIRED_CHANGED_PATHS="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "changed_paths")"
+    LOCAL_REQUIRED_REASON_SUMMARY="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "reason_summary")"
     if [[ "$LOCAL_REQUIRED_SCOPE" != "minimal" ]]; then
-      LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=${RUST_SCOPE_PLAN[run_oasis7_required_tests]:-false} \
-OASIS7_CI_RUN_CONSENSUS_TESTS=${RUST_SCOPE_PLAN[run_consensus_tests]:-false} \
-OASIS7_CI_RUN_DISTFS_TESTS=${RUST_SCOPE_PLAN[run_distfs_tests]:-false} \
-OASIS7_CI_RUN_OASIS7_NODE_TESTS=${RUST_SCOPE_PLAN[run_oasis7_node_tests]:-false} \
-OASIS7_CI_RUN_OASIS7_NET_TESTS=${RUST_SCOPE_PLAN[run_oasis7_net_tests]:-false} \
-OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=${RUST_SCOPE_PLAN[run_oasis7_net_libp2p_tests]:-false} \
-OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=${RUST_SCOPE_PLAN[run_viewer_contract_tests]:-false} \
-OASIS7_CI_RUN_VIEWER_WASM_CHECK=${RUST_SCOPE_PLAN[run_viewer_wasm_check]:-false} \
-OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=${RUST_SCOPE_PLAN[run_launcher_web_build]:-false} \
+      RUN_OASIS7_REQUIRED_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_required_tests" "false")"
+      RUN_CONSENSUS_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_consensus_tests" "false")"
+      RUN_DISTFS_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_distfs_tests" "false")"
+      RUN_OASIS7_NODE_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_node_tests" "false")"
+      RUN_OASIS7_NET_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_net_tests" "false")"
+      RUN_OASIS7_NET_LIBP2P_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_net_libp2p_tests" "false")"
+      RUN_VIEWER_CONTRACT_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_viewer_contract_tests" "false")"
+      RUN_VIEWER_WASM_CHECK="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_viewer_wasm_check" "false")"
+      RUN_LAUNCHER_WEB_BUILD="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_launcher_web_build" "false")"
+      LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=$RUN_OASIS7_REQUIRED_TESTS \
+OASIS7_CI_RUN_CONSENSUS_TESTS=$RUN_CONSENSUS_TESTS \
+OASIS7_CI_RUN_DISTFS_TESTS=$RUN_DISTFS_TESTS \
+OASIS7_CI_RUN_OASIS7_NODE_TESTS=$RUN_OASIS7_NODE_TESTS \
+OASIS7_CI_RUN_OASIS7_NET_TESTS=$RUN_OASIS7_NET_TESTS \
+OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=$RUN_OASIS7_NET_LIBP2P_TESTS \
+OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=$RUN_VIEWER_CONTRACT_TESTS \
+OASIS7_CI_RUN_VIEWER_WASM_CHECK=$RUN_VIEWER_WASM_CHECK \
+OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=$RUN_LAUNCHER_WEB_BUILD \
 ./scripts/ci-tests.sh required"
     fi
     CLAIM_READY_COMMAND="$(render_cmd "./scripts/pm/claim-ready.sh" "--claim-type" "ready_for_pr" "--verify-command" "$LOCAL_REQUIRED_COMMAND")"

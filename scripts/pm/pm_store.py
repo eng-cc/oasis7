@@ -710,6 +710,17 @@ def resolve_source_ref_path(root: pathlib.Path, source_ref: str) -> pathlib.Path
     return root / path
 
 
+def is_external_codex_session_ref(source_ref: str) -> bool:
+    path = pathlib.Path(parse_reference_path(source_ref)).expanduser()
+    parts = path.parts
+    if not path.is_absolute() or path.suffix != ".jsonl":
+        return False
+    for index, part in enumerate(parts[:-1]):
+        if part == ".codex" and index + 1 < len(parts) and parts[index + 1] == "sessions":
+            return True
+    return False
+
+
 def is_devlog_archive_reference(source_ref: str) -> bool:
     source_path = parse_reference_path(str(source_ref))
     if not source_path:
@@ -1039,6 +1050,8 @@ def run_working_memory_lint(root: pathlib.Path) -> None:
                         resolved = resolve_source_ref_path(root, str(source_ref))
                     except ValueError as exc:
                         fail(f"{path.relative_to(root)} {entry_id} invalid source_ref: {exc}")
+                        continue
+                    if is_external_codex_session_ref(str(source_ref)):
                         continue
                     if not resolved.exists():
                         fail(f"{path.relative_to(root)} {entry_id} source_ref missing: {resolved}")
@@ -2143,6 +2156,8 @@ def run_memory_lint(root: pathlib.Path) -> None:
                             f"{path.relative_to(root)} {record_id} source_ref must not use doc/devlog archive: "
                             f"{source_ref}"
                         )
+                    if is_external_codex_session_ref(str(source_ref)):
+                        continue
                     if not (root / source_path).exists():
                         fail(f"{path.relative_to(root)} {record_id} source_ref missing: {source_path}")
 

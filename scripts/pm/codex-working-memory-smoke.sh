@@ -8,6 +8,24 @@ OUTPUT_JSON=0
 KEEP_TEMP=0
 SMOKE_TASK_UID="task_a878d035986f54a79dc65a383a87de1c"
 
+sha256_file() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print $1}'
+    return
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$path" | awk '{print $1}'
+    return
+  fi
+  if command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha256 "$path" | awk '{print $NF}'
+    return
+  fi
+  echo "codex-working-memory-smoke: no SHA-256 command found" >&2
+  exit 1
+}
+
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/pm/codex-working-memory-smoke.sh [--json] [--keep-temp]
@@ -274,11 +292,11 @@ RESULT_JSON_REGISTRY="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-workin
   --codex-bin "$TMPDIR/fake-codex" \
   --json)"
 
-DRY_RUN_SIGNAL_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/inbox/signals.jsonl" | awk '{print $1}')"
-DRY_RUN_WM_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/working_memory/$SMOKE_TASK_UID.yaml" | awk '{print $1}')"
-DRY_RUN_TASK_REGISTRY_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/registry/tasks.yaml" | awk '{print $1}')"
-DRY_RUN_BACKLOG_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/roles/producer_system_designer/backlog/candidate.yaml" | awk '{print $1}')"
-DRY_RUN_TASK_LIST_BEFORE="$(find "$TMPDIR/.pm/tasks" -maxdepth 1 -type f -printf '%f\n' | sort)"
+DRY_RUN_SIGNAL_SHA_BEFORE="$(sha256_file "$TMPDIR/.pm/inbox/signals.jsonl")"
+DRY_RUN_WM_SHA_BEFORE="$(sha256_file "$TMPDIR/.pm/working_memory/$SMOKE_TASK_UID.yaml")"
+DRY_RUN_TASK_REGISTRY_SHA_BEFORE="$(sha256_file "$TMPDIR/.pm/registry/tasks.yaml")"
+DRY_RUN_BACKLOG_SHA_BEFORE="$(sha256_file "$TMPDIR/.pm/roles/producer_system_designer/backlog/candidate.yaml")"
+DRY_RUN_TASK_LIST_BEFORE="$(find "$TMPDIR/.pm/tasks" -maxdepth 1 -type f | sed 's#^.*/##' | sort)"
 DRY_RUN_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-autoflow.sh" \
   --task-uid "$SMOKE_TASK_UID" \
   --entry-id WM-0002 \
@@ -286,11 +304,11 @@ DRY_RUN_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-autof
   --priority P2 \
   --dry-run \
   --json)"
-DRY_RUN_SIGNAL_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/inbox/signals.jsonl" | awk '{print $1}')"
-DRY_RUN_WM_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/working_memory/$SMOKE_TASK_UID.yaml" | awk '{print $1}')"
-DRY_RUN_TASK_REGISTRY_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/registry/tasks.yaml" | awk '{print $1}')"
-DRY_RUN_BACKLOG_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/roles/producer_system_designer/backlog/candidate.yaml" | awk '{print $1}')"
-DRY_RUN_TASK_LIST_AFTER="$(find "$TMPDIR/.pm/tasks" -maxdepth 1 -type f -printf '%f\n' | sort)"
+DRY_RUN_SIGNAL_SHA_AFTER="$(sha256_file "$TMPDIR/.pm/inbox/signals.jsonl")"
+DRY_RUN_WM_SHA_AFTER="$(sha256_file "$TMPDIR/.pm/working_memory/$SMOKE_TASK_UID.yaml")"
+DRY_RUN_TASK_REGISTRY_SHA_AFTER="$(sha256_file "$TMPDIR/.pm/registry/tasks.yaml")"
+DRY_RUN_BACKLOG_SHA_AFTER="$(sha256_file "$TMPDIR/.pm/roles/producer_system_designer/backlog/candidate.yaml")"
+DRY_RUN_TASK_LIST_AFTER="$(find "$TMPDIR/.pm/tasks" -maxdepth 1 -type f | sed 's#^.*/##' | sort)"
 
 SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-to-signal.sh" \
   --task-uid "$SMOKE_TASK_UID" \
