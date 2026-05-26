@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
   cat <<'USAGE'
@@ -549,10 +550,10 @@ if ! command -v curl >/dev/null 2>&1; then
 fi
 
 if [[ "$prewarm" -eq 1 ]] && [[ "$dry_run" -eq 0 ]]; then
-  run env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime
+  run oasis7_cargo_dev build -p oasis7 --bin oasis7_chain_runtime
 fi
 
-chain_bin="$repo_root/target/debug/oasis7_chain_runtime"
+chain_bin="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_chain_runtime"
 if [[ "$dry_run" -eq 0 ]] && [[ ! -x "$chain_bin" ]]; then
   echo "oasis7_chain_runtime binary not found: $chain_bin" >&2
   echo "run with prewarm enabled or build it manually first" >&2

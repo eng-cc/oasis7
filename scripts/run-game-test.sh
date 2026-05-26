@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 source "$ROOT_DIR/scripts/bundle-freshness-lib.sh"
+source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
 
 VIEWER_HOST="127.0.0.1"
 VIEWER_PORT="4173"
@@ -273,17 +274,7 @@ check_port_free() {
 }
 
 resolve_source_mode_target_dir() {
-  local base_dir
-  if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-    if [[ "${CARGO_TARGET_DIR}" == /* ]]; then
-      base_dir="${CARGO_TARGET_DIR}"
-    else
-      base_dir="$ROOT_DIR/${CARGO_TARGET_DIR}"
-    fi
-  else
-    base_dir="$ROOT_DIR/target"
-  fi
-  printf '%s/debug\n' "$base_dir"
+  oasis7_cargo_dev_debug_bin_dir "$ROOT_DIR"
 }
 
 ensure_launcher_alive() {
@@ -488,7 +479,7 @@ else
   if [[ "$CHAIN_ENABLED" == "1" ]]; then
     SOURCE_BUILD_ARGS+=(--bin oasis7_chain_runtime)
   fi
-  env -u RUSTC_WRAPPER cargo "${SOURCE_BUILD_ARGS[@]}"
+  oasis7_cargo_dev "${SOURCE_BUILD_ARGS[@]}"
   [[ -x "$SOURCE_MODE_PROBE_BIN" ]] || { echo "error: built probe binary missing: $SOURCE_MODE_PROBE_BIN" >&2; exit 1; }
   [[ -x "$SOURCE_MODE_LAUNCHER_BIN" ]] || { echo "error: built launcher binary missing: $SOURCE_MODE_LAUNCHER_BIN" >&2; exit 1; }
   [[ -x "$SOURCE_MODE_VIEWER_LIVE_BIN" ]] || { echo "error: built viewer live binary missing: $SOURCE_MODE_VIEWER_LIVE_BIN" >&2; exit 1; }

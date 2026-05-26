@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 source "$repo_root/scripts/agent-browser-lib.sh"
+source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
   cat <<'USAGE'
@@ -344,11 +345,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "+ env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime"
-env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime >>"$launcher_log" 2>&1
+echo "+ oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime"
+OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime >>"$launcher_log" 2>&1
 
-echo "+ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- ${live_args[*]}"
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- "${live_args[@]}" >"$launcher_log" 2>&1 &
+echo "+ oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- ${live_args[*]}"
+OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- "${live_args[@]}" >"$launcher_log" 2>&1 &
 launcher_pid=$!
 
 wait_for_port "$web_bind_host" "$web_bind_port" 240 || { echo "error: web bridge did not come up on $web_bind" >&2; exit 1; }

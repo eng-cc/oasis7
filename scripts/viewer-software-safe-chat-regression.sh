@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 source "$repo_root/scripts/agent-browser-lib.sh"
+source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
   cat <<'USAGE'
@@ -376,7 +377,7 @@ if [[ -z "$GAME_URL" ]]; then
   BOOTSTRAPPED_STACK=1
   if [[ "$BOOTSTRAP_USES_BUNDLE" -ne 1 ]]; then
     log_note build_oasis7_viewer_live
-    env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_viewer_live >>"$ab_log" 2>&1
+    OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live >>"$ab_log" 2>&1
   fi
   if [[ "$REQUIRE_AGENT_SPOKE_EXPLICIT" -ne 1 && "$BOOTSTRAP_USES_BUNDLE" -ne 1 ]]; then
     REQUIRE_AGENT_SPOKE=1

@@ -122,6 +122,7 @@ run_required_gate_checks() {
   run ./scripts/doc-governance-check.sh
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh
+  run ./scripts/cargo-dev-lib.test.sh
   run ./scripts/check-rust-file-size.sh
   run env -u RUSTC_WRAPPER cargo fmt --all -- --check
 }

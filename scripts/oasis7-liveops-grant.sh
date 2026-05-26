@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
 
 usage() {
   cat <<'USAGE'
@@ -169,7 +170,7 @@ fi
 if [[ -n "$CLI_BIN" ]]; then
   CMD=("$CLI_BIN" "${CLI_ARGS[@]}")
 else
-  CMD=(env -u RUSTC_WRAPPER cargo run -q -p oasis7 --bin oasis7_liveops_grant_cli -- "${CLI_ARGS[@]}")
+  CMD=(oasis7_cargo_dev run -q -p oasis7 --bin oasis7_liveops_grant_cli -- "${CLI_ARGS[@]}")
 fi
 
 if [[ "$PRINT_CMD" == "1" ]]; then

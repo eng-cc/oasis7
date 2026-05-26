@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/cargo-dev-lib.sh"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -265,7 +268,7 @@ fi
 cp -a "$SOURCE_WORLD_DIR"/. "$BACKUP_DIR"/
 
 run_and_capture baseline_pre_audit \
-  env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_audit -- \
+  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BASELINE_MANIFEST" \
     --finality-slot-id "$FINALITY_SLOT_ID" \
@@ -274,12 +277,12 @@ run_and_capture baseline_pre_audit \
     --require-single-failure-tolerance
 
 run_and_capture pass_import \
-  env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_import -- \
+  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_import -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$PASS_MANIFEST"
 
 run_and_capture pass_audit \
-  env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_audit -- \
+  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$PASS_MANIFEST" \
     --finality-slot-id "$FINALITY_SLOT_ID" \
@@ -288,12 +291,12 @@ run_and_capture pass_audit \
     --require-single-failure-tolerance
 
 run_and_capture block_import \
-  env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_import -- \
+  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_import -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BLOCK_MANIFEST"
 
 run_and_capture block_audit \
-  env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_audit -- \
+  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BLOCK_MANIFEST" \
     --finality-slot-id "$FINALITY_SLOT_ID" \
@@ -303,12 +306,12 @@ run_and_capture block_audit \
 
 if [[ "$BLOCK_ENFORCEMENT_STAGE" == "audit_failover_gate" ]]; then
   run_and_capture rejoin_to_pass_import \
-    env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_import -- \
+    oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_import -- \
       --world-dir "$SOURCE_WORLD_DIR" \
       --public-manifest "$PASS_MANIFEST"
 
   run_and_capture rejoin_audit \
-    env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_audit -- \
+    oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
       --world-dir "$SOURCE_WORLD_DIR" \
       --public-manifest "$PASS_MANIFEST" \
       --finality-slot-id "$FINALITY_SLOT_ID" \
@@ -325,12 +328,12 @@ else
 fi
 
 run_and_capture restore_import \
-  env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_import -- \
+  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_import -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BASELINE_MANIFEST"
 
 run_and_capture restore_audit \
-  env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_audit -- \
+  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BASELINE_MANIFEST" \
     --finality-slot-id "$FINALITY_SLOT_ID" \

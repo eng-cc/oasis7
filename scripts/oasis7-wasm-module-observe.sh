@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/cargo-dev-lib.sh"
+
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/oasis7-wasm-module-observe.sh [options]
@@ -68,8 +71,7 @@ if [[ ! -f "$spec_path" ]]; then
 fi
 
 cmd=(
-  env -u RUSTC_WRAPPER
-  cargo run --manifest-path tools/wasm_module_observe/Cargo.toml -- observe
+  oasis7_cargo_dev run --manifest-path tools/wasm_module_observe/Cargo.toml -- observe
   --spec "$spec_path"
 )
 

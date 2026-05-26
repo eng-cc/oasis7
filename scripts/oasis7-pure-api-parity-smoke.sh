@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
   cat <<'USAGE'
@@ -201,8 +202,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-env -u RUSTC_WRAPPER cargo build -q -p oasis7 --bin oasis7_pure_api_client
-client_bin="$repo_root/target/debug/oasis7_pure_api_client"
+OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -q -p oasis7 --bin oasis7_pure_api_client
+client_bin="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_pure_api_client"
 [[ -x "$client_bin" ]] || {
   echo "error: expected pure API client binary at $client_bin" >&2
   exit 1

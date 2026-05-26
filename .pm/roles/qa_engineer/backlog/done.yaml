@@ -424,3 +424,17 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_3a51efc776c54376a85798763102a9e5.yaml
+  - task_uid: task_46ea1c81166043e3a1e3d5899b618ae6
+    title: "local cargo cache script convergence"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-ENGINEERING-021
+      - PRD-ENGINEERING-002
+    acceptance:
+      - "Development-state local Rust build/test/run/check scripts use scripts/cargo-dev.sh or an explicit shared target wrapper where safe."
+      - "Deterministic wasm, release, CI, and hash/receipt evidence flows keep raw cargo/CARGO_TARGET_DIR boundaries documented."
+      - "Testing/manual and project/task execution truth record the narrowed exception policy."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_46ea1c81166043e3a1e3d5899b618ae6.yaml
