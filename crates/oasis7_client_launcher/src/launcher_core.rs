@@ -751,9 +751,14 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
     let web_host = host_for_url(web_host.as_str());
     let ws_url = format!("ws://{web_host}:{web_port}");
     let is_hosted_public_join = hosted_public_join_blocks_local_chain_runtime(config);
+    let hosted_access_verdict = if is_hosted_public_join {
+        "hosted_public_join_blocked_until_strong_auth"
+    } else {
+        "trusted_local_only_preview"
+    };
     let hosted_access_hint = serde_json::json!({
         "deployment_mode": config.deployment_mode.trim(),
-        "verdict": "specified_not_implemented",
+        "verdict": hosted_access_verdict,
         "browser_signer_bootstrap": if is_hosted_public_join {
             "disabled_for_public_player_plane"
         } else {

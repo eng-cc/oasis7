@@ -735,7 +735,7 @@ mod tests {
                 .unwrap_or_else(|| panic!("path should expose public snapshot: {path}"));
             assert_eq!(
                 public_state.hosted_access.verdict,
-                "specified_not_implemented"
+                "hosted_public_join_blocked_until_strong_auth"
             );
             assert!(
                 public_state.game_url.contains("play.example.com"),
@@ -756,7 +756,10 @@ mod tests {
         );
         let snapshot = public_snapshot_from_state(&state, Some("127.0.0.1"));
         assert_eq!(snapshot.hosted_access.deployment_mode, "hosted_public_join");
-        assert_eq!(snapshot.hosted_access.verdict, "specified_not_implemented");
+        assert_eq!(
+            snapshot.hosted_access.verdict,
+            "hosted_public_join_blocked_until_strong_auth"
+        );
         assert_eq!(
             snapshot.hosted_access.local_chain_runtime,
             "blocked_for_public_player_plane"

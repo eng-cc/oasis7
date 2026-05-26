@@ -22,7 +22,7 @@
 - 当前 hosted world 的对外口径仍然是：
   - `limited playable technical preview`
   - `crypto-hardened preview`
-  - `hosted-world player access verdict = specified_not_implemented`
+  - `hosted-world player access verdict = hosted_public_join_blocked_until_strong_auth` unless the backend strong-auth grant lane is configured, then `hosted_public_join_strong_auth_preview`
 
 ## 2. 先认清三类入口
 - `public join URL`
@@ -47,7 +47,7 @@
 2. 确认你准备发出去的是 game/viewer URL，而不是 launcher console 地址。
 3. 确认公开页面不会再注入长期 signer bootstrap。
 4. 确认 public snapshot 仍显示：
-   - `verdict = specified_not_implemented`
+   - `verdict = hosted_public_join_blocked_until_strong_auth` or `hosted_public_join_strong_auth_preview`; neither means `hosted_ready`
    - `main_token_transfer = blocked_until_strong_auth`
 5. 确认你没有对外宣称：
    - `hosted-ready`
