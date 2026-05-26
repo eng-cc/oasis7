@@ -1,0 +1,29 @@
+task_uid: task_4ade083740bc4d9f9f9bb742a7ce153f
+title: "advance pixel world rendering design and implementation"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-pixel-world-rendering
+execution_log_path: .pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/world-simulator/project.md
+doc_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/project.md
+related_prd: []
+acceptance:
+  - "Document the current pixel world rendering pipeline, target UX, data contract, interaction model, and verification plan."
+  - "Implement the next pixel world rendering slice in the viewer with deterministic fallback data and runtime-state integration."
+  - "Add focused automated verification for pixel world state mapping and browser-render smoke coverage where available."
+  - "Record workflow route, implementation evidence, and verification results in the task execution log."
+handoff_to: []
+updated_at: 2026-05-26T13:31:34+08:00
+last_started_at: 2026-05-26T13:19:04+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host"
+last_verified_at: 2026-05-26T13:31:33+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-26T13:31:33+08:00

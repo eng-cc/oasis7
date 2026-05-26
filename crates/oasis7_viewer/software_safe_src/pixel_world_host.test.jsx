@@ -144,6 +144,29 @@ describe("pixel world host", () => {
     expect(renderState.visual_hotspots.some((entry) => entry.kind === "blocker")).toBe(true);
   });
 
+  it("derives deterministic agent positions from assigned locations when snapshots omit agent coordinates", async () => {
+    vi.resetModules();
+    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+
+    const core = await import("./legacy_core.js");
+    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
+
+    core.injectSnapshot(sampleSnapshot());
+
+    const firstState = buildPixelWorldRenderState("en");
+    const secondState = buildPixelWorldRenderState("en");
+    const agent = firstState.agents.find((entry) => entry.id === "agent-0");
+
+    expect(agent.position_source).toBe("location_derived");
+    expect(agent.pos).toEqual(secondState.agents.find((entry) => entry.id === "agent-0").pos);
+    expect(agent.status_badges).toContain("position=location_derived");
+    expect(firstState.links).toHaveLength(1);
+    expect(firstState.links[0].from).toEqual(agent.pos);
+    expect(firstState.links[0].to).toEqual(firstState.locations[0].pos);
+  });
+
   it("shows the explicit fallback surface when the wasm runtime is unavailable", async () => {
     const { core } = await renderPixelWorldHost();
 
