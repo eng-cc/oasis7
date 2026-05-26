@@ -613,17 +613,13 @@ fn normalize_host_header(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::super::{
-        deployment_mode_from_config, public_snapshot_from_state, LauncherConfig, ServiceState,
+        deployment_mode_from_config, hosted_access::hosted_strong_auth_test_env_lock,
+        public_snapshot_from_state, LauncherConfig, ServiceState,
     };
     use super::{is_loopback_peer, path_requires_private_control_plane, private_plane_rejection};
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::path::PathBuf;
-    use std::sync::{Arc, Mutex, OnceLock};
-
-    fn hosted_strong_auth_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
+    use std::sync::{Arc, Mutex};
 
     fn clear_hosted_strong_auth_env() {
         for name in [
@@ -689,6 +685,9 @@ mod tests {
 
     #[test]
     fn hosted_mode_rejects_remote_private_control_plane_matrix() {
+        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
+        clear_hosted_strong_auth_env();
+
         let private_paths = [
             "/api/state",
             "/api/gui-agent/capabilities",
@@ -746,6 +745,9 @@ mod tests {
 
     #[test]
     fn public_snapshot_exposes_hosted_access_contract() {
+        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
+        clear_hosted_strong_auth_env();
+
         let mut config = LauncherConfig::default();
         config.deployment_mode = "hosted_public_join".to_string();
         let state = ServiceState::new(
@@ -782,7 +784,7 @@ mod tests {
 
     #[test]
     fn public_snapshot_keeps_asset_lane_blocked_when_prompt_reauth_env_is_ready() {
-        let _guard = hosted_strong_auth_env_lock().lock().expect("env lock");
+        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
         clear_hosted_strong_auth_env();
         std::env::set_var(
             "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY",
