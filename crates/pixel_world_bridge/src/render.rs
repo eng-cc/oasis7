@@ -106,7 +106,7 @@ fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64
     let _ = emit_camera_state(&runtime.camera);
 }
 
-fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -> GridLayoutKey {
+pub(crate) fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -> GridLayoutKey {
     let grid_step = clamp(24.0 * camera.zoom.max(0.5), 12.0, 72.0);
     let offset_x = ((camera.pan_x_px % grid_step) + grid_step) % grid_step;
     let offset_y = ((camera.pan_y_px % grid_step) + grid_step) % grid_step;

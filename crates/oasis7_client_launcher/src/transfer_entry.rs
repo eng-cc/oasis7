@@ -349,6 +349,9 @@ mod tests {
 
     #[test]
     fn build_transfer_submit_request_parses_trimmed_values() {
+        let _guard = crate::transfer_auth::TRANSFER_AUTH_ENV_LOCK
+            .lock()
+            .expect("env lock");
         let (public_key, private_key) = transfer_test_signer(41);
         let draft = TransferDraft {
             from_account_id: format!(" oc:pk:{public_key} "),
@@ -388,6 +391,9 @@ mod tests {
 
     #[test]
     fn submit_transfer_remote_posts_expected_payload_and_reads_success() {
+        let _guard = crate::transfer_auth::TRANSFER_AUTH_ENV_LOCK
+            .lock()
+            .expect("env lock");
         let (public_key, private_key) = transfer_test_signer(43);
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock chain server");
         let bind = listener.local_addr().expect("read local addr");
@@ -434,6 +440,9 @@ mod tests {
 
     #[test]
     fn submit_transfer_remote_returns_error_for_rejected_response() {
+        let _guard = crate::transfer_auth::TRANSFER_AUTH_ENV_LOCK
+            .lock()
+            .expect("env lock");
         let (public_key, private_key) = transfer_test_signer(45);
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock chain server");
         let bind = listener.local_addr().expect("read local addr");
