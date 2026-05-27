@@ -978,4 +978,11 @@
 - `crates/oasis7_launcher_ui/src/lib.rs`
 - `crates/oasis7_client_launcher/src/{main.rs,main_app_shell.rs,app_process.rs,app_process_web.rs,explorer_window.rs,explorer_window_view.rs}`
 - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`、`crates/oasis7/src/runtime/tests/{agent_default_modules.rs,power_bootstrap.rs}`、`scripts/build-game-launcher-bundle.sh`、`testing-manual.md`
-## 状态: 更新日期 / 当前状态 / 下一任务 / 最新完成 / 当前优先任务 / 当前阻断说明 / 并行待办: 2026-04-24 / active / 待下一个模块任务明确 / `task_241f25085f754d868313462b879e4d01` 已修复 launcher “打开游戏页”URL 与 `oasis7_game_launcher` 自动打开入口不一致的问题，`task_552222a529fa48489eab10deb789ed54` 已完成 launcher explorer 主链级重构，`task_ee3cc0c5d2d741658b404100843f93d8` 已补齐 `/api/state` `chain_replication_status` 透传，并在启动器 `节点观测` 摘要卡展示 peer 健康概览，同时提供可单独打开的 peer 明细窗口展示本地 peer id 与已连接 peer 明细；当前优先任务回到模块后续排队项 / 当前无新 blocker，已知环境限制仅剩 source stack formal 启动前仍要求配置 `OASIS7_LLM_MODEL`，本轮 URL 修复不影响 formal gameplay/LLM 预检边界 / OpenClaw provider-backed 单 NPC 闭环试点与 latency 扩面继续并行；`standard_3d` 相关代码、脚本与活跃文档已移除，当前仅保留 `viewer` canonical Web 主入口与 `software_safe` compat alias。
+## 状态
+- 更新日期: 2026-05-26
+- 当前状态: active
+- 下一任务: 待下一个模块任务明确。
+- 当前优先任务: 回到模块后续排队项；当前无新 blocker。
+- 当前窗口摘要: launcher “打开游戏页”URL、launcher explorer 主链级重构、`/api/state.chain_replication_status` 透传与节点观测摘要卡均已收口，详情回看对应 task trace。
+- 边界说明: 已知环境限制仍是 source stack formal 启动前需要 `OASIS7_LLM_MODEL` 或等价配置；`standard_3d` 相关代码、脚本与活跃文档已移除，当前仅保留 `viewer` canonical Web 主入口与 `software_safe` compat alias。
+- 历史追溯: 最近完成项不再压缩在标题行中维护；需要追 launcher / viewer / provider-backed NPC / release distribution 历史时，先从上方任务项、topic project、`doc/world-simulator/prd.index.md` 与 `.pm/tasks/*.execution.md` 进入。
