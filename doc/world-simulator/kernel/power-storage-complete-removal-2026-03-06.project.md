@@ -10,7 +10,7 @@
 - [x] T2 (PSR-002) [test_tier_required]: 删除 simulator 侧 `PowerStorage` 模型/动作/事件/初始化/回放与相关测试。
 - [x] T3 (PSR-003) [test_tier_required]: 删除 viewer 侧 `power_storage` 渲染、selection、自动化、配置与相关测试。
 - [x] T4 (PSR-004) [test_tier_required]: 更新 scripts/视觉评审模板与 UI 评审卡，去除 `power_storage` 检查项。
-- [x] T5 (PSR-002/003/004) [test_tier_required]: 执行回归、补 `doc/devlog/2026-03-06.md`、提交收口。
+- [x] T5 (PSR-002/003/004) [test_tier_required]: 执行回归、补 `doc/devlog/README.md`、提交收口。
 
 ## 依赖
 - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`

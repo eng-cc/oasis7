@@ -40,7 +40,7 @@
 ### T5 回归与收口
 - [x] 运行定向测试与脚本回归（含 gate）
 - [x] 回写项目文档状态
-- [x] 回写 `doc/devlog/2026-02-21.md`
+- [x] 回写 `doc/devlog/README.md`
 
 ### T6 千 tick 长周期演进（新增）
 - [x] `oasis7_llm_agent_demo` 增加多阶段切换参数（`--prompt-switches-json`）并与单次切换参数做互斥校验
@@ -75,7 +75,7 @@
 - [x] 新增 `test_tier_full` 定向回归：加载 git 跟踪基线 fixture 并校验关键状态结构
 - [x] 新增脚本 `scripts/llm-baseline-fixture-smoke.sh`（fixture 存在性 + 定向回归）
 - [x] `scripts/ci-tests.sh full` 接入 baseline fixture smoke
-- [x] 更新 `testing-manual.md` 与 `doc/devlog/2026-02-21.md`
+- [x] 更新 `testing-manual.md` 与 `doc/devlog/README.md`
 
 ### T11 基线加载后离线治理续跑 smoke（新增）
 - [x] 在 `oasis7_llm_agent_demo` 测试中新增 runtime bridge 续跑用例（基于 `fixtures/llm_baseline/state_01`）

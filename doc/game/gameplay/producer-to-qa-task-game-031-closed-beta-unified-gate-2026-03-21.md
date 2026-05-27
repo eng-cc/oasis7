@@ -27,7 +27,7 @@
 - 接收方交付物 1：统一 `closed_beta_candidate` release gate 文档或 evidence bundle
 - 接收方交付物 2：明确 `pass/block` 结论与阻断列表
 - 接收方交付物 3：趋势是否允许升阶的明确说明
-- 需要回写的文档 / 日志：`doc/testing/*` 或 evidence、`doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md`、`doc/devlog/2026-03-21.md`
+- 需要回写的文档 / 日志：`doc/testing/*` 或 evidence、`doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md`、`doc/devlog/README.md`
 
 ## Done Definition
 - [ ] headed Web/UI、pure API、no-UI、longrun/recovery 已进入同一 gate

@@ -70,7 +70,7 @@
 - 专题入口状态: `game-test`/`playability_test_card`/`playability_test_manual` 已收敛到模块目录。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-010 入口治理状态: 已为 evidence-first 消费者补齐轻量入口，当前模块无需再做更重的根 README 拆分。
-- 说明: 本文档仅维护可玩性结果模块设计执行状态；过程记录在 `doc/devlog/2026-03-03.md`。
+- 说明: 本文档仅维护可玩性结果模块设计执行状态；过程记录在 `doc/devlog/README.md`。
 
 ## 阶段收口角色交接
 ### Meta

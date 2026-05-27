@@ -17,7 +17,7 @@
 - `scripts/viewer-owr4-stress.sh`
 - `crates/oasis7_viewer/src/perf_probe.rs`
 - `testing-manual.md`
-- `doc/devlog/2026-02-25.md`
+- `doc/devlog/README.md`
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
 

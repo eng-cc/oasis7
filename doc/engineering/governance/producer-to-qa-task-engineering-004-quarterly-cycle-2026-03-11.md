@@ -27,7 +27,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `TASK-ENGINEERING-004` 满足 `test_tier_required`
 - 接收方交付物 2：如发现模板缺口，仅登记审查意见，不重开趋势基线任务
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`（若 QA 追加结论）
+- 需要回写的文档 / 日志：`doc/devlog/README.md`（若 QA 追加结论）
 
 ## Done Definition
 - [x] 满足验收点 1：季度节奏、触发条件与角色分工已冻结

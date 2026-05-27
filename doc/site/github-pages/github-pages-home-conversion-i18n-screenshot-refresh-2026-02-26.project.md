@@ -34,7 +34,7 @@
 ### 4. 验证与收口
 - [x] 执行 `env -u RUSTC_WRAPPER cargo check -p oasis7_viewer`
 - [x] 回写本项目管理文档状态
-- [x] 写任务日志（`doc/devlog/2026-02-26.md`）
+- [x] 写任务日志（`doc/devlog/README.md`）
 
 ## 依赖
 - 站点结构：`site/` 静态目录与 `site/assets/app.js` 现有交互。

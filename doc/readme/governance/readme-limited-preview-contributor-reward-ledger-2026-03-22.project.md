@@ -21,7 +21,7 @@
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md`
 - `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`
 - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
-- `doc/devlog/2026-03-22.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 更新日期: 2026-04-14

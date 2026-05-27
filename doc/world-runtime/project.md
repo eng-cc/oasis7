@@ -733,7 +733,7 @@
 - 承接约束: `TASK-WORLD_RUNTIME-002` 完成后方可进入 `TASK-WORLD_RUNTIME-003` 与 `TASK-WORLD_RUNTIME-004`；`TASK-WORLD_RUNTIME-033` 保留为后续联合验证切片。
 - 实施备注: 仅保留 `TASK-WORLD_RUNTIME-043` 的当前阻塞与承接约束；已完成切片不再在状态区展开，统一回看上方任务项、topic project 与 `.pm` execution log。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 说明: 本文档仅维护 world-runtime 模块设计执行状态；过程记录在 `doc/devlog/2026-03-03.md`、`doc/devlog/2026-03-06.md` 与 `doc/devlog/2026-03-08.md`。
+- 说明: 本文档仅维护 world-runtime 模块设计执行状态；过程记录在 `doc/devlog/README.md`、`doc/devlog/README.md` 与 `doc/devlog/README.md`。
 
 ## 阶段收口角色交接
 ### Meta

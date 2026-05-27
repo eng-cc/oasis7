@@ -40,7 +40,7 @@
 ## Requested Work
 - 工作项 1：验证定向单测通过并锁定 `release_default` 在 `64` 才生成 checkpoint。
 - 工作项 2：复跑真实 runtime 样本，确认 `<64` 无 checkpoint、`>=64` 有 checkpoint。
-- 工作项 3：回写 `doc/world-runtime/evidence/*`、`doc/world-runtime/project.md`、`doc/devlog/2026-03-10.md`。
+- 工作项 3：回写 `doc/world-runtime/evidence/*`、`doc/world-runtime/project.md`、`doc/devlog/README.md`。
 
 ## Expected Outputs
 - 代码改动：无

@@ -28,7 +28,7 @@
 - 接收方交付物 1：标准化 `QA Weekly / Event Verdict`
 - 接收方交付物 2：5 条 lane 的最新状态与是否需 rerun 的判断
 - 接收方交付物 3：新 failure signature / live feedback impact / `go / conditional go / no-go`
-- 需要回写的文档 / 日志：`doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md`、必要时 `doc/devlog/2026-03-22.md`
+- 需要回写的文档 / 日志：`doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md`、必要时 `doc/devlog/README.md`
 
 ## Done Definition
 - [ ] 结论覆盖 Web/UI、Pure API、No-UI、Longrun/Recovery、Trend Baseline 五条 lane
@@ -42,7 +42,7 @@
 
 ## Validation
 - 建议测试层级：`test_tier_required`
-- 建议验证命令：`rg -n "QA Weekly / Event Verdict|Unified Gate|Lane Summary|Trend Baseline|QA Recommendation" doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md doc/devlog/2026-03-22.md`
+- 建议验证命令：`rg -n "QA Weekly / Event Verdict|Unified Gate|Lane Summary|Trend Baseline|QA Recommendation" doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md doc/devlog/README.md`
 
 ## Notes
 - 接收方确认范围：`待 qa_engineer 确认`

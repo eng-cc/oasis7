@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认公开入口已补“正式公告仍在准备态”的安全说明
 - 接收方交付物 2：后续若正式公告上线，可沿用当前占位位置直接替换
-- 需要回写的文档 / 日志：`doc/site/project.md`、`doc/devlog/2026-03-11.md`
+- 需要回写的文档 / 日志：`doc/site/project.md`、`doc/devlog/README.md`
 
 ## Done Definition
 - [x] 四个公开入口页已同构补位

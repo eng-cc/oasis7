@@ -91,7 +91,7 @@
     - `doc/p2p/node/*.md`
     - `doc/p2p/observer/*.md`
     - `doc/p2p/token/*.md`
-    - `doc/devlog/2026-03-19.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "^# oasis7|^# oasis7 Runtime|^# oasis7 Simulator|^# oasis7 Viewer" doc/p2p --glob '!third_party/**'`
     - `./scripts/doc-governance-check.sh`
@@ -318,7 +318,7 @@
     - `doc/p2p/prd.index.md`
     - `doc/p2p/README.md`
     - `testing-manual.md`
-    - `doc/devlog/2026-03-24.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "shared network|release train|fuzz/property|governance drill|mainstream public-chain" doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md doc/p2p/prd.md doc/p2p/project.md testing-manual.md`
     - `./scripts/doc-governance-check.sh`
@@ -341,7 +341,7 @@
     - `doc/p2p/prd.index.md`
     - `doc/p2p/README.md`
     - `testing-manual.md`
-    - `doc/devlog/2026-03-24.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "shared_devnet|staging|canary|release_candidate_bundle|partial|runbook|promotion_record|incident_review|exit_decision|release train" doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md doc/testing/evidence/shared-network-shared-devnet-dry-run-2026-03-24.md doc/testing/evidence/shared-network-shared-devnet-promotion-record-2026-03-24.md doc/testing/evidence/shared-network-shared-devnet-incident-2026-03-24.md doc/p2p/prd.md doc/p2p/project.md testing-manual.md`
     - `./scripts/doc-governance-check.sh`
@@ -355,7 +355,7 @@
     - `doc/p2p/project.md`
     - `doc/p2p/prd.index.md`
     - `doc/p2p/README.md`
-    - `doc/devlog/2026-03-25.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "public player plane|private control plane|signer plane|guest session|player session|strong auth|invite-only|gui-agent/action|admission control|hosted_public_join_blocked_until_strong_auth|hosted_public_join_strong_auth_preview" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.design.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.project.md doc/p2p/prd.md doc/p2p/project.md`
     - `./scripts/doc-governance-check.sh`
@@ -377,7 +377,7 @@
     - `crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api_tests.rs`
     - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs`
     - `doc/p2p/project.md`
-    - `doc/devlog/2026-03-27.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bins`
     - `env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown`

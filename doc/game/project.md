@@ -90,7 +90,7 @@
     - `doc/game/gameplay/producer-to-viewer-task-game-030-closed-beta-first-screen-2026-03-21.md`
     - `doc/game/gameplay/producer-to-qa-task-game-031-closed-beta-unified-gate-2026-03-21.md`
     - `doc/game/gameplay/producer-to-liveops-task-game-032-closed-beta-candidate-runbook-2026-03-21.md`
-    - `doc/devlog/2026-03-21.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "PRD-GAME-009|internal_playable_alpha_late|closed_beta_candidate" doc/game/prd.md doc/game/project.md doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md`
     - `./scripts/doc-governance-check.sh`
@@ -126,7 +126,7 @@
     - `doc/game/project.md`
     - `doc/game/prd.index.md`
     - `doc/game/README.md`
-    - `doc/devlog/2026-03-22.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "PRD-GAME-010|limited playable technical preview|continue / hold / reassess|claim drift" doc/game/prd.md doc/game/project.md doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md doc/game/gameplay/producer-to-liveops-task-game-036-limited-preview-execution-2026-03-22.md doc/game/gameplay/producer-to-qa-task-game-037-limited-preview-gate-watch-2026-03-22.md`
     - `./scripts/doc-governance-check.sh`

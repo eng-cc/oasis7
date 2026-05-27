@@ -31,7 +31,7 @@
 - [x] 静态结构自检（关键锚点与模块可达）
 - [x] 执行 `env -u RUSTC_WRAPPER cargo check`
 - [x] 更新项目管理文档状态
-- [x] 写入当日开发日志（`doc/devlog/2026-02-12.md`）
+- [x] 写入当日开发日志（`doc/devlog/README.md`）
 
 ## 依赖
 - 继续沿用 `site/` 静态目录与 GitHub Pages 工作流。

@@ -21,7 +21,7 @@
 
 ### S4 文档回写
 - [x] 更新 `doc/world-simulator/scenario/scenario-files.prd.md` 场景矩阵描述
-- [x] 追加当日 `doc/devlog/2026-02-07.md`
+- [x] 追加当日 `doc/devlog/README.md`
 - [x] 提交 git commit
 
 ## 依赖

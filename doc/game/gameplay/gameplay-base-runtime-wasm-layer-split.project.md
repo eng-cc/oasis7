@@ -22,7 +22,7 @@
 ### T2 回归与收口
 - [x] 运行 `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::gameplay:: -- --nocapture`
 - [x] 运行 `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::modules:: -- --nocapture`
-- [x] 回写项目文档状态与 `doc/devlog/2026-02-20.md`
+- [x] 回写项目文档状态与 `doc/devlog/README.md`
 
 ## 依赖
 - `doc/game/gameplay/gameplay-engineering-architecture.md`

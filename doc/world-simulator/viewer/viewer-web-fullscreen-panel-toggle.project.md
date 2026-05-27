@@ -20,7 +20,7 @@
 - `crates/oasis7_viewer/src/panel_layout.rs`
 - `crates/oasis7_viewer/src/egui_right_panel_tests.rs`
 - `doc/world-simulator/viewer/viewer-manual.md`
-- `doc/devlog/2026-02-21.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：VWFP-1 ~ VWFP-7 全部完成。

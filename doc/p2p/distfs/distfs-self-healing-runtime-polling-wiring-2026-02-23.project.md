@@ -22,7 +22,7 @@
 ### T2 收口
 - [x] 回归 (PRD-P2P-MIG-079)：`oasis7_node`、`oasis7_net`、`oasis7_distfs`、`oasis7_consensus`
 - [x] 更新设计/项目文档状态 (PRD-P2P-MIG-079)
-- [x] 追加 `doc/devlog/2026-02-23.md` 任务日志 (PRD-P2P-MIG-079)
+- [x] 追加 `doc/devlog/README.md` 任务日志 (PRD-P2P-MIG-079)
 
 ## 依赖
 - `crates/oasis7_node/src/lib.rs`

@@ -28,7 +28,7 @@
 - [x] 静态文本一致性自检（CN/EN 对齐）
 - [x] 执行 `env -u RUSTC_WRAPPER cargo check`
 - [x] 更新项目管理文档状态
-- [x] 写入当日开发日志（`doc/devlog/2026-02-12.md`）
+- [x] 写入当日开发日志（`doc/devlog/README.md`）
 
 ## 依赖
 - 依赖现有项目阶段状态文档：`doc/world-simulator.project.md`。

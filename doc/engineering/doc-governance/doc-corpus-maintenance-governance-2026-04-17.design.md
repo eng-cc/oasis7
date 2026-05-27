@@ -34,14 +34,14 @@
 ### 3.1 成本源
 - 总量成本：`doc/` 文件总数过大，任何全局审查和检索都更慢。
 - 热点路径成本：`world-simulator/viewer`、`p2p/node`、`testing/evidence` 这类热点目录持续累积，使对象边界越来越模糊。
-- 历史 backlog 成本：`doc/devlog` 虽已退回历史归档层，但 57 份日文件仍在抬高回溯与去重成本。
+- 历史 backlog 成本：`doc/devlog` 已退回历史归档层；退役前的 57 份日文件曾持续抬高回溯与去重成本，现已由 compact archive summary 替代。
 - 近限文件成本：`project.md`、`prd.index.md` 等活跃入口文件逼近 1000 行门禁时，任何小变更都会变成结构性拆分压力。
 
 ### 3.2 本轮正式基线
 - 2026-04-17 任务启动前 `doc/` Markdown 总数: 1730
 - 高密度模块: `world-simulator` 549、`p2p` 269、`testing` 178
-- 热点历史目录: `doc/devlog/` 57
-- 最大单文件: `doc/devlog/2026-02-16.md` 3288 行
+- 热点历史目录: `doc/devlog/` retired daily files = 57
+- 原最大单文件: `doc/devlog/README.md` 3288 行（已退役）
 - 近限活跃文件示例: `doc/world-simulator/project.md` 998 行
 
 ## 4. 库存报告设计
@@ -74,7 +74,7 @@
 处理顺序：
 1. 先确认保留追溯要求。
 2. 再补中间索引、月度/阶段摘要或压缩策略。
-3. 最后才考虑把日文件进一步下沉或只保留引用入口。
+3. 当 `.pm` execution log 已成为运行态证据时，用 compact archive summary 替代并退役日文件。
 
 ### 5.2 路径级治理
 适用对象：
@@ -104,7 +104,7 @@
 
 ## 6. 当前优先级
 1. `doc/devlog`
-   - 已不再是运行态真值，但 57 份日文件和 3288 行单文件说明历史压缩债已经独立成立。
+   - 已不再是运行态真值，57 份日文件和 3288 行单文件已由 `doc/devlog/README.md` compact archive summary 替代。
 2. `world-simulator`
    - 总量 549，`viewer/` 热点依旧巨大，后续更适合路径级二次分层。
 3. `p2p`

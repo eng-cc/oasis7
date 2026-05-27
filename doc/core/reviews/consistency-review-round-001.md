@@ -114,7 +114,7 @@ rg -n "审计轮次:[[:space:]]*[1-9][0-9]*" doc/*/prd*.md doc/*/**/*.prd*.md
 | R-001 | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-closure-2026-02-25.prd.md`、`doc/headless-runtime/nonviewer/nonviewer-design-alignment-review-2026-02-25.prd.md` | 一次性设计对齐收口文档，项目状态已完成 | `doc/headless-runtime/prd.md` + `doc/core/reviews/consistency-review-round-001.md` | proposed |
 | R-002 | `doc/world-runtime/runtime/runtime-numeric-correctness-phase1~15*.prd*.md`、`runtime-infinite-sequence-rollover.prd.md` | 阶段性里程碑文档大量保留在活跃区，维护噪声高 | `doc/world-runtime/prd.md`（建议补一份汇总页） | proposed |
 | R-003 | legacy launcher desktop/unified 文档（已删除） | 已被 2026-03-04 控制面统一系列文档替代 | `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md` | done |
-| R-004 | legacy viewer rust line cap 文档（已删除） | 历史收口结论与当前代码状态漂移 | `viewer-release-full-coverage-gate.prd.md` + `doc/devlog/2026-02-22.md` | done |
+| R-004 | legacy viewer rust line cap 文档（已删除） | 历史收口结论与当前代码状态漂移 | `viewer-release-full-coverage-gate.prd.md` + `doc/devlog/README.md` | done |
 | R-005 | `doc/p2p/distributed/distributed-hard-split-phase7.prd*.md`、`doc/p2p/observer/observer-sync-*.prd*.md`（前序阶段） | 历史拆分/阶段文档已完成，信息可并入现行主线 | `doc/p2p/distributed/distributed-runtime.prd.md` + 最新 observer 桥接文档 | proposed |
 | R-006 | `doc/p2p/*/*.release.md` | 与 PRD 树索引机制不一致，链路不可达 | 对应 `*.prd.md` + `*.project.md` 的状态段 | kept_with_index |
 | R-007 | `doc/engineering/prd-review/checklists/*.md` | 旧快照法与“审计轮次 + ROUND 状态”方法重复，且存在结论漂移 | `doc/core/reviews/consistency-review-round-001.md` + 文档头 `审计轮次` | proposed |

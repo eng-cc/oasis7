@@ -25,7 +25,7 @@
 ## Expected Output
 - 接收方交付物 1：更新后的 playability 卡片或等价 QA 结论文档
 - 接收方交付物 2：`TASK-GAME-018` 是否可继续进入 release gate 的阻断判断
-- 需要回写的文档 / 日志：`doc/playability_test_result/`、`doc/game/project.md`、`doc/devlog/2026-03-10.md`
+- 需要回写的文档 / 日志：`doc/playability_test_result/`、`doc/game/project.md`、`doc/devlog/README.md`
 
 ## Done Definition
 - [ ] 基于本轮证据完成 QA 结论

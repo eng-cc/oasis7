@@ -15,7 +15,7 @@
 - `crates/oasis7_viewer/src/app_bootstrap.rs`
 - `crates/oasis7_viewer/src/main.rs`
 - `crates/oasis7_viewer/src/wasm_egui_input_bridge.rs`
-- `doc/devlog/2026-02-16.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：WDF1 已完成。

@@ -19,7 +19,7 @@
 - `crates/oasis7/src/bin/oasis7_chain_runtime/distfs_probe_runtime.rs`
 - `crates/oasis7/src/runtime/node_points_runtime.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs（`#[cfg(test)]`）`
-- `doc/devlog/2026-02-17.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：ERCB 全部完成。

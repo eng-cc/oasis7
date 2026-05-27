@@ -138,6 +138,6 @@
 - 当前证据骨架: `doc/game/gameplay/gameplay-micro-loop-visual-closure-evidence-template-2026-03-10.md`
 - 下一任务: `已完成`（后续仅需按 evidence linkage 回填到 `playability_test_result` / `testing` / `core`）
 - 阻塞项: 无
-- 说明: 过程记录在 `doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-07.md` 与 `doc/devlog/2026-03-10.md`
+- 说明: 过程记录在 `doc/devlog/README.md`、`doc/devlog/README.md` 与 `doc/devlog/README.md`
 
 审计轮次: 4

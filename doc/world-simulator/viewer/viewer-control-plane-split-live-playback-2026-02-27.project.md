@@ -17,7 +17,7 @@
 - `crates/oasis7_proto/src/viewer.rs`
 - `crates/oasis7/src/viewer/{protocol.rs,server.rs,live_split_part2.rs,mod.rs}`
 - `crates/oasis7_viewer/src/{main.rs,app_bootstrap.rs,main_connection.rs,timeline_controls.rs,egui_right_panel.rs,egui_right_panel_controls.rs,egui_right_panel_player_experience.rs,egui_right_panel_player_guide.rs,viewer_automation.rs,web_test_api.rs,headless.rs}`
-- `doc/devlog/2026-02-27.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 最近更新：2026-03-18（ROUND-006 I44-001 live seek 语义显式化）

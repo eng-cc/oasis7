@@ -34,7 +34,7 @@
 
 ### S5 文档回写与提交
 - [x] 更新设计文档/项目管理文档状态
-- [x] 追加 `doc/devlog/2026-02-07.md`
+- [x] 追加 `doc/devlog/README.md`
 - [x] 提交 git commit
 
 ## 依赖

@@ -35,4 +35,4 @@
 - 阻塞项: 无
 - 进展: `TASK-P2P-010-T0~T4` 全部完成，已完成控制面参数透传、脚本示例对齐、required/full 定向回归与任务收口。
 - 进展（2026-03-08）: 已回写残留文档口径，明确 launcher 控制面为 `oasis7_chain_runtime/oasis7_game_launcher/oasis7_web_launcher/oasis7_client_launcher`，`oasis7_viewer_live` 仅保留能力边界说明。
-- 说明: 本文档仅维护执行计划与任务状态；实施过程记录写入 `doc/devlog/2026-03-07.md`。
+- 说明: 本文档仅维护执行计划与任务状态；实施过程记录写入 `doc/devlog/README.md`。

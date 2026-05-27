@@ -71,7 +71,7 @@
 - 承接约束: 先完成 `TASK-NONVIEWER-002/003`，再与 testing 联动推进 `TASK-NONVIEWER-004`。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-010 入口治理状态: 已补齐命名迁移后的轻量入口，当前模块无需再拆更重的 README 层级。
-- 说明: 本文档仅维护 headless-runtime（原 nonviewer）设计执行状态；过程记录在 `doc/devlog/2026-03-03.md`。
+- 说明: 本文档仅维护 headless-runtime（原 nonviewer）设计执行状态；过程记录在 `doc/devlog/README.md`。
 
 ## 阶段收口角色交接
 ### Meta

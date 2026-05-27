@@ -18,7 +18,7 @@
 - `crates/oasis7/src/runtime/reward_asset.rs`
 - `crates/oasis7/src/runtime/world/event_processing.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
-- `doc/devlog/2026-02-17.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：PRH1-1 ~ PRH1-5 已完成。

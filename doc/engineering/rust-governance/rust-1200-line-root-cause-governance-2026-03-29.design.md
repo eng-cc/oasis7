@@ -103,4 +103,4 @@
 - `doc/engineering/prd.index.md`
 - `doc/engineering/README.md`
 - `doc/engineering/project.md`
-- `doc/devlog/2026-03-29.md`
+- `doc/devlog/README.md`

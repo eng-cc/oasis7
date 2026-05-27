@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认该草案包可作为真实发帖前的 review baseline
 - 接收方交付物 2：如发现越界措辞，仅补裁剪意见和替代措辞
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-19.md`
+- 需要回写的文档 / 日志：`doc/devlog/README.md`
 
 ## Done Definition
 - [x] 已有 6 条首批主贴草案

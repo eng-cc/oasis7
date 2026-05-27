@@ -32,7 +32,7 @@
 - [x] 执行 `env -u RUSTC_WRAPPER cargo check`（任务一）
 - [x] 执行 `env -u RUSTC_WRAPPER cargo check`（任务二）
 - [x] 更新项目管理文档状态
-- [x] 写任务日志（`doc/devlog/2026-02-15.md`）
+- [x] 写任务日志（`doc/devlog/README.md`）
 
 ## 依赖
 - 沿用现有 `site/` 静态部署与 `.github/workflows/pages.yml`。

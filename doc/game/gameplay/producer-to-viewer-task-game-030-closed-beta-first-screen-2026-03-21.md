@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：首屏主目标优先、无无关高显著噪音的实现与证据
 - 接收方交付物 2：玩家入口相关 full-coverage gate 抽样结果
-- 需要回写的文档 / 日志：相关 viewer 专题、`doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md`、`doc/devlog/2026-03-21.md`
+- 需要回写的文档 / 日志：相关 viewer 专题、`doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md`、`doc/devlog/README.md`
 
 ## Done Definition
 - [ ] `PostOnboarding` 首屏以目标 / 进度 / 阻塞 / 下一步为主

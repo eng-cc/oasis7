@@ -22,7 +22,7 @@
 ### T3 收口
 - [x] 运行回归 (PRD-P2P-MIG-064)：`oasis7_net`、`oasis7_distfs`、`oasis7_consensus`、`oasis7_node`
 - [x] 更新设计/项目文档状态 (PRD-P2P-MIG-064)
-- [x] 追加 `doc/devlog/2026-02-23.md` 任务日志 (PRD-P2P-MIG-064)
+- [x] 追加 `doc/devlog/README.md` 任务日志 (PRD-P2P-MIG-064)
 
 ## 依赖
 - `crates/oasis7_proto/src/distributed_dht.rs`

@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `TASK-CORE-019` 满足 `test_tier_required`
 - 接收方交付物 2：如发现版本级槽位定义缺口，仅登记意见，不回退 task 级 board
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`
+- 需要回写的文档 / 日志：`doc/devlog/README.md`
 
 ## Done Definition
 - [x] 已生成版本级候选看板

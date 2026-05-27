@@ -17,12 +17,13 @@
 - [x] viewer-manual-canonical-source-cleanup-followup (PRD-ENGINEERING-025) [test_tier_required]: 继续对当前真值/当前基线类正式文档执行 aftercare，把 `world-simulator/site github-pages` 相关正式文档中的 `viewer-manual.md` 基线路径统一改回 `viewer-manual.manual.md`，避免 legacy redirect 再次被误读成 canonical source。 Trace: .pm/tasks/task_010e133e25f5411daa05bbbf80ff3727.yaml
 - [x] viewer-manual-sync-contract-refresh-followup (PRD-ENGINEERING-025) [test_tier_required]: 刷新 `scripts/site-manual-sync-check.sh` 的 source/manual 与 HTML mirror 校验契约，使其重新匹配当前 `render_mode=viewer&test_api=1` 基线，避免镜像同步门禁继续盯过时命令字符串。 Trace: .pm/tasks/task_03cd617323c840d29a36b5bfa91792ed.yaml
 - [x] doc-surface-slimming-followup (PRD-ENGINEERING-025) [test_tier_required]: 执行 near-limit active project docs aftercare，先压缩 `doc/readme/project.md`、`doc/scripts/project.md`、`doc/site/project.md`、`doc/world-runtime/project.md` 与 `doc/world-simulator/project.md` 的状态区，避免主项目页继续接管完成历史归档职责。 Trace: .pm/tasks/task_732e8ae00c634232ad5ec570b53f5e5b.yaml
+- [x] devlog-summary-retire-followup (PRD-ENGINEERING-026) [test_tier_required]: 将 `doc/devlog/README.md` 升级为 compact archive summary，删除 57 份 `doc/devlog/2026-*.md` 日文件，并收敛具体日文件引用到 summary 入口。 Trace: .pm/tasks/task_eebbcc11039940dcbc99c540a15ece03.yaml
 
 ## 2026-04-24 季度复核快照
 - `bash ./scripts/doc-inventory-report.sh` 当前快照：
   - `doc/` Markdown 总量 `1764`
   - `doc/devlog` 文件数 `57`
-  - 最大 Markdown / devlog 文件仍为 `doc/devlog/2026-02-16.md`，`3288` 行
+  - 最大 Markdown / devlog 文件仍为 `doc/devlog/README.md`，`3288` 行
   - 模块体量前三：`world-simulator=553`、`p2p=270`、`testing=180`
   - 热点子目录前三：`doc/world-simulator/viewer=297`、`doc/readme/governance=98`、`doc/world-simulator/launcher=86`
   - near-limit active docs：`doc/world-simulator/project.md=1000`、`doc/readme/project.md=978`、`doc/core/reviews/round-006-reviewed-files.md=932`、`doc/core/reviews/round-007-reviewed-files.md=906`
@@ -35,6 +36,7 @@
 `doc/devlog` 历史压缩、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 路径级治理都已完成首批入口收口。季度复核也已完成当前快照重算；后续若要继续扩 `core/reviews`、`world-simulator/launcher`、`ci/longrun/templates`、`gap` 或 `production` 等 follow-up，仍需至少各自独立创建 `.pm` task；默认仍建议独立 worktree，除非用户明确要求复用当前 PR/工作树。
 2026-05-18 补充：已对 `world-simulator` 已治理路径执行一轮重复入口 aftercare，清掉 `viewer-manual.md` 的 legacy 正文残留，并将 `prd.index.md` 收回 index-first 角色；该动作不改变季度复核已冻结的“near-limit active project docs 拆分优先”下一步顺序。
 2026-05-26 补充：已执行首批 near-limit active project docs aftercare，压缩 `readme/scripts/site/world-runtime/world-simulator` 主项目状态区；后续若继续处理 `core/reviews`、`world-simulator/launcher` 或把 `prd.index.md` 改为生成式索引，仍需新开独立 task。
+2026-05-27 补充：`doc/devlog` 已从“README 导航 57 个日文件”推进到“README 摘要替代 + 日文件退役”；后续不再新增 daily devlog，当前执行证据继续写入 `.pm/tasks/*.execution.md`。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -49,5 +51,5 @@
 - 当前阶段: M2 已完成
 - 阶段说明: formalize + report + five path follow-ups + quarterly review closed
 - 阻塞项: 无
-- 最近更新: 2026-05-26
-- 后续动作: 入口减重专题 `PRD-ENGINEERING-024`、首批五条路径级 follow-up、`world-simulator` 重复入口 aftercare 与首批 near-limit project 状态区 aftercare 均已完成。下一条正式 follow-up 应在 `core/reviews`、`world-simulator/launcher`、`prd.index.md` 生成化或 devlog 月度摘要之间择一单独立项。
+- 最近更新: 2026-05-27
+- 后续动作: 入口减重专题 `PRD-ENGINEERING-024`、首批五条路径级 follow-up、`world-simulator` 重复入口 aftercare、首批 near-limit project 状态区 aftercare 与 devlog 摘要退役均已完成。下一条正式 follow-up 应在 `core/reviews`、`world-simulator/launcher` 或 `prd.index.md` 生成化之间择一单独立项。

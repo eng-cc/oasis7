@@ -19,7 +19,7 @@
 - `crates/oasis7/src/bin/oasis7_chain_runtime/reward_runtime_worker.rs`
 - `crates/oasis7/src/bin/oasis7_chain_runtime/distfs_probe_runtime.rs`
 - `crates/oasis7/src/bin/oasis7_chain_runtime/reward_runtime_worker.rs`
-- `doc/devlog/2026-02-17.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：PRG-C1 ~ PRG-C4 全部完成。

@@ -25,7 +25,7 @@
 - `crates/oasis7/src/runtime/events.rs`
 - `crates/oasis7/src/runtime/tests/reward_asset.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
-- `doc/devlog/2026-02-17.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：SGC-0 ~ SGC-5 全部完成。

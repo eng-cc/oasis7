@@ -27,7 +27,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `TASK-ENGINEERING-015` 满足 `test_tier_required`
 - 接收方交付物 2：如发现缺口，仅登记缺口，不重开 legacy 批量迁移
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`（若 QA 追加结论）
+- 需要回写的文档 / 日志：`doc/devlog/README.md`（若 QA 追加结论）
 
 ## Done Definition
 - [x] 满足验收点 1：冻结快照现存条目缺口为 0

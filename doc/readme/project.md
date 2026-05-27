@@ -69,14 +69,14 @@
   - 产物文件:
     - `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
     - `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
-    - `doc/devlog/2026-03-19.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "GitHub|issue|PR|pull request" doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-README-017 (PRD-README-013) [test_tier_required]: 将 Moltbook 首批帖文进一步压缩为更短的 feed-native 最终发布版，保留 `technical preview / not playable yet` 与 GitHub CTA 边界。
   - 产物文件:
     - `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
-    - `doc/devlog/2026-03-19.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "Short-form publish note|technical preview|not playable yet|GitHub issue or PR" doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
     - `./scripts/doc-governance-check.sh`
@@ -86,7 +86,7 @@
     - `testing-manual.md`
     - `world-rule.md`
     - `.agents/roles/producer_system_designer.md`
-    - `doc/devlog/2026-03-19.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "^# oasis7$|^# oasis7: 系统性应用测试手册|^# oasis7 Specification" README.md testing-manual.md world-rule.md`
     - `./scripts/readme-link-check.sh`
@@ -96,7 +96,7 @@
     - `doc/readme/prd.md`
     - `doc/readme/project.md`
     - `doc/readme/governance/*.md`
-    - `doc/devlog/2026-03-19.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "^# oasis7|^# oasis7 Runtime|^# oasis7 Simulator|^# oasis7 Viewer" doc/readme --glob '!third_party/**'`
     - `./scripts/doc-governance-check.sh`
@@ -164,7 +164,7 @@
     - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.design.md`
     - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.project.md`
     - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
-    - `doc/devlog/2026-03-21.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "发帖前检查|发帖后 24 小时巡检|常规日巡检|GitHub 回流规则|当日回写要求" doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
     - `./scripts/doc-governance-check.sh`
@@ -174,7 +174,7 @@
     - `doc/readme/prd.md`
     - `doc/readme/project.md`
     - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
-    - `doc/devlog/2026-03-21.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "首周运营模板|Day 1|Day 7|回复目标|记录重点" doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
     - `./scripts/doc-governance-check.sh`
@@ -195,7 +195,7 @@
     - `doc/readme/prd.md`
     - `doc/readme/project.md`
     - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
-    - `doc/devlog/2026-03-22.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "实战复盘|有效内容设计模式|spam 风险模式|builder discussion hook|自评带裸链" doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
     - `./scripts/doc-governance-check.sh`
@@ -210,7 +210,7 @@
     - `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.design.md`
     - `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
     - `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
-    - `doc/devlog/2026-03-22.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "limited playable technical preview|closed beta|play now|live now" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.prd.md doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.design.md doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
     - `./scripts/doc-governance-check.sh`
@@ -223,7 +223,7 @@
     - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
     - `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`
     - `doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md`
-    - `doc/devlog/2026-03-22.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "Round ID|Invite-only Builder Callout|Blocking|Opportunity|Idea|claim drift|Producer Summary" doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md`
     - `./scripts/doc-governance-check.sh`
@@ -239,7 +239,7 @@
     - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.project.md`
     - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md`
     - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
-    - `doc/devlog/2026-03-22.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "eligible-small|eligible-medium|eligible-large|no fixed token/point ratio|play-to-earn|login reward|time played = token" doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
     - `./scripts/doc-governance-check.sh`
@@ -371,7 +371,7 @@
     - `doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md`
     - `site/social/xiaohongshu-cover-agent-team.html`
     - `site/social/xiaohongshu-cover-agent-team.png`
-    - `doc/devlog/2026-03-22.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "大家好，我最近在和一群 agent 一起做游戏|我在和一群 agent 一起做游戏|#独立开发|#开发日记|人类开发者" doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md`
     - `./scripts/doc-governance-check.sh`
@@ -388,7 +388,7 @@
     - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.project.md`
     - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
     - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
-    - `doc/devlog/2026-03-22.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "Round ID|Ledger ID|Recommended Band|Approval ID|Distribution Ref|archived" doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
     - `./scripts/doc-governance-check.sh`
@@ -401,7 +401,7 @@
     - `doc/readme/prd.index.md`
     - `doc/readme/governance/readme-xiaohongshu-team-roster-post-pack-2026-03-22.md`
     - `site/social/xiaohongshu-agent-team-roster.html`
-    - `doc/devlog/2026-03-22.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "我现在有这几位 agent 队友|producer_system_designer|runtime_engineer|viewer_engineer|团队协作" doc/readme/governance/readme-xiaohongshu-team-roster-post-pack-2026-03-22.md`
     - `./scripts/doc-governance-check.sh`
@@ -414,7 +414,7 @@
     - `doc/readme/README.md`
     - `doc/readme/prd.index.md`
     - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
-    - `doc/devlog/2026-03-23.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "小红书|发帖前复核|T\\+15m|互动引导|你会猜这是个什么游戏" .agents/roles/liveops_community.md doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
     - `./scripts/doc-governance-check.sh`
@@ -435,7 +435,7 @@
     - `site/social/xiaohongshu-game-intro-slide5.png`
     - `site/social/xiaohongshu-game-intro-slide6.png`
     - `site/social/xiaohongshu-game-intro-slide7.png`
-    - `doc/devlog/2026-03-24.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "我想做的，不是一个写死剧情的游戏|会自己持续运转的世界|硅基智能体|如果只听到这里，你会把它猜成什么类型的游戏" doc/readme/governance/readme-xiaohongshu-game-intro-post-pack-2026-03-24.md`
     - `./scripts/doc-governance-check.sh`
@@ -454,7 +454,7 @@
     - `site/social/xiaohongshu-player-boundary-slide3.png`
     - `site/social/xiaohongshu-player-boundary-slide4.png`
     - `site/social/xiaohongshu-player-boundary-slide5.png`
-    - `doc/devlog/2026-03-25.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "玩家为什么不能直接控制角色|你不是去附身一个角色|你不是去操控一个人|定目标|给提示|直接控一个角色" doc/readme/governance/readme-xiaohongshu-player-boundary-post-pack-2026-03-25.md`
     - `./scripts/doc-governance-check.sh`
@@ -473,7 +473,7 @@
     - `site/social/xiaohongshu-ai-laziness-game-mode-slide3.png`
     - `site/social/xiaohongshu-ai-laziness-game-mode-slide4.png`
     - `site/social/xiaohongshu-ai-laziness-game-mode-slide5.png`
-    - `doc/devlog/2026-03-26.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "AI时代，你变\"懒\"了么|异星工厂|缺氧|补带子|拉管线|先扩哪边|先保哪边|要不要大改" doc/readme/governance/readme-xiaohongshu-ai-laziness-game-mode-post-pack-2026-03-26.md site/social/xiaohongshu-ai-laziness-game-mode.html`
     - `./scripts/doc-governance-check.sh`
@@ -488,7 +488,7 @@
     - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
     - `site/social/xiaohongshu-spring-recruit-cover.html`
     - `site/social/xiaohongshu-spring-recruit-cover.png`
-    - `doc/devlog/2026-03-29.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "作为游戏工作室主理人，今年春招我会看什么人|我先看，你能不能把事接住|做得完的人|怎么用 AI|有没有玩家感觉" doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md site/social/xiaohongshu-spring-recruit-cover.html`
     - `./scripts/doc-governance-check.sh`
@@ -509,7 +509,7 @@
     - `site/social/xiaohongshu-spring-recruit-carousel-slide4.png`
     - `site/social/xiaohongshu-spring-recruit-carousel-slide5.png`
     - `site/social/xiaohongshu-spring-recruit-carousel-slide6.png`
-    - `doc/devlog/2026-03-29.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "今年春招，我会看什么人|AI 把\\\"会一点\\\"的人变多了|讲得清|做得完|玩家感觉|你觉得自己最强的是哪一项" doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md site/social/xiaohongshu-spring-recruit-carousel.html`
     - `./scripts/doc-governance-check.sh`
@@ -519,7 +519,7 @@
     - `doc/readme/project.md`
     - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
     - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
-    - `doc/devlog/2026-03-29.md`
+    - `doc/devlog/README.md`
     - `site/social/xiaohongshu-spring-recruit-cover.html`
     - `site/social/xiaohongshu-spring-recruit-cover.png`
     - `site/social/xiaohongshu-spring-recruit-carousel.html`
@@ -538,7 +538,7 @@
     - `doc/readme/project.md`
     - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
     - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
-    - `doc/devlog/2026-03-29.md`
+    - `doc/devlog/README.md`
     - `site/social/xiaohongshu-spring-recruit-cover.html`
     - `site/social/xiaohongshu-spring-recruit-cover.png`
     - `site/social/xiaohongshu-spring-recruit-carousel.html`
@@ -558,7 +558,7 @@
     - `doc/readme/project.md`
     - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
     - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
-    - `doc/devlog/2026-03-29.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "作为游戏工作室主理人，今年的春招视角|20 字|标题上限" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
     - `./scripts/doc-governance-check.sh`
@@ -571,7 +571,7 @@
     - `doc/readme/prd.index.md`
     - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
     - `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
-    - `doc/devlog/2026-03-30.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "AI人格很火，但我不想做陪聊搭子|会陪你聊天|会在世界里自己行动|资源紧张的时候|陪聊搭子" doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
     - `./scripts/doc-governance-check.sh`
@@ -582,7 +582,7 @@
     - `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
     - `site/social/xiaohongshu-ai-persona-cover.html`
     - `site/social/xiaohongshu-ai-persona-cover.png`
-    - `doc/devlog/2026-03-30.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "聊天框分割图|世界内行动看板|xiaohongshu-ai-persona-cover.html|xiaohongshu-ai-persona-cover.png" doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md site/social/xiaohongshu-ai-persona-cover.html`
     - `./scripts/doc-governance-check.sh`
@@ -600,7 +600,7 @@
     - `site/social/xiaohongshu-ai-persona-carousel-slide2.png`
     - `site/social/xiaohongshu-ai-persona-carousel-slide3.png`
     - `site/social/xiaohongshu-ai-persona-carousel-slide4.png`
-    - `doc/devlog/2026-03-30.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "AI人格很火|人格不只是|比如这些时候|如果是你|xiaohongshu-ai-persona-carousel.html" doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md site/social/xiaohongshu-ai-persona-carousel.html`
     - `./scripts/doc-governance-check.sh`
@@ -612,7 +612,7 @@
     - `site/social/xiaohongshu-ai-persona-carousel.html`
     - `site/social/xiaohongshu-ai-persona-carousel-slide1.png`
     - `site/social/xiaohongshu-ai-persona-carousel-slide2.png`
-    - `doc/devlog/2026-03-30.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "headline-card|contrast-card|judgment-grid|reason-card|thin-card|thick-card" site/social/xiaohongshu-ai-persona-carousel.html`
     - `./scripts/doc-governance-check.sh`
@@ -624,7 +624,7 @@
     - `site/social/xiaohongshu-ai-persona-carousel.html`
     - `site/social/xiaohongshu-ai-persona-carousel-slide3.png`
     - `site/social/xiaohongshu-ai-persona-carousel-slide4.png`
-    - `doc/devlog/2026-03-30.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "scenario-grid|scenario-main|scenario-card|vote-layout|vote-main|vote-option|vote-question" site/social/xiaohongshu-ai-persona-carousel.html`
     - `./scripts/doc-governance-check.sh`
@@ -639,7 +639,7 @@
     - `site/social/xiaohongshu-ai-persona-carousel-slide2.png`
     - `site/social/xiaohongshu-ai-persona-carousel-slide3.png`
     - `site/social/xiaohongshu-ai-persona-carousel-slide4.png`
-    - `doc/devlog/2026-03-30.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "Ma Shan Zheng|note-card|poll-card|comment-card|scenario-top|bubble-card|stack-card" site/social/xiaohongshu-ai-persona-carousel.html`
     - `./scripts/doc-governance-check.sh`
@@ -652,7 +652,7 @@
     - `doc/readme/prd.index.md`
     - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
     - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
-    - `doc/devlog/2026-03-31.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "做AI游戏以后，我越来越不信demo了|这玩意儿能撑多久|demo只负责高光|会不会很快塌|第一眼很猛" doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
     - `./scripts/doc-governance-check.sh`
@@ -664,7 +664,7 @@
     - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
     - `site/social/xiaohongshu-demo-skepticism-cover.html`
     - `site/social/xiaohongshu-demo-skepticism-cover.png`
-    - `doc/devlog/2026-03-31.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "项目审查板|build review wall|xiaohongshu-demo-skepticism-cover.html|xiaohongshu-demo-skepticism-cover.png|先问它能撑多久" doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md site/social/xiaohongshu-demo-skepticism-cover.html`
     - `file site/social/xiaohongshu-demo-skepticism-cover.png`
@@ -684,7 +684,7 @@
     - `site/social/xiaohongshu-demo-skepticism-carousel-slide2.png`
     - `site/social/xiaohongshu-demo-skepticism-carousel-slide3.png`
     - `site/social/xiaohongshu-demo-skepticism-carousel-slide4.png`
-    - `doc/devlog/2026-03-31.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "做AI游戏以后|demo只负责高光|我现在会先问|你更吃哪一种|xiaohongshu-demo-skepticism-carousel.html" doc/readme/governance/readme-xiaohongshu-demo-skepticism-carousel-pack-2026-03-31.md site/social/xiaohongshu-demo-skepticism-carousel.html`
     - `file site/social/xiaohongshu-demo-skepticism-carousel-slide1.png site/social/xiaohongshu-demo-skepticism-carousel-slide2.png site/social/xiaohongshu-demo-skepticism-carousel-slide3.png site/social/xiaohongshu-demo-skepticism-carousel-slide4.png`
@@ -985,4 +985,4 @@
 - 历史追溯: 更早完成项不再在本状态区按时间追加；需要追 reward / Moltbook / 小红书 / closed beta / public positioning 历史时，先从 `doc/readme/prd.index.md`、`doc/readme/governance/README.md` 与对应 task trace 进入。
 - PRD / ROUND 状态: strict schema 已对齐（含第 6 章验证与决策记录）；gap 子簇主从化已完成（gap12345 主入口，其它 gap 专题增量维护）。
 - 模块进展补充: 已补齐 README 口径一致性巡检、链接检查、季度审查模板、对外口径简报/公告底稿模板，以及 Moltbook 推广方案、主贴模板、GitHub 反馈 CTA 与更短 feed-native 版本。
-- 说明: 本文档仅维护 readme 模块设计执行状态；过程记录在 `doc/devlog/2026-03-03.md` 与 `doc/devlog/2026-03-11.md`。
+- 说明: 本文档仅维护 readme 模块设计执行状态；过程记录在 `doc/devlog/README.md` 与 `doc/devlog/README.md`。

@@ -180,7 +180,7 @@
     - `doc/world-simulator/kernel/*.md`
     - `doc/world-simulator/scenario/*.md`
     - `doc/world-simulator/llm/*.md`
-    - `doc/devlog/2026-03-19.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "^# oasis7|^# oasis7：|^# oasis7 Simulator：|^# oasis7 Simulator:|^# oasis7 Viewer：|^# oasis7 Viewer:" doc/world-simulator --glob '!third_party/**'`
     - `./scripts/doc-governance-check.sh`
@@ -190,7 +190,7 @@
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
     - `crates/oasis7_client_launcher/index.html`
-    - `doc/devlog/2026-03-19.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "oasis7 Launcher \\(Web\\)|oasis7 Launcher \\(Web\\)" crates/oasis7_client_launcher/index.html`
     - `./scripts/doc-governance-check.sh`

@@ -19,7 +19,7 @@
 - `crates/oasis7_viewer/src/egui_right_panel.rs`
 - `scripts/viewer-owr4-stress.sh`
 - `testing-manual.md`
-- `doc/devlog/2026-02-25.md`
+- `doc/devlog/README.md`
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
 

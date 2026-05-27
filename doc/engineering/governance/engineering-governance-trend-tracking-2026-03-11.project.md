@@ -16,8 +16,8 @@
 - `doc/engineering/evidence/engineering-governance-trend-baseline-2026-03-11.md`
 - `doc/engineering/governance/producer-to-qa-task-engineering-003-governance-trend-2026-03-11.md`
 - `doc/engineering/project.md`
-- `doc/devlog/2026-03-03.md`
-- `doc/devlog/2026-03-09.md`
+- `doc/devlog/README.md`
+- `doc/devlog/README.md`
 - `scripts/doc-governance-check.sh`
 
 ## 状态

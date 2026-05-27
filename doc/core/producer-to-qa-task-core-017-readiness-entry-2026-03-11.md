@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `TASK-CORE-017` 满足 `test_tier_required`
 - 接收方交付物 2：如发现字段缺口，仅登记意见，不重开优先级清单任务
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`
+- 需要回写的文档 / 日志：`doc/devlog/README.md`
 
 ## Done Definition
 - [x] 已冻结统一入口字段与状态规则

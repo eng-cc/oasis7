@@ -14,7 +14,7 @@
 - [x] AOR7 更新单测（URL 归一化、工具请求、函数调用解析、超时回退）
 - [x] AOR8 更新 README / config 示例 / 对外说明
 - [x] AOR9 跑测试与检查（`env -u RUSTC_WRAPPER cargo test` / `cargo check`）
-- [x] AOR10 回顾并更新项目状态与开发日志（`doc/devlog/2026-02-10.md`）
+- [x] AOR10 回顾并更新项目状态与开发日志（`doc/devlog/README.md`）
 
 ## 依赖
 - `crates/oasis7/Cargo.toml`

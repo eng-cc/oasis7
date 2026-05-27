@@ -27,7 +27,7 @@
 - [x] 更新 simulator 单元测试（power/kernel/init/llm 相关）
 - [x] 运行 required-tier 测试命令并通过
 - [x] 更新本项目文档状态
-- [x] 追加当日 `doc/devlog/2026-02-17.md`
+- [x] 追加当日 `doc/devlog/README.md`
 - [x] 提交 git commit
 
 ## 依赖

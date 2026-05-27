@@ -31,7 +31,7 @@
 - [x] 新增协议与状态单测（`test_tier_required`）
 - [x] 新增 gameplay bootstrap/wasm 测试（`test_tier_full`）
 - [x] 运行关键测试命令并通过
-- [x] 回写项目文档状态与 `doc/devlog/2026-02-20.md`
+- [x] 回写项目文档状态与 `doc/devlog/README.md`
 
 ## 依赖
 - `README.md`
