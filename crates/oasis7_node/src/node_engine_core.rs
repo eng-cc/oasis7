@@ -110,6 +110,8 @@ impl PosNodeEngine {
             committed_height: 0,
             network_committed_height: 0,
             replication_persisted_height: 0,
+            last_replication_gap_sync_blocked_height: None,
+            last_replication_gap_sync_blocked_reason: None,
             last_replication_successor_probe_height: None,
             last_replication_successor_probe_at_ms: None,
             last_replication_successor_probe_hold: None,
@@ -322,6 +324,11 @@ impl PosNodeEngine {
             consensus_snapshot: self.snapshot_from_decision(&decision),
             committed_action_batch,
         })
+    }
+
+    pub(super) fn restored_consensus_snapshot(&self) -> Result<NodeConsensusSnapshot, NodeError> {
+        let decision = self.idle_pending_decision()?;
+        Ok(self.snapshot_from_decision(&decision))
     }
 
     fn observe_wall_clock_tick(&mut self, now_ms: i64) -> Result<ObservedPosTick, NodeError> {
@@ -737,6 +744,11 @@ impl PosNodeEngine {
             committed_height: self.committed_height,
             last_committed_at_ms: self.last_committed_at_ms,
             network_committed_height: self.network_committed_height.max(self.committed_height),
+            replication_persisted_height: self.replication_persisted_height,
+            replication_gap_sync_blocked_height: self.last_replication_gap_sync_blocked_height,
+            replication_gap_sync_blocked_reason: self
+                .last_replication_gap_sync_blocked_reason
+                .clone(),
             known_peer_heads: self.peer_heads.len(),
             peer_heads,
             inbound_rejected_proposal_future_slot: self.inbound_rejected_proposal_future_slot,

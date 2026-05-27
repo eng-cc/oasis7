@@ -76,19 +76,23 @@ fn runtime_restart_reconciles_stale_pos_state_from_persisted_replication_height(
         }
         thread::sleep(Duration::from_millis(5));
     }
-    restarted.stop().expect("stop second");
-    let second = restarted.snapshot();
+    let first_positive_snapshot = restarted.snapshot();
     assert!(
         first_positive_height >= persisted_height,
         "restart should reconcile to persisted height before new commits: first_positive={} persisted={} final={} last_error={:?}",
         first_positive_height,
         persisted_height,
-        second.consensus.committed_height,
-        second.last_error
+        first_positive_snapshot.consensus.committed_height,
+        first_positive_snapshot.last_error
     );
+    let advanced = wait_until(Instant::now() + Duration::from_secs(2), || {
+        restarted.snapshot().consensus.committed_height > persisted_height
+    });
+    restarted.stop().expect("stop second");
+    let second = restarted.snapshot();
     assert!(second.last_error.is_none(), "{:?}", second.last_error);
     assert!(
-        second.consensus.committed_height > persisted_height,
+        advanced && second.consensus.committed_height > persisted_height,
         "runtime should continue past persisted height after reconcile: final={} persisted={persisted_height}",
         second.consensus.committed_height
     );
