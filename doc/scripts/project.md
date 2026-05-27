@@ -425,37 +425,11 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
- - 更新日期: 2026-04-24
+- 更新日期: 2026-05-26
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
-- 最新完成: `shared-cargo-dev-cache-default`（已将开发态 Rust 命令默认入口收紧到 `scripts/cargo-dev.sh`，并为 `worktree-gc-report.sh` 增加 `--footprint`，可只读统计每个 worktree 的 `target` 与 Viewer `node_modules` 体量。）
-- 最新完成: `workflow-helper-review-followup`（已收口 PR `#145` review comments：`worktree-gc-report` 的 cleanup 命令改为 shell-quoted 并补合同测试，`pr-review-thread-closeout` 改为通过临时文件传递 PR/thread JSON，`pm/rebase-conflict-helper` 不再泄漏全局 `RETURN` trap。）
-- 最新完成: `web-ui-automation-light-smoke`（已新增 `scripts/viewer-software-safe-step-regression-smoke.sh`，用 fixture 页面复用真 `agent-browser` 回归 `viewer-software-safe-step-regression.sh` 的最小 Web/UI automation 契约，无需起完整 runtime 栈。）
-- 最新完成: `pr-review-thread-closeout-helper`（已新增 `scripts/pr-review-thread-closeout.sh`，统一盘点/resolve 当前 PR review threads，并在每次操作后重新回报 `reviewDecision` / `mergeStateStatus`。）
-- 最新完成: `pm-rebase-conflict-helper`（已新增 `scripts/pm/rebase-conflict-helper.sh`，用于统一分类 `.pm/**` rebase 冲突，并只在 active rebase 中安全自动修复 `signals.jsonl` 的 signal-id 碰撞。）
-- 最新完成: `prepare-task-pr-local-required-recommendation`（已让 `scripts/prepare-task-pr.sh` 在 PR preflight 阶段直接输出 changed-path 对齐的本地 required 验证建议，但不自动执行推荐命令。）
-- 最新完成: `prepare-task-pr-planner-reason-summary`（已让 `scripts/prepare-task-pr.sh` 在 PR preflight 阶段同时输出 changed-path planner 的 `reason_summary` 与拆分后的 `reason_items[]`。）
-- 最新完成: `task-closeout-helper`（已将 `scripts/pm/task-closeout.sh` 收紧为“done closeout 必须先 fresh verify”，并新增 `scripts/pm/workflow-behavior-eval.sh` 统一回归 task-worktree/closeout/PR/review-thread 主链。）
-- 最新完成: `worktree-lifecycle-report`（已新增只读 `worktree-gc-report.sh`，用于统一汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，减少已完成 task worktree 长期滞留。）
-- 最新完成: `TASK-SCRIPTS-024`（已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `land-task-worktree.sh` 与旧 landing 专题统一降级为 compatibility / fallback。）
-- 最新完成: `TASK-SCRIPTS-023`（builtin wasm-heavy runtime 闭环已从 required/pre-commit 路径下放到 `test_tier_full`，required 重新只承载轻量核心基线。）
-- 最新完成: `TASK-SCRIPTS-022`（已把根 `AGENTS.md` 的 cargo 规则补齐到与 `scripts/cargo-dev.sh` / `testing-manual.md` 一致，明确原始 cargo 入口与开发态共享缓存入口的边界。）
-- 最新完成: `TASK-SCRIPTS-021`（已新增 `scripts/cargo-dev.sh` 作为开发态共享 cargo target 入口，并把 scripts/testing 文档明确切分为“开发态共享缓存”与“deterministic wasm/release 不共享”的双轨口径。）
-- 最新完成: `TASK-SCRIPTS-020`（已统一收紧 worktree 例外授权口径，明确文档/脚本/测试/话术改动也算新需求，且发现切错 worktree 后必须立即切走。）
-- 最新完成: `TASK-SCRIPTS-019`（已为 `scripts/README.md` 补齐 task worktree bootstrap / landing / harness 的轻量入口映射，并明确 README / `prd.index.md` / 高频脚本专题的职责边界。）
-- 最新完成: `TASK-SCRIPTS-018`（收紧 task worktree 生命周期口径，要求 landing 成功后必须删除已完成 task worktree / branch。）
-- 最新完成: `TASK-SCRIPTS-017`（新增标准化 task worktree landing 入口，统一任务分支 rebase 到本地 `main` 并 fast-forward 合入本地 `main` 的闭环。）
-- 最新完成: `TASK-SCRIPTS-016`（为标准化 task worktree bootstrap 入口补齐 `--init-docs` 与 `--with-harness`。）
-- 最新完成: `TASK-SCRIPTS-015`（新增标准化 task worktree bootstrap 入口，统一新需求的 branch/path 命名、脏源 worktree 围栏与机器可读摘要输出。）
-- 最新完成: `TASK-SCRIPTS-014`（新增 worktree-isolated harness 主入口，收口 `run-game-test.sh` / `run-producer-playtest.sh` 的 worktree 隔离契约，并同步 scripts/testing 文档。）
-- 最新完成: `TASK-SCRIPTS-013`（`doc/scripts/wasm/**` 活跃手册中遗漏的 builtin wasm artifact 当前路径已统一切到 `crates/oasis7/...`。）
-- 最新完成: `TASK-SCRIPTS-012`（历史 texture-inspector 专题中的 viewer crate、环境变量与运行命令口径已完成收口；当前相关专题已从仓库移除。）
-- 最新完成: `TASK-SCRIPTS-011`（repo-owned provider real-play helper 文档与脚本中的当前 cargo 运行命令和入口路径已统一切到 `oasis7` / `crates/oasis7*` 当前口径。）
-- 最新完成: `TASK-SCRIPTS-010`（历史 `capture-viewer-frame` fallback 文档中的 viewer crate 与环境变量命名已完成收口；当前相关专题已从仓库移除。）
-- 最新完成: `TASK-SCRIPTS-009`（pre-commit 活跃文档中的 viewer wasm 编译门禁与依赖说明已统一切到 `oasis7_viewer` 当前口径）。
-- 最新完成: `TASK-SCRIPTS-006`（scripts 模块 README 入口索引同步）。
-- 最新完成: `TASK-SCRIPTS-007`（scripts 文件级索引表格格式修正）。
-- 最新完成: `TASK-SCRIPTS-008`（scripts 治理专题标题统一切到 `oasis7` 品牌）。
+- 当前窗口摘要: 最近收口集中在 shared cargo dev cache、workflow helper review follow-up、轻量 Web/UI automation smoke、PR review-thread closeout、PM rebase conflict helper 与 `prepare-task-pr` preflight 增强。
+- 历史追溯: 更早 `TASK-SCRIPTS-*` 完成项不再在状态区逐条展开；需要追 bootstrap / landing fallback / harness / pre-commit / wasm 脚本历史时，先从上方任务项、`doc/scripts/prd.index.md`、对应 topic project 与 `.pm/tasks/*.execution.md` 进入。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 模块进展补充（2026-03-11）: 已新增 scripts 分层专题，明确 `ci-tests.sh`、`release-gate.sh`、`run-viewer-web.sh` 等主入口；旧 `capture-viewer-frame.sh` fallback 围栏已随仓库清退移除。
 - 模块进展补充（2026-03-11 / contracts）: 已新增高频脚本参数契约专题，冻结 `ci-tests.sh`、`release-gate.sh`、`build-game-launcher-bundle.sh`、`run-viewer-web.sh`、`site-link-check.sh` 的最小调用、默认值与失败语义。
