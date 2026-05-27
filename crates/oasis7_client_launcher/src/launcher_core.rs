@@ -359,7 +359,6 @@ pub(super) fn normalize_chain_network_tier_config(config: &mut LaunchConfig) {
     }
 }
 
-#[cfg(test)]
 pub(super) fn effective_chain_network_tier_manifest(config: &LaunchConfig) -> String {
     let explicit = config.chain_network_tier_manifest.trim();
     if !explicit.is_empty() {

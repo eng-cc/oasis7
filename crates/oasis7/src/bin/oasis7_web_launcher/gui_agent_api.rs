@@ -384,6 +384,7 @@ pub(super) fn execute_gui_agent_action(
                 "chain network tier switched to {}",
                 state.config.chain_network_tier
             ));
+            state.mark_updated();
             poll_service_state(state);
             action_ok(
                 state,

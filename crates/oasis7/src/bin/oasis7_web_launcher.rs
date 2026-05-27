@@ -42,8 +42,8 @@ use parse_utils::{
     parse_host_port, parse_non_negative_u64, parse_optional_i64, parse_port, parse_positive_u64,
 };
 use runtime_paths::{
-    normalize_bind_host_for_local_access, now_unix_ms, resolve_console_static_dir_path,
-    resolve_oasis7_game_launcher_binary, resolve_static_dir_path,
+    normalize_bind_host_for_local_access, now_unix_ms, repo_root_dir,
+    resolve_console_static_dir_path, resolve_oasis7_game_launcher_binary, resolve_static_dir_path,
 };
 #[cfg(test)]
 use server::remap_transfer_runtime_target;
@@ -889,6 +889,15 @@ fn known_network_tier_manifest(tier: &str) -> Option<&'static str> {
     }
 }
 
+fn resolve_known_network_tier_manifest(tier: &str) -> Option<String> {
+    known_network_tier_manifest(tier).map(|relative_path| {
+        repo_root_dir()
+            .join(relative_path)
+            .to_string_lossy()
+            .to_string()
+    })
+}
+
 fn normalize_chain_network_tier_config(config: &mut LauncherConfig) -> Result<(), String> {
     let tier =
         canonical_chain_network_tier(config.chain_network_tier.as_str()).ok_or_else(|| {
@@ -896,7 +905,7 @@ fn normalize_chain_network_tier_config(config: &mut LauncherConfig) -> Result<()
         })?;
     config.chain_network_tier = tier.to_string();
     if config.chain_network_tier_manifest.trim().is_empty() {
-        if let Some(manifest) = known_network_tier_manifest(tier) {
+        if let Some(manifest) = resolve_known_network_tier_manifest(tier) {
             config.chain_network_tier_manifest = manifest.to_string();
         }
     }
@@ -910,7 +919,7 @@ fn effective_chain_network_tier_manifest(config: &LauncherConfig) -> String {
     }
     let tier =
         canonical_chain_network_tier(config.chain_network_tier.as_str()).unwrap_or("local_devnet");
-    known_network_tier_manifest(tier)
+    resolve_known_network_tier_manifest(tier)
         .unwrap_or_default()
         .to_string()
 }

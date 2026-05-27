@@ -5,7 +5,7 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::runtime_paths::viewer_dev_dist_candidates;
+use super::runtime_paths::{repo_root_dir, viewer_dev_dist_candidates};
 use super::{
     build_chain_runtime_args, build_game_url, build_launcher_args,
     build_launcher_args_with_launcher_bin, chain_error_code_for_state, execute_gui_agent_action,
@@ -424,9 +424,13 @@ fn build_chain_runtime_args_resolves_public_testnet_tier_manifest() {
         ..LauncherConfig::default()
     };
     let args = build_chain_runtime_args(&config).expect("args");
+    let expected_manifest = repo_root_dir()
+        .join("doc/testing/templates/network-tier-public-testnet.example.json")
+        .to_string_lossy()
+        .to_string();
     assert!(args.contains(&"--network-tier-manifest".to_string()));
-    assert!(args
-        .contains(&"doc/testing/templates/network-tier-public-testnet.example.json".to_string()));
+    assert!(PathBuf::from(expected_manifest.as_str()).is_file());
+    assert!(args.contains(&expected_manifest));
     assert!(!args.contains(&"--storage-profile".to_string()));
 }
 
@@ -829,6 +833,7 @@ fn gui_agent_set_chain_network_tier_updates_config_manifest() {
         PathBuf::from("."),
         LauncherConfig::default(),
     );
+    state.updated_at_unix_ms = 0;
 
     let response = execute_gui_agent_action(
         &mut state,
@@ -848,9 +853,13 @@ fn gui_agent_set_chain_network_tier_updates_config_manifest() {
     );
     assert_eq!(
         encoded["state"]["config"]["chain_network_tier_manifest"],
-        serde_json::json!("doc/testing/templates/network-tier-mainnet.example.json")
+        serde_json::json!(repo_root_dir()
+            .join("doc/testing/templates/network-tier-mainnet.example.json")
+            .to_string_lossy()
+            .to_string())
     );
     assert_eq!(state.config.chain_network_tier, "mainnet");
+    assert!(state.updated_at_unix_ms > 0);
 }
 
 #[test]
