@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `TASK-CORE-020` 满足 `test_tier_required`
 - 接收方交付物 2：如发现 runtime 槽位判断有误，仅登记缺口，不回退 version board 结构
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`
+- 需要回写的文档 / 日志：`doc/devlog/README.md`
 
 ## Done Definition
 - [x] `runtime_footprint` 已绑定真实 evidence

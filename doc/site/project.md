@@ -69,7 +69,7 @@
     - `doc/site/prd.md`
     - `doc/site/project.md`
     - `doc/site/github-pages/*.md`
-    - `doc/devlog/2026-03-19.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "^# oasis7|^# oasis7 Runtime|^# oasis7 Simulator|^# oasis7 Viewer" doc/site --glob '!third_party/**'`
     - `./scripts/doc-governance-check.sh`
@@ -143,4 +143,4 @@
 - 历史追溯: 更早 `TASK-SITE-*` 与 homepage copy iteration 不再在状态区逐条追加；需要追 Pages/manual/release/download/homepage 历史时，先从 `doc/site/prd.index.md`、`doc/site/github-pages/` topic project、站点文件 diff 与 `.pm/tasks/*.execution.md` 进入。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND 状态: manual 子簇、github-pages 子簇、技术预览口径、下载 CTA 与 release notes 边界均已完成历史收口；后续只在对应 topic project 中增量维护。
-- 说明: 本文档仅维护 site 模块设计执行状态；过程记录在 `doc/devlog/2026-03-03.md` 与 `doc/devlog/2026-03-11.md`。
+- 说明: 本文档仅维护 site 模块设计执行状态；过程记录在 `doc/devlog/README.md` 与 `doc/devlog/README.md`。

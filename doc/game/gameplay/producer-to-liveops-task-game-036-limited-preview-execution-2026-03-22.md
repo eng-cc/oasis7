@@ -28,7 +28,7 @@
 - 接收方交付物 1：1 条 controlled builder-facing callout 与固定窗口巡检记录（当前 round-1 主线程：`eng-cc/oasis7#48`）
 - 接收方交付物 2：按 `Blocking / Opportunity / Idea` 归档的首批外部信号
 - 接收方交付物 3：producer 可读的聚合摘要（来源、频次、owner、next action）
-- 需要回写的文档 / 日志：`doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`、`doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md`、`doc/devlog/2026-03-22.md`
+- 需要回写的文档 / 日志：`doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`、`doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md`、`doc/devlog/README.md`
 
 ## Done Definition
 - [ ] 完成 1 条 controlled builder-facing callout，并显式使用 `limited playable technical preview` 与 GitHub CTA
@@ -42,7 +42,7 @@
 
 ## Validation
 - 建议测试层级：`test_tier_required`
-- 建议验证命令：`rg -n "limited playable technical preview|candidate-feedback|Blocking|Opportunity|Idea|closed beta|play now|live now|blocked_before_publish" doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md doc/devlog/2026-03-27.md`
+- 建议验证命令：`rg -n "limited playable technical preview|candidate-feedback|Blocking|Opportunity|Idea|closed beta|play now|live now|blocked_before_publish" doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md doc/devlog/README.md`
 
 ## Notes
 - 接收方确认范围：`按 readme-limited-preview-invite-pack-2026-03-22.md 的 approved main copy / first comment / monitoring windows 执行，不扩大 claim envelope`

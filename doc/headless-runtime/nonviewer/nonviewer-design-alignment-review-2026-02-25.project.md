@@ -25,7 +25,7 @@
 ### T3 收口
 - [x] 更新 `doc/headless-runtime/README.md` 活跃文档索引
 - [x] 更新本项目状态
-- [x] 追加 `doc/devlog/2026-02-25.md` 任务日志
+- [x] 追加 `doc/devlog/README.md` 任务日志
 
 ## 依赖
 - `crates/oasis7`

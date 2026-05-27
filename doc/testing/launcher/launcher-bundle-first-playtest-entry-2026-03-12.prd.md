@@ -65,7 +65,7 @@
   - `scripts/run-game-test.sh` 增加 bundle 入口并保留源码 fallback。
   - `scripts/run-producer-playtest.sh` 提供制作人一键入口。
   - `scripts/run-game-test-ab.sh`、`testing-manual.md`、启动器人工测试清单同步 bundle-first 口径。
-  - `doc/testing/project.md`、`doc/testing/prd.index.md`、`doc/testing/README.md`、`doc/devlog/2026-03-12.md` 回写追溯。
+  - `doc/testing/project.md`、`doc/testing/prd.index.md`、`doc/testing/README.md`、`doc/devlog/README.md` 回写追溯。
 - Out of Scope:
   - 不移除 `run-game-test.sh` 源码模式。
   - 不改造 `oasis7_game_launcher` / `oasis7_web_launcher` 参数协议。

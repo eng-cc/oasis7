@@ -66,7 +66,7 @@
   - 协作项目文档：`doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
   - 待迁移清单快照：`doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
   - 模块追踪：`doc/engineering/prd.md`、`doc/engineering/project.md`
-  - 任务日志：`doc/devlog/2026-03-03.md`
+  - 任务日志：`doc/devlog/README.md`
 - Owner-C 执行分批（TASK-ENGINEERING-013）：
   - Batch-C2: `doc/headless-runtime/**`（4 篇）
   - Batch-C3: `doc/world-runtime/governance/**` + `doc/world-runtime/module/**` + `doc/world-runtime/wasm/**`（9 篇）

@@ -18,7 +18,7 @@
 - `crates/oasis7_viewer/src/egui_right_panel.rs`
 - `crates/oasis7_viewer/src/ui_locale_text.rs`
 - `doc/world-simulator.project.md`
-- `doc/devlog/2026-02-15.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：已完成

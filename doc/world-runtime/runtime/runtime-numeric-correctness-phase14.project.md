@@ -22,7 +22,7 @@
 ### T3 回归与收口
 - [x] 运行 `oasis7_consensus` 定向回归测试。
 - [x] 回写设计文档状态（M0~M3）。
-- [x] 回写项目状态与 `doc/devlog/2026-02-23.md`。
+- [x] 回写项目状态与 `doc/devlog/README.md`。
 
 ## 依赖
 - `crates/oasis7_consensus/src/membership.rs`

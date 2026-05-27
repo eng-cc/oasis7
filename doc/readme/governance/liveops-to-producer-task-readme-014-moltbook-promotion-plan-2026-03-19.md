@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认方案可作为 Moltbook 首轮运营动作和贴文草案的边界文件
 - 接收方交付物 2：如发现越界承诺，仅回写裁剪意见和禁宣称补充
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-19.md`
+- 需要回写的文档 / 日志：`doc/devlog/README.md`
 
 ## Done Definition
 - [x] 已明确 Moltbook 当前公开机制与 oasis7 对应定位

@@ -40,9 +40,9 @@
 - [x] 执行 `env -u RUSTC_WRAPPER cargo check`
 - [x] 更新 `README.md` 展示站说明（补充三期亮点）
 - [x] 回写本项目管理文档状态
-- [x] 追加当日开发日志（`doc/devlog/2026-02-10.md`）
+- [x] 追加当日开发日志（`doc/devlog/README.md`）
 - [x] 回归新增 Proof 切换交互截图（中英文）
-- [x] 追加本次增量任务日志（`doc/devlog/2026-02-10.md`）
+- [x] 追加本次增量任务日志（`doc/devlog/README.md`）
 
 ## 依赖
 - 继续沿用当前 `site/` 静态部署结构与 Pages 工作流。

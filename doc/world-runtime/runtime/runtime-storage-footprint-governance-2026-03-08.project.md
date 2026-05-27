@@ -54,7 +54,7 @@
 - [ ] T7.2 (PRD-WORLD_RUNTIME-014/015) [test_tier_required]: 建立默认 profile 的体积预算、restart recovery、retained-height replay gate，并输出失败时的目录/指标差异。
 - [x] T7.3 (PRD-WORLD_RUNTIME-014/015) [test_tier_full]: 建立 GC fail-safe、profile 切换、archive read、checkpoint corruption、replay mismatch 的全量回归套件。
 - [x] T7.4 (PRD-WORLD_RUNTIME-014/015) [test_tier_full]: 对接 launcher / chain runtime / soak 场景，验证 `dev_local`、`release_default`、`soak_forensics` 三档 profile 口径一致。
-- [x] T7.5 (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 回写专题 PRD / project、模块项目文档、`testing-manual.md`（如测试入口变化）与 `doc/devlog/2026-03-08.md`，归档体积对比与回放验证结论。
+- [x] T7.5 (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 回写专题 PRD / project、模块项目文档、`testing-manual.md`（如测试入口变化）与 `doc/devlog/README.md`，归档体积对比与回放验证结论。
 
 ### T8 Replication footprint follow-up
 - [x] replication-storage-footprint-optimization (PRD-WORLD_RUNTIME-013/015) [test_tier_required]: 为 `node-distfs` replication store 增加 cold-index-aware orphan sweep，将 `files_index` / `replication_commit_messages` / cold-index 落盘切到 compact JSON，并把冷 commit 归档从“一块一文件”收敛为 segmented pack + offset 索引，减少 legacy orphan blob、inode 数和 pretty-json 块膨胀。 Trace: .pm/tasks/task_2aa685ee43244129b35535bea1f47fed.yaml

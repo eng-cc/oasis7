@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `TASK-CORE-016` 满足 `test_tier_required`
 - 接收方交付物 2：如发现排序口径缺口，仅登记意见，不改动第一优先级主题
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`
+- 需要回写的文档 / 日志：`doc/devlog/README.md`
 
 ## Done Definition
 - [x] 已形成 P0/P1/P2 优先级清单

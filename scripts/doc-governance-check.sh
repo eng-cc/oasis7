@@ -365,6 +365,7 @@ normalize_project_task_row_for_policy() {
   if [[ "$row" =~ ^-[[:space:]]\[[[:space:]x]\][[:space:]](.*)$ ]]; then
     row="${BASH_REMATCH[1]}"
   fi
+  row="$(printf '%s\n' "$row" | sed -E 's#doc/devlog/[0-9]{4}-[0-9]{2}-[0-9]{2}\.md#doc/devlog/README.md#g')"
   printf '%s\n' "$row"
 }
 

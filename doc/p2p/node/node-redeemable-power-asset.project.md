@@ -31,7 +31,7 @@
 - `crates/oasis7_consensus/src/pos.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
 - `crates/oasis7_distfs/src/lib.rs`
-- `doc/devlog/2026-02-16.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：RPA-0 ~ RPA-9 全部完成。

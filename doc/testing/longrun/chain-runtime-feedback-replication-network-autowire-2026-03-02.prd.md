@@ -61,7 +61,7 @@
   - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
   - `crates/oasis7/src/bin/oasis7_chain_runtime/oasis7_chain_runtime_tests.rs`
   - `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.project.md`
-  - `doc/devlog/2026-03-02.md`
+  - `doc/devlog/README.md`
 - Edge Cases & Error Handling:
   - 无 bootstrap peers 网络：启用本地 fallback 保证单机闭环可用。
   - 显式 bootstrap peers 但暂时失联：必须返回真实 libp2p 断连/无 peer 错误，不得静默回退到本地 handler。

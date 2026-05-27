@@ -23,7 +23,7 @@
 
 ### T3 回归与收口
 - [x] 运行对应 `test_tier_required` 口径的定向测试。
-- [x] 更新设计/项目文档状态与 `doc/devlog/2026-02-22.md`。
+- [x] 更新设计/项目文档状态与 `doc/devlog/README.md`。
 
 ## 依赖
 - Runtime：

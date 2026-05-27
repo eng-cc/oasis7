@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：版本候选对外口径简报
 - 接收方交付物 2：禁用表述、风险摘要与回滚说明
-- 需要回写的文档 / 日志：`doc/readme/project.md`、`doc/devlog/2026-03-11.md`
+- 需要回写的文档 / 日志：`doc/readme/project.md`、`doc/devlog/README.md`
 
 ## Done Definition
 - [x] 已接收内部版本候选 `go` 结论

@@ -38,7 +38,7 @@
 ### T3 回归验证与文档收口
 - [x] 执行脚本回归与基础构建校验
 - [x] 回写本项目管理文档状态
-- [x] 写任务日志：`doc/devlog/2026-03-01.md`
+- [x] 写任务日志：`doc/devlog/README.md`
 - [x] 任务测试与提交
 - 完成内容（2026-05-10 follow-up）：`release-gate-web` 额外纳入 `viewer-primary-web-entry-regression.sh`，在 `software_safe` realtime regression 之前先验证公开默认 `/` 与 `render_mode=auto` 发布入口都落到 `software_safe`；避免 `standard_3d` 删除后 release gate 只验证强制 `render_mode=software_safe`，却漏掉真正对外发布的默认入口契约。
 

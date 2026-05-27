@@ -30,7 +30,7 @@
 ### T4 收口
 - [x] required-tier 回归
 - [x] 设计/项目文档状态更新
-- [x] `doc/devlog/2026-02-23.md` 追加任务日志
+- [x] `doc/devlog/README.md` 追加任务日志
 
 ## 依赖
 - `crates/oasis7_node/src/node_runtime_core.rs`

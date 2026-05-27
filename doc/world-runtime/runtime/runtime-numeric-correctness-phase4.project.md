@@ -18,7 +18,7 @@
 
 ### T2 回归与收口
 - [x] 运行 node 定向测试并确认 required-tier 门禁通过。
-- [x] 更新设计/项目文档状态与 `doc/devlog/2026-02-23.md` 收口记录。
+- [x] 更新设计/项目文档状态与 `doc/devlog/README.md` 收口记录。
 
 ## 依赖
 - `crates/oasis7_node/src/replication.rs`

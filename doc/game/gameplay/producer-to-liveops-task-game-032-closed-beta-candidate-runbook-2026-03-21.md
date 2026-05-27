@@ -27,7 +27,7 @@
 - 接收方交付物 1：封闭 Beta 候选 runbook / FAQ / 招募与反馈模板
 - 接收方交付物 2：禁语清单与升级条件
 - 接收方交付物 3：事故摘要与用户反馈回流模板
-- 需要回写的文档 / 日志：`doc/readme/*`、必要时 `doc/playability_test_result/*`、`doc/devlog/2026-03-21.md`
+- 需要回写的文档 / 日志：`doc/readme/*`、必要时 `doc/playability_test_result/*`、`doc/devlog/README.md`
 
 ## Done Definition
 - [ ] runbook 已覆盖招募、反馈、事故回流

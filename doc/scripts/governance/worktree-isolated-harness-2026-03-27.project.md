@@ -8,7 +8,7 @@
 ## 任务拆解（含 PRD-ID 映射）
 - [x] WTH-1 (PRD-SCRIPTS-HARNESS-001/002) [test_tier_required]: 新增 `scripts/worktree-harness.sh` / `scripts/worktree-harness-lib.sh`，实现 worktree 身份解析、端口组分配、状态文件落盘和 `up/down/status/url/logs/smoke` 主入口。
 - [x] WTH-2 (PRD-SCRIPTS-HARNESS-001/002/003) [test_tier_required]: 扩展 `run-game-test.sh` / `run-producer-playtest.sh` 契约，支持 worktree 级 `output-dir`、`run-id`、`meta-file`、`json-ready` 与 bundle 根目录注入。
-- [x] WTH-3 (PRD-SCRIPTS-HARNESS-002/003) [test_tier_required]: 同步 `testing-manual.md`、`doc/scripts/{README,prd.index,project,prd}.md` 与 `doc/devlog/2026-03-27.md`，将 worktree harness 正式收入口径。
+- [x] WTH-3 (PRD-SCRIPTS-HARNESS-002/003) [test_tier_required]: 同步 `testing-manual.md`、`doc/scripts/{README,prd.index,project,prd}.md` 与 `doc/devlog/README.md`，将 worktree harness 正式收入口径。
 
 ## 关键契约
 

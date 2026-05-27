@@ -19,13 +19,13 @@
 - [x] 新增 GitHub Pages 工作流（`.github/workflows/pages.yml`）
 - [x] 在 `README.md` 增加 Pages 入口
 - [x] 本地自检链接与资源路径（项目页子路径）
-- [x] 更新任务日志（`doc/devlog/2026-02-10.md`）
+- [x] 更新任务日志（`doc/devlog/README.md`）
 - [x] 运行测试（`env -u RUSTC_WRAPPER cargo check`）
 - [x] 更新方案文档：补充中英文双版目标/范围/验收
 - [x] 新增英文首页（`site/en/index.html`）
 - [x] 新增中英文切换入口（CN/EN）
 - [x] 本地预览双页并截图核对（agent-browser）
-- [x] 同步更新任务日志（`doc/devlog/2026-02-10.md`）
+- [x] 同步更新任务日志（`doc/devlog/README.md`）
 - [x] 新增首访按浏览器语言自动跳转（EN）
 - [x] 新增手动语言选择记忆（停止后续自动跳转）
 - [x] agent-browser 验证自动跳转与手动选择记忆

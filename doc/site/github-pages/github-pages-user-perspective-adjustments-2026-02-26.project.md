@@ -29,7 +29,7 @@
 - [x] agent-browser 关键路径回归（首页、语言切换、文档入口、移动端）
 - [x] 执行 `env -u RUSTC_WRAPPER cargo check -p oasis7_viewer`
 - [x] 回写本项目管理文档状态
-- [x] 写任务日志（`doc/devlog/2026-02-26.md`）
+- [x] 写任务日志（`doc/devlog/README.md`）
 
 ## 依赖
 - 站点静态结构：`site/` 与 `.github/workflows/pages.yml`。

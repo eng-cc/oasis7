@@ -16,7 +16,7 @@
 - `crates/oasis7_node/src/pos_state_store.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
 - `crates/oasis7/src/bin/oasis7_chain_runtime/reward_runtime_worker.rs`
-- `doc/devlog/2026-02-17.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：PRG-1 ~ PRG-4 全部完成。

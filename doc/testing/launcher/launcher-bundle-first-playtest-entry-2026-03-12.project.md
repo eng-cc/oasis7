@@ -24,7 +24,7 @@
 - `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`
 - `doc/testing/project.md`
 - `doc/testing/prd.index.md`
-- `doc/devlog/2026-03-12.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 更新日期：2026-03-12

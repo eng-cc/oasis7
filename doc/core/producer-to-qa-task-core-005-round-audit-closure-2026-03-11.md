@@ -27,7 +27,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `TASK-CORE-005` 的证据链满足 `test_tier_required`
 - 接收方交付物 2：如发现缺口，仅登记缺口，不重写既有 round 台账
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`（若 QA 追加结论）
+- 需要回写的文档 / 日志：`doc/devlog/README.md`（若 QA 追加结论）
 
 ## Done Definition
 - [x] 满足验收点 1：存在连续 round 审查台账，且包含状态/审计轮次/缺省处理口径

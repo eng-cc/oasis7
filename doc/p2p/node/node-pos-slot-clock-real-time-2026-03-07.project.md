@@ -26,4 +26,4 @@
 - 下一任务: 无
 - 阻塞项: 无
 - 进展: `TASK-P2P-008-T0~T3` 已全部完成；已完成 wall-clock slot/epoch 驱动、漏槽对齐、入站 proposal/attestation 时间窗口校验（未来槽/过旧槽）、attestation epoch 映射门禁与拒绝原因快照可观测，并通过单元与跨节点定向回归。
-- 说明: 本文档仅维护执行计划与任务状态；实施过程记录写入 `doc/devlog/2026-03-07.md`。
+- 说明: 本文档仅维护执行计划与任务状态；实施过程记录写入 `doc/devlog/README.md`。

@@ -38,7 +38,7 @@
 ### T4 文档与顶层任务收口（对应问题 5）
 - [x] 回写 `doc/game/gameplay/gameplay-top-level-design.project.md` 未完成项
 - [x] 固化 Gameplay 模块 `test_tier_required` 与 `test_tier_full` 测试矩阵引用
-- [x] 回写 `doc/devlog/2026-02-20.md`
+- [x] 回写 `doc/devlog/README.md`
 
 ## 依赖
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`

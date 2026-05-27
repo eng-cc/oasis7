@@ -58,8 +58,8 @@
   - `doc/scripts/project.md`
   - `doc/scripts/governance/script-entry-layering-2026-03-11.project.md`
   - `doc/scripts/governance/script-parameter-contracts-2026-03-11.project.md`
-  - `doc/devlog/2026-03-03.md`
-  - `doc/devlog/2026-03-11.md`
+  - `doc/devlog/README.md`
+  - `doc/devlog/README.md`
 - Edge Cases & Error Handling:
   - 样本只有任务完成结论、缺少发现日期：可记为 `incomplete_sample`，不纳入修复时长均值。
   - 单个任务同时补多个指标：允许在多个覆盖率分子中同时计数。

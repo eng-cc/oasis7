@@ -17,8 +17,8 @@
 - `crates/oasis7/src/bin/oasis7_chain_runtime/oasis7_chain_runtime_tests.rs`
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
-- `doc/devlog/2026-03-02.md`
-- `doc/devlog/2026-03-03.md`
+- `doc/devlog/README.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 更新日期：2026-03-03

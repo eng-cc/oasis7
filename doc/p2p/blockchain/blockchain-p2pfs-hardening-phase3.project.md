@@ -16,7 +16,7 @@
 - `crates/oasis7_consensus/src/sequencer_mainloop.rs`
 - `crates/oasis7_consensus/src/lib.rs`
 - `crates/oasis7_consensus/Cargo.toml`
-- `doc/devlog/2026-02-17.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：HP3-0 ~ HP3-3 全部完成。

@@ -24,7 +24,7 @@
 ### T3 回归与收口
 - [x] 运行 runtime 与相关 crate 定向测试
 - [x] 更新设计/项目文档状态
-- [x] 更新 `doc/devlog/2026-02-22.md`
+- [x] 更新 `doc/devlog/README.md`
 
 ## 依赖
 - Runtime world 核心：

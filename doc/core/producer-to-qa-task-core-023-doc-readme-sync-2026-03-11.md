@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `doc/README.md` 满足 `test_tier_required`
 - 接收方交付物 2：如有路径遗漏，仅登记入口缺口
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`
+- 需要回写的文档 / 日志：`doc/devlog/README.md`
 
 ## Done Definition
 - [x] 更新时间已同步到 `2026-03-11`

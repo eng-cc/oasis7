@@ -29,7 +29,7 @@
 ### T4 收口
 - [x] 跑定向测试并记录结果
 - [x] 回写项目状态与文档
-- [x] 更新 `doc/devlog/2026-02-22.md`
+- [x] 更新 `doc/devlog/README.md`
 
 ## 依赖
 - `crates/oasis7/src/runtime/world/event_processing/*`

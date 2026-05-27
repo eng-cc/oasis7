@@ -22,7 +22,7 @@
 
 ### T3 回归与收口
 - [x] 运行 `test_tier_required` 口径的 node 定向测试与编译检查。
-- [x] 更新设计/项目文档状态与 `doc/devlog/2026-02-23.md` 收口记录。
+- [x] 更新设计/项目文档状态与 `doc/devlog/README.md` 收口记录。
 
 ## 依赖
 - Node：

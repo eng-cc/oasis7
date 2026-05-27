@@ -15,7 +15,7 @@
 - `crates/oasis7_consensus/src/signature.rs`
 - `crates/oasis7_consensus/src/membership_logic.rs`
 - `crates/oasis7_consensus/src/sequencer_mainloop.rs`
-- `doc/devlog/2026-02-17.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：HP8-0 ~ HP8-2 全部完成。

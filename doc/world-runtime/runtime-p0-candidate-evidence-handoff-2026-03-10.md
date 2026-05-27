@@ -25,7 +25,7 @@
 ## Expected Output
 - 接收方交付物 1：runtime 候选级证据记录（可直接被 core go/no-go 引用）
 - 接收方交付物 2：`doc/world-runtime/project.md` 回写当前候选证据路径与结论
-- 需要回写的文档 / 日志：`doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`、`doc/world-runtime/project.md`、`doc/devlog/2026-03-10.md`
+- 需要回写的文档 / 日志：`doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`、`doc/world-runtime/project.md`、`doc/devlog/README.md`
 
 ## Done Definition
 - [ ] 绑定至少 1 组 runtime 实测证据到 core 记录

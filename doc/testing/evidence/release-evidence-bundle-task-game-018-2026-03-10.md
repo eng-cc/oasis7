@@ -18,10 +18,10 @@
 ## 执行命令
 | 套件 / 检查项 | 命令 | 结果 | 日志路径 |
 | --- | --- | --- | --- |
-| `viewer-halo-regression` | `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer selection_emphasis::tests:: -- --nocapture` | `PASS` | `doc/devlog/2026-03-10.md` |
-| `viewer-marker-regression` | `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer two_d_agent_marker_profile_ -- --nocapture` | `PASS` | `doc/devlog/2026-03-10.md` |
+| `viewer-halo-regression` | `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer selection_emphasis::tests:: -- --nocapture` | `PASS` | `doc/devlog/README.md` |
+| `viewer-marker-regression` | `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer two_d_agent_marker_profile_ -- --nocapture` | `PASS` | `doc/devlog/README.md` |
 | `S6-web-visual-capture` | `agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&test_api=1"` + `agent-browser eval/runSteps` + `agent-browser screenshot` + `agent-browser record start/stop` | `PASS` | `output/playwright/playability/manual-20260310-round009/console.log` |
-| `doc-linkage-check` | `rg -n "TASK-GAME-018|card_2026_03_10_23_27_43|总结论: `pass`" doc/game doc/playability_test_result doc/testing doc/core` | `PASS` | `doc/devlog/2026-03-10.md` |
+| `doc-linkage-check` | `rg -n "TASK-GAME-018|card_2026_03_10_23_27_43|总结论: `pass`" doc/game doc/playability_test_result doc/testing doc/core` | `PASS` | `doc/devlog/README.md` |
 
 ## UI / 体验证据
 | 类型 | 路径 | 说明 |

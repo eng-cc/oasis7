@@ -91,4 +91,4 @@
   - challenge 规则与实时体验存在冲突，需要联动客户端最终性文案。
   - 快照/日志可用性会直接影响重连追平成功率。
   - 全仓 pre-commit required 套件存在已知基线失败（`bootstrap_power` / `agent_default_modules` 等约 10 项），本任务仅对 MLC 相关矩阵执行并通过；全仓门禁修复需另立专项追踪。
-- 说明: 本文档只维护执行计划；过程记录写入 `doc/devlog/2026-03-07.md`。
+- 说明: 本文档只维护执行计划；过程记录写入 `doc/devlog/README.md`。

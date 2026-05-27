@@ -22,7 +22,7 @@
 - `crates/oasis7_client_launcher/src/main.rs`
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
-- `doc/devlog/2026-03-01.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 更新日期：2026-03-03

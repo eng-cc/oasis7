@@ -28,7 +28,7 @@
 ### T3 测试与收口
 - [x] 新增/扩展 `runtime/tests/gameplay_protocol.rs` 生命周期测试（`test_tier_required`）
 - [x] 跑 `cargo check` 与 gameplay 目标测试
-- [x] 回写项目文档状态与 `doc/devlog/2026-02-20.md`
+- [x] 回写项目文档状态与 `doc/devlog/README.md`
 
 ## 依赖
 - `README.md`

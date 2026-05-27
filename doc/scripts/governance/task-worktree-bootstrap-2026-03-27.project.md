@@ -8,7 +8,7 @@
 ## 任务拆解（含 PRD-ID 映射）
 - [x] WTB-BOOT-1 (PRD-SCRIPTS-WTB-001/002) [test_tier_required]: 新增 `scripts/new-task-worktree.sh`，实现默认 branch/path 派生、clean-source guard 与 branch/path 冲突检测。
 - [x] WTB-BOOT-2 (PRD-SCRIPTS-WTB-001/002/003) [test_tier_required]: 为入口补齐 `--base`、`--branch`、`--path`、`--json`、`--allow-dirty-source` 契约与人类可读下一步提示。
-- [x] WTB-BOOT-3 (PRD-SCRIPTS-WTB-003) [test_tier_required]: 同步 `AGENTS.md`、`doc/scripts/{prd,project,README,prd.index}.md` 与 `doc/devlog/2026-03-27.md`，把新标准入口收入口径。
+- [x] WTB-BOOT-3 (PRD-SCRIPTS-WTB-003) [test_tier_required]: 同步 `AGENTS.md`、`doc/scripts/{prd,project,README,prd.index}.md` 与 `doc/devlog/README.md`，把新标准入口收入口径。
 - [x] WTB-BOOT-4 (PRD-SCRIPTS-WTB-004) [test_tier_required]: 为入口补齐 `--init-docs` 与 `--with-harness`，输出模块文档检查摘要，并可在新 worktree 中后台预热 `worktree-harness.sh up --no-llm`。
 - [x] WTB-BOOT-5 (PRD-SCRIPTS-WTB-001/002/004) [test_tier_required]: 收紧 worktree 例外授权话术，同步 `AGENTS.md` 与 task-worktree bootstrap 文档，明确“文档/脚本/测试/话术改动也算新需求”“只有显式复用授权才可例外”“发现切错 worktree 后必须立即切走”。
 

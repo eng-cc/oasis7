@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 12 个模块主项目均为 completed
 - 接收方交付物 2：如发现单个模块状态漂移，仅登记缺口，不扩展新需求范围
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`
+- 需要回写的文档 / 日志：`doc/devlog/README.md`
 
 ## Done Definition
 - [x] 12 个模块主项目状态已汇总

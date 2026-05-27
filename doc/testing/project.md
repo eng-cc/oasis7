@@ -220,7 +220,7 @@
     - `doc/testing/longrun/*.md`
     - `doc/testing/manual/*.md`
     - `doc/testing/performance/*.md`
-    - `doc/devlog/2026-03-19.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "^# oasis7|^# oasis7 Runtime|^# oasis7 Simulator|^# oasis7 Viewer" doc/testing --glob '!third_party/**'`
     - `./scripts/doc-governance-check.sh`
@@ -237,7 +237,7 @@
     - `doc/testing/prd.index.md`
     - `doc/testing/README.md`
     - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
-    - `doc/devlog/2026-03-22.md`
+    - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "sum=10000 bps|genesis_liquid|1500 bps|5000 bps|custody|treasury|verdict" doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md doc/testing/evidence/token-genesis-allocation-audit-template-2026-03-22.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
     - `./scripts/doc-governance-check.sh`

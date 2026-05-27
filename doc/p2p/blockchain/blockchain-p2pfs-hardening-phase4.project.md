@@ -15,7 +15,7 @@
 - `crates/oasis7_consensus/src/membership.rs`
 - `crates/oasis7_consensus/src/membership_logic.rs`
 - `crates/oasis7_consensus/src/membership_tests.rs`
-- `doc/devlog/2026-02-17.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：HP4-0 ~ HP4-3 全部完成。

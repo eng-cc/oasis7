@@ -8,7 +8,7 @@
 ## 任务拆解
 - [x] T1 (`PRD-CORE-009`) [test_tier_required]: 冻结 `standard_3d / software_safe / pure_api` 三模式总契约，明确 mode/lane 分层、claim envelope、fallback 规则与禁宣称项。
 - [x] T2 (`PRD-CORE-009`) [test_tier_required]: 同步 `doc/core/prd.md`、`doc/core/project.md`、`doc/core/prd.index.md` 与 `doc/core/README.md`，把本专题挂入 core 主入口。
-- [x] T3 (`PRD-CORE-009`) [test_tier_required]: 回写 `doc/devlog/2026-03-19.md`，记录 owner、完成内容、验证方式与后续使用约束。
+- [x] T3 (`PRD-CORE-009`) [test_tier_required]: 回写 `doc/devlog/README.md`，记录 owner、完成内容、验证方式与后续使用约束。
 - [x] T4 (`PRD-CORE-009`) [test_tier_required]: 对齐 `testing-manual`、`doc/world-simulator/**`、`doc/game/**` 与 `doc/testing/**` 的下游术语，要求结论先绑定玩家访问模式，再附加 execution lane。
 - [x] T5 (`PRD-CORE-009`) [test_tier_required]: 将 `pure_api` 的正式游玩口径重定为“必须启用且可连通 LLM”，同步回写 launcher/runtime 行为、README/testing/manual/game/world-simulator 当前入口，并把 `--no-llm` 降级为 observer/debug only。
 - [x] T6 (`PRD-CORE-009`) [test_tier_required]: 将旧单字段 provider mode 歧义口径收口为“`agent_direct_connect` 接入方式 + `provider_loopback_http` provider implementation + execution lane”，同步回写 core/world-simulator/testing 文档、launcher/client launcher 用户文案与兼容 alias。

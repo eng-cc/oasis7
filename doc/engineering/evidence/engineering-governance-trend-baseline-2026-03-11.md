@@ -24,10 +24,10 @@
 ## 样本明细
 | Sample ID | 来源 | 样本基数 | 残留违规 | 发现日期 | 关闭日期 | 修复时长 | 回归数 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `TASK-ENGINEERING-017` | `doc/devlog/2026-03-03.md` | `336` | `0` | `2026-03-03` | `2026-03-03` | `0d` | `0` | 专题 `*.prd.md <-> *.project.md` 双向互链全量覆盖，最终 `design_missing_project_link=0`、`project_missing_design_link=0`。 |
-| `TASK-ENGINEERING-018` | `doc/devlog/2026-03-03.md` | `12` | `0` | `2026-03-03` | `2026-03-03` | `0d` | `0` | 12 个模块主项目任务项全部显式标注 `test_tier_required/full`。 |
-| `TASK-ENGINEERING-019` | `doc/devlog/2026-03-03.md` | `7` | `0` | `2026-03-03` | `2026-03-03` | `0d` | `0` | 修复 7 条活跃文档断链，并将引用路径可达门禁纳入 `doc-governance-check.sh`。 |
-| `TASK-ENGINEERING-034` | `doc/devlog/2026-03-09.md` | `1` | `0` | `2026-03-09` | `2026-03-09` | `0d` | `0` | 角色名白名单门禁接入后，devlog / handoff 的角色命名统一纳入标准角色集。 |
+| `TASK-ENGINEERING-017` | `doc/devlog/README.md` | `336` | `0` | `2026-03-03` | `2026-03-03` | `0d` | `0` | 专题 `*.prd.md <-> *.project.md` 双向互链全量覆盖，最终 `design_missing_project_link=0`、`project_missing_design_link=0`。 |
+| `TASK-ENGINEERING-018` | `doc/devlog/README.md` | `12` | `0` | `2026-03-03` | `2026-03-03` | `0d` | `0` | 12 个模块主项目任务项全部显式标注 `test_tier_required/full`。 |
+| `TASK-ENGINEERING-019` | `doc/devlog/README.md` | `7` | `0` | `2026-03-03` | `2026-03-03` | `0d` | `0` | 修复 7 条活跃文档断链，并将引用路径可达门禁纳入 `doc-governance-check.sh`。 |
+| `TASK-ENGINEERING-034` | `doc/devlog/README.md` | `1` | `0` | `2026-03-09` | `2026-03-09` | `0d` | `0` | 角色名白名单门禁接入后，devlog / handoff 的角色命名统一纳入标准角色集。 |
 
 ## 当前基线结果
 - 违规率：`(0 + 0 + 0 + 0) / (336 + 12 + 7 + 1) = 0 / 356 = 0%` → `green`

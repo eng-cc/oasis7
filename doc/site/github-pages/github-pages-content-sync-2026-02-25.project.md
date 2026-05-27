@@ -28,7 +28,7 @@
 ### 3. 验证与收口
 - [x] 执行 `env -u RUSTC_WRAPPER cargo check`
 - [x] 更新本项目管理文档状态
-- [x] 写任务日志（`doc/devlog/2026-02-25.md`）
+- [x] 写任务日志（`doc/devlog/README.md`）
 
 ## 依赖
 - 继续沿用 `site/` 静态目录与 GitHub Pages 工作流。

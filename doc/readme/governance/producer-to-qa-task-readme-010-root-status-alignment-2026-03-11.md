@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `README.md` 状态段满足 `test_tier_required`
 - 接收方交付物 2：如发现与公开站点口径冲突，只登记缺口，不扩展到整份 README 重写
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`
+- 需要回写的文档 / 日志：`doc/devlog/README.md`
 
 ## Done Definition
 - [x] README 已明确“技术预览（尚不可玩）”

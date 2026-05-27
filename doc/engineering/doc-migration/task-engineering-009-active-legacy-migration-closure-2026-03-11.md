@@ -12,7 +12,7 @@
   - 分批方案已冻结：`TASK-ENGINEERING-010` 产出协作主文档与 2026-03-03 冻结快照。
   - 模块批次已执行：`TASK-ENGINEERING-011/012/013/013B/013C/013D/014/014-D1/014-D2` 覆盖 world-simulator、p2p、world-runtime、headless-runtime、site、readme、scripts、game、engineering 与根入口 redirect。
   - 收口复核已完成：`TASK-ENGINEERING-015` 已确认冻结快照现存缺口为 0，命名一致性、引用可达与模块追踪同步均通过。
-  - 文档追踪已回写：迁移协作子项目、engineering 主项目与 `doc/devlog/2026-03-03.md` / `doc/devlog/2026-03-11.md` 均有明确记录。
+  - 文档追踪已回写：迁移协作子项目、engineering 主项目与 `doc/devlog/README.md` / `doc/devlog/README.md` 均有明确记录。
 
 ## 批次覆盖摘要
 | 批次 | 范围 | 状态 | 关键结论 |
@@ -30,8 +30,8 @@
 - `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
 - `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
 - `doc/engineering/project.md`
-- `doc/devlog/2026-03-03.md`
-- `doc/devlog/2026-03-11.md`
+- `doc/devlog/README.md`
+- `doc/devlog/README.md`
 
 ## 验收判定
 - `PRD-ENGINEERING-004` 对 `TASK-ENGINEERING-009` 的要求已满足，`doc/engineering/project.md` 可以将该任务标记为完成，并将 engineering 主项目切为 completed。

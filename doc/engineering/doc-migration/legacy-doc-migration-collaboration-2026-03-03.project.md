@@ -24,7 +24,7 @@
 - `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
 - `doc/engineering/prd.md`
 - `doc/engineering/project.md`
-- `doc/devlog/2026-03-03.md`
+- `doc/devlog/README.md`
 - `./scripts/doc-governance-check.sh`
 
 ## 状态

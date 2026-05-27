@@ -27,7 +27,7 @@
 ## Expected Output
 - 接收方交付物 1：确认 `TASK-GAME-018` 证据回填链路满足 `test_tier_required`
 - 接收方交付物 2：如发现互链缺口，仅登记缺口，不重开 viewer 体验任务
-- 需要回写的文档 / 日志：`doc/devlog/2026-03-11.md`（若 QA 追加结论）
+- 需要回写的文档 / 日志：`doc/devlog/README.md`（若 QA 追加结论）
 
 ## Done Definition
 - [x] 满足验收点 1：playability / testing / core 证据链互链存在

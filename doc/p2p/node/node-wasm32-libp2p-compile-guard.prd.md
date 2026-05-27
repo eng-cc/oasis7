@@ -25,7 +25,7 @@
   - AC-2: `crates/oasis7_node/src/libp2p_replication_network_wasm.rs`（新增）
   - AC-3: `crates/oasis7/src/viewer/web_bridge.rs`
   - AC-4: `doc/p2p/node/node-wasm32-libp2p-compile-guard.project.md`
-  - AC-5: `doc/devlog/2026-02-16.md`
+  - AC-5: `doc/devlog/README.md`
   - AC-6: 调整 PoS/gossip 共识业务语义。
 - Non-Goals:
   - 不扩展超出原文边界的新需求。

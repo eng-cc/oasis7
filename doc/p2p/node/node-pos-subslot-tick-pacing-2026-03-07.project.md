@@ -27,4 +27,4 @@
 - 下一任务: 无
 - 阻塞项: 无
 - 进展: `TASK-P2P-009-T0~T3` 已全部完成；已完成 `ticks_per_slot/proposal_tick_phase` 相位门控、tick 级快照持久化、runtime 动态调度等待与跨节点回归证据收口。
-- 说明: 本文档仅维护执行计划与任务状态；实施过程记录写入 `doc/devlog/2026-03-07.md`。
+- 说明: 本文档仅维护执行计划与任务状态；实施过程记录写入 `doc/devlog/README.md`。

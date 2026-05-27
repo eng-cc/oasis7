@@ -10,7 +10,7 @@
 - [x] 输出项目管理文档（本文件）
 - [x] 新增修复脚本（`scripts/fix-precommit.sh`）
 - [x] 运行校验（`./scripts/fix-precommit.sh`）
-- [x] 更新任务日志（`doc/devlog/2026-02-06.md`）
+- [x] 更新任务日志（`doc/devlog/README.md`）
 
 ## 依赖
 - `scripts/pre-commit.sh`

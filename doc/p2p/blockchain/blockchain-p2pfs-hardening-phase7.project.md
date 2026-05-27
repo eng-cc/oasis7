@@ -12,7 +12,7 @@
 ## 依赖
 - doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7.prd.md
 - `crates/oasis7_consensus/src/sequencer_mainloop.rs`
-- `doc/devlog/2026-02-17.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：HP7-0 ~ HP7-2 全部完成。

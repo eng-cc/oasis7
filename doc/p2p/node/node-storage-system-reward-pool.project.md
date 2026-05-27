@@ -15,7 +15,7 @@
 - `crates/oasis7/src/runtime/node_points.rs`
 - `crates/oasis7/src/runtime/node_points_runtime.rs`
 - `crates/oasis7/src/runtime/mod.rs`
-- `doc/devlog/2026-02-16.md`
+- `doc/devlog/README.md`
 
 ## 状态
 - 当前阶段：节点存储系统奖励池阶段完成（SBR-1~SBR-4 全部完成）。

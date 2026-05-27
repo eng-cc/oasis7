@@ -20,7 +20,7 @@
 - `scripts/release-gate.sh`
 - `scripts/release-gate-smoke.sh`
 - `testing-manual.md`
-- `doc/devlog/2026-03-24.md`
+- `doc/devlog/README.md`
 
 ### RTMIN-2 产物
 - `scripts/shared-network-track-gate.sh`
@@ -32,7 +32,7 @@
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
 - `testing-manual.md`
-- `doc/devlog/2026-03-24.md`
+- `doc/devlog/README.md`
 
 ### RTMIN-3 产物
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
@@ -47,7 +47,7 @@
 - `doc/p2p/prd.index.md`
 - `doc/p2p/README.md`
 - `testing-manual.md`
-- `doc/devlog/2026-03-24.md`
+- `doc/devlog/README.md`
 
 ### RTMIN-4 产物
 - `output/release-candidates/shared-devnet-dry-run-20260324-01.json`
@@ -63,7 +63,7 @@
 - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md`
 - `doc/p2p/project.md`
 - `testing-manual.md`
-- `doc/devlog/2026-03-24.md`
+- `doc/devlog/README.md`
 
 ### RTMIN-4A 产物
 - `scripts/shared-devnet-rehearsal.sh`
@@ -87,7 +87,7 @@
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
 - `doc/p2p/project.md`
 - `testing-manual.md`
-- `doc/devlog/2026-03-24.md`
+- `doc/devlog/README.md`
 
 ## 当前结论
 - 当前阶段:

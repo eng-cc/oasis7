@@ -28,7 +28,7 @@
 - 接收方交付物 1：five-node no-LLM soak 候选版本证据
 - 接收方交付物 2：replay/rollback drill 候选版本证据
 - 接收方交付物 3：给 `qa_engineer` 可直接消费的 runtime release gate 摘要
-- 需要回写的文档 / 日志：对应 evidence、`doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md`、`doc/devlog/2026-03-21.md`
+- 需要回写的文档 / 日志：对应 evidence、`doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md`、`doc/devlog/README.md`
 
 ## Done Definition
 - [ ] five-node no-LLM soak 证据可复跑

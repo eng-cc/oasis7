@@ -29,7 +29,7 @@
 ### 3. 验证与收口
 - [x] 执行 `env -u RUSTC_WRAPPER cargo check`
 - [x] 更新项目管理文档状态
-- [x] 写任务日志（`doc/devlog/2026-02-15.md`）
+- [x] 写任务日志（`doc/devlog/README.md`）
 
 ## 依赖
 - 以 `doc/world-simulator/viewer/viewer-manual.manual.md` 为中文基线。
