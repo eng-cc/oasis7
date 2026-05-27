@@ -107,6 +107,11 @@ const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
 const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
+const DEFAULT_CHAIN_NETWORK_TIER: &str = "local_devnet";
+const PUBLIC_TESTNET_NETWORK_TIER_MANIFEST: &str =
+    "doc/testing/templates/network-tier-public-testnet.example.json";
+const MAINNET_NETWORK_TIER_MANIFEST: &str =
+    "doc/testing/templates/network-tier-mainnet.example.json";
 const DEFAULT_CHAIN_NODE_TICK_MS: &str = "200";
 const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: &str = "12000";
 const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: &str = "10";
@@ -401,6 +406,8 @@ struct LaunchConfig {
     chain_enabled: bool,
     chain_status_bind: String,
     chain_node_id: String,
+    chain_network_tier: String,
+    chain_network_tier_manifest: String,
     chain_world_id: String,
     chain_node_role: String,
     chain_p2p_user_mode: String,
@@ -456,6 +463,8 @@ impl Default for LaunchConfig {
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
             chain_node_id: default_chain_node_id(),
+            chain_network_tier: DEFAULT_CHAIN_NETWORK_TIER.to_string(),
+            chain_network_tier_manifest: String::new(),
             chain_world_id: String::new(),
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
             chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
@@ -480,6 +489,7 @@ impl Default for LaunchConfig {
 impl LaunchConfig {
     fn normalize(&mut self) {
         normalize_launch_config(self);
+        normalize_chain_network_tier_config(self);
     }
 }
 
@@ -641,6 +651,7 @@ enum ConfigIssue {
     ChainRuntimeBinMissing,
     ChainStatusBindInvalid,
     ChainNodeIdRequired,
+    ChainNetworkTierInvalid,
     ChainRoleInvalid,
     ChainP2pUserModeInvalid,
     ChainPublicEntryConfirmationRequired,
@@ -750,6 +761,12 @@ impl ConfigIssue {
             }
             (Self::ChainNodeIdRequired, UiLanguage::ZhCn) => "链节点 ID（chain node id）是必填项",
             (Self::ChainNodeIdRequired, UiLanguage::EnUs) => "Chain node id is required",
+            (Self::ChainNetworkTierInvalid, UiLanguage::ZhCn) => {
+                "链网络层级必须是 local_devnet、public_testnet 或 mainnet"
+            }
+            (Self::ChainNetworkTierInvalid, UiLanguage::EnUs) => {
+                "Chain network tier must be local_devnet, public_testnet, or mainnet"
+            }
             (Self::ChainRoleInvalid, UiLanguage::ZhCn) => {
                 "链节点角色必须是 sequencer/storage/observer"
             }

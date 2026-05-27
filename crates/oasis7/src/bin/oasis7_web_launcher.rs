@@ -42,8 +42,8 @@ use parse_utils::{
     parse_host_port, parse_non_negative_u64, parse_optional_i64, parse_port, parse_positive_u64,
 };
 use runtime_paths::{
-    normalize_bind_host_for_local_access, now_unix_ms, resolve_console_static_dir_path,
-    resolve_oasis7_game_launcher_binary, resolve_static_dir_path,
+    normalize_bind_host_for_local_access, now_unix_ms, repo_root_dir,
+    resolve_console_static_dir_path, resolve_oasis7_game_launcher_binary, resolve_static_dir_path,
 };
 #[cfg(test)]
 use server::remap_transfer_runtime_target;
@@ -65,7 +65,12 @@ const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
 const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
+const DEFAULT_CHAIN_NETWORK_TIER: &str = "local_devnet";
 const DEFAULT_CHAIN_NETWORK_TIER_MANIFEST: &str = "";
+const PUBLIC_TESTNET_NETWORK_TIER_MANIFEST: &str =
+    "doc/testing/templates/network-tier-public-testnet.example.json";
+const MAINNET_NETWORK_TIER_MANIFEST: &str =
+    "doc/testing/templates/network-tier-mainnet.example.json";
 const DEFAULT_CHAIN_NODE_TICK_MS: u64 = 200;
 const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: u64 = 12_000;
 const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: u64 = 10;
@@ -103,6 +108,7 @@ struct LauncherConfig {
     chain_enabled: bool,
     chain_status_bind: String,
     chain_node_id: String,
+    chain_network_tier: String,
     chain_network_tier_manifest: String,
     chain_storage_profile: String,
     chain_world_id: String,
@@ -139,6 +145,7 @@ impl Default for LauncherConfig {
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
             chain_node_id: default_chain_node_id(),
+            chain_network_tier: DEFAULT_CHAIN_NETWORK_TIER.to_string(),
             chain_network_tier_manifest: DEFAULT_CHAIN_NETWORK_TIER_MANIFEST.to_string(),
             chain_storage_profile: StorageProfile::DevLocal.as_str().to_string(),
             chain_world_id: String::new(),
@@ -584,6 +591,8 @@ Options:\n\
   --chain-enable / --chain-disable\n\
   --chain-status-bind <host:port>\n\
   --chain-node-id <id>\n\
+  --chain-network-tier <tier>   local_devnet|public_testnet|mainnet\n\
+  --chain-network-tier-manifest <path>\n\
   --chain-storage-profile <name>  dev_local|release_default|soak_forensics\n\
   --chain-world-id <id>\n\
   --chain-node-role <role>        sequencer|storage|observer\n\
@@ -686,6 +695,10 @@ where
             "--chain-node-id" => {
                 options.initial_config.chain_node_id = next_value(&mut iter, "--chain-node-id")?;
             }
+            "--chain-network-tier" => {
+                options.initial_config.chain_network_tier =
+                    next_value(&mut iter, "--chain-network-tier")?;
+            }
             "--chain-network-tier-manifest" => {
                 options.initial_config.chain_network_tier_manifest =
                     next_value(&mut iter, "--chain-network-tier-manifest")?;
@@ -773,6 +786,7 @@ where
     }
     options.initial_config.launcher_bin = options.launcher_bin.trim().to_string();
     options.initial_config.chain_runtime_bin = options.chain_runtime_bin.trim().to_string();
+    normalize_chain_network_tier_config(&mut options.initial_config)?;
 
     parse_host_port(options.listen_bind.as_str(), "--listen-bind")?;
     let deployment_mode = DeploymentMode::parse(
@@ -790,9 +804,7 @@ where
             options.initial_config.chain_status_bind.as_str(),
             "--chain-status-bind",
         )?;
-        if options
-            .initial_config
-            .chain_network_tier_manifest
+        if effective_chain_network_tier_manifest(&options.initial_config)
             .trim()
             .is_empty()
         {
@@ -858,6 +870,58 @@ where
     }
 
     Ok(options)
+}
+
+fn canonical_chain_network_tier(raw: &str) -> Option<&'static str> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" | "local" | "local_devnet" | "devnet" => Some("local_devnet"),
+        "public_testnet" | "testnet" => Some("public_testnet"),
+        "mainnet" => Some("mainnet"),
+        _ => None,
+    }
+}
+
+fn known_network_tier_manifest(tier: &str) -> Option<&'static str> {
+    match tier {
+        "public_testnet" => Some(PUBLIC_TESTNET_NETWORK_TIER_MANIFEST),
+        "mainnet" => Some(MAINNET_NETWORK_TIER_MANIFEST),
+        _ => None,
+    }
+}
+
+fn resolve_known_network_tier_manifest(tier: &str) -> Option<String> {
+    known_network_tier_manifest(tier).map(|relative_path| {
+        repo_root_dir()
+            .join(relative_path)
+            .to_string_lossy()
+            .to_string()
+    })
+}
+
+fn normalize_chain_network_tier_config(config: &mut LauncherConfig) -> Result<(), String> {
+    let tier =
+        canonical_chain_network_tier(config.chain_network_tier.as_str()).ok_or_else(|| {
+            "chain network tier must be one of: local_devnet|public_testnet|mainnet".to_string()
+        })?;
+    config.chain_network_tier = tier.to_string();
+    if config.chain_network_tier_manifest.trim().is_empty() {
+        if let Some(manifest) = resolve_known_network_tier_manifest(tier) {
+            config.chain_network_tier_manifest = manifest.to_string();
+        }
+    }
+    Ok(())
+}
+
+fn effective_chain_network_tier_manifest(config: &LauncherConfig) -> String {
+    let explicit = config.chain_network_tier_manifest.trim();
+    if !explicit.is_empty() {
+        return explicit.to_string();
+    }
+    let tier =
+        canonical_chain_network_tier(config.chain_network_tier.as_str()).unwrap_or("local_devnet");
+    resolve_known_network_tier_manifest(tier)
+        .unwrap_or_default()
+        .to_string()
 }
 
 fn parse_chain_p2p_user_mode(raw: &str) -> Result<String, String> {

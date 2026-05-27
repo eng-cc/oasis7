@@ -5,7 +5,7 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::runtime_paths::viewer_dev_dist_candidates;
+use super::runtime_paths::{repo_root_dir, viewer_dev_dist_candidates};
 use super::{
     build_chain_runtime_args, build_game_url, build_launcher_args,
     build_launcher_args_with_launcher_bin, chain_error_code_for_state, execute_gui_agent_action,
@@ -32,6 +32,7 @@ fn parse_options_defaults() {
         DEFAULT_CHAIN_STATUS_BIND
     );
     assert_eq!(options.initial_config.chain_network_tier_manifest, "");
+    assert_eq!(options.initial_config.chain_network_tier, "local_devnet");
     assert_eq!(
         options.initial_config.chain_storage_profile,
         StorageProfile::DevLocal.as_str()
@@ -144,6 +145,7 @@ fn parse_options_accepts_overrides() {
         "release_default"
     );
     assert_eq!(options.initial_config.chain_network_tier_manifest, "");
+    assert_eq!(options.initial_config.chain_network_tier, "local_devnet");
     assert_eq!(options.initial_config.chain_p2p_user_mode, "public_entry");
     assert!(options.initial_config.chain_p2p_accept_public_entry);
     assert_eq!(
@@ -407,6 +409,29 @@ fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
     assert!(!args.contains(&"--storage-profile".to_string()));
     assert!(args.contains(&"--node-role".to_string()));
     assert!(args.contains(&"sequencer".to_string()));
+}
+
+#[test]
+fn build_chain_runtime_args_resolves_public_testnet_tier_manifest() {
+    let config = LauncherConfig {
+        viewer_static_dir: ".".to_string(),
+        chain_enabled: true,
+        chain_status_bind: "127.0.0.1:6121".to_string(),
+        chain_node_id: "chain-a".to_string(),
+        chain_network_tier: "public_testnet".to_string(),
+        chain_p2p_user_mode: "public_entry".to_string(),
+        chain_p2p_accept_public_entry: true,
+        ..LauncherConfig::default()
+    };
+    let args = build_chain_runtime_args(&config).expect("args");
+    let expected_manifest = repo_root_dir()
+        .join("doc/testing/templates/network-tier-public-testnet.example.json")
+        .to_string_lossy()
+        .to_string();
+    assert!(args.contains(&"--network-tier-manifest".to_string()));
+    assert!(PathBuf::from(expected_manifest.as_str()).is_file());
+    assert!(args.contains(&expected_manifest));
+    assert!(!args.contains(&"--storage-profile".to_string()));
 }
 
 #[test]
@@ -787,6 +812,7 @@ fn gui_agent_capabilities_include_expected_actions_and_targets() {
             .any(|item| item.as_str().is_some_and(|value| value == name))
     };
     assert!(contains_action("start_game"));
+    assert!(contains_action("set_chain_network_tier"));
     assert!(contains_action("submit_transfer"));
     assert!(contains_action("query_explorer_mempool"));
 
@@ -797,6 +823,43 @@ fn gui_agent_capabilities_include_expected_actions_and_targets() {
     assert!(query_targets.iter().any(|target| {
         target.get("id").and_then(serde_json::Value::as_str) == Some("transfer.status")
     }));
+}
+
+#[test]
+fn gui_agent_set_chain_network_tier_updates_config_manifest() {
+    let mut state = ServiceState::new(
+        "launcher".to_string(),
+        "chain".to_string(),
+        PathBuf::from("."),
+        LauncherConfig::default(),
+    );
+    state.updated_at_unix_ms = 0;
+
+    let response = execute_gui_agent_action(
+        &mut state,
+        br#"{"action":"set_chain_network_tier","payload":{"tier":"mainnet"}}"#,
+        Some("127.0.0.1"),
+    );
+    let encoded = serde_json::to_value(&response).expect("serialize response");
+
+    assert_eq!(encoded["ok"], serde_json::json!(true));
+    assert_eq!(
+        encoded["action"],
+        serde_json::json!("set_chain_network_tier")
+    );
+    assert_eq!(
+        encoded["state"]["config"]["chain_network_tier"],
+        serde_json::json!("mainnet")
+    );
+    assert_eq!(
+        encoded["state"]["config"]["chain_network_tier_manifest"],
+        serde_json::json!(repo_root_dir()
+            .join("doc/testing/templates/network-tier-mainnet.example.json")
+            .to_string_lossy()
+            .to_string())
+    );
+    assert_eq!(state.config.chain_network_tier, "mainnet");
+    assert!(state.updated_at_unix_ms > 0);
 }
 
 #[test]

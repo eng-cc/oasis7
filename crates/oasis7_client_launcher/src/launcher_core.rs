@@ -292,6 +292,8 @@ pub(super) fn launcher_text_field_mut<'a>(
         "agent_provider_profile" => Some(&mut config.agent_provider_profile),
         "chain_status_bind" => Some(&mut config.chain_status_bind),
         "chain_node_id" => Some(&mut config.chain_node_id),
+        "chain_network_tier" => Some(&mut config.chain_network_tier),
+        "chain_network_tier_manifest" => Some(&mut config.chain_network_tier_manifest),
         "chain_world_id" => Some(&mut config.chain_world_id),
         "chain_node_role" => Some(&mut config.chain_node_role),
         "chain_p2p_user_mode" => Some(&mut config.chain_p2p_user_mode),
@@ -327,6 +329,46 @@ pub(super) fn launcher_checkbox_field_mut<'a>(
         "auto_open_browser" => Some(&mut config.auto_open_browser),
         _ => None,
     }
+}
+
+pub(super) fn canonical_chain_network_tier(raw: &str) -> Option<&'static str> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" | "local" | "local_devnet" | "devnet" => Some("local_devnet"),
+        "public_testnet" | "testnet" => Some("public_testnet"),
+        "mainnet" => Some("mainnet"),
+        _ => None,
+    }
+}
+
+pub(super) fn known_network_tier_manifest(tier: &str) -> Option<&'static str> {
+    match tier {
+        "public_testnet" => Some(PUBLIC_TESTNET_NETWORK_TIER_MANIFEST),
+        "mainnet" => Some(MAINNET_NETWORK_TIER_MANIFEST),
+        _ => None,
+    }
+}
+
+pub(super) fn normalize_chain_network_tier_config(config: &mut LaunchConfig) {
+    let tier =
+        canonical_chain_network_tier(config.chain_network_tier.as_str()).unwrap_or("local_devnet");
+    config.chain_network_tier = tier.to_string();
+    if config.chain_network_tier_manifest.trim().is_empty() {
+        if let Some(manifest) = known_network_tier_manifest(tier) {
+            config.chain_network_tier_manifest = manifest.to_string();
+        }
+    }
+}
+
+pub(super) fn effective_chain_network_tier_manifest(config: &LaunchConfig) -> String {
+    let explicit = config.chain_network_tier_manifest.trim();
+    if !explicit.is_empty() {
+        return explicit.to_string();
+    }
+    let tier =
+        canonical_chain_network_tier(config.chain_network_tier.as_str()).unwrap_or("local_devnet");
+    known_network_tier_manifest(tier)
+        .unwrap_or_default()
+        .to_string()
 }
 
 pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<ConfigIssue> {
@@ -443,6 +485,9 @@ pub(super) fn collect_chain_required_config_issues(config: &LaunchConfig) -> Vec
     }
     if config.chain_node_id.trim().is_empty() {
         issues.push(ConfigIssue::ChainNodeIdRequired);
+    }
+    if canonical_chain_network_tier(config.chain_network_tier.as_str()).is_none() {
+        issues.push(ConfigIssue::ChainNetworkTierInvalid);
     }
     if parse_chain_role(config.chain_node_role.as_str()).is_err() {
         issues.push(ConfigIssue::ChainRoleInvalid);
@@ -729,6 +774,11 @@ pub(super) fn build_chain_runtime_args(config: &LaunchConfig) -> Result<Vec<Stri
         "--pos-max-past-slot-lag".to_string(),
         pos_max_past_slot_lag.to_string(),
     ];
+    let network_tier_manifest = effective_chain_network_tier_manifest(config);
+    if !network_tier_manifest.trim().is_empty() {
+        args.push("--network-tier-manifest".to_string());
+        args.push(network_tier_manifest.trim().to_string());
+    }
     if let Some(genesis) = pos_slot_clock_genesis_unix_ms {
         args.push("--pos-slot-clock-genesis-unix-ms".to_string());
         args.push(genesis.to_string());
