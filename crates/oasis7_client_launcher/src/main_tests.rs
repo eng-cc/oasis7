@@ -41,6 +41,8 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "main_tests_chain_args.rs"]
+mod chain_args_tests;
 #[path = "main_tests_explorer.rs"]
 mod explorer_tests;
 #[path = "main_tests_onboarding.rs"]

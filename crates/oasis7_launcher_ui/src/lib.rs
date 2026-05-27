@@ -209,6 +209,24 @@ const LAUNCHER_UI_FIELDS: &[LauncherUiField] = &[
         native_visible: true,
     },
     LauncherUiField {
+        id: "chain_network_tier",
+        section: "chain_identity",
+        kind: LauncherUiFieldKind::Text,
+        label_zh: "链网络层级",
+        label_en: "Chain Network Tier",
+        web_visible: true,
+        native_visible: true,
+    },
+    LauncherUiField {
+        id: "chain_network_tier_manifest",
+        section: "chain_identity",
+        kind: LauncherUiFieldKind::Text,
+        label_zh: "网络层级 Manifest",
+        label_en: "Network Tier Manifest",
+        web_visible: true,
+        native_visible: true,
+    },
+    LauncherUiField {
         id: "chain_storage_profile",
         section: "chain_identity",
         kind: LauncherUiFieldKind::Text,
@@ -396,6 +414,7 @@ mod tests {
         assert!(!ids.contains("launcher_bin"));
         assert!(!ids.contains("chain_runtime_bin"));
         assert!(ids.contains("scenario"));
+        assert!(ids.contains("chain_network_tier"));
         assert!(ids.contains("chain_storage_profile"));
         assert!(ids.contains("chain_replication_bootstrap_peers"));
         assert!(ids.contains("viewer_static_dir"));

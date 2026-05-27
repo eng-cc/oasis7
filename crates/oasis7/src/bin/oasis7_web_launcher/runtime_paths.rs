@@ -61,6 +61,12 @@ pub(super) fn viewer_dev_dist_candidates() -> Vec<PathBuf> {
     vec![repo_root.join("oasis7_viewer").join("dist")]
 }
 
+pub(super) fn repo_root_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+}
+
 pub(super) fn resolve_console_static_dir_path() -> PathBuf {
     if let Some(path) = resolve_non_empty_override_value(env::var(WEB_LAUNCHER_STATIC_DIR_ENV).ok())
     {

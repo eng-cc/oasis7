@@ -42,7 +42,10 @@ pub(super) fn host_for_url(host: &str) -> String {
 }
 
 pub(super) fn parse_config_request(body: &[u8], action: &str) -> Result<LauncherConfig, String> {
-    serde_json::from_slice(body).map_err(|err| format!("parse {action} request JSON failed: {err}"))
+    let mut config: LauncherConfig = serde_json::from_slice(body)
+        .map_err(|err| format!("parse {action} request JSON failed: {err}"))?;
+    normalize_chain_network_tier_config(&mut config)?;
+    Ok(config)
 }
 
 pub(super) fn parse_chain_transfer_request(
@@ -792,7 +795,13 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     if config.chain_node_id.trim().is_empty() {
         issues.push("chain node id is required".to_string());
     }
-    let network_tier_manifest = config.chain_network_tier_manifest.trim();
+    if canonical_chain_network_tier(config.chain_network_tier.as_str()).is_none() {
+        issues.push(
+            "chain network tier must be one of: local_devnet|public_testnet|mainnet".to_string(),
+        );
+    }
+    let network_tier_manifest = effective_chain_network_tier_manifest(config);
+    let network_tier_manifest = network_tier_manifest.trim();
     if network_tier_manifest.is_empty() {
         if config
             .chain_storage_profile
@@ -1043,13 +1052,14 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         "--pos-max-past-slot-lag".to_string(),
         pos_max_past_slot_lag.to_string(),
     ];
-    if config.chain_network_tier_manifest.trim().is_empty() {
+    let network_tier_manifest = effective_chain_network_tier_manifest(config);
+    if network_tier_manifest.trim().is_empty() {
         let storage_profile = config.chain_storage_profile.parse::<StorageProfile>()?;
         args.push("--storage-profile".to_string());
         args.push(storage_profile.as_str().to_string());
     } else {
         args.push("--network-tier-manifest".to_string());
-        args.push(config.chain_network_tier_manifest.trim().to_string());
+        args.push(network_tier_manifest.trim().to_string());
     }
     args.push(if config.chain_p2p_accept_public_entry {
         "--p2p-accept-public-entry".to_string()
