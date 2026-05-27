@@ -83,6 +83,7 @@ fn sample_snapshot(committed_height: u64, block_hash: Option<&str>) -> NodeSnaps
         player_id: "node-a".to_string(),
         world_id: "w1".to_string(),
         role: NodeRole::Sequencer,
+        replication_enabled: false,
         running: true,
         tick_count: 10,
         last_tick_unix_ms: Some(10),

@@ -142,6 +142,7 @@ fn status_payload_exposes_loaded_network_tier_manifest() {
         player_id: "player-a".to_string(),
         world_id: "live-a".to_string(),
         role: NodeRole::Observer,
+        replication_enabled: false,
         running: true,
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),

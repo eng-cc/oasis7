@@ -1,0 +1,28 @@
+task_uid: task_2b5ef4df590d474a9df7cc6f72db7065
+title: "Detect public testnet replication gap split brain"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-runtime-replication-gap-health
+execution_log_path: .pm/tasks/task_2b5ef4df590d474a9df7cc6f72db7065.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - crates/oasis7_node/src/replication.rs
+  - crates/oasis7_node/src/node_engine_replication.rs
+  - crates/oasis7_node/src/pos_state_store.rs
+  - crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs
+doc_refs: []
+related_prd: []
+acceptance:
+  - "runtime status reports non-healthy or explicit blocked state when consensus snapshot is ahead of contiguous replication/execution state"
+  - "gap sync reports missing commit height instead of silently preserving ok=true split-brain state"
+  - "focused tests cover non-contiguous persisted commit records and gap-sync missing-height behavior"
+handoff_to: []
+updated_at: 2026-05-27T10:32:51+08:00
+last_started_at: 2026-05-26T22:06:26+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/pm/lint.sh
+last_verified_at: 2026-05-27T10:32:51+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-27T10:32:51+08:00

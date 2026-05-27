@@ -109,6 +109,20 @@ fn runtime_network_replication_gap_sync_not_found_is_non_fatal() {
         snapshot_b.consensus.committed_height < target_height,
         "observer should keep waiting when target height is not found"
     );
+    assert_eq!(
+        snapshot_b.consensus.replication_gap_sync_blocked_height,
+        Some(1),
+        "not found gap sync must expose the first missing height"
+    );
+    assert!(
+        snapshot_b
+            .consensus
+            .replication_gap_sync_blocked_reason
+            .as_deref()
+            .map(|reason| reason.contains("missing commit height 1"))
+            .unwrap_or(false),
+        "not found gap sync must expose a recoverability reason"
+    );
 
     runtime_b.stop().expect("stop b");
     let _ = fs::remove_dir_all(&dir_a);
