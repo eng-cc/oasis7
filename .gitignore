@@ -39,6 +39,7 @@ __pycache__/
 crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules/*.wasm
 crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules/*.wasm
 artifacts/owr4_baseline/
+artifacts/robot_voxel_pipeline/
 # egui_kittest snapshot artifacts
 **/tests/snapshots/*.diff.png
 **/tests/snapshots/*.new.png
