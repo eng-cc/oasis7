@@ -640,6 +640,8 @@ impl PixelWorldBridge {
 
 #[cfg(test)]
 mod tests {
+    use crate::render::build_grid_layout;
+
     use super::*;
 
     #[cfg(target_arch = "wasm32")]

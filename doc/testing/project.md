@@ -3,6 +3,7 @@
 审计轮次: 9
 
 ## 任务拆解（含 PRD-ID 映射）
+- [ ] test-coverage-gate-fill (PRD-TESTING-002/PRD-TESTING-003) [test_tier_required] + [test_tier_full]: 补齐 Rust CI 测试覆盖缺口，让 `full-support` 直接触达 workspace support crates，并为 `required-gate` changed-path planner 增加 regression，防止未分类代码路径绕过 full fallback。 Trace: .pm/tasks/task_ce44b8a269824fbcb718febd2140c425.yaml
 - [x] playability-governance-stack-2026-05-06 (PRD-TESTING-007/008/009/010) [test_tier_required]: 本页将“好玩性证据栈 / subagent 评审系统 / 模拟玩家 persona 面板 / L4 synthetic-agent 分层”四个 2026-05-06 专题收口为单个 bundle 入口，便于浏览；当前同批 follow-up 已补 repo-local `L4` scaffold/wrapper + `L4B` runner，使同一 worktree 内可以直接准备 packet、role/persona cards、summary、`L4B` agent 卡，并执行一次会自动落 summary/state/screenshot 的 embodied-agent run，以及可选内部真人佐证 notes。 Trace: .pm/tasks/task_efe1a5f949e84160a1237302c9064168.yaml
   - Bundle includes: `playability-subagent-review-system-2026-05-06`、`playability-simulated-player-persona-panel-2026-05-06`、`playability-l4-synthetic-human-split-2026-05-06`
   - Related traces: `.pm/tasks/task_9a6bbbc3022f4d4e8a3f5f99fab4d1b2.yaml`、`.pm/tasks/task_a9d3c884a3074ab2b0f3b10dab7bb86e.yaml`、`.pm/tasks/task_a68decb0a2c8460aa7d989df7370c901.yaml`

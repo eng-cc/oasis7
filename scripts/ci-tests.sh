@@ -91,6 +91,21 @@ run_oasis7_net_libp2p_tests() {
   run_cargo test -p oasis7_net --features libp2p --lib
 }
 
+run_oasis7_workspace_support_crate_tests() {
+  run_cargo test \
+    -p oasis7_launcher_ui \
+    -p oasis7_proto \
+    -p oasis7_wasm_abi \
+    -p oasis7_wasm_build \
+    -p oasis7_wasm_router \
+    -p oasis7_wasm_sdk \
+    -p oasis7_wasm_store \
+    -p pixel_world_bridge \
+    --lib
+  run_cargo test -p oasis7_wasm_executor --features wasmtime --lib
+  run_cargo test -p oasis7_client_launcher --bin oasis7_client_launcher
+}
+
 run_oasis7_llm_baseline_fixture_smoke() {
   run ./scripts/llm-baseline-fixture-smoke.sh
 }
@@ -123,6 +138,7 @@ run_required_gate_checks() {
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh
   run ./scripts/cargo-dev-lib.test.sh
+  run ./scripts/plan-rust-required-scope.test.sh
   run ./scripts/check-rust-file-size.sh
   run env -u RUSTC_WRAPPER cargo fmt --all -- --check
 }
@@ -145,6 +161,7 @@ run_full_support_tier_tests() {
   run_oasis7_node_tests
   run_oasis7_net_tests
   run_oasis7_net_libp2p_tests
+  run_oasis7_workspace_support_crate_tests
   run_oasis7_llm_baseline_fixture_smoke
   run_oasis7_viewer_software_safe_feedback_contract_tests
   run_oasis7_viewer_software_safe_build
