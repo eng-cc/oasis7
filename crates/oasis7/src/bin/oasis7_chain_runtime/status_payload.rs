@@ -97,6 +97,10 @@ pub(super) struct ChainNodeObservabilityStatus {
     pub(super) peer_with_issues_count: usize,
     pub(super) known_peer_heads: usize,
     pub(super) network_height_lag: u64,
+    pub(super) replication_enabled: bool,
+    pub(super) replication_persisted_height: u64,
+    pub(super) replication_state_gap: u64,
+    pub(super) replication_gap_sync_blocked_height: Option<u64>,
     pub(super) recent_replication_error_count: usize,
     pub(super) storage_degraded: bool,
     pub(super) reward_runtime_degraded: bool,
@@ -127,6 +131,10 @@ pub(super) struct ChainConsensusStatus {
     pub(super) last_committed_at_ms: Option<i64>,
     pub(super) last_commit_age_ms: Option<i64>,
     pub(super) network_committed_height: u64,
+    pub(super) replication_enabled: bool,
+    pub(super) replication_persisted_height: u64,
+    pub(super) replication_gap_sync_blocked_height: Option<u64>,
+    pub(super) replication_gap_sync_blocked_reason: Option<String>,
     pub(super) recent_finality_latency: ChainFinalityLatencyStatus,
     pub(super) pending_proposal: Option<ChainPendingProposalStatus>,
     pub(super) pending_consensus_actions: ChainPendingConsensusActionsStatus,
@@ -263,7 +271,7 @@ fn observability_summary_for_alerts(alerts: &[ChainNodeObservabilityAlert]) -> S
     }
 }
 
-fn build_chain_node_observability_status(
+pub(super) fn build_chain_node_observability_status(
     snapshot: &NodeSnapshot,
     storage_metrics: &storage_metrics::StorageMetricsSnapshot,
     reward_runtime_metrics: &super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
@@ -293,6 +301,14 @@ fn build_chain_node_observability_status(
         .consensus
         .network_committed_height
         .saturating_sub(snapshot.consensus.committed_height);
+    let replication_state_gap = if snapshot.replication_enabled {
+        snapshot
+            .consensus
+            .committed_height
+            .saturating_sub(snapshot.consensus.replication_persisted_height)
+    } else {
+        0
+    };
     let recent_replication_error_count = replication.recent_errors.len();
     let storage_degraded = storage_metrics.degraded_reason.is_some()
         || matches!(storage_metrics.last_gc_result.as_str(), "failed");
@@ -316,6 +332,32 @@ fn build_chain_node_observability_status(
             "warn",
             "consensus_network_lag",
             format!("network committed height is ahead by {network_height_lag}"),
+        );
+    }
+    if let Some(height) = snapshot.consensus.replication_gap_sync_blocked_height {
+        let reason = snapshot
+            .consensus
+            .replication_gap_sync_blocked_reason
+            .clone()
+            .unwrap_or_else(|| format!("replication gap sync blocked at height {height}"));
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "replication_gap_sync_blocked",
+            reason,
+        );
+    }
+    if snapshot.replication_enabled && replication_state_gap > 0 {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "consensus_replication_state_gap",
+            format!(
+                "consensus committed height {} is ahead of contiguous replication persisted height {} by {}",
+                snapshot.consensus.committed_height,
+                snapshot.consensus.replication_persisted_height,
+                replication_state_gap
+            ),
         );
     }
     if suspect_peer_count > 0 || blocked_peer_count > 0 || peer_with_issues_count > 0 {
@@ -394,6 +436,10 @@ fn build_chain_node_observability_status(
         peer_with_issues_count,
         known_peer_heads,
         network_height_lag,
+        replication_enabled: snapshot.replication_enabled,
+        replication_persisted_height: snapshot.consensus.replication_persisted_height,
+        replication_state_gap,
+        replication_gap_sync_blocked_height: snapshot.consensus.replication_gap_sync_blocked_height,
         recent_replication_error_count,
         storage_degraded,
         reward_runtime_degraded,
@@ -463,7 +509,7 @@ pub(super) fn build_chain_status_payload(
         });
 
     ChainStatusResponse {
-        ok: true,
+        ok: observability.status != "critical",
         observed_at_unix_ms,
         node_id: snapshot.node_id,
         world_id: snapshot.world_id,
@@ -511,6 +557,15 @@ pub(super) fn build_chain_status_payload(
             last_committed_at_ms: snapshot.consensus.last_committed_at_ms,
             last_commit_age_ms,
             network_committed_height: snapshot.consensus.network_committed_height,
+            replication_enabled: snapshot.replication_enabled,
+            replication_persisted_height: snapshot.consensus.replication_persisted_height,
+            replication_gap_sync_blocked_height: snapshot
+                .consensus
+                .replication_gap_sync_blocked_height,
+            replication_gap_sync_blocked_reason: snapshot
+                .consensus
+                .replication_gap_sync_blocked_reason
+                .clone(),
             recent_finality_latency: ChainFinalityLatencyStatus {
                 sample_count: snapshot.consensus.recent_finality_latency.sample_count,
                 avg_latency_ms: snapshot.consensus.recent_finality_latency.avg_latency_ms,

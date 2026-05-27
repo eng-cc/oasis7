@@ -341,6 +341,16 @@ impl NodeRuntime {
                 }
             }
         }
+        {
+            let mut current = lock_state(&self.state);
+            match engine.restored_consensus_snapshot() {
+                Ok(snapshot) => current.consensus = snapshot,
+                Err(err) => {
+                    self.running.store(false, Ordering::SeqCst);
+                    return Err(err);
+                }
+            }
+        }
         if let (Some(network), Some(replication_config)) = (
             &self.replication_network,
             effective_replication_config.as_ref(),
@@ -649,6 +659,7 @@ impl NodeRuntime {
             player_id: self.config.player_id.clone(),
             world_id: self.config.world_id.clone(),
             role: self.config.role,
+            replication_enabled: self.config.replication.is_some(),
             running: self.running.load(Ordering::SeqCst),
             tick_count: state.tick_count,
             last_tick_unix_ms: state.last_tick_unix_ms,
@@ -851,6 +862,8 @@ struct PosNodeEngine {
     committed_height: u64,
     network_committed_height: u64,
     replication_persisted_height: u64,
+    last_replication_gap_sync_blocked_height: Option<u64>,
+    last_replication_gap_sync_blocked_reason: Option<String>,
     last_replication_successor_probe_height: Option<u64>,
     last_replication_successor_probe_at_ms: Option<i64>,
     last_replication_successor_probe_hold: Option<bool>,
