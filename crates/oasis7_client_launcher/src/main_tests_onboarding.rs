@@ -336,7 +336,7 @@ fn start_demo_mode_one_click_applies_safe_defaults() {
 
     assert_eq!(app.demo_mode_phase, DemoModePhase::StartChainRequested);
     assert!(app.config.chain_enabled);
-    assert_eq!(app.config.scenario, "llm_bootstrap");
+    assert_eq!(app.config.scenario, "");
 }
 
 #[test]

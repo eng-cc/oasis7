@@ -15,6 +15,8 @@ const MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION: u8 = 1;
 const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "octransferauth:v1:";
 const VIEWER_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
+#[cfg(test)]
+pub(crate) static TRANSFER_AUTH_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_CONFIG_PATH: &str = "config.toml";
 #[cfg(not(target_arch = "wasm32"))]
@@ -392,6 +394,7 @@ mod tests {
 
     #[test]
     fn resolve_transfer_auth_signer_from_env_requires_both_keys() {
+        let _guard = super::TRANSFER_AUTH_ENV_LOCK.lock().expect("env lock");
         std::env::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
         std::env::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, "private");
         let err = resolve_transfer_auth_signer_from_env().expect_err("missing public key");
@@ -415,6 +418,7 @@ mod tests {
 
     #[test]
     fn build_signed_web_transfer_submit_request_includes_auth_fields() {
+        let _guard = super::TRANSFER_AUTH_ENV_LOCK.lock().expect("env lock");
         let (public_key, private_key) = test_signer(21);
         let from_account_id = format!("oc:pk:{public_key}");
         let action = Action::TransferMainToken {

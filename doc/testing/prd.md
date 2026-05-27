@@ -31,7 +31,7 @@
 - Proposed Solution: 以 testing PRD 统一定义分层测试体系、触发条件、证据标准与发布门禁，并对齐 `testing-manual.md`。
 - Success Criteria:
   - SC-1: 关键改动路径均可映射到明确测试层级（S0~S10）。
-  - SC-2: required/full 门禁持续可用且与手册口径一致；其中 PR `required-gate` 允许在保持稳定 check context 的前提下按 changed paths 剪裁无关重型组件，并在命中 `oasis7_client_launcher` / launcher shared runtime 路径时补跑 launcher Web `trunk build`。
+  - SC-2: required/full 门禁持续可用且与手册口径一致；其中 PR `required-gate` 允许在保持稳定 check context 的前提下按 changed paths 剪裁无关重型组件，并在命中 `oasis7_client_launcher` / launcher shared runtime 路径时补跑 launcher Web `trunk build`；`full-support` 必须直接触达 workspace 内稳定可跑的 support crate 测试入口。
   - SC-3: Web UI 闭环与分布式长跑在发布流程中有可追溯证据，且明确区分 `Viewer(agent-browser)` 与 `launcher(GUI Agent first)` 两条驱动链路。
     - SC-3A: `release-gate-web` 在 `renderMode=software_safe` 的主 Web 入口上，必须接受 `play/pause` 先返回 `queued` 的 live-control 契约，并以后续 `step` 收到 `completed_advanced` 且产出正向 world delta 作为 formal progress 判据，不再要求 `play` 立刻推进 tick 或强制选中 Agent。
     - SC-3B: 正式 gameplay evidence packet 必须显式区分 `player leverage` 与 `ambient world activity`，并回答“玩家做了什么、世界因此变了什么、这是否打开下一步决策”。
@@ -133,6 +133,7 @@
   - AC-19: `playability-l4-synthetic-human-split-2026-05-06` 专题文档必须明确 `L4A/L4B/L5` 的定义、operator 入口、claim 边界与当前非替代承诺。
   - AC-20: `scripts/prepare-playability-l4-review.sh` 与 `doc/testing/templates/playability-l4-*.md` 必须能在当前 worktree 下生成一套完整 `L4` scaffold，至少包含 review packet、role review cards、persona cards、summary、`L4B` agent 卡副本、可选内部真人佐证 notes 和推荐命令文件。
   - AC-21: `scripts/run-playability-l4b-agent.sh` 必须能消费上述 `manifest.json` 或 artifact 目录，实际完成一次 `L4B` embodied-agent run，并落盘 `L4B` summary、关键 state snapshots、截图、启动日志路径以及对 copied `l4b-agent-playtest-card.md` / `l4-summary.md` 的自动预填。
+  - AC-22: `scripts/ci-tests.sh full-support` 必须直接执行 workspace support crates 的 Rust 测试入口，至少覆盖 `oasis7_client_launcher`、`oasis7_launcher_ui`、`oasis7_proto`、`oasis7_wasm_abi`、`oasis7_wasm_build`、`oasis7_wasm_executor`、`oasis7_wasm_router`、`oasis7_wasm_sdk`、`oasis7_wasm_store` 与 `pixel_world_bridge`，避免这些 crate 只被间接编译或 release 阶段暴露回归。
 - Non-Goals:
   - 不在本 PRD 中替代业务模块的功能设计。
   - 不承诺所有测试都进入 CI 默认路径。

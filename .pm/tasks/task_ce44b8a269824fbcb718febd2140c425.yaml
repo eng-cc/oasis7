@@ -1,0 +1,28 @@
+task_uid: task_ce44b8a269824fbcb718febd2140c425
+title: "Fill test coverage gate gaps"
+owner_role: qa_engineer
+worktree_hint: oasis7-world-simulator-test-coverage-gate-fill
+execution_log_path: .pm/tasks/task_ce44b8a269824fbcb718febd2140c425.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - scripts/ci-tests.sh
+  - Cargo.toml
+doc_refs:
+  - doc/testing/project.md
+  - testing-manual.md
+related_prd:
+  - doc/testing/prd.md
+acceptance:
+  - "Full CI tier must directly exercise every workspace Rust crate with stable unit/doc test entrypoints or document an intentional exclusion."
+  - "Required scope planner tests must prove unclassified workspace crates fall back to full required coverage."
+handoff_to: []
+updated_at: 2026-05-27T10:24:11+08:00
+last_started_at: 2026-05-26T22:07:12+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/ci-tests.sh required"
+last_verified_at: 2026-05-27T10:24:11+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-27T10:24:11+08:00
