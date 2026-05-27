@@ -1,0 +1,26 @@
+task_uid: task_9d86c9c43bd84546bbdc35cb1d48b93e
+title: "robot six-view voxel pipeline"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-assets-robot-voxel-pipeline
+execution_log_path: .pm/tasks/task_9d86c9c43bd84546bbdc35cb1d48b93e.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Provide a reproducible pipeline from a six-view robot image to a 1cm voxel-style 3D model artifact."
+  - "Document physical scale assumptions for a 2m-tall robot and voxel resolution."
+  - "Verify generated model metadata and preview outputs."
+handoff_to: []
+updated_at: 2026-05-27T15:11:29+08:00
+last_started_at: 2026-05-27T11:04:04+08:00
+last_claim_type: task_complete
+last_verify_command: "python3 tools/voxel_asset_pipeline/tests/test_six_view_to_voxel_model.py"
+last_verified_at: 2026-05-27T15:11:28+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-27T15:11:29+08:00
