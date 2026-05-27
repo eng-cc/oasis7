@@ -1,0 +1,32 @@
+task_uid: task_732e8ae00c634232ad5ec570b53f5e5b
+title: "doc surface slimming"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-doc-surface-slimming
+execution_log_path: .pm/tasks/task_732e8ae00c634232ad5ec570b53f5e5b.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/readme/project.md
+  - doc/scripts/project.md
+  - doc/world-runtime/project.md
+  - doc/world-simulator/project.md
+  - doc/site/project.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd:
+  - PRD-ENGINEERING-025
+acceptance:
+  - "Slim stale project status sections without changing task truth"
+  - "Preserve canonical trace via topic project and .pm task references"
+  - "Run doc governance and PM lint verification"
+handoff_to: []
+updated_at: 2026-05-27T10:18:34+08:00
+last_started_at: 2026-05-26T22:05:43+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -lc './scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && git diff --check'"
+last_verified_at: 2026-05-27T10:18:30+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-27T10:18:34+08:00

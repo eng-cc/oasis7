@@ -136,40 +136,11 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-08
+- 更新日期: 2026-05-26
 - 当前状态: active
 - 下一任务: `待定（等待下一轮站点公开叙事 / 对外材料收口）`
-- 最新完成: `html-roadshow-deck`（公开站点已新增中英文 HTML 路演 deck，使用 vendored `reveal.js` 保持静态 Pages 发布路径不变；中英文 docs hub 与首页深挖入口也已接入 deck，形成“首页公开入口 -> deck 顺序化讲述 -> docs hub 深读”的分工。）
-- 最新完成: `public-oasis7-skill`（公开站点已新增 `site/skills/oasis7.md` 作为稳定 raw skill 直链；中英 docs hub 也已新增对应入口卡片，直接把执行者或自动化代理送到原始 Markdown，而不再额外维护人读 HTML 说明页。）
-- 最新完成: `public-copy-tightening`（中英首页后半段已把“给普通访客看的入口”与 builder/internal verification 语境继续拆开：主路径先讲这世界值不值得继续看、已经能证明什么、要不要下载预览构建；docs hub hero 与路径卡也已明确为首页之后的深读入口，并修复失效 `#demo` 锚点。）
-- 最新完成: `homepage-genre-advantage-hook`（中英首页前半段已补一段更抓人的“这类游戏为什么让人停不下来”文案，不点具体竞品名，直接把“从混乱到秩序、一个判断会一路改写后果”的爽点顶到访客更早能看到的位置，同时保持技术预览与 claim boundary 不变。）
-- 最新完成: `homepage-copy-polish-cn-en`（中英首页 hero、30 秒说明、玩家角色解释区与社媒摘要已参考同类策略/模拟游戏公开介绍改成“局势 + 身份 + 后果”优先的话术，去掉“你不直接点单位 / You are not micromanaging units”这类突兀开场，同时保持技术预览与 claim boundary 原样收紧。）
-- 最新完成: `homepage-player-first-hook-follow-up`（首屏已移出 `software_safe` / hosted-join 说明，第二 CTA 改成“看一局事件链”，首个解释区块改成资源紧张/联盟松动/战争留痕的局面化描述，builder 文案已退回折叠开发者路径；英文页同步做了一轮去术语化与更游戏化表达。）
-- 最新完成: `homepage-first-glance-game-hook`（中英首页首屏改成“玩家动作 + 文明幻想”优先：默认网页验证入口降为次级说明，builder / hosted-join 边界退出主标题段，future-platform claim 移到首个解释区块脚注，首页第一眼更像游戏入口而不是技术验证页。）
-- 最新完成: `homepage-first-impression-hardening`（中英首页首屏已把“破碎小行星带世界 + 文明外部指挥者 + Agent 自主经营/交易/结盟/开战”前置，首个解释区块改成题材/玩家幻想优先，builder 与 future-platform 边界保留但不再抢首感。）
-- 最新完成: `homepage-entry-claim-boundary-hardening`（中英首页已按“公开访客入口 -> builder 验证 -> future platform”三层收紧 claim；`viewer` 已被固定为默认 formal Web / UI 入口，`software_safe` 仅保留兼容 alias，新增 homepage claim/parity gate，并补齐移动端 no-JS 导航与 skip-link a11y 收口。）
-- 最新完成: `homepage-game-explainer`（公开首页已改成游戏说明优先的首屏；中英页同步收紧首屏信息密度，先回答“这是什么 / 你在这里做什么 / 现在是否可玩”，技术验证与下载细节下沉到后续版块。）
-- 最新完成: `TASK-SITE-022`（GitHub Release 公开下载产物已切到 `.deb` / `.dmg` / `.exe` 原生安装器；中英首页与下载校验脚本已同步，不再将 `.tar.gz` / `.zip` 暴露为公开下载主入口。）
-- 最新完成: `TASK-SITE-021`（中英首页在线验证示例已把 `--no-llm` 明确收紧为 observer/debug-only 诊断路径，不再暗示可作为正式在线验证证据。）
-- 最新完成: `TASK-SITE-020`（`site/doc/cn|en/viewer-manual.html` 已追平 current LLM gating 口径，docs hub 已移除陈旧同步日期，Pages workflow 与 `site-manual-sync-check` 已改为监听 canonical `viewer-manual.manual.md`。）
-- 最新完成: `TASK-SITE-019`（已为 `doc/site/README.md` 补齐 site 模块与公开 docs hub、静态手册镜像、仓库权威手册之间的入口映射。）
-- 最新完成: `TASK-SITE-018`（`doc/site/github-pages/**` 活跃专题中的当前 viewer 校验命令与 crate 路径已统一切到 `oasis7_viewer` / `crates/oasis7*` 当前口径。）
-- 最新完成: `TASK-SITE-017`（`release-packages.yml` 的 Web dist / soak prewarm 当前路径与包名已切到 `oasis7*`，相关 github-pages 发布链路文档已同步。）
-- 最新完成: `TASK-SITE-015`（公开站点、release 下载入口与站点脚本已统一切换到 `oasis7` 品牌与 `eng-cc/oasis7` 路径）。
-- 最新完成: `TASK-SITE-016`（已完成 `doc/site/github-pages/**` 历史专题首行标题的 title-only cleanup，旧 `oasis7*` 公开标题已统一切到 `oasis7*`）。
-- 最新完成: `TASK-SITE-011`（site 模块 README 目录索引同步）。
-- 最新完成: `TASK-SITE-012`（site 模块 completed 状态摘要补齐）。
-- 最新完成: `TASK-SITE-013`（中英首页已对齐当前双模式技术预览访问面口径，消除旧“运行模式/LLM 默认模式”歧义；现行公开访问面只保留 `viewer / pure_api`，其中 `software_safe` 仅保留兼容 alias。）
-- 最新完成: `TASK-SITE-014`（site manual sync gate 已追平 `test_api=1` viewer 命令基线，解除 Pages 假失败）。
+- 当前窗口摘要: 最近站点工作集中在中英文 HTML roadshow deck、公开 raw skill 入口与首页公开叙事继续收紧；公开下载、viewer manual mirror、homepage claim/parity gate 等历史收口保留在上方任务项和 topic project 中。
+- 历史追溯: 更早 `TASK-SITE-*` 与 homepage copy iteration 不再在状态区逐条追加；需要追 Pages/manual/release/download/homepage 历史时，先从 `doc/site/prd.index.md`、`doc/site/github-pages/` topic project、站点文件 diff 与 `.pm/tasks/*.execution.md` 进入。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- ROUND-002 进展: manual 子簇主从化已完成（`site-manual-static-docs` 主入口，`viewer-manual-content-migration-2026-02-15` 增量维护）。
-- ROUND-002 进展: github-pages 子簇主从化已完成（`github-pages-game-engine-reposition-2026-02-25` 主入口，其余专题增量维护）。
-- ROUND-003 进展: TASK-SITE-002/003/004 已按既有专题交付收敛为 completed，进入口径同步与状态回写阶段（TASK-SITE-006/007）。
-- ROUND-003 进展: TASK-SITE-006 已完成，静态手册已移除过时 `power_storage` 表述并校准自动目标语法。
-- ROUND-003 进展: TASK-SITE-007 已完成，`github-pages-release-download-pipeline-2026-03-01.project.md` 状态已与 `Release Packages` 最新成功 run 对齐。
-- ROUND-004 进展: 已识别首页“已可玩/赛季运行中”叙事与真实状态不一致，进入 TASK-SITE-008 修复口径。
-- ROUND-004 进展: TASK-SITE-008 已完成；`site/index.html`、`site/en/index.html`、`site/doc/cn/index.html`、`site/doc/en/index.html` 已统一为“技术预览（尚不可玩）”口径。
-- ROUND-005 进展: TASK-SITE-009 已完成；首页与文档入口 CTA 已调整为“预览验证优先、完整构建/长文档次级”的同构层级。
-- ROUND-005 进展: TASK-SITE-010 已完成；首页/下载区与 docs hub 已补“正式公告仍在准备中”的公开说明占位，并明确 release notes 仅代表构建说明。
-- ROUND-005 进展: TASK-SITE-011 已完成；`doc/site/README.md` 已同步最新 github-pages 专题入口与维护约定。
+- ROUND 状态: manual 子簇、github-pages 子簇、技术预览口径、下载 CTA 与 release notes 边界均已完成历史收口；后续只在对应 topic project 中增量维护。
 - 说明: 本文档仅维护 site 模块设计执行状态；过程记录在 `doc/devlog/2026-03-03.md` 与 `doc/devlog/2026-03-11.md`。
