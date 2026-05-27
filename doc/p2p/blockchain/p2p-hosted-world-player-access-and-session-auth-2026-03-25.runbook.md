@@ -102,8 +102,8 @@
    - 不能把“能解析 DNS”误当成“能访问实例”。
 3. 若未显式指定 `OASIS7_HOSTED_ACCOUNT_TABLESTORE_TABLE`，当前默认表名是 `oasis7_hosted_account_identity`。
 4. 首次启动若表还不存在，`OASIS7_HOSTED_ACCOUNT_TABLESTORE_AUTO_CREATE=true` 时允许先出现一次 `OTSObjectNotExist`，随后自动建表并继续启动。
-5. 面向真实玩家时，`OASIS7_HOSTED_LOGIN_DELIVERY_MODE` 应切到 `smtp`。
-   - `preview_inline` 只适合 smoke / staging，不适合公开玩家入口。
+5. hosted login 没有部署期 delivery mode 开关；服务端固定使用 SMTP 邮件投递。
+   - 登录 start 响应不得返回 inline OTP；验证码只走云上邮件投递链路。
 6. SMTP 与 Tablestore 要分开看待：
    - SMTP 负责把 OTP 送出去。
    - Tablestore 负责把 `hosted_account_id -> player_id` 稳定落盘。
@@ -146,7 +146,6 @@ MVP 最小 smoke：
   - 本地开发、结构验证、单机 smoke。
 - 允许:
   - `OASIS7_HOSTED_ACCOUNT_STORE_BACKEND=file`，或无 OTS 配置时的 `auto` 本地 fallback。
-  - `OASIS7_HOSTED_LOGIN_DELIVERY_MODE=preview_inline|server_log_only`。
   - 手工测试邮箱、一次性 OTP、无对外公告的局部验证。
 - 禁止:
   - 复用 staging/production 的 SMTP、Tablestore、strong-auth signer、approval code。
@@ -178,7 +177,7 @@ MVP 最小 smoke：
 - 目标:
   - 面向真实外部玩家的正式 hosted account 服务面。
 - 硬要求:
-  - `OASIS7_HOSTED_LOGIN_DELIVERY_MODE=smtp`；不得使用 `preview_inline` 或 `server_log_only`。
+  - hosted login 固定走 SMTP 邮件投递；不得使用 server log 或 inline OTP 作为用户链路。
   - 独立正式 SMTP、独立正式 account store/table、独立正式 strong-auth/custody secret。
   - 已有 staging fresh smoke、operator runbook 演练、claims review 和发布决策。
   - 审计、监控、告警、备份、恢复与 incident owner 已明确。

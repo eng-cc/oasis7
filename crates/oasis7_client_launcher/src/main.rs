@@ -118,7 +118,7 @@ const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: &str = "10";
 const DEFAULT_CHAIN_POS_PROPOSAL_TICK_PHASE: &str = "9";
 const DEFAULT_CHAIN_POS_SLOT_CLOCK_GENESIS_UNIX_MS: &str = "";
 const DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG: &str = "256";
-const DEFAULT_DEPLOYMENT_MODE: &str = "trusted_local_only";
+const DEFAULT_DEPLOYMENT_MODE: &str = "hosted_public_join";
 const MAX_LOG_LINES: usize = 2000;
 const OASIS7_CJK_FONT_NAME: &str = "oasis7-cjk";
 const EGUI_CJK_FONT_BYTES: &[u8] = include_bytes!("../../../third_party/ms-yahei.ttf");
@@ -460,7 +460,7 @@ impl Default for LaunchConfig {
             agent_provider_profile: DEFAULT_AGENT_PROVIDER_PROFILE.to_string(),
             llm_enabled: true,
             provider_auto_discover: true,
-            chain_enabled: true,
+            chain_enabled: false,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
             chain_node_id: default_chain_node_id(),
             chain_network_tier: DEFAULT_CHAIN_NETWORK_TIER.to_string(),

@@ -5,7 +5,6 @@ export function createInitialHostedLoginState() {
     challengeId: null,
     maskedLoginHint: null,
     deliveryMode: null,
-    previewCode: null,
     code: "",
     expiresAtUnixMs: null,
     retryAfterSeconds: null,
@@ -24,7 +23,6 @@ export function resetHostedLoginChallenge(hostedLogin) {
   hostedLogin.challengeId = null;
   hostedLogin.maskedLoginHint = null;
   hostedLogin.deliveryMode = null;
-  hostedLogin.previewCode = null;
   hostedLogin.code = "";
   hostedLogin.expiresAtUnixMs = null;
   hostedLogin.accountExists = false;

@@ -12,23 +12,22 @@ Usage: ./scripts/hosted-account-staging-smoke.sh [options]
 Run a repo-owned hosted account smoke against `oasis7_game_launcher`.
 
 Default (`--mode local`) behavior:
-1. start a local `hosted_public_join` launcher with
-   `OASIS7_HOSTED_LOGIN_DELIVERY_MODE=preview_inline`
+1. start a local `hosted_public_join` launcher with the standard SMTP
+   hosted-login delivery lane
 2. complete one email login and capture `hosted_account_id/player_id`
 3. release the issued player slot
 4. restart the launcher against the same hosted account store
 5. complete the same login again and assert the same account/player ids
 
-`--mode staging` reuses the same flow but expects a real OTP fetch command so
-the smoke can complete `/login/start -> /login/complete` with
-`OASIS7_HOSTED_LOGIN_DELIVERY_MODE=smtp` and the staging store backend.
+Both local and staging modes expect a real OTP fetch command so
+the smoke can complete `/login/start -> /login/complete`.
 
 Options:
   --mode <local|staging>         Smoke mode (default: local)
   --login-handle <email>         Login handle for both passes
                                  (default local: player@example.com)
   --otp-fetch-command <cmd>      Command that prints the latest OTP for the
-                                 current challenge when preview_code is absent
+                                 current challenge from the cloud delivery lane
   --otp-timeout <secs>           Wait timeout for OTP fetch command (default: 90)
   --startup-timeout <secs>       Wait timeout for launcher HTTP listener (default: 120)
   --out-dir <path>               Artifact root (default: output/playwright/hosted-account)
@@ -37,8 +36,6 @@ Options:
   --web-bind <host:port>         Viewer WS bind (default: 127.0.0.1:6412)
   --live-bind <host:port>        Runtime live bind (default: 127.0.0.1:6413)
   --viewer-static-dir <path>     Viewer static dir (default: crates/oasis7_viewer)
-  --delivery-mode <mode>         Override hosted login delivery mode.
-                                 Defaults: local=preview_inline, staging=smtp
   --store-backend <mode>         Override hosted account store backend.
                                  Defaults: local=file, staging=inherit
   --launcher-bin <path>          Reuse an existing launcher binary
@@ -123,7 +120,6 @@ viewer_port="6411"
 web_bind="127.0.0.1:6412"
 live_bind="127.0.0.1:6413"
 viewer_static_dir="crates/oasis7_viewer"
-delivery_mode=""
 store_backend=""
 launcher_bin=""
 viewer_live_bin=""
@@ -175,10 +171,6 @@ while [[ $# -gt 0 ]]; do
       viewer_static_dir="${2:-}"
       shift 2
       ;;
-    --delivery-mode)
-      delivery_mode="${2:-}"
-      shift 2
-      ;;
     --store-backend)
       store_backend="${2:-}"
       shift 2
@@ -227,14 +219,6 @@ done
   echo "error: --login-handle cannot be empty" >&2
   exit 2
 }
-
-if [[ -z "$delivery_mode" ]]; then
-  if [[ "$mode" == "local" ]]; then
-    delivery_mode="preview_inline"
-  else
-    delivery_mode="smtp"
-  fi
-fi
 
 if [[ -z "$store_backend" ]]; then
   if [[ "$mode" == "local" ]]; then
@@ -307,7 +291,6 @@ start_launcher() {
   }
 
   local -a env_cmd=(env)
-  env_cmd+=("OASIS7_HOSTED_LOGIN_DELIVERY_MODE=$delivery_mode")
   env_cmd+=("OASIS7_VIEWER_LIVE_BIN=$viewer_live_bin")
   if [[ "$store_backend" != "inherit" ]]; then
     env_cmd+=("OASIS7_HOSTED_ACCOUNT_STORE_BACKEND=$store_backend")
@@ -377,15 +360,8 @@ post_query() {
 resolve_otp_code() {
   local start_path=$1
   local attempt_label=$2
-  local preview_code=""
-  preview_code=$(json_field "$start_path" '.challenge.preview_code // empty')
-  if [[ -n "$preview_code" && "$preview_code" != "null" ]]; then
-    printf '%s\n' "$preview_code"
-    return 0
-  fi
-
   [[ -n "$otp_fetch_command" ]] || {
-    echo "error: login start response did not include preview_code and no --otp-fetch-command was provided" >&2
+    echo "error: --otp-fetch-command is required; hosted account login no longer exposes inline OTP codes" >&2
     return 1
   }
 
@@ -526,7 +502,6 @@ summary_json=$(
     --arg viewer_url "$http_base/" \
     --arg live_bind "$live_bind" \
     --arg web_bind "$web_bind" \
-    --arg delivery_mode "$delivery_mode" \
     --arg store_backend "$store_backend" \
     --arg first_delivery_mode "$first_delivery_mode" \
     --arg second_delivery_mode "$second_delivery_mode" \
@@ -547,7 +522,6 @@ summary_json=$(
       viewer_url: $viewer_url,
       live_bind: $live_bind,
       web_bind: $web_bind,
-      delivery_mode_request: $delivery_mode,
       store_backend_request: $store_backend,
       first_delivery_mode: $first_delivery_mode,
       second_delivery_mode: $second_delivery_mode,
@@ -573,7 +547,6 @@ cat >"$summary_md_path" <<EOF
 - run_id: \`$run_id\`
 - mode: \`$mode\`
 - login_handle: \`$login_handle\`
-- requested_delivery_mode: \`$delivery_mode\`
 - requested_store_backend: \`$store_backend\`
 - first_delivery_mode: \`$first_delivery_mode\`
 - second_delivery_mode: \`$second_delivery_mode\`

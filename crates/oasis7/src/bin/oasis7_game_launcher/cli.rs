@@ -214,7 +214,7 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     let _ = parse_host_port(options.live_bind.as_str(), "--live-bind")?;
     let _ = parse_host_port(options.web_bind.as_str(), "--web-bind")?;
     let deployment_mode =
-        DeploymentMode::parse(options.deployment_mode.as_str(), "--deployment-mode")?;
+        DeploymentMode::parse_user_facing(options.deployment_mode.as_str(), "--deployment-mode")?;
     if !deployment_mode.allows_local_chain_runtime() {
         options.chain_enabled = false;
     }
@@ -284,7 +284,7 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
 
 pub(super) fn deployment_mode_from_options(options: &CliOptions) -> DeploymentMode {
     DeploymentMode::parse(options.deployment_mode.as_str(), "deployment_mode")
-        .unwrap_or(DeploymentMode::TrustedLocalOnly)
+        .unwrap_or(DeploymentMode::HostedPublicJoin)
 }
 
 pub(super) fn uses_provider_http_transport(options: &CliOptions) -> bool {
@@ -396,7 +396,7 @@ Start player stack with one command:\n\
 - start built-in static web server\n\
 - print URL and optionally open browser\n\n\
 Options:\n\
-  --deployment-mode <mode>    trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
+  --deployment-mode <mode>    hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
   --scenario <name>            optional debug scenario; default uses formal release fixed world\n\
   --live-bind <host:port>      oasis7_viewer_live bind (default: {DEFAULT_LIVE_BIND})\n\
   --web-bind <host:port>       oasis7_viewer_live web bridge bind (default: {DEFAULT_WEB_BIND})\n\

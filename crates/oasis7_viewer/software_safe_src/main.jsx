@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { render as mount } from "solid-js/web";
 
 import * as core from "./legacy_core.js";
@@ -146,6 +146,13 @@ function CalloutCard(props) {
 
 function HostedLoginForm(props) {
   const locale = () => props.locale ?? uiLocale();
+  const clearHostedLoginError = () => {
+    if (core.state.hostedLogin.error != null || core.state.hostedLogin.retryAfterSeconds != null) {
+      core.state.hostedLogin.error = null;
+      core.state.hostedLogin.retryAfterSeconds = null;
+      core.requestRender();
+    }
+  };
   return (
     <div class="stack">
       <div class="control-grid">
@@ -160,9 +167,7 @@ function HostedLoginForm(props) {
             value={core.state.hostedLogin.handle}
             onInput={(event) => {
               core.state.hostedLogin.handle = String(event.currentTarget.value || "");
-              core.state.hostedLogin.error = null;
-              core.state.hostedLogin.retryAfterSeconds = null;
-              core.requestRender();
+              clearHostedLoginError();
             }}
           />
         </div>
@@ -185,11 +190,6 @@ function HostedLoginForm(props) {
           <Badge>{`delivery=${core.state.hostedLogin.deliveryMode || "-"}`}</Badge>
           <Badge>{core.state.hostedLogin.accountExists ? "account=existing" : "account=new"}</Badge>
         </div>
-        <Show when={core.state.hostedLogin.previewCode}>
-          <div class="badge-row">
-            <Badge class="badge badge--accent">{`previewCode=${core.state.hostedLogin.previewCode}`}</Badge>
-          </div>
-        </Show>
         <div class="field">
           <label for={props.codeId ?? "hosted-login-code"}>
             {tr(locale(), "验证码", "Verification Code")}
@@ -201,8 +201,7 @@ function HostedLoginForm(props) {
             value={core.state.hostedLogin.code}
             onInput={(event) => {
               core.state.hostedLogin.code = String(event.currentTarget.value || "");
-              core.state.hostedLogin.error = null;
-              core.requestRender();
+              clearHostedLoginError();
             }}
           />
         </div>
@@ -229,6 +228,106 @@ function HostedLoginForm(props) {
         </div>
       </Show>
     </div>
+  );
+}
+
+function shouldShowHostedLoginGate() {
+  return !core.state.auth.available
+    && String(core.state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
+}
+
+function focusableElements(root) {
+  return [...root.querySelectorAll(
+    [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(","),
+  )].filter((element) => !element.hasAttribute("aria-hidden"));
+}
+
+function HostedLoginGate() {
+  const locale = () => uiLocale();
+  let dialogRef;
+  let previousFocus = null;
+
+  onMount(() => {
+    previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    queueMicrotask(() => {
+      const firstFocusable = dialogRef ? focusableElements(dialogRef)[0] : null;
+      (firstFocusable || dialogRef)?.focus();
+    });
+  });
+
+  onCleanup(() => {
+    if (previousFocus && document.contains(previousFocus)) {
+      previousFocus.focus();
+    }
+  });
+
+  const trapDialogFocus = (event) => {
+    if (event.key !== "Tab" || !dialogRef) {
+      return;
+    }
+    const focusables = focusableElements(dialogRef);
+    if (focusables.length === 0) {
+      event.preventDefault();
+      dialogRef.focus();
+      return;
+    }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <Show when={shouldShowHostedLoginGate()}>
+      <div
+        class="auth-gate"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hosted-login-gate-title"
+        tabIndex="-1"
+        ref={dialogRef}
+        onKeyDown={trapDialogFocus}
+      >
+        <div class="auth-gate__dialog">
+          <div class="auth-gate__header">
+            <div>
+              <div class="panel__eyebrow">{tr(locale(), "标准用户流程", "Standard User Flow")}</div>
+              <h1 id="hosted-login-gate-title" class="auth-gate__title">
+                {tr(locale(), "登录邮箱后进入游戏", "Sign In With Email")}
+              </h1>
+            </div>
+            <Badge class="badge badge--warn">auth=missing</Badge>
+          </div>
+          <div class="feedback-summary">
+            {tr(
+              locale(),
+              "当前是 hosted public join。先领取玩家会话，再进入聊天、玩法动作和后续授权。",
+              "This is hosted public join. Acquire a player session first, then continue to chat, gameplay actions, and later authorization.",
+            )}
+          </div>
+          <HostedLoginForm
+            locale={locale()}
+            handleId="gate-hosted-login-handle"
+            codeId="gate-hosted-login-code"
+          />
+          <Show when={core.state.auth.rebindNotice || core.state.auth.error}>
+            <EmptyState>{core.state.auth.rebindNotice || core.state.auth.error}</EmptyState>
+          </Show>
+        </div>
+      </div>
+    </Show>
   );
 }
 
@@ -1756,6 +1855,7 @@ function AppShell() {
   return (
     <>
       <MobileJumpRail />
+      <HostedLoginGate />
       <section class="panel panel--targets" id="viewer-targets-panel">
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>

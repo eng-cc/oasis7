@@ -2,7 +2,7 @@ use serde::Serialize;
 #[cfg(test)]
 use std::sync::{Mutex, OnceLock};
 
-pub(super) const DEFAULT_DEPLOYMENT_MODE: &str = "trusted_local_only";
+pub(super) const DEFAULT_DEPLOYMENT_MODE: &str = "hosted_public_join";
 #[allow(dead_code)]
 const DEFAULT_MAX_GUEST_SESSIONS: u64 = 32;
 #[allow(dead_code)]
@@ -37,6 +37,16 @@ impl DeploymentMode {
             _ => Err(format!(
                 "{label} must be one of: trusted_local_only|hosted_public_join"
             )),
+        }
+    }
+
+    pub(super) fn parse_user_facing(raw: &str, label: &str) -> Result<Self, String> {
+        match raw.trim() {
+            "hosted_public_join" => Ok(Self::HostedPublicJoin),
+            "trusted_local_only" => Err(format!(
+                "{label}=trusted_local_only has been removed from the user launcher flow; use hosted_public_join"
+            )),
+            _ => Err(format!("{label} must be hosted_public_join")),
         }
     }
 

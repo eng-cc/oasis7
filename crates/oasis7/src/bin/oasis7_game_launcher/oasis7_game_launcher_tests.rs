@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
-use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::net::TcpListener;
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
@@ -14,7 +14,8 @@ use super::{
     query_runtime_bound_players, resolve_static_asset_path,
     resolve_viewer_auth_bootstrap_for_embedded_server, resolve_viewer_auth_bootstrap_from_path,
     resolve_viewer_static_dir_with_override, sanitize_index_html_for_embedded_server,
-    sanitize_relative_request_path, viewer_dev_dist_candidates, CliOptions, ViewerAuthBootstrap,
+    sanitize_relative_request_path, start_static_http_server, stop_static_http_server,
+    viewer_dev_dist_candidates, CliOptions, DeploymentMode, ViewerAuthBootstrap,
     BUILTIN_LLM_DECISION_SOURCE, DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS,
     DEFAULT_AGENT_PROVIDER_PROFILE, DEFAULT_AGENT_PROVIDER_URL, DEFAULT_CHAIN_NODE_ID,
     DEFAULT_CHAIN_STATUS_BIND, DEFAULT_DEPLOYMENT_MODE, DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS,
@@ -96,7 +97,7 @@ fn parse_options_defaults() {
     );
     assert!(options.open_browser);
     assert_eq!(options.viewer_static_dir, "web");
-    assert!(options.chain_enabled);
+    assert!(!options.chain_enabled);
     assert_eq!(options.chain_status_bind, DEFAULT_CHAIN_STATUS_BIND);
     assert!(options
         .chain_node_id
@@ -484,7 +485,7 @@ fn build_viewer_live_command_skips_default_llm_timeout_when_repo_config_exists()
 fn parse_options_rejects_unknown_deployment_mode() {
     let err = parse_options(["--deployment-mode", "invalid"].into_iter())
         .expect_err("invalid deployment mode should fail");
-    assert!(err.contains("trusted_local_only"));
+    assert!(err.contains("hosted_public_join"));
 }
 
 #[test]
@@ -508,8 +509,8 @@ fn parse_options_rejects_invalid_chain_replication_network_peer() {
 }
 
 #[test]
-fn parse_options_rejects_proposal_tick_phase_out_of_range() {
-    let err = parse_options(
+fn parse_options_ignores_chain_tuning_when_hosted_public_join_disables_chain() {
+    let options = parse_options(
         [
             "--chain-pos-ticks-per-slot",
             "4",
@@ -518,8 +519,11 @@ fn parse_options_rejects_proposal_tick_phase_out_of_range() {
         ]
         .into_iter(),
     )
-    .expect_err("should fail");
-    assert!(err.contains("--chain-pos-proposal-tick-phase"));
+    .expect("hosted public join disables local chain validation");
+    assert_eq!(options.deployment_mode, "hosted_public_join");
+    assert!(!options.chain_enabled);
+    assert_eq!(options.chain_pos_ticks_per_slot, 4);
+    assert_eq!(options.chain_pos_proposal_tick_phase, 4);
 }
 
 #[test]
@@ -713,7 +717,7 @@ fn build_game_url_brackets_ipv6_hosts() {
     assert!(url.starts_with(
         "http://[::1]:4173/?render_mode=viewer&ws=ws%3A%2F%2F%5B%3A%3A1%5D%3A5011&hosted_access="
     ));
-    assert!(url.contains("%22deployment_mode%22%3A%22trusted_local_only%22"));
+    assert!(url.contains("%22deployment_mode%22%3A%22hosted_public_join%22"));
 }
 
 #[test]
@@ -944,6 +948,50 @@ fn sanitize_index_html_for_embedded_server_injects_viewer_auth_bootstrap_into_no
     assert!(sanitized.contains("viewer-player"));
     assert!(sanitized.contains("pub-hex"));
     assert!(sanitized.contains("priv-hex"));
+}
+
+#[test]
+fn static_http_server_serves_large_static_asset_completely() {
+    let temp_dir = make_temp_dir("large_static_asset");
+    let large_body = vec![b'a'; 512 * 1024];
+    fs::write(temp_dir.join("viewer.js"), &large_body).expect("write large asset");
+
+    let probe = TcpListener::bind(("127.0.0.1", 0)).expect("bind port probe");
+    let port = probe.local_addr().expect("probe addr").port();
+    drop(probe);
+
+    let mut server = start_static_http_server(
+        DeploymentMode::TrustedLocalOnly,
+        "127.0.0.1:0",
+        "127.0.0.1",
+        port,
+        temp_dir.as_path(),
+        None,
+    )
+    .expect("start static HTTP server");
+
+    let mut response = Vec::new();
+    for _ in 0..50 {
+        match TcpStream::connect(("127.0.0.1", port)) {
+            Ok(mut stream) => {
+                stream
+                    .write_all(b"GET /viewer.js HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+                    .expect("write request");
+                stream.read_to_end(&mut response).expect("read response");
+                break;
+            }
+            Err(_) => thread::sleep(std::time::Duration::from_millis(20)),
+        }
+    }
+    stop_static_http_server(&mut server);
+
+    let split_at = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .expect("response headers end")
+        + 4;
+    assert!(String::from_utf8_lossy(&response[..split_at]).starts_with("HTTP/1.1 200 OK"));
+    assert_eq!(&response[split_at..], large_body.as_slice());
 }
 
 #[test]

@@ -186,7 +186,7 @@
         transform: translateY(-1px);
       }
       button:disabled { opacity: 0.5; cursor: not-allowed; }
-      input[type="number"], input[type="search"], textarea {
+      input[type="email"], input[type="number"], input[type="search"], input[type="text"], textarea {
         width: 100%;
         border-radius: 12px;
         border: 1px solid var(--border);
@@ -315,6 +315,41 @@
         display: flex;
         flex-direction: column;
         gap: 10px;
+      }
+      .auth-gate {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: rgba(5, 8, 7, 0.72);
+        backdrop-filter: blur(8px);
+      }
+      .auth-gate__dialog {
+        width: min(560px, 100%);
+        max-height: calc(100vh - 40px);
+        overflow: auto;
+        border: 1px solid rgba(208, 168, 91, 0.38);
+        border-radius: 8px;
+        padding: 18px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
+          var(--panel-strong);
+        box-shadow: 0 26px 70px rgba(0, 0, 0, 0.48);
+      }
+      .auth-gate__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 12px;
+      }
+      .auth-gate__title {
+        margin: 4px 0 0;
+        font-size: 24px;
+        line-height: 1.2;
+        letter-spacing: 0;
       }
       .pixel-world-host__summary {
         display: flex;

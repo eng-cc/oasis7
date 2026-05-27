@@ -104,7 +104,7 @@ fn build_launcher_args_contains_llm_and_no_open_switches() {
     assert!(args.contains(&"--agent-decision-source".to_string()));
     assert!(args.contains(&"builtin_llm".to_string()));
     assert!(args.contains(&"--deployment-mode".to_string()));
-    assert!(args.contains(&"trusted_local_only".to_string()));
+    assert!(args.contains(&"hosted_public_join".to_string()));
     assert!(args.contains(&"--no-open-browser".to_string()));
     assert!(args.contains(&"--viewer-static-dir".to_string()));
     assert!(args.contains(&"--chain-disable".to_string()));
@@ -186,9 +186,7 @@ fn hosted_public_join_transfer_barrier_tracks_deployment_mode() {
         deployment_mode: "hosted_public_join".to_string(),
         ..LaunchConfig::default()
     }));
-    assert!(!hosted_public_join_transfer_blocked(
-        &LaunchConfig::default()
-    ));
+    assert!(hosted_public_join_transfer_blocked(&LaunchConfig::default()));
 }
 #[test]
 fn build_game_url_rewrites_zero_host() {
@@ -248,7 +246,7 @@ fn build_game_url_brackets_ipv6_hosts() {
     assert!(url.starts_with(
         "http://[::1]:4173/?render_mode=viewer&ws=ws%3A%2F%2F%5B%3A%3A1%5D%3A5011&hosted_access="
     ));
-    assert!(url.contains("%22deployment_mode%22%3A%22trusted_local_only%22"));
+    assert!(url.contains("%22deployment_mode%22%3A%22hosted_public_join%22"));
 }
 
 #[test]
@@ -272,7 +270,7 @@ fn normalize_host_for_url_maps_empty_and_any() {
 fn launch_config_defaults_enable_llm() {
     let config = LaunchConfig::default();
     assert!(config.llm_enabled);
-    assert!(config.chain_enabled);
+    assert!(!config.chain_enabled);
     assert_eq!(config.agent_decision_source, "builtin_llm");
     assert_eq!(config.agent_provider_backend, "provider_local_bridge");
     assert_eq!(config.agent_provider_contract, "worldsim_provider_v1");
@@ -335,6 +333,7 @@ fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_set() {
 #[test]
 fn build_chain_runtime_args_contains_chain_overrides_when_enabled() {
     let config = LaunchConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         chain_enabled: true,
         chain_status_bind: "127.0.0.1:6121".to_string(),
         chain_node_id: "chain-node-a".to_string(),
@@ -416,6 +415,7 @@ fn normalize_launch_config_disables_chain_for_hosted_public_join() {
     assert!(!config.chain_enabled);
     assert!(!chain_runtime_effectively_enabled(&config));
 }
+
 #[test]
 fn parse_chain_role_rejects_invalid_value() {
     let err = parse_chain_role("invalid").expect_err("should fail");
@@ -766,7 +766,7 @@ fn chain_runtime_status_from_web_maps_stale_execution_world() {
 }
 
 #[test]
-fn apply_web_snapshot_tracks_chain_recovery_payload() {
+fn apply_web_snapshot_preserves_chain_recovery_payload_but_disables_legacy_local_chain() {
     let mut app = ClientLauncherApp::default();
     let snapshot = WebStateSnapshot {
         status: "idle".to_string(),
@@ -787,20 +787,25 @@ fn apply_web_snapshot_tracks_chain_recovery_payload() {
             fresh_node_id: "viewer-live-node-fresh-1".to_string(),
             fresh_chain_status_bind: "127.0.0.1:5122".to_string(),
             suggested_config: LaunchConfig {
+                deployment_mode: "trusted_local_only".to_string(),
                 chain_node_id: "viewer-live-node-fresh-1".to_string(),
                 chain_status_bind: "127.0.0.1:5122".to_string(),
                 ..LaunchConfig::default()
             },
         }),
         game_url: "http://127.0.0.1:4173/".to_string(),
-        config: LaunchConfig::default(),
+        config: LaunchConfig {
+            deployment_mode: "trusted_local_only".to_string(),
+            chain_enabled: true,
+            ..LaunchConfig::default()
+        },
         logs: vec![],
     };
 
     app.apply_web_snapshot(snapshot);
     assert!(matches!(
         app.chain_runtime_status,
-        ChainRuntimeStatus::StaleExecutionWorld(_)
+        ChainRuntimeStatus::Disabled
     ));
     assert_eq!(
         app.chain_recovery
@@ -1023,6 +1028,7 @@ fn collect_required_config_issues_reports_missing_required_fields() {
 #[test]
 fn collect_chain_required_config_issues_reports_missing_required_fields() {
     let config = LaunchConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         chain_enabled: true,
         chain_runtime_bin: "".to_string(),
         chain_status_bind: "127.0.0.1".to_string(),
@@ -1128,6 +1134,7 @@ fn collect_chain_required_config_issues_accepts_valid_required_fields() {
 #[test]
 fn collect_chain_required_config_issues_requires_public_entry_confirmation() {
     let issues = collect_chain_required_config_issues(&LaunchConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         chain_enabled: true,
         chain_runtime_bin: std::env::current_exe()
             .expect("current exe")
@@ -1147,6 +1154,7 @@ fn collect_chain_required_config_issues_requires_public_entry_confirmation() {
 #[test]
 fn build_chain_runtime_args_requires_public_entry_confirmation() {
     let err = build_chain_runtime_args(&LaunchConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         chain_enabled: true,
         chain_runtime_bin: "/tmp/oasis7_chain_runtime".to_string(),
         chain_status_bind: "127.0.0.1:6121".to_string(),

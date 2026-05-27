@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@solidjs/testing-library";
+import { fireEvent, screen, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./pixel_world_host.jsx", () => ({
@@ -281,6 +281,7 @@ describe("viewer web ui automation baseline", () => {
     });
 
     screen.getByText("Runtime Diagnostics").click();
+    expect(screen.getByRole("dialog", { name: "Sign In With Email" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Request Login Code" }).length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText("Email").length).toBeGreaterThan(0);
     expect(screen.getByText("upgrade_after_player_session")).toBeInTheDocument();
@@ -291,6 +292,27 @@ describe("viewer web ui automation baseline", () => {
     ).toBeGreaterThan(0);
     expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();
     expect(screen.queryByText(/not implemented yet/i)).not.toBeInTheDocument();
+  });
+
+  it("does not show the hosted login gate after player session registration", async () => {
+    await renderViewerApp({
+      setupAfterMount(core) {
+        core.state.hostedAccess = sampleHostedPublicJoinAccess();
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "hosted-player-1",
+          publicKey: "oc:pk:test-player",
+          privateKey: "ed25519-secret",
+          releaseToken: "hosted-release-1",
+          source: "hosted_browser_storage",
+          registrationStatus: "registered",
+          runtimeStatus: "registered",
+        };
+      },
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Sign In With Email" })).not.toBeInTheDocument();
   });
 
   it("surfaces hosted login retry-after guidance when OTP resend is throttled", async () => {
@@ -308,6 +330,54 @@ describe("viewer web ui automation baseline", () => {
       screen.getAllByText("a login code was just sent for this email; retry in 21 seconds (retry in 21s)").length,
     ).toBeGreaterThan(0);
     expect(screen.getAllByText("retry_after=21s").length).toBeGreaterThan(0);
+  });
+
+  it("clears hosted login retry guidance immediately when the player edits the email", async () => {
+    await renderViewerApp({
+      setupAfterMount(core) {
+        core.state.hostedAccess = sampleHostedPublicJoinAccess();
+        core.state.hostedLogin.handle = "player@example.com";
+        core.state.hostedLogin.error = "a login code was just sent for this email; retry in 21 seconds (retry in 21s)";
+        core.state.hostedLogin.retryAfterSeconds = 21;
+      },
+    });
+
+    expect(screen.getAllByText("retry_after=21s").length).toBeGreaterThan(0);
+
+    fireEvent.input(document.getElementById("gate-hosted-login-handle"), {
+      target: { value: "next-player@example.com" },
+    });
+
+    expect(screen.queryByText("retry_after=21s")).not.toBeInTheDocument();
+    expect(screen.queryByText(/retry in 21 seconds/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus inside the hosted login gate while it is modal", async () => {
+    await renderViewerApp({
+      setupAfterMount(core) {
+        core.state.hostedAccess = sampleHostedPublicJoinAccess();
+        core.state.hostedLogin.handle = "player@example.com";
+      },
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Sign In With Email" });
+    const emailInput = document.getElementById("gate-hosted-login-handle");
+    const requestButton = within(dialog).getByRole("button", { name: "Request Login Code" });
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(emailInput);
+    });
+
+    requestButton.focus();
+    const tabEvent = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
+    dialog.dispatchEvent(tabEvent);
+
+    expect(tabEvent.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(emailInput);
   });
 
   it("marks hosted backend reauth as available once a browser player session is registered", async () => {

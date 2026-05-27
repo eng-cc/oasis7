@@ -6,6 +6,15 @@ fn temp_store_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("oasis7-hosted-account-{name}-{unique}.json"))
 }
 
+fn pending_otp_code(broker: &HostedAccountIdentityBroker, challenge_id: &str) -> String {
+    broker
+        .pending_challenges
+        .get(challenge_id)
+        .expect("pending challenge")
+        .otp_code
+        .clone()
+}
+
 #[test]
 fn hosted_account_login_start_rejects_phone_channel() {
     let mut broker =
@@ -37,7 +46,7 @@ fn hosted_account_login_complete_reuses_stable_player_id() {
     let first = broker.complete_login(
         DeploymentMode::HostedPublicJoin,
         challenge.challenge_id.as_str(),
-        challenge.preview_code.as_deref().unwrap_or_default(),
+        pending_otp_code(&broker, challenge.challenge_id.as_str()).as_str(),
         &mut issuer,
     );
     assert!(first.ok);
@@ -56,7 +65,7 @@ fn hosted_account_login_complete_reuses_stable_player_id() {
     let second = broker.complete_login(
         DeploymentMode::HostedPublicJoin,
         challenge_second.challenge_id.as_str(),
-        challenge_second.preview_code.as_deref().unwrap_or_default(),
+        pending_otp_code(&broker, challenge_second.challenge_id.as_str()).as_str(),
         &mut issuer,
     );
     assert!(second.ok);
@@ -75,6 +84,24 @@ fn hosted_account_login_complete_reuses_stable_player_id() {
 }
 
 #[test]
+fn hosted_account_login_start_does_not_expose_otp_in_public_response() {
+    let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("otp-random"))
+        .expect("broker");
+    let start = broker.start_login(
+        DeploymentMode::HostedPublicJoin,
+        "email",
+        "player-random@example.com",
+    );
+    assert!(start.ok);
+    let challenge = start.challenge.expect("challenge");
+    let otp_code = pending_otp_code(&broker, challenge.challenge_id.as_str());
+
+    assert_eq!(otp_code.len(), 6);
+    assert!(otp_code.chars().all(|ch| ch.is_ascii_digit()));
+    assert_ne!(otp_code, "123456");
+}
+
+#[test]
 fn hosted_account_login_complete_rejects_wrong_otp() {
     let mut broker =
         HostedAccountIdentityBroker::with_store_path(temp_store_path("wrong-otp")).expect("broker");
@@ -85,7 +112,8 @@ fn hosted_account_login_complete_rejects_wrong_otp() {
         "player@example.com",
     );
     let challenge = start.challenge.expect("challenge");
-    let wrong_code = if challenge.preview_code.as_deref() == Some("000000") {
+    let otp_code = pending_otp_code(&broker, challenge.challenge_id.as_str());
+    let wrong_code = if otp_code == "000000" {
         "000001"
     } else {
         "000000"
@@ -111,7 +139,8 @@ fn hosted_account_login_complete_locks_after_repeated_invalid_otp() {
         "player@example.com",
     );
     let challenge = start.challenge.expect("challenge");
-    let wrong_code = if challenge.preview_code.as_deref() == Some("000000") {
+    let otp_code = pending_otp_code(&broker, challenge.challenge_id.as_str());
+    let wrong_code = if otp_code == "000000" {
         "000001"
     } else {
         "000000"
@@ -136,7 +165,7 @@ fn hosted_account_login_complete_locks_after_repeated_invalid_otp() {
     let missing = broker.complete_login(
         DeploymentMode::HostedPublicJoin,
         challenge.challenge_id.as_str(),
-        challenge.preview_code.as_deref().unwrap_or_default(),
+        otp_code.as_str(),
         &mut issuer,
     );
     assert_eq!(missing.error_code.as_deref(), Some("challenge_not_found"));
@@ -146,7 +175,7 @@ fn hosted_account_login_complete_locks_after_repeated_invalid_otp() {
 fn hosted_account_login_start_rolls_back_on_delivery_failure() {
     let mut broker =
         HostedAccountIdentityBroker::with_store_path(temp_store_path("smtp-fail")).expect("broker");
-    broker.delivery_mode = HOSTED_LOGIN_DELIVERY_MODE_SMTP.to_string();
+    broker.test_log_delivery = false;
     let response = broker.start_login(
         DeploymentMode::HostedPublicJoin,
         "email",
@@ -239,22 +268,6 @@ fn hosted_account_login_start_enforces_extended_rate_limit() {
         .as_deref()
         .unwrap_or_default()
         .contains("last 10 minutes"));
-}
-
-#[test]
-fn normalize_delivery_mode_accepts_smtp() {
-    assert_eq!(
-        normalize_delivery_mode(Some(" smtp ")),
-        HOSTED_LOGIN_DELIVERY_MODE_SMTP
-    );
-    assert_eq!(
-        normalize_delivery_mode(Some("server_log_only")),
-        HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY
-    );
-    assert_eq!(
-        normalize_delivery_mode(Some("unexpected")),
-        HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE
-    );
 }
 
 #[test]

@@ -107,7 +107,7 @@
   - 原子步骤:
     1. 新增 hosted account smoke 脚本，自动完成 `login/start -> login/complete -> player-session/release -> launcher restart -> stable account continuity`。
        - 验证命令: `bash ./scripts/hosted-account-staging-smoke.sh --mode local`
-       - 预期结果: 本地 `preview_inline + file backend` smoke 通过，并生成 summary artifact。
+       - 预期结果: 本地 `smtp + file backend + otp-fetch-command` smoke 通过，并生成 summary artifact。
     2. 将本地 smoke 接入 repo-owned required 自动化，同时保留 staging `smtp + otp-fetch-command` 入口。
        - 验证命令: `bash -n scripts/hosted-account-staging-smoke.sh && rg -n "hosted account local smoke|OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE" scripts/ci-tests.sh`
        - 预期结果: `./scripts/ci-tests.sh required` 拥有稳定的本地 hosted account e2e smoke，而 staging 继续复用同一脚本。
@@ -207,10 +207,10 @@
 - 结论-1: 对 `hosted_public_join` 而言，“邮箱登录 + 中心化托管密钥 + 可选自托管升级”是比“让普通玩家保存公私钥”更合适的正式产品路径。
 - 结论-2: 中心化 KMS 不是直接替代全部产品语义；更准确的落法是 `identity broker + custody service + sign API`，KMS/HSM 作为 custody backend 的实现选项，而不是前端/运行时直接耦合的唯一接口。
 - 结论-3: 当前代码已经完成两刀 hosted identity 基线：其一是 `device_session` 收口，viewer 不再把 hosted player `privateKey` 持久化到 `localStorage`；其二是中心化 hosted account 登录 server，`oasis7_game_launcher` 现已提供 email login challenge、稳定 `hosted_account_id -> player_id` 持久化和登录后换发 `device_session + player_session` 的 public route，viewer 也已改成 hosted account 登录表单。
-- 结论-4: 当前登录投递已具备真实邮件链路：server 现支持 `preview_inline`、`server_log_only` 与 `smtp` 三种 challenge delivery mode，其中 `smtp` 通过 `OASIS7_HOSTED_LOGIN_SMTP_*` 环境变量加载配置，默认可对接 Aliyun DirectMail `smtpdm.aliyun.com:465`；同时 OTP start 路径已补 resend cooldown、短窗/长窗配额与 `retry_after_seconds` 反馈，避免前端只能盲目重试。
+- 结论-4: 当前登录投递已具备真实邮件链路：server 面向用户固定使用 `smtp` challenge delivery lane，不再提供部署期 delivery mode 开关；`smtp` 通过 `OASIS7_HOSTED_LOGIN_SMTP_*` 环境变量加载配置，默认可对接 Aliyun DirectMail `smtpdm.aliyun.com:465`；同时 OTP start 路径已补 resend cooldown、短窗/长窗配额与 `retry_after_seconds` 反馈，避免前端只能盲目重试。
 - 结论-5: 当前 hosted account registry 已支持 Aliyun Tablestore 托管存储；服务端通过 `HostedAccountStoreBackend` 在 `file` 与 `tablestore` 之间切换，默认 `auto` 模式下会在检测到 `OASIS7_HOSTED_ACCOUNT_TABLESTORE_*` 或 `ALIYUN_OTS_*` 后自动启用 Tablestore。
 - 结论-5A: 2026-05-20 已在 ECS 上完成一次真实 VPC Tablestore smoke：`https://oasis7.cn-huhehaote.vpc.tablestore.aliyuncs.com` 可从部署机直连，`AUTO_CREATE=true` 时首次启动允许由 `OTSObjectNotExist` 进入自动建表；同一邮箱在 launcher 重启前后两次登录均返回同一个 `hosted_account_id` / `player_id`，证明 hosted identity MVP 的“邮箱登录 + 服务端持久化恢复”主链路已经跑通。
-- 结论-5B: 当前已补 repo-owned `scripts/hosted-account-staging-smoke.sh`。同一脚本在本地会默认跑 `preview_inline + file backend` 的 required smoke，并输出 summary artifact；切到 `--mode staging --delivery-mode smtp --otp-fetch-command <cmd>` 后，可直接验证 staging 环境里的真实 OTP 与跨重启 account continuity，不再需要临时拼散命令。
+- 结论-5B: 当前已补 repo-owned `scripts/hosted-account-staging-smoke.sh`。同一脚本默认使用 `smtp`，并要求 `--otp-fetch-command <cmd>` 读取云上投递的真实 OTP；本地可搭配 file backend 验证 account continuity，staging 可直接验证真实 OTP 与跨重启 account continuity，不再需要临时拼散命令。
 - 结论-6: 托管身份仅面向 player plane；node / validator / governance signer 继续沿用独立 custody/governance 专题。
 - 结论-7: hosted account 服务从现在起必须按 `dev/staging/production` 分层执行；环境分层的最小真值不是“不同 URL”，而是 SMTP、account store、strong-auth/custody secret、风控阈值和对外 claims 的独立隔离。
 
