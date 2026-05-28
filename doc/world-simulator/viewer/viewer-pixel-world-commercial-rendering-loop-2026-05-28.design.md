@@ -59,3 +59,8 @@
 - Host render test checks HUD visible text and renderer diagnostics collapsed by default.
 - Existing Fragment terrain tests continue proving background/non-interactive terrain order.
 - Build regenerates `viewer.js` and compat `software_safe.js`.
+
+## Follow-up Brainstorm
+- `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md` defines the next design direction after this first commercial HUD slice.
+- The recommended sequence is command lens first, production pulse second, pixel moment theater after causality and production contracts are stable.
+- Any implementation of production readability should create a new `.pm` task because it likely changes runtime snapshot contract and viewer interaction behavior.
