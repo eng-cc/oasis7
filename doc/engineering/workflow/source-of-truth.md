@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.2.2**
-Last Updated: **2026-05-26**
+Version: **v1.2.3**
+Last Updated: **2026-05-28**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -78,6 +78,7 @@ flowchart TD
 ## 5. Normative Details (from legacy AGENTS workflow)
 ### 5.1 Worktree + task truth
 - New demand uses a dedicated worktree by default; only explicit user authorization allows reuse.
+- Do not edit any files from the `main` branch/worktree; create or enter the relevant task worktree before making changes.
 - Entering implementation requires owner role selection and `.pm` task binding.
 - Cross-role collaboration must converge to one owner / one `.pm` task / one canonical worktree / one PR chain.
 - Task worktrees created through `./scripts/new-task-worktree.sh` must create a git-ignored `target` symlink to the repo-family shared cargo target cache resolved by `./scripts/cargo-dev.sh --print-target-dir`, so direct cargo and the development wrapper share local build artifacts by default.
@@ -105,6 +106,8 @@ flowchart TD
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.2.3 (2026-05-28)**
+  - Required all file edits to happen from a task worktree instead of the `main` branch/worktree.
 - **v1.2.2 (2026-05-26)**
   - Required PR helper Copilot review requests to use a verifiable requested-reviewers API path and warn when the request does not stick.
 - **v1.2.1 (2026-05-26)**
