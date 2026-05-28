@@ -1,0 +1,33 @@
+task_uid: task_428db5366f654c5e892ac300807cb9cc
+title: "Pixel-world fragment LOD terrain rendering"
+owner_role: viewer_engineer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-viewer-pixel-world-fragment-lod
+execution_log_path: .pm/tasks/task_428db5366f654c5e892ac300807cb9cc.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/world-simulator/viewer/README.md
+  - doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning-2026-05-26.prd.md
+  - doc/world-simulator/viewer/viewer-fragment-element-rendering.prd.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.prd.md
+  - doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.design.md
+  - doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.project.md
+related_prd: []
+acceptance:
+  - "Pixel-world render state includes fragment terrain data derived from location.fragment_profile.blocks without changing runtime snapshot protocol."
+  - "Renderer uses screen-space LOD so fragments aggregate as background at agent-readable zoom and expose block detail only when large enough."
+  - "Location marker visibility is de-emphasized behind fragment terrain while preserving selection and relation context."
+  - "Repo-owned unit/UI tests, Bevy ECS probes, pixel regression probes, browser visual smoke, and wasm bridge checks cover DTO generation, LOD thresholds, visual hierarchy, and existing selection behavior."
+handoff_to:
+  - qa_engineer
+updated_at: 2026-05-28T14:30:23+08:00
+last_started_at: 2026-05-27T20:05:33+08:00
+last_claim_type: task_complete
+last_verify_command: "cargo fmt --check -p pixel_world_bridge && npm --prefix crates/oasis7_viewer run test:ui && env -u RUSTC_WRAPPER cargo test -p pixel_world_bridge --lib && ./scripts/viewer-pixel-world-bevy-render-probe.sh && ./scripts/viewer-pixel-world-bevy-pixel-regression.sh && env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown && npm --prefix crates/oasis7_viewer run build:software-safe && ./scripts/viewer-pixel-world-fragment-visual-smoke.sh && ./scripts/check-script-executable-bits.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-05-28T14:30:23+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-28T14:30:23+08:00

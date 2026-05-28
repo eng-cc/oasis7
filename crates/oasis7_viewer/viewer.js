@@ -4947,11 +4947,23 @@ async function createPixelWorldRuntimeBridge({
     fatal
   };
 }
-var _tmpl$$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface width=960 height=540></canvas><div class=pixel-world-canvas__overlay>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas><div class=pixel-world-canvas__grid></div><div class=pixel-world-canvas__overlay>`), _tmpl$6$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$7$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"><span>`), _tmpl$8$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class="callout callout--warn"><div class=callout__header><div class=callout__title></div></div><div class=callout__body><div class=feedback-summary>`), _tmpl$1$1 = /* @__PURE__ */ template(`<div class="pixel-world-host stack"><div class=pixel-world-host__summary><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><button type=button></button></div><details class=diagnostic><summary></summary><div class=stack style=margin-top:10px><pre class=json>`);
+var _tmpl$$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface width=960 height=540></canvas><div class=pixel-world-canvas__overlay>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas><div class=pixel-world-canvas__grid></div><div class=pixel-world-canvas__overlay>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$7$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$8$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$1$1 = /* @__PURE__ */ template(`<div class="callout callout--warn"><div class=callout__header><div class=callout__title></div></div><div class=callout__body><div class=feedback-summary>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-host stack"><div class=pixel-world-host__summary><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><button type=button></button></div><details class=diagnostic><summary></summary><div class=stack style=margin-top:10px><pre class=json>`);
 function tr$1(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
+const FRAGMENT_TERRAIN_PALETTE = {
+  silicate_matrix: [126, 144, 99],
+  iron_nickel_alloy: [176, 184, 196],
+  water_ice: [125, 211, 252],
+  hydrated_mineral: [96, 165, 250],
+  carbonaceous_organic: [120, 113, 108],
+  sulfide_ore: [202, 138, 4],
+  rare_earth_oxide: [167, 139, 250],
+  uranium_bearing_ore: [132, 204, 22],
+  thorium_bearing_ore: [244, 114, 182],
+  unknown: [148, 163, 184]
+};
 async function waitForRuntimeCanvasAttachment(canvas) {
   for (let attempt = 0; attempt < 12; attempt += 1) {
     if (canvas?.isConnected && document.getElementById(PIXEL_WORLD_RUNTIME_CANVAS_ID) === canvas) {
@@ -4995,6 +5007,10 @@ function countResourceEntries(summary) {
   }
   return String(summary).split(" · ").map((entry) => entry.trim()).filter(Boolean).length;
 }
+function safeNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
 function worldCenterPosition(worldBounds) {
   if (!worldBounds) {
     return null;
@@ -5014,6 +5030,73 @@ function clampWorldPosition(pos, worldBounds) {
     y_cm: Math.min(worldBounds.depth_cm, Math.max(0, Number(pos.y_cm) || 0)),
     z_cm: Math.min(worldBounds.height_cm, Math.max(0, Number(pos.z_cm) || 0))
   };
+}
+function dominantCompound(block) {
+  const ppm = block?.compounds?.ppm;
+  if (!ppm || typeof ppm !== "object") {
+    return "unknown";
+  }
+  const ranked = Object.entries(ppm).map(([kind, value]) => [kind, safeNumber(value, 0)]).filter(([, value]) => value > 0).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  return ranked[0]?.[0] || "unknown";
+}
+function fragmentTerrainColor(compound) {
+  return FRAGMENT_TERRAIN_PALETTE[compound] || FRAGMENT_TERRAIN_PALETTE.unknown;
+}
+function colorToCss(color, alpha = 0.36) {
+  const [red, green, blue] = Array.isArray(color) ? color : FRAGMENT_TERRAIN_PALETTE.unknown;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+function fragmentBlocks(location) {
+  const blocks = location?.fragment_profile?.blocks?.blocks;
+  return Array.isArray(blocks) ? blocks : [];
+}
+function estimateFragmentHalfExtentCm(location, blocks) {
+  const explicitRadius = safeNumber(location?.profile?.radius_cm, 0);
+  if (explicitRadius > 0) {
+    return explicitRadius;
+  }
+  const maxExtent = blocks.reduce((value, block) => {
+    const originX = safeNumber(block?.origin_cm?.x_cm, 0);
+    const originZ = safeNumber(block?.origin_cm?.z_cm ?? block?.origin_cm?.y_cm, 0);
+    const sizeX = safeNumber(block?.size_cm?.x_cm, 0);
+    const sizeZ = safeNumber(block?.size_cm?.z_cm ?? block?.size_cm?.y_cm, 0);
+    return Math.max(value, originX + sizeX, originZ + sizeZ);
+  }, 0);
+  return Math.max(1, maxExtent / 2);
+}
+function buildFragmentTerrainForLocation(location, worldBounds) {
+  const pos = normalizePosition(location?.pos);
+  const blocks = fragmentBlocks(location);
+  if (!pos || !worldBounds || !blocks.length) {
+    return [];
+  }
+  const halfExtentCm = estimateFragmentHalfExtentCm(location, blocks);
+  return blocks.map((block, index) => {
+    const sizeX = safeNumber(block?.size_cm?.x_cm, 0);
+    const sizeZ = safeNumber(block?.size_cm?.z_cm ?? block?.size_cm?.y_cm, 0);
+    const originX = safeNumber(block?.origin_cm?.x_cm, 0);
+    const originZ = safeNumber(block?.origin_cm?.z_cm ?? block?.origin_cm?.y_cm, 0);
+    const footprintCm = Math.max(1, sizeX, sizeZ);
+    if (sizeX <= 0 || sizeZ <= 0) {
+      return null;
+    }
+    const dominant = dominantCompound(block);
+    const localX = originX + sizeX / 2 - halfExtentCm;
+    const localY = originZ + sizeZ / 2 - halfExtentCm;
+    return {
+      id: `fragment:${location.id}:${index}`,
+      location_id: location.id,
+      pos: clampWorldPosition({
+        x_cm: pos.x_cm + localX,
+        y_cm: pos.y_cm + localY,
+        z_cm: pos.z_cm
+      }, worldBounds),
+      footprint_cm: footprintCm,
+      dominant_compound: dominant,
+      color: fragmentTerrainColor(dominant),
+      emphasis: 0.58
+    };
+  }).filter((entry) => entry?.pos);
 }
 function deterministicHash(input) {
   return String(input || "").split("").reduce((hash, char) => hash * 31 + char.charCodeAt(0) >>> 0, 2166136261);
@@ -5102,6 +5185,19 @@ function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
   return {
     left: `${xPercent.toFixed(1)}%`,
     top: `${yPercent.toFixed(1)}%`
+  };
+}
+function fragmentTerrainStyle(patch, worldBounds, index) {
+  const sizePx = Math.max(7, Math.min(26, safeNumber(patch.footprint_cm, 1) / 1200));
+  return {
+    ...toWorldPercentStyle(patch.pos, worldBounds, {
+      left: `${12 + index % 6 * 13}%`,
+      top: `${16 + Math.floor(index / 6) * 13}%`
+    }),
+    width: `${sizePx.toFixed(1)}px`,
+    height: `${sizePx.toFixed(1)}px`,
+    "background-color": colorToCss(patch.color),
+    transform: "translate(-50%, -50%)"
   };
 }
 function buildVisualHotspots({
@@ -5246,15 +5342,30 @@ function buildPixelWorldRenderState(locale = state.uiLocale) {
     height_cm: Number(space.height_cm) || 0
   } : null;
   const worldScaleBase = Math.max(1, Math.min(worldBounds?.width_cm || 1, worldBounds?.depth_cm || 1));
+  const fragmentTerrain = [];
   const locations = lists.locations.map((location) => ({
-    id: location.id,
-    label: location.name || location.id,
-    pos: normalizePosition(location.pos),
-    radius_cm: Number(location?.profile?.radius_cm) || 0,
-    resource_summary: resourceSummary(location.resources),
-    resource_score: countResourceEntries(resourceSummary(location.resources)),
-    size_hint_px: 16 + Math.min(18, (Number(location?.profile?.radius_cm) || 0) / worldScaleBase * 420 + countResourceEntries(resourceSummary(location.resources)) * 2)
-  })).filter((location) => location.pos);
+    raw: location,
+    terrain: buildFragmentTerrainForLocation(location, worldBounds)
+  })).map(({
+    raw: location,
+    terrain
+  }) => {
+    fragmentTerrain.push(...terrain);
+    const resourceSummary$1 = resourceSummary(location.resources);
+    const hasTerrain = terrain.length > 0;
+    return {
+      id: location.id,
+      label: location.name || location.id,
+      pos: normalizePosition(location.pos),
+      radius_cm: Number(location?.profile?.radius_cm) || 0,
+      resource_summary: resourceSummary$1,
+      resource_score: countResourceEntries(resourceSummary$1),
+      fragment_terrain_count: terrain.length,
+      marker_role: hasTerrain ? "logic_anchor" : "primary_marker",
+      marker_alpha: hasTerrain ? 0.32 : 0.72,
+      size_hint_px: hasTerrain ? 10 : 16 + Math.min(18, (Number(location?.profile?.radius_cm) || 0) / worldScaleBase * 420 + countResourceEntries(resourceSummary$1) * 2)
+    };
+  }).filter((location) => location.pos);
   const locationById = new Map(locations.map((location) => [location.id, location]));
   const agents = lists.agents.map((agent) => {
     const resolvedPosition = resolveAgentPosition(agent, selected, locationById, worldBounds);
@@ -5297,6 +5408,7 @@ function buildPixelWorldRenderState(locale = state.uiLocale) {
     locale,
     world_bounds: worldBounds,
     locations,
+    fragment_terrain: fragmentTerrain,
     agents,
     links,
     selection,
@@ -5367,33 +5479,58 @@ function PixelWorldCanvasPlaceholder(props) {
     var _el$7 = _tmpl$5$1(), _el$8 = _el$7.firstChild, _el$0 = _el$8.nextSibling;
     insert(_el$7, createComponent(For, {
       get each() {
-        return props.renderState().locations.slice(0, 8);
+        return props.renderState().fragment_terrain.slice(0, 96);
       },
-      children: (location, index) => (() => {
-        var _el$11 = _tmpl$6$1(), _el$12 = _el$11.firstChild;
-        _el$11.$$click = () => props.onSelect({
-          kind: "location",
-          id: location.id
-        });
-        _el$11.addEventListener("mouseleave", () => props.onHover(null));
-        _el$11.addEventListener("mouseenter", () => props.onHover({
-          kind: "location",
-          id: location.id
-        }));
-        insert(_el$12, () => location.label.slice(0, 2).toUpperCase());
+      children: (patch, index) => (() => {
+        var _el$11 = _tmpl$6$1();
         createRenderEffect((_p$) => {
-          var _v$ = toWorldPercentStyle(location.pos, props.renderState().world_bounds, {
-            left: `${12 + index() % 4 * 21}%`,
-            top: `${18 + Math.floor(index() / 4) * 26}%`
-          }), _v$2 = location.label;
-          _p$.e = style(_el$11, _v$, _p$.e);
-          _v$2 !== _p$.t && setAttribute(_el$11, "title", _p$.t = _v$2);
+          var _v$ = patch.dominant_compound, _v$2 = fragmentTerrainStyle(patch, props.renderState().world_bounds, index()), _v$3 = `${patch.location_id}:${patch.dominant_compound}`;
+          _v$ !== _p$.e && setAttribute(_el$11, "data-compound", _p$.e = _v$);
+          _p$.t = style(_el$11, _v$2, _p$.t);
+          _v$3 !== _p$.a && setAttribute(_el$11, "title", _p$.a = _v$3);
           return _p$;
         }, {
           e: void 0,
-          t: void 0
+          t: void 0,
+          a: void 0
         });
         return _el$11;
+      })()
+    }), _el$0);
+    insert(_el$7, createComponent(For, {
+      get each() {
+        return props.renderState().locations.slice(0, 8);
+      },
+      children: (location, index) => (() => {
+        var _el$12 = _tmpl$7$1(), _el$13 = _el$12.firstChild;
+        _el$12.$$click = () => props.onSelect({
+          kind: "location",
+          id: location.id
+        });
+        _el$12.addEventListener("mouseleave", () => props.onHover(null));
+        _el$12.addEventListener("mouseenter", () => props.onHover({
+          kind: "location",
+          id: location.id
+        }));
+        insert(_el$13, () => location.label.slice(0, 2).toUpperCase());
+        createRenderEffect((_p$) => {
+          var _v$4 = location.marker_role, _v$5 = {
+            ...toWorldPercentStyle(location.pos, props.renderState().world_bounds, {
+              left: `${12 + index() % 4 * 21}%`,
+              top: `${18 + Math.floor(index() / 4) * 26}%`
+            }),
+            opacity: location.marker_alpha
+          }, _v$6 = location.label;
+          _v$4 !== _p$.e && setAttribute(_el$12, "data-marker-role", _p$.e = _v$4);
+          _p$.t = style(_el$12, _v$5, _p$.t);
+          _v$6 !== _p$.a && setAttribute(_el$12, "title", _p$.a = _v$6);
+          return _p$;
+        }, {
+          e: void 0,
+          t: void 0,
+          a: void 0
+        });
+        return _el$12;
       })()
     }), _el$0);
     insert(_el$7, createComponent(For, {
@@ -5401,32 +5538,32 @@ function PixelWorldCanvasPlaceholder(props) {
         return props.renderState().agents.slice(0, 10);
       },
       children: (agent, index) => (() => {
-        var _el$13 = _tmpl$7$1(), _el$14 = _el$13.firstChild;
-        _el$13.$$click = () => props.onSelect({
+        var _el$14 = _tmpl$8$1(), _el$15 = _el$14.firstChild;
+        _el$14.$$click = () => props.onSelect({
           kind: "agent",
           id: agent.id
         });
-        _el$13.addEventListener("mouseleave", () => props.onHover(null));
-        _el$13.addEventListener("mouseenter", () => props.onHover({
+        _el$14.addEventListener("mouseleave", () => props.onHover(null));
+        _el$14.addEventListener("mouseenter", () => props.onHover({
           kind: "agent",
           id: agent.id
         }));
-        insert(_el$14, () => agent.label.slice(0, 1).toUpperCase());
+        insert(_el$15, () => agent.label.slice(0, 1).toUpperCase());
         createRenderEffect((_p$) => {
-          var _v$3 = agent.position_source, _v$4 = toWorldPercentStyle(agent.pos, props.renderState().world_bounds, {
+          var _v$7 = agent.position_source, _v$8 = toWorldPercentStyle(agent.pos, props.renderState().world_bounds, {
             left: `${18 + index() % 5 * 15}%`,
             top: `${14 + Math.floor(index() / 5) * 22}%`
-          }), _v$5 = agent.label;
-          _v$3 !== _p$.e && setAttribute(_el$13, "data-position-source", _p$.e = _v$3);
-          _p$.t = style(_el$13, _v$4, _p$.t);
-          _v$5 !== _p$.a && setAttribute(_el$13, "title", _p$.a = _v$5);
+          }), _v$9 = agent.label;
+          _v$7 !== _p$.e && setAttribute(_el$14, "data-position-source", _p$.e = _v$7);
+          _p$.t = style(_el$14, _v$8, _p$.t);
+          _v$9 !== _p$.a && setAttribute(_el$14, "title", _p$.a = _v$9);
           return _p$;
         }, {
           e: void 0,
           t: void 0,
           a: void 0
         });
-        return _el$13;
+        return _el$14;
       })()
     }), _el$0);
     insert(_el$7, createComponent(Show, {
@@ -5598,56 +5735,57 @@ function PixelWorldHost(props) {
     });
   });
   return (() => {
-    var _el$15 = _tmpl$1$1(), _el$16 = _el$15.firstChild, _el$17 = _el$16.firstChild, _el$18 = _el$17.nextSibling, _el$19 = _el$16.nextSibling, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$21.nextSibling, _el$23 = _el$22.nextSibling, _el$24 = _el$23.nextSibling, _el$25 = _el$24.nextSibling, _el$26 = _el$25.nextSibling, _el$27 = _el$26.nextSibling, _el$31 = _el$27.nextSibling, _el$32 = _el$31.nextSibling, _el$33 = _el$32.nextSibling, _el$40 = _el$19.nextSibling, _el$41 = _el$40.firstChild, _el$42 = _el$41.nextSibling, _el$43 = _el$42.firstChild;
-    insert(_el$17, () => tr$1(locale(), "嵌入式像素世界层", "Embedded Pixel World Layer"));
-    insert(_el$18, () => tr$1(locale(), "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。", "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer."));
-    insert(_el$20, () => `locations=${renderState().locations.length}`);
-    insert(_el$21, () => `agents=${renderState().agents.length}`);
-    insert(_el$22, () => `links=${renderState().links.length}`);
-    insert(_el$23, () => `hotspots=${renderState().visual_hotspots.length}`);
-    insert(_el$24, () => `derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`);
-    insert(_el$25, () => renderState().world_bounds ? "world_bounds=ready" : "world_bounds=missing");
-    insert(_el$26, () => `renderer=${rendererStatus()}`);
-    insert(_el$27, () => `runtime=${runtimeSource()}`);
-    insert(_el$19, createComponent(Show, {
+    var _el$16 = _tmpl$10$1(), _el$17 = _el$16.firstChild, _el$18 = _el$17.firstChild, _el$19 = _el$18.nextSibling, _el$20 = _el$17.nextSibling, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$23 = _el$22.nextSibling, _el$24 = _el$23.nextSibling, _el$25 = _el$24.nextSibling, _el$26 = _el$25.nextSibling, _el$27 = _el$26.nextSibling, _el$28 = _el$27.nextSibling, _el$29 = _el$28.nextSibling, _el$33 = _el$29.nextSibling, _el$34 = _el$33.nextSibling, _el$35 = _el$34.nextSibling, _el$42 = _el$20.nextSibling, _el$43 = _el$42.firstChild, _el$44 = _el$43.nextSibling, _el$45 = _el$44.firstChild;
+    insert(_el$18, () => tr$1(locale(), "嵌入式像素世界层", "Embedded Pixel World Layer"));
+    insert(_el$19, () => tr$1(locale(), "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。", "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer."));
+    insert(_el$21, () => `locations=${renderState().locations.length}`);
+    insert(_el$22, () => `fragments=${renderState().fragment_terrain.length}`);
+    insert(_el$23, () => `agents=${renderState().agents.length}`);
+    insert(_el$24, () => `links=${renderState().links.length}`);
+    insert(_el$25, () => `hotspots=${renderState().visual_hotspots.length}`);
+    insert(_el$26, () => `derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`);
+    insert(_el$27, () => renderState().world_bounds ? "world_bounds=ready" : "world_bounds=missing");
+    insert(_el$28, () => `renderer=${rendererStatus()}`);
+    insert(_el$29, () => `runtime=${runtimeSource()}`);
+    insert(_el$20, createComponent(Show, {
       get when() {
         return cameraState();
       },
       get children() {
-        var _el$28 = _tmpl$8$1();
-        insert(_el$28, () => `zoom=${cameraState().zoom.toFixed(2)}`);
-        return _el$28;
+        var _el$30 = _tmpl$9$1();
+        insert(_el$30, () => `zoom=${cameraState().zoom.toFixed(2)}`);
+        return _el$30;
       }
-    }), _el$31);
-    insert(_el$19, createComponent(Show, {
+    }), _el$33);
+    insert(_el$20, createComponent(Show, {
       get when() {
         return cameraState();
       },
       get children() {
-        var _el$29 = _tmpl$8$1();
-        insert(_el$29, () => `pan=${cameraState().pan_x_px},${cameraState().pan_y_px}`);
-        return _el$29;
+        var _el$31 = _tmpl$9$1();
+        insert(_el$31, () => `pan=${cameraState().pan_x_px},${cameraState().pan_y_px}`);
+        return _el$31;
       }
-    }), _el$31);
-    insert(_el$19, createComponent(Show, {
+    }), _el$33);
+    insert(_el$20, createComponent(Show, {
       get when() {
         return hoverSelection();
       },
       get children() {
-        var _el$30 = _tmpl$8$1();
-        insert(_el$30, () => `hover=${hoverSelection().kind}/${hoverSelection().id}`);
-        return _el$30;
+        var _el$32 = _tmpl$9$1();
+        insert(_el$32, () => `hover=${hoverSelection().kind}/${hoverSelection().id}`);
+        return _el$32;
       }
-    }), _el$31);
-    _el$31.$$click = () => {
+    }), _el$33);
+    _el$33.$$click = () => {
       void setReadyMode();
     };
-    insert(_el$31, () => tr$1(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer"));
-    _el$32.$$click = simulateFatal;
-    insert(_el$32, () => tr$1(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal"));
-    _el$33.$$click = setFallbackMode;
-    insert(_el$33, () => tr$1(locale(), "切回 Host Fallback", "Back To Host Fallback"));
-    insert(_el$15, createComponent(Show, {
+    insert(_el$33, () => tr$1(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer"));
+    _el$34.$$click = simulateFatal;
+    insert(_el$34, () => tr$1(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal"));
+    _el$35.$$click = setFallbackMode;
+    insert(_el$35, () => tr$1(locale(), "切回 Host Fallback", "Back To Host Fallback"));
+    insert(_el$16, createComponent(Show, {
       get when() {
         return rendererStatus() !== "fallback";
       },
@@ -5669,29 +5807,29 @@ function PixelWorldHost(props) {
           }
         });
       }
-    }), _el$40);
-    insert(_el$15, createComponent(Show, {
+    }), _el$42);
+    insert(_el$16, createComponent(Show, {
       get when() {
         return rendererStatus() === "fallback";
       },
       get children() {
-        var _el$34 = _tmpl$0$1(), _el$35 = _el$34.firstChild, _el$36 = _el$35.firstChild, _el$37 = _el$35.nextSibling, _el$38 = _el$37.firstChild;
-        insert(_el$36, () => tr$1(locale(), "Renderer 未接管", "Renderer Not Attached"));
-        insert(_el$38, () => tr$1(locale(), "嵌入式 renderer 启动失败，页面已退回 host fallback 模式。正式玩法摘要、目标和明细主链继续可用。", "The embedded renderer failed to attach, so the page returned to host fallback mode. Formal gameplay summary, targets, and details remain available."));
-        insert(_el$37, createComponent(Show, {
+        var _el$36 = _tmpl$1$1(), _el$37 = _el$36.firstChild, _el$38 = _el$37.firstChild, _el$39 = _el$37.nextSibling, _el$40 = _el$39.firstChild;
+        insert(_el$38, () => tr$1(locale(), "Renderer 未接管", "Renderer Not Attached"));
+        insert(_el$40, () => tr$1(locale(), "嵌入式 renderer 启动失败，页面已退回 host fallback 模式。正式玩法摘要、目标和明细主链继续可用。", "The embedded renderer failed to attach, so the page returned to host fallback mode. Formal gameplay summary, targets, and details remain available."));
+        insert(_el$39, createComponent(Show, {
           get when() {
             return rendererFatal();
           },
           get children() {
-            var _el$39 = _tmpl$9$1();
-            insert(_el$39, () => `${rendererFatal().code}: ${rendererFatal().message}`);
-            return _el$39;
+            var _el$41 = _tmpl$0$1();
+            insert(_el$41, () => `${rendererFatal().code}: ${rendererFatal().message}`);
+            return _el$41;
           }
         }), null);
-        return _el$34;
+        return _el$36;
       }
-    }), _el$40);
-    insert(_el$15, createComponent(Show, {
+    }), _el$42);
+    insert(_el$16, createComponent(Show, {
       get when() {
         return rendererStatus() !== "ready";
       },
@@ -5704,10 +5842,10 @@ function PixelWorldHost(props) {
           onHover: (selection) => adapter().simulateHover(selection)
         });
       }
-    }), _el$40);
-    insert(_el$41, () => tr$1(locale(), "展开 Render DTO", "Expand Render DTO"));
-    insert(_el$43, () => JSON.stringify(renderState(), null, 2));
-    return _el$15;
+    }), _el$42);
+    insert(_el$43, () => tr$1(locale(), "展开 Render DTO", "Expand Render DTO"));
+    insert(_el$45, () => JSON.stringify(renderState(), null, 2));
+    return _el$16;
   })();
 }
 delegateEvents(["click"]);

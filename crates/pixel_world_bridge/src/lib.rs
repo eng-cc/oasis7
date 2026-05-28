@@ -7,7 +7,7 @@ use bevy::window::{PrimaryWindow, WindowPlugin};
 use js_sys::Function;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use serde_wasm_bindgen::{from_value, to_value};
+use serde_wasm_bindgen::{from_value, Serializer};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
@@ -36,6 +36,8 @@ struct Location {
     #[allow(dead_code)]
     resource_summary: String,
     size_hint_px: Option<f64>,
+    marker_role: Option<String>,
+    marker_alpha: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -60,6 +62,19 @@ struct Link {
     kind: String,
     from: Position,
     to: Position,
+    emphasis: Option<f64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct FragmentTerrainPatch {
+    id: String,
+    #[allow(dead_code)]
+    location_id: String,
+    pos: Position,
+    footprint_cm: f64,
+    #[allow(dead_code)]
+    dominant_compound: String,
+    color: [u8; 3],
     emphasis: Option<f64>,
 }
 
@@ -93,6 +108,8 @@ struct WorldBounds {
 struct RenderState {
     world_bounds: Option<WorldBounds>,
     locations: Vec<Location>,
+    #[serde(default)]
+    fragment_terrain: Vec<FragmentTerrainPatch>,
     agents: Vec<Agent>,
     links: Vec<Link>,
     visual_hotspots: Vec<VisualHotspot>,
@@ -191,6 +208,7 @@ struct BevyRuntimeState {
     hit_regions: Vec<HitRegion>,
     hover_key: Option<String>,
     grid_layout: Option<render::GridLayoutKey>,
+    fragment_entities: HashMap<String, Entity>,
     location_entities: HashMap<String, Entity>,
     agent_entities: HashMap<String, Entity>,
     link_entities: HashMap<String, Entity>,
@@ -217,7 +235,8 @@ fn clamp(value: f64, min: f64, max: f64) -> f64 {
 }
 
 fn js_value_from_serializable<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
-    to_value(value)
+    value
+        .serialize(&Serializer::json_compatible())
         .map_err(|error| JsValue::from_str(&format!("serialize js payload failed: {error}")))
 }
 
@@ -313,16 +332,17 @@ fn transform_for_line(
 
 fn emit_event_value(value: &Value) -> Result<(), JsValue> {
     let payload = js_value_from_serializable(value)?;
-    BRIDGE_SHARED.with(|shared| {
+    let callback = BRIDGE_SHARED.with(|shared| {
         shared
             .borrow()
             .on_event
-            .as_ref()
-            .ok_or_else(|| JsValue::from_str("event callback missing"))?
-            .call1(&JsValue::NULL, &payload)
-            .map(|_| ())
-            .map_err(|_| JsValue::from_str("event callback failed"))
-    })
+            .clone()
+            .ok_or_else(|| JsValue::from_str("event callback missing"))
+    })?;
+    callback
+        .call1(&JsValue::NULL, &payload)
+        .map(|_| ())
+        .map_err(|_| JsValue::from_str("event callback failed"))
 }
 
 fn emit_camera_state(camera: &CameraState) -> Result<(), JsValue> {
@@ -342,11 +362,10 @@ fn emit_fatal_payload(message: &str) -> JsValue {
         "message": message,
     });
     if let Ok(js_payload) = js_value_from_serializable(&payload) {
-        BRIDGE_SHARED.with(|shared| {
-            if let Some(on_fatal) = shared.borrow().on_fatal.as_ref() {
-                let _ = on_fatal.call1(&JsValue::NULL, &js_payload);
-            }
-        });
+        let on_fatal = BRIDGE_SHARED.with(|shared| shared.borrow().on_fatal.clone());
+        if let Some(on_fatal) = on_fatal {
+            let _ = on_fatal.call1(&JsValue::NULL, &js_payload);
+        }
     }
     js_value_from_serializable(&json!({ "status": "fallback", "fatal": payload }))
         .unwrap_or_else(|_| status_value("fallback"))
@@ -640,7 +659,10 @@ impl PixelWorldBridge {
 
 #[cfg(test)]
 mod tests {
-    use crate::render::build_grid_layout;
+    use crate::render::{
+        agent_visual_style, build_grid_layout, classify_fragment_lod, fragment_screen_size_px,
+        fragment_visual_style, location_visual_style, FragmentTerrainLod,
+    };
 
     use super::*;
 
@@ -668,6 +690,107 @@ mod tests {
         assert!(point.1 >= 0.0 && point.1 <= 540.0);
     }
 
+    fn assert_fragment_lod_uses_screen_space_size() {
+        let bounds = WorldBounds {
+            width_cm: 1_000_000.0,
+            depth_cm: 1_000_000.0,
+            height_cm: 0.0,
+        };
+        let mut camera = CameraState::default();
+        let background_size = fragment_screen_size_px(10_000.0, &bounds, 1000.0, 1000.0, &camera);
+        assert_eq!(
+            classify_fragment_lod(background_size),
+            FragmentTerrainLod::Background
+        );
+
+        camera.zoom = 2.0;
+        let detail_size = fragment_screen_size_px(10_000.0, &bounds, 1000.0, 1000.0, &camera);
+        assert_eq!(
+            classify_fragment_lod(detail_size),
+            FragmentTerrainLod::Detail
+        );
+        assert_eq!(classify_fragment_lod(1.0), FragmentTerrainLod::Hidden);
+    }
+
+    fn assert_fragment_lod_keeps_blocks_background_at_agent_readable_scale() {
+        let bounds = WorldBounds {
+            width_cm: 3_000_000.0,
+            depth_cm: 2_000_000.0,
+            height_cm: 0.0,
+        };
+        let mut camera = CameraState::default();
+        camera.zoom = 3.0;
+
+        let screen_size = fragment_screen_size_px(12_000.0, &bounds, 960.0, 540.0, &camera);
+        assert!(screen_size < 10.0);
+        assert_eq!(
+            classify_fragment_lod(screen_size),
+            FragmentTerrainLod::Background
+        );
+    }
+
+    fn assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents() {
+        let bounds = WorldBounds {
+            width_cm: 3_000_000.0,
+            depth_cm: 2_000_000.0,
+            height_cm: 0.0,
+        };
+        let mut camera = CameraState::default();
+        camera.zoom = 3.0;
+        let fragment = FragmentTerrainPatch {
+            id: "fragment:loc-0:0".to_string(),
+            location_id: "loc-0".to_string(),
+            pos: Position {
+                x_cm: 1_500_000.0,
+                y_cm: 1_000_000.0,
+                z_cm: 0.0,
+            },
+            footprint_cm: 12_000.0,
+            dominant_compound: "silicate_matrix".to_string(),
+            color: [141, 199, 170],
+            emphasis: Some(0.58),
+        };
+        let location = Location {
+            id: "loc-0".to_string(),
+            label: "Fragment Field Anchor".to_string(),
+            pos: Position {
+                x_cm: 1_500_000.0,
+                y_cm: 1_000_000.0,
+                z_cm: 0.0,
+            },
+            radius_cm: 30_000.0,
+            resource_summary: "-".to_string(),
+            size_hint_px: Some(10.0),
+            marker_role: Some("logic_anchor".to_string()),
+            marker_alpha: Some(0.32),
+        };
+        let agent = Agent {
+            id: "agent-0".to_string(),
+            label: "Survey Agent".to_string(),
+            pos: Some(Position {
+                x_cm: 1_520_000.0,
+                y_cm: 1_015_000.0,
+                z_cm: 0.0,
+            }),
+            location_id: Some("loc-0".to_string()),
+            resource_summary: "-".to_string(),
+            status_badges: vec!["position=location_derived".to_string()],
+            size_hint_px: Some(16.0),
+        };
+
+        let fragment_style =
+            fragment_visual_style(&fragment, &bounds, 960.0, 540.0, &camera).unwrap();
+        let location_style = location_visual_style(&location, 0.0);
+        let agent_style = agent_visual_style(&agent, true, 0.0, 0);
+
+        assert_eq!(fragment_style.lod, FragmentTerrainLod::Background);
+        assert!(fragment_style.size_px < agent_style.size_px);
+        assert!(fragment_style.alpha < location_style.alpha);
+        assert!(location_style.alpha < 0.5);
+        assert!(fragment_style.layer_z < location_style.layer_z);
+        assert!(location_style.layer_z < agent_style.layer_z);
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn grid_layout_is_stable_for_same_camera_and_size() {
@@ -686,6 +809,24 @@ mod tests {
         assert_fallback_point_stays_within_canvas();
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn fragment_lod_uses_screen_space_size() {
+        assert_fragment_lod_uses_screen_space_size();
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn fragment_lod_keeps_blocks_background_at_agent_readable_scale() {
+        assert_fragment_lod_keeps_blocks_background_at_agent_readable_scale();
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn bevy_visual_styles_keep_fragments_background_behind_readable_agents() {
+        assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents();
+    }
+
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen_test]
     fn wasm_grid_layout_is_stable_for_same_camera_and_size() {
@@ -702,5 +843,23 @@ mod tests {
     #[wasm_bindgen_test]
     fn wasm_fallback_point_stays_within_canvas() {
         assert_fallback_point_stays_within_canvas();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test]
+    fn wasm_fragment_lod_uses_screen_space_size() {
+        assert_fragment_lod_uses_screen_space_size();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test]
+    fn wasm_fragment_lod_keeps_blocks_background_at_agent_readable_scale() {
+        assert_fragment_lod_keeps_blocks_background_at_agent_readable_scale();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test]
+    fn wasm_bevy_visual_styles_keep_fragments_background_behind_readable_agents() {
+        assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents();
     }
 }

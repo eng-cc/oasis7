@@ -5,6 +5,7 @@
   "scripts": {
     "test:ui": "vitest run",
     "test:ui:watch": "vitest",
+    "test:pixel-world:visual": "node ./scripts/pixel-world-fragment-visual-smoke.mjs",
     "build:software-safe:bundle": "vite build --config vite.software-safe.config.mjs",
     "build:software-safe": "npm run build:software-safe:bundle && node ./scripts/finalize-software-safe-build.mjs"
   },
