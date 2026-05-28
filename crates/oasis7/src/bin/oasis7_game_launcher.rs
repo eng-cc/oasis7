@@ -603,6 +603,9 @@ fn run_static_http_loop(
 
         match listener.accept() {
             Ok((stream, _addr)) => {
+                stream
+                    .set_nonblocking(false)
+                    .map_err(|err| format!("failed to set static HTTP stream blocking: {err}"))?;
                 let root_dir = Arc::clone(&root_dir);
                 let live_bind = Arc::clone(&live_bind);
                 let default_viewer_player_id = Arc::clone(&default_viewer_player_id);

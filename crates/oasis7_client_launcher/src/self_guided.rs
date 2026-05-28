@@ -392,11 +392,15 @@ impl ClientLauncherApp {
 
     pub(super) fn start_demo_mode_one_click(&mut self) {
         self.apply_demo_mode_safe_defaults();
-        self.demo_mode_phase = DemoModePhase::StartChainRequested;
+        self.demo_mode_phase = if chain_runtime_effectively_enabled(&self.config) {
+            DemoModePhase::StartChainRequested
+        } else {
+            DemoModePhase::StartGameRequested
+        };
         self.increment_guidance_counter(GuidanceCounter::DemoRuns);
         self.append_log(self.tr(
-            "演示模式：已应用安全默认配置，准备串行启动区块链与游戏。",
-            "Demo mode: safe defaults applied, preparing serial chain/game startup.",
+            "演示模式：已应用安全默认配置，准备启动游戏。",
+            "Demo mode: safe defaults applied, preparing game startup.",
         ));
     }
 

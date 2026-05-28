@@ -750,9 +750,11 @@ pub(super) fn validate_game_config_with_launcher_bin(
     launcher_bin: &str,
 ) -> Vec<String> {
     let mut issues = Vec::new();
-    if DeploymentMode::parse(config.deployment_mode.as_str(), "deployment mode").is_err() {
+    if DeploymentMode::parse_user_facing(config.deployment_mode.as_str(), "deployment mode")
+        .is_err()
+    {
         issues.push(
-            "deployment mode must be one of: trusted_local_only|hosted_public_join".to_string(),
+            "deployment mode must be hosted_public_join; trusted_local_only has been removed from the user launcher flow".to_string(),
         );
     }
     if parse_host_port(config.live_bind.as_str(), "live bind").is_err() {
@@ -940,7 +942,9 @@ pub(super) fn build_launcher_args_with_launcher_bin(
 
     let mut args = vec![
         "--deployment-mode".to_string(),
-        config.deployment_mode.trim().to_string(),
+        DeploymentMode::parse_user_facing(config.deployment_mode.as_str(), "deployment_mode")?
+            .as_str()
+            .to_string(),
         "--live-bind".to_string(),
         config.live_bind.trim().to_string(),
         "--web-bind".to_string(),

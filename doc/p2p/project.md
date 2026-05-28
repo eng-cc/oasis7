@@ -646,7 +646,7 @@
     - `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G|hosted-account-env-tiering|5B\. 分环境执行清单|promotion gate" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/project.md .pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] hosted-account-staging-automation (PRD-P2P-029-G) [test_tier_required]: 补齐 hosted account 的 repo-owned 自动化链路，新增 `scripts/hosted-account-staging-smoke.sh`，让本地 required `preview_inline` smoke 与 staging `smtp + continuity` live smoke 复用同一入口，并把该入口接入 `scripts/ci-tests.sh required`。 Trace: .pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.yaml
+- [x] hosted-account-staging-automation (PRD-P2P-029-G) [test_tier_required]: 补齐 hosted account 的 repo-owned 自动化链路，新增 `scripts/hosted-account-staging-smoke.sh`，让本地 file backend 与 staging continuity smoke 统一走 `smtp + otp-fetch-command` 入口；该入口作为 `scripts/ci-tests.sh required` 的显式 opt-in 组件接入，默认在无云端 OTP/SMTP 凭据的 PR 环境跳过。 Trace: .pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.yaml
   - 产物文件:
     - `scripts/hosted-account-staging-smoke.sh`
     - `scripts/ci-tests.sh`

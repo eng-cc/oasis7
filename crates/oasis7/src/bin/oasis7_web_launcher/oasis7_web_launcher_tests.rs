@@ -25,7 +25,7 @@ use oasis7_proto::storage_profile::StorageProfile;
 fn parse_options_defaults() {
     let options = parse_options(std::iter::empty()).expect("parse options");
     assert_eq!(options.listen_bind, DEFAULT_LISTEN_BIND);
-    assert_eq!(options.initial_config.deployment_mode, "trusted_local_only");
+    assert_eq!(options.initial_config.deployment_mode, "hosted_public_join");
     assert_eq!(options.initial_config.scenario, DEFAULT_SCENARIO);
     assert_eq!(
         options.initial_config.chain_status_bind,
@@ -57,7 +57,7 @@ fn parse_options_defaults() {
     );
     assert_eq!(options.initial_config.chain_pos_max_past_slot_lag, "256");
     assert!(options.initial_config.llm_enabled);
-    assert!(options.initial_config.chain_enabled);
+    assert!(!options.initial_config.chain_enabled);
     assert!(!options.initial_config.auto_open_browser);
     assert!(options
         .initial_config
@@ -227,12 +227,12 @@ fn parse_options_rejects_unknown_option() {
 fn parse_options_rejects_unknown_deployment_mode() {
     let err = parse_options(["--deployment-mode", "invalid"].into_iter())
         .expect_err("invalid deployment mode should fail");
-    assert!(err.contains("trusted_local_only"));
+    assert!(err.contains("hosted_public_join"));
 }
 
 #[test]
-fn parse_options_rejects_out_of_range_chain_pos_proposal_tick_phase() {
-    let err = parse_options(
+fn parse_options_ignores_chain_tuning_when_hosted_public_join_disables_chain() {
+    let options = parse_options(
         [
             "--chain-pos-ticks-per-slot",
             "4",
@@ -241,8 +241,11 @@ fn parse_options_rejects_out_of_range_chain_pos_proposal_tick_phase() {
         ]
         .into_iter(),
     )
-    .expect_err("out-of-range proposal tick phase should fail");
-    assert!(err.contains("--chain-pos-proposal-tick-phase"));
+    .expect("hosted public join disables local chain validation");
+    assert_eq!(options.initial_config.deployment_mode, "hosted_public_join");
+    assert!(!options.initial_config.chain_enabled);
+    assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "4");
+    assert_eq!(options.initial_config.chain_pos_proposal_tick_phase, "4");
 }
 
 #[test]
@@ -296,6 +299,7 @@ fn build_launcher_args_includes_chain_disable_when_off() {
 #[test]
 fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_on() {
     let config = LauncherConfig {
+        deployment_mode: "hosted_public_join".to_string(),
         viewer_static_dir: ".".to_string(),
         chain_enabled: true,
         chain_status_bind: "127.0.0.1:6121".to_string(),
@@ -325,6 +329,7 @@ fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_on() {
 #[test]
 fn build_chain_runtime_args_includes_chain_overrides_when_on() {
     let config = LauncherConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         viewer_static_dir: ".".to_string(),
         chain_enabled: true,
         chain_status_bind: "127.0.0.1:6121".to_string(),
@@ -387,6 +392,7 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
 #[test]
 fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
     let config = LauncherConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         viewer_static_dir: ".".to_string(),
         chain_enabled: true,
         chain_status_bind: "127.0.0.1:6121".to_string(),
@@ -414,6 +420,7 @@ fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
 #[test]
 fn build_chain_runtime_args_resolves_public_testnet_tier_manifest() {
     let config = LauncherConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         viewer_static_dir: ".".to_string(),
         chain_enabled: true,
         chain_status_bind: "127.0.0.1:6121".to_string(),
@@ -460,6 +467,7 @@ fn viewer_dev_dist_candidates_only_return_oasis7_path() {
 fn build_chain_runtime_args_supports_all_storage_profiles() {
     for expected in ["dev_local", "release_default", "soak_forensics"] {
         let config = LauncherConfig {
+            deployment_mode: "trusted_local_only".to_string(),
             viewer_static_dir: ".".to_string(),
             chain_enabled: true,
             chain_status_bind: "127.0.0.1:6121".to_string(),
@@ -477,6 +485,7 @@ fn build_chain_runtime_args_supports_all_storage_profiles() {
 #[test]
 fn build_chain_runtime_args_rejects_unknown_storage_profile() {
     let config = LauncherConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         chain_enabled: true,
         chain_storage_profile: "unknown".to_string(),
         ..LauncherConfig::default()
@@ -490,6 +499,7 @@ fn build_chain_runtime_args_rejects_unknown_storage_profile() {
 #[test]
 fn build_chain_runtime_args_requires_public_entry_confirmation() {
     let err = build_chain_runtime_args(&LauncherConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         chain_enabled: true,
         chain_status_bind: "127.0.0.1:6121".to_string(),
         chain_node_id: "chain-a".to_string(),

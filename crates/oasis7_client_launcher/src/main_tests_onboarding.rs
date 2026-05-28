@@ -58,7 +58,7 @@ fn apply_safe_defaults_for_game_target_recovers_required_fields() {
 }
 
 #[test]
-fn apply_safe_defaults_for_chain_target_recovers_required_fields() {
+fn apply_safe_defaults_for_chain_target_keeps_user_flow_chain_disabled() {
     let mut app = ClientLauncherApp::default();
     app.config.chain_enabled = false;
     app.config.chain_runtime_bin.clear();
@@ -74,9 +74,9 @@ fn apply_safe_defaults_for_chain_target_recovers_required_fields() {
     app.apply_safe_defaults_for_startup_target(StartupGuideTarget::Chain);
 
     let chain_issues = collect_chain_required_config_issues(&app.config);
-    assert!(app.config.chain_enabled);
+    assert!(!app.config.chain_enabled);
     assert!(chain_issues.is_empty());
-    assert_eq!(app.chain_runtime_status, ChainRuntimeStatus::NotStarted);
+    assert_eq!(app.chain_runtime_status, ChainRuntimeStatus::Disabled);
 }
 
 #[test]
@@ -315,6 +315,18 @@ fn restore_last_successful_config_profile_normalizes_hosted_public_join() {
 }
 
 #[test]
+fn normalize_launch_config_maps_legacy_trusted_local_preview_to_hosted_join() {
+    let mut config = LaunchConfig::default();
+    config.deployment_mode = "trusted_local_only".to_string();
+    config.chain_enabled = true;
+
+    normalize_launch_config(&mut config);
+
+    assert_eq!(config.deployment_mode, "hosted_public_join");
+    assert!(!config.chain_enabled);
+}
+
+#[test]
 fn clear_last_successful_config_profile_clears_saved_snapshot() {
     let mut app = ClientLauncherApp::default();
     app.ux_state.last_successful_config = Some(app.config.clone());
@@ -334,8 +346,8 @@ fn start_demo_mode_one_click_applies_safe_defaults() {
 
     app.start_demo_mode_one_click();
 
-    assert_eq!(app.demo_mode_phase, DemoModePhase::StartChainRequested);
-    assert!(app.config.chain_enabled);
+    assert_eq!(app.demo_mode_phase, DemoModePhase::StartGameRequested);
+    assert!(!app.config.chain_enabled);
     assert_eq!(app.config.scenario, "");
 }
 
@@ -343,7 +355,6 @@ fn start_demo_mode_one_click_applies_safe_defaults() {
 fn advance_demo_mode_reaches_done_when_chain_and_game_are_ready() {
     let mut app = ClientLauncherApp::default();
     app.start_demo_mode_one_click();
-    app.advance_demo_mode(&[], &[], false, true);
     assert_eq!(app.demo_mode_phase, DemoModePhase::StartGameRequested);
 
     app.advance_demo_mode(&[], &[], true, true);
@@ -351,10 +362,10 @@ fn advance_demo_mode_reaches_done_when_chain_and_game_are_ready() {
 }
 
 #[test]
-fn advance_demo_mode_fails_when_chain_config_is_blocked() {
+fn advance_demo_mode_fails_when_game_config_is_blocked() {
     let mut app = ClientLauncherApp::default();
     app.start_demo_mode_one_click();
-    app.advance_demo_mode(&[], &[ConfigIssue::ChainNodeIdRequired], false, false);
+    app.advance_demo_mode(&[ConfigIssue::LiveBindInvalid], &[], false, false);
     assert_eq!(app.demo_mode_phase, DemoModePhase::Failed);
 }
 

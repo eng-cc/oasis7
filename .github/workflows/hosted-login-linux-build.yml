@@ -1,0 +1,123 @@
+name: Hosted Login Linux Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_profile:
+        description: "Cargo profile for the hosted login launcher binary"
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - dev
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  RUST_TOOLCHAIN: 1.92.0
+
+jobs:
+  build-linux-x86-64:
+    name: hosted-login-linux-x86-64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install viewer web dependencies
+        run: npm ci --prefix crates/oasis7_viewer
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup default "${RUST_TOOLCHAIN}"
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: hosted-login-linux-x86-64-v1
+          cache-on-failure: true
+
+      - name: Resolve build profile
+        id: profile
+        shell: bash
+        run: |
+          profile="${{ github.event.inputs.build_profile || 'release' }}"
+          case "${profile}" in
+            release)
+              echo "cargo_args=--release" >> "${GITHUB_OUTPUT}"
+              echo "binary_dir=release" >> "${GITHUB_OUTPUT}"
+              ;;
+            dev)
+              echo "cargo_args=" >> "${GITHUB_OUTPUT}"
+              echo "binary_dir=debug" >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "error: unsupported build_profile=${profile}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Build hosted login launcher
+        run: |
+          env -u RUSTC_WRAPPER cargo build \
+            ${{ steps.profile.outputs.cargo_args }} \
+            -p oasis7 \
+            --bin oasis7_game_launcher \
+            --bin oasis7_viewer_live
+
+      - name: Build viewer web dist
+        run: |
+          ./scripts/build-viewer-software-safe.sh
+          ./scripts/copy-viewer-web-dist.sh --dist-dir output/hosted-login/web
+
+      - name: Stage deployable artifact
+        run: |
+          mkdir -p output/hosted-login/bin
+          cp "target/${{ steps.profile.outputs.binary_dir }}/oasis7_game_launcher" \
+            output/hosted-login/bin/oasis7_game_launcher_v3
+          cp "target/${{ steps.profile.outputs.binary_dir }}/oasis7_viewer_live" \
+            output/hosted-login/bin/oasis7_viewer_live
+          chmod +x output/hosted-login/bin/oasis7_game_launcher_v3
+          chmod +x output/hosted-login/bin/oasis7_viewer_live
+          {
+            echo "git_sha=${GITHUB_SHA}"
+            echo "profile=${{ github.event.inputs.build_profile || 'release' }}"
+            echo "target=x86_64-unknown-linux-gnu"
+            echo "binary=bin/oasis7_game_launcher_v3"
+            echo "viewer_live=bin/oasis7_viewer_live"
+            echo "web=web/"
+          } > output/hosted-login/BUILDINFO
+          (
+            cd output/hosted-login
+            sha256sum bin/oasis7_game_launcher_v3 bin/oasis7_viewer_live > SHA256SUMS
+            tar -czf ../hosted-login-linux-x86_64.tar.gz .
+          )
+
+      - name: Upload hosted login Linux artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: hosted-login-linux-x86_64-${{ github.sha }}
+          path: output/hosted-login-linux-x86_64.tar.gz
+          if-no-files-found: error

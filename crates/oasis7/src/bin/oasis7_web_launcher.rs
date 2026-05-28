@@ -577,7 +577,7 @@ fn print_help() {
         "Usage: oasis7_web_launcher [options]\n\n\
 Options:\n\
   --listen-bind <host:port>       web console listen bind (default: {DEFAULT_LISTEN_BIND})\n\
-  --deployment-mode <mode>        trusted_local_only|hosted_public_join\n\
+  --deployment-mode <mode>        hosted_public_join\n\
   --launcher-bin <path>           oasis7_game_launcher binary path\n\
   --chain-runtime-bin <path>      oasis7_chain_runtime binary path\n\
   --console-static-dir <path>     launcher web static directory (default: ../web-launcher)\n\
@@ -789,7 +789,7 @@ where
     normalize_chain_network_tier_config(&mut options.initial_config)?;
 
     parse_host_port(options.listen_bind.as_str(), "--listen-bind")?;
-    let deployment_mode = DeploymentMode::parse(
+    let deployment_mode = DeploymentMode::parse_user_facing(
         options.initial_config.deployment_mode.as_str(),
         "--deployment-mode",
     )?;

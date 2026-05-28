@@ -1383,8 +1383,7 @@ async function startHostedAccountLogin() {
     state.hostedLogin.challengeId = String(payload.challenge.challenge_id || "").trim() || null;
     state.hostedLogin.maskedLoginHint = String(payload.challenge.masked_login_hint || "").trim() || null;
     state.hostedLogin.deliveryMode = String(payload.challenge.delivery_mode || "").trim() || null;
-    state.hostedLogin.previewCode = String(payload.challenge.preview_code || "").trim() || null;
-    state.hostedLogin.code = state.hostedLogin.previewCode || "";
+    state.hostedLogin.code = "";
     state.hostedLogin.expiresAtUnixMs = payload?.challenge?.expires_at_unix_ms == null ? null : Number(payload.challenge.expires_at_unix_ms);
     state.hostedLogin.retryAfterSeconds = null;
     state.hostedLogin.accountExists = false;

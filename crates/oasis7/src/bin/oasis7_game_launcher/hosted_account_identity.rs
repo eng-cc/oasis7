@@ -18,9 +18,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub(super) const HOSTED_ACCOUNT_LOGIN_START_ROUTE: &str = "/api/public/hosted-account/login/start";
 pub(super) const HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE: &str =
     "/api/public/hosted-account/login/complete";
-const HOSTED_LOGIN_DELIVERY_MODE_ENV: &str = "OASIS7_HOSTED_LOGIN_DELIVERY_MODE";
-const HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE: &str = "preview_inline";
-const HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY: &str = "server_log_only";
 const HOSTED_LOGIN_DELIVERY_MODE_SMTP: &str = "smtp";
 const HOSTED_LOGIN_SMTP_HOST_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_HOST";
 const HOSTED_LOGIN_SMTP_PORT_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_PORT";
@@ -86,15 +83,14 @@ pub(super) struct HostedAccountLoginChallengeSnapshot {
     pub(super) masked_login_hint: String,
     pub(super) delivery_mode: String,
     pub(super) expires_at_unix_ms: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) preview_code: Option<String>,
 }
 
 #[derive(Debug)]
 pub(super) struct HostedAccountIdentityBroker {
     store_backend: HostedAccountStoreBackend,
-    delivery_mode: String,
     smtp_config: Option<HostedLoginSmtpConfig>,
+    #[cfg(test)]
+    test_log_delivery: bool,
     next_challenge_sequence: u64,
     otp_secret: [u8; 32],
     recent_start_timestamps_by_factor: BTreeMap<String, VecDeque<u64>>,
@@ -140,28 +136,19 @@ pub(super) struct ReservedHostedLoginStart {
 
 #[derive(Debug, Clone)]
 enum HostedLoginDeliveryPlan {
-    PreviewInline,
-    ServerLogOnly,
+    #[cfg(test)]
+    TestLogOnly,
     Smtp(HostedLoginSmtpConfig),
     SmtpUnavailable,
 }
 
 impl HostedAccountIdentityBroker {
     pub(super) fn from_env() -> Result<Self, String> {
-        let delivery_mode = normalize_delivery_mode(
-            std::env::var(HOSTED_LOGIN_DELIVERY_MODE_ENV)
-                .ok()
-                .as_deref(),
-        );
-        let smtp_config = if delivery_mode == HOSTED_LOGIN_DELIVERY_MODE_SMTP {
-            Some(HostedLoginSmtpConfig::from_env()?)
-        } else {
-            None
-        };
         Ok(Self {
             store_backend: HostedAccountStoreBackend::from_env()?,
-            delivery_mode,
-            smtp_config,
+            smtp_config: Some(HostedLoginSmtpConfig::from_env()?),
+            #[cfg(test)]
+            test_log_delivery: false,
             next_challenge_sequence: 0,
             otp_secret: random_otp_secret(),
             recent_start_timestamps_by_factor: BTreeMap::new(),
@@ -173,8 +160,8 @@ impl HostedAccountIdentityBroker {
     fn with_store_path(store_path: PathBuf) -> Result<Self, String> {
         Ok(Self {
             store_backend: HostedAccountStoreBackend::with_file_store_path(store_path)?,
-            delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
             smtp_config: None,
+            test_log_delivery: true,
             next_challenge_sequence: 0,
             otp_secret: [0x5a; 32],
             recent_start_timestamps_by_factor: BTreeMap::new(),
@@ -185,8 +172,9 @@ impl HostedAccountIdentityBroker {
     pub(super) fn disabled() -> Self {
         Self {
             store_backend: HostedAccountStoreBackend::disabled(),
-            delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
             smtp_config: None,
+            #[cfg(test)]
+            test_log_delivery: true,
             next_challenge_sequence: 0,
             otp_secret: [0u8; 32],
             recent_start_timestamps_by_factor: BTreeMap::new(),
@@ -274,13 +262,8 @@ impl HostedAccountIdentityBroker {
             challenge_id,
             login_channel: channel.to_string(),
             masked_login_hint,
-            delivery_mode: self.delivery_mode.clone(),
+            delivery_mode: HOSTED_LOGIN_DELIVERY_MODE_SMTP.to_string(),
             expires_at_unix_ms,
-            preview_code: if self.delivery_mode == HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE {
-                Some(otp_code)
-            } else {
-                None
-            },
         };
         Ok(ReservedHostedLoginStart {
             factor_key,
@@ -559,23 +542,22 @@ impl HostedAccountIdentityBroker {
     }
 
     fn delivery_plan(&self) -> HostedLoginDeliveryPlan {
-        match self.delivery_mode.as_str() {
-            HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY => HostedLoginDeliveryPlan::ServerLogOnly,
-            HOSTED_LOGIN_DELIVERY_MODE_SMTP => self
-                .smtp_config
-                .clone()
-                .map(HostedLoginDeliveryPlan::Smtp)
-                .unwrap_or(HostedLoginDeliveryPlan::SmtpUnavailable),
-            _ => HostedLoginDeliveryPlan::PreviewInline,
+        if let Some(config) = self.smtp_config.clone() {
+            return HostedLoginDeliveryPlan::Smtp(config);
         }
+        #[cfg(test)]
+        if self.test_log_delivery {
+            return HostedLoginDeliveryPlan::TestLogOnly;
+        }
+        HostedLoginDeliveryPlan::SmtpUnavailable
     }
 }
 
 impl ReservedHostedLoginStart {
     pub(super) fn deliver(&self) -> Result<(), String> {
         match &self.delivery_plan {
-            HostedLoginDeliveryPlan::PreviewInline => Ok(()),
-            HostedLoginDeliveryPlan::ServerLogOnly => {
+            #[cfg(test)]
+            HostedLoginDeliveryPlan::TestLogOnly => {
                 emit_delivery_notice(
                     self.challenge.login_channel.as_str(),
                     self.challenge.masked_login_hint.as_str(),
@@ -726,16 +708,7 @@ fn account_summary_from_record(record: &HostedAccountRecord) -> HostedAccountSum
     }
 }
 
-fn normalize_delivery_mode(raw: Option<&str>) -> String {
-    match raw.unwrap_or("").trim() {
-        HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY => {
-            HOSTED_LOGIN_DELIVERY_MODE_SERVER_LOG_ONLY.to_string()
-        }
-        HOSTED_LOGIN_DELIVERY_MODE_SMTP => HOSTED_LOGIN_DELIVERY_MODE_SMTP.to_string(),
-        _ => HOSTED_LOGIN_DELIVERY_MODE_PREVIEW_INLINE.to_string(),
-    }
-}
-
+#[cfg(test)]
 fn emit_delivery_notice(channel: &str, masked_login_hint: &str, challenge_id: &str) {
     let message = format!(
         "hosted account login challenge issued: channel={channel} target={masked_login_hint} challenge_id={challenge_id}"
@@ -841,18 +814,18 @@ fn random_otp_secret() -> [u8; 32] {
 }
 
 fn build_login_otp_code(
-    otp_secret: &[u8; 32],
-    challenge_id: &str,
-    normalized_login_hint: &str,
+    _otp_secret: &[u8; 32],
+    _challenge_id: &str,
+    _normalized_login_hint: &str,
 ) -> String {
-    let mut input = Vec::with_capacity(challenge_id.len() + normalized_login_hint.len() + 1);
-    input.extend_from_slice(challenge_id.as_bytes());
-    input.push(0);
-    input.extend_from_slice(normalized_login_hint.as_bytes());
-    let digest = blake3::keyed_hash(otp_secret, input.as_slice());
-    let mut prefix = [0u8; 8];
-    prefix.copy_from_slice(&digest.as_bytes()[..8]);
-    format!("{:06}", u64::from_le_bytes(prefix) % 1_000_000)
+    loop {
+        let mut bytes = [0u8; 4];
+        OsRng.fill_bytes(&mut bytes);
+        let code = format!("{:06}", u32::from_le_bytes(bytes) % 1_000_000);
+        if code != "000000" && code != "123456" {
+            return code;
+        }
+    }
 }
 
 fn now_unix_ms() -> u64 {

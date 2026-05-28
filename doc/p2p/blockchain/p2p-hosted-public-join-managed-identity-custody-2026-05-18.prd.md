@@ -120,7 +120,7 @@
 - Environment Tiering Contract:
   - `dev`:
     - 目标: 本地开发、结构验证、单机 smoke。
-    - 允许: `OASIS7_HOSTED_ACCOUNT_STORE_BACKEND=file` 或无 OTS 配置下的 `auto` fallback，`OASIS7_HOSTED_LOGIN_DELIVERY_MODE=preview_inline|server_log_only`，临时测试邮箱，最小手工 smoke。
+    - 允许: `OASIS7_HOSTED_ACCOUNT_STORE_BACKEND=file` 或无 OTS 配置下的 `auto` fallback，临时测试邮箱，最小手工 smoke。
     - 禁止: 对外宣称为真实玩家入口；复用 staging/production 的 SMTP、Tablestore、strong-auth signer 或 approval code。
   - `staging`:
     - 目标: 受控测试用户试用、回归、演练、上线前 smoke。
@@ -129,7 +129,7 @@
     - 禁止: 与 production 共用邮箱投递、账户表、signer、风控阈值或 incident channel。
   - `production`:
     - 目标: 面向真实外部玩家的正式 hosted account 服务面。
-    - 要求: 必须使用独立真实 SMTP、独立托管账户存储、独立强鉴权 signer/custody 后端、正式告警与审计；不得启用 `preview_inline` 或 `server_log_only`。
+    - 要求: 必须使用独立真实 SMTP、独立托管账户存储、独立强鉴权 signer/custody 后端、正式告警与审计。
     - 要求: 上线前必须先通过 staging fresh smoke、operator runbook 演练与 claims review；production 只能共享“已批准的发布工件”，不能共享 staging 数据面。
     - 禁止: 复用 staging/dev 的邮箱、OTP、account store、approval code、tablestore table 或对外 claims。
 - Edge Cases & Error Handling:
@@ -176,7 +176,7 @@
 | PRD-P2P-029-D | device-session-and-runtime-binding / step-up-auth-and-risk-policy | `test_tier_required` | viewer UX、设备会话存储、step-up 状态与错误反馈回归 | 前端登录/重连/敏感动作文案 |
 | PRD-P2P-029-E | qa-abuse-and-liveops-runbook | `test_tier_required` + `test_tier_full` | 盗号、设备丢失、重复绑定、风控冻结、撤销与恢复 runbook | 运营事故、QA 阻断 |
 | PRD-P2P-029-F | external-wallet-bind-and-transfer-out | `test_tier_required` + `test_tier_full` | self-custody 升级、wallet bind、transfer-out 冷却与审计回归 | 账户迁移、custody exit |
-| PRD-P2P-029-G | hosted-account-env-tiering | `test_tier_required` | 文档冻结 `dev/staging/production` 边界；`rg -n "preview_inline|staging|production|tablestore|smtp|claims"` 覆盖 PRD/project/runbook；`./scripts/doc-governance-check.sh` + `git diff --check` | 环境隔离、试用/正式口径、operator 上线清单 |
+| PRD-P2P-029-G | hosted-account-env-tiering | `test_tier_required` | 文档冻结 `dev/staging/production` 边界；`rg -n "staging|production|tablestore|smtp|claims"` 覆盖 PRD/project/runbook；`./scripts/doc-governance-check.sh` + `git diff --check` | 环境隔离、试用/正式口径、operator 上线清单 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

@@ -2,7 +2,8 @@ use super::*;
 
 #[test]
 fn build_chain_runtime_args_resolves_public_testnet_manifest_from_tier() {
-    let mut config = LaunchConfig {
+    let config = LaunchConfig {
+        deployment_mode: "trusted_local_only".to_string(),
         chain_enabled: true,
         chain_status_bind: "127.0.0.1:6121".to_string(),
         chain_node_id: "chain-a".to_string(),
@@ -11,7 +12,6 @@ fn build_chain_runtime_args_resolves_public_testnet_manifest_from_tier() {
         chain_p2p_accept_public_entry: true,
         ..LaunchConfig::default()
     };
-    config.normalize();
 
     let args = build_chain_runtime_args(&config).expect("args should build");
 

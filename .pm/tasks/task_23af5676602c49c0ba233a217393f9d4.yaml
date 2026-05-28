@@ -1,0 +1,24 @@
+task_uid: task_23af5676602c49c0ba233a217393f9d4
+title: "remove trusted local preview mode from user launcher flow"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-world-simulator-remove-trusted-local-preview
+execution_log_path: .pm/tasks/task_23af5676602c49c0ba233a217393f9d4.execution.md
+status: committed
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/prd.md
+  - doc/p2p/prd.md
+  - crates/oasis7_client_launcher/src/main.rs
+  - crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs
+doc_refs:
+  - doc/world-simulator/viewer/viewer-manual.manual.md
+related_prd:
+  - PRD-WORLD_SIMULATOR
+acceptance:
+  - "Default user launcher deployment mode is hosted_public_join and local trusted preview is no longer exposed as a user-selectable mode."
+  - "CLI/config validation rejects trusted_local_only for user launcher surfaces or maps legacy configs to hosted_public_join with explicit tests."
+  - "Hosted/email login path is the default user-facing join path, and tests/docs no longer present trusted local preview as the normal user flow."
+handoff_to: []
+updated_at: 2026-05-26T17:02:01+08:00
+last_started_at: 2026-05-26T17:02:01+08:00
