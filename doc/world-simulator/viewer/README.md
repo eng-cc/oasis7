@@ -7,6 +7,7 @@
 - 想确认正式浏览器主入口、`viewer` / `software_safe` 兼容边界或弱机/CI 默认路径：先读 `viewer-web-software-safe-mode-2026-03-16.prd.md`
 - 想确认 `legacy_core.js` 拆分边界、`viewer.js` / `software_safe.js` canonical/compat 关系，或 `pixel-world-bridge` generated runtime 真值：先读 `viewer-web-single-source-build-truth-2026-05-19.prd.md`
 - 想确认 pixel-world 稀疏快照下的 agent 派生坐标、关系线与 fallback DOM 定位：先读 `viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
+- 想确认 pixel-world Fragment terrain、Location 逻辑锚点与缩放 LOD 分层：先读 `viewer-pixel-world-fragment-lod-2026-05-27.prd.md`
 - 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
 - 想确认聊天、右侧面板、Prompt 与输入桥接：先读 `viewer-chat-right-panel-polish.prd.md` 或 `viewer-egui-right-panel.prd.md`
 - 想确认 gameplay release / current web experience：先读 `viewer-gameplay-release-experience-overhaul.prd.md`

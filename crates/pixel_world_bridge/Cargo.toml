@@ -16,4 +16,5 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "HtmlCanvasElement", "Window"] }
 
 [dev-dependencies]
+image = { version = "0.25.9", default-features = false, features = ["png"] }
 wasm-bindgen-test = "0.3.71"

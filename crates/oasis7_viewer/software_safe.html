@@ -444,14 +444,23 @@
       .pixel-world-canvas__grid {
         position: absolute;
         inset: 0;
+        z-index: 0;
         background-image:
           linear-gradient(rgba(141, 199, 170, 0.08) 1px, transparent 1px),
           linear-gradient(90deg, rgba(141, 199, 170, 0.08) 1px, transparent 1px);
         background-size: 24px 24px;
         opacity: 0.75;
       }
+      .pixel-world-fragment-terrain {
+        position: absolute;
+        z-index: 1;
+        border-radius: 2px;
+        pointer-events: none;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+      }
       .pixel-world-entity {
         position: absolute;
+        z-index: 2;
         min-width: 26px;
         min-height: 26px;
         padding: 0;

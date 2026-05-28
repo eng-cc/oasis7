@@ -8,6 +8,18 @@ function tr(locale, zh, en) {
 }
 
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
+const FRAGMENT_TERRAIN_PALETTE = {
+  silicate_matrix: [126, 144, 99],
+  iron_nickel_alloy: [176, 184, 196],
+  water_ice: [125, 211, 252],
+  hydrated_mineral: [96, 165, 250],
+  carbonaceous_organic: [120, 113, 108],
+  sulfide_ore: [202, 138, 4],
+  rare_earth_oxide: [167, 139, 250],
+  uranium_bearing_ore: [132, 204, 22],
+  thorium_bearing_ore: [244, 114, 182],
+  unknown: [148, 163, 184],
+};
 
 async function waitForRuntimeCanvasAttachment(canvas) {
   for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -61,6 +73,11 @@ function countResourceEntries(summary) {
     .length;
 }
 
+function safeNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
 function worldCenterPosition(worldBounds) {
   if (!worldBounds) {
     return null;
@@ -81,6 +98,85 @@ function clampWorldPosition(pos, worldBounds) {
     y_cm: Math.min(worldBounds.depth_cm, Math.max(0, Number(pos.y_cm) || 0)),
     z_cm: Math.min(worldBounds.height_cm, Math.max(0, Number(pos.z_cm) || 0)),
   };
+}
+
+function dominantCompound(block) {
+  const ppm = block?.compounds?.ppm;
+  if (!ppm || typeof ppm !== "object") {
+    return "unknown";
+  }
+  const ranked = Object.entries(ppm)
+    .map(([kind, value]) => [kind, safeNumber(value, 0)])
+    .filter(([, value]) => value > 0)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  return ranked[0]?.[0] || "unknown";
+}
+
+function fragmentTerrainColor(compound) {
+  return FRAGMENT_TERRAIN_PALETTE[compound] || FRAGMENT_TERRAIN_PALETTE.unknown;
+}
+
+function colorToCss(color, alpha = 0.36) {
+  const [red, green, blue] = Array.isArray(color) ? color : FRAGMENT_TERRAIN_PALETTE.unknown;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function fragmentBlocks(location) {
+  const blocks = location?.fragment_profile?.blocks?.blocks;
+  return Array.isArray(blocks) ? blocks : [];
+}
+
+function estimateFragmentHalfExtentCm(location, blocks) {
+  const explicitRadius = safeNumber(location?.profile?.radius_cm, 0);
+  if (explicitRadius > 0) {
+    return explicitRadius;
+  }
+  const maxExtent = blocks.reduce((value, block) => {
+    const originX = safeNumber(block?.origin_cm?.x_cm, 0);
+    const originZ = safeNumber(block?.origin_cm?.z_cm ?? block?.origin_cm?.y_cm, 0);
+    const sizeX = safeNumber(block?.size_cm?.x_cm, 0);
+    const sizeZ = safeNumber(block?.size_cm?.z_cm ?? block?.size_cm?.y_cm, 0);
+    return Math.max(value, originX + sizeX, originZ + sizeZ);
+  }, 0);
+  return Math.max(1, maxExtent / 2);
+}
+
+function buildFragmentTerrainForLocation(location, worldBounds) {
+  const pos = normalizePosition(location?.pos);
+  const blocks = fragmentBlocks(location);
+  if (!pos || !worldBounds || !blocks.length) {
+    return [];
+  }
+
+  const halfExtentCm = estimateFragmentHalfExtentCm(location, blocks);
+  return blocks
+    .map((block, index) => {
+      const sizeX = safeNumber(block?.size_cm?.x_cm, 0);
+      const sizeZ = safeNumber(block?.size_cm?.z_cm ?? block?.size_cm?.y_cm, 0);
+      const originX = safeNumber(block?.origin_cm?.x_cm, 0);
+      const originZ = safeNumber(block?.origin_cm?.z_cm ?? block?.origin_cm?.y_cm, 0);
+      const footprintCm = Math.max(1, sizeX, sizeZ);
+      if (sizeX <= 0 || sizeZ <= 0) {
+        return null;
+      }
+      const dominant = dominantCompound(block);
+      const localX = originX + (sizeX / 2) - halfExtentCm;
+      const localY = originZ + (sizeZ / 2) - halfExtentCm;
+      return {
+        id: `fragment:${location.id}:${index}`,
+        location_id: location.id,
+        pos: clampWorldPosition({
+          x_cm: pos.x_cm + localX,
+          y_cm: pos.y_cm + localY,
+          z_cm: pos.z_cm,
+        }, worldBounds),
+        footprint_cm: footprintCm,
+        dominant_compound: dominant,
+        color: fragmentTerrainColor(dominant),
+        emphasis: 0.58,
+      };
+    })
+    .filter((entry) => entry?.pos);
 }
 
 function deterministicHash(input) {
@@ -187,6 +283,20 @@ function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
   return {
     left: `${xPercent.toFixed(1)}%`,
     top: `${yPercent.toFixed(1)}%`,
+  };
+}
+
+function fragmentTerrainStyle(patch, worldBounds, index) {
+  const sizePx = Math.max(7, Math.min(26, safeNumber(patch.footprint_cm, 1) / 1200));
+  return {
+    ...toWorldPercentStyle(patch.pos, worldBounds, {
+      left: `${12 + ((index % 6) * 13)}%`,
+      top: `${16 + (Math.floor(index / 6) * 13)}%`,
+    }),
+    width: `${sizePx.toFixed(1)}px`,
+    height: `${sizePx.toFixed(1)}px`,
+    "background-color": colorToCss(patch.color),
+    transform: "translate(-50%, -50%)",
   };
 }
 
@@ -337,20 +447,35 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
     : null;
   const worldScaleBase = Math.max(1, Math.min(worldBounds?.width_cm || 1, worldBounds?.depth_cm || 1));
 
+  const fragmentTerrain = [];
   const locations = lists.locations
     .map((location) => ({
-      id: location.id,
-      label: location.name || location.id,
-      pos: normalizePosition(location.pos),
-      radius_cm: Number(location?.profile?.radius_cm) || 0,
-      resource_summary: core.resourceSummary(location.resources),
-      resource_score: countResourceEntries(core.resourceSummary(location.resources)),
-      size_hint_px: 16 + Math.min(
-        18,
-        (((Number(location?.profile?.radius_cm) || 0) / worldScaleBase) * 420)
-          + (countResourceEntries(core.resourceSummary(location.resources)) * 2),
-      ),
+      raw: location,
+      terrain: buildFragmentTerrainForLocation(location, worldBounds),
     }))
+    .map(({ raw: location, terrain }) => {
+      fragmentTerrain.push(...terrain);
+      const resourceSummary = core.resourceSummary(location.resources);
+      const hasTerrain = terrain.length > 0;
+      return {
+        id: location.id,
+        label: location.name || location.id,
+        pos: normalizePosition(location.pos),
+        radius_cm: Number(location?.profile?.radius_cm) || 0,
+        resource_summary: resourceSummary,
+        resource_score: countResourceEntries(resourceSummary),
+        fragment_terrain_count: terrain.length,
+        marker_role: hasTerrain ? "logic_anchor" : "primary_marker",
+        marker_alpha: hasTerrain ? 0.32 : 0.72,
+        size_hint_px: hasTerrain
+          ? 10
+          : 16 + Math.min(
+            18,
+            (((Number(location?.profile?.radius_cm) || 0) / worldScaleBase) * 420)
+              + (countResourceEntries(resourceSummary) * 2),
+          ),
+      };
+    })
     .filter((location) => location.pos);
   const locationById = new Map(locations.map((location) => [location.id, location]));
 
@@ -415,6 +540,7 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
     locale,
     world_bounds: worldBounds,
     locations,
+    fragment_terrain: fragmentTerrain,
     agents,
     links,
     selection,
@@ -481,14 +607,28 @@ function PixelWorldCanvasPlaceholder(props) {
   return (
     <div class="pixel-world-canvas" data-renderer-ready={props.ready() ? "true" : "false"}>
       <div class="pixel-world-canvas__grid" />
+      <For each={props.renderState().fragment_terrain.slice(0, 96)}>
+        {(patch, index) => (
+          <div
+            class="pixel-world-fragment-terrain"
+            data-compound={patch.dominant_compound}
+            style={fragmentTerrainStyle(patch, props.renderState().world_bounds, index())}
+            title={`${patch.location_id}:${patch.dominant_compound}`}
+          />
+        )}
+      </For>
       <For each={props.renderState().locations.slice(0, 8)}>
         {(location, index) => (
           <button
             class="pixel-world-entity pixel-world-entity--location"
-            style={toWorldPercentStyle(location.pos, props.renderState().world_bounds, {
-              left: `${12 + ((index() % 4) * 21)}%`,
-              top: `${18 + (Math.floor(index() / 4) * 26)}%`,
-            })}
+            data-marker-role={location.marker_role}
+            style={{
+              ...toWorldPercentStyle(location.pos, props.renderState().world_bounds, {
+                left: `${12 + ((index() % 4) * 21)}%`,
+                top: `${18 + (Math.floor(index() / 4) * 26)}%`,
+              }),
+              opacity: location.marker_alpha,
+            }}
             title={location.label}
             onMouseEnter={() => props.onHover({ kind: "location", id: location.id })}
             onMouseLeave={() => props.onHover(null)}
@@ -695,6 +835,7 @@ export function PixelWorldHost(props) {
       </div>
       <div class="pixel-world-host__toolbar badge-row">
         <span class="badge badge--accent">{`locations=${renderState().locations.length}`}</span>
+        <span class="badge badge--accent">{`fragments=${renderState().fragment_terrain.length}`}</span>
         <span class="badge badge--accent">{`agents=${renderState().agents.length}`}</span>
         <span class="badge">{`links=${renderState().links.length}`}</span>
         <span class="badge">{`hotspots=${renderState().visual_hotspots.length}`}</span>

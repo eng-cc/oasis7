@@ -56,8 +56,36 @@ function sampleSnapshot() {
         "loc-0": {
           id: "loc-0",
           name: "Factory Anchor",
-          pos: { x_cm: 0, y_cm: 0, z_cm: 0 },
+          pos: { x_cm: 5_000_000, y_cm: 2_500_000, z_cm: 0 },
           profile: { radius_cm: 25_000, radiation_emission_per_tick: 0, material: "silicate" },
+          fragment_profile: {
+            blocks: {
+              blocks: [
+                {
+                  origin_cm: { x_cm: 0, y_cm: 0, z_cm: 0 },
+                  size_cm: { x_cm: 12_000, y_cm: 7_500, z_cm: 8_000 },
+                  density_kg_per_m3: 3200,
+                  compounds: {
+                    ppm: {
+                      silicate_matrix: 800_000,
+                      water_ice: 200_000,
+                    },
+                  },
+                },
+                {
+                  origin_cm: { x_cm: 20_000, y_cm: 1_000, z_cm: 18_000 },
+                  size_cm: { x_cm: 20_000, y_cm: 8_000, z_cm: 10_000 },
+                  density_kg_per_m3: 7800,
+                  compounds: {
+                    ppm: {
+                      iron_nickel_alloy: 900_000,
+                      sulfide_ore: 100_000,
+                    },
+                  },
+                },
+              ],
+            },
+          },
           resources: {},
         },
       },
@@ -144,6 +172,34 @@ describe("pixel world host", () => {
     expect(renderState.visual_hotspots.some((entry) => entry.kind === "blocker")).toBe(true);
   });
 
+  it("derives fragment terrain from location fragment blocks and de-emphasizes location markers", async () => {
+    vi.resetModules();
+    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+
+    const core = await import("./legacy_core.js");
+    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
+
+    core.injectSnapshot(sampleSnapshot());
+
+    const renderState = buildPixelWorldRenderState("en");
+    expect(renderState.fragment_terrain).toHaveLength(2);
+    expect(renderState.locations[0].marker_role).toBe("logic_anchor");
+    expect(renderState.locations[0].marker_alpha).toBeLessThan(0.5);
+
+    const metalPatch = renderState.fragment_terrain.find((patch) => (
+      patch.dominant_compound === "iron_nickel_alloy"
+    ));
+    expect(metalPatch).toMatchObject({
+      id: "fragment:loc-0:1",
+      location_id: "loc-0",
+      footprint_cm: 20_000,
+      color: [176, 184, 196],
+    });
+    expect(metalPatch.pos.x_cm).toBeGreaterThan(renderState.locations[0].pos.x_cm);
+  });
+
   it("derives deterministic agent positions from assigned locations when snapshots omit agent coordinates", async () => {
     vi.resetModules();
     window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
@@ -176,6 +232,32 @@ describe("pixel world host", () => {
 
     expect(screen.getByText(/falls back explicitly instead of keeping a second JS renderer/i)).toBeInTheDocument();
     expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
+    expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(2);
+    expect(document.querySelector(".pixel-world-entity--location")).toHaveAttribute("data-marker-role", "logic_anchor");
     expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
+  });
+
+  it("keeps fragment terrain as non-interactive background behind readable agents", async () => {
+    await renderPixelWorldHost();
+
+    await waitFor(() => {
+      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+    });
+
+    const canvas = document.querySelector(".pixel-world-canvas");
+    const fragments = Array.from(canvas.querySelectorAll(".pixel-world-fragment-terrain"));
+    const location = canvas.querySelector(".pixel-world-entity--location");
+    const agent = canvas.querySelector(".pixel-world-entity--agent");
+    const children = Array.from(canvas.children);
+
+    expect(fragments).toHaveLength(2);
+    expect(fragments.every((fragment) => fragment.tagName === "DIV")).toBe(true);
+    expect(fragments.every((fragment) => fragment.getAttribute("role") === null)).toBe(true);
+    expect(children.indexOf(fragments[0])).toBeLessThan(children.indexOf(location));
+    expect(children.indexOf(location)).toBeLessThan(children.indexOf(agent));
+    expect(parseFloat(fragments[0].style.width)).toBeLessThanOrEqual(26);
+    expect(parseFloat(location.style.opacity)).toBeLessThan(0.5);
+    expect(location).toHaveAttribute("data-marker-role", "logic_anchor");
+    expect(agent).toHaveAttribute("data-position-source", "location_derived");
   });
 });
