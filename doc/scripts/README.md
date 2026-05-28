@@ -58,7 +58,7 @@
 - 新增专题后，需同步回写 `doc/scripts/prd.index.md` 与本目录索引。
 - `scripts/new-task-worktree.sh` 为新需求默认入口；`--init-docs` 用于检查模块 PRD / project / 当日 devlog，`--with-harness` 用于在新 worktree 中后台预热 `./scripts/worktree-harness.sh up`。
 - `scripts/pm/task-closeout.sh` 为默认 close-phase helper；负责在 task 已 start 且 execution log 已回写后，若收口到 `done` 则先跑 fresh verification，再执行 `workflow-report close -> move-task done|deferred -> pm lint`，但不替代 commit 或 `prepare-task-pr.sh`。
-- `scripts/pm/workflow-behavior-eval.sh` 为默认 workflow behavior eval 入口；负责把 task-worktree bootstrap、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 串成一条可重复的本地验证链。
+- `scripts/pm/workflow-behavior-eval.sh` 为默认 workflow behavior eval 入口；负责把 task-worktree bootstrap、可选/必需 routing scenarios、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 串成一条可重复的本地验证链。
 - `scripts/pr-review-thread-closeout.sh` 为当前 PR 的 review-thread closeout helper；默认只读盘点 review threads，显式传 `--resolve-thread` 或 `--resolve-all-unresolved` 时才会调用 GitHub resolve mutation，且每次都会重新回报 `reviewDecision` / `mergeStateStatus`。
 - `scripts/prepare-task-pr.sh` 为任务完成后的默认 GitHub PR 收口入口；负责在干净 task worktree 上执行 PR preflight / create，并基于 changed-path planner 输出本地 required 验证建议、planner 原因摘要，以及 PR 合入后的本地同步与回收命令。
 - `scripts/pm/rebase-conflict-helper.sh` 为 `.pm` rebase 冲突辅助入口；默认只读分类 `.pm/**` 未合并路径，只允许在 active rebase 中用 `--resolve-signals` 自动修 `.pm/inbox/signals.jsonl` 的 signal-id 碰撞。若冲突命中 `.pm/registry/tasks.yaml` 或 role backlog 这类 git-ignored 本地视图，应保留 `main` 删除，再执行 `./scripts/pm/sync-views.sh`。

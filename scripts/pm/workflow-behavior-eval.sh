@@ -142,7 +142,156 @@ print(json.dumps({"status": "ok", "surfaces": surfaces}, ensure_ascii=False))
 PY
 )"
 
-RESULT_JSON="$(python3 - "$TASK_WORKTREE_JSON" "$SUBAGENT_CONTRACT_JSON" "$REQUIRED_TIER_JSON" <<'PY'
+ROUTING_SCENARIOS_JSON="$(python3 - "$ROOT_DIR" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+
+surfaces = {
+    "AGENTS.md": (root / "AGENTS.md").read_text(encoding="utf-8"),
+    ".agents/skills/default-workflow-bootstrap/SKILL.md": (
+        root / ".agents/skills/default-workflow-bootstrap/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/repo-owned-workflow-router/SKILL.md": (
+        root / ".agents/skills/repo-owned-workflow-router/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/bounded-brainstorming/SKILL.md": (
+        root / ".agents/skills/bounded-brainstorming/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/tdd-test-writer/SKILL.md": (
+        root / ".agents/skills/tdd-test-writer/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/verification-before-completion/SKILL.md": (
+        root / ".agents/skills/verification-before-completion/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/finishing-a-development-branch/SKILL.md": (
+        root / ".agents/skills/finishing-a-development-branch/SKILL.md"
+    ).read_text(encoding="utf-8"),
+}
+
+scenarios = [
+    {
+        "id": "trivial_request_skips_task_bootstrap",
+        "expected_route": "direct handling without forced worktree or .pm task",
+        "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
+        "required_markers": [
+            "trivial: can be handled directly with no new task truth",
+            "Do not force this bootstrap onto trivial requests.",
+        ],
+    },
+    {
+        "id": "non_trivial_request_requires_task_truth_before_router",
+        "expected_route": "default-workflow-bootstrap -> task truth -> repo-owned-workflow-router",
+        "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
+        "required_markers": [
+            "non-trivial: requires repo-owned workflow setup",
+            "choose owner role first",
+            "create a dedicated worktree unless the user explicitly authorized reuse",
+            "Once task truth exists, hand off to `repo-owned-workflow-router`.",
+        ],
+    },
+    {
+        "id": "clear_implementation_skips_brainstorming",
+        "expected_route": "repo-owned-workflow-router -> executing-project-tasks",
+        "surface": ".agents/skills/bounded-brainstorming/SKILL.md",
+        "required_markers": [
+            "This is an optional pre-implementation layer, not a universal gate.",
+            "Do not use this skill when:",
+            "the user already gave a concrete implementation task and the scope is clear enough to start",
+        ],
+    },
+    {
+        "id": "ambiguous_or_option_heavy_work_uses_bounded_brainstorming",
+        "expected_route": "repo-owned-workflow-router -> bounded-brainstorming -> execution",
+        "surface": ".agents/skills/repo-owned-workflow-router/SKILL.md",
+        "required_markers": [
+            "Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.",
+            "Do not route into `bounded-brainstorming` if the task is already implementation-ready.",
+        ],
+    },
+    {
+        "id": "docs_governance_skips_tdd_red_gate",
+        "expected_route": "repo-owned-workflow-router -> executing-project-tasks without TDD RED",
+        "surface": ".agents/skills/tdd-test-writer/SKILL.md",
+        "required_markers": [
+            "Do not treat this skill as a universal gate for:",
+            "documentation / governance / planning-only tasks",
+            "When you skip RED phase in oasis7, record the skip reason",
+        ],
+    },
+    {
+        "id": "behavior_change_with_stable_harness_uses_tdd_red_gate",
+        "expected_route": "repo-owned-workflow-router -> tdd-test-writer -> execution",
+        "surface": ".agents/skills/tdd-test-writer/SKILL.md",
+        "required_markers": [
+            "the task changes product, runtime, API, or UI behavior",
+            "there is a stable automated test surface for that behavior",
+            "a narrow RED command can be run locally in the current task worktree",
+        ],
+    },
+    {
+        "id": "subagent_dispatch_is_conditional_and_bounded",
+        "expected_route": "producer orchestrates bounded role subagent slices only when needed",
+        "surface": "AGENTS.md",
+        "required_markers": [
+            "需要时派生角色 subagent 协作",
+            "所有 subagent slice 必须声明 write scope、return contract、integration owner/order",
+            "formal sink",
+        ],
+    },
+    {
+        "id": "completion_claim_requires_fresh_verification",
+        "expected_route": "verification-before-completion before done/tests-passed/ready-for-pr claims",
+        "surface": ".agents/skills/verification-before-completion/SKILL.md",
+        "required_markers": [
+            "Run the verification command now, read the result now, and only then make the claim.",
+            "Do not use stale output, partial output, or earlier successful runs as proof.",
+            "./scripts/pm/claim-ready.sh",
+        ],
+    },
+    {
+        "id": "closeout_routes_to_github_pr_review_not_local_landing",
+        "expected_route": "finishing-a-development-branch -> prepare-task-pr -> GitHub required checks/review",
+        "surface": ".agents/skills/finishing-a-development-branch/SKILL.md",
+        "required_markers": [
+            "./scripts/prepare-task-pr.sh --create",
+            "Do not land locally unless the user explicitly asks for local landing.",
+            "Do not treat review-thread resolution as merge readiness.",
+        ],
+    },
+]
+
+evaluated: list[dict[str, object]] = []
+for scenario in scenarios:
+    text = surfaces[scenario["surface"]]
+    missing = [
+        marker
+        for marker in scenario["required_markers"]
+        if marker not in text
+    ]
+    if missing:
+        raise SystemExit(
+            "workflow-behavior-eval: routing scenario "
+            f"{scenario['id']} missing markers in {scenario['surface']}: {missing}"
+        )
+    evaluated.append(
+        {
+            "id": scenario["id"],
+            "expected_route": scenario["expected_route"],
+            "surface": scenario["surface"],
+            "status": "ok",
+        }
+    )
+
+print(json.dumps({"status": "ok", "scenarios": evaluated}, ensure_ascii=False))
+PY
+)"
+
+RESULT_JSON="$(python3 - "$TASK_WORKTREE_JSON" "$SUBAGENT_CONTRACT_JSON" "$REQUIRED_TIER_JSON" "$ROUTING_SCENARIOS_JSON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -151,6 +300,7 @@ import sys
 task_worktree = json.loads(sys.argv[1])
 subagent_contract = json.loads(sys.argv[2])
 required_tier = json.loads(sys.argv[3])
+routing_scenarios = json.loads(sys.argv[4])
 
 segments = [
     {
@@ -176,6 +326,18 @@ segments = [
         "status": subagent_contract["status"],
         "evidence": {
             "surface_count": len(subagent_contract["surfaces"]),
+        },
+    },
+    {
+        "id": "routing_scenario_contract",
+        "command": "python contract check over workflow routing scenario surfaces",
+        "status": routing_scenarios["status"],
+        "evidence": {
+            "scenario_count": len(routing_scenarios["scenarios"]),
+            "scenario_ids": [
+                scenario["id"]
+                for scenario in routing_scenarios["scenarios"]
+            ],
         },
     },
     {
@@ -221,6 +383,8 @@ payload = {
         "new non-trivial work first routes through a repo-owned bootstrap surface rather than an external bootstrap",
         "bootstrap distinguishes trivial vs non-trivial work and ensures isolated task truth exists before routing",
         "task worktree bootstrap stays source-clean and starts the target task",
+        "trivial requests are not forced through task/worktree bootstrap",
+        "brainstorming, TDD, and subagent dispatch remain conditional rather than universal gates",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
         "high-risk local diffs can request repo-owned review packets without replacing GitHub PR review",
         "done closeout refuses to proceed without fresh verification",
@@ -230,12 +394,15 @@ payload = {
     "verification_surface": [segment["id"] for segment in segments],
     "failure_signature": [
         "default bootstrap surface disappears or no longer points new non-trivial work into repo-owned task truth",
+        "routing scenarios stop separating trivial direct handling from non-trivial task truth bootstrap",
+        "optional brainstorming, TDD, or subagent gates drift into mandatory stages",
         "task-closeout allows done closeout without verify-command",
         "subagent contract markers disappear from AGENTS or handoff/router surfaces",
         "repo-owned review-request surface disappears or stops separating local review from GitHub review",
         "prepare-task-pr local fixture no longer creates the expected PR command path",
         "review-thread closeout helper stops reporting unresolved/resolved state correctly",
     ],
+    "routing_scenarios": routing_scenarios["scenarios"],
     "segments": segments,
 }
 print(json.dumps(payload, ensure_ascii=False))
