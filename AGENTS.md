@@ -6,14 +6,15 @@
 ## 开发工作流（短规则）
 1. 新需求默认先判定 trivial/non-trivial，并确认是否需要新 worktree + `.pm` task。
 2. 非 trivial 任务按统一阶段推进：bootstrap → router →（可选）brainstorming/TDD → execution → verification → closeout。
-3. 所有 gate、责任边界、失败回退路径，统一引用：
+3. 禁止在 `main` 分支 / 主 worktree 直接修改任何文件；所有改动必须先创建或进入对应 task worktree。
+4. 所有 gate、责任边界、失败回退路径，统一引用：
    - 阶段图：`doc/engineering/workflow/source-of-truth.md#1-phase-diagram`
    - 责任边界：`doc/engineering/workflow/source-of-truth.md#2-responsibility-boundary`
    - 必需/可选 gate：`doc/engineering/workflow/source-of-truth.md#3-gates`
    - 失败回退：`doc/engineering/workflow/source-of-truth.md#4-failure-and-rollback-paths`
    - 关键规范细节（worktree/执行证据/closeout/PR）：`doc/engineering/workflow/source-of-truth.md#5-normative-details-from-legacy-agents-workflow`
    - 语义迁移核对清单：`doc/engineering/workflow/source-of-truth.md#8-semantic-migration-checklist`
-4. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
+5. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
 
 ### Workflow Eval Contract Markers
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
