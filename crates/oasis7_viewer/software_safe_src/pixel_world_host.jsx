@@ -278,11 +278,45 @@ function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
   if (!pos || !worldBounds) {
     return fallbackStyle;
   }
-  const xPercent = 8 + (clampRatio(pos.x_cm / Math.max(1, worldBounds.width_cm)) * 84);
-  const yPercent = 10 + (clampRatio(pos.y_cm / Math.max(1, worldBounds.depth_cm)) * 78);
+  const point = worldPercentPoint(pos, worldBounds, 8, 10);
   return {
-    left: `${xPercent.toFixed(1)}%`,
-    top: `${yPercent.toFixed(1)}%`,
+    left: `${point.x.toFixed(1)}%`,
+    top: `${point.y.toFixed(1)}%`,
+  };
+}
+
+function worldPercentPoint(pos, worldBounds, fallbackX = 50, fallbackY = 50) {
+  if (!pos || !worldBounds) {
+    return { x: fallbackX, y: fallbackY };
+  }
+  return {
+    x: 8 + (clampRatio(pos.x_cm / Math.max(1, worldBounds.width_cm)) * 84),
+    y: 10 + (clampRatio(pos.y_cm / Math.max(1, worldBounds.depth_cm)) * 78),
+  };
+}
+
+function routeStyle(link, worldBounds, index) {
+  const fallbackFrom = {
+    x: 14 + ((index % 5) * 15),
+    y: 18 + (Math.floor(index / 5) * 14),
+  };
+  const fallbackTo = {
+    x: fallbackFrom.x + 14,
+    y: fallbackFrom.y + 8,
+  };
+  const from = worldPercentPoint(link.from, worldBounds, fallbackFrom.x, fallbackFrom.y);
+  const to = worldPercentPoint(link.to, worldBounds, fallbackTo.x, fallbackTo.y);
+  const deltaX = to.x - from.x;
+  const deltaY = to.y - from.y;
+  const length = Math.max(4, Math.hypot(deltaX, deltaY));
+  const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+  return {
+    left: `${from.x.toFixed(1)}%`,
+    top: `${from.y.toFixed(1)}%`,
+    width: `${length.toFixed(1)}%`,
+    opacity: `${0.32 + (clampRatio(link.emphasis ?? 0.72) * 0.38)}`,
+    transform: `rotate(${angle.toFixed(1)}deg)`,
+    "transform-origin": "0 50%",
   };
 }
 
@@ -297,6 +331,80 @@ function fragmentTerrainStyle(patch, worldBounds, index) {
     height: `${sizePx.toFixed(1)}px`,
     "background-color": colorToCss(patch.color),
     transform: "translate(-50%, -50%)",
+  };
+}
+
+function pickKnownAgentId(candidateIds, agents) {
+  const knownAgentIds = new Set(agents.map((agent) => agent.id));
+  return candidateIds.find((id) => id && knownAgentIds.has(id)) || null;
+}
+
+function buildCommercialSurface({
+  locale,
+  gameplay,
+  agents,
+  links,
+  fragmentTerrain,
+  visualHotspots,
+  selection,
+}) {
+  const activeAgentId = pickKnownAgentId([
+    gameplay?.recommendedAction?.targetAgentId,
+    gameplay?.acceptedIntentTarget,
+    selection?.kind === "agent" ? selection.id : null,
+    agents[0]?.id,
+  ], agents);
+  const objectiveTitle = gameplay?.goalTitle
+    || tr(locale, "进入世界，建立第一条能力链", "Enter the world and build the first capability chain");
+  const objectiveDetail = gameplay?.objective
+    || gameplay?.progressDetail
+    || tr(locale, "先让 Agent、路线和资源关系变得可读，再推进下一步。", "Read the agent, route, and resource relationship before pushing the next move.");
+  const nextActionLabel = gameplay?.recommendedAction?.label
+    || gameplay?.nextStepHint
+    || gameplay?.narrativeNextStep
+    || tr(locale, "选择一个 Agent 或推进世界一步", "Select an agent or advance the world one step");
+  const nextActionDetail = gameplay?.recommendedAction?.disabledReason
+    || gameplay?.nextStepHint
+    || gameplay?.executionSummary
+    || null;
+  const leverageSummary = gameplay?.acceptedIntentSummary
+    || gameplay?.lastWorldChange
+    || tr(locale, "还没有一条被正式接受的玩家意图", "No player-facing accepted intent yet");
+  const leverageDetail = gameplay?.lastWorldChange
+    || gameplay?.executionCauseDetail
+    || gameplay?.acceptedIntentDetail
+    || gameplay?.progressDetail
+    || null;
+
+  return {
+    objective: {
+      title: objectiveTitle,
+      detail: objectiveDetail,
+      progress_percent: gameplay?.progressPercent ?? null,
+    },
+    next_action: {
+      label: nextActionLabel,
+      detail: nextActionDetail,
+      target_agent_id: gameplay?.recommendedAction?.targetAgentId || activeAgentId,
+      execute_kind: gameplay?.recommendedAction?.executeKind || null,
+    },
+    active_agent_id: activeAgentId,
+    player_leverage: {
+      state: gameplay?.executionState || "waiting_for_intent",
+      label: gameplay?.executionStateLabel || tr(locale, "等待玩家意图", "Waiting for Intent"),
+      summary: leverageSummary,
+      detail: leverageDetail,
+    },
+    blocker: {
+      label: gameplay?.blockerLabel || gameplay?.blockerKind || null,
+      detail: gameplay?.narrativeBlockerDetail || gameplay?.blockerDetail || null,
+    },
+    world_read: {
+      agents: agents.length,
+      routes: links.length,
+      fragments: fragmentTerrain.length,
+      hotspots: visualHotspots.length,
+    },
   };
 }
 
@@ -535,6 +643,15 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
     blockerHighlight,
     recentEventHotspots,
   });
+  const commercialSurface = buildCommercialSurface({
+    locale,
+    gameplay,
+    agents,
+    links,
+    fragmentTerrain,
+    visualHotspots,
+    selection,
+  });
 
   return {
     locale,
@@ -548,6 +665,7 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
     blocker_highlight: blockerHighlight,
     recent_event_hotspots: recentEventHotspots,
     visual_hotspots: visualHotspots,
+    commercial_surface: commercialSurface,
     presentation: {
       world_bounds_label: worldScaleSurface.physicalTruth.worldBoundsLabel,
       marker_truth_note: worldScaleSurface.presentationScale.markerTruthNote,
@@ -603,6 +721,56 @@ function PixelWorldCanvasRenderer(props) {
   );
 }
 
+function PixelWorldCommercialHud(props) {
+  const surface = () => props.renderState().commercial_surface;
+  return (
+    <Show when={surface()}>
+      <div
+        class="pixel-world-command-strip"
+        data-active-agent={surface().active_agent_id || ""}
+        data-leverage-state={surface().player_leverage.state}
+      >
+        <div class="pixel-world-command-cell pixel-world-command-cell--objective">
+          <div class="pixel-world-command-cell__label">
+            {tr(props.locale(), "目标", "Objective")}
+          </div>
+          <div class="pixel-world-command-cell__value">{surface().objective.title}</div>
+          <div class="pixel-world-command-cell__detail">{surface().objective.detail}</div>
+        </div>
+        <div class="pixel-world-command-cell pixel-world-command-cell--next">
+          <div class="pixel-world-command-cell__label">
+            {tr(props.locale(), "下一步", "Next Move")}
+          </div>
+          <div class="pixel-world-command-cell__value">{surface().next_action.label}</div>
+          <Show when={surface().next_action.detail}>
+            <div class="pixel-world-command-cell__detail">{surface().next_action.detail}</div>
+          </Show>
+        </div>
+        <div class="pixel-world-command-cell pixel-world-command-cell--leverage">
+          <div class="pixel-world-command-cell__label">
+            {tr(props.locale(), "玩家杠杆", "Player Leverage")}
+          </div>
+          <div class="pixel-world-command-cell__value">{surface().player_leverage.summary}</div>
+          <div class="pixel-world-command-cell__detail">
+            {surface().active_agent_id
+              ? `${surface().player_leverage.label} · agent=${surface().active_agent_id}`
+              : surface().player_leverage.label}
+          </div>
+        </div>
+      </div>
+      <div class="pixel-world-readout badge-row">
+        <span class="badge badge--accent">{`agents=${surface().world_read.agents}`}</span>
+        <span class="badge">{`routes=${surface().world_read.routes}`}</span>
+        <span class="badge">{`fragments=${surface().world_read.fragments}`}</span>
+        <span class="badge">{`hotspots=${surface().world_read.hotspots}`}</span>
+        <Show when={surface().blocker.label}>
+          <span class="badge badge--warn">{`blocker=${surface().blocker.label}`}</span>
+        </Show>
+      </div>
+    </Show>
+  );
+}
+
 function PixelWorldCanvasPlaceholder(props) {
   return (
     <div class="pixel-world-canvas" data-renderer-ready={props.ready() ? "true" : "false"}>
@@ -614,6 +782,16 @@ function PixelWorldCanvasPlaceholder(props) {
             data-compound={patch.dominant_compound}
             style={fragmentTerrainStyle(patch, props.renderState().world_bounds, index())}
             title={`${patch.location_id}:${patch.dominant_compound}`}
+          />
+        )}
+      </For>
+      <For each={props.renderState().links.slice(0, 10)}>
+        {(link, index) => (
+          <div
+            class="pixel-world-route"
+            data-route-kind={link.kind}
+            style={routeStyle(link, props.renderState().world_bounds, index())}
+            title={`${link.kind}:${link.id}`}
           />
         )}
       </For>
@@ -823,45 +1001,13 @@ export function PixelWorldHost(props) {
     <div class="pixel-world-host stack">
       <div class="pixel-world-host__summary">
         <div class="pixel-world-host__headline">
-          {tr(locale(), "嵌入式像素世界层", "Embedded Pixel World Layer")}
+          {tr(locale(), "世界指挥棋盘", "World Command Board")}
         </div>
         <div class="feedback-detail">
-          {tr(
-            locale(),
-            "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。",
-            "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer.",
-          )}
+          {renderState().commercial_surface?.objective?.detail}
         </div>
       </div>
-      <div class="pixel-world-host__toolbar badge-row">
-        <span class="badge badge--accent">{`locations=${renderState().locations.length}`}</span>
-        <span class="badge badge--accent">{`fragments=${renderState().fragment_terrain.length}`}</span>
-        <span class="badge badge--accent">{`agents=${renderState().agents.length}`}</span>
-        <span class="badge">{`links=${renderState().links.length}`}</span>
-        <span class="badge">{`hotspots=${renderState().visual_hotspots.length}`}</span>
-        <span class="badge">{`derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
-        <span class="badge">{renderState().world_bounds ? "world_bounds=ready" : "world_bounds=missing"}</span>
-        <span class="badge">{`renderer=${rendererStatus()}`}</span>
-        <span class="badge">{`runtime=${runtimeSource()}`}</span>
-        <Show when={cameraState()}>
-          <span class="badge">{`zoom=${cameraState().zoom.toFixed(2)}`}</span>
-        </Show>
-        <Show when={cameraState()}>
-          <span class="badge">{`pan=${cameraState().pan_x_px},${cameraState().pan_y_px}`}</span>
-        </Show>
-        <Show when={hoverSelection()}>
-          <span class="badge">{`hover=${hoverSelection().kind}/${hoverSelection().id}`}</span>
-        </Show>
-        <button type="button" onClick={() => { void setReadyMode(); }}>
-          {tr(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer")}
-        </button>
-        <button type="button" onClick={simulateFatal}>
-          {tr(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal")}
-        </button>
-        <button type="button" onClick={setFallbackMode}>
-          {tr(locale(), "切回 Host Fallback", "Back To Host Fallback")}
-        </button>
-      </div>
+      <PixelWorldCommercialHud locale={locale} renderState={renderState} />
       <Show when={rendererStatus() !== "fallback"}>
         <PixelWorldCanvasRenderer
           locale={locale}
@@ -908,6 +1054,45 @@ export function PixelWorldHost(props) {
           onHover={(selection) => adapter().simulateHover(selection)}
         />
       </Show>
+      <details class="diagnostic pixel-world-render-diagnostics">
+        <summary>{tr(locale(), "Renderer 诊断", "Renderer Diagnostics")}</summary>
+        <div class="pixel-world-host__toolbar badge-row">
+          <span class="badge badge--accent">{`locations=${renderState().locations.length}`}</span>
+          <span class="badge badge--accent">{`fragments=${renderState().fragment_terrain.length}`}</span>
+          <span class="badge badge--accent">{`agents=${renderState().agents.length}`}</span>
+          <span class="badge">{`links=${renderState().links.length}`}</span>
+          <span class="badge">{`hotspots=${renderState().visual_hotspots.length}`}</span>
+          <span class="badge">{`derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
+          <span class="badge">{renderState().world_bounds ? "world_bounds=ready" : "world_bounds=missing"}</span>
+          <span class="badge">{`renderer=${rendererStatus()}`}</span>
+          <span class="badge">{`runtime=${runtimeSource()}`}</span>
+          <Show when={cameraState()}>
+            <span class="badge">{`zoom=${cameraState().zoom.toFixed(2)}`}</span>
+          </Show>
+          <Show when={cameraState()}>
+            <span class="badge">{`pan=${cameraState().pan_x_px},${cameraState().pan_y_px}`}</span>
+          </Show>
+          <Show when={hoverSelection()}>
+            <span class="badge">{`hover=${hoverSelection().kind}/${hoverSelection().id}`}</span>
+          </Show>
+          <button type="button" onClick={() => { void setReadyMode(); }}>
+            {tr(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer")}
+          </button>
+          <button type="button" onClick={simulateFatal}>
+            {tr(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal")}
+          </button>
+          <button type="button" onClick={setFallbackMode}>
+            {tr(locale(), "切回 Host Fallback", "Back To Host Fallback")}
+          </button>
+          <div class="feedback-detail">
+            {tr(
+              locale(),
+              "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。",
+              "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer.",
+            )}
+          </div>
+        </div>
+      </details>
       <details class="diagnostic">
         <summary>{tr(locale(), "展开 Render DTO", "Expand Render DTO")}</summary>
         <div class="stack" style="margin-top:10px;">

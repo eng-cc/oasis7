@@ -95,6 +95,11 @@ function sampleSnapshot() {
     player_gameplay: {
       stage_id: "post_onboarding",
       stage_status: "blocked",
+      execution_state: "blocked",
+      accepted_intent_id: "gameplay_action:build_factory_smelter_mk1",
+      intent_summary: "Queue build_factory_smelter_mk1 for agent-0",
+      intent_scope: "gameplay_action",
+      intent_target: "agent-0",
       goal_id: "post_onboarding.recover_capability",
       goal_kind: "RecoverCapability",
       goal_title: "Recover sustainable capability",
@@ -103,10 +108,20 @@ function sampleSnapshot() {
       progress_percent: 68,
       blocker_kind: "material_shortage",
       blocker_detail: "iron input exhausted at factory-0",
+      causality_kind: "world_constraint",
+      causality_detail: "iron input exhausted at factory-0",
       blocker_supplemental_detail: null,
       next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
       branch_hint: null,
-      available_actions: [],
+      available_actions: [
+        {
+          action_id: "build_factory_smelter_mk1",
+          target_agent_id: "agent-0",
+          label: "Build smelter mk1",
+          protocol_action: "gameplay_action.submit",
+          disabled_reason: null,
+        },
+      ],
       recent_feedback: null,
       agent_claim: null,
     },
@@ -170,6 +185,26 @@ describe("pixel world host", () => {
     expect(renderState.visual_hotspots.length).toBeGreaterThanOrEqual(4);
     expect(renderState.visual_hotspots.some((entry) => entry.kind === "goal")).toBe(true);
     expect(renderState.visual_hotspots.some((entry) => entry.kind === "blocker")).toBe(true);
+    expect(renderState.commercial_surface).toMatchObject({
+      active_agent_id: "agent-0",
+      objective: {
+        title: "Recover sustainable capability",
+      },
+      next_action: {
+        label: "Build smelter mk1",
+        target_agent_id: "agent-0",
+        execute_kind: "gameplay_action",
+      },
+      player_leverage: {
+        state: "blocked",
+        summary: "Queue build_factory_smelter_mk1 for agent-0",
+      },
+      world_read: {
+        agents: 1,
+        routes: 1,
+        fragments: 2,
+      },
+    });
   });
 
   it("derives fragment terrain from location fragment blocks and de-emphasizes location markers", async () => {
@@ -230,6 +265,12 @@ describe("pixel world host", () => {
       expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
     });
 
+    expect(screen.getByText("World Command Board")).toBeInTheDocument();
+    expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    expect(screen.getByText("Build smelter mk1")).toBeInTheDocument();
+    expect(screen.getByText("Queue build_factory_smelter_mk1 for agent-0")).toBeInTheDocument();
+    const diagnostics = screen.getByText("Renderer Diagnostics").closest("details");
+    expect(diagnostics.open).toBe(false);
     expect(screen.getByText(/falls back explicitly instead of keeping a second JS renderer/i)).toBeInTheDocument();
     expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
     expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(2);
@@ -246,14 +287,18 @@ describe("pixel world host", () => {
 
     const canvas = document.querySelector(".pixel-world-canvas");
     const fragments = Array.from(canvas.querySelectorAll(".pixel-world-fragment-terrain"));
+    const route = canvas.querySelector(".pixel-world-route");
     const location = canvas.querySelector(".pixel-world-entity--location");
     const agent = canvas.querySelector(".pixel-world-entity--agent");
     const children = Array.from(canvas.children);
 
     expect(fragments).toHaveLength(2);
+    expect(route).toHaveAttribute("data-route-kind", "agent_assignment");
     expect(fragments.every((fragment) => fragment.tagName === "DIV")).toBe(true);
     expect(fragments.every((fragment) => fragment.getAttribute("role") === null)).toBe(true);
     expect(children.indexOf(fragments[0])).toBeLessThan(children.indexOf(location));
+    expect(children.indexOf(route)).toBeLessThan(children.indexOf(location));
+    expect(children.indexOf(fragments[0])).toBeLessThan(children.indexOf(route));
     expect(children.indexOf(location)).toBeLessThan(children.indexOf(agent));
     expect(parseFloat(fragments[0].style.width)).toBeLessThanOrEqual(26);
     expect(parseFloat(location.style.opacity)).toBeLessThan(0.5);

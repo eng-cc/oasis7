@@ -1,0 +1,29 @@
+task_uid: task_b399bf37eff94c44a300c55f5db739d3
+title: "commercial pixel world rendering loop"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-world-simulator-commercial-pixel-world-rendering-loop
+execution_log_path: .pm/tasks/task_b399bf37eff94c44a300c55f5db739d3.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/project.md
+  - doc/playability_test_result/prd.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Pixel world first screen prioritizes commercial gameplay readability over debug/operator data."
+  - "Agent action and selection surfaces show player leverage through objective, route, and feedback semantics."
+  - "Fragment terrain remains visible as background world body without overpowering agents at playable zoom."
+  - "Representative UI and renderer tests pass for the commercial pixel world render state."
+handoff_to:
+  - viewer_engineer
+updated_at: 2026-05-28T16:22:36+08:00
+last_started_at: 2026-05-28T16:04:35+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host && npm --prefix crates/oasis7_viewer run build:software-safe && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && git diff --check"
+last_verified_at: 2026-05-28T16:22:35+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-28T16:22:36+08:00
