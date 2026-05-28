@@ -110,6 +110,10 @@ run_oasis7_llm_baseline_fixture_smoke() {
   run ./scripts/llm-baseline-fixture-smoke.sh
 }
 
+run_provider_remote_https_smoke() {
+  run ./scripts/provider-remote-https/letai-provider-cli.test.sh
+}
+
 run_oasis7_viewer_software_safe_feedback_contract_tests() {
   run node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs
   run ./scripts/copy-viewer-web-dist.test.sh
@@ -139,6 +143,7 @@ run_required_gate_checks() {
   run bash ./scripts/check-script-executable-bits.sh
   run ./scripts/cargo-dev-lib.test.sh
   run ./scripts/plan-rust-required-scope.test.sh
+  run_provider_remote_https_smoke
   run ./scripts/check-rust-file-size.sh
   run env -u RUSTC_WRAPPER cargo fmt --all -- --check
 }

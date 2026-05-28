@@ -1,0 +1,25 @@
+task_uid: task_962b35abbe284804a0ca983cee0779d8
+title: "OC LetAI bridge test coverage"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-oc-letai-bridge-test-coverage
+execution_log_path: .pm/tasks/task_962b35abbe284804a0ca983cee0779d8.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-runtime/project.md
+doc_refs:
+  - doc/world-runtime/project.md
+related_prd:
+  - PRD-WORLD_RUNTIME-040
+acceptance:
+  - "Add automated coverage for OC to LetAI bridge wrapper and remote-provider integration gaps and verify related test suites."
+handoff_to: []
+updated_at: 2026-05-28T10:15:08+08:00
+last_started_at: 2026-05-28T10:07:22+08:00
+last_claim_type: task_complete
+last_verify_command: scripts/provider-remote-https/letai-provider-cli.test.sh
+last_verified_at: 2026-05-28T10:15:07+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-28T10:15:08+08:00
