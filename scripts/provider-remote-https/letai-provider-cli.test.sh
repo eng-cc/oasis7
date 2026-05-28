@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/../.."
+python3 scripts/provider-remote-https/letai_provider_cli.test.py

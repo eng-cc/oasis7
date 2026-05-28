@@ -7,6 +7,7 @@ use oasis7::simulator::{
 };
 use std::collections::BTreeMap;
 use std::fs;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 #[derive(Debug, Clone)]
 struct FakeInvoker {
@@ -17,6 +18,14 @@ impl AgentInvoker for FakeInvoker {
     fn invoke(&self, _invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
         self.response.clone()
     }
+}
+
+fn newapi_bridge_state_env_guard() -> MutexGuard<'static, ()> {
+    static GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+    GUARD
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("newapi bridge state env test guard")
 }
 
 #[test]
@@ -316,6 +325,7 @@ fn route_label_env_clears_label_when_absent() {
 
 #[test]
 fn resolve_newapi_bridge_route_label_requires_active_binding() {
+    let _guard = newapi_bridge_state_env_guard();
     let state_path = std::env::temp_dir().join(format!(
         "oasis7-provider-bridge-state-{}.json",
         std::process::id()
@@ -345,7 +355,53 @@ fn resolve_newapi_bridge_route_label_requires_active_binding() {
 }
 
 #[test]
+fn resolve_newapi_bridge_route_label_accepts_active_binding_with_token_key() {
+    let _guard = newapi_bridge_state_env_guard();
+    let state_path = std::env::temp_dir().join(format!(
+        "oasis7-provider-bridge-active-state-{}.json",
+        std::process::id()
+    ));
+    fs::write(
+        state_path.as_path(),
+        serde_json::to_vec(&serde_json::json!({
+            "bindings": [
+                {
+                    "bridge_user_id": "bridge-user-000001",
+                    "newapi_user_ref": "user-1",
+                    "status": "active"
+                }
+            ],
+            "project_bindings": [
+                {
+                    "bridge_user_id": "bridge-user-000001",
+                    "token_key": "token-key-000001"
+                }
+            ]
+        }))
+        .expect("encode bridge state"),
+    )
+    .expect("write bridge state");
+    std::env::set_var(
+        "OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH",
+        state_path.as_os_str(),
+    );
+    let state = ProviderState::new(CliOptions::default()).expect("provider state");
+    assert_eq!(
+        state.resolve_newapi_bridge_route_label("newapi_user_ref:user-1"),
+        Some("newapi_user_ref:user-1".to_string())
+    );
+    assert_eq!(
+        state.resolve_newapi_bridge_route_label("bridge_user_id:bridge-user-000001"),
+        Some("bridge_user_id:bridge-user-000001".to_string())
+    );
+    std::env::remove_var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH");
+    let _ = fs::remove_file(state_path);
+}
+
+#[test]
 fn resolve_newapi_bridge_route_label_rejects_unknown_prefix_and_short_bare_value() {
+    let _guard = newapi_bridge_state_env_guard();
+    std::env::remove_var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH");
     let state = ProviderState::new(CliOptions::default()).expect("provider state");
     assert_eq!(state.resolve_newapi_bridge_route_label("foo:user-1"), None);
     assert_eq!(

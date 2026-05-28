@@ -190,6 +190,17 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_ce44b8a269824fbcb718febd2140c425.yaml
+  - task_uid: task_962b35abbe284804a0ca983cee0779d8
+    title: "OC LetAI bridge test coverage"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - PRD-WORLD_RUNTIME-040
+    acceptance:
+      - "Add automated coverage for OC to LetAI bridge wrapper and remote-provider integration gaps and verify related test suites."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_962b35abbe284804a0ca983cee0779d8.yaml
   - task_uid: task_f5ff387007264254b4cafde421f34e10
     title: "Implement P2PARCH-6 mixed-topology validation matrix"
     priority: P2

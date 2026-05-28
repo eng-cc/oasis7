@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] oc-letai-bridge-test-coverage (PRD-WORLD_RUNTIME-040) [test_tier_required]: 补齐 `OC -> LetAI token_key/quota` 运行链的自动化覆盖，至少包含 remote provider bridge 从 `bridge-state.json` 解析 active binding/token_key 的正向用例，以及 `letai_provider_cli.py` 从 NewAPI bridge state 自动取 `token_key` 后调用 mock `/v1/chat/completions` 的脚本级 smoke。 Trace: .pm/tasks/task_962b35abbe284804a0ca983cee0779d8.yaml
 - [x] viewer-live-integration-flake-burn-down (PRD-WORLD_RUNTIME-001) [test_tier_full]: 移除 `scripts/ci-tests.sh` 对 `live_server_accepts_client_and_emits_snapshot_and_event` 的历史 `skip + 单测重跑 + retry` 特殊路径，确认该 full-tier 集成回归在当前代码上已可直接并入 `cargo test -p oasis7 --tests --features "test_tier_full,wasmtime,viewer_live_integration"` 单次入口。 Trace: .pm/tasks/task_0a012bf9b85b417bb56d591969a07d36.yaml
 - [x] first-agent-claim-auto-grant (PRD-WORLD_RUNTIME-040) [test_tier_required]: 将首个 agent `slot-1` claim 从“申请/审核/批准后再发 grant”改为“专用池余额足够时在 `ClaimAgent` 路径自动补足 restricted starter funding 并原子完成认领”；viewer / API 同步移除旧审批 surface，只保留 dedicated pool auto-funding 直连 claim 真值。 Trace: .pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml
   - 产物文件:
