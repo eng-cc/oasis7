@@ -1,0 +1,27 @@
+task_uid: task_b62ea1b2fe584b23ae72a9776e7e1261
+title: "Daily GitHub Release via CI"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-daily-github-release-ci
+execution_log_path: .pm/tasks/task_b62ea1b2fe584b23ae72a9776e7e1261.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - .github/workflows/release-packages.yml
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "A GitHub Actions workflow runs daily at 06:00 Asia/Shanghai and creates a date_v1 tag plus release without relying on a local machine."
+  - "The workflow is manually dispatchable for verification and refuses to overwrite existing tags/releases."
+  - "The prior local Codex automation is disabled or removed to avoid duplicate release attempts."
+handoff_to: []
+updated_at: 2026-05-29T11:48:02+08:00
+last_started_at: 2026-05-29T11:41:29+08:00
+last_claim_type: task_complete
+last_verify_command: "python3 -c \"import pathlib, yaml; yaml.safe_load(pathlib.Path('.github/workflows/daily-github-release.yml').read_text()); print('yaml ok')\" && git diff --check && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh"
+last_verified_at: 2026-05-29T11:48:01+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-29T11:48:02+08:00

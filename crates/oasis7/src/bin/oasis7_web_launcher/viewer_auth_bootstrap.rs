@@ -125,7 +125,44 @@ mod tests {
     };
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn viewer_auth_test_env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct ViewerAuthEnvRestore {
+        public_key: Option<String>,
+        private_key: Option<String>,
+    }
+
+    impl ViewerAuthEnvRestore {
+        fn clear() -> Self {
+            let restore = Self {
+                public_key: std::env::var(VIEWER_AUTH_PUBLIC_KEY_ENV).ok(),
+                private_key: std::env::var(VIEWER_AUTH_PRIVATE_KEY_ENV).ok(),
+            };
+            std::env::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
+            std::env::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
+            restore
+        }
+    }
+
+    impl Drop for ViewerAuthEnvRestore {
+        fn drop(&mut self) {
+            restore_env_var(VIEWER_AUTH_PUBLIC_KEY_ENV, self.public_key.as_deref());
+            restore_env_var(VIEWER_AUTH_PRIVATE_KEY_ENV, self.private_key.as_deref());
+        }
+    }
+
+    fn restore_env_var(name: &str, value: Option<&str>) {
+        match value {
+            Some(value) => std::env::set_var(name, value),
+            None => std::env::remove_var(name),
+        }
+    }
 
     fn temp_config_path(label: &str) -> PathBuf {
         let mut path = std::env::temp_dir();
@@ -160,17 +197,19 @@ mod tests {
 
     #[test]
     fn resolve_optional_viewer_auth_bootstrap_prefers_env_keys() {
+        let _guard = viewer_auth_test_env_lock().lock().expect("env lock");
+        let _restore = ViewerAuthEnvRestore::clear();
         std::env::set_var(VIEWER_AUTH_PUBLIC_KEY_ENV, "env-public");
         std::env::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, "env-private");
         let auth = resolve_optional_viewer_auth_bootstrap().expect("auth");
         assert_eq!(auth.public_key, "env-public");
         assert_eq!(auth.private_key, "env-private");
-        std::env::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
-        std::env::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
     }
 
     #[test]
     fn resolve_optional_viewer_auth_bootstrap_uses_config_file() {
+        let _guard = viewer_auth_test_env_lock().lock().expect("env lock");
+        let _restore = ViewerAuthEnvRestore::clear();
         let temp_root = temp_config_path("config");
         fs::create_dir_all(&temp_root).expect("mkdir");
         let config_path = temp_root.join("config.toml");
