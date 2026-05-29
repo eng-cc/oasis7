@@ -46,6 +46,7 @@
   - SC-11: testing 模块明确把 `L4` 正式收口为 `L4A synthetic internal playability review` 与 `L4B embodied agent playtest`，并把内部真人试玩降为 `L4B` 的可选校准证据，避免把 agent 角色扮演、agent 实操试玩和真实人类 / 外部继续游玩意愿混写成同一层结论。
   - SC-12: 仓库必须提供一个 repo-local `L4` scaffold 入口，能够在单个 worktree 内稳定生成 `L4A` review packet、role/persona cards、`L4B` agent 卡副本、可选内部真人佐证 notes、最终 summary 与推荐命令，不再依赖临时手写 packet/card 文件名。
   - SC-13: 仓库必须提供一个 repo-local `L4B` embodied-agent runner，能够实际启动 producer playtest、执行最小真实操作链路、并把状态快照/截图/日志路径/summary 回填到同一 artifact 目录，而不是只留下手工提示。
+  - SC-14: testing 模块具备一份 canonical 模型视觉评审 SOP，使截图/布局/遮挡/层级/可读性等常规视觉 review 默认由模型完成，并明确何时必须升级人工 owner。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -55,6 +56,7 @@
   - 制作人与经济配置维护者：需要一份可审计的创世配置检查表，避免只靠聊天结论发币。
   - 制作人与玩法 owner：需要一套分层证据栈，区分“没坏”“世界在动”“玩家真的想继续玩”。
   - 内部玩法评审 owner：需要固定的 simulated personas，避免每次靠临时脑补多个“可能的玩家”。
+  - UI / Viewer owner：需要用截图和模型视觉判断替代绝大部分人工视觉扫图，只把低置信或对外 claim 交给人。
 - User Scenarios & Frequency:
   - 开发分支回归：每次核心改动后触发一次 required 路径。
   - 发布候选验证：每个候选版本执行 required + full 组合。
@@ -64,6 +66,7 @@
   - 创世配置冻结前审计：每次准备冻结 Token 分配表时执行一次 required-tier 配置审计。
   - 信任门 / 留存证据复核：每次宣称“玩家值得继续玩”前，必须先检查该样本是否只是世界在自己运转。
   - 玩法质量争议复盘：每次出现“自动化通过但体验仍差”的争议时，必须先定位缺的是哪一层证据。
+  - UI / 视觉 PR 收口：每次改动触达首屏、布局、截图、像素世界、响应式或视觉层级时，优先产出截图并执行模型视觉评审。
 - User Stories:
   - PRD-TESTING-001: As a 测试维护者, I want one canonical testing strategy, so that suite evolution stays coherent.
   - PRD-TESTING-002: As a 开发者, I want clear trigger matrices, so that I can run the right tests efficiently.
@@ -75,6 +78,7 @@
   - PRD-TESTING-008: As a workflow owner, I want a designed system for role-based playability review subagents, so that internal multi-role review can run as a standard operating path instead of ad hoc coordination.
   - PRD-TESTING-009: As a playability reviewer, I want a designed panel of simulated player personas, so that internal review can compare multiple player mindsets without inventing a new formal role taxonomy.
   - PRD-TESTING-010: As a stage owner, I want `L4A/L4B/L5` boundaries written explicitly, so that synthetic、agentic、real-human playability claims stop collapsing into one undifferentiated `L4`.
+  - PRD-TESTING-011: As a UI / Viewer owner, I want screenshot-based model visual review to be the default routine visual reviewer, so that most manual visual review is replaced by reproducible evidence and humans only handle escalations.
 - Critical User Flows:
   1. Flow-TST-001: `识别改动类型 -> 匹配 S0~S10 -> 日常提交先执行 commit baseline，再按风险升级到 required/full -> 输出结果`
   2. Flow-TST-002: `发布前执行 full 套件 -> 按 Viewer/launcher 选择正确驱动链路 -> 汇总命令/日志/截图 -> 生成证据包`
@@ -88,11 +92,13 @@
   10. Flow-TST-010: `组装 review packet -> 按 changed surface 拉起标准角色 subagent -> 回收 review card -> producer/qa 汇总内部结论`
   11. Flow-TST-011: `若体验争议来自玩家风格差异 -> 选择 simulated personas -> 生成 persona cards -> 回流标准角色 review`
   12. Flow-TST-012: `若先做高强度内部模拟 -> 形成 L4A；若需要 agent 实际进游戏操作且尽量逼近真人评审效果的结论 -> 升级到 L4B；若仍需真实人类 / 真实环境结论 -> 再升级到 L5；内部真人试玩只作为 L4B 可选校准`
+  13. Flow-TST-013: `采集 desktop/mobile 截图 -> 附自动化摘要与视觉 contract -> 模型输出 visual review card -> pass 替代 routine 人工视觉 review，watch/block/low-confidence 升级人工`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 分层测试触发 | 改动类型、测试层级、命令集合、changed-path scope | 依据矩阵选择最小必跑集合；PR `required-gate` 先规划 `minimal / targeted / full` 再执行命中的重型组件，必要时追加 launcher Web `trunk build` | `planned -> scoped -> running -> passed/failed` | 默认先 `commit`，按风险升级到 `required`，发布加跑 `full`；docs-only / 无关元数据 PR 允许在 stable context 下退化为 governance/fmt-only；`oasis7_client_launcher` / launcher shared runtime 命中时 required-gate 追加 launcher Web 构建覆盖 | 开发者可执行，发布者可放行 |
 | Web UI 驱动分流 | `surface_type`、`driver`、`evidence_mode` | Viewer 页面默认走 `agent-browser`；`oasis7_web_launcher` 产品动作默认走 GUI Agent，页面仅做状态/字段校验 | `selected -> driven -> verified` | 先按 surface 分流，再决定是否补充 Canvas/页面采样 | QA/发布与产品 owner 共同遵循 |
+| 模型视觉评审 | `screenshot_set`、`expected_visual_contract`、`automated_evidence`、`verdict`、`confidence`、`human_escalation_needed` | 对截图执行固定 rubric 评审，输出 visual review card；`pass/high-confidence` 可替代 routine 人工视觉 review，`watch/block/low-confidence` 必须写明 owner action | `captured -> model_reviewed -> pass/watch/block/escalated` | 先跑确定性测试，再让模型判断视觉；模型只替代截图/布局/可读性类人工 review，不替代 GitHub required review、发布放行、L5 真实玩家验证或对外 claim 审批 | `producer_system_designer` / `qa_engineer` 守边界，命中的 UI owner 处理 findings |
 | software_safe release 语义门禁 | `renderMode`、`lastControlFeedback.stage`、`deltaLogicalTime`、`deltaEventSeq` | `software_safe` 下允许 `play/pause` 先返回 `queued`；formal progress 以后续 `step` 的 `completed_advanced` + 正向 world delta 判定 | `queued -> completed_advanced` 或 `queued -> blocked` | 主 Web 入口不再要求 `play` 立刻涨 tick，也不再强制 `selectedKind=agent`；若 `llm_required` 显式阻断则按 blocker 合约留痕 | QA/发布维护者维护 |
 | 证据包归档 | 命令、日志、截图、结论、责任人、`player_action`、`world_change_due_to_player`、`player_leverage_score`、`world_activity_only` | 执行后归档并建立索引 | `collecting -> archived -> reviewed` | 按版本与模块分层索引；若 `world_activity_only=yes`，则该样本不能直接支撑玩法放行 | 测试维护者负责最终校验 |
 | 缺陷回归闭环 | 缺陷ID、触发条件、修复提交、复测结论 | 缺陷关闭前必须绑定回归记录 | `opened -> fixed -> regressed -> closed` | 高风险缺陷优先回归 | QA/维护者可更新状态 |
@@ -133,7 +139,8 @@
   - AC-19: `playability-l4-synthetic-human-split-2026-05-06` 专题文档必须明确 `L4A/L4B/L5` 的定义、operator 入口、claim 边界与当前非替代承诺。
   - AC-20: `scripts/prepare-playability-l4-review.sh` 与 `doc/testing/templates/playability-l4-*.md` 必须能在当前 worktree 下生成一套完整 `L4` scaffold，至少包含 review packet、role review cards、persona cards、summary、`L4B` agent 卡副本、可选内部真人佐证 notes 和推荐命令文件。
   - AC-21: `scripts/run-playability-l4b-agent.sh` 必须能消费上述 `manifest.json` 或 artifact 目录，实际完成一次 `L4B` embodied-agent run，并落盘 `L4B` summary、关键 state snapshots、截图、启动日志路径以及对 copied `l4b-agent-playtest-card.md` / `l4-summary.md` 的自动预填。
-  - AC-22: `scripts/ci-tests.sh full-support` 必须直接执行 workspace support crates 的 Rust 测试入口，至少覆盖 `oasis7_client_launcher`、`oasis7_launcher_ui`、`oasis7_proto`、`oasis7_wasm_abi`、`oasis7_wasm_build`、`oasis7_wasm_executor`、`oasis7_wasm_router`、`oasis7_wasm_sdk`、`oasis7_wasm_store` 与 `pixel_world_bridge`，避免这些 crate 只被间接编译或 release 阶段暴露回归。
+  - AC-22: `model-visual-review-sop-2026-05-29.manual.md` 与 `model-visual-review-card-template.md` 必须定义截图输入、rubric、verdict、confidence、人类升级条件与正式 sink，使模型视觉评审能替代 routine 人工视觉 review。
+  - AC-23: `scripts/ci-tests.sh full-support` 必须直接执行 workspace support crates 的 Rust 测试入口，至少覆盖 `oasis7_client_launcher`、`oasis7_launcher_ui`、`oasis7_proto`、`oasis7_wasm_abi`、`oasis7_wasm_build`、`oasis7_wasm_executor`、`oasis7_wasm_router`、`oasis7_wasm_sdk`、`oasis7_wasm_store` 与 `pixel_world_bridge`，避免这些 crate 只被间接编译或 release 阶段暴露回归。
 - Non-Goals:
   - 不在本 PRD 中替代业务模块的功能设计。
   - 不承诺所有测试都进入 CI 默认路径。
@@ -235,6 +242,7 @@
 | PRD-TESTING-008 | playability-subagent-review-system-2026-05-06 | `test_tier_required` | 标准角色 subagent 定义、packet/card contract、scaffold 入口、trigger matrix 与 stop conditions 抽样检查 | 多角色内部评审系统设计 |
 | PRD-TESTING-009 | playability-simulated-player-persona-panel-2026-05-06 | `test_tier_required` | persona catalog、packet/card schema、persona scaffold、回流规则与 L4/L5 边界抽样检查 | 多风格内部玩家视角治理 |
 | PRD-TESTING-010 | playability-l4-synthetic-human-split-2026-05-06 | `test_tier_required` | `L4A/L4B/L5` 边界、manual 入口、repo-local scaffold、`L4B` runner、claim 边界与根入口互链抽样检查 | synthetic/agent/real-human 玩法证据治理 |
+| PRD-TESTING-011 | model-visual-review-sop | `test_tier_required` | 模型视觉评审 SOP、输出模板、testing 根入口和 S6 手册互链、doc governance 检查 | routine 人工视觉 review 替代路径 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -248,3 +256,4 @@
 | DEC-TST-008 | 进一步把多角色内部评审设计成标准角色 subagent 系统 | 继续临时决定这次要不要找哪些角色来看 | 临时协调很难规模化，也无法稳定复用 review 输出。 |
 | DEC-TST-009 | 用 simulated player persona panel 补多风格玩家视角，但不新增正式 `player` 角色 | 直接把 `player` 升格成新的标准角色 | 会破坏仓库角色治理，并混淆内部模拟与外部真人验证。 |
 | DEC-TST-010 | 把 `L4` 正式收口为 `L4A synthetic` 与 `L4B agent`，并把内部真人试玩降为 `L4B` 可选校准、把真实人类验证留在 `L5` | 继续把 agent 角色扮演、agent 实操、内部真人试玩与真实人类继续游玩意愿共用一个 `L4` 标签 | 这些信号的证明强度不同，混写会持续污染 stage/release 结论。 |
+| DEC-TST-011 | routine 视觉 review 默认采用截图加模型视觉评审，人工只处理升级项 | 所有视觉截图继续默认人工扫图 | 人工 review 容易不可追溯、成本高；固定截图输入和 rubric 后，模型足以覆盖大部分布局/遮挡/可读性判断。 |

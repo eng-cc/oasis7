@@ -9,6 +9,7 @@
 - 想在一个 worktree 里直接准备一轮完整 `L4A + L4B` 验证产物：先读 `testing-manual.md` 的 `L4A/L4B/L5` 章节，再执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 再由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
 - 想先回答“这些标准角色 subagent 到底怎么设计、怎么组合成 review 流程”：`doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
 - 想先回答“agent 如何模拟多个不同风格的玩家视角，但又不把 `player` 写成正式角色”：`doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
+- 想用截图加模型视觉评审替代绝大部分人工视觉 review：先读 `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`，输出卡模板在 `doc/testing/templates/model-visual-review-card-template.md`
 - 想看当前活跃任务、阻断与最新完成项：`doc/testing/project.md`
 - 想先判断要跑哪套测试或查操作步骤：`testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted-world / p2p-shared-network / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
@@ -36,7 +37,7 @@
 - evidence、templates 与历史 blocker/closure 留痕继续保留可检索性，但默认从 `prd.index.md` 或具体专题路径进入。
 
 ## 模块职责
-- 维护系统测试手册、required/full 分层门禁与发布证据包口径。
+- 维护系统测试手册、required/full 分层门禁、模型视觉评审 SOP 与发布证据包口径。
 - 汇总 CI、启动器、长稳、性能、人工手册与治理专题。
 - 承接跨模块测试范围定义、证据归档与趋势基线建设。
 
@@ -46,7 +47,7 @@
 - `longrun/`（24）：长稳、chaos、soak 与在线稳定性。
 - `launcher/`（18）：启动器链路测试、playtest 与配置自动接线。
 - `governance/`（28）：质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated player personas。
-- `templates/`（16）：证据包、报告与检查清单模板；默认按需进入。
+- `templates/`（16）：证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入。
 - `performance/`（12）：runtime / viewer 性能观测与方法学。
 - `manual/`（7）：系统测试手册分册与 Web UI 闭环 manual。
 - `chaos-plans/`（1）：专项 chaos plan 入口。

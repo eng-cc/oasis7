@@ -17,6 +17,7 @@
 - 想直接在一个 worktree 里准备完整 `L4A + L4B` 执行包：先读 `testing-manual.md` 的 `L4A/L4B/L5` 段落，再执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 再由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
 - 想先回答“对应标准角色 subagent 到底怎么设计、如何组合成 review 流程”：先读 `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
 - 想先回答“如何用多个 simulated player personas 补内部玩家视角，但不新增正式 `player` 角色”：先读 `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
+- 想用模型视觉判断替代常规人工视觉 review：先读 `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`，再按 `doc/testing/templates/model-visual-review-card-template.md` 输出评审卡
 - 想先回答当前在推进什么、哪些测试治理任务或 QA 阻断仍在影响收口：先读 `doc/testing/project.md`
 - 想直接决定要跑哪套测试或按步骤执行：先读 `testing-manual.md` 与 `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted-world / p2p-shared-network / governance drill / claim-audit 问题分流：先读 `doc/testing/evidence/README.md`
@@ -42,7 +43,7 @@
 | `longrun/` | 24 | 长稳、chaos、soak 与在线稳定性 |
 | `launcher/` | 18 | 启动器链路测试、playtest 与配置自动接线 |
 | `governance/` | 28 | 质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated personas |
-| `templates/` | 12 | 证据包、报告与检查清单模板；默认按需进入 |
+| `templates/` | 12 | 证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入 |
 | `performance/` | 12 | runtime / viewer 性能观测与方法学 |
 | `manual/` | 7 | 系统测试手册分册与 Web UI 闭环 manual |
 | `chaos-plans/` | 1 | 专项 chaos plan 入口 |
@@ -51,6 +52,7 @@
 - `doc/testing/evidence/README.md`：`evidence/` 热点子域 landing page，按 release gate、hosted-world、p2p/shared-network、governance drill 与 claim/audit 分流读者。
 - `testing-manual.md`：仓库级系统测试手册，不并入下方模块 PRD 三件套长表。
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`：Web UI 闭环 canonical 操作手册，不并入下方模块 PRD 三件套长表。
+- `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`：截图加模型视觉评审 SOP，用于替代 routine 人工视觉 review，不并入下方模块 PRD 三件套长表。
 - `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`：当前 QA 阻断摘要，适合在判断 provider 双模式收口风险时定向进入。
 
 ## 默认阅读面边界

@@ -377,6 +377,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - S6 详细执行步骤、agent-browser 命令、发布门禁与补充约定已拆分到：
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`（需求边界/成功标准）
+  - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`（截图加模型视觉评审，用于替代 routine 人工视觉 review）
   - `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`（发布前人工体验与异常恢复检查清单）
 - 本手册仅保留分层与触发矩阵，执行时按上述文档操作。
 - 模式总口径（`PRD-CORE-009`）：
@@ -391,6 +392,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 若需要把 `software_safe` 的 prompt/chat/rollback/message-flow 做成独立 QA smoke，优先执行 `./scripts/viewer-software-safe-chat-regression.sh`；当脚本自举 source stack 并自动启用 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` 时，若 QA echo 没有在 `chat ack` 后、无额外 `step/play` 的同一轮交互里进入消息流，会直接判为阻断失败；外部 URL 场景仍默认把 `agent_spoke` 缺失记为可追溯 warning，显式加 `--require-agent-spoke` 时再升级为阻断失败。
 - 若改动只触达 `software_safe` feedback 语义映射而不需要浏览器自举，优先执行 `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`；该 deterministic contract regression 已纳入 `./scripts/ci-tests.sh required`。
 - 若改动触达 `crates/oasis7_viewer/software_safe_src/**` 的结构、Prompt/Chat surface、主入口锚点或移动端分区导航，优先执行 `npm --prefix crates/oasis7_viewer run test:ui`；这套 Vitest + `@solidjs/testing-library` 回归用于验证 repo-owned `World / Targets / Command` 锚点、`Runtime Diagnostics` 降级面、`Agent Chat` 与 `Prompt Overrides` 的 DOM 可达性，不替代 S6 headed browser 证据。
+- 若改动触达视觉层级、首屏、截图、响应式、像素世界或 UI polish，S6 截图采证后默认执行模型视觉评审；`pass/high-confidence` 可替代 routine 人工视觉 review，`watch/block/low-confidence` 或对外 claim 影响必须升级人类 owner。输出格式使用 `doc/testing/templates/model-visual-review-card-template.md`。
 - 若需要稳定触发一条标准 `AgentSpoke` 供消息流验收，在 source runtime 启动前显式设置 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1`；该开关仅用于 Viewer / QA 测试态，默认产品路径必须保持关闭。
 - 若 Viewer 页面长期停在 `connecting` 且 `logicalTime=0`，必须查看 `window.__AW_TEST__.getState().lastError`；命中 `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` 等 fatal 时，按图形环境门禁失败处理，不进入玩法结论。
 - `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先查看 `window.__AW_TEST__.getState().renderMode`。
