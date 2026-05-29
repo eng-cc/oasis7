@@ -10,6 +10,7 @@ const repoRoot = resolve(viewerRoot, "../..");
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const outDir = resolve(repoRoot, "output/playwright/pixel-world-fragment-visual", runId);
 const screenshotPath = join(outDir, "fragment-fallback-visual.png");
+const actionReceiptScreenshotPath = join(outDir, "action-receipt-visual.png");
 const summaryPath = join(outDir, "summary.json");
 const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
 const session = `pixel-world-fragment-visual-${process.pid}`;
@@ -248,6 +249,7 @@ function visualProbeScript() {
       const badges = () => Array.from(document.querySelectorAll(".badge"))
         .map((element) => element.textContent.trim())
         .filter((text) => /^(locations|fragments|agents|links|hotspots|derived_positions|world_bounds|renderer|runtime|zoom|pan)=/.test(text));
+      const textOf = (selector, root = document) => root.querySelector(selector)?.textContent.trim() || null;
       const rectOf = (element) => {
         const rect = element.getBoundingClientRect();
         return {
@@ -257,8 +259,25 @@ function visualProbeScript() {
           height: Math.round(rect.height),
         };
       };
+      const receiptOf = () => {
+        const receipt = document.querySelector(".pixel-world-action-receipt");
+        if (!receipt) {
+          return null;
+        }
+        return {
+          present: receipt.dataset.receiptPresent || null,
+          state: receipt.dataset.receiptState || null,
+          confidence: receipt.dataset.receiptConfidence || null,
+          title: textOf(".pixel-world-action-receipt__title", receipt),
+          summary: textOf(".pixel-world-action-receipt__summary", receipt),
+          detail: textOf(".pixel-world-action-receipt__detail", receipt),
+          meta: textOf(".pixel-world-action-receipt__meta", receipt),
+          rect: rectOf(receipt),
+        };
+      };
 
       await waitFor(() => window.__AW_TEST__?.injectSnapshot);
+      window.__PIXEL_WORLD_VISUAL_BASE_SNAPSHOT__ = snapshot;
       window.__AW_TEST__.injectSnapshot(snapshot);
       await waitFor(() => document.querySelector("#pixel-world-embedded-runtime-canvas"));
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
@@ -320,8 +339,127 @@ function visualProbeScript() {
             fragmentsBeforeLocation: children.indexOf(fragments[0]) < children.indexOf(location),
             locationBeforeAgent: children.indexOf(location) < children.indexOf(agent),
           },
+          actionReceipt: receiptOf(),
           badges: badges(),
         },
+      });
+    })()
+  `;
+}
+
+function actionReceiptProbeScript() {
+  return String.raw`
+    (async () => {
+      const baseSnapshot = window.__PIXEL_WORLD_VISUAL_BASE_SNAPSHOT__;
+      if (!baseSnapshot) {
+        throw new Error("missing base visual snapshot for action receipt probe");
+      }
+      const snapshot = JSON.parse(JSON.stringify(baseSnapshot));
+      const gameplay = snapshot.player_gameplay || {};
+      snapshot.player_gameplay = gameplay;
+      gameplay.stage_status = "blocked";
+      gameplay.execution_state = "blocked";
+      gameplay.accepted_intent_id = "gameplay_action:build_factory_smelter_mk1";
+      gameplay.intent_summary = "Queue build_factory_smelter_mk1 for agent-0";
+      gameplay.intent_scope = "gameplay_action";
+      gameplay.intent_target = "agent-0";
+      gameplay.causality_kind = "world_constraint";
+      gameplay.causality_detail = "iron input exhausted at factory-0";
+      gameplay.last_world_change = "Smelter build request reached factory-0; iron shortage blocks construction.";
+      gameplay.available_actions = [
+        {
+          action_id: "build_factory_smelter_mk1",
+          target_agent_id: "agent-0",
+          label: "Build smelter mk1",
+          protocol_action: "gameplay_action.submit",
+          disabled_reason: null,
+        },
+      ];
+      gameplay.recent_feedback = {
+        action: "build_factory_smelter_mk1",
+        stage: "completed_no_progress",
+        effect: "Smelter build request reached factory-0; iron shortage blocks construction.",
+        reason: "iron input exhausted at factory-0",
+        hint: "Replenish upstream materials, then advance again.",
+        delta_logical_time: 1,
+        delta_event_seq: 2,
+      };
+
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const waitFor = async (predicate, timeoutMs = 12000) => {
+        const deadline = Date.now() + timeoutMs;
+        let lastError = null;
+        while (Date.now() < deadline) {
+          try {
+            const value = predicate();
+            if (value) {
+              return value;
+            }
+          } catch (error) {
+            lastError = error;
+          }
+          await sleep(100);
+        }
+        throw lastError || new Error("timed out waiting for action receipt visual probe condition");
+      };
+      const state = () => window.__AW_TEST__?.getState?.() || {};
+      const textOf = (selector, root = document) => root.querySelector(selector)?.textContent.trim() || null;
+      const rectOf = (element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+      };
+      const receiptOf = () => {
+        const receipt = document.querySelector(".pixel-world-action-receipt");
+        if (!receipt) {
+          return null;
+        }
+        return {
+          present: receipt.dataset.receiptPresent || null,
+          state: receipt.dataset.receiptState || null,
+          confidence: receipt.dataset.receiptConfidence || null,
+          title: textOf(".pixel-world-action-receipt__title", receipt),
+          summary: textOf(".pixel-world-action-receipt__summary", receipt),
+          detail: textOf(".pixel-world-action-receipt__detail", receipt),
+          meta: textOf(".pixel-world-action-receipt__meta", receipt),
+          rect: rectOf(receipt),
+        };
+      };
+
+      await waitFor(() => window.__AW_TEST__?.injectSnapshot);
+      window.__AW_TEST__.injectSnapshot(snapshot);
+      const receipt = await waitFor(() => {
+        const current = receiptOf();
+        return current?.present === "true" && current?.confidence === "world_delta" ? current : null;
+      });
+      await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
+      const fallbackButton = Array.from(document.querySelectorAll("button"))
+        .find((button) => /Host Fallback|切回/.test(button.textContent));
+      if (!fallbackButton) {
+        throw new Error("missing Host Fallback button for action receipt probe");
+      }
+      fallbackButton.click();
+      await waitFor(() => state().pixelWorldRuntimeStatus === "fallback");
+      await waitFor(() => /Renderer Not Attached|Renderer 未接管/.test(document.body.textContent || ""));
+      await waitFor(() => document.querySelectorAll(".pixel-world-fragment-terrain").length === 3);
+      const fragments = Array.from(document.querySelectorAll(".pixel-world-fragment-terrain"));
+      const stage = fragments[0]?.closest(".pixel-world-canvas") || document.querySelector(".pixel-world-canvas");
+      const agent = stage?.querySelector(".pixel-world-entity--agent") || null;
+      const blockerBadge = Array.from(document.querySelectorAll(".badge"))
+        .map((element) => element.textContent.trim())
+        .find((text) => text.startsWith("blocker=")) || null;
+      await sleep(150);
+
+      return JSON.stringify({
+        runtimeStatus: state().pixelWorldRuntimeStatus,
+        receipt,
+        blockerBadge,
+        fragmentCount: fragments.length,
+        agentRect: agent ? rectOf(agent) : null,
       });
     })()
   `;
@@ -356,15 +494,36 @@ try {
   assert(summary.fallback.agentPositionSource === "location_derived", "agent position was not derived from its location", summary.fallback);
   assert(summary.fallback.domOrder.fragmentsBeforeLocation, "fragment terrain is not behind the location layer", summary.fallback);
   assert(summary.fallback.domOrder.locationBeforeAgent, "agent layer is not in front of the location layer", summary.fallback);
+  assert(summary.fallback.actionReceipt?.present === "false", "fallback hierarchy fixture should start from an honest no-receipt state", summary.fallback);
+  assert(summary.fallback.actionReceipt?.confidence === "none", "no-receipt fixture should not claim action receipt confidence", summary.fallback);
   assert(summary.fallback.maxFragmentWidth > 0, "fragment marker boxes did not render with a measurable size", summary.fallback);
   assert(summary.fallback.maxFragmentWidth < summary.fallback.agentRect.width, "fragment blocks are not visually quieter than the agent marker", summary.fallback);
 
   await runAgentBrowser(["screenshot", screenshotPath], { timeout: 20_000 });
+  console.log("probing action receipt visual state");
+  summary.actionReceipt = await evalJson(actionReceiptProbeScript());
+  assert(summary.actionReceipt.receipt?.present === "true", "action receipt did not become visible", summary.actionReceipt);
+  assert(summary.actionReceipt.receipt?.state === "blocked", "action receipt did not expose the blocked state", summary.actionReceipt);
+  assert(summary.actionReceipt.receipt?.confidence === "world_delta", "action receipt did not use world_delta confidence", summary.actionReceipt);
+  assert(summary.actionReceipt.receipt?.title === "Action blocked", "action receipt title was not player-readable", summary.actionReceipt);
+  assert(summary.actionReceipt.runtimeStatus === "fallback", "action receipt screenshot did not stay on the host fallback surface", summary.actionReceipt);
+  assert(
+    /iron shortage blocks construction/.test(summary.actionReceipt.receipt?.summary || ""),
+    "action receipt summary did not describe the confirmed blocker",
+    summary.actionReceipt,
+  );
+  assert(/agent=agent-0/.test(summary.actionReceipt.receipt?.meta || ""), "action receipt did not name the target agent", summary.actionReceipt);
+  assert(summary.actionReceipt.receipt?.rect?.height > 40, "action receipt did not render with a measurable visual footprint", summary.actionReceipt);
+  assert(summary.actionReceipt.fragmentCount === 3, "action receipt scenario should preserve fragment background markers", summary.actionReceipt);
+  assert(summary.actionReceipt.agentRect?.width > 0, "action receipt scenario lost the readable agent marker", summary.actionReceipt);
+  await runAgentBrowser(["screenshot", actionReceiptScreenshotPath], { timeout: 20_000 });
   summary.url = url;
   summary.screenshot = screenshotPath;
+  summary.actionReceiptScreenshot = actionReceiptScreenshotPath;
   writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   console.log(`pixel-world fragment visual smoke passed: ${summaryPath}`);
   console.log(`screenshot: ${screenshotPath}`);
+  console.log(`action receipt screenshot: ${actionReceiptScreenshotPath}`);
 } finally {
   closeBrowser();
   await new Promise((resolveClose) => server.close(resolveClose));
