@@ -97,9 +97,8 @@ jobs:
             --bin oasis7_game_launcher \
             --bin oasis7_viewer_live
 
-      - name: Build viewer web dist
+      - name: Stage viewer web dist
         run: |
-          ./scripts/build-viewer-software-safe.sh
           ./scripts/copy-viewer-web-dist.sh --dist-dir output/hosted-login/web
 
       - name: Stage deployable artifact
