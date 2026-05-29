@@ -37,6 +37,12 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function numericInlineStyle(element, property) {
+  const value = Number.parseFloat(element.style[property]);
+  expect(Number.isFinite(value)).toBe(true);
+  return value;
+}
+
 function sampleSnapshot() {
   return {
     time: 12,
@@ -236,9 +242,14 @@ describe("pixel world host", () => {
 
     const renderState = buildPixelWorldRenderState("en");
     expect(renderState.links).toHaveLength(1);
-    expect(renderState.visual_hotspots.length).toBeGreaterThanOrEqual(4);
-    expect(renderState.visual_hotspots.some((entry) => entry.kind === "goal")).toBe(true);
-    expect(renderState.visual_hotspots.some((entry) => entry.kind === "blocker")).toBe(true);
+    expect(renderState.visual_hotspots).toHaveLength(4);
+    expect(renderState.visual_hotspots.map((entry) => entry.kind)).toEqual([
+      "goal",
+      "blocker",
+      "resource_transfer",
+      "build_queue",
+    ]);
+    expect(renderState.visual_hotspots.every((entry) => entry.pos)).toBe(true);
     expect(renderState.commercial_surface).toMatchObject({
       active_agent_id: "agent-0",
       objective: {
@@ -268,6 +279,7 @@ describe("pixel world host", () => {
         agents: 1,
         routes: 1,
         fragments: 2,
+        hotspots: 4,
       },
     });
   });
@@ -327,8 +339,34 @@ describe("pixel world host", () => {
 
     const renderState = buildPixelWorldRenderState("en");
     expect(renderState.fragment_terrain).toHaveLength(2);
-    expect(renderState.locations[0].marker_role).toBe("logic_anchor");
-    expect(renderState.locations[0].marker_alpha).toBeLessThan(0.5);
+    expect(renderState.locations[0]).toMatchObject({
+      marker_role: "logic_anchor",
+      marker_alpha: 0.32,
+      size_hint_px: 10,
+      fragment_terrain_count: 2,
+    });
+    expect(renderState.fragment_terrain.map((patch) => ({
+      id: patch.id,
+      dominant_compound: patch.dominant_compound,
+      footprint_cm: patch.footprint_cm,
+      color: patch.color,
+      emphasis: patch.emphasis,
+    }))).toEqual([
+      {
+        id: "fragment:loc-0:0",
+        dominant_compound: "silicate_matrix",
+        footprint_cm: 12_000,
+        color: [126, 144, 99],
+        emphasis: 0.58,
+      },
+      {
+        id: "fragment:loc-0:1",
+        dominant_compound: "iron_nickel_alloy",
+        footprint_cm: 20_000,
+        color: [176, 184, 196],
+        emphasis: 0.58,
+      },
+    ]);
 
     const metalPatch = renderState.fragment_terrain.find((patch) => (
       patch.dominant_compound === "iron_nickel_alloy"
@@ -379,7 +417,11 @@ describe("pixel world host", () => {
     expect(screen.getByText("Action Receipt")).toBeInTheDocument();
     expect(screen.getByText("Action blocked")).toBeInTheDocument();
     expect(screen.getByText("Smelter build request reached factory-0; iron shortage blocks construction.")).toBeInTheDocument();
-    expect(document.querySelector(".pixel-world-action-receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
+    const receipt = document.querySelector(".pixel-world-action-receipt");
+    expect(receipt).toHaveAttribute("data-receipt-present", "true");
+    expect(receipt).toHaveAttribute("data-receipt-state", "blocked");
+    expect(receipt).toHaveAttribute("data-receipt-confidence", "world_delta");
+    expect(receipt.textContent).toContain("agent=agent-0");
     const diagnostics = screen.getByText("Renderer Diagnostics").closest("details");
     expect(diagnostics.open).toBe(false);
     expect(screen.getByText(/falls back explicitly instead of keeping a second JS renderer/i)).toBeInTheDocument();
@@ -421,15 +463,27 @@ describe("pixel world host", () => {
     const children = Array.from(canvas.children);
 
     expect(fragments).toHaveLength(2);
+    expect(fragments.map((fragment) => fragment.getAttribute("data-compound"))).toEqual([
+      "silicate_matrix",
+      "iron_nickel_alloy",
+    ]);
+    expect(numericInlineStyle(fragments[0], "width")).toBeCloseTo(10, 1);
+    expect(numericInlineStyle(fragments[0], "height")).toBeCloseTo(10, 1);
+    expect(numericInlineStyle(fragments[1], "width")).toBeCloseTo(16.7, 1);
+    expect(numericInlineStyle(fragments[1], "height")).toBeCloseTo(16.7, 1);
     expect(route).toHaveAttribute("data-route-kind", "agent_assignment");
+    expect(numericInlineStyle(route, "opacity")).toBeCloseTo(0.5936, 4);
     expect(fragments.every((fragment) => fragment.tagName === "DIV")).toBe(true);
     expect(fragments.every((fragment) => fragment.getAttribute("role") === null)).toBe(true);
     expect(children.indexOf(fragments[0])).toBeLessThan(children.indexOf(location));
+    expect(children.indexOf(fragments[1])).toBeLessThan(children.indexOf(location));
     expect(children.indexOf(route)).toBeLessThan(children.indexOf(location));
     expect(children.indexOf(fragments[0])).toBeLessThan(children.indexOf(route));
+    expect(children.indexOf(fragments[1])).toBeLessThan(children.indexOf(route));
     expect(children.indexOf(location)).toBeLessThan(children.indexOf(agent));
-    expect(parseFloat(fragments[0].style.width)).toBeLessThanOrEqual(26);
-    expect(parseFloat(location.style.opacity)).toBeLessThan(0.5);
+    expect(numericInlineStyle(location, "opacity")).toBeCloseTo(0.32, 2);
+    expect(numericInlineStyle(location, "left")).toBeCloseTo(50, 1);
+    expect(numericInlineStyle(location, "top")).toBeCloseTo(49, 1);
     expect(location).toHaveAttribute("data-marker-role", "logic_anchor");
     expect(agent).toHaveAttribute("data-position-source", "location_derived");
   });
