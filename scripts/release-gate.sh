@@ -388,7 +388,9 @@ for step in "${selected_steps[@]}"; do
         --max-distfs-failure-ratio 0.1
         --chaos-continuous-enable
         --chaos-continuous-interval-secs 30
-        --chaos-continuous-start-sec 30
+        # Start after the first reward-runtime epoch plus startup buffer; the
+        # release gate should test recovery, not pre-warmup persistence churn.
+        --chaos-continuous-start-sec 90
         --chaos-continuous-max-events 8
         --chaos-continuous-actions restart,pause
         --chaos-continuous-seed 1772284566

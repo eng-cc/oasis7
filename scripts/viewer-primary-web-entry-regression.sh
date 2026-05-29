@@ -85,6 +85,29 @@ wait_for_http() {
   return 1
 }
 
+print_launcher_failure_context() {
+  local reason=$1
+  echo "error: $reason" >&2
+  if [[ -n "${launcher_pid:-}" ]]; then
+    if kill -0 "$launcher_pid" >/dev/null 2>&1; then
+      echo "launcher process is still running: pid=$launcher_pid" >&2
+    else
+      set +e
+      wait "$launcher_pid" >/dev/null 2>&1
+      local launcher_status=$?
+      set -e
+      echo "launcher process exited: status=$launcher_status" >&2
+      launcher_pid=""
+    fi
+  fi
+  if [[ -f "${launcher_log:-}" ]]; then
+    echo "launcher log tail (${launcher_log}):" >&2
+    tail -n 160 "$launcher_log" >&2 || true
+  else
+    echo "launcher log not found: ${launcher_log:-unset}" >&2
+  fi
+}
+
 normalize_eval_token() {
   local raw=${1:-}
   raw=$(printf '%s' "$raw" | tr -d '\r\n')
@@ -351,15 +374,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "+ oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime"
-OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime >>"$launcher_log" 2>&1
+echo "+ oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime --bin oasis7_game_launcher"
+if ! OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime --bin oasis7_game_launcher >>"$launcher_log" 2>&1; then
+  print_launcher_failure_context "launcher prebuild failed"
+  exit 1
+fi
 
 echo "+ oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- ${live_args[*]}"
-env "${launcher_env_defaults[@]}" OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- "${live_args[@]}" >"$launcher_log" 2>&1 &
+{
+  echo
+  echo "+ oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- ${live_args[*]}"
+} >>"$launcher_log"
+env "${launcher_env_defaults[@]}" OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- "${live_args[@]}" >>"$launcher_log" 2>&1 &
 launcher_pid=$!
 
-wait_for_port "$web_bind_host" "$web_bind_port" 240 || { echo "error: web bridge did not come up on $web_bind" >&2; exit 1; }
-wait_for_http "http://${viewer_host}:${viewer_port}/" 240 || { echo "error: viewer server did not become ready" >&2; exit 1; }
+if ! wait_for_port "$web_bind_host" "$web_bind_port" 240; then
+  print_launcher_failure_context "web bridge did not come up on $web_bind"
+  exit 1
+fi
+if ! wait_for_http "http://${viewer_host}:${viewer_port}/" 240; then
+  print_launcher_failure_context "viewer server did not become ready"
+  exit 1
+fi
 
 base_query="ws=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "ws://${web_bind}")&test_api=1"
 default_url="http://${viewer_host}:${viewer_port}/?${base_query}"

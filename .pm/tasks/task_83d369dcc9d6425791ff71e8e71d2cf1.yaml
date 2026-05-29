@@ -1,0 +1,31 @@
+task_uid: task_83d369dcc9d6425791ff71e8e71d2cf1
+title: "fix v0.0.54 release gate blockers"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-release-v0054-gate-fixes
+execution_log_path: .pm/tasks/task_83d369dcc9d6425791ff71e8e71d2cf1.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - .github/workflows/release-packages.yml
+  - scripts/release-gate-web-strict.sh
+  - scripts/p2p-longrun-soak.sh
+  - scripts/viewer-primary-web-entry-regression.sh
+doc_refs:
+  - doc/testing/project.md
+related_prd: []
+acceptance:
+  - "release-gate-web either starts the web bridge within the release timeout or emits the exact launcher failure in the gate log/artifact"
+  - "S9 triad_distributed restart chaos either recovers or the release gate no longer treats known pre-reward-runtime bootstrap insufficiency as a publish blocker without evidence"
+  - "targeted local verification and GitHub artifact evidence are recorded in the task execution log"
+handoff_to:
+  - qa_engineer
+  - runtime_engineer
+updated_at: 2026-05-29T17:51:59+08:00
+last_started_at: 2026-05-29T17:41:36+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/viewer-primary-web-entry-regression.sh scripts/release-gate.sh scripts/p2p-longrun-soak.sh && ./scripts/cargo-dev.sh build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime --bin oasis7_game_launcher && git diff --check"
+last_verified_at: 2026-05-29T17:51:58+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-29T17:51:59+08:00
