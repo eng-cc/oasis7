@@ -106,7 +106,8 @@ jobs:
           gh release create "${TAG}" \
             --target "${TARGET_SHA}" \
             --title "oasis7 ${TAG}" \
-            --generate-notes
+            --generate-notes \
+            --prerelease
 
       - name: Report release
         env:
