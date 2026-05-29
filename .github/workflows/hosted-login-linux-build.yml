@@ -1,6 +1,16 @@
 name: Hosted Login Linux Build
 
 on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/hosted-login-linux-build.yml"
+      - "crates/oasis7/**"
+      - "crates/oasis7_viewer/**"
+      - "scripts/build-viewer-software-safe.sh"
+      - "scripts/copy-viewer-web-dist.sh"
+      - "package-lock.json"
+      - "package.json"
   workflow_dispatch:
     inputs:
       build_profile:
