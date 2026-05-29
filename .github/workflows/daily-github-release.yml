@@ -53,25 +53,35 @@ jobs:
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "target_sha=${target_sha}" >> "${GITHUB_OUTPUT}"
 
-      - name: Refuse existing tag or release
+      - name: Check retry state
+        id: retry
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
+          TARGET_SHA: ${{ steps.tag.outputs.target_sha }}
         shell: bash
         run: |
           set -euo pipefail
-
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            echo "error: tag already exists: ${TAG}" >&2
-            exit 1
-          fi
 
           if gh release view "${TAG}" >/dev/null 2>&1; then
             echo "error: release already exists: ${TAG}" >&2
             exit 1
           fi
 
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+            existing_target_sha="$(git rev-list -n 1 "${TAG}")"
+            if [[ "${existing_target_sha}" != "${TARGET_SHA}" ]]; then
+              echo "error: existing tag ${TAG} points at ${existing_target_sha}, expected ${TARGET_SHA}" >&2
+              exit 1
+            fi
+            echo "tag_exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "tag_exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
       - name: Create and push tag
+        if: steps.retry.outputs.tag_exists != 'true'
         env:
           TAG: ${{ steps.tag.outputs.tag }}
           TARGET_SHA: ${{ steps.tag.outputs.target_sha }}
