@@ -5,12 +5,32 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/hosted-login-linux-build.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
       - "crates/oasis7/**"
-      - "crates/oasis7_viewer/**"
-      - "scripts/build-viewer-software-safe.sh"
+      - "crates/oasis7_consensus/**"
+      - "crates/oasis7_distfs/**"
+      - "crates/oasis7_launcher_ui/**"
+      - "crates/oasis7_net/**"
+      - "crates/oasis7_node/**"
+      - "crates/oasis7_proto/**"
+      - "crates/oasis7_wasm_abi/**"
+      - "crates/oasis7_wasm_executor/**"
+      - "crates/oasis7_wasm_router/**"
+      - "crates/oasis7_wasm_sdk/**"
+      - "crates/oasis7_wasm_store/**"
+      - "crates/oasis7_viewer/favicon.ico"
+      - "crates/oasis7_viewer/package-lock.json"
+      - "crates/oasis7_viewer/package.json"
+      - "crates/oasis7_viewer/pixel-world-bridge/**"
+      - "crates/oasis7_viewer/software_safe.html"
+      - "crates/oasis7_viewer/software_safe.js"
+      - "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html"
+      - "crates/oasis7_viewer/viewer.js"
       - "scripts/copy-viewer-web-dist.sh"
-      - "package-lock.json"
-      - "package.json"
+      - "scripts/viewer-web-dist-contract.sh"
+      - "vendor-egui-winit-0.33.3/**"
   workflow_dispatch:
     inputs:
       build_profile:
@@ -35,13 +55,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-
-      - name: Install viewer web dependencies
-        run: npm ci --prefix crates/oasis7_viewer
 
       - name: Install pinned Rust toolchain
         run: |
