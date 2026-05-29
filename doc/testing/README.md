@@ -13,6 +13,7 @@
 - 想先判断要跑哪套测试或查操作步骤：`testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted-world / p2p-shared-network / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
 - 想先看当前 QA 阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
+- 想先确认云上测试/正式环境、hosted-login 服务清单与 testnet/mainnet 口径边界：`doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/testing/prd.index.md`
 
 ## 入口

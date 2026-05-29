@@ -42,6 +42,7 @@
 | `consensus/` | 6 | 共识实现与内建 wasm 身份口径 |
 
 ## 活跃补充文档
+- `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`：项目级 test/prod 环境分层、hosted-login 云上清单与 `testnet/mainnet` claim boundary。
 - `doc/p2p/node/README.md`：`node/` 热点子域 landing page，按奖励、复制、PoS 时间、身份引导与 WASM 编译分流读者。
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`：formal `public_testnet` 从 `specified_skeleton_only` 进入 `ready_for_live_candidate` 前的 companion checklist/runbook。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的执行 companion runbook，不并入下方 PRD 三件套长表。
