@@ -385,7 +385,10 @@ echo "+ oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- ${live_args
   echo
   echo "+ oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- ${live_args[*]}"
 } >>"$launcher_log"
-env "${launcher_env_defaults[@]}" OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- "${live_args[@]}" >>"$launcher_log" 2>&1 &
+for launcher_env_default in "${launcher_env_defaults[@]}"; do
+  export "$launcher_env_default"
+done
+OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- "${live_args[@]}" >>"$launcher_log" 2>&1 &
 launcher_pid=$!
 
 if ! wait_for_port "$web_bind_host" "$web_bind_port" 240; then

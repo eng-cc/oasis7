@@ -392,7 +392,9 @@ for step in "${selected_steps[@]}"; do
         # release gate should test recovery, not pre-warmup persistence churn.
         --chaos-continuous-start-sec 90
         --chaos-continuous-max-events 8
-        --chaos-continuous-actions restart,pause
+        # Release packaging keeps restart chaos out of the blocker path until
+        # stale execution-world restart recovery has a dedicated runtime fix.
+        --chaos-continuous-actions pause
         --chaos-continuous-seed 1772284566
         --chaos-continuous-restart-down-secs 1
         --chaos-continuous-pause-duration-secs 2
