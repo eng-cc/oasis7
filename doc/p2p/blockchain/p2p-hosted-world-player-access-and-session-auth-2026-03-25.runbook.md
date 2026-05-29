@@ -139,6 +139,8 @@ MVP 最小 smoke：
    - 说明要么先建表，要么打开 `AUTO_CREATE`。
 
 ## 5B. 分环境执行清单
+项目级环境矩阵与当前云上服务清单以 `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md` 为入口；本节只保留 hosted account operator 执行口径。
+
 如果你准备把这条 hosted account 中心化服务给测试用户或真实玩家用，不要只想“有没有一个服务器能跑起来”；最小真值应是 `dev/staging/production` 三层各自独立。
 
 ### dev 环境

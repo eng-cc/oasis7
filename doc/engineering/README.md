@@ -19,6 +19,7 @@
 ## 按主题进入
 - 文档治理与入口减重：先看 `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
 - 目录职责与 redirect 规则：先看 `doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 环境分层、测试/正式云上清单、testnet/mainnet 口径：先看 `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
 - Rust 体量治理：先看 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
 - `.pm` / self-evolution：先看 `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 - 趋势 / 季度复核 / 迁移 / 审读：统一从 `doc/engineering/prd.index.md` 下钻对应专题
