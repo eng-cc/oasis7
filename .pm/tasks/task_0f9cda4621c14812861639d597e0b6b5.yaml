@@ -1,0 +1,26 @@
+task_uid: task_0f9cda4621c14812861639d597e0b6b5
+title: "model visual review SOP"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-world-simulator-commercial-pixel-world-rendering-loop
+execution_log_path: .pm/tasks/task_0f9cda4621c14812861639d597e0b6b5.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/project.md
+doc_refs:
+  - doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md
+  - doc/testing/templates/model-visual-review-card-template.md
+related_prd:
+  - PRD-TESTING-011
+acceptance:
+  - "Repo has a canonical screenshot-plus-model visual review SOP, output template, and testing README/PRD/project/index links; SOP defines when model review replaces routine human visual review and when human escalation remains required."
+handoff_to: []
+updated_at: 2026-05-29T11:57:15+08:00
+last_started_at: 2026-05-29T11:56:30+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && git diff --check"
+last_verified_at: 2026-05-29T11:57:14+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-29T11:57:14+08:00

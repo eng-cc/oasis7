@@ -4947,7 +4947,7 @@ async function createPixelWorldRuntimeBridge({
     fatal
   };
 }
-var _tmpl$$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface width=960 height=540></canvas><div class=pixel-world-canvas__overlay>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas><div class=pixel-world-canvas__grid></div><div class=pixel-world-canvas__overlay>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$7$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$8$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$1$1 = /* @__PURE__ */ template(`<div class="callout callout--warn"><div class=callout__header><div class=callout__title></div></div><div class=callout__body><div class=feedback-summary>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-host stack"><div class=pixel-world-host__summary><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><button type=button></button></div><details class=diagnostic><summary></summary><div class=stack style=margin-top:10px><pre class=json>`);
+var _tmpl$$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface width=960 height=540></canvas><div class=pixel-world-canvas__overlay>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$8$1 = /* @__PURE__ */ template(`<span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary></div></div><div class=pixel-world-action-receipt__meta><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$1$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas><div class=pixel-world-canvas__grid></div><div class=pixel-world-canvas__overlay>`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$13$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$14$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"><span>`), _tmpl$15$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$16$1 = /* @__PURE__ */ template(`<div class="callout callout--warn"><div class=callout__header><div class=callout__title></div></div><div class=callout__body><div class=feedback-summary>`), _tmpl$17$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$18$1 = /* @__PURE__ */ template(`<div class="pixel-world-host stack"><div class=pixel-world-host__summary><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><button type=button></button><div class=feedback-detail></div></div></details><details class=diagnostic><summary></summary><div class=stack style=margin-top:10px><pre class=json>`);
 function tr$1(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
@@ -5180,11 +5180,48 @@ function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
   if (!pos || !worldBounds) {
     return fallbackStyle;
   }
-  const xPercent = 8 + clampRatio(pos.x_cm / Math.max(1, worldBounds.width_cm)) * 84;
-  const yPercent = 10 + clampRatio(pos.y_cm / Math.max(1, worldBounds.depth_cm)) * 78;
+  const point = worldPercentPoint(pos, worldBounds, 8, 10);
   return {
-    left: `${xPercent.toFixed(1)}%`,
-    top: `${yPercent.toFixed(1)}%`
+    left: `${point.x.toFixed(1)}%`,
+    top: `${point.y.toFixed(1)}%`
+  };
+}
+function worldPercentPoint(pos, worldBounds, fallbackX = 50, fallbackY = 50) {
+  if (!pos || !worldBounds) {
+    return {
+      x: fallbackX,
+      y: fallbackY
+    };
+  }
+  return {
+    x: 8 + clampRatio(pos.x_cm / Math.max(1, worldBounds.width_cm)) * 84,
+    y: 10 + clampRatio(pos.y_cm / Math.max(1, worldBounds.depth_cm)) * 78
+  };
+}
+const FALLBACK_ROUTE_HEIGHT_TO_WIDTH_RATIO = 9 / 16;
+function routeStyle(link, worldBounds, index) {
+  const fallbackFrom = {
+    x: 14 + index % 5 * 15,
+    y: 18 + Math.floor(index / 5) * 14
+  };
+  const fallbackTo = {
+    x: fallbackFrom.x + 14,
+    y: fallbackFrom.y + 8
+  };
+  const from = worldPercentPoint(link.from, worldBounds, fallbackFrom.x, fallbackFrom.y);
+  const to = worldPercentPoint(link.to, worldBounds, fallbackTo.x, fallbackTo.y);
+  const deltaX = to.x - from.x;
+  const deltaY = to.y - from.y;
+  const scaledDeltaY = deltaY * FALLBACK_ROUTE_HEIGHT_TO_WIDTH_RATIO;
+  const length = Math.max(4, Math.hypot(deltaX, scaledDeltaY));
+  const angle = Math.atan2(scaledDeltaY, deltaX) * (180 / Math.PI);
+  return {
+    left: `${from.x.toFixed(1)}%`,
+    top: `${from.y.toFixed(1)}%`,
+    width: `${length.toFixed(1)}%`,
+    opacity: `${0.32 + clampRatio(link.emphasis ?? 0.72) * 0.38}`,
+    transform: `rotate(${angle.toFixed(1)}deg)`,
+    "transform-origin": "0 50%"
   };
 }
 function fragmentTerrainStyle(patch, worldBounds, index) {
@@ -5198,6 +5235,107 @@ function fragmentTerrainStyle(patch, worldBounds, index) {
     height: `${sizePx.toFixed(1)}px`,
     "background-color": colorToCss(patch.color),
     transform: "translate(-50%, -50%)"
+  };
+}
+function pickKnownAgentId(candidateIds, agents) {
+  const knownAgentIds = new Set(agents.map((agent) => agent.id));
+  return candidateIds.find((id) => id && knownAgentIds.has(id)) || null;
+}
+function actionReceiptTitle(locale, state2, present) {
+  if (!present) {
+    return tr$1(locale, "暂无行动回执", "No action receipt yet");
+  }
+  switch (state2) {
+    case "accepted":
+      return tr$1(locale, "行动已接受", "Action accepted");
+    case "blocked":
+      return tr$1(locale, "行动被阻塞", "Action blocked");
+    case "completed":
+      return tr$1(locale, "世界已改变", "World changed");
+    case "rejected":
+      return tr$1(locale, "行动被拒绝", "Action rejected");
+    default:
+      return tr$1(locale, "行动进行中", "Action in progress");
+  }
+}
+function buildActionReceipt({
+  locale,
+  gameplay,
+  activeAgentId
+}) {
+  const recentFeedback = gameplay?.recentFeedback;
+  const hasWorldDelta = Boolean(gameplay?.lastWorldChange || recentFeedback?.effect);
+  const hasPlayerIntent = Boolean(gameplay?.acceptedIntentId || gameplay?.acceptedIntentScope || gameplay?.acceptedIntentTarget || recentFeedback?.action);
+  const present = hasWorldDelta || hasPlayerIntent || Boolean(recentFeedback?.reason);
+  const rawState = gameplay?.executionState || recentFeedback?.stage || "waiting_for_intent";
+  const state2 = present ? rawState : "waiting_for_intent";
+  const confidence = hasWorldDelta ? "world_delta" : hasPlayerIntent ? "accepted_intent" : "none";
+  const summary = present ? gameplay?.lastWorldChange || recentFeedback?.effect || gameplay?.acceptedIntentSummary || recentFeedback?.action || gameplay?.executionSummary : tr$1(locale, "还没有一条玩家行动产生可确认的世界变化。", "No player-caused world change has been confirmed yet.");
+  const detail = present ? gameplay?.executionCauseDetail || recentFeedback?.reason || recentFeedback?.hint || gameplay?.acceptedIntentDetail || gameplay?.progressDetail || null : tr$1(locale, "先提交玩法动作或推进世界，再查看系统确认、阻塞或完成的回执。", "Submit a gameplay action or advance the world, then read whether the system accepted, blocked, or completed it.");
+  return {
+    present,
+    state: state2,
+    confidence,
+    title: actionReceiptTitle(locale, state2, present),
+    summary,
+    detail,
+    target_agent_id: present ? gameplay?.acceptedIntentTarget || gameplay?.recommendedAction?.targetAgentId || activeAgentId || null : null,
+    effect_kind: present ? gameplay?.executionCauseKind || recentFeedback?.stage || null : null,
+    delta_logical_time: present ? recentFeedback?.deltaLogicalTime ?? null : null,
+    delta_event_seq: present ? recentFeedback?.deltaEventSeq ?? null : null
+  };
+}
+function buildCommercialSurface({
+  locale,
+  gameplay,
+  agents,
+  links,
+  fragmentTerrain,
+  visualHotspots,
+  selection
+}) {
+  const activeAgentId = pickKnownAgentId([gameplay?.recommendedAction?.targetAgentId, gameplay?.acceptedIntentTarget, selection?.kind === "agent" ? selection.id : null, agents[0]?.id], agents);
+  const objectiveTitle = gameplay?.goalTitle || tr$1(locale, "进入世界，建立第一条能力链", "Enter the world and build the first capability chain");
+  const objectiveDetail = gameplay?.objective || gameplay?.progressDetail || tr$1(locale, "先让 Agent、路线和资源关系变得可读，再推进下一步。", "Read the agent, route, and resource relationship before pushing the next move.");
+  const nextActionLabel = gameplay?.recommendedAction?.label || gameplay?.nextStepHint || gameplay?.narrativeNextStep || tr$1(locale, "选择一个 Agent 或推进世界一步", "Select an agent or advance the world one step");
+  const nextActionDetail = gameplay?.recommendedAction?.disabledReason || gameplay?.nextStepHint || gameplay?.executionSummary || null;
+  const leverageSummary = gameplay?.acceptedIntentSummary || gameplay?.lastWorldChange || tr$1(locale, "还没有一条被正式接受的玩家意图", "No player-facing accepted intent yet");
+  const leverageDetail = gameplay?.lastWorldChange || gameplay?.executionCauseDetail || gameplay?.acceptedIntentDetail || gameplay?.progressDetail || null;
+  const actionReceipt = buildActionReceipt({
+    locale,
+    gameplay,
+    activeAgentId
+  });
+  return {
+    objective: {
+      title: objectiveTitle,
+      detail: objectiveDetail,
+      progress_percent: gameplay?.progressPercent ?? null
+    },
+    next_action: {
+      label: nextActionLabel,
+      detail: nextActionDetail,
+      target_agent_id: gameplay?.recommendedAction?.targetAgentId || activeAgentId,
+      execute_kind: gameplay?.recommendedAction?.executeKind || null
+    },
+    active_agent_id: activeAgentId,
+    player_leverage: {
+      state: gameplay?.executionState || "waiting_for_intent",
+      label: gameplay?.executionStateLabel || tr$1(locale, "等待玩家意图", "Waiting for Intent"),
+      summary: leverageSummary,
+      detail: leverageDetail
+    },
+    action_receipt: actionReceipt,
+    blocker: {
+      label: gameplay?.blockerLabel || gameplay?.blockerKind || null,
+      detail: gameplay?.narrativeBlockerDetail || gameplay?.blockerDetail || null
+    },
+    world_read: {
+      agents: agents.length,
+      routes: links.length,
+      fragments: fragmentTerrain.length,
+      hotspots: visualHotspots.length
+    }
   };
 }
 function buildVisualHotspots({
@@ -5404,6 +5542,15 @@ function buildPixelWorldRenderState(locale = state.uiLocale) {
     blockerHighlight,
     recentEventHotspots
   });
+  const commercialSurface = buildCommercialSurface({
+    locale,
+    gameplay,
+    agents,
+    links,
+    fragmentTerrain,
+    visualHotspots,
+    selection
+  });
   return {
     locale,
     world_bounds: worldBounds,
@@ -5416,6 +5563,7 @@ function buildPixelWorldRenderState(locale = state.uiLocale) {
     blocker_highlight: blockerHighlight,
     recent_event_hotspots: recentEventHotspots,
     visual_hotspots: visualHotspots,
+    commercial_surface: commercialSurface,
     presentation: {
       world_bounds_label: worldScaleSurface.physicalTruth.worldBoundsLabel,
       marker_truth_note: worldScaleSurface.presentationScale.markerTruthNote
@@ -5474,130 +5622,249 @@ function PixelWorldCanvasRenderer(props) {
     return _el$;
   })();
 }
-function PixelWorldCanvasPlaceholder(props) {
-  return (() => {
-    var _el$7 = _tmpl$5$1(), _el$8 = _el$7.firstChild, _el$0 = _el$8.nextSibling;
-    insert(_el$7, createComponent(For, {
-      get each() {
-        return props.renderState().fragment_terrain.slice(0, 96);
-      },
-      children: (patch, index) => (() => {
-        var _el$11 = _tmpl$6$1();
+function PixelWorldCommercialHud(props) {
+  const surface = () => props.renderState().commercial_surface;
+  return createComponent(Show, {
+    get when() {
+      return surface();
+    },
+    get children() {
+      return [(() => {
+        var _el$7 = _tmpl$6$1(), _el$8 = _el$7.firstChild, _el$9 = _el$8.firstChild, _el$0 = _el$9.nextSibling, _el$1 = _el$0.nextSibling, _el$10 = _el$8.nextSibling, _el$11 = _el$10.firstChild, _el$12 = _el$11.nextSibling, _el$14 = _el$10.nextSibling, _el$15 = _el$14.firstChild, _el$16 = _el$15.nextSibling, _el$17 = _el$16.nextSibling;
+        insert(_el$9, () => tr$1(props.locale(), "目标", "Objective"));
+        insert(_el$0, () => surface().objective.title);
+        insert(_el$1, () => surface().objective.detail);
+        insert(_el$11, () => tr$1(props.locale(), "下一步", "Next Move"));
+        insert(_el$12, () => surface().next_action.label);
+        insert(_el$10, createComponent(Show, {
+          get when() {
+            return surface().next_action.detail;
+          },
+          get children() {
+            var _el$13 = _tmpl$5$1();
+            insert(_el$13, () => surface().next_action.detail);
+            return _el$13;
+          }
+        }), null);
+        insert(_el$15, () => tr$1(props.locale(), "玩家杠杆", "Player Leverage"));
+        insert(_el$16, () => surface().player_leverage.summary);
+        insert(_el$17, (() => {
+          var _c$ = memo(() => !!surface().active_agent_id);
+          return () => _c$() ? `${surface().player_leverage.label} · agent=${surface().active_agent_id}` : surface().player_leverage.label;
+        })());
         createRenderEffect((_p$) => {
-          var _v$ = patch.dominant_compound, _v$2 = fragmentTerrainStyle(patch, props.renderState().world_bounds, index()), _v$3 = `${patch.location_id}:${patch.dominant_compound}`;
-          _v$ !== _p$.e && setAttribute(_el$11, "data-compound", _p$.e = _v$);
-          _p$.t = style(_el$11, _v$2, _p$.t);
-          _v$3 !== _p$.a && setAttribute(_el$11, "title", _p$.a = _v$3);
+          var _v$ = surface().active_agent_id || "", _v$2 = surface().player_leverage.state;
+          _v$ !== _p$.e && setAttribute(_el$7, "data-active-agent", _p$.e = _v$);
+          _v$2 !== _p$.t && setAttribute(_el$7, "data-leverage-state", _p$.t = _v$2);
+          return _p$;
+        }, {
+          e: void 0,
+          t: void 0
+        });
+        return _el$7;
+      })(), (() => {
+        var _el$18 = _tmpl$9$1(), _el$19 = _el$18.firstChild, _el$20 = _el$19.nextSibling, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$24 = _el$20.nextSibling, _el$25 = _el$24.firstChild;
+        insert(_el$19, () => tr$1(props.locale(), "行动回执", "Action Receipt"));
+        insert(_el$21, () => surface().action_receipt.title);
+        insert(_el$22, () => surface().action_receipt.summary);
+        insert(_el$20, createComponent(Show, {
+          get when() {
+            return surface().action_receipt.detail;
+          },
+          get children() {
+            var _el$23 = _tmpl$7$1();
+            insert(_el$23, () => surface().action_receipt.detail);
+            return _el$23;
+          }
+        }), null);
+        insert(_el$25, () => surface().action_receipt.confidence);
+        insert(_el$24, createComponent(Show, {
+          get when() {
+            return surface().action_receipt.target_agent_id;
+          },
+          get children() {
+            var _el$26 = _tmpl$8$1();
+            insert(_el$26, () => `agent=${surface().action_receipt.target_agent_id}`);
+            return _el$26;
+          }
+        }), null);
+        createRenderEffect((_p$) => {
+          var _v$3 = surface().action_receipt.present ? "true" : "false", _v$4 = surface().action_receipt.state, _v$5 = surface().action_receipt.confidence;
+          _v$3 !== _p$.e && setAttribute(_el$18, "data-receipt-present", _p$.e = _v$3);
+          _v$4 !== _p$.t && setAttribute(_el$18, "data-receipt-state", _p$.t = _v$4);
+          _v$5 !== _p$.a && setAttribute(_el$18, "data-receipt-confidence", _p$.a = _v$5);
           return _p$;
         }, {
           e: void 0,
           t: void 0,
           a: void 0
         });
-        return _el$11;
+        return _el$18;
+      })(), (() => {
+        var _el$27 = _tmpl$1$1(), _el$28 = _el$27.firstChild, _el$29 = _el$28.nextSibling, _el$30 = _el$29.nextSibling, _el$31 = _el$30.nextSibling;
+        insert(_el$28, () => `agents=${surface().world_read.agents}`);
+        insert(_el$29, () => `routes=${surface().world_read.routes}`);
+        insert(_el$30, () => `fragments=${surface().world_read.fragments}`);
+        insert(_el$31, () => `hotspots=${surface().world_read.hotspots}`);
+        insert(_el$27, createComponent(Show, {
+          get when() {
+            return surface().blocker.label;
+          },
+          get children() {
+            var _el$32 = _tmpl$0$1();
+            insert(_el$32, () => `blocker=${surface().blocker.label}`);
+            return _el$32;
+          }
+        }), null);
+        return _el$27;
+      })()];
+    }
+  });
+}
+function PixelWorldCanvasPlaceholder(props) {
+  return (() => {
+    var _el$33 = _tmpl$10$1(), _el$34 = _el$33.firstChild, _el$36 = _el$34.nextSibling;
+    insert(_el$33, createComponent(For, {
+      get each() {
+        return props.renderState().fragment_terrain.slice(0, 96);
+      },
+      children: (patch, index) => (() => {
+        var _el$39 = _tmpl$11$1();
+        createRenderEffect((_p$) => {
+          var _v$6 = patch.dominant_compound, _v$7 = fragmentTerrainStyle(patch, props.renderState().world_bounds, index()), _v$8 = `${patch.location_id}:${patch.dominant_compound}`;
+          _v$6 !== _p$.e && setAttribute(_el$39, "data-compound", _p$.e = _v$6);
+          _p$.t = style(_el$39, _v$7, _p$.t);
+          _v$8 !== _p$.a && setAttribute(_el$39, "title", _p$.a = _v$8);
+          return _p$;
+        }, {
+          e: void 0,
+          t: void 0,
+          a: void 0
+        });
+        return _el$39;
       })()
-    }), _el$0);
-    insert(_el$7, createComponent(For, {
+    }), _el$36);
+    insert(_el$33, createComponent(For, {
+      get each() {
+        return props.renderState().links.slice(0, 10);
+      },
+      children: (link, index) => (() => {
+        var _el$40 = _tmpl$12$1();
+        createRenderEffect((_p$) => {
+          var _v$9 = link.kind, _v$0 = routeStyle(link, props.renderState().world_bounds, index()), _v$1 = `${link.kind}:${link.id}`;
+          _v$9 !== _p$.e && setAttribute(_el$40, "data-route-kind", _p$.e = _v$9);
+          _p$.t = style(_el$40, _v$0, _p$.t);
+          _v$1 !== _p$.a && setAttribute(_el$40, "title", _p$.a = _v$1);
+          return _p$;
+        }, {
+          e: void 0,
+          t: void 0,
+          a: void 0
+        });
+        return _el$40;
+      })()
+    }), _el$36);
+    insert(_el$33, createComponent(For, {
       get each() {
         return props.renderState().locations.slice(0, 8);
       },
       children: (location, index) => (() => {
-        var _el$12 = _tmpl$7$1(), _el$13 = _el$12.firstChild;
-        _el$12.$$click = () => props.onSelect({
+        var _el$41 = _tmpl$13$1(), _el$42 = _el$41.firstChild;
+        _el$41.$$click = () => props.onSelect({
           kind: "location",
           id: location.id
         });
-        _el$12.addEventListener("mouseleave", () => props.onHover(null));
-        _el$12.addEventListener("mouseenter", () => props.onHover({
+        _el$41.addEventListener("mouseleave", () => props.onHover(null));
+        _el$41.addEventListener("mouseenter", () => props.onHover({
           kind: "location",
           id: location.id
         }));
-        insert(_el$13, () => location.label.slice(0, 2).toUpperCase());
+        insert(_el$42, () => location.label.slice(0, 2).toUpperCase());
         createRenderEffect((_p$) => {
-          var _v$4 = location.marker_role, _v$5 = {
+          var _v$10 = location.marker_role, _v$11 = {
             ...toWorldPercentStyle(location.pos, props.renderState().world_bounds, {
               left: `${12 + index() % 4 * 21}%`,
               top: `${18 + Math.floor(index() / 4) * 26}%`
             }),
             opacity: location.marker_alpha
-          }, _v$6 = location.label;
-          _v$4 !== _p$.e && setAttribute(_el$12, "data-marker-role", _p$.e = _v$4);
-          _p$.t = style(_el$12, _v$5, _p$.t);
-          _v$6 !== _p$.a && setAttribute(_el$12, "title", _p$.a = _v$6);
+          }, _v$12 = location.label;
+          _v$10 !== _p$.e && setAttribute(_el$41, "data-marker-role", _p$.e = _v$10);
+          _p$.t = style(_el$41, _v$11, _p$.t);
+          _v$12 !== _p$.a && setAttribute(_el$41, "title", _p$.a = _v$12);
           return _p$;
         }, {
           e: void 0,
           t: void 0,
           a: void 0
         });
-        return _el$12;
+        return _el$41;
       })()
-    }), _el$0);
-    insert(_el$7, createComponent(For, {
+    }), _el$36);
+    insert(_el$33, createComponent(For, {
       get each() {
         return props.renderState().agents.slice(0, 10);
       },
       children: (agent, index) => (() => {
-        var _el$14 = _tmpl$8$1(), _el$15 = _el$14.firstChild;
-        _el$14.$$click = () => props.onSelect({
+        var _el$43 = _tmpl$14$1(), _el$44 = _el$43.firstChild;
+        _el$43.$$click = () => props.onSelect({
           kind: "agent",
           id: agent.id
         });
-        _el$14.addEventListener("mouseleave", () => props.onHover(null));
-        _el$14.addEventListener("mouseenter", () => props.onHover({
+        _el$43.addEventListener("mouseleave", () => props.onHover(null));
+        _el$43.addEventListener("mouseenter", () => props.onHover({
           kind: "agent",
           id: agent.id
         }));
-        insert(_el$15, () => agent.label.slice(0, 1).toUpperCase());
+        insert(_el$44, () => agent.label.slice(0, 1).toUpperCase());
         createRenderEffect((_p$) => {
-          var _v$7 = agent.position_source, _v$8 = toWorldPercentStyle(agent.pos, props.renderState().world_bounds, {
+          var _v$13 = agent.position_source, _v$14 = toWorldPercentStyle(agent.pos, props.renderState().world_bounds, {
             left: `${18 + index() % 5 * 15}%`,
             top: `${14 + Math.floor(index() / 5) * 22}%`
-          }), _v$9 = agent.label;
-          _v$7 !== _p$.e && setAttribute(_el$14, "data-position-source", _p$.e = _v$7);
-          _p$.t = style(_el$14, _v$8, _p$.t);
-          _v$9 !== _p$.a && setAttribute(_el$14, "title", _p$.a = _v$9);
+          }), _v$15 = agent.label;
+          _v$13 !== _p$.e && setAttribute(_el$43, "data-position-source", _p$.e = _v$13);
+          _p$.t = style(_el$43, _v$14, _p$.t);
+          _v$15 !== _p$.a && setAttribute(_el$43, "title", _p$.a = _v$15);
           return _p$;
         }, {
           e: void 0,
           t: void 0,
           a: void 0
         });
-        return _el$14;
+        return _el$43;
       })()
-    }), _el$0);
-    insert(_el$7, createComponent(Show, {
+    }), _el$36);
+    insert(_el$33, createComponent(Show, {
       get when() {
         return props.renderState().selection;
       },
       get children() {
-        var _el$9 = _tmpl$3$1();
-        insert(_el$9, () => `${tr$1(props.locale(), "已选中", "Selected")}: ${props.renderState().selection.kind}/${props.renderState().selection.id}`);
-        return _el$9;
+        var _el$35 = _tmpl$3$1();
+        insert(_el$35, () => `${tr$1(props.locale(), "已选中", "Selected")}: ${props.renderState().selection.kind}/${props.renderState().selection.id}`);
+        return _el$35;
       }
-    }), _el$0);
-    insert(_el$0, createComponent(Show, {
+    }), _el$36);
+    insert(_el$36, createComponent(Show, {
       get when() {
         return props.renderState().goal_highlight;
       },
       get children() {
-        var _el$1 = _tmpl$$1();
-        insert(_el$1, () => `${tr$1(props.locale(), "目标", "Goal")}: ${props.renderState().goal_highlight.title}`);
-        return _el$1;
+        var _el$37 = _tmpl$$1();
+        insert(_el$37, () => `${tr$1(props.locale(), "目标", "Goal")}: ${props.renderState().goal_highlight.title}`);
+        return _el$37;
       }
     }), null);
-    insert(_el$0, createComponent(Show, {
+    insert(_el$36, createComponent(Show, {
       get when() {
         return props.renderState().blocker_highlight;
       },
       get children() {
-        var _el$10 = _tmpl$2$1();
-        insert(_el$10, () => `${tr$1(props.locale(), "阻塞", "Blocker")}: ${props.renderState().blocker_highlight.kind}`);
-        return _el$10;
+        var _el$38 = _tmpl$2$1();
+        insert(_el$38, () => `${tr$1(props.locale(), "阻塞", "Blocker")}: ${props.renderState().blocker_highlight.kind}`);
+        return _el$38;
       }
     }), null);
-    createRenderEffect(() => setAttribute(_el$7, "data-renderer-ready", props.ready() ? "true" : "false"));
-    return _el$7;
+    createRenderEffect(() => setAttribute(_el$33, "data-renderer-ready", props.ready() ? "true" : "false"));
+    return _el$33;
   })();
 }
 function PixelWorldHost(props) {
@@ -5735,57 +6002,14 @@ function PixelWorldHost(props) {
     });
   });
   return (() => {
-    var _el$16 = _tmpl$10$1(), _el$17 = _el$16.firstChild, _el$18 = _el$17.firstChild, _el$19 = _el$18.nextSibling, _el$20 = _el$17.nextSibling, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$23 = _el$22.nextSibling, _el$24 = _el$23.nextSibling, _el$25 = _el$24.nextSibling, _el$26 = _el$25.nextSibling, _el$27 = _el$26.nextSibling, _el$28 = _el$27.nextSibling, _el$29 = _el$28.nextSibling, _el$33 = _el$29.nextSibling, _el$34 = _el$33.nextSibling, _el$35 = _el$34.nextSibling, _el$42 = _el$20.nextSibling, _el$43 = _el$42.firstChild, _el$44 = _el$43.nextSibling, _el$45 = _el$44.firstChild;
-    insert(_el$18, () => tr$1(locale(), "嵌入式像素世界层", "Embedded Pixel World Layer"));
-    insert(_el$19, () => tr$1(locale(), "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。", "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer."));
-    insert(_el$21, () => `locations=${renderState().locations.length}`);
-    insert(_el$22, () => `fragments=${renderState().fragment_terrain.length}`);
-    insert(_el$23, () => `agents=${renderState().agents.length}`);
-    insert(_el$24, () => `links=${renderState().links.length}`);
-    insert(_el$25, () => `hotspots=${renderState().visual_hotspots.length}`);
-    insert(_el$26, () => `derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`);
-    insert(_el$27, () => renderState().world_bounds ? "world_bounds=ready" : "world_bounds=missing");
-    insert(_el$28, () => `renderer=${rendererStatus()}`);
-    insert(_el$29, () => `runtime=${runtimeSource()}`);
-    insert(_el$20, createComponent(Show, {
-      get when() {
-        return cameraState();
-      },
-      get children() {
-        var _el$30 = _tmpl$9$1();
-        insert(_el$30, () => `zoom=${cameraState().zoom.toFixed(2)}`);
-        return _el$30;
-      }
-    }), _el$33);
-    insert(_el$20, createComponent(Show, {
-      get when() {
-        return cameraState();
-      },
-      get children() {
-        var _el$31 = _tmpl$9$1();
-        insert(_el$31, () => `pan=${cameraState().pan_x_px},${cameraState().pan_y_px}`);
-        return _el$31;
-      }
-    }), _el$33);
-    insert(_el$20, createComponent(Show, {
-      get when() {
-        return hoverSelection();
-      },
-      get children() {
-        var _el$32 = _tmpl$9$1();
-        insert(_el$32, () => `hover=${hoverSelection().kind}/${hoverSelection().id}`);
-        return _el$32;
-      }
-    }), _el$33);
-    _el$33.$$click = () => {
-      void setReadyMode();
-    };
-    insert(_el$33, () => tr$1(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer"));
-    _el$34.$$click = simulateFatal;
-    insert(_el$34, () => tr$1(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal"));
-    _el$35.$$click = setFallbackMode;
-    insert(_el$35, () => tr$1(locale(), "切回 Host Fallback", "Back To Host Fallback"));
-    insert(_el$16, createComponent(Show, {
+    var _el$45 = _tmpl$18$1(), _el$46 = _el$45.firstChild, _el$47 = _el$46.firstChild, _el$48 = _el$47.nextSibling, _el$55 = _el$46.nextSibling, _el$56 = _el$55.firstChild, _el$57 = _el$56.nextSibling, _el$58 = _el$57.firstChild, _el$59 = _el$58.nextSibling, _el$60 = _el$59.nextSibling, _el$61 = _el$60.nextSibling, _el$62 = _el$61.nextSibling, _el$63 = _el$62.nextSibling, _el$64 = _el$63.nextSibling, _el$65 = _el$64.nextSibling, _el$66 = _el$65.nextSibling, _el$70 = _el$66.nextSibling, _el$71 = _el$70.nextSibling, _el$72 = _el$71.nextSibling, _el$73 = _el$72.nextSibling, _el$74 = _el$55.nextSibling, _el$75 = _el$74.firstChild, _el$76 = _el$75.nextSibling, _el$77 = _el$76.firstChild;
+    insert(_el$47, () => tr$1(locale(), "世界指挥棋盘", "World Command Board"));
+    insert(_el$48, () => renderState().commercial_surface?.objective?.detail);
+    insert(_el$45, createComponent(PixelWorldCommercialHud, {
+      locale,
+      renderState
+    }), _el$55);
+    insert(_el$45, createComponent(Show, {
       get when() {
         return rendererStatus() !== "fallback";
       },
@@ -5807,29 +6031,29 @@ function PixelWorldHost(props) {
           }
         });
       }
-    }), _el$42);
-    insert(_el$16, createComponent(Show, {
+    }), _el$55);
+    insert(_el$45, createComponent(Show, {
       get when() {
         return rendererStatus() === "fallback";
       },
       get children() {
-        var _el$36 = _tmpl$1$1(), _el$37 = _el$36.firstChild, _el$38 = _el$37.firstChild, _el$39 = _el$37.nextSibling, _el$40 = _el$39.firstChild;
-        insert(_el$38, () => tr$1(locale(), "Renderer 未接管", "Renderer Not Attached"));
-        insert(_el$40, () => tr$1(locale(), "嵌入式 renderer 启动失败，页面已退回 host fallback 模式。正式玩法摘要、目标和明细主链继续可用。", "The embedded renderer failed to attach, so the page returned to host fallback mode. Formal gameplay summary, targets, and details remain available."));
-        insert(_el$39, createComponent(Show, {
+        var _el$49 = _tmpl$16$1(), _el$50 = _el$49.firstChild, _el$51 = _el$50.firstChild, _el$52 = _el$50.nextSibling, _el$53 = _el$52.firstChild;
+        insert(_el$51, () => tr$1(locale(), "Renderer 未接管", "Renderer Not Attached"));
+        insert(_el$53, () => tr$1(locale(), "嵌入式 renderer 启动失败，页面已退回 host fallback 模式。正式玩法摘要、目标和明细主链继续可用。", "The embedded renderer failed to attach, so the page returned to host fallback mode. Formal gameplay summary, targets, and details remain available."));
+        insert(_el$52, createComponent(Show, {
           get when() {
             return rendererFatal();
           },
           get children() {
-            var _el$41 = _tmpl$0$1();
-            insert(_el$41, () => `${rendererFatal().code}: ${rendererFatal().message}`);
-            return _el$41;
+            var _el$54 = _tmpl$15$1();
+            insert(_el$54, () => `${rendererFatal().code}: ${rendererFatal().message}`);
+            return _el$54;
           }
         }), null);
-        return _el$36;
+        return _el$49;
       }
-    }), _el$42);
-    insert(_el$16, createComponent(Show, {
+    }), _el$55);
+    insert(_el$45, createComponent(Show, {
       get when() {
         return rendererStatus() !== "ready";
       },
@@ -5842,10 +6066,59 @@ function PixelWorldHost(props) {
           onHover: (selection) => adapter().simulateHover(selection)
         });
       }
-    }), _el$42);
-    insert(_el$43, () => tr$1(locale(), "展开 Render DTO", "Expand Render DTO"));
-    insert(_el$45, () => JSON.stringify(renderState(), null, 2));
-    return _el$16;
+    }), _el$55);
+    insert(_el$56, () => tr$1(locale(), "Renderer 诊断", "Renderer Diagnostics"));
+    insert(_el$58, () => `locations=${renderState().locations.length}`);
+    insert(_el$59, () => `fragments=${renderState().fragment_terrain.length}`);
+    insert(_el$60, () => `agents=${renderState().agents.length}`);
+    insert(_el$61, () => `links=${renderState().links.length}`);
+    insert(_el$62, () => `hotspots=${renderState().visual_hotspots.length}`);
+    insert(_el$63, () => `derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`);
+    insert(_el$64, () => renderState().world_bounds ? "world_bounds=ready" : "world_bounds=missing");
+    insert(_el$65, () => `renderer=${rendererStatus()}`);
+    insert(_el$66, () => `runtime=${runtimeSource()}`);
+    insert(_el$57, createComponent(Show, {
+      get when() {
+        return cameraState();
+      },
+      get children() {
+        var _el$67 = _tmpl$17$1();
+        insert(_el$67, () => `zoom=${cameraState().zoom.toFixed(2)}`);
+        return _el$67;
+      }
+    }), _el$70);
+    insert(_el$57, createComponent(Show, {
+      get when() {
+        return cameraState();
+      },
+      get children() {
+        var _el$68 = _tmpl$17$1();
+        insert(_el$68, () => `pan=${cameraState().pan_x_px},${cameraState().pan_y_px}`);
+        return _el$68;
+      }
+    }), _el$70);
+    insert(_el$57, createComponent(Show, {
+      get when() {
+        return hoverSelection();
+      },
+      get children() {
+        var _el$69 = _tmpl$17$1();
+        insert(_el$69, () => `hover=${hoverSelection().kind}/${hoverSelection().id}`);
+        return _el$69;
+      }
+    }), _el$70);
+    _el$70.$$click = () => {
+      void setReadyMode();
+    };
+    insert(_el$70, () => tr$1(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer"));
+    _el$71.$$click = simulateFatal;
+    insert(_el$71, () => tr$1(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal"));
+    _el$72.$$click = setFallbackMode;
+    insert(_el$72, () => tr$1(locale(), "切回 Host Fallback", "Back To Host Fallback"));
+    insert(_el$73, () => tr$1(locale(), "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。", "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer."));
+    insert(_el$75, () => tr$1(locale(), "展开 Render DTO", "Expand Render DTO"));
+    insert(_el$77, () => JSON.stringify(renderState(), null, 2));
+    return _el$45;
   })();
 }
 delegateEvents(["click"]);

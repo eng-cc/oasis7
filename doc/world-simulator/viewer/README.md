@@ -1,6 +1,6 @@
 # `world-simulator/viewer` 热点子域入口
 
-更新时间: 2026-05-26
+更新时间: 2026-05-29
 
 ## 从这里开始
 - 想执行 Viewer、走 Web 闭环、看命令或手工步骤：先读 `viewer-manual.manual.md`
@@ -8,6 +8,8 @@
 - 想确认 `legacy_core.js` 拆分边界、`viewer.js` / `software_safe.js` canonical/compat 关系，或 `pixel-world-bridge` generated runtime 真值：先读 `viewer-web-single-source-build-truth-2026-05-19.prd.md`
 - 想确认 pixel-world 稀疏快照下的 agent 派生坐标、关系线与 fallback DOM 定位：先读 `viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
 - 想确认 pixel-world Fragment terrain、Location 逻辑锚点与缩放 LOD 分层：先读 `viewer-pixel-world-fragment-lod-2026-05-27.prd.md`
+- 想确认 pixel-world 面向商业化游戏首屏如何呈现目标、下一步、玩家杠杆与诊断降噪：先读 `viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
+- 想确认 pixel-world 下一轮如何表达玩家因果、行动反馈、生产可读性与商业化长期循环：先读 `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
 - 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
 - 想确认聊天、右侧面板、Prompt 与输入桥接：先读 `viewer-chat-right-panel-polish.prd.md` 或 `viewer-egui-right-panel.prd.md`
 - 想确认 gameplay release / current web experience：先读 `viewer-gameplay-release-experience-overhaul.prd.md`
