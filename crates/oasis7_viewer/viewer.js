@@ -5263,9 +5263,10 @@ function buildActionReceipt({
 }) {
   const recentFeedback = gameplay?.recentFeedback;
   const hasWorldDelta = Boolean(gameplay?.lastWorldChange || recentFeedback?.effect);
-  const hasPlayerIntent = Boolean(gameplay?.acceptedIntentId || gameplay?.acceptedIntentSummary || recentFeedback?.action);
+  const hasPlayerIntent = Boolean(gameplay?.acceptedIntentId || gameplay?.acceptedIntentScope || gameplay?.acceptedIntentTarget || recentFeedback?.action);
   const present = hasWorldDelta || hasPlayerIntent || Boolean(recentFeedback?.reason);
-  const state2 = gameplay?.executionState || recentFeedback?.stage || "waiting_for_intent";
+  const rawState = gameplay?.executionState || recentFeedback?.stage || "waiting_for_intent";
+  const state2 = present ? rawState : "waiting_for_intent";
   const confidence = hasWorldDelta ? "world_delta" : hasPlayerIntent ? "accepted_intent" : "none";
   const summary = present ? gameplay?.lastWorldChange || recentFeedback?.effect || gameplay?.acceptedIntentSummary || recentFeedback?.action || gameplay?.executionSummary : tr$1(locale, "还没有一条玩家行动产生可确认的世界变化。", "No player-caused world change has been confirmed yet.");
   const detail = present ? gameplay?.executionCauseDetail || recentFeedback?.reason || recentFeedback?.hint || gameplay?.acceptedIntentDetail || gameplay?.progressDetail || null : tr$1(locale, "先提交玩法动作或推进世界，再查看系统确认、阻塞或完成的回执。", "Submit a gameplay action or advance the world, then read whether the system accepted, blocked, or completed it.");
@@ -5276,10 +5277,10 @@ function buildActionReceipt({
     title: actionReceiptTitle(locale, state2, present),
     summary,
     detail,
-    target_agent_id: gameplay?.acceptedIntentTarget || gameplay?.recommendedAction?.targetAgentId || activeAgentId || null,
-    effect_kind: gameplay?.executionCauseKind || recentFeedback?.stage || null,
-    delta_logical_time: recentFeedback?.deltaLogicalTime ?? null,
-    delta_event_seq: recentFeedback?.deltaEventSeq ?? null
+    target_agent_id: present ? gameplay?.acceptedIntentTarget || gameplay?.recommendedAction?.targetAgentId || activeAgentId || null : null,
+    effect_kind: present ? gameplay?.executionCauseKind || recentFeedback?.stage || null : null,
+    delta_logical_time: present ? recentFeedback?.deltaLogicalTime ?? null : null,
+    delta_event_seq: present ? recentFeedback?.deltaEventSeq ?? null : null
   };
 }
 function buildCommercialSurface({
