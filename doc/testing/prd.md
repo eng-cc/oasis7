@@ -66,7 +66,7 @@
   - 创世配置冻结前审计：每次准备冻结 Token 分配表时执行一次 required-tier 配置审计。
   - 信任门 / 留存证据复核：每次宣称“玩家值得继续玩”前，必须先检查该样本是否只是世界在自己运转。
   - 玩法质量争议复盘：每次出现“自动化通过但体验仍差”的争议时，必须先定位缺的是哪一层证据。
-  - UI / 视觉 PR 收口：每次改动触达首屏、布局、截图、像素世界、响应式或视觉层级时，优先产出截图并执行模型视觉评审。
+  - UI / 视觉 PR 收口：每次改动触达可视化相关代码、样式、资源或可见输出时，优先产出截图并执行模型视觉评审；若 owner 判断不影响可见 surface，必须在任务日志或 PR evidence 中写明豁免理由。
 - User Stories:
   - PRD-TESTING-001: As a 测试维护者, I want one canonical testing strategy, so that suite evolution stays coherent.
   - PRD-TESTING-002: As a 开发者, I want clear trigger matrices, so that I can run the right tests efficiently.
@@ -92,13 +92,13 @@
   10. Flow-TST-010: `组装 review packet -> 按 changed surface 拉起标准角色 subagent -> 回收 review card -> producer/qa 汇总内部结论`
   11. Flow-TST-011: `若体验争议来自玩家风格差异 -> 选择 simulated personas -> 生成 persona cards -> 回流标准角色 review`
   12. Flow-TST-012: `若先做高强度内部模拟 -> 形成 L4A；若需要 agent 实际进游戏操作且尽量逼近真人评审效果的结论 -> 升级到 L4B；若仍需真实人类 / 真实环境结论 -> 再升级到 L5；内部真人试玩只作为 L4B 可选校准`
-  13. Flow-TST-013: `采集 desktop/mobile 截图 -> 附自动化摘要与视觉 contract -> 模型输出 visual review card -> pass 替代 routine 人工视觉 review，watch/block/low-confidence 升级人工`
+  13. Flow-TST-013: `识别可视化相关改动 -> 采集 desktop/mobile 截图 -> 附自动化摘要与视觉 contract -> 模型输出 visual review card -> pass 替代 routine 人工视觉 review，watch/block/low-confidence 升级人工`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 分层测试触发 | 改动类型、测试层级、命令集合、changed-path scope | 依据矩阵选择最小必跑集合；PR `required-gate` 先规划 `minimal / targeted / full` 再执行命中的重型组件，必要时追加 launcher Web `trunk build` | `planned -> scoped -> running -> passed/failed` | 默认先 `commit`，按风险升级到 `required`，发布加跑 `full`；docs-only / 无关元数据 PR 允许在 stable context 下退化为 governance/fmt-only；`oasis7_client_launcher` / launcher shared runtime 命中时 required-gate 追加 launcher Web 构建覆盖 | 开发者可执行，发布者可放行 |
 | Web UI 驱动分流 | `surface_type`、`driver`、`evidence_mode` | Viewer 页面默认走 `agent-browser`；`oasis7_web_launcher` 产品动作默认走 GUI Agent，页面仅做状态/字段校验 | `selected -> driven -> verified` | 先按 surface 分流，再决定是否补充 Canvas/页面采样 | QA/发布与产品 owner 共同遵循 |
-| 模型视觉评审 | `screenshot_set`、`expected_visual_contract`、`automated_evidence`、`verdict`、`confidence`、`human_escalation_needed` | 对截图执行固定 rubric 评审，输出 visual review card；`pass/high-confidence` 可替代 routine 人工视觉 review，`watch/block/low-confidence` 必须写明 owner action | `captured -> model_reviewed -> pass/watch/block/escalated` | 先跑确定性测试，再让模型判断视觉；模型只替代截图/布局/可读性类人工 review，不替代 GitHub required review、发布放行、L5 真实玩家验证或对外 claim 审批 | `producer_system_designer` / `qa_engineer` 守边界，命中的 UI owner 处理 findings |
+| 模型视觉评审 | `visual_change_trigger`、`screenshot_set`、`expected_visual_contract`、`automated_evidence`、`verdict`、`confidence`、`human_escalation_needed` | 任何可视化相关代码、样式、资源或可见输出改动默认触发截图评审；对截图执行固定 rubric，输出 visual review card；`pass/high-confidence` 可替代 routine 人工视觉 review，`watch/block/low-confidence` 必须写明 owner action | `visual_change_detected -> captured -> model_reviewed -> pass/watch/block/escalated` | 先跑确定性测试，再让模型判断视觉；只有明确不影响任何可见 surface 的改动才能豁免且需记录理由；模型只替代截图/布局/可读性类人工 review，不替代 GitHub required review、发布放行、L5 真实玩家验证或对外 claim 审批 | `producer_system_designer` / `qa_engineer` 守边界，命中的 UI owner 处理 findings |
 | software_safe release 语义门禁 | `renderMode`、`lastControlFeedback.stage`、`deltaLogicalTime`、`deltaEventSeq` | `software_safe` 下允许 `play/pause` 先返回 `queued`；formal progress 以后续 `step` 的 `completed_advanced` + 正向 world delta 判定 | `queued -> completed_advanced` 或 `queued -> blocked` | 主 Web 入口不再要求 `play` 立刻涨 tick，也不再强制 `selectedKind=agent`；若 `llm_required` 显式阻断则按 blocker 合约留痕 | QA/发布维护者维护 |
 | 证据包归档 | 命令、日志、截图、结论、责任人、`player_action`、`world_change_due_to_player`、`player_leverage_score`、`world_activity_only` | 执行后归档并建立索引 | `collecting -> archived -> reviewed` | 按版本与模块分层索引；若 `world_activity_only=yes`，则该样本不能直接支撑玩法放行 | 测试维护者负责最终校验 |
 | 缺陷回归闭环 | 缺陷ID、触发条件、修复提交、复测结论 | 缺陷关闭前必须绑定回归记录 | `opened -> fixed -> regressed -> closed` | 高风险缺陷优先回归 | QA/维护者可更新状态 |

@@ -12,6 +12,18 @@
 - 适用于 PR 前本地收口、PR review 辅助、发布 evidence packet 的视觉部分。
 - 不适用于仅凭截图无法判断的 runtime contract、经济参数、安全权限、链上状态、LLM provider 活性或真实玩家留存结论。
 
+## 强制触发条件
+- 只要本轮改动触达可视化相关代码、样式、资源或可见输出，就默认触发截图加模型视觉评审。
+- 典型强制触发面包括：
+  - UI component、DOM 结构、CSS / layout / spacing / typography / color / icon / asset 改动
+  - 首屏、导航、侧栏、面板、表单、按钮、状态提示、receipt、blocker、empty/loading/error state 改动
+  - 响应式断点、mobile / desktop 优先级、滚动、overflow、裁切、焦点可见性改动
+  - canvas、WebGL、Three.js、pixel-world renderer、Fragment / Agent / Location / route / hotspot 等可视化映射改动
+  - DTO / state 到可见 UI 的映射改动，即使没有改 CSS，只要玩家看到的文本、状态、层级或实体可能改变
+  - 截图脚本、visual smoke、storybook / fixture / demo page、图片资源或品牌视觉素材改动
+- 可豁免的情况只限于明确不影响任何可见 surface 的改动，例如纯后端逻辑、纯测试 helper、非渲染文档文字；豁免时 owner 必须在任务日志或 PR evidence 中写明“不影响可见输出”的理由。
+- 若不确定是否会影响视觉，按触发处理，采集至少一张目标截图并输出 review card。
+
 ## 目标
 - 把“看起来是否对”从临时人工主观 review，改成可重复的截图输入、固定 rubric、结构化 verdict 和升级边界。
 - 让 routine visual review 默认由模型完成，人类只处理阻断、低置信、审美方向争议、对外 claim 和最终治理放行。
