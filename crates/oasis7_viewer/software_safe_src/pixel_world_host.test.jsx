@@ -110,6 +110,7 @@ function sampleSnapshot() {
       blocker_detail: "iron input exhausted at factory-0",
       causality_kind: "world_constraint",
       causality_detail: "iron input exhausted at factory-0",
+      last_world_change: "Smelter build request reached factory-0; iron shortage blocks construction.",
       blocker_supplemental_detail: null,
       next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
       branch_hint: null,
@@ -122,7 +123,15 @@ function sampleSnapshot() {
           disabled_reason: null,
         },
       ],
-      recent_feedback: null,
+      recent_feedback: {
+        action: "build_factory_smelter_mk1",
+        stage: "completed_no_progress",
+        effect: "Smelter build request reached factory-0; iron shortage blocks construction.",
+        reason: "iron input exhausted at factory-0",
+        hint: "Replenish upstream materials, then advance again.",
+        delta_logical_time: 1,
+        delta_event_seq: 2,
+      },
       agent_claim: null,
     },
   };
@@ -199,6 +208,17 @@ describe("pixel world host", () => {
         state: "blocked",
         summary: "Queue build_factory_smelter_mk1 for agent-0",
       },
+      action_receipt: {
+        present: true,
+        state: "blocked",
+        confidence: "world_delta",
+        title: "Action blocked",
+        summary: "Smelter build request reached factory-0; iron shortage blocks construction.",
+        target_agent_id: "agent-0",
+        effect_kind: "world_constraint",
+        delta_logical_time: 1,
+        delta_event_seq: 2,
+      },
       world_read: {
         agents: 1,
         routes: 1,
@@ -269,6 +289,10 @@ describe("pixel world host", () => {
     expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
     expect(screen.getByText("Build smelter mk1")).toBeInTheDocument();
     expect(screen.getByText("Queue build_factory_smelter_mk1 for agent-0")).toBeInTheDocument();
+    expect(screen.getByText("Action Receipt")).toBeInTheDocument();
+    expect(screen.getByText("Action blocked")).toBeInTheDocument();
+    expect(screen.getByText("Smelter build request reached factory-0; iron shortage blocks construction.")).toBeInTheDocument();
+    expect(document.querySelector(".pixel-world-action-receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
     const diagnostics = screen.getByText("Renderer Diagnostics").closest("details");
     expect(diagnostics.open).toBe(false);
     expect(screen.getByText(/falls back explicitly instead of keeping a second JS renderer/i)).toBeInTheDocument();

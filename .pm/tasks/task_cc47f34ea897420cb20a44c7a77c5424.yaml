@@ -1,0 +1,28 @@
+task_uid: task_cc47f34ea897420cb20a44c7a77c5424
+title: "pixel world action receipt surface"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-world-simulator-pixel-world-action-receipt-surface
+execution_log_path: .pm/tasks/task_cc47f34ea897420cb20a44c7a77c5424.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md
+  - doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Pixel world commercial_surface exposes an explicit action receipt derived from existing gameplay/intent/event state without widening runtime protocol."
+  - "PixelWorldHost distinguishes player-caused result feedback from ambient world activity and degrades honestly when no receipt exists."
+  - "Targeted UI tests and software-safe build pass for the action receipt surface."
+handoff_to:
+  - viewer_engineer
+updated_at: 2026-05-29T11:00:57+08:00
+last_started_at: 2026-05-29T10:46:28+08:00
+last_claim_type: task_complete
+last_verify_command: "PATH=\"/Users/scc/.nvm/versions/node/v24.14.1/bin:$PATH\" npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host && PATH=\"/Users/scc/.nvm/versions/node/v24.14.1/bin:$PATH\" npm --prefix crates/oasis7_viewer run build:software-safe && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && git diff --check"
+last_verified_at: 2026-05-29T11:00:56+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-29T11:00:57+08:00

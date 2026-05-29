@@ -339,6 +339,80 @@ function pickKnownAgentId(candidateIds, agents) {
   return candidateIds.find((id) => id && knownAgentIds.has(id)) || null;
 }
 
+function actionReceiptTitle(locale, state, present) {
+  if (!present) {
+    return tr(locale, "暂无行动回执", "No action receipt yet");
+  }
+  switch (state) {
+    case "accepted":
+      return tr(locale, "行动已接受", "Action accepted");
+    case "blocked":
+      return tr(locale, "行动被阻塞", "Action blocked");
+    case "completed":
+      return tr(locale, "世界已改变", "World changed");
+    case "rejected":
+      return tr(locale, "行动被拒绝", "Action rejected");
+    default:
+      return tr(locale, "行动进行中", "Action in progress");
+  }
+}
+
+function buildActionReceipt({ locale, gameplay, activeAgentId }) {
+  const recentFeedback = gameplay?.recentFeedback;
+  const hasWorldDelta = Boolean(gameplay?.lastWorldChange || recentFeedback?.effect);
+  const hasPlayerIntent = Boolean(
+    gameplay?.acceptedIntentId
+    || gameplay?.acceptedIntentSummary
+    || recentFeedback?.action,
+  );
+  const present = hasWorldDelta || hasPlayerIntent || Boolean(recentFeedback?.reason);
+  const state = gameplay?.executionState || recentFeedback?.stage || "waiting_for_intent";
+  const confidence = hasWorldDelta
+    ? "world_delta"
+    : hasPlayerIntent
+      ? "accepted_intent"
+      : "none";
+  const summary = present
+    ? gameplay?.lastWorldChange
+      || recentFeedback?.effect
+      || gameplay?.acceptedIntentSummary
+      || recentFeedback?.action
+      || gameplay?.executionSummary
+    : tr(
+      locale,
+      "还没有一条玩家行动产生可确认的世界变化。",
+      "No player-caused world change has been confirmed yet.",
+    );
+  const detail = present
+    ? gameplay?.executionCauseDetail
+      || recentFeedback?.reason
+      || recentFeedback?.hint
+      || gameplay?.acceptedIntentDetail
+      || gameplay?.progressDetail
+      || null
+    : tr(
+      locale,
+      "先提交玩法动作或推进世界，再查看系统确认、阻塞或完成的回执。",
+      "Submit a gameplay action or advance the world, then read whether the system accepted, blocked, or completed it.",
+    );
+
+  return {
+    present,
+    state,
+    confidence,
+    title: actionReceiptTitle(locale, state, present),
+    summary,
+    detail,
+    target_agent_id: gameplay?.acceptedIntentTarget
+      || gameplay?.recommendedAction?.targetAgentId
+      || activeAgentId
+      || null,
+    effect_kind: gameplay?.executionCauseKind || recentFeedback?.stage || null,
+    delta_logical_time: recentFeedback?.deltaLogicalTime ?? null,
+    delta_event_seq: recentFeedback?.deltaEventSeq ?? null,
+  };
+}
+
 function buildCommercialSurface({
   locale,
   gameplay,
@@ -375,6 +449,11 @@ function buildCommercialSurface({
     || gameplay?.acceptedIntentDetail
     || gameplay?.progressDetail
     || null;
+  const actionReceipt = buildActionReceipt({
+    locale,
+    gameplay,
+    activeAgentId,
+  });
 
   return {
     objective: {
@@ -395,6 +474,7 @@ function buildCommercialSurface({
       summary: leverageSummary,
       detail: leverageDetail,
     },
+    action_receipt: actionReceipt,
     blocker: {
       label: gameplay?.blockerLabel || gameplay?.blockerKind || null,
       detail: gameplay?.narrativeBlockerDetail || gameplay?.blockerDetail || null,
@@ -756,6 +836,35 @@ function PixelWorldCommercialHud(props) {
               ? `${surface().player_leverage.label} · agent=${surface().active_agent_id}`
               : surface().player_leverage.label}
           </div>
+        </div>
+      </div>
+      <div
+        class="pixel-world-action-receipt"
+        data-receipt-present={surface().action_receipt.present ? "true" : "false"}
+        data-receipt-state={surface().action_receipt.state}
+        data-receipt-confidence={surface().action_receipt.confidence}
+      >
+        <div class="pixel-world-action-receipt__label">
+          {tr(props.locale(), "行动回执", "Action Receipt")}
+        </div>
+        <div class="pixel-world-action-receipt__body">
+          <div class="pixel-world-action-receipt__title">
+            {surface().action_receipt.title}
+          </div>
+          <div class="pixel-world-action-receipt__summary">
+            {surface().action_receipt.summary}
+          </div>
+          <Show when={surface().action_receipt.detail}>
+            <div class="pixel-world-action-receipt__detail">
+              {surface().action_receipt.detail}
+            </div>
+          </Show>
+        </div>
+        <div class="pixel-world-action-receipt__meta">
+          <span>{surface().action_receipt.confidence}</span>
+          <Show when={surface().action_receipt.target_agent_id}>
+            <span>{`agent=${surface().action_receipt.target_agent_id}`}</span>
+          </Show>
         </div>
       </div>
       <div class="pixel-world-readout badge-row">

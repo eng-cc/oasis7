@@ -90,7 +90,7 @@
 ## Implementation Slice Proposal
 | Slice | Owner Bias | Scope | Verification |
 | --- | --- | --- | --- |
-| S1 action receipt surface | viewer_engineer | Extend host `commercial_surface` with explicit receipt fields from existing gameplay summary/events. | `pixel_world_host` UI tests + browser smoke |
+| S1 action receipt surface | viewer_engineer | Extend host `commercial_surface` with explicit receipt fields from existing gameplay summary/events. Current implementation task: `.pm/tasks/task_cc47f34ea897420cb20a44c7a77c5424.yaml`. | `pixel_world_host` UI tests + browser smoke |
 | S2 action preview lens | viewer_engineer + runtime_engineer | Bind available action target/route/cost preview into pixel-world selection state. | host tests + selected-agent browser smoke |
 | S3 production readability DTO | runtime_engineer + viewer_engineer | Add facilities/resources/edges/bottlenecks to snapshot and render state. | runtime contract tests + viewer DTO tests |
 | S4 pixel moment polish | viewer_engineer + producer_system_designer | Add motion/visual hierarchy once causality and production data are real. | screenshot comparison + mobile/desktop browser smoke |
