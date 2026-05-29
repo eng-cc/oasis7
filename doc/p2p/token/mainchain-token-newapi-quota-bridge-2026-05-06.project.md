@@ -12,6 +12,7 @@
 - [x] letai-openapi-adapter-integration (PRD-P2P-TBRIDGE-003) [test_tier_required]: 以 LetAI Run OpenAPI 替换 generic `credit adapter`，实现 user upsert、项目创建/Token 返回、用户 topup、额度概览与日志验证。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 - [x] letai-reconcile-and-verification-closure (PRD-P2P-TBRIDGE-004) [test_tier_required]: 重写 `oasis7_newapi_bridge_service` reconcile worker，使其按 `confirmed -> user -> project -> token -> topup -> verify -> reconciled/manual_review` 编排，并补齐 retry / verification mismatch 收口。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 - [x] letai-bridge-required-tests-and-runbook (PRD-P2P-TBRIDGE-003/004) [test_tier_required]: 重写测试桩与 operator runbook，覆盖首次建用户/项目、已有项目复用、稳定 `external_order_id` 重试、topup 查询验证与 manual review。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
+- [x] newapi-bridge-service-manual-ci-package (PRD-P2P-TBRIDGE-003/004) [test_tier_required]: 新增 `workflow_dispatch` 手动 CI 打包入口，编译 `oasis7_newapi_bridge_service` Linux binary，并把启动脚本、env/systemd 模板、operator runbook、`BUILDINFO` 与 `SHA256SUMS` 打进可下载 artifact；同时把同一打包脚本接入默认分支已存在的 `Rust` workflow `run_mode=newapi_bridge_package`，支持在合入前选择 PR 分支手动触发，也支持合入后直接取中心化服务部署包。 Trace: .pm/tasks/task_2718880e90634a56a54c514251aac935.yaml
 
 ## 状态
 - 当前阶段: `letai-openapi-full-closure`

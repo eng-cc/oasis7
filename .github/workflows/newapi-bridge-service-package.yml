@@ -1,0 +1,69 @@
+name: NewAPI Bridge Service Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_profile:
+        description: "Cargo profile for the NewAPI bridge service binary"
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - dev
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  RUST_TOOLCHAIN: 1.92.0
+
+jobs:
+  package-linux-x86-64:
+    name: newapi-bridge-linux-x86-64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup default "${RUST_TOOLCHAIN}"
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: newapi-bridge-service-linux-x86-64-v1
+          cache-on-failure: true
+
+      - name: Build and stage deployable artifact
+        run: |
+          ./scripts/newapi-bridge-service/package-newapi-bridge-service.sh \
+            --profile "${{ github.event.inputs.build_profile || 'release' }}" \
+            --archive output/newapi-bridge-service-linux-x86_64.tar.gz
+
+      - name: Upload NewAPI bridge service artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: newapi-bridge-service-linux-x86_64-${{ github.sha }}
+          path: output/newapi-bridge-service-linux-x86_64.tar.gz
+          if-no-files-found: error

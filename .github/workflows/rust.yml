@@ -8,6 +8,23 @@ on:
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      run_mode:
+        description: "Manual Rust workflow mode"
+        required: true
+        default: full_regression
+        type: choice
+        options:
+          - full_regression
+          - newapi_bridge_package
+      newapi_bridge_build_profile:
+        description: "Cargo profile when run_mode=newapi_bridge_package"
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - dev
 
 env:
   CARGO_TERM_COLOR: always
@@ -115,7 +132,7 @@ jobs:
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh required
 
   full-regression:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.run_mode == '' || inputs.run_mode == 'full_regression'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -151,3 +168,49 @@ jobs:
           cache-on-failure: true
       - name: Run full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
+
+  newapi-bridge-package:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'newapi_bridge_package'
+    name: newapi-bridge-linux-x86-64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup default "${RUST_TOOLCHAIN}"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: newapi-bridge-service-linux-x86-64-v1
+          cache-on-failure: true
+
+      - name: Build and stage deployable artifact
+        run: |
+          ./scripts/newapi-bridge-service/package-newapi-bridge-service.sh \
+            --profile "${{ inputs.newapi_bridge_build_profile }}" \
+            --archive output/newapi-bridge-service-linux-x86_64.tar.gz
+
+      - name: Upload NewAPI bridge service artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: newapi-bridge-service-linux-x86_64-${{ github.sha }}
+          path: output/newapi-bridge-service-linux-x86_64.tar.gz
+          if-no-files-found: error
