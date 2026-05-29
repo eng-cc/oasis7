@@ -11,6 +11,7 @@ const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const outDir = resolve(repoRoot, "output/playwright/pixel-world-fragment-visual", runId);
 const screenshotPath = join(outDir, "fragment-fallback-visual.png");
 const actionReceiptScreenshotPath = join(outDir, "action-receipt-visual.png");
+const mobileActionReceiptScreenshotPath = join(outDir, "mobile-action-receipt-visual.png");
 const summaryPath = join(outDir, "summary.json");
 const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
 const session = `pixel-world-fragment-visual-${process.pid}`;
@@ -465,6 +466,87 @@ function actionReceiptProbeScript() {
   `;
 }
 
+function mobileActionReceiptProbeScript() {
+  return String.raw`
+    (async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const waitFor = async (predicate, timeoutMs = 12000) => {
+        const deadline = Date.now() + timeoutMs;
+        let lastError = null;
+        while (Date.now() < deadline) {
+          try {
+            const value = predicate();
+            if (value) {
+              return value;
+            }
+          } catch (error) {
+            lastError = error;
+          }
+          await sleep(100);
+        }
+        throw lastError || new Error("timed out waiting for mobile action receipt visual probe condition");
+      };
+      const state = () => window.__AW_TEST__?.getState?.() || {};
+      const textOf = (selector, root = document) => root.querySelector(selector)?.textContent.trim() || null;
+      const rectOf = (element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          right: Math.round(rect.right),
+          bottom: Math.round(rect.bottom),
+        };
+      };
+      const receiptOf = () => {
+        const receipt = document.querySelector(".pixel-world-action-receipt");
+        if (!receipt) {
+          return null;
+        }
+        return {
+          present: receipt.dataset.receiptPresent || null,
+          state: receipt.dataset.receiptState || null,
+          confidence: receipt.dataset.receiptConfidence || null,
+          title: textOf(".pixel-world-action-receipt__title", receipt),
+          summary: textOf(".pixel-world-action-receipt__summary", receipt),
+          detail: textOf(".pixel-world-action-receipt__detail", receipt),
+          meta: textOf(".pixel-world-action-receipt__meta", receipt),
+          rect: rectOf(receipt),
+        };
+      };
+
+      await waitFor(() => state().pixelWorldRuntimeStatus === "fallback");
+      const receiptElement = await waitFor(() => document.querySelector(".pixel-world-action-receipt"));
+      receiptElement.scrollIntoView({ block: "start", inline: "nearest" });
+      window.scrollBy(0, -8);
+      await sleep(180);
+
+      const receipt = receiptOf();
+      const fragments = Array.from(document.querySelectorAll(".pixel-world-fragment-terrain"));
+      const agent = document.querySelector(".pixel-world-entity--agent");
+      const viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        scrollX: Math.round(window.scrollX),
+        scrollY: Math.round(window.scrollY),
+      };
+      const horizontalOverflowPx = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      return JSON.stringify({
+        runtimeStatus: state().pixelWorldRuntimeStatus,
+        viewport,
+        horizontalOverflowPx,
+        receipt,
+        fragmentCount: fragments.length,
+        agentRect: agent ? rectOf(agent) : null,
+        commandStripRect: rectOf(document.querySelector(".pixel-world-command-strip")),
+      });
+    })()
+  `;
+}
+
 ensureAgentBrowser();
 
 const server = createServer(serveFile);
@@ -517,13 +599,36 @@ try {
   assert(summary.actionReceipt.fragmentCount === 3, "action receipt scenario should preserve fragment background markers", summary.actionReceipt);
   assert(summary.actionReceipt.agentRect?.width > 0, "action receipt scenario lost the readable agent marker", summary.actionReceipt);
   await runAgentBrowser(["screenshot", actionReceiptScreenshotPath], { timeout: 20_000 });
+
+  console.log("probing mobile action receipt visual state");
+  await runAgentBrowserJson(["set", "viewport", "390", "844"]);
+  summary.mobileActionReceipt = await evalJson(mobileActionReceiptProbeScript());
+  assert(summary.mobileActionReceipt.runtimeStatus === "fallback", "mobile action receipt did not stay on the host fallback surface", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.viewport?.clientWidth <= 430, "mobile visual pass did not use a phone-width viewport", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.horizontalOverflowPx <= 2, "mobile pixel-world surface has horizontal overflow", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.receipt?.present === "true", "mobile action receipt is not visible", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.receipt?.state === "blocked", "mobile action receipt did not preserve blocked state", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.receipt?.confidence === "world_delta", "mobile action receipt did not preserve world_delta confidence", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.receipt?.rect?.x >= 0, "mobile receipt starts outside the viewport", summary.mobileActionReceipt);
+  assert(
+    summary.mobileActionReceipt.receipt?.rect?.right <= summary.mobileActionReceipt.viewport.clientWidth + 2,
+    "mobile receipt extends beyond the viewport",
+    summary.mobileActionReceipt,
+  );
+  assert(summary.mobileActionReceipt.receipt?.rect?.bottom <= summary.mobileActionReceipt.viewport.height, "mobile receipt is not fully visible in the screenshot viewport", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.fragmentCount === 3, "mobile action receipt scenario lost fragment background markers", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.agentRect?.width > 0, "mobile action receipt scenario lost the readable agent marker", summary.mobileActionReceipt);
+  await runAgentBrowser(["screenshot", mobileActionReceiptScreenshotPath], { timeout: 20_000 });
+
   summary.url = url;
   summary.screenshot = screenshotPath;
   summary.actionReceiptScreenshot = actionReceiptScreenshotPath;
+  summary.mobileActionReceiptScreenshot = mobileActionReceiptScreenshotPath;
   writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   console.log(`pixel-world fragment visual smoke passed: ${summaryPath}`);
   console.log(`screenshot: ${screenshotPath}`);
   console.log(`action receipt screenshot: ${actionReceiptScreenshotPath}`);
+  console.log(`mobile action receipt screenshot: ${mobileActionReceiptScreenshotPath}`);
 } finally {
   closeBrowser();
   await new Promise((resolveClose) => server.close(resolveClose));
