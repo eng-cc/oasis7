@@ -5,6 +5,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 source "$repo_root/scripts/agent-browser-lib.sh"
 source "$repo_root/scripts/cargo-dev-lib.sh"
+source "$repo_root/scripts/hosted-login-gate-env-lib.sh"
 
 usage() {
   cat <<'USAGE'
@@ -306,6 +307,11 @@ default_body_path="$out_dir/default_body.txt"
 auto_body_path="$out_dir/auto_body.txt"
 summary_json_path="$out_dir/summary.json"
 summary_md_path="$out_dir/summary.md"
+hosted_account_store_path="$out_dir/hosted-account-store.json"
+launcher_env_defaults=()
+while IFS= read -r env_default; do
+  launcher_env_defaults+=("$env_default")
+done < <(oasis7_hosted_login_gate_env_defaults "$hosted_account_store_path")
 
 resolved_viewer_static_dir=$(resolve_viewer_static_dir_for_web_closure \
   "$repo_root" \
@@ -349,7 +355,7 @@ echo "+ oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_c
 OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime >>"$launcher_log" 2>&1
 
 echo "+ oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- ${live_args[*]}"
-OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- "${live_args[@]}" >"$launcher_log" 2>&1 &
+env "${launcher_env_defaults[@]}" OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- "${live_args[@]}" >"$launcher_log" 2>&1 &
 launcher_pid=$!
 
 wait_for_port "$web_bind_host" "$web_bind_port" 240 || { echo "error: web bridge did not come up on $web_bind" >&2; exit 1; }
