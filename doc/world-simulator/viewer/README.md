@@ -1,6 +1,6 @@
 # `world-simulator/viewer` 热点子域入口
 
-更新时间: 2026-05-26
+更新时间: 2026-05-29
 
 ## 从这里开始
 - 想执行 Viewer、走 Web 闭环、看命令或手工步骤：先读 `viewer-manual.manual.md`

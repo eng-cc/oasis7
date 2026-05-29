@@ -295,6 +295,8 @@ function worldPercentPoint(pos, worldBounds, fallbackX = 50, fallbackY = 50) {
   };
 }
 
+const FALLBACK_ROUTE_HEIGHT_TO_WIDTH_RATIO = 9 / 16;
+
 function routeStyle(link, worldBounds, index) {
   const fallbackFrom = {
     x: 14 + ((index % 5) * 15),
@@ -308,8 +310,9 @@ function routeStyle(link, worldBounds, index) {
   const to = worldPercentPoint(link.to, worldBounds, fallbackTo.x, fallbackTo.y);
   const deltaX = to.x - from.x;
   const deltaY = to.y - from.y;
-  const length = Math.max(4, Math.hypot(deltaX, deltaY));
-  const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+  const scaledDeltaY = deltaY * FALLBACK_ROUTE_HEIGHT_TO_WIDTH_RATIO;
+  const length = Math.max(4, Math.hypot(deltaX, scaledDeltaY));
+  const angle = Math.atan2(scaledDeltaY, deltaX) * (180 / Math.PI);
   return {
     left: `${from.x.toFixed(1)}%`,
     top: `${from.y.toFixed(1)}%`,

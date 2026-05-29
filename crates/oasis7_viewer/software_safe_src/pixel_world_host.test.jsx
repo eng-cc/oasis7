@@ -473,6 +473,8 @@ describe("pixel world host", () => {
     expect(numericInlineStyle(fragments[1], "height")).toBeCloseTo(16.7, 1);
     expect(route).toHaveAttribute("data-route-kind", "agent_assignment");
     expect(numericInlineStyle(route, "opacity")).toBeCloseTo(0.5936, 4);
+    expect(numericInlineStyle(route, "width")).toBeCloseTo(4, 1);
+    expect(route.style.transform).toBe("rotate(-111.1deg)");
     expect(fragments.every((fragment) => fragment.tagName === "DIV")).toBe(true);
     expect(fragments.every((fragment) => fragment.getAttribute("role") === null)).toBe(true);
     expect(children.indexOf(fragments[0])).toBeLessThan(children.indexOf(location));
