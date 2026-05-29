@@ -218,7 +218,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-gate-soak-summary
-          path: .tmp/release_gate_soak
+          path: |
+            .tmp/release_gate_soak
+            .tmp/release_gate_p2p
+            .tmp/release_gate_s10
           if-no-files-found: warn
 
   release_gate:

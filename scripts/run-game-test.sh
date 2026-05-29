@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 source "$ROOT_DIR/scripts/bundle-freshness-lib.sh"
 source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
+source "$ROOT_DIR/scripts/hosted-login-gate-env-lib.sh"
 
 VIEWER_HOST="127.0.0.1"
 VIEWER_PORT="4173"
@@ -393,6 +394,11 @@ WORLD_LOG="$OUTPUT_DIR/oasis7_viewer_live.log"
 WEB_LOG="$OUTPUT_DIR/web_viewer.log"
 LLM_PROVIDER_PROBE_JSON="$OUTPUT_DIR/oasis7_llm_provider_probe.json"
 LLM_PROVIDER_PROBE_LOG="$OUTPUT_DIR/oasis7_llm_provider_probe.log"
+HOSTED_ACCOUNT_STORE_PATH="$OUTPUT_DIR/hosted-account-store.json"
+LAUNCHER_ENV_DEFAULTS=()
+while IFS= read -r env_default; do
+  LAUNCHER_ENV_DEFAULTS+=("$env_default")
+done < <(oasis7_hosted_login_gate_env_defaults "$HOSTED_ACCOUNT_STORE_PATH")
 if [[ -n "$META_FILE" ]]; then
   if [[ "$META_FILE" != /* ]]; then
     META_FILE="$ROOT_DIR/$META_FILE"
@@ -456,7 +462,7 @@ if [[ -n "$BUNDLE_DIR" ]]; then
   fi
   (
     cd "$BUNDLE_DIR"
-    "$BUNDLE_DIR/run-game.sh" "${WORLD_ARGS[@]}" >"$WORLD_LOG" 2>&1
+    env "${LAUNCHER_ENV_DEFAULTS[@]}" "$BUNDLE_DIR/run-game.sh" "${WORLD_ARGS[@]}" >"$WORLD_LOG" 2>&1
   ) &
 else
   LAUNCH_MODE="source"
@@ -500,6 +506,7 @@ else
   LAUNCH_CMD="$SOURCE_MODE_LAUNCHER_BIN"
   (
     cd "$ROOT_DIR"
+    env "${LAUNCHER_ENV_DEFAULTS[@]}" \
     OASIS7_VIEWER_LIVE_BIN="$SOURCE_MODE_VIEWER_LIVE_BIN" \
     OASIS7_CHAIN_RUNTIME_BIN="$SOURCE_MODE_CHAIN_RUNTIME_BIN" \
     "$SOURCE_MODE_LAUNCHER_BIN" "${WORLD_ARGS[@]}" >"$WORLD_LOG" 2>&1
@@ -530,6 +537,7 @@ INFO
   echo "LLM_PROVIDER_PREFLIGHT_SKIPPED=$SKIP_LLM_PROVIDER_PREFLIGHT"
   echo "LLM_PROVIDER_PROBE_JSON=$LLM_PROVIDER_PROBE_JSON"
   echo "LLM_PROVIDER_PROBE_LOG=$LLM_PROVIDER_PROBE_LOG"
+  echo "HOSTED_ACCOUNT_STORE_PATH=$HOSTED_ACCOUNT_STORE_PATH"
   echo "STACK_READY=0"
 } >"$META_FILE"
 
@@ -585,6 +593,7 @@ SOFTWARE_SAFE_VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mo
   echo "LLM_PROVIDER_PREFLIGHT_SKIPPED=$SKIP_LLM_PROVIDER_PREFLIGHT"
   echo "LLM_PROVIDER_PROBE_JSON=$LLM_PROVIDER_PROBE_JSON"
   echo "LLM_PROVIDER_PROBE_LOG=$LLM_PROVIDER_PROBE_LOG"
+  echo "HOSTED_ACCOUNT_STORE_PATH=$HOSTED_ACCOUNT_STORE_PATH"
   echo "STACK_READY=1"
   echo "GAME_URL=$GAME_URL"
   echo "SOFTWARE_SAFE_VIEWER_URL_ZH=$SOFTWARE_SAFE_VIEWER_URL_ZH"

@@ -1,0 +1,30 @@
+task_uid: task_c3c2fa06ea7447639e29592e4ca2be7b
+title: "fix v0.0.53 release gate blockers"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-release-v0053-gate-fixes
+execution_log_path: .pm/tasks/task_c3c2fa06ea7447639e29592e4ca2be7b.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - .github/workflows/release-packages.yml
+  - scripts/release-gate-web-strict.sh
+  - scripts/s10-five-node-game-soak.sh
+doc_refs:
+  - doc/testing/project.md
+related_prd: []
+acceptance:
+  - "release-gate-web no longer fails before web bridge startup due to missing hosted-login SMTP env in CI"
+  - "S10 release soak failure is reproduced or narrowed and the relevant gate script is fixed or made diagnosable"
+  - "targeted local verification passes and release re-trigger path is documented"
+handoff_to:
+  - qa_engineer
+  - runtime_engineer
+updated_at: 2026-05-29T16:49:13+08:00
+last_started_at: 2026-05-29T16:30:01+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/hosted-login-gate-env-lib.sh scripts/viewer-primary-web-entry-regression.sh scripts/run-game-test.sh scripts/s10-five-node-game-soak.sh scripts/release-gate.sh && git diff --check"
+last_verified_at: 2026-05-29T16:49:12+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-29T16:49:13+08:00
