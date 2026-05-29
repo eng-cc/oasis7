@@ -33,6 +33,10 @@ vi.mock("./pixel_world_runtime_loader.js", () => ({
 
 let activeCleanup = null;
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function sampleSnapshot() {
   return {
     time: 12,
@@ -137,7 +141,48 @@ function sampleSnapshot() {
   };
 }
 
-async function renderPixelWorldHost() {
+function acceptedOnlySnapshot() {
+  const snapshot = clone(sampleSnapshot());
+  const gameplay = snapshot.player_gameplay;
+  gameplay.stage_status = "executing";
+  gameplay.execution_state = "accepted";
+  gameplay.blocker_kind = null;
+  gameplay.blocker_detail = null;
+  gameplay.causality_kind = null;
+  gameplay.causality_detail = null;
+  gameplay.last_world_change = null;
+  gameplay.recent_feedback = {
+    action: "build_factory_smelter_mk1",
+    stage: "accepted",
+    effect: null,
+    reason: null,
+    hint: "Build request queued for agent-0.",
+    delta_logical_time: 0,
+    delta_event_seq: 1,
+  };
+  return snapshot;
+}
+
+function noReceiptSnapshot() {
+  const snapshot = clone(sampleSnapshot());
+  const gameplay = snapshot.player_gameplay;
+  gameplay.stage_status = "running";
+  delete gameplay.execution_state;
+  delete gameplay.accepted_intent_id;
+  delete gameplay.intent_summary;
+  delete gameplay.intent_scope;
+  delete gameplay.intent_target;
+  delete gameplay.blocker_kind;
+  delete gameplay.blocker_detail;
+  delete gameplay.causality_kind;
+  delete gameplay.causality_detail;
+  delete gameplay.last_world_change;
+  gameplay.progress_detail = "The first production line is waiting for a player command.";
+  gameplay.recent_feedback = null;
+  return snapshot;
+}
+
+async function renderPixelWorldHost(snapshot = sampleSnapshot()) {
   activeCleanup?.();
   activeCleanup = null;
   vi.resetModules();
@@ -149,7 +194,7 @@ async function renderPixelWorldHost() {
   const { PixelWorldHost } = await import("./pixel_world_host.jsx");
 
   core.setViewerLocale("en");
-  core.injectSnapshot(sampleSnapshot());
+  core.injectSnapshot(snapshot);
 
   const view = render(() => <PixelWorldHost locale="en" />);
   activeCleanup = view.unmount;
@@ -227,6 +272,48 @@ describe("pixel world host", () => {
     });
   });
 
+  it("classifies action receipt confidence without treating default intent copy as player action", async () => {
+    vi.resetModules();
+    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+
+    const core = await import("./legacy_core.js");
+    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
+
+    core.injectSnapshot(acceptedOnlySnapshot());
+    let receipt = buildPixelWorldRenderState("en").commercial_surface.action_receipt;
+    expect(receipt).toMatchObject({
+      present: true,
+      state: "accepted",
+      confidence: "accepted_intent",
+      title: "Action accepted",
+      summary: "Queue build_factory_smelter_mk1 for agent-0",
+      detail: "Build request queued for agent-0.",
+      target_agent_id: "agent-0",
+      effect_kind: "queued_for_execution",
+      delta_logical_time: 0,
+      delta_event_seq: 1,
+    });
+
+    core.injectSnapshot(noReceiptSnapshot());
+    core.state.recentEvents = [
+      { eventId: "ambient-1", title: "Ambient transfer spike", kind: "resource_transfer" },
+    ];
+    receipt = buildPixelWorldRenderState("en").commercial_surface.action_receipt;
+    expect(receipt).toMatchObject({
+      present: false,
+      state: "waiting_for_intent",
+      confidence: "none",
+      title: "No action receipt yet",
+      target_agent_id: null,
+      effect_kind: null,
+      delta_logical_time: null,
+      delta_event_seq: null,
+    });
+    expect(receipt.summary).toBe("No player-caused world change has been confirmed yet.");
+  });
+
   it("derives fragment terrain from location fragment blocks and de-emphasizes location markers", async () => {
     vi.resetModules();
     window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
@@ -300,6 +387,23 @@ describe("pixel world host", () => {
     expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(2);
     expect(document.querySelector(".pixel-world-entity--location")).toHaveAttribute("data-marker-role", "logic_anchor");
     expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
+  });
+
+  it("renders the no-receipt fallback without implying an active agent caused progress", async () => {
+    await renderPixelWorldHost(noReceiptSnapshot());
+
+    await waitFor(() => {
+      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+    });
+
+    const receipt = document.querySelector(".pixel-world-action-receipt");
+    expect(screen.getByText("Action Receipt")).toBeInTheDocument();
+    expect(screen.getByText("No action receipt yet")).toBeInTheDocument();
+    expect(screen.getByText("No player-caused world change has been confirmed yet.")).toBeInTheDocument();
+    expect(receipt).toHaveAttribute("data-receipt-present", "false");
+    expect(receipt).toHaveAttribute("data-receipt-state", "waiting_for_intent");
+    expect(receipt).toHaveAttribute("data-receipt-confidence", "none");
+    expect(receipt.textContent).not.toContain("agent=agent-0");
   });
 
   it("keeps fragment terrain as non-interactive background behind readable agents", async () => {

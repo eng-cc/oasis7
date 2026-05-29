@@ -362,11 +362,13 @@ function buildActionReceipt({ locale, gameplay, activeAgentId }) {
   const hasWorldDelta = Boolean(gameplay?.lastWorldChange || recentFeedback?.effect);
   const hasPlayerIntent = Boolean(
     gameplay?.acceptedIntentId
-    || gameplay?.acceptedIntentSummary
+    || gameplay?.acceptedIntentScope
+    || gameplay?.acceptedIntentTarget
     || recentFeedback?.action,
   );
   const present = hasWorldDelta || hasPlayerIntent || Boolean(recentFeedback?.reason);
-  const state = gameplay?.executionState || recentFeedback?.stage || "waiting_for_intent";
+  const rawState = gameplay?.executionState || recentFeedback?.stage || "waiting_for_intent";
+  const state = present ? rawState : "waiting_for_intent";
   const confidence = hasWorldDelta
     ? "world_delta"
     : hasPlayerIntent
@@ -403,13 +405,15 @@ function buildActionReceipt({ locale, gameplay, activeAgentId }) {
     title: actionReceiptTitle(locale, state, present),
     summary,
     detail,
-    target_agent_id: gameplay?.acceptedIntentTarget
-      || gameplay?.recommendedAction?.targetAgentId
-      || activeAgentId
-      || null,
-    effect_kind: gameplay?.executionCauseKind || recentFeedback?.stage || null,
-    delta_logical_time: recentFeedback?.deltaLogicalTime ?? null,
-    delta_event_seq: recentFeedback?.deltaEventSeq ?? null,
+    target_agent_id: present
+      ? gameplay?.acceptedIntentTarget
+        || gameplay?.recommendedAction?.targetAgentId
+        || activeAgentId
+        || null
+      : null,
+    effect_kind: present ? gameplay?.executionCauseKind || recentFeedback?.stage || null : null,
+    delta_logical_time: present ? recentFeedback?.deltaLogicalTime ?? null : null,
+    delta_event_seq: present ? recentFeedback?.deltaEventSeq ?? null : null,
   };
 }
 
