@@ -386,6 +386,66 @@
       .pixel-world-command-cell--leverage {
         border-color: rgba(99, 179, 255, 0.3);
       }
+      .pixel-world-action-receipt {
+        display: grid;
+        grid-template-columns: minmax(104px, 128px) minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 14px;
+        border: 1px solid rgba(99, 179, 255, 0.24);
+        border-left: 3px solid rgba(99, 179, 255, 0.72);
+        border-radius: 8px;
+        background: rgba(29, 78, 216, 0.1);
+      }
+      .pixel-world-action-receipt[data-receipt-present="false"] {
+        border-color: rgba(148, 163, 184, 0.2);
+        border-left-color: rgba(148, 163, 184, 0.44);
+        background: rgba(148, 163, 184, 0.06);
+      }
+      .pixel-world-action-receipt[data-receipt-state="blocked"],
+      .pixel-world-action-receipt[data-receipt-state="rejected"] {
+        border-color: rgba(251, 146, 60, 0.28);
+        border-left-color: rgba(251, 146, 60, 0.82);
+        background: rgba(120, 53, 15, 0.12);
+      }
+      .pixel-world-action-receipt[data-receipt-state="completed"] {
+        border-color: rgba(110, 231, 183, 0.26);
+        border-left-color: rgba(110, 231, 183, 0.82);
+        background: rgba(6, 95, 70, 0.12);
+      }
+      .pixel-world-action-receipt__label,
+      .pixel-world-action-receipt__meta {
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      .pixel-world-action-receipt__body {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .pixel-world-action-receipt__title {
+        color: #eef6f1;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+      }
+      .pixel-world-action-receipt__summary,
+      .pixel-world-action-receipt__detail {
+        color: #b8c8c0;
+        font-size: 12px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+      .pixel-world-action-receipt__meta {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        align-items: flex-end;
+        white-space: nowrap;
+      }
       .pixel-world-command-cell__label {
         color: var(--muted);
         font-size: 11px;
@@ -718,6 +778,15 @@
         .hero-focus-grid { grid-template-columns: 1fr; }
         .hero-focus-card { min-height: 0; }
         .pixel-world-command-strip { grid-template-columns: 1fr; }
+        .pixel-world-action-receipt {
+          grid-template-columns: 1fr;
+          align-items: start;
+        }
+        .pixel-world-action-receipt__meta {
+          flex-direction: row;
+          flex-wrap: wrap;
+          align-items: flex-start;
+        }
         .mobile-rail {
           position: sticky;
           top: 10px;
