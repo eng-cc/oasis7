@@ -1,9 +1,9 @@
 use multiaddr::Multiaddr;
 
-const MULTIADDR_EXAMPLE: &str = "/dns4/bootstrap1.oasis7.tech/tcp/5611";
+const MULTIADDR_EXAMPLE: &str = "/dns4/bootstrap1.oasis7.tech/tcp/5612";
 pub const DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS: &[&str] = &[
-    "/dns4/bootstrap1.oasis7.tech/tcp/5611",
-    "/dns4/bootstrap2.oasis7.tech/tcp/5612",
+    "/dns4/bootstrap1.oasis7.tech/tcp/5612",
+    "/dns4/bootstrap2.oasis7.tech/tcp/5611",
 ];
 
 pub fn default_chain_replication_bootstrap_peers_csv() -> String {
@@ -55,20 +55,20 @@ mod tests {
         assert_eq!(
             DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS,
             [
-                "/dns4/bootstrap1.oasis7.tech/tcp/5611",
-                "/dns4/bootstrap2.oasis7.tech/tcp/5612",
+                "/dns4/bootstrap1.oasis7.tech/tcp/5612",
+                "/dns4/bootstrap2.oasis7.tech/tcp/5611",
             ]
         );
         assert_eq!(
             default_chain_replication_bootstrap_peers_csv(),
-            "/dns4/bootstrap1.oasis7.tech/tcp/5611,/dns4/bootstrap2.oasis7.tech/tcp/5612"
+            "/dns4/bootstrap1.oasis7.tech/tcp/5612,/dns4/bootstrap2.oasis7.tech/tcp/5611"
                 .to_string()
         );
         assert_eq!(
             default_chain_replication_bootstrap_peers_vec(),
             vec![
-                "/dns4/bootstrap1.oasis7.tech/tcp/5611".to_string(),
-                "/dns4/bootstrap2.oasis7.tech/tcp/5612".to_string(),
+                "/dns4/bootstrap1.oasis7.tech/tcp/5612".to_string(),
+                "/dns4/bootstrap2.oasis7.tech/tcp/5611".to_string(),
             ]
         );
     }
