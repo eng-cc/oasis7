@@ -12,17 +12,20 @@ describe("pixel world runtime loader", () => {
       update: vi.fn(() => ({ status: "ready" })),
       unmount: vi.fn(() => ({ status: "detached" })),
     }));
+    const derivePixelWorldRenderState = vi.fn(() => ({ locale: "en" }));
 
     const runtime = await createPixelWorldRuntimeBridge({
       loadRuntimeModule: async () => ({
         PIXEL_WORLD_RUNTIME_SOURCE: "test_runtime",
         createPixelWorldBridge,
+        derivePixelWorldRenderState,
       }),
     });
 
     expect(runtime.source).toBe("test_runtime");
     expect(runtime.moduleUrl).toContain("pixel-world-bridge/pixel_world_bridge.js");
     expect(createPixelWorldBridge).toHaveBeenCalledTimes(1);
+    expect(runtime.deriveRenderState({ locale: "en" })).toEqual({ locale: "en" });
   });
 
   it("surfaces a structured fatal path when the wasm runtime import fails", async () => {

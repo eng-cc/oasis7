@@ -11,6 +11,7 @@ use serde_wasm_bindgen::{from_value, Serializer};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
+mod host_state;
 mod render;
 
 thread_local! {
@@ -247,6 +248,23 @@ fn status_value(status: &str) -> JsValue {
 fn parse_render_state(raw: JsValue) -> Result<RenderState, JsValue> {
     from_value(raw)
         .map_err(|error| JsValue::from_str(&format!("render state parse failed: {error}")))
+}
+
+#[wasm_bindgen]
+pub fn build_pixel_world_render_state(raw_input: JsValue) -> JsValue {
+    let input: Value = match from_value(raw_input) {
+        Ok(value) => value,
+        Err(error) => {
+            return js_value_from_serializable(&json!({
+                "fatal": {
+                    "code": "pixel_world_render_state_parse_failed",
+                    "message": format!("render state input parse failed: {error}"),
+                }
+            }))
+            .unwrap_or(JsValue::NULL)
+        }
+    };
+    js_value_from_serializable(&host_state::build_render_state(&input)).unwrap_or(JsValue::NULL)
 }
 
 fn fallback_point_for_entity(

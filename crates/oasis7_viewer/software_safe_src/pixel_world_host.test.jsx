@@ -1,10 +1,15 @@
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const runtimeMock = vi.hoisted(() => ({
+  deriveRenderState: null,
+}));
+
 vi.mock("./pixel_world_runtime_loader.js", () => ({
   createPixelWorldRuntimeBridge: async ({ onFatal }) => ({
-    source: "wasm_import_failed",
+    source: runtimeMock.deriveRenderState ? "test_rust_runtime" : "wasm_import_failed",
     moduleUrl: "http://127.0.0.1:4173/pixel-world-bridge/pixel_world_bridge.js",
+    deriveRenderState: runtimeMock.deriveRenderState,
     bridge: {
       mount() {
         const fatal = {
@@ -211,6 +216,7 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot()) {
 }
 
 beforeEach(() => {
+  runtimeMock.deriveRenderState = null;
   window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
   window.localStorage.clear();
   document.body.innerHTML = "";
@@ -429,6 +435,80 @@ describe("pixel world host", () => {
     expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(2);
     expect(document.querySelector(".pixel-world-entity--location")).toHaveAttribute("data-marker-role", "logic_anchor");
     expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
+  });
+
+  it("uses Rust-derived render state from the runtime module when available", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => ({
+      locale: input.locale,
+      world_bounds: { width_cm: 1, depth_cm: 1, height_cm: 1 },
+      locations: [],
+      fragment_terrain: [],
+      agents: [],
+      links: [],
+      selection: null,
+      goal_highlight: {
+        title: "Rust derived goal",
+        objective: "Rust objective detail",
+      },
+      blocker_highlight: null,
+      recent_event_hotspots: [],
+      visual_hotspots: [],
+      commercial_surface: {
+        objective: {
+          title: "Rust derived goal",
+          detail: "Rust objective detail",
+          progress_percent: null,
+        },
+        next_action: {
+          label: "Rust next move",
+          detail: null,
+          target_agent_id: null,
+          execute_kind: null,
+        },
+        active_agent_id: null,
+        player_leverage: {
+          state: "waiting_for_intent",
+          label: "Waiting for Intent",
+          summary: "Rust leverage summary",
+          detail: null,
+        },
+        action_receipt: {
+          present: false,
+          state: "waiting_for_intent",
+          confidence: "none",
+          title: "No action receipt yet",
+          summary: "Rust receipt summary",
+          detail: null,
+          target_agent_id: null,
+          effect_kind: null,
+          delta_logical_time: null,
+          delta_event_seq: null,
+        },
+        blocker: {
+          label: null,
+          detail: null,
+        },
+        world_read: {
+          agents: 0,
+          routes: 0,
+          fragments: 0,
+          hotspots: 0,
+        },
+      },
+      presentation: {
+        world_bounds_label: "rust bounds",
+        marker_truth_note: "rust truth",
+      },
+    }));
+
+    await renderPixelWorldHost();
+
+    await waitFor(() => {
+      expect(screen.getByText("Rust derived goal")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Rust next move")).toBeInTheDocument();
+    expect(screen.getByText("Rust leverage summary")).toBeInTheDocument();
+    expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
   });
 
   it("renders the no-receipt fallback without implying an active agent caused progress", async () => {

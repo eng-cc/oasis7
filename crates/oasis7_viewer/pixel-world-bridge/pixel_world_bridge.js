@@ -1,4 +1,7 @@
-import initPixelWorldBridgeModule, { PixelWorldBridge } from "./pixel_world_bridge_bindgen.js";
+import initPixelWorldBridgeModule, {
+  PixelWorldBridge,
+  build_pixel_world_render_state,
+} from "./pixel_world_bridge_bindgen.js";
 
 export const PIXEL_WORLD_RUNTIME_SOURCE = "wasm_bindgen_runtime";
 
@@ -182,4 +185,11 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
       return result;
     },
   };
+}
+
+export function derivePixelWorldRenderState(input) {
+  if (!runtimeInitPromise) {
+    throw new Error("pixel world bridge module is not initialized");
+  }
+  return build_pixel_world_render_state(input);
 }

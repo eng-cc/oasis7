@@ -93,6 +93,7 @@ export async function createPixelWorldRuntimeBridge({
   if (runtimeModule.module?.createPixelWorldBridge) {
     return {
       bridge: await runtimeModule.module.createPixelWorldBridge({ onEvent, onFatal }),
+      deriveRenderState: runtimeModule.module.derivePixelWorldRenderState || null,
       source: runtimeModule.module.PIXEL_WORLD_RUNTIME_SOURCE || "runtime_module",
       moduleUrl: runtimeModule.moduleUrl,
     };
@@ -101,6 +102,7 @@ export async function createPixelWorldRuntimeBridge({
   const fatal = buildRuntimeUnavailableFatal(runtimeModule.moduleUrl, runtimeModule.error);
   return {
     bridge: createUnavailableBridge({ fatal, onFatal }),
+    deriveRenderState: null,
     source: "wasm_import_failed",
     moduleUrl: runtimeModule.moduleUrl,
     fatal,
