@@ -29,20 +29,31 @@
 /etc/oasis7/newapi-bridge/bridge-state.json
 ```
 
+## 当前环境矩阵
+
+本矩阵只描述 NewAPI bridge / remote provider bridge，不改变 hosted-login、testnet、mainnet 的环境命名。
+
+| Lane | Host | NewAPI bridge | State | 当前验证 |
+| --- | --- | --- | --- | --- |
+| 测试环境 | `39.104.204.172` | `oasis7-newapi-bridge.service`，`active + enabled`，监听 `127.0.0.1:5852` | 独立测试 state: `/etc/oasis7/newapi-bridge/bridge-state.json`；可按 runbook 重置 | `GET /v1/bridge/health` 返回 `ok=true`；已通过本机 provider bridge 调用 `letai/gpt-5.4` smoke |
+| 正式环境 | `39.104.205.67` | `oasis7-newapi-bridge.service`，`active + enabled`，监听 `127.0.0.1:5852` | 正式 state: `/etc/oasis7/newapi-bridge/bridge-state.json`；保留既有 active binding / project binding | `GET /v1/bridge/health` 返回 `ok=true`；已通过本机 provider bridge 调用 `letai/gpt-5.4` smoke |
+
+两套环境当前都部署自 CI artifact `newapi-bridge-service-linux-x86_64-f628b2ab0fbb88a392d44a9d92c6b5147eaeda4f`，release 目录为 `/opt/oasis7/newapi-bridge/releases/20260529-205947-f628b2a`。
+
 ## 必需输入
 
 - `OASIS7_NEWAPI_BRIDGE_LETAI_BASE_URL`
 - `OASIS7_NEWAPI_BRIDGE_LETAI_PLATFORM_KEY`
 - `OASIS7_NEWAPI_BRIDGE_STATE_PATH`
 
-必须同时明确:
+建议同时明确:
 
 - `OASIS7_NEWAPI_BRIDGE_LETAI_PARENT_CHANNEL_ID`
 - `OASIS7_NEWAPI_BRIDGE_BIND_ADDR`
 - `OASIS7_NEWAPI_BRIDGE_ROUTE_TTL_SECONDS`
 
-- 当前 LetAI 生产环境若省略 `OASIS7_NEWAPI_BRIDGE_LETAI_PARENT_CHANNEL_ID`，动态创建出的 project token 可能默认落到已废弃分组 `cc`，随后对 `https://api.letai.run/v1/models` / `POST /v1/chat/completions` 会返回 `HTTP 403` 与 `分组 cc 已被弃用`。
-- 因此在真实 ECS 部署里，`OASIS7_NEWAPI_BRIDGE_LETAI_PARENT_CHANNEL_ID` 应视为必填项，而不是可选优化项。
+- `OASIS7_NEWAPI_BRIDGE_LETAI_PARENT_CHANNEL_ID` 为空时，bridge-service 不向 LetAI project upsert 请求传 `parent_channel_id`，由平台侧默认渠道策略决定 project token 归属。
+- 只有当 operator 明确需要把生成的 project token 绑定到指定 LetAI channel 时，才设置 `OASIS7_NEWAPI_BRIDGE_LETAI_PARENT_CHANNEL_ID`。
 
 ## 启动后最小验证
 

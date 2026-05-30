@@ -12,14 +12,15 @@
 - [x] letai-openapi-adapter-integration (PRD-P2P-TBRIDGE-003) [test_tier_required]: 以 LetAI Run OpenAPI 替换 generic `credit adapter`，实现 user upsert、项目创建/Token 返回、用户 topup、额度概览与日志验证。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 - [x] letai-reconcile-and-verification-closure (PRD-P2P-TBRIDGE-004) [test_tier_required]: 重写 `oasis7_newapi_bridge_service` reconcile worker，使其按 `confirmed -> user -> project -> token -> topup -> verify -> reconciled/manual_review` 编排，并补齐 retry / verification mismatch 收口。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 - [x] letai-bridge-required-tests-and-runbook (PRD-P2P-TBRIDGE-003/004) [test_tier_required]: 重写测试桩与 operator runbook，覆盖首次建用户/项目、已有项目复用、稳定 `external_order_id` 重试、topup 查询验证与 manual review。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
+- [x] newapi-bridge-service-manual-ci-package (PRD-P2P-TBRIDGE-003/004) [test_tier_required]: 新增 `workflow_dispatch` 手动 CI 打包入口，编译 `oasis7_newapi_bridge_service` Linux binary，并把启动脚本、env/systemd 模板、operator runbook、`BUILDINFO` 与 `SHA256SUMS` 打进可下载 artifact；同时把同一打包脚本接入默认分支已存在的 `Rust` workflow `run_mode=newapi_bridge_package`，支持在合入前选择 PR 分支手动触发，也支持合入后直接取中心化服务部署包。 Trace: .pm/tasks/task_2718880e90634a56a54c514251aac935.yaml
 
 ## 状态
 - 当前阶段: `letai-openapi-full-closure`
 - 当前 owner: `runtime_engineer`
-- 更新日期: 2026-05-14
+- 更新日期: 2026-05-29
 - 当前结论:
   - 只支持 `one-way OC -> LetAI Run OpenAPI quota`
-  - parent channel / platform key 由 operator 提供
+  - platform key 由 operator 提供；parent channel 可选，未配置时走 LetAI 平台默认渠道策略
   - 每个用户的 LetAI project 与 `token_key` 动态创建或复用，并持久化为 bridge 真值
   - bridge-service 必须独立部署
   - 自动 topup 必须依赖唯一入账映射和 `bridge_ledger` 幂等对账
@@ -33,7 +34,15 @@
 - operator-provided `--chain-base-url`
 - operator-provided LetAI `--letai-base-url`
 - operator-provided LetAI `--letai-platform-key`
-- operator-provided parent channel metadata
+- optional operator-provided parent channel metadata
+
+## 当前云上环境矩阵
+| Lane | Host | NewAPI bridge | Remote provider bridge | 验证状态 |
+| --- | --- | --- | --- | --- |
+| 测试环境 | `39.104.204.172` | `oasis7-newapi-bridge.service`，`active + enabled`，`127.0.0.1:5852` | `oasis7-remote-provider-bridge.service`，`active + enabled`，`127.0.0.1:5841` | NewAPI health `ok=true`；provider decision smoke 成功，`letai/gpt-5.4` |
+| 正式环境 | `39.104.205.67` | `oasis7-newapi-bridge.service`，`active + enabled`，`127.0.0.1:5852` | `oasis7-remote-provider-bridge.service`，`active + enabled`，`127.0.0.1:5841`，公网入口 `https://t2t.oasis7.tech` | NewAPI health `ok=true`；provider decision smoke 成功，`letai/gpt-5.4` |
+
+两套 NewAPI bridge 当前部署自 CI artifact `newapi-bridge-service-linux-x86_64-f628b2ab0fbb88a392d44a9d92c6b5147eaeda4f`。204 是 bridge 测试环境；205 是 bridge 正式环境。该口径只适用于 NewAPI quota bridge / remote provider bridge，不覆盖 hosted-login 的 test/prod 映射。
 
 ## 验证命令
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture`

@@ -1,0 +1,34 @@
+task_uid: task_2718880e90634a56a54c514251aac935
+title: "package newapi bridge service in manual CI"
+owner_role: runtime_engineer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-world-runtime-newapi-bridge-ci-package
+execution_log_path: .pm/tasks/task_2718880e90634a56a54c514251aac935.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/world-runtime/runtime/newapi-bridge-service-operator-runbook.md
+doc_refs:
+  - doc/world-runtime/prd.md
+  - doc/world-runtime/project.md
+  - doc/world-runtime/runtime/newapi-bridge-service-operator-runbook.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md
+related_prd:
+  - PRD-P2P-TBRIDGE-003
+  - PRD-P2P-TBRIDGE-004
+acceptance:
+  - "GitHub Actions exposes a manual trigger that can build the bridge package from a PR branch before merge and from main after merge."
+  - "Manual CI compiles the oasis7_newapi_bridge_service binary in release mode."
+  - "Manual CI packages the binary plus newapi bridge operator scripts/templates into an uploaded artifact."
+handoff_to: []
+updated_at: 2026-05-29T15:48:53+08:00
+last_started_at: 2026-05-29T15:13:27+08:00
+last_claim_type: task_complete
+last_verify_command: "ruby -e 'require \"yaml\"; ARGV.each { |path| YAML.load_file(path); puts \"yaml: ok #{path}\" }' .github/workflows/rust.yml .github/workflows/newapi-bridge-service-package.yml && bash -n scripts/newapi-bridge-service/package-newapi-bridge-service.sh && ./scripts/newapi-bridge-service/package-newapi-bridge-service.sh --profile dev --archive output/newapi-bridge-service-linux-x86_64.tar.gz && (cd output/newapi-bridge-service && if command -v sha256sum >/dev/null 2>&1; then sha256sum -c SHA256SUMS; else shasum -a 256 -c SHA256SUMS; fi) && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-05-29T15:48:52+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-29T15:48:53+08:00

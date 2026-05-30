@@ -15,6 +15,17 @@
 
 repo-owned 参考装配中，这 4 个端点由 `oasis7_provider_local_bridge` 提供，公网 `https://` 入口由 `nginx` 代理到本机 `127.0.0.1:5841`。参考 nginx 模板已包含按 IP 与 `Authorization` 的限流，以及连接数限制，用来降低单个 bearer 快速打空 LetAI quota 的风险。
 
+## 当前环境矩阵
+
+本矩阵只描述 remote provider bridge 的 runtime decision provider 口径；NewAPI bridge 自身是额度/token state 服务。
+
+| Lane | Host | Provider bridge | 对外入口 | State 来源 | 当前 LLM smoke |
+| --- | --- | --- | --- | --- | --- |
+| 测试环境 | `39.104.204.172` | `oasis7-remote-provider-bridge.service`，`active + enabled`，监听 `127.0.0.1:5841` | 暂无公网域名；本机/内网验证优先 | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | `POST /v1/world-simulator/decision` 成功，`provider_error=null`，`provider_version=letai/gpt-5.4`，样本延迟 `6290ms` |
+| 正式环境 | `39.104.205.67` | `oasis7-remote-provider-bridge.service`，`active + enabled`，监听 `127.0.0.1:5841` | `https://t2t.oasis7.tech` | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | `POST /v1/world-simulator/decision` 成功，`provider_error=null`，`provider_version=letai/gpt-5.4`，样本延迟 `4038ms` |
+
+两套 provider bridge 当前都启用自动映射模式：client 传 `newapi_user_ref:<user_ref>` 或 `bridge_user_id:<id>`，provider bridge 从本机 NewAPI bridge state 解析对应 `token_key`。`GET /v1/provider/health` 可能因上游 health URL 返回 `HTTP 401` 而显示 `degraded`；是否能调用模型以 `POST /v1/world-simulator/decision` smoke 为准。
+
 ## 仓库资产
 
 - Wrapper: `scripts/provider-remote-https/letai_provider_cli.py`
