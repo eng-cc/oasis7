@@ -4,13 +4,14 @@ use std::mem;
 
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowPlugin};
-use js_sys::Function;
+use js_sys::{Function, Object, Reflect};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use serde_wasm_bindgen::{from_value, Serializer};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
+mod host_state;
 mod render;
 
 thread_local! {
@@ -240,6 +241,27 @@ fn js_value_from_serializable<T: Serialize>(value: &T) -> Result<JsValue, JsValu
         .map_err(|error| JsValue::from_str(&format!("serialize js payload failed: {error}")))
 }
 
+fn render_state_fatal_value(code: &str, message: &str) -> JsValue {
+    js_value_from_serializable(&json!({
+        "fatal": {
+            "code": code,
+            "message": message,
+        }
+    }))
+    .unwrap_or_else(|_| {
+        let root = Object::new();
+        let fatal = Object::new();
+        let _ = Reflect::set(&fatal, &JsValue::from_str("code"), &JsValue::from_str(code));
+        let _ = Reflect::set(
+            &fatal,
+            &JsValue::from_str("message"),
+            &JsValue::from_str(message),
+        );
+        let _ = Reflect::set(&root, &JsValue::from_str("fatal"), &fatal);
+        root.into()
+    })
+}
+
 fn status_value(status: &str) -> JsValue {
     js_value_from_serializable(&json!({ "status": status })).unwrap_or_else(|_| JsValue::NULL)
 }
@@ -247,6 +269,28 @@ fn status_value(status: &str) -> JsValue {
 fn parse_render_state(raw: JsValue) -> Result<RenderState, JsValue> {
     from_value(raw)
         .map_err(|error| JsValue::from_str(&format!("render state parse failed: {error}")))
+}
+
+#[wasm_bindgen]
+pub fn build_pixel_world_render_state(raw_input: JsValue) -> JsValue {
+    let input: Value = match from_value(raw_input) {
+        Ok(value) => value,
+        Err(error) => {
+            return render_state_fatal_value(
+                "pixel_world_render_state_parse_failed",
+                &format!("render state input parse failed: {error}"),
+            )
+        }
+    };
+    let render_state = host_state::build_render_state(&input);
+    js_value_from_serializable(&render_state).unwrap_or_else(|error| {
+        render_state_fatal_value(
+            "pixel_world_render_state_serialize_failed",
+            &error
+                .as_string()
+                .unwrap_or_else(|| "render state serialization failed".to_string()),
+        )
+    })
 }
 
 fn fallback_point_for_entity(

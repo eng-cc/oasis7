@@ -4935,6 +4935,7 @@ async function createPixelWorldRuntimeBridge({
   if (runtimeModule.module?.createPixelWorldBridge) {
     return {
       bridge: await runtimeModule.module.createPixelWorldBridge({ onEvent, onFatal }),
+      deriveRenderState: runtimeModule.module.derivePixelWorldRenderState || null,
       source: runtimeModule.module.PIXEL_WORLD_RUNTIME_SOURCE || "runtime_module",
       moduleUrl: runtimeModule.moduleUrl
     };
@@ -4942,6 +4943,7 @@ async function createPixelWorldRuntimeBridge({
   const fatal = buildRuntimeUnavailableFatal(runtimeModule.moduleUrl, runtimeModule.error);
   return {
     bridge: createUnavailableBridge({ fatal, onFatal }),
+    deriveRenderState: null,
     source: "wasm_import_failed",
     moduleUrl: runtimeModule.moduleUrl,
     fatal
@@ -5390,8 +5392,28 @@ function createPixelWorldHostAdapter({
   let bridge = null;
   let runtimeSource = "detached";
   let runtimeModuleUrl = null;
+  let deriveRenderState = null;
+  function deriveRenderStateOrFallback(renderInput, fallbackRenderState) {
+    if (!deriveRenderState || !renderInput) {
+      return fallbackRenderState;
+    }
+    try {
+      const nextRenderState = deriveRenderState(renderInput);
+      if (nextRenderState?.fatal) {
+        onFatal?.(nextRenderState.fatal);
+        return fallbackRenderState;
+      }
+      return nextRenderState || fallbackRenderState;
+    } catch (error) {
+      onFatal?.({
+        code: "pixel_world_rust_render_state_failed",
+        message: error instanceof Error ? error.message : String(error || "Rust render state derivation failed")
+      });
+      return fallbackRenderState;
+    }
+  }
   return {
-    async mount(canvas, renderState) {
+    async mount(canvas, renderState, renderInput) {
       const runtime = await createPixelWorldRuntimeBridge({
         onEvent(event) {
           if (event?.type === "canvas_ready") {
@@ -5412,25 +5434,30 @@ function createPixelWorldHostAdapter({
         onFatal
       });
       bridge = runtime.bridge;
+      deriveRenderState = runtime.deriveRenderState || null;
       runtimeSource = runtime.source;
       runtimeModuleUrl = runtime.moduleUrl || null;
-      const result = bridge.mount(canvas, renderState);
+      const mountedRenderState = deriveRenderStateOrFallback(renderInput, renderState);
+      const result = bridge.mount(canvas, mountedRenderState);
       return {
         status: result?.status || "ready",
-        selection: renderState.selection,
+        selection: mountedRenderState.selection,
         fatal: result?.fatal || null,
+        renderState: mountedRenderState,
         runtimeSource,
         runtimeModuleUrl
       };
     },
-    update(renderState) {
-      const result = bridge?.update(renderState) || {
+    update(renderState, renderInput) {
+      const nextRenderState = deriveRenderStateOrFallback(renderInput, renderState);
+      const result = bridge?.update(nextRenderState) || {
         status: "detached"
       };
       return {
         status: result?.status || "ready",
-        selection: renderState.selection,
+        selection: nextRenderState.selection,
         fatal: result?.fatal || null,
+        renderState: nextRenderState,
         runtimeSource,
         runtimeModuleUrl
       };
@@ -5440,6 +5467,7 @@ function createPixelWorldHostAdapter({
         status: "detached"
       };
       bridge = null;
+      deriveRenderState = null;
       runtimeSource = "detached";
       runtimeModuleUrl = null;
       return result;
@@ -5464,15 +5492,39 @@ function createPixelWorldHostAdapter({
     },
     runtimeModuleUrl() {
       return runtimeModuleUrl;
+    },
+    deriveRenderState(renderInput) {
+      return deriveRenderStateOrFallback(renderInput, null);
     }
   };
 }
-function buildPixelWorldRenderState(locale = state.uiLocale) {
-  const lists = modelLists();
-  const gameplay = buildGameplaySummary(locale);
+function buildPixelWorldRenderInput(locale = state.uiLocale) {
   const worldScaleSurface = buildWorldScaleSurface(locale);
-  const snapshot = state.snapshot;
-  const selected = clone(state.selectedObject);
+  return {
+    locale,
+    snapshot: state.snapshot,
+    lists: modelLists(),
+    gameplay: buildGameplaySummary(locale),
+    selected: clone(state.selectedObject),
+    selectedKind: state.selectedKind,
+    selectedId: state.selectedId,
+    recentEvents: clone(state.recentEvents),
+    presentation: {
+      world_bounds_label: worldScaleSurface.physicalTruth.worldBoundsLabel,
+      marker_truth_note: worldScaleSurface.presentationScale.markerTruthNote
+    }
+  };
+}
+function buildPixelWorldRenderStateFromInput(input) {
+  const locale = input.locale || state.uiLocale;
+  const lists = input.lists || {
+    agents: [],
+    locations: []
+  };
+  const gameplay = input.gameplay;
+  const worldScaleSurface = buildWorldScaleSurface(locale);
+  const snapshot = input.snapshot;
+  const selected = input.selected;
   const space = snapshot?.config?.space || null;
   const worldBounds = space ? {
     width_cm: Number(space.width_cm) || 0,
@@ -5520,9 +5572,9 @@ function buildPixelWorldRenderState(locale = state.uiLocale) {
       size_hint_px: 12 + Math.min(10, countResourceEntries(resourceSummary$1) * 2 + (agent.location_id ? 2 : 0) + (agent.kind ? 1 : 0))
     };
   });
-  const selection = state.selectedKind && state.selectedId ? {
-    kind: state.selectedKind,
-    id: state.selectedId
+  const selection = input.selectedKind && input.selectedId ? {
+    kind: input.selectedKind,
+    id: input.selectedId
   } : null;
   const links = buildPixelWorldLinks(agents, locationById);
   const anchor = resolveSelectionPosition(selection, agents, locations) || agents.find((agent) => agent.pos)?.pos || locations[0]?.pos || worldCenterPosition(worldBounds);
@@ -5531,10 +5583,10 @@ function buildPixelWorldRenderState(locale = state.uiLocale) {
     objective: gameplay.objective || null
   } : null;
   const blockerHighlight = gameplay?.blockerKind || gameplay?.blockerDetail ? {
-    kind: gameplay.blockerKind || "blocked",
-    detail: gameplay.blockerDetail || null
+    kind: gameplay?.blockerKind || "blocked",
+    detail: gameplay?.blockerDetail || null
   } : null;
-  const recentEventHotspots = buildRecentEventHotspots(state.recentEvents);
+  const recentEventHotspots = buildRecentEventHotspots(input.recentEvents);
   const visualHotspots = buildVisualHotspots({
     worldBounds,
     anchor,
@@ -5579,7 +5631,7 @@ function PixelWorldCanvasRenderer(props) {
     props.onCanvasMount?.(canvasRef);
   });
   createEffect(() => {
-    props.renderState();
+    props.renderInput?.();
     if (!canvasRef) {
       return;
     }
@@ -5869,7 +5921,10 @@ function PixelWorldCanvasPlaceholder(props) {
 }
 function PixelWorldHost(props) {
   const locale = () => props.locale ?? state.uiLocale;
-  const renderState = createMemo(() => buildPixelWorldRenderState(locale()));
+  const renderInput = createMemo(() => buildPixelWorldRenderInput(locale()));
+  const fallbackRenderState = createMemo(() => buildPixelWorldRenderStateFromInput(renderInput()));
+  const [rustRenderState, setRustRenderState] = createSignal(null);
+  const renderState = () => rustRenderState() || fallbackRenderState();
   const [rendererStatus, setRendererStatus] = createSignal("booting");
   const [rendererFatal, setRendererFatal] = createSignal(null);
   const [hoverSelection, setHoverSelection] = createSignal(null);
@@ -5908,10 +5963,11 @@ function PixelWorldHost(props) {
   }));
   let mountedCanvas = null;
   function applyRendererUpdate() {
-    const result = adapter().update(renderState());
+    const result = adapter().update(fallbackRenderState(), renderInput());
     if (result?.fatal) {
       setRendererFatal(result.fatal);
     }
+    setRustRenderState(result?.renderState || null);
     setRendererStatus(result?.status || "ready");
     setRuntimeSource(result?.runtimeSource || adapter().runtimeSource());
     updatePixelWorldRuntimeMeta({
@@ -5961,10 +6017,11 @@ function PixelWorldHost(props) {
       });
       return;
     }
-    const result = await adapter().mount(mountedCanvas, renderState());
+    const result = await adapter().mount(mountedCanvas, fallbackRenderState(), renderInput());
     if (result?.fatal) {
       setRendererFatal(result.fatal);
     }
+    setRustRenderState(result?.renderState || null);
     setRendererStatus(result?.status || "ready");
     setRuntimeSource(result?.runtimeSource || adapter().runtimeSource());
     updatePixelWorldRuntimeMeta({
@@ -5977,6 +6034,7 @@ function PixelWorldHost(props) {
   }
   function setFallbackMode() {
     adapter().unmount();
+    setRustRenderState(null);
     setRendererStatus("fallback");
     setRuntimeSource("detached");
     setCameraState(null);
@@ -6016,6 +6074,7 @@ function PixelWorldHost(props) {
       get children() {
         return createComponent(PixelWorldCanvasRenderer, {
           locale,
+          renderInput,
           renderState,
           onFatal: (message) => adapter().simulateFatal(message),
           onCanvasMount: (canvas) => {

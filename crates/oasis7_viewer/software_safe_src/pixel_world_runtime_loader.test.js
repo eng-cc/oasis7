@@ -4,6 +4,7 @@ import {
   PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
   createPixelWorldRuntimeBridge,
 } from "./pixel_world_runtime_loader.js";
+import { derivePixelWorldRenderState as deriveStubRenderState } from "./pixel_world_runtime_module_stub.js";
 
 describe("pixel world runtime loader", () => {
   it("uses the wasm runtime module when it loads successfully", async () => {
@@ -12,17 +13,20 @@ describe("pixel world runtime loader", () => {
       update: vi.fn(() => ({ status: "ready" })),
       unmount: vi.fn(() => ({ status: "detached" })),
     }));
+    const derivePixelWorldRenderState = vi.fn(() => ({ locale: "en" }));
 
     const runtime = await createPixelWorldRuntimeBridge({
       loadRuntimeModule: async () => ({
         PIXEL_WORLD_RUNTIME_SOURCE: "test_runtime",
         createPixelWorldBridge,
+        derivePixelWorldRenderState,
       }),
     });
 
     expect(runtime.source).toBe("test_runtime");
     expect(runtime.moduleUrl).toContain("pixel-world-bridge/pixel_world_bridge.js");
     expect(createPixelWorldBridge).toHaveBeenCalledTimes(1);
+    expect(runtime.deriveRenderState({ locale: "en" })).toEqual({ locale: "en" });
   });
 
   it("surfaces a structured fatal path when the wasm runtime import fails", async () => {
@@ -48,5 +52,11 @@ describe("pixel world runtime loader", () => {
       code: PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
       message: expect.stringContaining("missing wasm bridge"),
     }));
+  });
+
+  it("keeps the static runtime stub derivation explicitly unavailable", () => {
+    expect(deriveStubRenderState({
+      fallback_render_state: { locale: "en" },
+    })).toBeNull();
   });
 });

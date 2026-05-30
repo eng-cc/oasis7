@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_pixelworldbridge_free: (a: number, b: number) => void;
+export const build_pixel_world_render_state: (a: any) => any;
 export const pixelworldbridge_click: (a: number, b: number, c: number) => any;
 export const pixelworldbridge_mount: (a: number, b: any, c: any) => any;
 export const pixelworldbridge_new: (a: any, b: any) => number;

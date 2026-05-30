@@ -16,11 +16,14 @@ export class PixelWorldBridge {
     wheel(delta_y: number): any;
 }
 
+export function build_pixel_world_render_state(raw_input: any): any;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_pixelworldbridge_free: (a: number, b: number) => void;
+    readonly build_pixel_world_render_state: (a: any) => any;
     readonly pixelworldbridge_click: (a: number, b: number, c: number) => any;
     readonly pixelworldbridge_mount: (a: number, b: any, c: any) => any;
     readonly pixelworldbridge_new: (a: any, b: any) => number;
