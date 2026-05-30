@@ -4,6 +4,7 @@ import {
   PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
   createPixelWorldRuntimeBridge,
 } from "./pixel_world_runtime_loader.js";
+import { derivePixelWorldRenderState as deriveStubRenderState } from "./pixel_world_runtime_module_stub.js";
 
 describe("pixel world runtime loader", () => {
   it("uses the wasm runtime module when it loads successfully", async () => {
@@ -51,5 +52,11 @@ describe("pixel world runtime loader", () => {
       code: PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
       message: expect.stringContaining("missing wasm bridge"),
     }));
+  });
+
+  it("keeps the static runtime stub derivation explicitly unavailable", () => {
+    expect(deriveStubRenderState({
+      fallback_render_state: { locale: "en" },
+    })).toBeNull();
   });
 });

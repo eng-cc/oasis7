@@ -6,6 +6,6 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
   return createPixelWorldBevyBridge({ onEvent, onFatal });
 }
 
-export function derivePixelWorldRenderState(input) {
-  return input?.fallback_render_state || null;
+export function derivePixelWorldRenderState() {
+  return null;
 }

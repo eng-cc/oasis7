@@ -22,11 +22,11 @@ acceptance:
   - "Targeted JS UI tests, Rust tests, wasm check, software-safe build, doc governance, PM lint, and diff hygiene pass."
 handoff_to:
   - qa_engineer
-updated_at: 2026-05-29T21:20:38+08:00
+updated_at: 2026-05-30T11:46:50+08:00
 last_started_at: 2026-05-29T17:50:31+08:00
-last_claim_type: ready_for_pr
-last_verify_command: "set -euo pipefail\nln -s /Users/scc/ccwork/oasis7/crates/oasis7_viewer/node_modules crates/oasis7_viewer/node_modules\ncleanup() { rm -f crates/oasis7_viewer/node_modules; }\ntrap cleanup EXIT\nPATH=\"/Users/scc/.nvm/versions/node/v24.14.1/bin:/opt/homebrew/bin:$PATH\" OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=true OASIS7_CI_RUN_CONSENSUS_TESTS=true OASIS7_CI_RUN_DISTFS_TESTS=true OASIS7_CI_RUN_OASIS7_NODE_TESTS=true OASIS7_CI_RUN_OASIS7_NET_TESTS=true OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=true OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=true OASIS7_CI_RUN_VIEWER_WASM_CHECK=true OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=true ./scripts/ci-tests.sh required"
-last_verified_at: 2026-05-29T21:20:38+08:00
-last_verification_exit_code: 101
-last_verification_status: blocked
-last_closed_at: 2026-05-29T20:56:59+08:00
+last_claim_type: task_complete
+last_verify_command: "\nset -euo pipefail\nenv -u RUSTC_WRAPPER cargo fmt --check -p pixel_world_bridge\nenv -u RUSTC_WRAPPER cargo test -p pixel_world_bridge --lib host_state -- --nocapture\nenv -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown\nln -s /Users/scc/ccwork/oasis7/crates/oasis7_viewer/node_modules crates/oasis7_viewer/node_modules\ncleanup() { rm -f crates/oasis7_viewer/node_modules; }\ntrap cleanup EXIT\nPATH=\"/Users/scc/.nvm/versions/node/v24.14.1/bin:$PATH\" npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_runtime_loader pixel_world_host\nPATH=\"/Users/scc/.nvm/versions/node/v24.14.1/bin:$PATH\" npm --prefix crates/oasis7_viewer run build:software-safe\n./scripts/doc-governance-check.sh\n./scripts/pm/lint.sh\ngit diff --check\n"
+last_verified_at: 2026-05-30T11:46:49+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-05-30T11:46:50+08:00
