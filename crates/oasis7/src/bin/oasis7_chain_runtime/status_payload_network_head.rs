@@ -127,12 +127,6 @@ pub(crate) fn build_network_head_status(
                 "critical",
                 selected.map(|(key, _)| (*key).clone()),
             )
-        } else if required_peer_count == 0 {
-            (
-                "self_only",
-                "ready",
-                selected.map(|(key, _)| (*key).clone()),
-            )
         } else if let Some((key, peers)) = selected {
             if bucket_quorum_met(
                 &policy.quorum_mode,
@@ -144,6 +138,8 @@ pub(crate) fn build_network_head_status(
             } else {
                 ("peer_single", "degraded", Some((*key).clone()))
             }
+        } else if required_peer_count == 0 {
+            ("self_only", "ready", None)
         } else if snapshot.replication_enabled {
             ("unknown", "degraded", None)
         } else {
