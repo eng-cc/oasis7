@@ -13,6 +13,14 @@ use super::runtime_status_util::{consensus_status_to_string, now_unix_ms};
 use super::storage_metrics;
 use super::traffic_status::ChainTrafficStatus;
 use super::wasm_status::ChainWasmStatus;
+#[path = "status_payload_network_head.rs"]
+mod status_payload_network_head;
+pub(super) use status_payload_network_head::{
+    applied_slashing_receipt_hashes, build_network_head_status, pending_slashing_intent_count,
+    readiness_policy, ChainConsensusNetworkHeadStatus, ChainReadinessPolicyStatus,
+};
+
+const TRANSPORT_STABILITY_MIN_SCORE: u8 = 70;
 
 #[derive(Debug, Serialize)]
 pub(super) struct ChainP2pStatus {
@@ -42,6 +50,9 @@ pub(super) struct ChainStatusResponse {
     pub(super) world_id: String,
     pub(super) role: String,
     pub(super) running: bool,
+    pub(super) liveness: ChainLivenessStatus,
+    pub(super) readiness: ChainReadinessStatus,
+    pub(super) sync: ChainSyncStatus,
     pub(super) worker_poll_count: u64,
     pub(super) tick_count: u64,
     pub(super) last_tick_unix_ms: Option<i64>,
@@ -58,6 +69,31 @@ pub(super) struct ChainStatusResponse {
     pub(super) traffic: ChainTrafficStatus,
     pub(super) transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
     pub(super) replication: super::ChainReplicationDebugStatus,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainLivenessStatus {
+    pub(super) status: String,
+    pub(super) running: bool,
+    pub(super) runtime_last_error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainReadinessStatus {
+    pub(super) status: String,
+    pub(super) ready: bool,
+    pub(super) failed_gates: Vec<String>,
+    pub(super) policy: ChainReadinessPolicyStatus,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainSyncStatus {
+    pub(super) status: String,
+    pub(super) network_head_source: String,
+    pub(super) network_height_lag: u64,
+    pub(super) fresh_peer_count: usize,
+    pub(super) stale_peer_count: usize,
+    pub(super) conflicting_peer_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -89,6 +125,7 @@ pub(super) struct ChainNetworkTierStatus {
 pub(super) struct ChainNodeObservabilityStatus {
     pub(super) status: String,
     pub(super) summary: String,
+    pub(super) ready: bool,
     pub(super) connected_peer_count: usize,
     pub(super) active_peer_count: usize,
     pub(super) candidate_peer_count: usize,
@@ -96,7 +133,18 @@ pub(super) struct ChainNodeObservabilityStatus {
     pub(super) blocked_peer_count: usize,
     pub(super) peer_with_issues_count: usize,
     pub(super) known_peer_heads: usize,
+    pub(super) network_head_available: bool,
     pub(super) network_height_lag: u64,
+    pub(super) transport_stable: bool,
+    pub(super) transport_stability_score: u8,
+    pub(super) reachability_policy_ok: bool,
+    pub(super) misbehavior_evidence_count: usize,
+    pub(super) slashing_intent_count: usize,
+    pub(super) pending_slashing_intent_count: usize,
+    pub(super) slashing_receipt_count: usize,
+    pub(super) applied_slashing_receipt_count: usize,
+    pub(super) quarantined_validator_count: usize,
+    pub(super) slashable_stake_total: u64,
     pub(super) replication_enabled: bool,
     pub(super) replication_persisted_height: u64,
     pub(super) replication_state_gap: u64,
@@ -105,6 +153,17 @@ pub(super) struct ChainNodeObservabilityStatus {
     pub(super) storage_degraded: bool,
     pub(super) reward_runtime_degraded: bool,
     pub(super) alerts: Vec<ChainNodeObservabilityAlert>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ChainReplicationTransportStability {
+    pub(super) stable: bool,
+    pub(super) score: u8,
+    pub(super) recent_error_count: usize,
+    pub(super) connection_closed_count: usize,
+    pub(super) insufficient_peers_count: usize,
+    pub(super) timeout_count: usize,
+    pub(super) protocol_error_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -145,6 +204,17 @@ pub(super) struct ChainConsensusStatus {
     pub(super) last_execution_block_hash: Option<String>,
     pub(super) last_execution_state_root: Option<String>,
     pub(super) known_peer_heads: usize,
+    pub(super) validator_set_hash: String,
+    pub(super) validator_stake_root: String,
+    pub(super) validator_stake_proof_count: usize,
+    pub(super) misbehavior_evidence_count: usize,
+    pub(super) slashing_intent_count: usize,
+    pub(super) pending_slashing_intent_count: usize,
+    pub(super) slashing_receipt_count: usize,
+    pub(super) applied_slashing_receipt_count: usize,
+    pub(super) quarantined_validator_count: usize,
+    pub(super) slashable_stake_total: u64,
+    pub(super) network_head: ChainConsensusNetworkHeadStatus,
 }
 
 #[derive(Debug, Serialize)]
@@ -271,11 +341,168 @@ fn observability_summary_for_alerts(alerts: &[ChainNodeObservabilityAlert]) -> S
     }
 }
 
+pub(super) fn classify_transport_stability(
+    replication: &super::ChainReplicationDebugStatus,
+) -> ChainReplicationTransportStability {
+    let mut connection_closed_count = 0usize;
+    let mut insufficient_peers_count = 0usize;
+    let mut timeout_count = 0usize;
+    let mut protocol_error_count = 0usize;
+    for error in &replication.recent_errors {
+        let lower = error.to_ascii_lowercase();
+        if lower.contains("connectionclosed") || lower.contains("connection closed") {
+            connection_closed_count += 1;
+        }
+        if lower.contains("insufficientpeers") || lower.contains("insufficient peers") {
+            insufficient_peers_count += 1;
+        }
+        if lower.contains("timeout") {
+            timeout_count += 1;
+        }
+        if lower.contains("protocol")
+            || lower.contains("unsupported")
+            || lower.contains("mismatch")
+            || lower.contains("unavailable")
+        {
+            protocol_error_count += 1;
+        }
+    }
+    let penalty = connection_closed_count
+        .saturating_mul(5)
+        .saturating_add(insufficient_peers_count.saturating_mul(10))
+        .saturating_add(timeout_count.saturating_mul(10))
+        .saturating_add(protocol_error_count.saturating_mul(15))
+        .saturating_add(
+            replication
+                .transport_retry_cooldown_peers
+                .len()
+                .saturating_mul(15),
+        )
+        .saturating_add(
+            replication
+                .protocol_retry_cooldown_peers
+                .values()
+                .map(Vec::len)
+                .sum::<usize>()
+                .saturating_mul(20),
+        );
+    let score = 100u8.saturating_sub(penalty.min(100) as u8);
+    ChainReplicationTransportStability {
+        stable: score >= TRANSPORT_STABILITY_MIN_SCORE,
+        score,
+        recent_error_count: replication.recent_errors.len(),
+        connection_closed_count,
+        insufficient_peers_count,
+        timeout_count,
+        protocol_error_count,
+    }
+}
+
+fn reachability_policy_ok(
+    snapshot: &NodeSnapshot,
+    p2p: &ChainP2pStatus,
+    active_peer_count: usize,
+    policy: &ChainReadinessPolicyStatus,
+) -> bool {
+    if !snapshot.replication_enabled {
+        return true;
+    }
+    if snapshot.role.as_str() == "observer" {
+        return active_peer_count > 0 || p2p.relay_available;
+    }
+    let has_public_direct = p2p.detected_reachability.as_deref() == Some("public")
+        || p2p.autonat_status == "public"
+        || p2p.public_port_reachability == "reachable"
+        || !p2p.confirmed_external_direct_addrs.is_empty()
+        || p2p.observed_public_addr.is_some();
+    if policy.tier == "mainnet" && policy.relay_policy == "public_direct_or_governed_relay" {
+        return has_public_direct || (p2p.relay_available && active_peer_count >= 2);
+    }
+    has_public_direct || p2p.relay_available
+}
+
+fn build_liveness_status(snapshot: &NodeSnapshot) -> ChainLivenessStatus {
+    let status = if snapshot.running && snapshot.last_error.is_none() {
+        "ok"
+    } else {
+        "critical"
+    };
+    ChainLivenessStatus {
+        status: status.to_string(),
+        running: snapshot.running,
+        runtime_last_error: snapshot.last_error.clone(),
+    }
+}
+
+fn build_readiness_status(
+    observability: &ChainNodeObservabilityStatus,
+    policy: ChainReadinessPolicyStatus,
+) -> ChainReadinessStatus {
+    let failed_gates = observability
+        .alerts
+        .iter()
+        .map(|alert| alert.code.clone())
+        .collect::<Vec<_>>();
+    ChainReadinessStatus {
+        status: if observability.ready {
+            "ready"
+        } else {
+            "not_ready"
+        }
+        .to_string(),
+        ready: observability.ready,
+        failed_gates,
+        policy,
+    }
+}
+
+pub(super) fn build_sync_status(
+    network_head: &ChainConsensusNetworkHeadStatus,
+    network_height_lag: u64,
+    policy: &ChainReadinessPolicyStatus,
+    snapshot: &NodeSnapshot,
+    observed_at_unix_ms: i64,
+) -> ChainSyncStatus {
+    let last_commit_age_ms = snapshot
+        .consensus
+        .last_committed_at_ms
+        .map(|last_ms| observed_at_unix_ms.saturating_sub(last_ms).max(0));
+    let stalled = network_height_lag > 0
+        && last_commit_age_ms
+            .map(|age_ms| age_ms > policy.sync_stalled_after_ms)
+            .unwrap_or(false);
+    let status = if network_head.conflicting_peer_count > 0 {
+        "conflicting"
+    } else if network_head.fresh_peer_count == 0 && network_head.required_peer_count > 0 {
+        "unknown"
+    } else if stalled {
+        "stalled"
+    } else if network_height_lag > 0 {
+        "catching_up"
+    } else if network_head.stale_peer_count > 0 {
+        "stale_peer_view"
+    } else {
+        "synced"
+    };
+    ChainSyncStatus {
+        status: status.to_string(),
+        network_head_source: network_head.source.clone(),
+        network_height_lag,
+        fresh_peer_count: network_head.fresh_peer_count,
+        stale_peer_count: network_head.stale_peer_count,
+        conflicting_peer_count: network_head.conflicting_peer_count,
+    }
+}
+
 pub(super) fn build_chain_node_observability_status(
     snapshot: &NodeSnapshot,
     storage_metrics: &storage_metrics::StorageMetricsSnapshot,
     reward_runtime_metrics: &super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     replication: &super::ChainReplicationDebugStatus,
+    network_head: &ChainConsensusNetworkHeadStatus,
+    p2p: &ChainP2pStatus,
+    policy: &ChainReadinessPolicyStatus,
+    observed_at_unix_ms: i64,
 ) -> ChainNodeObservabilityStatus {
     let connected_peer_count = replication.connected_peers.len();
     let mut active_peer_count = 0usize;
@@ -297,6 +524,8 @@ pub(super) fn build_chain_node_observability_status(
         .filter(|health| !health.issues.is_empty())
         .count();
     let known_peer_heads = snapshot.consensus.known_peer_heads;
+    let network_head_available =
+        matches!(network_head.source.as_str(), "peer_quorum" | "peer_single");
     let network_height_lag = snapshot
         .consensus
         .network_committed_height
@@ -310,12 +539,20 @@ pub(super) fn build_chain_node_observability_status(
         0
     };
     let recent_replication_error_count = replication.recent_errors.len();
+    let transport_stability = classify_transport_stability(replication);
+    let reachability_policy_ok = reachability_policy_ok(snapshot, p2p, active_peer_count, policy);
     let storage_degraded = storage_metrics.degraded_reason.is_some()
         || matches!(storage_metrics.last_gc_result.as_str(), "failed");
     let reward_runtime_degraded = reward_runtime_metrics.enabled
         && (!reward_runtime_metrics.metrics_available
             || !reward_runtime_metrics.invariant_ok
             || reward_runtime_metrics.last_error.is_some());
+    let slashable_stake_total = snapshot
+        .consensus
+        .misbehavior_evidence
+        .iter()
+        .map(|evidence| evidence.slashable_stake)
+        .sum::<u64>();
 
     let mut alerts = Vec::new();
     if let Some(err) = snapshot.last_error.as_ref() {
@@ -326,12 +563,134 @@ pub(super) fn build_chain_node_observability_status(
             format!("runtime last_error is set: {err}"),
         );
     }
-    if network_height_lag > 0 {
+    if network_height_lag > policy.max_network_height_lag {
         push_observability_alert(
             &mut alerts,
             "warn",
             "consensus_network_lag",
-            format!("network committed height is ahead by {network_height_lag}"),
+            format!(
+                "network committed height is ahead by {network_height_lag}; allowed lag is {}",
+                policy.max_network_height_lag
+            ),
+        );
+    }
+    if network_height_lag > 0
+        && snapshot
+            .consensus
+            .last_committed_at_ms
+            .map(|last_ms| observed_at_unix_ms.saturating_sub(last_ms).max(0))
+            .map(|age_ms| age_ms > policy.sync_stalled_after_ms)
+            .unwrap_or(false)
+    {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "consensus_sync_stalled",
+            format!(
+                "sync lag remains {} and last commit age exceeded {}ms",
+                network_height_lag, policy.sync_stalled_after_ms
+            ),
+        );
+    }
+    if snapshot.replication_enabled && network_head.fresh_peer_count == 0 {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "consensus_peer_head_unavailable",
+            "network head is unknown because no peer committed heads are visible".to_string(),
+        );
+    }
+    if network_head.stale_peer_count > 0 {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "consensus_peer_head_stale",
+            format!(
+                "{} peer committed head(s) exceeded freshness ttl {}ms",
+                network_head.stale_peer_count, network_head.freshness_ttl_ms
+            ),
+        );
+    }
+    if snapshot.replication_enabled
+        && policy.quorum_mode != "stake_weighted"
+        && network_head.fresh_peer_count > 0
+        && network_head.fresh_peer_count < network_head.required_peer_count
+    {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "consensus_peer_head_quorum_missing",
+            format!(
+                "fresh peer head quorum missing: observed={} required={}",
+                network_head.fresh_peer_count, network_head.required_peer_count
+            ),
+        );
+    }
+    if network_head.conflicting_peer_count > 0 {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "consensus_peer_head_conflict",
+            format!(
+                "{} fresh peer head(s) conflict at the same height",
+                network_head.conflicting_peer_count
+            ),
+        );
+    }
+    if policy.quorum_mode == "stake_weighted" && !network_head.stake_quorum_met {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "consensus_stake_quorum_missing",
+            format!(
+                "stake-weighted head quorum missing: observed_stake={} required_stake={} total_stake={}",
+                network_head.observed_stake, network_head.required_stake, network_head.total_stake
+            ),
+        );
+    }
+    if policy.quorum_mode == "count_fallback_stake_unavailable" {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "consensus_stake_quorum_unavailable",
+            "mainnet validator readiness requires stake-weighted peer head quorum, but validator stake snapshot is unavailable".to_string(),
+        );
+    }
+    if !snapshot.consensus.misbehavior_evidence.is_empty() {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "consensus_misbehavior_evidence_present",
+            format!(
+                "consensus misbehavior evidence present: count={} quarantined_validators={} slashable_stake_total={}",
+                snapshot.consensus.misbehavior_evidence.len(),
+                snapshot.consensus.quarantined_validators.len(),
+                slashable_stake_total
+            ),
+        );
+    }
+    if !snapshot.consensus.quarantined_validators.is_empty() {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "consensus_validator_quarantined",
+            format!(
+                "{} validator(s) are quarantined from peer-head quorum",
+                snapshot.consensus.quarantined_validators.len()
+            ),
+        );
+    }
+    let applied_slashing_receipts = applied_slashing_receipt_hashes(snapshot);
+    let applied_slashing_receipt_count = applied_slashing_receipts.len();
+    let pending_slashing_intent_count = pending_slashing_intent_count(snapshot);
+    if pending_slashing_intent_count > 0 {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "consensus_slashing_intent_pending",
+            format!(
+                "{pending_slashing_intent_count} consensus slashing intent(s) are pending governance identity penalty submission"
+            ),
         );
     }
     if let Some(height) = snapshot.consensus.replication_gap_sync_blocked_height {
@@ -388,6 +747,48 @@ pub(super) fn build_chain_node_observability_status(
             ),
         );
     }
+    if !transport_stability.stable {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "replication_transport_unstable",
+            format!(
+                "replication transport stability score {} below threshold {}: connection_closed={}, insufficient_peers={}, timeout={}, protocol_errors={}",
+                transport_stability.score,
+                TRANSPORT_STABILITY_MIN_SCORE,
+                transport_stability.connection_closed_count,
+                transport_stability.insufficient_peers_count,
+                transport_stability.timeout_count,
+                transport_stability.protocol_error_count
+            ),
+        );
+    }
+    if !reachability_policy_ok {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "p2p_reachability_degraded",
+            format!(
+                "p2p reachability does not satisfy role policy: role={} detected={:?} autonat={} public_port={} relay_available={}",
+                snapshot.role.as_str(),
+                p2p.detected_reachability,
+                p2p.autonat_status,
+                p2p.public_port_reachability,
+                p2p.relay_available
+            ),
+        );
+    }
+    if policy.tier == "mainnet" && policy.slashing_policy == "evidence_only_readiness_gate" {
+        let evidence_count = snapshot.consensus.misbehavior_evidence.len();
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "mainnet_slashing_evidence_only",
+            format!(
+                "mainnet slashing policy is evidence-only in readiness and does not execute protocol penalties; evidence_count={evidence_count}, slashable_stake_total={slashable_stake_total}"
+            ),
+        );
+    }
     if storage_degraded {
         let reason = storage_metrics
             .degraded_reason
@@ -425,9 +826,18 @@ pub(super) fn build_chain_node_observability_status(
         );
     }
 
+    let status = observability_status_for_alerts(alerts.as_slice());
+    let ready = status != "critical"
+        && (!snapshot.replication_enabled || network_head_available)
+        && network_head.decision == "ready"
+        && transport_stability.stable
+        && reachability_policy_ok
+        && network_height_lag <= policy.max_network_height_lag
+        && policy.quorum_mode != "count_fallback_stake_unavailable";
     ChainNodeObservabilityStatus {
-        status: observability_status_for_alerts(alerts.as_slice()),
+        status,
         summary: observability_summary_for_alerts(alerts.as_slice()),
+        ready,
         connected_peer_count,
         active_peer_count,
         candidate_peer_count,
@@ -435,7 +845,18 @@ pub(super) fn build_chain_node_observability_status(
         blocked_peer_count,
         peer_with_issues_count,
         known_peer_heads,
+        network_head_available,
         network_height_lag,
+        transport_stable: transport_stability.stable,
+        transport_stability_score: transport_stability.score,
+        reachability_policy_ok,
+        misbehavior_evidence_count: snapshot.consensus.misbehavior_evidence.len(),
+        slashing_intent_count: snapshot.consensus.slashing_intents.len(),
+        pending_slashing_intent_count,
+        slashing_receipt_count: snapshot.consensus.slashing_receipts.len(),
+        applied_slashing_receipt_count,
+        quarantined_validator_count: snapshot.consensus.quarantined_validators.len(),
+        slashable_stake_total,
         replication_enabled: snapshot.replication_enabled,
         replication_persisted_height: snapshot.consensus.replication_persisted_height,
         replication_state_gap,
@@ -465,6 +886,13 @@ pub(super) fn build_chain_status_payload(
     replication: super::ChainReplicationDebugStatus,
 ) -> ChainStatusResponse {
     let observed_at_unix_ms = now_unix_ms();
+    let p2p = build_chain_p2p_status(
+        live_p2p_recommendation,
+        applied_effective_user_mode,
+        effective_p2p_policy,
+        live_snapshot,
+        p2p_detection,
+    );
     let clamped_elapsed_ms = |prior_ms: i64| -> Option<i64> {
         observed_at_unix_ms
             .checked_sub(prior_ms)
@@ -474,16 +902,40 @@ pub(super) fn build_chain_status_payload(
         .consensus
         .last_status
         .map(consensus_status_to_string);
+    let readiness_policy = readiness_policy(&snapshot, loaded_network_tier_manifest);
+    let network_head =
+        build_network_head_status(&snapshot, observed_at_unix_ms, loaded_network_tier_manifest);
     let observability = build_chain_node_observability_status(
         &snapshot,
         &storage_metrics,
         &reward_runtime_metrics,
         &replication,
+        &network_head,
+        &p2p,
+        &readiness_policy,
+        observed_at_unix_ms,
+    );
+    let liveness = build_liveness_status(&snapshot);
+    let readiness = build_readiness_status(&observability, readiness_policy.clone());
+    let sync = build_sync_status(
+        &network_head,
+        observability.network_height_lag,
+        &readiness_policy,
+        &snapshot,
+        observed_at_unix_ms,
     );
     let last_commit_age_ms = snapshot
         .consensus
         .last_committed_at_ms
         .and_then(clamped_elapsed_ms);
+    let slashable_stake_total = snapshot
+        .consensus
+        .misbehavior_evidence
+        .iter()
+        .map(|evidence| evidence.slashable_stake)
+        .sum::<u64>();
+    let pending_slashing_intent_count = pending_slashing_intent_count(&snapshot);
+    let applied_slashing_receipt_count = applied_slashing_receipt_hashes(&snapshot).len();
     let pending_proposal = snapshot
         .consensus
         .pending_proposal
@@ -509,12 +961,15 @@ pub(super) fn build_chain_status_payload(
         });
 
     ChainStatusResponse {
-        ok: observability.status != "critical",
+        ok: observability.ready,
         observed_at_unix_ms,
         node_id: snapshot.node_id,
         world_id: snapshot.world_id,
         role: snapshot.role.as_str().to_string(),
         running: snapshot.running,
+        liveness,
+        readiness,
+        sync,
         worker_poll_count: snapshot.tick_count,
         tick_count: snapshot.tick_count,
         last_tick_unix_ms: snapshot.last_tick_unix_ms,
@@ -627,16 +1082,21 @@ pub(super) fn build_chain_status_payload(
             last_execution_block_hash: snapshot.consensus.last_execution_block_hash,
             last_execution_state_root: snapshot.consensus.last_execution_state_root,
             known_peer_heads: snapshot.consensus.known_peer_heads,
+            validator_set_hash: snapshot.consensus.validator_set_hash.clone(),
+            validator_stake_root: snapshot.consensus.validator_stake_root.clone(),
+            validator_stake_proof_count: snapshot.consensus.validator_stake_proofs.len(),
+            misbehavior_evidence_count: snapshot.consensus.misbehavior_evidence.len(),
+            slashing_intent_count: snapshot.consensus.slashing_intents.len(),
+            pending_slashing_intent_count,
+            slashing_receipt_count: snapshot.consensus.slashing_receipts.len(),
+            applied_slashing_receipt_count,
+            quarantined_validator_count: snapshot.consensus.quarantined_validators.len(),
+            slashable_stake_total,
+            network_head,
         },
         last_error: snapshot.last_error,
         execution_world_dir: execution_world_dir.display().to_string(),
-        p2p: build_chain_p2p_status(
-            live_p2p_recommendation,
-            applied_effective_user_mode,
-            effective_p2p_policy,
-            live_snapshot,
-            p2p_detection,
-        ),
+        p2p,
         observability,
         release_security_policy,
         reward_runtime: reward_runtime_metrics,

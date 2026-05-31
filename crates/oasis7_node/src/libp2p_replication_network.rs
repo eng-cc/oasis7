@@ -47,6 +47,7 @@ pub struct ReplicationNetworkDebugSnapshot {
     pub registered_protocols: Vec<String>,
     pub protocol_retry_cooldown_peers: HashMap<String, Vec<String>>,
     pub transport_retry_cooldown_peers: Vec<String>,
+    pub request_peer_scores: HashMap<String, u8>,
     pub recent_errors: Vec<String>,
 }
 
@@ -54,6 +55,17 @@ const REQUEST_CONNECTED_PEER_WAIT_RETRIES: usize = 12;
 const REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS: u64 = 150;
 const REQUEST_CONNECTION_REFRESH_RETRIES: usize = 12;
 const PROTOCOL_RETRY_COOLDOWN_AFTER_MS: u64 = 5_000;
+const REQUEST_PEER_DEFAULT_SCORE: u8 = 100;
+const REQUEST_PEER_TRANSPORT_PENALTY: u8 = 20;
+const REQUEST_PEER_PROTOCOL_PENALTY: u8 = 30;
+const REQUEST_PEER_GENERIC_PENALTY: u8 = 10;
+const REQUEST_PEER_SUCCESS_RECOVERY: u8 = 5;
+
+#[derive(Debug, Clone)]
+struct RequestPeerScore {
+    score: u8,
+    updated_at: Instant,
+}
 
 #[derive(Debug, Clone)]
 pub struct Libp2pReplicationNetworkConfig {
@@ -98,6 +110,7 @@ pub struct Libp2pReplicationNetwork {
     protocol_retry_cooldown_after: Duration,
     protocol_retry_cooldown_peers: Arc<Mutex<HashMap<String, HashMap<PeerId, Instant>>>>,
     transport_retry_cooldown_peers: Arc<Mutex<HashMap<PeerId, Instant>>>,
+    request_peer_scores: Arc<Mutex<HashMap<PeerId, RequestPeerScore>>>,
 }
 
 impl Libp2pReplicationNetwork {
@@ -124,6 +137,7 @@ impl Libp2pReplicationNetwork {
             protocol_retry_cooldown_after: config.protocol_retry_cooldown_after,
             protocol_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
             transport_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
+            request_peer_scores: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -214,6 +228,13 @@ impl Libp2pReplicationNetwork {
         let mut recent_errors = self.inner.debug_errors();
         recent_errors.sort();
         recent_errors.dedup();
+        let request_peer_scores: HashMap<String, u8> = self
+            .request_peer_scores
+            .lock()
+            .expect("lock request peer scores")
+            .iter()
+            .map(|(peer, score)| (peer.to_string(), score.score))
+            .collect();
 
         let mut registered_protocols: Vec<String> = self
             .handlers
@@ -232,6 +253,7 @@ impl Libp2pReplicationNetwork {
             registered_protocols,
             protocol_retry_cooldown_peers,
             transport_retry_cooldown_peers,
+            request_peer_scores,
             recent_errors,
         }
     }
@@ -287,24 +309,74 @@ impl Libp2pReplicationNetwork {
             .protocol_retry_cooldown_peers
             .lock()
             .expect("lock protocol retry cooldown peers");
-        let Some(peers) = protocol_retry_cooldown_peers.get_mut(protocol) else {
-            return ordered_peers
-                .into_iter()
-                .filter(|peer| !transport_retry_cooldown_peers.contains_key(peer))
-                .collect();
-        };
-        peers.retain(|_, cooldown_until| *cooldown_until > now);
-        let keep_protocol_entry = !peers.is_empty();
-        let filtered: Vec<PeerId> = ordered_peers
+        let protocol_cooldown_peers = protocol_retry_cooldown_peers
+            .get_mut(protocol)
+            .map(|peers| {
+                peers.retain(|_, cooldown_until| *cooldown_until > now);
+                peers.clone()
+            })
+            .unwrap_or_default();
+        let keep_protocol_entry = !protocol_cooldown_peers.is_empty();
+        let mut scored: Vec<(PeerId, u8, usize)> = ordered_peers
             .into_iter()
-            .filter(|peer| {
-                !peers.contains_key(peer) && !transport_retry_cooldown_peers.contains_key(peer)
+            .enumerate()
+            .filter_map(|(index, peer)| {
+                if protocol_cooldown_peers.contains_key(&peer)
+                    || transport_retry_cooldown_peers.contains_key(&peer)
+                {
+                    return None;
+                }
+                let score = self.request_peer_score(peer);
+                Some((peer, score, index))
             })
             .collect();
+        scored.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.2.cmp(&right.2)));
+        let filtered = scored
+            .into_iter()
+            .map(|(peer, _, _)| peer)
+            .collect::<Vec<_>>();
         if !keep_protocol_entry {
             protocol_retry_cooldown_peers.remove(protocol);
         }
         filtered
+    }
+
+    fn request_peer_score(&self, peer: PeerId) -> u8 {
+        self.request_peer_scores
+            .lock()
+            .expect("lock request peer scores")
+            .get(&peer)
+            .map(|entry| entry.score)
+            .unwrap_or(REQUEST_PEER_DEFAULT_SCORE)
+    }
+
+    fn adjust_request_peer_score(&self, peer: PeerId, delta: i16) {
+        let mut scores = self
+            .request_peer_scores
+            .lock()
+            .expect("lock request peer scores");
+        let entry = scores.entry(peer).or_insert(RequestPeerScore {
+            score: REQUEST_PEER_DEFAULT_SCORE,
+            updated_at: Instant::now(),
+        });
+        let updated = (entry.score as i16 + delta).clamp(0, REQUEST_PEER_DEFAULT_SCORE as i16);
+        entry.score = updated as u8;
+        entry.updated_at = Instant::now();
+    }
+
+    fn mark_peer_request_success(&self, peer: PeerId) {
+        self.adjust_request_peer_score(peer, REQUEST_PEER_SUCCESS_RECOVERY as i16);
+    }
+
+    fn mark_peer_request_failure(&self, protocol: &str, peer: PeerId, err: &WorldError) {
+        let penalty = if peer_error_indicates_transport_retry_cooldown(err) {
+            REQUEST_PEER_TRANSPORT_PENALTY
+        } else if peer_error_indicates_protocol_retry_cooldown(protocol, err) {
+            REQUEST_PEER_PROTOCOL_PENALTY
+        } else {
+            REQUEST_PEER_GENERIC_PENALTY
+        };
+        self.adjust_request_peer_score(peer, -(penalty as i16));
     }
 
     fn mark_peer_for_protocol_retry_cooldown(&self, protocol: &str, peer: PeerId) {
@@ -425,8 +497,12 @@ impl Libp2pReplicationNetwork {
             let mut retryable_connection_gap = false;
             for peer in ordered_peers {
                 match self.request_via_peer(protocol, payload, peer) {
-                    Ok(reply) => return Ok(reply),
+                    Ok(reply) => {
+                        self.mark_peer_request_success(peer);
+                        return Ok(reply);
+                    }
                     Err(err) => {
+                        self.mark_peer_request_failure(protocol, peer, &err);
                         if peer_error_indicates_transport_retry_cooldown(&err) {
                             self.mark_peer_for_transport_retry_cooldown(peer);
                         }

@@ -344,8 +344,12 @@ fn runtime_replication_storage_challenge_gate_falls_back_to_older_samples_during
             height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT,
             block_hash: "catchup-peer-head".to_string(),
             committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
             execution_block_hash: None,
             execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
         },
     );
     let replication = super::replication::ReplicationRuntime::new(
@@ -496,8 +500,12 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_during_warmup(
             height: 11,
             block_hash: "warmup-peer-head".to_string(),
             committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
             execution_block_hash: None,
             execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
         },
     );
     let replication = super::replication::ReplicationRuntime::new(

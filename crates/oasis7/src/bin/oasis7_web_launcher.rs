@@ -288,6 +288,7 @@ struct ChainNodeObservabilityAlertSnapshot {
 struct ChainNodeObservabilitySnapshot {
     status: String,
     summary: String,
+    ready: bool,
     connected_peer_count: usize,
     active_peer_count: usize,
     candidate_peer_count: usize,
@@ -295,7 +296,11 @@ struct ChainNodeObservabilitySnapshot {
     blocked_peer_count: usize,
     peer_with_issues_count: usize,
     known_peer_heads: usize,
+    network_head_available: bool,
     network_height_lag: u64,
+    transport_stable: bool,
+    transport_stability_score: u8,
+    reachability_policy_ok: bool,
     recent_replication_error_count: usize,
     storage_degraded: bool,
     reward_runtime_degraded: bool,
@@ -321,6 +326,8 @@ struct ChainReplicationSnapshot {
     local_peer_id: String,
     connected_peers: Vec<String>,
     peer_healths: Vec<ChainReplicationPeerHealthSnapshot>,
+    #[serde(default)]
+    request_peer_scores: std::collections::BTreeMap<String, u8>,
 }
 
 #[derive(Debug, Clone)]

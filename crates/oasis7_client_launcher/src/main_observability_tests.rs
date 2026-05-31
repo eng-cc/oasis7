@@ -28,6 +28,7 @@ fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
         chain_observability_status: Some(super::WebChainNodeObservabilityStatus {
             status: "warn".to_string(),
             summary: "network committed height is ahead by 2".to_string(),
+            ready: false,
             connected_peer_count: 1,
             active_peer_count: 1,
             candidate_peer_count: 0,
@@ -35,7 +36,11 @@ fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
             blocked_peer_count: 0,
             peer_with_issues_count: 0,
             known_peer_heads: 1,
+            network_head_available: true,
             network_height_lag: 2,
+            transport_stable: true,
+            transport_stability_score: 100,
+            reachability_policy_ok: true,
             recent_replication_error_count: 0,
             storage_degraded: false,
             reward_runtime_degraded: false,
@@ -57,6 +62,7 @@ fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
                 source_operator: None,
                 source_asn: None,
             }],
+            request_peer_scores: std::collections::BTreeMap::new(),
         }),
         chain_recovery: None,
         game_url: "http://127.0.0.1:4173/".to_string(),
@@ -112,6 +118,7 @@ fn connected_peer_detail_rows_follow_connected_peer_order() {
                 source_asn: Some("asn-b".to_string()),
             },
         ],
+        request_peer_scores: std::collections::BTreeMap::new(),
     };
 
     let rows = app.connected_peer_detail_rows(&replication);

@@ -42,6 +42,7 @@ pub(super) struct WebChainNodeObservabilityAlert {
 pub(super) struct WebChainNodeObservabilityStatus {
     pub(super) status: String,
     pub(super) summary: String,
+    pub(super) ready: bool,
     pub(super) connected_peer_count: usize,
     pub(super) active_peer_count: usize,
     pub(super) candidate_peer_count: usize,
@@ -49,7 +50,11 @@ pub(super) struct WebChainNodeObservabilityStatus {
     pub(super) blocked_peer_count: usize,
     pub(super) peer_with_issues_count: usize,
     pub(super) known_peer_heads: usize,
+    pub(super) network_head_available: bool,
     pub(super) network_height_lag: u64,
+    pub(super) transport_stable: bool,
+    pub(super) transport_stability_score: u8,
+    pub(super) reachability_policy_ok: bool,
     pub(super) recent_replication_error_count: usize,
     pub(super) storage_degraded: bool,
     pub(super) reward_runtime_degraded: bool,
@@ -72,4 +77,6 @@ pub(super) struct WebChainReplicationStatus {
     pub(super) local_peer_id: String,
     pub(super) connected_peers: Vec<String>,
     pub(super) peer_healths: Vec<WebChainReplicationPeerHealth>,
+    #[serde(default)]
+    pub(super) request_peer_scores: std::collections::BTreeMap<String, u8>,
 }

@@ -10,6 +10,10 @@ use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReacha
 use oasis7_proto::distributed_net::{NetworkLane, NetworkLaneOperation};
 
 use crate::pos_validation::validate_pos_config;
+use crate::types_consensus::{
+    NodeConsensusMisbehaviorEvidenceSnapshot, NodeConsensusSlashingIntentSnapshot,
+    NodeConsensusSlashingReceiptSnapshot, NodeValidatorStakeProofSnapshot,
+};
 use crate::{NodeConsensusAction, NodeError, NodeReplicationConfig};
 
 mod main_token_controller_binding;
@@ -1052,14 +1056,26 @@ pub struct NodeConsensusSnapshot {
     pub last_execution_height: u64,
     pub last_execution_block_hash: Option<String>,
     pub last_execution_state_root: Option<String>,
+    pub validator_stakes: BTreeMap<String, u64>,
+    pub required_stake: u64,
+    pub total_stake: u64,
+    pub validator_set_hash: String,
+    pub validator_stake_root: String,
+    pub validator_stake_proofs: Vec<NodeValidatorStakeProofSnapshot>,
+    pub misbehavior_evidence: Vec<NodeConsensusMisbehaviorEvidenceSnapshot>,
+    pub slashing_intents: Vec<NodeConsensusSlashingIntentSnapshot>,
+    pub slashing_receipts: Vec<NodeConsensusSlashingReceiptSnapshot>,
+    pub quarantined_validators: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct NodePeerCommittedHead {
     pub node_id: String,
+    pub validator_id: Option<String>,
     pub height: u64,
     pub block_hash: String,
     pub committed_at_ms: i64,
+    pub observed_at_ms: i64,
     pub execution_block_hash: Option<String>,
     pub execution_state_root: Option<String>,
 }
@@ -1101,6 +1117,16 @@ impl Default for NodeConsensusSnapshot {
             last_execution_height: 0,
             last_execution_block_hash: None,
             last_execution_state_root: None,
+            validator_stakes: BTreeMap::new(),
+            required_stake: 0,
+            total_stake: 0,
+            validator_set_hash: String::new(),
+            validator_stake_root: String::new(),
+            validator_stake_proofs: Vec::new(),
+            misbehavior_evidence: Vec::new(),
+            slashing_intents: Vec::new(),
+            slashing_receipts: Vec::new(),
+            quarantined_validators: Vec::new(),
         }
     }
 }

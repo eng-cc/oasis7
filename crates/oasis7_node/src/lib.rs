@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
@@ -53,6 +53,7 @@ mod network_bridge;
 mod node_engine_core;
 mod node_engine_network;
 mod node_engine_replication;
+mod node_engine_slashing;
 mod node_engine_storage_challenge;
 mod node_runtime_core;
 mod pos_engine_gossip;
@@ -65,6 +66,7 @@ mod replication_probe_gate;
 mod replication_state_reconcile;
 mod runtime_util;
 mod types;
+mod types_consensus;
 
 pub use consensus_support::compute_consensus_action_root;
 use consensus_support::{
@@ -109,6 +111,11 @@ pub use types::{
     NodePublicPortReachability, NodeReachabilityAutoDetection, NodeReplicaMaintenanceConfig,
     NodeRole, NodeSnapshot, NodeUserMode, NodeUserModeRecommendation, PosConsensusStatus,
     PosValidator,
+};
+pub use types_consensus::{
+    NodeConsensusMisbehaviorEvidenceSnapshot, NodeConsensusSlashingIntentSnapshot,
+    NodeConsensusSlashingReceiptSnapshot, NodeValidatorStakeProofSnapshot,
+    NodeValidatorStakeProofStepSnapshot,
 };
 
 use feedback_runtime::{
@@ -837,9 +844,13 @@ fn network_replication_error(err: ProtoWorldError) -> NodeError {
 struct PosNodeEngine {
     validators: BTreeMap<String, u64>,
     validator_players: BTreeMap<String, String>,
+    validator_by_player: BTreeMap<String, String>,
     validator_signers: BTreeMap<String, String>,
     total_stake: u64,
     required_stake: u64,
+    validator_set_hash: String,
+    validator_stake_root: String,
+    validator_stake_proofs: Vec<NodeValidatorStakeProofSnapshot>,
     epoch_length_slots: u64,
     slot_duration_ms: u64,
     ticks_per_slot: u64,
@@ -882,6 +893,8 @@ struct PosNodeEngine {
     consensus_signer: Option<NodeConsensusMessageSigner>,
     enforce_consensus_signature: bool,
     peer_heads: BTreeMap<String, PeerCommittedHead>,
+    misbehavior_evidence: BTreeMap<String, ConsensusMisbehaviorEvidence>,
+    quarantined_validators: BTreeSet<String>,
     last_committed_at_ms: Option<i64>,
     last_committed_block_hash: Option<String>,
     inbound_rejected_proposal_future_slot: u64,
@@ -907,8 +920,37 @@ struct PeerCommittedHead {
     height: u64,
     block_hash: String,
     committed_at_ms: i64,
+    observed_at_ms: i64,
     execution_block_hash: Option<String>,
     execution_state_root: Option<String>,
+    action_root: String,
+    public_key_hex: Option<String>,
+    signature_hex: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ConsensusMisbehaviorEvidence {
+    kind: String,
+    validator_id: String,
+    node_id: String,
+    height: u64,
+    observed_at_ms: i64,
+    first_block_hash: String,
+    second_block_hash: String,
+    first_execution_block_hash: Option<String>,
+    second_execution_block_hash: Option<String>,
+    first_execution_state_root: Option<String>,
+    second_execution_state_root: Option<String>,
+    first_action_root: String,
+    second_action_root: String,
+    first_public_key_hex: Option<String>,
+    second_public_key_hex: Option<String>,
+    first_signature_hex: Option<String>,
+    second_signature_hex: Option<String>,
+    slashable_stake: u64,
+    total_stake: u64,
+    validator_stake_root: String,
+    quarantined: bool,
 }
 
 #[cfg(test)]

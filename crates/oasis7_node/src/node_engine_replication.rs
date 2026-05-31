@@ -363,6 +363,13 @@ impl PosNodeEngine {
         if payload.height == 0 {
             return;
         }
+        if self
+            .validator_id_for_peer_head(peer_node_id)
+            .map(|validator_id| self.quarantined_validators.contains(&validator_id))
+            .unwrap_or(false)
+        {
+            return;
+        }
         self.network_committed_height = self.network_committed_height.max(payload.height);
         self.peer_heads.insert(
             peer_node_id.to_string(),
@@ -370,8 +377,12 @@ impl PosNodeEngine {
                 height: payload.height,
                 block_hash: payload.block_hash.clone(),
                 committed_at_ms: payload.committed_at_ms,
+                observed_at_ms: crate::runtime_util::now_unix_ms(),
                 execution_block_hash: payload.execution_block_hash.clone(),
                 execution_state_root: payload.execution_state_root.clone(),
+                action_root: String::new(),
+                public_key_hex: None,
+                signature_hex: None,
             },
         );
     }
