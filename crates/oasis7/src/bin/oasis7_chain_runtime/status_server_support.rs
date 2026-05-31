@@ -17,6 +17,7 @@ pub(super) struct ChainReplicationDebugStatus {
     pub(super) registered_protocols: Vec<String>,
     pub(super) protocol_retry_cooldown_peers: BTreeMap<String, Vec<String>>,
     pub(super) transport_retry_cooldown_peers: Vec<String>,
+    pub(super) request_peer_scores: BTreeMap<String, u8>,
     pub(super) recent_errors: Vec<String>,
 }
 
@@ -341,10 +342,11 @@ fn handle_chain_status_connection(
                 .map_err(|err| format!("failed to write /healthz response: {err}"))?;
         }
         "/v1/chain/status" => {
-            let (snapshot, udp_gossip_traffic) = runtime
+            let (mut snapshot, udp_gossip_traffic) = runtime
                 .lock()
                 .map_err(|_| "failed to read node runtime snapshot: lock poisoned".to_string())
                 .map(|locked| (locked.snapshot(), locked.gossip_traffic_snapshot()))?;
+            attach_governance_slashing_receipts(&mut snapshot, execution_world_dir);
             let live_snapshot = replication_network.reachability_snapshot();
             let (p2p_recommendation, p2p_detection) =
                 build_live_node_network_policy_recommendation(options, Some(&live_snapshot))?;
@@ -391,6 +393,62 @@ fn handle_chain_status_connection(
     Ok(())
 }
 
+pub(super) fn attach_governance_slashing_receipts(
+    snapshot: &mut oasis7_node::NodeSnapshot,
+    execution_world_dir: &Path,
+) {
+    if snapshot.consensus.slashing_intents.is_empty() {
+        return;
+    }
+    let Ok(world) = super::execution_bridge::load_execution_world(execution_world_dir) else {
+        return;
+    };
+    let intents_by_evidence = snapshot
+        .consensus
+        .slashing_intents
+        .iter()
+        .map(|intent| (intent.evidence_hash.clone(), intent.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let receipts = world
+        .governance_identity_penalties()
+        .values()
+        .filter_map(|record| {
+            let intent = intents_by_evidence.get(record.evidence_hash.as_str())?;
+            Some(NodeConsensusSlashingReceiptSnapshot {
+                penalty_id: record.penalty_id,
+                intent_id: intent.intent_id.clone(),
+                evidence_hash: record.evidence_hash.clone(),
+                validator_id: intent.validator_id.clone(),
+                target_agent_id: record.target_agent_id.clone(),
+                slash_stake: record.slash_stake,
+                status: governance_identity_penalty_status_label(record.status).to_string(),
+                evidence_chain_hash: record.evidence_chain_hash.clone(),
+                appeal_deadline_tick: record.appeal_deadline_tick,
+                applied: matches!(
+                    record.status,
+                    oasis7::runtime::GovernanceIdentityPenaltyStatus::Applied
+                        | oasis7::runtime::GovernanceIdentityPenaltyStatus::Appealed
+                        | oasis7::runtime::GovernanceIdentityPenaltyStatus::AppealRejected
+                ),
+            })
+        })
+        .collect::<Vec<_>>();
+    if !receipts.is_empty() {
+        snapshot.consensus.slashing_receipts = receipts;
+    }
+}
+
+fn governance_identity_penalty_status_label(
+    status: oasis7::runtime::GovernanceIdentityPenaltyStatus,
+) -> &'static str {
+    match status {
+        oasis7::runtime::GovernanceIdentityPenaltyStatus::Applied => "applied",
+        oasis7::runtime::GovernanceIdentityPenaltyStatus::Appealed => "appealed",
+        oasis7::runtime::GovernanceIdentityPenaltyStatus::AppealAccepted => "appeal_accepted",
+        oasis7::runtime::GovernanceIdentityPenaltyStatus::AppealRejected => "appeal_rejected",
+    }
+}
+
 pub(super) fn build_chain_replication_debug_status(
     replication_network: &Libp2pReplicationNetwork,
 ) -> ChainReplicationDebugStatus {
@@ -428,6 +486,7 @@ pub(super) fn build_chain_replication_debug_status(
         registered_protocols: debug_snapshot.registered_protocols,
         protocol_retry_cooldown_peers,
         transport_retry_cooldown_peers,
+        request_peer_scores: debug_snapshot.request_peer_scores.into_iter().collect(),
         recent_errors: debug_snapshot.recent_errors,
     }
 }

@@ -117,8 +117,12 @@ fn storage_challenge_gate_reuses_recent_blob_success_cache() {
             height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8,
             block_hash: "cached-peer-head".to_string(),
             committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
             execution_block_hash: None,
             execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
         },
     );
 
@@ -153,8 +157,12 @@ fn storage_challenge_gate_reuses_recent_blob_success_cache_expires() {
             height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8,
             block_hash: "expiry-peer-head".to_string(),
             committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
             execution_block_hash: None,
             execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
         },
     );
 
@@ -191,8 +199,12 @@ fn storage_challenge_gate_ignores_future_cache_heights_after_rewind() {
             height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8,
             block_hash: "rewind-peer-head".to_string(),
             committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
             execution_block_hash: None,
             execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
         },
     );
 

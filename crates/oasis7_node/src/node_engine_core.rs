@@ -1,4 +1,5 @@
 use super::*;
+use crate::node_engine_slashing::{build_validator_stake_proof_chain, evidence_hash};
 
 const GOSSIP_REVERSE_PATH_SEED_INTERVAL_MS: i64 = 5_000;
 
@@ -19,6 +20,8 @@ impl PosNodeEngine {
     pub(super) fn new(config: &NodeConfig) -> Result<Self, NodeError> {
         let (validators, validator_players, validator_signers, total_stake, required_stake) =
             validated_pos_state(&config.pos_config)?;
+        let (validator_set_hash, validator_stake_root, validator_stake_proofs) =
+            build_validator_stake_proof_chain(&validators, &validator_players, &validator_signers)?;
         let (consensus_signer, consensus_signer_public_key, enforce_consensus_signature) =
             if let Some(replication) = &config.replication {
                 let signer_keypair = replication.consensus_signer()?;
@@ -84,10 +87,17 @@ impl PosNodeEngine {
         }
         Ok(Self {
             validators,
+            validator_by_player: validator_players
+                .iter()
+                .map(|(validator_id, player_id)| (player_id.clone(), validator_id.clone()))
+                .collect(),
             validator_players,
             validator_signers,
             total_stake,
             required_stake,
+            validator_set_hash,
+            validator_stake_root,
+            validator_stake_proofs,
             epoch_length_slots: config.pos_config.epoch_length_slots,
             slot_duration_ms: config.pos_config.slot_duration_ms,
             ticks_per_slot: config.pos_config.ticks_per_slot,
@@ -131,6 +141,8 @@ impl PosNodeEngine {
             consensus_signer,
             enforce_consensus_signature,
             peer_heads: BTreeMap::new(),
+            misbehavior_evidence: BTreeMap::new(),
+            quarantined_validators: BTreeSet::new(),
             last_committed_at_ms: None,
             last_committed_block_hash: None,
             inbound_rejected_proposal_future_slot: 0,
@@ -719,14 +731,54 @@ impl PosNodeEngine {
         let peer_heads = self
             .peer_heads
             .iter()
+            .filter(|(node_id, _)| {
+                self.validator_id_for_peer_head(node_id)
+                    .map(|validator_id| !self.quarantined_validators.contains(&validator_id))
+                    .unwrap_or(true)
+            })
             .map(|(node_id, head)| NodePeerCommittedHead {
                 node_id: node_id.clone(),
+                validator_id: self.validator_id_for_peer_head(node_id),
                 height: head.height,
                 block_hash: head.block_hash.clone(),
                 committed_at_ms: head.committed_at_ms,
+                observed_at_ms: head.observed_at_ms,
                 execution_block_hash: head.execution_block_hash.clone(),
                 execution_state_root: head.execution_state_root.clone(),
             })
+            .collect::<Vec<_>>();
+        let misbehavior_evidence = self
+            .misbehavior_evidence
+            .values()
+            .map(|evidence| NodeConsensusMisbehaviorEvidenceSnapshot {
+                kind: evidence.kind.clone(),
+                evidence_hash: evidence_hash(evidence),
+                validator_id: evidence.validator_id.clone(),
+                node_id: evidence.node_id.clone(),
+                height: evidence.height,
+                observed_at_ms: evidence.observed_at_ms,
+                first_block_hash: evidence.first_block_hash.clone(),
+                second_block_hash: evidence.second_block_hash.clone(),
+                first_execution_block_hash: evidence.first_execution_block_hash.clone(),
+                second_execution_block_hash: evidence.second_execution_block_hash.clone(),
+                first_execution_state_root: evidence.first_execution_state_root.clone(),
+                second_execution_state_root: evidence.second_execution_state_root.clone(),
+                first_action_root: evidence.first_action_root.clone(),
+                second_action_root: evidence.second_action_root.clone(),
+                first_public_key_hex: evidence.first_public_key_hex.clone(),
+                second_public_key_hex: evidence.second_public_key_hex.clone(),
+                first_signature_hex: evidence.first_signature_hex.clone(),
+                second_signature_hex: evidence.second_signature_hex.clone(),
+                slashable_stake: evidence.slashable_stake,
+                total_stake: evidence.total_stake,
+                validator_stake_root: evidence.validator_stake_root.clone(),
+                quarantined: evidence.quarantined,
+            })
+            .collect::<Vec<_>>();
+        let slashing_intents = self
+            .misbehavior_evidence
+            .values()
+            .map(|evidence| self.slashing_intent_for_evidence(evidence))
             .collect::<Vec<_>>();
         NodeConsensusSnapshot {
             mode: NodeConsensusMode::Pos,
@@ -749,7 +801,7 @@ impl PosNodeEngine {
             replication_gap_sync_blocked_reason: self
                 .last_replication_gap_sync_blocked_reason
                 .clone(),
-            known_peer_heads: self.peer_heads.len(),
+            known_peer_heads: peer_heads.len(),
             peer_heads,
             inbound_rejected_proposal_future_slot: self.inbound_rejected_proposal_future_slot,
             inbound_rejected_proposal_stale_slot: self.inbound_rejected_proposal_stale_slot,
@@ -781,6 +833,24 @@ impl PosNodeEngine {
             last_execution_height: self.last_execution_height,
             last_execution_block_hash: self.last_execution_block_hash.clone(),
             last_execution_state_root: self.last_execution_state_root.clone(),
+            validator_stakes: self.validators.clone(),
+            required_stake: self.required_stake,
+            total_stake: self.total_stake,
+            validator_set_hash: self.validator_set_hash.clone(),
+            validator_stake_root: self.validator_stake_root.clone(),
+            validator_stake_proofs: self.validator_stake_proofs.clone(),
+            misbehavior_evidence,
+            slashing_intents,
+            slashing_receipts: Vec::new(),
+            quarantined_validators: self.quarantined_validators.iter().cloned().collect(),
+        }
+    }
+
+    pub(super) fn validator_id_for_peer_head(&self, node_id: &str) -> Option<String> {
+        if self.validators.contains_key(node_id) {
+            Some(node_id.to_string())
+        } else {
+            self.validator_by_player.get(node_id).cloned()
         }
     }
 

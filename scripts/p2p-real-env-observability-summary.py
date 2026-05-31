@@ -133,11 +133,18 @@ def summarize_host_runtime(host_node: dict) -> dict:
 
 def summarize_consensus(raw_status: dict) -> dict:
     consensus = raw_status.get("consensus") or {}
+    network_head = consensus.get("network_head") or {}
     pending_actions = consensus.get("pending_consensus_actions") or {}
     recent_finality = consensus.get("recent_finality_latency") or {}
     inbound_timing = consensus.get("inbound_timing_rejections") or {}
     network_committed_height = consensus.get("network_committed_height")
     committed_height = consensus.get("committed_height")
+    known_peer_heads = safe_int(consensus.get("known_peer_heads"))
+    validator_stake_proof_count = safe_int(consensus.get("validator_stake_proof_count"))
+    misbehavior_evidence_count = safe_int(consensus.get("misbehavior_evidence_count"))
+    pending_slashing_intent_count = safe_int(consensus.get("pending_slashing_intent_count"))
+    quarantined_validator_count = safe_int(consensus.get("quarantined_validator_count"))
+    slashable_stake_total = safe_int(consensus.get("slashable_stake_total"))
     height_lag = None
     if network_committed_height is not None and committed_height is not None:
         height_lag = max(int(network_committed_height) - int(committed_height), 0)
@@ -154,6 +161,29 @@ def summarize_consensus(raw_status: dict) -> dict:
     alerts = []
     if height_lag:
         alerts.append("network_height_lag")
+    if known_peer_heads <= 0:
+        alerts.append("network_head_unknown")
+    if network_head.get("decision") == "critical":
+        alerts.append("network_head_critical")
+    if safe_int(network_head.get("stale_peer_count")) > 0:
+        alerts.append("network_head_stale")
+    if safe_int(network_head.get("conflicting_peer_count")) > 0:
+        alerts.append("network_head_conflict")
+    if network_head.get("quorum_mode") == "stake_weighted" and network_head.get("stake_quorum_met") is False:
+        alerts.append("stake_quorum_not_ready")
+    if network_head.get("quorum_mode") == "count_fallback_stake_unavailable":
+        alerts.append("stake_quorum_unavailable")
+    if safe_int(network_head.get("total_stake")) > 0 and validator_stake_proof_count <= 0:
+        alerts.append("validator_stake_proof_unavailable")
+    if misbehavior_evidence_count > 0:
+        alerts.append("consensus_misbehavior_evidence_present")
+    if pending_slashing_intent_count > 0:
+        alerts.append("consensus_slashing_intent_pending")
+    if quarantined_validator_count > 0:
+        alerts.append("consensus_validator_quarantined")
+    sync = raw_status.get("sync") or {}
+    if sync.get("status") == "stalled":
+        alerts.append("sync_stalled")
     if (consensus.get("last_commit_age_ms") or 0) >= 15000:
         alerts.append("commit_age_high")
     if (
@@ -172,7 +202,18 @@ def summarize_consensus(raw_status: dict) -> dict:
     return {
         "status": determine_module_status(
             alerts,
-            critical_alerts={"network_height_lag"},
+            critical_alerts={
+                "network_height_lag",
+                "network_head_critical",
+                "network_head_conflict",
+                "stake_quorum_not_ready",
+                "stake_quorum_unavailable",
+                "validator_stake_proof_unavailable",
+                "consensus_misbehavior_evidence_present",
+                "consensus_slashing_intent_pending",
+                "consensus_validator_quarantined",
+                "sync_stalled",
+            },
         ),
         "alerts": alerts,
         "committed_height": committed_height,
@@ -180,6 +221,30 @@ def summarize_consensus(raw_status: dict) -> dict:
         "height_lag": height_lag,
         "last_commit_age_ms": consensus.get("last_commit_age_ms"),
         "known_peer_heads": consensus.get("known_peer_heads"),
+        "validator_set_hash": consensus.get("validator_set_hash"),
+        "validator_stake_root": consensus.get("validator_stake_root"),
+        "validator_stake_proof_count": validator_stake_proof_count,
+        "misbehavior_evidence_count": misbehavior_evidence_count,
+        "slashing_intent_count": consensus.get("slashing_intent_count"),
+        "pending_slashing_intent_count": pending_slashing_intent_count,
+        "slashing_receipt_count": consensus.get("slashing_receipt_count"),
+        "applied_slashing_receipt_count": consensus.get("applied_slashing_receipt_count"),
+        "quarantined_validator_count": quarantined_validator_count,
+        "slashable_stake_total": slashable_stake_total,
+        "network_head": {
+            "source": network_head.get("source"),
+            "decision": network_head.get("decision"),
+            "height": network_head.get("height"),
+            "fresh_peer_count": network_head.get("fresh_peer_count"),
+            "stale_peer_count": network_head.get("stale_peer_count"),
+            "conflicting_peer_count": network_head.get("conflicting_peer_count"),
+            "required_peer_count": network_head.get("required_peer_count"),
+            "quorum_mode": network_head.get("quorum_mode"),
+            "observed_stake": network_head.get("observed_stake"),
+            "required_stake": network_head.get("required_stake"),
+            "total_stake": network_head.get("total_stake"),
+            "stake_quorum_met": network_head.get("stake_quorum_met"),
+        },
         "pending_consensus_actions": {
             "queued_action_count": pending_actions.get("queued_action_count"),
             "queued_payload_bytes": pending_actions.get("queued_payload_bytes"),
@@ -209,6 +274,16 @@ def summarize_observability(raw_status: dict) -> dict:
         alerts.append("blocked_peers_present")
     if safe_int(observability.get("recent_replication_error_count")) > 0:
         alerts.append("recent_replication_errors_present")
+    if observability.get("transport_stable") is False:
+        alerts.append("replication_transport_unstable")
+    if observability.get("reachability_policy_ok") is False:
+        alerts.append("p2p_reachability_degraded")
+    if safe_int(observability.get("misbehavior_evidence_count")) > 0:
+        alerts.append("consensus_misbehavior_evidence_present")
+    if safe_int(observability.get("pending_slashing_intent_count")) > 0:
+        alerts.append("consensus_slashing_intent_pending")
+    if safe_int(observability.get("quarantined_validator_count")) > 0:
+        alerts.append("consensus_validator_quarantined")
     alerts = unique_sorted(alerts)
     status = observability.get("status") or determine_module_status(alerts)
     if status == "critical":
@@ -227,6 +302,16 @@ def summarize_observability(raw_status: dict) -> dict:
         "peer_with_issues_count": observability.get("peer_with_issues_count"),
         "known_peer_heads": observability.get("known_peer_heads"),
         "network_height_lag": observability.get("network_height_lag"),
+        "transport_stable": observability.get("transport_stable"),
+        "transport_stability_score": observability.get("transport_stability_score"),
+        "reachability_policy_ok": observability.get("reachability_policy_ok"),
+        "misbehavior_evidence_count": observability.get("misbehavior_evidence_count"),
+        "slashing_intent_count": observability.get("slashing_intent_count"),
+        "pending_slashing_intent_count": observability.get("pending_slashing_intent_count"),
+        "slashing_receipt_count": observability.get("slashing_receipt_count"),
+        "applied_slashing_receipt_count": observability.get("applied_slashing_receipt_count"),
+        "quarantined_validator_count": observability.get("quarantined_validator_count"),
+        "slashable_stake_total": observability.get("slashable_stake_total"),
         "recent_replication_error_count": observability.get("recent_replication_error_count"),
     }
 

@@ -216,6 +216,49 @@ append_sample_record() {
       world_id: ($status[0].world_id // null),
       role: ($status[0].role // null),
       running: ($status[0].running // null),
+      liveness: {
+        status: ($status[0].liveness.status // null),
+        running: ($status[0].liveness.running // null),
+        runtime_last_error: ($status[0].liveness.runtime_last_error // null)
+      },
+      readiness: {
+        status: ($status[0].readiness.status // null),
+        ready: ($status[0].readiness.ready // false),
+        failed_gates: ($status[0].readiness.failed_gates // []),
+        policy: {
+          tier: ($status[0].readiness.policy.tier // null),
+          role: ($status[0].readiness.policy.role // null),
+          peer_head_ttl_ms: ($status[0].readiness.policy.peer_head_ttl_ms // null),
+          max_network_height_lag: ($status[0].readiness.policy.max_network_height_lag // null),
+          sync_stalled_after_ms: ($status[0].readiness.policy.sync_stalled_after_ms // null),
+          quorum_mode: ($status[0].readiness.policy.quorum_mode // null),
+          relay_policy: ($status[0].readiness.policy.relay_policy // null),
+          slashing_policy: ($status[0].readiness.policy.slashing_policy // null),
+          slashing_enforced: ($status[0].readiness.policy.slashing_enforced // false)
+        }
+      },
+      sync: {
+        status: ($status[0].sync.status // null),
+        network_head_source: ($status[0].sync.network_head_source // null),
+        network_height_lag: ($status[0].sync.network_height_lag // null),
+        fresh_peer_count: ($status[0].sync.fresh_peer_count // null),
+        stale_peer_count: ($status[0].sync.stale_peer_count // null),
+        conflicting_peer_count: ($status[0].sync.conflicting_peer_count // null)
+      },
+      observability: {
+        status: ($status[0].observability.status // null),
+        ready: ($status[0].observability.ready // false),
+        network_head_available: ($status[0].observability.network_head_available // false),
+        transport_stable: ($status[0].observability.transport_stable // false),
+        transport_stability_score: ($status[0].observability.transport_stability_score // null),
+        reachability_policy_ok: ($status[0].observability.reachability_policy_ok // false),
+        misbehavior_evidence_count: ($status[0].observability.misbehavior_evidence_count // 0),
+        quarantined_validator_count: ($status[0].observability.quarantined_validator_count // 0),
+        slashable_stake_total: ($status[0].observability.slashable_stake_total // 0),
+        active_peer_count: ($status[0].observability.active_peer_count // null),
+        known_peer_heads: ($status[0].observability.known_peer_heads // null),
+        alerts: ($status[0].observability.alerts // [])
+      },
       last_error: ($status[0].last_error // null),
       reward_runtime_last_error: ($status[0].reward_runtime.last_error // null),
       consensus: {
@@ -224,8 +267,39 @@ append_sample_record() {
         committed_height: ($status[0].consensus.committed_height // null),
         network_committed_height: ($status[0].consensus.network_committed_height // null),
         known_peer_heads: ($status[0].consensus.known_peer_heads // null),
+        validator_set_hash: ($status[0].consensus.validator_set_hash // null),
+        validator_stake_root: ($status[0].consensus.validator_stake_root // null),
+        validator_stake_proof_count: ($status[0].consensus.validator_stake_proof_count // 0),
+        misbehavior_evidence_count: ($status[0].consensus.misbehavior_evidence_count // 0),
+        slashing_intent_count: ($status[0].consensus.slashing_intent_count // 0),
+        pending_slashing_intent_count: ($status[0].consensus.pending_slashing_intent_count // 0),
+        slashing_receipt_count: ($status[0].consensus.slashing_receipt_count // 0),
+        applied_slashing_receipt_count: ($status[0].consensus.applied_slashing_receipt_count // 0),
+        quarantined_validator_count: ($status[0].consensus.quarantined_validator_count // 0),
+        slashable_stake_total: ($status[0].consensus.slashable_stake_total // 0),
         missed_slot_count: ($status[0].consensus.missed_slot_count // null),
-        missed_tick_count: ($status[0].consensus.missed_tick_count // null)
+        missed_tick_count: ($status[0].consensus.missed_tick_count // null),
+        network_head: {
+          source: ($status[0].consensus.network_head.source // null),
+          decision: ($status[0].consensus.network_head.decision // null),
+          height: ($status[0].consensus.network_head.height // null),
+          block_hash: ($status[0].consensus.network_head.block_hash // null),
+          execution_state_root: ($status[0].consensus.network_head.execution_state_root // null),
+          observed_peer_count: ($status[0].consensus.network_head.observed_peer_count // null),
+          required_peer_count: ($status[0].consensus.network_head.required_peer_count // null),
+          quorum_mode: ($status[0].consensus.network_head.quorum_mode // null),
+          fresh_peer_count: ($status[0].consensus.network_head.fresh_peer_count // null),
+          stale_peer_count: ($status[0].consensus.network_head.stale_peer_count // null),
+          conflicting_peer_count: ($status[0].consensus.network_head.conflicting_peer_count // null),
+          observed_stake: ($status[0].consensus.network_head.observed_stake // null),
+          required_stake: ($status[0].consensus.network_head.required_stake // null),
+          total_stake: ($status[0].consensus.network_head.total_stake // null),
+          stake_quorum_met: ($status[0].consensus.network_head.stake_quorum_met // false),
+          freshness_ttl_ms: ($status[0].consensus.network_head.freshness_ttl_ms // null)
+        }
+      },
+      replication: {
+        request_peer_scores: ($status[0].replication.request_peer_scores // {})
       }
     }' >> "$samples_ndjson"
 }
@@ -468,6 +542,8 @@ jq -s \
     if ($arr | length) == 0 then 0 else ($arr | map(. // 0) | max) end;
   def min_or_zero($arr):
     if ($arr | length) == 0 then 0 else ($arr | map(. // 0) | min) end;
+  def all_true_or_false($arr):
+    if ($arr | length) == 0 then false else ($arr | all(. == true)) end;
   def node_summary($label):
     {
       label: $label,
@@ -478,6 +554,20 @@ jq -s \
       world_ids: (map(select(.label == $label) | .world_id) | unique),
       node_ids: (map(select(.label == $label) | .node_id) | unique),
       roles: (map(select(.label == $label) | .role) | unique),
+      liveness_statuses: (map(select(.label == $label) | .liveness.status) | unique),
+      readiness_statuses: (map(select(.label == $label) | .readiness.status) | unique),
+      sync_statuses: (map(select(.label == $label) | .sync.status) | unique),
+      readiness_policies: {
+        tiers: (map(select(.label == $label) | .readiness.policy.tier) | unique),
+        quorum_modes: (map(select(.label == $label) | .readiness.policy.quorum_mode) | unique),
+        relay_policies: (map(select(.label == $label) | .readiness.policy.relay_policy) | unique),
+        slashing_policies: (map(select(.label == $label) | .readiness.policy.slashing_policy) | unique),
+        slashing_enforced_all: all_true_or_false(map(select(.label == $label) | .readiness.policy.slashing_enforced))
+      },
+      readiness_all_ready: all_true_or_false(map(select(.label == $label) | .readiness.ready)),
+      observability_ready_all: all_true_or_false(map(select(.label == $label) | .observability.ready)),
+      transport_stable_all: all_true_or_false(map(select(.label == $label) | .observability.transport_stable)),
+      reachability_policy_ok_all: all_true_or_false(map(select(.label == $label) | .observability.reachability_policy_ok)),
       last_errors: (map(select(.label == $label) | .last_error) | unique),
       heights: {
         first_committed_height: first_or_zero(heights_for($label)),
@@ -492,7 +582,32 @@ jq -s \
       },
       peers: {
         min_known_peer_heads: min_or_zero(values_for($label; ["consensus","known_peer_heads"])),
-        max_known_peer_heads: max_or_zero(values_for($label; ["consensus","known_peer_heads"]))
+        max_known_peer_heads: max_or_zero(values_for($label; ["consensus","known_peer_heads"])),
+        validator_set_hashes: (map(select(.label == $label) | .consensus.validator_set_hash) | unique),
+        validator_stake_roots: (map(select(.label == $label) | .consensus.validator_stake_root) | unique),
+        min_validator_stake_proof_count: min_or_zero(values_for($label; ["consensus","validator_stake_proof_count"])),
+        max_validator_stake_proof_count: max_or_zero(values_for($label; ["consensus","validator_stake_proof_count"])),
+        max_misbehavior_evidence_count: max_or_zero(values_for($label; ["consensus","misbehavior_evidence_count"])),
+        max_slashing_intent_count: max_or_zero(values_for($label; ["consensus","slashing_intent_count"])),
+        max_pending_slashing_intent_count: max_or_zero(values_for($label; ["consensus","pending_slashing_intent_count"])),
+        max_slashing_receipt_count: max_or_zero(values_for($label; ["consensus","slashing_receipt_count"])),
+        max_applied_slashing_receipt_count: max_or_zero(values_for($label; ["consensus","applied_slashing_receipt_count"])),
+        max_quarantined_validator_count: max_or_zero(values_for($label; ["consensus","quarantined_validator_count"])),
+        max_slashable_stake_total: max_or_zero(values_for($label; ["consensus","slashable_stake_total"]))
+      },
+      network_head: {
+        sources: (map(select(.label == $label) | .consensus.network_head.source) | unique),
+        decisions: (map(select(.label == $label) | .consensus.network_head.decision) | unique),
+        quorum_modes: (map(select(.label == $label) | .consensus.network_head.quorum_mode) | unique),
+        min_fresh_peer_count: min_or_zero(values_for($label; ["consensus","network_head","fresh_peer_count"])),
+        max_fresh_peer_count: max_or_zero(values_for($label; ["consensus","network_head","fresh_peer_count"])),
+        max_stale_peer_count: max_or_zero(values_for($label; ["consensus","network_head","stale_peer_count"])),
+        max_conflicting_peer_count: max_or_zero(values_for($label; ["consensus","network_head","conflicting_peer_count"])),
+        max_required_peer_count: max_or_zero(values_for($label; ["consensus","network_head","required_peer_count"])),
+        max_observed_stake: max_or_zero(values_for($label; ["consensus","network_head","observed_stake"])),
+        max_required_stake: max_or_zero(values_for($label; ["consensus","network_head","required_stake"])),
+        max_total_stake: max_or_zero(values_for($label; ["consensus","network_head","total_stake"])),
+        stake_quorum_all_met: all_true_or_false(map(select(.label == $label) | .consensus.network_head.stake_quorum_met))
       }
     };
   def all_roles_equal($label; $role):
@@ -553,6 +668,98 @@ jq -s \
         and (.nodes.sequencer_ecs.heights.max_committed_height > 0)
         and (.nodes.storage_ecs.heights.max_committed_height > 0)
       ),
+      triad_nodes_ready: (
+        (.nodes.local_node.readiness_all_ready == true)
+        and (.nodes.sequencer_ecs.readiness_all_ready == true)
+        and (.nodes.storage_ecs.readiness_all_ready == true)
+      ),
+      triad_transport_stable: (
+        (.nodes.local_node.transport_stable_all == true)
+        and (.nodes.sequencer_ecs.transport_stable_all == true)
+        and (.nodes.storage_ecs.transport_stable_all == true)
+      ),
+      triad_reachability_policy_ok: (
+        (.nodes.local_node.reachability_policy_ok_all == true)
+        and (.nodes.sequencer_ecs.reachability_policy_ok_all == true)
+        and (.nodes.storage_ecs.reachability_policy_ok_all == true)
+      ),
+      network_head_conflict: (
+        (.nodes.local_node.network_head.max_conflicting_peer_count > 0)
+        or (.nodes.sequencer_ecs.network_head.max_conflicting_peer_count > 0)
+        or (.nodes.storage_ecs.network_head.max_conflicting_peer_count > 0)
+      ),
+      sync_stalled: (
+        ((.nodes.local_node.sync_statuses | index("stalled")) != null)
+        or ((.nodes.sequencer_ecs.sync_statuses | index("stalled")) != null)
+        or ((.nodes.storage_ecs.sync_statuses | index("stalled")) != null)
+      ),
+      stake_quorum_ready: (
+        (
+          (.nodes.local_node.network_head.quorum_modes | index("stake_weighted")) == null
+          or (.nodes.local_node.network_head.stake_quorum_all_met == true)
+        )
+        and (
+          (.nodes.sequencer_ecs.network_head.quorum_modes | index("stake_weighted")) == null
+          or (.nodes.sequencer_ecs.network_head.stake_quorum_all_met == true)
+        )
+        and (
+          (.nodes.storage_ecs.network_head.quorum_modes | index("stake_weighted")) == null
+          or (.nodes.storage_ecs.network_head.stake_quorum_all_met == true)
+        )
+      ),
+      stake_quorum_unavailable: (
+        ((.nodes.local_node.readiness_policies.quorum_modes | index("count_fallback_stake_unavailable")) != null)
+        or ((.nodes.sequencer_ecs.readiness_policies.quorum_modes | index("count_fallback_stake_unavailable")) != null)
+        or ((.nodes.storage_ecs.readiness_policies.quorum_modes | index("count_fallback_stake_unavailable")) != null)
+      ),
+      validator_stake_proof_unavailable: (
+        (
+          (.nodes.local_node.network_head.max_total_stake > 0)
+          and (.nodes.local_node.peers.min_validator_stake_proof_count == 0)
+        )
+        or (
+          (.nodes.sequencer_ecs.network_head.max_total_stake > 0)
+          and (.nodes.sequencer_ecs.peers.min_validator_stake_proof_count == 0)
+        )
+        or (
+          (.nodes.storage_ecs.network_head.max_total_stake > 0)
+          and (.nodes.storage_ecs.peers.min_validator_stake_proof_count == 0)
+        )
+      ),
+      mainnet_slashing_evidence_only: (
+        ((.nodes.local_node.readiness_policies.slashing_policies | index("evidence_only_readiness_gate")) != null)
+        or ((.nodes.sequencer_ecs.readiness_policies.slashing_policies | index("evidence_only_readiness_gate")) != null)
+        or ((.nodes.storage_ecs.readiness_policies.slashing_policies | index("evidence_only_readiness_gate")) != null)
+      ),
+      misbehavior_evidence_present: (
+        (.nodes.local_node.peers.max_misbehavior_evidence_count > 0)
+        or (.nodes.sequencer_ecs.peers.max_misbehavior_evidence_count > 0)
+        or (.nodes.storage_ecs.peers.max_misbehavior_evidence_count > 0)
+      ),
+      validator_quarantined: (
+        (.nodes.local_node.peers.max_quarantined_validator_count > 0)
+        or (.nodes.sequencer_ecs.peers.max_quarantined_validator_count > 0)
+        or (.nodes.storage_ecs.peers.max_quarantined_validator_count > 0)
+      ),
+      slashing_intent_pending: (
+        (.nodes.local_node.peers.max_pending_slashing_intent_count > 0)
+        or (.nodes.sequencer_ecs.peers.max_pending_slashing_intent_count > 0)
+        or (.nodes.storage_ecs.peers.max_pending_slashing_intent_count > 0)
+      ),
+      peer_head_quorum_ready: (
+        (
+          (.nodes.local_node.network_head.max_required_peer_count == 0)
+          or (.nodes.local_node.network_head.min_fresh_peer_count >= .nodes.local_node.network_head.max_required_peer_count)
+        )
+        and (
+          (.nodes.sequencer_ecs.network_head.max_required_peer_count == 0)
+          or (.nodes.sequencer_ecs.network_head.min_fresh_peer_count >= .nodes.sequencer_ecs.network_head.max_required_peer_count)
+        )
+        and (
+          (.nodes.storage_ecs.network_head.max_required_peer_count == 0)
+          or (.nodes.storage_ecs.network_head.min_fresh_peer_count >= .nodes.storage_ecs.network_head.max_required_peer_count)
+        )
+      ),
       cloud_pair_chain_visible: (
         (.nodes.sequencer_ecs.heights.max_committed_height > 0)
         and (.nodes.storage_ecs.heights.max_committed_height > 0)
@@ -601,6 +808,19 @@ jq -s \
       + (if .analysis.sequencer_chain_visible then [] else ["sequencer_committed_height_zero"] end)
       + (if .analysis.storage_chain_visible then [] else ["storage_committed_height_zero"] end)
       + (if .analysis.cloud_pair_progress_signal_present then [] else ["cloud_pair_no_recent_progress_signal"] end)
+      + (if .analysis.triad_nodes_ready then [] else ["node_not_ready"] end)
+      + (if .analysis.peer_head_quorum_ready then [] else ["peer_head_quorum_not_ready"] end)
+      + (if .analysis.stake_quorum_ready then [] else ["stake_quorum_not_ready"] end)
+      + (if .analysis.stake_quorum_unavailable then ["stake_quorum_unavailable"] else [] end)
+      + (if .analysis.validator_stake_proof_unavailable then ["validator_stake_proof_unavailable"] else [] end)
+      + (if .analysis.network_head_conflict then ["network_head_conflict"] else [] end)
+      + (if .analysis.sync_stalled then ["sync_stalled"] else [] end)
+      + (if .analysis.misbehavior_evidence_present then ["consensus_misbehavior_evidence_present"] else [] end)
+      + (if .analysis.validator_quarantined then ["consensus_validator_quarantined"] else [] end)
+      + (if .analysis.slashing_intent_pending then ["consensus_slashing_intent_pending"] else [] end)
+      + (if .analysis.triad_transport_stable then [] else ["replication_transport_unstable"] end)
+      + (if .analysis.triad_reachability_policy_ok then [] else ["p2p_reachability_degraded"] end)
+      + (if .analysis.mainnet_slashing_evidence_only then ["mainnet_slashing_evidence_only"] else [] end)
       + (if .analysis.sequencer_execution_stale_height then ["sequencer_execution_stale_height"] else [] end)
       + (
           if .analysis.claim_mode == "observer_mixed_topology" then
@@ -622,14 +842,16 @@ jq -s \
       if .analysis.claim_mode == "three_equal_validator" then
         if .analysis.triad_service_healthy
            and .analysis.triad_chain_visible
+           and .analysis.triad_nodes_ready
            and .analysis.triad_all_validator_roles
            and .analysis.local_peer_visibility_ok
            and .analysis.local_network_commit_visible
            and .analysis.local_committed_height_progressing
         then "pass_candidate"
         elif .analysis.cloud_pair_service_healthy
-             and .analysis.cloud_pair_chain_visible
-             and .analysis.triad_all_validator_roles
+           and .analysis.cloud_pair_chain_visible
+           and .analysis.triad_nodes_ready
+           and .analysis.triad_all_validator_roles
         then "partial_with_local_validator_blocker"
         else "blocked"
         end
@@ -637,6 +859,7 @@ jq -s \
            and .analysis.cloud_pair_chain_visible
            and .analysis.cloud_pair_progress_signal_present
            and .analysis.local_service_healthy
+           and .analysis.triad_nodes_ready
            and .analysis.local_peer_visibility_ok
            and .analysis.local_network_commit_visible
            and .analysis.local_committed_height_progressing
@@ -669,10 +892,16 @@ jq -s \
     echo "- status_fetch_all_ok: \`$(jq -r --arg label "$label" '.nodes[$label].status_fetch_all_ok' "$summary_json")\`"
     echo "- node_ids: \`$(jq -r --arg label "$label" '.nodes[$label].node_ids | join(", ")' "$summary_json")\`"
     echo "- roles: \`$(jq -r --arg label "$label" '.nodes[$label].roles | join(", ")' "$summary_json")\`"
+    echo "- liveness/readiness/sync: \`$(jq -r --arg label "$label" '.nodes[$label].liveness_statuses | join(", ")' "$summary_json") / $(jq -r --arg label "$label" '.nodes[$label].readiness_statuses | join(", ")' "$summary_json") / $(jq -r --arg label "$label" '.nodes[$label].sync_statuses | join(", ")' "$summary_json")\`"
+    echo "- readiness_policy: \`tier=$(jq -r --arg label "$label" '.nodes[$label].readiness_policies.tiers | join(", ")' "$summary_json"), quorum=$(jq -r --arg label "$label" '.nodes[$label].readiness_policies.quorum_modes | join(", ")' "$summary_json"), relay=$(jq -r --arg label "$label" '.nodes[$label].readiness_policies.relay_policies | join(", ")' "$summary_json"), slashing=$(jq -r --arg label "$label" '.nodes[$label].readiness_policies.slashing_policies | join(", ")' "$summary_json")\`"
+    echo "- readiness_all_ready: \`$(jq -r --arg label "$label" '.nodes[$label].readiness_all_ready' "$summary_json")\`"
+    echo "- transport_stable_all: \`$(jq -r --arg label "$label" '.nodes[$label].transport_stable_all' "$summary_json")\`"
+    echo "- reachability_policy_ok_all: \`$(jq -r --arg label "$label" '.nodes[$label].reachability_policy_ok_all' "$summary_json")\`"
     echo "- last_errors: \`$(jq -r --arg label "$label" '.nodes[$label].last_errors | map(select(. != null)) | if length == 0 then "(none)" else join(" | ") end' "$summary_json")\`"
     echo "- committed_height: \`$(jq -r --arg label "$label" '.nodes[$label].heights.first_committed_height' "$summary_json") -> $(jq -r --arg label "$label" '.nodes[$label].heights.last_committed_height' "$summary_json")\`"
     echo "- network_committed_height: \`$(jq -r --arg label "$label" '.nodes[$label].network.first_network_committed_height' "$summary_json") -> $(jq -r --arg label "$label" '.nodes[$label].network.last_network_committed_height' "$summary_json")\`"
     echo "- known_peer_heads: \`$(jq -r --arg label "$label" '.nodes[$label].peers.min_known_peer_heads' "$summary_json") -> $(jq -r --arg label "$label" '.nodes[$label].peers.max_known_peer_heads' "$summary_json")\`"
+    echo "- network_head: \`source=$(jq -r --arg label "$label" '.nodes[$label].network_head.sources | join(", ")' "$summary_json"), decision=$(jq -r --arg label "$label" '.nodes[$label].network_head.decisions | join(", ")' "$summary_json"), quorum=$(jq -r --arg label "$label" '.nodes[$label].network_head.quorum_modes | join(", ")' "$summary_json"), fresh=$(jq -r --arg label "$label" '.nodes[$label].network_head.min_fresh_peer_count' "$summary_json")->$(jq -r --arg label "$label" '.nodes[$label].network_head.max_fresh_peer_count' "$summary_json"), required=$(jq -r --arg label "$label" '.nodes[$label].network_head.max_required_peer_count' "$summary_json"), stake=$(jq -r --arg label "$label" '.nodes[$label].network_head.max_observed_stake' "$summary_json")/$(jq -r --arg label "$label" '.nodes[$label].network_head.max_required_stake' "$summary_json")/$(jq -r --arg label "$label" '.nodes[$label].network_head.max_total_stake' "$summary_json"), stale_max=$(jq -r --arg label "$label" '.nodes[$label].network_head.max_stale_peer_count' "$summary_json"), conflict_max=$(jq -r --arg label "$label" '.nodes[$label].network_head.max_conflicting_peer_count' "$summary_json")\`"
   done
   echo
   echo "## Artifacts"

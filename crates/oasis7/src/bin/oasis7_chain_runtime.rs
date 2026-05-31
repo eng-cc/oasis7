@@ -17,8 +17,9 @@ use oasis7::runtime::{
 };
 use oasis7_node::{
     derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
-    NodeConfig, NodeNetworkPolicy, NodePosConfig, NodeReplicationConfig,
-    NodeReplicationNetworkHandle, NodeRole, NodeRuntime, PosConsensusStatus, PosValidator,
+    NodeConfig, NodeConsensusSlashingReceiptSnapshot, NodeNetworkPolicy, NodePosConfig,
+    NodeReplicationConfig, NodeReplicationNetworkHandle, NodeRole, NodeRuntime, PosConsensusStatus,
+    PosValidator,
 };
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
@@ -822,8 +823,14 @@ mod execution_bridge_real_tests;
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_network_tier_tests.rs"]
 mod network_tier_tests;
 #[cfg(test)]
+#[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_slashing_tests.rs"]
+mod observability_slashing_tests;
+#[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_tests.rs"]
 mod observability_tests;
+#[cfg(test)]
+#[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_transport_tests.rs"]
+mod observability_transport_tests;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_tests.rs"]
 mod tests;

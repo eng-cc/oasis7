@@ -1029,7 +1029,7 @@ fn query_chain_status_endpoint_reads_p2p_payload() {
         let bytes = stream.read(&mut request).expect("read request");
         let request_text = String::from_utf8_lossy(&request[..bytes]);
         assert!(request_text.starts_with("GET /v1/chain/status HTTP/1.1"));
-        let body = r#"{"ok":true,"p2p":{"requested_user_mode":"auto_join","recommended_user_mode":"public_entry","effective_user_mode":"private_safe","applied_effective_user_mode":"private_safe","requires_explicit_public_entry_confirmation":true,"detected_reachability":"public","hole_punch_viability":"viable","relay_available":false,"probe_stable":true,"deployment_mode":"private","node_role_claim":"validator_core","rationale":["observed_reachability=public","public entry confirmation pending"]},"observability":{"status":"warn","summary":"network committed height is ahead by 2","connected_peer_count":1,"active_peer_count":1,"candidate_peer_count":0,"suspect_peer_count":0,"blocked_peer_count":0,"peer_with_issues_count":0,"known_peer_heads":1,"network_height_lag":2,"recent_replication_error_count":0,"storage_degraded":false,"reward_runtime_degraded":false,"alerts":[{"severity":"warn","code":"consensus_network_lag","summary":"network committed height is ahead by 2"}]},"replication":{"local_peer_id":"peer-local","connected_peers":["peer-a"],"peer_healths":[{"peer_id":"peer-a","status":"active","issues":[],"discovery_sources":["bootstrap"],"active_path_kind":"direct"}]}}"#;
+        let body = r#"{"ok":false,"p2p":{"requested_user_mode":"auto_join","recommended_user_mode":"public_entry","effective_user_mode":"private_safe","applied_effective_user_mode":"private_safe","requires_explicit_public_entry_confirmation":true,"detected_reachability":"public","hole_punch_viability":"viable","relay_available":false,"probe_stable":true,"deployment_mode":"private","node_role_claim":"validator_core","rationale":["observed_reachability=public","public entry confirmation pending"]},"observability":{"status":"warn","summary":"network committed height is ahead by 2","ready":false,"connected_peer_count":1,"active_peer_count":1,"candidate_peer_count":0,"suspect_peer_count":0,"blocked_peer_count":0,"peer_with_issues_count":0,"known_peer_heads":1,"network_head_available":true,"network_height_lag":2,"transport_stable":true,"transport_stability_score":100,"reachability_policy_ok":true,"recent_replication_error_count":0,"storage_degraded":false,"reward_runtime_degraded":false,"alerts":[{"severity":"warn","code":"consensus_network_lag","summary":"network committed height is ahead by 2"}]},"replication":{"local_peer_id":"peer-local","connected_peers":["peer-a"],"peer_healths":[{"peer_id":"peer-a","status":"active","issues":[],"discovery_sources":["bootstrap"],"active_path_kind":"direct"}]}}"#;
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             body.len(),
@@ -1085,6 +1085,7 @@ fn snapshot_from_state_includes_chain_p2p_status() {
     state.chain_observability_status = Some(super::ChainNodeObservabilitySnapshot {
         status: "warn".to_string(),
         summary: "network committed height is ahead by 2".to_string(),
+        ready: false,
         connected_peer_count: 1,
         active_peer_count: 1,
         candidate_peer_count: 0,
@@ -1092,7 +1093,11 @@ fn snapshot_from_state_includes_chain_p2p_status() {
         blocked_peer_count: 0,
         peer_with_issues_count: 0,
         known_peer_heads: 1,
+        network_head_available: true,
         network_height_lag: 2,
+        transport_stable: true,
+        transport_stability_score: 100,
+        reachability_policy_ok: true,
         recent_replication_error_count: 0,
         storage_degraded: false,
         reward_runtime_degraded: false,
@@ -1114,6 +1119,7 @@ fn snapshot_from_state_includes_chain_p2p_status() {
             source_operator: None,
             source_asn: None,
         }],
+        request_peer_scores: std::collections::BTreeMap::new(),
     });
 
     let snapshot = snapshot_from_state(&state, Some("127.0.0.1"));

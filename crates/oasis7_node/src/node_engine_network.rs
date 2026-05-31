@@ -5,6 +5,94 @@ use super::node_engine_core::InboundSlotWindow;
 use super::*;
 
 impl PosNodeEngine {
+    fn observe_peer_commit_message(&mut self, commit: &GossipCommitMessage) {
+        if commit.height == 0 {
+            return;
+        }
+        let validator_id = self.validator_id_for_peer_head(commit.node_id.as_str());
+        if validator_id
+            .as_deref()
+            .map(|id| self.quarantined_validators.contains(id))
+            .unwrap_or(false)
+        {
+            return;
+        }
+        let now_ms = crate::runtime_util::now_unix_ms();
+        let next_head = PeerCommittedHead {
+            height: commit.height,
+            block_hash: commit.block_hash.clone(),
+            committed_at_ms: commit.committed_at_ms,
+            observed_at_ms: now_ms,
+            execution_block_hash: commit.execution_block_hash.clone(),
+            execution_state_root: commit.execution_state_root.clone(),
+            action_root: commit.action_root.clone(),
+            public_key_hex: commit.public_key_hex.clone(),
+            signature_hex: commit.signature_hex.clone(),
+        };
+        if let Some(previous) = self.peer_heads.get(commit.node_id.as_str()) {
+            if commit.height < previous.height {
+                return;
+            }
+            if commit.height == previous.height && peer_commit_heads_conflict(previous, &next_head)
+            {
+                if let Some(validator_id) = validator_id {
+                    self.record_commit_equivocation_evidence(
+                        validator_id,
+                        commit.node_id.clone(),
+                        previous.clone(),
+                        next_head,
+                        now_ms,
+                    );
+                    self.peer_heads.remove(commit.node_id.as_str());
+                }
+                return;
+            }
+        }
+        self.network_committed_height = self.network_committed_height.max(commit.height);
+        self.peer_heads.insert(commit.node_id.clone(), next_head);
+    }
+
+    fn record_commit_equivocation_evidence(
+        &mut self,
+        validator_id: String,
+        node_id: String,
+        first: PeerCommittedHead,
+        second: PeerCommittedHead,
+        observed_at_ms: i64,
+    ) {
+        let key = format!("commit_equivocation:{validator_id}:{}", first.height);
+        self.quarantined_validators.insert(validator_id.clone());
+        self.misbehavior_evidence
+            .entry(key)
+            .or_insert_with(|| ConsensusMisbehaviorEvidence {
+                kind: "commit_equivocation".to_string(),
+                validator_id: validator_id.clone(),
+                node_id,
+                height: first.height,
+                observed_at_ms,
+                first_block_hash: first.block_hash,
+                second_block_hash: second.block_hash,
+                first_execution_block_hash: first.execution_block_hash,
+                second_execution_block_hash: second.execution_block_hash,
+                first_execution_state_root: first.execution_state_root,
+                second_execution_state_root: second.execution_state_root,
+                first_action_root: first.action_root,
+                second_action_root: second.action_root,
+                first_public_key_hex: first.public_key_hex,
+                second_public_key_hex: second.public_key_hex,
+                first_signature_hex: first.signature_hex,
+                second_signature_hex: second.signature_hex,
+                slashable_stake: self
+                    .validators
+                    .get(validator_id.as_str())
+                    .copied()
+                    .unwrap_or(0),
+                total_stake: self.total_stake,
+                validator_stake_root: self.validator_stake_root.clone(),
+                quarantined: true,
+            });
+    }
+
     pub(super) fn sync_replication_height_once(
         &self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -560,27 +648,7 @@ impl PosNodeEngine {
                     {
                         continue;
                     }
-                    let previous_height = self
-                        .peer_heads
-                        .get(commit.node_id.as_str())
-                        .map(|head| head.height)
-                        .unwrap_or(0);
-                    if commit.height < previous_height {
-                        continue;
-                    }
-                    self.peer_heads.insert(
-                        commit.node_id.clone(),
-                        PeerCommittedHead {
-                            height: commit.height,
-                            block_hash: commit.block_hash.clone(),
-                            committed_at_ms: commit.committed_at_ms,
-                            execution_block_hash: commit.execution_block_hash.clone(),
-                            execution_state_root: commit.execution_state_root.clone(),
-                        },
-                    );
-                    if commit.height > self.network_committed_height {
-                        self.network_committed_height = commit.height;
-                    }
+                    self.observe_peer_commit_message(&commit);
                 }
                 GossipMessage::Proposal(proposal) => {
                     if proposal.version != 1 || proposal.world_id != world_id {
@@ -683,27 +751,7 @@ impl PosNodeEngine {
                         continue;
                     }
                     endpoint.remember_peer(from)?;
-                    let previous_height = self
-                        .peer_heads
-                        .get(commit.node_id.as_str())
-                        .map(|head| head.height)
-                        .unwrap_or(0);
-                    if commit.height < previous_height {
-                        continue;
-                    }
-                    self.peer_heads.insert(
-                        commit.node_id.clone(),
-                        PeerCommittedHead {
-                            height: commit.height,
-                            block_hash: commit.block_hash.clone(),
-                            committed_at_ms: commit.committed_at_ms,
-                            execution_block_hash: commit.execution_block_hash.clone(),
-                            execution_state_root: commit.execution_state_root.clone(),
-                        },
-                    );
-                    if commit.height > self.network_committed_height {
-                        self.network_committed_height = commit.height;
-                    }
+                    self.observe_peer_commit_message(&commit);
                 }
                 GossipMessage::Proposal(proposal) => {
                     if proposal.version != 1 || proposal.world_id != world_id {
@@ -781,4 +829,11 @@ impl PosNodeEngine {
         })?;
         Ok(blake3_hex(bytes.as_slice()))
     }
+}
+
+fn peer_commit_heads_conflict(left: &PeerCommittedHead, right: &PeerCommittedHead) -> bool {
+    left.block_hash != right.block_hash
+        || left.execution_block_hash != right.execution_block_hash
+        || left.execution_state_root != right.execution_state_root
+        || left.action_root != right.action_root
 }

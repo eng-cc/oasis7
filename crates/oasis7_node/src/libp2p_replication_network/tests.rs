@@ -293,6 +293,40 @@ fn filtered_request_peers_excludes_transport_retry_cooldown_peers_across_protoco
 }
 
 #[test]
+fn filtered_request_peers_prioritizes_higher_request_scores() {
+    let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
+    let unstable_peer = PeerId::random();
+    let healthy_peer = PeerId::random();
+    network.adjust_request_peer_score(unstable_peer, -50);
+
+    let filtered = network.filtered_request_peers(
+        "/aw/node/replication/fetch-commit/1.0.0",
+        vec![unstable_peer, healthy_peer],
+    );
+    assert_eq!(filtered, vec![healthy_peer, unstable_peer]);
+}
+
+#[test]
+fn filtered_request_peers_keeps_low_score_peer_as_last_resort() {
+    let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
+    let low_score_peer = PeerId::random();
+    let healthy_peer = PeerId::random();
+    network.adjust_request_peer_score(low_score_peer, -70);
+
+    let filtered = network.filtered_request_peers(
+        "/aw/node/replication/fetch-commit/1.0.0",
+        vec![low_score_peer, healthy_peer],
+    );
+    assert_eq!(filtered, vec![healthy_peer, low_score_peer]);
+
+    let filtered_last_resort = network.filtered_request_peers(
+        "/aw/node/replication/fetch-commit/1.0.0",
+        vec![low_score_peer],
+    );
+    assert_eq!(filtered_last_resort, vec![low_score_peer]);
+}
+
+#[test]
 fn filtered_request_peers_retries_protocol_retry_cooldown_peer_after_retry_window() {
     let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         protocol_retry_cooldown_after: Duration::from_millis(5),
