@@ -123,6 +123,8 @@ fn write_test_network_tier_manifest_for_tier(
             },
             if tier == "mainnet" {
                 "governance_registry_only"
+            } else if tier == "local_devnet" {
+                "local_only"
             } else {
                 "allowlist_or_governed_candidate"
             },
@@ -133,16 +135,22 @@ fn write_test_network_tier_manifest_for_tier(
             },
             if tier == "mainnet" {
                 "frozen"
+            } else if tier == "local_devnet" {
+                "ephemeral"
             } else {
                 "resettable"
             },
             if tier == "mainnet" {
                 "production"
+            } else if tier == "local_devnet" {
+                "preview"
             } else {
                 "testnet"
             },
             if tier == "mainnet" {
                 r#""mainnet_live""#.to_string()
+            } else if tier == "local_devnet" {
+                r#""local_devnet""#.to_string()
             } else {
                 r#""public_testnet""#.to_string()
             },
@@ -474,6 +482,81 @@ fn public_testnet_validator_network_head_uses_manifest_quorum() {
     assert_eq!(network_head.required_peer_count, 2);
     assert_eq!(network_head.fresh_peer_count, 1);
     assert_eq!(network_head.decision, "degraded");
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn public_testnet_validator_network_head_prefers_highest_quorum_bucket() {
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
+    let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
+    let mut consensus = NodeConsensusSnapshot::default();
+    consensus.committed_height = 10;
+    consensus.network_committed_height = 11;
+    consensus.replication_persisted_height = 10;
+    consensus.known_peer_heads = 3;
+    consensus.peer_heads = vec![
+        peer_head("node-b", None, 10, i64::MAX),
+        peer_head("node-c", None, 10, i64::MAX),
+        peer_head("node-d", None, 11, i64::MAX),
+    ];
+    let snapshot = NodeSnapshot {
+        node_id: "node-a".to_string(),
+        player_id: "player-a".to_string(),
+        world_id: "live-a".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus,
+        last_error: None,
+    };
+
+    let network_head = super::status_payload::build_network_head_status(
+        &snapshot,
+        1_700_000_000_000,
+        Some(&loaded),
+    );
+
+    assert_eq!(network_head.required_peer_count, 2);
+    assert_eq!(network_head.fresh_peer_count, 3);
+    assert_eq!(network_head.source, "peer_quorum");
+    assert_eq!(network_head.decision, "ready");
+    assert_eq!(network_head.height, Some(10));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn local_devnet_network_head_honors_zero_peer_quorum() {
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) =
+        write_test_network_tier_manifest_for_tier(runtime_sha256.as_str(), "local_devnet");
+    let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
+    let snapshot = NodeSnapshot {
+        node_id: "node-a".to_string(),
+        player_id: "player-a".to_string(),
+        world_id: "local-a".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus: NodeConsensusSnapshot::default(),
+        last_error: None,
+    };
+
+    let network_head = super::status_payload::build_network_head_status(
+        &snapshot,
+        1_700_000_000_000,
+        Some(&loaded),
+    );
+
+    assert_eq!(network_head.required_peer_count, 0);
+    assert_eq!(network_head.source, "self_only");
+    assert_eq!(network_head.decision, "ready");
 
     let _ = fs::remove_dir_all(dir);
 }

@@ -210,7 +210,7 @@ append_sample_record() {
       expected_world_id: $expected_world_id,
       healthz_ok: ($health[0].ok // false),
       healthz_fetch_error: ($health[0].fetch_error // null),
-      status_fetch_ok: ($status[0].ok // false),
+      status_fetch_ok: (($status[0].fetch_error // null) == null),
       status_fetch_error: ($status[0].fetch_error // null),
       node_id: ($status[0].node_id // null),
       world_id: ($status[0].world_id // null),

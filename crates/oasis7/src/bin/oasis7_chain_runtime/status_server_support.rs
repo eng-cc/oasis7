@@ -428,6 +428,7 @@ pub(super) fn attach_governance_slashing_receipts(
                     record.status,
                     oasis7::runtime::GovernanceIdentityPenaltyStatus::Applied
                         | oasis7::runtime::GovernanceIdentityPenaltyStatus::Appealed
+                        | oasis7::runtime::GovernanceIdentityPenaltyStatus::AppealAccepted
                         | oasis7::runtime::GovernanceIdentityPenaltyStatus::AppealRejected
                 ),
             })

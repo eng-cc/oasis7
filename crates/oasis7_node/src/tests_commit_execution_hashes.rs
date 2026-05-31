@@ -227,3 +227,77 @@ fn pos_engine_quarantines_validator_on_commit_equivocation() {
         .iter()
         .all(|proof| !proof.leaf_hash.is_empty()));
 }
+
+#[test]
+fn pos_engine_does_not_quarantine_when_only_previous_action_root_is_unknown() {
+    let socket_a = UdpSocket::bind("127.0.0.1:0").expect("bind a");
+    let socket_b = UdpSocket::bind("127.0.0.1:0").expect("bind b");
+    let addr_a = socket_a.local_addr().expect("addr a");
+    let addr_b = socket_b.local_addr().expect("addr b");
+    drop(socket_a);
+    drop(socket_b);
+
+    let config = NodeConfig::new("node-b", "world-action-root-unknown", NodeRole::Observer)
+        .expect("config")
+        .with_pos_validators(vec![
+            PosValidator {
+                validator_id: "node-a".to_string(),
+                stake: 60,
+            },
+            PosValidator {
+                validator_id: "node-b".to_string(),
+                stake: 40,
+            },
+        ])
+        .expect("validators")
+        .with_gossip_optional(addr_b, vec![addr_a]);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let endpoint_a =
+        GossipEndpoint::bind(&gossip_config(addr_a, vec![addr_b])).expect("endpoint a");
+    let endpoint_b =
+        GossipEndpoint::bind(&gossip_config(addr_b, vec![addr_a])).expect("endpoint b");
+
+    engine.peer_heads.insert(
+        "node-a".to_string(),
+        PeerCommittedHead {
+            height: 8,
+            block_hash: "block-8-a".to_string(),
+            committed_at_ms: 8_000,
+            observed_at_ms: 8_000,
+            execution_block_hash: Some("exec-block-8-a".to_string()),
+            execution_state_root: Some("exec-state-8-a".to_string()),
+            action_root: String::new(),
+            public_key_hex: None,
+            signature_hex: None,
+        },
+    );
+
+    endpoint_a
+        .broadcast_commit(&GossipCommitMessage {
+            version: 1,
+            world_id: config.world_id.clone(),
+            node_id: "node-a".to_string(),
+            player_id: "node-a".to_string(),
+            height: 8,
+            slot: 8,
+            epoch: 0,
+            block_hash: "block-8-a".to_string(),
+            action_root: empty_action_root(),
+            actions: Vec::new(),
+            committed_at_ms: 8_100,
+            execution_block_hash: Some("exec-block-8-a".to_string()),
+            execution_state_root: Some("exec-state-8-a".to_string()),
+            public_key_hex: None,
+            signature_hex: None,
+        })
+        .expect("broadcast commit with known action root");
+    thread::sleep(Duration::from_millis(30));
+
+    engine
+        .ingest_peer_messages(&endpoint_b, &config.node_id, &config.world_id, None, 0)
+        .expect("ingest");
+
+    assert!(engine.peer_heads.contains_key("node-a"));
+    assert!(!engine.quarantined_validators.contains("node-a"));
+    assert!(engine.misbehavior_evidence.is_empty());
+}

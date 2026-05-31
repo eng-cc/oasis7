@@ -835,5 +835,7 @@ fn peer_commit_heads_conflict(left: &PeerCommittedHead, right: &PeerCommittedHea
     left.block_hash != right.block_hash
         || left.execution_block_hash != right.execution_block_hash
         || left.execution_state_root != right.execution_state_root
-        || left.action_root != right.action_root
+        || (!left.action_root.is_empty()
+            && !right.action_root.is_empty()
+            && left.action_root != right.action_root)
 }

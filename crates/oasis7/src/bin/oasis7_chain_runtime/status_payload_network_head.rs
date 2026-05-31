@@ -95,15 +95,19 @@ pub(crate) fn build_network_head_status(
 
     let selected = buckets
         .iter()
-        .max_by(|(left_key, left_peers), (right_key, right_peers)| {
-            left_key
-                .height
-                .cmp(&right_key.height)
-                .then_with(|| {
-                    observed_stake_for_peers(snapshot, left_peers.as_slice())
-                        .cmp(&observed_stake_for_peers(snapshot, right_peers.as_slice()))
-                })
-                .then_with(|| left_peers.len().cmp(&right_peers.len()))
+        .filter(|(_, peers)| {
+            bucket_quorum_met(
+                &policy.quorum_mode,
+                required_peer_count,
+                snapshot,
+                peers.as_slice(),
+            )
+        })
+        .max_by(|left, right| compare_peer_head_buckets(snapshot, *left, *right))
+        .or_else(|| {
+            buckets
+                .iter()
+                .max_by(|left, right| compare_peer_head_buckets(snapshot, *left, *right))
         });
     let selected_stake = selected
         .map(|(_, peers)| observed_stake_for_peers(snapshot, peers.as_slice()))
@@ -123,13 +127,19 @@ pub(crate) fn build_network_head_status(
                 "critical",
                 selected.map(|(key, _)| (*key).clone()),
             )
+        } else if required_peer_count == 0 {
+            (
+                "self_only",
+                "ready",
+                selected.map(|(key, _)| (*key).clone()),
+            )
         } else if let Some((key, peers)) = selected {
-            let quorum_met = if policy.quorum_mode == "stake_weighted" {
-                stake_quorum_met
-            } else {
-                peers.len() >= required_peer_count
-            };
-            if quorum_met {
+            if bucket_quorum_met(
+                &policy.quorum_mode,
+                required_peer_count,
+                snapshot,
+                peers.as_slice(),
+            ) {
                 ("peer_quorum", "ready", Some((*key).clone()))
             } else {
                 ("peer_single", "degraded", Some((*key).clone()))
@@ -162,6 +172,37 @@ pub(crate) fn build_network_head_status(
         stake_quorum_met,
         freshness_ttl_ms: policy.peer_head_ttl_ms,
         decision: decision.to_string(),
+    }
+}
+
+fn compare_peer_head_buckets(
+    snapshot: &NodeSnapshot,
+    (left_key, left_peers): (&PeerHeadBucketKey, &Vec<&NodePeerCommittedHead>),
+    (right_key, right_peers): (&PeerHeadBucketKey, &Vec<&NodePeerCommittedHead>),
+) -> std::cmp::Ordering {
+    left_key
+        .height
+        .cmp(&right_key.height)
+        .then_with(|| {
+            observed_stake_for_peers(snapshot, left_peers.as_slice())
+                .cmp(&observed_stake_for_peers(snapshot, right_peers.as_slice()))
+        })
+        .then_with(|| left_peers.len().cmp(&right_peers.len()))
+}
+
+fn bucket_quorum_met(
+    quorum_mode: &str,
+    required_peer_count: usize,
+    snapshot: &NodeSnapshot,
+    peers: &[&NodePeerCommittedHead],
+) -> bool {
+    if required_peer_count == 0 {
+        return true;
+    }
+    if quorum_mode == "stake_weighted" {
+        observed_stake_for_peers(snapshot, peers) >= snapshot.consensus.required_stake
+    } else {
+        peers.len() >= required_peer_count
     }
 }
 

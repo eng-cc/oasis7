@@ -287,3 +287,77 @@ fn status_server_attaches_governance_slashing_receipts_from_execution_world() {
     assert!(receipt.applied);
     assert!(!receipt.evidence_chain_hash.is_empty());
 }
+
+#[test]
+fn status_server_treats_accepted_slashing_appeal_as_resolved_receipt() {
+    let world_dir = slashing_temp_dir("slashing-receipt-appeal-accepted-world");
+    let mut world = World::new();
+    register_slashing_agent(&mut world, "node-a");
+    world
+        .set_governance_identity_profile("node-a", 100, 0, GovernanceIdentityStatus::Active)
+        .expect("set identity profile");
+    let penalty_id = world
+        .apply_identity_penalty(
+            "node-a",
+            "evidence-hash",
+            "consensus commit equivocation",
+            60,
+            32,
+            "guardian-1",
+            vec![
+                "governance.local.finality.signer.1".to_string(),
+                "governance.local.finality.signer.2".to_string(),
+            ],
+        )
+        .expect("apply identity penalty");
+    world
+        .appeal_identity_penalty(penalty_id, "node-a", "counter evidence")
+        .expect("appeal identity penalty");
+    world
+        .resolve_identity_penalty_appeal(penalty_id, "committee", true, "appeal accepted")
+        .expect("resolve appeal");
+    world.save_to_dir(&world_dir).expect("save execution world");
+
+    let mut snapshot = NodeSnapshot {
+        node_id: "node-b".to_string(),
+        player_id: "player-b".to_string(),
+        world_id: "world-misbehavior".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: false,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus: NodeConsensusSnapshot {
+            slashing_intents: vec![NodeConsensusSlashingIntentSnapshot {
+                intent_id: "intent-1".to_string(),
+                evidence_hash: "evidence-hash".to_string(),
+                kind: "commit_equivocation".to_string(),
+                validator_id: "node-a".to_string(),
+                target_agent_id: "node-a".to_string(),
+                reason: "consensus commit equivocation".to_string(),
+                slash_stake: 60,
+                appeal_window_ticks: 32,
+                validator_stake_root: "stake-root".to_string(),
+                governance_method: "apply_identity_penalty".to_string(),
+                status: "pending_governance_submission".to_string(),
+                enforced: false,
+            }],
+            ..NodeConsensusSnapshot::default()
+        },
+        last_error: None,
+    };
+
+    super::status_server_support::attach_governance_slashing_receipts(
+        &mut snapshot,
+        world_dir.as_path(),
+    );
+
+    assert_eq!(snapshot.consensus.slashing_receipts.len(), 1);
+    let receipt = &snapshot.consensus.slashing_receipts[0];
+    assert_eq!(receipt.status, "appeal_accepted");
+    assert!(receipt.applied);
+    assert_eq!(
+        super::status_payload::pending_slashing_intent_count(&snapshot),
+        0
+    );
+}

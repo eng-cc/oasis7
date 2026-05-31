@@ -161,7 +161,15 @@ def summarize_consensus(raw_status: dict) -> dict:
     alerts = []
     if height_lag:
         alerts.append("network_height_lag")
-    if known_peer_heads <= 0:
+    if (
+        network_head.get("source") == "unknown"
+        or (
+            network_head.get("source") is None
+            and safe_int(network_head.get("required_peer_count")) > 0
+            and safe_int(network_head.get("fresh_peer_count")) <= 0
+            and known_peer_heads <= 0
+        )
+    ):
         alerts.append("network_head_unknown")
     if network_head.get("decision") == "critical":
         alerts.append("network_head_critical")
