@@ -1,8 +1,8 @@
 # Story Workspace
 
-本目录用于从零重建长篇小说《绿洲 2076》（英文名：oasis 2076）的站点侧资料。
+本目录用于维护长篇小说《绿洲 2076》（英文名：oasis 2076）的站点侧资料。
 
-旧版时间线、章节卡和正文草稿已经清空；世界背景、总纲、人物、首轮调研、首轮审稿意见、第一批时间线锚点和第一卷四章章节卡已重建。
+世界背景、总纲、人物、调研、审稿意见、第一卷时间线锚点、第一卷四章章节卡和前两章正文试写已重建。
 
 ## 目录
 
@@ -17,7 +17,7 @@
 
 ## 写作边界
 
-- 当前 `background/world-background.md`、`outline/novel-outline.md`、`characters/character-registry.md`、`timeline/timeline.md` 与 `chapter-cards/` 下第一卷四章章节卡已包含已确认 canon；`research/` 和 `reviews/` 已包含支撑判断；正文仍待重建。
+- 当前 `background/world-background.md`、`outline/novel-outline.md`、`characters/character-registry.md`、`timeline/timeline.md` 与 `chapter-cards/` 下第一卷四章章节卡已包含已确认 canon；`research/` 和 `reviews/` 已包含支撑判断；`draft/` 已开始正文试写，但草稿尚未确认为 canon。
 - 新增人物、背景、时间线或正文前，应先明确其是否进入正式故事真值。
 - 每次新增正文前，先补齐对应的大纲、时间线或角色动机，避免后期失控。
 - 从章节卡进入正文时，先按 `draft/chapter-writing-sop.md` 执行社会口味调研、写前定位、正文试写、审稿、最小补丁和复审。
