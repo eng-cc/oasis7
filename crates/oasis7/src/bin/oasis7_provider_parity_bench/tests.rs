@@ -104,16 +104,8 @@ fn parse_options_accepts_provider_player_parity_execution_mode() {
 
 #[test]
 fn parse_options_rejects_removed_builtin_provider() {
-    let err = parse_options(
-        [
-            "--provider",
-            "builtin",
-            "--benchmark-run-id",
-            "run-4",
-        ]
-        .into_iter(),
-    )
-    .expect_err("builtin provider mode was removed");
+    let err = parse_options(["--provider", "builtin", "--benchmark-run-id", "run-4"].into_iter())
+        .expect_err("builtin provider mode was removed");
     assert!(err.contains("--provider"));
 }
 
