@@ -34,6 +34,7 @@ Do not use this skill when:
 5. Use the narrowest applicable workflow surface; do not force every phase if it is not needed.
 6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, mandatory context packet, write scope, return contract, mandatory `.pm` execution-log sink, and integration owner/order.
 7. TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
+8. TPM routing is coordination only. If the task needs professional/domain analysis, implementation, verification judgment, review judgment, or external messaging, route to the matching professional role slice before presenting that conclusion as authoritative.
 
 ## Routing Order
 
@@ -130,3 +131,4 @@ WORKFLOW ROUTE DECIDED
 - Do not use this router as a replacement for closeout; switch to `finishing-a-development-branch` when the task is done.
 - Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
 - Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current `.pm` task truth, and scoped repo context in the mandatory context packet.
+- Do not let TPM direct exploration become a professional conclusion; professional findings must be owned or verified by the matching role slice.
