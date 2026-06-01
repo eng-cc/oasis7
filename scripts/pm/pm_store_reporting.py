@@ -6,6 +6,9 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 
 
+ORCHESTRATOR_ROLES = {"producer_system_designer", "tpm"}
+
+
 def build_memory_report(
     root: pathlib.Path,
     role_filter: str | None,
@@ -469,10 +472,10 @@ def build_workflow_checklist(
                 command=f"./scripts/pm/memory-report.sh --role {role} --no-shared",
                 reason=f"needs_review_memory={memory_counts['needs_review']}",
             )
-        if role == "producer_system_designer":
+        if role in ORCHESTRATOR_ROLES:
             add(
                 "review-stage",
-                "制作人开始推进前先看阶段和 gate 汇总，确认 blocker 与 claim envelope 是否已变化。",
+                "Orchestrator 开始推进前先看阶段和 gate 汇总，确认 blocker 与 claim envelope 是否已变化。",
                 command="./scripts/pm/stage-report.sh",
                 reason=f"gate_status={gate_status}",
             )
@@ -541,7 +544,7 @@ def build_workflow_checklist(
             "稳定结论进入 active memory，被新结论取代的记录显式 supersede，不允许直接覆盖旧口径。",
             command=f"./scripts/pm/promote-memory.sh --signal-id <SIG-ID> --role {role} --topic <topic> --promotion-reason <reason>",
         )
-        if role == "producer_system_designer":
+        if role in ORCHESTRATOR_ROLES:
             add(
                 "sync-stage",
                 "若阶段判断、gate lane 或对外 claim envelope 有变化，同步更新 `.pm/stage/*.yaml` 并重跑阶段汇总。",
@@ -612,7 +615,7 @@ def build_workflow_report(
     role_report = build_role_report_impl(root, role_filter=role, stale_after_days=stale_after_days)
     role_payload = role_report["roles"][role]
     stage_report = build_stage_report_impl(root)
-    signal_role_filter = None if (phase == "review" and role == "producer_system_designer") else role
+    signal_role_filter = None if (phase == "review" and role in ORCHESTRATOR_ROLES) else role
     signal_summary = build_signal_summary_impl(root, role_filter=signal_role_filter)
     if task_uid:
         working_memory_summary = build_working_memory_report(root, task_uid=task_uid, role_filter=None)

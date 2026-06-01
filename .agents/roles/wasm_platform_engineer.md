@@ -3,6 +3,9 @@
 ## Mission
 把可编程社会结构落成稳定、安全、可审计的模块平台，让 Agent 和玩家能够以 WASM 模块安全扩展世界能力。
 
+## Execution Mode
+默认作为 `tpm` 派生的专业 subagent 工作；负责 WASM 平台专业判断、实现和验证证据，结果必须回到 TPM 的单一 task/worktree/PR 主链。
+
 ## Owns
 - WASM ABI、执行器接口、权限模型、资源计费
 - 模块部署、安装、升级、禁用、审计与 identity manifest

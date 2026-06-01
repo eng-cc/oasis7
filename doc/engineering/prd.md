@@ -72,7 +72,8 @@
   - SC-32: 既有 `project.md` 中已经存在的顺序任务编号可作为历史追踪保留，不要求批量迁移；但新增任务项不得再把顺序编号当默认格式回流到正式项目页。
   - SC-33: 外部 agent workflow/methodology 借鉴必须先在 `engineering/self-evolution` 专题中冻结 adopted / rejected / deferred 边界，并把 adopted 项转译为 repo-owned helper/eval/module follow-up；不得直接把外部 bootstrap、universal brainstorming/subagent/TDD 规则写成 oasis7 当前默认流程。
   - SC-34: `.pm` 必须提供 repo-owned task compaction 能力：当同一 owner / 同一工作流下出现仅承担 truth refresh、doc sync 或中段 burn-down 留痕的已关闭微任务时，必须能在正式 `project.md` / topic project Trace 已收口到 survivor task 后，把重复 canonical task 文件安全并档回单个聚合 task，而不是长期保留成 task 膨胀噪声。
-  - SC-35: 仓库必须存在 repo-owned `default-workflow-bootstrap` surface 作为新 non-trivial task 的默认入口：先判断 trivial/non-trivial、是否已具备隔离 task worktree / `.pm` task 真值与 formal docs，再把后续阶段接回 workflow router；该 surface 只能编排本地 helper/skill，不得回退成外部 bootstrap 或第二套计划真值。
+  - SC-35: 仓库必须存在 repo-owned `default-workflow-bootstrap` surface 作为会改变仓库状态的新 task 默认入口：先确认标准 task worktree / `.pm` task / owner role 真值与 formal docs，再把后续阶段接回 workflow router；该 surface 只能编排本地 helper/skill，不得回退成外部 bootstrap 或第二套计划真值。
+  - SC-36: 仓库默认主 Agent 必须是 `tpm`；`producer_system_designer`、`runtime_engineer`、`wasm_platform_engineer`、`agent_engineer`、`viewer_engineer`、`qa_engineer` 与 `liveops_community` 默认都作为 `tpm` 派生的专业 subagent slice 工作，不得绕过 TPM 形成第二 owner/task/worktree/PR 主链。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -193,7 +194,8 @@
   - AC-30: 自本规则生效后，模块 `project.md` 新增任务项必须默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，并固定包含 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）字段追溯运行态对象；推荐单行模板为 `- [ ] topic-slug (PRD-XXX) [test_tier_required|full]: <summary>. Trace: .pm/tasks/task_<32hex>.yaml`。已存在的 `TASK-*` 顺序编号条目可保留为历史记录，但不作为新增任务格式继续扩散。
   - AC-31: 外部 agent workflow/methodology 借鉴必须在 `engineering/self-evolution` 专题中形成 adopted / rejected / deferred 矩阵，并至少对 adopted 项给出 repo-owned follow-up 或模块参考边界；外部 bootstrap、universal brainstorming/subagent/TDD 规则不得未经专题裁决直接写成当前 root workflow 口径。
   - AC-32: `scripts/pm/compact-task-group.sh` 必须只允许 compaction `done/deferred` 的 dropped task，要求 survivor 与 dropped task 同 owner_role，并在 repo 仍存在 dropped task UID 的 tracked 引用时直接失败；成功后必须合并 survivor 元数据、删除 dropped `.pm/tasks/<uid>.yaml` 与 `.execution.md`、重建 task registry/backlog 视图，并提供至少一条 focused smoke 覆盖“先因文档引用失败、Trace 收口后成功并档”的路径。
-  - AC-33: `.agents/skills/default-workflow-bootstrap/SKILL.md`、`.agents/skills/README.md`、root `AGENTS.md` 与 `scripts/pm/workflow-behavior-eval.sh` 必须维持单一口径：non-trivial task 默认先经过 repo-owned bootstrap，完成 trivial/non-trivial 判定、隔离 task worktree / `.pm` task 真值检查与 formal doc 入口选择后，再进入 `repo-owned-workflow-router`；若其中任一 surface 缺失该入口，workflow eval 必须失败。
+  - AC-33: `.agents/skills/default-workflow-bootstrap/SKILL.md`、`.agents/skills/README.md`、root `AGENTS.md` 与 `scripts/pm/workflow-behavior-eval.sh` 必须维持单一口径：会改变仓库状态的 task 默认先经过 repo-owned bootstrap，完成标准 task worktree / `.pm` task / owner role 真值检查与 formal doc 入口选择后，再进入 `repo-owned-workflow-router`；若其中任一 surface 缺失该入口，workflow eval 必须失败。
+  - AC-34: `.agents/roles/tpm.md`、`.pm/registry/roles.yaml`、root `AGENTS.md`、`doc/engineering/workflow/source-of-truth.md` 与 `scripts/pm/workflow-behavior-eval.sh` 必须维持单一口径：`tpm` 是默认主 Agent / orchestrator / integrator，其他专业角色以 bounded subagent slice 形式参与；若 role registry 缺失 `tpm` 或 workflow eval 缺失该契约，验证必须失败。
 - Non-Goals:
   - 不定义 gameplay/p2p/runtime 业务规则。
   - 不替代模块内部测试策略。

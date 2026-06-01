@@ -12,7 +12,7 @@ Usage: ./scripts/pm/workflow-behavior-eval.sh [--json]
 
 Run the repo-owned workflow behavior eval for the default oasis7 task chain:
   default-workflow-bootstrap -> new-task-worktree -> workflow-report
-  -> repo-owned-workflow-router -> producer orchestrate / role subagent dispatch
+  -> repo-owned-workflow-router -> TPM orchestrate / professional role subagent dispatch
   -> task-closeout -> prepare-task-pr -> review-thread-closeout
 
 This eval reuses isolated fixture tests and PM smokes so the main chain stays
@@ -60,12 +60,36 @@ bt = chr(96)
 
 checks = [
     (
+        root / "doc/engineering/workflow/source-of-truth.md",
+        [
+            "### 1.1 Skill Map by Phase",
+            "default-workflow-bootstrap",
+            "repo-owned-workflow-router",
+            "systematic-debugging",
+            "receiving-code-review",
+            "writing-repo-owned-skills",
+            "### 1.2 Specialist Skill Reachability",
+            "Specialist skills are not mandatory workflow phases.",
+            "route, TODOs, and downstream handoff must still be recorded",
+            "mandatory context packet",
+            "identity and authority",
+            "workflow governance",
+            "task truth",
+            "user intent and acceptance target",
+            "scoped repo context",
+            "collaboration boundary",
+            "`AGENTS.md` and the assigned role card are mandatory inputs",
+        ],
+    ),
+    (
         root / ".agents/skills/default-workflow-bootstrap/SKILL.md",
         [
-            "## Task Classification",
+            "## Repository State Impact",
             "## Isolation Decision",
             "## Task Truth",
             "## Routed Next Phase",
+            ".pm` execution log (mandatory)",
+            "cannot replace the `.pm` execution log for repository-changing task truth",
             "./scripts/new-task-worktree.sh",
             "./.agents/skills/repo-owned-workflow-router/SKILL.md",
         ],
@@ -74,11 +98,35 @@ checks = [
         root / "AGENTS.md",
         [
             "default-workflow-bootstrap",
-            f"判断 trivial/non-trivial、是否已具备隔离 task worktree / {bt}.pm{bt} task 真值",
-            f"{bt}producer_system_designer{bt} orchestrator + 角色 subagents",
+            f"确认标准 task worktree / {bt}.pm{bt} task / owner role 真值",
+            f"{bt}tpm{bt} 主 Agent + 专业角色 subagents",
+            "TPM 的 TODO decomposition",
+            "mandatory context packet",
+            "必须先写入 `.pm/tasks/<TASK-UID>.execution.md`",
             "formal sink",
-            f"liveops_community{bt} 必须参与至少一个 slice",
+            f"{bt}liveops_community{bt} 必须参与至少一个 slice",
             "requesting-repo-owned-review/SKILL.md",
+        ],
+    ),
+    (
+        root / ".agents/roles/tpm.md",
+        [
+            "# Role: tpm",
+            "默认由 `tpm` 作为新仓库变更任务的主 Agent 和 canonical owner",
+            "专业角色以 subagent 形式提供切片工作",
+            "派工前必须把当前 TODO",
+            "mandatory context packet",
+            "workflow source-of-truth",
+            "mandatory `.pm` execution-log sink",
+            "./scripts/pm/workflow-report.sh --phase start|close|review --role tpm",
+        ],
+    ),
+    (
+        root / ".pm/registry/roles.yaml",
+        [
+            "role_name: tpm",
+            "memory_active_path: .pm/roles/tpm/memory/active.yaml",
+            "done_path: .pm/roles/tpm/backlog/done.yaml",
         ],
     ),
     (
@@ -101,6 +149,35 @@ checks = [
         ],
     ),
     (
+        root / ".agents/roles/templates/subagent-slice-card.md",
+        [
+            "- role:",
+            "- mandatory context packet:",
+            "identity and authority:",
+            "workflow governance:",
+            "task truth:",
+            "user intent:",
+            "scoped repo context:",
+            "collaboration boundary:",
+            "- context exemption:",
+            "除窄范围只读 explorer 且写明豁免原因外",
+        ],
+    ),
+    (
+        root / "scripts/pm/pm_store.py",
+        [
+            '"tpm": "TPM"',
+        ],
+    ),
+    (
+        root / "scripts/pm/pm_store_reporting.py",
+        [
+            'ORCHESTRATOR_ROLES = {"producer_system_designer", "tpm"}',
+            "role in ORCHESTRATOR_ROLES",
+            "signal_role_filter = None if (phase == \"review\" and role in ORCHESTRATOR_ROLES) else role",
+        ],
+    ),
+    (
         root / ".agents/skills/requesting-repo-owned-review/SKILL.md",
         [
             "Repo-owned review is a supplement, not a replacement.",
@@ -113,13 +190,83 @@ checks = [
         root / ".agents/skills/repo-owned-workflow-router/SKILL.md",
         [
             "## Subagent Slice Plan (If Needed)",
+            "## Specialist Skills Considered",
             "- role:",
             "- slice type:",
+            "- mandatory context packet:",
+            "identity and authority:",
+            "workflow governance:",
+            "task truth:",
+            "user intent:",
+            "scoped repo context:",
+            "collaboration boundary:",
             "- write scope:",
             "- return contract:",
             "- formal sink / writeback surface:",
+            ".pm/tasks/<TASK-UID>.execution.md` (mandatory)",
             "- integration owner:",
             "- integration order:",
+            "- context exemption:",
+            "Do not treat specialist domain skills as mandatory default workflow phases",
+            "Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`",
+        ],
+    ),
+    (
+        root / ".agents/skills/README.md",
+        [
+            "Canonical phase mapping lives in `doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`",
+            ".agents/skills/systematic-debugging/SKILL.md",
+            ".agents/skills/receiving-code-review/SKILL.md",
+            ".agents/skills/writing-repo-owned-skills/SKILL.md",
+            "Specialist skills are domain-triggered through TPM routing",
+        ],
+    ),
+    (
+        root / ".agents/skills/executing-project-tasks/SKILL.md",
+        [
+            "plan-gap review",
+            ".pm/tasks/<TASK-UID>.execution.md",
+            "Do not create a second planning system outside",
+        ],
+    ),
+    (
+        root / ".agents/skills/systematic-debugging/SKILL.md",
+        [
+            "Reproduce the failure.",
+            "narrowing the failure surface",
+            "Patch the root cause, not the surface symptom.",
+        ],
+    ),
+    (
+        root / ".agents/skills/receiving-code-review/SKILL.md",
+        [
+            "Inventory the active comments.",
+            "keeps thread resolution separate from merge readiness",
+            "\"Thread resolved\" is not the same as \"PR ready to merge\".",
+        ],
+    ),
+    (
+        root / ".agents/skills/writing-repo-owned-skills/SKILL.md",
+        [
+            "Local skills must strengthen oasis7 repo truth",
+            "not create a parallel workflow",
+            "If the skill introduces or documents a helper-driven workflow",
+        ],
+    ),
+    (
+        root / ".agents/skills/prd/SKILL.md",
+        [
+            "## Oasis7 Workflow Binding",
+            "this skill is a specialist planning surface, not a standalone workflow",
+            ".pm/tasks/<TASK-UID>.execution.md",
+        ],
+    ),
+    (
+        root / ".agents/skills/game-architect/SKILL.md",
+        [
+            "## Oasis7 Workflow Binding",
+            "not a second project workflow",
+            "Architecture documents may supplement `prd.md`, `project.md`, and handoff truth",
         ],
     ),
 ]
@@ -159,6 +306,9 @@ surfaces = {
     ".agents/skills/repo-owned-workflow-router/SKILL.md": (
         root / ".agents/skills/repo-owned-workflow-router/SKILL.md"
     ).read_text(encoding="utf-8"),
+    "doc/engineering/workflow/source-of-truth.md": (
+        root / "doc/engineering/workflow/source-of-truth.md"
+    ).read_text(encoding="utf-8"),
     ".agents/skills/bounded-brainstorming/SKILL.md": (
         root / ".agents/skills/bounded-brainstorming/SKILL.md"
     ).read_text(encoding="utf-8"),
@@ -171,25 +321,46 @@ surfaces = {
     ".agents/skills/finishing-a-development-branch/SKILL.md": (
         root / ".agents/skills/finishing-a-development-branch/SKILL.md"
     ).read_text(encoding="utf-8"),
+    ".agents/skills/executing-project-tasks/SKILL.md": (
+        root / ".agents/skills/executing-project-tasks/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/systematic-debugging/SKILL.md": (
+        root / ".agents/skills/systematic-debugging/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/requesting-repo-owned-review/SKILL.md": (
+        root / ".agents/skills/requesting-repo-owned-review/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/receiving-code-review/SKILL.md": (
+        root / ".agents/skills/receiving-code-review/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/writing-repo-owned-skills/SKILL.md": (
+        root / ".agents/skills/writing-repo-owned-skills/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/prd/SKILL.md": (
+        root / ".agents/skills/prd/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/game-architect/SKILL.md": (
+        root / ".agents/skills/game-architect/SKILL.md"
+    ).read_text(encoding="utf-8"),
 }
 
 scenarios = [
     {
-        "id": "trivial_request_skips_task_bootstrap",
-        "expected_route": "direct handling without forced worktree or .pm task",
+        "id": "read_only_request_skips_task_bootstrap",
+        "expected_route": "direct handling without repository writeback",
         "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
         "required_markers": [
-            "trivial: can be handled directly with no new task truth",
-            "Do not force this bootstrap onto trivial requests.",
+            "read-only/chat-only: may be handled directly without repository writeback",
+            "Do not force this bootstrap onto chat-only or read-only requests that do not change repository state.",
         ],
     },
     {
-        "id": "non_trivial_request_requires_task_truth_before_router",
+        "id": "repository_changing_request_requires_task_truth_before_router",
         "expected_route": "default-workflow-bootstrap -> task truth -> repo-owned-workflow-router",
         "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
         "required_markers": [
-            "non-trivial: requires repo-owned workflow setup",
-            "choose owner role first",
+            "repository-changing: requires standard worktree + `.pm` task truth before edits",
+            "choose `tpm` as the default owner role unless an existing bound task already has a valid owner",
             "create a dedicated worktree unless the user explicitly authorized reuse",
             "Once task truth exists, hand off to `repo-owned-workflow-router`.",
         ],
@@ -234,13 +405,131 @@ scenarios = [
         ],
     },
     {
+        "id": "execution_truth_ready_routes_to_executing_project_tasks",
+        "expected_route": "repo-owned-workflow-router -> executing-project-tasks",
+        "surface": ".agents/skills/executing-project-tasks/SKILL.md",
+        "required_markers": [
+            "the task already has written scope in `prd.md`, `project.md`, a handoff, or `.pm/tasks/<TASK-UID>.yaml`",
+            "Run a brief plan-gap review before editing",
+            "Do not create a second planning system outside `prd.md` / `project.md` / `.pm`.",
+        ],
+    },
+    {
+        "id": "observed_failure_routes_to_systematic_debugging",
+        "expected_route": "repo-owned-workflow-router -> systematic-debugging before speculative fixes",
+        "surface": ".agents/skills/systematic-debugging/SKILL.md",
+        "required_markers": [
+            "Reproduce the failure.",
+            "Narrow the scope:",
+            "Patch the root cause, not the surface symptom.",
+        ],
+    },
+    {
+        "id": "high_risk_diff_can_request_repo_owned_review",
+        "expected_route": "requesting-repo-owned-review -> verification-before-completion -> PR review",
+        "surface": ".agents/skills/requesting-repo-owned-review/SKILL.md",
+        "required_markers": [
+            "a major feature or workflow helper just landed locally",
+            "Repo-owned review is a supplement, not a replacement.",
+            "Formal Sink: <execution log | PR evidence | handoff>",
+        ],
+    },
+    {
         "id": "subagent_dispatch_is_conditional_and_bounded",
-        "expected_route": "producer orchestrates bounded role subagent slices only when needed",
+        "expected_route": "TPM orchestrates bounded professional role subagent slices",
         "surface": "AGENTS.md",
         "required_markers": [
-            "需要时派生角色 subagent 协作",
-            "所有 subagent slice 必须声明 write scope、return contract、integration owner/order",
-            "formal sink",
+            "其他专业角色必须以 subagent slice 形式参与",
+            "TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`",
+            "其他 formal sink 只能补充，不能替代 task execution log",
+        ],
+    },
+    {
+        "id": "subagent_context_packet_is_mandatory_before_dispatch",
+        "expected_route": "TPM supplies identity, governance, task truth, user intent, repo context, and collaboration boundaries",
+        "surface": "doc/engineering/workflow/source-of-truth.md",
+        "required_markers": [
+            "The mandatory context packet must include:",
+            "identity and authority",
+            "workflow governance",
+            "task truth",
+            "user intent and acceptance target",
+            "scoped repo context",
+            "collaboration boundary",
+            "`AGENTS.md` and the assigned role card are mandatory inputs",
+        ],
+    },
+    {
+        "id": "workflow_skill_map_covers_core_and_recovery_surfaces",
+        "expected_route": "source-of-truth maps phases to required, conditional, optional, and review/debug skills",
+        "surface": "doc/engineering/workflow/source-of-truth.md",
+        "required_markers": [
+            "### 1.1 Skill Map by Phase",
+            "`systematic-debugging`",
+            "`receiving-code-review`",
+            "`writing-repo-owned-skills`",
+            "Requiredness",
+            "Formal evidence",
+        ],
+    },
+    {
+        "id": "specialist_skills_are_domain_triggered_not_default_phases",
+        "expected_route": "TPM routes specialist skills only when task domain matches",
+        "surface": "doc/engineering/workflow/source-of-truth.md",
+        "required_markers": [
+            "### 1.2 Specialist Skill Reachability",
+            "Specialist skills are not mandatory workflow phases.",
+            "If a specialist skill is used, TPM must still bind it to the same owner",
+        ],
+    },
+    {
+        "id": "specialist_planning_skills_bind_back_to_tpm_pm_truth",
+        "expected_route": "prd/game-architect may supplement planning but not replace TPM/.pm task truth",
+        "surface": ".agents/skills/prd/SKILL.md",
+        "required_markers": [
+            "this skill is a specialist planning surface, not a standalone workflow",
+            "Record the PRD route, TODOs, and downstream handoff in `.pm/tasks/<TASK-UID>.execution.md`.",
+            "Do not treat PRD-only output as implementation-ready",
+        ],
+    },
+    {
+        "id": "game_architect_binds_back_to_tpm_pm_truth",
+        "expected_route": "game-architect docs remain supplemental architecture planning",
+        "surface": ".agents/skills/game-architect/SKILL.md",
+        "required_markers": [
+            "this skill is a specialist architecture-planning surface, not a second project workflow",
+            "record the route, TODOs, and downstream execution handoff in `.pm/tasks/<TASK-UID>.execution.md`",
+            "Implementation must still route through `repo-owned-workflow-router` and `executing-project-tasks`",
+        ],
+    },
+    {
+        "id": "github_review_feedback_routes_to_receiving_code_review",
+        "expected_route": "receiving-code-review -> fix evidence -> verification-before-completion",
+        "surface": ".agents/skills/receiving-code-review/SKILL.md",
+        "required_markers": [
+            "Inventory the active comments.",
+            "Verify the comment against repo truth before editing.",
+            "\"Thread resolved\" is not the same as \"PR ready to merge\".",
+        ],
+    },
+    {
+        "id": "local_skill_edit_routes_to_writing_repo_owned_skills",
+        "expected_route": "writing-repo-owned-skills governs local skill surface edits",
+        "surface": ".agents/skills/writing-repo-owned-skills/SKILL.md",
+        "required_markers": [
+            "Local skills must strengthen oasis7 repo truth, not create a parallel workflow.",
+            "If the content would be better owned by `AGENTS.md`, `prd.md`, `project.md`, a handoff template, or a script check",
+            "If the skill introduces or documents a helper-driven workflow, also run at least one representative command or check tied to that workflow.",
+        ],
+    },
+    {
+        "id": "tpm_planning_requires_task_execution_log_before_dispatch",
+        "expected_route": "TPM records TODO decomposition and slice contracts before delegated execution",
+        "surface": ".agents/skills/repo-owned-workflow-router/SKILL.md",
+        "required_markers": [
+            "TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.",
+            "mandatory `.pm` execution-log sink",
+            "formal docs may supplement but not replace it",
         ],
     },
     {
@@ -377,14 +666,15 @@ segments = [
 ]
 
 payload = {
-    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
+    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM orchestrate / professional role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, PM runtime smoke, and fake-gh PR helper tests",
     "expected_agent_behavior": [
-        "new non-trivial work first routes through a repo-owned bootstrap surface rather than an external bootstrap",
-        "bootstrap distinguishes trivial vs non-trivial work and ensures isolated task truth exists before routing",
+        "new repository-changing work first routes through a repo-owned bootstrap surface rather than an external bootstrap",
+        "bootstrap distinguishes repository-changing work from read-only/chat-only requests and ensures isolated task truth exists before routing",
         "task worktree bootstrap stays source-clean and starts the target task",
-        "trivial requests are not forced through task/worktree bootstrap",
-        "brainstorming, TDD, and subagent dispatch remain conditional rather than universal gates",
+        "read-only/chat-only requests are not forced through task/worktree bootstrap",
+        "TPM is the default main Agent / orchestrator / canonical integrator",
+        "brainstorming and TDD remain conditional while professional role work is represented as bounded subagent slices",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
         "high-risk local diffs can request repo-owned review packets without replacing GitHub PR review",
         "done closeout refuses to proceed without fresh verification",
@@ -393,8 +683,9 @@ payload = {
     ],
     "verification_surface": [segment["id"] for segment in segments],
     "failure_signature": [
-        "default bootstrap surface disappears or no longer points new non-trivial work into repo-owned task truth",
-        "routing scenarios stop separating trivial direct handling from non-trivial task truth bootstrap",
+        "default bootstrap surface disappears or no longer points repository-changing work into repo-owned task truth",
+        "routing scenarios stop requiring repository-changing work to establish task truth before edits",
+        "TPM role or registry markers disappear from role surfaces",
         "optional brainstorming, TDD, or subagent gates drift into mandatory stages",
         "task-closeout allows done closeout without verify-command",
         "subagent contract markers disappear from AGENTS or handoff/router surfaces",

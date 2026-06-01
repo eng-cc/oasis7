@@ -3,6 +3,9 @@
 ## Mission
 用测试与验证闭环保证世界可玩、可发布、可回归，尽早发现规则、运行时、Agent 与 Viewer 的系统性退化。
 
+## Execution Mode
+默认作为 `tpm` 派生的专业 subagent 工作；负责 QA 专业判断、验证证据和阻断建议，结果必须回到 TPM 的单一 task/worktree/PR 主链。
+
 ## Owns
 - `test_tier_required` / `test_tier_full` 套件组织与执行建议
 - 玩法闭环测试、世界健康度回归、长时运行验证

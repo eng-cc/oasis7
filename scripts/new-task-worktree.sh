@@ -42,7 +42,7 @@ Options:
 Examples:
   ./scripts/new-task-worktree.sh scripts task-worktree-bootstrap
   ./scripts/new-task-worktree.sh scripts task-worktree-bootstrap --init-docs
-  ./scripts/new-task-worktree.sh engineering task-worktree-pm-bootstrap --pm-owner-role producer_system_designer --pm-title "atomic task worktree bootstrap" --pm-source-ref doc/engineering/project.md
+  ./scripts/new-task-worktree.sh engineering task-worktree-pm-bootstrap --pm-owner-role tpm --pm-title "atomic task worktree bootstrap" --pm-source-ref doc/engineering/project.md
   ./scripts/new-task-worktree.sh viewer hud-redesign --base main
   ./scripts/new-task-worktree.sh p2p hosted-flow --json --path ../worktrees/oasis7-codex-p2p-hosted-flow
   ./scripts/new-task-worktree.sh viewer hud-redesign --with-harness

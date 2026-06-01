@@ -1,0 +1,4 @@
+version: 1
+role: tpm
+kind: memory_superseded
+records: []
