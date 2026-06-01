@@ -18,11 +18,11 @@ acceptance:
   - "Cargo lockfiles are updated coherently for the root workspace and relevant standalone Rust tools/modules."
   - "A fresh Rust verification command is run and recorded."
 handoff_to: []
-updated_at: 2026-06-01T17:17:55+08:00
-last_started_at: 2026-06-01T16:55:17+08:00
+updated_at: 2026-06-01T17:59:53+08:00
+last_started_at: 2026-06-01T17:52:19+08:00
 last_claim_type: task_complete
-last_verify_command: "./scripts/cargo-dev.sh check --workspace --all-targets && git diff --check"
-last_verified_at: 2026-06-01T17:17:54+08:00
+last_verify_command: "git diff --check && ./scripts/pm/lint.sh && env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --bin sync_builtin_wasm_identity && ./scripts/cargo-dev.sh test -p oasis7 builtin_wasm_identity"
+last_verified_at: 2026-06-01T17:59:53+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
-last_closed_at: 2026-06-01T17:17:55+08:00
+last_closed_at: 2026-06-01T17:59:53+08:00
