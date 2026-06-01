@@ -56,7 +56,7 @@ pub(super) fn test_wasm_executor_config() -> oasis7_wasm_executor::WasmExecutorC
         // Full-tier CI runs many builtin wasm tests in parallel on fresh runners.
         // Keep production defaults strict, but avoid conflating cold compile time with
         // module execution regressions in these integration-style tests.
-        config.max_call_ms = 15_000;
+        config.max_call_ms = 60_000;
     }
     config
 }
