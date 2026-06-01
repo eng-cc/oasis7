@@ -13,6 +13,7 @@
    - 必需/可选 gate：`doc/engineering/workflow/source-of-truth.md#3-gates`
    - 失败回退：`doc/engineering/workflow/source-of-truth.md#4-failure-and-rollback-paths`
    - 关键规范细节（worktree/执行证据/closeout/PR）：`doc/engineering/workflow/source-of-truth.md#5-normative-details-from-legacy-agents-workflow`
+   - skill 阶段映射：`doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`
    - 语义迁移核对清单：`doc/engineering/workflow/source-of-truth.md#8-semantic-migration-checklist`
 5. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
 

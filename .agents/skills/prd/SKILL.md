@@ -10,6 +10,14 @@ license: MIT
 
 Design comprehensive, production-grade Product Requirements Documents (PRDs) that bridge the gap between business vision and technical execution. This skill works for modern software systems, ensuring that requirements are clearly defined.
 
+## Oasis7 Workflow Binding
+
+In oasis7, this skill is a specialist planning surface, not a standalone workflow. TPM must bind PRD work to the same owner role, `.pm` task, canonical worktree, and PR chain before repository writeback.
+
+- Write PRD outputs to repo-owned docs such as `doc/<module>/prd.md` or `doc/**/**.prd.md`.
+- Record the PRD route, TODOs, and downstream handoff in `.pm/tasks/<TASK-UID>.execution.md`.
+- Do not treat PRD-only output as implementation-ready unless the workflow router has also confirmed project/task execution truth and verification entry.
+
 ## When to Use
 
 Use this skill when:

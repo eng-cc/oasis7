@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.1**
+Version: **v1.4.2**
 Last Updated: **2026-06-01**
 
 ## 0. Purpose
@@ -31,6 +31,33 @@ flowchart TD
   J -->|PR review requested changes| L[Review Fix Loop]
   L --> I
 ```
+
+### 1.1 Skill Map by Phase
+This map makes skill reachability explicit. TPM owns the route decision and records the selected skill path in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
+
+| Phase / trigger | Skill surface | Requiredness | Formal evidence |
+| --- | --- | --- | --- |
+| Repository-changing request starts | `default-workflow-bootstrap` | Required before edits unless the user explicitly authorized reuse of a bound task worktree | Bootstrap entry in `.pm/tasks/<TASK-UID>.execution.md` |
+| Bound task needs next phase selection | `repo-owned-workflow-router` | Required after bootstrap and whenever phase is unclear | Route entry with selected/skipped skills in `.pm/tasks/<TASK-UID>.execution.md` |
+| Scope is ambiguous, option-heavy, or visual enough to need ideation | `bounded-brainstorming` | Optional, risk-based | Brainstorming output or skip reason in execution log/project |
+| Behavior changes with a stable automated harness | `tdd-test-writer` | Conditional required when RED criteria are met; otherwise skip reason required | RED command, failing evidence, and handoff contract |
+| Repo truth is ready and implementation proceeds step by step | `executing-project-tasks` | Required for non-trivial execution after route selection | Atomic step evidence in `.pm/tasks/<TASK-UID>.execution.md` |
+| Bug, failing test, broken script, unexpected diff, or regression appears | `systematic-debugging` | Conditional required before speculative fixes | Reproduction, narrowed hypothesis, fix evidence |
+| Major/high-risk diff needs local supplemental review | `requesting-repo-owned-review` | Optional, risk-based; does not replace GitHub review | Findings/no-findings packet and residual risk |
+| About to claim done/tests-pass/ready-for-PR/ready-to-merge | `verification-before-completion` | Required before completion claims | Fresh verification command/output or claim-ready evidence |
+| Implementation is done and branch needs closeout/commit/PR | `finishing-a-development-branch` | Required for development branch closeout | Closeout output, commit, PR linkage |
+| GitHub PR receives review comments or requested changes | `receiving-code-review` | Required for actionable PR review feedback | Comment verification, fix evidence, thread status |
+| Workflow skill/docs themselves are created or edited | `writing-repo-owned-skills` | Required for local skill surface changes | Source-of-truth-first sync plus governance checks |
+
+### 1.2 Specialist Skill Reachability
+Specialist skills are not mandatory workflow phases. They become reachable through TPM routing or professional subagent slice planning when the task domain matches their trigger.
+
+- Product/planning docs: `prd`, `game-architect`; these may create planning artifacts, but the route, TODOs, and downstream handoff must still be recorded in `.pm/tasks/<TASK-UID>.execution.md`.
+- Game/domain implementation: `game-design-theory`, `gameplay-mechanics`, `level-design`, `audio-systems`, `particle-systems`, `optimization-performance`, `memory-management`, `asset-optimization`, `synchronization-algorithms`, `monetization-systems`.
+- Narrative/community/content: `epic-story-orchestrator-zh`, `content-creation`, `humanizer-zh`.
+- Browser/visual/content tools: `agent-browser`, `gpt-image-2`, `xiaohongshu`, `xiaohongshu-note-analyzer`.
+
+If a specialist skill is used, TPM must still bind it to the same owner, `.pm` task, canonical worktree, and PR chain through the subagent slice contract.
 
 ## 2. Responsibility Boundary
 - `tpm`: default main Agent / orchestrator / canonical integrator; owns phase decision, role allocation, final writeback, fresh verification, completion claim, and PR chain.
@@ -115,6 +142,9 @@ flowchart TD
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.4.2 (2026-06-01)**
+  - Added the normative skill map by workflow phase so each core skill has an explicit trigger, requiredness level, and evidence sink.
+  - Clarified that specialist skills are domain-triggered through TPM routing rather than mandatory default workflow phases.
 - **v1.4.1 (2026-06-01)**
   - Tightened TPM planning governance: TODO decomposition, subagent slice contracts, and integration order must be written to the task execution log before delegated work begins.
   - Clarified that other formal sinks may supplement but cannot replace `.pm/tasks/<TASK-UID>.execution.md` for task execution truth.
@@ -154,5 +184,6 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] Closeout command chain and `done` verification strictness.
 - [x] GitHub PR + required checks + review/approval as formal review boundary.
 - [x] PR review fix loop: fix -> re-verify -> resolve threads -> merge claim.
+- [x] Workflow phase-to-skill map preserves required, conditional, optional, and specialist skill reachability.
 
 If any item above changes, update this file first and then sync downstream docs/skills/scripts.

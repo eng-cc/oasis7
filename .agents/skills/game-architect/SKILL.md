@@ -10,6 +10,14 @@ This skill assists in the **documentation phase** of game project development. I
 > [!IMPORTANT]
 > This skill focuses on **documentation output only**. The actual code implementation phase is **outside the scope** of this skill.
 
+## Oasis7 Workflow Binding
+
+In oasis7, this skill is a specialist architecture-planning surface, not a second project workflow. TPM must bind any `game-architect` output to the same owner role, `.pm` task, canonical worktree, and PR chain before repository writeback.
+
+- If `architect/` documents are created or updated, record the route, TODOs, and downstream execution handoff in `.pm/tasks/<TASK-UID>.execution.md`.
+- Architecture documents may supplement `prd.md`, `project.md`, and handoff truth, but they do not replace `.pm` task truth.
+- Implementation must still route through `repo-owned-workflow-router` and `executing-project-tasks` before code changes.
+
 ## Output Documents
 
 All documents are placed in an `architect/` directory (create if needed). The pipeline produces:

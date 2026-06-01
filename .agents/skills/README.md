@@ -37,14 +37,21 @@
 
 ## Workflow Execution Entry Points
 
+Canonical phase mapping lives in `doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`; this README is an index, not the workflow authority.
+
 - 启动会改变仓库状态的新 task、需要先确认标准 task worktree / `.pm` task / owner role 真值，并把后续阶段接回 repo-owned 主链时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
 - 启动已具备 task 真值的仓库变更 task、或不确定下一步该走哪条 repo-owned workflow surface 时：`.agents/skills/repo-owned-workflow-router/SKILL.md`
 - 需求仍偏模糊、需要 scope 拆分、方案对比或判断是否需要 visual companion 时：`.agents/skills/bounded-brainstorming/SKILL.md`
 - 行为变更类实现任务、且存在稳定自动化测试面时：`.agents/skills/tdd-test-writer/SKILL.md`
 - 已有正式 `project.md` / handoff / `.pm` task 后进入实施：`.agents/skills/executing-project-tasks/SKILL.md`
+- 遇到 bug、失败测试、脚本异常、意外 diff 或回归时：`.agents/skills/systematic-debugging/SKILL.md`
 - 当前 diff 已形成 major feature、高风险收敛切片，或 commit 前 claim risk 明显偏高时：`.agents/skills/requesting-repo-owned-review/SKILL.md`
 - 接近完成、准备宣称“通过 / 完成 / 可提 PR”时：`.agents/skills/verification-before-completion/SKILL.md`
 - 已完成实现、准备 closeout / commit / PR 收口时：`.agents/skills/finishing-a-development-branch/SKILL.md`
+- PR 收到 review comments / requested changes，需要核实、修复、回证据并保持 thread resolution 与 merge readiness 分离时：`.agents/skills/receiving-code-review/SKILL.md`
+- 新增或修改本地 repo-owned skill、替换上游 skill 或调整 skill governance 时：`.agents/skills/writing-repo-owned-skills/SKILL.md`
+
+Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain.
 
 ## Bounded Borrowing From `writing-skills`
 

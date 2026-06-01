@@ -60,6 +60,20 @@ bt = chr(96)
 
 checks = [
     (
+        root / "doc/engineering/workflow/source-of-truth.md",
+        [
+            "### 1.1 Skill Map by Phase",
+            "default-workflow-bootstrap",
+            "repo-owned-workflow-router",
+            "systematic-debugging",
+            "receiving-code-review",
+            "writing-repo-owned-skills",
+            "### 1.2 Specialist Skill Reachability",
+            "Specialist skills are not mandatory workflow phases.",
+            "route, TODOs, and downstream handoff must still be recorded",
+        ],
+    ),
+    (
         root / ".agents/skills/default-workflow-bootstrap/SKILL.md",
         [
             "## Repository State Impact",
@@ -136,6 +150,7 @@ checks = [
         root / ".agents/skills/repo-owned-workflow-router/SKILL.md",
         [
             "## Subagent Slice Plan (If Needed)",
+            "## Specialist Skills Considered",
             "- role:",
             "- slice type:",
             "- write scope:",
@@ -144,6 +159,65 @@ checks = [
             ".pm/tasks/<TASK-UID>.execution.md` (mandatory)",
             "- integration owner:",
             "- integration order:",
+            "Do not treat specialist domain skills as mandatory default workflow phases",
+        ],
+    ),
+    (
+        root / ".agents/skills/README.md",
+        [
+            "Canonical phase mapping lives in `doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`",
+            ".agents/skills/systematic-debugging/SKILL.md",
+            ".agents/skills/receiving-code-review/SKILL.md",
+            ".agents/skills/writing-repo-owned-skills/SKILL.md",
+            "Specialist skills are domain-triggered through TPM routing",
+        ],
+    ),
+    (
+        root / ".agents/skills/executing-project-tasks/SKILL.md",
+        [
+            "plan-gap review",
+            ".pm/tasks/<TASK-UID>.execution.md",
+            "Do not create a second planning system outside",
+        ],
+    ),
+    (
+        root / ".agents/skills/systematic-debugging/SKILL.md",
+        [
+            "Reproduce the failure.",
+            "narrowing the failure surface",
+            "Patch the root cause, not the surface symptom.",
+        ],
+    ),
+    (
+        root / ".agents/skills/receiving-code-review/SKILL.md",
+        [
+            "Inventory the active comments.",
+            "keeps thread resolution separate from merge readiness",
+            "\"Thread resolved\" is not the same as \"PR ready to merge\".",
+        ],
+    ),
+    (
+        root / ".agents/skills/writing-repo-owned-skills/SKILL.md",
+        [
+            "Local skills must strengthen oasis7 repo truth",
+            "not create a parallel workflow",
+            "If the skill introduces or documents a helper-driven workflow",
+        ],
+    ),
+    (
+        root / ".agents/skills/prd/SKILL.md",
+        [
+            "## Oasis7 Workflow Binding",
+            "this skill is a specialist planning surface, not a standalone workflow",
+            ".pm/tasks/<TASK-UID>.execution.md",
+        ],
+    ),
+    (
+        root / ".agents/skills/game-architect/SKILL.md",
+        [
+            "## Oasis7 Workflow Binding",
+            "not a second project workflow",
+            "Architecture documents may supplement `prd.md`, `project.md`, and handoff truth",
         ],
     ),
 ]
@@ -183,6 +257,9 @@ surfaces = {
     ".agents/skills/repo-owned-workflow-router/SKILL.md": (
         root / ".agents/skills/repo-owned-workflow-router/SKILL.md"
     ).read_text(encoding="utf-8"),
+    "doc/engineering/workflow/source-of-truth.md": (
+        root / "doc/engineering/workflow/source-of-truth.md"
+    ).read_text(encoding="utf-8"),
     ".agents/skills/bounded-brainstorming/SKILL.md": (
         root / ".agents/skills/bounded-brainstorming/SKILL.md"
     ).read_text(encoding="utf-8"),
@@ -194,6 +271,27 @@ surfaces = {
     ).read_text(encoding="utf-8"),
     ".agents/skills/finishing-a-development-branch/SKILL.md": (
         root / ".agents/skills/finishing-a-development-branch/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/executing-project-tasks/SKILL.md": (
+        root / ".agents/skills/executing-project-tasks/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/systematic-debugging/SKILL.md": (
+        root / ".agents/skills/systematic-debugging/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/requesting-repo-owned-review/SKILL.md": (
+        root / ".agents/skills/requesting-repo-owned-review/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/receiving-code-review/SKILL.md": (
+        root / ".agents/skills/receiving-code-review/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/writing-repo-owned-skills/SKILL.md": (
+        root / ".agents/skills/writing-repo-owned-skills/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/prd/SKILL.md": (
+        root / ".agents/skills/prd/SKILL.md"
+    ).read_text(encoding="utf-8"),
+    ".agents/skills/game-architect/SKILL.md": (
+        root / ".agents/skills/game-architect/SKILL.md"
     ).read_text(encoding="utf-8"),
 }
 
@@ -258,6 +356,36 @@ scenarios = [
         ],
     },
     {
+        "id": "execution_truth_ready_routes_to_executing_project_tasks",
+        "expected_route": "repo-owned-workflow-router -> executing-project-tasks",
+        "surface": ".agents/skills/executing-project-tasks/SKILL.md",
+        "required_markers": [
+            "the task already has written scope in `prd.md`, `project.md`, a handoff, or `.pm/tasks/<TASK-UID>.yaml`",
+            "Run a brief plan-gap review before editing",
+            "Do not create a second planning system outside `prd.md` / `project.md` / `.pm`.",
+        ],
+    },
+    {
+        "id": "observed_failure_routes_to_systematic_debugging",
+        "expected_route": "repo-owned-workflow-router -> systematic-debugging before speculative fixes",
+        "surface": ".agents/skills/systematic-debugging/SKILL.md",
+        "required_markers": [
+            "Reproduce the failure.",
+            "Narrow the scope:",
+            "Patch the root cause, not the surface symptom.",
+        ],
+    },
+    {
+        "id": "high_risk_diff_can_request_repo_owned_review",
+        "expected_route": "requesting-repo-owned-review -> verification-before-completion -> PR review",
+        "surface": ".agents/skills/requesting-repo-owned-review/SKILL.md",
+        "required_markers": [
+            "a major feature or workflow helper just landed locally",
+            "Repo-owned review is a supplement, not a replacement.",
+            "Formal Sink: <execution log | PR evidence | handoff>",
+        ],
+    },
+    {
         "id": "subagent_dispatch_is_conditional_and_bounded",
         "expected_route": "TPM orchestrates bounded professional role subagent slices",
         "surface": "AGENTS.md",
@@ -265,6 +393,69 @@ scenarios = [
             "其他专业角色必须以 subagent slice 形式参与",
             "TPM 的 TODO decomposition、subagent slice contracts 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`",
             "其他 formal sink 只能补充，不能替代 task execution log",
+        ],
+    },
+    {
+        "id": "workflow_skill_map_covers_core_and_recovery_surfaces",
+        "expected_route": "source-of-truth maps phases to required, conditional, optional, and review/debug skills",
+        "surface": "doc/engineering/workflow/source-of-truth.md",
+        "required_markers": [
+            "### 1.1 Skill Map by Phase",
+            "`systematic-debugging`",
+            "`receiving-code-review`",
+            "`writing-repo-owned-skills`",
+            "Requiredness",
+            "Formal evidence",
+        ],
+    },
+    {
+        "id": "specialist_skills_are_domain_triggered_not_default_phases",
+        "expected_route": "TPM routes specialist skills only when task domain matches",
+        "surface": "doc/engineering/workflow/source-of-truth.md",
+        "required_markers": [
+            "### 1.2 Specialist Skill Reachability",
+            "Specialist skills are not mandatory workflow phases.",
+            "If a specialist skill is used, TPM must still bind it to the same owner",
+        ],
+    },
+    {
+        "id": "specialist_planning_skills_bind_back_to_tpm_pm_truth",
+        "expected_route": "prd/game-architect may supplement planning but not replace TPM/.pm task truth",
+        "surface": ".agents/skills/prd/SKILL.md",
+        "required_markers": [
+            "this skill is a specialist planning surface, not a standalone workflow",
+            "Record the PRD route, TODOs, and downstream handoff in `.pm/tasks/<TASK-UID>.execution.md`.",
+            "Do not treat PRD-only output as implementation-ready",
+        ],
+    },
+    {
+        "id": "game_architect_binds_back_to_tpm_pm_truth",
+        "expected_route": "game-architect docs remain supplemental architecture planning",
+        "surface": ".agents/skills/game-architect/SKILL.md",
+        "required_markers": [
+            "this skill is a specialist architecture-planning surface, not a second project workflow",
+            "record the route, TODOs, and downstream execution handoff in `.pm/tasks/<TASK-UID>.execution.md`",
+            "Implementation must still route through `repo-owned-workflow-router` and `executing-project-tasks`",
+        ],
+    },
+    {
+        "id": "github_review_feedback_routes_to_receiving_code_review",
+        "expected_route": "receiving-code-review -> fix evidence -> verification-before-completion",
+        "surface": ".agents/skills/receiving-code-review/SKILL.md",
+        "required_markers": [
+            "Inventory the active comments.",
+            "Verify the comment against repo truth before editing.",
+            "\"Thread resolved\" is not the same as \"PR ready to merge\".",
+        ],
+    },
+    {
+        "id": "local_skill_edit_routes_to_writing_repo_owned_skills",
+        "expected_route": "writing-repo-owned-skills governs local skill surface edits",
+        "surface": ".agents/skills/writing-repo-owned-skills/SKILL.md",
+        "required_markers": [
+            "Local skills must strengthen oasis7 repo truth, not create a parallel workflow.",
+            "If the content would be better owned by `AGENTS.md`, `prd.md`, `project.md`, a handoff template, or a script check",
+            "If the skill introduces or documents a helper-driven workflow, also run at least one representative command or check tied to that workflow.",
         ],
     },
     {

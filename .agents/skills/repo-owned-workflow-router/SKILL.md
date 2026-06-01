@@ -45,10 +45,18 @@ Check the task in this order:
    - Use when the task changes automatable behavior and has a stable automated test surface.
 3. `executing-project-tasks`
    - Use when `prd.md` / `project.md` / handoff / `.pm` truth is ready and implementation should proceed step by step.
-4. `verification-before-completion`
+4. `systematic-debugging`
+   - Use when a bug, failing test, broken script, unexpected diff, or regression appears before proposing fixes.
+5. `requesting-repo-owned-review`
+   - Use when a high-risk or major convergence diff needs local supplemental review before commit or before GitHub reviewers.
+6. `verification-before-completion`
    - Use when the work is close to a claim such as “done”, “tests pass”, or “ready for PR”.
-5. `finishing-a-development-branch`
+7. `finishing-a-development-branch`
    - Use when implementation and required verification are complete and the task should close out, commit, and move into PR handling.
+8. `receiving-code-review`
+   - Use when GitHub PR review comments or requested changes arrive.
+9. `writing-repo-owned-skills`
+   - Use when local repo-owned skill surfaces are created or edited.
 
 ## Routing Questions
 
@@ -58,8 +66,12 @@ Ask and answer these in order:
 2. Does the task need scope decomposition or 2-3 option comparison first?
 3. Will the task change product/runtime/interaction behavior with a stable test surface?
 4. Is the task already backed by sufficient repo truth to execute?
-5. Is the next risk “implementation correctness” or “claim correctness”?
-6. Is the task actually at closeout rather than execution?
+5. Did a bug, failing test, broken helper, unexpected diff, or regression appear?
+6. Is the diff large or risky enough to need supplemental repo-owned review?
+7. Is the next risk “implementation correctness” or “claim correctness”?
+8. Is the task actually at closeout rather than execution?
+9. Did GitHub review feedback arrive?
+10. Is this task editing local skill surfaces or skill governance?
 
 ## Expected Output
 
@@ -77,6 +89,9 @@ WORKFLOW ROUTE DECIDED
 
 ## Skipped Workflow Skills
 - [skill name] - [reason skipped]
+
+## Specialist Skills Considered
+- [skill name] - [domain trigger or reason skipped]
 
 ## Required Writeback
 - `prd.md`:
@@ -102,5 +117,7 @@ WORKFLOW ROUTE DECIDED
 - Do not route into `bounded-brainstorming` if the task is already implementation-ready.
 - Do not route into `tdd-test-writer` for pure docs/governance work or when no stable harness exists.
 - Do not route into `executing-project-tasks` if the plan truth is still missing key scope or validation details.
+- Do not skip `systematic-debugging` when an observed failure needs reproduction and narrowing before a fix.
 - Do not skip `verification-before-completion` when you are about to make a completion claim.
 - Do not use this router as a replacement for closeout; switch to `finishing-a-development-branch` when the task is done.
+- Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
