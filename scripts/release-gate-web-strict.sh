@@ -69,9 +69,9 @@ echo "+ ./scripts/viewer-primary-web-entry-regression.sh --scenario $SCENARIO --
   --out-dir "$OUT_DIR/primary-entry" \
   "${browser_mode[@]}"
 
-echo "+ ./scripts/viewer-software-safe-step-regression.sh --skip-llm-provider-preflight --scenario $SCENARIO --out-dir $OUT_DIR/software-safe-step ${step_browser_mode[*]}"
+echo "+ ./scripts/viewer-software-safe-step-regression.sh --skip-provider-preflight --scenario $SCENARIO --out-dir $OUT_DIR/software-safe-step ${step_browser_mode[*]}"
 ./scripts/viewer-software-safe-step-regression.sh \
-  --skip-llm-provider-preflight \
+  --skip-provider-preflight \
   --scenario "$SCENARIO" \
   --live-bind 127.0.0.1:5033 \
   --web-bind 127.0.0.1:5021 \

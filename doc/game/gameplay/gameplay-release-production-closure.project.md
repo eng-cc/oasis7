@@ -1,52 +1,12 @@
-# Gameplay 发行收口（项目管理文档）
+# Retired Direct Model Path Project
 
-- 对应设计文档: `doc/game/gameplay/gameplay-release-production-closure.design.md`
-- 对应需求文档: `doc/game/gameplay/gameplay-release-production-closure.prd.md`
-
-审计轮次: 4
-
-## 审计备注
-- 主项目入口：`doc/game/gameplay/gameplay-top-level-design.project.md`。
-- 本文档仅维护发行收口增量任务与状态。
+Paired PRD: `doc/game/gameplay/gameplay-release-production-closure.prd.md`.
 
 ## 任务拆解
-
-### T0 文档与任务建模
-- [x] 新建设计文档：`doc/game/gameplay/gameplay-release-production-closure.prd.md`
-- [x] 新建项目管理文档：`doc/game/gameplay/gameplay-release-production-closure.project.md`
-
-### T1 社会经济治理最小闭环（对应需求 2）
-- [x] 扩展 Runtime Action/DomainEvent：经济合约与治理规则动作
-- [x] 扩展 Runtime State：经济合约状态、声誉账本、治理参数
-- [x] 实现生命周期：合约创建/签约/结算/过期与声誉奖惩
-- [x] 补充 runtime 协议测试（主路径 + 拒绝路径）
-
-### T2 压测玩法门禁工程化（对应需求 3）
-- [x] 扩展 `scripts/llm-longrun-stress.sh` 支持玩法覆盖阈值参数
-- [x] 新增 `--release-gate` 发行口径开关与失败提示
-- [x] 更新 `testing-manual.md` 的 S8 使用口径与示例
-
-### T3 联盟生命周期与战争约束（对应需求 4）
-- [x] 扩展 Runtime Action/DomainEvent：`join/leave/dissolve` 与战争后果字段
-- [x] 扩展 Runtime 规则：联盟生命周期约束、战争成本与结算后果
-- [x] 扩展 LLM 决策 schema/parser/execution controls 支持新动作
-- [x] 补充 runtime + llm_agent 定向测试
-
-### T4 收口与回写
-- [x] 回写本项目文档状态
-- [x] 追加当日 devlog 任务日志（每任务一条）
-- [x] 运行相关测试并记录
+- Retired: obsolete game-side direct model work is no longer active.
 
 ## 依赖
-- Runtime Gameplay 基线：`crates/oasis7/src/runtime/world/*`
-- LLM 决策协议：`crates/oasis7/src/simulator/llm_agent/*`
-- 压测脚本：`scripts/llm-longrun-stress.sh`
-- 测试口径手册：`testing-manual.md`
+- Current dependency: provider-backed remote bridge contract.
 
 ## 状态
-- 当前阶段：已完成（T0~T4）
-- 阻塞项：无
-
-## 迁移记录（2026-03-03）
-- 已按 `TASK-ENGINEERING-014-D1 (PRD-ENGINEERING-006)` 从 legacy 命名迁移为 `.prd.md/.project.md`。
-- 保留原任务拆解、依赖与状态语义，不改变既有结论。
+- Retired tombstone retained for governance references.

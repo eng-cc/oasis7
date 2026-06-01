@@ -7,13 +7,11 @@ use std::process;
 use std::time::Instant;
 
 use oasis7::simulator::{
-    evaluate_provider_compatibility, initialize_kernel, provider_phase1_required_actions,
-    provider_phase1_required_capabilities, Action, ActionCatalogEntry, ActionResult, AgentBehavior,
-    AgentDecision, AgentDecisionTrace, AgentRunner, LlmAgentBehavior, Observation,
-    OpenAiChatCompletionClient, ProviderCompatibilityStatus, ProviderExecutionMode,
-    ProviderLoopbackAdapter, ProviderLoopbackHttpClient, RuntimePerfSnapshot, WorldConfig,
-    WorldEvent, WorldInitConfig, WorldScenario, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    evaluate_provider_compatibility, initialize_kernel, Action, ActionCatalogEntry, ActionResult,
+    AgentBehavior, AgentDecision, AgentDecisionTrace, AgentRunner, Observation,
+    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient,
+    RuntimePerfSnapshot, WorldConfig, WorldEvent, WorldInitConfig, WorldScenario,
+    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
 use serde::{Deserialize, Serialize};
 
@@ -28,19 +26,16 @@ const DEFAULT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_TICKS: u64 = 20;
 const DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
-const DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK: i64 = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum BenchProviderKind {
-    Builtin,
     ProviderLoopbackHttp,
 }
 
 impl BenchProviderKind {
     fn parse(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
-            "builtin" => Some(Self::Builtin),
             "provider_loopback_http" | "provider_local_bridge" => Some(Self::ProviderLoopbackHttp),
             _ => None,
         }
@@ -48,7 +43,6 @@ impl BenchProviderKind {
 
     fn as_str(self) -> &'static str {
         match self {
-            Self::Builtin => "builtin",
             Self::ProviderLoopbackHttp => "provider_loopback_http",
         }
     }
@@ -81,7 +75,7 @@ struct CliOptions {
 impl Default for CliOptions {
     fn default() -> Self {
         Self {
-            provider: BenchProviderKind::Builtin,
+            provider: BenchProviderKind::ProviderLoopbackHttp,
             scenario: WorldScenario::LlmBootstrap,
             scenario_id: "P0-001".to_string(),
             parity_tier: "P0".to_string(),
@@ -207,14 +201,7 @@ struct SampleSummary {
 }
 
 enum BenchBehavior {
-    Builtin(BuiltinParityBehavior),
     ProviderBacked(ProviderBackedLoopbackBehavior),
-}
-
-struct BuiltinParityBehavior {
-    inner: LlmAgentBehavior<OpenAiChatCompletionClient>,
-    scenario_id: String,
-    pending_trace: Option<AgentDecisionTrace>,
 }
 
 struct ProviderBackedLoopbackBehavior {
@@ -224,145 +211,33 @@ struct ProviderBackedLoopbackBehavior {
 impl AgentBehavior for BenchBehavior {
     fn agent_id(&self) -> &str {
         match self {
-            Self::Builtin(inner) => inner.agent_id(),
             Self::ProviderBacked(inner) => inner.agent_id(),
         }
     }
 
     fn decide(&mut self, observation: &Observation) -> AgentDecision {
         match self {
-            Self::Builtin(inner) => inner.decide(observation),
             Self::ProviderBacked(inner) => inner.decide(observation),
         }
     }
 
     fn on_action_result(&mut self, result: &ActionResult) {
         match self {
-            Self::Builtin(inner) => inner.on_action_result(result),
             Self::ProviderBacked(inner) => inner.on_action_result(result),
         }
     }
 
     fn on_event(&mut self, event: &WorldEvent) {
         match self {
-            Self::Builtin(inner) => inner.on_event(event),
             Self::ProviderBacked(inner) => inner.on_event(event),
         }
     }
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
         match self {
-            Self::Builtin(inner) => inner.take_decision_trace(),
             Self::ProviderBacked(inner) => inner.take_decision_trace(),
         }
     }
-}
-
-impl AgentBehavior for BuiltinParityBehavior {
-    fn agent_id(&self) -> &str {
-        self.inner.agent_id()
-    }
-
-    fn decide(&mut self, observation: &Observation) -> AgentDecision {
-        let original_decision = self.inner.decide(observation);
-        let mut trace = self.inner.take_decision_trace();
-        let (decision, guardrail_note) = apply_builtin_parity_guardrail(
-            self.scenario_id.as_str(),
-            self.inner.agent_id(),
-            observation,
-            original_decision.clone(),
-        );
-        if let Some(note) = guardrail_note {
-            if let Some(trace) = trace.as_mut() {
-                trace.decision = decision.clone();
-                trace.llm_step_trace.push(oasis7::simulator::LlmStepTrace {
-                    step_index: trace.llm_step_trace.len(),
-                    step_type: "builtin_parity_guardrail".to_string(),
-                    input_summary: decision_label(&original_decision),
-                    output_summary: decision_label(&decision),
-                    status: note,
-                });
-            }
-        }
-        self.pending_trace = trace;
-        decision
-    }
-
-    fn on_action_result(&mut self, result: &ActionResult) {
-        self.inner.on_action_result(result);
-    }
-
-    fn on_event(&mut self, event: &WorldEvent) {
-        self.inner.on_event(event);
-    }
-
-    fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
-        self.pending_trace.take()
-    }
-}
-
-fn apply_builtin_parity_guardrail(
-    scenario_id: &str,
-    agent_id: &str,
-    observation: &Observation,
-    decision: AgentDecision,
-) -> (AgentDecision, Option<String>) {
-    if scenario_id != "P0-001" {
-        return (decision, None);
-    }
-    let Some(preferred_location) = preferred_patrol_move_target(observation) else {
-        return (decision, None);
-    };
-    if decision_is_valid_patrol_move(&decision, observation) {
-        return (decision, None);
-    }
-    (
-        AgentDecision::Act(Action::MoveAgent {
-            agent_id: agent_id.to_string(),
-            to: preferred_location.clone(),
-        }),
-        Some(format!(
-            "builtin_parity_guardrail: reroute {} -> move_agent({})",
-            decision_label(&decision),
-            preferred_location,
-        )),
-    )
-}
-
-fn decision_is_valid_patrol_move(decision: &AgentDecision, observation: &Observation) -> bool {
-    let current_location_id = estimated_current_location_id(observation);
-    matches!(
-        decision,
-        AgentDecision::Act(Action::MoveAgent { to, .. })
-            if observation.visible_locations.iter().any(|location| {
-                location.location_id == *to
-                    && location.distance_cm > 0
-                    && location.distance_cm <= DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK
-                    && Some(location.location_id.as_str()) != current_location_id
-            })
-    )
-}
-
-fn preferred_patrol_move_target(observation: &Observation) -> Option<String> {
-    let current_location_id = estimated_current_location_id(observation);
-    observation
-        .visible_locations
-        .iter()
-        .filter(|location| {
-            location.distance_cm > 0
-                && location.distance_cm <= DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK
-                && Some(location.location_id.as_str()) != current_location_id
-        })
-        .min_by_key(|location| location.distance_cm)
-        .map(|location| location.location_id.clone())
-}
-
-fn estimated_current_location_id(observation: &Observation) -> Option<&str> {
-    observation
-        .visible_locations
-        .iter()
-        .min_by_key(|location| location.distance_cm)
-        .map(|location| location.location_id.as_str())
 }
 
 impl AgentBehavior for ProviderBackedLoopbackBehavior {
@@ -693,26 +568,6 @@ fn execution_environment_class(mode: ProviderExecutionMode) -> &'static str {
 
 fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String> {
     match options.provider {
-        BenchProviderKind::Builtin => Ok(ProviderRunInfo {
-            provider_kind: options.provider.as_str().to_string(),
-            provider_version: "builtin_llm_env".to_string(),
-            adapter_version: options.adapter_version.clone(),
-            protocol_version: options.protocol_version.clone(),
-            compatibility_status: ProviderCompatibilityStatus::Ready.as_str().to_string(),
-            fallback_reason: None,
-            capabilities: provider_phase1_required_capabilities()
-                .iter()
-                .map(|value| (*value).to_string())
-                .collect(),
-            supported_action_sets: provider_phase1_required_actions()
-                .iter()
-                .map(|value| (*value).to_string())
-                .collect(),
-            provider_status: None,
-            provider_last_error: None,
-            provider_queue_depth: None,
-            agent_profile: None,
-        }),
         BenchProviderKind::ProviderLoopbackHttp => {
             let base_url = options.provider_base_url.as_deref().ok_or_else(|| {
                 "--agent-provider-url is required for provider_loopback_http".to_string()
@@ -753,24 +608,6 @@ fn build_behavior(
     provider: &ProviderRunInfo,
 ) -> Result<BenchBehavior, String> {
     match options.provider {
-        BenchProviderKind::Builtin => {
-            if options.execution_mode != ProviderExecutionMode::HeadlessAgent {
-                return Err(
-                    "--execution-mode=player_parity is only supported with --provider provider_loopback_http"
-                        .to_string(),
-                );
-            }
-            let mut behavior =
-                LlmAgentBehavior::from_env(agent_id.to_string()).map_err(|err| err.to_string())?;
-            if let Some(goal) = builtin_parity_short_term_goal(options.scenario_id.as_str()) {
-                behavior.apply_prompt_overrides(None, Some(goal), None);
-            }
-            Ok(BenchBehavior::Builtin(BuiltinParityBehavior {
-                inner: behavior,
-                scenario_id: options.scenario_id.clone(),
-                pending_trace: None,
-            }))
-        }
         BenchProviderKind::ProviderLoopbackHttp => {
             let base_url = options.provider_base_url.as_deref().ok_or_else(|| {
                 "--agent-provider-url is required for provider_loopback_http".to_string()
@@ -806,10 +643,6 @@ fn build_behavior(
             ))
         }
     }
-}
-
-fn builtin_parity_short_term_goal(scenario_id: &str) -> Option<String> {
-    parity_memory_summary(scenario_id).map(str::to_string)
 }
 
 fn parity_memory_summary(scenario_id: &str) -> Option<&'static str> {

@@ -8,7 +8,6 @@ const OASIS7_GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_VIEWER_STATIC_DIR: &str = "web";
 pub(super) const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
-pub(super) const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 pub(super) const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 pub(super) const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
 pub(super) const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
@@ -65,7 +64,7 @@ pub(super) fn is_provider_http_mode(config: &LaunchConfig) -> bool {
 pub(super) fn validate_agent_decision_source(raw: &str) -> Result<(), String> {
     canonical_agent_decision_source(raw)
         .map(|_| ())
-        .ok_or_else(|| "agent decision source must be builtin_llm or provider_backed".to_string())
+        .ok_or_else(|| "agent decision source must be provider_backed".to_string())
 }
 
 pub(super) fn validate_agent_provider_backend(raw: &str) -> Result<(), String> {
@@ -102,7 +101,6 @@ pub(super) fn validate_provider_execution_mode(raw: &str) -> Result<(), String> 
 
 pub(super) fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {
     match raw.trim() {
-        BUILTIN_LLM_DECISION_SOURCE => Some(BUILTIN_LLM_DECISION_SOURCE),
         PROVIDER_BACKED_DECISION_SOURCE
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(PROVIDER_BACKED_DECISION_SOURCE),
@@ -635,7 +633,7 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
         args.push("--agent-decision-source".to_string());
         args.push(
             canonical_agent_decision_source(config.agent_decision_source.as_str())
-                .unwrap_or(BUILTIN_LLM_DECISION_SOURCE)
+                .unwrap_or(PROVIDER_BACKED_DECISION_SOURCE)
                 .to_string(),
         );
         if is_provider_http_mode(config) {

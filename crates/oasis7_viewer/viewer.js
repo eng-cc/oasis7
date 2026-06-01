@@ -1362,8 +1362,8 @@ function createViewerFeedbackModule({
     if (feedback.stage === "error") {
       if (code === "llm_init_failed") {
         description.label = isLocaleZh2(locale) ? "LLM 不可用" : "LLM unavailable";
-        description.summary = isLocaleZh2(locale) ? "当前栈没有可用的 LLM 配置，因此无法开始聊天。" : "Chat cannot start because this stack has no usable LLM configuration.";
-        description.detail = isLocaleZh2(locale) ? "请把 model、base URL 和 API key 写入当前 config.toml 或 OASIS7_LLM_* 环境变量，然后重启 launcher 栈。" : "Add model, base URL, and API key to the active config.toml or OASIS7_LLM_* env, then restart the launcher stack.";
+        description.summary = isLocaleZh2(locale) ? "当前栈没有可用的远程 provider bridge，因此无法开始聊天。" : "Chat cannot start because this stack has no usable remote provider bridge.";
+        description.detail = isLocaleZh2(locale) ? "请确认 launcher 使用 --newapi-user-ref 或等价 provider bearer selector，并且远程 provider bridge 的 /v1/provider/info 可访问。" : "Start the launcher with --newapi-user-ref or an equivalent provider bearer selector, and verify the remote provider bridge /v1/provider/info endpoint.";
         return description;
       }
       if (code === "target_version_not_found") {

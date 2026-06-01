@@ -36,12 +36,11 @@ pub(super) fn removed_old_brand_runtime_live_env(suffix: &str) -> String {
 pub(super) fn lock_test_llm_env() -> std::sync::MutexGuard<'static, ()> {
     let guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::set_var(crate::simulator::ENV_LLM_MODEL, "gpt-4o-mini");
-    std::env::set_var(
-        crate::simulator::ENV_LLM_BASE_URL,
-        "https://api.openai.com/v1",
-    );
-    std::env::set_var(crate::simulator::ENV_LLM_API_KEY, "test-api-key");
+    std::env::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_bridge");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
     guard
 }
 
@@ -51,6 +50,11 @@ pub(super) fn clear_runtime_provider_env() {
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_BACKEND"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_CONTRACT"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_TRANSPORT"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_URL"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_AUTH_TOKEN"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_CONNECT_TIMEOUT_MS"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_PROFILE"),
+        removed_old_brand_runtime_live_env("AGENT_EXECUTION_LANE"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_MODE"),
         removed_old_brand_runtime_live_env("RUNTIME_AGENT_CHAT_ECHO"),
     ];
@@ -59,6 +63,11 @@ pub(super) fn clear_runtime_provider_env() {
         VIEWER_AGENT_PROVIDER_BACKEND_ENV,
         VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
         VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+        VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+        VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+        VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+        VIEWER_AGENT_EXECUTION_LANE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
         RUNTIME_AGENT_CHAT_ECHO_ENV,
     ] {

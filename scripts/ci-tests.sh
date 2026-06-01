@@ -106,10 +106,6 @@ run_oasis7_workspace_support_crate_tests() {
   run_cargo test -p oasis7_client_launcher --bin oasis7_client_launcher
 }
 
-run_oasis7_llm_baseline_fixture_smoke() {
-  run ./scripts/llm-baseline-fixture-smoke.sh
-}
-
 run_provider_remote_https_smoke() {
   run ./scripts/provider-remote-https/letai-provider-cli.test.sh
 }
@@ -167,7 +163,6 @@ run_full_support_tier_tests() {
   run_oasis7_net_tests
   run_oasis7_net_libp2p_tests
   run_oasis7_workspace_support_crate_tests
-  run_oasis7_llm_baseline_fixture_smoke
   run_oasis7_viewer_software_safe_feedback_contract_tests
   run_oasis7_viewer_software_safe_build
   run_cargo test -p oasis7 --features wasmtime --lib --bins

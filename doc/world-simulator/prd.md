@@ -128,7 +128,7 @@
   - SC-20: `oasis7_viewer_live` 必须支持 runtime/world 驱动模式，并在不改 viewer 协议前提下输出可消费的 live 快照与事件。
   - SC-21: runtime 模式必须支持 `LLM/chat/prompt` 控制链路（含鉴权与错误语义），避免与 simulator 模式形成双套体验断裂。
   - SC-22: runtime live 必须补齐高频动作映射与等价回归，并移除 `oasis7_viewer_live` simulator 启动分支，统一 runtime-only 体验。
-  - SC-23: runtime live 必须使用真实 LLM 决策链路（AgentRunner/LlmAgentBehavior），且 LLM 失败时硬失败，不得回退启发式。
+  - SC-23: runtime live 必须使用 provider-backed 决策链路；游戏端 direct LLM/本地模型配置路径已删除，provider 不可用时硬失败并输出可诊断反馈。
   - SC-24: runtime live 必须达到 runtime 事件/快照 100% 覆盖，并允许通过协议扩展输出 DecisionTrace。
   - SC-25: 启动器 Web 端必须支持链上转账提交并保持与 native 一致的成功/拒绝/失败语义。
   - SC-26: 启动器 Web 端必须支持设置中心与反馈入口可用，并保持与 native 一致的操作语义（不再为禁用占位）。
@@ -154,7 +154,7 @@
   - SC-46: `oasis7_game_launcher` / `oasis7_web_launcher` 的运行时路径覆盖 env key（launcher bin、chain runtime bin、viewer/game static dir、web launcher static dir）必须优先迁移到 `OASIS7_*`，同时兼容旧 `OASIS7_*`，避免已有 bundle、shell 脚本与运维环境变量在品牌迁移时失效。
   - SC-47: Viewer 的 3D 配置、theme preset、panel/headless 行为控制与 release profile 脚本中的 `VIEWER_*` env key 必须统一到 `OASIS7_VIEWER_*`，避免渲染调参、无头回归与 operator 预设在品牌迁移后继续依赖旧前缀。
   - SC-48: Viewer operator 脚本中的抓帧、材质巡检与压力测试默认 env 写入必须统一使用 `OASIS7_VIEWER_*`，避免 capture/inspection/stress 自动化继续分叉出旧前缀入口。
-  - SC-49: simulator LLM 配置链路的默认 env key 必须统一到 `OASIS7_LLM_*`；`llm_agent`、agent-scoped goal override、runtime live 测试与长稳脚本不得继续保留旧前缀入口。
+  - SC-49: 游戏端不得再暴露 legacy direct model env 或 direct LLM 配置链路；正式试玩与 runtime live 统一走 provider-backed remote/loopback provider contract。
   - SC-50: runtime live 的 provider / QA chat echo 链路默认 env key 必须优先迁移到 `OASIS7_AGENT_DECISION_SOURCE`、`OASIS7_AGENT_PROVIDER_BACKEND`、`OASIS7_AGENT_PROVIDER_CONTRACT`、`OASIS7_AGENT_PROVIDER_TRANSPORT`、`OASIS7_AGENT_PROVIDER_URL`、`OASIS7_AGENT_PROVIDER_AUTH_TOKEN`、`OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS`、`OASIS7_AGENT_PROVIDER_PROFILE`、`OASIS7_AGENT_EXECUTION_LANE` 与 `OASIS7_RUNTIME_AGENT_CHAT_ECHO`；`OASIS7_AGENT_PROVIDER_MODE` 与 `OASIS7_AGENT_PROVIDER_*` 只保留为兼容 fallback，`oasis7_game_launcher` 注入、runtime_live 读取、software-safe QA 脚本与对应测试不得继续把旧单字段前缀当作唯一入口。
   - SC-51: bundle 产物中的 `run-client.sh` / `run-game.sh` / `run-web-launcher.sh` / `run-chain-runtime.sh` 默认 env 注入与 README 示例必须优先迁移到 `OASIS7_*` / `OASIS7_CHAIN_STORAGE_PROFILE`，同时兼容旧 `OASIS7_*` fallback；bundle-first operator 路径不得继续把旧前缀当作默认口径。
   - SC-52: viewer theme preset `.env` 文件中的默认导出 key 必须统一到 `OASIS7_VIEWER_*`，避免 theme 预设成为 viewer 配置链路里最后一批仍默认写旧前缀的 operator 入口。
@@ -433,7 +433,7 @@
   - AC-51: `software_safe` 相关 Web 入口、auth/bootstrap 与当前仍保留的 panel/headless 控制必须优先读取 `OASIS7_VIEWER_*`；现存 Web 主链路不得因前缀切换而失效。
   - AC-52: `oasis7_viewer` 的 automation、event window 与当前 `software_safe` internal capture/diagnostics 入口必须优先读取 `OASIS7_VIEWER_*`；startup automation 与事件抽样不得因前缀切换而失效。
   - AC-53: 仓库当前不再维护 `capture-viewer-frame`、texture inspector、theme preview 与 `viewer-owr4-stress` 等 3D/视觉 QA 脚本；相关 operator contract 统一删除，不得继续作为活跃入口保留。
-  - AC-54: `simulator/llm_defaults`、`simulator/llm_agent` 与 `scripts/llm-longrun-stress.sh` 必须默认优先读取或写入 `OASIS7_LLM_MODEL`、`OASIS7_LLM_BASE_URL`、`OASIS7_LLM_API_KEY`、`OASIS7_LLM_TIMEOUT_MS`、`OASIS7_LLM_PROMPT_*`、`OASIS7_LLM_DEBUG_MODE`、`OASIS7_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS`；agent-scoped goal override、调试提示与 longrun stress 命令注入不得因前缀切换而失效。
+  - AC-54: 游戏端 direct LLM agent 模块、demo 与 stress 脚本必须删除；launcher、runtime live、client launcher 与测试文档不得再要求或读取 legacy direct model env。
   - AC-55: `viewer/runtime_live/llm_sidecar`、`viewer/runtime_live/control_plane`、`oasis7_game_launcher`、`viewer/runtime_live/tests` 与 `scripts/viewer-software-safe-chat-regression.sh` 必须默认优先读取或写入 `OASIS7_AGENT_DECISION_SOURCE`、`OASIS7_AGENT_PROVIDER_BACKEND`、`OASIS7_AGENT_PROVIDER_CONTRACT`、`OASIS7_AGENT_PROVIDER_TRANSPORT`、`OASIS7_AGENT_PROVIDER_URL`、`OASIS7_AGENT_PROVIDER_AUTH_TOKEN`、`OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS`、`OASIS7_AGENT_PROVIDER_PROFILE`、`OASIS7_AGENT_EXECUTION_LANE` 与 `OASIS7_RUNTIME_AGENT_CHAT_ECHO`；`OASIS7_AGENT_PROVIDER_MODE`、`OASIS7_AGENT_PROVIDER_*` 与对应旧 alias 仅保留兼容 fallback，provider 解析、player_parity 元数据、QA echo 注入与 software-safe Web 回归不得因结构化字段迁移而失效。
   - AC-56: `scripts/build-game-launcher-bundle.sh` 生成的 wrapper 脚本必须默认写入 `OASIS7_GAME_LAUNCHER_BIN`、`OASIS7_GAME_STATIC_DIR`、`OASIS7_CHAIN_RUNTIME_BIN`、`OASIS7_WEB_LAUNCHER_STATIC_DIR` 与 `OASIS7_CHAIN_STORAGE_PROFILE`；README 中的 bundle-first operator 示例不得再把旧前缀作为默认真值。
   - AC-57: `crates/oasis7_viewer/assets/themes/**/presets/*.env` 必须默认导出 `OASIS7_VIEWER_*`；同一主题的 default/glossy/matte 预设都必须完成一致迁移，且 theme preset 仍能被现有 viewer env 解析链路消费。

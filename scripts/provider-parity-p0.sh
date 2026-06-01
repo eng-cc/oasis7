@@ -18,14 +18,14 @@ PROVIDER_AUTH_TOKEN=""
 AGENT_PROVIDER_CONNECT_TIMEOUT_MS=15000
 AGENT_PROVIDER_PROFILE="oasis7_p0_low_freq_npc"
 PROVIDER_EXECUTION_MODE="headless_agent"
-RUN_BUILTIN=1
+RUN_BUILTIN=0
 RUN_PROVIDER=1
 
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/provider-parity-p0.sh [options]
 
-Run a repeatable P0 parity batch for builtin and/or the loopback provider.
+Run a repeatable P0 parity batch for the provider-backed loopback provider.
 This script emits protocol-aligned artifacts under output/provider_parity/<run_id>/.
 
 Options:
@@ -42,12 +42,10 @@ Options:
   --agent-provider-connect-timeout-ms <n>     local provider connect timeout (default: 15000)
   --agent-provider-profile <id>          local provider gameplay profile/skill id
   --execution-mode <mode>                local provider execution mode (default: headless_agent)
-  --builtin-only                        Run only builtin provider
   --provider-only                       Run only the local provider-backed loopback provider
   -h, --help                            Show help
 
 Notes:
-  - builtin runs require the usual builtin LLM env (for example OPENAI_API_KEY).
   - provider runs require a real local provider exposing /v1/provider/info, /health,
     /world-simulator/decision and /feedback.
   - This script prepares T4/T5 parity evidence; it does not auto-sign QA/producer scorecards.
@@ -109,9 +107,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --builtin-only)
-      RUN_BUILTIN=1
-      RUN_PROVIDER=0
-      shift
+      echo "error: --builtin-only has been removed; parity runs must use provider-backed mode" >&2
+      exit 1
       ;;
     --provider-only)
       RUN_BUILTIN=0

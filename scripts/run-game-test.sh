@@ -24,7 +24,16 @@ OUTPUT_DIR=""
 RUN_ID=""
 META_FILE=""
 JSON_READY="0"
-SKIP_LLM_PROVIDER_PREFLIGHT="0"
+SKIP_PROVIDER_PREFLIGHT="0"
+REQUIRE_PLAYABLE_SNAPSHOT="0"
+PLAYABLE_SNAPSHOT_TIMEOUT_SECS=45
+AGENT_PROVIDER_URL="${OASIS7_AGENT_PROVIDER_URL:-https://t2t.oasis7.tech}"
+AGENT_PROVIDER_AUTH_TOKEN="${OASIS7_AGENT_PROVIDER_AUTH_TOKEN:-}"
+NEWAPI_USER_REF="${OASIS7_NEWAPI_USER_REF:-}"
+BRIDGE_USER_ID="${OASIS7_BRIDGE_USER_ID:-}"
+AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS:-15000}"
+AGENT_PROVIDER_PROFILE="${OASIS7_AGENT_PROVIDER_PROFILE:-oasis7_p0_low_freq_npc}"
+AGENT_EXECUTION_LANE="${OASIS7_AGENT_EXECUTION_LANE:-player_parity}"
 
 usage() {
   cat <<'USAGE'
@@ -57,9 +66,25 @@ Options:
   --run-id <id>            Override logical run id used for output dir / chain node id defaults
   --meta-file <path>       Override metadata file path (default: <output-dir>/session.meta)
   --json-ready             Emit one-line JSON ready payload after the stack becomes ready
-  --skip-llm-provider-preflight
-                           Skip the active-LLM provider probe before launcher startup
-  --with-llm               Enable LLM mode (default: enabled; required for gameplay)
+  --require-playable-snapshot
+                           Do not report ready until the primary Web Viewer connects and exposes
+                           a non-empty agents/locations snapshot
+  --playable-snapshot-timeout <secs>
+                           Wait timeout for --require-playable-snapshot (default: 45)
+  --llm-provider-url <url> Remote provider bridge URL (default: https://t2t.oasis7.tech)
+  --newapi-user-ref <ref>  Resolve bearer via remote NewAPI bridge state as newapi_user_ref:<ref>
+  --bridge-user-id <id>    Resolve bearer via remote NewAPI bridge state as bridge_user_id:<id>
+  --agent-provider-auth-token <tok>
+                           Explicit provider bearer token or supported bearer selector
+  --agent-provider-profile <id>
+                           Provider profile (default: oasis7_p0_low_freq_npc)
+  --agent-provider-connect-timeout-ms <ms>
+                           Provider connect timeout (default: 15000)
+  --agent-execution-lane <mode>
+                           Provider execution lane: player_parity|headless_agent (default: player_parity)
+  --skip-provider-preflight
+                           Skip remote provider contract preflight before launcher startup
+  --with-llm               Enable provider-backed LLM mode (default; required for gameplay)
   --no-llm                 Negative-path only; this launcher stack now fails fast without LLM
   -h, --help               Show this help
 USAGE
@@ -121,8 +146,44 @@ while [[ $# -gt 0 ]]; do
       JSON_READY="1"
       shift
       ;;
-    --skip-llm-provider-preflight)
-      SKIP_LLM_PROVIDER_PREFLIGHT="1"
+    --require-playable-snapshot)
+      REQUIRE_PLAYABLE_SNAPSHOT="1"
+      shift
+      ;;
+    --playable-snapshot-timeout)
+      PLAYABLE_SNAPSHOT_TIMEOUT_SECS="${2:-}"
+      shift 2
+      ;;
+    --llm-provider-url|--agent-provider-url)
+      AGENT_PROVIDER_URL="${2:-}"
+      shift 2
+      ;;
+    --newapi-user-ref)
+      NEWAPI_USER_REF="${2:-}"
+      shift 2
+      ;;
+    --bridge-user-id)
+      BRIDGE_USER_ID="${2:-}"
+      shift 2
+      ;;
+    --agent-provider-auth-token)
+      AGENT_PROVIDER_AUTH_TOKEN="${2:-}"
+      shift 2
+      ;;
+    --agent-provider-profile)
+      AGENT_PROVIDER_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --agent-provider-connect-timeout-ms)
+      AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${2:-}"
+      shift 2
+      ;;
+    --agent-execution-lane)
+      AGENT_EXECUTION_LANE="${2:-}"
+      shift 2
+      ;;
+    --skip-provider-preflight)
+      SKIP_PROVIDER_PREFLIGHT="1"
       shift
       ;;
     --chain-enable)
@@ -168,6 +229,53 @@ fi
 
 if [[ -z "$SCENARIO" ]]; then
   echo "error: --scenario cannot be empty" >&2
+  exit 1
+fi
+
+if [[ -z "$AGENT_PROVIDER_URL" ]]; then
+  echo "error: --llm-provider-url cannot be empty" >&2
+  exit 1
+fi
+
+if [[ -z "$AGENT_PROVIDER_PROFILE" ]]; then
+  echo "error: --agent-provider-profile cannot be empty" >&2
+  exit 1
+fi
+
+if ! [[ "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" =~ ^[0-9]+$ ]] || (( AGENT_PROVIDER_CONNECT_TIMEOUT_MS <= 0 )); then
+  echo "error: --agent-provider-connect-timeout-ms must be a positive integer" >&2
+  exit 1
+fi
+
+case "$AGENT_EXECUTION_LANE" in
+  player_parity|headless_agent) ;;
+  *)
+    echo "error: --agent-execution-lane must be player_parity or headless_agent" >&2
+    exit 1
+    ;;
+esac
+
+selector_count=0
+[[ -n "$AGENT_PROVIDER_AUTH_TOKEN" ]] && selector_count=$((selector_count + 1))
+[[ -n "$NEWAPI_USER_REF" ]] && selector_count=$((selector_count + 1))
+[[ -n "$BRIDGE_USER_ID" ]] && selector_count=$((selector_count + 1))
+if (( selector_count > 1 )); then
+  echo "error: choose only one of --agent-provider-auth-token, --newapi-user-ref, or --bridge-user-id" >&2
+  exit 1
+fi
+if [[ -n "$NEWAPI_USER_REF" ]]; then
+  AGENT_PROVIDER_AUTH_TOKEN="newapi_user_ref:${NEWAPI_USER_REF}"
+elif [[ -n "$BRIDGE_USER_ID" ]]; then
+  AGENT_PROVIDER_AUTH_TOKEN="bridge_user_id:${BRIDGE_USER_ID}"
+fi
+if [[ -z "$AGENT_PROVIDER_AUTH_TOKEN" && "$SKIP_PROVIDER_PREFLIGHT" != "1" ]]; then
+  echo "error: provider-backed playtest requires --newapi-user-ref, --bridge-user-id, or --agent-provider-auth-token" >&2
+  echo "hint: set OASIS7_NEWAPI_USER_REF for the cloud NewAPI bridge path, or pass --skip-provider-preflight only for mocked/negative stack diagnostics" >&2
+  exit 1
+fi
+
+if ! [[ "$PLAYABLE_SNAPSHOT_TIMEOUT_SECS" =~ ^[0-9]+$ ]] || (( PLAYABLE_SNAPSHOT_TIMEOUT_SECS <= 0 )); then
+  echo "error: --playable-snapshot-timeout must be a positive integer" >&2
   exit 1
 fi
 
@@ -217,7 +325,7 @@ fi
 
 if [[ "$ENABLE_LLM" != "1" ]]; then
   echo "error: ./scripts/run-game-test.sh now wraps oasis7_game_launcher, which requires active LLM access" >&2
-  echo "hint: use env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm ... only for direct observer/debug diagnostics" >&2
+  echo "hint: use env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm ... only for raw observer/debug diagnostics" >&2
   exit 1
 fi
 
@@ -324,6 +432,63 @@ wait_for_tcp_listener_ready() {
   return 1
 }
 
+probe_playable_viewer_state() {
+  local session=$1
+  ab_eval "$session" '(() => {
+    const state = window.__AW_TEST__?.getState?.() ?? null;
+    const snapshot = state?.snapshot ?? null;
+    const agents = snapshot?.model?.agents ? Object.keys(snapshot.model.agents).length : 0;
+    const locations = snapshot?.model?.locations ? Object.keys(snapshot.model.locations).length : 0;
+    return {
+      hasTestApi: typeof window.__AW_TEST__ === "object",
+      connectionStatus: state?.connectionStatus ?? null,
+      agents,
+      locations,
+      blockerKind: state?.gameplaySummary?.blockerKind ?? null,
+      lastError: state?.lastError ?? null,
+    };
+  })()'
+}
+
+wait_for_playable_snapshot_ready() {
+  local url=$1
+  local timeout_secs=$2
+  local launcher_pid=${3:-}
+  local out_path=$4
+  local session="run-game-test-ready-${RUN_ID}"
+  local probe_state='null'
+  local exit_code=1
+  local i
+
+  ab_require
+  ab_run "$session" close >/dev/null 2>&1 || true
+  trap 'ab_run "$session" close >/dev/null 2>&1 || true' RETURN
+  ab_open "$session" 0 "$url"
+  ab_cmd "$session" wait --load networkidle >/dev/null 2>&1 || true
+
+  for ((i = 0; i < timeout_secs; i++)); do
+    if ! ensure_launcher_alive "$launcher_pid"; then
+      exit_code=2
+      break
+    fi
+    probe_state=$(probe_playable_viewer_state "$session")
+    json_to_file "$probe_state" "$out_path"
+    if [[ "$(json_get "$probe_state" hasTestApi)" == "true" \
+      && "$(json_get "$probe_state" connectionStatus)" == "connected" \
+      && "$(json_get "$probe_state" agents)" =~ ^[0-9]+$ \
+      && "$(json_get "$probe_state" locations)" =~ ^[0-9]+$ \
+      && $(json_get "$probe_state" agents) -gt 0 \
+      && $(json_get "$probe_state" locations) -gt 0 ]]; then
+      exit_code=0
+      break
+    fi
+    sleep 1
+  done
+
+  printf '%s\n' "$probe_state"
+  return "$exit_code"
+}
+
 tail_logs_on_error() {
   echo "--- oasis7_viewer_live.log (tail) ---" >&2
   tail -n 80 "$WORLD_LOG" >&2 || true
@@ -333,15 +498,32 @@ tail_logs_on_error() {
   fi
 }
 
-tail_probe_logs_on_error() {
+run_provider_contract_preflight() {
+  local provider_url="$1"
+  local auth_token="$2"
+  local timeout_ms="$3"
+  local out_json="$4"
+  local out_log="$5"
+  local base_url="${provider_url%/}"
+  local timeout_secs=$(( (timeout_ms + 999) / 1000 ))
+  local curl_args=(-fsS --connect-timeout "$timeout_secs" --max-time "$timeout_secs")
+
+  if [[ -n "$auth_token" ]]; then
+    curl_args+=(-H "Authorization: Bearer ${auth_token}")
+  fi
+
+  curl "${curl_args[@]}" "${base_url}/v1/provider/info" >"$out_json" 2>"$out_log"
+}
+
+tail_provider_preflight_logs_on_error() {
   local probe_json="$1"
   local probe_log="$2"
   if [[ -f "$probe_json" ]]; then
-    echo "--- oasis7_llm_provider_probe.json ---" >&2
+    echo "--- provider-contract-preflight.json ---" >&2
     cat "$probe_json" >&2 || true
   fi
   if [[ -s "$probe_log" ]]; then
-    echo "--- oasis7_llm_provider_probe.log ---" >&2
+    echo "--- provider-contract-preflight.log ---" >&2
     tail -n 80 "$probe_log" >&2 || true
   fi
 }
@@ -392,8 +574,9 @@ fi
 
 WORLD_LOG="$OUTPUT_DIR/oasis7_viewer_live.log"
 WEB_LOG="$OUTPUT_DIR/web_viewer.log"
-LLM_PROVIDER_PROBE_JSON="$OUTPUT_DIR/oasis7_llm_provider_probe.json"
-LLM_PROVIDER_PROBE_LOG="$OUTPUT_DIR/oasis7_llm_provider_probe.log"
+PROVIDER_PREFLIGHT_JSON="$OUTPUT_DIR/provider-contract-preflight.json"
+PROVIDER_PREFLIGHT_LOG="$OUTPUT_DIR/provider-contract-preflight.log"
+PLAYABLE_SNAPSHOT_STATE_JSON="$OUTPUT_DIR/playable-snapshot-state.json"
 HOSTED_ACCOUNT_STORE_PATH="$OUTPUT_DIR/hosted-account-store.json"
 LAUNCHER_ENV_DEFAULTS=()
 while IFS= read -r env_default; do
@@ -444,22 +627,38 @@ if [[ "$CHAIN_ENABLED" == "1" ]]; then
 else
   WORLD_ARGS+=(--chain-disable)
 fi
-WORLD_ARGS+=(--with-llm)
+WORLD_ARGS+=(
+  --with-llm
+  --agent-decision-source provider_backed
+  --agent-provider-backend provider_local_bridge
+  --agent-provider-contract worldsim_provider_v1
+  --agent-provider-transport remote_https
+  --agent-provider-url "$AGENT_PROVIDER_URL"
+  --agent-provider-connect-timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
+  --agent-provider-profile "$AGENT_PROVIDER_PROFILE"
+  --agent-execution-lane "$AGENT_EXECUTION_LANE"
+)
+if [[ -n "$AGENT_PROVIDER_AUTH_TOKEN" ]]; then
+  WORLD_ARGS+=(--agent-provider-auth-token "$AGENT_PROVIDER_AUTH_TOKEN")
+fi
+
+if [[ "$SKIP_PROVIDER_PREFLIGHT" != "1" ]]; then
+  if ! run_provider_contract_preflight \
+    "$AGENT_PROVIDER_URL" \
+    "$AGENT_PROVIDER_AUTH_TOKEN" \
+    "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" \
+    "$PROVIDER_PREFLIGHT_JSON" \
+    "$PROVIDER_PREFLIGHT_LOG"; then
+    echo "error: remote provider contract preflight failed before launcher startup" >&2
+    echo "hint: verify --llm-provider-url and bridge auth selector; use --skip-provider-preflight only for mocked/negative stack diagnostics" >&2
+    tail_provider_preflight_logs_on_error "$PROVIDER_PREFLIGHT_JSON" "$PROVIDER_PREFLIGHT_LOG"
+    exit 1
+  fi
+fi
 
 if [[ -n "$BUNDLE_DIR" ]]; then
   LAUNCH_MODE="bundle"
   LAUNCH_CMD="$BUNDLE_DIR/run-game.sh"
-  if [[ "$SKIP_LLM_PROVIDER_PREFLIGHT" != "1" ]]; then
-    if ! (
-      cd "$BUNDLE_DIR"
-      "$ROOT_DIR/scripts/check-active-llm-provider.sh"
-    ) >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"; then
-      echo "error: active LLM provider preflight failed before launcher startup" >&2
-      echo "hint: rerun with --skip-llm-provider-preflight only when intentionally validating blocked/failure behavior after stack bootstrap" >&2
-      tail_probe_logs_on_error "$LLM_PROVIDER_PROBE_JSON" "$LLM_PROVIDER_PROBE_LOG"
-      exit 1
-    fi
-  fi
   (
     cd "$BUNDLE_DIR"
     env "${LAUNCHER_ENV_DEFAULTS[@]}" "$BUNDLE_DIR/run-game.sh" "${WORLD_ARGS[@]}" >"$WORLD_LOG" 2>&1
@@ -467,7 +666,6 @@ if [[ -n "$BUNDLE_DIR" ]]; then
 else
   LAUNCH_MODE="source"
   SOURCE_MODE_TARGET_DIR="$(resolve_source_mode_target_dir)"
-  SOURCE_MODE_PROBE_BIN="$SOURCE_MODE_TARGET_DIR/oasis7_llm_provider_probe"
   SOURCE_MODE_LAUNCHER_BIN="$SOURCE_MODE_TARGET_DIR/oasis7_game_launcher"
   SOURCE_MODE_VIEWER_LIVE_BIN="$SOURCE_MODE_TARGET_DIR/oasis7_viewer_live"
   SOURCE_MODE_CHAIN_RUNTIME_BIN="$SOURCE_MODE_TARGET_DIR/oasis7_chain_runtime"
@@ -475,8 +673,6 @@ else
     build
     -p
     oasis7
-    --bin
-    oasis7_llm_provider_probe
     --bin
     oasis7_game_launcher
     --bin
@@ -486,22 +682,10 @@ else
     SOURCE_BUILD_ARGS+=(--bin oasis7_chain_runtime)
   fi
   oasis7_cargo_dev "${SOURCE_BUILD_ARGS[@]}"
-  [[ -x "$SOURCE_MODE_PROBE_BIN" ]] || { echo "error: built probe binary missing: $SOURCE_MODE_PROBE_BIN" >&2; exit 1; }
   [[ -x "$SOURCE_MODE_LAUNCHER_BIN" ]] || { echo "error: built launcher binary missing: $SOURCE_MODE_LAUNCHER_BIN" >&2; exit 1; }
   [[ -x "$SOURCE_MODE_VIEWER_LIVE_BIN" ]] || { echo "error: built viewer live binary missing: $SOURCE_MODE_VIEWER_LIVE_BIN" >&2; exit 1; }
   if [[ "$CHAIN_ENABLED" == "1" ]]; then
     [[ -x "$SOURCE_MODE_CHAIN_RUNTIME_BIN" ]] || { echo "error: built chain runtime binary missing: $SOURCE_MODE_CHAIN_RUNTIME_BIN" >&2; exit 1; }
-  fi
-  if [[ "$SKIP_LLM_PROVIDER_PREFLIGHT" != "1" ]]; then
-    if ! (
-      cd "$ROOT_DIR"
-      "$SOURCE_MODE_PROBE_BIN"
-    ) >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"; then
-      echo "error: active LLM provider preflight failed before launcher startup" >&2
-      echo "hint: rerun with --skip-llm-provider-preflight only when intentionally validating blocked/failure behavior after stack bootstrap" >&2
-      tail_probe_logs_on_error "$LLM_PROVIDER_PROBE_JSON" "$LLM_PROVIDER_PROBE_LOG"
-      exit 1
-    fi
   fi
   LAUNCH_CMD="$SOURCE_MODE_LAUNCHER_BIN"
   (
@@ -534,9 +718,17 @@ INFO
   echo "LAUNCH_MODE=$LAUNCH_MODE"
   echo "LAUNCH_CMD=$LAUNCH_CMD"
   echo "BUNDLE_DIR=$BUNDLE_DIR"
-  echo "LLM_PROVIDER_PREFLIGHT_SKIPPED=$SKIP_LLM_PROVIDER_PREFLIGHT"
-  echo "LLM_PROVIDER_PROBE_JSON=$LLM_PROVIDER_PROBE_JSON"
-  echo "LLM_PROVIDER_PROBE_LOG=$LLM_PROVIDER_PROBE_LOG"
+  echo "AGENT_DECISION_SOURCE=provider_backed"
+  echo "AGENT_PROVIDER_TRANSPORT=remote_https"
+  echo "AGENT_PROVIDER_URL=$AGENT_PROVIDER_URL"
+  echo "AGENT_PROVIDER_PROFILE=$AGENT_PROVIDER_PROFILE"
+  echo "AGENT_EXECUTION_LANE=$AGENT_EXECUTION_LANE"
+  echo "PROVIDER_PREFLIGHT_SKIPPED=$SKIP_PROVIDER_PREFLIGHT"
+  echo "PROVIDER_PREFLIGHT_JSON=$PROVIDER_PREFLIGHT_JSON"
+  echo "PROVIDER_PREFLIGHT_LOG=$PROVIDER_PREFLIGHT_LOG"
+  echo "REQUIRE_PLAYABLE_SNAPSHOT=$REQUIRE_PLAYABLE_SNAPSHOT"
+  echo "PLAYABLE_SNAPSHOT_TIMEOUT_SECS=$PLAYABLE_SNAPSHOT_TIMEOUT_SECS"
+  echo "PLAYABLE_SNAPSHOT_STATE_JSON=$PLAYABLE_SNAPSHOT_STATE_JSON"
   echo "HOSTED_ACCOUNT_STORE_PATH=$HOSTED_ACCOUNT_STORE_PATH"
   echo "STACK_READY=0"
 } >"$META_FILE"
@@ -574,6 +766,26 @@ GAME_URL="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?ws=ws://${URL_WS_HOST}:${WEB
 SOFTWARE_SAFE_VIEWER_URL_ZH="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=software_safe&ws=ws://${URL_WS_HOST}:${WEB_BRIDGE_PORT}&test_api=1&locale=zh"
 SOFTWARE_SAFE_VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=software_safe&ws=ws://${URL_WS_HOST}:${WEB_BRIDGE_PORT}&test_api=1&locale=en"
 
+if [[ "$REQUIRE_PLAYABLE_SNAPSHOT" == "1" ]]; then
+  if ! playable_probe_state=$(
+    wait_for_playable_snapshot_ready \
+      "$GAME_URL" \
+      "$PLAYABLE_SNAPSHOT_TIMEOUT_SECS" \
+      "$LAUNCHER_PID" \
+      "$PLAYABLE_SNAPSHOT_STATE_JSON"
+  ); then
+    if ensure_launcher_alive "$LAUNCHER_PID"; then
+      echo "error: viewer stack reached HTTP/bridge ready, but did not expose a non-empty playable snapshot in time" >&2
+    else
+      echo "error: launcher exited before a playable snapshot became ready" >&2
+    fi
+    echo "--- playable snapshot readiness state ---" >&2
+    cat "$PLAYABLE_SNAPSHOT_STATE_JSON" >&2 || true
+    tail_logs_on_error
+    exit 1
+  fi
+fi
+
 {
   echo "RUN_ID=$RUN_ID"
   echo "OUTPUT_DIR=$OUTPUT_DIR"
@@ -590,9 +802,18 @@ SOFTWARE_SAFE_VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mo
   echo "LAUNCH_MODE=$LAUNCH_MODE"
   echo "LAUNCH_CMD=$LAUNCH_CMD"
   echo "BUNDLE_DIR=$BUNDLE_DIR"
-  echo "LLM_PROVIDER_PREFLIGHT_SKIPPED=$SKIP_LLM_PROVIDER_PREFLIGHT"
-  echo "LLM_PROVIDER_PROBE_JSON=$LLM_PROVIDER_PROBE_JSON"
-  echo "LLM_PROVIDER_PROBE_LOG=$LLM_PROVIDER_PROBE_LOG"
+  echo "AGENT_DECISION_SOURCE=provider_backed"
+  echo "AGENT_PROVIDER_TRANSPORT=remote_https"
+  echo "AGENT_PROVIDER_URL=$AGENT_PROVIDER_URL"
+  echo "AGENT_PROVIDER_PROFILE=$AGENT_PROVIDER_PROFILE"
+  echo "AGENT_EXECUTION_LANE=$AGENT_EXECUTION_LANE"
+  echo "PROVIDER_PREFLIGHT_SKIPPED=$SKIP_PROVIDER_PREFLIGHT"
+  echo "PROVIDER_PREFLIGHT_JSON=$PROVIDER_PREFLIGHT_JSON"
+  echo "PROVIDER_PREFLIGHT_LOG=$PROVIDER_PREFLIGHT_LOG"
+  echo "REQUIRE_PLAYABLE_SNAPSHOT=$REQUIRE_PLAYABLE_SNAPSHOT"
+  echo "PLAYABLE_SNAPSHOT_TIMEOUT_SECS=$PLAYABLE_SNAPSHOT_TIMEOUT_SECS"
+  echo "PLAYABLE_SNAPSHOT_STATE_JSON=$PLAYABLE_SNAPSHOT_STATE_JSON"
+  echo "PLAYABLE_SNAPSHOT_READY=$REQUIRE_PLAYABLE_SNAPSHOT"
   echo "HOSTED_ACCOUNT_STORE_PATH=$HOSTED_ACCOUNT_STORE_PATH"
   echo "STACK_READY=1"
   echo "GAME_URL=$GAME_URL"
@@ -642,7 +863,9 @@ Game test stack is ready.
 - Chain enabled: $CHAIN_ENABLED
 - Chain node id: ${CHAIN_NODE_ID:-disabled}
 - Chain status bind: ${CHAIN_STATUS_BIND_ADDR:-disabled}
-- LLM provider preflight: $LLM_PROVIDER_PROBE_JSON
+- LLM decision source: provider_backed remote_https
+- Provider URL: $AGENT_PROVIDER_URL
+- Provider preflight: $PROVIDER_PREFLIGHT_JSON
 
 Recommended use:
 - producer/release playtests: pass --bundle-dir <bundle>

@@ -24,15 +24,15 @@ const core = await import("../software_safe_src/legacy_core.js");
     kind: "chat",
     stage: "error",
     effect: "llm_init_failed",
-    reason: "llm init failed for agent-0: llm config error: missing env variable: OASIS7_LLM_MODEL",
+    reason: "llm init failed for agent-0: provider-backed runtime requires a reachable remote provider bridge",
     response: {
       code: "llm_init_failed",
-      message: "llm init failed for agent-0: llm config error: missing env variable: OASIS7_LLM_MODEL",
+      message: "llm init failed for agent-0: provider-backed runtime requires a reachable remote provider bridge",
     },
   });
   assert.equal(display.label, "LLM unavailable");
-  assert.match(display.summary, /no usable LLM configuration/i);
-  assert.match(display.detail, /config\.toml|OASIS7_LLM_/);
+  assert.match(display.summary, /remote provider bridge/i);
+  assert.match(display.detail, /newapi-user-ref|provider bearer selector/i);
 }
 
 {
@@ -47,7 +47,7 @@ const core = await import("../software_safe_src/legacy_core.js");
     },
   }, "zh");
   assert.equal(display.label, "LLM 不可用");
-  assert.match(display.summary, /没有可用的 LLM 配置/);
+  assert.match(display.summary, /远程 provider bridge/);
 }
 
 {
@@ -380,14 +380,14 @@ const core = await import("../software_safe_src/legacy_core.js");
           label: "Advance 1 step",
           protocol_action: "live_control.step",
           target_agent_id: null,
-          disabled_reason: "missing env variable: OASIS7_LLM_MODEL",
+          disabled_reason: "remote provider bridge unavailable",
         },
         {
           action_id: "resume_play",
           label: "Resume live play",
           protocol_action: "live_control.play",
           target_agent_id: null,
-          disabled_reason: "missing env variable: OASIS7_LLM_MODEL",
+          disabled_reason: "remote provider bridge unavailable",
         },
         {
           action_id: "request_snapshot",
@@ -408,7 +408,7 @@ const core = await import("../software_safe_src/legacy_core.js");
   const feedback = core.sendControl("step");
   assert.equal(feedback.accepted, false);
   assert.equal(feedback.stage, "blocked");
-  assert.equal(feedback.reason, "missing env variable: OASIS7_LLM_MODEL");
+  assert.equal(feedback.reason, "remote provider bridge unavailable");
   assert.match(feedback.effect, /control blocked by gameplay gate/i);
   assert.equal(feedback.hint, "Enable LLM access before retrying world controls.");
 }

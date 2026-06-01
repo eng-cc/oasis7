@@ -165,36 +165,6 @@ impl LiveWorld {
                     decision_trace: None,
                 })
             }
-            LiveDriver::Llm(runner) => {
-                if self.llm_decision_mailbox == 0 {
-                    return Ok(LiveStepResult {
-                        event: None,
-                        decision_trace: None,
-                    });
-                }
-                self.llm_decision_mailbox = self.llm_decision_mailbox.saturating_sub(1);
-                let tick_result = runner.tick_decide_only(&mut self.kernel);
-                sync_llm_runner_long_term_memory(&mut self.kernel, runner);
-                let mut decision_trace = None;
-                if let Some(result) = tick_result {
-                    decision_trace = result.decision_trace;
-                    if let AgentDecision::Act(action) = result.decision {
-                        self.llm_decision_mailbox = self.llm_decision_mailbox.saturating_add(1);
-                        if let Some(bridge) = self.consensus_bridge.as_mut() {
-                            bridge.submit_action(
-                                action,
-                                ActionSubmitter::Agent {
-                                    agent_id: result.agent_id,
-                                },
-                            )?;
-                        }
-                    }
-                }
-                Ok(LiveStepResult {
-                    event: None,
-                    decision_trace,
-                })
-            }
         }
     }
 
@@ -221,20 +191,7 @@ impl LiveWorld {
         })?;
         let action_execution_elapsed = action_execution_started_at.elapsed();
 
-        if let LiveDriver::Llm(runner) = &mut self.driver {
-            if let ActionSubmitter::Agent { agent_id } = &submitter {
-                let success = !matches!(event.kind, WorldEventKind::ActionRejected { .. });
-                let action_result = ActionResult {
-                    action,
-                    action_id,
-                    success,
-                    event: event.clone(),
-                };
-                runner.record_external_action_execution_duration(action_execution_elapsed);
-                let _ = runner.notify_action_result(agent_id.as_str(), &action_result);
-            }
-            sync_llm_runner_long_term_memory(&mut self.kernel, runner);
-        }
+        let _ = (action_execution_elapsed, action_id);
 
         Ok(event)
     }

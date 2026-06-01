@@ -1,26 +1,12 @@
-# oasis7 Simulator：LLM Prompt ModuleCall Effect/Receipt 可回放链路（项目管理文档）
+# Retired Direct Model Path Project
 
-- 对应设计文档: `doc/world-simulator/llm/llm-prompt-effect-receipt.design.md`
-- 对应需求文档: `doc/world-simulator/llm/llm-prompt-effect-receipt.prd.md`
+Paired PRD: `doc/world-simulator/llm/llm-prompt-effect-receipt.prd.md`.
 
-审计轮次: 5
-## 任务拆解（含 PRD-ID 映射）
-- [x] LPER1 输出设计文档（`doc/world-simulator/llm/llm-prompt-effect-receipt.prd.md`）
-- [x] LPER2 输出项目管理文档（本文件）
-- [x] LPER3 扩展 `AgentDecisionTrace`（intent/receipt 结构化字段）
-- [x] LPER4 扩展 `WorldEventKind`（LlmEffectQueued/LlmReceiptAppended）
-- [x] LPER5 在 `LlmAgentBehavior` 生成 module_call intent/receipt
-- [x] LPER6 在 `AgentRunner` 将 trace 事件写入 `kernel.journal`
-- [x] LPER7 补充单元测试（链路与序列化）
-- [x] LPER8 回顾文档状态、补 devlog、运行测试并收口
+## 任务拆解
+- Retired: obsolete game-side direct model work is no longer active.
 
 ## 依赖
-- `crates/oasis7/src/simulator/agent.rs`
-- `crates/oasis7/src/simulator/kernel/types.rs`
-- `crates/oasis7/src/simulator/runner.rs`
-- `crates/oasis7/src/simulator/llm_agent.rs`
+- Current dependency: provider-backed remote bridge contract.
 
 ## 状态
-- 当前阶段：LPER8（已收口，viewer 集成兼容已补齐）
-- 下一步：将 simulator 侧 `llm.prompt.module_call` 与 runtime 统一到共享 effect schema
-- 最近更新：补齐 oasis7_viewer 对新增 trace/event 字段的兼容并通过全仓测试（2026-02-09）
+- Retired tombstone retained for governance references.

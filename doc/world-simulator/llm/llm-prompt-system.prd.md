@@ -1,96 +1,18 @@
-# oasis7 Simulator：Agent-LLM Prompt 模块交互系统（设计文档）
+# Retired Direct Model Path Document
 
-- 对应设计文档: `doc/world-simulator/llm/llm-prompt-system.design.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-prompt-system.project.md`
+Paired project: `doc/world-simulator/llm/llm-prompt-system.project.md`.
 
-审计轮次: 5
+## 目标
+Retire the obsolete game-side direct model path and keep this path only as a governance tombstone.
 
-## 1. Executive Summary
-- 构建一套可扩展的 Agent-LLM Prompt 交互机制，让 LLM 不只“看见观测”，还能通过机器人模块按需查询上下文。
-- 支持 LLM 通过模块获取：
-  - 环境信息（当前观测）
-  - 记忆信息（短期记忆 + 长期记忆，类人脑分层）
-  - Agent 可用模块清单（知道“自己有什么能力可调”）
-- 为每个 Agent 增加外部可配置目标：短期目标、长期目标，并将其拼接进 system prompt。
-- 保持稳定性：模块调用协议异常、解析失败、调用超限时都安全降级为 `Wait`。
+## 范围
+No active implementation, operator workflow, or playtest runbook should depend on this retired document.
 
-## 2. User Experience & Functionality
+## 接口 / 数据
+Current gameplay uses provider-backed agent decisions through the remote provider bridge.
 
-### In Scope
-- 扩展 `LlmAgentConfig`，增加目标配置与模块调用轮次限制。
-- 在 `LlmAgentBehavior` 内新增 Prompt 模块交互会话：
-  - LLM 输出 `module_call` 请求
-  - 系统执行模块并回填结果
-  - LLM 基于结果继续决策
-- 将 `AgentMemory` 实际接入 LLM 行为循环，形成可查询的短期/长期记忆。
-- system prompt 模板化拼接：基础 prompt + 短期目标 + 长期目标 + 模块协议。
-- 补充单元测试（配置读取、目标拼接、模块调用闭环、超限降级）。
+## 里程碑
+Retired during MVP playtest readiness hardening.
 
-### Out of Scope
-- 引入真实 function calling/tool calling 协议（本期维持 JSON 协议）。
-- 向 runtime effect/receipt 持久化完整模块调用轨迹。
-- 语义检索（embedding）与向量数据库记忆检索。
-- 多模型路由、成本预算、复杂重试编排。
-
-## 3. AI System Requirements (If Applicable)
-- N/A: 本专题不新增 AI 专属要求。
-
-## 4. Technical Specifications
-
-### 配置项（`config.toml` 或同名环境变量）
-- 文件内（推荐）：
-  - 根级选择项：`model` / `model_provider` / `profile`
-  - `[model_providers.<name>]`：`base_url` / `auth_token`
-  - `[profiles.<name>]`：`model` / `model_provider`
-  - `[llm]`：
-    - `timeout_ms` / `system_prompt`
-    - `short_term_goal` / `long_term_goal`
-    - `max_module_calls`（每次决策最大模块调用轮次）
-    - `max_decision_steps` / `max_repair_rounds`
-    - `prompt_max_history_items` / `prompt_profile`
-    - `force_replan_after_same_action` / `harvest_max_amount_cap`
-    - `execute_until_auto_reenter_ticks` / `debug_mode`
-  - Agent 级覆盖（可选）：
-    - `[llm.agent_overrides.<AGENT_ID_NORMALIZED>]`
-    - `short_term_goal` / `long_term_goal`
-    - `AGENT_ID_NORMALIZED` 为大写+非字母数字转下划线（如 `agent-1` -> `AGENT_1`）。
-- 环境变量（回退/注入）：
-  - 使用 `OASIS7_LLM_*` 与 `OASIS7_LLM_*_<AGENT_ID_NORMALIZED>`。
-
-### Prompt 交互协议（JSON）
-- 模块调用：
-  - `{"type":"module_call","module":"memory.short_term.recent","args":{"limit":5}}`
-- 最终决策：
-  - `{"decision":"wait"}`
-  - `{"decision":"wait_ticks","ticks":3}`
-  - `{"decision":"move_agent","to":"loc-2"}`
-  - `{"decision":"harvest_radiation","max_amount":20}`
-
-### 机器人模块（内置）
-- `agent.modules.list`
-  - 返回模块清单、用途、参数约定。
-- `environment.current_observation`
-  - 返回当前 Observation（当前 tick 的环境快照）。
-- `memory.short_term.recent`
-  - 返回短期记忆最近 N 条。
-- `memory.long_term.search`
-  - 按关键词检索长期记忆（无关键词时返回高重要度记忆）。
-
-### 记忆接入策略
-- `decide` 前记录本轮 observation 摘要到短期记忆。
-- `decide` 后记录决策到短期记忆。
-- `on_action_result` 记录动作执行结果；失败动作会进入长期记忆索引，便于后续检索。
-
-## 5. Risks & Roadmap
-- M1：完成文档与配置模型扩展（目标项 + 模块调用上限）。
-- M2：完成 Prompt 模块交互主流程（module_call → 模块结果 → 决策）。
-- M3：完成记忆接入与测试，更新 README / 示例配置 / 项目状态。
-
-### Technical Risks
-- **输出协议漂移**：LLM 输出非协议 JSON；通过严格解析与降级缓解。
-- **调用轮次膨胀**：LLM反复调用模块导致开销上升；通过 `max_module_calls` 限制。
-- **记忆噪声累积**：长期记忆质量下降；本期仅提供基础检索，后续可引入摘要压缩与重要度重评分。
-- **配置复杂性提升**：Agent 级覆盖键较多；通过“全局默认 + 可选覆盖”降低接入门槛。
-
-## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+## 风险
+Do not reintroduce client-side model configuration from this historical path.

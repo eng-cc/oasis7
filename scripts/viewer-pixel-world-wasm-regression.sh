@@ -202,7 +202,7 @@ trap cleanup EXIT
 game_url="$provided_url"
 if [[ -z "$game_url" ]]; then
   run_log="$out_dir/run-game-test.log"
-  ./scripts/run-game-test.sh --skip-llm-provider-preflight "${run_game_test_args[@]}" >"$run_log" 2>&1 &
+  ./scripts/run-game-test.sh --skip-provider-preflight "${run_game_test_args[@]}" >"$run_log" 2>&1 &
   launcher_pid=$!
   deadline=$((SECONDS + startup_timeout_secs))
   while (( SECONDS < deadline )); do
@@ -216,7 +216,7 @@ if not path.exists():
 text = path.read_text(encoding="utf-8", errors="ignore")
 matches = re.findall(r"(http://[^\s]+)", text)
 for candidate in reversed(matches):
-    candidate = candidate.rstrip(')"\'')
+    candidate = candidate.rstrip(")\"'")
     if "test_api=1" in candidate and "ws=" in candidate:
         print(candidate)
         raise SystemExit(0)

@@ -1,30 +1,16 @@
 use super::*;
 
-pub(super) fn env_requests_provider_backend() -> bool {
-    named_env_var_any(&[
-        VIEWER_AGENT_DECISION_SOURCE_ENV,
-        VIEWER_AGENT_PROVIDER_MODE_ENV,
-    ])
-    .map(|value| value.trim().to_string())
-    .as_deref()
-    .and_then(canonical_agent_decision_source)
-    .is_some_and(|value| value == PROVIDER_BACKED_DECISION_SOURCE)
-}
-
 pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
 ) -> Result<Option<ProviderDecisionSettings>, String> {
     let decision_source = named_env_var_any(&[
         VIEWER_AGENT_DECISION_SOURCE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
     ])
-    .unwrap_or_default();
+    .unwrap_or_else(|| PROVIDER_BACKED_DECISION_SOURCE.to_string());
     let decision_source = decision_source.trim();
-    if decision_source.is_empty() || decision_source == BUILTIN_LLM_DECISION_SOURCE {
-        return Ok(None);
-    }
     let Some(_) = canonical_agent_decision_source(decision_source) else {
         return Err(format!(
-            "unsupported agent decision source `{decision_source}`; expected builtin_llm or provider_backed"
+            "unsupported agent decision source `{decision_source}`; expected provider_backed"
         ));
     };
 
@@ -52,7 +38,7 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
         VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
     ])
-    .unwrap_or_else(|| LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string());
+    .unwrap_or_else(|| REMOTE_HTTPS_PROVIDER_TRANSPORT.to_string());
     let Some(_) = canonical_agent_provider_transport(transport.as_str()) else {
         return Err(format!(
             "unsupported agent provider transport `{transport}`; expected loopback_http or remote_https"
@@ -177,7 +163,6 @@ pub(super) fn provider_phase1_memory_summary() -> String {
 
 fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {
     match raw.trim() {
-        BUILTIN_LLM_DECISION_SOURCE => Some(BUILTIN_LLM_DECISION_SOURCE),
         PROVIDER_BACKED_DECISION_SOURCE
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(PROVIDER_BACKED_DECISION_SOURCE),

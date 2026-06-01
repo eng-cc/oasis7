@@ -1,12 +1,12 @@
 use super::*;
 
 #[test]
-fn provider_settings_from_env_defaults_to_none() {
+fn provider_settings_from_env_requires_provider_url_by_default() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    let settings =
-        super::control_plane::runtime_provider_settings_from_env().expect("settings parse");
-    assert_eq!(settings, None);
+    let err = super::control_plane::runtime_provider_settings_from_env()
+        .expect_err("provider-backed runtime now requires a provider URL");
+    assert!(err.contains("OASIS7_AGENT_PROVIDER_URL"));
 }
 
 #[test]
@@ -87,8 +87,8 @@ fn provider_settings_from_env_rejects_removed_old_brand_prefix() {
         "removed-old-brand-token",
     );
 
-    let settings =
-        super::control_plane::runtime_provider_settings_from_env().expect("settings parse");
-    assert_eq!(settings, None);
+    let err = super::control_plane::runtime_provider_settings_from_env()
+        .expect_err("removed-old-brand env must not configure provider settings");
+    assert!(err.contains("OASIS7_AGENT_PROVIDER_URL"));
     clear_runtime_provider_env();
 }

@@ -7,21 +7,12 @@ use oasis7_node::{
 use std::io::{BufRead, BufReader, BufWriter};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex, OnceLock};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 #[path = "tests_auth.rs"]
 mod tests_auth;
-
-fn set_test_llm_env() {
-    std::env::set_var(crate::simulator::ENV_LLM_MODEL, "gpt-4o-mini");
-    std::env::set_var(
-        crate::simulator::ENV_LLM_BASE_URL,
-        "https://api.openai.com/v1",
-    );
-    std::env::set_var(crate::simulator::ENV_LLM_API_KEY, "test-api-key");
-}
 
 fn test_signer(seed: u8) -> (String, String) {
     let private_key = [seed; 32];
@@ -222,27 +213,8 @@ fn live_server_config_supports_llm_mode() {
     assert_eq!(script_config.decision_mode, ViewerLiveDecisionMode::Script);
 }
 
-fn viewer_live_llm_timeout_env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
 
-#[test]
-fn viewer_live_llm_timeout_defaults_to_trust_floor_budget() {
-    let _guard = viewer_live_llm_timeout_env_lock().lock().expect("env lock");
-    std::env::remove_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS");
-    assert_eq!(resolve_viewer_live_llm_timeout_ms(180_000), 30_000);
-    assert_eq!(resolve_viewer_live_llm_timeout_ms(8_000), 8_000);
-}
 
-#[test]
-fn viewer_live_llm_timeout_respects_env_ceiling_without_expanding_budget() {
-    let _guard = viewer_live_llm_timeout_env_lock().lock().expect("env lock");
-    std::env::set_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS", "9000");
-    assert_eq!(resolve_viewer_live_llm_timeout_ms(180_000), 9_000);
-    assert_eq!(resolve_viewer_live_llm_timeout_ms(4_000), 4_000);
-    std::env::remove_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS");
-}
 
 #[test]
 fn live_server_config_play_step_interval_clamps_to_minimum_budget() {
@@ -354,87 +326,8 @@ fn live_world_llm_bootstrap_script_mode_advances_tick() {
     assert!(world.kernel.time() > 0);
 }
 
-#[test]
-fn live_world_llm_event_driven_gate_avoids_repeated_empty_ticks() {
-    set_test_llm_env();
-    let config = WorldConfig::default();
-    let mut init = WorldInitConfig::default();
-    init.agents = crate::simulator::AgentSpawnConfig {
-        count: 0,
-        ..crate::simulator::AgentSpawnConfig::default()
-    };
-    let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Llm).expect("init ok");
 
-    let first = world.step().expect("first step");
-    assert!(first.event.is_none());
-    assert!(first.decision_trace.is_none());
-    assert_eq!(world.metrics().total_ticks, 1);
 
-    let second = world.step().expect("second step");
-    assert!(second.event.is_none());
-    assert!(second.decision_trace.is_none());
-    assert_eq!(world.metrics().total_ticks, 1);
-
-    world.request_llm_decision();
-    let third = world.step().expect("third step");
-    assert!(third.event.is_none());
-    assert!(third.decision_trace.is_none());
-    assert_eq!(world.metrics().total_ticks, 2);
-}
-
-#[test]
-fn live_world_llm_mailbox_preserves_multiple_requests() {
-    set_test_llm_env();
-    let config = WorldConfig::default();
-    let mut init = WorldInitConfig::default();
-    init.agents = crate::simulator::AgentSpawnConfig {
-        count: 0,
-        ..crate::simulator::AgentSpawnConfig::default()
-    };
-    let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Llm).expect("init ok");
-
-    let first = world.step().expect("first step");
-    assert!(first.event.is_none());
-    assert!(first.decision_trace.is_none());
-    assert_eq!(world.metrics().total_ticks, 1);
-
-    world.request_llm_decision();
-    world.request_llm_decision();
-
-    let second = world.step().expect("second step");
-    assert!(second.event.is_none());
-    assert!(second.decision_trace.is_none());
-    assert_eq!(world.metrics().total_ticks, 2);
-
-    let third = world.step().expect("third step");
-    assert!(third.event.is_none());
-    assert!(third.decision_trace.is_none());
-    assert_eq!(world.metrics().total_ticks, 3);
-
-    let fourth = world.step().expect("fourth step");
-    assert!(fourth.event.is_none());
-    assert!(fourth.decision_trace.is_none());
-    assert_eq!(world.metrics().total_ticks, 3);
-}
-
-#[test]
-fn live_world_event_drive_gate_tracks_llm_mailbox() {
-    set_test_llm_env();
-    let config = WorldConfig::default();
-    let mut init = WorldInitConfig::default();
-    init.agents = crate::simulator::AgentSpawnConfig {
-        count: 0,
-        ..crate::simulator::AgentSpawnConfig::default()
-    };
-    let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Llm).expect("init ok");
-
-    assert!(world.should_step_on_event_drive());
-    let _ = world.step().expect("step consumes bootstrap mailbox token");
-    assert!(!world.should_step_on_event_drive());
-
-    world.request_llm_decision();
-    assert!(world.should_step_on_event_drive());
-}
 
 #[test]
 fn live_world_non_consensus_path_is_event_drive_only() {
@@ -443,17 +336,6 @@ fn live_world_non_consensus_path_is_event_drive_only() {
     let script_world =
         LiveWorld::new(script_config, script_init, ViewerLiveDecisionMode::Script).expect("init");
     assert!(script_world.uses_non_consensus_event_drive());
-
-    set_test_llm_env();
-    let llm_config = WorldConfig::default();
-    let mut llm_init = WorldInitConfig::default();
-    llm_init.agents = crate::simulator::AgentSpawnConfig {
-        count: 0,
-        ..crate::simulator::AgentSpawnConfig::default()
-    };
-    let llm_world =
-        LiveWorld::new(llm_config, llm_init, ViewerLiveDecisionMode::Llm).expect("init");
-    assert!(llm_world.uses_non_consensus_event_drive());
 }
 
 #[test]
@@ -509,52 +391,7 @@ fn emit_step_outcome_skips_idle_metrics_when_disabled() {
     assert!(line.contains("\"metrics\""));
 }
 
-#[test]
-fn restore_behavior_long_term_memory_from_model_applies_persisted_entries() {
-    set_test_llm_env();
-    let config = WorldConfig::default();
-    let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
-    let (mut kernel, _) = initialize_kernel(config, init).expect("init ok");
 
-    let persisted = crate::simulator::LongTermMemoryEntry::new("mem-3", 7, "persisted insight")
-        .with_tag("persisted");
-    kernel
-        .set_agent_long_term_memory("agent-0", vec![persisted.clone()])
-        .expect("set persisted memory");
-
-    let mut behavior = LlmAgentBehavior::from_env("agent-0").expect("build llm behavior");
-    assert!(behavior.export_long_term_memory_entries().is_empty());
-
-    restore_behavior_long_term_memory_from_model(&mut behavior, &kernel, "agent-0");
-    let restored = behavior.export_long_term_memory_entries();
-    assert_eq!(restored.len(), 1);
-    assert_eq!(restored[0].id, persisted.id);
-    assert_eq!(restored[0].content, persisted.content);
-}
-
-#[test]
-fn sync_llm_runner_long_term_memory_writes_back_to_world_model() {
-    set_test_llm_env();
-    let config = WorldConfig::default();
-    let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
-    let (mut kernel, _) = initialize_kernel(config, init).expect("init ok");
-
-    let mut behavior = LlmAgentBehavior::from_env("agent-0").expect("build llm behavior");
-    let runtime_entry = crate::simulator::LongTermMemoryEntry::new("mem-9", 15, "runtime memory")
-        .with_tag("runtime");
-    behavior.restore_long_term_memory_entries(&[runtime_entry.clone()]);
-
-    let mut runner = AgentRunner::new();
-    runner.register(behavior);
-
-    sync_llm_runner_long_term_memory(&mut kernel, &runner);
-    let restored = kernel
-        .long_term_memory_for_agent("agent-0")
-        .expect("agent memory exists");
-    assert_eq!(restored.len(), 1);
-    assert_eq!(restored[0].id, runtime_entry.id);
-    assert_eq!(restored[0].content, runtime_entry.content);
-}
 
 #[test]
 fn live_world_consensus_bridge_applies_only_committed_actions() {

@@ -13,11 +13,9 @@ use tracing::Level;
 
 use crate::geometry::space_distance_cm;
 use crate::simulator::{
-    initialize_kernel, Action, ActionResult, ActionSubmitter, AgentDecision, AgentDecisionTrace,
-    AgentPromptProfile, AgentRunner, LlmAgentBehavior, LlmAgentBuildError, LlmAgentConfig,
-    OpenAiChatCompletionClient, PromptUpdateOperation, ResourceKind, ResourceOwner, RunnerMetrics,
-    WorldConfig, WorldEvent, WorldEventKind, WorldInitConfig, WorldInitError, WorldKernel,
-    WorldScenario, WorldSnapshot,
+    initialize_kernel, Action, ActionSubmitter, AgentDecisionTrace, AgentPromptProfile,
+    PromptUpdateOperation, ResourceKind, ResourceOwner, RunnerMetrics, WorldConfig, WorldEvent,
+    WorldInitConfig, WorldInitError, WorldKernel, WorldScenario, WorldSnapshot,
 };
 
 #[path = "live/consensus_bridge.rs"]
@@ -116,7 +114,7 @@ pub enum ViewerLiveServerError {
     Io(io::Error),
     Serde(String),
     Init(WorldInitError),
-    LlmBuild(LlmAgentBuildError),
+    DirectLlmRemoved(String),
     Node(String),
 }
 
@@ -129,12 +127,6 @@ impl From<io::Error> for ViewerLiveServerError {
 impl From<WorldInitError> for ViewerLiveServerError {
     fn from(err: WorldInitError) -> Self {
         ViewerLiveServerError::Init(err)
-    }
-}
-
-impl From<LlmAgentBuildError> for ViewerLiveServerError {
-    fn from(err: LlmAgentBuildError) -> Self {
-        ViewerLiveServerError::LlmBuild(err)
     }
 }
 
@@ -635,7 +627,6 @@ struct LiveWorld {
 
 enum LiveDriver {
     Script(LiveScript),
-    Llm(AgentRunner<LlmAgentBehavior<OpenAiChatCompletionClient>>),
 }
 
 struct LiveStepResult {
@@ -666,11 +657,7 @@ impl LiveWorld {
         let reset_init = init.clone();
         let (kernel, _) = initialize_kernel(config.clone(), init.clone())?;
         let driver = build_driver(&kernel, decision_mode)?;
-        let llm_decision_mailbox = if matches!(&driver, LiveDriver::Llm(_)) {
-            1
-        } else {
-            0
-        };
+        let llm_decision_mailbox = 0;
         Ok(Self {
             #[cfg(test)]
             config: reset_config,
@@ -693,7 +680,6 @@ impl LiveWorld {
     fn metrics(&self) -> RunnerMetrics {
         match &self.driver {
             LiveDriver::Script(_) => metrics_from_kernel(&self.kernel),
-            LiveDriver::Llm(runner) => runner.metrics_with_kernel(&self.kernel),
         }
     }
 
@@ -745,11 +731,7 @@ impl LiveWorld {
         let (kernel, _) = initialize_kernel(self.config.clone(), self.init.clone())?;
         self.kernel = kernel;
         self.driver = build_driver(&self.kernel, self.decision_mode)?;
-        self.llm_decision_mailbox = if matches!(&self.driver, LiveDriver::Llm(_)) {
-            1
-        } else {
-            0
-        };
+        self.llm_decision_mailbox = 0;
         if let Some(bridge) = self.consensus_bridge.as_mut() {
             bridge.reset_pending();
         }
@@ -770,41 +752,11 @@ impl LiveWorld {
                     decision_trace: None,
                 })
             }
-            LiveDriver::Llm(runner) => {
-                if self.llm_decision_mailbox == 0 {
-                    return Ok(LiveStepResult {
-                        event: None,
-                        decision_trace: None,
-                    });
-                }
-                self.llm_decision_mailbox = self.llm_decision_mailbox.saturating_sub(1);
-                let tick_result = runner.tick(&mut self.kernel);
-                sync_llm_runner_long_term_memory(&mut self.kernel, runner);
-                let mut event = None;
-                let mut decision_trace = None;
-                if let Some(result) = tick_result {
-                    event = result.action_result.map(|action| action.event);
-                    decision_trace = result.decision_trace;
-                }
-                if event.is_some() {
-                    self.llm_decision_mailbox = self.llm_decision_mailbox.saturating_add(1);
-                }
-                Ok(LiveStepResult {
-                    event,
-                    decision_trace,
-                })
-            }
         }
     }
 
     fn request_llm_decision(&mut self) {
-        if matches!(&self.driver, LiveDriver::Llm(_)) {
-            self.llm_decision_mailbox = self.llm_decision_mailbox.saturating_add(1);
-        }
-    }
-
-    fn llm_mailbox_has_pending(&self) -> bool {
-        self.llm_decision_mailbox > 0
+        self.llm_decision_mailbox = 0;
     }
 
     fn should_step_on_event_drive(&self) -> bool {
@@ -813,7 +765,6 @@ impl LiveWorld {
         }
         match &self.driver {
             LiveDriver::Script(_) => true,
-            LiveDriver::Llm(_) => self.llm_mailbox_has_pending(),
         }
     }
 
@@ -823,7 +774,6 @@ impl LiveWorld {
         }
         match &self.driver {
             LiveDriver::Script(_) => step.event.is_some(),
-            LiveDriver::Llm(_) => self.llm_mailbox_has_pending(),
         }
     }
 }

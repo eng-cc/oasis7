@@ -102,7 +102,9 @@ fn build_launcher_args_contains_llm_and_no_open_switches() {
     let args = build_launcher_args(&config).expect("args should build");
     assert!(args.contains(&"--with-llm".to_string()));
     assert!(args.contains(&"--agent-decision-source".to_string()));
-    assert!(args.contains(&"builtin_llm".to_string()));
+    assert!(args.contains(&"provider_backed".to_string()));
+    assert!(args.contains(&"--agent-provider-transport".to_string()));
+    assert!(args.contains(&"remote_https".to_string()));
     assert!(args.contains(&"--deployment-mode".to_string()));
     assert!(args.contains(&"hosted_public_join".to_string()));
     assert!(args.contains(&"--no-open-browser".to_string()));
@@ -271,11 +273,11 @@ fn launch_config_defaults_enable_llm() {
     let config = LaunchConfig::default();
     assert!(config.llm_enabled);
     assert!(!config.chain_enabled);
-    assert_eq!(config.agent_decision_source, "builtin_llm");
+    assert_eq!(config.agent_decision_source, "provider_backed");
     assert_eq!(config.agent_provider_backend, "provider_local_bridge");
     assert_eq!(config.agent_provider_contract, "worldsim_provider_v1");
-    assert_eq!(config.agent_provider_transport, "loopback_http");
-    assert_eq!(config.agent_provider_url, "http://127.0.0.1:5841");
+    assert_eq!(config.agent_provider_transport, "remote_https");
+    assert_eq!(config.agent_provider_url, "https://t2t.oasis7.tech");
     assert_eq!(config.agent_provider_connect_timeout_ms, "15000");
     assert_eq!(config.agent_execution_lane, "player_parity");
     assert_eq!(config.agent_provider_profile, "oasis7_p0_low_freq_npc");

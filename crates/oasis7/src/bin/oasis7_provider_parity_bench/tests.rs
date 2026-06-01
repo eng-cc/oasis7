@@ -69,114 +69,18 @@ fn parse_options_accepts_custom_provider_agent_profile() {
 
 #[test]
 fn parse_options_defaults_use_real_provider_timeout_budget() {
-    let options =
-        parse_options(["--benchmark-run-id", "run-defaults"].into_iter()).expect("parse defaults");
+    let options = parse_options(
+        [
+            "--benchmark-run-id",
+            "run-defaults",
+            "--agent-provider-url",
+            "http://127.0.0.1:5841",
+        ]
+        .into_iter(),
+    )
+    .expect("parse defaults");
     assert_eq!(options.timeout_ms, 15_000);
     assert_eq!(options.agent_provider_connect_timeout_ms, 15_000);
-}
-
-#[test]
-fn builtin_parity_short_term_goal_matches_memory_summary() {
-    assert_eq!(
-        builtin_parity_short_term_goal("P0-001").as_deref(),
-        parity_memory_summary("P0-001")
-    );
-    assert_eq!(builtin_parity_short_term_goal("unknown"), None);
-}
-
-fn sample_patrol_observation() -> Observation {
-    Observation {
-        time: 7,
-        agent_id: "agent-1".to_string(),
-        pos: oasis7::geometry::GeoPos {
-            x_cm: 0,
-            y_cm: 0,
-            z_cm: 0,
-        },
-        self_resources: Default::default(),
-        visibility_range_cm: 1_000,
-        visible_agents: Vec::new(),
-        visible_locations: vec![
-            oasis7::simulator::ObservedLocation {
-                location_id: "loc-1".to_string(),
-                name: "base".to_string(),
-                pos: oasis7::geometry::GeoPos {
-                    x_cm: 0,
-                    y_cm: 0,
-                    z_cm: 0,
-                },
-                profile: Default::default(),
-                distance_cm: 0,
-            },
-            oasis7::simulator::ObservedLocation {
-                location_id: "loc-2".to_string(),
-                name: "neighbor".to_string(),
-                pos: oasis7::geometry::GeoPos {
-                    x_cm: 100,
-                    y_cm: 0,
-                    z_cm: 0,
-                },
-                profile: Default::default(),
-                distance_cm: 100,
-            },
-        ],
-        module_lifecycle: Default::default(),
-        module_market: Default::default(),
-        power_market: Default::default(),
-        social_state: Default::default(),
-    }
-}
-
-#[test]
-fn builtin_parity_guardrail_reroutes_passive_patrol_decision_to_move() {
-    let observation = sample_patrol_observation();
-    let (decision, note) =
-        apply_builtin_parity_guardrail("P0-001", "agent-1", &observation, AgentDecision::Wait);
-    assert_eq!(
-        decision,
-        AgentDecision::Act(Action::MoveAgent {
-            agent_id: "agent-1".to_string(),
-            to: "loc-2".to_string(),
-        })
-    );
-    assert!(note
-        .unwrap_or_default()
-        .contains("builtin_parity_guardrail"));
-}
-
-#[test]
-fn builtin_parity_guardrail_reroutes_non_move_patrol_decision_to_move() {
-    let observation = sample_patrol_observation();
-    let (decision, note) = apply_builtin_parity_guardrail(
-        "P0-001",
-        "agent-1",
-        &observation,
-        AgentDecision::Act(Action::HarvestRadiation {
-            agent_id: "agent-1".to_string(),
-            max_amount: 3,
-        }),
-    );
-    assert_eq!(
-        decision,
-        AgentDecision::Act(Action::MoveAgent {
-            agent_id: "agent-1".to_string(),
-            to: "loc-2".to_string(),
-        })
-    );
-    assert!(note.unwrap_or_default().contains("act:other"));
-}
-
-#[test]
-fn builtin_parity_guardrail_keeps_valid_move_agent_decision() {
-    let observation = sample_patrol_observation();
-    let decision = AgentDecision::Act(Action::MoveAgent {
-        agent_id: "agent-1".to_string(),
-        to: "loc-2".to_string(),
-    });
-    let (rewritten, note) =
-        apply_builtin_parity_guardrail("P0-001", "agent-1", &observation, decision.clone());
-    assert_eq!(rewritten, decision);
-    assert_eq!(note, None);
 }
 
 #[test]
@@ -199,20 +103,18 @@ fn parse_options_accepts_provider_player_parity_execution_mode() {
 }
 
 #[test]
-fn parse_options_rejects_builtin_player_parity_execution_mode() {
+fn parse_options_rejects_removed_builtin_provider() {
     let err = parse_options(
         [
             "--provider",
             "builtin",
             "--benchmark-run-id",
             "run-4",
-            "--execution-mode",
-            "player_parity",
         ]
         .into_iter(),
     )
-    .expect_err("builtin parity mode should fail");
-    assert!(err.contains("provider_loopback_http"));
+    .expect_err("builtin provider mode was removed");
+    assert!(err.contains("--provider"));
 }
 
 #[test]

@@ -1,19 +1,6 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-const ENV_VIEWER_LIVE_LLM_TIMEOUT_MS: &str = "OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS";
-const DEFAULT_VIEWER_LIVE_LLM_TIMEOUT_MS: u64 = 30_000;
-
-pub(super) fn resolve_viewer_live_llm_timeout_ms(configured_timeout_ms: u64) -> u64 {
-    let configured_timeout_ms = configured_timeout_ms.max(1);
-    let live_timeout_ceiling_ms = std::env::var(ENV_VIEWER_LIVE_LLM_TIMEOUT_MS)
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .map(|value| value.max(1))
-        .unwrap_or(DEFAULT_VIEWER_LIVE_LLM_TIMEOUT_MS);
-    configured_timeout_ms.min(live_timeout_ceiling_ms)
-}
-
 pub(super) fn normalize_required_player_id(
     player_id: &str,
     agent_id: &str,
@@ -202,63 +189,9 @@ pub(super) fn build_driver(
 ) -> Result<LiveDriver, ViewerLiveServerError> {
     match decision_mode {
         ViewerLiveDecisionMode::Script => Ok(LiveDriver::Script(LiveScript::new(kernel))),
-        ViewerLiveDecisionMode::Llm => {
-            let mut runner = AgentRunner::new();
-            let mut agent_ids: Vec<String> = kernel.model().agents.keys().cloned().collect();
-            agent_ids.sort();
-            for agent_id in agent_ids {
-                let mut config = LlmAgentConfig::from_default_sources_for_agent(agent_id.as_str())
-                    .map_err(LlmAgentBuildError::Config)?;
-                config.timeout_ms = resolve_viewer_live_llm_timeout_ms(config.timeout_ms);
-                let client = OpenAiChatCompletionClient::from_config(&config)
-                    .map_err(LlmAgentBuildError::Client)?;
-                let mut behavior = LlmAgentBehavior::new(agent_id.clone(), config, client);
-                if let Some(profile) = kernel.model().agent_prompt_profiles.get(&agent_id) {
-                    behavior.apply_prompt_overrides(
-                        profile.system_prompt_override.clone(),
-                        profile.short_term_goal_override.clone(),
-                        profile.long_term_goal_override.clone(),
-                    );
-                }
-                restore_behavior_long_term_memory_from_model(&mut behavior, kernel, &agent_id);
-                runner.register(behavior);
-            }
-            Ok(LiveDriver::Llm(runner))
-        }
-    }
-}
-
-pub(super) fn restore_behavior_long_term_memory_from_model(
-    behavior: &mut LlmAgentBehavior<OpenAiChatCompletionClient>,
-    kernel: &WorldKernel,
-    agent_id: &str,
-) {
-    if let Some(entries) = kernel.long_term_memory_for_agent(agent_id) {
-        behavior.restore_long_term_memory_entries(entries);
-    } else {
-        behavior.restore_long_term_memory_entries(&[]);
-    }
-}
-
-pub(super) fn sync_llm_runner_long_term_memory(
-    kernel: &mut WorldKernel,
-    runner: &AgentRunner<LlmAgentBehavior<OpenAiChatCompletionClient>>,
-) {
-    for agent_id in runner.agent_ids() {
-        let Some(agent) = runner.get(agent_id.as_str()) else {
-            continue;
-        };
-        let entries = agent.behavior.export_long_term_memory_entries();
-        if let Err(message) = kernel.set_agent_long_term_memory(agent_id.as_str(), entries) {
-            crate::observability::emit_stderr_or_event(
-                tracing::Level::WARN,
-                format!(
-                    "viewer live: skip long-term memory sync for {}: {}",
-                    agent_id, message
-                )
-                .as_str(),
-                "viewer live skipped long-term memory sync",
-            );
-        }
+        ViewerLiveDecisionMode::Llm => Err(ViewerLiveServerError::DirectLlmRemoved(
+            "viewer live direct LLM mode was removed; use runtime_live provider_backed remote_https"
+                .to_string(),
+        )),
     }
 }

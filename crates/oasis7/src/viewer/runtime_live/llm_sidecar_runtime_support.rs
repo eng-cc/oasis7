@@ -356,38 +356,3 @@ fn parse_runtime_location_id(location_id: &str) -> Option<GeoPos> {
     }
     Some(GeoPos::new(x, y, z))
 }
-
-pub(super) fn restore_behavior_long_term_memory_from_model(
-    behavior: &mut LlmAgentBehavior<OpenAiChatCompletionClient>,
-    kernel: &WorldKernel,
-    agent_id: &str,
-) {
-    if let Some(entries) = kernel.long_term_memory_for_agent(agent_id) {
-        behavior.restore_long_term_memory_entries(entries);
-    } else {
-        behavior.restore_long_term_memory_entries(&[]);
-    }
-}
-
-pub(super) fn sync_llm_runner_long_term_memory(
-    kernel: &mut WorldKernel,
-    runner: &AgentRunner<LlmAgentBehavior<OpenAiChatCompletionClient>>,
-) {
-    for agent_id in runner.agent_ids() {
-        let Some(agent) = runner.get(agent_id.as_str()) else {
-            continue;
-        };
-        let entries = agent.behavior.export_long_term_memory_entries();
-        if let Err(message) = kernel.set_agent_long_term_memory(agent_id.as_str(), entries) {
-            crate::observability::emit_stderr_or_event(
-                tracing::Level::WARN,
-                format!(
-                    "viewer runtime live: skip long-term memory sync for {}: {}",
-                    agent_id, message
-                )
-                .as_str(),
-                "viewer runtime live skipped long-term memory sync",
-            );
-        }
-    }
-}

@@ -358,11 +358,10 @@ fn agent_chat_requires_player_id() {
 }
 
 #[test]
-fn agent_chat_rejects_replayed_nonce() {
-    set_test_llm_env();
+fn agent_chat_reports_direct_llm_removed() {
     let config = WorldConfig::default();
     let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
-    let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Llm).expect("init ok");
+    let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Script).expect("init ok");
     let (public_key, private_key) = test_signer(24);
     let request = signed_agent_chat_request(
         AgentChatRequest {
@@ -379,23 +378,17 @@ fn agent_chat_rejects_replayed_nonce() {
         private_key.as_str(),
     );
 
-    let first = world
-        .agent_chat(request.clone())
-        .expect("first request accepted");
-    assert_eq!(first.player_id.as_deref(), Some("player-a"));
-
-    let replay = world
+    let err = world
         .agent_chat(request)
-        .expect_err("replay request should be rejected");
-    assert_eq!(replay.code, "auth_nonce_replay");
+        .expect_err("direct viewer live chat should be removed");
+    assert_eq!(err.code, "direct_llm_removed");
 }
 
 #[test]
-fn agent_chat_upgrades_compat_player_binding_with_public_key() {
-    set_test_llm_env();
+fn agent_chat_direct_llm_removed_does_not_mutate_player_binding() {
     let config = WorldConfig::default();
     let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
-    let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Llm).expect("init ok");
+    let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Script).expect("init ok");
     let (public_key, private_key) = test_signer(16);
 
     let bind_event = world
@@ -405,7 +398,7 @@ fn agent_chat_upgrades_compat_player_binding_with_public_key() {
     assert!(bind_event.is_some());
     assert_eq!(world.kernel.public_key_binding_for_agent("agent-0"), None);
 
-    let ack = world
+    let err = world
         .agent_chat(signed_agent_chat_request(
             AgentChatRequest {
                 agent_id: "agent-0".to_string(),
@@ -420,11 +413,8 @@ fn agent_chat_upgrades_compat_player_binding_with_public_key() {
             public_key.as_str(),
             private_key.as_str(),
         ))
-        .expect("chat should be accepted");
+        .expect_err("direct viewer live chat should be removed");
 
-    assert_eq!(ack.player_id.as_deref(), Some("player-a"));
-    assert_eq!(
-        world.kernel.public_key_binding_for_agent("agent-0"),
-        Some(public_key.as_str())
-    );
+    assert_eq!(err.code, "direct_llm_removed");
+    assert_eq!(world.kernel.public_key_binding_for_agent("agent-0"), None);
 }

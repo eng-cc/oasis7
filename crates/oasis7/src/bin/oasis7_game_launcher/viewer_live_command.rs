@@ -1,11 +1,6 @@
 use super::*;
 
-pub(super) fn build_oasis7_viewer_live_command(
-    path: &Path,
-    options: &CliOptions,
-    parent_has_llm_timeout_ms: bool,
-    repo_has_node_config_file: bool,
-) -> Command {
+pub(super) fn build_oasis7_viewer_live_command(path: &Path, options: &CliOptions) -> Command {
     let mut command = Command::new(path);
     if !options.scenario.trim().is_empty() {
         command.arg(options.scenario.as_str());
@@ -24,24 +19,14 @@ pub(super) fn build_oasis7_viewer_live_command(
     }
     if options.with_llm {
         command.arg("--llm");
-        apply_viewer_live_env_overrides(
-            &mut command,
-            options,
-            parent_has_llm_timeout_ms,
-            repo_has_node_config_file,
-        );
+        apply_viewer_live_env_overrides(&mut command, options);
     } else {
         command.arg("--no-llm");
     }
     command
 }
 
-pub(super) fn apply_viewer_live_env_overrides(
-    command: &mut Command,
-    options: &CliOptions,
-    parent_has_llm_timeout_ms: bool,
-    repo_has_node_config_file: bool,
-) {
+pub(super) fn apply_viewer_live_env_overrides(command: &mut Command, options: &CliOptions) {
     for env_name in [
         VIEWER_AGENT_DECISION_SOURCE_ENV,
         VIEWER_AGENT_PROVIDER_BACKEND_ENV,
@@ -57,52 +42,46 @@ pub(super) fn apply_viewer_live_env_overrides(
         command.env_remove(env_name);
     }
 
-    if uses_provider_http_transport(options) {
-        command.env(
-            VIEWER_AGENT_DECISION_SOURCE_ENV,
-            PROVIDER_BACKED_DECISION_SOURCE,
-        );
-        command.env(
-            VIEWER_AGENT_PROVIDER_BACKEND_ENV,
-            LOCAL_BRIDGE_PROVIDER_BACKEND,
-        );
-        command.env(
-            VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
-            WORLDSIM_PROVIDER_CONTRACT,
-        );
-        command.env(
-            VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
-            options.agent_provider_transport.as_str(),
-        );
-        command.env(
-            VIEWER_AGENT_PROVIDER_URL_ENV,
-            options.agent_provider_url.as_str(),
-        );
-        if !options.agent_provider_auth_token.trim().is_empty() {
-            command.env(
-                VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
-                options.agent_provider_auth_token.as_str(),
-            );
-        }
-        command.env(
-            VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
-            options.agent_provider_connect_timeout_ms.to_string(),
-        );
-        command.env(
-            VIEWER_AGENT_PROVIDER_PROFILE_ENV,
-            options.agent_provider_profile.as_str(),
-        );
-        command.env(
-            VIEWER_AGENT_EXECUTION_LANE_ENV,
-            options.agent_execution_lane.as_str(),
-        );
+    if !uses_provider_http_transport(options) {
         return;
     }
 
-    if !parent_has_llm_timeout_ms && !repo_has_node_config_file {
+    command.env(
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        PROVIDER_BACKED_DECISION_SOURCE,
+    );
+    command.env(
+        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+        LOCAL_BRIDGE_PROVIDER_BACKEND,
+    );
+    command.env(
+        VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+        WORLDSIM_PROVIDER_CONTRACT,
+    );
+    command.env(
+        VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        options.agent_provider_transport.as_str(),
+    );
+    command.env(
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+        options.agent_provider_url.as_str(),
+    );
+    if !options.agent_provider_auth_token.trim().is_empty() {
         command.env(
-            LLM_TIMEOUT_MS_ENV,
-            DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string(),
+            VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+            options.agent_provider_auth_token.as_str(),
         );
     }
+    command.env(
+        VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+        options.agent_provider_connect_timeout_ms.to_string(),
+    );
+    command.env(
+        VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+        options.agent_provider_profile.as_str(),
+    );
+    command.env(
+        VIEWER_AGENT_EXECUTION_LANE_ENV,
+        options.agent_execution_lane.as_str(),
+    );
 }

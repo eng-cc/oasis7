@@ -16,11 +16,10 @@ use super::{
     resolve_viewer_static_dir_with_override, sanitize_index_html_for_embedded_server,
     sanitize_relative_request_path, start_static_http_server, stop_static_http_server,
     viewer_dev_dist_candidates, CliOptions, DeploymentMode, ViewerAuthBootstrap,
-    BUILTIN_LLM_DECISION_SOURCE, DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS,
-    DEFAULT_AGENT_PROVIDER_PROFILE, DEFAULT_AGENT_PROVIDER_URL, DEFAULT_CHAIN_NODE_ID,
-    DEFAULT_CHAIN_STATUS_BIND, DEFAULT_DEPLOYMENT_MODE, DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS,
-    DEFAULT_LIVE_BIND, DEFAULT_SCENARIO, DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV,
-    LLM_TIMEOUT_MS_ENV, LOCAL_BRIDGE_PROVIDER_BACKEND, LOOPBACK_HTTP_PROVIDER_TRANSPORT,
+    DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS, DEFAULT_AGENT_PROVIDER_PROFILE,
+    DEFAULT_AGENT_PROVIDER_URL, DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND,
+    DEFAULT_DEPLOYMENT_MODE, DEFAULT_LIVE_BIND, DEFAULT_SCENARIO, DEFAULT_VIEWER_STATIC_DIR,
+    GAME_STATIC_DIR_ENV, LOCAL_BRIDGE_PROVIDER_BACKEND, LOOPBACK_HTTP_PROVIDER_TRANSPORT,
     PROVIDER_BACKED_DECISION_SOURCE, VIEWER_AGENT_DECISION_SOURCE_ENV,
     VIEWER_AGENT_EXECUTION_LANE_ENV, VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
     VIEWER_AGENT_PROVIDER_BACKEND_ENV, VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
@@ -71,16 +70,16 @@ fn parse_options_defaults() {
     assert_eq!(options.live_bind, DEFAULT_LIVE_BIND);
     assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
     assert!(options.with_llm);
-    assert_eq!(options.agent_decision_source, BUILTIN_LLM_DECISION_SOURCE);
+    assert_eq!(
+        options.agent_decision_source,
+        PROVIDER_BACKED_DECISION_SOURCE
+    );
     assert_eq!(
         options.agent_provider_backend,
         LOCAL_BRIDGE_PROVIDER_BACKEND
     );
     assert_eq!(options.agent_provider_contract, WORLDSIM_PROVIDER_CONTRACT);
-    assert_eq!(
-        options.agent_provider_transport,
-        LOOPBACK_HTTP_PROVIDER_TRANSPORT
-    );
+    assert_eq!(options.agent_provider_transport, "remote_https");
     assert_eq!(options.agent_provider_url, DEFAULT_AGENT_PROVIDER_URL);
     assert_eq!(options.agent_provider_auth_token, "");
     assert_eq!(
@@ -351,44 +350,7 @@ fn parse_options_accepts_agent_direct_connect_alias() {
 }
 
 #[test]
-fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
-    let options = CliOptions::default();
-    let mut command = Command::new("echo");
-
-    apply_viewer_live_env_overrides(&mut command, &options, false, false);
-
-    assert_eq!(
-        command_env_value(&command, LLM_TIMEOUT_MS_ENV),
-        Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))
-    );
-    assert_eq!(
-        command_env_value(&command, VIEWER_AGENT_DECISION_SOURCE_ENV),
-        Some(None)
-    );
-}
-
-#[test]
-fn builtin_viewer_live_env_preserves_explicit_parent_llm_timeout() {
-    let options = CliOptions::default();
-    let mut command = Command::new("echo");
-
-    apply_viewer_live_env_overrides(&mut command, &options, true, false);
-
-    assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
-}
-
-#[test]
-fn builtin_viewer_live_env_skips_default_llm_timeout_when_repo_config_exists() {
-    let options = CliOptions::default();
-    let mut command = Command::new("echo");
-
-    apply_viewer_live_env_overrides(&mut command, &options, false, true);
-
-    assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
-}
-
-#[test]
-fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout() {
+fn provider_backed_viewer_live_env_sets_provider_specific_overrides() {
     let mut options = CliOptions::default();
     options.agent_decision_source = PROVIDER_BACKED_DECISION_SOURCE.to_string();
     options.agent_provider_backend = LOCAL_BRIDGE_PROVIDER_BACKEND.to_string();
@@ -401,9 +363,8 @@ fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_buil
     options.agent_execution_lane = ProviderExecutionMode::PlayerParity;
     let mut command = Command::new("echo");
 
-    apply_viewer_live_env_overrides(&mut command, &options, false, false);
+    apply_viewer_live_env_overrides(&mut command, &options);
 
-    assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
     assert_eq!(
         command_env_value(&command, VIEWER_AGENT_DECISION_SOURCE_ENV),
         Some(Some(PROVIDER_BACKED_DECISION_SOURCE.to_string()))
@@ -449,9 +410,9 @@ fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_buil
 }
 
 #[test]
-fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
+fn build_viewer_live_command_wires_provider_env_into_spawn_path() {
     let options = CliOptions::default();
-    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options);
     let args: Vec<String> = command
         .get_args()
         .map(|arg| arg.to_string_lossy().into_owned())
@@ -463,22 +424,13 @@ fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
     assert!(!args.iter().any(|arg| arg.is_empty()));
     assert!(!args.iter().any(|arg| arg == DEFAULT_SCENARIO));
     assert_eq!(
-        command_env_value(&command, LLM_TIMEOUT_MS_ENV),
-        Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))
+        command_env_value(&command, VIEWER_AGENT_DECISION_SOURCE_ENV),
+        Some(Some(PROVIDER_BACKED_DECISION_SOURCE.to_string()))
     );
-}
-
-#[test]
-fn build_viewer_live_command_skips_default_llm_timeout_when_repo_config_exists() {
-    let options = CliOptions::default();
-    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, true);
-    let args: Vec<String> = command
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-
-    assert!(args.contains(&"--llm".to_string()));
-    assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
+    assert_eq!(
+        command_env_value(&command, VIEWER_AGENT_PROVIDER_TRANSPORT_ENV),
+        Some(Some("remote_https".to_string()))
+    );
 }
 
 #[test]
@@ -536,7 +488,6 @@ fn parse_options_rejects_unknown_option() {
 fn parse_options_rejects_unknown_agent_provider_mode() {
     let err = parse_options(["--agent-provider-mode", "wat-provider"].into_iter())
         .expect_err("should fail");
-    assert!(err.contains("builtin_llm"));
     assert!(err.contains("provider_backed"));
 }
 

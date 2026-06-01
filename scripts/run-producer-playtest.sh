@@ -25,7 +25,9 @@ Prepare a bundle-first Web stack for producer manual play.
 Default behavior:
 - reuse the current worktree-local producer bundle if it already exists and is fresh
 - otherwise build or rebuild a fresh bundle there
-- then start `./scripts/run-game-test.sh --bundle-dir <bundle>`
+- then start `./scripts/run-game-test.sh --bundle-dir <bundle> --require-playable-snapshot`
+- LLM decisions always use the remote provider-backed path; pass `--newapi-user-ref <ref>`
+  or set `OASIS7_NEWAPI_USER_REF=<ref>` for the cloud NewAPI bridge.
 - when `--open-headed` is used, `agent-browser` defaults to hardware WebGL args
   `--use-angle=gl,--ignore-gpu-blocklist` (override with `AGENT_BROWSER_ARGS`)
 
@@ -45,8 +47,8 @@ Examples:
   ./scripts/run-producer-playtest.sh
   ./scripts/run-producer-playtest.sh --profile dev
   ./scripts/run-producer-playtest.sh --open-headed
+  ./scripts/run-producer-playtest.sh --newapi-user-ref user-1
   ./scripts/run-producer-playtest.sh --bundle-dir output/release/game-launcher-local
-  ./scripts/run-producer-playtest.sh --no-llm   # negative-path only; launcher boot is expected to fail
 USAGE
 }
 
@@ -123,7 +125,7 @@ else
 fi
 
 if [[ "$OPEN_HEADED" != "1" ]]; then
-  exec ./scripts/run-game-test.sh --bundle-dir "$ABS_BUNDLE_DIR" "${STACK_ARGS[@]}"
+  exec ./scripts/run-game-test.sh --bundle-dir "$ABS_BUNDLE_DIR" --require-playable-snapshot "${STACK_ARGS[@]}"
 fi
 
 ab_require
@@ -159,9 +161,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if command -v stdbuf >/dev/null 2>&1; then
-  stdbuf -oL -eL ./scripts/run-game-test.sh --bundle-dir "$ABS_BUNDLE_DIR" --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
+  stdbuf -oL -eL ./scripts/run-game-test.sh --bundle-dir "$ABS_BUNDLE_DIR" --require-playable-snapshot --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
 else
-  ./scripts/run-game-test.sh --bundle-dir "$ABS_BUNDLE_DIR" --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
+  ./scripts/run-game-test.sh --bundle-dir "$ABS_BUNDLE_DIR" --require-playable-snapshot --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
 fi
 STACK_PID=$!
 

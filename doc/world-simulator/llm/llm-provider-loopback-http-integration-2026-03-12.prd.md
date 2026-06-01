@@ -43,7 +43,7 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | Provider 发现 | `provider_id/version/capabilities/health` | launcher 自动探测或手动刷新本机 provider | `offline -> discovered -> ready` | 仅探测 allowlist 端口/路径 | 仅本机回环地址 |
-| Provider 选择 | `agent_decision_source=provider_backed`、`agent_provider_backend=provider_local_bridge`、`agent_provider_contract=worldsim_provider_v1`、`agent_provider_transport=loopback_http`、`compat_aliases=[agent_direct_connect,provider_loopback_http]` | 用户在设置中心选择本地 Local Provider | `builtin_llm -> provider_backed` | UI/文档使用结构化 provider 维度；旧接入方式/实现名只保留兼容说明 | 仅本地用户可配 |
+| Provider 选择 | `agent_decision_source=provider_backed`、`agent_provider_backend=provider_local_bridge`、`agent_provider_contract=worldsim_provider_v1`、`agent_provider_transport=loopback_http`、`compat_aliases=[agent_direct_connect,provider_loopback_http]` | 用户在设置中心选择本地 Local Provider | 旧直连模型入口已移除；正式入口只保留 provider-backed | UI/文档使用结构化 provider 维度；旧 provider 实现名只保留兼容说明 | 仅本地用户可配 |
 | 决策请求 | `DecisionRequest` | runtime 对目标 agent 发起一次决策请求 | `observed -> requesting -> responded` | 每 tick 每 agent 至多一请求 | 仅本地 runtime 发起 |
 | 结构化决策 | `decision/action_ref/args/diagnostics` | provider 返回 wait/act | `responded -> validated -> executed/rejected` | 动作必须先过 schema | runtime 权威裁定 |
 | 状态反馈 | `FeedbackEnvelope` | runtime 把执行结果回写 provider | `executed/rejected -> feedback_sent` | 顺序跟随 action_id | 仅对应会话可写 |
@@ -100,7 +100,7 @@
 - Discovery & Configuration:
   - 默认探测地址：`127.0.0.1:5841`（可配置）。
   - launcher 设置项：
-    - `agent_decision_source`：`builtin_llm` / `provider_backed`
+    - `agent_decision_source`：`provider_backed`
     - `agent_provider_backend`：当前固定为 `provider`
     - `agent_provider_contract`：当前固定为 `worldsim_provider_v1`
     - `agent_provider_transport`：当前固定为 `loopback_http`

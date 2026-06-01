@@ -95,11 +95,11 @@ const DEFAULT_LIVE_BIND: &str = "127.0.0.1:5023";
 const DEFAULT_WEB_BIND: &str = "127.0.0.1:5011";
 const DEFAULT_VIEWER_HOST: &str = "127.0.0.1";
 const DEFAULT_VIEWER_PORT: &str = "4173";
-const DEFAULT_AGENT_DECISION_SOURCE: &str = "builtin_llm";
+const DEFAULT_AGENT_DECISION_SOURCE: &str = "provider_backed";
 const DEFAULT_AGENT_PROVIDER_BACKEND: &str = "provider_local_bridge";
 const DEFAULT_AGENT_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
-const DEFAULT_AGENT_PROVIDER_TRANSPORT: &str = "loopback_http";
-const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
+const DEFAULT_AGENT_PROVIDER_TRANSPORT: &str = "remote_https";
+const DEFAULT_AGENT_PROVIDER_URL: &str = "https://t2t.oasis7.tech";
 const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: &str = "15000";
 const DEFAULT_AGENT_EXECUTION_LANE: &str = "player_parity";
 const DEFAULT_AGENT_PROVIDER_PROFILE: &str = "oasis7_p0_low_freq_npc";
@@ -698,10 +698,10 @@ impl ConfigIssue {
                 "Viewer static directory does not exist or is not a directory"
             }
             (Self::AgentProviderModeInvalid, UiLanguage::ZhCn) => {
-                "Agent 接入方式必须是 builtin_llm、agent_direct_connect 或 provider_backed"
+                "Agent 接入方式必须是 provider_backed"
             }
             (Self::AgentProviderModeInvalid, UiLanguage::EnUs) => {
-                "Agent access mode must be builtin_llm, agent_direct_connect, or provider_backed"
+                "Agent access mode must be provider_backed"
             }
             (Self::ProviderBaseUrlRequired, UiLanguage::ZhCn) => {
                 "启用 ProviderBacked 且关闭自动发现时，必须填写 Provider Base URL"

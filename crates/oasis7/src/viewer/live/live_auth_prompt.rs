@@ -241,50 +241,11 @@ impl LiveWorld {
         }
         self.verify_and_consume_agent_chat_auth(&request)?;
 
-        if matches!(self.driver, LiveDriver::Script(_)) {
-            return Err(AgentChatError {
-                code: "llm_mode_required".to_string(),
-                message: "agent chat requires live server running with --llm".to_string(),
-                agent_id: Some(request.agent_id),
-            });
-        }
-
-        self.bind_agent_player_access_for_chat(
-            request.agent_id.as_str(),
-            player_id.as_str(),
-            public_key.as_deref(),
-        )?;
-        let runner = match &mut self.driver {
-            LiveDriver::Llm(runner) => runner,
-            LiveDriver::Script(_) => unreachable!("script mode handled above"),
-        };
-        let Some(agent) = runner.get_mut(request.agent_id.as_str()) else {
-            return Err(AgentChatError {
-                code: "agent_not_registered".to_string(),
-                message: format!("agent {} is not registered in llm runner", request.agent_id),
-                agent_id: Some(request.agent_id),
-            });
-        };
-        if !agent
-            .behavior
-            .push_player_message(self.kernel.time(), message.as_str())
-        {
-            return Err(AgentChatError {
-                code: "empty_message".to_string(),
-                message: "chat message cannot be empty".to_string(),
-                agent_id: Some(request.agent_id),
-            });
-        }
-        Ok(AgentChatAck {
-            agent_id: request.agent_id,
-            accepted_at_tick: self.kernel.time(),
-            message_len: message.chars().count(),
-            player_id: Some(player_id),
-            intent_tick: request.intent_tick,
-            intent_seq: request
-                .intent_seq
-                .or_else(|| request.auth.as_ref().map(|auth| auth.nonce)),
-            idempotent_replay: false,
+        let _ = (player_id, public_key, message);
+        Err(AgentChatError {
+            code: "direct_llm_removed".to_string(),
+            message: "agent chat moved to runtime_live provider_backed remote_https; viewer live direct LLM is removed".to_string(),
+            agent_id: Some(request.agent_id),
         })
     }
 
@@ -436,43 +397,17 @@ impl LiveWorld {
         &mut self,
         profile: &AgentPromptProfile,
     ) -> Result<(), PromptControlError> {
-        match &mut self.driver {
-            LiveDriver::Script(_) => Err(PromptControlError {
-                code: "llm_mode_required".to_string(),
-                message: "prompt_control requires live server running with --llm".to_string(),
-                agent_id: Some(profile.agent_id.clone()),
-                current_version: self
-                    .kernel
-                    .model()
-                    .agent_prompt_profiles
-                    .get(&profile.agent_id)
-                    .map(|entry| entry.version),
-            }),
-            LiveDriver::Llm(runner) => {
-                let Some(agent) = runner.get_mut(profile.agent_id.as_str()) else {
-                    return Err(PromptControlError {
-                        code: "agent_not_registered".to_string(),
-                        message: format!(
-                            "agent {} is not registered in llm runner",
-                            profile.agent_id
-                        ),
-                        agent_id: Some(profile.agent_id.clone()),
-                        current_version: self
-                            .kernel
-                            .model()
-                            .agent_prompt_profiles
-                            .get(&profile.agent_id)
-                            .map(|entry| entry.version),
-                    });
-                };
-                agent.behavior.apply_prompt_overrides(
-                    profile.system_prompt_override.clone(),
-                    profile.short_term_goal_override.clone(),
-                    profile.long_term_goal_override.clone(),
-                );
-                Ok(())
-            }
-        }
+        Err(PromptControlError {
+            code: "direct_llm_removed".to_string(),
+            message: "prompt_control moved to runtime_live provider_backed remote_https; viewer live direct LLM is removed".to_string(),
+            agent_id: Some(profile.agent_id.clone()),
+            current_version: self
+                .kernel
+                .model()
+                .agent_prompt_profiles
+                .get(&profile.agent_id)
+                .map(|entry| entry.version),
+        })
     }
 
     pub(crate) fn bind_agent_player_access(
@@ -503,31 +438,4 @@ impl LiveWorld {
         Ok(())
     }
 
-    pub(crate) fn bind_agent_player_access_for_chat(
-        &mut self,
-        agent_id: &str,
-        player_id: &str,
-        public_key: Option<&str>,
-    ) -> Result<(), AgentChatError> {
-        let mapped = ensure_agent_player_access(self.kernel(), agent_id, player_id, public_key)
-            .map_err(|err| AgentChatError {
-                code: "agent_control_forbidden".to_string(),
-                message: err.message,
-                agent_id: err.agent_id,
-            });
-        mapped?;
-        let needs_bind = self.kernel.player_binding_for_agent(agent_id).is_none()
-            || (public_key.is_some()
-                && self.kernel.public_key_binding_for_agent(agent_id).is_none());
-        if needs_bind {
-            self.kernel
-                .bind_agent_player(agent_id, player_id, public_key)
-                .map_err(|message| AgentChatError {
-                    code: "player_bind_failed".to_string(),
-                    message,
-                    agent_id: Some(agent_id.to_string()),
-                })?;
-        }
-        Ok(())
-    }
 }

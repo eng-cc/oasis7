@@ -27,7 +27,6 @@ oasis7_node = { path = "../oasis7_node" }
 oasis7_wasm_executor = { path = "../oasis7_wasm_executor", default-features = false }
 oasis7_wasm_router = { path = "../oasis7_wasm_router" }
 oasis7_wasm_store = { path = "../oasis7_wasm_store" }
-async-openai = { version = "0.32.4", default-features = false, features = ["responses", "rustls"] }
 ctrlc = { version = "3.4", features = ["termination"] }
 futures-util = "0.3"
 hmac = "0.12"

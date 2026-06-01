@@ -180,14 +180,6 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     {
         return Err("--agent-provider-profile cannot be empty".to_string());
     }
-    if options.provider == BenchProviderKind::Builtin
-        && options.execution_mode != ProviderExecutionMode::HeadlessAgent
-    {
-        return Err(
-            "--execution-mode=player_parity is only supported with --provider provider_loopback_http"
-                .to_string(),
-        );
-    }
     Ok(options)
 }
 
@@ -199,10 +191,10 @@ fn parse_u64(raw: &str, flag: &str) -> Result<u64, String> {
 pub(super) fn print_help() {
     println!(
         "Usage: oasis7_provider_parity_bench [options]\n\n\
-Run one parity benchmark sample for builtin or the loopback provider and emit\n\
+Run one parity benchmark sample for the loopback provider and emit\n\
 raw jsonl + single-sample summary json following the parity benchmark contract.\n\n\
 Options:\n\
-  --provider <builtin|provider_loopback_http|provider_local_bridge>\n\
+  --provider <provider_loopback_http|provider_local_bridge>\n\
                                provider_local_bridge is accepted as an alias of provider_loopback_http\n\
   --scenario <name>\n\
   --scenario-id <id>\n\

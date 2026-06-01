@@ -14,7 +14,7 @@
 
 ### 2) Fix one code error (panic-prone request parsing)
 - **Finding**: test helper HTTP parser assumes request headers are UTF-8 and panics on decode failure via `expect("request header should be utf-8")`.
-- **Example**: `crates/oasis7/src/bin/oasis7_llm_provider_probe.rs` in `read_http_request`.
+- **Example**: `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs` request parsing paths.
 - **Proposed task**: replace panic path with fallible handling (`from_utf8` branch) and return a structured parse error or safe fallback for malformed headers.
 - **Risk**: medium (touches request parsing behavior; should include regression tests).
 

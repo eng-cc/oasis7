@@ -525,9 +525,6 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("reserve port");
     let addr = listener.local_addr().expect("local addr");

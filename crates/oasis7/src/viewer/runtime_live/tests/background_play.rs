@@ -4,9 +4,6 @@ use super::*;
 fn runtime_background_play_retries_transient_llm_access_failure_after_prior_progress() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -53,9 +50,6 @@ fn runtime_background_play_retries_transient_llm_access_failure_after_prior_prog
 fn runtime_background_play_stops_after_retry_budget_exhausted() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)

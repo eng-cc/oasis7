@@ -10,10 +10,9 @@ use crate::runtime::{
 use crate::simulator::{
     evaluate_provider_compatibility, Action as SimulatorAction, ActionCatalogEntry, ActionResult,
     AgentDecision, AgentDecisionTrace, AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
-    LlmAgentBehavior, LlmAgentConfig, OpenAiChatCompletionClient, ProviderBackedAgentBehavior,
-    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
-    WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot,
-    CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
+    ProviderBackedAgentBehavior, ProviderExecutionMode, ProviderLoopbackAdapter,
+    ProviderLoopbackHttpClient, ResourceOwner, WorldConfig, WorldEvent, WorldEventKind,
+    WorldJournal, WorldKernel, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -34,7 +33,6 @@ pub(super) struct RuntimeLlmDecision {
     pub(super) decision_trace: Option<AgentDecisionTrace>,
 }
 
-const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
 const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
@@ -56,21 +54,16 @@ const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
 const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const RUNTIME_PROVIDER_CHECK_CACHE_MS: u64 = 2_000;
-const ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS: &str = "OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS";
-const DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS: u64 = 30_000;
 
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
 #[path = "llm_sidecar_runtime_support.rs"]
 mod runtime_support;
 pub(in crate::viewer::runtime_live) use self::provider_support::provider_settings_from_env;
-use self::provider_support::{
-    env_requests_provider_backend, provider_phase1_action_catalog, provider_phase1_memory_summary,
-};
+use self::provider_support::{provider_phase1_action_catalog, provider_phase1_memory_summary};
 use self::runtime_support::{
-    hash_chat_message, normalize_optional_public_key, restore_behavior_long_term_memory_from_model,
-    runtime_provider_check_cache_key, runtime_provider_check_now_unix_ms,
-    sync_llm_runner_long_term_memory,
+    hash_chat_message, normalize_optional_public_key, runtime_provider_check_cache_key,
+    runtime_provider_check_now_unix_ms,
 };
 pub(in crate::viewer::runtime_live) use self::runtime_support::{
     simulator_action_label, simulator_action_to_runtime,
@@ -100,18 +93,7 @@ pub(in crate::viewer::runtime_live) struct RuntimeProviderCheckSnapshot {
     cache_key: String,
 }
 
-fn resolve_runtime_live_llm_timeout_ms(configured_timeout_ms: u64) -> u64 {
-    let configured_timeout_ms = configured_timeout_ms.max(1);
-    let runtime_timeout_ceiling_ms = std::env::var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS)
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .map(|value| value.max(1))
-        .unwrap_or(DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS);
-    configured_timeout_ms.min(runtime_timeout_ceiling_ms)
-}
-
 enum RuntimeDecisionRunner {
-    Builtin(AgentRunner<LlmAgentBehavior<OpenAiChatCompletionClient>>),
     ProviderBacked(AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>>),
 }
 
@@ -155,17 +137,6 @@ impl RuntimeLlmDecision {
     }
 }
 
-fn runtime_live_phase1_short_term_goal() -> String {
-    concat!(
-        "post_onboarding.establish_first_capability 阶段，先做第一条可持续工业线。 ",
-        "开局默认种子资源通常已足够首个 smelter：若 self_resources.electricity>=10 且 data>=5 且还没有 factory.smelter.mk1，",
-        "优先 build_factory(factory.smelter.mk1)，不要先 harvest_radiation。 ",
-        "只有在 electricity<10 时才先 harvest_radiation；只有在 data<5 时才先 mine_compound/refine_compound。 ",
-        "smelter 建好后立刻 schedule_recipe(recipe.smelter.iron_ingot 或其他首批 smelter 配方)，避免 wait。"
-    )
-    .to_string()
-}
-
 pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) decision_mode: ViewerLiveDecisionMode,
     pub(in crate::viewer::runtime_live) prompt_profiles: BTreeMap<String, AgentPromptProfile>,
@@ -207,11 +178,11 @@ impl RuntimeLlmSidecar {
     }
 
     pub(in crate::viewer::runtime_live) fn supports_prompt_control(&self) -> bool {
-        !env_requests_provider_backend()
+        false
     }
 
     pub(in crate::viewer::runtime_live) fn supports_agent_chat(&self) -> bool {
-        !env_requests_provider_backend()
+        false
     }
 
     pub(in crate::viewer::runtime_live) fn refresh_provider_check_snapshot(&mut self) {
@@ -527,20 +498,7 @@ impl RuntimeLlmSidecar {
     }
 
     pub(super) fn apply_prompt_profile_to_driver(&mut self, profile: &AgentPromptProfile) {
-        let Some(runner) = self.runner.as_mut() else {
-            return;
-        };
-        let RuntimeDecisionRunner::Builtin(runner) = runner else {
-            return;
-        };
-        let Some(agent) = runner.get_mut(profile.agent_id.as_str()) else {
-            return;
-        };
-        agent.behavior.apply_prompt_overrides(
-            profile.system_prompt_override.clone(),
-            profile.short_term_goal_override.clone(),
-            profile.long_term_goal_override.clone(),
-        );
+        let _ = profile;
     }
 
     pub(super) fn push_chat_message(
@@ -571,43 +529,13 @@ impl RuntimeLlmSidecar {
                 agent_id: Some(agent_id.to_string()),
             });
         }
-        let runner = match self.runner.as_mut() {
-            Some(runner) => runner,
-            None => {
-                return Err(AgentChatError {
-                    code: "llm_init_failed".to_string(),
-                    message: "llm runner not initialized".to_string(),
-                    agent_id: Some(agent_id.to_string()),
-                });
-            }
-        };
-        let RuntimeDecisionRunner::Builtin(runner) = runner else {
-            return Err(AgentChatError {
-                code: "agent_provider_chat_unsupported".to_string(),
-                message:
-                    "agent chat is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
-                        .to_string(),
-                agent_id: Some(agent_id.to_string()),
-            });
-        };
-        let Some(agent) = runner.get_mut(agent_id) else {
-            return Err(AgentChatError {
-                code: "agent_not_registered".to_string(),
-                message: format!("agent {} is not registered in llm runner", agent_id),
-                agent_id: Some(agent_id.to_string()),
-            });
-        };
-        if !agent
-            .behavior
-            .push_player_message(world.state().time, message)
-        {
-            return Err(AgentChatError {
-                code: "empty_message".to_string(),
-                message: "chat message cannot be empty".to_string(),
-                agent_id: Some(agent_id.to_string()),
-            });
-        }
-        Ok(())
+        let _ = (world, message);
+        Err(AgentChatError {
+            code: "agent_provider_chat_unsupported".to_string(),
+            message: "agent chat is not yet supported when runtime live uses ProviderBacked"
+                .to_string(),
+            agent_id: Some(agent_id.to_string()),
+        })
     }
 
     pub(super) fn next_llm_decision(
@@ -644,14 +572,8 @@ impl RuntimeLlmSidecar {
                 ));
             }
         };
-        let result = match runner {
-            RuntimeDecisionRunner::Builtin(runner) => {
-                let result = runner.tick_decide_only(kernel);
-                sync_llm_runner_long_term_memory(kernel, runner);
-                result
-            }
-            RuntimeDecisionRunner::ProviderBacked(runner) => runner.tick_decide_only(kernel),
-        };
+        let RuntimeDecisionRunner::ProviderBacked(runner) = runner;
+        let result = runner.tick_decide_only(kernel);
         result.map(|tick| RuntimeLlmDecision {
             agent_id: tick.agent_id,
             decision: tick.decision,
@@ -686,14 +608,8 @@ impl RuntimeLlmSidecar {
             event,
         };
         if let Some(runner) = self.runner.as_mut() {
-            match runner {
-                RuntimeDecisionRunner::Builtin(runner) => {
-                    let _ = runner.notify_action_result(pending.agent_id.as_str(), &action_result);
-                }
-                RuntimeDecisionRunner::ProviderBacked(runner) => {
-                    let _ = runner.notify_action_result(pending.agent_id.as_str(), &action_result);
-                }
-            }
+            let RuntimeDecisionRunner::ProviderBacked(runner) = runner;
+            let _ = runner.notify_action_result(pending.agent_id.as_str(), &action_result);
         }
     }
 
@@ -750,12 +666,11 @@ impl RuntimeLlmSidecar {
             .shadow_kernel
             .as_ref()
             .ok_or_else(|| "shadow kernel not initialized".to_string())?;
-        let provider_settings = provider_settings_from_env()?;
+        let provider_settings = provider_settings_from_env()?.ok_or_else(|| {
+            "provider_backed runtime live requires OASIS7_AGENT_PROVIDER_URL".to_string()
+        })?;
         if self.runner.is_none() {
-            self.runner = Some(match provider_settings.as_ref() {
-                Some(_) => RuntimeDecisionRunner::ProviderBacked(AgentRunner::new()),
-                None => RuntimeDecisionRunner::Builtin(AgentRunner::new()),
-            });
+            self.runner = Some(RuntimeDecisionRunner::ProviderBacked(AgentRunner::new()));
         }
         let runner = self
             .runner
@@ -764,82 +679,39 @@ impl RuntimeLlmSidecar {
         let mut agent_ids: Vec<String> = kernel.model().agents.keys().cloned().collect();
         agent_ids.sort();
         for agent_id in agent_ids {
-            match runner {
-                RuntimeDecisionRunner::Builtin(runner) => {
-                    if runner.get(agent_id.as_str()).is_some() {
-                        continue;
-                    }
-                    let mut config = LlmAgentConfig::from_default_sources_for_agent(
-                        agent_id.as_str(),
-                    )
-                    .map_err(|err| format!("llm init failed for {}: {:?}", agent_id, err))?;
-                    config.timeout_ms = resolve_runtime_live_llm_timeout_ms(config.timeout_ms);
-                    let client = OpenAiChatCompletionClient::from_config(&config)
-                        .map_err(|err| format!("llm init failed for {}: {:?}", agent_id, err))?;
-                    let mut behavior = LlmAgentBehavior::new(agent_id.clone(), config, client);
-                    let short_term_goal_override = self
-                        .prompt_profiles
-                        .get(agent_id.as_str())
-                        .and_then(|profile| profile.short_term_goal_override.clone())
-                        .or_else(|| Some(runtime_live_phase1_short_term_goal()));
-                    let system_prompt_override = self
-                        .prompt_profiles
-                        .get(agent_id.as_str())
-                        .and_then(|profile| profile.system_prompt_override.clone());
-                    let long_term_goal_override = self
-                        .prompt_profiles
-                        .get(agent_id.as_str())
-                        .and_then(|profile| profile.long_term_goal_override.clone());
-                    behavior.apply_prompt_overrides(
-                        system_prompt_override,
-                        short_term_goal_override,
-                        long_term_goal_override,
-                    );
-                    restore_behavior_long_term_memory_from_model(
-                        &mut behavior,
-                        kernel,
-                        agent_id.as_str(),
-                    );
-                    runner.register(behavior);
-                }
-                RuntimeDecisionRunner::ProviderBacked(runner) => {
-                    if runner.get(agent_id.as_str()).is_some() {
-                        continue;
-                    }
-                    let settings = provider_settings.as_ref().ok_or_else(|| {
-                        "provider runner selected without resolved settings".to_string()
-                    })?;
-                    let adapter = ProviderLoopbackAdapter::new_with_transport(
-                        settings.base_url.as_str(),
-                        settings.auth_token.as_deref(),
-                        settings.connect_timeout_ms,
-                        settings.provider_transport.as_str(),
-                    )
-                    .map_err(|err| format!("provider init failed for {}: {}", agent_id, err))?;
-                    let behavior = ProviderBackedAgentBehavior::new(
-                        agent_id.clone(),
-                        adapter,
-                        provider_phase1_action_catalog(),
-                    )
-                    .with_provider_config_ref(format!(
-                        "provider://{}/runtime-live/pid-{}/{}",
-                        settings.provider_transport,
-                        std::process::id(),
-                        agent_id
-                    ))
-                    .with_agent_profile(settings.agent_profile.clone())
-                    .with_execution_mode(settings.execution_mode)
-                    .with_environment_class("runtime_live")
-                    .with_memory_summary(provider_phase1_memory_summary());
-                    let behavior =
-                        if let Some(fallback_reason) = settings.fallback_reason.as_deref() {
-                            behavior.with_fallback_reason(fallback_reason)
-                        } else {
-                            behavior
-                        };
-                    runner.register(behavior);
-                }
+            let RuntimeDecisionRunner::ProviderBacked(runner) = runner;
+            if runner.get(agent_id.as_str()).is_some() {
+                continue;
             }
+            let adapter = ProviderLoopbackAdapter::new_with_transport(
+                provider_settings.base_url.as_str(),
+                provider_settings.auth_token.as_deref(),
+                provider_settings.connect_timeout_ms,
+                provider_settings.provider_transport.as_str(),
+            )
+            .map_err(|err| format!("provider init failed for {}: {}", agent_id, err))?;
+            let behavior = ProviderBackedAgentBehavior::new(
+                agent_id.clone(),
+                adapter,
+                provider_phase1_action_catalog(),
+            )
+            .with_provider_config_ref(format!(
+                "provider://{}/runtime-live/pid-{}/{}",
+                provider_settings.provider_transport,
+                std::process::id(),
+                agent_id
+            ))
+            .with_agent_profile(provider_settings.agent_profile.clone())
+            .with_execution_mode(provider_settings.execution_mode)
+            .with_environment_class("runtime_live")
+            .with_memory_summary(provider_phase1_memory_summary());
+            let behavior =
+                if let Some(fallback_reason) = provider_settings.fallback_reason.as_deref() {
+                    behavior.with_fallback_reason(fallback_reason)
+                } else {
+                    behavior
+                };
+            runner.register(behavior);
         }
         Ok(())
     }
@@ -848,12 +720,6 @@ impl RuntimeLlmSidecar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
-
-    fn runtime_llm_timeout_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     #[test]
     fn bind_agent_player_emits_unbind_before_rebind_for_same_agent() {
@@ -914,22 +780,5 @@ mod tests {
                 .map(String::as_str),
             Some("pubkey-b")
         );
-    }
-
-    #[test]
-    fn runtime_live_llm_timeout_defaults_to_configured_budget() {
-        let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
-        std::env::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
-        assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 30_000);
-        assert_eq!(resolve_runtime_live_llm_timeout_ms(8_000), 8_000);
-    }
-
-    #[test]
-    fn runtime_live_llm_timeout_respects_env_ceiling_without_expanding_budget() {
-        let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
-        std::env::set_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS, "9000");
-        assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 9_000);
-        assert_eq!(resolve_runtime_live_llm_timeout_ms(4_000), 4_000);
-        std::env::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
     }
 }

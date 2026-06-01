@@ -19,9 +19,6 @@ mod fragment_physics;
 mod init;
 mod init_module_visual;
 mod kernel;
-#[cfg(not(target_arch = "wasm32"))]
-mod llm_agent;
-mod llm_defaults;
 mod memory;
 mod module_visual;
 mod native_resolution;
@@ -79,21 +76,6 @@ pub use kernel::{
     Observation, ObservedAgent, ObservedLocation, ObservedModuleArtifactRecord,
     ObservedModuleLifecycleState, ObservedModuleMarketState, ObservedPowerMarketState,
     ObservedSocialState, WorldKernel,
-};
-#[cfg(not(target_arch = "wasm32"))]
-pub use llm_agent::{
-    LlmAgentBehavior, LlmAgentBuildError, LlmAgentConfig, LlmClientError,
-    OpenAiChatCompletionClient,
-};
-pub use llm_defaults::{
-    DEFAULT_CONFIG_FILE_NAME, DEFAULT_LLM_FORCE_REPLAN_AFTER_SAME_ACTION,
-    DEFAULT_LLM_LONG_TERM_GOAL, DEFAULT_LLM_MAX_DECISION_STEPS, DEFAULT_LLM_MAX_MODULE_CALLS,
-    DEFAULT_LLM_MAX_REPAIR_ROUNDS, DEFAULT_LLM_PROMPT_MAX_HISTORY_ITEMS,
-    DEFAULT_LLM_SHORT_TERM_GOAL, DEFAULT_LLM_SYSTEM_PROMPT, ENV_LLM_API_KEY, ENV_LLM_BASE_URL,
-    ENV_LLM_FORCE_REPLAN_AFTER_SAME_ACTION, ENV_LLM_LONG_TERM_GOAL, ENV_LLM_MAX_DECISION_STEPS,
-    ENV_LLM_MAX_MODULE_CALLS, ENV_LLM_MAX_REPAIR_ROUNDS, ENV_LLM_MODEL,
-    ENV_LLM_PROMPT_MAX_HISTORY_ITEMS, ENV_LLM_PROMPT_PROFILE, ENV_LLM_SHORT_TERM_GOAL,
-    ENV_LLM_SYSTEM_PROMPT, ENV_LLM_TIMEOUT_MS,
 };
 pub use memory::{
     AgentMemory, LongTermMemory, LongTermMemoryEntry, MemoryEntry, MemoryEntryKind, ShortTermMemory,

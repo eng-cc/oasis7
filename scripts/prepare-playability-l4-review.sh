@@ -35,7 +35,7 @@ Options:
   --artifact-path <path>      Repeatable packet artifact path
   --bundle-dir <path>         Bundle dir to embed into recommended L4B commands
   --with-l4a-stack            Boot `./scripts/worktree-harness.sh up` before writing artifacts
-                              (requires the same active LLM provider config as formal gameplay)
+                              (requires the same remote provider bridge selector as formal gameplay)
   --json                      Print manifest JSON path summary
   -h, --help                  Show this help
 

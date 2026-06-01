@@ -141,9 +141,6 @@ fn runtime_step_control_reports_blocked_without_llm_mode() {
 fn runtime_step_control_reports_llm_init_failed_when_provider_unavailable() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -187,9 +184,6 @@ fn runtime_step_control_reports_llm_init_failed_when_provider_unavailable() {
 fn runtime_background_play_stops_when_llm_access_is_unavailable() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -971,9 +965,6 @@ fn runtime_agent_chat_echo_env_accepts_chat_without_llm_runner_config() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),

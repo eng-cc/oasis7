@@ -88,8 +88,13 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                     })?;
             }
             "--agent-provider-mode" => {
-                options.agent_decision_source =
-                    parse_required_value(&mut iter, "--agent-provider-mode")?;
+                let provider_mode = parse_required_value(&mut iter, "--agent-provider-mode")?;
+                if provider_mode == PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
+                    || provider_mode == AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS
+                {
+                    options.agent_provider_transport = LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string();
+                }
+                options.agent_decision_source = provider_mode;
             }
             "--no-open-browser" => {
                 options.open_browser = false;
@@ -435,15 +440,15 @@ Options:\n\
   --chain-pos-max-past-slot-lag <n>\n\
                                oasis7_chain_runtime max accepted stale slot lag (default: {DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG})\n\
   --chain-node-validator <v:s> oasis7_chain_runtime validator (repeatable)\n\
-  --with-llm                   enable llm mode (default; required for gameplay)\n\
+  --with-llm                   enable provider-backed LLM mode (default; required for gameplay)\n\
   --agent-decision-source <src>\n\
-                               agent decision source: builtin_llm|provider_backed\n\
+                               agent decision source: provider_backed\n\
   --agent-provider-backend <id>\n\
                                provider backend: provider_local_bridge (default when provider_backed)\n\
   --agent-provider-contract <id>\n\
                                provider contract: worldsim_provider_v1 (default when provider_backed)\n\
   --agent-provider-transport <id>\n\
-                               provider transport: loopback_http (default when provider_backed)\n\
+                               provider transport: remote_https (default) or loopback_http\n\
   --agent-provider-url <url>   provider URL (default: {DEFAULT_AGENT_PROVIDER_URL})\n\
   --agent-provider-auth-token <tok>\n\
                                provider bearer token\n\
@@ -453,7 +458,7 @@ Options:\n\
                                provider profile (default: {DEFAULT_AGENT_PROVIDER_PROFILE})\n\
   --agent-execution-lane <mode>\n\
                                execution lane: player_parity|headless_agent (default: headless_agent)\n\
-  --agent-provider-mode <mode> legacy alias for --agent-decision-source; accepts agent_direct_connect/provider_loopback_http\n\\
+  --agent-provider-mode <mode> legacy provider-backed alias; accepts agent_direct_connect/provider_loopback_http\n\\
   --no-open-browser            do not auto open browser\n\
   -h, --help                   show help\n\n\
 Env:\n\

@@ -103,7 +103,6 @@
   - `cargo test -p oasis7_node --lib`
   - `cargo test -p oasis7_net --lib`
   - `cargo test -p oasis7_net --features libp2p --lib`
-  - `./scripts/llm-baseline-fixture-smoke.sh`
   - `cargo test -p oasis7 --features wasmtime --lib --bins`
 - 入口 B：`.github/workflows/rust.yml`（required-gate）
   - planner 先执行：`./scripts/plan-rust-required-scope.sh --event-name <push|pull_request> --base-ref <base> --head-ref <head>`
@@ -152,7 +151,7 @@
 ### L4A synthetic 内部闭环层（Web 为默认）
 - 目标：验证 formal player surface 的真实可用性（加载、交互、状态可见、无 console error），并在此基础上完成 synthetic internal playability review。
 - 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。这一层属于 `L4A synthetic`，可以产出 UI 闭环、subagent review、persona panel 等内部模拟证据。`scripts/run-game-test.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断。launcher stack 与 `--with-harness` 预热都走 formal gameplay 的 active LLM path；`--no-llm` 只保留给直接 `oasis7_viewer_live` 观战/调试排障。
-- 完整 `L4` scaffold：先运行 `./scripts/prepare-playability-l4-review.sh --with-l4a-stack`。它会在当前 worktree 自己的 `output/harness/<worktree_id>/artifacts/playability-l4-<timestamp>/` 下生成 `l4-review-packet.md`、`role-review-cards/*.md`、`persona-cards/*.md`、`l4-summary.md`、`commands.sh`、`manifest.json`，并在 `evidence/` 下冻结当前 `L4A` harness state / URL。这个入口继承 formal gameplay 的 active LLM provider preflight；若当前环境缺少 `OASIS7_LLM_MODEL` / 等价 `config.toml`，会在 harness 启动前 fail-fast。
+- 完整 `L4` scaffold：先运行 `./scripts/prepare-playability-l4-review.sh --with-l4a-stack`。它会在当前 worktree 自己的 `output/harness/<worktree_id>/artifacts/playability-l4-<timestamp>/` 下生成 `l4-review-packet.md`、`role-review-cards/*.md`、`persona-cards/*.md`、`l4-summary.md`、`commands.sh`、`manifest.json`，并在 `evidence/` 下冻结当前 `L4A` harness state / URL。这个入口继承 formal gameplay 的 remote provider contract preflight；默认走 `agent_decision_source=provider_backed + agent_provider_transport=remote_https`，需要传 `--newapi-user-ref <ref>` / `OASIS7_NEWAPI_USER_REF` 或等价 provider bearer selector。
 - 最低完成定义：至少回填 review packet、`producer_system_designer` / `qa_engineer` 角色卡，以及命中的其余角色卡与 persona cards；只跑 harness / S6，不回填这些卡片，不算 `L4A` 完成。
 - 结论边界：这一层可以回答“synthetic 看起来会不会继续玩”，不能直接回答“真人是否真的想继续玩”。
 - native 抓图：仅 fallback（Web 无法复现或 native 图形链路问题）。
@@ -233,7 +232,6 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - `viewer_live_integration`
   - `oasis7_node --lib`、`oasis7_net --lib`
   - `oasis7_net` 的 `libp2p` 路径
-  - `llm-baseline-fixture-smoke`（基线加载与离线治理续跑断言）
 
 ### S3：应用主链定向套件（L1 + L2）
 ```bash
@@ -383,7 +381,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 模式总口径（`PRD-CORE-009`）：
   - `viewer` / `pure_api` 是当前正式玩家访问模式，分别对应默认 Web 入口和纯接口正式入口；`software_safe` 仅保留为 `viewer` 的兼容 alias。
   - `pure_api` 的正式游玩与 headed Web/UI 一样，默认要求 active LLM access；禁用 LLM 后只能做 blocked/observer-debug 诊断，不再计入正式可玩性证据。
-  - `player_parity` / `headless_agent` / `debug_viewer` 是 agent provider 的 execution lane；当前 Local Provider provider-backed 主口径必须写成 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`，远程托管 bridge 则必须显式写成 `agent_provider_transport=remote_https`，`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias，这些字段都不构成额外玩家访问模式。
+  - `player_parity` / `headless_agent` / `debug_viewer` 是 agent provider 的 execution lane；当前正式试玩主口径必须写成 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=remote_https`。`loopback_http` 只保留给本地 provider bridge 开发诊断，`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias，这些字段都不构成额外玩家访问模式。
   - repo-owned `remote_https` 参考装配当前采用 `oasis7_provider_local_bridge` + `scripts/provider-remote-https/letai_provider_cli.py` + `nginx` HTTPS 反代；操作步骤见 `doc/world-runtime/runtime/provider-remote-https-bridge-operator-runbook.md`。
   - 任何 QA / release / playability 结论都应先标明玩家访问模式，再补充 execution lane；不得把 `headless_agent` 或 `debug_viewer` 直接当成“第四种入口”。
 - `oasis7_viewer_live` / Viewer 页面：默认使用 `agent-browser` 驱动页面与采集证据；当 `renderMode=viewer`（或兼容 alias `software_safe`）且带 viewer auth bootstrap 时，允许继续验证选中 Agent 的最小 `prompt/chat` 闭环。
@@ -442,8 +440,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
 ./scripts/worktree-harness.sh status --json
 ./scripts/worktree-harness.sh down
 ./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local
-./scripts/check-active-llm-provider.sh --pretty
-./scripts/run-game-test.sh --bundle-dir output/release/game-launcher-local --with-llm
+./scripts/run-game-test.sh --bundle-dir output/release/game-launcher-local --newapi-user-ref <ref>
 ./scripts/run-game-test-ab.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/viewer-post-onboarding-qa.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/viewer-post-onboarding-headless-smoke.sh --bundle-dir output/release/game-launcher-local --with-llm
@@ -451,8 +448,8 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
 cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
 ./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --with-llm
 ```
-  - active-LLM 预检：
-    `run-game-test.sh` 现在会在启动 launcher 前先跑一次 active LLM provider probe，复用同一套 `config.toml` / `OASIS7_LLM_*` 配置，并同时验证 Responses hello 文本响应与 required tool-call 合约；若 provider/model/auth/base URL 当前不可用，或模型能回文本但不能稳定返回 tool call，会直接 fail-fast，不再等到首个 `step` 才暴露。需要故意保留“stack 可启动但 formal lane 在首步 blocked”的负向验证时，显式加 `--skip-llm-provider-preflight`。
+  - remote provider 预检：
+    `run-game-test.sh` 现在会在启动 launcher 前先跑 remote provider contract preflight，默认检查 `https://t2t.oasis7.tech/v1/provider/info`，并把 `--newapi-user-ref <ref>` 转成 `agent-provider-auth-token=newapi_user_ref:<ref>` 交给 remote bridge。游戏端 direct LLM/config 路径已删除；需要故意保留“stack 可启动但 formal lane 在首步 blocked”的负向验证时，显式加 `--skip-provider-preflight`。
 
 ### S7：场景矩阵回归套件（L1 + L4）
 ```bash
@@ -484,31 +481,9 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
 ```bash
 ./scripts/viewer-owr4-stress.sh --duration-secs 45 --scenarios triad_region_bootstrap,llm_bootstrap
 ```
-- LLM 长稳：
-```bash
-./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240
-```
-- LLM 覆盖门禁（发行口径）：
-```bash
-./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240 --release-gate --release-gate-profile hybrid
-```
-- LLM gameplay 对照（bridge 开/关）：
-```bash
-./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --runtime-gameplay-bridge
-./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --no-runtime-gameplay-bridge
-```
-- git 跟踪基线 fixture smoke（`test_tier_full`）：
-```bash
-./scripts/llm-baseline-fixture-smoke.sh
-```
-- Prompt 切换覆盖对比（定向排障）：
-```bash
-./scripts/llm-switch-coverage-diff.sh --log <run.log> --switch-tick 24
-```
 - 说明：
-  - 详细参数与 profile 组合请以 `./scripts/llm-longrun-stress.sh --help` 为准；
-  - `viewer-owr4-stress` 在无 `OPENAI_API_KEY` 时，`llm_bootstrap` 会退化为 script_fallback；
-  - `scripts/ci-tests.sh full` 已接入 `./scripts/llm-baseline-fixture-smoke.sh`；
+  - 游戏端 direct LLM stress/demo 入口已删除；MVP 试玩长稳统一通过 provider-backed remote HTTPS formal stack 验证；
+  - `viewer-owr4-stress` 不得依赖 legacy direct model env 或 direct provider fallback；
   - 压测结果需保留 CSV/summary/log 产物。
 
 ### S9：P2P/存储/共识在线长跑套件（L5）
@@ -1125,7 +1100,7 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 | `crates/oasis7_consensus/**` | S0 + S4（consensus） + S9/S10（按改动面至少一条） | S2 + S8 + 另一条在线长跑（S9 或 S10） | epoch / attest / finality 逻辑改动优先补 S10 |
 | `crates/oasis7_distfs/**` | S0 + S4（distfs） + S9/S10（按改动面至少一条） | S2 + S8 + 另一条在线长跑（S9 或 S10） | 存储复制 / challenge / 修复逻辑改动优先补 S9 |
 | `doc/**`（非 `doc/devlog/**`） | S0（含 `./scripts/doc-governance-check.sh`） | 命中模块的抽样 required 证据核验 | 若文档改变发布 / 测试口径，追加对应模块的最小必跑集 |
-| `scripts/ci-tests.sh` / `.github/workflows/rust.yml` | S0（含 `./scripts/doc-governance-check.sh`） + `bash -n scripts/plan-rust-required-scope.sh` + planner 样例 + S1 + （full）`./scripts/llm-baseline-fixture-smoke.sh` | S2 + S4 + S6（抽样） | 若更改默认 gate 组合，需抽样至少一条 S9 或 S10；docs-only / `.pm` / 无关元数据 PR 必须验证 planner 可输出 `scope=minimal` 且保留 stable `required-gate` 上下文 |
+| `scripts/ci-tests.sh` / `.github/workflows/rust.yml` | S0（含 `./scripts/doc-governance-check.sh`） + `bash -n scripts/plan-rust-required-scope.sh` + planner 样例 + S1 | S2 + S4 + S6（抽样） | 若更改默认 gate 组合，需抽样至少一条 S9 或 S10；docs-only / `.pm` / 无关元数据 PR 必须验证 planner 可输出 `scope=minimal` 且保留 stable `required-gate` 上下文 |
 | `scripts/plan-rust-required-scope.sh` | `bash -n scripts/plan-rust-required-scope.sh` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_viewer/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7/src/runtime/mod.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_node/src/network_bridge.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_net/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --changed-path doc/testing/project.md` + `./scripts/plan-rust-required-scope.sh --changed-path scripts/ci-tests.sh` | 与 `required-gate` 同步执行；PR/push 上先规划 `minimal / targeted / full`，再决定 viewer/runtime 哪些重型组件实际执行；`oasis7_node/oasis7_net` 改动需命中 support-crate required shard，而不是因未分类路径退回 full | 命中共享 CI / gate 输入或未分类代码路径时必须回退 `scope=full`；docs-only / `.pm` / 无关元数据应输出 `scope=minimal` 且不跳过治理/fmt |
 | `scripts/release-gate.sh` / `.github/workflows/release-packages.yml` | `./scripts/ci-tests.sh full` + `sync-m1/m4/m5 --check` + Web strict + S9 + S10 | `./scripts/release-gate.sh --quick` / `--dry-run` | 任何发布 gate 逻辑变更均不允许跳过 S9/S10 |
 | `scripts/ci-m1-wasm-summary.sh` / `scripts/ci-verify-m1-wasm-summaries.py` / `scripts/wasm-release-evidence-report.sh` / `.github/workflows/wasm-determinism-gate.yml` | `S0` + `./scripts/ci-m1-wasm-summary.sh --module-set m4 --runner-label linux-x86_64 --out output/ci/m4-wasm-summary/linux-x86_64.json` + `./scripts/wasm-release-evidence-report.sh --module-sets m4 --skip-collect --summary-import-dir output/ci/m4-wasm-summary --expected-runners linux-x86_64` | `workflow_dispatch` 触发 GitHub-hosted Linux runner gate；若补入外部 macOS summary，可再用 `--expected-runners linux-x86_64,darwin-arm64` 做双宿主对账 | 若改动 hash/summary/evidence report 格式，Linux gate 必跑；跨宿主 full-tier 在有 Docker-capable macOS summary 时追加 |

@@ -75,7 +75,6 @@ const DEFAULT_VIEWER_STATIC_DIR: &str = "web";
 const GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 const OASIS7_VIEWER_LIVE_BIN_ENV: &str = "OASIS7_VIEWER_LIVE_BIN";
 const OASIS7_CHAIN_RUNTIME_BIN_ENV: &str = "OASIS7_CHAIN_RUNTIME_BIN";
-const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
 const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
@@ -83,11 +82,9 @@ const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
 const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
-const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
+const DEFAULT_AGENT_PROVIDER_URL: &str = "https://t2t.oasis7.tech";
 const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_AGENT_PROVIDER_PROFILE: &str = "oasis7_p0_low_freq_npc";
-const DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS: u64 = 10_000;
-const LLM_TIMEOUT_MS_ENV: &str = "OASIS7_LLM_TIMEOUT_MS";
 const VIEWER_AGENT_DECISION_SOURCE_ENV: &str = "OASIS7_AGENT_DECISION_SOURCE";
 const VIEWER_AGENT_PROVIDER_BACKEND_ENV: &str = "OASIS7_AGENT_PROVIDER_BACKEND";
 const VIEWER_AGENT_PROVIDER_CONTRACT_ENV: &str = "OASIS7_AGENT_PROVIDER_CONTRACT";
@@ -197,10 +194,10 @@ impl Default for CliOptions {
             viewer_port: DEFAULT_VIEWER_PORT,
             viewer_static_dir: DEFAULT_VIEWER_STATIC_DIR.to_string(),
             with_llm: true,
-            agent_decision_source: BUILTIN_LLM_DECISION_SOURCE.to_string(),
+            agent_decision_source: PROVIDER_BACKED_DECISION_SOURCE.to_string(),
             agent_provider_backend: LOCAL_BRIDGE_PROVIDER_BACKEND.to_string(),
             agent_provider_contract: WORLDSIM_PROVIDER_CONTRACT.to_string(),
-            agent_provider_transport: LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string(),
+            agent_provider_transport: REMOTE_HTTPS_PROVIDER_TRANSPORT.to_string(),
             agent_provider_url: DEFAULT_AGENT_PROVIDER_URL.to_string(),
             agent_provider_auth_token: String::new(),
             agent_provider_connect_timeout_ms: DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS,
@@ -408,14 +405,7 @@ fn spawn_oasis7_viewer_live(
     options: &CliOptions,
     trace_session_id: &str,
 ) -> Result<Child, String> {
-    let parent_has_llm_timeout_ms = env::var_os(LLM_TIMEOUT_MS_ENV).is_some();
-    let repo_has_node_config_file = Path::new(NODE_CONFIG_FILE_NAME).is_file();
-    let mut command = build_oasis7_viewer_live_command(
-        path,
-        options,
-        parent_has_llm_timeout_ms,
-        repo_has_node_config_file,
-    );
+    let mut command = build_oasis7_viewer_live_command(path, options);
     command.env(TRACE_SESSION_ID_ENV, trace_session_id);
     command.spawn().map_err(|err| {
         format!(
@@ -964,21 +954,19 @@ fn host_for_url(host: &str) -> String {
 
 fn validate_agent_decision_source(raw: &str) -> Result<(), String> {
     match raw.trim() {
-        BUILTIN_LLM_DECISION_SOURCE
-        | PROVIDER_BACKED_DECISION_SOURCE
+        PROVIDER_BACKED_DECISION_SOURCE
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
-        _ => Err("--agent-decision-source must be builtin_llm or provider_backed".to_string()),
+        _ => Err("--agent-decision-source must be provider_backed".to_string()),
     }
 }
 
 fn canonical_agent_decision_source(raw: &str) -> &'static str {
     match raw.trim() {
-        BUILTIN_LLM_DECISION_SOURCE => BUILTIN_LLM_DECISION_SOURCE,
         PROVIDER_BACKED_DECISION_SOURCE
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => PROVIDER_BACKED_DECISION_SOURCE,
-        _ => BUILTIN_LLM_DECISION_SOURCE,
+        _ => PROVIDER_BACKED_DECISION_SOURCE,
     }
 }
 
