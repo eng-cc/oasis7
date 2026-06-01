@@ -178,7 +178,7 @@ impl RuntimeLlmSidecar {
     }
 
     pub(in crate::viewer::runtime_live) fn supports_prompt_control(&self) -> bool {
-        false
+        true
     }
 
     pub(in crate::viewer::runtime_live) fn supports_agent_chat(&self) -> bool {

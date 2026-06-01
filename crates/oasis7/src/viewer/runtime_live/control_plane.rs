@@ -406,15 +406,7 @@ impl ViewerRuntimeLiveServer {
                 agent_id: Some(agent_id),
             });
         }
-        if !self.llm_sidecar.supports_agent_chat() {
-            return Err(AgentChatError {
-                code: "agent_provider_chat_unsupported".to_string(),
-                message:
-                    "agent chat is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
-                        .to_string(),
-                agent_id: Some(agent_id),
-            });
-        }
+        let chat_echo_enabled = runtime_agent_chat_echo_enabled_from_env();
 
         let player_id = request
             .player_id
@@ -471,6 +463,15 @@ impl ViewerRuntimeLiveServer {
         {
             return Ok(replay_ack);
         }
+        if !self.llm_sidecar.supports_agent_chat() && !chat_echo_enabled {
+            return Err(AgentChatError {
+                code: "agent_provider_chat_unsupported".to_string(),
+                message:
+                    "agent chat is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
+                        .to_string(),
+                agent_id: Some(agent_id),
+            });
+        }
         self.llm_sidecar
             .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
             .map_err(|message| AgentChatError {
@@ -493,7 +494,12 @@ impl ViewerRuntimeLiveServer {
             Ok(()) => {
                 self.llm_sidecar.request_decision();
             }
-            Err(error) if chat_echo_enabled && error.code == "llm_init_failed" => {}
+            Err(error)
+                if chat_echo_enabled
+                    && matches!(
+                        error.code.as_str(),
+                        "llm_init_failed" | "agent_provider_chat_unsupported"
+                    ) => {}
             Err(error) => return Err(error),
         }
         self.enqueue_agent_chat_echo_event_if_enabled(agent_id.as_str(), message.as_str());

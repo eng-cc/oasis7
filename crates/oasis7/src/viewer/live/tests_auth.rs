@@ -39,7 +39,7 @@ fn prompt_control_preview_reports_fields_and_next_version() {
 }
 
 #[test]
-fn prompt_control_apply_requires_llm_mode() {
+fn prompt_control_apply_reports_direct_llm_removed() {
     let config = WorldConfig::default();
     let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
     let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Script).expect("init ok");
@@ -66,7 +66,7 @@ fn prompt_control_apply_requires_llm_mode() {
         ))
         .expect_err("script mode should reject apply");
 
-    assert_eq!(err.code, "llm_mode_required");
+    assert_eq!(err.code, "direct_llm_removed");
     assert!(world.kernel.model().agent_prompt_profiles.is_empty());
     assert!(world.kernel.model().agent_player_bindings.is_empty());
     assert!(!world.kernel.journal().iter().any(|event| matches!(

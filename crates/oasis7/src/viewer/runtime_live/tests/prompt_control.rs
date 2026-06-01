@@ -416,7 +416,7 @@ fn runtime_prompt_control_hosted_public_join_rejects_revoked_session_even_with_v
 }
 
 #[test]
-fn runtime_prompt_control_provider_mode_reports_unsupported() {
+fn runtime_prompt_control_provider_mode_updates_snapshot_and_bindings() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
@@ -436,6 +436,18 @@ fn runtime_prompt_control_provider_mode_reports_unsupported() {
         .cloned()
         .expect("seed agent");
     let (public_key, private_key) = test_signer(31);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        30,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
     let request = signed_prompt_control_apply_request(
         crate::viewer::PromptControlApplyRequest {
             agent_id: agent_id.clone(),
@@ -454,10 +466,10 @@ fn runtime_prompt_control_provider_mode_reports_unsupported() {
         public_key.as_str(),
         private_key.as_str(),
     );
-    let err = server
+    let ack = server
         .handle_prompt_control(crate::viewer::PromptControlCommand::Apply { request })
-        .expect_err("provider mode should reject prompt control");
-    assert_eq!(err.code, "agent_provider_prompt_control_unsupported");
+        .expect("provider mode prompt control updates runtime snapshot");
+    assert_eq!(ack.version, 1);
     clear_runtime_provider_env();
 }
 

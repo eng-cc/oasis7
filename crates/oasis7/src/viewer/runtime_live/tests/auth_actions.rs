@@ -807,16 +807,35 @@ fn runtime_agent_chat_provider_mode_reports_unsupported() {
         .next()
         .cloned()
         .expect("seed agent");
-    let err = server
-        .handle_agent_chat(crate::viewer::AgentChatRequest {
-            agent_id,
+    let (public_key, private_key) = test_signer(20);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
             player_id: Some("player-a".to_string()),
             public_key: None,
             auth: None,
             message: "hello".to_string(),
-            intent_tick: None,
-            intent_seq: None,
-        })
+            intent_tick: Some(1),
+            intent_seq: Some(20),
+        },
+        20,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        19,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    let err = server
+        .handle_agent_chat(request)
         .expect_err("provider mode should reject chat");
     assert_eq!(err.code, "agent_provider_chat_unsupported");
     clear_runtime_provider_env();
@@ -825,6 +844,7 @@ fn runtime_agent_chat_provider_mode_reports_unsupported() {
 #[test]
 fn runtime_agent_chat_replay_returns_idempotent_ack() {
     let _guard = lock_test_llm_env();
+    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -1065,8 +1085,10 @@ fn runtime_agent_chat_echo_removed_old_brand_env_is_ignored() {
         AuthoritativeRecoveryStatus::SessionRegistered
     );
 
-    let ack = server.handle_agent_chat(request).expect("chat accepted");
-    assert_eq!(ack.agent_id, agent_id);
+    let err = server
+        .handle_agent_chat(request)
+        .expect_err("removed old brand echo env should not enable chat");
+    assert_eq!(err.code, "agent_provider_chat_unsupported");
 
     let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
     assert!(!events.iter().any(|event| matches!(

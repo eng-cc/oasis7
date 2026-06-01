@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change() {
     let _guard = lock_test_llm_env();
+    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -118,6 +119,7 @@ fn runtime_agent_chat_rejects_intent_seq_nonce_mismatch() {
 #[test]
 fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_chat() {
     let _guard = lock_test_llm_env();
+    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
