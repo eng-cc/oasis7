@@ -58,7 +58,7 @@ impl PosNodeEngine {
                 self.record_synced_replication_height(probe_height, block_hash, committed_at_ms)?;
                 Ok(true)
             }
-            Ok(GapSyncHeightOutcome::NotFound) => {
+            Ok(GapSyncHeightOutcome::NotFound { .. }) => {
                 self.note_replication_successor_probe_attempt(probe_height, now_ms, false);
                 Ok(false)
             }

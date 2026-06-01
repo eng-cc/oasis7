@@ -33,7 +33,7 @@ fn sample_observability_p2p_status() -> super::status_payload::ChainP2pStatus {
     }
 }
 
-fn sample_wasm_status() -> super::wasm_status::ChainWasmStatus {
+pub(super) fn sample_wasm_status() -> super::wasm_status::ChainWasmStatus {
     super::wasm_status::ChainWasmStatus {
         metrics_available: true,
         observed_since_unix_ms: Some(1_700_000_000_000),
@@ -982,135 +982,6 @@ fn build_chain_status_payload_clamps_future_ages_to_zero() {
             .age_ms,
         0
     );
-}
-
-#[test]
-fn build_chain_status_payload_marks_replication_gap_blocked_unhealthy() {
-    let mut consensus = NodeConsensusSnapshot::default();
-    consensus.committed_height = 10;
-    consensus.network_committed_height = 30;
-    consensus.replication_persisted_height = 4;
-    consensus.replication_gap_sync_blocked_height = Some(5);
-    consensus.replication_gap_sync_blocked_reason =
-        Some("replication gap sync blocked: missing commit height 5".to_string());
-    let snapshot = NodeSnapshot {
-        node_id: "node-gap".to_string(),
-        player_id: "player-gap".to_string(),
-        world_id: "world-gap".to_string(),
-        role: NodeRole::Sequencer,
-        replication_enabled: true,
-        running: true,
-        tick_count: 1,
-        last_tick_unix_ms: None,
-        consensus,
-        last_error: None,
-    };
-    let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
-        NodeRole::Sequencer,
-        NodeUserMode::PrivateSafe,
-        NodeReachabilityAutoDetection::default(),
-        false,
-    )
-    .expect("recommendation");
-    let payload = build_chain_status_payload(
-        snapshot,
-        Path::new("/tmp/execution-world"),
-        None,
-        &recommendation,
-        None,
-        NodeNetworkPolicy {
-            deployment_mode: PeerDeploymentMode::Private,
-            node_role_claim: PeerNodeRole::ValidatorCore,
-        },
-        &Libp2pReachabilitySnapshot::default(),
-        NodeReachabilityAutoDetection::default(),
-        ReleaseSecurityPolicy::default(),
-        super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
-            enabled: false,
-            metrics_available: true,
-            report_dir: String::new(),
-            report_count: 0,
-            latest_epoch_index: 0,
-            latest_report_observed_at_unix_ms: 0,
-            latest_total_distributed_points: 0,
-            latest_minted_record_count: 0,
-            cumulative_minted_record_count: 0,
-            distfs_total_checks: 0,
-            distfs_failed_checks: 0,
-            distfs_failure_ratio: 0.0,
-            settlement_apply_attempts_total: 0,
-            settlement_apply_failures_total: 0,
-            settlement_apply_failure_ratio: 0.0,
-            invariant_ok: true,
-            last_error: None,
-        },
-        super::storage_metrics::StorageMetricsSnapshot {
-            storage_profile: "dev_local".to_string(),
-            effective_budget: StorageProfileConfig::from(StorageProfile::DevLocal),
-            bytes_by_dir: BTreeMap::new(),
-            blob_counts: BTreeMap::new(),
-            ref_count: 0,
-            pin_count: 0,
-            retained_heights: Vec::new(),
-            checkpoint_count: 0,
-            replay_summary: super::storage_metrics::StorageReplaySummary::default(),
-            orphan_blob_count: 0,
-            last_gc_at_ms: None,
-            last_gc_result: "not_available".to_string(),
-            last_gc_error: None,
-            degraded_reason: None,
-        },
-        sample_wasm_status(),
-        super::ChainTrafficStatus {
-            udp_gossip: None,
-            libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
-        },
-        super::transfer_submit_api::ChainTransferMetricsStatus {
-            tracked_records: 0,
-            accepted_count: 0,
-            pending_count: 0,
-            confirmed_count: 0,
-            failed_count: 0,
-            timeout_count: 0,
-            inflight_count: 0,
-            oldest_inflight_age_ms: None,
-            recent_confirmation_latency:
-                super::transfer_submit_api::ChainTransferLatencySummaryStatus {
-                    sample_count: 0,
-                    avg_latency_ms: None,
-                    max_latency_ms: None,
-                    p50_latency_ms: None,
-                    p95_latency_ms: None,
-                },
-        },
-        super::ChainReplicationDebugStatus::default(),
-    );
-
-    assert!(!payload.ok);
-    assert_eq!(payload.observability.status, "critical");
-    assert!(payload.observability.replication_enabled);
-    assert_eq!(payload.observability.replication_persisted_height, 4);
-    assert_eq!(payload.observability.replication_state_gap, 6);
-    assert_eq!(
-        payload.observability.replication_gap_sync_blocked_height,
-        Some(5)
-    );
-    assert!(payload.consensus.replication_enabled);
-    assert_eq!(payload.consensus.replication_persisted_height, 4);
-    assert_eq!(
-        payload.consensus.replication_gap_sync_blocked_height,
-        Some(5)
-    );
-    assert!(payload
-        .observability
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "replication_gap_sync_blocked"));
-    assert!(payload
-        .observability
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_replication_state_gap"));
 }
 
 #[test]

@@ -144,7 +144,9 @@ impl PosNodeEngine {
         let request = replication_runtime.build_fetch_commit_request(world_id, height)?;
         let fetch_commit = fetch_commit(endpoint, &request)?;
         if !fetch_commit.response.found {
-            return Ok(GapSyncHeightOutcome::NotFound);
+            return Ok(GapSyncHeightOutcome::NotFound {
+                repair_summary: fetch_commit.repair_summary,
+            });
         }
         let mut message = fetch_commit
             .response
@@ -227,7 +229,11 @@ impl PosNodeEngine {
         }
         match replication_runtime.validate_remote_message_for_apply(node_id, world_id, &message) {
             Ok(true) => {}
-            Ok(false) => return Ok(GapSyncHeightOutcome::NotFound),
+            Ok(false) => {
+                return Ok(GapSyncHeightOutcome::NotFound {
+                    repair_summary: "commit validation rejected apply".to_string(),
+                })
+            }
             Err(err) => return Err(err),
         }
         validate_consensus_action_root(payload.action_root.as_str(), payload.actions.as_slice())
@@ -351,6 +357,7 @@ impl PosNodeEngine {
         block_hash: String,
         committed_at_ms: i64,
     ) -> Result<(), NodeError> {
+        self.replication_persisted_height = self.replication_persisted_height.max(height);
         if height <= self.committed_height {
             return Ok(());
         }
@@ -361,6 +368,46 @@ impl PosNodeEngine {
         self.last_committed_at_ms = Some(committed_at_ms);
         self.next_height = next_synced_height;
         self.last_committed_block_hash = Some(block_hash);
+        self.pending = None;
+        Ok(())
+    }
+
+    pub(super) fn rollback_to_replicated_commit_boundary(
+        &mut self,
+        height: u64,
+        block_hash: String,
+        committed_at_ms: i64,
+        execution_block_hash: Option<String>,
+        execution_state_root: Option<String>,
+    ) -> Result<(), NodeError> {
+        if execution_block_hash.is_some() != execution_state_root.is_some() {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "replication boundary rollback height {} execution binding malformed",
+                    height
+                ),
+            });
+        }
+        let next_height = checked_replication_successor(
+            height,
+            "height",
+            "rolling back to replicated commit boundary",
+        )?;
+        self.committed_height = height;
+        self.network_committed_height = self.network_committed_height.min(height);
+        self.replication_persisted_height = self.replication_persisted_height.min(height);
+        self.last_replication_gap_sync_blocked_height = None;
+        self.last_replication_gap_sync_blocked_reason = None;
+        self.last_replication_gap_sync_repair_attempt_height = None;
+        self.last_replication_gap_sync_repair_attempt_summary = None;
+        self.last_committed_at_ms = Some(committed_at_ms);
+        self.next_height = next_height;
+        self.last_committed_block_hash = Some(block_hash);
+        self.last_execution_height = height;
+        self.last_execution_block_hash = execution_block_hash;
+        self.last_execution_state_root = execution_state_root;
+        self.execution_bindings.clear();
+        self.remember_execution_binding_for_height(height);
         self.pending = None;
         Ok(())
     }

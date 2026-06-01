@@ -1,5 +1,7 @@
 #[path = "tests_storage_challenge_gate.rs"]
 mod storage_challenge_gate_tests;
+#[path = "tests_storage_replication_recovery.rs"]
+mod storage_replication_recovery_tests;
 
 #[test]
 fn runtime_network_replication_gap_sync_reports_error_after_retries_exhausted() {
@@ -639,6 +641,80 @@ fn proposer_local_replication_advances_persisted_height_without_network_endpoint
     assert_eq!(engine.replication_persisted_height, 1);
     assert_eq!(engine.last_replication_gap_sync_blocked_height, None);
     assert_eq!(engine.last_replication_gap_sync_blocked_reason, None);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn restart_refresh_seeds_replication_cursor_from_durable_writer_state() {
+    let dir = temp_dir("restart-refresh-seeds-replication-cursor");
+    let world_id = "world-restart-replication-cursor";
+    let validators = vec![PosValidator {
+        validator_id: "node-a".to_string(),
+        stake: 100,
+    }];
+    let pos_config = signed_pos_config_with_signer_seeds(validators, &[("node-a", 41)]);
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 41));
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let mut replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-a")
+            .expect("replication runtime");
+
+    for height in 1..=3 {
+        engine.last_execution_height = height;
+        engine.last_execution_block_hash = Some(format!("exec-block-{height}"));
+        engine.last_execution_state_root = Some(format!("exec-state-{height}"));
+        let decision = PosDecision {
+            height,
+            slot: height - 1,
+            epoch: 0,
+            status: PosConsensusStatus::Committed,
+            block_hash: format!("block-{height}"),
+            action_root: empty_action_root(),
+            committed_actions: Vec::new(),
+            approved_stake: 100,
+            rejected_stake: 0,
+            required_stake: 67,
+            total_stake: 100,
+        };
+        engine
+            .broadcast_local_replication(
+                None,
+                None,
+                "node-a",
+                world_id,
+                1_000 + height as i64,
+                &decision,
+                Some(&mut replication),
+            )
+            .expect("broadcast local replication");
+    }
+
+    fs::remove_file(
+        dir.join("replication_commit_messages")
+            .join("00000000000000000001.json"),
+    )
+    .expect("remove compacted first commit");
+
+    let restarted_replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-a")
+            .expect("restarted replication runtime");
+    let mut restarted_engine = PosNodeEngine::new(&config).expect("restarted engine");
+    restarted_engine
+        .refresh_replication_persisted_height(&restarted_replication, world_id)
+        .expect("refresh replication persisted height");
+
+    assert_eq!(restarted_engine.replication_persisted_height, 3);
+    assert_eq!(
+        restarted_replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted height"),
+        3
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }

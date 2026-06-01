@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -275,6 +275,10 @@ impl NodeReplicationConfig {
         self.root_dir.join("replication_guard.json")
     }
 
+    fn remote_guard_state_path(&self) -> PathBuf {
+        self.root_dir.join("replication_remote_guards.json")
+    }
+
     fn writer_state_path(&self, node_id: &str) -> PathBuf {
         self.root_dir
             .join(format!("replication_writer_state_{node_id}.json"))
@@ -340,6 +344,7 @@ pub(crate) struct ReplicationRuntime {
     config: NodeReplicationConfig,
     store: LocalCasStore,
     guard: SingleWriterReplicationGuard,
+    remote_guards: BTreeMap<String, SingleWriterReplicationGuard>,
     writer_state: LocalWriterState,
     signer: Option<ReplicationSigningKey>,
     enforce_signature: bool,
@@ -421,6 +426,9 @@ impl ReplicationRuntime {
         let guard = load_json_or_default::<SingleWriterReplicationGuard>(
             config.guard_state_path().as_path(),
         )?;
+        let remote_guards = load_json_or_default::<BTreeMap<String, SingleWriterReplicationGuard>>(
+            config.remote_guard_state_path().as_path(),
+        )?;
         let signer = config.signing_keypair()?;
         let mut writer_state =
             load_json_or_default::<LocalWriterState>(config.writer_state_path(node_id).as_path())?;
@@ -439,6 +447,7 @@ impl ReplicationRuntime {
             config: config.clone(),
             store: LocalCasStore::new(config.store_root()),
             guard,
+            remote_guards,
             writer_state,
             enforce_signature: config.enforce_signature || signer.is_some(),
             remote_writer_allowlist: config.remote_writer_allowlist().clone(),
@@ -547,19 +556,22 @@ impl ReplicationRuntime {
             return Ok(());
         }
 
+        let mut remote_guard = self.remote_guard_for_record(&message.record);
         apply_replication_record(
             &self.store,
-            &mut self.guard,
+            &mut remote_guard,
             &message.record,
             &message.payload,
         )
         .map_err(distfs_error_to_node_error)?;
+        self.remote_guards
+            .insert(message.record.writer_id.clone(), remote_guard);
 
         if let Some(height) = commit_height_from_payload(message.payload.as_slice()) {
             self.persist_commit_message(height, message)?;
         }
 
-        write_json_pretty(self.config.guard_state_path().as_path(), &self.guard)
+        self.persist_remote_guards()
     }
 
     pub(crate) fn validate_remote_message_for_observe(
@@ -589,7 +601,7 @@ impl ReplicationRuntime {
             return Ok(false);
         }
 
-        let mut next_guard = self.guard.clone();
+        let mut next_guard = self.remote_guard_for_record(&message.record);
         next_guard
             .validate_and_advance(&message.record)
             .map_err(distfs_error_to_node_error)?;
@@ -608,9 +620,17 @@ impl ReplicationRuntime {
 
     fn persist_state(&self, node_id: &str) -> Result<(), NodeError> {
         write_json_pretty(self.config.guard_state_path().as_path(), &self.guard)?;
+        self.persist_remote_guards()?;
         write_json_pretty(
             self.config.writer_state_path(node_id).as_path(),
             &self.writer_state,
+        )
+    }
+
+    fn persist_remote_guards(&self) -> Result<(), NodeError> {
+        write_json_pretty(
+            self.config.remote_guard_state_path().as_path(),
+            &self.remote_guards,
         )
     }
 
@@ -662,17 +682,25 @@ impl ReplicationRuntime {
     }
 
     fn is_stale_remote_record(&self, record: &FileReplicationRecord) -> bool {
-        let local_epoch = self.guard.writer_epoch.max(DEFAULT_WRITER_EPOCH);
-        if record.writer_epoch < local_epoch {
-            return true;
-        }
-        if record.writer_epoch == local_epoch
-            && self.guard.writer_id.as_deref() == Some(record.writer_id.as_str())
-            && record.sequence <= self.guard.last_sequence
-        {
-            return true;
-        }
-        false
+        let Some(guard) = self.remote_guards.get(record.writer_id.as_str()) else {
+            return false;
+        };
+        record.writer_epoch < guard.writer_epoch
+            || (record.writer_epoch == guard.writer_epoch && record.sequence <= guard.last_sequence)
+    }
+
+    fn remote_guard_for_record(
+        &self,
+        record: &FileReplicationRecord,
+    ) -> SingleWriterReplicationGuard {
+        self.remote_guards
+            .get(record.writer_id.as_str())
+            .cloned()
+            .unwrap_or_else(|| SingleWriterReplicationGuard {
+                writer_id: Some(record.writer_id.clone()),
+                writer_epoch: record.writer_epoch,
+                last_sequence: record.sequence.saturating_sub(1),
+            })
     }
 
     fn persist_commit_message(
@@ -829,6 +857,10 @@ impl ReplicationRuntime {
             candidate -= 1;
         }
         Ok(0)
+    }
+
+    pub(crate) fn writer_last_replicated_height(&self) -> u64 {
+        self.writer_state.last_replicated_height
     }
 
     pub(crate) fn load_blob_by_hash(

@@ -19,6 +19,12 @@ pub(super) use status_payload_network_head::{
     applied_slashing_receipt_hashes, build_network_head_status, pending_slashing_intent_count,
     readiness_policy, ChainConsensusNetworkHeadStatus, ChainReadinessPolicyStatus,
 };
+#[path = "status_payload_state_sync.rs"]
+mod status_payload_state_sync;
+use status_payload_state_sync::{
+    consensus_participation_hold_reason, state_sync_fallback_reason,
+    state_sync_trusted_checkpoint_required_height,
+};
 
 const TRANSPORT_STABILITY_MIN_SCORE: u8 = 70;
 
@@ -194,6 +200,14 @@ pub(super) struct ChainConsensusStatus {
     pub(super) replication_persisted_height: u64,
     pub(super) replication_gap_sync_blocked_height: Option<u64>,
     pub(super) replication_gap_sync_blocked_reason: Option<String>,
+    pub(super) replication_gap_sync_repair_attempt_height: Option<u64>,
+    pub(super) replication_gap_sync_repair_attempt_summary: Option<String>,
+    pub(super) state_sync_fallback_required: bool,
+    pub(super) state_sync_snapshot_available: bool,
+    pub(super) state_sync_trusted_checkpoint_required_height: Option<u64>,
+    pub(super) state_sync_fallback_reason: Option<String>,
+    pub(super) consensus_participation_held: bool,
+    pub(super) consensus_participation_hold_reason: Option<String>,
     pub(super) recent_finality_latency: ChainFinalityLatencyStatus,
     pub(super) pending_proposal: Option<ChainPendingProposalStatus>,
     pub(super) pending_consensus_actions: ChainPendingConsensusActionsStatus,
@@ -538,6 +552,14 @@ pub(super) fn build_chain_node_observability_status(
     } else {
         0
     };
+    let consensus_participation_hold_reason = consensus_participation_hold_reason(
+        snapshot,
+        network_height_lag,
+        replication_state_gap,
+        policy.max_network_height_lag,
+    );
+    let state_sync_fallback_reason =
+        state_sync_fallback_reason(snapshot, replication_state_gap, network_height_lag);
     let recent_replication_error_count = replication.recent_errors.len();
     let transport_stability = classify_transport_stability(replication);
     let reachability_policy_ok = reachability_policy_ok(snapshot, p2p, active_peer_count, policy);
@@ -717,6 +739,27 @@ pub(super) fn build_chain_node_observability_status(
                 snapshot.consensus.replication_persisted_height,
                 replication_state_gap
             ),
+        );
+    }
+    if let Some(reason) = consensus_participation_hold_reason.as_ref() {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "consensus_participation_held",
+            format!("local consensus participation is held until verified sync recovers: {reason}"),
+        );
+    }
+    if let Some(reason) = state_sync_fallback_reason.as_ref() {
+        let severity = if storage_metrics.checkpoint_count > 0 {
+            "warn"
+        } else {
+            "critical"
+        };
+        push_observability_alert(
+            &mut alerts,
+            severity,
+            "state_sync_fallback_required",
+            reason.clone(),
         );
     }
     if suspect_peer_count > 0 || blocked_peer_count > 0 || peer_with_issues_count > 0 {
@@ -915,6 +958,26 @@ pub(super) fn build_chain_status_payload(
         &readiness_policy,
         observed_at_unix_ms,
     );
+    let consensus_participation_hold_reason = consensus_participation_hold_reason(
+        &snapshot,
+        observability.network_height_lag,
+        observability.replication_state_gap,
+        readiness_policy.max_network_height_lag,
+    );
+    let consensus_participation_held = consensus_participation_hold_reason.is_some();
+    let state_sync_fallback_reason = state_sync_fallback_reason(
+        &snapshot,
+        observability.replication_state_gap,
+        observability.network_height_lag,
+    );
+    let state_sync_trusted_checkpoint_required_height =
+        state_sync_trusted_checkpoint_required_height(
+            &snapshot,
+            observability.replication_state_gap,
+            observability.network_height_lag,
+        );
+    let state_sync_fallback_required = state_sync_fallback_reason.is_some();
+    let state_sync_snapshot_available = storage_metrics.checkpoint_count > 0;
     let liveness = build_liveness_status(&snapshot);
     let readiness = build_readiness_status(&observability, readiness_policy.clone());
     let sync = build_sync_status(
@@ -1021,6 +1084,19 @@ pub(super) fn build_chain_status_payload(
                 .consensus
                 .replication_gap_sync_blocked_reason
                 .clone(),
+            replication_gap_sync_repair_attempt_height: snapshot
+                .consensus
+                .replication_gap_sync_repair_attempt_height,
+            replication_gap_sync_repair_attempt_summary: snapshot
+                .consensus
+                .replication_gap_sync_repair_attempt_summary
+                .clone(),
+            state_sync_fallback_required,
+            state_sync_snapshot_available,
+            state_sync_trusted_checkpoint_required_height,
+            state_sync_fallback_reason,
+            consensus_participation_held,
+            consensus_participation_hold_reason,
             recent_finality_latency: ChainFinalityLatencyStatus {
                 sample_count: snapshot.consensus.recent_finality_latency.sample_count,
                 avg_latency_ms: snapshot.consensus.recent_finality_latency.avg_latency_ms,
