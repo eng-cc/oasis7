@@ -318,9 +318,11 @@ mod tests {
         .expect("write spec");
 
         let resolved = load_spec(&spec_path).expect("load spec");
+        let expected_manifest_path =
+            std::fs::canonicalize(&manifest_path).expect("canonicalize expected manifest path");
         assert_eq!(resolved.schema_version, 1);
         assert_eq!(resolved.module.module_id, "m.test");
-        assert_eq!(resolved.module.manifest_path, manifest_path);
+        assert_eq!(resolved.module.manifest_path, expected_manifest_path);
         assert_eq!(resolved.module.entrypoint, "reduce");
 
         let _ = std::fs::remove_file(spec_path);

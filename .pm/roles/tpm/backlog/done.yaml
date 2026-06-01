@@ -1,4 +1,16 @@
 version: 1
 role: tpm
 status: done
-tasks: []
+tasks:
+  - task_uid: task_95297df7a48a4ae798dd7cde1a0f3507
+    title: "Upgrade Rust dependencies"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "Rust direct dependencies are upgraded where compatible without modifying third_party or vendor sources."
+      - "Cargo lockfiles are updated coherently for the root workspace and relevant standalone Rust tools/modules."
+      - "A fresh Rust verification command is run and recorded."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_95297df7a48a4ae798dd7cde1a0f3507.yaml
