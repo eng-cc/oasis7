@@ -37,8 +37,8 @@
 
 ## Workflow Execution Entry Points
 
-- 启动新的 non-trivial task、需要先判断 trivial/non-trivial、检查是否必须创建 task worktree / `.pm` task，并把后续阶段接回 repo-owned 主链时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
-- 启动非 trivial task、或不确定下一步该走哪条 repo-owned workflow surface 时：`.agents/skills/repo-owned-workflow-router/SKILL.md`
+- 启动会改变仓库状态的新 task、需要先确认标准 task worktree / `.pm` task / owner role 真值，并把后续阶段接回 repo-owned 主链时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
+- 启动已具备 task 真值的仓库变更 task、或不确定下一步该走哪条 repo-owned workflow surface 时：`.agents/skills/repo-owned-workflow-router/SKILL.md`
 - 需求仍偏模糊、需要 scope 拆分、方案对比或判断是否需要 visual companion 时：`.agents/skills/bounded-brainstorming/SKILL.md`
 - 行为变更类实现任务、且存在稳定自动化测试面时：`.agents/skills/tdd-test-writer/SKILL.md`
 - 已有正式 `project.md` / handoff / `.pm` task 后进入实施：`.agents/skills/executing-project-tasks/SKILL.md`

@@ -1,0 +1,28 @@
+task_uid: task_2f8fdc0b447244a4b4b7923ab0496da5
+title: "Make standard worktree flow mandatory"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-standard-worktree-flow
+execution_log_path: .pm/tasks/task_2f8fdc0b447244a4b4b7923ab0496da5.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - AGENTS.md
+doc_refs:
+  - .agents/skills/default-workflow-bootstrap/SKILL.md
+  - .agents/skills/repo-owned-workflow-router/SKILL.md
+related_prd: []
+acceptance:
+  - "Workflow source-of-truth requires standard task worktree setup for repository-changing work."
+  - "AGENTS and workflow skills describe standard worktree/task truth as the default for every request that changes repo state."
+  - "Workflow behavior evaluation and governance checks pass."
+handoff_to: []
+updated_at: 2026-06-01T10:56:57+08:00
+last_started_at: 2026-06-01T10:45:27+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/pm/workflow-behavior-eval.sh
+last_verified_at: 2026-06-01T10:56:57+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-01T10:56:57+08:00

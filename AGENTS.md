@@ -4,8 +4,8 @@
 3. 详细流程规范统一以 `doc/engineering/workflow/source-of-truth.md` 为准（唯一真值）。
 
 ## 开发工作流（短规则）
-1. 新需求默认先判定 trivial/non-trivial，并确认是否需要新 worktree + `.pm` task。
-2. 非 trivial 任务按统一阶段推进：bootstrap → router →（可选）brainstorming/TDD → execution → verification → closeout。
+1. 凡是会改变仓库状态的新需求，默认先创建或进入标准 task worktree，并绑定单一 `.pm` task 与 owner role。
+2. 仓库变更任务按统一阶段推进：bootstrap → router →（可选）brainstorming/TDD → execution → verification → closeout。
 3. 禁止在 `main` 分支 / 主 worktree 直接修改任何文件；所有改动必须先创建或进入对应 task worktree。
 4. 所有 gate、责任边界、失败回退路径，统一引用：
    - 阶段图：`doc/engineering/workflow/source-of-truth.md#1-phase-diagram`
@@ -19,7 +19,7 @@
 ### Workflow Eval Contract Markers
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
 
-- `default-workflow-bootstrap`: 新 non-trivial 工作必须先经过 repo-owned bootstrap，判断 trivial/non-trivial、是否已具备隔离 task worktree / `.pm` task 真值，再进入后续 workflow surface。
+- `default-workflow-bootstrap`: 会改变仓库状态的新工作必须先经过 repo-owned bootstrap，确认标准 task worktree / `.pm` task / owner role 真值，再进入后续 workflow surface。
 - 默认协作口径：`producer_system_designer` orchestrator + 角色 subagents；所有 subagent slice 必须声明 write scope、return contract、integration owner/order，并把 formal sink 回写到 project、handoff、`.pm` execution log、signal、memory 或 PR evidence 中至少一处。
 - 高风险或大 diff 收敛前，补充 review 入口是 `.agents/skills/requesting-repo-owned-review/SKILL.md`；它只补强 GitHub PR review、required checks 与 review/approval 主链。
 - 涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice。

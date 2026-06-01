@@ -62,7 +62,7 @@ checks = [
     (
         root / ".agents/skills/default-workflow-bootstrap/SKILL.md",
         [
-            "## Task Classification",
+            "## Repository State Impact",
             "## Isolation Decision",
             "## Task Truth",
             "## Routed Next Phase",
@@ -74,7 +74,7 @@ checks = [
         root / "AGENTS.md",
         [
             "default-workflow-bootstrap",
-            f"判断 trivial/non-trivial、是否已具备隔离 task worktree / {bt}.pm{bt} task 真值",
+            f"确认标准 task worktree / {bt}.pm{bt} task / owner role 真值",
             f"{bt}producer_system_designer{bt} orchestrator + 角色 subagents",
             "formal sink",
             f"liveops_community{bt} 必须参与至少一个 slice",
@@ -175,20 +175,20 @@ surfaces = {
 
 scenarios = [
     {
-        "id": "trivial_request_skips_task_bootstrap",
-        "expected_route": "direct handling without forced worktree or .pm task",
+        "id": "read_only_request_skips_task_bootstrap",
+        "expected_route": "direct handling without repository writeback",
         "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
         "required_markers": [
-            "trivial: can be handled directly with no new task truth",
-            "Do not force this bootstrap onto trivial requests.",
+            "read-only/chat-only: may be handled directly without repository writeback",
+            "Do not force this bootstrap onto chat-only or read-only requests that do not change repository state.",
         ],
     },
     {
-        "id": "non_trivial_request_requires_task_truth_before_router",
+        "id": "repository_changing_request_requires_task_truth_before_router",
         "expected_route": "default-workflow-bootstrap -> task truth -> repo-owned-workflow-router",
         "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
         "required_markers": [
-            "non-trivial: requires repo-owned workflow setup",
+            "repository-changing: requires standard worktree + `.pm` task truth before edits",
             "choose owner role first",
             "create a dedicated worktree unless the user explicitly authorized reuse",
             "Once task truth exists, hand off to `repo-owned-workflow-router`.",
@@ -380,10 +380,10 @@ payload = {
     "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, PM runtime smoke, and fake-gh PR helper tests",
     "expected_agent_behavior": [
-        "new non-trivial work first routes through a repo-owned bootstrap surface rather than an external bootstrap",
-        "bootstrap distinguishes trivial vs non-trivial work and ensures isolated task truth exists before routing",
+        "new repository-changing work first routes through a repo-owned bootstrap surface rather than an external bootstrap",
+        "bootstrap distinguishes repository-changing work from read-only/chat-only requests and ensures isolated task truth exists before routing",
         "task worktree bootstrap stays source-clean and starts the target task",
-        "trivial requests are not forced through task/worktree bootstrap",
+        "read-only/chat-only requests are not forced through task/worktree bootstrap",
         "brainstorming, TDD, and subagent dispatch remain conditional rather than universal gates",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
         "high-risk local diffs can request repo-owned review packets without replacing GitHub PR review",
@@ -393,8 +393,8 @@ payload = {
     ],
     "verification_surface": [segment["id"] for segment in segments],
     "failure_signature": [
-        "default bootstrap surface disappears or no longer points new non-trivial work into repo-owned task truth",
-        "routing scenarios stop separating trivial direct handling from non-trivial task truth bootstrap",
+        "default bootstrap surface disappears or no longer points repository-changing work into repo-owned task truth",
+        "routing scenarios stop requiring repository-changing work to establish task truth before edits",
         "optional brainstorming, TDD, or subagent gates drift into mandatory stages",
         "task-closeout allows done closeout without verify-command",
         "subagent contract markers disappear from AGENTS or handoff/router surfaces",

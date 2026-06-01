@@ -14,15 +14,15 @@ Use this skill to decide which repo-owned workflow surface should drive the next
 
 Use this skill when:
 
-- `default-workflow-bootstrap` has already classified the work as non-trivial and task truth now exists
-- a bootstrapped non-trivial task is starting implementation or needs phase selection
+- `default-workflow-bootstrap` has already confirmed repository-changing work has task truth
+- a bootstrapped repository-changing task is starting implementation or needs phase selection
 - you are unsure which local workflow skill should apply next
 - the task needs to move across multiple phases, such as ideation -> implementation -> verification -> closeout
 - the user wants the whole workflow chained together rather than treated as isolated skills
 
 Do not use this skill when:
 
-- the task is trivial and can be completed directly without workflow branching
+- the request is chat-only or read-only and does not change repository state
 - you are already clearly inside one terminal phase and the next step is obvious
 
 ## Required Rules

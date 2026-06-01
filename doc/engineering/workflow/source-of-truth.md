@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.2.3**
-Last Updated: **2026-05-28**
+Version: **v1.3.0**
+Last Updated: **2026-06-01**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -14,7 +14,7 @@ Mandatory rule:
 ## 1. Phase Diagram
 ```mermaid
 flowchart TD
-  A[Bootstrap\nclassify trivial/non-trivial\nverify worktree + task truth] --> B[Router\nchoose current phase]
+  A[Bootstrap\nverify standard worktree + task truth] --> B[Router\nchoose current phase]
   B --> C{Need brainstorming?}
   C -- yes --> D[Bounded Brainstorming]
   C -- no --> E
@@ -36,7 +36,8 @@ flowchart TD
 - `producer_system_designer`: orchestrates phase decision, resource/role allocation, and cross-role consistency.
 - `owner role` (single role per task): canonical integrator; owns final writeback, fresh verification, completion claim, and PR chain.
 - role subagents: provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the owner chain.
-- Canonical truth per task must remain single-threaded:
+- Every request that changes repository state must enter the standard worktree flow before edits begin; chat-only answers and read-only inspection may be handled directly without repository writeback.
+- Canonical truth per repository-changing request must remain single-threaded:
   - one owner role
   - one `.pm` task
   - one canonical worktree
@@ -77,7 +78,8 @@ flowchart TD
 
 ## 5. Normative Details (from legacy AGENTS workflow)
 ### 5.1 Worktree + task truth
-- New demand uses a dedicated worktree by default; only explicit user authorization allows reuse.
+- Every request that changes repository state uses a dedicated task worktree by default; only explicit user authorization allows reuse of an existing task worktree.
+- Do not classify repository-changing work as `trivial` to bypass task worktree / `.pm` task setup.
 - Do not edit any files from the `main` branch/worktree; create or enter the relevant task worktree before making changes.
 - Entering implementation requires owner role selection and `.pm` task binding.
 - Cross-role collaboration must converge to one owner / one `.pm` task / one canonical worktree / one PR chain.
@@ -106,6 +108,10 @@ flowchart TD
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.3.0 (2026-06-01)**
+  - Removed the `trivial` / `non-trivial` workflow split for repository-changing work.
+  - Required every repository-changing request to enter the standard task worktree + `.pm` task flow before edits begin.
+  - Kept read-only inspection and chat-only answers outside repository writeback requirements.
 - **v1.2.3 (2026-05-28)**
   - Required all file edits to happen from a task worktree instead of the `main` branch/worktree.
 - **v1.2.2 (2026-05-26)**
@@ -127,7 +133,7 @@ flowchart TD
 This checklist records whether key legacy `AGENTS.md` workflow semantics were preserved here to avoid policy loss during deduplication.
 
 - [x] Single owner / single `.pm` task / single worktree / single PR chain.
-- [x] Dedicated worktree-by-default and explicit-reuse-only policy.
+- [x] Standard task worktree flow for every repository-changing request, with explicit-reuse-only policy.
 - [x] Owner role selection and `.pm` task binding before implementation.
 - [x] Mandatory execution evidence fields and blocker recording.
 - [x] Current-round fresh verification before completion claim.
