@@ -20,7 +20,7 @@
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
 
 - `default-workflow-bootstrap`: 会改变仓库状态的新工作必须先经过 repo-owned bootstrap，确认标准 task worktree / `.pm` task / owner role 真值，再进入后续 workflow surface。
-- 默认协作口径：`tpm` 主 Agent + 专业角色 subagents；所有专业角色工作必须以 subagent slice 形式声明 write scope、return contract、integration owner/order，并把 formal sink 回写到 project、handoff、`.pm` execution log、signal、memory 或 PR evidence 中至少一处。
+- 默认协作口径：`tpm` 主 Agent + 专业角色 subagents；TPM 的 TODO decomposition、subagent slice contracts 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`，其他 formal sink 只能补充，不能替代 task execution log。
 - 高风险或大 diff 收敛前，补充 review 入口是 `.agents/skills/requesting-repo-owned-review/SKILL.md`；它只补强 GitHub PR review、required checks 与 review/approval 主链。
 - 涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice。
 

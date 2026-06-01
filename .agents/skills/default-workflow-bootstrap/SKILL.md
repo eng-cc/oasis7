@@ -45,10 +45,9 @@ Do not use this skill when:
    - bootstrap `.pm` task inside the target worktree
    - read `doc/<module>/prd.md`, `doc/<module>/project.md`, and task execution truth
 4. Once task truth exists, hand off to `repo-owned-workflow-router`.
-5. Record the bootstrap decision in a formal sink:
-   - `project.md`
-   - handoff
-   - `.pm/tasks/<TASK-UID>.execution.md`
+5. Record the bootstrap decision in `.pm/tasks/<TASK-UID>.execution.md`.
+   - `project.md` and handoff may supplement the task log
+   - they cannot replace the `.pm` execution log for repository-changing task truth
 6. Continue into the routed phase rather than stopping at setup.
 
 ## Output Contract
@@ -79,7 +78,8 @@ WORKFLOW BOOTSTRAP DECIDED
 ## Required Writeback
 - `prd.md`:
 - `project.md`:
-- `.pm` execution log / handoff:
+- `.pm` execution log (mandatory):
+- handoff (optional supplement):
 
 ## Next Action
 - exact next step:
@@ -105,6 +105,7 @@ WORKFLOW BOOTSTRAP DECIDED
 ## Guardrails
 
 - Do not create a second planning or bootstrap truth outside repo-owned surfaces.
+- Do not treat project, handoff, signal, memory, or PR evidence as a replacement for `.pm/tasks/<TASK-UID>.execution.md` on repository-changing work.
 - Do not skip worktree / `.pm` task creation for repository-changing work unless the user explicitly authorized reuse of a specific task worktree.
 - Do not stop after saying which workflow surface should be used; continue into that phase.
 - Do not treat this skill as permission to bypass `repo-owned-workflow-router`, verification, or GitHub PR review.

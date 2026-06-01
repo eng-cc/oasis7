@@ -1,6 +1,6 @@
 # Subagent Slice Card
 
-> 用途：在 `tpm` 派工前，先把每个专业角色 subagent slice 固化为单卡，确保 owner / task / worktree / PR 主链一致，并可回写 execution log。
+> 用途：在 `tpm` 派工前，先把每个专业角色 subagent slice 固化为单卡，确保 owner / task / worktree / PR 主链一致，并必须回写 `.pm/tasks/<TASK-UID>.execution.md`。
 
 ## Required Fields（固定字段）
 - owner role:
@@ -9,7 +9,7 @@
 - write scope:
 - return contract:
 - validation command:
-- formal sink:
+- formal sink: `.pm/tasks/<TASK-UID>.execution.md`（mandatory；其他 sink 只能补充）
 - integration order:
 
 ## Disjoint Scope Checklist（并行写入必填）
@@ -26,9 +26,9 @@
 - write scope: `crates/foo/**`（disjoint）
 - return contract: patch + test evidence
 - validation command: `./scripts/cargo-dev.sh test -p foo`
-- formal sink: `.pm/tasks/<TASK-UID>.execution.md`
+- formal sink: `.pm/tasks/<TASK-UID>.execution.md`（mandatory）
 - integration order: 2/3（after runtime slice, before qa slice）
 
 ## Notes
 - 一个 slice 一张卡；多角色并行时，必须逐张卡校验 disjoint scope checklist。
-- slice card 链接/引用应回写 `.pm/tasks/<TASK-UID>.execution.md` 对应条目。
+- slice card 链接/引用必须回写 `.pm/tasks/<TASK-UID>.execution.md` 对应条目；未写入 task execution log 的派工不视为有效派工。

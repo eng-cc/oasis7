@@ -30,9 +30,10 @@ Do not use this skill when:
 1. This skill is a router, not an external bootstrap.
 2. It must not replace `AGENTS.md`, `.pm`, `prd.md`, `project.md`, task execution logs, or GitHub PR review.
 3. It only chooses and orders repo-owned workflow skills.
-4. If the task truth changes, route decisions must be written back into formal docs or the execution log.
+4. If the task truth changes, route decisions must be written back into `.pm/tasks/<TASK-UID>.execution.md`; formal docs may supplement but not replace it.
 5. Use the narrowest applicable workflow surface; do not force every phase if it is not needed.
-6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, write scope, return contract, formal sink, and integration owner/order.
+6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, write scope, return contract, mandatory `.pm` execution-log sink, and integration owner/order.
+7. TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
 
 ## Routing Order
 
@@ -80,14 +81,15 @@ WORKFLOW ROUTE DECIDED
 ## Required Writeback
 - `prd.md`:
 - `project.md`:
-- handoff / `.pm` execution log:
+- `.pm/tasks/<TASK-UID>.execution.md`:
+- handoff / project supplement:
 
 ## Subagent Slice Plan (If Needed)
 - role:
 - slice type:
 - write scope:
 - return contract:
-- formal sink / writeback surface:
+- formal sink / writeback surface: `.pm/tasks/<TASK-UID>.execution.md` (mandatory)
 - integration owner:
 - integration order:
 

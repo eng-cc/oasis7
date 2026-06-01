@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.0**
+Version: **v1.4.1**
 Last Updated: **2026-06-01**
 
 ## 0. Purpose
@@ -35,6 +35,7 @@ flowchart TD
 ## 2. Responsibility Boundary
 - `tpm`: default main Agent / orchestrator / canonical integrator; owns phase decision, role allocation, final writeback, fresh verification, completion claim, and PR chain.
 - professional role subagents: `producer_system_designer`, `runtime_engineer`, `wasm_platform_engineer`, `agent_engineer`, `viewer_engineer`, `qa_engineer`, and `liveops_community` provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the TPM owner chain.
+- TPM planning, TODO decomposition, subagent slice contracts, and integration order are task execution truth and must be written to `.pm/tasks/<TASK-UID>.execution.md` before the delegated work begins.
 - Every request that changes repository state must enter the standard worktree flow before edits begin; chat-only answers and read-only inspection may be handled directly without repository writeback.
 - Canonical truth per repository-changing request must remain single-threaded:
   - one owner role
@@ -45,7 +46,7 @@ flowchart TD
 ## 3. Gates
 ### 3.1 Required Gates (must pass)
 1. **Task truth gate**: isolated worktree + bound `.pm` task + owner role confirmed.
-2. **Planning gate**: PRD/project/execution truth aligned for scope and verification entry.
+2. **Planning gate**: PRD/project/execution truth aligned for scope and verification entry; TPM TODOs and any subagent slice plan are recorded in `.pm/tasks/<TASK-UID>.execution.md` before execution.
 3. **Execution gate**: atomic step evidence captured (`Action`, `Validation Command`, `Expected Result`, `Actual Result`, plus blocker fields when needed).
 4. **Fresh verification gate**: current-round verification success before completion claims.
 5. **Closeout gate**: closeout metadata + task status transition + lint/governance checks + commit + PR creation.
@@ -84,29 +85,39 @@ flowchart TD
 - Cross-role collaboration must converge to one owner / one `.pm` task / one canonical worktree / one PR chain.
 - Task worktrees created through `./scripts/new-task-worktree.sh` must create a git-ignored `target` symlink to the repo-family shared cargo target cache resolved by `./scripts/cargo-dev.sh --print-target-dir`, so direct cargo and the development wrapper share local build artifacts by default.
 
-### 5.2 Execution evidence
+### 5.2 TPM planning and subagent dispatch
+- TPM must record the current plan, TODO decomposition, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
+- Each subagent slice must declare role, slice type, input, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
+- Project docs, handoff files, signals, memory, and PR evidence may supplement the `.pm` execution log, but they do not replace it for task execution truth.
+- If the plan changes during execution, TPM must append an execution-log update before continuing the changed work.
+
+### 5.3 Execution evidence
 - Atomic steps should be recorded with `Action / Validation Command / Expected Result / Actual Result`.
 - If blocked, also record `Blocker / Next Action`.
 - For tasks started with the `2026-05-23` execution-log template or later, these fields are mandatory per entry.
 
-### 5.3 Claim / closeout chain
+### 5.4 Claim / closeout chain
 - Before completion claims, run fresh verification (prefer `./scripts/pm/claim-ready.sh --claim-type <type> --verify-command "<cmd>"` when applicable).
 - Closeout should run `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh cmd>"` (or equivalent manual chain).
 - For `done` closeout, fresh verification must be from the current round.
 
-### 5.4 PR and review chain
+### 5.5 PR and review chain
 - Standard path is GitHub PR + required checks + review/approval.
 - PR creation helpers that request Copilot review must verify the request through GitHub's requested-reviewers API rather than relying only on `gh pr edit` exit status.
 - If review comments arrive, fix + re-verify + resolve threads before merge claim.
 - After merge, sync local `main` and clean up task worktree/branch.
 
 ## 6. Required Artifacts by Phase
-- Bootstrap/Router: decision record in project or execution log.
+- Bootstrap/Router: decision record in `.pm/tasks/<TASK-UID>.execution.md`; project or handoff records may supplement it.
+- Planning/Dispatch: TPM TODO decomposition and subagent slice contracts in `.pm/tasks/<TASK-UID>.execution.md`.
 - Execution: atomic evidence records per risky step.
 - Verification: claim-ready command + output evidence.
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.4.1 (2026-06-01)**
+  - Tightened TPM planning governance: TODO decomposition, subagent slice contracts, and integration order must be written to the task execution log before delegated work begins.
+  - Clarified that other formal sinks may supplement but cannot replace `.pm/tasks/<TASK-UID>.execution.md` for task execution truth.
 - **v1.4.0 (2026-06-01)**
   - Added `tpm` as the default main Agent / orchestrator / canonical integrator.
   - Required all professional roles to participate as bounded subagent slices under TPM coordination.
@@ -137,6 +148,7 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] Single owner / single `.pm` task / single worktree / single PR chain.
 - [x] Standard task worktree flow for every repository-changing request, with explicit-reuse-only policy.
 - [x] Owner role selection and `.pm` task binding before implementation.
+- [x] TPM planning/TODO decomposition and subagent slice contracts written to `.pm` execution log before delegated execution.
 - [x] Mandatory execution evidence fields and blocker recording.
 - [x] Current-round fresh verification before completion claim.
 - [x] Closeout command chain and `done` verification strictness.
