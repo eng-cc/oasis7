@@ -723,7 +723,7 @@ impl fmt::Display for LlmAgentProviderBuildError {
 impl Error for LlmAgentProviderBuildError {}
 
 #[cfg(test)]
-mod tests {
+mod tests_provider_builder {
     use super::*;
     use crate::geometry::GeoPos;
     use crate::simulator::{
@@ -859,3 +859,6 @@ mod tests {
         assert!(prompt.contains("observation"));
     }
 }
+
+#[cfg(test)]
+mod tests;
