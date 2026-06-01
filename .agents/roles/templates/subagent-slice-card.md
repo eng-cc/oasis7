@@ -1,6 +1,6 @@
 # Subagent Slice Card
 
-> 用途：在 `producer_system_designer`（或当前 orchestrator）派工前，先把每个 subagent slice 固化为单卡，确保 owner / task / worktree / PR 主链一致，并可回写 execution log。
+> 用途：在 `tpm` 派工前，先把每个专业角色 subagent slice 固化为单卡，确保 owner / task / worktree / PR 主链一致，并可回写 execution log。
 
 ## Required Fields（固定字段）
 - owner role:

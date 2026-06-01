@@ -46,6 +46,15 @@ roles:
     committed_path: .pm/roles/runtime_engineer/backlog/committed.yaml
     blocked_path: .pm/roles/runtime_engineer/backlog/blocked.yaml
     done_path: .pm/roles/runtime_engineer/backlog/done.yaml
+  - role_name: tpm
+    is_active: true
+    introduced_at: 2026-06-01
+    memory_active_path: .pm/roles/tpm/memory/active.yaml
+    memory_superseded_path: .pm/roles/tpm/memory/superseded.yaml
+    candidate_path: .pm/roles/tpm/backlog/candidate.yaml
+    committed_path: .pm/roles/tpm/backlog/committed.yaml
+    blocked_path: .pm/roles/tpm/backlog/blocked.yaml
+    done_path: .pm/roles/tpm/backlog/done.yaml
   - role_name: viewer_engineer
     is_active: true
     introduced_at: 2026-03-30

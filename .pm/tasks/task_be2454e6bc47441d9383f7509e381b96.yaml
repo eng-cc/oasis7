@@ -1,0 +1,28 @@
+task_uid: task_be2454e6bc47441d9383f7509e381b96
+title: "Add TPM orchestrator role"
+owner_role: producer_system_designer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-tpm-orchestrator-role
+execution_log_path: .pm/tasks/task_be2454e6bc47441d9383f7509e381b96.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - AGENTS.md
+doc_refs:
+  - .agents/roles/producer_system_designer.md
+  - .agents/roles/templates/handoff-brief.md
+related_prd: []
+acceptance:
+  - "TPM is added as the primary coordinating agent role for repository workflow."
+  - "Professional roles are documented as subagent roles coordinated by TPM."
+  - "Role registry, workflow docs, and behavior eval markers are synchronized and verified."
+handoff_to: []
+updated_at: 2026-06-01T11:40:33+08:00
+last_started_at: 2026-06-01T11:12:59+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/new-task-worktree.sh scripts/pm/workflow-behavior-eval.sh && ./scripts/pm/workflow-behavior-eval.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-01T11:40:33+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-01T11:40:33+08:00

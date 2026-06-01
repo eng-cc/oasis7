@@ -40,7 +40,7 @@ Do not use this skill when:
    - is the current worktree already bound to the target task
    - is there unrelated dirty state that forbids reuse
 3. If isolation or task truth is missing, create it:
-   - choose owner role first
+   - choose `tpm` as the default owner role unless an existing bound task already has a valid owner
    - create a dedicated worktree unless the user explicitly authorized reuse
    - bootstrap `.pm` task inside the target worktree
    - read `doc/<module>/prd.md`, `doc/<module>/project.md`, and task execution truth

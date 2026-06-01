@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.3.0**
+Version: **v1.4.0**
 Last Updated: **2026-06-01**
 
 ## 0. Purpose
@@ -33,9 +33,8 @@ flowchart TD
 ```
 
 ## 2. Responsibility Boundary
-- `producer_system_designer`: orchestrates phase decision, resource/role allocation, and cross-role consistency.
-- `owner role` (single role per task): canonical integrator; owns final writeback, fresh verification, completion claim, and PR chain.
-- role subagents: provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the owner chain.
+- `tpm`: default main Agent / orchestrator / canonical integrator; owns phase decision, role allocation, final writeback, fresh verification, completion claim, and PR chain.
+- professional role subagents: `producer_system_designer`, `runtime_engineer`, `wasm_platform_engineer`, `agent_engineer`, `viewer_engineer`, `qa_engineer`, and `liveops_community` provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the TPM owner chain.
 - Every request that changes repository state must enter the standard worktree flow before edits begin; chat-only answers and read-only inspection may be handled directly without repository writeback.
 - Canonical truth per repository-changing request must remain single-threaded:
   - one owner role
@@ -108,6 +107,9 @@ flowchart TD
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.4.0 (2026-06-01)**
+  - Added `tpm` as the default main Agent / orchestrator / canonical integrator.
+  - Required all professional roles to participate as bounded subagent slices under TPM coordination.
 - **v1.3.0 (2026-06-01)**
   - Removed the `trivial` / `non-trivial` workflow split for repository-changing work.
   - Required every repository-changing request to enter the standard task worktree + `.pm` task flow before edits begin.

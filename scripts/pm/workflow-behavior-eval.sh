@@ -12,7 +12,7 @@ Usage: ./scripts/pm/workflow-behavior-eval.sh [--json]
 
 Run the repo-owned workflow behavior eval for the default oasis7 task chain:
   default-workflow-bootstrap -> new-task-worktree -> workflow-report
-  -> repo-owned-workflow-router -> producer orchestrate / role subagent dispatch
+  -> repo-owned-workflow-router -> TPM orchestrate / professional role subagent dispatch
   -> task-closeout -> prepare-task-pr -> review-thread-closeout
 
 This eval reuses isolated fixture tests and PM smokes so the main chain stays
@@ -75,10 +75,27 @@ checks = [
         [
             "default-workflow-bootstrap",
             f"确认标准 task worktree / {bt}.pm{bt} task / owner role 真值",
-            f"{bt}producer_system_designer{bt} orchestrator + 角色 subagents",
+            f"{bt}tpm{bt} 主 Agent + 专业角色 subagents",
             "formal sink",
             f"liveops_community{bt} 必须参与至少一个 slice",
             "requesting-repo-owned-review/SKILL.md",
+        ],
+    ),
+    (
+        root / ".agents/roles/tpm.md",
+        [
+            "# Role: tpm",
+            "默认由 `tpm` 作为新仓库变更任务的主 Agent 和 canonical owner",
+            "专业角色以 subagent 形式提供切片工作",
+            "./scripts/pm/workflow-report.sh --phase start|close|review --role tpm",
+        ],
+    ),
+    (
+        root / ".pm/registry/roles.yaml",
+        [
+            "role_name: tpm",
+            "memory_active_path: .pm/roles/tpm/memory/active.yaml",
+            "done_path: .pm/roles/tpm/backlog/done.yaml",
         ],
     ),
     (
@@ -189,7 +206,7 @@ scenarios = [
         "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
         "required_markers": [
             "repository-changing: requires standard worktree + `.pm` task truth before edits",
-            "choose owner role first",
+            "choose `tpm` as the default owner role unless an existing bound task already has a valid owner",
             "create a dedicated worktree unless the user explicitly authorized reuse",
             "Once task truth exists, hand off to `repo-owned-workflow-router`.",
         ],
@@ -235,11 +252,11 @@ scenarios = [
     },
     {
         "id": "subagent_dispatch_is_conditional_and_bounded",
-        "expected_route": "producer orchestrates bounded role subagent slices only when needed",
+        "expected_route": "TPM orchestrates bounded professional role subagent slices",
         "surface": "AGENTS.md",
         "required_markers": [
-            "需要时派生角色 subagent 协作",
-            "所有 subagent slice 必须声明 write scope、return contract、integration owner/order",
+            "其他专业角色必须以 subagent slice 形式参与",
+            "所有专业角色工作必须以 subagent slice 形式声明 write scope、return contract、integration owner/order",
             "formal sink",
         ],
     },
@@ -377,14 +394,15 @@ segments = [
 ]
 
 payload = {
-    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> producer orchestrate / role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
+    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM orchestrate / professional role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, PM runtime smoke, and fake-gh PR helper tests",
     "expected_agent_behavior": [
         "new repository-changing work first routes through a repo-owned bootstrap surface rather than an external bootstrap",
         "bootstrap distinguishes repository-changing work from read-only/chat-only requests and ensures isolated task truth exists before routing",
         "task worktree bootstrap stays source-clean and starts the target task",
         "read-only/chat-only requests are not forced through task/worktree bootstrap",
-        "brainstorming, TDD, and subagent dispatch remain conditional rather than universal gates",
+        "TPM is the default main Agent / orchestrator / canonical integrator",
+        "brainstorming and TDD remain conditional while professional role work is represented as bounded subagent slices",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
         "high-risk local diffs can request repo-owned review packets without replacing GitHub PR review",
         "done closeout refuses to proceed without fresh verification",
@@ -395,6 +413,7 @@ payload = {
     "failure_signature": [
         "default bootstrap surface disappears or no longer points repository-changing work into repo-owned task truth",
         "routing scenarios stop requiring repository-changing work to establish task truth before edits",
+        "TPM role or registry markers disappear from role surfaces",
         "optional brainstorming, TDD, or subagent gates drift into mandatory stages",
         "task-closeout allows done closeout without verify-command",
         "subagent contract markers disappear from AGENTS or handoff/router surfaces",

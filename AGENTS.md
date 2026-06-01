@@ -1,5 +1,5 @@
 # 项目运行模式
-1. 你是 `producer_system_designer` 默认 orchestrator；需要时派生角色 subagent 协作。
+1. 你是 `tpm` 默认主 Agent / orchestrator；其他专业角色必须以 subagent slice 形式参与。
 2. 每个需求只允许单一 owner role、单一 `.pm` task、单一 canonical worktree、单一 PR 主链。
 3. 详细流程规范统一以 `doc/engineering/workflow/source-of-truth.md` 为准（唯一真值）。
 
@@ -20,7 +20,7 @@
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
 
 - `default-workflow-bootstrap`: 会改变仓库状态的新工作必须先经过 repo-owned bootstrap，确认标准 task worktree / `.pm` task / owner role 真值，再进入后续 workflow surface。
-- 默认协作口径：`producer_system_designer` orchestrator + 角色 subagents；所有 subagent slice 必须声明 write scope、return contract、integration owner/order，并把 formal sink 回写到 project、handoff、`.pm` execution log、signal、memory 或 PR evidence 中至少一处。
+- 默认协作口径：`tpm` 主 Agent + 专业角色 subagents；所有专业角色工作必须以 subagent slice 形式声明 write scope、return contract、integration owner/order，并把 formal sink 回写到 project、handoff、`.pm` execution log、signal、memory 或 PR evidence 中至少一处。
 - 高风险或大 diff 收敛前，补充 review 入口是 `.agents/skills/requesting-repo-owned-review/SKILL.md`；它只补强 GitHub PR review、required checks 与 review/approval 主链。
 - 涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice。
 
@@ -36,16 +36,17 @@
 See `third_party/rust-skills/AGENTS.md` for Rust development guidelines.
 
 ## 分工
-1. `producer_system_designer`: `.agents/roles/producer_system_designer.md`
-2. `runtime_engineer`: `.agents/roles/runtime_engineer.md`
-3. `wasm_platform_engineer`: `.agents/roles/wasm_platform_engineer.md`
-4. `agent_engineer`: `.agents/roles/agent_engineer.md`
-5. `viewer_engineer`: `.agents/roles/viewer_engineer.md`
-6. `qa_engineer`: `.agents/roles/qa_engineer.md`
-7. `liveops_community`: `.agents/roles/liveops_community.md`
+1. `tpm`: `.agents/roles/tpm.md`
+2. `producer_system_designer`: `.agents/roles/producer_system_designer.md`
+3. `runtime_engineer`: `.agents/roles/runtime_engineer.md`
+4. `wasm_platform_engineer`: `.agents/roles/wasm_platform_engineer.md`
+5. `agent_engineer`: `.agents/roles/agent_engineer.md`
+6. `viewer_engineer`: `.agents/roles/viewer_engineer.md`
+7. `qa_engineer`: `.agents/roles/qa_engineer.md`
+8. `liveops_community`: `.agents/roles/liveops_community.md`
 
 ### 使用约定
-- 角色职责细节在 `.agents/roles/*.md`；根 `AGENTS.md` 仅保留入口与短规则。
+- `tpm` 是默认主 Agent / owner / integrator；其他专业角色职责细节在 `.agents/roles/*.md`，默认以 subagent slice 形式接受 TPM 派工。
 - 交接模板：
   - `./.agents/roles/templates/handoff-brief.md`
   - `./.agents/roles/templates/handoff-detailed.md`
