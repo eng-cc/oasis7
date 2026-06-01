@@ -5,10 +5,10 @@
 4. 详细流程规范统一以 `doc/engineering/workflow/source-of-truth.md` 为准（唯一真值）。
 
 ## 开发工作流（短规则）
-1. 凡是会改变仓库状态的新需求，默认先创建或进入标准 task worktree，并绑定单一 `.pm` task 与 owner role。
-2. 只读/聊天请求不默认创建 task/worktree；但只要问题涉及产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等专业判断，TPM 仍必须派发对应 bounded 专业角色 slice 后再给权威结论。
-3. 纯文件存在性、路径查找、命令输出复述等客观事实读取，可由 TPM 直接回答；TPM 不得把这种直接阅读扩展成专业判断。
-4. 未绑定 task/worktree 的只读专业 slice，其 sink 是带角色归因的用户答案或保留的聊天记录；只有已绑定 task 或会发生仓库写回时，才要求 `.pm` execution-log sink。
+1. 任何用户请求第一步都必须创建或进入标准 task worktree，并绑定单一 `.pm` task 与 owner role；包括只读、聊天、纯事实读取、专业判断、实现、验证、评审和对外口径。
+2. 只读/聊天请求也不跳过 task/worktree；进入 task truth 后，若问题涉及产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等专业判断，TPM 仍必须派发对应 bounded 专业角色 slice 后再给权威结论。
+3. 纯文件存在性、路径查找、命令输出复述等客观事实读取，可由 TPM 在已绑定 task/worktree 内直接回答；TPM 不得把这种直接阅读扩展成专业判断。
+4. 只读专业 slice 的 contract、证据和 sink 必须写入 `.pm/tasks/<TASK-UID>.execution.md`；带角色归因的用户答案只能作为对外摘要，不能替代 `.pm` execution-log sink。
 5. 仓库变更任务按统一阶段推进：bootstrap → router →（可选）brainstorming/TDD → execution → verification → closeout。
 6. 禁止在 `main` 分支 / 主 worktree 直接修改任何文件；所有改动必须先创建或进入对应 task worktree。
 7. 所有 gate、责任边界、失败回退路径，统一引用：
@@ -24,8 +24,8 @@
 ### Workflow Eval Contract Markers
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
 
-- `default-workflow-bootstrap`: 会改变仓库状态的新工作必须先经过 repo-owned bootstrap，确认标准 task worktree / `.pm` task / owner role 真值，再进入后续 workflow surface。
-- 只读专业判断分流：只读/聊天请求可跳过 task/worktree bootstrap；但凡输出产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等专业结论，仍必须由对应专业角色 slice 给出或验证，TPM 只能合流与标注来源。
+- `default-workflow-bootstrap`: 任何用户请求都必须先经过 repo-owned bootstrap，确认标准 task worktree / `.pm` task / owner role 真值，再进入后续 workflow surface；禁止用只读、聊天、纯事实读取绕过 bootstrap。
+- 只读专业判断分流：只读/聊天请求也必须先进入 task/worktree bootstrap；但凡输出产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等专业结论，仍必须由对应专业角色 slice 给出或验证，TPM 只能合流与标注来源。
 - subagent 默认模型：专业角色 slice 默认使用 `gpt-5.4` + `reasoning_effort=medium`（简写 `gpt-5.4-medium`）；若用户要求其他模型，或 slice 明确需要更强/更快/更省配置，必须在 slice contract 记录 model / reasoning 与原因。
 - 默认协作口径：`tpm` 主 Agent + 专业角色 subagents；TPM 只做 workflow coordination / integration。对已绑定 task 或会改变仓库状态的工作，TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`，其他 formal sink 只能补充，不能替代 task execution log。
 - 专业结论来源约束：产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等专业分析、实现、验证、评审或对外口径，必须来自对应专业角色 slice；TPM 只能合流和标注证据来源。

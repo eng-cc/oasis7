@@ -1,6 +1,6 @@
 ---
 name: default-workflow-bootstrap
-description: Use at the start of any new repository-changing task to ensure standard task worktree truth exists, then hand off to the correct repo-owned workflow surface.
+description: Use at the start of any user request to ensure standard task worktree truth exists, then hand off to the correct repo-owned workflow surface.
 ---
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
@@ -8,8 +8,7 @@ description: Use at the start of any new repository-changing task to ensure stan
 
 # Default Workflow Bootstrap
 
-Use this skill as the repo-owned first-touch entrypoint for new work that will
-change repository state.
+Use this skill as the repo-owned first-touch entrypoint for every user request.
 
 It exists to make oasis7 behave more like a default structured workflow without
 importing an external bootstrap or creating a second source of truth.
@@ -18,7 +17,8 @@ importing an external bootstrap or creating a second source of truth.
 
 Use this skill when:
 
-- a new task is starting and will change repository files, scripts, docs, tests, config, or other tracked state
+- any new user request starts, including read-only, chat-only, pure fact lookup, professional judgment, implementation, verification, review, or external messaging
+- a new task is starting and may change repository files, scripts, docs, tests, config, or other tracked state
 - the user said `做`, `继续`, `landing`, or otherwise expects end-to-end execution
 - you need to ensure a dedicated task worktree and `.pm` task exist before edits begin
 - the next step is still “set up the correct workflow surface” rather than implementation itself
@@ -28,26 +28,25 @@ Do not use this skill when:
 - the task is already inside a bound task worktree with `.pm` task truth and an obvious current phase
 - you are already executing a documented task and only need `executing-project-tasks`
 - you are already at claim-ready / closeout time
-- the user only asks for chat-only explanation or read-only inspection that will not change repository state
 
 Read-only caveat:
 
-- Skipping this bootstrap only skips task/worktree writeback. It does not let TPM
-  issue professional/domain conclusions directly.
+- Read-only and chat-only requests do not skip this bootstrap. They still need
+  task/worktree truth before TPM answers, gathers evidence, or dispatches slices.
 - If a read-only question requires product/design/runtime/WASM/agent/viewer/QA or
-  liveops judgment, route to the matching bounded professional slice without
-  creating a `.pm` task unless repository writeback follows.
+  liveops judgment, route to the matching bounded professional slice after
+  task/worktree bootstrap.
 - Pure fact lookup, path lookup, command-output restatement, or mechanical
-  evidence collection can be answered directly by TPM if it is not framed as a
-  professional conclusion.
+  evidence collection can be answered directly by TPM only inside the bound
+  task worktree and only if it is not framed as a professional conclusion.
 
 ## Core Workflow
 
-1. Determine whether the request changes repository state:
+1. Treat the request as requiring standard worktree + `.pm` task truth before substantive handling:
    - repository-changing: requires standard worktree + `.pm` task truth before edits
-   - read-only/chat-only pure fact lookup: may be handled directly without repository writeback
-   - read-only/chat-only professional judgment: skip task/worktree bootstrap, but dispatch the matching professional role slice before an authoritative answer
-2. For repository-changing work, verify workflow state in this order:
+   - read-only/chat-only pure fact lookup: requires standard worktree + `.pm` task truth before direct answer
+   - read-only/chat-only professional judgment: requires standard worktree + `.pm` task truth before dispatching the matching professional role slice
+2. Verify workflow state in this order:
    - are you already in an isolated task worktree
    - is the current worktree already bound to the target task
    - is there unrelated dirty state that forbids reuse
@@ -60,7 +59,7 @@ Read-only caveat:
 4. Once task truth exists, hand off to `repo-owned-workflow-router`.
 5. Record the bootstrap decision in `.pm/tasks/<TASK-UID>.execution.md`.
    - `project.md` and handoff may supplement the task log
-   - they cannot replace the `.pm` execution log for repository-changing task truth
+   - they cannot replace the `.pm` execution log for task truth
 6. Continue into the routed phase rather than stopping at setup.
 
 ## Output Contract
@@ -118,12 +117,12 @@ WORKFLOW BOOTSTRAP DECIDED
 ## Guardrails
 
 - Do not create a second planning or bootstrap truth outside repo-owned surfaces.
-- Do not treat project, handoff, signal, memory, or PR evidence as a replacement for `.pm/tasks/<TASK-UID>.execution.md` on repository-changing work.
-- Do not skip worktree / `.pm` task creation for repository-changing work unless the user explicitly authorized reuse of a specific task worktree.
+- Do not treat project, handoff, signal, memory, chat transcript, or PR evidence as a replacement for `.pm/tasks/<TASK-UID>.execution.md`.
+- Do not skip worktree / `.pm` task creation for any user request unless the user explicitly authorized reuse of a specific task worktree that is already bound to the same `.pm` task.
 - Do not stop after saying which workflow surface should be used; continue into that phase.
 - Do not treat this skill as permission to bypass `repo-owned-workflow-router`, verification, or GitHub PR review.
-- Do not force this bootstrap onto chat-only or read-only requests that do not change repository state.
-- Do not treat read-only professional/domain questions as TPM-owned conclusions just because bootstrap is skipped; the matching professional slice still owns the conclusion.
+- Do force this bootstrap onto chat-only or read-only requests, even when they do not change repository state.
+- Do not treat read-only professional/domain questions as TPM-owned conclusions just because bootstrap has completed; the matching professional slice still owns the conclusion.
 
 ## Verification
 
@@ -134,4 +133,4 @@ WORKFLOW BOOTSTRAP DECIDED
   - `git diff --check`
 - Expected result:
   - bootstrap surface is discoverable in `AGENTS.md` and `.agents/skills/README.md`
-  - workflow behavior eval proves repository-changing work routes through repo-owned task truth
+  - workflow behavior eval proves all user requests route through repo-owned task truth

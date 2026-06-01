@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.7**
+Version: **v1.4.8**
 Last Updated: **2026-06-01**
 
 ## 0. Purpose
@@ -37,8 +37,8 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 
 | Phase / trigger | Skill surface | Requiredness | Formal evidence |
 | --- | --- | --- | --- |
-| Repository-changing request starts | `default-workflow-bootstrap` | Required before edits unless the user explicitly authorized reuse of a bound task worktree | Bootstrap entry in `.pm/tasks/<TASK-UID>.execution.md` |
-| Read-only professional/domain question | Matching professional bounded slice under TPM coordination; no `default-workflow-bootstrap` unless writeback is needed | Required when the answer depends on product/design/runtime/WASM/agent/viewer/QA/liveops judgment; skipped for pure fact lookup | Role-tagged slice return in the user-facing answer, or `.pm/tasks/<TASK-UID>.execution.md` if already bound |
+| Any user request starts | `default-workflow-bootstrap` | Required before fact lookup, chat answer, professional slice dispatch, edits, verification, review, or external messaging unless already inside the bound task worktree | Bootstrap entry in `.pm/tasks/<TASK-UID>.execution.md` |
+| Read-only professional/domain question | Matching professional bounded slice under TPM coordination after task/worktree bootstrap | Required when the answer depends on product/design/runtime/WASM/agent/viewer/QA/liveops judgment; skipped only for pure fact lookup after task truth exists | Role-tagged slice return recorded in `.pm/tasks/<TASK-UID>.execution.md` and summarized to the user |
 | Bound task needs next phase selection | `repo-owned-workflow-router` | Required after bootstrap and whenever phase is unclear | Route entry with selected/skipped skills in `.pm/tasks/<TASK-UID>.execution.md` |
 | Scope is ambiguous, option-heavy, or visual enough to need ideation | `bounded-brainstorming` | Optional, risk-based | Brainstorming output or skip reason in execution log/project |
 | Behavior changes with a stable automated harness | `tdd-test-writer` | Conditional required when RED criteria are met; otherwise skip reason required | RED command, failing evidence, and handoff contract |
@@ -73,15 +73,15 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - external messaging, community feedback, incidents, player promises, and channel runbooks by `liveops_community`
 - professional role subagents provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the TPM owner chain.
 - TPM may perform mechanical orchestration edits to workflow governance surfaces, task logs, integration notes, and PR plumbing. If the work requires a professional conclusion, TPM must dispatch the matching role slice first and attribute the conclusion to that slice/evidence.
-- For task-bound or repository-changing work, TPM planning, TODO decomposition, subagent slice contracts, and integration order are task execution truth and must be written to `.pm/tasks/<TASK-UID>.execution.md` before the delegated work begins.
-- Every request that changes repository state must enter the standard worktree flow before edits begin; chat-only answers and read-only inspection do not create task/worktree truth by default.
-- Read-only/chat-only requests still split by judgment type:
-  - Pure fact lookup, path lookup, command-output restatement, or mechanical evidence collection may be handled directly by TPM, as long as the answer does not present a professional/domain conclusion.
+- For every request, TPM planning, TODO decomposition when needed, subagent slice contracts, and integration order are task execution truth and must be written to `.pm/tasks/<TASK-UID>.execution.md` before the delegated work begins.
+- Every user request must enter the standard worktree flow before any substantive handling begins, including chat-only answers, read-only inspection, fact lookup, professional slice dispatch, implementation, verification, review, and external messaging.
+- The only allowed pre-bootstrap work is mechanical enough to create or enter the task truth: inspect current git/worktree state, choose or confirm the task/worktree, and run the bootstrap helper.
+- Read-only/chat-only requests still split by judgment type after task truth exists:
+  - Pure fact lookup, path lookup, command-output restatement, or mechanical evidence collection may be handled by TPM inside the bound task worktree, as long as the answer does not present a professional/domain conclusion.
   - Read-only professional/domain questions must be dispatched to the matching bounded professional role slice before the answer is presented as authoritative. Examples: "does viewer have a performance collection/evaluation mechanism", "is this QA evidence release-blocking", "what runtime design risk is present", or "how should LiveOps message this incident".
-  - Such read-only professional slices do not by themselves require `.pm` task creation, a task worktree, or PR chain. The required sink for an unbound read-only professional slice is the role-tagged user-facing answer, or the surrounding chat/thread transcript when the platform preserves it; no `.pm` execution-log sink is required unless the work is already task-bound or repository writeback follows.
-  - If the answer leads to repository writeback, create or enter the standard task worktree before edits.
-  - TPM may gather raw files, commands, or repo context before dispatch, but the final user-facing answer must label TPM synthesis separately from professional role conclusions and cite the role/evidence that owns each professional conclusion.
-- Canonical truth per repository-changing request must remain single-threaded:
+  - Such read-only professional slices require the same `.pm` task and canonical task worktree as any other request. Their required sink is `.pm/tasks/<TASK-UID>.execution.md`, plus the role-tagged user-facing answer.
+  - TPM may gather raw files, commands, or repo context before dispatch only after bootstrap; the final user-facing answer must label TPM synthesis separately from professional role conclusions and cite the role/evidence that owns each professional conclusion.
+- Canonical truth per user request must remain single-threaded:
   - one owner role
   - one `.pm` task
   - one canonical worktree
@@ -122,16 +122,17 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 
 ## 5. Normative Details (from legacy AGENTS workflow)
 ### 5.1 Worktree + task truth
-- Every request that changes repository state uses a dedicated task worktree by default; only explicit user authorization allows reuse of an existing task worktree.
-- Do not classify repository-changing work as `trivial` to bypass task worktree / `.pm` task setup.
+- Every user request uses a dedicated task worktree by default, regardless of whether the immediate answer is chat-only, read-only, fact lookup, professional analysis, implementation, verification, review, or external messaging.
+- Only explicit user authorization allows reuse of an existing task worktree.
+- Do not classify work as `trivial`, `read-only`, `chat-only`, or `pure fact lookup` to bypass task worktree / `.pm` task setup.
 - Do not edit any files from the `main` branch/worktree; create or enter the relevant task worktree before making changes.
 - Entering implementation requires owner role selection and `.pm` task binding.
 - Cross-role collaboration must converge to one owner / one `.pm` task / one canonical worktree / one PR chain.
 - Task worktrees created through `./scripts/new-task-worktree.sh` must create a git-ignored `target` symlink to the repo-family shared cargo target cache resolved by `./scripts/cargo-dev.sh --print-target-dir`, so direct cargo and the development wrapper share local build artifacts by default.
 
 ### 5.2 TPM planning and subagent dispatch
-- For task-bound or repository-changing work, TPM must record the current plan, TODO decomposition, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
-- Each task-bound or repository-changing subagent slice must declare role, slice type, model configuration, mandatory context packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
+- For every request, TPM must record the current plan, TODO decomposition when needed, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
+- Each subagent slice must declare role, slice type, model configuration, mandatory context packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
 - Default subagent runtime is `gpt-5.4` with `reasoning_effort=medium` (shorthand: `gpt-5.4-medium`). TPM should use this default for bounded professional slices unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
 - Any non-default subagent model or reasoning effort must be recorded in the slice contract with the reason, such as high-risk architecture/review work, simple read-only exploration, or a user-specified override.
 - The mandatory context packet must include:
@@ -141,17 +142,17 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - user intent and acceptance target: original request summary, current TODO, explicit non-goals, and done/verification expectations
   - scoped repo context: relevant `prd.md`, `project.md`, handoff, changed paths, current diff or evidence summary, and known constraints such as `third_party` read-only boundaries
   - collaboration boundary: sibling slices, write-scope conflicts, integration order, allowed commands, return contract, and formal sink
-- `AGENTS.md` and the assigned role card are mandatory inputs for implementation, verification, review, or domain-specialist slices. A narrow read-only explorer slice may omit them only when the slice contract records the exemption reason and the exact files to inspect.
+- `AGENTS.md` and the assigned role card are mandatory inputs for implementation, verification, review, or domain-specialist slices. A narrow read-only explorer slice may omit the role card only when the slice contract records the exemption reason and the exact files to inspect; it still runs after task/worktree bootstrap and records its sink in `.pm`.
 - TPM read-only exploration is allowed only to gather routing context, inspect task truth, or integrate returned evidence. It must not be reported as a professional finding unless a matching professional role slice owns or verifies that finding.
 - TPM user-facing summaries must distinguish procedural synthesis from professional conclusions. Professional conclusions must be traceable to subagent artifacts, execution evidence, handoff, project/prd records, or PR evidence.
 - Project docs, handoff files, signals, memory, and PR evidence may supplement the `.pm` execution log, but they do not replace it for task execution truth.
 - If the plan changes during execution, TPM must append an execution-log update before continuing the changed work.
 
 ### 5.2.1 Read-only specialist routing
-- The repository-changing decision and the professional-slice decision are independent:
-  - Repository-changing controls whether standard worktree + `.pm` task truth is required.
-  - Professional judgment controls whether a matching bounded role slice is required.
-- Therefore, a read-only request may skip `default-workflow-bootstrap` while still requiring a professional role slice.
+- The task/worktree decision and the professional-slice decision are intentionally decoupled:
+  - Task/worktree truth is required for every request.
+  - Professional judgment controls whether a matching bounded role slice is required after bootstrap.
+- Therefore, a read-only request must enter `default-workflow-bootstrap` first and may still require a professional role slice.
 - Minimal read-only specialist slice contract:
   - role and slice type (`read_only_analysis`, `verification_judgment`, `review_judgment`, or `liveops_messaging`)
   - model configuration, defaulting to `gpt-5.4-medium` unless an override reason is recorded
@@ -159,9 +160,9 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - scoped files/commands/evidence to inspect
   - return contract with conclusion, evidence, uncertainty, and whether repository writeback is recommended
   - attribution rule for the final answer
-- For an unbound read-only specialist slice, the slice contract may live in the dispatch prompt/chat turn instead of `.pm`; the required sink is the final user-facing answer with role attribution and evidence, or the preserved chat/thread transcript. A `.pm` execution-log sink becomes mandatory only after a `.pm` task is bound or repository writeback is required.
-- Pure evidence questions may be answered by TPM directly only when the user asks for an objective fact such as "does this file exist", "what command output says", or "which paths match this search".
-- If a read-only specialist slice recommends changing repository state, TPM must stop direct edits, bootstrap or enter the canonical task worktree, and record the follow-up in `.pm` before applying changes.
+- Read-only specialist slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md`; chat/thread text may supplement but not replace the `.pm` sink.
+- Pure evidence questions may be answered by TPM directly only after bootstrap and only when the user asks for an objective fact such as "does this file exist", "what command output says", or "which paths match this search".
+- If a read-only specialist slice recommends changing repository state, TPM continues in the already-bound canonical task worktree and records the changed route in `.pm` before applying changes.
 
 ### 5.3 Execution evidence
 - Atomic steps should be recorded with `Action / Validation Command / Expected Result / Actual Result`.
@@ -187,15 +188,19 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.4.8 (2026-06-01)**
+  - Required every user request to create or enter standard task worktree / `.pm` task truth before substantive handling, including read-only, chat-only, and pure fact lookup requests.
+  - Removed the read-only/chat-only bypass for `default-workflow-bootstrap`; read-only professional slices now record their contract and sink in `.pm/tasks/<TASK-UID>.execution.md`.
+  - Clarified that professional routing still happens after bootstrap, but no request is handled outside task/worktree truth.
 - **v1.4.7 (2026-06-01)**
-  - Defined the sink for unbound read-only professional slices as the role-tagged user-facing answer or preserved chat/thread transcript.
-  - Clarified that `.pm` execution-log sinks are mandatory for task-bound or repository-changing subagent work, not for standalone read-only professional answers.
+  - Defined the sink for unbound read-only professional slices as the role-tagged user-facing answer or preserved chat/thread transcript. Superseded by v1.4.8, which forbids unbound read-only professional slices.
+  - Clarified that `.pm` execution-log sinks are mandatory for task-bound or repository-changing subagent work, not for standalone read-only professional answers. Superseded by v1.4.8, which requires `.pm` task truth for every request.
 - **v1.4.6 (2026-06-01)**
   - Added the default subagent runtime policy: `gpt-5.4` with `reasoning_effort=medium`.
   - Required slice contracts to record model configuration and reasons for non-default model/reasoning overrides.
 - **v1.4.5 (2026-06-01)**
   - Split read-only/chat-only handling into pure fact lookup versus read-only professional/domain judgment.
-  - Required matching professional role slices for read-only professional questions without forcing task/worktree bootstrap unless repository writeback follows.
+  - Required matching professional role slices for read-only professional questions without forcing task/worktree bootstrap unless repository writeback follows. Superseded by v1.4.8, which forces bootstrap first.
   - Added a minimal read-only specialist slice contract and explicit examples.
 - **v1.4.4 (2026-06-01)**
   - Clarified that TPM is a workflow coordinator/canonical integrator only, not a professional execution role.
@@ -216,7 +221,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - **v1.3.0 (2026-06-01)**
   - Removed the `trivial` / `non-trivial` workflow split for repository-changing work.
   - Required every repository-changing request to enter the standard task worktree + `.pm` task flow before edits begin.
-  - Kept read-only inspection and chat-only answers outside repository writeback requirements.
+  - Kept read-only inspection and chat-only answers outside repository writeback requirements. Superseded by v1.4.8, which requires task/worktree truth for every request.
 - **v1.2.3 (2026-05-28)**
   - Required all file edits to happen from a task worktree instead of the `main` branch/worktree.
 - **v1.2.2 (2026-05-26)**
@@ -238,11 +243,11 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 This checklist records whether key legacy `AGENTS.md` workflow semantics were preserved here to avoid policy loss during deduplication.
 
 - [x] Single owner / single `.pm` task / single worktree / single PR chain.
-- [x] Standard task worktree flow for every repository-changing request, with explicit-reuse-only policy.
+- [x] Standard task worktree flow for every user request, with explicit-reuse-only policy.
 - [x] Owner role selection and `.pm` task binding before implementation.
 - [x] TPM planning/TODO decomposition and subagent slice contracts written to `.pm` execution log before delegated execution.
 - [x] TPM is workflow coordinator/integrator only; professional findings and judgments must come from matching role slices.
-- [x] Read-only professional/domain questions require matching bounded role slices without forcing task/worktree bootstrap unless repository writeback follows.
+- [x] Read-only professional/domain questions require matching bounded role slices after task/worktree bootstrap.
 - [x] Subagent model configuration defaults to `gpt-5.4-medium` and non-default overrides require recorded rationale.
 - [x] Subagent context packet includes identity, governance, task truth, user intent, scoped repo context, and collaboration boundaries.
 - [x] Mandatory execution evidence fields and blocker recording.

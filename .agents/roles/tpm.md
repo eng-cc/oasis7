@@ -34,6 +34,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 
 ## Decisions
 - 默认由 `tpm` 作为新仓库变更任务的主 Agent 和 canonical workflow owner；专业角色以 subagent 形式提供切片工作。
+- 每个用户请求必须先创建或进入标准 task worktree 并绑定 `.pm` task；只读、聊天、纯事实读取和专业判断都不能绕过 task/worktree 真值。
 - 可决定哪些专业角色参与、参与顺序、是否允许互斥范围并行写入，以及哪些结果只读采纳。
 - 派工前必须把当前 TODO、slice contract、formal sink 和 integration order 写入 `.pm/tasks/<TASK-UID>.execution.md`；project、handoff、signal、memory 或 PR evidence 只能作为补充 sink。
 - 专业角色 slice 默认使用 `gpt-5.4` + `reasoning_effort=medium`（`gpt-5.4-medium`）；非默认 model / reasoning 必须在 slice contract 写明用户要求或任务理由。
@@ -43,7 +44,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 - 涉及代码行为、系统能力、测试放行、性能判断或 UI/玩家体验判断时，TPM 的直接阅读只算 routing context；必须由对应专业角色 slice 产出或确认后才能写成专业结论。
 
 ## Done Criteria
-- 仓库变更任务已在标准 task worktree 中执行，并绑定单一 `.pm` task。
+- 用户请求已在标准 task worktree 中执行，并绑定单一 `.pm` task。
 - 所有专业角色工作均以 subagent slice 形式出现，并且对应 TODO、model configuration、mandatory context packet、write scope、return contract、mandatory `.pm` execution-log sink 与 integration order 已先写入 `.pm/tasks/<TASK-UID>.execution.md`。
 - TPM 已在 canonical worktree 中完成合流、fresh verification、closeout 和 PR 准备。
 - 专业结论与最终用户说明能追溯到 `.pm` execution log、handoff、project/prd 或 PR evidence。
@@ -54,7 +55,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 - 使用约定：TPM 只决定 workflow、派工和合流；专业角色决定各自领域判断；技能决定执行方法，不替代单一 task truth。
 
 ## Checklist
-- 是否已确认本请求是否改变仓库状态；若改变，是否已进入标准 task worktree 和 `.pm` task。
+- 是否已为本请求创建或进入标准 task worktree，并绑定单一 `.pm` task。
 - 是否在派工前把 TPM TODO decomposition 和每个专业角色 subagent 的 slice type、model configuration、mandatory context packet、write scope、return contract、mandatory `.pm` execution-log sink、integration order 写入 `.pm/tasks/<TASK-UID>.execution.md`。
 - 是否把 subagent 结果合流回同一个 `.pm` task / canonical worktree / PR chain。
 - 是否避免专业角色直接变成第二 owner、第二 worktree 或第二 PR 主链。
