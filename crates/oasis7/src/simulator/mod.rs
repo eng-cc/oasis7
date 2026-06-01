@@ -19,6 +19,7 @@ mod fragment_physics;
 mod init;
 mod init_module_visual;
 mod kernel;
+mod llm_agent;
 mod memory;
 mod module_visual;
 mod native_resolution;
@@ -76,6 +77,13 @@ pub use kernel::{
     Observation, ObservedAgent, ObservedLocation, ObservedModuleArtifactRecord,
     ObservedModuleLifecycleState, ObservedModuleMarketState, ObservedPowerMarketState,
     ObservedSocialState, WorldKernel,
+};
+#[cfg(not(target_arch = "wasm32"))]
+pub use llm_agent::build_remote_provider_llm_agent_behavior;
+pub use llm_agent::{
+    build_provider_backed_llm_agent_behavior, provider_phase1_action_catalog,
+    LlmAgentProviderBuildError, LlmAgentProviderConfig, DEFAULT_LLM_AGENT_MEMORY_SUMMARY,
+    DEFAULT_LLM_AGENT_PROFILE, DEFAULT_LLM_AGENT_TIMEOUT_BUDGET_MS,
 };
 pub use memory::{
     AgentMemory, LongTermMemory, LongTermMemoryEntry, MemoryEntry, MemoryEntryKind, ShortTermMemory,

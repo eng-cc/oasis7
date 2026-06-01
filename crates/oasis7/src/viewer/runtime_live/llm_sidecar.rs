@@ -8,11 +8,12 @@ use crate::runtime::{
     WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
-    evaluate_provider_compatibility, Action as SimulatorAction, ActionCatalogEntry, ActionResult,
-    AgentDecision, AgentDecisionTrace, AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
-    ProviderBackedAgentBehavior, ProviderExecutionMode, ProviderLoopbackAdapter,
-    ProviderLoopbackHttpClient, ResourceOwner, WorldConfig, WorldEvent, WorldEventKind,
-    WorldJournal, WorldKernel, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
+    build_remote_provider_llm_agent_behavior, evaluate_provider_compatibility,
+    Action as SimulatorAction, ActionResult, AgentDecision, AgentDecisionTrace, AgentPromptProfile,
+    AgentRunner, ChunkRuntimeConfig, LlmAgentProviderConfig, ProviderBackedAgentBehavior,
+    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
+    WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot,
+    CHUNK_GENERATION_SCHEMA_VERSION, DEFAULT_LLM_AGENT_PROFILE, SNAPSHOT_VERSION,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -41,7 +42,6 @@ const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
 const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 const DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 3_000;
-const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const VIEWER_AGENT_DECISION_SOURCE_ENV: &str = "OASIS7_AGENT_DECISION_SOURCE";
 const VIEWER_AGENT_PROVIDER_BACKEND_ENV: &str = "OASIS7_AGENT_PROVIDER_BACKEND";
 const VIEWER_AGENT_PROVIDER_CONTRACT_ENV: &str = "OASIS7_AGENT_PROVIDER_CONTRACT";
@@ -60,7 +60,6 @@ mod provider_support;
 #[path = "llm_sidecar_runtime_support.rs"]
 mod runtime_support;
 pub(in crate::viewer::runtime_live) use self::provider_support::provider_settings_from_env;
-use self::provider_support::{provider_phase1_action_catalog, provider_phase1_memory_summary};
 use self::runtime_support::{
     hash_chat_message, normalize_optional_public_key, runtime_provider_check_cache_key,
     runtime_provider_check_now_unix_ms,
@@ -683,34 +682,28 @@ impl RuntimeLlmSidecar {
             if runner.get(agent_id.as_str()).is_some() {
                 continue;
             }
-            let adapter = ProviderLoopbackAdapter::new_with_transport(
+            let mut config = LlmAgentProviderConfig::new()
+                .with_provider_config_ref(format!(
+                    "provider://{}/runtime-live/pid-{}/{}",
+                    provider_settings.provider_transport,
+                    std::process::id(),
+                    agent_id
+                ))
+                .with_agent_profile(provider_settings.agent_profile.clone())
+                .with_execution_mode(provider_settings.execution_mode)
+                .with_environment_class("runtime_live");
+            if let Some(fallback_reason) = provider_settings.fallback_reason.as_deref() {
+                config = config.with_fallback_reason(fallback_reason);
+            }
+            let behavior = build_remote_provider_llm_agent_behavior(
+                agent_id.clone(),
                 provider_settings.base_url.as_str(),
                 provider_settings.auth_token.as_deref(),
                 provider_settings.connect_timeout_ms,
                 provider_settings.provider_transport.as_str(),
+                config,
             )
             .map_err(|err| format!("provider init failed for {}: {}", agent_id, err))?;
-            let behavior = ProviderBackedAgentBehavior::new(
-                agent_id.clone(),
-                adapter,
-                provider_phase1_action_catalog(),
-            )
-            .with_provider_config_ref(format!(
-                "provider://{}/runtime-live/pid-{}/{}",
-                provider_settings.provider_transport,
-                std::process::id(),
-                agent_id
-            ))
-            .with_agent_profile(provider_settings.agent_profile.clone())
-            .with_execution_mode(provider_settings.execution_mode)
-            .with_environment_class("runtime_live")
-            .with_memory_summary(provider_phase1_memory_summary());
-            let behavior =
-                if let Some(fallback_reason) = provider_settings.fallback_reason.as_deref() {
-                    behavior.with_fallback_reason(fallback_reason)
-                } else {
-                    behavior
-                };
             runner.register(behavior);
         }
         Ok(())

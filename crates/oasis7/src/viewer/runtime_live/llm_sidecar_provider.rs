@@ -72,7 +72,7 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
     }
 
     let agent_profile = named_env_var_any(&[VIEWER_AGENT_PROVIDER_PROFILE_ENV])
-        .unwrap_or_else(|| DEFAULT_PROVIDER_AGENT_PROFILE.to_string());
+        .unwrap_or_else(|| DEFAULT_LLM_AGENT_PROFILE.to_string());
     let agent_profile = agent_profile.trim();
     if agent_profile.is_empty() {
         return Err(format!(
@@ -109,56 +109,6 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
         execution_mode,
         fallback_reason: provider_mode_fallback_reason(decision_source),
     }))
-}
-
-pub(super) fn provider_phase1_action_catalog() -> Vec<ActionCatalogEntry> {
-    vec![
-        ActionCatalogEntry::new("wait", "yield current turn without acting"),
-        ActionCatalogEntry::new("wait_ticks", "sleep for a bounded number of ticks"),
-        ActionCatalogEntry::new("move_agent", "move to a neighboring location"),
-        ActionCatalogEntry::new(
-            "harvest_radiation",
-            "recover electricity before industrial expansion or recipe execution",
-        ),
-        ActionCatalogEntry::new(
-            "mine_compound",
-            "extract raw compound mass when recovery needs material inputs",
-        ),
-        ActionCatalogEntry::new(
-            "refine_compound",
-            "convert compound mass into hardware output for recovery",
-        ),
-        ActionCatalogEntry::new(
-            "build_factory",
-            "start the first compatible factory line for industrial progression",
-        ),
-        ActionCatalogEntry::new(
-            "schedule_recipe",
-            "run the next compatible recipe on an existing factory line",
-        ),
-        ActionCatalogEntry::new("speak_to_nearby", "emit a lightweight nearby speech event"),
-        ActionCatalogEntry::new(
-            "inspect_target",
-            "emit a lightweight target inspection event",
-        ),
-        ActionCatalogEntry::new(
-            "simple_interact",
-            "emit a lightweight simple interaction event",
-        ),
-    ]
-}
-
-pub(super) fn provider_phase1_memory_summary() -> String {
-    concat!(
-        "goal=post_onboarding.establish_first_capability; ",
-        "开局默认种子资源通常已足够首个 smelter（例如 electricity>=10 且 data>=5）；",
-        "若当前没有 factory.smelter.mk1，不要先 harvest_radiation，优先 build_factory(factory.smelter.mk1)。",
-        "只有在 electricity<10 时才先 harvest_radiation；只有在 data<5 时才先 mine_compound/refine_compound。 ",
-        "build_factory 成功后立刻 schedule_recipe(",
-        "recipe.smelter.iron_ingot|recipe.smelter.copper_wire|recipe.smelter.polymer_resin|recipe.smelter.alloy_plate",
-        ")；不要长期停留在 wait/move/speak/inspect。"
-    )
-    .to_string()
 }
 
 fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {
