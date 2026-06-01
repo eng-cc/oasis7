@@ -104,7 +104,7 @@ checks = [
             "mandatory context packet",
             "必须先写入 `.pm/tasks/<TASK-UID>.execution.md`",
             "formal sink",
-            f"liveops_community{bt} 必须参与至少一个 slice",
+            f"{bt}liveops_community{bt} 必须参与至少一个 slice",
             "requesting-repo-owned-review/SKILL.md",
         ],
     ),
@@ -151,6 +151,7 @@ checks = [
     (
         root / ".agents/roles/templates/subagent-slice-card.md",
         [
+            "- role:",
             "- mandatory context packet:",
             "identity and authority:",
             "workflow governance:",
@@ -160,6 +161,20 @@ checks = [
             "collaboration boundary:",
             "- context exemption:",
             "除窄范围只读 explorer 且写明豁免原因外",
+        ],
+    ),
+    (
+        root / "scripts/pm/pm_store.py",
+        [
+            '"tpm": "TPM"',
+        ],
+    ),
+    (
+        root / "scripts/pm/pm_store_reporting.py",
+        [
+            'ORCHESTRATOR_ROLES = {"producer_system_designer", "tpm"}',
+            "role in ORCHESTRATOR_ROLES",
+            "signal_role_filter = None if (phase == \"review\" and role in ORCHESTRATOR_ROLES) else role",
         ],
     ),
     (

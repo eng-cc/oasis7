@@ -3,7 +3,7 @@
 > 用途：在 `tpm` 派工前，先把每个专业角色 subagent slice 固化为单卡，确保 owner / task / worktree / PR 主链一致，并必须回写 `.pm/tasks/<TASK-UID>.execution.md`。
 
 ## Required Fields（固定字段）
-- owner role:
+- role:
 - slice type:
 - mandatory context packet:
   - identity and authority: assigned role + `.agents/roles/<role>.md` + owner role + TPM integration owner
@@ -27,7 +27,7 @@
 - [ ] 已定义完成信号（patch / findings / evidence / review）与回传路径，避免并行漂移到新真值。
 
 ## Example (copy/paste)
-- owner role: producer_system_designer
+- role: producer_system_designer
 - slice type: implementation
 - mandatory context packet: `AGENTS.md` + `.agents/roles/producer_system_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/<module>/project.md` task `<task slug>` + `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）

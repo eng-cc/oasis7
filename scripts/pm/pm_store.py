@@ -76,6 +76,7 @@ ROLE_MEMORY_PREFIXES = {
     "qa_engineer": "QA",
     "runtime_engineer": "RUNTIME",
     "shared": "SHARED",
+    "tpm": "TPM",
     "viewer_engineer": "VIEWER",
     "wasm_platform_engineer": "WASM",
 }
