@@ -786,14 +786,24 @@ mod tests {
         MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
     };
     use std::collections::{BTreeMap, BTreeSet};
+    use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
     fn temp_dir(prefix: &str) -> PathBuf {
-        let unique = SystemTime::now()
+        let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("duration")
             .as_nanos();
-        std::env::temp_dir().join(format!("oasis7-liveops-grant-cli-{prefix}-{unique}"))
+        let sequence = TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "oasis7-liveops-grant-cli-{prefix}-{}-{timestamp}-{sequence}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).expect("create temp dir");
+        path
     }
 
     fn sample_policy(public_key_hex: &str) -> GovernanceThresholdSignerPolicy {

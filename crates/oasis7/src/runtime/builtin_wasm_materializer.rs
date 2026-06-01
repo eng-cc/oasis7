@@ -351,7 +351,7 @@ fn run_default_builtin_wasm_build(
     prefer_host_native: bool,
 ) -> Result<(), WorldError> {
     let mut command = Command::new(build_script);
-    // Tests may run under a stable rustup alias (for example 1.92.0-...); fallback
+    // Tests may run under a versioned stable rustup alias (for example 1.96.0-...); fallback
     // build should pick the canonical wasm toolchain on its own.
     command.env_remove("RUSTUP_TOOLCHAIN");
     command.env_remove("OASIS7_WASM_BUILD_IN_CONTAINER");
