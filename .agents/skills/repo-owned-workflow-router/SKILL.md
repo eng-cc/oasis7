@@ -32,7 +32,7 @@ Do not use this skill when:
 3. It only chooses and orders repo-owned workflow skills.
 4. If the task truth changes, route decisions must be written back into `.pm/tasks/<TASK-UID>.execution.md`; formal docs may supplement but not replace it.
 5. Use the narrowest applicable workflow surface; do not force every phase if it is not needed.
-6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, write scope, return contract, mandatory `.pm` execution-log sink, and integration owner/order.
+6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, mandatory context packet, write scope, return contract, mandatory `.pm` execution-log sink, and integration owner/order.
 7. TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
 
 ## Routing Order
@@ -102,11 +102,19 @@ WORKFLOW ROUTE DECIDED
 ## Subagent Slice Plan (If Needed)
 - role:
 - slice type:
+- mandatory context packet:
+  - identity and authority:
+  - workflow governance:
+  - task truth:
+  - user intent:
+  - scoped repo context:
+  - collaboration boundary:
 - write scope:
 - return contract:
 - formal sink / writeback surface: `.pm/tasks/<TASK-UID>.execution.md` (mandatory)
 - integration owner:
 - integration order:
+- context exemption:
 
 ## Next Action
 - exact next step:
@@ -121,3 +129,4 @@ WORKFLOW ROUTE DECIDED
 - Do not skip `verification-before-completion` when you are about to make a completion claim.
 - Do not use this router as a replacement for closeout; switch to `finishing-a-development-branch` when the task is done.
 - Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
+- Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current `.pm` task truth, and scoped repo context in the mandatory context packet.

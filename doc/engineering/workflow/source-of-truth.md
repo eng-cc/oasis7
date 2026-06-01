@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.2**
+Version: **v1.4.3**
 Last Updated: **2026-06-01**
 
 ## 0. Purpose
@@ -114,7 +114,15 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 
 ### 5.2 TPM planning and subagent dispatch
 - TPM must record the current plan, TODO decomposition, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
-- Each subagent slice must declare role, slice type, input, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
+- Each subagent slice must declare role, slice type, mandatory context packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
+- The mandatory context packet must include:
+  - identity and authority: assigned role, role card path, owner role, and TPM integration owner
+  - workflow governance: `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and the selected workflow skills
+  - task truth: current `.pm/tasks/<TASK-UID>.yaml`, `.pm/tasks/<TASK-UID>.execution.md`, canonical worktree, branch, base ref, and PR link/status when present
+  - user intent and acceptance target: original request summary, current TODO, explicit non-goals, and done/verification expectations
+  - scoped repo context: relevant `prd.md`, `project.md`, handoff, changed paths, current diff or evidence summary, and known constraints such as `third_party` read-only boundaries
+  - collaboration boundary: sibling slices, write-scope conflicts, integration order, allowed commands, return contract, and formal sink
+- `AGENTS.md` and the assigned role card are mandatory inputs for implementation, verification, review, or domain-specialist slices. A narrow read-only explorer slice may omit them only when the slice contract records the exemption reason and the exact files to inspect.
 - Project docs, handoff files, signals, memory, and PR evidence may supplement the `.pm` execution log, but they do not replace it for task execution truth.
 - If the plan changes during execution, TPM must append an execution-log update before continuing the changed work.
 
@@ -142,6 +150,9 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.4.3 (2026-06-01)**
+  - Defined the mandatory subagent context packet so identity, workflow governance, task truth, user intent, repo context, and collaboration boundaries are provided before dispatch.
+  - Required `AGENTS.md` and the assigned role card for non-read-only subagent slices, with explicit exemption reasons for narrow read-only explorer slices.
 - **v1.4.2 (2026-06-01)**
   - Added the normative skill map by workflow phase so each core skill has an explicit trigger, requiredness level, and evidence sink.
   - Clarified that specialist skills are domain-triggered through TPM routing rather than mandatory default workflow phases.
@@ -179,6 +190,7 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] Standard task worktree flow for every repository-changing request, with explicit-reuse-only policy.
 - [x] Owner role selection and `.pm` task binding before implementation.
 - [x] TPM planning/TODO decomposition and subagent slice contracts written to `.pm` execution log before delegated execution.
+- [x] Subagent context packet includes identity, governance, task truth, user intent, scoped repo context, and collaboration boundaries.
 - [x] Mandatory execution evidence fields and blocker recording.
 - [x] Current-round fresh verification before completion claim.
 - [x] Closeout command chain and `done` verification strictness.
