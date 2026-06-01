@@ -60,6 +60,9 @@ impl MockChainServer {
             }
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    stream
+                        .set_nonblocking(false)
+                        .expect("set mock chain stream blocking");
                     let request = read_http_request(&mut stream).expect("read mock chain request");
                     handle_mock_chain_request(&mut stream, &state_for_thread, request);
                 }
@@ -197,6 +200,9 @@ impl MockLetaiServer {
             }
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    stream
+                        .set_nonblocking(false)
+                        .expect("set mock letai stream blocking");
                     let request = read_http_request(&mut stream).expect("read mock letai request");
                     handle_mock_letai_request(&mut stream, &state_for_thread, request);
                 }

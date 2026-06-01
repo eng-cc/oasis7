@@ -3,7 +3,7 @@
 use super::super::m1_builtin_wasm_artifact::m1_builtin_manifest_hash_tokens;
 use super::super::*;
 use super::pos;
-use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
+use oasis7_wasm_executor::WasmExecutor;
 use std::collections::BTreeMap;
 
 fn has_active(world: &World, module_id: &str) -> bool {
@@ -11,7 +11,7 @@ fn has_active(world: &World, module_id: &str) -> bool {
 }
 
 fn power_module_sandbox() -> WasmExecutor {
-    WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor")
+    WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor")
 }
 
 fn apply_module_changes(world: &mut World, actor: &str, changes: ModuleChangeSet) {

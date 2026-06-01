@@ -49,6 +49,18 @@ fn test_module_artifact_signing_key() -> SigningKey {
     SigningKey::from_bytes(&private_key_bytes)
 }
 
+#[cfg(feature = "wasmtime")]
+pub(super) fn test_wasm_executor_config() -> oasis7_wasm_executor::WasmExecutorConfig {
+    let mut config = oasis7_wasm_executor::WasmExecutorConfig::default();
+    if cfg!(feature = "test_tier_full") {
+        // Full-tier CI runs many builtin wasm tests in parallel on fresh runners.
+        // Keep production defaults strict, but avoid conflating cold compile time with
+        // module execution regressions in these integration-style tests.
+        config.max_call_ms = 60_000;
+    }
+    config
+}
+
 mod agent_claims;
 mod agent_claims_auto_funding;
 #[cfg(feature = "test_tier_full")]

@@ -4,7 +4,7 @@ use crate::models::{BodyKernelView, BodySlotType, CargoEntityEntry, CargoEntityK
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 use crate::simulator::ResourceKind;
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
-use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
+use oasis7_wasm_executor::WasmExecutor;
 
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 fn install_m1_body_module(world: &mut World) {
@@ -250,7 +250,7 @@ fn body_action_updates_view_and_costs_resources() {
     });
 
     let mut sandbox =
-        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
+        WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor");
     world.step_with_modules(&mut sandbox).unwrap();
 
     let agent = world.state().agents.get("agent-1").unwrap();
@@ -288,7 +288,7 @@ fn body_action_rejects_when_insufficient_resources() {
     });
 
     let mut sandbox =
-        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
+        WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor");
     world.step_with_modules(&mut sandbox).unwrap();
 
     let last = world.journal().events.last().unwrap();
