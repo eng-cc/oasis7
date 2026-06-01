@@ -12,7 +12,7 @@ Design comprehensive, production-grade Product Requirements Documents (PRDs) tha
 
 ## Oasis7 Workflow Binding
 
-In oasis7, this skill is a specialist planning surface, not a standalone workflow. TPM must bind PRD work to the same owner role, `.pm` task, canonical worktree, and PR chain before repository writeback.
+In oasis7, this skill is a specialist planning surface, not a standalone workflow. TPM must bind PRD work to the same owner role, `.pm` task, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; the planning/domain conclusion must be owned by the appropriate professional slice.
 
 - Write PRD outputs to repo-owned docs such as `doc/<module>/prd.md` or `doc/**/**.prd.md`.
 - Record the PRD route, TODOs, and downstream handoff in `.pm/tasks/<TASK-UID>.execution.md`.

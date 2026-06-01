@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.3**
+Version: **v1.4.4**
 Last Updated: **2026-06-01**
 
 ## 0. Purpose
@@ -33,7 +33,7 @@ flowchart TD
 ```
 
 ### 1.1 Skill Map by Phase
-This map makes skill reachability explicit. TPM owns the route decision and records the selected skill path in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
+This map makes skill reachability explicit. TPM owns the route decision as a workflow coordination act and records the selected skill path in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
 
 | Phase / trigger | Skill surface | Requiredness | Formal evidence |
 | --- | --- | --- | --- |
@@ -57,11 +57,21 @@ Specialist skills are not mandatory workflow phases. They become reachable throu
 - Narrative/community/content: `epic-story-orchestrator-zh`, `content-creation`, `humanizer-zh`.
 - Browser/visual/content tools: `agent-browser`, `gpt-image-2`, `xiaohongshu`, `xiaohongshu-note-analyzer`.
 
-If a specialist skill is used, TPM must still bind it to the same owner, `.pm` task, canonical worktree, and PR chain through the subagent slice contract.
+If a specialist skill is used, TPM must still bind it to the same owner, `.pm` task, canonical worktree, and PR chain through the subagent slice contract. TPM may route to specialist skills, but the specialist role owns the professional conclusion.
 
 ## 2. Responsibility Boundary
-- `tpm`: default main Agent / orchestrator / canonical integrator; owns phase decision, role allocation, final writeback, fresh verification, completion claim, and PR chain.
-- professional role subagents: `producer_system_designer`, `runtime_engineer`, `wasm_platform_engineer`, `agent_engineer`, `viewer_engineer`, `qa_engineer`, and `liveops_community` provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the TPM owner chain.
+- `tpm`: default main Agent / workflow coordinator / canonical integrator only; owns phase decision, role allocation, subagent dispatch, integration order, task-truth writeback, fresh-verification gate coordination, completion-claim coordination, and PR chain coordination.
+- TPM is not a professional execution role. TPM must not be the source of domain/professional analysis, implementation, verification judgment, code review judgment, product/design judgment, runtime/wasm/viewer/agent/QA judgment, or liveops/community messaging.
+- Professional/domain work must be done by the matching bounded subagent slice. This includes:
+  - product/system design by `producer_system_designer`
+  - runtime/gameplay/server logic by `runtime_engineer`
+  - WASM/platform/ABI work by `wasm_platform_engineer`
+  - agent behavior/prompt/provider work by `agent_engineer`
+  - Viewer/Web/UI work by `viewer_engineer`
+  - verification strategy, test evidence, and release blocking judgment by `qa_engineer`
+  - external messaging, community feedback, incidents, player promises, and channel runbooks by `liveops_community`
+- professional role subagents provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the TPM owner chain.
+- TPM may perform mechanical orchestration edits to workflow governance surfaces, task logs, integration notes, and PR plumbing. If the work requires a professional conclusion, TPM must dispatch the matching role slice first and attribute the conclusion to that slice/evidence.
 - TPM planning, TODO decomposition, subagent slice contracts, and integration order are task execution truth and must be written to `.pm/tasks/<TASK-UID>.execution.md` before the delegated work begins.
 - Every request that changes repository state must enter the standard worktree flow before edits begin; chat-only answers and read-only inspection may be handled directly without repository writeback.
 - Canonical truth per repository-changing request must remain single-threaded:
@@ -123,6 +133,8 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - scoped repo context: relevant `prd.md`, `project.md`, handoff, changed paths, current diff or evidence summary, and known constraints such as `third_party` read-only boundaries
   - collaboration boundary: sibling slices, write-scope conflicts, integration order, allowed commands, return contract, and formal sink
 - `AGENTS.md` and the assigned role card are mandatory inputs for implementation, verification, review, or domain-specialist slices. A narrow read-only explorer slice may omit them only when the slice contract records the exemption reason and the exact files to inspect.
+- TPM read-only exploration is allowed only to gather routing context, inspect task truth, or integrate returned evidence. It must not be reported as a professional finding unless a matching professional role slice owns or verifies that finding.
+- TPM user-facing summaries must distinguish procedural synthesis from professional conclusions. Professional conclusions must be traceable to subagent artifacts, execution evidence, handoff, project/prd records, or PR evidence.
 - Project docs, handoff files, signals, memory, and PR evidence may supplement the `.pm` execution log, but they do not replace it for task execution truth.
 - If the plan changes during execution, TPM must append an execution-log update before continuing the changed work.
 
@@ -150,6 +162,10 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.4.4 (2026-06-01)**
+  - Clarified that TPM is a workflow coordinator/canonical integrator only, not a professional execution role.
+  - Required professional/domain analysis, implementation, verification judgment, review judgment, and liveops/community messaging to come from matching bounded subagent slices.
+  - Limited TPM read-only exploration to routing/integration context unless a professional slice owns or verifies the resulting conclusion.
 - **v1.4.3 (2026-06-01)**
   - Defined the mandatory subagent context packet so identity, workflow governance, task truth, user intent, repo context, and collaboration boundaries are provided before dispatch.
   - Required `AGENTS.md` and the assigned role card for non-read-only subagent slices, with explicit exemption reasons for narrow read-only explorer slices.
@@ -190,6 +206,7 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] Standard task worktree flow for every repository-changing request, with explicit-reuse-only policy.
 - [x] Owner role selection and `.pm` task binding before implementation.
 - [x] TPM planning/TODO decomposition and subagent slice contracts written to `.pm` execution log before delegated execution.
+- [x] TPM is workflow coordinator/integrator only; professional findings and judgments must come from matching role slices.
 - [x] Subagent context packet includes identity, governance, task truth, user intent, scoped repo context, and collaboration boundaries.
 - [x] Mandatory execution evidence fields and blocker recording.
 - [x] Current-round fresh verification before completion claim.

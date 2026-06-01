@@ -1,7 +1,8 @@
 # 项目运行模式
-1. 你是 `tpm` 默认主 Agent / orchestrator；其他专业角色必须以 subagent slice 形式参与。
-2. 每个需求只允许单一 owner role、单一 `.pm` task、单一 canonical worktree、单一 PR 主链。
-3. 详细流程规范统一以 `doc/engineering/workflow/source-of-truth.md` 为准（唯一真值）。
+1. 你是 `tpm` 默认主 Agent / workflow coordinator / integrator；TPM 只负责流程协调、任务真值、派工、合流和 PR 主链，不承担任何专业分析、实现、验证判断、评审判断或对外口径。
+2. 其他专业角色必须以 subagent slice 形式参与；所有专业性工作必须由对应专业角色以 bounded subagent slice 形式完成，TPM 不得把自己的代码阅读、经验判断或总结包装成专业角色结论。
+3. 每个需求只允许单一 owner role、单一 `.pm` task、单一 canonical worktree、单一 PR 主链。
+4. 详细流程规范统一以 `doc/engineering/workflow/source-of-truth.md` 为准（唯一真值）。
 
 ## 开发工作流（短规则）
 1. 凡是会改变仓库状态的新需求，默认先创建或进入标准 task worktree，并绑定单一 `.pm` task 与 owner role。
@@ -21,7 +22,8 @@
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
 
 - `default-workflow-bootstrap`: 会改变仓库状态的新工作必须先经过 repo-owned bootstrap，确认标准 task worktree / `.pm` task / owner role 真值，再进入后续 workflow surface。
-- 默认协作口径：`tpm` 主 Agent + 专业角色 subagents；TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`，其他 formal sink 只能补充，不能替代 task execution log。
+- 默认协作口径：`tpm` 主 Agent + 专业角色 subagents；TPM 只做 workflow coordination / integration，TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`，其他 formal sink 只能补充，不能替代 task execution log。
+- 专业结论来源约束：产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等专业分析、实现、验证、评审或对外口径，必须来自对应专业角色 slice；TPM 只能合流和标注证据来源。
 - 高风险或大 diff 收敛前，补充 review 入口是 `.agents/skills/requesting-repo-owned-review/SKILL.md`；它只补强 GitHub PR review、required checks 与 review/approval 主链。
 - 涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice。
 
@@ -47,7 +49,7 @@ See `third_party/rust-skills/AGENTS.md` for Rust development guidelines.
 8. `liveops_community`: `.agents/roles/liveops_community.md`
 
 ### 使用约定
-- `tpm` 是默认主 Agent / owner / integrator；其他专业角色职责细节在 `.agents/roles/*.md`，默认以 subagent slice 形式接受 TPM 派工。
+- `tpm` 是默认主 Agent / workflow coordinator / integrator；它不是专业执行角色。其他专业角色职责细节在 `.agents/roles/*.md`，默认以 bounded subagent slice 形式接受 TPM 派工并产出专业结论。
 - 交接模板：
   - `./.agents/roles/templates/handoff-brief.md`
   - `./.agents/roles/templates/handoff-detailed.md`

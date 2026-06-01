@@ -12,7 +12,7 @@ Usage: ./scripts/pm/workflow-behavior-eval.sh [--json]
 
 Run the repo-owned workflow behavior eval for the default oasis7 task chain:
   default-workflow-bootstrap -> new-task-worktree -> workflow-report
-  -> repo-owned-workflow-router -> TPM orchestrate / professional role subagent dispatch
+  -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch
   -> task-closeout -> prepare-task-pr -> review-thread-closeout
 
 This eval reuses isolated fixture tests and PM smokes so the main chain stays
@@ -112,8 +112,10 @@ checks = [
         root / ".agents/roles/tpm.md",
         [
             "# Role: tpm",
-            "默认由 `tpm` 作为新仓库变更任务的主 Agent 和 canonical owner",
+            "TPM 只做 workflow coordination / integration",
+            "默认由 `tpm` 作为新仓库变更任务的主 Agent 和 canonical workflow owner",
             "专业角色以 subagent 形式提供切片工作",
+            "不得用 TPM 自己的判断替代专业 subagent 结论",
             "派工前必须把当前 TODO",
             "mandatory context packet",
             "workflow source-of-truth",
@@ -360,7 +362,8 @@ scenarios = [
         "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
         "required_markers": [
             "repository-changing: requires standard worktree + `.pm` task truth before edits",
-            "choose `tpm` as the default owner role unless an existing bound task already has a valid owner",
+            "choose `tpm` as the default workflow owner role unless an existing bound task already has a valid owner",
+            "professional work still requires matching bounded subagent slices",
             "create a dedicated worktree unless the user explicitly authorized reuse",
             "Once task truth exists, hand off to `repo-owned-workflow-router`.",
         ],
@@ -436,7 +439,7 @@ scenarios = [
     },
     {
         "id": "subagent_dispatch_is_conditional_and_bounded",
-        "expected_route": "TPM orchestrates bounded professional role subagent slices",
+        "expected_route": "TPM coordinates bounded professional role subagent slices",
         "surface": "AGENTS.md",
         "required_markers": [
             "其他专业角色必须以 subagent slice 形式参与",
@@ -480,6 +483,19 @@ scenarios = [
             "### 1.2 Specialist Skill Reachability",
             "Specialist skills are not mandatory workflow phases.",
             "If a specialist skill is used, TPM must still bind it to the same owner",
+            "the specialist role owns the professional conclusion",
+        ],
+    },
+    {
+        "id": "tpm_is_coordination_only_not_professional_execution",
+        "expected_route": "TPM coordinates while professional role slices own domain judgments",
+        "surface": "doc/engineering/workflow/source-of-truth.md",
+        "required_markers": [
+            "TPM is not a professional execution role.",
+            "TPM must not be the source of domain/professional analysis",
+            "Professional/domain work must be done by the matching bounded subagent slice.",
+            "TPM read-only exploration is allowed only to gather routing context",
+            "Professional conclusions must be traceable to subagent artifacts",
         ],
     },
     {
@@ -666,14 +682,15 @@ segments = [
 ]
 
 payload = {
-    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM orchestrate / professional role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
+    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, PM runtime smoke, and fake-gh PR helper tests",
     "expected_agent_behavior": [
         "new repository-changing work first routes through a repo-owned bootstrap surface rather than an external bootstrap",
         "bootstrap distinguishes repository-changing work from read-only/chat-only requests and ensures isolated task truth exists before routing",
         "task worktree bootstrap stays source-clean and starts the target task",
         "read-only/chat-only requests are not forced through task/worktree bootstrap",
-        "TPM is the default main Agent / orchestrator / canonical integrator",
+        "TPM is the default main Agent / workflow coordinator / canonical integrator only",
+        "TPM does not own professional/domain conclusions; matching professional role slices do",
         "brainstorming and TDD remain conditional while professional role work is represented as bounded subagent slices",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
         "high-risk local diffs can request repo-owned review packets without replacing GitHub PR review",

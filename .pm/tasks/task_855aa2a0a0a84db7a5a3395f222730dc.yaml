@@ -1,0 +1,27 @@
+task_uid: task_855aa2a0a0a84db7a5a3395f222730dc
+title: "Clarify TPM role boundary"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-tpm-role-boundary
+execution_log_path: .pm/tasks/task_855aa2a0a0a84db7a5a3395f222730dc.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "TPM role is explicitly limited to orchestration, routing, integration, verification gate coordination, and PR chain coordination."
+  - "Professional/domain analysis, implementation, and verification are explicitly delegated to bounded specialist subagent slices."
+  - "Workflow docs and skill surfaces are synced and workflow governance checks pass."
+handoff_to: []
+updated_at: 2026-06-01T17:52:27+08:00
+last_started_at: 2026-06-01T17:42:30+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-behavior-eval.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-01T17:52:26+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-01T17:52:27+08:00

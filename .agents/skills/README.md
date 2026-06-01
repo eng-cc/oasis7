@@ -51,7 +51,7 @@ Canonical phase mapping lives in `doc/engineering/workflow/source-of-truth.md#11
 - PR 收到 review comments / requested changes，需要核实、修复、回证据并保持 thread resolution 与 merge readiness 分离时：`.agents/skills/receiving-code-review/SKILL.md`
 - 新增或修改本地 repo-owned skill、替换上游 skill 或调整 skill governance 时：`.agents/skills/writing-repo-owned-skills/SKILL.md`
 
-Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain.
+Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain. TPM routing is coordination only; specialist conclusions must be owned by the matching professional role slice.
 
 ## Bounded Borrowing From `writing-skills`
 
