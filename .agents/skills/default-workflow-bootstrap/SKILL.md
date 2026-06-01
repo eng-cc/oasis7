@@ -30,11 +30,23 @@ Do not use this skill when:
 - you are already at claim-ready / closeout time
 - the user only asks for chat-only explanation or read-only inspection that will not change repository state
 
+Read-only caveat:
+
+- Skipping this bootstrap only skips task/worktree writeback. It does not let TPM
+  issue professional/domain conclusions directly.
+- If a read-only question requires product/design/runtime/WASM/agent/viewer/QA or
+  liveops judgment, route to the matching bounded professional slice without
+  creating a `.pm` task unless repository writeback follows.
+- Pure fact lookup, path lookup, command-output restatement, or mechanical
+  evidence collection can be answered directly by TPM if it is not framed as a
+  professional conclusion.
+
 ## Core Workflow
 
 1. Determine whether the request changes repository state:
    - repository-changing: requires standard worktree + `.pm` task truth before edits
-   - read-only/chat-only: may be handled directly without repository writeback
+   - read-only/chat-only pure fact lookup: may be handled directly without repository writeback
+   - read-only/chat-only professional judgment: skip task/worktree bootstrap, but dispatch the matching professional role slice before an authoritative answer
 2. For repository-changing work, verify workflow state in this order:
    - are you already in an isolated task worktree
    - is the current worktree already bound to the target task
@@ -111,6 +123,7 @@ WORKFLOW BOOTSTRAP DECIDED
 - Do not stop after saying which workflow surface should be used; continue into that phase.
 - Do not treat this skill as permission to bypass `repo-owned-workflow-router`, verification, or GitHub PR review.
 - Do not force this bootstrap onto chat-only or read-only requests that do not change repository state.
+- Do not treat read-only professional/domain questions as TPM-owned conclusions just because bootstrap is skipped; the matching professional slice still owns the conclusion.
 
 ## Verification
 

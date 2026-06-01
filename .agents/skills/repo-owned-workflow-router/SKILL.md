@@ -32,14 +32,20 @@ Do not use this skill when:
 3. It only chooses and orders repo-owned workflow skills.
 4. If the task truth changes, route decisions must be written back into `.pm/tasks/<TASK-UID>.execution.md`; formal docs may supplement but not replace it.
 5. Use the narrowest applicable workflow surface; do not force every phase if it is not needed.
-6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, mandatory context packet, write scope, return contract, mandatory `.pm` execution-log sink, and integration owner/order.
-7. TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
+6. If the route implies multi-role or subagent-driven execution for task-bound or repository-changing work, the route output must also include a minimal slice contract: role, slice type, model configuration, mandatory context packet, write scope, return contract, mandatory `.pm` execution-log sink, and integration owner/order.
+7. For task-bound or repository-changing work, TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
 8. TPM routing is coordination only. If the task needs professional/domain analysis, implementation, verification judgment, review judgment, or external messaging, route to the matching professional role slice before presenting that conclusion as authoritative.
+9. Read-only/chat-only requests do not enter this router unless they are already bound to task truth or need repository writeback. However, read-only professional/domain questions still require the matching bounded role slice; TPM may dispatch that slice directly and use the role-tagged user-facing answer as the sink when no task/writeback exists.
 
 ## Routing Order
 
 Check the task in this order:
 
+0. Already-bound read-only professional/domain judgment
+   - Apply this router step only when the read-only professional/domain judgment is already task-bound or writeback-driven.
+   - Dispatch the matching bounded role slice; this router is not the entrypoint for unbound read-only professional questions.
+   - Unbound read-only professional questions do not enter this router. TPM dispatches the matching bounded role slice directly and uses the role-tagged user-facing answer as the sink.
+   - Skip professional dispatch only for pure fact lookup or command-output restatement.
 1. `bounded-brainstorming`
    - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
 2. `tdd-test-writer`
@@ -103,6 +109,7 @@ WORKFLOW ROUTE DECIDED
 ## Subagent Slice Plan (If Needed)
 - role:
 - slice type:
+- model configuration: `gpt-5.4-medium` by default; record reason for any override
 - mandatory context packet:
   - identity and authority:
   - workflow governance:

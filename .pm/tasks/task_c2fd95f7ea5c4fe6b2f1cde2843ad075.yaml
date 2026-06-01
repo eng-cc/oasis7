@@ -1,0 +1,26 @@
+task_uid: task_c2fd95f7ea5c4fe6b2f1cde2843ad075
+title: "clarify read-only specialist routing"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-readonly-specialist-routing
+execution_log_path: .pm/tasks/task_c2fd95f7ea5c4fe6b2f1cde2843ad075.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Read-only professional judgment requires matching bounded specialist slice without forcing task worktree creation."
+  - "Workflow source of truth is updated before entrypoint docs."
+  - "Workflow behavior eval, PM lint, doc governance, and diff check pass."
+handoff_to: []
+updated_at: 2026-06-01T18:52:10+08:00
+last_started_at: 2026-06-01T18:43:57+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-behavior-eval.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-01T18:52:10+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-01T18:52:10+08:00
