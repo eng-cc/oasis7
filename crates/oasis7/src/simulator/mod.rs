@@ -81,9 +81,13 @@ pub use kernel::{
 #[cfg(not(target_arch = "wasm32"))]
 pub use llm_agent::build_remote_provider_llm_agent_behavior;
 pub use llm_agent::{
-    build_provider_backed_llm_agent_behavior, provider_phase1_action_catalog,
-    LlmAgentProviderBuildError, LlmAgentProviderConfig, DEFAULT_LLM_AGENT_MEMORY_SUMMARY,
-    DEFAULT_LLM_AGENT_PROFILE, DEFAULT_LLM_AGENT_TIMEOUT_BUDGET_MS,
+    build_provider_backed_llm_agent_behavior, provider_phase1_action_catalog, LlmAgentBehavior,
+    LlmAgentConfig, LlmAgentProviderBuildError, LlmAgentProviderConfig, LlmClientError,
+    LlmCompletionClient, LlmCompletionRequest, LlmCompletionResult, LlmCompletionTurn,
+    LlmPromptOverrides, LlmPromptProfile, MemorySelector, MemorySelectorConfig, PromptAssembler,
+    PromptAssemblyInput, PromptAssemblyOutput, PromptBudget, PromptStepContext,
+    DEFAULT_LLM_AGENT_MEMORY_SUMMARY, DEFAULT_LLM_AGENT_PROFILE,
+    DEFAULT_LLM_AGENT_TIMEOUT_BUDGET_MS,
 };
 pub use memory::{
     AgentMemory, LongTermMemory, LongTermMemoryEntry, MemoryEntry, MemoryEntryKind, ShortTermMemory,
