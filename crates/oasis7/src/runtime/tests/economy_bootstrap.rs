@@ -4,14 +4,14 @@ use super::super::*;
 use super::pos;
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack};
-use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
+use oasis7_wasm_executor::WasmExecutor;
 
 fn has_active(world: &World, module_id: &str) -> bool {
     world.module_registry().active.contains_key(module_id)
 }
 
 fn sandbox() -> WasmExecutor {
-    WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor")
+    WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor")
 }
 
 fn apply_module_changes(world: &mut World, actor: &str, changes: ModuleChangeSet) {

@@ -8,7 +8,7 @@ use oasis7_wasm_abi::{
 };
 use oasis7_wasm_executor::FixedSandbox;
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
-use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
+use oasis7_wasm_executor::WasmExecutor;
 use std::collections::BTreeMap;
 
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
@@ -684,7 +684,7 @@ fn m1_move_rule_rejects_when_insufficient_resources() {
     install_m1_move_rule(&mut world);
 
     let mut sandbox =
-        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
+        WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor");
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
@@ -716,7 +716,7 @@ fn m1_move_rule_denies_same_position() {
     install_m1_move_rule(&mut world);
 
     let mut sandbox =
-        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
+        WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor");
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
@@ -747,7 +747,7 @@ fn m1_visibility_rule_emits_observation() {
     install_m1_visibility_rule(&mut world);
 
     let mut sandbox =
-        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
+        WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor");
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
@@ -782,7 +782,7 @@ fn m1_visibility_rule_denies_when_missing_agent() {
     install_m1_visibility_rule(&mut world);
 
     let mut sandbox =
-        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
+        WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor");
 
     world.submit_action(Action::QueryObservation {
         agent_id: "agent-1".to_string(),
@@ -805,7 +805,7 @@ fn m1_transfer_rule_moves_resources() {
     install_m1_transfer_rule(&mut world);
 
     let mut sandbox =
-        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
+        WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor");
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
@@ -866,7 +866,7 @@ fn m1_transfer_rule_rejects_when_insufficient() {
     install_m1_transfer_rule(&mut world);
 
     let mut sandbox =
-        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
+        WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor");
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
@@ -906,7 +906,7 @@ fn m1_transfer_rule_denies_when_not_colocated() {
     install_m1_transfer_rule(&mut world);
 
     let mut sandbox =
-        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
+        WasmExecutor::new(super::test_wasm_executor_config()).expect("initialize wasm executor");
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),

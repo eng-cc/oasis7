@@ -83,7 +83,17 @@ pub(crate) fn load_builtin_wasm_with_fetch_fallback(
         return store.get_verified(&actual_hash).map_err(WorldError::from);
     }
 
-    let compiled = compile_builtin_wasm(module_id, expected_hashes)?;
+    let compiled = match compile_builtin_wasm(module_id, expected_hashes) {
+        Ok(compiled) => compiled,
+        Err(compile_error) => {
+            if let Some(cached_hash) = cached_module_hash_for(module_id, distfs_root) {
+                if let Ok(bytes) = store.get_verified(&cached_hash) {
+                    return Ok(bytes);
+                }
+            }
+            return Err(compile_error);
+        }
+    };
     let actual_hash = util::sha256_hex(&compiled);
     store.put(&actual_hash, &compiled)?;
     let _ = persist_cached_module_hash(module_id, &actual_hash, distfs_root);
