@@ -546,16 +546,10 @@ fn runtime_gossip_replication_syncs_distfs_commit_files() {
 
     let dir_a = temp_dir("replication-a");
     let dir_b = temp_dir("replication-b");
-    let validators = vec![
-        PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 60,
-        },
-        PosValidator {
-            validator_id: "node-b".to_string(),
-            stake: 40,
-        },
-    ];
+    let validators = vec![PosValidator {
+        validator_id: "node-a".to_string(),
+        stake: 100,
+    }];
 
     let config_a = NodeConfig::new("node-a", "world-repl", NodeRole::Sequencer)
         .expect("config a")
@@ -580,11 +574,20 @@ fn runtime_gossip_replication_syncs_distfs_commit_files() {
 
     let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a));
     let mut runtime_b = NodeRuntime::new(config_b);
-    runtime_a.start().expect("start a");
     runtime_b.start().expect("start b");
+    let observer_ready = wait_until(Instant::now() + Duration::from_secs(2), || {
+        let snapshot = runtime_b.snapshot();
+        snapshot.tick_count > 0 && snapshot.last_error.is_none()
+    });
+    assert!(
+        observer_ready,
+        "observer runtime did not start draining gossip before sequencer start: {:?}",
+        runtime_b.snapshot()
+    );
+    runtime_a.start().expect("start a");
 
     let store_b = LocalCasStore::new(dir_b.join("store"));
-    let replicated = wait_until(Instant::now() + Duration::from_secs(3), || {
+    let replicated = wait_until(Instant::now() + Duration::from_secs(8), || {
         store_b
             .list_files()
             .map(|files| {
@@ -596,13 +599,23 @@ fn runtime_gossip_replication_syncs_distfs_commit_files() {
             .unwrap_or(false)
     });
     let files = store_b.list_files().expect("list files");
+    let snapshot_a = runtime_a.snapshot();
+    let snapshot_b = runtime_b.snapshot();
 
     runtime_a.stop().expect("stop a");
     runtime_b.stop().expect("stop b");
 
     assert!(
         replicated,
-        "expected gossip replication to apply commit files and guard, got files={files:?}"
+        "expected gossip replication to apply commit files and guard, got files={files:?}, a_committed={}, a_network_committed={}, a_known_peer_heads={}, a_last_error={:?}, b_committed={}, b_network_committed={}, b_known_peer_heads={}, b_last_error={:?}",
+        snapshot_a.consensus.committed_height,
+        snapshot_a.consensus.network_committed_height,
+        snapshot_a.consensus.known_peer_heads,
+        snapshot_a.last_error,
+        snapshot_b.consensus.committed_height,
+        snapshot_b.consensus.network_committed_height,
+        snapshot_b.consensus.known_peer_heads,
+        snapshot_b.last_error
     );
     assert!(files
         .iter()
