@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.4**
+Version: **v1.4.7**
 Last Updated: **2026-06-01**
 
 ## 0. Purpose
@@ -38,6 +38,7 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 | Phase / trigger | Skill surface | Requiredness | Formal evidence |
 | --- | --- | --- | --- |
 | Repository-changing request starts | `default-workflow-bootstrap` | Required before edits unless the user explicitly authorized reuse of a bound task worktree | Bootstrap entry in `.pm/tasks/<TASK-UID>.execution.md` |
+| Read-only professional/domain question | Matching professional bounded slice under TPM coordination; no `default-workflow-bootstrap` unless writeback is needed | Required when the answer depends on product/design/runtime/WASM/agent/viewer/QA/liveops judgment; skipped for pure fact lookup | Role-tagged slice return in the user-facing answer, or `.pm/tasks/<TASK-UID>.execution.md` if already bound |
 | Bound task needs next phase selection | `repo-owned-workflow-router` | Required after bootstrap and whenever phase is unclear | Route entry with selected/skipped skills in `.pm/tasks/<TASK-UID>.execution.md` |
 | Scope is ambiguous, option-heavy, or visual enough to need ideation | `bounded-brainstorming` | Optional, risk-based | Brainstorming output or skip reason in execution log/project |
 | Behavior changes with a stable automated harness | `tdd-test-writer` | Conditional required when RED criteria are met; otherwise skip reason required | RED command, failing evidence, and handoff contract |
@@ -72,8 +73,14 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - external messaging, community feedback, incidents, player promises, and channel runbooks by `liveops_community`
 - professional role subagents provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the TPM owner chain.
 - TPM may perform mechanical orchestration edits to workflow governance surfaces, task logs, integration notes, and PR plumbing. If the work requires a professional conclusion, TPM must dispatch the matching role slice first and attribute the conclusion to that slice/evidence.
-- TPM planning, TODO decomposition, subagent slice contracts, and integration order are task execution truth and must be written to `.pm/tasks/<TASK-UID>.execution.md` before the delegated work begins.
-- Every request that changes repository state must enter the standard worktree flow before edits begin; chat-only answers and read-only inspection may be handled directly without repository writeback.
+- For task-bound or repository-changing work, TPM planning, TODO decomposition, subagent slice contracts, and integration order are task execution truth and must be written to `.pm/tasks/<TASK-UID>.execution.md` before the delegated work begins.
+- Every request that changes repository state must enter the standard worktree flow before edits begin; chat-only answers and read-only inspection do not create task/worktree truth by default.
+- Read-only/chat-only requests still split by judgment type:
+  - Pure fact lookup, path lookup, command-output restatement, or mechanical evidence collection may be handled directly by TPM, as long as the answer does not present a professional/domain conclusion.
+  - Read-only professional/domain questions must be dispatched to the matching bounded professional role slice before the answer is presented as authoritative. Examples: "does viewer have a performance collection/evaluation mechanism", "is this QA evidence release-blocking", "what runtime design risk is present", or "how should LiveOps message this incident".
+  - Such read-only professional slices do not by themselves require `.pm` task creation, a task worktree, or PR chain. The required sink for an unbound read-only professional slice is the role-tagged user-facing answer, or the surrounding chat/thread transcript when the platform preserves it; no `.pm` execution-log sink is required unless the work is already task-bound or repository writeback follows.
+  - If the answer leads to repository writeback, create or enter the standard task worktree before edits.
+  - TPM may gather raw files, commands, or repo context before dispatch, but the final user-facing answer must label TPM synthesis separately from professional role conclusions and cite the role/evidence that owns each professional conclusion.
 - Canonical truth per repository-changing request must remain single-threaded:
   - one owner role
   - one `.pm` task
@@ -123,8 +130,10 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Task worktrees created through `./scripts/new-task-worktree.sh` must create a git-ignored `target` symlink to the repo-family shared cargo target cache resolved by `./scripts/cargo-dev.sh --print-target-dir`, so direct cargo and the development wrapper share local build artifacts by default.
 
 ### 5.2 TPM planning and subagent dispatch
-- TPM must record the current plan, TODO decomposition, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
-- Each subagent slice must declare role, slice type, mandatory context packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
+- For task-bound or repository-changing work, TPM must record the current plan, TODO decomposition, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
+- Each task-bound or repository-changing subagent slice must declare role, slice type, model configuration, mandatory context packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
+- Default subagent runtime is `gpt-5.4` with `reasoning_effort=medium` (shorthand: `gpt-5.4-medium`). TPM should use this default for bounded professional slices unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
+- Any non-default subagent model or reasoning effort must be recorded in the slice contract with the reason, such as high-risk architecture/review work, simple read-only exploration, or a user-specified override.
 - The mandatory context packet must include:
   - identity and authority: assigned role, role card path, owner role, and TPM integration owner
   - workflow governance: `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and the selected workflow skills
@@ -137,6 +146,22 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - TPM user-facing summaries must distinguish procedural synthesis from professional conclusions. Professional conclusions must be traceable to subagent artifacts, execution evidence, handoff, project/prd records, or PR evidence.
 - Project docs, handoff files, signals, memory, and PR evidence may supplement the `.pm` execution log, but they do not replace it for task execution truth.
 - If the plan changes during execution, TPM must append an execution-log update before continuing the changed work.
+
+### 5.2.1 Read-only specialist routing
+- The repository-changing decision and the professional-slice decision are independent:
+  - Repository-changing controls whether standard worktree + `.pm` task truth is required.
+  - Professional judgment controls whether a matching bounded role slice is required.
+- Therefore, a read-only request may skip `default-workflow-bootstrap` while still requiring a professional role slice.
+- Minimal read-only specialist slice contract:
+  - role and slice type (`read_only_analysis`, `verification_judgment`, `review_judgment`, or `liveops_messaging`)
+  - model configuration, defaulting to `gpt-5.4-medium` unless an override reason is recorded
+  - exact question to answer and explicit non-goals
+  - scoped files/commands/evidence to inspect
+  - return contract with conclusion, evidence, uncertainty, and whether repository writeback is recommended
+  - attribution rule for the final answer
+- For an unbound read-only specialist slice, the slice contract may live in the dispatch prompt/chat turn instead of `.pm`; the required sink is the final user-facing answer with role attribution and evidence, or the preserved chat/thread transcript. A `.pm` execution-log sink becomes mandatory only after a `.pm` task is bound or repository writeback is required.
+- Pure evidence questions may be answered by TPM directly only when the user asks for an objective fact such as "does this file exist", "what command output says", or "which paths match this search".
+- If a read-only specialist slice recommends changing repository state, TPM must stop direct edits, bootstrap or enter the canonical task worktree, and record the follow-up in `.pm` before applying changes.
 
 ### 5.3 Execution evidence
 - Atomic steps should be recorded with `Action / Validation Command / Expected Result / Actual Result`.
@@ -162,6 +187,16 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.4.7 (2026-06-01)**
+  - Defined the sink for unbound read-only professional slices as the role-tagged user-facing answer or preserved chat/thread transcript.
+  - Clarified that `.pm` execution-log sinks are mandatory for task-bound or repository-changing subagent work, not for standalone read-only professional answers.
+- **v1.4.6 (2026-06-01)**
+  - Added the default subagent runtime policy: `gpt-5.4` with `reasoning_effort=medium`.
+  - Required slice contracts to record model configuration and reasons for non-default model/reasoning overrides.
+- **v1.4.5 (2026-06-01)**
+  - Split read-only/chat-only handling into pure fact lookup versus read-only professional/domain judgment.
+  - Required matching professional role slices for read-only professional questions without forcing task/worktree bootstrap unless repository writeback follows.
+  - Added a minimal read-only specialist slice contract and explicit examples.
 - **v1.4.4 (2026-06-01)**
   - Clarified that TPM is a workflow coordinator/canonical integrator only, not a professional execution role.
   - Required professional/domain analysis, implementation, verification judgment, review judgment, and liveops/community messaging to come from matching bounded subagent slices.
@@ -207,6 +242,8 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] Owner role selection and `.pm` task binding before implementation.
 - [x] TPM planning/TODO decomposition and subagent slice contracts written to `.pm` execution log before delegated execution.
 - [x] TPM is workflow coordinator/integrator only; professional findings and judgments must come from matching role slices.
+- [x] Read-only professional/domain questions require matching bounded role slices without forcing task/worktree bootstrap unless repository writeback follows.
+- [x] Subagent model configuration defaults to `gpt-5.4-medium` and non-default overrides require recorded rationale.
 - [x] Subagent context packet includes identity, governance, task truth, user intent, scoped repo context, and collaboration boundaries.
 - [x] Mandatory execution evidence fields and blocker recording.
 - [x] Current-round fresh verification before completion claim.

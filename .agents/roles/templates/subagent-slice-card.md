@@ -5,6 +5,7 @@
 ## Required Fields（固定字段）
 - role:
 - slice type:
+- model configuration: `gpt-5.4-medium` by default; record reason for any override.
 - mandatory context packet:
   - identity and authority: assigned role + `.agents/roles/<role>.md` + owner role + TPM integration owner
   - workflow governance: `AGENTS.md` + `doc/engineering/workflow/source-of-truth.md` + selected workflow skill(s)
@@ -29,6 +30,7 @@
 ## Example (copy/paste)
 - role: producer_system_designer
 - slice type: implementation
+- model configuration: `gpt-5.4-medium`
 - mandatory context packet: `AGENTS.md` + `.agents/roles/producer_system_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/<module>/project.md` task `<task slug>` + `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）
 - return contract: patch + test evidence

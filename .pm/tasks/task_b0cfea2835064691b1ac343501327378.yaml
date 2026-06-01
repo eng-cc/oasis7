@@ -1,0 +1,26 @@
+task_uid: task_b0cfea2835064691b1ac343501327378
+title: "document default subagent model"
+owner_role: tpm
+worktree_hint: null
+execution_log_path: .pm/tasks/task_b0cfea2835064691b1ac343501327378.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Default subagent model policy records gpt-5.4 medium as the baseline."
+  - "Source of truth updates before AGENTS and skill/eval surfaces."
+  - "Workflow eval, PM lint, doc governance, and diff check pass."
+handoff_to: []
+updated_at: 2026-06-01T22:01:44+08:00
+last_started_at: 2026-06-01T21:53:45+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-behavior-eval.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-01T22:01:43+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-01T22:01:44+08:00
