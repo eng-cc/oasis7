@@ -13,6 +13,8 @@ impl PosNodeEngine {
         {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
+            self.last_replication_gap_sync_repair_attempt_height = None;
+            self.last_replication_gap_sync_repair_attempt_summary = None;
         }
     }
 
@@ -429,8 +431,11 @@ impl PosNodeEngine {
                         synced_commit = Some((message, payload));
                         break;
                     }
-                    Ok(GapSyncHeightOutcome::NotFound) => {
+                    Ok(GapSyncHeightOutcome::NotFound { repair_summary }) => {
                         not_found = true;
+                        self.last_replication_gap_sync_repair_attempt_height = Some(next_height);
+                        self.last_replication_gap_sync_repair_attempt_summary =
+                            Some(repair_summary);
                         break;
                     }
                     Err(err) if replication_request_waitable_connection_gap(&err) => {
@@ -470,8 +475,12 @@ impl PosNodeEngine {
             if not_found {
                 self.last_replication_gap_sync_blocked_height = Some(next_height);
                 self.last_replication_gap_sync_blocked_reason = Some(format!(
-                    "replication gap sync blocked: missing commit height {next_height} while network_committed_height={} replication_persisted_height={}",
-                    self.network_committed_height, self.replication_persisted_height
+                    "replication gap sync blocked: missing commit height {next_height} while network_committed_height={} replication_persisted_height={} repair_attempt={}",
+                    self.network_committed_height,
+                    self.replication_persisted_height,
+                    self.last_replication_gap_sync_repair_attempt_summary
+                        .as_deref()
+                        .unwrap_or("unavailable")
                 ));
                 break;
             }
@@ -494,6 +503,8 @@ impl PosNodeEngine {
         if self.replication_persisted_height >= self.network_committed_height {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
+            self.last_replication_gap_sync_repair_attempt_height = None;
+            self.last_replication_gap_sync_repair_attempt_summary = None;
         } else {
             self.clear_replication_gap_sync_blocked_if_unblocked();
         }
@@ -505,6 +516,21 @@ impl PosNodeEngine {
         replication_runtime: &ReplicationRuntime,
         world_id: &str,
     ) -> Result<(), NodeError> {
+        if self.replication_persisted_height == 0 {
+            let durable_writer_height = replication_runtime.writer_last_replicated_height();
+            for durable_baseline_height in [self.committed_height, durable_writer_height] {
+                if durable_baseline_height == 0 {
+                    continue;
+                }
+                if replication_runtime
+                    .load_commit_message_by_height(world_id, durable_baseline_height)?
+                    .is_some()
+                {
+                    self.replication_persisted_height = durable_baseline_height;
+                    break;
+                }
+            }
+        }
         let observed_latest_height =
             replication_runtime.latest_persisted_commit_height(world_id)?;
         self.advance_contiguous_replication_persisted_height(

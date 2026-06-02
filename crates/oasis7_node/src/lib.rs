@@ -181,7 +181,9 @@ enum GapSyncHeightOutcome {
         message: replication::GossipReplicationMessage,
         payload: replication_state_reconcile::ReplicationCommitPayload,
     },
-    NotFound,
+    NotFound {
+        repair_summary: String,
+    },
 }
 
 fn with_execution_hook<T>(
@@ -872,9 +874,12 @@ struct PosNodeEngine {
     next_slot: u64,
     committed_height: u64,
     network_committed_height: u64,
+    replication_enabled: bool,
     replication_persisted_height: u64,
     last_replication_gap_sync_blocked_height: Option<u64>,
     last_replication_gap_sync_blocked_reason: Option<String>,
+    last_replication_gap_sync_repair_attempt_height: Option<u64>,
+    last_replication_gap_sync_repair_attempt_summary: Option<String>,
     last_replication_successor_probe_height: Option<u64>,
     last_replication_successor_probe_at_ms: Option<i64>,
     last_replication_successor_probe_hold: Option<bool>,

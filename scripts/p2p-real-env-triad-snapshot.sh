@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
+CURL_MAX_TIME_SECS=8
+
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/p2p-real-env-triad-snapshot.sh [options]
@@ -38,6 +40,10 @@ Options:
                                    (default: http://127.0.0.1:5631/v1/chain/status)
   --sequencer-health-url <url>     remote sequencer health endpoint
                                    (default: http://127.0.0.1:5631/healthz)
+  --sequencer-public-status-url <url>
+                                   optional public fallback when SSH status fetch fails
+  --sequencer-public-health-url <url>
+                                   optional public fallback when SSH health fetch fails
   --sequencer-env-file <path>      remote sequencer env file
                                    (default: /opt/oasis7/p2p-triad/config/node.env)
 
@@ -49,6 +55,10 @@ Options:
                                    (default: http://127.0.0.1:5632/v1/chain/status)
   --storage-health-url <url>       remote storage health endpoint
                                    (default: http://127.0.0.1:5632/healthz)
+  --storage-public-status-url <url>
+                                   optional public fallback when SSH status fetch fails
+  --storage-public-health-url <url>
+                                   optional public fallback when SSH health fetch fails
   --storage-env-file <path>        remote storage env file
                                    (default: /opt/oasis7/p2p-triad/config/node.env)
 
@@ -151,17 +161,19 @@ capture_health_and_status() {
   local sample_index=$5
   local target=${6:-}
   local password=${7:-}
+  local public_health_url=${8:-}
+  local public_status_url=${9:-}
   local node_dir="$nodes_root/$label"
   local sample_dir="$node_dir/samples/sample-$(printf '%03d' "$sample_index")"
   mkdir -p "$sample_dir"
 
   if [[ "$mode" == "local" ]]; then
-    if curl -fsS "$health_url" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.stderr.log"; then
+    if curl -fsS --max-time "$CURL_MAX_TIME_SECS" "$health_url" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.stderr.log"; then
       cp "$sample_dir/healthz.json" "$node_dir/healthz.json"
     else
       printf '{"ok":false,"fetch_error":"curl_failed"}\n' >"$sample_dir/healthz.json"
     fi
-    if curl -fsS "$status_url" >"$sample_dir/status.json" 2>"$sample_dir/status.stderr.log"; then
+    if curl -fsS --max-time "$CURL_MAX_TIME_SECS" "$status_url" >"$sample_dir/status.json" 2>"$sample_dir/status.stderr.log"; then
       cp "$sample_dir/status.json" "$node_dir/status.json"
     else
       printf '{"ok":false,"fetch_error":"curl_failed"}\n' >"$sample_dir/status.json"
@@ -169,13 +181,19 @@ capture_health_and_status() {
     return 0
   fi
 
-  if run_ssh "$target" "$password" "curl -fsS '$health_url'" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.stderr.log"; then
+  if run_ssh "$target" "$password" "curl -fsS --max-time '$CURL_MAX_TIME_SECS' '$health_url'" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.stderr.log"; then
+    cp "$sample_dir/healthz.json" "$node_dir/healthz.json"
+  elif [[ -n "$public_health_url" ]] && curl -fsS --max-time "$CURL_MAX_TIME_SECS" "$public_health_url" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.public.stderr.log"; then
+    printf 'ssh_failed_public_fallback_used\n' >"$sample_dir/healthz.fallback.txt"
     cp "$sample_dir/healthz.json" "$node_dir/healthz.json"
   else
     printf '{"ok":false,"fetch_error":"ssh_or_curl_failed"}\n' >"$sample_dir/healthz.json"
   fi
 
-  if run_ssh "$target" "$password" "curl -fsS '$status_url'" >"$sample_dir/status.json" 2>"$sample_dir/status.stderr.log"; then
+  if run_ssh "$target" "$password" "curl -fsS --max-time '$CURL_MAX_TIME_SECS' '$status_url'" >"$sample_dir/status.json" 2>"$sample_dir/status.stderr.log"; then
+    cp "$sample_dir/status.json" "$node_dir/status.json"
+  elif [[ -n "$public_status_url" ]] && curl -fsS --max-time "$CURL_MAX_TIME_SECS" "$public_status_url" >"$sample_dir/status.json" 2>"$sample_dir/status.public.stderr.log"; then
+    printf 'ssh_failed_public_fallback_used\n' >"$sample_dir/status.fallback.txt"
     cp "$sample_dir/status.json" "$node_dir/status.json"
   else
     printf '{"ok":false,"fetch_error":"ssh_or_curl_failed"}\n' >"$sample_dir/status.json"
@@ -319,12 +337,16 @@ sequencer_target="root@39.104.204.172"
 sequencer_service="oasis7-triad-sequencer.service"
 sequencer_status_url="http://127.0.0.1:5631/v1/chain/status"
 sequencer_health_url="http://127.0.0.1:5631/healthz"
+sequencer_public_status_url=""
+sequencer_public_health_url=""
 sequencer_env_file="/opt/oasis7/p2p-triad/config/node.env"
 
 storage_target="root@39.104.205.67"
 storage_service="oasis7-triad-storage.service"
 storage_status_url="http://127.0.0.1:5632/v1/chain/status"
 storage_health_url="http://127.0.0.1:5632/healthz"
+storage_public_status_url=""
+storage_public_health_url=""
 storage_env_file="/opt/oasis7/p2p-triad/config/node.env"
 
 while [[ $# -gt 0 ]]; do
@@ -381,6 +403,14 @@ while [[ $# -gt 0 ]]; do
       sequencer_health_url=${2:-}
       shift 2
       ;;
+    --sequencer-public-status-url)
+      sequencer_public_status_url=${2:-}
+      shift 2
+      ;;
+    --sequencer-public-health-url)
+      sequencer_public_health_url=${2:-}
+      shift 2
+      ;;
     --sequencer-env-file)
       sequencer_env_file=${2:-}
       shift 2
@@ -399,6 +429,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --storage-health-url)
       storage_health_url=${2:-}
+      shift 2
+      ;;
+    --storage-public-status-url)
+      storage_public_status_url=${2:-}
+      shift 2
+      ;;
+    --storage-public-health-url)
+      storage_public_health_url=${2:-}
       shift 2
       ;;
     --storage-env-file)
@@ -450,11 +488,15 @@ jq -n \
   --arg sequencer_service "$sequencer_service" \
   --arg sequencer_status_url "$sequencer_status_url" \
   --arg sequencer_health_url "$sequencer_health_url" \
+  --arg sequencer_public_status_url "$sequencer_public_status_url" \
+  --arg sequencer_public_health_url "$sequencer_public_health_url" \
   --arg sequencer_env_file "$sequencer_env_file" \
   --arg storage_target "$storage_target" \
   --arg storage_service "$storage_service" \
   --arg storage_status_url "$storage_status_url" \
   --arg storage_health_url "$storage_health_url" \
+  --arg storage_public_status_url "$storage_public_status_url" \
+  --arg storage_public_health_url "$storage_public_health_url" \
   --arg storage_env_file "$storage_env_file" \
   --argjson samples "$samples" \
   --argjson interval_secs "$interval_secs" \
@@ -480,6 +522,8 @@ jq -n \
         service: $sequencer_service,
         status_url: $sequencer_status_url,
         health_url: $sequencer_health_url,
+        public_status_url: $sequencer_public_status_url,
+        public_health_url: $sequencer_public_health_url,
         env_file: $sequencer_env_file
       },
       storage_ecs: {
@@ -488,6 +532,8 @@ jq -n \
         service: $storage_service,
         status_url: $storage_status_url,
         health_url: $storage_health_url,
+        public_status_url: $storage_public_status_url,
+        public_health_url: $storage_public_health_url,
         env_file: $storage_env_file
       }
     }
@@ -510,10 +556,10 @@ for ((sample_index = 1; sample_index <= samples; sample_index++)); do
   capture_health_and_status local_node local "$local_health_url" "$local_status_url" "$sample_index"
   append_sample_record local_node "$local_service"
 
-  capture_health_and_status sequencer_ecs remote "$sequencer_health_url" "$sequencer_status_url" "$sample_index" "$sequencer_target" "$seq_password"
+  capture_health_and_status sequencer_ecs remote "$sequencer_health_url" "$sequencer_status_url" "$sample_index" "$sequencer_target" "$seq_password" "$sequencer_public_health_url" "$sequencer_public_status_url"
   append_sample_record sequencer_ecs "$sequencer_service"
 
-  capture_health_and_status storage_ecs remote "$storage_health_url" "$storage_status_url" "$sample_index" "$storage_target" "$storage_password"
+  capture_health_and_status storage_ecs remote "$storage_health_url" "$storage_status_url" "$sample_index" "$storage_target" "$storage_password" "$storage_public_health_url" "$storage_public_status_url"
   append_sample_record storage_ecs "$storage_service"
 
   if (( sample_index < samples )); then

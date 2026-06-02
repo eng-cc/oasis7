@@ -1,5 +1,9 @@
 #[path = "tests_storage_challenge_gate.rs"]
 mod storage_challenge_gate_tests;
+#[path = "tests_storage_replication_failover.rs"]
+mod storage_replication_failover_tests;
+#[path = "tests_storage_replication_recovery.rs"]
+mod storage_replication_recovery_tests;
 
 #[test]
 fn runtime_network_replication_gap_sync_reports_error_after_retries_exhausted() {
@@ -644,6 +648,80 @@ fn proposer_local_replication_advances_persisted_height_without_network_endpoint
 }
 
 #[test]
+fn restart_refresh_seeds_replication_cursor_from_durable_writer_state() {
+    let dir = temp_dir("restart-refresh-seeds-replication-cursor");
+    let world_id = "world-restart-replication-cursor";
+    let validators = vec![PosValidator {
+        validator_id: "node-a".to_string(),
+        stake: 100,
+    }];
+    let pos_config = signed_pos_config_with_signer_seeds(validators, &[("node-a", 41)]);
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 41));
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let mut replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-a")
+            .expect("replication runtime");
+
+    for height in 1..=3 {
+        engine.last_execution_height = height;
+        engine.last_execution_block_hash = Some(format!("exec-block-{height}"));
+        engine.last_execution_state_root = Some(format!("exec-state-{height}"));
+        let decision = PosDecision {
+            height,
+            slot: height - 1,
+            epoch: 0,
+            status: PosConsensusStatus::Committed,
+            block_hash: format!("block-{height}"),
+            action_root: empty_action_root(),
+            committed_actions: Vec::new(),
+            approved_stake: 100,
+            rejected_stake: 0,
+            required_stake: 67,
+            total_stake: 100,
+        };
+        engine
+            .broadcast_local_replication(
+                None,
+                None,
+                "node-a",
+                world_id,
+                1_000 + height as i64,
+                &decision,
+                Some(&mut replication),
+            )
+            .expect("broadcast local replication");
+    }
+
+    fs::remove_file(
+        dir.join("replication_commit_messages")
+            .join("00000000000000000001.json"),
+    )
+    .expect("remove compacted first commit");
+
+    let restarted_replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-a")
+            .expect("restarted replication runtime");
+    let mut restarted_engine = PosNodeEngine::new(&config).expect("restarted engine");
+    restarted_engine
+        .refresh_replication_persisted_height(&restarted_replication, world_id)
+        .expect("refresh replication persisted height");
+
+    assert_eq!(restarted_engine.replication_persisted_height, 3);
+    assert_eq!(
+        restarted_replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted height"),
+        3
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn runtime_remote_replication_ingest_publishes_blob_provider_to_dht() {
     let dir_a = temp_dir("publish-remote-provider-a");
     let dir_b = temp_dir("publish-remote-provider-b");
@@ -760,8 +838,17 @@ fn runtime_gossip_replication_with_signature_applies_files() {
 
     let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a));
     let mut runtime_b = NodeRuntime::new(config_b);
-    runtime_a.start().expect("start a");
     runtime_b.start().expect("start b");
+    let observer_ready = wait_until(Instant::now() + Duration::from_secs(2), || {
+        let snapshot = runtime_b.snapshot();
+        snapshot.tick_count > 0 && snapshot.last_error.is_none()
+    });
+    assert!(
+        observer_ready,
+        "signed observer runtime did not start before sequencer replication: {:?}",
+        runtime_b.snapshot()
+    );
+    runtime_a.start().expect("start a");
 
     let store_b = LocalCasStore::new(dir_b.join("store"));
     let replicated = wait_until(Instant::now() + Duration::from_secs(3), || {
@@ -894,13 +981,26 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
 
     let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(build_config_a()));
     let mut runtime_b = NodeRuntime::new(build_config_b());
-    runtime_a.start().expect("start a first");
     runtime_b.start().expect("start b first");
-    let guard_path = dir_b.join("replication_guard.json");
+    let observer_ready = wait_until(Instant::now() + Duration::from_secs(2), || {
+        let snapshot = runtime_b.snapshot();
+        snapshot.tick_count > 0 && snapshot.last_error.is_none()
+    });
+    assert!(
+        observer_ready,
+        "observer runtime did not start before sequencer replication: {:?}",
+        runtime_b.snapshot()
+    );
+    runtime_a.start().expect("start a first");
+    let guard_path = dir_b.join("replication_remote_guards.json");
     let guard_ready = wait_until(Instant::now() + Duration::from_secs(3), || {
         fs::read(&guard_path)
             .ok()
-            .and_then(|bytes| serde_json::from_slice::<SingleWriterReplicationGuard>(&bytes).ok())
+            .and_then(|bytes| {
+                serde_json::from_slice::<BTreeMap<String, SingleWriterReplicationGuard>>(&bytes)
+                    .ok()
+            })
+            .and_then(|guards| guards.values().next().cloned())
             .is_some_and(|guard| guard.last_sequence >= 1)
     });
     let snapshot_b_first = runtime_b.snapshot();
@@ -912,22 +1012,42 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
     );
     assert!(snapshot_b_first.last_error.is_none());
 
-    let guard_before: SingleWriterReplicationGuard =
-        serde_json::from_slice(&fs::read(&guard_path).expect("read guard before"))
-            .expect("parse guard before");
+    let guard_before = serde_json::from_slice::<BTreeMap<String, SingleWriterReplicationGuard>>(
+        &fs::read(&guard_path).expect("read guard before"),
+    )
+    .expect("parse guard before")
+    .values()
+    .next()
+    .cloned()
+    .expect("remote guard before");
     assert!(guard_before.last_sequence >= 1);
 
     let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(build_config_a()));
     let mut runtime_b = NodeRuntime::new(build_config_b());
-    runtime_a.start().expect("start a second");
     runtime_b.start().expect("start b second");
+    let observer_ready = wait_until(Instant::now() + Duration::from_secs(2), || {
+        let snapshot = runtime_b.snapshot();
+        snapshot.tick_count > 0 && snapshot.last_error.is_none()
+    });
+    assert!(
+        observer_ready,
+        "observer runtime did not restart before sequencer replication: {:?}",
+        runtime_b.snapshot()
+    );
+    runtime_a.start().expect("start a second");
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
-        let maybe_guard = fs::read(&guard_path)
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<SingleWriterReplicationGuard>(&bytes).ok());
+        let maybe_guard = fs::read(&guard_path).ok().and_then(|bytes| {
+            serde_json::from_slice::<BTreeMap<String, SingleWriterReplicationGuard>>(&bytes).ok()
+        });
         if maybe_guard
             .as_ref()
+            .and_then(|guards| {
+                guard_before
+                    .writer_id
+                    .as_deref()
+                    .and_then(|writer_id| guards.get(writer_id))
+            })
             .is_some_and(|guard| guard.last_sequence > guard_before.last_sequence)
         {
             break;
@@ -942,9 +1062,13 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
     runtime_b.stop().expect("stop b second");
     assert!(snapshot_b_second.last_error.is_none());
 
-    let guard_after: SingleWriterReplicationGuard =
-        serde_json::from_slice(&fs::read(&guard_path).expect("read guard after"))
-            .expect("parse guard after");
+    let guard_after = serde_json::from_slice::<BTreeMap<String, SingleWriterReplicationGuard>>(
+        &fs::read(&guard_path).expect("read guard after"),
+    )
+    .expect("parse guard after")
+    .get(guard_before.writer_id.as_deref().expect("writer before"))
+    .cloned()
+    .expect("remote guard after");
     assert_eq!(guard_after.writer_id, guard_before.writer_id);
     assert!(guard_after.last_sequence > guard_before.last_sequence);
 
@@ -954,119 +1078,4 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
 
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
-}
-
-#[test]
-fn runtime_network_replication_accepts_writer_failover_with_epoch_rotation() {
-    let dir_a = temp_dir("failover-a");
-    let dir_b = temp_dir("failover-b");
-    let dir_c = temp_dir("failover-c");
-    let validators = vec![
-        PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 34,
-        },
-        PosValidator {
-            validator_id: "node-b".to_string(),
-            stake: 33,
-        },
-        PosValidator {
-            validator_id: "node-c".to_string(),
-            stake: 33,
-        },
-    ];
-    let pos_config = signed_pos_config_with_signer_seeds(
-        validators,
-        &[("node-a", 91), ("node-b", 92), ("node-c", 93)],
-    );
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
-
-    let build_observer = || {
-        NodeConfig::new("node-b", "world-failover-repl", NodeRole::Observer)
-            .expect("observer config")
-            .with_tick_interval(Duration::from_millis(10))
-            .expect("observer tick")
-            .with_pos_config(pos_config.clone())
-            .expect("observer pos config")
-            .with_replication(signed_replication_config(dir_b.clone(), 92))
-    };
-    let build_sequencer_a = || {
-        NodeConfig::new("node-a", "world-failover-repl", NodeRole::Sequencer)
-            .expect("sequencer a config")
-            .with_tick_interval(Duration::from_millis(10))
-            .expect("sequencer a tick")
-            .with_pos_config(pos_config.clone())
-            .expect("sequencer a pos config")
-            .with_auto_attest_all_validators(true)
-            .with_replication(signed_replication_config(dir_a.clone(), 91))
-    };
-    let build_sequencer_c = || {
-        NodeConfig::new("node-c", "world-failover-repl", NodeRole::Sequencer)
-            .expect("sequencer c config")
-            .with_tick_interval(Duration::from_millis(10))
-            .expect("sequencer c tick")
-            .with_pos_config(pos_config.clone())
-            .expect("sequencer c pos config")
-            .with_auto_attest_all_validators(true)
-            .with_replication(signed_replication_config(dir_c.clone(), 93))
-    };
-
-    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(build_sequencer_a()))
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
-    let mut runtime_b = NodeRuntime::new(build_observer())
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
-    runtime_a.start().expect("start a");
-    runtime_b.start().expect("start b with a");
-    let guard_path = dir_b.join("replication_guard.json");
-    let guard_ready = wait_until(Instant::now() + Duration::from_secs(3), || {
-        fs::read(&guard_path)
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<SingleWriterReplicationGuard>(&bytes).ok())
-            .is_some_and(|guard| guard.last_sequence >= 1 && guard.writer_epoch >= 1)
-    });
-    runtime_a.stop().expect("stop a");
-    runtime_b.stop().expect("stop b after a");
-    assert!(
-        guard_ready,
-        "initial replication guard did not persist before failover snapshot"
-    );
-
-    let guard_before: SingleWriterReplicationGuard =
-        serde_json::from_slice(&fs::read(&guard_path).expect("read guard before"))
-            .expect("parse guard before");
-    assert!(guard_before.last_sequence >= 1);
-    assert!(guard_before.writer_epoch >= 1);
-    let writer_before = guard_before.writer_id.clone();
-
-    let mut runtime_c = with_noop_execution_hook(NodeRuntime::new(build_sequencer_c()))
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
-    let mut runtime_b = NodeRuntime::new(build_observer())
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
-    runtime_c.start().expect("start c");
-    runtime_b.start().expect("start b with c");
-    let failover_ready = wait_until(Instant::now() + Duration::from_secs(3), || {
-        fs::read(&guard_path)
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<SingleWriterReplicationGuard>(&bytes).ok())
-            .is_some_and(|guard| guard.writer_epoch > guard_before.writer_epoch)
-    });
-    runtime_c.stop().expect("stop c");
-    runtime_b.stop().expect("stop b after c");
-    assert!(
-        failover_ready,
-        "failover guard epoch did not advance before second stop"
-    );
-
-    let guard_after: SingleWriterReplicationGuard =
-        serde_json::from_slice(&fs::read(&guard_path).expect("read guard after"))
-            .expect("parse guard after");
-    assert!(guard_after.last_sequence >= 1);
-    assert!(guard_after.writer_epoch > guard_before.writer_epoch);
-    assert_ne!(guard_after.writer_id, writer_before);
-
-    let _ = fs::remove_dir_all(&dir_a);
-    let _ = fs::remove_dir_all(&dir_b);
-    let _ = fs::remove_dir_all(&dir_c);
 }

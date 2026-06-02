@@ -313,6 +313,46 @@ fn pending_far_ahead_proposal_waits_for_gap_sync_before_local_attestation_or_com
 }
 
 #[test]
+fn lagging_replication_cursor_holds_local_consensus_participation() {
+    let config = NodeConfig::new("node-a", "world-participation-hold", NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_validators(vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }])
+        .expect("validators")
+        .with_auto_attest_all_validators(true);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = 4;
+    engine.next_height = 5;
+    engine.network_committed_height = 30;
+    engine.replication_persisted_height = 4;
+    engine.last_replication_gap_sync_blocked_height = Some(5);
+
+    let result = engine
+        .tick(
+            &config.node_id,
+            &config.world_id,
+            1_000,
+            None,
+            None,
+            None,
+            None,
+            Vec::new(),
+            None,
+        )
+        .expect("tick");
+
+    assert_eq!(
+        result.consensus_snapshot.last_status,
+        Some(PosConsensusStatus::Pending)
+    );
+    assert!(engine.pending.is_none());
+    assert_eq!(engine.committed_height, 4);
+    assert_eq!(engine.next_height, 5);
+}
+
+#[test]
 fn pos_engine_ingest_proposal_rejects_slot_overflow_without_partial_state() {
     let config =
         NodeConfig::new("node-a", "world-overflow-proposal", NodeRole::Observer).expect("config");

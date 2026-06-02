@@ -50,6 +50,7 @@ struct CachedFetchCommitSuccess {
 
 pub(crate) struct GapSyncFetchCommitResponse {
     pub response: FetchCommitResponse,
+    pub repair_summary: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -339,12 +340,23 @@ impl ReplicationNetworkEndpoint {
             )?;
         }
         if let Some(response) = self.cached_fetch_commit_success_response(request) {
-            return Ok(GapSyncFetchCommitResponse { response });
+            return Ok(GapSyncFetchCommitResponse {
+                response,
+                repair_summary: "cache=hit".to_string(),
+            });
         }
         let mut last_err = None;
-        let mut response = match self.request_json(REPLICATION_FETCH_COMMIT_PROTOCOL, request) {
-            Ok(response) => response,
+        let mut route_events = Vec::new();
+        let mut response = match self.request_json::<FetchCommitRequest, FetchCommitResponse>(
+            REPLICATION_FETCH_COMMIT_PROTOCOL,
+            request,
+        ) {
+            Ok(response) => {
+                route_events.push(format!("generic:found={}", response.found));
+                response
+            }
             Err(err) => {
+                route_events.push(format!("generic:error={}", short_node_error(&err)));
                 last_err = Some(err);
                 FetchCommitResponse {
                     found: false,
@@ -358,13 +370,14 @@ impl ReplicationNetworkEndpoint {
             peer_ids.dedup();
             peer_ids.retain(|peer_id| !peer_id.trim().is_empty());
             for peer_id in peer_ids {
-                let provider_route = [peer_id];
+                let provider_route = [peer_id.clone()];
                 match self.request_json_with_providers::<FetchCommitRequest, FetchCommitResponse>(
                     REPLICATION_FETCH_COMMIT_PROTOCOL,
                     request,
                     provider_route.as_slice(),
                 ) {
                     Ok(candidate) => {
+                        route_events.push(format!("peer:{}:found={}", peer_id, candidate.found));
                         if candidate.found {
                             response = candidate;
                             last_err = None;
@@ -374,6 +387,11 @@ impl ReplicationNetworkEndpoint {
                         last_err = None;
                     }
                     Err(err) => {
+                        route_events.push(format!(
+                            "peer:{}:error={}",
+                            peer_id,
+                            short_node_error(&err)
+                        ));
                         last_err = Some(err);
                     }
                 }
@@ -384,19 +402,28 @@ impl ReplicationNetworkEndpoint {
                 if response.found {
                     break;
                 }
-                match self.request_json(REPLICATION_FETCH_COMMIT_PROTOCOL, request) {
+                match self.request_json::<FetchCommitRequest, FetchCommitResponse>(
+                    REPLICATION_FETCH_COMMIT_PROTOCOL,
+                    request,
+                ) {
                     Ok(candidate) => {
+                        route_events.push(format!("generic_retry:found={}", candidate.found));
                         response = candidate;
                         last_err = None;
                     }
                     Err(err) => {
+                        route_events
+                            .push(format!("generic_retry:error={}", short_node_error(&err)));
                         last_err = Some(err);
                     }
                 }
             }
         }
         if response.found || last_err.is_none() {
-            return Ok(GapSyncFetchCommitResponse { response });
+            return Ok(GapSyncFetchCommitResponse {
+                response,
+                repair_summary: summarize_fetch_commit_routes(&route_events),
+            });
         }
         Err(last_err.expect("gap-sync fetch-commit last_err should exist"))
     }
@@ -534,6 +561,18 @@ impl ReplicationNetworkEndpoint {
             .get(&fetch_commit_success_cache_key(request))
             .map(|entry| entry.response.clone())
     }
+}
+
+fn short_node_error(err: &NodeError) -> String {
+    let raw = err.to_string();
+    raw.chars().take(160).collect()
+}
+
+fn summarize_fetch_commit_routes(route_events: &[String]) -> String {
+    if route_events.is_empty() {
+        return "routes=none".to_string();
+    }
+    route_events.join(";")
 }
 
 fn fetch_commit_success_cache_key(request: &FetchCommitRequest) -> FetchCommitSuccessCacheKey {

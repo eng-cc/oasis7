@@ -51,7 +51,27 @@ pub(super) fn reconcile_engine_with_persisted_replication(
     mut execution_hook: Option<&mut dyn NodeExecutionHook>,
 ) -> Result<(), NodeError> {
     let latest_persisted_height = replication.latest_persisted_commit_height(world_id)?;
+    if latest_persisted_height < engine.committed_height {
+        if latest_persisted_height == 0 {
+            return Ok(());
+        }
+        let message =
+            load_validated_persisted_commit(replication, world_id, latest_persisted_height)?;
+        let payload =
+            parse_validated_persisted_commit_payload(world_id, latest_persisted_height, &message)?;
+        engine.rollback_to_replicated_commit_boundary(
+            latest_persisted_height,
+            payload.block_hash,
+            payload.committed_at_ms,
+            payload.execution_block_hash,
+            payload.execution_state_root,
+        )?;
+        return Ok(());
+    }
     if latest_persisted_height <= engine.committed_height {
+        engine.replication_persisted_height = engine
+            .replication_persisted_height
+            .max(latest_persisted_height);
         return Ok(());
     }
     let mut height =
@@ -65,70 +85,8 @@ pub(super) fn reconcile_engine_with_persisted_replication(
                 ),
             })?;
     while height <= latest_persisted_height {
-        let message = replication
-            .load_commit_message_by_height(world_id, height)?
-            .ok_or_else(|| NodeError::Replication {
-                reason: format!(
-                    "persisted commit missing for world={} height={}",
-                    world_id, height
-                ),
-            })?;
-        if message.world_id != world_id || message.record.world_id != world_id {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "persisted commit world mismatch at height {} expected={} actual_message={} actual_record={}",
-                    height, world_id, message.world_id, message.record.world_id
-                ),
-            });
-        }
-        let payload =
-            parse_replication_commit_payload(message.payload.as_slice()).ok_or_else(|| {
-                NodeError::Replication {
-                    reason: format!(
-                        "persisted commit payload decode failed for world={} height={}",
-                        world_id, height
-                    ),
-                }
-            })?;
-        if payload.world_id != world_id {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "persisted commit payload world mismatch at height {} expected={} actual={}",
-                    height, world_id, payload.world_id
-                ),
-            });
-        }
-        if payload.node_id != message.node_id {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "persisted commit payload node mismatch at height {} expected={} actual={}",
-                    height, message.node_id, payload.node_id
-                ),
-            });
-        }
-        if payload.height != height {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "persisted commit payload height mismatch expected={} actual={}",
-                    height, payload.height
-                ),
-            });
-        }
-        if payload.block_hash.trim().is_empty() {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "persisted commit payload block_hash is empty at height={}",
-                    height
-                ),
-            });
-        }
-        validate_consensus_action_root(payload.action_root.as_str(), payload.actions.as_slice())
-            .map_err(|err| NodeError::Replication {
-                reason: format!(
-                    "persisted commit action_root validation failed at height {}: {:?}",
-                    height, err
-                ),
-            })?;
+        let message = load_validated_persisted_commit(replication, world_id, height)?;
+        let payload = parse_validated_persisted_commit_payload(world_id, height, &message)?;
         with_execution_hook(&mut execution_hook, |hook| {
             engine.apply_synced_replication_commit(world_id, &payload, hook)
         })?;
@@ -144,4 +102,84 @@ pub(super) fn reconcile_engine_with_persisted_replication(
             })?;
     }
     Ok(())
+}
+
+fn load_validated_persisted_commit(
+    replication: &ReplicationRuntime,
+    world_id: &str,
+    height: u64,
+) -> Result<super::replication::GossipReplicationMessage, NodeError> {
+    let message = replication
+        .load_commit_message_by_height(world_id, height)?
+        .ok_or_else(|| NodeError::Replication {
+            reason: format!(
+                "persisted commit missing for world={} height={}",
+                world_id, height
+            ),
+        })?;
+    if message.world_id != world_id || message.record.world_id != world_id {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "persisted commit world mismatch at height {} expected={} actual_message={} actual_record={}",
+                height, world_id, message.world_id, message.record.world_id
+            ),
+        });
+    }
+    Ok(message)
+}
+
+fn parse_validated_persisted_commit_payload(
+    world_id: &str,
+    height: u64,
+    message: &super::replication::GossipReplicationMessage,
+) -> Result<ReplicationCommitPayload, NodeError> {
+    let payload =
+        parse_replication_commit_payload(message.payload.as_slice()).ok_or_else(|| {
+            NodeError::Replication {
+                reason: format!(
+                    "persisted commit payload decode failed for world={} height={}",
+                    world_id, height
+                ),
+            }
+        })?;
+    if payload.world_id != world_id {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "persisted commit payload world mismatch at height {} expected={} actual={}",
+                height, world_id, payload.world_id
+            ),
+        });
+    }
+    if payload.node_id != message.node_id {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "persisted commit payload node mismatch at height {} expected={} actual={}",
+                height, message.node_id, payload.node_id
+            ),
+        });
+    }
+    if payload.height != height {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "persisted commit payload height mismatch expected={} actual={}",
+                height, payload.height
+            ),
+        });
+    }
+    if payload.block_hash.trim().is_empty() {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "persisted commit payload block_hash is empty at height={}",
+                height
+            ),
+        });
+    }
+    validate_consensus_action_root(payload.action_root.as_str(), payload.actions.as_slice())
+        .map_err(|err| NodeError::Replication {
+            reason: format!(
+                "persisted commit action_root validation failed at height {}: {:?}",
+                height, err
+            ),
+        })?;
+    Ok(payload)
 }

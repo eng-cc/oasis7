@@ -119,9 +119,12 @@ impl PosNodeEngine {
             next_slot: 0,
             committed_height: 0,
             network_committed_height: 0,
+            replication_enabled: config.replication.is_some(),
             replication_persisted_height: 0,
             last_replication_gap_sync_blocked_height: None,
             last_replication_gap_sync_blocked_reason: None,
+            last_replication_gap_sync_repair_attempt_height: None,
+            last_replication_gap_sync_repair_attempt_summary: None,
             last_replication_successor_probe_height: None,
             last_replication_successor_probe_at_ms: None,
             last_replication_successor_probe_hold: None,
@@ -231,10 +234,13 @@ impl PosNodeEngine {
             false
         };
         self.align_next_slot_to_wall_clock(current_slot)?;
+        let consensus_participation_safe = self.consensus_participation_safe();
 
         let mut decision = if self.pending.is_some() {
             self.advance_pending_attestations(now_ms)?
         } else if hold_for_replication_probe {
+            self.idle_pending_decision()?
+        } else if !consensus_participation_safe {
             self.idle_pending_decision()?
         } else if !self.allow_local_proposals {
             self.idle_pending_decision()?
@@ -250,7 +256,10 @@ impl PosNodeEngine {
             decision = self.advance_pending_attestations(now_ms)?;
         }
 
-        if let Some(endpoint) = consensus_network.as_ref() {
+        if !consensus_participation_safe {
+            // Continue ingesting/repairing state, but do not advertise local
+            // consensus votes while this node is outside the verified sync boundary.
+        } else if let Some(endpoint) = consensus_network.as_ref() {
             self.broadcast_local_proposal_network(endpoint, node_id, world_id, now_ms)?;
             self.broadcast_local_attestation_network(endpoint, node_id, world_id, now_ms)?;
         } else if let Some(endpoint) = gossip.as_ref() {
@@ -259,9 +268,45 @@ impl PosNodeEngine {
         }
 
         let prev_committed_height = self.committed_height;
+        if matches!(decision.status, PosConsensusStatus::Committed)
+            && decision.height > prev_committed_height
+            && self
+                .pending
+                .as_ref()
+                .map(|proposal| proposal.proposer_id.as_str() != node_id)
+                .unwrap_or(false)
+        {
+            let has_remote_replication = match replication.as_deref() {
+                Some(replication_runtime) => replication_runtime
+                    .load_commit_message_by_height(world_id, decision.height)?
+                    .is_some(),
+                None => true,
+            };
+            if !has_remote_replication {
+                self.pending = None;
+                self.last_inbound_timing_reject_reason = Some(format!(
+                    "drop remote committed height {} without matching persisted replication commit",
+                    decision.height
+                ));
+                let held = self.idle_pending_decision()?;
+                return Ok(NodeEngineTickResult {
+                    consensus_snapshot: self.snapshot_from_decision(&held),
+                    committed_action_batch: None,
+                });
+            }
+        }
         with_execution_hook(&mut execution_hook, |hook| {
             self.apply_committed_execution(node_id, world_id, now_ms, &decision, hook)
         })?;
+        self.broadcast_local_replication(
+            gossip.as_deref(),
+            replication_network.as_deref(),
+            node_id,
+            world_id,
+            now_ms,
+            &decision,
+            replication.as_deref_mut(),
+        )?;
         if matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > prev_committed_height
         {
@@ -283,15 +328,6 @@ impl PosNodeEngine {
         } else if let Some(endpoint) = gossip.as_ref() {
             self.broadcast_local_commit(endpoint, node_id, world_id, now_ms, &decision)?;
         }
-        self.broadcast_local_replication(
-            gossip.as_deref(),
-            replication_network.as_deref(),
-            node_id,
-            world_id,
-            now_ms,
-            &decision,
-            replication.as_deref_mut(),
-        )?;
         if let Some(endpoint) = gossip.as_ref() {
             self.ingest_peer_messages(
                 endpoint,
@@ -456,6 +492,21 @@ impl PosNodeEngine {
             required_stake: self.required_stake,
             total_stake: self.total_stake,
         })
+    }
+
+    fn consensus_participation_safe(&self) -> bool {
+        if self.replication_enabled {
+            if self.last_replication_gap_sync_blocked_height.is_some() {
+                return false;
+            }
+            if self.replication_persisted_height < self.committed_height {
+                return false;
+            }
+        }
+        if self.network_committed_height > self.committed_height {
+            return false;
+        }
+        true
     }
 
     fn propose_next_head(
@@ -800,6 +851,11 @@ impl PosNodeEngine {
             replication_gap_sync_blocked_height: self.last_replication_gap_sync_blocked_height,
             replication_gap_sync_blocked_reason: self
                 .last_replication_gap_sync_blocked_reason
+                .clone(),
+            replication_gap_sync_repair_attempt_height: self
+                .last_replication_gap_sync_repair_attempt_height,
+            replication_gap_sync_repair_attempt_summary: self
+                .last_replication_gap_sync_repair_attempt_summary
                 .clone(),
             known_peer_heads: peer_heads.len(),
             peer_heads,
