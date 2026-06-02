@@ -558,8 +558,12 @@ pub(super) fn build_chain_node_observability_status(
         replication_state_gap,
         policy.max_network_height_lag,
     );
-    let state_sync_fallback_reason =
-        state_sync_fallback_reason(snapshot, replication_state_gap, network_height_lag);
+    let state_sync_fallback_reason = state_sync_fallback_reason(
+        snapshot,
+        replication_state_gap,
+        network_height_lag,
+        policy.max_network_height_lag,
+    );
     let recent_replication_error_count = replication.recent_errors.len();
     let transport_stability = classify_transport_stability(replication);
     let reachability_policy_ok = reachability_policy_ok(snapshot, p2p, active_peer_count, policy);
@@ -969,12 +973,14 @@ pub(super) fn build_chain_status_payload(
         &snapshot,
         observability.replication_state_gap,
         observability.network_height_lag,
+        readiness_policy.max_network_height_lag,
     );
     let state_sync_trusted_checkpoint_required_height =
         state_sync_trusted_checkpoint_required_height(
             &snapshot,
             observability.replication_state_gap,
             observability.network_height_lag,
+            readiness_policy.max_network_height_lag,
         );
     let state_sync_fallback_required = state_sync_fallback_reason.is_some();
     let state_sync_snapshot_available = storage_metrics.checkpoint_count > 0;

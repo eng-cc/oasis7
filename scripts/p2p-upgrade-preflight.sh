@@ -1030,7 +1030,7 @@ for ((status_index = 0; status_index < status_count; status_index++)); do
                   + [
                     {
                       step: "verify_state_sync_chunks_root",
-                      command: ("computed_chunks_root=\"sha256:$(printf %s " + ($chunk_manifest | @json | @sh) + " | sha256sum | cut -d \" \" -f 1)\"; test \"$computed_chunks_root\" = " + ($chunks_root | @sh))
+                      command: ("computed_chunks_root=\"sha256:$(printf %s " + ($chunk_manifest | tostring | @sh) + " | sha256sum | cut -d \" \" -f 1)\"; test \"$computed_chunks_root\" = " + ($chunks_root | @sh))
                     }
                   ]
                 else [] end)

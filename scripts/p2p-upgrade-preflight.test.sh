@@ -562,6 +562,12 @@ jq -e --arg snapshot_sha "$SNAPSHOT_SHA256" --arg journal_sha "$JOURNAL_SHA256" 
   and .snapshot_available == true
   and (.operator_steps | length) >= 6
 ' "$TMP_DIR/recovery-plans/node-gap-with-snapshot.recovery-plan.json" >/dev/null
+CHUNKS_ROOT_COMMAND="$(
+  jq -r '.restore_command_plan[] | select(.step == "verify_state_sync_chunks_root") | .command' \
+    "$TMP_DIR/recovery-plans/node-gap-with-snapshot.recovery-plan.json"
+)"
+[[ "$CHUNKS_ROOT_COMMAND" == *"$CHUNKS_ROOT"* ]]
+eval "$CHUNKS_ROOT_COMMAND"
 
 "$SCRIPT" \
   --status-url "http://127.0.0.1:$PORT/fallback.json" \
