@@ -16,6 +16,24 @@ const repoRoot = resolve(viewerRoot, "../..");
 const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
 const session = `viewer-performance-probe-${process.pid}`;
 
+function positiveInteger(value, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.max(1, Math.floor(numeric));
+}
+
+function normalizeProbeOptions(options) {
+  options.agents = positiveInteger(options.agents, 80);
+  options.locations = positiveInteger(options.locations, 24);
+  options.viewport = [
+    positiveInteger(options.viewport?.[0], 1440),
+    positiveInteger(options.viewport?.[1], 1000),
+  ];
+  return options;
+}
+
 function parseArgs(argv) {
   const options = {
     profile: "smoke",
@@ -61,7 +79,7 @@ function parseArgs(argv) {
         throw new Error(`unknown option: ${arg}`);
     }
   }
-  return options;
+  return normalizeProbeOptions(options);
 }
 
 function usage() {
@@ -102,7 +120,14 @@ function contentType(pathname) {
 
 function serveFile(request, response) {
   const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
-  const rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/software_safe.html" : requestUrl.pathname);
+  let rawPath = "";
+  try {
+    rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/software_safe.html" : requestUrl.pathname);
+  } catch {
+    response.writeHead(400);
+    response.end("bad request");
+    return;
+  }
   const normalized = normalize(rawPath).replace(/^(\.\.(\/|\\|$))+/, "");
   const filePath = resolve(viewerRoot, `.${normalized}`);
   const relativePath = relative(viewerRoot, filePath);

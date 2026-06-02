@@ -5067,8 +5067,7 @@ function shouldAutoAttachRenderer() {
   if (value) {
     return !DEFER_RENDERER_VALUES.has(value);
   }
-  const testApi = String(params.get("test_api") || "").trim().toLowerCase();
-  return !["1", "true", "yes", "on"].includes(testApi);
+  return true;
 }
 function fragmentBlocks(location) {
   const blocks = location?.fragment_profile?.blocks?.blocks;

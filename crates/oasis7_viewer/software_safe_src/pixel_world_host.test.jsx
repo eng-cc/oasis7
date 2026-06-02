@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const runtimeMock = vi.hoisted(() => ({
   deriveRenderState: null,
+  mountCalls: 0,
 }));
 
 vi.mock("./pixel_world_runtime_loader.js", () => ({
@@ -12,6 +13,7 @@ vi.mock("./pixel_world_runtime_loader.js", () => ({
     deriveRenderState: runtimeMock.deriveRenderState,
     bridge: {
       mount() {
+        runtimeMock.mountCalls += 1;
         const fatal = {
           code: "pixel_world_renderer_runtime_unavailable",
           message: "pixel world wasm runtime is unavailable: missing wasm bridge",
@@ -193,11 +195,11 @@ function noReceiptSnapshot() {
   return snapshot;
 }
 
-async function renderPixelWorldHost(snapshot = sampleSnapshot()) {
+async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test_api=1&connect=0&locale=en") {
   activeCleanup?.();
   activeCleanup = null;
   vi.resetModules();
-  window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
+  window.history.replaceState({}, "", `/software_safe.html${search}`);
   window.localStorage.clear();
   document.body.innerHTML = "";
 
@@ -217,6 +219,7 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot()) {
 
 beforeEach(() => {
   runtimeMock.deriveRenderState = null;
+  runtimeMock.mountCalls = 0;
   window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
   window.localStorage.clear();
   document.body.innerHTML = "";
@@ -409,13 +412,17 @@ describe("pixel world host", () => {
     expect(firstState.links[0].to).toEqual(firstState.locations[0].pos);
   });
 
-  it("shows the explicit fallback surface when the wasm runtime is unavailable", async () => {
-    const { core } = await renderPixelWorldHost();
+  it("shows the explicit fallback surface when renderer deferral is requested", async () => {
+    const { core } = await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
     });
 
+    expect(runtimeMock.mountCalls).toBe(0);
     expect(screen.getByText("World Command Board")).toBeInTheDocument();
     expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
     expect(screen.getByText("Build smelter mk1")).toBeInTheDocument();
@@ -437,9 +444,21 @@ describe("pixel world host", () => {
     await waitFor(() => {
       expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
     });
+    expect(runtimeMock.mountCalls).toBeGreaterThan(0);
     expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
     expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(2);
     expect(document.querySelector(".pixel-world-entity--location")).toHaveAttribute("data-marker-role", "logic_anchor");
+    expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
+  }, 15000);
+
+  it("auto-attaches the embedded renderer for test_api pages unless deferral is explicit", async () => {
+    const { core } = await renderPixelWorldHost();
+
+    await waitFor(() => {
+      expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
+    });
+
+    expect(runtimeMock.mountCalls).toBe(1);
     expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
   }, 15000);
 
