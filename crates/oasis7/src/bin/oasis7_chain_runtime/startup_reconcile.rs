@@ -10,7 +10,8 @@ use super::RuntimePaths;
 struct ExecutionRecordLatest {
     world_id: String,
     height: u64,
-    node_block_hash: String,
+    #[serde(default)]
+    node_block_hash: Option<String>,
     execution_block_hash: String,
     execution_state_root: String,
 }
@@ -85,8 +86,15 @@ fn reconcile_startup_state_from_execution_latest_paths(
     if latest.world_id != world_id || latest.height == 0 {
         return Ok(None);
     }
-    if latest.node_block_hash.trim().is_empty()
-        || latest.execution_block_hash.trim().is_empty()
+    let Some(node_block_hash) = latest
+        .node_block_hash
+        .as_deref()
+        .map(str::trim)
+        .filter(|hash| !hash.is_empty())
+    else {
+        return Ok(None);
+    };
+    if latest.execution_block_hash.trim().is_empty()
         || latest.execution_state_root.trim().is_empty()
     {
         return Err(format!(
@@ -156,35 +164,14 @@ fn reconcile_startup_state_from_execution_latest_paths(
         last_broadcast_proposal_height: latest.height,
         last_broadcast_local_attestation_height: latest.height,
         last_broadcast_committed_height: latest.height,
-        last_committed_block_hash: Some(latest.node_block_hash),
+        last_committed_block_hash: Some(node_block_hash.to_string()),
         last_execution_height: latest.height,
         last_execution_block_hash: Some(latest.execution_block_hash),
         last_execution_state_root: Some(latest.execution_state_root),
     };
-    if let Some(parent) = state_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create node pos state dir {} failed: {err}",
-                parent.display()
-            )
-        })?;
-    }
     let bytes = serde_json::to_vec_pretty(&reconciled)
         .map_err(|err| format!("serialize reconciled node pos state failed: {err}"))?;
-    let temp_path = state_path.with_extension("json.tmp");
-    fs::write(temp_path.as_path(), bytes).map_err(|err| {
-        format!(
-            "write node pos state temp {} failed: {err}",
-            temp_path.display()
-        )
-    })?;
-    fs::rename(temp_path.as_path(), state_path.as_path()).map_err(|err| {
-        format!(
-            "rename node pos state temp {} -> {} failed: {err}",
-            temp_path.display(),
-            state_path.display()
-        )
-    })?;
+    super::write_bytes_atomic(state_path.as_path(), bytes.as_slice())?;
     Ok(Some(StartupReconcileReport {
         previous_committed_height,
         reconciled_height: latest.height,
@@ -196,7 +183,14 @@ mod tests {
     use super::*;
 
     fn test_dir(name: &str) -> std::path::PathBuf {
-        let unique = format!("oasis7-startup-reconcile-{name}-{}", std::process::id());
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let unique = format!(
+            "oasis7-startup-reconcile-{name}-{}-{nanos}",
+            std::process::id()
+        );
         std::env::temp_dir().join(unique)
     }
 
@@ -240,6 +234,38 @@ mod tests {
         assert_eq!(state.last_execution_state_root.as_deref(), Some("state-42"));
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn startup_reconcile_skips_legacy_latest_without_node_block_hash() {
+        for (name, latest_json) in [
+            (
+                "missing-node-block-hash",
+                br#"{"world_id":"world-a","height":42,"execution_block_hash":"exec-42","execution_state_root":"state-42"}"#.as_slice(),
+            ),
+            (
+                "null-node-block-hash",
+                br#"{"world_id":"world-a","height":42,"node_block_hash":null,"execution_block_hash":"exec-42","execution_state_root":"state-42"}"#.as_slice(),
+            ),
+        ] {
+            let root = test_dir(name);
+            let records = root.join("records");
+            let replication = root.join("replication");
+            fs::create_dir_all(records.as_path()).expect("create records");
+            fs::create_dir_all(replication.as_path()).expect("create replication");
+            fs::write(records.join("latest.json"), latest_json).expect("write execution latest");
+
+            let report = reconcile_startup_state_from_execution_latest_paths(
+                records.as_path(),
+                replication.as_path(),
+                "world-a",
+            )
+            .expect("reconcile");
+            assert_eq!(report, None);
+            assert!(!replication.join("node_pos_state.json").exists());
+
+            let _ = fs::remove_dir_all(root);
+        }
     }
 
     #[test]
