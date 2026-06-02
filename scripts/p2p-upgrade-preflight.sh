@@ -78,6 +78,7 @@ RESTORE_SCRIPT_DIR=""
 EXECUTE_RESTORE_SCRIPTS=false
 AUTO_ROLLBACK_ON_RESTORE_FAILURE=false
 RECOVERY_PLAN_DIR=""
+STATUS_FETCH_MAX_TIME_SECS=8
 
 validate_restore_shell_safe_path() {
   local label="$1"
@@ -795,7 +796,7 @@ for ((status_index = 0; status_index < status_count; status_index++)); do
     fi
     status_json="$(cat "$status_json_path")"
   else
-    status_json="$(curl -fsS "$url")" || {
+    status_json="$(curl -fsS --max-time "$STATUS_FETCH_MAX_TIME_SECS" "$url")" || {
       echo "FAIL $url status_fetch_failed"
       overall=1
       continue

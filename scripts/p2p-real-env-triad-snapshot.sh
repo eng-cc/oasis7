@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
+CURL_MAX_TIME_SECS=8
+
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/p2p-real-env-triad-snapshot.sh [options]
@@ -166,12 +168,12 @@ capture_health_and_status() {
   mkdir -p "$sample_dir"
 
   if [[ "$mode" == "local" ]]; then
-    if curl -fsS "$health_url" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.stderr.log"; then
+    if curl -fsS --max-time "$CURL_MAX_TIME_SECS" "$health_url" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.stderr.log"; then
       cp "$sample_dir/healthz.json" "$node_dir/healthz.json"
     else
       printf '{"ok":false,"fetch_error":"curl_failed"}\n' >"$sample_dir/healthz.json"
     fi
-    if curl -fsS "$status_url" >"$sample_dir/status.json" 2>"$sample_dir/status.stderr.log"; then
+    if curl -fsS --max-time "$CURL_MAX_TIME_SECS" "$status_url" >"$sample_dir/status.json" 2>"$sample_dir/status.stderr.log"; then
       cp "$sample_dir/status.json" "$node_dir/status.json"
     else
       printf '{"ok":false,"fetch_error":"curl_failed"}\n' >"$sample_dir/status.json"
@@ -179,18 +181,18 @@ capture_health_and_status() {
     return 0
   fi
 
-  if run_ssh "$target" "$password" "curl -fsS '$health_url'" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.stderr.log"; then
+  if run_ssh "$target" "$password" "curl -fsS --max-time '$CURL_MAX_TIME_SECS' '$health_url'" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.stderr.log"; then
     cp "$sample_dir/healthz.json" "$node_dir/healthz.json"
-  elif [[ -n "$public_health_url" ]] && curl -fsS "$public_health_url" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.public.stderr.log"; then
+  elif [[ -n "$public_health_url" ]] && curl -fsS --max-time "$CURL_MAX_TIME_SECS" "$public_health_url" >"$sample_dir/healthz.json" 2>"$sample_dir/healthz.public.stderr.log"; then
     printf 'ssh_failed_public_fallback_used\n' >"$sample_dir/healthz.fallback.txt"
     cp "$sample_dir/healthz.json" "$node_dir/healthz.json"
   else
     printf '{"ok":false,"fetch_error":"ssh_or_curl_failed"}\n' >"$sample_dir/healthz.json"
   fi
 
-  if run_ssh "$target" "$password" "curl -fsS '$status_url'" >"$sample_dir/status.json" 2>"$sample_dir/status.stderr.log"; then
+  if run_ssh "$target" "$password" "curl -fsS --max-time '$CURL_MAX_TIME_SECS' '$status_url'" >"$sample_dir/status.json" 2>"$sample_dir/status.stderr.log"; then
     cp "$sample_dir/status.json" "$node_dir/status.json"
-  elif [[ -n "$public_status_url" ]] && curl -fsS "$public_status_url" >"$sample_dir/status.json" 2>"$sample_dir/status.public.stderr.log"; then
+  elif [[ -n "$public_status_url" ]] && curl -fsS --max-time "$CURL_MAX_TIME_SECS" "$public_status_url" >"$sample_dir/status.json" 2>"$sample_dir/status.public.stderr.log"; then
     printf 'ssh_failed_public_fallback_used\n' >"$sample_dir/status.fallback.txt"
     cp "$sample_dir/status.json" "$node_dir/status.json"
   else

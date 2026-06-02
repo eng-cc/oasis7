@@ -35,6 +35,10 @@ SH
 
 cat >"$bin_dir/curl" <<'SH'
 #!/usr/bin/env bash
+if [[ " $* " != *" --max-time "* ]]; then
+  echo "curl missing --max-time: $*" >&2
+  exit 2
+fi
 url="${@: -1}"
 case "$url" in
   *local/healthz|*sequencer/healthz|*storage/healthz)

@@ -429,6 +429,20 @@ grep -q '^PASS ' "$TMP_DIR/pass.out"
 "$SCRIPT" --status-json "$TMP_DIR/pass.json" >"$TMP_DIR/pass-status-json.out"
 grep -q '^PASS ' "$TMP_DIR/pass-status-json.out"
 
+FAKE_CURL_DIR="$TMP_DIR/fake-curl-bin"
+mkdir -p "$FAKE_CURL_DIR"
+cat >"$FAKE_CURL_DIR/curl" <<SH
+#!/usr/bin/env bash
+if [[ " \$* " != *" --max-time "* ]]; then
+  echo "curl missing --max-time: \$*" >&2
+  exit 2
+fi
+cat "$TMP_DIR/pass.json"
+SH
+chmod +x "$FAKE_CURL_DIR/curl"
+PATH="$FAKE_CURL_DIR:$PATH" "$SCRIPT" --status-url "http://fake/pass.json" >"$TMP_DIR/pass-status-url-timeout.out"
+grep -q '^PASS ' "$TMP_DIR/pass-status-url-timeout.out"
+
 if "$SCRIPT" --status-url "http://127.0.0.1:$PORT/fail.json" >"$TMP_DIR/fail.out"; then
   echo "expected failing preflight to exit non-zero" >&2
   exit 1
