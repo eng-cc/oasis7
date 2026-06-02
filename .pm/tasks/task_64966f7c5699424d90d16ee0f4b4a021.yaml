@@ -25,11 +25,11 @@ acceptance:
   - "Any Volume 1 optimization is minimal, traceable, and avoids canon expansion or large retcon."
   - "Execution log records TPM routing, specialist slice evidence, and fresh verification."
 handoff_to: []
-updated_at: 2026-06-02T14:16:51+08:00
+updated_at: 2026-06-02T15:51:09+08:00
 last_started_at: 2026-06-01T22:15:27+08:00
-last_claim_type: ready_for_pr
-last_verify_command: "git diff --check origin/main...HEAD && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ! rg -n \"第一场公共客厅|可报名|维修成果发布会|砾光把旧螺栓旁边的小灯调暗|砾光把旧臂螺栓旁边的小灯调暗\" site/story/characters/character-registry.md site/story/research/research-notes.md site/story/chapter-cards/volume-01-chapter-02-cards.md site/story/chapter-cards/volume-01-chapter-04-cards.md site/story/draft/volume-01-chapter-004.md site/story/draft/README.md && ! rg -n \"稳定量产|盛大开幕|发布会|首秀|KPI|PIP|班味|摸鱼|牛马\" site/story/draft/volume-01-chapter-003.md site/story/draft/volume-01-chapter-004.md site/story/draft/README.md && ! rg -n -P \"(?<!不能让绿洲突然)拥有完整工业自给|达到完整工业自给|实现完整工业自给|完整工业自给(?!。)\" site/story/draft/volume-01-chapter-003.md site/story/draft/volume-01-chapter-004.md site/story/draft/README.md"
-last_verified_at: 2026-06-02T14:16:51+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ! rg -n \"第一场公共客厅|可报名|维修成果发布会|砾光把旧螺栓旁边的小灯调暗|砾光把旧臂螺栓旁边的小灯调暗\" site/story/characters/character-registry.md site/story/research/research-notes.md site/story/chapter-cards/volume-01-chapter-02-cards.md site/story/chapter-cards/volume-01-chapter-04-cards.md site/story/draft/volume-01-chapter-004.md site/story/draft/README.md && ! rg -n \"稳定量产|盛大开幕|发布会|首秀|KPI|PIP|班味|摸鱼|牛马\" site/story/draft/volume-01-chapter-003.md site/story/draft/volume-01-chapter-004.md site/story/draft/README.md && ! rg -n -P \"(?<!不能让绿洲突然)拥有完整工业自给|达到完整工业自给|实现完整工业自给|完整工业自给(?!。)\" site/story/draft/volume-01-chapter-003.md site/story/draft/volume-01-chapter-004.md site/story/draft/README.md"
+last_verified_at: 2026-06-02T15:51:09+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
-last_closed_at: 2026-06-02T14:14:33+08:00
+last_closed_at: 2026-06-02T15:51:09+08:00
