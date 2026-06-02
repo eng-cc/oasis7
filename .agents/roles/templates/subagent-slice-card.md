@@ -5,8 +5,12 @@
 ## Required Fields（固定字段）
 - role:
 - slice type:
-- model configuration: `gpt-5.4-medium` by default; record reason for any override.
-- mandatory context packet:
+- model configuration: compatibility marker; fill the intended/actual fields below.
+- intended model configuration: `gpt-5.4-medium` by default; record reason for any requested override.
+- actual dispatched model/reasoning: selected model/reasoning when the tool permits and reports it; otherwise `inherited/unverified` plus connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified.
+- context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded.
+- mandatory context packet: compatibility marker; fill the mandatory context checklist/packet below.
+- mandatory context checklist/packet:
   - identity and authority: assigned role + `.agents/roles/<role>.md` + owner role + TPM integration owner
   - workflow governance: `AGENTS.md` + `doc/engineering/workflow/source-of-truth.md` + selected workflow skill(s)
   - task truth: `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + canonical worktree/branch/base ref + PR link/status if present
@@ -30,8 +34,12 @@
 ## Example (copy/paste)
 - role: producer_system_designer
 - slice type: implementation
-- model configuration: `gpt-5.4-medium`
-- mandatory context packet: `AGENTS.md` + `.agents/roles/producer_system_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/<module>/project.md` task `<task slug>` + `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + current branch/diff summary
+- model configuration: see intended/actual fields
+- intended model configuration: `gpt-5.4-medium`
+- actual dispatched model/reasoning: `gpt-5.4-medium`, or `inherited/unverified` with reason if the connector cannot select/report the model or actual dispatch cannot be verified
+- context delivery mode: full-thread/full-history fork
+- mandatory context packet: see mandatory context checklist/packet
+- mandatory context checklist/packet: `AGENTS.md` + `.agents/roles/producer_system_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/<module>/project.md` task `<task slug>` + `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）
 - return contract: patch + test evidence
 - validation command: `./scripts/cargo-dev.sh test -p foo`

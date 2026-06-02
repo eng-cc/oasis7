@@ -42,7 +42,7 @@ Read-only caveat:
 
 ## Core Workflow
 
-1. Treat the request as requiring standard worktree + `.pm` task truth before substantive handling:
+1. Treat the request as requiring standard worktree + `.pm` task truth before substantive handling. Do not first classify the request type to decide whether bootstrap is needed:
    - repository-changing: requires standard worktree + `.pm` task truth before edits
    - read-only/chat-only pure fact lookup: requires standard worktree + `.pm` task truth before direct answer
    - read-only/chat-only professional judgment: requires standard worktree + `.pm` task truth before dispatching the matching professional role slice
@@ -117,6 +117,7 @@ WORKFLOW BOOTSTRAP DECIDED
 ## Guardrails
 
 - Do not create a second planning or bootstrap truth outside repo-owned surfaces.
+- Do not infer a read-only/chat-only bypass before bootstrap; request-type routing happens only after task truth exists.
 - Do not treat project, handoff, signal, memory, chat transcript, or PR evidence as a replacement for `.pm/tasks/<TASK-UID>.execution.md`.
 - Do not skip worktree / `.pm` task creation for any user request unless the user explicitly authorized reuse of a specific task worktree that is already bound to the same `.pm` task.
 - Do not stop after saying which workflow surface should be used; continue into that phase.

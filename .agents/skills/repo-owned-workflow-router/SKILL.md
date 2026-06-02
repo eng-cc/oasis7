@@ -33,7 +33,7 @@ Do not use this skill when:
 3. It only chooses and orders repo-owned workflow skills.
 4. If the task truth changes, route decisions must be written back into `.pm/tasks/<TASK-UID>.execution.md`; formal docs may supplement but not replace it.
 5. Use the narrowest applicable workflow surface; do not force every phase if it is not needed.
-6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, model configuration, mandatory context packet, write scope, return contract, mandatory `.pm` execution-log sink, and integration owner/order.
+6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, intended model configuration, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, mandatory context checklist/packet, write scope, return contract, mandatory `.pm` execution-log sink, and integration owner/order.
 7. TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
 8. TPM routing is coordination only. If the task needs professional/domain analysis, implementation, verification judgment, review judgment, or external messaging, route to the matching professional role slice before presenting that conclusion as authoritative.
 9. Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth. Read-only professional/domain questions still require the matching bounded role slice, and the slice contract/sink must be recorded in `.pm/tasks/<TASK-UID>.execution.md`.
@@ -110,8 +110,12 @@ WORKFLOW ROUTE DECIDED
 ## Subagent Slice Plan (If Needed)
 - role:
 - slice type:
-- model configuration: `gpt-5.4-medium` by default; record reason for any override
-- mandatory context packet:
+- model configuration: compatibility marker; fill the intended/actual fields below
+- intended model configuration: `gpt-5.4-medium` by default; record reason for any requested override
+- actual dispatched model/reasoning: record the selected model/reasoning when the tool permits and reports it; otherwise record `inherited/unverified` plus the connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified
+- context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded
+- mandatory context packet: compatibility marker; fill the mandatory context checklist/packet below
+- mandatory context checklist/packet:
   - identity and authority:
   - workflow governance:
   - task truth:
@@ -138,5 +142,5 @@ WORKFLOW ROUTE DECIDED
 - Do not skip `verification-before-completion` when you are about to make a completion claim.
 - Do not use this router as a replacement for closeout; switch to `finishing-a-development-branch` when the task is done.
 - Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
-- Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current `.pm` task truth, and scoped repo context in the mandatory context packet.
+- Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current `.pm` task truth, and scoped repo context recorded in the mandatory context checklist/packet.
 - Do not let TPM direct exploration become a professional conclusion; professional findings must be owned or verified by the matching role slice.

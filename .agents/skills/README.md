@@ -40,7 +40,7 @@
 Canonical phase mapping lives in `doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`; this README is an index, not the workflow authority.
 
 - 启动任何用户请求、需要先确认标准 task worktree / `.pm` task / owner role 真值，并把后续阶段接回 repo-owned 主链时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
-- 只读/聊天请求也默认进入 task/worktree bootstrap；如果要输出专业结论，进入 task truth 后仍由 TPM 派发对应 bounded 专业角色 slice。纯路径查找、命令输出复述等客观事实读取可由 TPM 在已绑定 task/worktree 内直接处理。
+- 只读/聊天请求也默认进入 task/worktree bootstrap；不要先用“只读/聊天/纯事实”分类决定是否跳过 bootstrap。如果要输出专业结论，进入 task truth 后仍由 TPM 派发对应 bounded 专业角色 slice。纯路径查找、命令输出复述等客观事实读取可由 TPM 在已绑定 task/worktree 内直接处理。
 - 启动已具备 task 真值的仓库变更 task、或不确定下一步该走哪条 repo-owned workflow surface 时：`.agents/skills/repo-owned-workflow-router/SKILL.md`
 - 需求仍偏模糊、需要 scope 拆分、方案对比或判断是否需要 visual companion 时：`.agents/skills/bounded-brainstorming/SKILL.md`
 - 行为变更类实现任务、且存在稳定自动化测试面时：`.agents/skills/tdd-test-writer/SKILL.md`
@@ -52,7 +52,7 @@ Canonical phase mapping lives in `doc/engineering/workflow/source-of-truth.md#11
 - PR 收到 review comments / requested changes，需要核实、修复、回证据并保持 thread resolution 与 merge readiness 分离时：`.agents/skills/receiving-code-review/SKILL.md`
 - 新增或修改本地 repo-owned skill、替换上游 skill 或调整 skill governance 时：`.agents/skills/writing-repo-owned-skills/SKILL.md`
 
-Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain. TPM routing is coordination only; specialist conclusions must be owned by the matching professional role slice.
+Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain. TPM routing is coordination only; specialist conclusions must be owned by the matching professional role slice. Professional slice contracts record intended model, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, and mandatory context checklist/packet; default context delivery is full-thread/full-history fork, with explicit context packets only as delivery supplement/fallback.
 
 ## Bounded Borrowing From `writing-skills`
 
