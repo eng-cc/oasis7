@@ -682,25 +682,37 @@ impl ReplicationRuntime {
     }
 
     fn is_stale_remote_record(&self, record: &FileReplicationRecord) -> bool {
-        let Some(guard) = self.remote_guards.get(record.writer_id.as_str()) else {
-            return false;
-        };
-        record.writer_epoch < guard.writer_epoch
-            || (record.writer_epoch == guard.writer_epoch && record.sequence <= guard.last_sequence)
+        let guard = self
+            .remote_guards
+            .get(record.writer_id.as_str())
+            .or_else(|| {
+                (self.guard.writer_id.as_deref() == Some(record.writer_id.as_str()))
+                    .then_some(&self.guard)
+            });
+        guard
+            .map(|guard| {
+                record.writer_epoch < guard.writer_epoch
+                    || (record.writer_epoch == guard.writer_epoch
+                        && record.sequence <= guard.last_sequence)
+            })
+            .unwrap_or(false)
     }
 
     fn remote_guard_for_record(
         &self,
         record: &FileReplicationRecord,
     ) -> SingleWriterReplicationGuard {
-        self.remote_guards
-            .get(record.writer_id.as_str())
-            .cloned()
-            .unwrap_or_else(|| SingleWriterReplicationGuard {
-                writer_id: Some(record.writer_id.clone()),
-                writer_epoch: record.writer_epoch,
-                last_sequence: record.sequence.saturating_sub(1),
-            })
+        if let Some(guard) = self.remote_guards.get(record.writer_id.as_str()) {
+            return guard.clone();
+        }
+        if self.guard.writer_id.as_deref() == Some(record.writer_id.as_str()) {
+            return self.guard.clone();
+        }
+        SingleWriterReplicationGuard {
+            writer_id: Some(record.writer_id.clone()),
+            writer_epoch: record.writer_epoch,
+            last_sequence: record.sequence.saturating_sub(1),
+        }
     }
 
     fn persist_commit_message(

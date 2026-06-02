@@ -69,6 +69,9 @@ pub(super) fn reconcile_engine_with_persisted_replication(
         return Ok(());
     }
     if latest_persisted_height <= engine.committed_height {
+        engine.replication_persisted_height = engine
+            .replication_persisted_height
+            .max(latest_persisted_height);
         return Ok(());
     }
     let mut height =

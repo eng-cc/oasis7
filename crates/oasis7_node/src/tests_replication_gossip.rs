@@ -594,7 +594,7 @@ fn runtime_gossip_replication_syncs_distfs_commit_files() {
                 files
                     .iter()
                     .any(|item| item.path.starts_with("consensus/commits/"))
-                    && dir_b.join("replication_guard.json").exists()
+                    && dir_b.join("replication_remote_guards.json").exists()
             })
             .unwrap_or(false)
     });
@@ -620,7 +620,7 @@ fn runtime_gossip_replication_syncs_distfs_commit_files() {
     assert!(files
         .iter()
         .any(|item| item.path.starts_with("consensus/commits/")));
-    assert!(dir_b.join("replication_guard.json").exists());
+    assert!(dir_b.join("replication_remote_guards.json").exists());
 
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
