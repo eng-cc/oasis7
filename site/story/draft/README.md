@@ -7,4 +7,5 @@
 - `volume-01-chapter-003.md`: 第一卷第三章试写 v0.2，当前覆盖 `CH-021` 到 `CH-028`。
 - `volume-01-chapter-004.md`: 第一卷第四章试写 v0.2，当前覆盖 `CH-029` 到 `CH-036`。
 - `volume-02-chapter-001-positioning.md`: 第二卷第一章写前定位，当前覆盖 `CH-037` 到 `CH-046`；用于进入正文前校准任务句、场景切分、人物使用、Agent 边界和行业反差，不是正文。
+- `volume-02-chapter-001.md`: 第二卷第一章试写 v0.1，当前覆盖 `CH-037`。
 - `chapter-writing-sop.md`: 根据第一章试写、调研、复审、五方最终审稿和极小润色经验整理的章节写作 SOP。
