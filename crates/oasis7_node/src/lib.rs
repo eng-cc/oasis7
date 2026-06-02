@@ -874,6 +874,7 @@ struct PosNodeEngine {
     next_slot: u64,
     committed_height: u64,
     network_committed_height: u64,
+    replication_enabled: bool,
     replication_persisted_height: u64,
     last_replication_gap_sync_blocked_height: Option<u64>,
     last_replication_gap_sync_blocked_reason: Option<String>,

@@ -119,6 +119,7 @@ impl PosNodeEngine {
             next_slot: 0,
             committed_height: 0,
             network_committed_height: 0,
+            replication_enabled: config.replication.is_some(),
             replication_persisted_height: 0,
             last_replication_gap_sync_blocked_height: None,
             last_replication_gap_sync_blocked_reason: None,
@@ -494,11 +495,13 @@ impl PosNodeEngine {
     }
 
     fn consensus_participation_safe(&self) -> bool {
-        if self.last_replication_gap_sync_blocked_height.is_some() {
-            return false;
-        }
-        if self.replication_persisted_height < self.committed_height {
-            return false;
+        if self.replication_enabled {
+            if self.last_replication_gap_sync_blocked_height.is_some() {
+                return false;
+            }
+            if self.replication_persisted_height < self.committed_height {
+                return false;
+            }
         }
         if self.network_committed_height > self.committed_height {
             return false;
