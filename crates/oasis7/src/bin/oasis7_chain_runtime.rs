@@ -61,6 +61,8 @@ mod reward_runtime_settlement;
 mod reward_runtime_worker;
 #[path = "oasis7_chain_runtime/runtime_status_util.rs"]
 mod runtime_status_util;
+#[path = "oasis7_chain_runtime/startup_reconcile.rs"]
+mod startup_reconcile;
 #[path = "oasis7_chain_runtime/status_payload.rs"]
 mod status_payload;
 #[path = "oasis7_chain_runtime/status_server_support.rs"]
@@ -309,6 +311,20 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         &storage_profile_config,
         replication_remote_writer_allowlist.as_slice(),
     )?);
+    if let Some(report) = startup_reconcile::reconcile_startup_state_from_execution_latest(
+        &paths,
+        options.world_id.as_str(),
+    )? {
+        emit_stderr_or_event(
+            Level::INFO,
+            format!(
+                "startup reconciled node pos state from execution latest: previous_committed_height={} reconciled_height={}",
+                report.previous_committed_height, report.reconciled_height
+            )
+            .as_str(),
+            "startup reconciled node pos state from execution latest",
+        );
+    }
 
     let mut runtime = NodeRuntime::new(config);
     if require_execution {

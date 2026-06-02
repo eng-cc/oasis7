@@ -114,6 +114,75 @@ fn remote_apply_bootstraps_midstream_writer_without_overwriting_local_guard() {
 }
 
 #[test]
+fn remote_apply_repairs_stale_same_writer_epoch_guard_for_midstream_record() {
+    let world_id = "world-remote-apply-stale-epoch-guard";
+    let dir_a = temp_dir("remote-apply-stale-epoch-a");
+    let dir_b = temp_dir("remote-apply-stale-epoch-b");
+    let config_a = NodeReplicationConfig::new(dir_a.clone()).expect("config a");
+    let config_b = NodeReplicationConfig::new(dir_b.clone()).expect("config b");
+
+    fs::create_dir_all(&dir_a).expect("create dir a");
+    fs::write(
+        dir_a.join("replication_guard.json"),
+        br#"{"writer_id":"node-a","writer_epoch":2,"last_sequence":2}"#,
+    )
+    .expect("write local guard a");
+    fs::write(
+        dir_a.join("replication_writer_state_node-a.json"),
+        br#"{"writer_epoch":2,"last_sequence":2,"last_replicated_height":2}"#,
+    )
+    .expect("write writer state a");
+    fs::create_dir_all(&dir_b).expect("create dir b");
+    fs::write(
+        dir_b.join("replication_remote_guards.json"),
+        br#"{"node-a":{"writer_id":"node-a","writer_epoch":1,"last_sequence":1}}"#,
+    )
+    .expect("write stale remote guard b");
+
+    let mut replication_a = ReplicationRuntime::new(&config_a, "node-a").expect("runtime a");
+    let mut replication_b = ReplicationRuntime::new(&config_b, "node-b").expect("runtime b");
+    let decision = PosDecision {
+        height: 3,
+        slot: 3,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "block-a-3".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 60,
+        rejected_stake: 0,
+        required_stake: 40,
+        total_stake: 100,
+    };
+    let message = replication_a
+        .build_local_commit_message("node-a", world_id, 3_000, &decision, None, None)
+        .expect("build local a commit")
+        .expect("local a message");
+    assert_eq!(message.record.writer_id, "node-a");
+    assert_eq!(message.record.writer_epoch, 2);
+    assert_eq!(message.record.sequence, 3);
+
+    assert!(replication_b
+        .validate_remote_message_for_apply("node-b", world_id, &message)
+        .expect("validate same-writer epoch advance midstream commit"));
+    replication_b
+        .apply_remote_message("node-b", world_id, &message)
+        .expect("apply same-writer epoch advance midstream commit");
+
+    let remote_guards: BTreeMap<String, SingleWriterReplicationGuard> = serde_json::from_slice(
+        &fs::read(dir_b.join("replication_remote_guards.json")).expect("read remote guards"),
+    )
+    .expect("parse remote guards");
+    let remote_guard = remote_guards.get("node-a").expect("remote node-a guard");
+    assert_eq!(remote_guard.writer_id.as_deref(), Some("node-a"));
+    assert_eq!(remote_guard.writer_epoch, 2);
+    assert_eq!(remote_guard.last_sequence, 3);
+
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
 fn restart_refresh_seeds_remote_cursor_from_committed_baseline() {
     let dir_a = temp_dir("restart-refresh-remote-cursor-a");
     let dir_b = temp_dir("restart-refresh-remote-cursor-b");
