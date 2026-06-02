@@ -71,7 +71,10 @@ fn parse_options_defaults() {
     assert_eq!(options.live_bind, DEFAULT_LIVE_BIND);
     assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
     assert!(options.with_llm);
-    assert_eq!(options.agent_decision_source, BUILTIN_LLM_DECISION_SOURCE);
+    assert_eq!(
+        options.agent_decision_source,
+        PROVIDER_BACKED_DECISION_SOURCE
+    );
     assert_eq!(
         options.agent_provider_backend,
         LOCAL_BRIDGE_PROVIDER_BACKEND
@@ -352,7 +355,8 @@ fn parse_options_accepts_agent_direct_connect_alias() {
 
 #[test]
 fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
-    let options = CliOptions::default();
+    let mut options = CliOptions::default();
+    options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
     let mut command = Command::new("echo");
 
     apply_viewer_live_env_overrides(&mut command, &options, false, false);
@@ -369,7 +373,8 @@ fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
 
 #[test]
 fn builtin_viewer_live_env_preserves_explicit_parent_llm_timeout() {
-    let options = CliOptions::default();
+    let mut options = CliOptions::default();
+    options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
     let mut command = Command::new("echo");
 
     apply_viewer_live_env_overrides(&mut command, &options, true, false);
@@ -379,7 +384,8 @@ fn builtin_viewer_live_env_preserves_explicit_parent_llm_timeout() {
 
 #[test]
 fn builtin_viewer_live_env_skips_default_llm_timeout_when_repo_config_exists() {
-    let options = CliOptions::default();
+    let mut options = CliOptions::default();
+    options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
     let mut command = Command::new("echo");
 
     apply_viewer_live_env_overrides(&mut command, &options, false, true);
@@ -450,7 +456,8 @@ fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_buil
 
 #[test]
 fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
-    let options = CliOptions::default();
+    let mut options = CliOptions::default();
+    options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
     let args: Vec<String> = command
         .get_args()

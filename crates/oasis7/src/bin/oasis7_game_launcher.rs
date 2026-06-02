@@ -197,7 +197,7 @@ impl Default for CliOptions {
             viewer_port: DEFAULT_VIEWER_PORT,
             viewer_static_dir: DEFAULT_VIEWER_STATIC_DIR.to_string(),
             with_llm: true,
-            agent_decision_source: BUILTIN_LLM_DECISION_SOURCE.to_string(),
+            agent_decision_source: PROVIDER_BACKED_DECISION_SOURCE.to_string(),
             agent_provider_backend: LOCAL_BRIDGE_PROVIDER_BACKEND.to_string(),
             agent_provider_contract: WORLDSIM_PROVIDER_CONTRACT.to_string(),
             agent_provider_transport: LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string(),
