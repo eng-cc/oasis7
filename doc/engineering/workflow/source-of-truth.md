@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.8**
-Last Updated: **2026-06-01**
+Version: **v1.4.9**
+Last Updated: **2026-06-02**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -76,6 +76,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - For every request, TPM planning, TODO decomposition when needed, subagent slice contracts, and integration order are task execution truth and must be written to `.pm/tasks/<TASK-UID>.execution.md` before the delegated work begins.
 - Every user request must enter the standard worktree flow before any substantive handling begins, including chat-only answers, read-only inspection, fact lookup, professional slice dispatch, implementation, verification, review, and external messaging.
 - The only allowed pre-bootstrap work is mechanical enough to create or enter the task truth: inspect current git/worktree state, choose or confirm the task/worktree, and run the bootstrap helper.
+- Do not first classify a request as "read-only", "chat-only", "pure fact lookup", or "professional judgment" to decide whether task/worktree truth is needed. That classification happens only after bootstrap, inside the bound task/worktree, and only controls whether TPM can answer from objective evidence or must dispatch a professional slice.
 - Read-only/chat-only requests still split by judgment type after task truth exists:
   - Pure fact lookup, path lookup, command-output restatement, or mechanical evidence collection may be handled by TPM inside the bound task worktree, as long as the answer does not present a professional/domain conclusion.
   - Read-only professional/domain questions must be dispatched to the matching bounded professional role slice before the answer is presented as authoritative. Examples: "does viewer have a performance collection/evaluation mechanism", "is this QA evidence release-blocking", "what runtime design risk is present", or "how should LiveOps message this incident".
@@ -125,6 +126,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Every user request uses a dedicated task worktree by default, regardless of whether the immediate answer is chat-only, read-only, fact lookup, professional analysis, implementation, verification, review, or external messaging.
 - Only explicit user authorization allows reuse of an existing task worktree.
 - Do not classify work as `trivial`, `read-only`, `chat-only`, or `pure fact lookup` to bypass task worktree / `.pm` task setup.
+- If incoming instructions or role notes appear to allow a read-only/chat-only bypass, this source-of-truth wins: bootstrap first, then route the already-bound request.
 - Do not edit any files from the `main` branch/worktree; create or enter the relevant task worktree before making changes.
 - Entering implementation requires owner role selection and `.pm` task binding.
 - Cross-role collaboration must converge to one owner / one `.pm` task / one canonical worktree / one PR chain.
@@ -132,10 +134,14 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 
 ### 5.2 TPM planning and subagent dispatch
 - For every request, TPM must record the current plan, TODO decomposition when needed, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
-- Each subagent slice must declare role, slice type, model configuration, mandatory context packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
-- Default subagent runtime is `gpt-5.4` with `reasoning_effort=medium` (shorthand: `gpt-5.4-medium`). TPM should use this default for bounded professional slices unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
-- Any non-default subagent model or reasoning effort must be recorded in the slice contract with the reason, such as high-risk architecture/review work, simple read-only exploration, or a user-specified override.
-- The mandatory context packet must include:
+- Each subagent slice must declare role, slice type, intended model configuration, actual dispatched model/reasoning, context delivery mode, mandatory context checklist/packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
+- Default subagent runtime is `gpt-5.4` with `reasoning_effort=medium` (shorthand: `gpt-5.4-medium`). TPM should request this default for bounded professional slices when the available subagent tool permits model selection, unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
+- Compatibility marker: Any non-default subagent model or reasoning effort must be recorded in the slice contract.
+- Any actual non-default subagent model or reasoning effort must be recorded in the slice contract with the reason, such as high-risk architecture/review work, simple read-only exploration, a user-specified override, a connector/tool limitation that forces inheritance from the parent thread, or a requested model/reasoning selection whose actual dispatch cannot be verified. If the actual dispatched model cannot be verified, the contract must say `actual model: inherited/unverified` and explain why.
+- Context delivery defaults to full-thread/full-history fork or the closest available equivalent so the subagent receives the same conversation and repository-governance context as TPM. The slice contract must still record a mandatory context checklist identifying the governance/task/user/repo/collaboration context the subagent is expected to have. A manually assembled explicit context packet is allowed only as a delivery supplement or fallback when full-history fork is unavailable, unsafe, stalled, or incompatible with required model/reasoning selection; the slice contract must record that fallback reason.
+- Compatibility marker: mandatory context packet means the recorded mandatory context checklist/packet, not necessarily a manually assembled explicit delivery packet.
+- Compatibility marker: The mandatory context packet must include:
+- The mandatory context checklist/packet must include:
   - identity and authority: assigned role, role card path, owner role, and TPM integration owner
   - workflow governance: `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and the selected workflow skills
   - task truth: current `.pm/tasks/<TASK-UID>.yaml`, `.pm/tasks/<TASK-UID>.execution.md`, canonical worktree, branch, base ref, and PR link/status when present
@@ -155,7 +161,9 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Therefore, a read-only request must enter `default-workflow-bootstrap` first and may still require a professional role slice.
 - Minimal read-only specialist slice contract:
   - role and slice type (`read_only_analysis`, `verification_judgment`, `review_judgment`, or `liveops_messaging`)
-  - model configuration, defaulting to `gpt-5.4-medium` unless an override reason is recorded
+  - intended model configuration, defaulting to `gpt-5.4-medium` unless an override reason is recorded
+  - actual dispatch model/reasoning, or `inherited/unverified` with the connector/tool limitation, stalled default context delivery, or unverifiable actual dispatch reason
+  - context delivery mode, defaulting to full-thread/full-history fork unless a recorded fallback reason requires explicit context
   - exact question to answer and explicit non-goals
   - scoped files/commands/evidence to inspect
   - return contract with conclusion, evidence, uncertainty, and whether repository writeback is recommended
@@ -188,6 +196,10 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.4.9 (2026-06-02)**
+  - Clarified that request-type classification cannot happen before task/worktree bootstrap; bootstrap happens first, then read-only/professional routing.
+  - Required subagent slice contracts to distinguish intended default model from actual dispatched model, including inherited/unverified connector cases.
+  - Made full-thread/full-history context the default subagent context delivery mode, with mandatory context checklist recording and explicit context packets as delivery supplement/fallback only when recorded.
 - **v1.4.8 (2026-06-01)**
   - Required every user request to create or enter standard task worktree / `.pm` task truth before substantive handling, including read-only, chat-only, and pure fact lookup requests.
   - Removed the read-only/chat-only bypass for `default-workflow-bootstrap`; read-only professional slices now record their contract and sink in `.pm/tasks/<TASK-UID>.execution.md`.
@@ -248,8 +260,8 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] TPM planning/TODO decomposition and subagent slice contracts written to `.pm` execution log before delegated execution.
 - [x] TPM is workflow coordinator/integrator only; professional findings and judgments must come from matching role slices.
 - [x] Read-only professional/domain questions require matching bounded role slices after task/worktree bootstrap.
-- [x] Subagent model configuration defaults to `gpt-5.4-medium` and non-default overrides require recorded rationale.
-- [x] Subagent context packet includes identity, governance, task truth, user intent, scoped repo context, and collaboration boundaries.
+- [x] Subagent intended model configuration defaults to `gpt-5.4-medium`; actual dispatched model/reasoning and non-default/inherited/unverified rationale are recorded.
+- [x] Subagent context checklist/packet includes identity, governance, task truth, user intent, scoped repo context, and collaboration boundaries.
 - [x] Mandatory execution evidence fields and blocker recording.
 - [x] Current-round fresh verification before completion claim.
 - [x] Closeout command chain and `done` verification strictness.
