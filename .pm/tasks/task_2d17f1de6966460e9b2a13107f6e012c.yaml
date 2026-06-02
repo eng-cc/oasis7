@@ -1,0 +1,26 @@
+task_uid: task_2d17f1de6966460e9b2a13107f6e012c
+title: "Check volume two SOP completion"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_2d17f1de6966460e9b2a13107f6e012c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - site/story/draft/chapter-writing-sop.md
+  - site/story/reviews/editorial-notes.md
+doc_refs:
+  - site/story
+related_prd: []
+acceptance:
+  - "Answer whether the second-volume story line has completed all SOP phases, with repo evidence."
+handoff_to: []
+updated_at: 2026-06-02T21:17:15+08:00
+last_started_at: 2026-06-02T21:14:03+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/pm/lint.sh
+last_verified_at: 2026-06-02T21:17:13+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-02T21:17:15+08:00
