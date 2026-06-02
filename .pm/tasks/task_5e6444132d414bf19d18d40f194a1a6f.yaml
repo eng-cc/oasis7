@@ -1,0 +1,29 @@
+task_uid: task_5e6444132d414bf19d18d40f194a1a6f
+title: "Add viewer performance harness"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-viewer-viewer-performance-harness
+execution_log_path: .pm/tasks/task_5e6444132d414bf19d18d40f194a1a6f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/world-simulator/viewer/README.md
+  - doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.prd.md
+  - doc/testing/performance/viewer-perf-bottleneck-observability-2026-02-25.prd.md
+related_prd: []
+acceptance:
+  - "Provide an active viewer performance collection and evaluation harness for current JS/Vite viewer."
+  - "Capture FPS/frame timing, long tasks where available, UI readiness, artifact JSON/Markdown summaries, and pass/fail gates."
+  - "Document/run verification commands and address current lag investigation entry point."
+handoff_to: []
+updated_at: 2026-06-02T21:43:08+08:00
+last_started_at: 2026-06-02T17:12:34+08:00
+last_claim_type: task_complete
+last_verify_command: "cd crates/oasis7_viewer && npm run test:ui -- pixel_world_host.test.jsx main.test.jsx performance_metrics"
+last_verified_at: 2026-06-02T21:43:07+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-02T21:43:08+08:00

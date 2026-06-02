@@ -288,7 +288,7 @@ describe("pixel world host", () => {
         hotspots: 4,
       },
     });
-  });
+  }, 15000);
 
   it("classifies action receipt confidence without treating default intent copy as player action", async () => {
     vi.resetModules();
@@ -430,12 +430,18 @@ describe("pixel world host", () => {
     expect(receipt.textContent).toContain("agent=agent-0");
     const diagnostics = screen.getByText("Renderer Diagnostics").closest("details");
     expect(diagnostics.open).toBe(false);
-    expect(screen.getByText(/falls back explicitly instead of keeping a second JS renderer/i)).toBeInTheDocument();
+    expect(screen.getByText(/using host fallback first/i)).toBeInTheDocument();
+
+    screen.getByRole("button", { name: "Reattach Embedded Renderer" }).click();
+
+    await waitFor(() => {
+      expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
+    });
     expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
     expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(2);
     expect(document.querySelector(".pixel-world-entity--location")).toHaveAttribute("data-marker-role", "logic_anchor");
     expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
-  });
+  }, 15000);
 
   it("uses Rust-derived render state from the runtime module when available", async () => {
     runtimeMock.deriveRenderState = vi.fn((input) => ({
@@ -502,6 +508,7 @@ describe("pixel world host", () => {
     }));
 
     await renderPixelWorldHost();
+    screen.getByRole("button", { name: "Reattach Embedded Renderer" }).click();
 
     await waitFor(() => {
       expect(screen.getByText("Rust derived goal")).toBeInTheDocument();

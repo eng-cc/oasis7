@@ -8,6 +8,7 @@ function tr(locale, zh, en) {
 }
 
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
+const DEFER_RENDERER_VALUES = new Set(["0", "false", "no", "off", "defer", "fallback"]);
 const FRAGMENT_TERRAIN_PALETTE = {
   silicate_matrix: [126, 144, 99],
   iron_nickel_alloy: [176, 184, 196],
@@ -119,6 +120,19 @@ function fragmentTerrainColor(compound) {
 function colorToCss(color, alpha = 0.36) {
   const [red, green, blue] = Array.isArray(color) ? color : FRAGMENT_TERRAIN_PALETTE.unknown;
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function shouldAutoAttachRenderer() {
+  if (typeof window === "undefined" || !window.location) {
+    return true;
+  }
+  const params = new URLSearchParams(window.location.search || "");
+  const value = String(params.get("pixel_world_renderer") || "").trim().toLowerCase();
+  if (value) {
+    return !DEFER_RENDERER_VALUES.has(value);
+  }
+  const testApi = String(params.get("test_api") || "").trim().toLowerCase();
+  return !["1", "true", "yes", "on"].includes(testApi);
 }
 
 function fragmentBlocks(location) {
@@ -1031,11 +1045,13 @@ export function PixelWorldHost(props) {
   const fallbackRenderState = createMemo(() => buildPixelWorldRenderStateFromInput(renderInput()));
   const [rustRenderState, setRustRenderState] = createSignal(null);
   const renderState = () => rustRenderState() || fallbackRenderState();
-  const [rendererStatus, setRendererStatus] = createSignal("booting");
+  const autoAttachRenderer = shouldAutoAttachRenderer();
+  const [rendererStatus, setRendererStatus] = createSignal(autoAttachRenderer ? "booting" : "fallback");
   const [rendererFatal, setRendererFatal] = createSignal(null);
   const [hoverSelection, setHoverSelection] = createSignal(null);
-  const [runtimeSource, setRuntimeSource] = createSignal("loading");
+  const [runtimeSource, setRuntimeSource] = createSignal(autoAttachRenderer ? "loading" : "deferred");
   const [cameraState, setCameraState] = createSignal(null);
+  const [renderDtoOpen, setRenderDtoOpen] = createSignal(false);
 
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
@@ -1143,6 +1159,15 @@ export function PixelWorldHost(props) {
     });
   }
 
+  function requestReadyMode() {
+    setRendererFatal(null);
+    setRendererStatus("booting");
+    setRuntimeSource("loading");
+    if (mountedCanvas) {
+      void setReadyMode();
+    }
+  }
+
   function setFallbackMode() {
     adapter().unmount();
     setRustRenderState(null);
@@ -1212,8 +1237,8 @@ export function PixelWorldHost(props) {
             <div class="feedback-summary">
               {tr(
                 locale(),
-                "嵌入式 renderer 启动失败，页面已退回 host fallback 模式。正式玩法摘要、目标和明细主链继续可用。",
-                "The embedded renderer failed to attach, so the page returned to host fallback mode. Formal gameplay summary, targets, and details remain available.",
+                "嵌入式 renderer 未接管；页面先使用 host fallback，正式玩法摘要、目标和明细主链继续可用。",
+                "The embedded renderer is not attached; the page is using host fallback first. Formal gameplay summary, targets, and details remain available.",
               )}
             </div>
             <Show when={rendererFatal()}>
@@ -1252,7 +1277,7 @@ export function PixelWorldHost(props) {
           <Show when={hoverSelection()}>
             <span class="badge">{`hover=${hoverSelection().kind}/${hoverSelection().id}`}</span>
           </Show>
-          <button type="button" onClick={() => { void setReadyMode(); }}>
+          <button type="button" onClick={requestReadyMode}>
             {tr(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer")}
           </button>
           <button type="button" onClick={simulateFatal}>
@@ -1270,11 +1295,16 @@ export function PixelWorldHost(props) {
           </div>
         </div>
       </details>
-      <details class="diagnostic">
+      <details
+        class="diagnostic"
+        onToggle={(event) => setRenderDtoOpen(event.currentTarget.open)}
+      >
         <summary>{tr(locale(), "展开 Render DTO", "Expand Render DTO")}</summary>
-        <div class="stack" style="margin-top:10px;">
-          <pre class="json">{JSON.stringify(renderState(), null, 2)}</pre>
-        </div>
+        <Show when={renderDtoOpen()}>
+          <div class="stack" style="margin-top:10px;">
+            <pre class="json">{JSON.stringify(renderState(), null, 2)}</pre>
+          </div>
+        </Show>
       </details>
     </div>
   );
