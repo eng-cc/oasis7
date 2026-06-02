@@ -1231,3 +1231,29 @@ SOP v0.2 更适合第二章及后续章节使用。后续开写新章时，应�
 ### 综合结论
 
 第一卷现在可以作为当前稳定基线：正文本体和高权重 canon / doc 已同步到最低试运营、低压入口、短账本 / 短记忆 / 一起坐一会儿的口径，无剩余 P1 must-fix。下一步进入最终 claim-ready 验证。
+
+## 2026-06-02 第一卷稳定基线封存记录
+
+### 封存范围
+
+- 第一卷正文：`site/story/draft/volume-01-chapter-001.md` 到 `site/story/draft/volume-01-chapter-004.md`。
+- 第一卷 canon / doc 同步面：`background/`、`outline/`、`characters/`、`timeline/`、`chapter-cards/`、`research/`、`draft/README.md` 与本审稿记录中已完成的第一卷相关条目。
+
+### 封存结论
+
+第一卷按当前 repo truth 进入稳定基线状态。后续不应继续对第一卷正文做结构性修改、扩写新场景、增加新人物、扩大剧场试运营尺度或追加新的互联网行业梗；如发现 P0 / P1 级 canon 或边界问题，再按最小补丁流程单独处理。
+
+### 保留 P2 与第二卷禁回带
+
+- 第二卷应降低第一卷高频锚点复用：`留灯`、`位置保留`、`休息已确认`、`下一次回应时间`、`三行提示`、`调字号`。
+- 第二卷应换新的承诺物件和参与形态，不继续只依赖门口灯、退出提示和公共账本作为情感胜利。
+- 第一卷轻微 P2 不阻断稳定基线：少量流程词、状态提示和普通维护措辞仍可存在，但不得作为第二卷主表达方式继续累积。
+
+### 下一条故事线
+
+下一条故事线建议单独开“第二卷 Agent 归零与修宪路线设计”任务，先补第二卷口味调研、卷级目标、`TL-*` 锚点和章节卡，再进入正文。
+
+### 最终验证
+
+- 验证命令: `./scripts/pm/claim-ready.sh --claim-type task_complete --verify-command "python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/reviews/editorial-notes.md && git diff --check -- site/story && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"`
+- 当前状态: 已通过最终验证（2026-06-02 17:50:56 CST）。
