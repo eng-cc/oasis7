@@ -703,6 +703,16 @@ impl ReplicationRuntime {
         record: &FileReplicationRecord,
     ) -> SingleWriterReplicationGuard {
         if let Some(guard) = self.remote_guards.get(record.writer_id.as_str()) {
+            if guard.writer_id.as_deref() == Some(record.writer_id.as_str())
+                && record.writer_epoch > guard.writer_epoch
+                && record.sequence > 1
+            {
+                return SingleWriterReplicationGuard {
+                    writer_id: Some(record.writer_id.clone()),
+                    writer_epoch: record.writer_epoch,
+                    last_sequence: record.sequence.saturating_sub(1),
+                };
+            }
             return guard.clone();
         }
         if self.guard.writer_id.as_deref() == Some(record.writer_id.as_str()) {

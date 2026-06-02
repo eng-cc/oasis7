@@ -1,0 +1,25 @@
+task_uid: task_6f9b2549964a4890bee485836d348e1a
+title: "auto recovery reconcile to green readiness"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-auto-recovery-green-reconcile
+execution_log_path: .pm/tasks/task_6f9b2549964a4890bee485836d348e1a.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/project.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "restart reconcile advances node_pos_state from trusted persisted execution records instead of stale output state"
+  - "replication remote guards can be safely seeded or repaired from durable replicated records without accepting forked writer history"
+  - "targeted tests cover stale node_pos_state plus writer_epoch sequence recovery"
+handoff_to: []
+updated_at: 2026-06-02T22:02:45+08:00
+last_started_at: 2026-06-02T21:12:47+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check"
+last_verified_at: 2026-06-02T22:02:45+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-02T22:02:45+08:00
