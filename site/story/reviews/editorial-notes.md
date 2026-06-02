@@ -1257,3 +1257,40 @@ SOP v0.2 更适合第二章及后续章节使用。后续开写新章时，应�
 
 - 验证命令: `./scripts/pm/claim-ready.sh --claim-type task_complete --verify-command "python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/reviews/editorial-notes.md && git diff --check -- site/story && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"`
 - 当前状态: 已通过最终验证（2026-06-02 17:50:56 CST）。
+
+## 2026-06-02 第二卷 Agent 归零与修宪路线设计
+
+### 设计结论
+
+第二卷从第一卷的“能再见 / 能继续 / 能轮换 / 明天也留灯”升级为：当一台 Agent 只剩唯一身份链、失去现场习惯与资产能力时，共同体如何承认关系的裂缝、重建可验证的连续性，并把临时善意修订成长期规则。
+
+### 已采纳路线
+
+- 新增第二卷第一阶段路线：`TL-037` 到 `TL-046` / `CH-037` 到 `CH-046`。
+- 第一阶段只打开“归零事件发生 -> 共同体确认裂缝 -> 修宪议题成立”，不直接写完整第二卷，也不写正文。
+- 被归零对象先作为低戏份对应 Agent 处理，可暂称“回砂”，不分配 `CHAR-*`，不升格主线。
+- 优先复用六位主线老人 / Agent，以及程望川、贺南溪、景亭晚、闵存真等低戏份回声角色。
+
+### 已写回文件
+
+- `site/story/outline/novel-outline.md`: 新增第二卷定位、核心危机、非目标、第一阶段路线和禁回带。
+- `site/story/timeline/timeline.md`: 追加 `TL-037` 到 `TL-046`。
+- `site/story/chapter-cards/README.md`: 登记第二卷第一章章节卡，并新增第二卷降频表。
+- `site/story/chapter-cards/volume-02-chapter-01-cards.md`: 新增 `CH-037` 到 `CH-046` 章节卡。
+- `site/story/research/README.md`: 登记第二卷路线调研文件。
+- `site/story/research/volume-02-route-research.md`: 新增第二卷身份连续性、记忆 / 归零、共同体规则和老人自主权调研问题。
+
+### 禁回带
+
+第二卷不得继续把第一卷高频锚点作为主要情感胜利：`留灯`、`位置保留`、`休息已确认`、`下一次回应时间`、`三行提示`、`调字号`、门口灯、出口提示、公共账本短句、旧螺栓、退炉残片、“删到三件事”、“今天不是产量日”、剧场最低试运营和空维修床。
+
+### 风险
+
+- 最大风险是把 Agent 归零写成 AI 权利剧，压过老人主体性。
+- 第二风险是把修宪写成说明文，缺少物件、关系和具体场面。
+- 第三风险是复用第一卷高频母题，导致第二卷像第一卷情感动作的换壳。
+- 第四风险是把归零写成死亡或失忆苦情，违背当前温暖人文科幻基线。
+
+### 下一步
+
+进入 `CH-037` 正文前，先补齐 `volume-02-route-research.md` 的正式外部调研来源、发现和不采纳项，再按 `draft/chapter-writing-sop.md` 开始写前定位。

@@ -2,22 +2,22 @@
 
 本目录用于维护长篇小说《绿洲 2076》（英文名：oasis 2076）的站点侧资料。
 
-世界背景、总纲、人物、调研、审稿意见、第一卷时间线锚点、第一卷四章章节卡和前两章正文试写已重建。
+世界背景、总纲、人物、调研、审稿意见、第一卷时间线锚点、第一卷四章章节卡和第一卷正文草稿已重建；第二卷 Agent 归零与修宪路线已打开到第一章章节卡。
 
 ## 目录
 
 - `background/`: 世界背景已复审更新。
 - `outline/`: 长篇总纲已重建到第一卷目标层级。
 - `characters/`: 人物注册表已开始重建。
-- `timeline/`: 时间线已开始重建，包含第一卷开篇事件锚点。
-- `chapter-cards/`: 章节卡已开始重建，第一卷四章已拆完，共三十六场。
+- `timeline/`: 时间线已开始重建，包含第一卷三十六场和第二卷第一阶段十个事件锚点。
+- `chapter-cards/`: 章节卡已开始重建，第一卷四章已拆完，共三十六场；第二卷第一章已打开到 `CH-037` 到 `CH-046`。
 - `research/`: 调研笔记已开始重建。
 - `reviews/`: 审稿意见已开始重建。
 - `draft/`: 正文草稿和章节写作 SOP 已开始重建。
 
 ## 写作边界
 
-- 当前 `background/world-background.md`、`outline/novel-outline.md`、`characters/character-registry.md`、`timeline/timeline.md` 与 `chapter-cards/` 下第一卷四章章节卡已包含已确认 canon；`research/` 和 `reviews/` 已包含支撑判断；`draft/` 已开始正文试写，但草稿尚未确认为 canon。
+- 当前 `background/world-background.md`、`outline/novel-outline.md`、`characters/character-registry.md`、`timeline/timeline.md` 与 `chapter-cards/` 下第一卷四章章节卡已包含已确认 canon；第一卷已按 `reviews/editorial-notes.md` 封存为稳定基线。第二卷当前只打开路线、调研问题、时间线锚点和第一章章节卡，尚未进入正文。
 - 新增人物、背景、时间线或正文前，应先明确其是否进入正式故事真值。
 - 每次新增正文前，先补齐对应的大纲、时间线或角色动机，避免后期失控。
 - 从章节卡进入正文时，先按 `draft/chapter-writing-sop.md` 执行社会口味调研、写前定位、正文试写、审稿、最小补丁和复审。
