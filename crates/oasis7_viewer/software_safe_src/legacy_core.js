@@ -343,6 +343,11 @@ function shouldConnectViewerWs() {
   return mode !== "0" && mode !== "false" && mode !== "off";
 }
 
+function shouldRunHostedBootstrap() {
+  const mode = String(getSearchParams().get("hosted_bootstrap") || "").trim().toLowerCase();
+  return mode !== "0" && mode !== "false" && mode !== "off";
+}
+
 const {
   authHasSigningKeyMaterial,
   clearHostedPlayerSession,
@@ -958,12 +963,15 @@ function handleSnapshot(snapshot) {
   syncAgentInteractionDrafts(false);
 }
 
-function injectSnapshot(snapshot) {
+function injectSnapshot(snapshot, options = {}) {
   if (!isTestApiEnabled()) {
     throw new Error("injectSnapshot requires test_api=1");
   }
   handleSnapshot(clone(snapshot));
   render();
+  if (options?.returnState === false) {
+    return { ok: true };
+  }
   return getState();
 }
 
@@ -3421,8 +3429,10 @@ function bootstrap() {
   });
   installTestApi();
   render();
-  void refreshHostedAdmissionState().then(() => render());
-  void ensureHostedPlayerAuthAvailable().then(() => render());
+  if (shouldRunHostedBootstrap()) {
+    void refreshHostedAdmissionState().then(() => render());
+    void ensureHostedPlayerAuthAvailable().then(() => render());
+  }
   if (shouldConnectViewerWs()) {
     connect();
   } else {

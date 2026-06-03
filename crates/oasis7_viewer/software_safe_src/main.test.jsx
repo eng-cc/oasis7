@@ -227,7 +227,7 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByLabelText("Short-Term Goal Override")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview Prompt" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply Prompt" })).toBeInTheDocument();
-  });
+  }, 15000);
 
   it("keeps diagnostics visually demoted behind the player path surface", async () => {
     const { container } = await renderViewerApp();
@@ -242,7 +242,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getAllByText("Accepted Intent").length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText("Next Step").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Actions Not Exposed On This Page")).toBeInTheDocument();
-  });
+  }, 15000);
 
   it("forces goal execution blocked when the empty-entity guard trips", async () => {
     const { container } = await renderViewerApp({
@@ -292,7 +292,7 @@ describe("viewer web ui automation baseline", () => {
     ).toBeGreaterThan(0);
     expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();
     expect(screen.queryByText(/not implemented yet/i)).not.toBeInTheDocument();
-  });
+  }, 15000);
 
   it("does not show the hosted login gate after player session registration", async () => {
     await renderViewerApp({

@@ -2549,6 +2549,10 @@ function shouldConnectViewerWs() {
   const mode = String(getSearchParams().get("connect") || "").trim().toLowerCase();
   return mode !== "0" && mode !== "false" && mode !== "off";
 }
+function shouldRunHostedBootstrap() {
+  const mode = String(getSearchParams().get("hosted_bootstrap") || "").trim().toLowerCase();
+  return mode !== "0" && mode !== "false" && mode !== "off";
+}
 const {
   authHasSigningKeyMaterial,
   clearHostedPlayerSession,
@@ -3111,12 +3115,15 @@ function handleSnapshot(snapshot) {
   }
   syncAgentInteractionDrafts(false);
 }
-function injectSnapshot(snapshot) {
+function injectSnapshot(snapshot, options = {}) {
   if (!isTestApiEnabled()) {
     throw new Error("injectSnapshot requires test_api=1");
   }
   handleSnapshot(clone(snapshot));
   render();
+  if (options?.returnState === false) {
+    return { ok: true };
+  }
   return getState();
 }
 function handleMetrics(time, metrics) {
@@ -4803,8 +4810,10 @@ function bootstrap() {
   });
   installTestApi();
   render();
-  void refreshHostedAdmissionState().then(() => render());
-  void ensureHostedPlayerAuthAvailable().then(() => render());
+  if (shouldRunHostedBootstrap()) {
+    void refreshHostedAdmissionState().then(() => render());
+    void ensureHostedPlayerAuthAvailable().then(() => render());
+  }
   if (shouldConnectViewerWs()) {
     connect();
   } else {
@@ -4949,11 +4958,12 @@ async function createPixelWorldRuntimeBridge({
     fatal
   };
 }
-var _tmpl$$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface width=960 height=540></canvas><div class=pixel-world-canvas__overlay>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$8$1 = /* @__PURE__ */ template(`<span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary></div></div><div class=pixel-world-action-receipt__meta><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$1$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas><div class=pixel-world-canvas__grid></div><div class=pixel-world-canvas__overlay>`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$13$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$14$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"><span>`), _tmpl$15$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$16$1 = /* @__PURE__ */ template(`<div class="callout callout--warn"><div class=callout__header><div class=callout__title></div></div><div class=callout__body><div class=feedback-summary>`), _tmpl$17$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$18$1 = /* @__PURE__ */ template(`<div class="pixel-world-host stack"><div class=pixel-world-host__summary><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><button type=button></button><div class=feedback-detail></div></div></details><details class=diagnostic><summary></summary><div class=stack style=margin-top:10px><pre class=json>`);
+var _tmpl$$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface width=960 height=540></canvas><div class=pixel-world-canvas__overlay>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$8$1 = /* @__PURE__ */ template(`<span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary></div></div><div class=pixel-world-action-receipt__meta><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$1$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas><div class=pixel-world-canvas__grid></div><div class=pixel-world-canvas__overlay>`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$13$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$14$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"><span>`), _tmpl$15$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$16$1 = /* @__PURE__ */ template(`<div class="callout callout--warn"><div class=callout__header><div class=callout__title></div></div><div class=callout__body><div class=feedback-summary>`), _tmpl$17$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$18$1 = /* @__PURE__ */ template(`<div class=stack style=margin-top:10px><pre class=json>`), _tmpl$19$1 = /* @__PURE__ */ template(`<div class="pixel-world-host stack"><div class=pixel-world-host__summary><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><button type=button></button><div class=feedback-detail></div></div></details><details class=diagnostic><summary>`);
 function tr$1(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
+const DEFER_RENDERER_VALUES = /* @__PURE__ */ new Set(["0", "false", "no", "off", "defer", "fallback"]);
 const FRAGMENT_TERRAIN_PALETTE = {
   silicate_matrix: [126, 144, 99],
   iron_nickel_alloy: [176, 184, 196],
@@ -5047,6 +5057,17 @@ function fragmentTerrainColor(compound) {
 function colorToCss(color, alpha = 0.36) {
   const [red, green, blue] = Array.isArray(color) ? color : FRAGMENT_TERRAIN_PALETTE.unknown;
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+function shouldAutoAttachRenderer() {
+  if (typeof window === "undefined" || !window.location) {
+    return true;
+  }
+  const params = new URLSearchParams(window.location.search || "");
+  const value = String(params.get("pixel_world_renderer") || "").trim().toLowerCase();
+  if (value) {
+    return !DEFER_RENDERER_VALUES.has(value);
+  }
+  return true;
 }
 function fragmentBlocks(location) {
   const blocks = location?.fragment_profile?.blocks?.blocks;
@@ -5925,11 +5946,13 @@ function PixelWorldHost(props) {
   const fallbackRenderState = createMemo(() => buildPixelWorldRenderStateFromInput(renderInput()));
   const [rustRenderState, setRustRenderState] = createSignal(null);
   const renderState = () => rustRenderState() || fallbackRenderState();
-  const [rendererStatus, setRendererStatus] = createSignal("booting");
+  const autoAttachRenderer = shouldAutoAttachRenderer();
+  const [rendererStatus, setRendererStatus] = createSignal(autoAttachRenderer ? "booting" : "fallback");
   const [rendererFatal, setRendererFatal] = createSignal(null);
   const [hoverSelection, setHoverSelection] = createSignal(null);
-  const [runtimeSource, setRuntimeSource] = createSignal("loading");
+  const [runtimeSource, setRuntimeSource] = createSignal(autoAttachRenderer ? "loading" : "deferred");
   const [cameraState, setCameraState] = createSignal(null);
+  const [renderDtoOpen, setRenderDtoOpen] = createSignal(false);
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
       applySelection(selection);
@@ -6032,6 +6055,14 @@ function PixelWorldHost(props) {
       fatal: result?.fatal || null
     });
   }
+  function requestReadyMode() {
+    setRendererFatal(null);
+    setRendererStatus("booting");
+    setRuntimeSource("loading");
+    if (mountedCanvas) {
+      void setReadyMode();
+    }
+  }
   function setFallbackMode() {
     adapter().unmount();
     setRustRenderState(null);
@@ -6060,7 +6091,7 @@ function PixelWorldHost(props) {
     });
   });
   return (() => {
-    var _el$45 = _tmpl$18$1(), _el$46 = _el$45.firstChild, _el$47 = _el$46.firstChild, _el$48 = _el$47.nextSibling, _el$55 = _el$46.nextSibling, _el$56 = _el$55.firstChild, _el$57 = _el$56.nextSibling, _el$58 = _el$57.firstChild, _el$59 = _el$58.nextSibling, _el$60 = _el$59.nextSibling, _el$61 = _el$60.nextSibling, _el$62 = _el$61.nextSibling, _el$63 = _el$62.nextSibling, _el$64 = _el$63.nextSibling, _el$65 = _el$64.nextSibling, _el$66 = _el$65.nextSibling, _el$70 = _el$66.nextSibling, _el$71 = _el$70.nextSibling, _el$72 = _el$71.nextSibling, _el$73 = _el$72.nextSibling, _el$74 = _el$55.nextSibling, _el$75 = _el$74.firstChild, _el$76 = _el$75.nextSibling, _el$77 = _el$76.firstChild;
+    var _el$45 = _tmpl$19$1(), _el$46 = _el$45.firstChild, _el$47 = _el$46.firstChild, _el$48 = _el$47.nextSibling, _el$55 = _el$46.nextSibling, _el$56 = _el$55.firstChild, _el$57 = _el$56.nextSibling, _el$58 = _el$57.firstChild, _el$59 = _el$58.nextSibling, _el$60 = _el$59.nextSibling, _el$61 = _el$60.nextSibling, _el$62 = _el$61.nextSibling, _el$63 = _el$62.nextSibling, _el$64 = _el$63.nextSibling, _el$65 = _el$64.nextSibling, _el$66 = _el$65.nextSibling, _el$70 = _el$66.nextSibling, _el$71 = _el$70.nextSibling, _el$72 = _el$71.nextSibling, _el$73 = _el$72.nextSibling, _el$74 = _el$55.nextSibling, _el$75 = _el$74.firstChild;
     insert(_el$47, () => tr$1(locale(), "世界指挥棋盘", "World Command Board"));
     insert(_el$48, () => renderState().commercial_surface?.objective?.detail);
     insert(_el$45, createComponent(PixelWorldCommercialHud, {
@@ -6098,7 +6129,7 @@ function PixelWorldHost(props) {
       get children() {
         var _el$49 = _tmpl$16$1(), _el$50 = _el$49.firstChild, _el$51 = _el$50.firstChild, _el$52 = _el$50.nextSibling, _el$53 = _el$52.firstChild;
         insert(_el$51, () => tr$1(locale(), "Renderer 未接管", "Renderer Not Attached"));
-        insert(_el$53, () => tr$1(locale(), "嵌入式 renderer 启动失败，页面已退回 host fallback 模式。正式玩法摘要、目标和明细主链继续可用。", "The embedded renderer failed to attach, so the page returned to host fallback mode. Formal gameplay summary, targets, and details remain available."));
+        insert(_el$53, () => tr$1(locale(), "嵌入式 renderer 未接管；页面先使用 host fallback，正式玩法摘要、目标和明细主链继续可用。", "The embedded renderer is not attached; the page is using host fallback first. Formal gameplay summary, targets, and details remain available."));
         insert(_el$52, createComponent(Show, {
           get when() {
             return rendererFatal();
@@ -6166,17 +6197,25 @@ function PixelWorldHost(props) {
         return _el$69;
       }
     }), _el$70);
-    _el$70.$$click = () => {
-      void setReadyMode();
-    };
+    _el$70.$$click = requestReadyMode;
     insert(_el$70, () => tr$1(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer"));
     _el$71.$$click = simulateFatal;
     insert(_el$71, () => tr$1(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal"));
     _el$72.$$click = setFallbackMode;
     insert(_el$72, () => tr$1(locale(), "切回 Host Fallback", "Back To Host Fallback"));
     insert(_el$73, () => tr$1(locale(), "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。", "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer."));
+    _el$74.addEventListener("toggle", (event) => setRenderDtoOpen(event.currentTarget.open));
     insert(_el$75, () => tr$1(locale(), "展开 Render DTO", "Expand Render DTO"));
-    insert(_el$77, () => JSON.stringify(renderState(), null, 2));
+    insert(_el$74, createComponent(Show, {
+      get when() {
+        return renderDtoOpen();
+      },
+      get children() {
+        var _el$76 = _tmpl$18$1(), _el$77 = _el$76.firstChild;
+        insert(_el$77, () => JSON.stringify(renderState(), null, 2));
+        return _el$76;
+      }
+    }), null);
     return _el$45;
   })();
 }
