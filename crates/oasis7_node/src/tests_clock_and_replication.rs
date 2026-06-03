@@ -509,12 +509,22 @@ fn runtime_pos_state_persists_across_restart() {
         RecordingExecutionHook::new(Arc::new(Mutex::new(Vec::new()))),
     );
     runtime.start().expect("start first");
-    thread::sleep(Duration::from_millis(180));
+    let reached = wait_until(Instant::now() + Duration::from_secs(2), || {
+        let snapshot = runtime.snapshot();
+        snapshot.consensus.committed_height >= 8 && snapshot.consensus.last_execution_height >= 8
+    });
     runtime.stop().expect("stop first");
     let first = runtime.snapshot();
     assert!(first.last_error.is_none());
-    assert!(first.consensus.committed_height >= 8);
-    assert!(first.consensus.last_execution_height >= 8);
+    assert!(
+        reached
+            && first.consensus.committed_height >= 8
+            && first.consensus.last_execution_height >= 8,
+        "runtime did not reach seed height before restart: committed={} execution={} last_error={:?}",
+        first.consensus.committed_height,
+        first.consensus.last_execution_height,
+        first.last_error
+    );
 
     let state_path = dir.join("node_pos_state.json");
     assert!(state_path.exists());
@@ -533,12 +543,25 @@ fn runtime_pos_state_persists_across_restart() {
         RecordingExecutionHook::new(Arc::new(Mutex::new(Vec::new()))),
     );
     runtime.start().expect("start second");
-    thread::sleep(Duration::from_millis(40));
+    let advanced = wait_until(Instant::now() + Duration::from_secs(2), || {
+        let snapshot = runtime.snapshot();
+        snapshot.consensus.committed_height > first.consensus.committed_height
+            && snapshot.consensus.last_execution_height > first.consensus.last_execution_height
+    });
     runtime.stop().expect("stop second");
     let second = runtime.snapshot();
     assert!(second.last_error.is_none());
-    assert!(second.consensus.committed_height > first.consensus.committed_height);
-    assert!(second.consensus.last_execution_height > first.consensus.last_execution_height);
+    assert!(
+        advanced
+            && second.consensus.committed_height > first.consensus.committed_height
+            && second.consensus.last_execution_height > first.consensus.last_execution_height,
+        "runtime should advance after restart: first_committed={} second_committed={} first_execution={} second_execution={} last_error={:?}",
+        first.consensus.committed_height,
+        second.consensus.committed_height,
+        first.consensus.last_execution_height,
+        second.consensus.last_execution_height,
+        second.last_error
+    );
     assert!(second.consensus.last_observed_slot >= first.consensus.last_observed_slot);
 
     let _ = fs::remove_dir_all(&dir);

@@ -1,0 +1,25 @@
+task_uid: task_c88e1bea1b4643aba1e70ee8d280f4bf
+title: "stabilize runtime pos restart required test"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-trigger-latest-github-release
+execution_log_path: .pm/tasks/task_c88e1bea1b4643aba1e70ee8d280f4bf.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - crates/oasis7_node/src/tests_clock_and_replication.rs
+doc_refs:
+  - doc/site/project.md
+related_prd: []
+acceptance:
+  - "Rust required-gate failure in runtime_pos_state_persists_across_restart is reproduced or diagnosed, a focused fix is applied if needed, and fresh local verification is recorded."
+handoff_to: []
+updated_at: 2026-06-03T15:59:37+08:00
+last_started_at: 2026-06-03T15:57:12+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo test -p oasis7_node tests::runtime_pos_state_persists_across_restart -- --exact --nocapture && ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/release-packages.yml\"); puts \"workflow yaml parsed\"' && bash -n scripts/viewer-software-safe-step-regression.sh scripts/viewer-software-safe-step-regression-smoke.sh && ./scripts/viewer-software-safe-step-regression-smoke.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-03T15:59:36+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T15:59:37+08:00
