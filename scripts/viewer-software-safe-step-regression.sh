@@ -134,6 +134,31 @@ state_blocker_kind() { json_get "$1" gameplaySummary.blockerKind; }
 state_blocker_detail() { json_get "$1" gameplaySummary.blockerDetail; }
 state_stage_status() { json_get "$1" gameplaySummary.stageStatus; }
 state_last_control_stage() { json_get "$1" lastControlFeedback.stage; }
+state_execution_state() { json_get "$1" gameplaySummary.executionState; }
+state_recent_feedback_stage() { json_get "$1" gameplaySummary.recentFeedback.stage; }
+state_narrative_blocker_detail() { json_get "$1" gameplaySummary.narrativeBlockerDetail; }
+
+refresh_explicit_blocker_state() {
+  local state=$1
+  stage_status=$(state_stage_status "$state")
+  blocker_kind=$(state_blocker_kind "$state")
+  blocker_detail=$(state_blocker_detail "$state")
+  execution_state=$(state_execution_state "$state")
+  recent_feedback_stage=$(state_recent_feedback_stage "$state")
+  narrative_blocker_detail=$(state_narrative_blocker_detail "$state")
+  explicit_blocker_state=false
+  if [[ -n "${blocker_kind:-}" && "$blocker_kind" != "null" ]]; then
+    explicit_blocker_state=true
+  elif [[ "${stage_status:-}" == "blocked" ]]; then
+    explicit_blocker_state=true
+  elif [[ "${execution_state:-}" == "blocked" ]]; then
+    explicit_blocker_state=true
+  elif [[ "${recent_feedback_stage:-}" == "blocked" ]]; then
+    explicit_blocker_state=true
+  elif [[ -n "${narrative_blocker_detail:-}" && "$narrative_blocker_detail" != "null" ]]; then
+    explicit_blocker_state=true
+  fi
+}
 
 wait_for_api() {
   local timeout_ms=${1:-20000}
@@ -414,12 +439,18 @@ render_mode="$(state_render_mode "$initial_state")"
 [[ "$render_mode" == "viewer" || "$render_mode" == "software_safe" ]] || { echo "error: expected renderMode=viewer-compatible, got $render_mode" >&2; exit 1; }
 
 log_note select_agent
+agent_id_json=$(python3 - "$AGENT_ID" <<'PY'
+import json
+import sys
+print(json.dumps(sys.argv[1]))
+PY
+)
 ab_eval "$session" "window.__AW_TEST__.select('agent:${AGENT_ID}')" >>"$ab_log" 2>&1
-wait_for_js_true "(() => window.__AW_TEST__?.getState?.()?.selectedId === ${AGENT_ID@Q})()" 6000 || {
+wait_for_js_true "(() => window.__AW_TEST__?.getState?.()?.selectedId === ${agent_id_json})()" 6000 || {
   echo "error: failed to select agent ${AGENT_ID}" >&2
   exit 1
 }
-wait_for_js_true "(() => { const agentId = ${AGENT_ID@Q}; return !!document.querySelector('[data-select-kind=\"agent\"][data-select-id=\"' + agentId + '\"][data-selected=\"true\"]'); })()" 6000 || {
+wait_for_js_true "(() => { const agentId = ${agent_id_json}; return !!document.querySelector('[data-select-kind=\"agent\"][data-select-id=\"' + agentId + '\"][data-selected=\"true\"]'); })()" 6000 || {
   echo "error: selected agent ${AGENT_ID} is not reflected in DOM" >&2
   exit 1
 }
@@ -532,14 +563,7 @@ if [[ "$auto_progress_observed" != "true" ]]; then
     if [[ "$logical_time_advanced" == "true" || "$event_seq_advanced" == "true" ]]; then
       auto_progress_observed=true
     fi
-    stage_status=$(state_stage_status "$after_progress_state")
-    blocker_kind=$(state_blocker_kind "$after_progress_state")
-    blocker_detail=$(state_blocker_detail "$after_progress_state")
-    if [[ -n "${blocker_kind:-}" && "$blocker_kind" != "null" ]]; then
-      explicit_blocker_state=true
-    elif [[ "${stage_status:-}" == "blocked" ]]; then
-      explicit_blocker_state=true
-    fi
+    refresh_explicit_blocker_state "$after_progress_state"
 
     if [[ "$auto_progress_observed" != "true" && "$explicit_blocker_state" != "true" && "$(state_last_control_stage "$after_progress_state")" == "queued" ]]; then
       log_note resume_play
@@ -576,14 +600,7 @@ if [[ "$auto_progress_observed" != "true" ]]; then
       if [[ "$logical_time_advanced" == "true" || "$event_seq_advanced" == "true" ]]; then
         auto_progress_observed=true
       fi
-      stage_status=$(state_stage_status "$after_progress_state")
-      blocker_kind=$(state_blocker_kind "$after_progress_state")
-      blocker_detail=$(state_blocker_detail "$after_progress_state")
-      if [[ -n "${blocker_kind:-}" && "$blocker_kind" != "null" ]]; then
-        explicit_blocker_state=true
-      elif [[ "${stage_status:-}" == "blocked" ]]; then
-        explicit_blocker_state=true
-      fi
+      refresh_explicit_blocker_state "$after_progress_state"
     fi
   fi
 
