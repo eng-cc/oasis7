@@ -214,7 +214,7 @@ export TEST_PROVIDER_AUTH_TOKEN=newapi_user_ref:${TEST_NEWAPI_USER_REF}
 - 可通过受信 SSH / tunnel / 本机启动访问 `BRIDGE_BASE_URL`、`PROVIDER_BASE_URL`、`CHAIN_BASE_URL`。
 - bridge-service 已配置 `--chain-base-url`、`--letai-base-url`、`--letai-platform-key`，且测试 lane 的 `--pricing-rule` 包含当前 `PRICING_VERSION`。
 - remote provider bridge 已启用 `OASIS7_PROVIDER_AUTH_ROUTE_FROM_BEARER=true`，且可读取同一份 NewAPI bridge state。
-- 已确认一个可执行的签名转账路径，能从本地 secret 文件读取 32-byte Ed25519 私钥并产出 `octransferauth:v1:<signature-hex>`。
+- 已确认 `oasis7_chain_transfer_submit_client` 可从本地 secret 文件读取当前 persona 的 `chain_private_key_hex`、`chain_public_key_hex`、`oasis_sender_account_id`，并产出 `octransferauth:v1:<signature-hex>`。
 - 测试 sender 账户有足够 OC，或测试网 faucet/operator 已准备好等价入账路径。
 - 证据采集能按本次 `route_id` / `bridge_deposit_id` / chain action id 定位 ledger row；不得只看全局计数。
 
@@ -295,10 +295,26 @@ export TEST_ROUTE_EXPIRES_AT_UNIX_MS="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r 
 
 #### Step D: 链上签名转账
 
-公开 transfer submit API 的请求体必须包含签名字段，不要用未签名 `curl` 伪造链上入账。完整 `happy_path` 在没有明确 signer/operator 工具前保持 blocked。测试时二选一：
+公开 transfer submit API 的请求体必须包含签名字段，不要用未签名 `curl` 伪造链上入账。默认使用 repo-owned signed transfer client：
 
-- 用当前测试网/launcher/operator 已验证的签名转账工具，从本地 secret 文件读取 persona 私钥，生成 `octransferauth:v1:<signature-hex>` 后提交到 `POST /v1/chain/transfer/submit`。
-- 若本 lane 由 faucet/operator 工具托管测试入账，则用等价工具把同一 `TEST_OASIS_SENDER_ACCOUNT_ID -> TEST_DEPOSIT_ACCOUNT_ID` 的金额提交到链上，并保留 tx/action id。
+```bash
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_chain_transfer_submit_client -- \
+  submit \
+  --keys-file ~/Documents/keys/test_keys.txt \
+  --persona happy_path \
+  --chain-base-url "${CHAIN_BASE_URL}" \
+  --to-account-id "${TEST_DEPOSIT_ACCOUNT_ID}" \
+  --amount 100 \
+  --nonce 1
+```
+
+约束：
+
+- `--persona` 必须选择本轮正在跑的 test persona。
+- `--amount` 必须替换成当前 `PRICING_VERSION` 对应的 OC 金额；少付/多付 case 用同一命令改金额制造。
+- `--nonce` 必须使用该 sender 在测试 lane 中未用过的 nonce。
+- client 从 `--keys-file` 的当前 persona 段读取 `chain_private_key_hex`、`chain_public_key_hex`、`oasis_sender_account_id`，不会把私钥打印到 stdout。
+- 若本 lane 由 faucet/operator 工具托管测试入账，也可以用等价工具把同一 `TEST_OASIS_SENDER_ACCOUNT_ID -> TEST_DEPOSIT_ACCOUNT_ID` 的金额提交到链上，并保留 tx/action id。
 
 transfer submit 字段形状：
 

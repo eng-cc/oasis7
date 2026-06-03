@@ -1,0 +1,28 @@
+task_uid: task_5ea9d9779665405face4c4984c056613
+title: "chain transfer submit client"
+owner_role: runtime_engineer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-chain-transfer-submit-client
+execution_log_path: .pm/tasks/task_5ea9d9779665405face4c4984c056613.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md
+  - crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api.rs
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Add a repo-owned signed transfer submit client for bridge happy-path testing"
+  - "Client reads private keys from local secret file without printing them"
+  - "Update bridge runbook Step D to use the client"
+handoff_to:
+  - qa_engineer
+updated_at: 2026-06-03T21:15:26+08:00
+last_started_at: 2026-06-03T21:02:29+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_chain_transfer_submit_client -- --nocapture && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-03T21:15:24+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T21:15:26+08:00
