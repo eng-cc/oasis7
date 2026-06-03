@@ -1,0 +1,25 @@
+task_uid: task_cf63a0576b57474e996ab048aaa715bc
+title: "Review site story CH-039 CH-040 focused slice"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_cf63a0576b57474e996ab048aaa715bc.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/draft/volume-02-chapter-001.md
+doc_refs:
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+  - site/story/draft/volume-02-chapter-001-positioning.md
+related_prd: []
+acceptance:
+  - "Run focused review for CH-039 and CH-040 boundary bridge, write results to editorial notes, and apply only required minimal patches if P1 blockers are found."
+handoff_to: []
+updated_at: 2026-06-03T16:38:33+08:00
+last_started_at: 2026-06-03T16:21:34+08:00
+last_claim_type: task_complete
+last_verify_command: "rg -n \"CH-039 / CH-040 focused slice review|进入 CH-041 的边界|P2 watch\" site/story/reviews/editorial-notes.md && git diff --check -- site/story .pm && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ./scripts/pm/lint.sh"
+last_verified_at: 2026-06-03T16:38:30+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T16:38:32+08:00
