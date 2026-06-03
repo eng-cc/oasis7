@@ -1,0 +1,24 @@
+task_uid: task_96e92d21a9114d34a9f5b4b90c578217
+title: "ECS 205 storage cleanup assessment"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-ecs-205-storage-cleanup
+execution_log_path: .pm/tasks/task_96e92d21a9114d34a9f5b4b90c578217.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Inspect ECS 205 disk usage and identify safe cleanup candidates before any destructive action"
+handoff_to: []
+updated_at: 2026-06-03T20:39:43+08:00
+last_started_at: 2026-06-03T17:52:32+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_chain_runtime execution_bridge_retention_maintenance -- --nocapture && ./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_chain_runtime execution_bridge_pin_set -- --nocapture"
+last_verified_at: 2026-06-03T20:39:41+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T20:39:42+08:00
