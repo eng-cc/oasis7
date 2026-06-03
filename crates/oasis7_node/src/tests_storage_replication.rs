@@ -1035,29 +1035,25 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
         runtime_b.snapshot()
     );
     runtime_a.start().expect("start a second");
-    let deadline = Instant::now() + Duration::from_secs(2);
-    loop {
-        let maybe_guard = fs::read(&guard_path).ok().and_then(|bytes| {
-            serde_json::from_slice::<BTreeMap<String, SingleWriterReplicationGuard>>(&bytes).ok()
-        });
-        if maybe_guard
-            .as_ref()
-            .and_then(|guards| {
-                guard_before
-                    .writer_id
-                    .as_deref()
-                    .and_then(|writer_id| guards.get(writer_id))
+    let writer_before = guard_before
+        .writer_id
+        .as_deref()
+        .expect("writer before")
+        .to_string();
+    let guard_advanced = wait_until(Instant::now() + Duration::from_secs(5), || {
+        fs::read(&guard_path)
+            .ok()
+            .and_then(|bytes| {
+                serde_json::from_slice::<BTreeMap<String, SingleWriterReplicationGuard>>(&bytes)
+                    .ok()
             })
+            .and_then(|guards| guards.get(&writer_before).cloned())
             .is_some_and(|guard| guard.last_sequence > guard_before.last_sequence)
-        {
-            break;
-        }
-        if Instant::now() >= deadline {
-            break;
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
+    });
     let snapshot_b_second = runtime_b.snapshot();
+    let guards_after_wait = fs::read(&guard_path).ok().and_then(|bytes| {
+        serde_json::from_slice::<BTreeMap<String, SingleWriterReplicationGuard>>(&bytes).ok()
+    });
     runtime_a.stop().expect("stop a second");
     runtime_b.stop().expect("stop b second");
     assert!(snapshot_b_second.last_error.is_none());
@@ -1066,11 +1062,18 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
         &fs::read(&guard_path).expect("read guard after"),
     )
     .expect("parse guard after")
-    .get(guard_before.writer_id.as_deref().expect("writer before"))
+    .get(&writer_before)
     .cloned()
     .expect("remote guard after");
     assert_eq!(guard_after.writer_id, guard_before.writer_id);
-    assert!(guard_after.last_sequence > guard_before.last_sequence);
+    assert!(
+        guard_advanced && guard_after.last_sequence > guard_before.last_sequence,
+        "replication guard did not advance after restart: before={:?} after={:?} guards_after_wait={:?} snapshot={:?}",
+        guard_before,
+        guard_after,
+        guards_after_wait,
+        snapshot_b_second
+    );
 
     let store_b = LocalCasStore::new(dir_b.join("store"));
     let files = store_b.list_files().expect("list files");
