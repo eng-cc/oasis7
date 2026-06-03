@@ -1,0 +1,26 @@
+task_uid: task_55a0f725be6a4ad2a7c2a785714b2c4f
+title: "Review site story volume two chapter one closeout"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_55a0f725be6a4ad2a7c2a785714b2c4f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/draft/volume-02-chapter-001.md
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+doc_refs:
+  - site/story/draft/volume-02-chapter-001-positioning.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Run chapter-level closeout review for second-volume first chapter CH-037..CH-046, record results, apply only required minimal patches, verify, commit, push, and update PR."
+handoff_to: []
+updated_at: 2026-06-03T23:38:35+08:00
+last_started_at: 2026-06-03T23:28:42+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-001.md site/story/draft/README.md site/story/chapter-cards/volume-02-chapter-01-cards.md site/story/reviews/editorial-notes.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-03T23:38:34+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T23:38:35+08:00
