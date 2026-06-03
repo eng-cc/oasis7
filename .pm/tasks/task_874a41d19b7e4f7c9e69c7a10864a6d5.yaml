@@ -1,0 +1,26 @@
+task_uid: task_874a41d19b7e4f7c9e69c7a10864a6d5
+title: "Draft site story CH-040"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_874a41d19b7e4f7c9e69c7a10864a6d5.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+doc_refs:
+  - site/story/draft/volume-02-chapter-001-positioning.md
+related_prd: []
+acceptance:
+  - "Second-volume first-chapter draft extends from CH-037-CH-039 to include CH-040 only."
+  - "CH-040 uses door-side memory wall/short memory as boundary evidence only: it can show 回砂 once was present, but cannot confirm current trust or full relationship."
+  - "Draft avoids CH-041 classification, CH-042 wording calibration, CH-043 promise inheritance, and first-volume repeated victory motifs."
+handoff_to: []
+updated_at: 2026-06-03T15:50:06+08:00
+last_started_at: 2026-06-03T15:40:37+08:00
+last_claim_type: task_complete
+last_verify_command: "if sed -n '/^## 公共记忆只能证明曾经在场/,$p' site/story/draft/volume-02-chapter-001.md | rg -n \"身份、承诺、能力|空白握手|恢复中|需要重新校准|未完成承诺|留灯|位置保留|休息已确认|下一次回应时间|三行提示|调字号|死亡|复活|失智|公司|攻击|事故|灰度|埋点|KPI|SLA|P0|P1|工单闭环|需求评审|权限矩阵|投票|权利宣言|情感胜利|重新授权\"; then exit 1; else echo \"CH-040 forbidden-pattern check: OK\"; fi && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ./scripts/pm/lint.sh && git diff --check"
+last_verified_at: 2026-06-03T15:50:05+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T15:50:06+08:00
