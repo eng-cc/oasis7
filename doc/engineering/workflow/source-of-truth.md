@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.9**
-Last Updated: **2026-06-02**
+Version: **v1.4.10**
+Last Updated: **2026-06-03**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -153,6 +153,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - TPM user-facing summaries must distinguish procedural synthesis from professional conclusions. Professional conclusions must be traceable to subagent artifacts, execution evidence, handoff, project/prd records, or PR evidence.
 - Project docs, handoff files, signals, memory, and PR evidence may supplement the `.pm` execution log, but they do not replace it for task execution truth.
 - If the plan changes during execution, TPM must append an execution-log update before continuing the changed work.
+- Pre-task discoveries, loose TODOs, and follow-up ideas found before an owner decides to create a `.pm` task should be captured with `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`. This records a `source_type=reflection` signal by default and must not be treated as committed task truth until explicitly promoted with `--create-task` or another task-creation path.
 
 ### 5.2.1 Read-only specialist routing
 - The task/worktree decision and the professional-slice decision are intentionally decoupled:
@@ -199,6 +200,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - **v1.4.10 (2026-06-03)**
   - Updated the default subagent runtime policy to `gpt-5.5` with `reasoning_effort=medium`.
   - Consolidated synced guidance, templates, and workflow eval checks to reference the section 5.2 `Default subagent runtime` policy instead of duplicating the concrete model string.
+  - Added the `capture-todo.sh` pre-task discovery intake path for loose TODOs and follow-up ideas that should become `reflection` signals before any explicit `.pm` task promotion.
 - **v1.4.9 (2026-06-02)**
   - Clarified that request-type classification cannot happen before task/worktree bootstrap; bootstrap happens first, then read-only/professional routing.
   - Required subagent slice contracts to distinguish intended default model from actual dispatched model, including inherited/unverified connector cases.
