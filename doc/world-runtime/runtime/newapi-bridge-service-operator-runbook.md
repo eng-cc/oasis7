@@ -72,6 +72,48 @@ curl -sS -X POST http://127.0.0.1:5852/v1/bridge/bind \
 - `project_bindings[].platform_project_id`
 - `project_bindings[].token_key`
 
+## 全链路测试用户模式
+
+早期测试环境可以先使用假邮箱作为 hosted login / QA persona 标签。假邮箱不要求真实收信，但必须清楚标记为非生产，并避免与真实用户冲突。
+
+推荐映射：
+
+```text
+email=oasis7-e2e-001@test.invalid
+external_user_name=Oasis7 E2E User 001
+project_name=oasis7-e2e-001
+oasis_sender_account_id=oc:pk:<public-key-or-account-id>
+newapi_user_ref=pk_<public-key-fingerprint>
+provider_auth_token=newapi_user_ref:pk_<public-key-fingerprint>
+```
+
+约束：
+
+- 私钥由测试环境安全随机生成，不能从邮箱派生。
+- 私钥只写入 `~/Documents/keys/test_keys.txt` 或受控 secret store，不写入 repo、bridge state、provider auth token、CI log。
+- `newapi_user_ref` 使用公钥或公钥 fingerprint，避免把邮箱作为 provider bearer 主选择器。
+- `email` 可传给 `POST /v1/bridge/bind`，用于 LetAI platform user metadata / QA 审计。
+- bind response 不能暴露 `platform_user_id`、`platform_project_id` 或 raw `token_key`；这些只允许存在于受控 bridge state。
+
+示例 bind:
+
+```bash
+curl -sS -X POST http://127.0.0.1:5852/v1/bridge/bind \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "newapi_user_ref": "pk_<public-key-fingerprint>",
+    "oasis_sender_account_id": "oc:pk:<public-key-or-account-id>",
+    "external_user_name": "Oasis7 E2E User 001",
+    "email": "oasis7-e2e-001@test.invalid",
+    "project_name": "oasis7-e2e-001",
+    "project_metadata": {
+      "purpose": "bridge-full-chain-e2e",
+      "email_login_env": "test",
+      "identity_root": "fake-email-plus-chain-public-key"
+    }
+  }'
+```
+
 ## 与 Remote Provider Bridge 串接
 
 remote provider bridge 可直接读取同一份 state:
@@ -88,3 +130,17 @@ OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH=/etc/oasis7/newapi-bridge/bridge-stat
 ```
 
 provider bridge 会自动解析到对应的 `token_key`。
+
+## 测试步骤入口
+
+完整的测试环境全链路步骤以 `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md#67-全链路测试步骤矩阵` 为准，覆盖：
+
+- 从 `~/Documents/keys/test_keys.txt` 选择 fake-email + chain keypair persona。
+- `POST /v1/bridge/bind` 建立 `newapi_user_ref -> bridge_user_id -> LetAI project/token_key` 绑定。
+- `POST /v1/bridge/deposit-route` 创建充值路由。
+- 通过已签名的 chain transfer submit / faucet / operator 工具完成 testnet 入账。
+- `POST /v1/bridge/reconcile` 推进 happy path 或 manual-review path。
+- 用 `newapi_user_ref:<ref>` bearer 调 provider smoke，确认额度消耗归属到同一个测试用户。
+
+注意：测试步骤中可以记录 `newapi_user_ref`、`bridge_user_id`、`route_id` 和 tx/action id；不得记录 raw `token_key` 或链上私钥。
+完整 happy path 需要先确认测试 lane 有可执行的签名转账工具或 operator/faucet 等价入账路径；否则只能完成环境、bind 与 deposit-route rehearsal。

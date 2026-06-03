@@ -121,6 +121,7 @@ OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH=/path/to/newapi-bridge/bridge-state.j
 - `oasis7_newapi_bridge_service` 的 state 文件能被 remote provider bridge 读取
 - state 内对应 binding 为 `active`
 - 对应 `project_bindings` 已写入真实 `token_key`
+- 对于全链路测试用户，`newapi_user_ref` 推荐使用链上公钥 fingerprint，例如 `pk_<public-key-fingerprint>`；client bearer 使用 `newapi_user_ref:pk_<public-key-fingerprint>`。测试邮箱只作为 QA / hosted-login persona 标签，不作为 provider bearer 主选择器。
 
 推荐不要手改 JSON，直接用脚本给用户签发 bridge token:
 
