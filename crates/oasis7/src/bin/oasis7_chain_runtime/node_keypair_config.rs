@@ -117,12 +117,19 @@ impl ConfigFileLock {
                 Ok(_) => return Ok(Self { path }),
                 Err(err) if err.kind() == ErrorKind::AlreadyExists => {
                     if Instant::now() >= deadline {
-                        return Err(format!("timed out waiting for config lock {}", path.display()));
+                        return Err(format!(
+                            "timed out waiting for config lock {}",
+                            path.display()
+                        ));
                     }
                     thread::sleep(Duration::from_millis(10));
                 }
                 Err(err) => {
-                    return Err(format!("create config lock {} failed: {}", path.display(), err));
+                    return Err(format!(
+                        "create config lock {} failed: {}",
+                        path.display(),
+                        err
+                    ));
                 }
             }
         }
@@ -238,7 +245,8 @@ mod tests {
         assert!(keypairs.iter().all(|keypair| keypair == first));
         assert!(!lock_path.exists(), "config lock should be removed");
 
-        let persisted = ensure_node_keypair_in_config(&config_path).expect("read persisted keypair");
+        let persisted =
+            ensure_node_keypair_in_config(&config_path).expect("read persisted keypair");
         assert_eq!(persisted, *first);
         let _ = fs::remove_dir_all(config_path.parent().expect("config parent"));
     }
