@@ -1,0 +1,26 @@
+task_uid: task_d997184193684bc4a645dc945ed3020e
+title: "Draft site story CH-042"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_d997184193684bc4a645dc945ed3020e.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/draft/volume-02-chapter-001.md
+doc_refs:
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+  - site/story/draft/volume-02-chapter-001-positioning.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Draft CH-042 in volume two chapter one, update README/version metadata, record professional slice evidence, and verify story writeback without entering CH-043."
+handoff_to: []
+updated_at: 2026-06-03T19:54:44+08:00
+last_started_at: 2026-06-03T19:42:50+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-001.md site/story/draft/README.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-03T19:54:42+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T19:54:44+08:00
