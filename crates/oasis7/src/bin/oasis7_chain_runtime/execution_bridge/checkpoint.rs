@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use oasis7::runtime::LocalCasStore;
+use oasis7::runtime::{BlobStore, LocalCasStore};
 
 use super::{
     write_bytes_atomic, ExecutionBridgePinSet, ExecutionBridgeRecord,
@@ -377,9 +377,13 @@ fn collect_execution_bridge_record_retained_refs(
     retain_latest_head: bool,
     retain_hot_window: bool,
     pinned_refs: &mut BTreeSet<String>,
+    best_effort_pinned_refs: &mut BTreeSet<String>,
 ) {
     maybe_insert_pin_ref(pinned_refs, record.commit_log_ref.as_deref());
-    maybe_insert_pin_ref(pinned_refs, record.external_effect_ref.as_deref());
+    maybe_insert_pin_ref(
+        best_effort_pinned_refs,
+        record.external_effect_ref.as_deref(),
+    );
 
     if retain_latest_head {
         maybe_insert_pin_ref(pinned_refs, record.latest_state_ref.as_deref());
@@ -466,6 +470,7 @@ fn build_execution_bridge_pin_set(
         hot_window_start_height: Some(hot_window_start_height),
         checkpoint_heights,
         pinned_refs: BTreeSet::new(),
+        best_effort_pinned_refs: BTreeSet::new(),
     };
 
     for height in record_heights {
@@ -477,6 +482,7 @@ fn build_execution_bridge_pin_set(
             record.height == latest_height,
             record.height >= hot_window_start_height,
             &mut pin_set.pinned_refs,
+            &mut pin_set.best_effort_pinned_refs,
         );
     }
     collect_execution_checkpoint_retained_refs(execution_records_dir, &mut pin_set.pinned_refs)?;
@@ -490,24 +496,39 @@ pub(super) fn sync_execution_bridge_pin_set(
     hot_window_heights: u64,
 ) -> Result<ExecutionBridgePinSet, String> {
     let pin_set = build_execution_bridge_pin_set(execution_records_dir, hot_window_heights)?;
+    let mut desired_pins = pin_set.pinned_refs.clone();
+    for pinned_ref in pin_set
+        .best_effort_pinned_refs
+        .difference(&pin_set.pinned_refs)
+    {
+        if execution_store
+            .has(pinned_ref.as_str())
+            .map_err(|err| format!("check execution store ref {} failed: {:?}", pinned_ref, err))?
+        {
+            desired_pins.insert(pinned_ref.clone());
+        }
+    }
     let current_pins = execution_store
         .list_pins()
         .map_err(|err| format!("list execution store pins failed: {:?}", err))?
         .into_iter()
         .collect::<BTreeSet<_>>();
 
-    for stale_ref in current_pins.difference(&pin_set.pinned_refs) {
+    for stale_ref in current_pins.difference(&desired_pins) {
         execution_store
             .unpin(stale_ref.as_str())
             .map_err(|err| format!("unpin execution store ref {} failed: {:?}", stale_ref, err))?;
     }
-    for pinned_ref in pin_set.pinned_refs.difference(&current_pins) {
+    for pinned_ref in desired_pins.difference(&current_pins) {
         execution_store
             .pin(pinned_ref.as_str())
             .map_err(|err| format!("pin execution store ref {} failed: {:?}", pinned_ref, err))?;
     }
 
-    Ok(pin_set)
+    Ok(ExecutionBridgePinSet {
+        pinned_refs: desired_pins,
+        ..pin_set
+    })
 }
 
 fn list_execution_bridge_pre_v2_heights(execution_records_dir: &Path) -> Result<Vec<u64>, String> {

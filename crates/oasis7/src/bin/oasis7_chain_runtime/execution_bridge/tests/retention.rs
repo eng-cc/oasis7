@@ -17,6 +17,11 @@ use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use oasis7_wasm_abi::ModuleOutput;
 use oasis7_wasm_executor::FixedSandbox;
 
+fn remove_test_store_blob(store: &LocalCasStore, content_ref: &str) {
+    fs::remove_file(store.blobs_dir().join(format!("{content_ref}.blob")))
+        .expect("remove test store blob");
+}
+
 #[test]
 fn execution_checkpoint_cadence_trims_old_manifests_and_clears_record_refs() {
     let dir = temp_dir("execution-checkpoint-cadence-trim");
@@ -224,6 +229,88 @@ fn execution_bridge_retention_maintenance_clears_archive_refs_and_prunes_orphans
                 .expect("record5 journal ref")
         )
         .expect("check hot journal"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn execution_bridge_retention_maintenance_tolerates_missing_archive_external_effect_ref() {
+    let dir = temp_dir("execution-bridge-retention-missing-external-effect");
+    let records_dir = dir.join("records");
+    let store = LocalCasStore::new(dir.join("store"));
+    fs::create_dir_all(records_dir.as_path()).expect("create records dir");
+
+    let mut records = Vec::new();
+    for height in 1..=6 {
+        let mut record =
+            persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, height);
+        record.checkpoint_ref =
+            maybe_persist_execution_checkpoint_for_record(records_dir.as_path(), &record, 2, 2)
+                .expect("maybe persist checkpoint");
+        persist_execution_bridge_record(records_dir.as_path(), &record)
+            .expect("persist checkpointed record");
+        records.push(record);
+    }
+
+    let missing_external_effect_ref = records[0]
+        .external_effect_ref
+        .as_deref()
+        .expect("record1 external effect ref")
+        .to_string();
+    remove_test_store_blob(&store, missing_external_effect_ref.as_str());
+
+    let freed_bytes = run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 2)
+        .expect("run retention maintenance with missing archive external effect");
+    assert!(freed_bytes > 0, "expected orphan sweep to free bytes");
+
+    let record_1 = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 1).as_path(),
+    )
+    .expect("load record 1");
+    assert!(record_1.snapshot_ref.is_none());
+    assert!(record_1.journal_ref.is_none());
+    assert!(!store
+        .is_pinned(missing_external_effect_ref.as_str())
+        .expect("check missing external effect pin"));
+    assert!(!store
+        .has(missing_external_effect_ref.as_str())
+        .expect("check missing external effect blob"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn execution_bridge_retention_maintenance_fails_for_missing_required_refs() {
+    let dir = temp_dir("execution-bridge-retention-missing-required-ref");
+    let records_dir = dir.join("records");
+    let store = LocalCasStore::new(dir.join("store"));
+    fs::create_dir_all(records_dir.as_path()).expect("create records dir");
+
+    let mut records = Vec::new();
+    for height in 1..=6 {
+        let mut record =
+            persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, height);
+        record.checkpoint_ref =
+            maybe_persist_execution_checkpoint_for_record(records_dir.as_path(), &record, 2, 2)
+                .expect("maybe persist checkpoint");
+        persist_execution_bridge_record(records_dir.as_path(), &record)
+            .expect("persist checkpointed record");
+        records.push(record);
+    }
+
+    let missing_latest_state_ref = records[5]
+        .latest_state_ref
+        .as_deref()
+        .expect("record6 latest state ref")
+        .to_string();
+    remove_test_store_blob(&store, missing_latest_state_ref.as_str());
+
+    let err = run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 2)
+        .expect_err("missing latest state ref should fail retention maintenance");
+    assert!(
+        err.contains(missing_latest_state_ref.as_str()),
+        "expected missing ref in error, got {err}"
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
