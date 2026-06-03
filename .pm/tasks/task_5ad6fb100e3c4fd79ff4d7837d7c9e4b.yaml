@@ -1,0 +1,24 @@
+task_uid: task_5ad6fb100e3c4fd79ff4d7837d7c9e4b
+title: "address PR 342 review comments"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-trigger-latest-github-release
+execution_log_path: .pm/tasks/task_5ad6fb100e3c4fd79ff4d7837d7c9e4b.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - scripts/viewer-software-safe-step-regression.sh
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Unresolved actionable PR review comments on PR 342 are inspected, addressed locally or summarized when non-actionable, and fresh verification is recorded."
+handoff_to: []
+updated_at: 2026-06-03T20:49:03+08:00
+last_started_at: 2026-06-03T20:43:25+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/viewer-software-safe-step-regression.sh && bash -n scripts/viewer-software-safe-step-regression-smoke.sh && ./scripts/viewer-software-safe-step-regression-smoke.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-03T20:49:02+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T20:49:02+08:00

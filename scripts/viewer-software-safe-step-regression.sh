@@ -148,6 +148,7 @@ refresh_explicit_blocker_state() {
   recent_feedback_stage=$(state_recent_feedback_stage "$state")
   recent_feedback_reason=$(state_recent_feedback_reason "$state")
   narrative_blocker_detail=$(state_narrative_blocker_detail "$state")
+  expected_blocker_status=""
   expected_blocker_detail=""
   if [[ -n "${blocker_detail:-}" && "$blocker_detail" != "null" ]]; then
     expected_blocker_detail="$blocker_detail"
@@ -161,14 +162,19 @@ refresh_explicit_blocker_state() {
     explicit_blocker_state=true
   elif [[ "${stage_status:-}" == "blocked" ]]; then
     explicit_blocker_state=true
+    expected_blocker_status="blocked"
   elif [[ "${execution_state:-}" == "blocked" ]]; then
     explicit_blocker_state=true
+    expected_blocker_status="blocked"
   elif [[ "${recent_feedback_stage:-}" == "blocked" ]]; then
     explicit_blocker_state=true
+    expected_blocker_status="blocked"
   elif [[ -n "${narrative_blocker_detail:-}" && "$narrative_blocker_detail" != "null" ]]; then
     explicit_blocker_state=true
+    expected_blocker_status="blocked"
   elif [[ -n "${recent_feedback_reason:-}" && "$recent_feedback_reason" != "null" ]]; then
     explicit_blocker_state=true
+    expected_blocker_status="blocked"
   fi
 }
 
@@ -281,6 +287,7 @@ payload = {
     "stageStatus": None if sys.argv[13] == "null" else sys.argv[13],
     "blockerKind": None if sys.argv[14] == "null" else sys.argv[14],
     "blockerDetail": None if sys.argv[15] == "null" else sys.argv[15],
+    "expectedBlockerDetail": None if sys.argv[16] == "null" else sys.argv[16],
 }
 print(json.dumps(payload, ensure_ascii=False, indent=2))
 PY
@@ -614,14 +621,15 @@ if [[ "$auto_progress_observed" != "true" ]]; then
   if [[ "$auto_progress_observed" == "true" ]]; then
     :
   elif [[ "$explicit_blocker_state" == "true" ]]; then
-    blocker_dom_check_js=$(python3 - "${stage_status:-null}" "${blocker_kind:-null}" "${blocker_detail:-null}" "${expected_blocker_detail:-null}" <<'PY'
+    blocker_dom_check_js=$(python3 - "${expected_blocker_status:-null}" "${stage_status:-null}" "${blocker_kind:-null}" "${blocker_detail:-null}" "${expected_blocker_detail:-null}" <<'PY'
 import json
 import sys
 
-stage_status = sys.argv[1]
-blocker_kind = sys.argv[2]
-blocker_detail = sys.argv[3]
-expected_blocker_detail = sys.argv[4]
+expected_blocker_status = sys.argv[1]
+stage_status = sys.argv[2]
+blocker_kind = sys.argv[3]
+blocker_detail = sys.argv[4]
+expected_blocker_detail = sys.argv[5]
 
 print(r"""
 (() => {
@@ -630,6 +638,7 @@ print(r"""
     .replace(/\s+/g, ' ')
     .trim();
   const text = normalize(document.body && document.body.innerText ? document.body.innerText : '');
+  const expectedBlockerStatus = %s;
   const stageStatus = %s;
   const blockerKind = %s;
   const blockerDetail = %s;
@@ -653,10 +662,14 @@ print(r"""
     !expectedBlockerDetail ||
     expectedBlockerDetail === 'null' ||
     text.includes(normalize(expectedBlockerDetail));
-  const statusOk = stageStatus !== 'blocked' || text.includes('blocked') || text.includes('阻塞');
+  const statusOk =
+    (stageStatus !== 'blocked' && expectedBlockerStatus !== 'blocked') ||
+    text.includes('blocked') ||
+    text.includes('阻塞');
   return hasSurface && kindOk && detailOk && expectedDetailOk && statusOk;
 })()
 """ % (
+    json.dumps(expected_blocker_status),
     json.dumps(stage_status),
     json.dumps(blocker_kind),
     json.dumps(blocker_detail),
@@ -693,7 +706,8 @@ summary_raw=$(summary_json \
   "${blocker_dom_visible:-null}" \
   "${stage_status:-null}" \
   "${blocker_kind:-null}" \
-  "${blocker_detail:-null}")
+  "${blocker_detail:-null}" \
+  "${expected_blocker_detail:-null}")
 printf '%s\n' "$summary_raw" >"$summary_json_path"
 python3 - "$summary_json_path" "$summary_md_path" <<'PY'
 import json
@@ -719,6 +733,7 @@ lines = [
     f"- stageStatus: `{data['stageStatus']}`",
     f"- blockerKind: `{data['blockerKind']}`",
     f"- blockerDetail: `{data['blockerDetail']}`",
+    f"- expectedBlockerDetail: `{data['expectedBlockerDetail']}`",
     f"- gameUrl: `{data['gameUrl']}`",
 ]
 out.write_text("\n".join(lines) + "\n", encoding='utf-8')

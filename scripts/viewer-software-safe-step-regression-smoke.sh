@@ -283,6 +283,7 @@ assert summary["blockerDomVisible"] is True, summary
 assert summary["stageStatus"] == "active", summary
 assert summary["blockerKind"] is None, summary
 assert summary["blockerDetail"] is None, summary
+assert summary["expectedBlockerDetail"] == "fixture provider unavailable", summary
 assert summary["selectedAgentVisible"] is True, summary
 assert summary["playbackControlsVisible"] is False, summary
 assert after_select["selectedId"] == "agent-0", after_select
