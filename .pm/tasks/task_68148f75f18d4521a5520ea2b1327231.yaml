@@ -1,0 +1,28 @@
+task_uid: task_68148f75f18d4521a5520ea2b1327231
+title: "Draft site story volume two CH-039"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_68148f75f18d4521a5520ea2b1327231.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - site/story/draft/chapter-writing-sop.md
+doc_refs:
+  - site/story/draft/volume-02-chapter-001.md
+  - site/story/draft/volume-02-chapter-001-positioning.md
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Draft CH-039 prose slice after CH-038, limited to the small-habit question without entering CH-040."
+handoff_to: []
+updated_at: 2026-06-03T15:34:01+08:00
+last_started_at: 2026-06-03T15:17:09+08:00
+last_claim_type: task_complete
+last_verify_command: "if sed -n '/^## 对应老人先问一个小习惯/,$p' site/story/draft/volume-02-chapter-001.md | rg -n \"手感不在|需重新校准|空白握手位|可恢复|门口灯|留灯|位置保留|休息已确认|下一次回应时间|三行提示|调字号|死亡|复活|失智|公司|攻击|事故|灰度|埋点|KPI|SLA|P0|P1|工单闭环|需求评审|权限矩阵|索赔|控诉|身份辩论|公共记忆|不能证明\"; then exit 1; else exit 0; fi && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ./scripts/pm/lint.sh && git diff --check"
+last_verified_at: 2026-06-03T15:34:00+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T15:34:01+08:00
