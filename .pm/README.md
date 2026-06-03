@@ -35,6 +35,7 @@
 - 最后执行 `./scripts/pm/lint.sh`，确认 registry、模板与路径全部可枚举。
 
 当前已落地的 Phase 2 基础链路：
+- `./scripts/pm/capture-todo.sh`：把还没决定创建 `.pm` task 的顺手 TODO / discovery 记录为 `source_type=reflection` signal；默认只写 `.pm/inbox/signals.jsonl`，显式 `--create-task` 时才提升成 candidate task。
 - `./scripts/pm/promote-signal.sh`：把高价值信号写入 `.pm/inbox/signals.jsonl`。
 - `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/task_<32hex>.yaml` 与对应 `.pm/tasks/task_<32hex>.execution.md`，并重建 task registry 与 owner 的 `backlog/candidate.yaml` 视图。
 - `./scripts/new-task-worktree.sh --pm-owner-role ... --pm-title ... --pm-source-ref ...`：在创建 task worktree 的同时，切到目标 worktree 内原子完成 `new-task -> move-task committed -> workflow-report start`，避免 `.pm` task 误写回 source worktree。
@@ -66,6 +67,7 @@
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
 
 工作流接入基础用法：
+- 记录 pre-task TODO：`./scripts/pm/capture-todo.sh --source-ref <path> --summary "发现的问题/想法"`；默认 `role_hint=tpm`、`severity=low`、只写 reflection signal。若已经决定推进，再加 `--create-task --title ... --owner-role <role> --acceptance ...`。
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
 - 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`；若需要手工拆步，再执行“fresh verification” + `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`
 - fresh verification claim：`./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "<fresh verification command>"`

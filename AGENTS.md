@@ -12,7 +12,8 @@
 5. 仓库变更任务按统一阶段推进：bootstrap → router →（可选）brainstorming/TDD → execution → verification → closeout。
 6. 禁止在 `main` 分支 / 主 worktree 直接修改任何文件；所有改动必须先创建或进入对应 task worktree。
 7. 不得在 bootstrap 前先把请求判定为“只读/聊天/纯事实/专业判断”来决定是否需要 task/worktree；任何看似允许只读绕过的旧说明，都以 `doc/engineering/workflow/source-of-truth.md` 当前版本为准。
-8. 所有 gate、责任边界、失败回退路径，统一引用：
+8. 还没决定创建 `.pm` task 的顺手 TODO / discovery，用 `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"` 先记录为 `reflection` signal；只有显式 `--create-task` 或后续 `new-task` 才进入正式 task 真值。
+9. 所有 gate、责任边界、失败回退路径，统一引用：
    - 阶段图：`doc/engineering/workflow/source-of-truth.md#1-phase-diagram`
    - 责任边界：`doc/engineering/workflow/source-of-truth.md#2-responsibility-boundary`
    - 必需/可选 gate：`doc/engineering/workflow/source-of-truth.md#3-gates`
@@ -20,7 +21,7 @@
    - 关键规范细节（worktree/执行证据/closeout/PR）：`doc/engineering/workflow/source-of-truth.md#5-normative-details-from-legacy-agents-workflow`
    - skill 阶段映射：`doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`
    - 语义迁移核对清单：`doc/engineering/workflow/source-of-truth.md#8-semantic-migration-checklist`
-9. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
+10. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
 
 ### Workflow Eval Contract Markers
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
