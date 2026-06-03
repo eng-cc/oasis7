@@ -4,10 +4,11 @@ on:
   push:
     tags:
       - "v*"
+      - "20??-??-??_v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, e.g. v0.1.0"
+        description: "Release tag, e.g. v0.1.0 or 2026-06-03_v1"
         required: true
         type: string
 
@@ -463,8 +464,8 @@ jobs:
             echo "error: release tag is empty" >&2
             exit 1
           fi
-          if [[ "${tag}" != v* ]]; then
-            echo "error: release tag must start with 'v': ${tag}" >&2
+          if [[ ! "${tag}" =~ ^v[0-9].* && ! "${tag}" =~ ^20[0-9]{2}-[0-9]{2}-[0-9]{2}_v[0-9]+$ ]]; then
+            echo "error: release tag must be semver-like (v*) or daily date tag (YYYY-MM-DD_vN): ${tag}" >&2
             exit 1
           fi
           echo "value=${tag}" >> "${GITHUB_OUTPUT}"
