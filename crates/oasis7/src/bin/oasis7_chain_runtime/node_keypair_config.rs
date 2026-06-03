@@ -1,5 +1,8 @@
-use std::fs;
-use std::path::Path;
+use std::fs::{self, OpenOptions};
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use ed25519_dalek::SigningKey;
 
@@ -14,6 +17,11 @@ pub(super) struct NodeKeypairConfig {
 }
 
 pub(super) fn ensure_node_keypair_in_config(path: &Path) -> Result<NodeKeypairConfig, String> {
+    let _lock = ConfigFileLock::acquire(path)?;
+    ensure_node_keypair_in_config_unlocked(path)
+}
+
+fn ensure_node_keypair_in_config_unlocked(path: &Path) -> Result<NodeKeypairConfig, String> {
     let mut table = load_config_table(path)?;
     let mut wrote = false;
 
@@ -84,6 +92,62 @@ pub(super) fn ensure_node_keypair_in_config(path: &Path) -> Result<NodeKeypairCo
     Ok(keypair)
 }
 
+struct ConfigFileLock {
+    path: PathBuf,
+}
+
+impl ConfigFileLock {
+    fn acquire(config_path: &Path) -> Result<Self, String> {
+        let path = config_lock_path(config_path);
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent).map_err(|err| {
+                    format!(
+                        "create config lock parent dir {} failed: {}",
+                        parent.display(),
+                        err
+                    )
+                })?;
+            }
+        }
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(_) => return Ok(Self { path }),
+                Err(err) if err.kind() == ErrorKind::AlreadyExists => {
+                    if Instant::now() >= deadline {
+                        return Err(format!(
+                            "timed out waiting for config lock {}",
+                            path.display()
+                        ));
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(err) => {
+                    return Err(format!(
+                        "create config lock {} failed: {}",
+                        path.display(),
+                        err
+                    ));
+                }
+            }
+        }
+    }
+}
+
+impl Drop for ConfigFileLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn config_lock_path(config_path: &Path) -> PathBuf {
+    let mut lock_path = config_path.as_os_str().to_os_string();
+    lock_path.push(".lock");
+    PathBuf::from(lock_path)
+}
+
 fn load_config_table(path: &Path) -> Result<toml::map::Map<String, toml::Value>, String> {
     if !path.exists() {
         return Ok(toml::map::Map::new());
@@ -139,4 +203,51 @@ fn signing_key_from_hex(private_key_hex: &str) -> Result<SigningKey, String> {
         .try_into()
         .map_err(|_| "node.private_key must be 32-byte hex".to_string())?;
     Ok(SigningKey::from_bytes(&private_array))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Barrier};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_config_path(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        std::env::temp_dir()
+            .join(format!("oasis7-node-keypair-config-{label}-{unique}"))
+            .join("config.toml")
+    }
+
+    #[test]
+    fn concurrent_first_writers_share_one_generated_keypair() {
+        let config_path = temp_config_path("concurrent");
+        let lock_path = config_lock_path(&config_path);
+        let barrier = Arc::new(Barrier::new(8));
+        let handles = (0..8)
+            .map(|_| {
+                let config_path = config_path.clone();
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    barrier.wait();
+                    ensure_node_keypair_in_config(&config_path).expect("ensure keypair")
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let keypairs = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("join keypair worker"))
+            .collect::<Vec<_>>();
+        let first = keypairs.first().expect("first keypair");
+        assert!(keypairs.iter().all(|keypair| keypair == first));
+        assert!(!lock_path.exists(), "config lock should be removed");
+
+        let persisted =
+            ensure_node_keypair_in_config(&config_path).expect("read persisted keypair");
+        assert_eq!(persisted, *first);
+        let _ = fs::remove_dir_all(config_path.parent().expect("config parent"));
+    }
 }

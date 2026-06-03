@@ -1,0 +1,25 @@
+task_uid: task_8c6cadfbece54baf944ecc9190606c5a
+title: "fix v0.0.56 release package failures"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-trigger-latest-github-release
+execution_log_path: .pm/tasks/task_8c6cadfbece54baf944ecc9190606c5a.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - .github/workflows/release-packages.yml
+doc_refs:
+  - doc/site/project.md
+related_prd: []
+acceptance:
+  - "Identify the v0.0.56 release package workflow failure signatures, patch the current release workflow PR branch if needed, and record verification."
+handoff_to: []
+updated_at: 2026-06-03T15:10:10+08:00
+last_started_at: 2026-06-03T14:54:54+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/release-packages.yml\"); puts \"workflow yaml parsed\"' && bash -n scripts/viewer-software-safe-step-regression.sh scripts/viewer-software-safe-step-regression-smoke.sh && ./scripts/viewer-software-safe-step-regression-smoke.sh && git diff --check"
+last_verified_at: 2026-06-03T15:10:07+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T15:10:10+08:00

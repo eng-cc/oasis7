@@ -99,9 +99,12 @@ cat >"$fixture_root/software_safe.html" <<'EOF'
           logicalTime: 0,
           eventSeq: 0,
           gameplaySummary: {
-            stageStatus: "running",
+            stageStatus: "active",
             blockerKind: null,
             blockerDetail: null,
+            executionState: null,
+            narrativeBlockerDetail: null,
+            recentFeedback: null,
           },
         };
 
@@ -130,9 +133,14 @@ cat >"$fixture_root/software_safe.html" <<'EOF'
           } else {
             selectionRoot.textContent = "No agent selected yet.";
           }
-          if (state.gameplaySummary.stageStatus === "blocked") {
+          const blockerDetail =
+            state.gameplaySummary.blockerDetail ||
+            state.gameplaySummary.narrativeBlockerDetail ||
+            state.gameplaySummary.recentFeedback?.reason ||
+            null;
+          if (state.gameplaySummary.stageStatus === "blocked" || blockerDetail) {
             blockerRoot.textContent =
-              `blocked ${state.gameplaySummary.blockerKind} ${state.gameplaySummary.blockerDetail}`;
+              `blocked ${state.gameplaySummary.blockerKind || "provider"} ${blockerDetail}`;
           } else {
             blockerRoot.textContent = "No blocker active.";
           }
@@ -146,9 +154,12 @@ cat >"$fixture_root/software_safe.html" <<'EOF'
             const [kind, id] = String(target || "").split(":");
             state.selectedKind = kind || null;
             state.selectedId = id || null;
-            state.gameplaySummary.stageStatus = "blocked";
-            state.gameplaySummary.blockerKind = "fixture_blocker";
-            state.gameplaySummary.blockerDetail = "fixture smoke blocker";
+            state.gameplaySummary.executionState = "blocked";
+            state.gameplaySummary.narrativeBlockerDetail = "fixture provider unavailable";
+            state.gameplaySummary.recentFeedback = {
+              stage: "blocked",
+              reason: "fixture provider unavailable",
+            };
             render();
             return cloneState();
           },
@@ -269,15 +280,21 @@ assert summary["autoProgressObserved"] is False, summary
 assert summary["logicalTimeAdvanced"] is False, summary
 assert summary["eventSeqAdvanced"] is False, summary
 assert summary["blockerDomVisible"] is True, summary
-assert summary["stageStatus"] == "blocked", summary
-assert summary["blockerKind"] == "fixture_blocker", summary
+assert summary["stageStatus"] == "active", summary
+assert summary["blockerKind"] is None, summary
+assert summary["blockerDetail"] is None, summary
+assert summary["expectedBlockerDetail"] == "fixture provider unavailable", summary
 assert summary["selectedAgentVisible"] is True, summary
 assert summary["playbackControlsVisible"] is False, summary
 assert after_select["selectedId"] == "agent-0", after_select
 assert after_select["selectedKind"] == "agent", after_select
 assert after_progress["connectionStatus"] == "connected", after_progress
-assert after_progress["gameplaySummary"]["stageStatus"] == "blocked", after_progress
-assert after_progress["gameplaySummary"]["blockerKind"] == "fixture_blocker", after_progress
+assert after_progress["gameplaySummary"]["stageStatus"] == "active", after_progress
+assert after_progress["gameplaySummary"]["blockerKind"] is None, after_progress
+assert after_progress["gameplaySummary"]["executionState"] == "blocked", after_progress
+assert after_progress["gameplaySummary"]["narrativeBlockerDetail"] == "fixture provider unavailable", after_progress
+assert after_progress["gameplaySummary"]["recentFeedback"]["stage"] == "blocked", after_progress
+assert after_progress["gameplaySummary"]["recentFeedback"]["reason"] == "fixture provider unavailable", after_progress
 PY
 
 ensure_file_contains "$summary_json" '"failCategory": null'

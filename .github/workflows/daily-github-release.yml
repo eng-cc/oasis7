@@ -12,6 +12,7 @@ on:
         type: string
 
 permissions:
+  actions: write
   contents: write
 
 concurrency:
@@ -108,6 +109,20 @@ jobs:
             --title "oasis7 ${TAG}" \
             --generate-notes \
             --prerelease
+
+      - name: Trigger package build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gh workflow run release-packages.yml \
+            --repo "${REPOSITORY}" \
+            --ref main \
+            -f "tag=${TAG}"
 
       - name: Report release
         env:

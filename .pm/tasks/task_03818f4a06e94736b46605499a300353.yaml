@@ -1,0 +1,24 @@
+task_uid: task_03818f4a06e94736b46605499a300353
+title: "fix node keypair format check"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-trigger-latest-github-release
+execution_log_path: .pm/tasks/task_03818f4a06e94736b46605499a300353.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - crates/oasis7/src/bin/oasis7_chain_runtime/node_keypair_config.rs
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Rust required-gate cargo fmt failure after node keypair config lock fix is resolved and fresh verification is recorded."
+handoff_to: []
+updated_at: 2026-06-03T20:11:10+08:00
+last_started_at: 2026-06-03T20:09:54+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo fmt --all -- --check && env -u RUSTC_WRAPPER cargo test -p oasis7 node_keypair_config -- --nocapture && bash -n scripts/p2p-longrun-soak.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-03T20:11:08+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T20:11:09+08:00
