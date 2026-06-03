@@ -1,0 +1,27 @@
+task_uid: task_43876d993285499ba9bdd424c2b7ccb3
+title: "Draft site story volume two CH-041"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_43876d993285499ba9bdd424c2b7ccb3.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+doc_refs:
+  - site/story/draft/volume-02-chapter-001-positioning.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Draft CH-041 prose slice after CH-040, limited to identity/commitment/capability classification without entering CH-042 or CH-043."
+  - "CH-041 uses the blank handshake-record draft as the foreground object and prevents relationship from becoming process acceptance."
+  - "Draft preserves CH-039/CH-040 P2 watch items: no immediate authorial summary and no quick ledger/term closeout."
+handoff_to: []
+updated_at: 2026-06-03T16:59:30+08:00
+last_started_at: 2026-06-03T16:43:22+08:00
+last_claim_type: task_complete
+last_verify_command: "if sed -n '/^## 身份、承诺、能力/,$p' site/story/draft/volume-02-chapter-001.md | rg -n \"恢复中|需要重新校准|未完成承诺|修宪|条款|重新授权|留灯|位置保留|休息已确认|下一次回应时间|三行提示|调字号|删到三件事|死亡|复活|失智|公司|攻击|事故|灰度|埋点|KPI|SLA|P0|P1|工单闭环|需求评审|权限矩阵|投票|权利宣言|情感胜利|索赔|控诉\"; then exit 1; else echo \"CH-041 forbidden-pattern check: OK\"; fi && git diff --check && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ./scripts/pm/lint.sh"
+last_verified_at: 2026-06-03T16:59:21+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T16:59:28+08:00
