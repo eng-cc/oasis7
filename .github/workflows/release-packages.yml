@@ -4,7 +4,7 @@ on:
   push:
     tags:
       - "v*"
-      - "20??-??-??_v*"
+      - "20*-*-*_v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -22,7 +22,6 @@ env:
   RUST_TOOLCHAIN: 1.96.0
   BUILTIN_WASM_TOOLCHAIN: nightly-2025-12-11
   BUILTIN_WASM_TARGET: wasm32-unknown-unknown
-  RELEASE_CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
 jobs:
   release_gate_runtime_core:
@@ -31,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_CHECKOUT_REF }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
@@ -62,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_CHECKOUT_REF }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
@@ -93,7 +92,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_CHECKOUT_REF }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
@@ -135,7 +134,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_CHECKOUT_REF }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
@@ -191,7 +190,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_CHECKOUT_REF }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
@@ -276,7 +275,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_CHECKOUT_REF }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
@@ -335,7 +334,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_CHECKOUT_REF }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Install pinned Rust toolchain
         shell: bash
         run: |
