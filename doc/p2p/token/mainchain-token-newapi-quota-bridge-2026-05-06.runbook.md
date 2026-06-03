@@ -92,7 +92,31 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
 
 ## 6. 首次演练流程
 
-### 6.1 建立用户绑定
+### 6.1 准备全链路测试用户
+- 早期演练可以先使用假邮箱，因为邮箱登录服务也有测试环境；假邮箱只作为测试 persona 标签，不要求真实投递。
+- 推荐使用保留域名，避免误发给真实用户：
+  - `oasis7-e2e-001@test.invalid`
+  - `oasis7-e2e-lowquota-001@test.invalid`
+  - `oasis7-e2e-manualreview-001@test.invalid`
+- 每个测试邮箱必须对应一套受控生成的链上 keypair：
+  - 私钥只放在 operator/QA 本地 secret 文件或等价 secret store，不进 repo、CI log、bridge state、provider request。
+  - 公钥或公钥 fingerprint 用作 `newapi_user_ref`，例如 `pk_<fingerprint>`。
+  - `oasis_sender_account_id` 使用同一公钥/account id，作为链侧转账来源。
+- 不要从邮箱确定性派生私钥；邮箱只是 human/audit root，链上私钥必须由安全随机源生成。
+- 本地测试密钥材料模板记录在 `~/Documents/keys/test_keys.txt`；公开文档只记录字段形状和假邮箱，不记录真实私钥。
+
+建议字段形状：
+
+```text
+email=oasis7-e2e-001@test.invalid
+external_user_name=Oasis7 E2E User 001
+project_name=oasis7-e2e-001
+newapi_user_ref=pk_<public-key-fingerprint>
+oasis_sender_account_id=oc:pk:<public-key-or-account-id>
+agent_provider_auth_token=newapi_user_ref:pk_<public-key-fingerprint>
+```
+
+### 6.2 建立用户绑定
 - 调用 `POST /v1/bridge/bind`
 - 输入：
   - `newapi_user_ref`
@@ -102,7 +126,26 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
   - 返回 `bridge_user_id`
   - 不返回 `platform_user_id/platform_project_id/token_key`
 
-### 6.2 分配充值路由
+示例：
+
+```bash
+curl -sS -X POST http://127.0.0.1:5852/v1/bridge/bind \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "newapi_user_ref": "pk_<public-key-fingerprint>",
+    "oasis_sender_account_id": "oc:pk:<public-key-or-account-id>",
+    "external_user_name": "Oasis7 E2E User 001",
+    "email": "oasis7-e2e-001@test.invalid",
+    "project_name": "oasis7-e2e-001",
+    "project_metadata": {
+      "purpose": "bridge-full-chain-e2e",
+      "email_login_env": "test",
+      "identity_root": "fake-email-plus-chain-public-key"
+    }
+  }'
+```
+
+### 6.3 分配充值路由
 - 调用 `POST /v1/bridge/deposit-route`
 - 输入：
   - `bridge_user_id`
@@ -111,13 +154,13 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
   - 返回唯一 `deposit_account_id`
   - `route_status=issued`
 
-### 6.3 链上入账
+### 6.4 链上入账
 - 让绑定用户向 `deposit_account_id` 转入与 `pricing_version` 对应的 `OC`
 - 期望：
   - chain watcher 观察到 route 对应入账
   - 不匹配金额、重复 route、过期 route 默认进入 `manual_review`
 
-### 6.4 reconcile
+### 6.5 reconcile
 - 手工触发：
   - `POST /v1/bridge/reconcile`
 - 或等待后台 interval
@@ -129,6 +172,235 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
   - `token_key`
   - `external_order_id`
   - `user_snapshot/project_snapshot/topup_log_snapshot`
+
+### 6.6 provider / gameplay 消费验证
+- 使用同一个 `newapi_user_ref` 作为 provider bearer selector：
+  - `newapi_user_ref:pk_<public-key-fingerprint>`
+- remote provider bridge 必须从受控 `bridge-state.json` 自动解析到对应 project `token_key`。
+- 游戏 runtime / launcher 只接收 bearer selector，不接收 raw `token_key`。
+- 完成一次 `play/step`、`agent_chat` 或 provider decision smoke 后，验证 trace 中出现同一用户路径下的 token usage / provider decision 证据。
+
+### 6.7 全链路测试步骤矩阵
+
+测试前从 `~/Documents/keys/test_keys.txt` 选择一组 persona，把对应字段临时导出到 operator shell。不要把该文件内容贴进 issue、PR、聊天、CI log 或 public terminal recording。
+
+```bash
+export BRIDGE_BASE_URL=http://127.0.0.1:5852
+export PROVIDER_BASE_URL=http://127.0.0.1:5841
+export CHAIN_BASE_URL=http://127.0.0.1:5010
+export PRICING_VERSION=pv-1
+
+export TEST_EMAIL=oasis7-e2e-001@test.invalid
+export TEST_EXTERNAL_USER_NAME="Oasis7 E2E User 001"
+export TEST_PROJECT_NAME=oasis7-e2e-001
+export TEST_NEWAPI_USER_REF=pk_<public-key-fingerprint>
+export TEST_OASIS_SENDER_ACCOUNT_ID=oc:pk:<public-key-hex>
+export TEST_CHAIN_PUBLIC_KEY_HEX=<public-key-hex>
+export TEST_PROVIDER_AUTH_TOKEN=newapi_user_ref:${TEST_NEWAPI_USER_REF}
+```
+
+不要把 `chain_private_key_hex` 导出到 shell 环境变量。签名工具必须从本地 secret 文件或等价 secret store 读取私钥，并且不得把私钥打印到 terminal、CI log 或证据文件。
+
+| Persona | 目标 | 入账金额 | 期望 |
+| --- | --- | --- | --- |
+| `happy_path` | 正常发额度并完成一次 provider smoke | 等于 `PRICING_VERSION` 对应 OC | `reconciled_credit_count=1`，provider decision 成功 |
+| `lowquota_exhaustion` | 小额度消耗到不足 | 等于最小测试档，随后连续 provider smoke | 最后一次调用出现额度不足或上游 quota 失败，且不串到其他用户 |
+| `manual_review_underpay` | 少付 | 小于 `PRICING_VERSION` 对应 OC | `manual_review_count` 增加，不能自动 credited |
+| `manual_review_overpay` | 多付 | 大于 `PRICING_VERSION` 对应 OC | `manual_review_count` 增加，不能静默错充 |
+| `expired_route` | route 过期后入账 | 等于或接近 `PRICING_VERSION` 对应 OC，但在 TTL 后转入 | 进入 expired/manual review 路径，不发正常额度 |
+
+本轮 `happy_path` 必须先满足以下 execution gates；任一不满足时，只允许做环境预检、`bind` 和 `deposit-route` rehearsal，不得声称全链路通过：
+
+- 可通过受信 SSH / tunnel / 本机启动访问 `BRIDGE_BASE_URL`、`PROVIDER_BASE_URL`、`CHAIN_BASE_URL`。
+- bridge-service 已配置 `--chain-base-url`、`--letai-base-url`、`--letai-platform-key`，且测试 lane 的 `--pricing-rule` 包含当前 `PRICING_VERSION`。
+- remote provider bridge 已启用 `OASIS7_PROVIDER_AUTH_ROUTE_FROM_BEARER=true`，且可读取同一份 NewAPI bridge state。
+- 已确认一个可执行的签名转账路径，能从本地 secret 文件读取 32-byte Ed25519 私钥并产出 `octransferauth:v1:<signature-hex>`。
+- 测试 sender 账户有足够 OC，或测试网 faucet/operator 已准备好等价入账路径。
+- 证据采集能按本次 `route_id` / `bridge_deposit_id` / chain action id 定位 ledger row；不得只看全局计数。
+
+扩展负向覆盖：
+
+- `duplicate_route_deposit`、`binding_not_found`、`project_binding_not_found`、LetAI topup/query mismatch、LetAI timeout/decode failure 属于 phase-2 negative coverage；不是 `happy_path` 首轮阻断，但正式放行前应单独补证据。
+- 当前 bridge reconcile 记录 `from_account_id`，但不得把 `from_account_id == oasis_sender_account_id` 当作已强制执行的安全不变量；若需要强约束，另开 runtime/security 修复任务。测试证据仍应记录实际 `from_account_id`，并增加“不同 sender 向同一 deposit account 入账”的负向检查。
+
+#### Step A: 环境健康检查
+
+```bash
+curl -sS "${BRIDGE_BASE_URL}/v1/bridge/health"
+curl -sS "${PROVIDER_BASE_URL}/v1/provider/info" \
+  -H "Authorization: Bearer ${TEST_PROVIDER_AUTH_TOKEN}"
+```
+
+期望：
+- bridge health 返回 `ok=true`。
+- 在 bind/reconcile 之前，provider 自动映射还没有 active binding / project `token_key`，用 `newapi_user_ref:<ref>` 访问 `GET /v1/provider/info` 预期可以是 `401 Unauthorized`。
+- bind 且成功写入 project `token_key` 后，provider info / decision 才应返回成功；任何阶段都不能要求 client 传 raw `token_key`。
+
+#### Step B: 建立 bind
+
+```bash
+BIND_RESPONSE="$(
+  curl -sS -X POST "${BRIDGE_BASE_URL}/v1/bridge/bind" \
+    -H 'Content-Type: application/json' \
+    -d "{
+      \"newapi_user_ref\": \"${TEST_NEWAPI_USER_REF}\",
+      \"oasis_sender_account_id\": \"${TEST_OASIS_SENDER_ACCOUNT_ID}\",
+      \"external_user_name\": \"${TEST_EXTERNAL_USER_NAME}\",
+      \"email\": \"${TEST_EMAIL}\",
+      \"project_name\": \"${TEST_PROJECT_NAME}\",
+      \"metadata\": {
+        \"purpose\": \"bridge-full-chain-e2e\",
+        \"persona\": \"${TEST_PROJECT_NAME}\",
+        \"email_login_env\": \"test\",
+        \"identity_root\": \"fake-email-plus-chain-public-key\"
+      },
+      \"project_metadata\": {
+        \"purpose\": \"bridge-full-chain-e2e\",
+        \"newapi_user_ref\": \"${TEST_NEWAPI_USER_REF}\"
+      }
+    }"
+)"
+printf '%s\n' "${BIND_RESPONSE}"
+export TEST_BRIDGE_USER_ID="$(printf '%s' "${BIND_RESPONSE}" | jq -r '.bridge_user_id')"
+```
+
+期望：
+- `ok=true`。
+- `bridge_user_id` 非空。
+- response 不包含 raw `token_key`。
+- `bridge-state.json` 中可以由 operator 查到该 `newapi_user_ref` 对应 active binding 与 project binding。
+
+#### Step C: 创建 deposit route
+
+```bash
+ROUTE_RESPONSE="$(
+  curl -sS -X POST "${BRIDGE_BASE_URL}/v1/bridge/deposit-route" \
+    -H 'Content-Type: application/json' \
+    -d "{
+      \"bridge_user_id\": \"${TEST_BRIDGE_USER_ID}\",
+      \"pricing_version\": \"${PRICING_VERSION}\",
+      \"topup_plan_id\": null
+    }"
+)"
+printf '%s\n' "${ROUTE_RESPONSE}"
+export TEST_DEPOSIT_ROUTE_ID="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r '.route_id')"
+export TEST_DEPOSIT_ACCOUNT_ID="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r '.deposit_account_id')"
+export TEST_ROUTE_EXPIRES_AT_UNIX_MS="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r '.expires_at_unix_ms')"
+```
+
+期望：
+- `ok=true`。
+- `route_status=issued`。
+- `deposit_account_id` 非空且只用于本 route。
+
+#### Step D: 链上签名转账
+
+公开 transfer submit API 的请求体必须包含签名字段，不要用未签名 `curl` 伪造链上入账。完整 `happy_path` 在没有明确 signer/operator 工具前保持 blocked。测试时二选一：
+
+- 用当前测试网/launcher/operator 已验证的签名转账工具，从本地 secret 文件读取 persona 私钥，生成 `octransferauth:v1:<signature-hex>` 后提交到 `POST /v1/chain/transfer/submit`。
+- 若本 lane 由 faucet/operator 工具托管测试入账，则用等价工具把同一 `TEST_OASIS_SENDER_ACCOUNT_ID -> TEST_DEPOSIT_ACCOUNT_ID` 的金额提交到链上，并保留 tx/action id。
+
+transfer submit 字段形状：
+
+```json
+{
+  "from_account_id": "oc:pk:<public-key-hex>",
+  "to_account_id": "<TEST_DEPOSIT_ACCOUNT_ID>",
+  "amount": 100,
+  "nonce": 1,
+  "public_key": "<public-key-hex>",
+  "signature": "octransferauth:v1:<signature-hex>"
+}
+```
+
+期望：
+- submit response 返回 `ok=true` 和 `action_id`。
+- `GET /v1/chain/transfer/status?action_id=<action_id>` 或链侧 explorer 证据最终显示 confirmed。
+- 对少付/多付/过期 route，用对应 persona 的金额或等待策略制造失败条件，并保留同样的 tx/action id。
+
+#### Step E: reconcile
+
+```bash
+RECONCILE_RESPONSE="$(
+  curl -sS -X POST "${BRIDGE_BASE_URL}/v1/bridge/reconcile"
+)"
+printf '%s\n' "${RECONCILE_RESPONSE}"
+```
+
+happy path 期望：
+- 至少一次 reconcile 后，本次 `route_id` / `bridge_deposit_id` 对应 ledger row 推进到 `reconciled`。
+- `reconciled_credit_count` 可作为本次处理摘要，但不能单独作为通过标准；若 state 内已有旧记录，全局计数可能误导。
+- state 内同一 binding/project binding 有 `platform_user_id`、`platform_project_id`、`token_key`、`external_order_id` 和 LetAI topup/query 快照。
+
+失败 path 期望：
+- underpay / overpay / expired route 不得 credited。
+- 本次 `route_id` / `bridge_deposit_id` 对应 ledger row 进入 `manual_review` 并记录 review reason；`manual_review_count` 只作辅助摘要。
+- 后续 operator review 只能显式 `mark_resolved` 或 `close`，不能口头判成功。
+
+#### Step F: provider smoke 与消耗证据
+
+```bash
+curl -sS -X POST "${PROVIDER_BASE_URL}/v1/world-simulator/decision" \
+  -H "Authorization: Bearer ${TEST_PROVIDER_AUTH_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "observation": {
+      "agent_id": "agent-1",
+      "world_time": 1,
+      "mode": "headless_agent",
+      "observation_schema_version": "oc_dual_obs_v1",
+      "action_schema_version": "oc_dual_act_v1",
+      "environment_class": "bridge-full-chain-e2e",
+      "observation": {
+        "self_state": {
+          "location_ref": "loc-1",
+          "pose_hint": "grid_pose=(0, 0, 0)",
+          "status_flags": [],
+          "resource_summary": {}
+        },
+        "mission_context": {
+          "goal_summary": "return a minimal wait decision for bridge quota smoke"
+        },
+        "nearby_entities": [],
+        "recent_events": [],
+        "local_navigation_graph": [],
+        "hazard_summary": [],
+        "interaction_targets": []
+      },
+      "recent_event_summary": [],
+      "memory_summary": "bridge quota smoke",
+      "action_catalog": [
+        {
+          "action_ref": "wait",
+          "summary": "do nothing this tick"
+        }
+      ],
+      "timeout_budget_ms": 7000
+    },
+    "provider_config_ref": "provider://local-bridge",
+    "agent_profile": "oasis7_p0_low_freq_npc",
+    "fixture_id": "bridge-full-chain-e2e",
+    "timeout_budget_ms": 7000
+  }'
+```
+
+期望：
+- happy path 返回 `provider_error=null` 或等价成功字段。
+- provider trace / bridge log 能证明该调用通过 `newapi_user_ref:<ref>` 映射到对应 project `token_key`。
+- LetAI / NewAPI 侧能看到该 project 的 token usage 或余额消耗。
+- lowquota persona 连续调用直到额度耗尽时，失败必须归属于同一 `newapi_user_ref`，不得 fallback 到全局 token。
+
+#### Step G: 证据回写
+
+每个 persona 跑完后，必须记录到 `.pm/tasks/<TASK-UID>.execution.md`，并为正式 QA closeout 增补一个 sanitized evidence 文件，例如 `doc/testing/evidence/oc-letai-bridge-full-chain-e2e-<date>.md`：
+
+- persona slug，不含私钥。
+- `newapi_user_ref`、`bridge_user_id`、`route_id`、`deposit_account_id`。
+- chain `action_id` / tx id / explorer link，以及实际 `from_account_id`。
+- reconcile response 摘要和本次 route/ledger row 状态。
+- provider smoke response 摘要。
+- LetAI/NewAPI usage 摘要。
+- 对失败 path，记录 `manual_review` reason 和 operator review resolution。
 
 ## 7. 日常巡检
 - health 接口关注：

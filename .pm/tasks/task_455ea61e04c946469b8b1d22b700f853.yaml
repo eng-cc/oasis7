@@ -1,0 +1,25 @@
+task_uid: task_455ea61e04c946469b8b1d22b700f853
+title: "explain LLM token consumption"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-agent-llm-token-consumption-readonly
+execution_log_path: .pm/tasks/task_455ea61e04c946469b8b1d22b700f853.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Explain current in-game LLM token consumption paths with repo evidence"
+handoff_to:
+  - agent_engineer
+updated_at: 2026-06-03T15:36:39+08:00
+last_started_at: 2026-06-02T15:44:37+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-03T15:36:37+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T15:36:39+08:00
