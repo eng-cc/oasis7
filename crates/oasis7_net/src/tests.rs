@@ -138,6 +138,7 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
     let peer_manager_policy = PeerManagerPolicy {
         min_active_discovery_sources: 0,
         min_peer_discovery_sources: 0,
+        max_ipv4_subnet_active_peers: None,
         max_ipv4_subnet_share_per_mille: 1_000,
         block_ipv4_subnet_share_per_mille: 1_000,
         max_relay_domain_share_per_mille: 1_000,

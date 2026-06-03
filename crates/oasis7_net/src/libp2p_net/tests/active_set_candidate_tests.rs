@@ -61,6 +61,56 @@ fn active_set_candidate_status_flags_bucket_overflow_without_full_recompute() {
 }
 
 #[test]
+fn active_set_candidate_count_limit_allows_third_and_blocks_fourth_subnet_peer() {
+    let candidate = ActivePeerCandidate {
+        discovery_sources: vec![
+            crate::dht::PeerDiscoverySource::Dht,
+            crate::dht::PeerDiscoverySource::Rendezvous,
+        ],
+        ipv4_subnet_bucket: Some("10.0.0".to_string()),
+        relay_domain: None,
+        source_operator: None,
+        source_asn: None,
+        relay_reserved: false,
+    };
+    let policy = PeerManagerPolicy {
+        max_ipv4_subnet_active_peers: Some(3),
+        ..PeerManagerPolicy::default()
+    };
+    let two_peer_stats = ActivePeerSetStats {
+        active_peer_count: 2,
+        active_discovery_sources: BTreeSet::from(["dht", "rendezvous"]),
+        ipv4_subnet_counts: HashMap::from([("10.0.0".to_string(), 2)]),
+        ..ActivePeerSetStats::default()
+    };
+    let three_peer_stats = ActivePeerSetStats {
+        active_peer_count: 3,
+        active_discovery_sources: BTreeSet::from(["dht", "rendezvous"]),
+        ipv4_subnet_counts: HashMap::from([("10.0.0".to_string(), 3)]),
+        ..ActivePeerSetStats::default()
+    };
+
+    assert_eq!(
+        candidate_status_with_active_set(&candidate, &two_peer_stats, &policy),
+        PeerManagerHealthStatus::Active
+    );
+    assert!(!candidate_would_degrade_admitted_peers(
+        &candidate,
+        &two_peer_stats,
+        &policy,
+    ));
+    assert_eq!(
+        candidate_status_with_active_set(&candidate, &three_peer_stats, &policy),
+        PeerManagerHealthStatus::Blocked
+    );
+    assert!(candidate_would_degrade_admitted_peers(
+        &candidate,
+        &three_peer_stats,
+        &policy,
+    ));
+}
+
+#[test]
 fn active_set_candidate_status_admits_distinct_peer_without_degrading_existing_active_set() {
     let admitted_key = Keypair::generate_ed25519();
     let admitted_peer = PeerId::from(admitted_key.public());

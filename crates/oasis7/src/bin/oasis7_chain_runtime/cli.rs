@@ -88,6 +88,7 @@ pub(super) struct CliOptions {
     pub p2p_node_role: PeerNodeRole,
     pub p2p_source_operator: Option<String>,
     pub p2p_source_asn: Option<String>,
+    pub p2p_max_ipv4_subnet_active_peers: Option<usize>,
     pub node_tick_ms: u64,
     pub pos_slot_duration_ms: u64,
     pub pos_ticks_per_slot: u64,
@@ -145,6 +146,7 @@ impl Default for CliOptions {
             p2p_node_role: PeerNodeRole::ValidatorCore,
             p2p_source_operator: None,
             p2p_source_asn: None,
+            p2p_max_ipv4_subnet_active_peers: None,
             node_tick_ms: DEFAULT_NODE_TICK_MS,
             pos_slot_duration_ms: DEFAULT_POS_SLOT_DURATION_MS,
             pos_ticks_per_slot: DEFAULT_POS_TICKS_PER_SLOT,
@@ -279,6 +281,18 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                     raw.as_str(),
                     "--p2p-source-asn",
                 )?);
+            }
+            "--p2p-max-ipv4-subnet-active-peers" => {
+                let raw = parse_required_value(&mut iter, "--p2p-max-ipv4-subnet-active-peers")?;
+                options.p2p_max_ipv4_subnet_active_peers = Some(
+                    raw.parse::<usize>()
+                        .ok()
+                        .filter(|value| *value > 0)
+                        .ok_or_else(|| {
+                            "--p2p-max-ipv4-subnet-active-peers requires a positive integer"
+                                .to_string()
+                        })?,
+                );
             }
             "--node-tick-ms" => {
                 let raw = parse_required_value(&mut iter, "--node-tick-ms")?;
@@ -713,6 +727,8 @@ Options:\n\
   --p2p-node-role <role>            validator_core|sentry|relay|full_storage|observer_light\n\
   --p2p-source-operator <label>     canonical operator label for peer diversity policy\n\
   --p2p-source-asn <label>          canonical ASN label for peer diversity policy\n\
+  --p2p-max-ipv4-subnet-active-peers <n>\n\
+                                    max active peers allowed in one IPv4 /24 before blocking\n\
   --node-tick-ms <n>                worker poll/fallback interval ms (default: {DEFAULT_NODE_TICK_MS})\n\
   --pos-slot-duration-ms <n>        PoS slot duration in milliseconds (default: {DEFAULT_POS_SLOT_DURATION_MS})\n\
   --pos-ticks-per-slot <n>          logical ticks per PoS slot (default: {DEFAULT_POS_TICKS_PER_SLOT})\n\

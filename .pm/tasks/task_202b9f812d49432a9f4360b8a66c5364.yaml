@@ -1,0 +1,18 @@
+task_uid: task_202b9f812d49432a9f4360b8a66c5364
+title: "expand testnet to fourth local node"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-expand-testnet-fourth-node
+execution_log_path: .pm/tasks/task_202b9f812d49432a9f4360b8a66c5364.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - /Users/scc/Documents/keys/aliyun_ecs.txt
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Start one additional local public testnet node and verify four-node topology evidence."
+handoff_to: []
+updated_at: 2026-06-03T15:18:38+08:00
+last_started_at: 2026-06-03T15:18:38+08:00

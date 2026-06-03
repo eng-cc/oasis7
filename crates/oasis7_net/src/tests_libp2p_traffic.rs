@@ -24,6 +24,7 @@ fn libp2p_traffic_metrics_track_requests_and_gossip_payloads() {
     let peer_manager_policy = PeerManagerPolicy {
         min_active_discovery_sources: 0,
         min_peer_discovery_sources: 0,
+        max_ipv4_subnet_active_peers: None,
         max_ipv4_subnet_share_per_mille: 1_000,
         block_ipv4_subnet_share_per_mille: 1_000,
         max_relay_domain_share_per_mille: 1_000,

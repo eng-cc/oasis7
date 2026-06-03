@@ -58,6 +58,7 @@ fn parse_options_defaults() {
     assert!(options.replication_network_listen_addrs.is_empty());
     assert!(options.replication_network_bootstrap_peers.is_empty());
     assert!(options.replication_remote_writer_public_keys.is_empty());
+    assert_eq!(options.p2p_max_ipv4_subnet_active_peers, None);
 }
 
 #[test]
@@ -94,6 +95,8 @@ fn parse_options_reads_custom_values() {
             "--node-validator",
             "node-b:45",
             "--node-auto-attest-all",
+            "--p2p-max-ipv4-subnet-active-peers",
+            "3",
             "--execution-world-dir",
             "custom/world",
             "--reward-runtime-epoch-duration-secs",
@@ -129,6 +132,7 @@ fn parse_options_reads_custom_values() {
     assert_eq!(options.node_validators.len(), 2);
     assert!(options.node_validator_signer_public_keys.is_empty());
     assert!(options.node_auto_attest_all_validators);
+    assert_eq!(options.p2p_max_ipv4_subnet_active_peers, Some(3));
     assert_eq!(options.reward_runtime_epoch_duration_secs, Some(60));
     assert_eq!(options.reward_points_per_credit, 100);
     assert!(options.reward_runtime_auto_redeem);
@@ -140,6 +144,13 @@ fn parse_options_reads_custom_values() {
             .map(|p| p.to_string_lossy().to_string()),
         Some("custom/world".to_string())
     );
+}
+
+#[test]
+fn parse_options_rejects_invalid_ipv4_subnet_active_peer_limit() {
+    let err = parse_options(["--p2p-max-ipv4-subnet-active-peers", "0"].into_iter())
+        .expect_err("should reject zero peer limit");
+    assert!(err.contains("--p2p-max-ipv4-subnet-active-peers requires a positive integer"));
 }
 
 #[test]
@@ -423,6 +434,32 @@ fn triad_low_traffic_replication_network_config_slows_control_plane_churn() {
     assert_eq!(config.discovery_query_interval_ms, 180_000);
     assert_eq!(config.republish_interval_ms, 30 * 60 * 1000);
     assert!(!config.enable_autonat);
+}
+
+#[test]
+fn replication_network_config_applies_ipv4_subnet_active_peer_limit() {
+    let signing_key = SigningKey::from_bytes(&[13_u8; 32]);
+    let keypair = node_keypair_config::NodeKeypairConfig {
+        private_key_hex: hex::encode(signing_key.to_bytes()),
+        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
+    };
+    let options = parse_options(
+        [
+            "--p2p-max-ipv4-subnet-active-peers",
+            "3",
+            "--replication-network-peer",
+            "/ip4/39.104.204.172/tcp/5611",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+    let config = build_default_replication_network_config(&options, &keypair)
+        .expect("replication network config should build");
+
+    assert_eq!(
+        config.peer_manager_policy.max_ipv4_subnet_active_peers,
+        Some(3)
+    );
 }
 
 #[test]
