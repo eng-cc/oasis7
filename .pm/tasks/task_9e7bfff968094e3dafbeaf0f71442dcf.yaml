@@ -1,0 +1,25 @@
+task_uid: task_9e7bfff968094e3dafbeaf0f71442dcf
+title: "fix PR release soak gate failure"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-trigger-latest-github-release
+execution_log_path: .pm/tasks/task_9e7bfff968094e3dafbeaf0f71442dcf.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - .github/workflows/release-packages.yml
+  - scripts/p2p-longrun-soak.sh
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Release Packages run 26877365314 soak gate failure is diagnosed, fixed if needed, and fresh verification or rerun evidence is recorded."
+handoff_to: []
+updated_at: 2026-06-03T19:59:38+08:00
+last_started_at: 2026-06-03T19:43:53+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo test -p oasis7 node_keypair_config -- --nocapture && bash -n scripts/p2p-longrun-soak.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-03T19:59:37+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T19:59:38+08:00
