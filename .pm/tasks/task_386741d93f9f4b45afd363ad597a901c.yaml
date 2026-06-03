@@ -1,0 +1,25 @@
+task_uid: task_386741d93f9f4b45afd363ad597a901c
+title: "Local play launcher and game"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-viewer-local-play-launcher-game
+execution_log_path: .pm/tasks/task_386741d93f9f4b45afd363ad597a901c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Launcher and game are built or served locally."
+  - "User receives a usable local play URL or launch command."
+handoff_to: []
+updated_at: 2026-06-02T21:49:32+08:00
+last_started_at: 2026-06-02T15:44:29+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/run-game-test.sh && bash -n scripts/worktree-harness.sh && ./scripts/cargo-dev.sh fmt --check && ./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_game_launcher -- --nocapture && ./scripts/cargo-dev.sh test -p oasis7 llm_config_uses_default_model_when_unset -- --nocapture && git diff --check"
+last_verified_at: 2026-06-02T21:49:31+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-02T21:49:32+08:00

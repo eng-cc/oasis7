@@ -21,6 +21,7 @@ use super::agent::{
     LlmPromptSectionTrace, LlmStepTrace,
 };
 use super::kernel::{Observation, RejectReason, WorldEvent, WorldEventKind};
+use super::llm_defaults::DEFAULT_LLM_MODEL;
 use super::memory::{AgentMemory, LongTermMemoryEntry, MemoryEntry};
 use super::types::{
     Action, ModuleInstallTarget, ResourceKind, ResourceOwner, CM_PER_KM,
@@ -414,7 +415,10 @@ impl LlmAgentConfig {
     where
         F: FnMut(&str) -> Option<String>,
     {
-        let model = required_env(&mut getter, ENV_LLM_MODEL)?;
+        let model = getter(ENV_LLM_MODEL)
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| DEFAULT_LLM_MODEL.to_string());
         let base_url = required_env(&mut getter, ENV_LLM_BASE_URL)?;
         let api_key = required_env(&mut getter, ENV_LLM_API_KEY)?;
         let timeout_ms = match getter(ENV_LLM_TIMEOUT_MS) {

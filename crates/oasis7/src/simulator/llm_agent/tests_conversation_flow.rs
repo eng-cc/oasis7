@@ -442,6 +442,19 @@ fn llm_config_uses_default_system_prompt() {
 }
 
 #[test]
+fn llm_config_uses_default_model_when_unset() {
+    let mut vars = BTreeMap::new();
+    vars.insert(
+        ENV_LLM_BASE_URL.to_string(),
+        "https://api.example.com/v1".to_string(),
+    );
+    vars.insert(ENV_LLM_API_KEY.to_string(), "secret".to_string());
+
+    let config = LlmAgentConfig::from_env_with(|key| vars.get(key).cloned(), "").unwrap();
+    assert_eq!(config.model, DEFAULT_LLM_MODEL);
+}
+
+#[test]
 fn llm_config_reads_system_prompt_from_env() {
     let mut vars = BTreeMap::new();
     vars.insert(ENV_LLM_MODEL.to_string(), "gpt-4o-mini".to_string());
@@ -688,7 +701,7 @@ fn llm_config_from_env_for_agent_rejects_removed_old_brand_prefix() {
     let error = LlmAgentConfig::from_env_for_agent("agent-1").expect_err("missing oasis7 env");
     assert!(matches!(
         error,
-        LlmConfigError::MissingEnv { key } if key == ENV_LLM_MODEL
+        LlmConfigError::MissingEnv { key } if key == ENV_LLM_BASE_URL
     ));
 }
 

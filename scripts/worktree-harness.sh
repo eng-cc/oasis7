@@ -201,25 +201,41 @@ case "$action" in
     live_bind=$(json_get "$ports_json" live_bind)
     chain_status_bind=$(json_get "$ports_json" chain_status_bind)
 
-    wh_state_write "$STATE_FILE" "$(python3 - <<PY
+    wh_state_write "$STATE_FILE" "$(python3 - \
+      "$WORKTREE_ID" \
+      "$PWD" \
+      "$GIT_HEAD" \
+      "$BOOT_MODE" \
+      "$ENABLE_LLM" \
+      "$viewer_port" \
+      "$web_bind" \
+      "$live_bind" \
+      "$chain_status_bind" \
+      "$BUNDLE_DIR" \
+      "$RUNTIME_DIR" \
+      "$ARTIFACT_DIR" \
+      "$BROWSER_DIR" \
+      "$BROWSER_SESSION" \
+      "$STARTUP_LOG" <<'PY'
 import json
+import sys
 payload = {
-    "worktree_id": ${WORKTREE_ID@Q},
-    "worktree_path": ${PWD@Q},
-    "git_head": ${GIT_HEAD@Q},
+    "worktree_id": sys.argv[1],
+    "worktree_path": sys.argv[2],
+    "git_head": sys.argv[3],
     "status": "booting",
-    "boot_mode": ${BOOT_MODE@Q},
-    "llm_enabled": ${ENABLE_LLM@Q},
-    "viewer_port": int(${viewer_port@Q}),
-    "web_bind": ${web_bind@Q},
-    "live_bind": ${live_bind@Q},
-    "chain_status_bind": ${chain_status_bind@Q},
-    "bundle_dir": ${BUNDLE_DIR@Q},
-    "runtime_dir": ${RUNTIME_DIR@Q},
-    "artifact_dir": ${ARTIFACT_DIR@Q},
-    "browser_dir": ${BROWSER_DIR@Q},
-    "browser_session": ${BROWSER_SESSION@Q},
-    "startup_log": ${STARTUP_LOG@Q},
+    "boot_mode": sys.argv[4],
+    "llm_enabled": sys.argv[5],
+    "viewer_port": int(sys.argv[6]),
+    "web_bind": sys.argv[7],
+    "live_bind": sys.argv[8],
+    "chain_status_bind": sys.argv[9],
+    "bundle_dir": sys.argv[10],
+    "runtime_dir": sys.argv[11],
+    "artifact_dir": sys.argv[12],
+    "browser_dir": sys.argv[13],
+    "browser_session": sys.argv[14],
+    "startup_log": sys.argv[15],
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -234,8 +250,11 @@ PY
       bundle_args=()
     fi
 
-    run_args=(
-      "${bundle_args[@]}"
+    run_args=()
+    if [[ "$BOOT_MODE" == "bundle" ]]; then
+      run_args+=("${bundle_args[@]}")
+    fi
+    run_args+=(
       --viewer-port "$viewer_port"
       --web-bind "$web_bind"
       --live-bind "$live_bind"
@@ -275,13 +294,18 @@ PY
 
     viewer_url=$(wh_env_file_get "$META_FILE" GAME_URL)
     launcher_pid=$(wh_env_file_get "$META_FILE" LAUNCHER_PID 2>/dev/null || true)
-    wh_state_write "$STATE_FILE" "$(python3 - <<PY
+    wh_state_write "$STATE_FILE" "$(python3 - \
+      "$viewer_url" \
+      "$launcher_pid" \
+      "$META_FILE" <<'PY'
 import json
+import sys
+launcher_pid = sys.argv[2]
 payload = {
     "status": "ready",
-    "viewer_url": ${viewer_url@Q},
-    "launcher_pid": int(${launcher_pid@Q}) if ${launcher_pid@Q} else None,
-    "meta_file": ${META_FILE@Q},
+    "viewer_url": sys.argv[1],
+    "launcher_pid": int(launcher_pid) if launcher_pid else None,
+    "meta_file": sys.argv[3],
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY

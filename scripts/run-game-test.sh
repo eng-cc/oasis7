@@ -25,6 +25,18 @@ RUN_ID=""
 META_FILE=""
 JSON_READY="0"
 SKIP_LLM_PROVIDER_PREFLIGHT="0"
+AGENT_DECISION_SOURCE="${OASIS7_AGENT_DECISION_SOURCE:-provider_backed}"
+AGENT_PROVIDER_LANE="${OASIS7_AGENT_PROVIDER_LANE:-local}"
+AGENT_PROVIDER_BACKEND="${OASIS7_AGENT_PROVIDER_BACKEND:-provider_local_bridge}"
+AGENT_PROVIDER_CONTRACT="${OASIS7_AGENT_PROVIDER_CONTRACT:-worldsim_provider_v1}"
+AGENT_PROVIDER_TRANSPORT="${OASIS7_AGENT_PROVIDER_TRANSPORT:-}"
+AGENT_PROVIDER_URL="${OASIS7_AGENT_PROVIDER_URL:-}"
+AGENT_PROVIDER_AUTH_TOKEN="${OASIS7_AGENT_PROVIDER_AUTH_TOKEN:-}"
+AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS:-15000}"
+AGENT_PROVIDER_PROFILE="${OASIS7_AGENT_PROVIDER_PROFILE:-oasis7_p0_low_freq_npc}"
+AGENT_EXECUTION_LANE="${OASIS7_AGENT_EXECUTION_LANE:-headless_agent}"
+AGENT_PROVIDER_PROD_URL="${OASIS7_AGENT_PROVIDER_PROD_URL:-https://t2t.oasis7.tech}"
+AGENT_PROVIDER_TEST_URL="${OASIS7_AGENT_PROVIDER_TEST_URL:-}"
 
 usage() {
   cat <<'USAGE'
@@ -58,7 +70,18 @@ Options:
   --meta-file <path>       Override metadata file path (default: <output-dir>/session.meta)
   --json-ready             Emit one-line JSON ready payload after the stack becomes ready
   --skip-llm-provider-preflight
-                           Skip the active-LLM provider probe before launcher startup
+                           Skip the active LLM/provider probe before launcher startup
+  --agent-decision-source <s>
+                           provider_backed (default) or builtin_llm
+  --agent-provider-lane <lane>
+                           local (default), test, or prod
+  --agent-provider-url <u> Provider bridge URL override for provider_backed mode
+  --agent-provider-auth-token <t>
+                           Optional provider bridge bearer token, e.g. newapi_user_ref:<user>
+  --agent-provider-transport <t>
+                           loopback_http (default) or remote_https
+  --agent-execution-lane <lane>
+                           headless_agent (default) or player_parity
   --with-llm               Enable LLM mode (default: enabled; required for gameplay)
   --no-llm                 Negative-path only; this launcher stack now fails fast without LLM
   -h, --help               Show this help
@@ -124,6 +147,30 @@ while [[ $# -gt 0 ]]; do
     --skip-llm-provider-preflight)
       SKIP_LLM_PROVIDER_PREFLIGHT="1"
       shift
+      ;;
+    --agent-decision-source)
+      AGENT_DECISION_SOURCE="${2:-}"
+      shift 2
+      ;;
+    --agent-provider-lane|--agent-provider-env)
+      AGENT_PROVIDER_LANE="${2:-}"
+      shift 2
+      ;;
+    --agent-provider-url)
+      AGENT_PROVIDER_URL="${2:-}"
+      shift 2
+      ;;
+    --agent-provider-auth-token)
+      AGENT_PROVIDER_AUTH_TOKEN="${2:-}"
+      shift 2
+      ;;
+    --agent-provider-transport)
+      AGENT_PROVIDER_TRANSPORT="${2:-}"
+      shift 2
+      ;;
+    --agent-execution-lane)
+      AGENT_EXECUTION_LANE="${2:-}"
+      shift 2
       ;;
     --chain-enable)
       CHAIN_ENABLED="1"
@@ -220,6 +267,38 @@ if [[ "$ENABLE_LLM" != "1" ]]; then
   echo "hint: use env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm ... only for direct observer/debug diagnostics" >&2
   exit 1
 fi
+
+resolve_agent_provider_lane_defaults() {
+  if [[ "$AGENT_DECISION_SOURCE" == "builtin_llm" ]]; then
+    return 0
+  fi
+
+  case "$AGENT_PROVIDER_LANE" in
+    local)
+      AGENT_PROVIDER_TRANSPORT="${AGENT_PROVIDER_TRANSPORT:-loopback_http}"
+      AGENT_PROVIDER_URL="${AGENT_PROVIDER_URL:-http://127.0.0.1:5841}"
+      ;;
+    test)
+      AGENT_PROVIDER_TRANSPORT="${AGENT_PROVIDER_TRANSPORT:-remote_https}"
+      AGENT_PROVIDER_URL="${AGENT_PROVIDER_URL:-$AGENT_PROVIDER_TEST_URL}"
+      if [[ -z "$AGENT_PROVIDER_URL" ]]; then
+        echo "error: --agent-provider-lane test requires --agent-provider-url or OASIS7_AGENT_PROVIDER_TEST_URL" >&2
+        exit 1
+      fi
+      ;;
+    prod|production|online)
+      AGENT_PROVIDER_LANE="prod"
+      AGENT_PROVIDER_TRANSPORT="${AGENT_PROVIDER_TRANSPORT:-remote_https}"
+      AGENT_PROVIDER_URL="${AGENT_PROVIDER_URL:-$AGENT_PROVIDER_PROD_URL}"
+      ;;
+    *)
+      echo "error: --agent-provider-lane must be one of local, test, prod; got $AGENT_PROVIDER_LANE" >&2
+      exit 1
+      ;;
+  esac
+}
+
+resolve_agent_provider_lane_defaults
 
 if [[ -n "$CHAIN_STATUS_BIND_ADDR" ]]; then
   if [[ "$CHAIN_STATUS_BIND_ADDR" != *:* ]]; then
@@ -346,6 +425,95 @@ tail_probe_logs_on_error() {
   fi
 }
 
+provider_curl_timeout_seconds() {
+  local timeout_ms="$1"
+  python3 - "$timeout_ms" <<'PY'
+import sys
+
+raw = sys.argv[1].strip()
+try:
+    timeout_ms = int(raw)
+except ValueError:
+    raise SystemExit(f"invalid provider connect timeout `{raw}`")
+if timeout_ms <= 0:
+    raise SystemExit("provider connect timeout must be positive")
+seconds = timeout_ms / 1000
+print(f"{seconds:.3f}".rstrip("0").rstrip("."))
+PY
+}
+
+run_provider_bridge_preflight() {
+  local provider_url="${AGENT_PROVIDER_URL%/}"
+  if [[ -z "$provider_url" ]]; then
+    echo "provider bridge URL is required for provider_backed mode" >"$LLM_PROVIDER_PROBE_LOG"
+    return 1
+  fi
+
+  local info_file health_file
+  info_file="$OUTPUT_DIR/provider-info.json"
+  health_file="$OUTPUT_DIR/provider-health.json"
+  local curl_timeout_seconds
+  if ! curl_timeout_seconds="$(provider_curl_timeout_seconds "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" 2>"$LLM_PROVIDER_PROBE_LOG")"; then
+    return 1
+  fi
+  local curl_args=(-fsS --connect-timeout "$curl_timeout_seconds" --max-time "$curl_timeout_seconds")
+  if [[ -n "$AGENT_PROVIDER_AUTH_TOKEN" ]]; then
+    curl_args+=(-H "Authorization: Bearer $AGENT_PROVIDER_AUTH_TOKEN")
+  fi
+
+  if ! curl "${curl_args[@]}" "$provider_url/v1/provider/info" >"$info_file" 2>"$LLM_PROVIDER_PROBE_LOG"; then
+    return 1
+  fi
+  if ! curl "${curl_args[@]}" "$provider_url/v1/provider/health" >"$health_file" 2>>"$LLM_PROVIDER_PROBE_LOG"; then
+    return 1
+  fi
+
+  python3 - "$provider_url" "$AGENT_PROVIDER_TRANSPORT" "$info_file" "$health_file" >"$LLM_PROVIDER_PROBE_JSON" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+provider_url, transport, info_path, health_path = sys.argv[1:5]
+payload = {
+    "status": "ok",
+    "config_source": "provider_backed",
+    "provider_url": provider_url,
+    "provider_transport": transport,
+    "provider_info": json.loads(Path(info_path).read_text()),
+    "provider_health": json.loads(Path(health_path).read_text()),
+}
+print(json.dumps(payload, ensure_ascii=False))
+PY
+}
+
+run_builtin_llm_preflight() {
+  local probe_bin="${1:-}"
+  if [[ -n "$probe_bin" ]]; then
+    "$probe_bin" >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"
+  else
+    (
+      cd "$BUNDLE_DIR"
+      "$ROOT_DIR/scripts/check-active-llm-provider.sh"
+    ) >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"
+  fi
+}
+
+run_active_llm_preflight() {
+  local probe_bin="${1:-}"
+  case "$AGENT_DECISION_SOURCE" in
+    provider_backed|provider_loopback_http|agent_direct_connect)
+      run_provider_bridge_preflight
+      ;;
+    builtin_llm)
+      run_builtin_llm_preflight "$probe_bin"
+      ;;
+    *)
+      echo "unsupported agent decision source for preflight: $AGENT_DECISION_SOURCE" >"$LLM_PROVIDER_PROBE_LOG"
+      return 1
+      ;;
+  esac
+}
+
 check_port_free "$VIEWER_PORT"
 check_port_free "$WEB_BRIDGE_PORT"
 
@@ -445,17 +613,31 @@ else
   WORLD_ARGS+=(--chain-disable)
 fi
 WORLD_ARGS+=(--with-llm)
+WORLD_ARGS+=(
+  --agent-decision-source "$AGENT_DECISION_SOURCE"
+)
+if [[ "$AGENT_DECISION_SOURCE" != "builtin_llm" ]]; then
+  WORLD_ARGS+=(
+    --agent-provider-backend "$AGENT_PROVIDER_BACKEND"
+    --agent-provider-contract "$AGENT_PROVIDER_CONTRACT"
+    --agent-provider-transport "$AGENT_PROVIDER_TRANSPORT"
+    --agent-provider-url "$AGENT_PROVIDER_URL"
+    --agent-provider-connect-timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
+    --agent-provider-profile "$AGENT_PROVIDER_PROFILE"
+    --agent-execution-lane "$AGENT_EXECUTION_LANE"
+  )
+  if [[ -n "$AGENT_PROVIDER_AUTH_TOKEN" ]]; then
+    WORLD_ARGS+=(--agent-provider-auth-token "$AGENT_PROVIDER_AUTH_TOKEN")
+  fi
+fi
 
 if [[ -n "$BUNDLE_DIR" ]]; then
   LAUNCH_MODE="bundle"
   LAUNCH_CMD="$BUNDLE_DIR/run-game.sh"
   if [[ "$SKIP_LLM_PROVIDER_PREFLIGHT" != "1" ]]; then
-    if ! (
-      cd "$BUNDLE_DIR"
-      "$ROOT_DIR/scripts/check-active-llm-provider.sh"
-    ) >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"; then
-      echo "error: active LLM provider preflight failed before launcher startup" >&2
-      echo "hint: rerun with --skip-llm-provider-preflight only when intentionally validating blocked/failure behavior after stack bootstrap" >&2
+    if ! run_active_llm_preflight; then
+      echo "error: active provider preflight failed before launcher startup" >&2
+      echo "hint: provider_backed mode expects a reachable provider bridge; builtin_llm mode expects direct LLM env/config" >&2
       tail_probe_logs_on_error "$LLM_PROVIDER_PROBE_JSON" "$LLM_PROVIDER_PROBE_LOG"
       exit 1
     fi
@@ -493,12 +675,9 @@ else
     [[ -x "$SOURCE_MODE_CHAIN_RUNTIME_BIN" ]] || { echo "error: built chain runtime binary missing: $SOURCE_MODE_CHAIN_RUNTIME_BIN" >&2; exit 1; }
   fi
   if [[ "$SKIP_LLM_PROVIDER_PREFLIGHT" != "1" ]]; then
-    if ! (
-      cd "$ROOT_DIR"
-      "$SOURCE_MODE_PROBE_BIN"
-    ) >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"; then
-      echo "error: active LLM provider preflight failed before launcher startup" >&2
-      echo "hint: rerun with --skip-llm-provider-preflight only when intentionally validating blocked/failure behavior after stack bootstrap" >&2
+    if ! run_active_llm_preflight "$SOURCE_MODE_PROBE_BIN"; then
+      echo "error: active provider preflight failed before launcher startup" >&2
+      echo "hint: provider_backed mode expects a reachable provider bridge; builtin_llm mode expects direct LLM env/config" >&2
       tail_probe_logs_on_error "$LLM_PROVIDER_PROBE_JSON" "$LLM_PROVIDER_PROBE_LOG"
       exit 1
     fi
