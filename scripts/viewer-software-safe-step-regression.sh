@@ -136,6 +136,7 @@ state_stage_status() { json_get "$1" gameplaySummary.stageStatus; }
 state_last_control_stage() { json_get "$1" lastControlFeedback.stage; }
 state_execution_state() { json_get "$1" gameplaySummary.executionState; }
 state_recent_feedback_stage() { json_get "$1" gameplaySummary.recentFeedback.stage; }
+state_recent_feedback_reason() { json_get "$1" gameplaySummary.recentFeedback.reason; }
 state_narrative_blocker_detail() { json_get "$1" gameplaySummary.narrativeBlockerDetail; }
 
 refresh_explicit_blocker_state() {
@@ -145,7 +146,16 @@ refresh_explicit_blocker_state() {
   blocker_detail=$(state_blocker_detail "$state")
   execution_state=$(state_execution_state "$state")
   recent_feedback_stage=$(state_recent_feedback_stage "$state")
+  recent_feedback_reason=$(state_recent_feedback_reason "$state")
   narrative_blocker_detail=$(state_narrative_blocker_detail "$state")
+  expected_blocker_detail=""
+  if [[ -n "${blocker_detail:-}" && "$blocker_detail" != "null" ]]; then
+    expected_blocker_detail="$blocker_detail"
+  elif [[ -n "${narrative_blocker_detail:-}" && "$narrative_blocker_detail" != "null" ]]; then
+    expected_blocker_detail="$narrative_blocker_detail"
+  elif [[ -n "${recent_feedback_reason:-}" && "$recent_feedback_reason" != "null" ]]; then
+    expected_blocker_detail="$recent_feedback_reason"
+  fi
   explicit_blocker_state=false
   if [[ -n "${blocker_kind:-}" && "$blocker_kind" != "null" ]]; then
     explicit_blocker_state=true
@@ -156,6 +166,8 @@ refresh_explicit_blocker_state() {
   elif [[ "${recent_feedback_stage:-}" == "blocked" ]]; then
     explicit_blocker_state=true
   elif [[ -n "${narrative_blocker_detail:-}" && "$narrative_blocker_detail" != "null" ]]; then
+    explicit_blocker_state=true
+  elif [[ -n "${recent_feedback_reason:-}" && "$recent_feedback_reason" != "null" ]]; then
     explicit_blocker_state=true
   fi
 }
@@ -521,12 +533,7 @@ if [[ "$(state_connection "$after_progress_state")" != "connected" ]]; then
 fi
 fail_category=null
 if [[ "$auto_progress_observed" != "true" ]]; then
-  explicit_blocker_state=false
-  if [[ -n "${blocker_kind:-}" && "$blocker_kind" != "null" ]]; then
-    explicit_blocker_state=true
-  elif [[ "${stage_status:-}" == "blocked" ]]; then
-    explicit_blocker_state=true
-  fi
+  refresh_explicit_blocker_state "$after_progress_state"
 
   if [[ "$explicit_blocker_state" != "true" ]]; then
     log_note step_once
@@ -607,13 +614,14 @@ if [[ "$auto_progress_observed" != "true" ]]; then
   if [[ "$auto_progress_observed" == "true" ]]; then
     :
   elif [[ "$explicit_blocker_state" == "true" ]]; then
-    blocker_dom_check_js=$(python3 - "${stage_status:-null}" "${blocker_kind:-null}" "${blocker_detail:-null}" <<'PY'
+    blocker_dom_check_js=$(python3 - "${stage_status:-null}" "${blocker_kind:-null}" "${blocker_detail:-null}" "${expected_blocker_detail:-null}" <<'PY'
 import json
 import sys
 
 stage_status = sys.argv[1]
 blocker_kind = sys.argv[2]
 blocker_detail = sys.argv[3]
+expected_blocker_detail = sys.argv[4]
 
 print(r"""
 (() => {
@@ -625,6 +633,7 @@ print(r"""
   const stageStatus = %s;
   const blockerKind = %s;
   const blockerDetail = %s;
+  const expectedBlockerDetail = %s;
   const surfaceKeywords = [
     'formal gameplay summary',
     'recent feedback',
@@ -640,10 +649,19 @@ print(r"""
   const hasSurface = surfaceKeywords.some((token) => text.includes(normalize(token)));
   const kindOk = !blockerKind || blockerKind === 'null' || text.includes(normalize(blockerKind));
   const detailOk = !blockerDetail || blockerDetail === 'null' || text.includes(normalize(blockerDetail));
+  const expectedDetailOk =
+    !expectedBlockerDetail ||
+    expectedBlockerDetail === 'null' ||
+    text.includes(normalize(expectedBlockerDetail));
   const statusOk = stageStatus !== 'blocked' || text.includes('blocked') || text.includes('阻塞');
-  return hasSurface && kindOk && detailOk && statusOk;
+  return hasSurface && kindOk && detailOk && expectedDetailOk && statusOk;
 })()
-""" % (json.dumps(stage_status), json.dumps(blocker_kind), json.dumps(blocker_detail)))
+""" % (
+    json.dumps(stage_status),
+    json.dumps(blocker_kind),
+    json.dumps(blocker_detail),
+    json.dumps(expected_blocker_detail),
+))
 PY
 )
     blocker_dom_visible=$(normalize_eval_token "$(ab_eval "$session" "$blocker_dom_check_js" 2>>"$ab_log" || printf 'false')")

@@ -133,9 +133,14 @@ cat >"$fixture_root/software_safe.html" <<'EOF'
           } else {
             selectionRoot.textContent = "No agent selected yet.";
           }
-          if (state.gameplaySummary.stageStatus === "blocked") {
+          const blockerDetail =
+            state.gameplaySummary.blockerDetail ||
+            state.gameplaySummary.narrativeBlockerDetail ||
+            state.gameplaySummary.recentFeedback?.reason ||
+            null;
+          if (state.gameplaySummary.stageStatus === "blocked" || blockerDetail) {
             blockerRoot.textContent =
-              `blocked ${state.gameplaySummary.blockerKind} ${state.gameplaySummary.blockerDetail}`;
+              `blocked ${state.gameplaySummary.blockerKind || "provider"} ${blockerDetail}`;
           } else {
             blockerRoot.textContent = "No blocker active.";
           }
@@ -277,6 +282,7 @@ assert summary["eventSeqAdvanced"] is False, summary
 assert summary["blockerDomVisible"] is True, summary
 assert summary["stageStatus"] == "active", summary
 assert summary["blockerKind"] is None, summary
+assert summary["blockerDetail"] is None, summary
 assert summary["selectedAgentVisible"] is True, summary
 assert summary["playbackControlsVisible"] is False, summary
 assert after_select["selectedId"] == "agent-0", after_select
@@ -285,7 +291,9 @@ assert after_progress["connectionStatus"] == "connected", after_progress
 assert after_progress["gameplaySummary"]["stageStatus"] == "active", after_progress
 assert after_progress["gameplaySummary"]["blockerKind"] is None, after_progress
 assert after_progress["gameplaySummary"]["executionState"] == "blocked", after_progress
+assert after_progress["gameplaySummary"]["narrativeBlockerDetail"] == "fixture provider unavailable", after_progress
 assert after_progress["gameplaySummary"]["recentFeedback"]["stage"] == "blocked", after_progress
+assert after_progress["gameplaySummary"]["recentFeedback"]["reason"] == "fixture provider unavailable", after_progress
 PY
 
 ensure_file_contains "$summary_json" '"failCategory": null'
