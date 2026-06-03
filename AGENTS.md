@@ -27,7 +27,7 @@
 
 - `default-workflow-bootstrap`: 任何用户请求都必须先经过 repo-owned bootstrap，确认标准 task worktree / `.pm` task / owner role 真值，再进入后续 workflow surface；禁止用只读、聊天、纯事实读取绕过 bootstrap。
 - 只读专业判断分流：只读/聊天请求也必须先进入 task/worktree bootstrap；但凡输出产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等专业结论，仍必须由对应专业角色 slice 给出或验证，TPM 只能合流与标注来源。
-- subagent 默认模型：专业角色 slice 默认请求 `gpt-5.4` + `reasoning_effort=medium`（简写 `gpt-5.4-medium`）；若用户要求其他模型、slice 明确需要更强/更快/更省配置，当前 subagent 工具只能继承父线程模型，或请求选择后无法验证实际派发模型，必须在 slice contract 同时记录 intended model、actual dispatched model/reasoning 与原因；无法验证实际模型时记录 `actual model: inherited/unverified`。
+- subagent 默认模型：专业角色 slice 默认请求 `gpt-5.5` + `reasoning_effort=medium`（简写 `gpt-5.5-medium`）；若用户要求其他模型、slice 明确需要更强/更快/更省配置，当前 subagent 工具只能继承父线程模型，或请求选择后无法验证实际派发模型，必须在 slice contract 同时记录 intended model、actual dispatched model/reasoning 与原因；无法验证实际模型时记录 `actual model: inherited/unverified`。
 - subagent 默认上下文：专业角色 slice 默认使用 full-thread/full-history fork 或最接近的等价上下文；slice contract 仍必须记录 mandatory context checklist。手工显式 context packet 只能作为补充或 fallback，且必须记录为什么不能使用默认 fork（例如工具限制、上下文安全、模型选择冲突或默认 fork 卡住）。
 - 兼容契约词：`mandatory context packet` 在当前语义下指必须记录的 mandatory context checklist/packet，不等同于必须手工组装显式上下文包。
 - 兼容契约词：TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`；其中 `mandatory context packet` 按当前语义解释为 mandatory context checklist/packet。

@@ -1,0 +1,27 @@
+task_uid: task_4a83cec640514c02bb839b020e5594ad
+title: "update subagent default model to gpt-5.5"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-subagent-default-gpt55
+execution_log_path: .pm/tasks/task_4a83cec640514c02bb839b020e5594ad.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "Workflow source-of-truth and synced guidance use gpt-5.5-medium as the default professional subagent slice model."
+  - "Repository workflow checks pass or any remaining blockers are recorded."
+handoff_to: []
+updated_at: 2026-06-03T15:13:10+08:00
+last_started_at: 2026-06-03T15:00:10+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-behavior-eval.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-03T15:13:07+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T15:13:09+08:00

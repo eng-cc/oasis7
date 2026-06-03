@@ -111,7 +111,7 @@ WORKFLOW ROUTE DECIDED
 - role:
 - slice type:
 - model configuration: compatibility marker; fill the intended/actual fields below
-- intended model configuration: `gpt-5.4-medium` by default; record reason for any requested override
+- intended model configuration: `gpt-5.5-medium` by default; record reason for any requested override
 - actual dispatched model/reasoning: record the selected model/reasoning when the tool permits and reports it; otherwise record `inherited/unverified` plus the connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified
 - context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded
 - mandatory context packet: compatibility marker; fill the mandatory context checklist/packet below
