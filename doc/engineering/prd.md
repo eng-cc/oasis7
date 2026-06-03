@@ -75,7 +75,7 @@
   - SC-35: 仓库必须存在 repo-owned `default-workflow-bootstrap` surface 作为会改变仓库状态的新 task 默认入口：先确认标准 task worktree / `.pm` task / owner role 真值与 formal docs，再把后续阶段接回 workflow router；该 surface 只能编排本地 helper/skill，不得回退成外部 bootstrap 或第二套计划真值。
   - SC-36: 仓库默认主 Agent 必须是 `tpm` workflow coordinator / integrator only；TPM 只负责流程协调、任务真值、派工、合流和 PR 主链，不承担任何专业分析、实现、验证判断、评审判断或对外口径；`producer_system_designer`、`runtime_engineer`、`wasm_platform_engineer`、`agent_engineer`、`viewer_engineer`、`qa_engineer` 与 `liveops_community` 默认都作为 `tpm` 派生的专业 subagent slice 工作，不得绕过 TPM 形成第二 owner/task/worktree/PR 主链。
   - SC-36A: 只读/聊天请求必须区分“客观事实读取”和“专业判断”：纯文件存在性、路径查找、命令输出复述可由 TPM 直接回答；产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等只读专业问题仍必须由对应 bounded 专业角色 slice 给出或验证，且不因无需仓库写回而退化成 TPM 直接专业结论。
-  - SC-36B: 专业角色 subagent slice 默认模型配置必须固定为 `gpt-5.5` + `reasoning_effort=medium`（`gpt-5.5-medium`）；任何非默认模型或 reasoning effort 必须在 slice contract 中记录用户要求或任务理由。
+  - SC-36B: 专业角色 subagent slice 默认模型配置必须以 workflow source-of-truth 的 `Default subagent runtime` 为准；任何非默认模型或 reasoning effort 必须在 slice contract 中记录用户要求或任务理由。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -132,7 +132,7 @@
   14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap；新 task worktree 必须把 ignored `target` 链接到 repo-family shared cargo target cache，减少多 worktree 重复编译产物；若 canonical `main` worktree 根存在本地 `config.toml`，则同步复制到新 task worktree，避免 active-LLM / harness 复现因缺配置偏离 `main`）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> `task-closeout.sh --verify-command "<fresh verification command>"`（或等价的“fresh verification -> `workflow-report close -> move-task --to-status done|deferred -> pm lint`”手工链）-> commit -> prepare-task-pr -> 若 PR 收到 review comments，则用 `pr-review-thread-closeout.sh` 盘点/resolve thread 并重新检查 PR state -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
   15. Flow-ENG-015: `评估外部 agent workflow repo/skill -> 将模式写入 adopted/rejected/deferred 矩阵 -> 只有 adopted 项才允许转成 repo-owned follow-up（helper/eval/optional module technique）-> 对 rejected/deferred 项显式保持非默认边界`
   16. Flow-ENG-016: `只读问题 -> 判断是否只是客观事实读取 -> 若是则 TPM 直接复述证据 -> 若需要专业判断则派发对应 bounded role slice -> TPM 合流并标注角色来源 -> 若后续要改仓库再进入 default-workflow-bootstrap`
-  17. Flow-ENG-017: `TPM 准备派发专业角色 slice -> 默认填入 model=gpt-5.5 / reasoning_effort=medium -> 若要覆盖则在 slice contract 写明 override reason -> 再启动 subagent`
+  17. Flow-ENG-017: `TPM 准备派发专业角色 slice -> 默认填入 workflow source-of-truth 的 Default subagent runtime -> 若要覆盖则在 slice contract 写明 override reason -> 再启动 subagent`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |

@@ -161,7 +161,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Therefore, a read-only request must enter `default-workflow-bootstrap` first and may still require a professional role slice.
 - Minimal read-only specialist slice contract:
   - role and slice type (`read_only_analysis`, `verification_judgment`, `review_judgment`, or `liveops_messaging`)
-  - intended model configuration, defaulting to `gpt-5.5-medium` unless an override reason is recorded
+  - intended model configuration, defaulting to the `Default subagent runtime` policy unless an override reason is recorded
   - actual dispatch model/reasoning, or `inherited/unverified` with the connector/tool limitation, stalled default context delivery, or unverifiable actual dispatch reason
   - context delivery mode, defaulting to full-thread/full-history fork unless a recorded fallback reason requires explicit context
   - exact question to answer and explicit non-goals
@@ -208,7 +208,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - Defined the sink for unbound read-only professional slices as the role-tagged user-facing answer or preserved chat/thread transcript. Superseded by v1.4.8, which forbids unbound read-only professional slices.
   - Clarified that `.pm` execution-log sinks are mandatory for task-bound or repository-changing subagent work, not for standalone read-only professional answers. Superseded by v1.4.8, which requires `.pm` task truth for every request.
 - **v1.4.6 (2026-06-01)**
-  - Added the default subagent runtime policy, originally `gpt-5.4` with `reasoning_effort=medium`; current default is `gpt-5.5` with `reasoning_effort=medium`.
+  - Added the default subagent runtime policy; current concrete default is defined by the `Default subagent runtime` line in section 5.2.
   - Required slice contracts to record model configuration and reasons for non-default model/reasoning overrides.
 - **v1.4.5 (2026-06-01)**
   - Split read-only/chat-only handling into pure fact lookup versus read-only professional/domain judgment.
@@ -260,7 +260,7 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] TPM planning/TODO decomposition and subagent slice contracts written to `.pm` execution log before delegated execution.
 - [x] TPM is workflow coordinator/integrator only; professional findings and judgments must come from matching role slices.
 - [x] Read-only professional/domain questions require matching bounded role slices after task/worktree bootstrap.
-- [x] Subagent intended model configuration defaults to `gpt-5.5-medium`; actual dispatched model/reasoning and non-default/inherited/unverified rationale are recorded.
+- [x] Subagent intended model configuration defaults to the `Default subagent runtime` policy; actual dispatched model/reasoning and non-default/inherited/unverified rationale are recorded.
 - [x] Subagent context checklist/packet includes identity, governance, task truth, user intent, scoped repo context, and collaboration boundaries.
 - [x] Mandatory execution evidence fields and blocker recording.
 - [x] Current-round fresh verification before completion claim.

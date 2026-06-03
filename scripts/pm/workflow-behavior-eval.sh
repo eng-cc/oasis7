@@ -42,21 +42,43 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-TASK_WORKTREE_JSON="$("$ROOT_DIR/scripts/pm/new-task-worktree-bootstrap-smoke.sh" --json)"
-REQUIRED_TIER_JSON="$("$ROOT_DIR/scripts/pm/required-tier-smoke.sh" --json)"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-workflow-eval.XXXXXX")"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+TASK_WORKTREE_JSON_FILE="$TMP_DIR/task-worktree.json"
+REQUIRED_TIER_JSON_FILE="$TMP_DIR/required-tier.json"
+SUBAGENT_CONTRACT_JSON_FILE="$TMP_DIR/subagent-contract.json"
+ROUTING_SCENARIOS_JSON_FILE="$TMP_DIR/routing-scenarios.json"
+
+"$ROOT_DIR/scripts/pm/new-task-worktree-bootstrap-smoke.sh" --json > "$TASK_WORKTREE_JSON_FILE"
+"$ROOT_DIR/scripts/pm/required-tier-smoke.sh" --json > "$REQUIRED_TIER_JSON_FILE"
 "$ROOT_DIR/scripts/pm/claim-ready.test.sh" >/dev/null
 "$ROOT_DIR/scripts/prepare-task-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pr-review-thread-closeout.test.sh" >/dev/null
 
-SUBAGENT_CONTRACT_JSON="$(python3 - "$ROOT_DIR" <<'PY'
+python3 - "$ROOT_DIR" > "$SUBAGENT_CONTRACT_JSON_FILE" <<'PY'
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
 bt = chr(96)
+source_text = (root / "doc/engineering/workflow/source-of-truth.md").read_text(encoding="utf-8")
+default_runtime_match = re.search(
+    r"Default subagent runtime is `([^`]+)` with `reasoning_effort=([^`]+)` "
+    r"\(shorthand: `([^`]+)`\)",
+    source_text,
+)
+if not default_runtime_match:
+    raise SystemExit("workflow-behavior-eval: source-of-truth missing parseable Default subagent runtime policy")
+default_model, default_reasoning, default_shorthand = default_runtime_match.groups()
+default_runtime_marker = (
+    f"Default subagent runtime is `{default_model}` with "
+    f"`reasoning_effort={default_reasoning}`"
+)
 
 checks = [
     (
@@ -82,7 +104,8 @@ checks = [
             "Every user request must enter the standard worktree flow before any substantive handling begins",
             "Read-only professional/domain questions must be dispatched to the matching bounded professional role slice",
             "The task/worktree decision and the professional-slice decision are intentionally decoupled",
-            "Default subagent runtime is `gpt-5.5` with `reasoning_effort=medium`",
+            default_runtime_marker,
+            f"shorthand: `{default_shorthand}`",
             "Any non-default subagent model or reasoning effort must be recorded in the slice contract",
         ],
     ),
@@ -119,7 +142,7 @@ checks = [
             "任何用户请求第一步都必须创建或进入标准 task worktree",
             "只读专业 slice 的 contract、证据和 sink 必须写入",
             "subagent 默认模型",
-            "gpt-5.5-medium",
+            "Default subagent runtime",
         ],
     ),
     (
@@ -131,7 +154,7 @@ checks = [
             "每个用户请求必须先创建或进入标准 task worktree",
             "专业角色以 subagent 形式提供切片工作",
             "不得用 TPM 自己的判断替代专业 subagent 结论",
-            "gpt-5.5-medium",
+            "Default subagent runtime",
             "派工前必须把当前 TODO",
             "mandatory context packet",
             "workflow source-of-truth",
@@ -171,7 +194,7 @@ checks = [
         [
             "- role:",
             "- model configuration:",
-            "`gpt-5.5-medium` by default",
+            "`Default subagent runtime` by default",
             "- mandatory context packet:",
             "identity and authority:",
             "workflow governance:",
@@ -214,7 +237,7 @@ checks = [
             "- role:",
             "- slice type:",
             "- model configuration:",
-            "`gpt-5.5-medium` by default",
+            "`Default subagent runtime` by default",
             "- mandatory context packet:",
             "identity and authority:",
             "workflow governance:",
@@ -310,14 +333,28 @@ for path, markers in checks:
         }
     )
 
-print(json.dumps({"status": "ok", "surfaces": surfaces}, ensure_ascii=False))
+print(
+    json.dumps(
+        {
+            "status": "ok",
+            "surfaces": surfaces,
+            "default_runtime": {
+                "model": default_model,
+                "reasoning_effort": default_reasoning,
+                "shorthand": default_shorthand,
+            },
+        },
+        ensure_ascii=False,
+    )
+)
 PY
-)"
 
-ROUTING_SCENARIOS_JSON="$(python3 - "$ROOT_DIR" <<'PY'
+
+python3 - "$ROOT_DIR" > "$ROUTING_SCENARIOS_JSON_FILE" <<'PY'
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -368,6 +405,18 @@ surfaces = {
         root / ".agents/skills/game-architect/SKILL.md"
     ).read_text(encoding="utf-8"),
 }
+default_runtime_match = re.search(
+    r"Default subagent runtime is `([^`]+)` with `reasoning_effort=([^`]+)` "
+    r"\(shorthand: `([^`]+)`\)",
+    surfaces["doc/engineering/workflow/source-of-truth.md"],
+)
+if not default_runtime_match:
+    raise SystemExit("workflow-behavior-eval: source-of-truth missing parseable Default subagent runtime policy")
+default_model, default_reasoning, default_shorthand = default_runtime_match.groups()
+default_runtime_marker = (
+    f"Default subagent runtime is `{default_model}` with "
+    f"`reasoning_effort={default_reasoning}`"
+)
 
 scenarios = [
     {
@@ -512,11 +561,11 @@ scenarios = [
     },
     {
         "id": "subagent_default_model_is_recorded",
-        "expected_route": "TPM records gpt-5.5-medium as the default subagent model configuration",
+        "expected_route": f"TPM records {default_shorthand} as the source-of-truth default subagent model configuration",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
-            "Default subagent runtime is `gpt-5.5` with `reasoning_effort=medium`",
-            "shorthand: `gpt-5.5-medium`",
+            default_runtime_marker,
+            f"shorthand: `{default_shorthand}`",
             "Any non-default subagent model or reasoning effort must be recorded in the slice contract",
         ],
     },
@@ -653,18 +702,20 @@ for scenario in scenarios:
 
 print(json.dumps({"status": "ok", "scenarios": evaluated}, ensure_ascii=False))
 PY
-)"
 
-RESULT_JSON="$(python3 - "$TASK_WORKTREE_JSON" "$SUBAGENT_CONTRACT_JSON" "$REQUIRED_TIER_JSON" "$ROUTING_SCENARIOS_JSON" <<'PY'
+
+RESULT_JSON="$(python3 - "$TASK_WORKTREE_JSON_FILE" "$SUBAGENT_CONTRACT_JSON_FILE" "$REQUIRED_TIER_JSON_FILE" "$ROUTING_SCENARIOS_JSON_FILE" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
-task_worktree = json.loads(sys.argv[1])
-subagent_contract = json.loads(sys.argv[2])
-required_tier = json.loads(sys.argv[3])
-routing_scenarios = json.loads(sys.argv[4])
+task_worktree = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+subagent_contract = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+required_tier = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+routing_scenarios = json.loads(Path(sys.argv[4]).read_text(encoding="utf-8"))
+default_shorthand = subagent_contract["default_runtime"]["shorthand"]
 
 segments = [
     {
@@ -753,7 +804,7 @@ payload = {
         "TPM does not own professional/domain conclusions; matching professional role slices do",
         "brainstorming and TDD remain conditional while professional role work is represented as bounded subagent slices",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
-        "subagent slice contracts record gpt-5.5-medium as the default model configuration unless an override reason is present",
+        f"subagent slice contracts record {default_shorthand} as the source-of-truth default model configuration unless an override reason is present",
         "high-risk local diffs can request repo-owned review packets without replacing GitHub PR review",
         "done closeout refuses to proceed without fresh verification",
         "PR preflight stays the default GitHub PR entrypoint",
@@ -768,7 +819,7 @@ payload = {
         "optional brainstorming, TDD, or subagent gates drift into mandatory stages",
         "task-closeout allows done closeout without verify-command",
         "subagent contract markers disappear from AGENTS or handoff/router surfaces",
-        "subagent model configuration markers disappear or no longer default to gpt-5.5-medium",
+        f"subagent model configuration markers disappear or no longer default to the source-of-truth runtime ({default_shorthand})",
         "repo-owned review-request surface disappears or stops separating local review from GitHub review",
         "prepare-task-pr local fixture no longer creates the expected PR command path",
         "review-thread closeout helper stops reporting unresolved/resolved state correctly",
