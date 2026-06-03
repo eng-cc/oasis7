@@ -1592,3 +1592,38 @@ SOP v0.2 更适合第二章及后续章节使用。后续开写新章时，应�
 - 可以进入章级 closeout / final review。
 - Closeout 和 PR summary 只能说：`第一条旁出现小修订建议，议题成立但未解决`。
 - 不要写“修宪完成 / 共识达成 / 第一条通过 / 公共承诺已经继承 / 程望川必须接住旧承诺”。
+
+## 2026-06-03 第二卷后续 CH-047..CH-078 full-volume planning review
+
+### 审读方式
+
+对第二卷第一章 closeout 后的全卷规划做三方 bounded planning review。本轮不进入正文，只确认第二卷后续是否可以从 `CH-047` 延展到卷末，并将结构、Agent / 规则边界和目标读者语气要求写回正式规划文件。
+
+### 审读结论
+
+- `story_structure_editor`: ready。建议第二卷共五章：第一章 `CH-037..CH-046` 让议题成立；第二章 `CH-047..CH-054` 做极窄普通工具重新授权；第三章 `CH-055..CH-062` 处理旧承诺没有接收人；第四章 `CH-063..CH-070` 处理私人习惯边界和老人主体性；第五章 `CH-071..CH-078` 只做铅笔条款试运行。卷末最多是有限重新协作入口，不是制度胜利。
+- `world_agent_boundary_editor`: ready for planning boundary。身份链只能证明材料连续、编号未断档和可追溯入口仍在；公共承诺材料可保留为待确认对象；能力、资产、工具权限和私人习惯必须另行校准、授权和关系确认。禁止身份链证明完整关系、公共记录替程望川确认、资产 / 工具 / 未完成承诺自动返还、回砂自证身份或进入 Agent 权利宣言线。
+- `target_reader_style_editor`: ready。后续吸引力应来自老人一次次选择、暂停、拒绝、重新授权和重新协作，而不是更大事故、更高制度规格或 Agent 议题升级。推荐物件包括待确认夹、暂锁工具柜、小型力矩扳手、误差样本、空接收人栏、未同步外层记录、铅笔页角和未盖章草案。
+
+### 采纳的补丁
+
+- `site/story/outline/novel-outline.md`: 将第二卷从第一阶段路线扩展为 `CH-037` 到 `CH-078` 的五章完整规划，并写明第二卷后续四章的阶段目标、升级逻辑和不可解决边界。
+- `site/story/timeline/timeline.md`: 新增 `TL-047` 到 `TL-078`，并将 `TL-046` 条款口径同步为“公共承诺材料保留追溯入口；能力、资产和私人习惯必须另行校准、授权和关系确认”。
+- `site/story/chapter-cards/README.md`: 登记第二卷后四章章节卡，并补第二卷降频表。
+- `site/story/chapter-cards/volume-02-chapter-02-cards.md`: 新增第二卷第二章 `CH-047` 到 `CH-054`，主题为“重新授权的第一只手”。
+- `site/story/chapter-cards/volume-02-chapter-03-cards.md`: 新增第二卷第三章 `CH-055` 到 `CH-062`，主题为“旧承诺没有接收人”。
+- `site/story/chapter-cards/volume-02-chapter-04-cards.md`: 新增第二卷第四章 `CH-063` 到 `CH-070`，主题为“不能公开的小习惯”。
+- `site/story/chapter-cards/volume-02-chapter-05-cards.md`: 新增第二卷第五章 `CH-071` 到 `CH-078`，主题为“铅笔条款试运行”。
+- `site/story/README.md` 与 `site/story/chapter-cards/volume-02-chapter-01-cards.md`: 同步第二卷全卷规划已完成、下一步进入第二卷第二章外部调研和写前定位的 routing 文案。
+
+### 保留 P2
+
+- 后四章仍是规划级章卡，不是正文；每章进入正文前仍需按 SOP 补外部调研、写前定位、focused slice review 和必要最小补丁。
+- 章节卡中涉及“条款”“清单”“试运行”的位置有制度说明风险；正文阶段必须继续用具体物件和动作压低规格。
+- 第二卷卷末仍保留裂缝：关系没有复原成原样，条款没有通过，旧资产、旧承诺和私人习惯仍允许分层暂停。
+
+### 规划 closeout 口径
+
+- 第二卷完整规划已打开到 `CH-078` / `TL-078`。
+- 第二卷后半卷从重新授权、承诺接收、私人习惯边界和铅笔条款试运行四步推进。
+- 任何 summary 不得写成“修宪完成 / 共识达成 / 第一条通过 / 公共承诺已经继承 / 程望川必须接住旧承诺”。

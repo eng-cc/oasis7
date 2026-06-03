@@ -119,4 +119,4 @@
 
 ## 下一步
 
-本章 `CH-037` 到 `CH-046` 正文与 focused slice review 已完成；下一步进入章级 closeout / final review，确认只表述为“第一条旁出现小修订建议，议题成立但未解决”。
+本章 `CH-037` 到 `CH-046` 正文、focused slice review 与章级 closeout review 已完成；第二卷后续 `CH-047` 到 `CH-078` 全卷规划已打开。进入下一章正文前，应先按 SOP 为第二卷第二章做外部调研和写前定位。

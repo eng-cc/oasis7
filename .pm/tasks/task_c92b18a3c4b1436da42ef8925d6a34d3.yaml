@@ -1,0 +1,24 @@
+task_uid: task_c92b18a3c4b1436da42ef8925d6a34d3
+title: "Plan site story volume two remaining chapters"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_c92b18a3c4b1436da42ef8925d6a34d3.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story
+doc_refs:
+  - site/story
+related_prd: []
+acceptance:
+  - "Plan the next second-volume chapter and complete second-volume remaining chapter planning with repo-tracked story truth, bounded professional slice evidence, verification, commit, push, and PR update."
+handoff_to: []
+updated_at: 2026-06-04T00:02:48+08:00
+last_started_at: 2026-06-03T23:58:45+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/README.md site/story/outline/novel-outline.md site/story/timeline/timeline.md site/story/chapter-cards/README.md site/story/chapter-cards/volume-02-chapter-01-cards.md site/story/chapter-cards/volume-02-chapter-02-cards.md site/story/chapter-cards/volume-02-chapter-03-cards.md site/story/chapter-cards/volume-02-chapter-04-cards.md site/story/chapter-cards/volume-02-chapter-05-cards.md site/story/reviews/editorial-notes.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-04T00:02:47+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-04T00:02:48+08:00
