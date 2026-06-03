@@ -21,6 +21,7 @@ use super::agent::{
     LlmPromptSectionTrace, LlmStepTrace,
 };
 use super::kernel::{Observation, RejectReason, WorldEvent, WorldEventKind};
+use super::llm_defaults::DEFAULT_LLM_MODEL;
 use super::memory::{AgentMemory, LongTermMemoryEntry, MemoryEntry};
 use super::types::{
     Action, ModuleInstallTarget, ResourceKind, ResourceOwner, CM_PER_KM,
@@ -168,7 +169,6 @@ impl LlmPromptProfile {
 }
 
 pub const DEFAULT_CONFIG_FILE_NAME: &str = "config.toml";
-pub const DEFAULT_LLM_MODEL: &str = "gpt-5.4-mini";
 pub const DEFAULT_LLM_TIMEOUT_MS: u64 = 180_000;
 pub const DEFAULT_LLM_SYSTEM_PROMPT: &str = "你是硅基文明发展 Agent。按“读规则/观察 -> 资源稳态 -> 产业建设 -> 治理协作 -> 危机韧性”推进文明进程，每轮仅提交一个可执行 decision。若规则或动作前置条件不明确，先调用 world.rules.guide 与 environment.current_observation，再做决策。";
 pub const DEFAULT_LLM_SHORT_TERM_GOAL: &str = "先识别当前阶段最关键瓶颈，并按前置条件逐步推进：能源与数据稳定后再扩产，扩产后推进治理与风险处理。遇到 action_rejected 时根据 reject_reason 切换到补前置动作，避免原样重复失败参数。";

@@ -425,6 +425,23 @@ tail_probe_logs_on_error() {
   fi
 }
 
+provider_curl_timeout_seconds() {
+  local timeout_ms="$1"
+  python3 - "$timeout_ms" <<'PY'
+import sys
+
+raw = sys.argv[1].strip()
+try:
+    timeout_ms = int(raw)
+except ValueError:
+    raise SystemExit(f"invalid provider connect timeout `{raw}`")
+if timeout_ms <= 0:
+    raise SystemExit("provider connect timeout must be positive")
+seconds = timeout_ms / 1000
+print(f"{seconds:.3f}".rstrip("0").rstrip("."))
+PY
+}
+
 run_provider_bridge_preflight() {
   local provider_url="${AGENT_PROVIDER_URL%/}"
   if [[ -z "$provider_url" ]]; then
@@ -435,7 +452,11 @@ run_provider_bridge_preflight() {
   local info_file health_file
   info_file="$OUTPUT_DIR/provider-info.json"
   health_file="$OUTPUT_DIR/provider-health.json"
-  local curl_args=(-fsS --connect-timeout 5 --max-time 15)
+  local curl_timeout_seconds
+  if ! curl_timeout_seconds="$(provider_curl_timeout_seconds "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" 2>"$LLM_PROVIDER_PROBE_LOG")"; then
+    return 1
+  fi
+  local curl_args=(-fsS --connect-timeout "$curl_timeout_seconds" --max-time "$curl_timeout_seconds")
   if [[ -n "$AGENT_PROVIDER_AUTH_TOKEN" ]]; then
     curl_args+=(-H "Authorization: Bearer $AGENT_PROVIDER_AUTH_TOKEN")
   fi
