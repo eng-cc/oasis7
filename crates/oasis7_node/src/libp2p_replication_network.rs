@@ -8,6 +8,7 @@ use libp2p::{Multiaddr, PeerId};
 use oasis7_net::{
     world_error_is_missing_handler, world_error_is_retryable_connection_gap, Libp2pNetwork,
     Libp2pNetworkConfig, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
+    PeerManagerPolicy,
 };
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse};
@@ -78,6 +79,7 @@ pub struct Libp2pReplicationNetworkConfig {
     pub discovery_query_interval_ms: i64,
     pub discovery_query_cooldown_ms: i64,
     pub enable_autonat: bool,
+    pub peer_manager_policy: PeerManagerPolicy,
     pub allow_local_handler_fallback_when_no_peers: bool,
     pub protocol_retry_cooldown_after: Duration,
 }
@@ -95,6 +97,7 @@ impl Default for Libp2pReplicationNetworkConfig {
             discovery_query_interval_ms: inner_defaults.discovery_query_interval_ms,
             discovery_query_cooldown_ms: inner_defaults.discovery_query_cooldown_ms,
             enable_autonat: inner_defaults.enable_autonat,
+            peer_manager_policy: inner_defaults.peer_manager_policy,
             allow_local_handler_fallback_when_no_peers: false,
             protocol_retry_cooldown_after: Duration::from_millis(PROTOCOL_RETRY_COOLDOWN_AFTER_MS),
         }
@@ -125,6 +128,7 @@ impl Libp2pReplicationNetwork {
             discovery_query_interval_ms: config.discovery_query_interval_ms,
             discovery_query_cooldown_ms: config.discovery_query_cooldown_ms,
             enable_autonat: config.enable_autonat,
+            peer_manager_policy: config.peer_manager_policy,
             ..Libp2pNetworkConfig::default()
         });
 
@@ -743,6 +747,14 @@ fn replication_peer_health_issue_label(issue: oasis7_net::PeerManagerHealthIssue
             limit_per_mille,
         } => format!(
             "ipv4_subnet_concentration subnet={subnet} peers_in_bucket={peers_in_bucket} active_peer_count={active_peer_count} limit_per_mille={limit_per_mille}"
+        ),
+        oasis7_net::PeerManagerHealthIssue::Ipv4SubnetActivePeerLimit {
+            subnet,
+            peers_in_bucket,
+            active_peer_count,
+            max_active_peers,
+        } => format!(
+            "ipv4_subnet_active_peer_limit subnet={subnet} peers_in_bucket={peers_in_bucket} active_peer_count={active_peer_count} max_active_peers={max_active_peers}"
         ),
         oasis7_net::PeerManagerHealthIssue::RelayDomainConcentration {
             relay_domain,

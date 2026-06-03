@@ -12,6 +12,7 @@ use super::transport_paths::{TransportPath, TransportPathKind};
 pub struct PeerManagerPolicy {
     pub min_active_discovery_sources: usize,
     pub min_peer_discovery_sources: usize,
+    pub max_ipv4_subnet_active_peers: Option<usize>,
     pub max_ipv4_subnet_share_per_mille: u16,
     pub block_ipv4_subnet_share_per_mille: u16,
     pub max_relay_domain_share_per_mille: u16,
@@ -28,6 +29,7 @@ impl Default for PeerManagerPolicy {
         Self {
             min_active_discovery_sources: 2,
             min_peer_discovery_sources: 2,
+            max_ipv4_subnet_active_peers: None,
             max_ipv4_subnet_share_per_mille: 250,
             block_ipv4_subnet_share_per_mille: 500,
             max_relay_domain_share_per_mille: 250,
@@ -65,6 +67,12 @@ pub enum PeerManagerHealthIssue {
         peers_in_bucket: usize,
         active_peer_count: usize,
         limit_per_mille: u16,
+    },
+    Ipv4SubnetActivePeerLimit {
+        subnet: String,
+        peers_in_bucket: usize,
+        active_peer_count: usize,
+        max_active_peers: usize,
     },
     RelayDomainConcentration {
         relay_domain: String,
@@ -172,7 +180,17 @@ pub(super) fn recompute_peer_manager_healths(
                     .get(bucket.as_str())
                     .copied()
                     .unwrap_or(0);
-                if bucket_count >= 2
+                if let Some(limit) = policy.max_ipv4_subnet_active_peers {
+                    if bucket_count > limit {
+                        issues.push(PeerManagerHealthIssue::Ipv4SubnetActivePeerLimit {
+                            subnet: bucket,
+                            peers_in_bucket: bucket_count,
+                            active_peer_count: active_set_stats.active_peer_count,
+                            max_active_peers: limit,
+                        });
+                        hard_block = true;
+                    }
+                } else if bucket_count >= 2
                     && meets_or_exceeds_share_limit(
                         bucket_count,
                         active_set_stats.active_peer_count,
@@ -571,6 +589,103 @@ mod tests {
             PeerManagerHealthIssue::Ipv4SubnetConcentration { subnet, .. } if subnet == "192.168.10"
         )));
         assert_eq!(healths[&peer_c].status, PeerManagerHealthStatus::Active);
+    }
+
+    #[test]
+    fn recompute_count_limit_blocks_all_peers_when_four_share_same_ipv4_subnet() {
+        let peers = [
+            PeerId::random(),
+            PeerId::random(),
+            PeerId::random(),
+            PeerId::random(),
+        ];
+        let discovery_sources = vec![
+            PeerDiscoverySource::StaticBootstrap,
+            PeerDiscoverySource::Dht,
+        ];
+        let discovered =
+            HashMap::from(peers.map(|peer| (peer, sample_record(peer, discovery_sources.clone()))));
+        let active_three = HashMap::from([
+            (
+                peers[0],
+                transport_path(
+                    peers[0],
+                    "/ip4/192.168.10.1/udp/4101/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peers[1],
+                transport_path(
+                    peers[1],
+                    "/ip4/192.168.10.2/udp/4102/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peers[2],
+                transport_path(
+                    peers[2],
+                    "/ip4/192.168.10.3/udp/4103/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+        ]);
+        let active_four = HashMap::from([
+            (
+                peers[0],
+                transport_path(
+                    peers[0],
+                    "/ip4/192.168.10.1/udp/4101/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peers[1],
+                transport_path(
+                    peers[1],
+                    "/ip4/192.168.10.2/udp/4102/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peers[2],
+                transport_path(
+                    peers[2],
+                    "/ip4/192.168.10.3/udp/4103/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peers[3],
+                transport_path(
+                    peers[3],
+                    "/ip4/192.168.10.4/udp/4104/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+        ]);
+        let policy = PeerManagerPolicy {
+            max_ipv4_subnet_active_peers: Some(3),
+            ..PeerManagerPolicy::default()
+        };
+
+        let healths_three = recompute_peer_manager_healths(&discovered, &active_three, &policy);
+        for peer in peers.iter().take(3) {
+            assert_eq!(healths_three[peer].status, PeerManagerHealthStatus::Active);
+        }
+
+        let healths_four = recompute_peer_manager_healths(&discovered, &active_four, &policy);
+        for peer in peers {
+            assert_eq!(healths_four[&peer].status, PeerManagerHealthStatus::Blocked);
+            assert!(healths_four[&peer].issues.iter().any(|issue| matches!(
+                issue,
+                PeerManagerHealthIssue::Ipv4SubnetActivePeerLimit {
+                    max_active_peers: 3,
+                    ..
+                }
+            )));
+        }
     }
 
     #[test]

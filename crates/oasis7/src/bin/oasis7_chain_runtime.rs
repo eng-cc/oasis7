@@ -673,6 +673,9 @@ fn build_default_replication_network_config(
                 .map_err(|err| format!("invalid --replication-network-peer {raw}: {err}"))
         })
         .collect::<Result<_, _>>()?;
+    if let Some(limit) = options.p2p_max_ipv4_subnet_active_peers {
+        config.peer_manager_policy.max_ipv4_subnet_active_peers = Some(limit);
+    }
     apply_traffic_profile_to_replication_network_config(&mut config, options.traffic_profile);
     Ok(config)
 }

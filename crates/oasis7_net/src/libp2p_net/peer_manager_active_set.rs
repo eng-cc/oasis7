@@ -139,7 +139,11 @@ pub(super) fn candidate_status_with_active_set(
             .copied()
             .unwrap_or(0)
             .saturating_add(1);
-        if projected_bucket_count >= 2
+        if let Some(limit) = policy.max_ipv4_subnet_active_peers {
+            if projected_bucket_count > limit {
+                hard_block = true;
+            }
+        } else if projected_bucket_count >= 2
             && meets_or_exceeds_share_limit(
                 projected_bucket_count,
                 projected_active_peer_count,
@@ -270,7 +274,11 @@ pub(super) fn candidate_would_degrade_admitted_peers(
             .copied()
             .unwrap_or(0);
         let projected_bucket_count = current_bucket_count.saturating_add(1);
-        if current_bucket_count > 0
+        if let Some(limit) = policy.max_ipv4_subnet_active_peers {
+            if current_bucket_count > 0 && projected_bucket_count > limit {
+                return true;
+            }
+        } else if current_bucket_count > 0
             && projected_bucket_count >= 2
             && (meets_or_exceeds_share_limit(
                 projected_bucket_count,

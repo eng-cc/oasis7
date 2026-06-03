@@ -1,8 +1,13 @@
+use std::time::Duration;
+
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
+use oasis7_net::PeerManagerPolicy;
 use oasis7_proto::distributed_dht::PeerRecord;
 use oasis7_proto::distributed_net::{DistributedNetwork, NetworkSubscription};
 use oasis7_proto::world_error::WorldError;
+
+const PROTOCOL_RETRY_COOLDOWN_AFTER_MS: u64 = 5_000;
 
 // wasm32 target intentionally does not ship a full-node networking stack.
 // This stub exists only to keep API shape stable for compile-time compatibility.
@@ -12,6 +17,14 @@ pub struct Libp2pReplicationNetworkConfig {
     pub peer_record: Option<PeerRecord>,
     pub listen_addrs: Vec<Multiaddr>,
     pub bootstrap_peers: Vec<Multiaddr>,
+    pub bootstrap_redial_interval_ms: i64,
+    pub republish_interval_ms: i64,
+    pub discovery_query_interval_ms: i64,
+    pub discovery_query_cooldown_ms: i64,
+    pub enable_autonat: bool,
+    pub peer_manager_policy: PeerManagerPolicy,
+    pub allow_local_handler_fallback_when_no_peers: bool,
+    pub protocol_retry_cooldown_after: Duration,
 }
 
 impl Default for Libp2pReplicationNetworkConfig {
@@ -21,6 +34,14 @@ impl Default for Libp2pReplicationNetworkConfig {
             peer_record: None,
             listen_addrs: Vec::new(),
             bootstrap_peers: Vec::new(),
+            bootstrap_redial_interval_ms: 1_000,
+            republish_interval_ms: 5 * 60 * 1_000,
+            discovery_query_interval_ms: 15_000,
+            discovery_query_cooldown_ms: 60_000,
+            enable_autonat: true,
+            peer_manager_policy: PeerManagerPolicy::default(),
+            allow_local_handler_fallback_when_no_peers: false,
+            protocol_retry_cooldown_after: Duration::from_millis(PROTOCOL_RETRY_COOLDOWN_AFTER_MS),
         }
     }
 }
