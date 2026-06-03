@@ -196,6 +196,9 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, and PR linkage.
 
 ## 7. Change Log
+- **v1.4.10 (2026-06-03)**
+  - Updated the default subagent runtime policy to `gpt-5.5` with `reasoning_effort=medium`.
+  - Consolidated synced guidance, templates, and workflow eval checks to reference the section 5.2 `Default subagent runtime` policy instead of duplicating the concrete model string.
 - **v1.4.9 (2026-06-02)**
   - Clarified that request-type classification cannot happen before task/worktree bootstrap; bootstrap happens first, then read-only/professional routing.
   - Required subagent slice contracts to distinguish intended default model from actual dispatched model, including inherited/unverified connector cases.
@@ -208,7 +211,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - Defined the sink for unbound read-only professional slices as the role-tagged user-facing answer or preserved chat/thread transcript. Superseded by v1.4.8, which forbids unbound read-only professional slices.
   - Clarified that `.pm` execution-log sinks are mandatory for task-bound or repository-changing subagent work, not for standalone read-only professional answers. Superseded by v1.4.8, which requires `.pm` task truth for every request.
 - **v1.4.6 (2026-06-01)**
-  - Added the default subagent runtime policy; current concrete default is defined by the `Default subagent runtime` line in section 5.2.
+  - Added the default subagent runtime policy, originally `gpt-5.4` with `reasoning_effort=medium`.
   - Required slice contracts to record model configuration and reasons for non-default model/reasoning overrides.
 - **v1.4.5 (2026-06-01)**
   - Split read-only/chat-only handling into pure fact lookup versus read-only professional/domain judgment.

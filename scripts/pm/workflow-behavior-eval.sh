@@ -43,7 +43,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-workflow-eval.XXXXXX")"
-trap 'rm -rf "$TMP_DIR"' EXIT
+cleanup() {
+  local status=$?
+  rm -rf "$TMP_DIR"
+  exit "$status"
+}
+trap cleanup EXIT
 
 TASK_WORKTREE_JSON_FILE="$TMP_DIR/task-worktree.json"
 REQUIRED_TIER_JSON_FILE="$TMP_DIR/required-tier.json"
