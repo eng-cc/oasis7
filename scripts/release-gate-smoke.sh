@@ -57,7 +57,26 @@ ensure_file_contains "$pass_summary" "- Overall: PASS"
 ensure_file_contains "$pass_summary" "- Candidate bundle: \`$candidate_bundle\`"
 ensure_file_contains "$pass_summary" "- candidate_bundle: passed \\(dry_run\\)"
 ensure_file_contains "$pass_summary" "- web_strict: passed \\(dry_run\\)"
+ensure_file_contains "$pass_summary" "- s9: passed \\(dry_run\\)"
+ensure_file_contains "$pass_summary" "--node-auto-attest-all"
 ensure_file_contains "$pass_summary" "- s10: passed \\(dry_run\\)"
+
+p2p_dry_root="$smoke_root/p2p-auto-attest"
+run ./scripts/p2p-longrun-soak.sh \
+  --profile soak_release \
+  --topologies triad_distributed \
+  --duration-secs 30 \
+  --node-auto-attest-all \
+  --dry-run \
+  --out-dir "$p2p_dry_root"
+p2p_run_dir=$(find "$p2p_dry_root" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)
+if [[ -z "$p2p_run_dir" ]]; then
+  echo "error: p2p dry-run dir not found under $p2p_dry_root" >&2
+  exit 1
+fi
+ensure_file_contains "$p2p_run_dir/summary.md" "- node_auto_attest_mode: \`all\`"
+ensure_file_contains "$p2p_run_dir/triad_distributed/nodes/storage/command.txt" "--node-auto-attest-all"
+ensure_file_contains "$p2p_run_dir/triad_distributed/nodes/observer/command.txt" "--node-auto-attest-all"
 
 failure_log="$fail_root/failure.log"
 set +e

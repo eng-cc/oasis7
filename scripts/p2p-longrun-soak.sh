@@ -50,6 +50,10 @@ Options:
   --reward-runtime-epoch-duration-secs <n>
                                    reward runtime epoch duration seconds (default: 60)
   --reward-points-per-credit <n>   reward points per credit (default: 100)
+  --node-auto-attest-all           enable local auto-attesting all validators on all nodes
+  --node-no-auto-attest-all        disable local auto-attesting all validators on all nodes
+  --node-auto-attest-sequencer-only
+                                   enable auto-attest only on sequencer (default)
   --feedback-events-enable          continuously inject feedback submit events during soak
   --feedback-events-interval-secs <n>
                                    interval seconds between feedback submissions (default: 60)
@@ -229,6 +233,7 @@ chaos_continuous_restart_down_secs=1
 chaos_continuous_pause_duration_secs=2
 reward_runtime_epoch_duration_secs=60
 reward_points_per_credit=100
+node_auto_attest_mode=1
 feedback_events_enabled=0
 feedback_events_interval_secs=60
 feedback_events_start_sec=30
@@ -365,6 +370,18 @@ while [[ $# -gt 0 ]]; do
       reward_points_per_credit=${2:-}
       shift 2
       ;;
+    --node-auto-attest-all)
+      node_auto_attest_mode=2
+      shift
+      ;;
+    --node-no-auto-attest-all)
+      node_auto_attest_mode=0
+      shift
+      ;;
+    --node-auto-attest-sequencer-only)
+      node_auto_attest_mode=1
+      shift
+      ;;
     --feedback-events-enable)
       feedback_events_enabled=1
       shift
@@ -483,6 +500,11 @@ ensure_non_negative_int "--chaos-continuous-restart-down-secs" "$chaos_continuou
 ensure_non_negative_int "--chaos-continuous-pause-duration-secs" "$chaos_continuous_pause_duration_secs"
 ensure_positive_int "--reward-runtime-epoch-duration-secs" "$reward_runtime_epoch_duration_secs"
 ensure_positive_int "--reward-points-per-credit" "$reward_points_per_credit"
+ensure_non_negative_int "--node-auto-attest-mode" "$node_auto_attest_mode"
+if (( node_auto_attest_mode > 2 )); then
+  echo "invalid node auto-attest mode: $node_auto_attest_mode" >&2
+  exit 2
+fi
 ensure_non_negative_int "--feedback-events-start-sec" "$feedback_events_start_sec"
 ensure_non_negative_int "--feedback-events-max-events" "$feedback_events_max_events"
 if [[ "$chaos_continuous_enabled" -eq 1 ]]; then
@@ -527,6 +549,13 @@ if [[ "$chaos_continuous_enabled" -eq 1 ]]; then
   done
 else
   chaos_continuous_seed=0
+fi
+
+node_auto_attest_mode_label="off"
+if [[ "$node_auto_attest_mode" -eq 2 ]]; then
+  node_auto_attest_mode_label="all"
+elif [[ "$node_auto_attest_mode" -eq 1 ]]; then
+  node_auto_attest_mode_label="sequencer_only"
 fi
 
 mapfile -t topologies < <(printf '%s' "$topologies_csv" | tr ',' '\n' | sed '/^$/d')
@@ -606,6 +635,7 @@ jq -n \
   --argjson chaos_continuous_pause_duration_secs "$chaos_continuous_pause_duration_secs" \
   --argjson reward_runtime_epoch_duration_secs "$reward_runtime_epoch_duration_secs" \
   --argjson reward_points_per_credit "$reward_points_per_credit" \
+  --arg node_auto_attest_mode "$node_auto_attest_mode_label" \
   --argjson feedback_events_enabled "$feedback_events_enabled" \
   --argjson feedback_events_interval_secs "$feedback_events_interval_secs" \
   --argjson feedback_events_start_sec "$feedback_events_start_sec" \
@@ -633,6 +663,7 @@ jq -n \
     },
     reward_runtime_epoch_duration_secs: $reward_runtime_epoch_duration_secs,
     reward_points_per_credit: $reward_points_per_credit,
+    node_auto_attest_mode: $node_auto_attest_mode,
     feedback_events: {
       enabled: ($feedback_events_enabled == 1),
       interval_secs: $feedback_events_interval_secs,
@@ -686,6 +717,7 @@ jq -n \
   echo "- pos_max_past_slot_lag: \`$pos_max_past_slot_lag\`"
   echo "- reward_runtime_epoch_duration_secs: \`$reward_runtime_epoch_duration_secs\`"
   echo "- reward_points_per_credit: \`$reward_points_per_credit\`"
+  echo "- node_auto_attest_mode: \`$node_auto_attest_mode_label\`"
   if [[ "$feedback_events_enabled" -eq 1 ]]; then
     echo "- feedback_events: \`enabled\` (interval=${feedback_events_interval_secs}s, start=${feedback_events_start_sec}s, max_events=${feedback_events_max_events})"
   else
@@ -1764,7 +1796,7 @@ run_topology() {
       if [[ -n "$pos_slot_clock_genesis_unix_ms" ]]; then
         cmd+=(--pos-slot-clock-genesis-unix-ms "$pos_slot_clock_genesis_unix_ms")
       fi
-      if [[ "$role" == "sequencer" ]]; then
+      if [[ "$node_auto_attest_mode" -eq 2 ]] || { [[ "$node_auto_attest_mode" -eq 1 ]] && [[ "$role" == "sequencer" ]]; }; then
         cmd+=(--node-auto-attest-all)
       else
         cmd+=(--node-no-auto-attest-all)
@@ -1877,7 +1909,7 @@ run_topology() {
       cmd+=(--pos-slot-clock-genesis-unix-ms "$pos_slot_clock_genesis_unix_ms")
     fi
 
-    if [[ "$role" == "sequencer" ]]; then
+    if [[ "$node_auto_attest_mode" -eq 2 ]] || { [[ "$node_auto_attest_mode" -eq 1 ]] && [[ "$role" == "sequencer" ]]; }; then
       cmd+=(--node-auto-attest-all)
     else
       cmd+=(--node-no-auto-attest-all)
@@ -2305,6 +2337,7 @@ write_summary_json() {
     --argjson chaos_continuous_seed "$chaos_continuous_seed" \
     --argjson chaos_continuous_restart_down_secs "$chaos_continuous_restart_down_secs" \
     --argjson chaos_continuous_pause_duration_secs "$chaos_continuous_pause_duration_secs" \
+    --arg node_auto_attest_mode "$node_auto_attest_mode_label" \
     --argjson dry_run "$dry_run" \
     --arg timeline_csv "$timeline_csv" \
     --arg summary_md "$summary_md" \
@@ -2324,6 +2357,7 @@ write_summary_json() {
         profile: $profile,
         scenario_compat: $scenario,
         llm_enabled_compat: ($llm_enabled == 1),
+        node_auto_attest_mode: $node_auto_attest_mode,
         chaos_plan: (if $chaos_plan_path == "" then null else $chaos_plan_path end),
         chaos_continuous: {
           enabled: ($chaos_continuous_enabled == 1),

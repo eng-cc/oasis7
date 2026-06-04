@@ -383,6 +383,7 @@ for step in "${selected_steps[@]}"; do
         --topologies triad_distributed
         --duration-secs "$s9_duration_secs"
         --no-prewarm
+        --node-auto-attest-all
         --max-stall-secs 240
         --max-lag-p95 50
         --max-distfs-failure-ratio 0.1
