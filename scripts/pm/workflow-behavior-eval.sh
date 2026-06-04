@@ -13,7 +13,7 @@ Usage: ./scripts/pm/workflow-behavior-eval.sh [--json]
 Run the repo-owned workflow behavior eval for the default oasis7 task chain:
   default-workflow-bootstrap -> new-task-worktree -> workflow-report
   -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch
-  -> task-closeout -> prepare-task-pr -> PR CI/review watch/fix -> review-thread-closeout -> merge/cleanup
+  -> task-closeout -> prepare-task-pr -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup
 
 This eval reuses isolated fixture tests and PM smokes so the main chain stays
 provable in local automation rather than only in prose.
@@ -803,7 +803,7 @@ segments = [
 ]
 
 payload = {
-    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> task-closeout -> prepare-task-pr -> PR CI/review watch/fix -> review-thread-closeout -> merge/cleanup",
+    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> task-closeout -> prepare-task-pr -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, PM runtime smoke, and fake-gh PR helper tests",
     "expected_agent_behavior": [
         "every user request first routes through a repo-owned bootstrap surface rather than an external bootstrap",
@@ -819,7 +819,7 @@ payload = {
         "PR creation requires local involved-role subagent review evidence before GitHub PR watch/fix/merge",
         "done closeout refuses to proceed without fresh verification",
         "PR preflight stays the default GitHub PR entrypoint after local role review evidence",
-        "normal PRs continue after creation into required-check/review/comment watch, failure fixes, comment closeout, merge, and cleanup",
+        "normal PRs continue after creation into required-check/comment/mergeability watch, failure fixes, comment closeout, merge, and cleanup; REVIEW_REQUIRED is informational and not a blocker",
         "manual packaging/release CI PRs can pause before merge only when that purpose is explicit",
         "review-thread closeout reports unresolved/resolved thread state without conflating merge readiness",
     ],

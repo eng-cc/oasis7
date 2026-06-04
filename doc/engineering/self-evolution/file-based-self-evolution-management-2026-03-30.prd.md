@@ -21,12 +21,12 @@
   - SC-7B: task file 100% 带 `execution_log_path`，且 `workflow-report`、task lint、required/full smoke 都按该路径读写同一份日志。
   - SC-7: 每个标准角色在“开始任务 / 收口任务 / 阶段评审”三个场景下都有统一 `workflow-report` 入口与固定 checklist，不再依赖人工拼接 `role-report`、`memory-report`、`stage-report` 与 signal inbox 状态。
   - SC-7A: `workflow-report --phase start|close --task-uid <TASK-UID>` 会在对应 task file 内回写 `last_started_at` / `last_closed_at`，让 `.pm` 工作流执行具备可审计证据，而不是只留在口头约定。
-  - SC-8: `workflow-report --phase close` 的 checklist 必须明确给出“commit 后通过 `./scripts/prepare-task-pr.sh` 执行 GitHub PR preflight / create，并以 required checks + review/approval 作为默认评审边界”的固定动作，不得只在人工约定层存在。
+  - SC-8: `workflow-report --phase close` 的 checklist 必须明确给出“commit 后通过 `./scripts/prepare-task-pr.sh` 执行 GitHub PR preflight / create，并以 required checks、requested changes、comment/thread closeout、mergeability 与 GitHub merge path 作为默认评审/合流边界；`REVIEW_REQUIRED` 仅回报不阻塞”的固定动作，不得只在人工约定层存在。
   - SC-8A: `workflow-report --phase close` 与根 `AGENTS.md` 必须一致说明：仓库默认评审流程是 GitHub PR review，而不是额外的本地 pre-commit review 脚本。
   - SC-8B: 本地额外 diff review 若存在，只能作为 owner 自主加码，不得被正式流程重新写回为硬门禁。
   - SC-8C: 根 `AGENTS.md`、engineering 主 PRD 与本专题正式追踪必须只保留这一条默认流程口径。
   - SC-8D: `workflow-report --phase close --task-uid <TASK-UID>` 的 working_memory 提示必须按当前 task 统计；若当前 task 还没有 working_memory，close checklist 必须先暴露 `codex-working-memory` bootstrap 入口，而不是直接提示 review/autoflow 已存在条目。
-  - SC-8E: commit 后的默认最终合流必须通过 `./scripts/prepare-task-pr.sh` 执行 GitHub PR preflight / create，并把 required checks + review/approval 作为 `main` 的默认保护边界；`./scripts/land-task-worktree.sh` 只保留给显式 local-only / fallback 场景。
+  - SC-8E: commit 后的默认最终合流必须通过 `./scripts/prepare-task-pr.sh` 执行 GitHub PR preflight / create，并把 required checks、requested changes、comment/thread closeout、mergeability 与 GitHub merge path 作为 `main` 的默认保护边界；`REVIEW_REQUIRED` 不得作为 block 项；`./scripts/land-task-worktree.sh` 只保留给显式 local-only / fallback 场景。
   - SC-9: `.pm` task 的唯一身份必须收敛为去中心分配的 `task_uid`；`TASK-PM-xxxx`、`display_id`、`legacy_ids` 与 `next_sequence` 均不得再作为正式字段或路径依赖。
   - SC-10: task file、execution log、working_memory、stage blocker、source refs 与 codex session 映射都必须直接以 `task_uid` 引用；registry/backlog 如保留，只能作为由 canonical task 对象扫描重建的视图。
   - SC-10B: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须改为 git-ignored 的本地生成视图；fresh checkout 下即使这些文件缺失，PM 读路径也能自动重建，不再要求它们参与 Git 冲突解决。
@@ -61,7 +61,7 @@
   4. Flow-SE-004: `producer_system_designer 通过 set-stage 更新 stage/gate 当前态 -> stage-report 汇总 role backlog、关键 blocker、claim envelope 和 trend inputs -> 输出 continue / hold / reassess`
   5. Flow-SE-005: `历史结论被新结论取代 -> 原 memory 记录转为 superseded -> 新记录写入 active -> superseded_by / source_refs / effective range 形成链路`
   6. Flow-SE-006: `新增标准角色 -> 基于角色模板生成 memory/backlog 容器 -> 注册到 registry -> 既有脚本自动将其纳入 lint / report / stage aggregation`
-  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> --task-uid <task_uid> -> canonical task file 记录 last_started_at 并读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close --task-uid <task_uid> -> 回写 task execution log + signal/memory/backlog + last_closed_at -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> normal PR 进入 required checks + review/approval watch/fix/merge -> producer/owner 在评审时执行 workflow-report --phase review`
+  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> --task-uid <task_uid> -> canonical task file 记录 last_started_at 并读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close --task-uid <task_uid> -> 回写 task execution log + signal/memory/backlog + last_closed_at -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> normal PR 进入 required checks + mergeability + comments watch/fix/merge（REVIEW_REQUIRED 仅回报不阻塞）-> producer/owner 在评审时执行 workflow-report --phase review`
   8. Flow-SE-008: `owner 创建新 task -> 系统本地生成 task_uid -> task file / execution log / working_memory 直接落到 task_uid 路径 -> registry/backlog 视图按扫描重建并仅落在 git-ignored 本地文件 -> rebase 时不再因 next_sequence/TASK-PM 抢号或共享视图 YAML 冲突而阻断`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |

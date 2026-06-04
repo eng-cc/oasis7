@@ -14,9 +14,10 @@ optionally push the branch plus open the PR through `gh`. The preflight summary
 also reports a local required-gate validation recommendation, a claim-ready
 helper command for fresh PR-readiness verification, local role-review evidence
 status, plus planner reason summary derived from the current changed-path scope.
-After PR creation, the default workflow continues into required-check/review
-watch, failure fixes, merge, and cleanup unless the task explicitly records that
-the PR exists only to run manual-trigger packaging/release CI.
+After PR creation, the default workflow continues into required-check/comment/
+mergeability watch, failure fixes, merge, and cleanup unless the task explicitly
+records that the PR exists only to run manual-trigger packaging/release CI.
+REVIEW_REQUIRED is reported as status but is not a blocking item by itself.
 
 Default conventions:
 - source branch: current branch

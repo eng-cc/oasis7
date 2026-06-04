@@ -54,10 +54,10 @@
 - 阻塞项:
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:
-  - `drop-local-review-script`：已将默认评审边界完全切到 GitHub PR review，并把 `workflow-report` close checklist、required-tier smoke、`.pm/README`、`AGENTS.md` 与 engineering / self-evolution 正式追踪统一改成“commit -> prepare-task-pr -> GitHub PR review/approval”；当前口径进一步要求 normal PR 创建后继续 watch/fix/merge/cleanup，manual packaging/release CI PR 才能停在人工 gate。
+  - `drop-local-review-script`：已将默认评审边界完全切到 GitHub PR，并把 `workflow-report` close checklist、required-tier smoke、`.pm/README`、`AGENTS.md` 与 engineering / self-evolution 正式追踪统一改成“commit -> prepare-task-pr -> GitHub required checks / mergeability / comments watch”；当前口径进一步要求 normal PR 创建后继续 watch/fix/merge/cleanup，`REVIEW_REQUIRED` 仅回报不阻塞，manual packaging/release CI PR 才能停在人工 gate。
   - `TASK-ENGINEERING-113`：已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `AGENTS.md`、`.pm/README`、self-evolution / engineering 正式追踪与 scripts 模块文档统一改成“PR 是默认最终保护边界，本地 landing 仅保留给 compatibility / fallback”。
   - `TASK-ENGINEERING-PMVIEW-001`：已新增 `sync-views` 入口，并把 `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 降级为 git-ignored 本地生成视图；PM lint/report/read-path 在缺失时可自动重建，根 engineering project 也已停止手工维护“最新完成”长列表，改为以 topic project 与 `.pm/tasks/*.yaml` 追溯近期收口。
-  - `TASK-ENGINEERING-102`：已清理当时正式流程中的旧 review 文案，并将彼时的 commit 前 review 收口到 `./scripts/pm/codex-review-snapshot.sh`；该口径现已被 `TASK-ENGINEERING-113` 与 `drop-local-review-script` superseded，当前默认评审边界为 GitHub PR review/approval + normal PR watch/fix/merge/cleanup。
+  - `TASK-ENGINEERING-102`：已清理当时正式流程中的旧 review 文案，并将彼时的 commit 前 review 收口到 `./scripts/pm/codex-review-snapshot.sh`；该口径现已被 `TASK-ENGINEERING-113` 与 `drop-local-review-script` superseded，当前默认评审/合流边界为 GitHub required checks + mergeability + comment/thread closeout + normal PR watch/fix/merge/cleanup，且 `REVIEW_REQUIRED` 仅回报不阻塞。
   - `TASK-ENGINEERING-097`：已收紧当时的 commit 前 review 话术，补齐快照式 `codex exec review --uncommitted` 与旧口径之间的边界说明，并补齐运行环境阻断边界；该阶段性口径现同样仅作历史追踪保留。
   - `TASK-ENGINEERING-098`：已将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
   - `TASK-ENGINEERING-099`：已将 `.pm` task identity 收敛为 `task_uid` 单一真值，移除顺序 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并完成 lint/smoke 与正式文档迁移收口。

@@ -58,7 +58,7 @@ Use this skill when code and docs are already updated and you are moving into br
 ```
 
 7. Record the PR purpose decision:
-   - `normal_pr_ci_watch`: default for ordinary implementation/documentation PRs. Keep watching required checks, review/approval, mergeability, and unresolved review threads.
+   - `normal_pr_ci_watch`: default for ordinary implementation/documentation PRs. Keep watching required checks, mergeability, review decisions, comments, and unresolved review threads. Treat `REVIEW_REQUIRED` as informational, not as a blocker.
    - `manual_packaging_ci_hold`: only when the user/task says the PR exists specifically to run manual-trigger packaging/release CI jobs. Record the manual job/purpose and stop before auto-merge until the operator/user resumes.
 
 8. For `normal_pr_ci_watch`, keep the loop moving without waiting for another prompt:
@@ -69,7 +69,7 @@ Use this skill when code and docs are already updated and you are moving into br
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
 ```
 
-   - when required checks and required review/approval pass, PR comments/review threads have been checked, and no actionable comments or blocking unresolved review threads remain, merge the PR using the repository's configured merge path
+   - when required checks pass, the PR is mergeable through the repository/GitHub merge path, PR comments/review threads have been checked, and no requested changes, actionable comments, or blocking unresolved review threads remain, merge the PR using the repository's configured merge path
 
 9. After merge, sync local `main` and remove the task worktree / branch.
 
@@ -81,7 +81,7 @@ Use this skill when code and docs are already updated and you are moving into br
 - local verification rerun for the affected surface
 - pre-PR local role review packet recorded when the next step is PR creation
 - PR purpose decision recorded after PR creation
-- normal PRs are watched through required checks/review/comment closeout to merge; only manual packaging CI PRs may pause before merge
+- normal PRs are watched through required checks, mergeability, review decisions, and comment closeout to merge; `REVIEW_REQUIRED` alone is not a blocker, and only manual packaging CI PRs may pause before merge
 
 ## Post-Merge Cleanup
 

@@ -24,17 +24,19 @@ Use this skill when:
 Do not use this skill when:
 
 - there is no PR creation path in the current task
-- you are trying to replace GitHub PR required checks or review/approval with only an internal review ritual
+- you are trying to replace GitHub PR required checks, requested-changes handling, comment closeout, or mergeability with only an internal review ritual
 - no concrete review target, risk question, or evidence sink has been defined
 
 ## Core Rule
 
 Pre-PR local role review is required before PR creation, but it is not a
-replacement for GitHub required checks or review/approval.
+replacement for GitHub required checks, requested-changes handling, comment
+closeout, mergeability, or the repository/GitHub merge path. `REVIEW_REQUIRED`
+is informational and is not a blocking item by itself.
 
 The formal path is:
 
-`local involved-role subagent review -> prepare-task-pr -> GitHub required checks -> review/approval`
+`local involved-role subagent review -> prepare-task-pr -> GitHub required checks -> comment/requested-changes closeout -> mergeability -> merge`
 
 ## Workflow
 

@@ -28,7 +28,7 @@ Use this skill when:
 5. Re-run the checks that prove the comment is addressed.
 6. Push first, then resolve the thread explicitly.
 7. Re-check overall PR state separately.
-8. For normal PRs, continue watching required checks/review/mergeability after the fix; if everything passes, merge and clean up through the finishing branch workflow.
+8. For normal PRs, continue watching required checks, requested changes, comments/threads, and mergeability after the fix; `REVIEW_REQUIRED` is informational and does not block by itself. If everything passes, merge and clean up through the finishing branch workflow.
 
 ## Oasis7 GitHub Loop
 
@@ -43,6 +43,8 @@ Use it to inventory unresolved threads. After fixes and push, resolve the intend
 - `reviewDecision`
 - `mergeStateStatus`
 - required checks
+
+Treat `REVIEW_REQUIRED` as a status signal to report, not as merge-blocking by itself. Requested changes, actionable comments, unresolved blocking threads, failed checks, non-mergeable state, or merge API/branch-protection rejection remain blockers.
 
 If the PR purpose decision is `manual_packaging_ci_hold`, do not convert packaging-job completion into merge readiness by itself. Resume the normal watch/fix/merge path only after the operator/user says the manual packaging CI purpose is complete.
 

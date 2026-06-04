@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.12**
+Version: **v1.4.13**
 Last Updated: **2026-06-04**
 
 ## 0. Purpose
@@ -35,7 +35,7 @@ flowchart TD
   I -->|fail| K[Rollback: debug/fix/replan]
   K --> E
   M -->|findings require changes| K
-  O -->|PR check/review failure| L[Review Fix Loop]
+  O -->|PR check/requested-changes/comment failure| L[Review Fix Loop]
   L --> I
 ```
 
@@ -103,7 +103,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 4. **Fresh verification gate**: current-round verification success before completion claims.
 5. **Pre-PR local role review gate**: fresh local subagent review by all involved relevant roles, with actionable findings addressed or explicitly rejected with evidence.
 6. **Closeout gate**: closeout metadata + task status transition + lint/governance checks + commit + PR creation.
-7. **Post-PR watch/merge gate**: unless the PR is explicitly opened only to access manual-trigger packaging/release CI, watch normal PR required checks and review/approval to completion, fix failures through the review/debug loop, then merge and clean up.
+7. **Post-PR watch/merge gate**: unless the PR is explicitly opened only to access manual-trigger packaging/release CI, watch normal PR required checks, mergeability, and PR comments/review threads to completion, fix failures through the review/debug loop, then merge and clean up. `REVIEW_REQUIRED` is informational and is not a blocking item by itself.
 
 ### 3.2 Optional Gates (risk-based)
 1. Bounded brainstorming gate (ambiguous scope / architecture tradeoffs).
@@ -120,7 +120,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Stop speculative implementation.
 - Update planning truth (PRD/project/execution) before resuming code edits.
 
-### 4.3 PR check/review failure
+### 4.3 PR check/requested-changes/comment failure
 - Re-enter review-fix loop.
 - Re-run fresh verification.
 - Re-submit PR evidence.
@@ -196,7 +196,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - For `done` closeout, fresh verification must be from the current round.
 
 ### 5.5 PR and review chain
-- Standard path is local role-subagent review + GitHub PR + required checks + review/approval.
+- Standard path is local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability.
 - The workflow no longer requests Copilot review as a PR helper step.
 - Before PR creation, TPM must create or dispatch fresh local review subagents for every involved relevant professional role in the diff scope. At minimum, use changed paths, role ownership, and task slice history to select roles; include `qa_engineer` when the claim involves verification or release readiness; include `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched.
 - Each local role review must return `findings` or `no_findings` plus `residual_risk`. TPM must fix valid findings or record why a finding is stale/rejected with code or doc evidence before PR creation.
@@ -218,8 +218,8 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - After PR creation, TPM must record the PR purpose decision:
   - `normal_pr_ci_watch`: default. Use this unless the user or task truth says the PR was opened only to access manual-trigger packaging/release CI jobs.
   - `manual_packaging_ci_hold`: allowed only when the PR is explicitly created for manual-trigger packaging/release CI. Record which manual job(s) or packaging purpose need the PR and stop before auto-merge until the operator/user resumes the normal path.
-- For `normal_pr_ci_watch`, TPM continues without waiting for another user prompt: watch the PR's normal required checks, review/approval state, and mergeability. If checks fail or review requests changes, route through the fix loop, rerun fresh verification, push fixes, and continue watching.
-- Once normal required checks and required review/approval pass, PR comments/review threads have been checked, and no actionable comments or unresolved blocking review threads remain, merge the PR using the repository's configured merge method, then sync local `main` and clean up the task worktree/branch.
+- For `normal_pr_ci_watch`, TPM continues without waiting for another user prompt: watch the PR's normal required checks, mergeability, review decisions, and PR comments/review threads. `REVIEW_REQUIRED` is a status signal to report, not a blocker. If checks fail, review requests changes, actionable comments appear, unresolved blocking review threads remain, or the merge API/branch protection rejects the merge, route through the fix loop, rerun fresh verification, push fixes or answer/resolve comments, and continue watching.
+- Once normal required checks pass, the PR is mergeable by the repository/GitHub merge path, PR comments/review threads have been checked, and no actionable comments, requested changes, or unresolved blocking review threads remain, merge the PR using the repository's configured merge method, then sync local `main` and clean up the task worktree/branch.
 - After merge, sync local `main` and clean up task worktree/branch.
 
 ## 6. Required Artifacts by Phase
@@ -231,6 +231,9 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.13 (2026-06-04)**
+  - Clarified that `REVIEW_REQUIRED` is informational and is not a blocking merge item by itself.
+  - Kept actual blockers on required-check failures, requested changes, actionable/unresolved PR comments or review threads, non-mergeable state, and repository/GitHub merge rejection.
 - **v1.4.12 (2026-06-04)**
   - Added the post-PR purpose decision: normal PRs proceed into CI/review watch, failure fix loop, merge, and cleanup without waiting for another prompt.
   - Added the manual packaging/release CI hold exception for PRs opened specifically to access manual-trigger packaging CI jobs.
@@ -313,7 +316,7 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] Current-round fresh verification before completion claim.
 - [x] Pre-PR local role-subagent review packet before PR creation.
 - [x] Closeout command chain and `done` verification strictness.
-- [x] Local role-subagent review + GitHub PR + required checks + review/approval as formal review boundary.
+- [x] Local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability as formal review/merge boundary; `REVIEW_REQUIRED` is informational, not a blocker.
 - [x] PR review fix loop: fix -> re-verify -> resolve threads -> merge claim.
 - [x] Workflow phase-to-skill map preserves required, conditional, optional, and specialist skill reachability.
 
