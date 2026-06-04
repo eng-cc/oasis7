@@ -397,8 +397,65 @@ curl -sS -X POST "${PROVIDER_BASE_URL}/v1/world-simulator/decision" \
     "agent_profile": "oasis7_p0_low_freq_npc",
     "fixture_id": "bridge-full-chain-e2e",
     "timeout_budget_ms": 7000
-  }'
+}'
 ```
+
+可重复执行的自动化 smoke:
+
+```bash
+./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
+  --base-url "${PROVIDER_BASE_URL}" \
+  --auth-token "${TEST_PROVIDER_AUTH_TOKEN}" \
+  --decision-count 1 \
+  --min-successes 1
+```
+
+正式环境/测试环境验收不得只看 mock。需要发现真实 ECS、nginx ingress、LetAI
+额度和 state 映射问题时，必须跑 live gate。live gate 会从真实 204/205 ECS
+读取 active `newapi_user_ref:<ref>` selector，不打印 raw `token_key`：
+
+```bash
+./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1
+./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 204 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 205 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --skip-loopback
+```
+
+CI 默认只运行无副作用 harness 回归；真实环境门禁需显式启用：
+
+```bash
+OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
+```
+
+`lowquota_exhaustion` persona 需要连续 decision 直到出现额度不足或上游 quota
+失败。自动化判定示例：
+
+```bash
+./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
+  --base-url "${PROVIDER_BASE_URL}" \
+  --auth-token "${TEST_PROVIDER_AUTH_TOKEN}" \
+  --decision-count 20 \
+  --min-successes 1 \
+  --expect-provider-error-code-substr quota
+```
+
+真实环境低额度验收使用 dedicated lowquota persona 后执行：
+
+```bash
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --skip-public \
+  --loopback-target 204 \
+  --lowquota-target 204 \
+  --lowquota-decision-count 20
+
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --skip-loopback \
+  --lowquota-target public205 \
+  --lowquota-decision-count 20
+```
+
+通过标准：至少一次 decision 成功，并且后续 response 中出现 `provider_error.code`
+包含 `quota` 的记录；不得把 raw `token_key`、私钥或完整 bridge state 写入证据。
 
 期望：
 - happy path 返回 `provider_error=null` 或等价成功字段。

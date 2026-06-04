@@ -112,6 +112,15 @@ run_oasis7_llm_baseline_fixture_smoke() {
 
 run_provider_remote_https_smoke() {
   run ./scripts/provider-remote-https/letai-provider-cli.test.sh
+  run ./scripts/provider-remote-https/provider-bridge-contract-smoke.test.sh
+}
+
+run_provider_bridge_live_gate() {
+  run ./scripts/provider-remote-https/provider-bridge-live-gate.sh
+}
+
+run_newapi_bridge_service_accounting_tests() {
+  run_cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture
 }
 
 run_oasis7_viewer_software_safe_feedback_contract_tests() {
@@ -144,6 +153,8 @@ run_required_gate_checks() {
   run ./scripts/cargo-dev-lib.test.sh
   run ./scripts/plan-rust-required-scope.test.sh
   run_provider_remote_https_smoke
+  run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" run_provider_bridge_live_gate
+  run_newapi_bridge_service_accounting_tests
   run ./scripts/check-rust-file-size.sh
   run env -u RUSTC_WRAPPER cargo fmt --all -- --check
 }
