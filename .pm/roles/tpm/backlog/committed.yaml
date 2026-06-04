@@ -1,14 +1,4 @@
 version: 1
 role: tpm
 status: committed
-tasks:
-  - task_uid: task_202b9f812d49432a9f4360b8a66c5364
-    title: "expand testnet to fourth local node"
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance:
-      - "Start one additional local public testnet node and verify four-node topology evidence."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_202b9f812d49432a9f4360b8a66c5364.yaml
+tasks: []
