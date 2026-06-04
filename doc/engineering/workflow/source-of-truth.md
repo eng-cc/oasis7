@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.13**
+Version: **v1.4.15**
 Last Updated: **2026-06-04**
 
 ## 0. Purpose
@@ -103,7 +103,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 4. **Fresh verification gate**: current-round verification success before completion claims.
 5. **Pre-PR local role review gate**: fresh local subagent review by all involved relevant roles, with actionable findings addressed or explicitly rejected with evidence.
 6. **Closeout gate**: closeout metadata + task status transition + lint/governance checks + commit + PR creation.
-7. **Post-PR watch/merge gate**: unless the PR is explicitly opened only to access manual-trigger packaging/release CI, watch normal PR required checks, mergeability, and PR comments/review threads to completion, fix failures through the review/debug loop, then merge and clean up. `REVIEW_REQUIRED` is informational and is not a blocking item by itself.
+7. **Post-PR watch/merge gate**: unless the PR is explicitly opened only to access manual-trigger packaging/release CI, watch normal PR required checks, mergeability, and PR comments/review threads to completion, fix failures through the review/debug loop, then merge and clean up. `REVIEW_REQUIRED` is informational and is not a blocking item by itself. `mergeStateStatus=BEHIND` is also informational by itself: if the PR stays mergeable, has no actionable comments/requested changes/blocking threads, and the repository/GitHub merge path accepts the merge without a local branch sync, the normal path may merge directly without rebasing first. If `mergeStateStatus=BLOCKED` is caused only by missing review approval, and the user/task policy explicitly authorizes skipping that approval, the normal path may use the repository's admin merge path after re-checking required checks, mergeability, requested changes, and PR comments/review threads.
 
 ### 3.2 Optional Gates (risk-based)
 1. Bounded brainstorming gate (ambiguous scope / architecture tradeoffs).
@@ -218,8 +218,10 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - After PR creation, TPM must record the PR purpose decision:
   - `normal_pr_ci_watch`: default. Use this unless the user or task truth says the PR was opened only to access manual-trigger packaging/release CI jobs.
   - `manual_packaging_ci_hold`: allowed only when the PR is explicitly created for manual-trigger packaging/release CI. Record which manual job(s) or packaging purpose need the PR and stop before auto-merge until the operator/user resumes the normal path.
-- For `normal_pr_ci_watch`, TPM continues without waiting for another user prompt: watch the PR's normal required checks, mergeability, review decisions, and PR comments/review threads. `REVIEW_REQUIRED` is a status signal to report, not a blocker. If checks fail, review requests changes, actionable comments appear, unresolved blocking review threads remain, or the merge API/branch protection rejects the merge, route through the fix loop, rerun fresh verification, push fixes or answer/resolve comments, and continue watching.
-- Once normal required checks pass, the PR is mergeable by the repository/GitHub merge path, PR comments/review threads have been checked, and no actionable comments, requested changes, or unresolved blocking review threads remain, merge the PR using the repository's configured merge method, then sync local `main` and clean up the task worktree/branch.
+- For `normal_pr_ci_watch`, TPM continues without waiting for another user prompt: watch the PR's normal required checks, mergeability, review decisions, and PR comments/review threads. `REVIEW_REQUIRED` is a status signal to report, not a blocker. If checks fail, review requests changes, actionable comments appear, unresolved blocking review threads remain, or the merge API/branch protection rejects the merge for reasons other than review approval, route through the fix loop, rerun fresh verification, push fixes or answer/resolve comments, and continue watching.
+- If GitHub reports `mergeStateStatus=BEHIND`, treat it as a branch-sync signal, not an automatic blocker. When the PR is still mergeable and the repository/GitHub merge path accepts the merge without requiring a local branch sync, TPM may merge directly after the same checks/comments/thread closeout steps. If GitHub refuses because the branch must be updated first or because a conflict/non-mergeable state exists, sync the branch to the current base, rerun fresh verification as needed, push, and continue watching.
+- If GitHub reports `mergeStateStatus=BLOCKED` / `REVIEW_REQUIRED` only because review approval is missing, and the current user request or task truth explicitly authorizes skipping review approval, TPM may use the repository's admin merge path as part of the normal PR watch/merge flow. Before doing so, TPM must re-check that required checks pass, the PR is mergeable, no requested changes remain, PR comments/review threads have been checked, and no actionable comments or unresolved blocking review threads remain. Admin merge must not be used for failed checks, non-mergeable code state, requested changes, unresolved actionable comments/threads, manual packaging CI holds, or unrelated branch-protection failures.
+- Once normal required checks pass, the PR is mergeable by the repository/GitHub merge path or by the authorized review-approval admin path above, PR comments/review threads have been checked, and no actionable comments, requested changes, or unresolved blocking review threads remain, merge the PR using the repository's configured merge method, then sync local `main` and clean up the task worktree/branch.
 - After merge, sync local `main` and clean up task worktree/branch.
 
 ## 6. Required Artifacts by Phase
@@ -231,6 +233,12 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.15 (2026-06-04)**
+  - Clarified that `mergeStateStatus=BEHIND` is informational by itself and does not force a local rebase when the PR remains mergeable and the repository/GitHub merge path accepts a direct merge.
+  - Kept branch sync/rebase required only when GitHub actually refuses the behind branch because an update or conflict resolution is needed.
+- **v1.4.14 (2026-06-04)**
+  - Defined review-approval-only `mergeStateStatus=BLOCKED` as a normal admin merge path when user/task policy explicitly authorizes skipping review approval.
+  - Kept admin merge forbidden for failed checks, non-mergeable code state, requested changes, unresolved actionable comments/threads, manual packaging CI holds, and unrelated branch-protection failures.
 - **v1.4.13 (2026-06-04)**
   - Clarified that `REVIEW_REQUIRED` is informational and is not a blocking merge item by itself.
   - Kept actual blockers on required-check failures, requested changes, actionable/unresolved PR comments or review threads, non-mergeable state, and repository/GitHub merge rejection.

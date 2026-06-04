@@ -819,7 +819,7 @@ payload = {
         "PR creation requires local involved-role subagent review evidence before GitHub PR watch/fix/merge",
         "done closeout refuses to proceed without fresh verification",
         "PR preflight stays the default GitHub PR entrypoint after local role review evidence",
-        "normal PRs continue after creation into required-check/comment/mergeability watch, failure fixes, comment closeout, merge, and cleanup; REVIEW_REQUIRED is informational and not a blocker",
+        "normal PRs continue after creation into required-check/comment/mergeability watch, failure fixes, comment closeout, authorized review-approval admin merge when policy allows, merge, and cleanup; REVIEW_REQUIRED is informational and not a blocker",
         "manual packaging/release CI PRs can pause before merge only when that purpose is explicit",
         "review-thread closeout reports unresolved/resolved thread state without conflating merge readiness",
     ],

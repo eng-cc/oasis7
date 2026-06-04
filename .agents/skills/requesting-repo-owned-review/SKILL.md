@@ -32,7 +32,10 @@ Do not use this skill when:
 Pre-PR local role review is required before PR creation, but it is not a
 replacement for GitHub required checks, requested-changes handling, comment
 closeout, mergeability, or the repository/GitHub merge path. `REVIEW_REQUIRED`
-is informational and is not a blocking item by itself.
+is informational and is not a blocking item by itself. A review-approval-only
+`mergeStateStatus=BLOCKED` may use an explicitly authorized repository admin
+merge path, but this does not weaken checks, requested changes, comments, or
+mergeability gates.
 
 The formal path is:
 

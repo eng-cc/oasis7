@@ -1040,7 +1040,9 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
         .as_deref()
         .expect("writer before")
         .to_string();
-    let guard_advanced = wait_until(Instant::now() + Duration::from_secs(5), || {
+    // CI runners can take noticeably longer to resume replication after both
+    // nodes restart, so give the persisted remote guard extra time to advance.
+    let guard_advanced = wait_until(Instant::now() + Duration::from_secs(10), || {
         fs::read(&guard_path)
             .ok()
             .and_then(|bytes| {

@@ -13,13 +13,13 @@
 - Related Module PRD: `doc/scripts/prd.md` (`PRD-SCRIPTS-007/008`)
 
 ## 1. Executive Summary
-- Problem Statement: 本地 `land-task-worktree.sh` 能约束单机线性历史，但它无法替代 GitHub PR 的 required checks、requested changes、comment/thread closeout、mergeability 与受保护 `main` 分支边界。继续把“本地 landing 到 local main”当默认最终合流，会让默认保护边界停留在单机流程，而不是服务端门禁；同时，owner 在 commit 后进入 PR preflight 时，仍缺少一份与 changed-path planner 对齐的“本地最小 required 校验建议”，而 branch 跟进最新 `main` 时若命中 `.pm/**` rebase 冲突，也缺少 repo-owned 的分类与安全自动修复边界，容易退回临时手工处理。
+- Problem Statement: 本地 `land-task-worktree.sh` 能约束单机线性历史，但它无法替代 GitHub PR 的 required checks、requested changes、comment/thread closeout、mergeability、review-approval-only admin merge 授权路径与受保护 `main` 分支边界。继续把“本地 landing 到 local main”当默认最终合流，会让默认保护边界停留在单机流程，而不是服务端门禁；同时，owner 在 commit 后进入 PR preflight 时，仍缺少一份与 changed-path planner 对齐的“本地最小 required 校验建议”，而 branch 跟进最新 `main` 时若命中 `.pm/**` rebase 冲突，也缺少 repo-owned 的分类与安全自动修复边界，容易退回临时手工处理。
 - Proposed Solution: 新增 `scripts/prepare-task-pr.sh` 作为标准 GitHub PR 收口入口，并补 `scripts/pm/rebase-conflict-helper.sh` 作为 `.pm` rebase 冲突辅助。前者负责校验 task worktree 干净状态、比较 source branch 与 base ref、输出或执行 `gh pr create` 命令，并给出 PR 合入后的本地同步/cleanup 命令；同时复用现有 changed-path planner，为当前 diff 输出只读的本地 required-gate 建议命令。后者负责分类 `.pm/**` 未合并路径，并把唯一允许的自动修复边界收口为 `.pm/inbox/signals.jsonl` 的 signal-id 碰撞。旧 `land-task-worktree.sh` 降级为 local-only / fallback 兼容工具。
 - Success Criteria:
   - SC-1: 已完成任务的默认最终合流入口切到 `scripts/prepare-task-pr.sh`，而不是 `scripts/land-task-worktree.sh`。
   - SC-2: `prepare-task-pr.sh --json` 输出 source/base/comparison/create/cleanup 结构化字段，便于 agent 消费。
   - SC-3: source worktree 脏、base ref 缺失、`--create` 时 source 落后于 comparison ref 等情况会在本地 preflight 阶段被阻断。
-  - SC-4: 正式文档统一说明“GitHub PR + required checks + requested changes/comment closeout + mergeability”是默认最终保护边界，且 `REVIEW_REQUIRED` 仅回报不阻塞。
+  - SC-4: 正式文档统一说明“GitHub PR + required checks + requested changes/comment closeout + mergeability + authorized review-approval admin merge path”是默认最终保护边界，且 `REVIEW_REQUIRED` 仅回报不阻塞。
   - SC-5: PR 合入后的 task worktree / branch cleanup 仍是必做项，而不是“可选建议”。
   - SC-6: `prepare-task-pr.sh` 必须在 preflight 阶段输出与当前 changed paths 对齐的本地 required-gate 建议命令，但只负责推荐，不自动执行，也不改变 `./scripts/ci-tests.sh required/full` 的既有语义。
   - SC-7: `prepare-task-pr.sh` 必须同时暴露 changed-path planner 的 `reason_summary`，让 owner 在 PR preflight 阶段直接看到“为什么被规划成当前 scope”，而不必手工重跑 planner。
@@ -117,5 +117,5 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-GHPR-001 | 默认最终合流切到 GitHub PR，local landing 仅保留兼容/应急 | 继续默认本地 landing 到 local main | 默认保护边界应该落在服务端 required checks、requested changes/comment closeout 与 mergeability，而不是单机流程；`REVIEW_REQUIRED` 只报告状态，不单独阻塞。 |
+| DEC-GHPR-001 | 默认最终合流切到 GitHub PR，local landing 仅保留兼容/应急 | 继续默认本地 landing 到 local main | 默认保护边界应该落在服务端 required checks、requested changes/comment closeout、mergeability 与授权的 review-approval admin merge path，而不是单机流程；`REVIEW_REQUIRED` 只报告状态，不单独阻塞。 |
 | DEC-GHPR-002 | 把 PR preflight 与 `gh pr create` 合到一个脚本里，但 `--create` 作为显式动作 | 只输出文档说明，不提供标准入口 | 治理变更必须有可执行主入口，否则默认流程仍会退回口头约定。 |
