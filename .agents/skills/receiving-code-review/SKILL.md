@@ -44,7 +44,7 @@ Use it to inventory unresolved threads. After fixes and push, resolve the intend
 - `mergeStateStatus`
 - required checks
 
-Treat `REVIEW_REQUIRED` as a status signal to report, not as merge-blocking by itself. Requested changes, actionable comments, unresolved blocking threads, failed checks, non-mergeable state, or merge API/branch-protection rejection remain blockers.
+Treat `REVIEW_REQUIRED` as a status signal to report, not as merge-blocking by itself. If `mergeStateStatus=BLOCKED` is only missing review approval and the user/task policy explicitly authorizes skipping it, the finishing workflow may use the repository admin merge path after re-checking gates. Requested changes, actionable comments, unresolved blocking threads, failed checks, non-mergeable state, or non-review-approval merge API/branch-protection rejection remain blockers.
 
 If the PR purpose decision is `manual_packaging_ci_hold`, do not convert packaging-job completion into merge readiness by itself. Resume the normal watch/fix/merge path only after the operator/user says the manual packaging CI purpose is complete.
 

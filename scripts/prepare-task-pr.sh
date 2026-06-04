@@ -18,6 +18,9 @@ After PR creation, the default workflow continues into required-check/comment/
 mergeability watch, failure fixes, merge, and cleanup unless the task explicitly
 records that the PR exists only to run manual-trigger packaging/release CI.
 REVIEW_REQUIRED is reported as status but is not a blocking item by itself.
+When mergeStateStatus=BLOCKED is only missing review approval and user/task
+policy explicitly allows skipping it, the normal flow may use repo admin merge
+after re-checking checks, mergeability, requested changes, comments, and threads.
 
 Default conventions:
 - source branch: current branch
