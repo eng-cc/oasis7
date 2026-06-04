@@ -1,0 +1,25 @@
+task_uid: task_1b9e1a6ff48047a1811a9ed125f02267
+title: "Draft site story CH-047"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_1b9e1a6ff48047a1811a9ed125f02267.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/chapter-cards/volume-02-chapter-02-cards.md
+doc_refs:
+  - site/story/draft/volume-02-chapter-002-positioning.md
+  - site/story/research/volume-02-chapter-02-research.md
+related_prd: []
+acceptance:
+  - "Draft CH-047 / 待确认夹 for second-volume second chapter using approved research and positioning, record bounded professional drafting evidence, update repo draft truth, verify, commit, push, and update PR."
+handoff_to: []
+updated_at: 2026-06-04T11:45:41+08:00
+last_started_at: 2026-06-04T11:25:57+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-002.md site/story/draft/README.md .pm/tasks/task_1b9e1a6ff48047a1811a9ed125f02267.execution.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-04T11:45:39+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-04T11:45:41+08:00
