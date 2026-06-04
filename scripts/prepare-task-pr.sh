@@ -345,7 +345,7 @@ missing: list[str] = []
 selected_block = blocks[-1]
 
 for key, expected in required.items():
-    if f"- {key}: {expected}" not in selected_block:
+    if parse_field(selected_block, key) != expected:
         missing.append(f"{key}: {expected}")
 
 reviewed_source_head = parse_field(selected_block, "Source Head")

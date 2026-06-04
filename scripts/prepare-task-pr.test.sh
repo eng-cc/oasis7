@@ -168,6 +168,40 @@ write_shadowed_role_review_packet() {
 EOF
 }
 
+write_prefix_mismatch_role_review_packet() {
+  local source_head="$1"
+  cat > "$SMOKE_WORKTREE/.pm/tasks/$TASK_UID.execution.md" <<EOF
+# $TASK_UID Execution Log
+
+- task_uid: $TASK_UID
+- title: prepare task pr role review fixture
+- owner_role: tpm
+- worktree_hint: $SMOKE_WORKTREE_CANONICAL
+
+## 2026-06-03 00:00:00 CST / tpm
+- 完成内容: fixture pre-PR local role review packet with prefix-mismatched fields.
+- 遗留事项: none.
+- Action: fixture.
+- Validation Command: fixture.
+- Expected Result: fixture.
+- Actual Result: fixture.
+- Pre-PR Local Role Review: passed
+- Task UID: $TASK_UID
+- Source Worktree: $SMOKE_WORKTREE_CANONICAL-old
+- Source Branch: $SMOKE_BRANCH-old
+- Source Head: $source_head
+- Comparison Ref: refs/remotes/origin/main-old
+- Reviewed Changed Paths: scripts/prepare-task-pr.sh
+- Role Selection Basis: changed paths include PR helper workflow; roles tpm,qa_engineer.
+- Review Roles: tpm,qa_engineer
+- Review Evidence: qa_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: fixture evidence
+- Residual Risk: fixture residual risk
+- Blocker / Next Action: none.
+EOF
+}
+
 commit_fixture_evidence() {
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" ".pm/tasks/$TASK_UID.execution.md"
   "$REAL_GIT" -C "$SMOKE_WORKTREE" \
@@ -244,6 +278,35 @@ if any("push" in line for line in git_lines):
     raise SystemExit(f"expected no push before stale-review failure, got: {git_lines}")
 if "Source Head ancestor" not in stderr:
     raise SystemExit(f"expected stale Source Head marker in error, got: {stderr}")
+PY
+
+write_prefix_mismatch_role_review_packet "$SOURCE_HEAD"
+commit_fixture_evidence
+
+prefix_mismatch_json="$TMPDIR/prefix-mismatch.json"
+run_prepare "$TMPDIR/gh-prefix-mismatch.log" "$TMPDIR/git-prefix-mismatch.log" --json >"$prefix_mismatch_json"
+
+python3 - "$prefix_mismatch_json" "$SMOKE_WORKTREE_CANONICAL" "$SMOKE_BRANCH" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+expected_worktree = sys.argv[2]
+expected_branch = sys.argv[3]
+review = payload["pre_pr_local_role_review"]
+missing = set(review["missing_markers"])
+expected = {
+    f"Source Worktree: {expected_worktree}",
+    f"Source Branch: {expected_branch}",
+    "Comparison Ref: refs/remotes/origin/main",
+}
+if review["status"] != "missing":
+    raise SystemExit(f"expected missing review status for prefix-mismatched fields, got: {review}")
+if not expected.issubset(missing):
+    raise SystemExit(f"expected exact field mismatch markers {expected}, got: {missing}")
 PY
 
 write_role_review_packet "$SOURCE_HEAD" "no_findings"
