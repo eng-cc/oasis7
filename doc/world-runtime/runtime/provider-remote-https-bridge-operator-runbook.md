@@ -19,10 +19,10 @@ repo-owned 参考装配中，这 4 个端点由 `oasis7_provider_local_bridge` �
 
 本矩阵只描述 remote provider bridge 的 runtime decision provider 口径；NewAPI bridge 自身是额度/token state 服务。
 
-| Lane | Host | Provider bridge | 对外入口 | State 来源 | 当前 LLM smoke |
+| Lane | Host | Provider bridge | 对外入口 | State 来源 | 当前 live gate |
 | --- | --- | --- | --- | --- | --- |
-| 测试环境 | `39.104.204.172` | `oasis7-remote-provider-bridge.service`，`active + enabled`，监听 `127.0.0.1:5841` | 暂无公网域名；本机/内网验证优先 | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | `POST /v1/world-simulator/decision` 成功，`provider_error=null`，`provider_version=letai/gpt-5.4`，样本延迟 `6290ms` |
-| 正式环境 | `39.104.205.67` | `oasis7-remote-provider-bridge.service`，`active + enabled`，监听 `127.0.0.1:5841` | `https://t2t.oasis7.tech` | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | `POST /v1/world-simulator/decision` 成功，`provider_error=null`，`provider_version=letai/gpt-5.4`，样本延迟 `4038ms` |
+| 测试环境 | `39.104.204.172` | `oasis7-remote-provider-bridge.service`，监听 `127.0.0.1:5841` | 暂无公网域名；本机/内网验证优先 | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | 2026-06-04 live gate: state realigned to the same NewAPI project/token as 205; loopback decision passes with `provider_version=letai/gpt-5.4` |
+| 正式环境 | `39.104.205.67` | `oasis7-remote-provider-bridge.service`，监听 `127.0.0.1:5841` | `https://t2t.oasis7.tech` | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | 2026-06-04 live gate: loopback decision passes with `provider_version=letai/gpt-5.4`; current Codex control host to public TLS is reset before nginx, while 204-to-205 public TLS/HTTP succeeds |
 
 两套 provider bridge 当前都启用自动映射模式：client 传 `newapi_user_ref:<user_ref>` 或 `bridge_user_id:<id>`，provider bridge 从本机 NewAPI bridge state 解析对应 `token_key`。`GET /v1/provider/health` 可能因上游 health URL 返回 `HTTP 401` 而显示 `degraded`；是否能调用模型以 `POST /v1/world-simulator/decision` smoke 为准。
 
@@ -178,12 +178,58 @@ curl -sS -H "Authorization: Bearer <alice-bridge-token>" \
 
 ## nginx 验证
 
+真实环境门禁优先使用 live gate。该脚本会通过 SSH 读取 204/205 真实
+`/etc/oasis7/newapi-bridge/bridge-state.json`，派生 active
+`newapi_user_ref:<ref>` selector，然后分别打真实 ECS loopback provider 和 205
+公网 nginx ingress。它不打印 raw `token_key`、密码或私钥。
+
+```bash
+./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1
+./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 204 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 205 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --skip-loopback
+```
+
+长跑额度消耗/低额度验证也必须走真实环境，使用 dedicated lowquota persona 后再执行:
+
+```bash
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --skip-public \
+  --loopback-target 204 \
+  --lowquota-target 204 \
+  --lowquota-decision-count 20
+
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --skip-loopback \
+  --lowquota-target public205 \
+  --lowquota-decision-count 20
+```
+
+默认 CI 只跑无副作用的 provider contract 回归；真实环境门禁需要凭据和公网可达性，
+用 `OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required` 显式启用。
+mock 测试只用于保护 harness 解析和失败判定，不作为环境通过证据。
+
 公网入口验证:
 
 ```bash
 curl -sS -H "Authorization: Bearer <token>" https://t2t.oasis7.tech/v1/provider/info
 curl -sS -H "Authorization: Bearer <token>" https://t2t.oasis7.tech/v1/provider/health
 ```
+
+自动化合同 smoke:
+
+```bash
+./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
+  --base-url https://t2t.oasis7.tech \
+  --auth-token <token> \
+  --decision-count 1 \
+  --min-successes 1
+```
+
+该脚本同时验证 `/v1/provider/info`、`/v1/provider/health` 与
+`POST /v1/world-simulator/decision`。默认允许 health 返回 `degraded`，因为上游
+health URL 可能返回 `HTTP 401`；是否能调用模型仍以 decision smoke 为准。若需要把
+health 也作为硬门禁，追加 `--require-health-ok`。
 
 若 LetAI 上游对默认 `oasis7-letai-provider-cli/1.0` User-Agent 做了额外拦截，可在 env 里显式覆写:
 

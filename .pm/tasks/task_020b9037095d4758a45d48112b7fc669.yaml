@@ -1,0 +1,25 @@
+task_uid: task_020b9037095d4758a45d48112b7fc669
+title: "Add provider bridge ingress quota coverage"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-ops-add-provider-bridge-coverage
+execution_log_path: .pm/tasks/task_020b9037095d4758a45d48112b7fc669.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/world-runtime/runtime/provider-remote-https-bridge-operator-runbook.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md
+related_prd: []
+acceptance:
+  - "Add automated coverage for public provider ingress smoke and low-quota exhaustion/accounting harness, and keep deposit/reconcile accounting tests integrated."
+handoff_to: []
+updated_at: 2026-06-04T15:14:03+08:00
+last_started_at: 2026-06-04T11:23:40+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/provider-remote-https/provider-bridge-contract-smoke.test.sh && ./scripts/provider-remote-https/letai-provider-cli.test.sh && env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture && ./scripts/check-script-executable-bits.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-04T15:13:59+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-04T15:14:03+08:00
