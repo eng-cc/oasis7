@@ -1,6 +1,6 @@
 use super::*;
 
-fn build_fetch_commit_success_cache_fixture(
+pub(super) fn build_fetch_commit_success_cache_fixture(
     world_id: &str,
     dir_remote: &std::path::Path,
     dir_local: &std::path::Path,
@@ -98,13 +98,13 @@ fn build_gap_sync_endpoint_with_policy(
 }
 
 #[derive(Clone)]
-struct PeerDirectedFetchCommitTestNetwork {
-    generic_response: super::replication::FetchCommitResponse,
-    generic_unsupported: bool,
-    peer_responses: Arc<Mutex<HashMap<String, super::replication::FetchCommitResponse>>>,
-    connected_peer_ids: Vec<String>,
-    generic_attempts: Arc<Mutex<usize>>,
-    provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
+pub(super) struct PeerDirectedFetchCommitTestNetwork {
+    pub(super) generic_response: super::replication::FetchCommitResponse,
+    pub(super) generic_unsupported: bool,
+    pub(super) peer_responses: Arc<Mutex<HashMap<String, super::replication::FetchCommitResponse>>>,
+    pub(super) connected_peer_ids: Vec<String>,
+    pub(super) generic_attempts: Arc<Mutex<usize>>,
+    pub(super) provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
 impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>

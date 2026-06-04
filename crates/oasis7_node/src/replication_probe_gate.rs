@@ -66,6 +66,10 @@ impl PosNodeEngine {
                 self.note_replication_successor_probe_attempt(probe_height, now_ms, true);
                 Ok(true)
             }
+            Err(err) if replication_successor_probe_fetch_commit_unavailable(&err) => {
+                self.note_replication_successor_probe_attempt(probe_height, now_ms, false);
+                Ok(false)
+            }
             Err(err) => Err(err),
         }
     }
@@ -118,6 +122,15 @@ pub(super) fn replication_request_waitable_connection_gap(err: &NodeError) -> bo
     reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
 }
 
+fn replication_successor_probe_fetch_commit_unavailable(err: &NodeError) -> bool {
+    let NodeError::Replication { reason } = err else {
+        return false;
+    };
+    reason.contains(super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL)
+        && (reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
+            || reason.contains("ErrUnsupported"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,6 +156,16 @@ mod tests {
             ),
         };
         assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn successor_probe_treats_fetch_commit_unsupported_as_unavailable() {
+        let err = NodeError::Replication {
+            reason: "replication network error: NetworkRequestFailed { code: ErrUnsupported, message: \"/aw/node/replication/fetch-commit/1.0.0\", retryable: false }"
+                .to_string(),
+        };
+        assert!(replication_successor_probe_fetch_commit_unavailable(&err));
         assert!(!replication_request_waitable_connection_gap(&err));
     }
 }
