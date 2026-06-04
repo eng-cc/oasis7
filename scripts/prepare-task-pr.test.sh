@@ -123,6 +123,51 @@ write_role_review_packet() {
 EOF
 }
 
+write_shadowed_role_review_packet() {
+  local source_head="$1"
+  cat > "$SMOKE_WORKTREE/.pm/tasks/$TASK_UID.execution.md" <<EOF
+# $TASK_UID Execution Log
+
+- task_uid: $TASK_UID
+- title: prepare task pr role review fixture
+- owner_role: tpm
+- worktree_hint: $SMOKE_WORKTREE_CANONICAL
+
+## 2026-06-03 00:00:00 CST / tpm
+- 完成内容: fixture earlier integration entry.
+- 遗留事项: none.
+- Action: fixture.
+- Validation Command: fixture.
+- Expected Result: fixture.
+- Actual Result: fixture.
+- Review Findings Disposition: addressed.
+- Residual Risk: earlier non-packet risk.
+- Blocker / Next Action: none.
+
+## 2026-06-03 00:01:00 CST / tpm
+- 完成内容: fixture final pre-PR local role review packet.
+- 遗留事项: none.
+- Action: fixture.
+- Validation Command: fixture.
+- Expected Result: fixture.
+- Actual Result: fixture.
+- Pre-PR Local Role Review: passed
+- Task UID: $TASK_UID
+- Source Worktree: $SMOKE_WORKTREE_CANONICAL
+- Source Branch: $SMOKE_BRANCH
+- Source Head: $source_head
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: scripts/prepare-task-pr.sh
+- Role Selection Basis: changed paths include PR helper workflow; roles tpm,qa_engineer.
+- Review Roles: tpm,qa_engineer
+- Review Evidence: qa_engineer: 2026-06-03 00:01:00 CST; no_findings; fixture
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: fixture evidence
+- Residual Risk: final fixture residual risk
+- Blocker / Next Action: none.
+EOF
+}
+
 commit_fixture_evidence() {
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" ".pm/tasks/$TASK_UID.execution.md"
   "$REAL_GIT" -C "$SMOKE_WORKTREE" \
@@ -264,6 +309,29 @@ if stderr:
     raise SystemExit(f"did not expect stderr on addressed path: {stderr}")
 PY
 
+write_shadowed_role_review_packet "$SOURCE_HEAD"
+commit_fixture_evidence
+
+shadowed_json="$TMPDIR/shadowed.json"
+run_prepare "$TMPDIR/gh-shadowed.log" "$TMPDIR/git-shadowed.log" --json >"$shadowed_json"
+
+python3 - "$shadowed_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+review = payload["pre_pr_local_role_review"]
+if review["status"] != "passed":
+    raise SystemExit(f"expected passed review status from latest packet, got: {review}")
+if review["findings_disposition"] != "no_findings":
+    raise SystemExit(f"expected latest packet disposition, got: {review}")
+if review["residual_risk"] != "final fixture residual risk":
+    raise SystemExit(f"expected latest packet residual risk, got: {review}")
+PY
+
 json_out="$TMPDIR/preflight.json"
 run_prepare "$TMPDIR/gh-json.log" "$TMPDIR/git-json.log" --json >"$json_out"
 
@@ -280,8 +348,8 @@ if review["status"] != "passed":
     raise SystemExit(f"expected passed review status, got: {review}")
 if payload["review_request_command"] is not None:
     raise SystemExit(f"expected no reviewer request command, got: {payload['review_request_command']}")
-if review["findings_disposition"] != "addressed":
-    raise SystemExit(f"expected addressed disposition, got: {review}")
+if review["findings_disposition"] != "no_findings":
+    raise SystemExit(f"expected no_findings disposition, got: {review}")
 PY
 
 echo "prepare-task-pr.test: OK"

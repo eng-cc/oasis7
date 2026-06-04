@@ -246,6 +246,26 @@ def parse_field(text: str, key: str) -> str:
     match = re.search(rf"^- {re.escape(key)}: (.+)$", text, re.MULTILINE)
     return match.group(1).strip() if match else ""
 
+def review_packet_blocks(text: str) -> list[str]:
+    lines = text.splitlines()
+    blocks: list[str] = []
+    current: list[str] = []
+    in_block = False
+    for line in lines:
+        if line.startswith("## "):
+            if in_block and current:
+                blocks.append("\n".join(current))
+            current = [line]
+            in_block = False
+            continue
+        if current:
+            current.append(line)
+            if line == "- Pre-PR Local Role Review: passed":
+                in_block = True
+    if in_block and current:
+        blocks.append("\n".join(current))
+    return blocks
+
 def emit(
     status: str,
     task_uid: str = "",
@@ -300,6 +320,16 @@ if not log_path.is_file():
     emit("missing", task_uid=task_uid, log_path=log_path_rel, reason="execution log missing")
 
 text = log_path.read_text(encoding="utf-8")
+blocks = review_packet_blocks(text)
+if not blocks:
+    emit(
+        "missing",
+        task_uid=task_uid,
+        log_path=log_path_rel,
+        reason="no pre-PR local role review packet found",
+        missing_markers=["Pre-PR Local Role Review: passed"],
+    )
+
 required = {
     "Pre-PR Local Role Review": "passed",
     "Task UID": task_uid,
@@ -309,11 +339,13 @@ required = {
 }
 
 missing: list[str] = []
+selected_block = blocks[-1]
+
 for key, expected in required.items():
-    if f"- {key}: {expected}" not in text:
+    if f"- {key}: {expected}" not in selected_block:
         missing.append(f"{key}: {expected}")
 
-reviewed_source_head = parse_field(text, "Source Head")
+reviewed_source_head = parse_field(selected_block, "Source Head")
 if not reviewed_source_head:
     missing.append("Source Head")
 elif reviewed_source_head != source_head:
@@ -349,15 +381,15 @@ for key in (
     "Finding Disposition Evidence",
     "Residual Risk",
 ):
-    if not parse_field(text, key):
+    if not parse_field(selected_block, key):
         missing.append(key)
 
-findings_disposition = parse_field(text, "Review Findings Disposition")
+findings_disposition = parse_field(selected_block, "Review Findings Disposition")
 if findings_disposition not in {"addressed", "no_findings"}:
     missing.append("Review Findings Disposition: addressed|no_findings")
 
-review_roles = parse_field(text, "Review Roles")
-residual_risk = parse_field(text, "Residual Risk")
+review_roles = parse_field(selected_block, "Review Roles")
+residual_risk = parse_field(selected_block, "Residual Risk")
 
 if missing:
     emit(
