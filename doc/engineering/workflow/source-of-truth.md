@@ -214,12 +214,12 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - `Review Findings Disposition: addressed` or `Review Findings Disposition: no_findings`
   - `Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>`
   - `Residual Risk: <text>`
-- If review comments arrive, fix + re-verify + resolve threads before merge claim.
+- Before merge, explicitly check PR comments and review threads. If any actionable comments or unresolved blocking threads exist, fix + re-verify + resolve or answer them before the merge claim.
 - After PR creation, TPM must record the PR purpose decision:
   - `normal_pr_ci_watch`: default. Use this unless the user or task truth says the PR was opened only to access manual-trigger packaging/release CI jobs.
   - `manual_packaging_ci_hold`: allowed only when the PR is explicitly created for manual-trigger packaging/release CI. Record which manual job(s) or packaging purpose need the PR and stop before auto-merge until the operator/user resumes the normal path.
 - For `normal_pr_ci_watch`, TPM continues without waiting for another user prompt: watch the PR's normal required checks, review/approval state, and mergeability. If checks fail or review requests changes, route through the fix loop, rerun fresh verification, push fixes, and continue watching.
-- Once normal required checks and required review/approval pass and no unresolved blocking review threads remain, merge the PR using the repository's configured merge method, then sync local `main` and clean up the task worktree/branch.
+- Once normal required checks and required review/approval pass, PR comments/review threads have been checked, and no actionable comments or unresolved blocking review threads remain, merge the PR using the repository's configured merge method, then sync local `main` and clean up the task worktree/branch.
 - After merge, sync local `main` and clean up task worktree/branch.
 
 ## 6. Required Artifacts by Phase
@@ -234,6 +234,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - **v1.4.12 (2026-06-04)**
   - Added the post-PR purpose decision: normal PRs proceed into CI/review watch, failure fix loop, merge, and cleanup without waiting for another prompt.
   - Added the manual packaging/release CI hold exception for PRs opened specifically to access manual-trigger packaging CI jobs.
+  - Clarified that merge readiness requires an explicit PR comment/review-thread check before merge.
 - **v1.4.11 (2026-06-03)**
   - Replaced the optional/risk-based local supplemental review gate with a required pre-PR local role-subagent review gate.
   - Removed the Copilot review request from the standard PR helper flow.

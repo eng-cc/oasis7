@@ -22,7 +22,7 @@
    - skill 阶段映射：`doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`
    - 语义迁移核对清单：`doc/engineering/workflow/source-of-truth.md#8-semantic-migration-checklist`
 10. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
-11. PR 创建后默认进入正常 PR CI / review watch-fix-merge 主链；除非 task/用户明确说明该 PR 只是为了触发手动打包/发布 CI，否则 TPM 必须持续盯 required checks、review/approval 和 mergeability，失败就回到修复/验证/推送循环，通过后合入并清理 worktree。
+11. PR 创建后默认进入正常 PR CI / review watch-fix-merge 主链；除非 task/用户明确说明该 PR 只是为了触发手动打包/发布 CI，否则 TPM 必须持续盯 required checks、review/approval、mergeability、PR comments 与 review threads，失败或存在 actionable comments 就回到修复/验证/推送循环，通过且 comments/thread 已收口后合入并清理 worktree。
 
 ### Workflow Eval Contract Markers
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
@@ -36,7 +36,7 @@
 - 默认协作口径：`tpm` 主 Agent + 专业角色 subagents；TPM 只做 workflow coordination / integration。对已绑定 task 或会改变仓库状态的工作，TPM 的 TODO decomposition、subagent slice contracts、mandatory context checklist/packet 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`，其他 formal sink 只能补充，不能替代 task execution log。
 - 专业结论来源约束：产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等专业分析、实现、验证、评审或对外口径，必须来自对应专业角色 slice；TPM 只能合流和标注证据来源。
 - 创建 PR 前必须通过 `.agents/skills/requesting-repo-owned-review/SKILL.md` 新建/派发本地相关专业角色 subagent review；TPM 必须合流 findings/no_findings/residual_risk，并在有效 findings 整改或基于证据驳回后，写入 `Pre-PR Local Role Review: passed` evidence packet，随后才能进入 `prepare-task-pr --create`。
-- PR 创建后默认继续盯 GitHub required checks、review/approval 和 mergeability 并在通过后合入；只有明确的 manual packaging/release CI purpose 才允许停在 PR 上等待人工/操作员。
+- PR 创建后默认继续盯 GitHub required checks、review/approval、mergeability、PR comments 与 review threads，并在通过且 comments/thread 已收口后合入；只有明确的 manual packaging/release CI purpose 才允许停在 PR 上等待人工/操作员。
 - 涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice。
 
 ## 工程架构

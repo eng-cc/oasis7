@@ -63,13 +63,13 @@ Use this skill when code and docs are already updated and you are moving into br
 
 8. For `normal_pr_ci_watch`, keep the loop moving without waiting for another prompt:
    - if checks fail, inspect the failing job, fix, rerun local verification, push, and continue watching
-   - if review comments arrive, use:
+   - before merge, explicitly check PR comments and review threads; if review comments arrive, use:
 
 ```bash
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
 ```
 
-   - when required checks and required review/approval pass and no blocking unresolved review threads remain, merge the PR using the repository's configured merge path
+   - when required checks and required review/approval pass, PR comments/review threads have been checked, and no actionable comments or blocking unresolved review threads remain, merge the PR using the repository's configured merge path
 
 9. After merge, sync local `main` and remove the task worktree / branch.
 
@@ -81,7 +81,7 @@ Use this skill when code and docs are already updated and you are moving into br
 - local verification rerun for the affected surface
 - pre-PR local role review packet recorded when the next step is PR creation
 - PR purpose decision recorded after PR creation
-- normal PRs are watched through required checks/review to merge; only manual packaging CI PRs may pause before merge
+- normal PRs are watched through required checks/review/comment closeout to merge; only manual packaging CI PRs may pause before merge
 
 ## Post-Merge Cleanup
 
@@ -96,4 +96,5 @@ Use this skill when code and docs are already updated and you are moving into br
 - Do not claim "done" while the branch still lacks required verification or PR creation.
 - Do not treat review-thread resolution as merge readiness.
 - Do not stop at PR creation for normal PRs; continue watching CI/review, fix failures, merge, and clean up.
+- Do not merge a normal PR without first checking PR comments and review threads and resolving or answering actionable items.
 - Do not auto-merge PRs opened specifically for manual packaging/release CI until the operator/user resumes the normal merge path.
