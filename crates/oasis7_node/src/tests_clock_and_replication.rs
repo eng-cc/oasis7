@@ -6,6 +6,8 @@ mod network_gap_sync_not_found_tests;
 mod network_gap_sync_provider_routing_tests;
 #[path = "tests_network_gap_sync.rs"]
 mod network_gap_sync_tests;
+#[path = "tests_network_gap_sync_successor_probe.rs"]
+mod network_gap_sync_successor_probe_tests;
 #[path = "tests_storage_challenge_blob_cache.rs"]
 mod storage_challenge_blob_cache_tests;
 
