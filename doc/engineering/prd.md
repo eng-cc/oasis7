@@ -51,10 +51,10 @@
   - SC-20: `engineering` 模块治理专题标题对外统一使用 `oasis7` 品牌，不再在活跃/历史治理入口中混用 `oasis7` 标题。
   - SC-21: 仓库内文件化项目管理层 `.pm/` 建档完成后，7 个标准角色的长期 memory/backlog、signal inbox、task registry 与 stage/gate 汇总具备正式专题规格与任务追踪入口。
   - SC-22: `self-evolution` 后续补强在借鉴外部 memory/reflective-agent 方案时，必须显式冻结 adopted / rejected / deferred 边界，且不引入外部真值系统替代 `.pm/`。
-  - SC-23: 默认评审边界必须是 commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR，并以 required checks + review/approval 作为正式 review 流程。
-  - SC-24: 本地不再要求额外的 `codex-review-snapshot` 或其他 commit 前 review 脚本作为默认步骤；若 owner 额外做本地 diff review，只能作为自主加码，不得回写成仓库硬门禁。
-  - SC-24A: 根 `AGENTS.md`、engineering 主 PRD、`self-evolution` 正式追踪、`.pm/README` 与 `workflow-report` close checklist 必须对该流程维持单一口径：默认通过 `./scripts/pm/task-closeout.sh --verify-command "<fresh verification command>"` 执行“fresh verification -> `workflow-report close -> move-task -> pm lint`”，随后 `commit -> prepare-task-pr -> GitHub PR review/approval`；若 owner 选择手工拆步，也必须与该 helper 的底层顺序保持等价。
-  - SC-24B: required-tier smoke 必须断言 close checklist 不再要求 `codex-review-snapshot.sh`，而是把 GitHub PR preflight / review 边界指向 `./scripts/prepare-task-pr.sh`。
+  - SC-23: 默认评审边界必须是 commit 后先完成本地相关角色 subagent review evidence packet，再通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR，并以 required checks + review/approval 作为服务端正式 review 流程。
+  - SC-24: 本地不再要求额外的 `codex-review-snapshot` 或其他独立 commit 前 review 脚本；但创建 PR 前必须由 TPM 新建/派发涉及到的相关专业角色 subagent 做本地 review，并将 findings/no_findings/residual_risk 与整改处置写入 task execution log。
+  - SC-24A: 根 `AGENTS.md`、engineering 主 PRD、`self-evolution` 正式追踪、`.pm/README` 与 `workflow-report` close checklist 必须对该流程维持单一口径：默认通过 `./scripts/pm/task-closeout.sh --verify-command "<fresh verification command>"` 执行“fresh verification -> `workflow-report close -> move-task -> pm lint`”，随后 `commit -> pre-PR local role subagent review -> prepare-task-pr -> GitHub PR review/approval`；若 owner 选择手工拆步，也必须与该 helper 的底层顺序保持等价。
+  - SC-24B: required-tier smoke 必须断言 close checklist 不再要求 `codex-review-snapshot.sh`，而是要求 `Pre-PR Local Role Review: passed` evidence packet 并把 GitHub PR preflight / review 边界指向 `./scripts/prepare-task-pr.sh`。
   - SC-24C: 默认最终合流路径必须是 GitHub PR，而不是直接本地 landing 到 `main`；`./scripts/land-task-worktree.sh` 只保留给用户明确要求的 local-only / fallback 场景。
   - SC-24D: 同一 PR 内的 review comment follow-up 必须存在 repo-owned helper，用于统一盘点 unresolved review threads、执行显式 resolve，并在每轮操作后分别报告 `reviewDecision`、`mergeStateStatus` 与 unresolved thread 数，避免把“thread 已关”误报成“PR 可合并”。
   - SC-24E: `prepare-task-pr.sh` 必须在 PR preflight 阶段输出与当前 changed paths 对齐的本地 required 验证建议，减少 owner 对“本地至少该补跑什么”的人工猜测；该建议只负责推荐，不自动执行，也不改变 `./scripts/ci-tests.sh required/full` 的既有语义。
@@ -149,7 +149,7 @@
 | 全量 PRD 审读清单 | 文档路径、阅读时刻、代码一致性、重复性、上下游状态、处理动作 | 逐篇阅读后更新清单并回写偏差 | `unread -> read -> aligned` | 入口优先、风险优先 | 维护者与评审者可写，贡献者可读 |
 | 角色职责卡 | 角色名、使命、owner 范围、输入、输出、决策边界、完成定义、推荐技能、检查清单 | 更新 `.agents/roles/*.md` 并在根 `AGENTS.md` 维护入口映射 | `draft -> aligned -> adopted` | 默认按 7 个组合角色稳定排序；技能仅作推荐方法，不改变 owner role | 全体贡献者可读，角色 owner 与治理维护者可改 |
 | 角色交接模板 | 交接标题、来源角色、目标角色、目标、上下文、输入、输出、截止、风险、阻断、验证、回写位置 | 从 `.agents/roles/templates/*.md` 复制填写并随任务流转 | `draft -> sent -> acknowledged -> delivered` | 默认先 brief 后 detailed，按风险等级决定是否升级 | 发起方负责填写，接收方负责确认，维护者可演进模板 |
-| 角色协作工作流 | owner role、角色视角切换、职责卡加载、handoff 触发条件、执行顺序、QA/LiveOps 回流、GitHub PR review 默认流程 | 当需要其他伙伴协作时，先切换到对应标准角色视角并加载职责卡，再按工作流执行；完成 commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR 的 required checks + review/approval | `defined -> adopted -> audited` | 默认按需求进入顺序执行，跨角色任务先定 owner 再流转；如需额外本地 review，只能作为 owner 自主加码，不得替代角色协作规则或 GitHub PR 默认边界 | 全体贡献者遵守，治理维护者可演进 |
+| 角色协作工作流 | owner role、角色视角切换、职责卡加载、handoff 触发条件、执行顺序、QA/LiveOps 回流、pre-PR local role review、GitHub PR review 默认流程 | 当需要其他伙伴协作时，先切换到对应标准角色视角并加载职责卡，再按工作流执行；完成 commit 后先完成本地相关角色 subagent review evidence packet，再通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR 的 required checks + review/approval | `defined -> adopted -> audited` | 默认按需求进入顺序执行，跨角色任务先定 owner 再流转；PR 创建前的本地 role review 是 required evidence gate，但不得替代 GitHub PR 服务端 review/approval 边界 | 全体贡献者遵守，治理维护者可演进 |
 | task execution log | `task_uid`、日期、时刻、角色、完成内容、遗留事项 | 每个任务写入 `.pm/tasks/task_<32hex>.execution.md`，并在条目级显式标角色 | `logged -> traceable -> audited` | 默认一任务一文件，按时间排序 | 全体贡献者可写，评审者可按任务/角色回溯 |
 | 角色名白名单校验 | 角色名、来源文件、白名单来源 | 校验 task execution log / handoff 中角色名是否存在于 `.agents/roles/*.md` | `pass/fail` | 以角色文件名去后缀为唯一 canonical name | 治理维护者维护角色清单，提交者必须修复别名 |
 | 文件化项目管理层 | 角色 registry、role memory/backlog、signal inbox、task registry、stage/gate 文件、task workflow evidence | 在仓库内维护 `.pm/` 运行态对象，并通过脚本做 scaffold/lint/report/promote/set-stage | `planned -> scaffolded -> adopted -> audited` | 默认按 `role_name`、`priority`、`updated_at` 排序；高严重度 signal 优先提升 | 治理维护者维护结构，owner role 维护自身 memory/backlog，producer 维护正式阶段结论 |
@@ -176,7 +176,7 @@
   - AC-17: `.agents/roles/templates/` 下至少提供一套可直接复制使用的角色交接模板，并在根 `AGENTS.md` 可达。
   - AC-18: 根 `AGENTS.md` 的“开发工作流”章节应明确 owner role、handoff 使用时机、QA/LiveOps 责任和“用户要求不提交”时的例外处理。
   - AC-18A: 根 `AGENTS.md` 的“项目运行模式”需明确：需要其他伙伴协作时，执行主体必须切换到 `.agents/roles/*.md` 中的标准角色视角并加载对应职责描述，而非依赖未定义的 `sub agent` 能力。
-  - AC-18B: 根 `AGENTS.md` 不得再把本地额外 review 脚本写成默认硬门禁；正式流程需只保留 GitHub PR review 的单一默认口径。
+  - AC-18B: 根 `AGENTS.md` 不得再把本地额外 review 脚本写成默认硬门禁；正式流程必须要求 PR 创建前本地相关角色 subagent review evidence，并保留 GitHub PR required checks + review/approval 作为服务端保护边界。
   - AC-19: 根 `AGENTS.md` 的 task execution log 规则需明确“一任务一文件、不按角色拆文件、条目级标角色”的约束。
   - AC-20: 文档治理门禁需阻断 task execution log / handoff 中未在 `.agents/roles/*.md` 注册的角色名。
   - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。

@@ -809,7 +809,7 @@ if any(item.get("id") == "triage-signals" and "command" in item for item in work
 if any(item.get("id") == "codex-review" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should no longer require local codex review")
 if not any(item.get("id") == "prepare-pr-review" for item in workflow_close["checklist"]):
-    raise SystemExit("workflow close checklist should point to GitHub PR review as the default review boundary")
+    raise SystemExit("workflow close checklist should point to pre-PR local role review plus GitHub PR review")
 if not any(item.get("id") == "fresh-claim-verification" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should require fresh claim verification before PR-readiness claims")
 claim_verify_items = [item for item in workflow_close["checklist"] if item.get("id") == "fresh-claim-verification"]
@@ -818,6 +818,8 @@ if claim_verify_items[0].get("command") != "./scripts/pm/claim-ready.sh --claim-
 prepare_items = [item for item in workflow_close["checklist"] if item.get("id") == "prepare-pr-review"]
 if prepare_items[0].get("command") != "./scripts/prepare-task-pr.sh":
     raise SystemExit("workflow close PR review checklist should point to prepare-task-pr.sh")
+if "Pre-PR Local Role Review: passed" not in prepare_items[0].get("summary", ""):
+    raise SystemExit("workflow close PR review checklist should require local role review evidence before prepare-task-pr")
 if not any(item.get("id") == "bootstrap-working-memory" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should suggest bootstrapping working_memory when the current task has no entries")
 bootstrap_items = [item for item in workflow_close["checklist"] if item.get("id") == "bootstrap-working-memory"]

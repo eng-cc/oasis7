@@ -525,7 +525,7 @@ def build_workflow_checklist(
         )
         add(
             "prepare-pr-review",
-            "默认评审边界在 GitHub PR：完成 commit 后通过 `./scripts/prepare-task-pr.sh` 执行 PR preflight / create，并以 required checks + review/approval 作为正式 review 流程；本地不再要求额外的 pre-commit review 脚本。",
+            "创建 PR 前必须先完成本地相关角色 subagent review 并写入 `Pre-PR Local Role Review: passed` evidence packet；随后通过 `./scripts/prepare-task-pr.sh` 执行 PR preflight / create，并继续以 GitHub required checks + review/approval 作为服务端保护边界。",
             command="./scripts/prepare-task-pr.sh",
         )
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:

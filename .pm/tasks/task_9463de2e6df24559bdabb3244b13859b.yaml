@@ -1,0 +1,25 @@
+task_uid: task_9463de2e6df24559bdabb3244b13859b
+title: "Require local role review before PR"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-pre-pr-local-role-review
+execution_log_path: .pm/tasks/task_9463de2e6df24559bdabb3244b13859b.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "PR flow no longer requests Copilot review by default"
+  - "Before PR creation, involved role subagents perform local review and actionable findings are addressed or explicitly rejected with evidence"
+handoff_to: []
+updated_at: 2026-06-04T09:31:37+08:00
+last_started_at: 2026-06-03T23:39:13+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-behavior-eval.sh && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-04T09:31:35+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-04T09:31:36+08:00

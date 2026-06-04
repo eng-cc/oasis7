@@ -34,7 +34,7 @@
 - 兼容契约词：TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`；其中 `mandatory context packet` 按当前语义解释为 mandatory context checklist/packet。
 - 默认协作口径：`tpm` 主 Agent + 专业角色 subagents；TPM 只做 workflow coordination / integration。对已绑定 task 或会改变仓库状态的工作，TPM 的 TODO decomposition、subagent slice contracts、mandatory context checklist/packet 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`，其他 formal sink 只能补充，不能替代 task execution log。
 - 专业结论来源约束：产品/系统设计、runtime、WASM、agent、viewer、QA、LiveOps/community 等专业分析、实现、验证、评审或对外口径，必须来自对应专业角色 slice；TPM 只能合流和标注证据来源。
-- 高风险或大 diff 收敛前，补充 review 入口是 `.agents/skills/requesting-repo-owned-review/SKILL.md`；它只补强 GitHub PR review、required checks 与 review/approval 主链。
+- 创建 PR 前必须通过 `.agents/skills/requesting-repo-owned-review/SKILL.md` 新建/派发本地相关专业角色 subagent review；TPM 必须合流 findings/no_findings/residual_risk，并在有效 findings 整改或基于证据驳回后，写入 `Pre-PR Local Role Review: passed` evidence packet，随后才能进入 `prepare-task-pr --create`。
 - 涉及对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 的任务，`liveops_community` 必须参与至少一个 slice。
 
 ## 工程架构

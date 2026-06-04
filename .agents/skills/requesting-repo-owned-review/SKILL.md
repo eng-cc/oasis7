@@ -1,71 +1,99 @@
 ---
 name: requesting-repo-owned-review
-description: Use when a diff has high claim risk, closes a major slice, or needs a focused repo-owned review before commit or before asking GitHub reviewers to assess it.
+description: Use when a branch is about to create a PR and must collect fresh involved-role subagent review before GitHub PR creation.
 ---
 
 # Requesting Repo-Owned Review
 
-Use this skill when the work would benefit from one more deliberate review pass before it enters or advances through the GitHub PR path.
+Use this skill when the work is about to enter the GitHub PR path.
+
+The review is no longer optional before PR creation. TPM must create or dispatch
+fresh local subagents for every involved relevant professional role, integrate
+their review findings, and record the required evidence packet before
+`prepare-task-pr.sh --create`.
 
 ## When to Use
 
 Use this skill when:
 
+- a branch is about to create a PR
 - a major feature or workflow helper just landed locally
 - multiple role slices were just integrated back into one canonical diff
-- the next claim is high-risk, such as `tests_passed`, `ready_for_pr`, or a broad behavioral assertion
-- you want a focused local review packet before asking GitHub reviewers to spend time on the PR
+- the next claim is `ready_for_pr`, `tests_passed`, or a broad behavioral assertion
 
 Do not use this skill when:
 
-- the diff is trivial and already fully covered by the normal verification path
-- you are trying to replace GitHub PR review with an internal review ritual
+- there is no PR creation path in the current task
+- you are trying to replace GitHub PR required checks or review/approval with only an internal review ritual
 - no concrete review target, risk question, or evidence sink has been defined
 
 ## Core Rule
 
-Repo-owned review is a supplement, not a replacement.
+Pre-PR local role review is required before PR creation, but it is not a
+replacement for GitHub required checks or review/approval.
 
-It strengthens local confidence and leaves a traceable packet, but the formal review boundary remains:
+The formal path is:
 
-`prepare-task-pr -> GitHub required checks -> review/approval`
+`local involved-role subagent review -> prepare-task-pr -> GitHub required checks -> review/approval`
 
 ## Workflow
 
-1. Define the review trigger:
-   - major feature
-   - high-risk integration slice
-   - commit-before-claim risk
-   - pre-PR packaging of a complex diff
+1. Define the involved roles:
+   - infer from changed paths, role ownership, task slice history, and user-facing claim
+   - include `qa_engineer` when the PR claim depends on verification or release readiness
+   - include `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched
 2. Freeze the review target:
    - changed files or path set
    - exact question to answer
    - evidence already available
-3. State the expected output contract:
+3. Spawn or dispatch a fresh subagent for each involved role.
+4. State the expected output contract:
    - `findings`
    - `no_findings`
    - `residual_risk`
-4. Write the review request into a formal sink before or while dispatching:
+5. Write the review request into a formal sink before or while dispatching:
    - `.pm/tasks/<TASK-UID>.execution.md`
    - PR evidence document
    - handoff when another role/subagent is reviewing
-5. Run or dispatch the review.
 6. Act on the result:
    - fix valid findings
    - record rejected/stale findings with code or doc evidence
    - keep residual risk explicit
-7. Only then continue to claim-ready, commit, or PR progression.
+7. Record the passed evidence packet only after all valid findings are resolved.
+8. Only then continue to PR creation.
 
 ## Review Packet Template
 
 ```markdown
 ## YYYY-MM-DD HH:MM:SS CST / <role_name>
-- Review Trigger: <major feature | high-risk slice | commit claim risk | pre-PR>
+- Review Trigger: pre-PR local role review
 - Review Scope: <paths / diff summary>
+- Review Roles: <comma-separated roles>
 - Review Question: <what must this review confirm or challenge>
 - Evidence Available: <tests / docs / screenshots / logs>
 - Expected Return Contract: <findings | no_findings | residual_risk>
 - Formal Sink: <execution log | PR evidence | handoff>
+```
+
+## Passed Evidence Packet
+
+Record this packet in `.pm/tasks/<TASK-UID>.execution.md` after integrating the
+role reviews and addressing findings:
+
+```markdown
+- Pre-PR Local Role Review: passed
+- Task UID: <task_uid>
+- Source Worktree: <absolute path>
+- Source Branch: <branch>
+- Source Head: <reviewed git sha; must be current source head or an ancestor whose later changes are only the task review evidence files>
+- Comparison Ref: <base ref>
+- Reviewed Changed Paths: <semicolon-separated paths or diff summary ref>
+- Role Selection Basis: <changed paths + task slice history + explicit includes/skips>
+- Review Roles: <comma-separated roles>
+- Review Evidence: <per-role section or handoff refs>
+- Review Findings Disposition: <addressed | no_findings>
+- Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>
+- Residual Risk: <text>
 ```
 
 ## Output Rules
@@ -79,7 +107,7 @@ It strengthens local confidence and leaves a traceable packet, but the formal re
 
 ## Guardrails
 
-- Do not turn this into a mandatory review after every tiny step.
+- Do not leave PR creation without a passed pre-PR local role review packet.
 - Do not claim that repo-owned review makes GitHub review unnecessary.
 - Do not leave the review request or outcome as chat-only context.
 - Do not resolve GitHub threads based solely on this local review packet.
