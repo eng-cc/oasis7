@@ -1,0 +1,26 @@
+task_uid: task_74350f4352d745f386f9e9866409560c
+title: "Fix latest GitHub release failure"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-release-fix-latest-github-release
+execution_log_path: .pm/tasks/task_74350f4352d745f386f9e9866409560c.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Identify the latest GitHub release failure and record root cause evidence."
+  - "Apply a focused fix in the task worktree without modifying third_party."
+  - "Run relevant local verification and document residual GitHub release status."
+handoff_to: []
+updated_at: 2026-06-04T15:40:14+08:00
+last_started_at: 2026-06-04T14:54:59+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/p2p-longrun-soak.sh scripts/release-gate.sh scripts/release-gate-smoke.sh && git diff --check && python3 - <<'PY'\nfrom pathlib import Path\nrelease = Path('scripts/release-gate.sh').read_text()\nstart = release.index('    s9)')\nend = release.index('    s10)', start)\nassert '--node-auto-attest-all' in release[start:end]\nsoak = Path('scripts/p2p-longrun-soak.sh').read_text()\nfor flag in ['--node-auto-attest-all', '--node-no-auto-attest-all', '--node-auto-attest-sequencer-only']:\n    assert flag in soak\nassert 'node_auto_attest_mode_label=\"all\"' in soak\nassert 'node_auto_attest_mode: ' in soak\nprint('static release auto-attest assertions passed')\nPY\n env -u RUSTC_WRAPPER cargo test -p oasis7_node pos_engine_stays_pending_without_peer_votes_when_auto_attest_disabled"
+last_verified_at: 2026-06-04T15:40:10+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-04T15:40:13+08:00
