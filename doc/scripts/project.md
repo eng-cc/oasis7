@@ -361,7 +361,7 @@
     - `./scripts/prepare-task-pr.test.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [ ] pre-pr-local-role-review (PRD-SCRIPTS-007/008) [test_tier_required]: `scripts/prepare-task-pr.sh --create` 不再请求 Copilot review；创建 PR 前必须检查 source-bound 的 `Pre-PR Local Role Review: passed` execution-log evidence packet，缺失或 stale source head 时在 push / PR create 前失败。 Trace: .pm/tasks/task_9463de2e6df24559bdabb3244b13859b.yaml
+- [ ] pre-pr-local-role-review (PRD-SCRIPTS-007/008) [test_tier_required]: `scripts/prepare-task-pr.sh --create` 不再请求 Copilot review；创建 PR 前必须检查 source-bound 的 `Pre-PR Local Role Review: passed` execution-log evidence packet，缺失或 stale source head 时在 push / PR create 前失败；PR 创建后若不是明确用于手动触发打包/发布 CI，则默认继续盯 normal required checks / review / mergeability，失败回到修复验证循环，通过后合入并清理。 Trace: .pm/tasks/task_9463de2e6df24559bdabb3244b13859b.yaml
   - 产物文件:
     - `scripts/prepare-task-pr.sh`
     - `scripts/prepare-task-pr.test.sh`
@@ -372,6 +372,7 @@
     - `bash -n scripts/prepare-task-pr.sh scripts/prepare-task-pr.test.sh scripts/pm/workflow-behavior-eval.sh`
     - `./scripts/prepare-task-pr.test.sh`
     - `./scripts/prepare-task-pr.sh --help`
+    - `./scripts/pm/workflow-behavior-eval.sh`
     - `./scripts/doc-governance-check.sh`
     - `./scripts/pm/lint.sh`
     - `git diff --check`

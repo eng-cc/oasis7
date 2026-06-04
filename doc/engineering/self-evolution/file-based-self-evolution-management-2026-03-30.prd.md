@@ -61,7 +61,7 @@
   4. Flow-SE-004: `producer_system_designer 通过 set-stage 更新 stage/gate 当前态 -> stage-report 汇总 role backlog、关键 blocker、claim envelope 和 trend inputs -> 输出 continue / hold / reassess`
   5. Flow-SE-005: `历史结论被新结论取代 -> 原 memory 记录转为 superseded -> 新记录写入 active -> superseded_by / source_refs / effective range 形成链路`
   6. Flow-SE-006: `新增标准角色 -> 基于角色模板生成 memory/backlog 容器 -> 注册到 registry -> 既有脚本自动将其纳入 lint / report / stage aggregation`
-  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> --task-uid <task_uid> -> canonical task file 记录 last_started_at 并读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close --task-uid <task_uid> -> 回写 task execution log + signal/memory/backlog + last_closed_at -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> 进入 required checks + review/approval -> producer/owner 在评审时执行 workflow-report --phase review`
+  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> --task-uid <task_uid> -> canonical task file 记录 last_started_at 并读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close --task-uid <task_uid> -> 回写 task execution log + signal/memory/backlog + last_closed_at -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> normal PR 进入 required checks + review/approval watch/fix/merge -> producer/owner 在评审时执行 workflow-report --phase review`
   8. Flow-SE-008: `owner 创建新 task -> 系统本地生成 task_uid -> task file / execution log / working_memory 直接落到 task_uid 路径 -> registry/backlog 视图按扫描重建并仅落在 git-ignored 本地文件 -> rebase 时不再因 next_sequence/TASK-PM 抢号或共享视图 YAML 冲突而阻断`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |

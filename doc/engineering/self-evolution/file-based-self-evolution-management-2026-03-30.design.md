@@ -143,7 +143,7 @@
 2. `workflow-report.sh --phase close --role <owner> --task-uid <task_uid>`
    - 回写 task execution log、signal、memory 与 backlog
    - working memory 为空时暴露 bootstrap 入口，而不是静默跳过
-3. commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR review
+3. commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR watch/fix/merge
 4. `workflow-report.sh --phase review --role <owner>`
    - producer 额外聚合全部角色 pending signals
 5. `sync-views.sh` 在需要时重建 registry/backlog 本地视图

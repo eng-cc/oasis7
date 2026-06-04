@@ -525,7 +525,7 @@ def build_workflow_checklist(
         )
         add(
             "prepare-pr-review",
-            "创建 PR 前必须先完成本地相关角色 subagent review 并写入 `Pre-PR Local Role Review: passed` evidence packet；随后通过 `./scripts/prepare-task-pr.sh` 执行 PR preflight / create，并继续以 GitHub required checks + review/approval 作为服务端保护边界。",
+            "创建 PR 前必须先完成本地相关角色 subagent review 并写入 `Pre-PR Local Role Review: passed` evidence packet；随后通过 `./scripts/prepare-task-pr.sh` 执行 PR preflight / create。普通 PR 创建后默认继续盯 GitHub required checks、review/approval、mergeability 与 unresolved review threads，失败就修复/验证/推送，通过后合入并清理；只有明确用于 manual packaging/release CI 的 PR 才能停在人工打包 gate。",
             command="./scripts/prepare-task-pr.sh",
         )
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:

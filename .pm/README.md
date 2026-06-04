@@ -72,11 +72,11 @@
 - 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`；若需要手工拆步，再执行“fresh verification” + `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`
 - fresh verification claim：`./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "<fresh verification command>"`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
-- GitHub PR preflight / 默认评审边界：`./scripts/prepare-task-pr.sh`
+- GitHub PR preflight / 默认 watch-fix-merge 边界：`./scripts/prepare-task-pr.sh`
 - 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
 - `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
-- 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令；收口时优先使用 `task-closeout.sh` 完成 close-phase，再在 commit 后立即进入 `prepare-task-pr.sh`，由 GitHub PR 的 required checks + review/approval 承担默认评审边界。`prepare-task-pr.sh` 还会基于当前 changed paths 给出一条本地 required 验证建议与 planner `reason_summary`，但这些输出只负责推荐/解释，不自动执行，也不改写 `./scripts/ci-tests.sh required/full` 的既有语义。
+- 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令；收口时优先使用 `task-closeout.sh` 完成 close-phase，再在 commit 后立即进入 `prepare-task-pr.sh`。普通 PR 创建后默认继续盯 GitHub required checks、review/approval、mergeability 与 unresolved review threads，失败就修复/验证/推送，通过后合入并清理；只有明确用于 manual packaging/release CI 的 PR 才能停在人工打包 gate。`prepare-task-pr.sh` 还会基于当前 changed paths 给出一条本地 required 验证建议与 planner `reason_summary`，但这些输出只负责推荐/解释，不自动执行，也不改写 `./scripts/ci-tests.sh required/full` 的既有语义。
 - `./scripts/pm/workflow-behavior-eval.sh`：repo-owned workflow behavior eval 入口；把 task-worktree bootstrap、可选/必需 routing scenarios、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 串成一条可重复的本地验证链。
 - role subagent 产出的 patch、review card、summary、incident note 或 messaging brief，只有在被 owner 回写到 `project.md`、handoff、`.pm/tasks/<TASK-UID>.execution.md`、signal/memory，或 PR evidence 中至少一处后，才算进入 canonical 主链；孤立产物本身不构成正式收口证据。
 - 若 slice 类型是 `liveops_feedback`、`supplemental_review` 或其他非代码反馈，收口前仍必须明确它的 formal sink：至少要么 `promote-signal` / `promote-memory`，要么在 execution log / PR evidence 中留下可追溯引用。

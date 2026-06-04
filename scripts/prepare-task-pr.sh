@@ -14,12 +14,15 @@ optionally push the branch plus open the PR through `gh`. The preflight summary
 also reports a local required-gate validation recommendation, a claim-ready
 helper command for fresh PR-readiness verification, local role-review evidence
 status, plus planner reason summary derived from the current changed-path scope.
+After PR creation, the default workflow continues into required-check/review
+watch, failure fixes, merge, and cleanup unless the task explicitly records that
+the PR exists only to run manual-trigger packaging/release CI.
 
 Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- standard path: commit -> local role-subagent review -> prepare-task-pr -> GitHub PR review
+- standard path: commit -> local role-subagent review -> prepare-task-pr -> GitHub PR watch/fix/merge
 
 Options:
   --base <branch>         Base branch for the PR (default: main)

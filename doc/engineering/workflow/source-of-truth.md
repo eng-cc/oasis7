@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.11**
-Last Updated: **2026-06-03**
+Version: **v1.4.12**
+Last Updated: **2026-06-04**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -25,12 +25,17 @@ flowchart TD
   G --> H[Implementation + Slice Verification]
   H --> I[Verification-before-completion\nfresh verification / claim-ready]
   I --> M[Pre-PR Local Role Review\ninvolved role subagents review diff]
-  M --> J[Closeout\ncommit + PR + cleanup]
+  M --> J[Closeout\ncommit + PR create]
+  J --> N{PR opened for\nmanual packaging CI only?}
+  N -- no --> O[PR Watch/Fix/Merge\nwatch checks + reviews, fix failures, merge]
+  N -- yes --> P[Manual CI Hold\nrecord purpose + wait for operator/user]
+  O --> Q[Cleanup\nsync main + remove task worktree]
+  P --> O
 
   I -->|fail| K[Rollback: debug/fix/replan]
   K --> E
   M -->|findings require changes| K
-  J -->|PR review requested changes| L[Review Fix Loop]
+  O -->|PR check/review failure| L[Review Fix Loop]
   L --> I
 ```
 
@@ -48,7 +53,7 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 | Bug, failing test, broken script, unexpected diff, or regression appears | `systematic-debugging` | Conditional required before speculative fixes | Reproduction, narrowed hypothesis, fix evidence |
 | Branch is about to create a PR | `requesting-repo-owned-review` | Required before PR creation; TPM must spawn or dispatch fresh local subagents for all involved relevant roles, collect review findings/no-findings/residual risk, and address or explicitly reject actionable findings with evidence before continuing | `Pre-PR Local Role Review: passed` execution-log packet with roles, review evidence, finding disposition, and residual risk |
 | About to claim done/tests-pass/ready-for-PR/ready-to-merge | `verification-before-completion` | Required before completion claims | Fresh verification command/output or claim-ready evidence |
-| Implementation is done and branch needs closeout/commit/PR | `finishing-a-development-branch` | Required for development branch closeout | Closeout output, commit, PR linkage |
+| Implementation is done and branch needs closeout/commit/PR/watch/merge | `finishing-a-development-branch` | Required for development branch closeout | Closeout output, commit, PR linkage, PR purpose decision, CI/review watch evidence, merge/cleanup evidence |
 | GitHub PR receives review comments or requested changes | `receiving-code-review` | Required for actionable PR review feedback | Comment verification, fix evidence, thread status |
 | Workflow skill/docs themselves are created or edited | `writing-repo-owned-skills` | Required for local skill surface changes | Source-of-truth-first sync plus governance checks |
 
@@ -98,6 +103,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 4. **Fresh verification gate**: current-round verification success before completion claims.
 5. **Pre-PR local role review gate**: fresh local subagent review by all involved relevant roles, with actionable findings addressed or explicitly rejected with evidence.
 6. **Closeout gate**: closeout metadata + task status transition + lint/governance checks + commit + PR creation.
+7. **Post-PR watch/merge gate**: unless the PR is explicitly opened only to access manual-trigger packaging/release CI, watch normal PR required checks and review/approval to completion, fix failures through the review/debug loop, then merge and clean up.
 
 ### 3.2 Optional Gates (risk-based)
 1. Bounded brainstorming gate (ambiguous scope / architecture tradeoffs).
@@ -114,10 +120,14 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Stop speculative implementation.
 - Update planning truth (PRD/project/execution) before resuming code edits.
 
-### 4.3 PR review failure
+### 4.3 PR check/review failure
 - Re-enter review-fix loop.
 - Re-run fresh verification.
 - Re-submit PR evidence.
+
+### 4.3.1 Manual packaging CI hold
+- If the PR exists specifically to run manual-trigger packaging/release CI jobs, record that purpose in the task execution log and do not auto-watch-to-merge.
+- Resume the normal PR watch/fix/merge path only after the operator/user says the manual packaging CI purpose is complete and the PR should proceed to merge readiness.
 
 ### 4.4 Workflow governance drift
 - If scripts/skills/docs conflict with this file, this file wins.
@@ -205,6 +215,11 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - `Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>`
   - `Residual Risk: <text>`
 - If review comments arrive, fix + re-verify + resolve threads before merge claim.
+- After PR creation, TPM must record the PR purpose decision:
+  - `normal_pr_ci_watch`: default. Use this unless the user or task truth says the PR was opened only to access manual-trigger packaging/release CI jobs.
+  - `manual_packaging_ci_hold`: allowed only when the PR is explicitly created for manual-trigger packaging/release CI. Record which manual job(s) or packaging purpose need the PR and stop before auto-merge until the operator/user resumes the normal path.
+- For `normal_pr_ci_watch`, TPM continues without waiting for another user prompt: watch the PR's normal required checks, review/approval state, and mergeability. If checks fail or review requests changes, route through the fix loop, rerun fresh verification, push fixes, and continue watching.
+- Once normal required checks and required review/approval pass and no unresolved blocking review threads remain, merge the PR using the repository's configured merge method, then sync local `main` and clean up the task worktree/branch.
 - After merge, sync local `main` and clean up task worktree/branch.
 
 ## 6. Required Artifacts by Phase
@@ -213,9 +228,12 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Execution: atomic evidence records per risky step.
 - Verification: claim-ready command + output evidence.
 - Pre-PR local role review: involved-role subagent review packet, finding disposition, and residual risk.
-- Closeout: closeout command output, task status update, pre-PR local role review evidence, and PR linkage.
+- Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.12 (2026-06-04)**
+  - Added the post-PR purpose decision: normal PRs proceed into CI/review watch, failure fix loop, merge, and cleanup without waiting for another prompt.
+  - Added the manual packaging/release CI hold exception for PRs opened specifically to access manual-trigger packaging CI jobs.
 - **v1.4.11 (2026-06-03)**
   - Replaced the optional/risk-based local supplemental review gate with a required pre-PR local role-subagent review gate.
   - Removed the Copilot review request from the standard PR helper flow.

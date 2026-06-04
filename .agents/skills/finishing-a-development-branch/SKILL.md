@@ -17,6 +17,8 @@ Use this skill when code and docs are already updated and you are moving into br
 - commit
 - collect fresh local involved-role subagent review
 - prepare or create the PR
+- decide whether the PR is a normal CI/review PR or a manual packaging CI hold
+- watch required checks/review and merge normal PRs
 - handle review comments
 - clean up after merge
 
@@ -55,13 +57,21 @@ Use this skill when code and docs are already updated and you are moving into br
 ./scripts/prepare-task-pr.sh --create
 ```
 
-7. If review comments arrive, use:
+7. Record the PR purpose decision:
+   - `normal_pr_ci_watch`: default for ordinary implementation/documentation PRs. Keep watching required checks, review/approval, mergeability, and unresolved review threads.
+   - `manual_packaging_ci_hold`: only when the user/task says the PR exists specifically to run manual-trigger packaging/release CI jobs. Record the manual job/purpose and stop before auto-merge until the operator/user resumes.
+
+8. For `normal_pr_ci_watch`, keep the loop moving without waiting for another prompt:
+   - if checks fail, inspect the failing job, fix, rerun local verification, push, and continue watching
+   - if review comments arrive, use:
 
 ```bash
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
 ```
 
-8. After merge, sync local `main` and remove the task worktree / branch.
+   - when required checks and required review/approval pass and no blocking unresolved review threads remain, merge the PR using the repository's configured merge path
+
+9. After merge, sync local `main` and remove the task worktree / branch.
 
 ## Required Checks Before Commit
 
@@ -70,6 +80,8 @@ Use this skill when code and docs are already updated and you are moving into br
 - relevant formal docs updated
 - local verification rerun for the affected surface
 - pre-PR local role review packet recorded when the next step is PR creation
+- PR purpose decision recorded after PR creation
+- normal PRs are watched through required checks/review to merge; only manual packaging CI PRs may pause before merge
 
 ## Post-Merge Cleanup
 
@@ -83,3 +95,5 @@ Use this skill when code and docs are already updated and you are moving into br
 - Do not skip `.pm` closeout just because the execution log is updated.
 - Do not claim "done" while the branch still lacks required verification or PR creation.
 - Do not treat review-thread resolution as merge readiness.
+- Do not stop at PR creation for normal PRs; continue watching CI/review, fix failures, merge, and clean up.
+- Do not auto-merge PRs opened specifically for manual packaging/release CI until the operator/user resumes the normal merge path.
