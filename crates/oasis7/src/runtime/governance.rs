@@ -218,6 +218,8 @@ pub struct GovernanceFinalityEpochSnapshot {
     pub threshold: u16,
     #[serde(default)]
     pub signer_node_ids: Vec<String>,
+    #[serde(default)]
+    pub validator_stakes: BTreeMap<String, u64>,
 }
 
 impl GovernanceFinalityEpochSnapshot {
@@ -248,6 +250,8 @@ pub struct GovernanceFinalitySignerRegistry {
     pub threshold_bps: u16,
     #[serde(default)]
     pub signer_bindings: BTreeMap<String, String>,
+    #[serde(default)]
+    pub validator_stakes: BTreeMap<String, u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -281,6 +285,8 @@ pub struct GovernanceValidatorAdmissionRecord {
     pub node_id: String,
     #[serde(default)]
     pub finality_signer_public_key: String,
+    #[serde(default = "default_governance_validator_admission_stake")]
+    pub stake: u64,
     #[serde(default)]
     pub operator_owner: String,
     #[serde(default)]
@@ -299,6 +305,10 @@ pub struct GovernanceValidatorAdmissionRecord {
     pub revoked_at_epoch: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revocation_reason: Option<String>,
+}
+
+fn default_governance_validator_admission_stake() -> u64 {
+    100
 }
 
 /// Events related to governance actions.
@@ -394,6 +404,8 @@ pub enum GovernanceEvent {
         candidate_id: String,
         node_id: String,
         finality_signer_public_key: String,
+        #[serde(default = "default_governance_validator_admission_stake")]
+        stake: u64,
         operator_owner: String,
         public_manifest_hash: String,
         requested_at_epoch: u64,

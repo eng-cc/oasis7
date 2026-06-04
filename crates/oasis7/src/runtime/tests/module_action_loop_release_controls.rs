@@ -5,6 +5,7 @@ mod release_controls_tests;
 
 const LOCAL_FINALITY_SIGNER_1: &str = "governance.local.finality.signer.1";
 const LOCAL_FINALITY_SIGNER_2: &str = "governance.local.finality.signer.2";
+const TEST_FINALITY_SIGNER_3: &str = "governance.test.finality.signer.3";
 const TEST_RELEASE_BUILDER_IMAGE_DIGEST: &str =
     "sha256:1111111111111111111111111111111111111111111111111111111111111111";
 const TEST_RELEASE_CONTAINER_PLATFORM: &str = "linux-x86_64";
@@ -191,6 +192,15 @@ fn set_module_release_attestation_epoch_snapshot(
     threshold: u16,
     signer_node_ids: &[&str],
 ) {
+    set_module_release_attestation_epoch_snapshot_with_stakes(world, threshold, signer_node_ids, &[])
+}
+
+fn set_module_release_attestation_epoch_snapshot_with_stakes(
+    world: &mut World,
+    threshold: u16,
+    signer_node_ids: &[&str],
+    validator_stakes: &[(&str, u64)],
+) {
     let epoch_len = world
         .governance_execution_policy()
         .epoch_length_ticks
@@ -203,6 +213,10 @@ fn set_module_release_attestation_epoch_snapshot(
             signer_node_ids: signer_node_ids
                 .iter()
                 .map(|signer| signer.to_string())
+                .collect(),
+            validator_stakes: validator_stakes
+                .iter()
+                .map(|(node_id, stake)| ((*node_id).to_string(), *stake))
                 .collect(),
             ..GovernanceFinalityEpochSnapshot::default()
         })

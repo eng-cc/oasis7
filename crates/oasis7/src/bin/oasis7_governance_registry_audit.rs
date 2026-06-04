@@ -446,6 +446,7 @@ mod tests {
                             .to_string(),
                     ),
                 ]),
+                validator_stakes: BTreeMap::new(),
             })
             .expect("set finality registry");
         world
@@ -636,6 +637,7 @@ mod tests {
                             .to_string(),
                     ),
                 ]),
+                validator_stakes: BTreeMap::new(),
             })
             .expect("set finality registry");
         world
@@ -806,6 +808,10 @@ mod tests {
                             .to_string(),
                     ),
                 ]),
+                validator_stakes: BTreeMap::from([
+                    ("validator-a".to_string(), 100),
+                    ("validator-b".to_string(), 100),
+                ]),
             })
             .expect("set finality registry");
         world
@@ -846,6 +852,7 @@ mod tests {
             node_id: "validator-c".to_string(),
             finality_signer_public_key:
                 "3333333333333333333333333333333333333333333333333333333333333333".to_string(),
+            stake: 25,
             operator_owner: "ops.team".to_string(),
             public_manifest_hash: "manifest-c".to_string(),
         });

@@ -12,7 +12,7 @@
 ## 当前治理 signer 真值
 | Governance scope | 当前来源 | 当前问题 | 生产结论 |
 | --- | --- | --- | --- |
-| `finality signer` | execution world `governance_finality_signer_registry` + `governance_validator_admissions` 解析出的 effective registry（存在时）; 否则回退 `world/governance` deterministic local seed | runtime admission / activation 已可落到 world-state，但 shared-network probation 与治理证据链仍未完全闭环 | partial |
+| `finality signer` | execution world `governance_finality_signer_registry` + `governance_validator_admissions` 解析出的 effective registry（存在时）; 否则回退 `world/governance` deterministic local seed | runtime admission / activation 已可把 membership、governed stake 与 signer binding 落到 world-state，但 shared-network probation 与治理证据链仍未完全闭环 | partial |
 | `controller signer` | execution world `governance_main_token_controller_registry`（存在时）; 否则回退 `NodeConfig.main_token_controller_binding.controller_signer_policies` | controller policy 真值也可由 world-state 恢复，但 appointment / freeze / ceremony 仍未闭环 | partial |
 
 ## 目标态
@@ -49,7 +49,7 @@
 ### 目标状态机
 | 状态 | 含义 | 进入条件 | 退出条件 |
 | --- | --- | --- | --- |
-| `applied` | 申请人已提交材料，但未审核 | 提交 node identity、公网/可达性信息、finality signer 公钥、operator ownership、public manifest | 审核驳回或进入 `approved_candidate` |
+| `applied` | 申请人已提交材料，但未审核 | 提交 node identity、公网/可达性信息、governed stake、finality signer 公钥、operator ownership、public manifest | 审核驳回或进入 `approved_candidate` |
 | `approved_candidate` | 通过治理审核，但尚未进入活跃 validator set | producer/runtime/QA 联合确认材料完整、角色边界正确 | 进入 `probation_ready` 或撤销 |
 | `probation_ready` | 候选节点已完成 reachability/同步/演练检查，可排期激活 | candidate world / shared network 演练通过，activation epoch 已冻结 | 激活进入 `active` 或回退 |
 | `active` | 已在 world-state registry 内成为正式 validator/finality signer | governance action / world-state registry update 生效 | 轮换、撤销、failover 或退场 |
@@ -57,6 +57,7 @@
 
 ### 申请材料
 - `node_id` / `node.public_key`
+- `stake`
 - `finality_signer_public_key`
 - network reachability 信息：公开地址、private/hybrid/relay 策略、bootstrap 方案
 - `operator_owner` 与变更审批联系人
@@ -64,17 +65,19 @@
 - 预期 `activation_epoch` 或激活窗口
 
 ### 准入流程
-1. 申请人提交 node identity、finality signer 公钥和 public-only manifest，不提交私钥材料。
+1. 申请人提交 node identity、governed stake、finality signer 公钥和 public-only manifest，不提交私钥材料。
 2. `producer_system_designer` 冻结角色与容量策略，确认当前 validator set 是否允许扩容或替换。
 3. `runtime_engineer` 校验 signer key 与 node identity 没有混用，且 candidate 配置符合当前 reachability / bootstrap 架构。
 4. `qa_engineer` 在 candidate world、clone-world 或 shared network 上执行 reachability、同步、registry import/audit 与 failover smoke。
-5. 审核通过后，把 candidate 以非活跃形式写入 execution world `governance_validator_admissions`；真正激活时，由 `activation_epoch` 驱动 effective `governance_finality_signer_registry` 把该候选并入 active validator set。
-6. 到达 activation epoch 后，runtime 通过 world-state registry 恢复新的 validator membership / signer binding；`--node-validator*` 不能再作为正式准入动作。
+5. 审核通过后，把 candidate 以非活跃形式写入 execution world `governance_validator_admissions`；真正激活时，由 `activation_epoch` 驱动 effective `governance_finality_signer_registry` 把该候选的 membership、stake 与 signer binding 并入 active validator set。
+6. 到达 activation epoch 后，runtime 通过 world-state registry 恢复新的 validator membership / governed stake / signer binding；`--node-validator*` 不能再作为正式准入动作。
 7. 若发生 compromise、失联或替换，则走 rotation / revocation / failover，同样通过 world-state registry 留痕并生效。
 
 ### 运行时影响
 - active validator set 的唯一长期真值是 execution world 里的 governance registry。
-- execution world 会额外持久化 `governance_validator_admissions`；runtime 以 `base governance_finality_signer_registry + due admissions - revoked admissions` 解析 effective finality registry。
+- 公共主链式冷启动采用一次性 genesis validator registry：首个 execution world 尚无 effective finality registry 时，runtime 可通过 `--genesis-validator-registry <path>` 把 `node_id`、`stake` 与 `finality_signer_public_key` 写入 world-state registry；registry 存在后重启不会再覆盖治理 admission 产生的有效集合。
+- `public_testnet` / `mainnet` 或 governance-registry admission policy 下，缺失 world-state registry 且没有 genesis registry path 时必须启动失败；`NODE_VALIDATORS_CSV` 不再是 public tier 的 canonical validator truth。
+- execution world 会额外持久化 `governance_validator_admissions`；runtime 以 `base governance_finality_signer_registry + due admissions - revoked admissions` 解析 effective finality registry，并同步 `validator_stakes` 作为 governed stake 真值。
 - local `NodePosConfig` 只负责 bootstrap、测试或显式运维覆盖，不负责长期成员变更。
 - 新节点即使已经拿到二进制与静态配置，只要 governance registry 未激活，也不能自称正式 validator。
 

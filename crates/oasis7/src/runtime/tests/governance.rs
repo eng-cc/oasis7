@@ -1,8 +1,6 @@
 use super::super::*;
 use super::pos;
-#[cfg(feature = "test_tier_full")]
-use ed25519_dalek::Signer;
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer, SigningKey};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -20,6 +18,9 @@ const ROTATED_FINALITY_SIGNER_3: (&str, &str) = (
     "governance.test.finality.signer.3",
     "oasis7-governance-test-finality-signer-3-v1",
 );
+
+#[path = "governance_finality_tests.rs"]
+mod finality_tests;
 
 fn local_guardians() -> Vec<String> {
     vec![
@@ -46,7 +47,6 @@ fn bind_finality_signer_with_seed(world: &mut World, node_id: &str, seed_label: 
         .expect("bind governance finality signer identity");
 }
 
-#[cfg(feature = "test_tier_full")]
 fn build_finality_certificate_with_signers(
     world: &World,
     proposal_id: ProposalId,
@@ -82,6 +82,29 @@ fn build_finality_certificate_with_signers(
     }
     certificate.signatures = signatures;
     certificate
+}
+
+#[test]
+fn governance_event_validator_admission_submitted_defaults_legacy_stake() {
+    let value = json!({
+        "type": "ValidatorAdmissionSubmitted",
+        "data": {
+            "controller_account_id": "msig.genesis.v1",
+            "candidate_id": "candidate-legacy",
+            "node_id": "validator-legacy",
+            "finality_signer_public_key": "1111111111111111111111111111111111111111111111111111111111111111",
+            "operator_owner": "ops.legacy",
+            "public_manifest_hash": "manifest-legacy",
+            "requested_at_epoch": 7
+        }
+    });
+
+    let decoded: GovernanceEvent =
+        serde_json::from_value(value).expect("deserialize legacy validator admission event");
+    match decoded {
+        GovernanceEvent::ValidatorAdmissionSubmitted { stake, .. } => assert_eq!(stake, 100),
+        other => panic!("expected validator admission event: {other:?}"),
+    }
 }
 
 fn register_agent(world: &mut World, agent_id: &str, x: i64, y: i64) {
@@ -166,6 +189,11 @@ fn governance_finality_registry_roundtrip_persists_and_drives_epoch_snapshot() {
                     "e22bd5029176296712fb1a477f91c15775e5ab858181cb4172839ced526f12c8".to_string(),
                 ),
             ]),
+            validator_stakes: BTreeMap::from([
+                ("governance.finality.v1.signer01".to_string(), 50),
+                ("governance.finality.v1.signer02".to_string(), 30),
+                ("governance.finality.v1.signer03".to_string(), 20),
+            ]),
         })
         .expect("set finality registry");
     world
@@ -213,6 +241,7 @@ fn governance_finality_registry_roundtrip_persists_and_drives_epoch_snapshot() {
     assert_eq!(snapshot.epoch_id, 7);
     assert_eq!(snapshot.threshold, 2);
     assert_eq!(snapshot.signer_node_ids.len(), 3);
+    assert!(!snapshot.stake_root.is_empty());
     assert_eq!(
         restored.node_identity_public_key("governance.finality.v1.signer01"),
         Some("54e7a02919fff2d49a9c325def8cb0211ea7f7a75a9011b9d0678b9e2a7af6bc")

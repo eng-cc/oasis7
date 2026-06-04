@@ -28,8 +28,11 @@ mkdir -p \
   "$EXECUTION_RECORDS_DIR" \
   "$STORAGE_ROOT"
 
-IFS="," read -r -a validators <<< "${NODE_VALIDATORS_CSV:-}"
-IFS="," read -r -a validator_signers <<< "${NODE_VALIDATOR_SIGNERS_CSV:-}"
+# Public tiers use the execution-world governance registry as validator truth.
+# NODE_VALIDATORS_CSV / NODE_VALIDATOR_SIGNERS_CSV are kept only as dev/legacy
+# fallback for local launches without a network tier registry.
+IFS="," read -r -a legacy_validators <<< "${NODE_VALIDATORS_CSV:-}"
+IFS="," read -r -a legacy_validator_signers <<< "${NODE_VALIDATOR_SIGNERS_CSV:-}"
 IFS="," read -r -a peers <<< "${NODE_GOSSIP_PEERS_CSV:-}"
 IFS="," read -r -a replication_listens <<< "${REPLICATION_NETWORK_LISTEN_ADDRS_CSV:-}"
 IFS="," read -r -a replication_peers <<< "${REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV:-}"
@@ -83,14 +86,6 @@ if [[ -n "${NODE_AUTO_ATTEST_FLAG:-}" ]]; then
   cmd+=("$NODE_AUTO_ATTEST_FLAG")
 fi
 
-for validator in "${validators[@]}"; do
-  [[ -n "$validator" ]] && cmd+=(--node-validator "$validator")
-done
-
-for signer in "${validator_signers[@]}"; do
-  [[ -n "$signer" ]] && cmd+=(--node-validator-signer-public-key "$signer")
-done
-
 for peer in "${peers[@]}"; do
   [[ -n "$peer" ]] && cmd+=(--node-gossip-peer "$peer")
 done
@@ -115,6 +110,19 @@ fi
 network_tier_manifest_path="${NETWORK_TIER_MANIFEST_PATH:-}"
 if [[ -n "$network_tier_manifest_path" ]]; then
   cmd+=(--network-tier-manifest "$network_tier_manifest_path")
+fi
+
+genesis_validator_registry_path="${GENESIS_VALIDATOR_REGISTRY_PATH:-}"
+if [[ -n "$genesis_validator_registry_path" ]]; then
+  cmd+=(--genesis-validator-registry "$genesis_validator_registry_path")
+elif [[ -z "$network_tier_manifest_path" || "${ALLOW_LEGACY_NODE_VALIDATORS_CSV:-0}" == "1" ]]; then
+  for validator in "${legacy_validators[@]}"; do
+    [[ -n "$validator" ]] && cmd+=(--node-validator "$validator")
+  done
+
+  for signer in "${legacy_validator_signers[@]}"; do
+    [[ -n "$signer" ]] && cmd+=(--node-validator-signer-public-key "$signer")
+  done
 fi
 
 traffic_monitor_enable="${TRAFFIC_MONITOR_ENABLE:-0}"

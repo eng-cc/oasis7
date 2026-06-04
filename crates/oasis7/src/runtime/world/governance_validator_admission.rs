@@ -33,6 +33,14 @@ impl World {
                 reason: "validator admission record fields cannot be empty".to_string(),
             });
         }
+        if record.stake == 0 {
+            return Err(WorldError::GovernancePolicyInvalid {
+                reason: format!(
+                    "validator admission stake must be > 0 candidate_id={} node_id={}",
+                    record.candidate_id, record.node_id
+                ),
+            });
+        }
         decode_hex_array::<32>(
             record.finality_signer_public_key.as_str(),
             format!(
@@ -139,6 +147,7 @@ impl World {
             match record.status {
                 GovernanceValidatorAdmissionStatus::Revoked => {
                     registry.signer_bindings.remove(record.node_id.as_str());
+                    registry.validator_stakes.remove(record.node_id.as_str());
                 }
                 GovernanceValidatorAdmissionStatus::ProbationReady
                 | GovernanceValidatorAdmissionStatus::Active => {
@@ -148,6 +157,9 @@ impl World {
                             record.node_id.clone(),
                             record.finality_signer_public_key.clone(),
                         );
+                        registry
+                            .validator_stakes
+                            .insert(record.node_id.clone(), record.stake);
                     }
                 }
                 GovernanceValidatorAdmissionStatus::Applied
@@ -164,6 +176,7 @@ impl World {
         candidate_id: &str,
         node_id: &str,
         finality_signer_public_key: &str,
+        stake: u64,
         operator_owner: &str,
         public_manifest_hash: &str,
         requested_at_epoch: u64,
@@ -190,6 +203,7 @@ impl World {
                 candidate_id: candidate_id.to_string(),
                 node_id: node_id.to_string(),
                 finality_signer_public_key: finality_signer_public_key.to_string(),
+                stake,
                 operator_owner: operator_owner.to_string(),
                 public_manifest_hash: public_manifest_hash.to_string(),
                 requested_at_epoch,
@@ -424,6 +438,7 @@ impl World {
                     candidate_id: resolved_candidate_id.clone(),
                     node_id: node_id.to_string(),
                     finality_signer_public_key: current_public_key.clone(),
+                    stake: DEFAULT_GOVERNANCE_VALIDATOR_STAKE,
                     operator_owner: "governance.revocation".to_string(),
                     public_manifest_hash: "synthetic-revocation".to_string(),
                     requested_at_epoch: revoked_at_epoch,
