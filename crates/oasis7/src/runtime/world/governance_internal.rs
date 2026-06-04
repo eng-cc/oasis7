@@ -525,20 +525,6 @@ impl World {
                 ),
             });
         }
-        let signed_signer_node_ids = certificate.signatures.keys().cloned().collect();
-        let signed_stake_bps = governance_finality_signed_stake_bps(
-            snapshot.signer_node_ids.as_slice(),
-            &snapshot.validator_stakes,
-            &signed_signer_node_ids,
-        );
-        if signed_stake_bps < certificate.threshold_bps {
-            return Err(WorldError::GovernanceFinalityInvalid {
-                reason: format!(
-                    "signed stake below threshold_bps: epoch_id={} signed_stake_bps={} threshold_bps={}",
-                    epoch_id, signed_stake_bps, certificate.threshold_bps
-                ),
-            });
-        }
         for (node_id, signature_with_prefix) in &certificate.signatures {
             if !epoch_signers.contains(node_id) {
                 return Err(WorldError::GovernanceFinalityInvalid {
@@ -584,6 +570,20 @@ impl World {
                 .map_err(|error| WorldError::GovernanceFinalityInvalid {
                     reason: format!("signature verification failed for {node_id}: {error}"),
                 })?;
+        }
+        let signed_signer_node_ids = certificate.signatures.keys().cloned().collect();
+        let signed_stake_bps = governance_finality_signed_stake_bps(
+            snapshot.signer_node_ids.as_slice(),
+            &snapshot.validator_stakes,
+            &signed_signer_node_ids,
+        );
+        if signed_stake_bps < certificate.threshold_bps {
+            return Err(WorldError::GovernanceFinalityInvalid {
+                reason: format!(
+                    "signed stake below threshold_bps: epoch_id={} signed_stake_bps={} threshold_bps={}",
+                    epoch_id, signed_stake_bps, certificate.threshold_bps
+                ),
+            });
         }
         Ok(())
     }
