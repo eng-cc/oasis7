@@ -20,7 +20,7 @@
 
 外部 workflow 借鉴不得替换当前默认执行链：
 
-`new-task-worktree -> workflow-report start -> producer orchestrate / role subagent dispatch -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR review/approval -> review-thread closeout`
+`new-task-worktree -> workflow-report start -> producer orchestrate / role subagent dispatch -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR watch/fix/review-thread closeout/merge`
 
 因此 adopted 项只能以三种形态落地：
 

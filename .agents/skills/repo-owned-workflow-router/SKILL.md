@@ -56,7 +56,7 @@ Check the task in this order:
 4. `systematic-debugging`
    - Use when a bug, failing test, broken script, unexpected diff, or regression appears before proposing fixes.
 5. `requesting-repo-owned-review`
-   - Use when a high-risk or major convergence diff needs local supplemental review before commit or before GitHub reviewers.
+   - Use when a branch is about to create a PR and needs required local review from involved professional role subagents before GitHub reviewers.
 6. `verification-before-completion`
    - Use when the work is close to a claim such as “done”, “tests pass”, or “ready for PR”.
 7. `finishing-a-development-branch`
@@ -75,7 +75,7 @@ Ask and answer these in order:
 3. Will the task change product/runtime/interaction behavior with a stable test surface?
 4. Is the task already backed by sufficient repo truth to execute?
 5. Did a bug, failing test, broken helper, unexpected diff, or regression appear?
-6. Is the diff large or risky enough to need supplemental repo-owned review?
+6. Is the branch about to create a PR and therefore due for involved-role local subagent review?
 7. Is the next risk “implementation correctness” or “claim correctness”?
 8. Is the task actually at closeout rather than execution?
 9. Did GitHub review feedback arrive?

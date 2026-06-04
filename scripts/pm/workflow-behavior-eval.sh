@@ -13,7 +13,7 @@ Usage: ./scripts/pm/workflow-behavior-eval.sh [--json]
 Run the repo-owned workflow behavior eval for the default oasis7 task chain:
   default-workflow-bootstrap -> new-task-worktree -> workflow-report
   -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch
-  -> task-closeout -> prepare-task-pr -> review-thread-closeout
+  -> task-closeout -> prepare-task-pr -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup
 
 This eval reuses isolated fixture tests and PM smokes so the main chain stays
 provable in local automation rather than only in prose.
@@ -228,7 +228,7 @@ checks = [
     (
         root / ".agents/skills/requesting-repo-owned-review/SKILL.md",
         [
-            "Repo-owned review is a supplement, not a replacement.",
+            "Pre-PR local role review is required before PR creation",
             "findings",
             "no_findings",
             "residual_risk",
@@ -530,12 +530,13 @@ scenarios = [
         ],
     },
     {
-        "id": "high_risk_diff_can_request_repo_owned_review",
-        "expected_route": "requesting-repo-owned-review -> verification-before-completion -> PR review",
+        "id": "pre_pr_requires_repo_owned_role_review",
+        "expected_route": "requesting-repo-owned-review -> prepare-task-pr -> GitHub PR watch/fix/merge",
         "surface": ".agents/skills/requesting-repo-owned-review/SKILL.md",
         "required_markers": [
+            "a branch is about to create a PR",
             "a major feature or workflow helper just landed locally",
-            "Repo-owned review is a supplement, not a replacement.",
+            "Pre-PR Local Role Review: passed",
             "Formal Sink: <execution log | PR evidence | handoff>",
         ],
     },
@@ -672,11 +673,16 @@ scenarios = [
         ],
     },
     {
-        "id": "closeout_routes_to_github_pr_review_not_local_landing",
-        "expected_route": "finishing-a-development-branch -> prepare-task-pr -> GitHub required checks/review",
+        "id": "closeout_routes_to_local_role_review_then_github_pr_review",
+        "expected_route": "finishing-a-development-branch -> local role review -> prepare-task-pr -> GitHub required checks/review -> merge/cleanup",
         "surface": ".agents/skills/finishing-a-development-branch/SKILL.md",
         "required_markers": [
+            "Pre-PR Local Role Review: passed",
             "./scripts/prepare-task-pr.sh --create",
+            "normal_pr_ci_watch",
+            "manual_packaging_ci_hold",
+            "Do not stop at PR creation for normal PRs; continue watching CI/review, fix failures, merge, and clean up.",
+            "Do not merge a normal PR without first checking PR comments and review threads and resolving or answering actionable items.",
             "Do not land locally unless the user explicitly asks for local landing.",
             "Do not treat review-thread resolution as merge readiness.",
         ],
@@ -797,7 +803,7 @@ segments = [
 ]
 
 payload = {
-    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout",
+    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> task-closeout -> prepare-task-pr -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, PM runtime smoke, and fake-gh PR helper tests",
     "expected_agent_behavior": [
         "every user request first routes through a repo-owned bootstrap surface rather than an external bootstrap",
@@ -810,9 +816,11 @@ payload = {
         "brainstorming and TDD remain conditional while professional role work is represented as bounded subagent slices",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
         f"subagent slice contracts record {default_shorthand} as the source-of-truth default model configuration unless an override reason is present",
-        "high-risk local diffs can request repo-owned review packets without replacing GitHub PR review",
+        "PR creation requires local involved-role subagent review evidence before GitHub PR watch/fix/merge",
         "done closeout refuses to proceed without fresh verification",
-        "PR preflight stays the default GitHub PR entrypoint",
+        "PR preflight stays the default GitHub PR entrypoint after local role review evidence",
+        "normal PRs continue after creation into required-check/comment/mergeability watch, failure fixes, comment closeout, merge, and cleanup; REVIEW_REQUIRED is informational and not a blocker",
+        "manual packaging/release CI PRs can pause before merge only when that purpose is explicit",
         "review-thread closeout reports unresolved/resolved thread state without conflating merge readiness",
     ],
     "verification_surface": [segment["id"] for segment in segments],
@@ -825,8 +833,9 @@ payload = {
         "task-closeout allows done closeout without verify-command",
         "subagent contract markers disappear from AGENTS or handoff/router surfaces",
         f"subagent model configuration markers disappear or no longer default to the source-of-truth runtime ({default_shorthand})",
-        "repo-owned review-request surface disappears or stops separating local review from GitHub review",
+        "repo-owned review-request surface disappears or stops requiring pre-PR local role review evidence",
         "prepare-task-pr local fixture no longer creates the expected PR command path",
+        "finishing branch guidance stops distinguishing normal PR CI watch from manual packaging CI hold",
         "review-thread closeout helper stops reporting unresolved/resolved state correctly",
     ],
     "routing_scenarios": routing_scenarios["scenarios"],

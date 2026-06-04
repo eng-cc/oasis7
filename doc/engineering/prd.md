@@ -51,10 +51,10 @@
   - SC-20: `engineering` 模块治理专题标题对外统一使用 `oasis7` 品牌，不再在活跃/历史治理入口中混用 `oasis7` 标题。
   - SC-21: 仓库内文件化项目管理层 `.pm/` 建档完成后，7 个标准角色的长期 memory/backlog、signal inbox、task registry 与 stage/gate 汇总具备正式专题规格与任务追踪入口。
   - SC-22: `self-evolution` 后续补强在借鉴外部 memory/reflective-agent 方案时，必须显式冻结 adopted / rejected / deferred 边界，且不引入外部真值系统替代 `.pm/`。
-  - SC-23: 默认评审边界必须是 commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR，并以 required checks + review/approval 作为正式 review 流程。
-  - SC-24: 本地不再要求额外的 `codex-review-snapshot` 或其他 commit 前 review 脚本作为默认步骤；若 owner 额外做本地 diff review，只能作为自主加码，不得回写成仓库硬门禁。
-  - SC-24A: 根 `AGENTS.md`、engineering 主 PRD、`self-evolution` 正式追踪、`.pm/README` 与 `workflow-report` close checklist 必须对该流程维持单一口径：默认通过 `./scripts/pm/task-closeout.sh --verify-command "<fresh verification command>"` 执行“fresh verification -> `workflow-report close -> move-task -> pm lint`”，随后 `commit -> prepare-task-pr -> GitHub PR review/approval`；若 owner 选择手工拆步，也必须与该 helper 的底层顺序保持等价。
-  - SC-24B: required-tier smoke 必须断言 close checklist 不再要求 `codex-review-snapshot.sh`，而是把 GitHub PR preflight / review 边界指向 `./scripts/prepare-task-pr.sh`。
+  - SC-23: 默认评审边界必须是 commit 后先完成本地相关角色 subagent review evidence packet，再通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR，并以 required checks、requested changes、PR comment/thread closeout、mergeability 与 GitHub merge path 作为服务端正式 review/merge 流程；普通 PR 创建后必须继续盯 required checks/mergeability/comments，`REVIEW_REQUIRED` 只作为状态信息回报、不作为 block 项，失败修复并重推，actionable comments 回复/整改/resolve 后，才能合入与清理。
+  - SC-24: 本地不再要求额外的 `codex-review-snapshot` 或其他独立 commit 前 review 脚本；但创建 PR 前必须由 TPM 新建/派发涉及到的相关专业角色 subagent 做本地 review，并将 findings/no_findings/residual_risk 与整改处置写入 task execution log。
+  - SC-24A: 根 `AGENTS.md`、engineering 主 PRD、`self-evolution` 正式追踪、`.pm/README` 与 `workflow-report` close checklist 必须对该流程维持单一口径：默认通过 `./scripts/pm/task-closeout.sh --verify-command "<fresh verification command>"` 执行“fresh verification -> `workflow-report close -> move-task -> pm lint`”，随后 `commit -> pre-PR local role subagent review -> prepare-task-pr -> GitHub PR watch/fix/merge -> cleanup`；若 owner 选择手工拆步，也必须与该 helper 的底层顺序保持等价。只有明确用于 manual packaging/release CI 的 PR 才允许停在人工打包 gate。
+  - SC-24B: required-tier smoke 必须断言 close checklist 不再要求 `codex-review-snapshot.sh`，而是要求 `Pre-PR Local Role Review: passed` evidence packet 并把 GitHub PR preflight / review 边界指向 `./scripts/prepare-task-pr.sh`。
   - SC-24C: 默认最终合流路径必须是 GitHub PR，而不是直接本地 landing 到 `main`；`./scripts/land-task-worktree.sh` 只保留给用户明确要求的 local-only / fallback 场景。
   - SC-24D: 同一 PR 内的 review comment follow-up 必须存在 repo-owned helper，用于统一盘点 unresolved review threads、执行显式 resolve，并在每轮操作后分别报告 `reviewDecision`、`mergeStateStatus` 与 unresolved thread 数，避免把“thread 已关”误报成“PR 可合并”。
   - SC-24E: `prepare-task-pr.sh` 必须在 PR preflight 阶段输出与当前 changed paths 对齐的本地 required 验证建议，减少 owner 对“本地至少该补跑什么”的人工猜测；该建议只负责推荐，不自动执行，也不改变 `./scripts/ci-tests.sh required/full` 的既有语义。
@@ -116,7 +116,7 @@
   - PRD-ENGINEERING-031: As a `producer_system_designer`, I want external agent workflow patterns benchmarked against oasis7's repo-native execution chain, so that we only adopt the parts that strengthen evidence, workflow verification, or UI ideation without replacing `.pm`, owner roles, or GitHub PR review.
   - PRD-ENGINEERING-032: As a repo workflow owner, I want the current local skill inventory frozen into keep/replace/retire/defer buckets, so that role cards and engineering docs no longer recommend low-value or workflow-conflicting skill surfaces.
 - Critical User Flows:
-  1. Flow-ENG-001: `提交前执行必要测试/门禁 -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> 进入 required checks + review/approval`
+  1. Flow-ENG-001: `提交前执行必要测试/门禁 -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> normal PR 进入 required checks + mergeability + comments watch（REVIEW_REQUIRED 仅回报不阻塞）-> 失败修复重推 -> comments 处理/resolve -> 通过后合入与清理`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
   3. Flow-ENG-003: `季度复盘 -> 汇总违规趋势 -> 调整门禁阈值 -> 发布新治理基线`
   4. Flow-ENG-004: `逐篇阅读旧文档 -> 按 strict schema 重写 -> 内容保真复核 -> 更新任务与执行日志追踪`
@@ -129,7 +129,7 @@
   11. Flow-ENG-011: owner 创建 `.pm` task -> 系统本地生成 merge-stable `task_uid` -> task file / execution log / working_memory / stage blocker 全部按 `task_uid` 引用 -> registry/backlog 视图由扫描重建并只落在 git-ignored 本地文件 -> rebase/landing 不再因顺序 task id 分配或共享视图 YAML 产生结构性冲突
   12. Flow-ENG-012: `模块文档体量超过可读阈值 -> 先区分活跃真值 / 审计留痕 / 历史归档 / 兼容跳转 -> 收紧 README / prd.index / 根入口默认暴露面 -> 再按优先级拆后续减重任务`
   13. Flow-ENG-013: `入口减重已完成但文档总量/热点路径/历史 backlog 继续增长 -> 运行 scripts/doc-inventory-report.sh -> 判断属于历史压缩/路径级治理/近限文件拆分中的哪一类 -> 再切独立 worktree 建 follow-up task`
-  14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap；新 task worktree 必须把 ignored `target` 链接到 repo-family shared cargo target cache，减少多 worktree 重复编译产物；若 canonical `main` worktree 根存在本地 `config.toml`，则同步复制到新 task worktree，避免 active-LLM / harness 复现因缺配置偏离 `main`）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> `task-closeout.sh --verify-command "<fresh verification command>"`（或等价的“fresh verification -> `workflow-report close -> move-task --to-status done|deferred -> pm lint`”手工链）-> commit -> prepare-task-pr -> 若 PR 收到 review comments，则用 `pr-review-thread-closeout.sh` 盘点/resolve thread 并重新检查 PR state -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
+  14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap；新 task worktree 必须把 ignored `target` 链接到 repo-family shared cargo target cache，减少多 worktree 重复编译产物；若 canonical `main` worktree 根存在本地 `config.toml`，则同步复制到新 task worktree，避免 active-LLM / harness 复现因缺配置偏离 `main`）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> `task-closeout.sh --verify-command "<fresh verification command>"`（或等价的“fresh verification -> `workflow-report close -> move-task --to-status done|deferred -> pm lint`”手工链）-> commit -> prepare-task-pr -> 记录 PR purpose decision；normal PR 盯 CI/mergeability/comments，`REVIEW_REQUIRED` 仅回报不阻塞，失败修复重推，comments 先处理/resolve；manual packaging/release CI PR 停在人工 gate -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
   15. Flow-ENG-015: `评估外部 agent workflow repo/skill -> 将模式写入 adopted/rejected/deferred 矩阵 -> 只有 adopted 项才允许转成 repo-owned follow-up（helper/eval/optional module technique）-> 对 rejected/deferred 项显式保持非默认边界`
   16. Flow-ENG-016: `只读问题 -> 判断是否只是客观事实读取 -> 若是则 TPM 直接复述证据 -> 若需要专业判断则派发对应 bounded role slice -> TPM 合流并标注角色来源 -> 若后续要改仓库再进入 default-workflow-bootstrap`
   17. Flow-ENG-017: `TPM 准备派发专业角色 slice -> 默认填入 workflow source-of-truth 的 Default subagent runtime -> 若要覆盖则在 slice contract 写明 override reason -> 再启动 subagent`
@@ -149,7 +149,7 @@
 | 全量 PRD 审读清单 | 文档路径、阅读时刻、代码一致性、重复性、上下游状态、处理动作 | 逐篇阅读后更新清单并回写偏差 | `unread -> read -> aligned` | 入口优先、风险优先 | 维护者与评审者可写，贡献者可读 |
 | 角色职责卡 | 角色名、使命、owner 范围、输入、输出、决策边界、完成定义、推荐技能、检查清单 | 更新 `.agents/roles/*.md` 并在根 `AGENTS.md` 维护入口映射 | `draft -> aligned -> adopted` | 默认按 7 个组合角色稳定排序；技能仅作推荐方法，不改变 owner role | 全体贡献者可读，角色 owner 与治理维护者可改 |
 | 角色交接模板 | 交接标题、来源角色、目标角色、目标、上下文、输入、输出、截止、风险、阻断、验证、回写位置 | 从 `.agents/roles/templates/*.md` 复制填写并随任务流转 | `draft -> sent -> acknowledged -> delivered` | 默认先 brief 后 detailed，按风险等级决定是否升级 | 发起方负责填写，接收方负责确认，维护者可演进模板 |
-| 角色协作工作流 | owner role、角色视角切换、职责卡加载、handoff 触发条件、执行顺序、QA/LiveOps 回流、GitHub PR review 默认流程 | 当需要其他伙伴协作时，先切换到对应标准角色视角并加载职责卡，再按工作流执行；完成 commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR 的 required checks + review/approval | `defined -> adopted -> audited` | 默认按需求进入顺序执行，跨角色任务先定 owner 再流转；如需额外本地 review，只能作为 owner 自主加码，不得替代角色协作规则或 GitHub PR 默认边界 | 全体贡献者遵守，治理维护者可演进 |
+| 角色协作工作流 | owner role、角色视角切换、职责卡加载、handoff 触发条件、执行顺序、QA/LiveOps 回流、pre-PR local role review、GitHub PR watch/fix/comment-closeout/merge 默认流程 | 当需要其他伙伴协作时，先切换到对应标准角色视角并加载职责卡，再按工作流执行；完成 commit 后先完成本地相关角色 subagent review evidence packet，再通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR 的 required checks、requested changes、comment/thread closeout 与 mergeability 路径，并对 normal PR 持续 watch/fix/comment-closeout/merge/cleanup；`REVIEW_REQUIRED` 仅回报不阻塞 | `defined -> adopted -> audited` | 默认按需求进入顺序执行，跨角色任务先定 owner 再流转；PR 创建前的本地 role review 是 required evidence gate，但不得替代 GitHub PR 服务端 required checks、requested changes、comment closeout 或 mergeability 边界；未明确 manual packaging/release CI purpose 时不得停在 PR 创建后 | 全体贡献者遵守，治理维护者可演进 |
 | task execution log | `task_uid`、日期、时刻、角色、完成内容、遗留事项 | 每个任务写入 `.pm/tasks/task_<32hex>.execution.md`，并在条目级显式标角色 | `logged -> traceable -> audited` | 默认一任务一文件，按时间排序 | 全体贡献者可写，评审者可按任务/角色回溯 |
 | 角色名白名单校验 | 角色名、来源文件、白名单来源 | 校验 task execution log / handoff 中角色名是否存在于 `.agents/roles/*.md` | `pass/fail` | 以角色文件名去后缀为唯一 canonical name | 治理维护者维护角色清单，提交者必须修复别名 |
 | 文件化项目管理层 | 角色 registry、role memory/backlog、signal inbox、task registry、stage/gate 文件、task workflow evidence | 在仓库内维护 `.pm/` 运行态对象，并通过脚本做 scaffold/lint/report/promote/set-stage | `planned -> scaffolded -> adopted -> audited` | 默认按 `role_name`、`priority`、`updated_at` 排序；高严重度 signal 优先提升 | 治理维护者维护结构，owner role 维护自身 memory/backlog，producer 维护正式阶段结论 |
@@ -176,7 +176,7 @@
   - AC-17: `.agents/roles/templates/` 下至少提供一套可直接复制使用的角色交接模板，并在根 `AGENTS.md` 可达。
   - AC-18: 根 `AGENTS.md` 的“开发工作流”章节应明确 owner role、handoff 使用时机、QA/LiveOps 责任和“用户要求不提交”时的例外处理。
   - AC-18A: 根 `AGENTS.md` 的“项目运行模式”需明确：需要其他伙伴协作时，执行主体必须切换到 `.agents/roles/*.md` 中的标准角色视角并加载对应职责描述，而非依赖未定义的 `sub agent` 能力。
-  - AC-18B: 根 `AGENTS.md` 不得再把本地额外 review 脚本写成默认硬门禁；正式流程需只保留 GitHub PR review 的单一默认口径。
+  - AC-18B: 根 `AGENTS.md` 不得再把本地额外 review 脚本写成默认硬门禁；正式流程必须要求 PR 创建前本地相关角色 subagent review evidence，并保留 GitHub PR required checks、requested changes、comment closeout、mergeability 与 merge path 作为服务端保护边界；`REVIEW_REQUIRED` 不得被写成 block 项。
   - AC-19: 根 `AGENTS.md` 的 task execution log 规则需明确“一任务一文件、不按角色拆文件、条目级标角色”的约束。
   - AC-20: 文档治理门禁需阻断 task execution log / handoff 中未在 `.agents/roles/*.md` 注册的角色名。
   - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
@@ -369,7 +369,7 @@
 | DEC-ENG-014 | 重复与上下游对齐问题在同批次完成修复与回填 | 跨批次累积处理 | 同批次闭环可避免问题扩散到下一轮审读。 |
 | DEC-ENG-015 | 根 `AGENTS.md` 仅保留 7 个组合角色入口，详细职责下沉到 `.agents/roles/*.md` | 在根 `AGENTS.md` 内持续堆叠所有角色长描述 | 入口更短、更稳，且更便于按角色独立演进职责卡。 |
 | DEC-ENG-016 | 为角色协作提供统一 handoff 模板，并放在 `.agents/roles/templates/` | 继续依赖自由格式口头/临时文本交接 | 统一模板能显著降低跨角色遗漏、返工和上下文漂移。 |
-| DEC-ENG-017 | 将 `AGENTS.md` 工作流升级为角色协作版，并显式写入 handoff / QA / LiveOps / GitHub PR review / no-commit 例外 | 继续保留单线程开发表述，或让额外本地 review 替代 owner role / GitHub PR 默认评审边界 | 当前仓库已引入角色职责卡与交接模板；需要继续由角色视角承接 owner 责任，并把 GitHub PR 的 required checks + review/approval 作为默认评审边界。 |
+| DEC-ENG-017 | 将 `AGENTS.md` 工作流升级为角色协作版，并显式写入 handoff / QA / LiveOps / GitHub PR review / no-commit 例外 | 继续保留单线程开发表述，或让额外本地 review 替代 owner role / GitHub PR 默认评审边界 | 当前仓库已引入角色职责卡与交接模板；需要继续由角色视角承接 owner 责任，并把 GitHub PR 的 required checks、requested changes/comment closeout、mergeability 与 merge path 作为默认评审/合流边界；`REVIEW_REQUIRED` 仅回报不阻塞。 |
 | DEC-ENG-018 | 自我进化项目管理首期采用仓库内文件化运行层 | 直接将外部 PM/SaaS 作为主真值 | 当前仓库已具备 Git/worktree/正式文档治理链，先在 repo 内闭环更符合现有工程约束。 |
 | DEC-ENG-019 | 执行日志收敛为 task-local `.pm/tasks/task_<32hex>.execution.md`，并在条目级强制标注角色 | 继续维护集中式日表或按角色拆分日志文件 | `.pm` 已经以 task 为基本执行单元，任务日志跟 task file 同址更利于追溯、lint 与多 worktree 并发隔离。 |
 | DEC-ENG-020 | `.pm` task canonical identity 收敛为去中心分配的 `task_uid`，registry/backlog 改为扫描重建视图 | 继续把 `TASK-PM-xxxx` 顺序号、`next_sequence` 与 task file 文件名绑定为正式主键 | 顺序号一旦同时承担主键、文件名、视图索引和人类展示作用，就会在并发 worktree 下制造结构性 rebase/landing 冲突；`task_uid` 可把冲突面收敛回真正被并发编辑的 task 对象。 |

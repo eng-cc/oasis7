@@ -12,22 +12,24 @@ Usage: ./scripts/prepare-task-pr.sh [source-branch] [options]
 Validate one task branch for GitHub PR closure, print the exact PR command, and
 optionally push the branch plus open the PR through `gh`. The preflight summary
 also reports a local required-gate validation recommendation, a claim-ready
-helper command for fresh PR-readiness verification, plus planner reason summary
-derived from the current changed-path scope.
+helper command for fresh PR-readiness verification, local role-review evidence
+status, plus planner reason summary derived from the current changed-path scope.
+After PR creation, the default workflow continues into required-check/comment/
+mergeability watch, failure fixes, merge, and cleanup unless the task explicitly
+records that the PR exists only to run manual-trigger packaging/release CI.
+REVIEW_REQUIRED is reported as status but is not a blocking item by itself.
 
 Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- post-create reviewer request: attempt `@copilot`
-- standard path: commit -> prepare-task-pr -> GitHub PR review
+- standard path: commit -> local role-subagent review -> prepare-task-pr -> GitHub PR watch/fix/merge
 
 Options:
   --base <branch>         Base branch for the PR (default: main)
   --remote <name>         Remote name for push / base comparison (default: origin)
   --create                Push branch if needed and run `gh pr create`
   --draft                 Add `--draft` when creating the PR
-  --no-copilot-review     Do not attempt `@copilot` review request after PR create
   --title <text>          Explicit PR title (default: use gh --fill)
   --body-file <path>      Pass an explicit PR body file to `gh pr create`
   --json                  Print machine-readable JSON summary only
@@ -79,7 +81,6 @@ REMOTE_NAME="origin"
 CREATE_PR=0
 DRAFT_PR=0
 OUTPUT_JSON=0
-REQUEST_COPILOT_REVIEW=1
 PR_TITLE=""
 BODY_FILE=""
 POSITIONAL=()
@@ -100,10 +101,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --draft)
       DRAFT_PR=1
-      shift
-      ;;
-    --no-copilot-review)
-      REQUEST_COPILOT_REVIEW=0
       shift
       ;;
     --title)
@@ -213,45 +210,6 @@ print(" ".join(shlex.quote(arg) for arg in sys.argv[1:]))
 PY
 }
 
-warn() {
-  echo "warning: $*" >&2
-}
-
-repo_full_name() {
-  gh repo view --json nameWithOwner --jq .nameWithOwner
-}
-
-pr_number_from_url() {
-  local pr_url="$1"
-  python3 - "$pr_url" <<'PY'
-from __future__ import annotations
-
-import re
-import sys
-
-match = re.search(r"/pull/([0-9]+)(?:$|[/?#])", sys.argv[1])
-if not match:
-    raise SystemExit(1)
-print(match.group(1))
-PY
-}
-
-request_copilot_review() {
-  local repo="$1"
-  local pr_number="$2"
-  local requested_logins=""
-
-  if ! gh api -X POST "repos/$repo/pulls/$pr_number/requested_reviewers" \
-    -f 'reviewers[]=chatgpt-codex-connector[bot]' >/dev/null; then
-    return 1
-  fi
-
-  requested_logins="$(gh api "repos/$repo/pulls/$pr_number/requested_reviewers" --jq '.users[].login')"
-  if ! printf '%s\n' "$requested_logins" | grep -Fxq "Copilot"; then
-    return 1
-  fi
-}
-
 plan_kv_get() {
   local output="$1"
   local key=""
@@ -266,6 +224,199 @@ plan_kv_get_default() {
   local value=""
   value="$(plan_kv_get "$output" "$key")"
   printf '%s\n' "${value:-$default_value}"
+}
+
+local_role_review_status() {
+  local source_worktree="$1"
+  local source_branch="$2"
+  local source_head="$3"
+  local comparison_ref="$4"
+  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" <<'PY'
+from __future__ import annotations
+
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+source_worktree = Path(sys.argv[1]).resolve()
+source_branch = sys.argv[2]
+source_head = sys.argv[3]
+comparison_ref = sys.argv[4]
+root = source_worktree
+tasks_dir = root / ".pm" / "tasks"
+
+def parse_field(text: str, key: str) -> str:
+    match = re.search(rf"^- {re.escape(key)}: (.+)$", text, re.MULTILINE)
+    return match.group(1).strip() if match else ""
+
+def review_packet_blocks(text: str) -> list[str]:
+    lines = text.splitlines()
+    blocks: list[str] = []
+    current: list[str] = []
+    in_block = False
+    for line in lines:
+        if line.startswith("## "):
+            if in_block and current:
+                blocks.append("\n".join(current))
+            current = [line]
+            in_block = False
+            continue
+        if current:
+            current.append(line)
+            if line == "- Pre-PR Local Role Review: passed":
+                in_block = True
+    if in_block and current:
+        blocks.append("\n".join(current))
+    return blocks
+
+def emit(
+    status: str,
+    task_uid: str = "",
+    log_path: str = "",
+    reason: str = "",
+    missing_markers: list[str] | None = None,
+    review_roles: str = "",
+    findings_disposition: str = "",
+    residual_risk: str = "",
+) -> None:
+    print(f"status={status}")
+    print(f"task_uid={task_uid}")
+    print(f"execution_log_path={log_path}")
+    print(f"reason={reason}")
+    print(f"missing_markers={';'.join(missing_markers or [])}")
+    print(f"review_roles={review_roles}")
+    print(f"findings_disposition={findings_disposition}")
+    print(f"residual_risk={residual_risk}")
+    raise SystemExit(0)
+
+if not tasks_dir.is_dir():
+    emit("missing", reason=".pm/tasks directory missing")
+
+task_uid_re = re.compile(r"^task_[0-9a-f]{32}$")
+candidates: list[tuple[str, Path, str]] = []
+for task_file in sorted(tasks_dir.glob("task_*.yaml")):
+    text = task_file.read_text(encoding="utf-8")
+    if f"worktree_hint: {source_worktree}" not in text:
+        continue
+    task_uid = ""
+    execution_log_path = ""
+    for line in text.splitlines():
+        key, _, value = line.partition(":")
+        value = value.strip().strip('"')
+        if key == "task_uid":
+            task_uid = value
+        elif key == "execution_log_path":
+            execution_log_path = value
+    if not task_uid_re.fullmatch(task_uid):
+        continue
+    if not execution_log_path:
+        execution_log_path = f".pm/tasks/{task_uid}.execution.md"
+    candidates.append((task_uid, root / execution_log_path, execution_log_path))
+
+if not candidates:
+    emit("missing", reason=f"no .pm task has worktree_hint {source_worktree}")
+if len(candidates) > 1:
+    emit("missing", reason=f"multiple .pm tasks match worktree_hint {source_worktree}")
+
+task_uid, log_path, log_path_rel = candidates[0]
+if not log_path.is_file():
+    emit("missing", task_uid=task_uid, log_path=log_path_rel, reason="execution log missing")
+
+text = log_path.read_text(encoding="utf-8")
+blocks = review_packet_blocks(text)
+if not blocks:
+    emit(
+        "missing",
+        task_uid=task_uid,
+        log_path=log_path_rel,
+        reason="no pre-PR local role review packet found",
+        missing_markers=["Pre-PR Local Role Review: passed"],
+    )
+
+required = {
+    "Pre-PR Local Role Review": "passed",
+    "Task UID": task_uid,
+    "Source Worktree": str(source_worktree),
+    "Source Branch": source_branch,
+    "Comparison Ref": comparison_ref,
+}
+
+missing: list[str] = []
+selected_block = blocks[-1]
+
+for key, expected in required.items():
+    if parse_field(selected_block, key) != expected:
+        missing.append(f"{key}: {expected}")
+
+reviewed_source_head = parse_field(selected_block, "Source Head")
+if not reviewed_source_head:
+    missing.append("Source Head")
+elif reviewed_source_head != source_head:
+    allowed_evidence_paths = {
+        log_path_rel,
+        f".pm/tasks/{task_uid}.yaml",
+    }
+    try:
+        subprocess.check_call(
+            ["git", "merge-base", "--is-ancestor", reviewed_source_head, source_head],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        changed_since_review = subprocess.check_output(
+            ["git", "diff", "--name-only", f"{reviewed_source_head}..{source_head}"],
+            text=True,
+        ).splitlines()
+    except subprocess.CalledProcessError:
+        missing.append(f"Source Head ancestor of {source_head}")
+    else:
+        disallowed = [
+            path for path in changed_since_review
+            if path not in allowed_evidence_paths
+        ]
+        if disallowed:
+            missing.append("Source Head has post-review non-evidence changes: " + ",".join(disallowed))
+
+for key in (
+    "Reviewed Changed Paths",
+    "Role Selection Basis",
+    "Review Roles",
+    "Review Evidence",
+    "Finding Disposition Evidence",
+    "Residual Risk",
+):
+    if not parse_field(selected_block, key):
+        missing.append(key)
+
+findings_disposition = parse_field(selected_block, "Review Findings Disposition")
+if findings_disposition not in {"addressed", "no_findings"}:
+    missing.append("Review Findings Disposition: addressed|no_findings")
+
+review_roles = parse_field(selected_block, "Review Roles")
+residual_risk = parse_field(selected_block, "Residual Risk")
+
+if missing:
+    emit(
+        "missing",
+        task_uid=task_uid,
+        log_path=log_path_rel,
+        reason="missing required pre-PR local role review markers",
+        missing_markers=missing,
+        review_roles=review_roles,
+        findings_disposition=findings_disposition,
+        residual_risk=residual_risk,
+    )
+
+emit(
+    "passed",
+    task_uid=task_uid,
+    log_path=log_path_rel,
+    reason="matched source worktree, branch, head, and comparison ref",
+    review_roles=review_roles,
+    findings_disposition=findings_disposition,
+    residual_risk=residual_risk,
+)
+PY
 }
 
 ensure_branch_exists "$SOURCE_BRANCH"
@@ -365,6 +516,16 @@ if git show-ref --verify --quiet "refs/remotes/$REMOTE_NAME/$SOURCE_BRANCH"; the
   REMOTE_SOURCE_REF="refs/remotes/$REMOTE_NAME/$SOURCE_BRANCH"
 fi
 
+LOCAL_ROLE_REVIEW_OUTPUT="$(local_role_review_status "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF")"
+LOCAL_ROLE_REVIEW_STATUS="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "status")"
+LOCAL_ROLE_REVIEW_TASK_UID="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "task_uid")"
+LOCAL_ROLE_REVIEW_LOG_PATH="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "execution_log_path")"
+LOCAL_ROLE_REVIEW_REASON="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "reason")"
+LOCAL_ROLE_REVIEW_MISSING_MARKERS="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "missing_markers")"
+LOCAL_ROLE_REVIEW_ROLES="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_roles")"
+LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "findings_disposition")"
+LOCAL_ROLE_REVIEW_RESIDUAL_RISK="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "residual_risk")"
+
 UPSTREAM_REF="$(git rev-parse --abbrev-ref --symbolic-full-name "$SOURCE_BRANCH@{upstream}" 2>/dev/null || true)"
 LOCAL_ONLY_COUNT="$AHEAD_COUNT"
 REMOTE_ONLY_COUNT=0
@@ -385,12 +546,6 @@ if [[ "$DRAFT_PR" == "1" ]]; then
   CREATE_CMD+=("--draft")
 fi
 CREATE_CMD_RENDERED="$(render_cmd "${CREATE_CMD[@]}")"
-REQUEST_REVIEW_CMD=()
-REQUEST_REVIEW_CMD_RENDERED=""
-if [[ "$REQUEST_COPILOT_REVIEW" == "1" ]]; then
-  REQUEST_REVIEW_CMD=("gh" "api" "-X" "POST" "repos/<repo>/pulls/<pr-number>/requested_reviewers" "-f" "reviewers[]=chatgpt-codex-connector[bot]")
-  REQUEST_REVIEW_CMD_RENDERED="$(render_cmd "${REQUEST_REVIEW_CMD[@]}")"
-fi
 
 SYNC_CMD=""
 if [[ -n "$BASE_WORKTREE" ]]; then
@@ -405,32 +560,29 @@ if [[ "$CREATE_PR" == "1" ]]; then
   if [[ "$REBASE_REQUIRED" == "1" ]]; then
     die "source branch is behind $COMPARISON_REF; rebase before creating the PR"
   fi
+  if [[ "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
+    die "missing passed pre-PR local role review evidence for $SOURCE_BRANCH at $SOURCE_HEAD ($LOCAL_ROLE_REVIEW_REASON; log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-unknown}; missing: ${LOCAL_ROLE_REVIEW_MISSING_MARKERS:-unknown})"
+  fi
   if [[ -z "$REMOTE_SOURCE_REF" ]]; then
     git -C "$SOURCE_WORKTREE" push -u "$REMOTE_NAME" "$SOURCE_BRANCH"
   elif [[ "$LOCAL_ONLY_COUNT" != "0" || "$REMOTE_ONLY_COUNT" != "0" ]]; then
     git -C "$SOURCE_WORKTREE" push "$REMOTE_NAME" "$SOURCE_BRANCH"
   fi
   PR_URL="$("${CREATE_CMD[@]}")"
-  if [[ "${#REQUEST_REVIEW_CMD[@]}" -gt 0 ]]; then
-    PR_NUMBER="$(pr_number_from_url "$PR_URL")"
-    REPO_FULL_NAME="$(repo_full_name)"
-    if ! request_copilot_review "$REPO_FULL_NAME" "$PR_NUMBER"; then
-      warn "PR created, but failed to request @copilot review via: $REQUEST_REVIEW_CMD_RENDERED"
-    fi
-  fi
 fi
 
 LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED="$(printf '%s;' ${LOCAL_REQUIRED_EXTRA_COMMANDS[@]+"${LOCAL_REQUIRED_EXTRA_COMMANDS[@]}"})"
 SUMMARY_JSON="$(
-python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$REQUEST_REVIEW_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED" <<'PY'
+python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED" "$LOCAL_ROLE_REVIEW_STATUS" "$LOCAL_ROLE_REVIEW_TASK_UID" "$LOCAL_ROLE_REVIEW_LOG_PATH" "$LOCAL_ROLE_REVIEW_REASON" "$LOCAL_ROLE_REVIEW_MISSING_MARKERS" "$LOCAL_ROLE_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
 
-changed_paths = [path for path in sys.argv[22].split(";") if path]
-reason_items = [reason for reason in sys.argv[23].split(";") if reason]
-extra_commands = [cmd for cmd in sys.argv[26].split(";") if cmd]
+changed_paths = [path for path in sys.argv[21].split(";") if path]
+reason_items = [reason for reason in sys.argv[22].split(";") if reason]
+extra_commands = [cmd for cmd in sys.argv[25].split(";") if cmd]
+missing_markers = [marker for marker in sys.argv[30].split(";") if marker]
 
 payload = {
     "source_branch": sys.argv[1],
@@ -447,19 +599,29 @@ payload = {
     "unpushed_commit_count": int(sys.argv[12]),
     "remote_only_commit_count": int(sys.argv[13]),
     "create_command": sys.argv[14],
-    "review_request_command": sys.argv[15] or None,
-    "post_merge_commands": [cmd for cmd in sys.argv[16:19] if cmd],
-    "cleanup_commands": [cmd for cmd in sys.argv[16:19] if cmd],
-    "pr_url": sys.argv[19] or None,
+    "review_request_command": None,
+    "post_merge_commands": [cmd for cmd in sys.argv[15:18] if cmd],
+    "cleanup_commands": [cmd for cmd in sys.argv[15:18] if cmd],
+    "pr_url": sys.argv[18] or None,
     "local_required_validation": {
-        "scope": sys.argv[20],
-        "changed_path_count": int(sys.argv[21]),
+        "scope": sys.argv[19],
+        "changed_path_count": int(sys.argv[20]),
         "changed_paths": changed_paths,
-        "reason_summary": sys.argv[23] or None,
+        "reason_summary": sys.argv[22] or None,
         "reason_items": reason_items,
-        "recommended_required_command": sys.argv[24] or None,
-        "recommended_claim_ready_command": sys.argv[25] or None,
+        "recommended_required_command": sys.argv[23] or None,
+        "recommended_claim_ready_command": sys.argv[24] or None,
         "recommended_extra_commands": extra_commands,
+    },
+    "pre_pr_local_role_review": {
+        "status": sys.argv[26],
+        "task_uid": sys.argv[27] or None,
+        "execution_log_path": sys.argv[28] or None,
+        "reason": sys.argv[29] or None,
+        "missing_markers": missing_markers,
+        "review_roles": sys.argv[31] or None,
+        "findings_disposition": sys.argv[32] or None,
+        "residual_risk": sys.argv[33] or None,
     },
 }
 print(json.dumps(payload, ensure_ascii=False))
@@ -514,6 +676,25 @@ if [[ "${#LOCAL_REQUIRED_EXTRA_COMMANDS[@]}" -gt 0 ]]; then
   for extra_cmd in "${LOCAL_REQUIRED_EXTRA_COMMANDS[@]}"; do
     echo "- recommended extra command: $extra_cmd"
   done
+fi
+
+echo
+echo "Pre-PR Local Role Review:"
+echo "- status: $LOCAL_ROLE_REVIEW_STATUS"
+echo "- task uid: ${LOCAL_ROLE_REVIEW_TASK_UID:-"(none)"}"
+echo "- execution log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-"(none)"}"
+echo "- reason: ${LOCAL_ROLE_REVIEW_REASON:-"(none)"}"
+if [[ -n "$LOCAL_ROLE_REVIEW_MISSING_MARKERS" ]]; then
+  echo "- missing markers: $LOCAL_ROLE_REVIEW_MISSING_MARKERS"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_ROLES" ]]; then
+  echo "- review roles: $LOCAL_ROLE_REVIEW_ROLES"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" ]]; then
+  echo "- findings disposition: $LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" ]]; then
+  echo "- residual risk: $LOCAL_ROLE_REVIEW_RESIDUAL_RISK"
 fi
 
 if [[ "$REBASE_REQUIRED" == "1" ]]; then

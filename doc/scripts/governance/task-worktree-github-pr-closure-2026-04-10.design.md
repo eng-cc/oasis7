@@ -53,5 +53,5 @@
 - `pr_create_failed`: push 或 `gh pr create` 返回非零。
 
 ## 6. Rationale
-- 选择把默认最终合流切到 GitHub PR，而不是继续强化本地 landing，是因为默认保护边界必须落在 required checks 与 review/approval，而不是单机历史整理。
+- 选择把默认最终合流切到 GitHub PR，而不是继续强化本地 landing，是因为默认保护边界必须落在 required checks、requested changes/comment closeout、mergeability 与 GitHub merge path，而不是单机历史整理；`REVIEW_REQUIRED` 仅作为状态回报，不单独阻塞。
 - 保留 `land-task-worktree.sh` 作为兼容/应急工具，而不是立即删除，是为了保留离线、本地演练或用户显式要求的 fallback 路径。
