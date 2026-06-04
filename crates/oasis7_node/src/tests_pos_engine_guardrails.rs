@@ -219,6 +219,74 @@ fn pos_engine_non_expected_proposer_keeps_pending_consensus_actions_queued() {
 }
 
 #[test]
+fn release_triad_sequencer_only_all_auto_attest_makes_progress_before_first_chaos() {
+    let sequencer_id = "soak-triad_distributed-probe-sequencer";
+    let mut pos_config = NodePosConfig::ethereum_like(vec![
+        PosValidator {
+            validator_id: sequencer_id.to_string(),
+            stake: 50,
+        },
+        PosValidator {
+            validator_id: "soak-triad_distributed-probe-storage".to_string(),
+            stake: 30,
+        },
+        PosValidator {
+            validator_id: "soak-triad_distributed-probe-observer".to_string(),
+            stake: 20,
+        },
+    ]);
+    pos_config.slot_duration_ms = 12_000;
+    pos_config.ticks_per_slot = 10;
+    pos_config.proposal_tick_phase = 9;
+    pos_config.adaptive_tick_scheduler_enabled = false;
+    pos_config.max_past_slot_lag = 256;
+
+    let config = NodeConfig::new(
+        sequencer_id,
+        "world-release-triad-sequencer-only",
+        NodeRole::Sequencer,
+    )
+    .expect("config")
+    .with_pos_config(pos_config)
+    .expect("pos config")
+    .with_auto_attest_all_validators(true)
+    .with_require_execution_on_commit(false);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    for now_ms in (0..90_000).step_by(200) {
+        engine
+            .tick(
+                &config.node_id,
+                &config.world_id,
+                now_ms,
+                None,
+                None,
+                None,
+                None,
+                Vec::new(),
+                None,
+            )
+            .expect("tick");
+        if engine.committed_height > 0 {
+            return;
+        }
+    }
+
+    let expected_proposers = (0..8)
+        .map(|slot| {
+            format!(
+                "{slot}:{}",
+                engine
+                    .expected_proposer(slot)
+                    .unwrap_or_else(|| "<none>".to_string())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    panic!("release triad sequencer did not commit before first chaos; expected_proposers={expected_proposers}");
+}
+
+#[test]
 fn pos_engine_apply_decision_rejects_height_overflow_without_state_mutation() {
     let config =
         NodeConfig::new("node-a", "world-overflow-apply", NodeRole::Observer).expect("config");
