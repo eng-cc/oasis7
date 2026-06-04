@@ -82,7 +82,7 @@ def request_json(
     return status, decoded, elapsed
 
 
-def build_decision_request(index: int) -> dict:
+def build_decision_request(index: int, timeout_ms: int) -> dict:
     return {
         "observation": {
             "agent_id": f"smoke-agent-{index}",
@@ -112,12 +112,12 @@ def build_decision_request(index: int) -> dict:
                 {"action_ref": "wait", "summary": "do nothing this tick"},
                 {"action_ref": "move_agent", "summary": "move to a visible location"},
             ],
-            "timeout_budget_ms": DEFAULT_TIMEOUT_MS,
+            "timeout_budget_ms": timeout_ms,
         },
         "provider_config_ref": "provider://remote-https",
         "agent_profile": "oasis7_p0_low_freq_npc",
         "fixture_id": "provider_bridge_contract_smoke",
-        "timeout_budget_ms": DEFAULT_TIMEOUT_MS,
+        "timeout_budget_ms": timeout_ms,
     }
 
 
@@ -173,7 +173,7 @@ def run_smoke(options: SmokeOptions) -> dict:
             "/v1/world-simulator/decision",
             method="POST",
             auth_token=options.auth_token,
-            payload=build_decision_request(index),
+            payload=build_decision_request(index, options.timeout_ms),
             timeout_ms=options.timeout_ms,
         )
         error_code = provider_error_code(response)

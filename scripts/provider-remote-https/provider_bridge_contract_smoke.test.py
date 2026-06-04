@@ -238,6 +238,12 @@ class ProviderBridgeContractSmokeTests(unittest.TestCase):
         )
         self.assertIn("insufficient_user_quota", summary["decisions"][1]["provider_error_message"])
 
+    def test_decision_payload_uses_configured_timeout_budget(self):
+        request = smoke.build_decision_request(index=7, timeout_ms=4321)
+
+        self.assertEqual(request["timeout_budget_ms"], 4321)
+        self.assertEqual(request["observation"]["timeout_budget_ms"], 4321)
+
     def test_low_quota_exhaustion_fails_without_provider_error(self):
         with MockProviderServer(health_ok=True) as server:
             with self.assertRaisesRegex(RuntimeError, "expected provider_error code or message"):

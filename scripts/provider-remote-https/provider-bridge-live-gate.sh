@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-CREDENTIALS_FILE="${ALIYUN_ECS_CREDENTIALS_FILE:-/Users/scc/Documents/keys/aliyun_ecs.txt}"
+CREDENTIALS_FILE="${OASIS7_PROVIDER_LIVE_CREDENTIALS_FILE:-${ALIYUN_ECS_CREDENTIALS_FILE:-}}"
 TEST_HOST="39.104.204.172"
 PROD_HOST="39.104.205.67"
 PUBLIC_BASE_URL="${OASIS7_PROVIDER_PUBLIC_BASE_URL:-https://t2t.oasis7.tech}"
@@ -29,6 +29,7 @@ Usage: ./scripts/provider-remote-https/provider-bridge-live-gate.sh [options]
 
 Runs real provider bridge checks against live ECS environments. This script
 does not print raw token_key, raw bridge state, private keys, or passwords.
+Requires sshpass for password-based SSH from the credential file.
 
 Default checks:
   - SSH to 39.104.204.172 and 39.104.205.67.
@@ -39,7 +40,8 @@ Default checks:
     the 205 production selector.
 
 Options:
-  --credentials-file <path>       default: /Users/scc/Documents/keys/aliyun_ecs.txt
+  --credentials-file <path>       SSH credential file; can also be set with
+                                  OASIS7_PROVIDER_LIVE_CREDENTIALS_FILE
   --decision-count <n>            default: 1
   --timeout-ms <n>                default: 15000
   --skip-public                   skip https://t2t.oasis7.tech check
@@ -139,6 +141,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+[[ -n "$CREDENTIALS_FILE" ]] || { echo "error: credentials file required; set --credentials-file or OASIS7_PROVIDER_LIVE_CREDENTIALS_FILE" >&2; exit 2; }
 [[ -f "$CREDENTIALS_FILE" ]] || { echo "error: credentials file not found: $CREDENTIALS_FILE" >&2; exit 2; }
 [[ "$DECISION_COUNT" =~ ^[0-9]+$ && "$DECISION_COUNT" -gt 0 ]] || { echo "error: --decision-count must be positive" >&2; exit 2; }
 [[ "$TIMEOUT_MS" =~ ^[0-9]+$ && "$TIMEOUT_MS" -gt 0 ]] || { echo "error: --timeout-ms must be positive" >&2; exit 2; }
@@ -156,43 +159,25 @@ password_for_host() {
 ssh_capture() {
   local host="$1"
   local command="$2"
+  command -v sshpass >/dev/null 2>&1 || { echo "error: sshpass is required for password-based live gate SSH" >&2; exit 2; }
   local password
   password="$(password_for_host "$host")" || { echo "error: no credential for root@$host" >&2; exit 2; }
-  local command_b64
-  command_b64="$(python3 -c 'import base64,sys; print(base64.b64encode(sys.stdin.read().encode()).decode())' <<<"$command")"
+  local command_file
+  command_file="$(mktemp)"
+  printf '%s\n' "$command" >"$command_file"
   local output_file
   output_file="$(mktemp)"
-  local expect_status=0
-  PASS="$password" HOST="$host" REMOTE_COMMAND_B64="$command_b64" OUT="$output_file" expect <<'EXPECT' || expect_status=$?
-set timeout 60
-set password $env(PASS)
-set host $env(HOST)
-set encoded $env(REMOTE_COMMAND_B64)
-set command "python3 -c \"import base64,sys; sys.stdout.write(base64.b64decode('$encoded').decode())\" | bash"
-set outfile $env(OUT)
-set transcript ""
-log_user 0
-spawn ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/Users/scc/.ssh/known_hosts root@$host $command
-expect {
-  "*assword:*" { send -- "$password\r"; exp_continue }
-  -re {(.|\r|\n)+} { append transcript $expect_out(buffer); exp_continue }
-  timeout { exit 124 }
-  eof {}
-}
-set handle [open $outfile w]
-puts -nonewline $handle $transcript
-close $handle
-catch wait result
-set exit_code [lindex $result 3]
-exit $exit_code
-EXPECT
-  if [[ "$expect_status" -ne 0 ]]; then
+  local ssh_status=0
+  SSHPASS="$password" sshpass -e \
+    ssh -o StrictHostKeyChecking=accept-new root@"$host" bash -s \
+    <"$command_file" >"$output_file" 2>&1 || ssh_status=$?
+  if [[ "$ssh_status" -ne 0 ]]; then
     sed -E 's/(Authorization: Bearer )[[:graph:]]+/\1<redacted>/g' "$output_file" >&2 || true
-    rm -f "$output_file"
-    return "$expect_status"
+    rm -f "$output_file" "$command_file"
+    return "$ssh_status"
   fi
   sed -E 's/(Authorization: Bearer )[[:graph:]]+/\1<redacted>/g' "$output_file"
-  rm -f "$output_file"
+  rm -f "$output_file" "$command_file"
 }
 
 selector_for_host() {
@@ -244,12 +229,13 @@ run_loopback_host_smoke() {
   local remote_command
   # Copying the full Python harness to the host is unnecessary; invoke the
   # endpoint with curl and summarize the response with on-host Python.
-  remote_command="AUTH_TOKEN=$(printf '%q' "$selector") DECISION_COUNT=$(printf '%q' "$decision_count") MIN_SUCCESSES=$(printf '%q' "$min_successes") EXPECTED_ERROR_SUBSTR=$(printf '%q' "$expected_error_substr") TIMEOUT_SECONDS=$(printf '%q' "$(( (TIMEOUT_MS + 999) / 1000 ))") python3 - <<'PY'
+  remote_command="AUTH_TOKEN=$(printf '%q' "$selector") DECISION_COUNT=$(printf '%q' "$decision_count") MIN_SUCCESSES=$(printf '%q' "$min_successes") EXPECTED_ERROR_SUBSTR=$(printf '%q' "$expected_error_substr") TIMEOUT_MS=$(printf '%q' "$TIMEOUT_MS") TIMEOUT_SECONDS=$(printf '%q' "$(( (TIMEOUT_MS + 999) / 1000 ))") python3 - <<'PY'
 import json, os, subprocess, tempfile
 auth = os.environ['AUTH_TOKEN']
 count = int(os.environ['DECISION_COUNT'])
 min_successes = int(os.environ['MIN_SUCCESSES'])
 expected_error_substr = os.environ.get('EXPECTED_ERROR_SUBSTR') or ''
+timeout_ms = int(os.environ['TIMEOUT_MS'])
 timeout = os.environ['TIMEOUT_SECONDS']
 successes = 0
 versions = []
@@ -275,12 +261,12 @@ for index in range(1, count + 1):
             },
             'recent_event_summary': [],
         'action_catalog': [{'action_ref': 'wait', 'summary': 'do nothing this tick'}],
-            'timeout_budget_ms': 15000,
+            'timeout_budget_ms': timeout_ms,
         },
         'provider_config_ref': 'provider://remote-https',
         'agent_profile': 'oasis7_p0_low_freq_npc',
         'fixture_id': 'provider_bridge_live_gate',
-        'timeout_budget_ms': 15000,
+        'timeout_budget_ms': timeout_ms,
     }
     with tempfile.NamedTemporaryFile('w', delete=False) as handle:
         json.dump(payload, handle)
