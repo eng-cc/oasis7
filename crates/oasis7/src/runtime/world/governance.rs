@@ -27,6 +27,7 @@ const LOCAL_GOVERNANCE_FINALITY_SIGNERS: [(&str, &str); 2] = [
     ),
 ];
 const IDENTITY_PENALTY_DETECTION_SOURCE: &str = "world.threat_heatmap.v1";
+pub(super) const DEFAULT_GOVERNANCE_VALIDATOR_STAKE: u64 = 100;
 
 pub(super) fn local_governance_finality_signer_public_keys() -> Vec<(String, String)> {
     let mut keys = Vec::with_capacity(LOCAL_GOVERNANCE_FINALITY_SIGNERS.len());
@@ -66,22 +67,54 @@ pub(super) fn governance_finality_validator_set_hash(signer_node_ids: &[String])
     sha256_hex(signer_node_ids.join("|").as_bytes())
 }
 
-pub(super) fn governance_finality_stake_root(signer_node_ids: &[String]) -> String {
+pub(super) fn governance_finality_stake_root(
+    signer_node_ids: &[String],
+    validator_stakes: &BTreeMap<String, u64>,
+) -> String {
     let payload = signer_node_ids
         .iter()
-        .map(|node_id| format!("{node_id}:1"))
+        .map(|node_id| {
+            let stake = validator_stakes
+                .get(node_id)
+                .copied()
+                .unwrap_or(DEFAULT_GOVERNANCE_VALIDATOR_STAKE);
+            format!("{node_id}:{stake}")
+        })
         .collect::<Vec<_>>()
         .join("|");
     sha256_hex(payload.as_bytes())
 }
 
-fn governance_finality_signed_stake_bps(total_signers: usize, signed_signers: usize) -> u16 {
-    if total_signers == 0 {
+pub(crate) fn governance_finality_signed_stake_bps(
+    signer_node_ids: &[String],
+    validator_stakes: &BTreeMap<String, u64>,
+    signed_signer_node_ids: &BTreeSet<String>,
+) -> u16 {
+    let total_stake = signer_node_ids
+        .iter()
+        .map(|node_id| {
+            validator_stakes
+                .get(node_id)
+                .copied()
+                .unwrap_or(DEFAULT_GOVERNANCE_VALIDATOR_STAKE)
+        })
+        .sum::<u64>();
+    if total_stake == 0 {
         return 0;
     }
-    let signed = u128::from(signed_signers as u64)
+    let signed_stake = signer_node_ids
+        .iter()
+        .filter(|node_id| signed_signer_node_ids.contains(*node_id))
+        .map(|node_id| {
+            validator_stakes
+                .get(node_id)
+                .copied()
+                .unwrap_or(DEFAULT_GOVERNANCE_VALIDATOR_STAKE)
+        })
+        .sum::<u64>();
+    let signed = u128::from(signed_stake)
         .saturating_mul(10_000)
-        .saturating_div(u128::from(total_signers as u64));
+        .saturating_div(u128::from(total_stake));
     signed.min(10_000) as u16
 }
 
@@ -721,9 +754,13 @@ impl World {
             threshold_bps: 10_000,
             min_unique_signers,
             validator_set_hash: governance_finality_validator_set_hash(signer_node_ids.as_slice()),
-            stake_root: governance_finality_stake_root(signer_node_ids.as_slice()),
+            stake_root: governance_finality_stake_root(
+                signer_node_ids.as_slice(),
+                &BTreeMap::new(),
+            ),
             threshold: min_unique_signers,
             signer_node_ids,
+            validator_stakes: BTreeMap::new(),
         }
     }
 }

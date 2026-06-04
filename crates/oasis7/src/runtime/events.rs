@@ -500,6 +500,8 @@ pub enum Action {
         candidate_id: String,
         node_id: String,
         finality_signer_public_key: String,
+        #[serde(default = "default_governance_validator_admission_stake")]
+        stake: u64,
         operator_owner: String,
         public_manifest_hash: String,
     },
@@ -610,6 +612,10 @@ pub enum Action {
         proposal_id: ProposalId,
         profile: FactoryProfileV1,
     },
+}
+
+fn default_governance_validator_admission_stake() -> u64 {
+    100
 }
 
 impl Action {

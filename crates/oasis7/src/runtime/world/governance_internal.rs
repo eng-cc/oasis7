@@ -22,9 +22,13 @@ impl World {
             threshold_bps,
             min_unique_signers: threshold,
             validator_set_hash: governance_finality_validator_set_hash(signer_node_ids.as_slice()),
-            stake_root: governance_finality_stake_root(signer_node_ids.as_slice()),
+            stake_root: governance_finality_stake_root(
+                signer_node_ids.as_slice(),
+                &registry.validator_stakes,
+            ),
             threshold,
             signer_node_ids,
+            validator_stakes: registry.validator_stakes.clone(),
         })
     }
 
@@ -105,7 +109,34 @@ impl World {
             }
             normalized
         };
-        let computed_stake_root = governance_finality_stake_root(unique_signers.as_slice());
+        let mut normalized_stakes = BTreeMap::new();
+        for (node_id, stake) in snapshot.validator_stakes.iter() {
+            let node_id = node_id.trim().to_string();
+            if node_id.is_empty() || !unique_signers.iter().any(|signer| signer == &node_id) {
+                return Err(WorldError::GovernancePolicyInvalid {
+                    reason: format!(
+                        "finality epoch snapshot stake references unknown signer epoch_id={} node_id={}",
+                        snapshot.epoch_id, node_id
+                    ),
+                });
+            }
+            if *stake == 0 {
+                return Err(WorldError::GovernancePolicyInvalid {
+                    reason: format!(
+                        "finality epoch snapshot stake must be > 0 epoch_id={} node_id={}",
+                        snapshot.epoch_id, node_id
+                    ),
+                });
+            }
+            normalized_stakes.insert(node_id, *stake);
+        }
+        for node_id in &unique_signers {
+            normalized_stakes
+                .entry(node_id.clone())
+                .or_insert(DEFAULT_GOVERNANCE_VALIDATOR_STAKE);
+        }
+        let computed_stake_root =
+            governance_finality_stake_root(unique_signers.as_slice(), &normalized_stakes);
         let stake_root = if snapshot.stake_root.trim().is_empty() {
             computed_stake_root
         } else {
@@ -126,6 +157,7 @@ impl World {
         snapshot.validator_set_hash = validator_set_hash;
         snapshot.stake_root = stake_root;
         snapshot.signer_node_ids = unique_signers;
+        snapshot.validator_stakes = normalized_stakes;
         Ok(())
     }
 
@@ -178,6 +210,40 @@ impl World {
             }
             normalized_bindings.insert(node_id, public_key_hex);
         }
+        let mut normalized_stakes = BTreeMap::new();
+        for (node_id, stake) in registry.validator_stakes {
+            let node_id = node_id.trim().to_string();
+            if node_id.is_empty() {
+                return Err(WorldError::GovernancePolicyInvalid {
+                    reason: format!(
+                        "finality signer registry stake node_id cannot be empty slot_id={}",
+                        registry.slot_id
+                    ),
+                });
+            }
+            if !normalized_bindings.contains_key(node_id.as_str()) {
+                return Err(WorldError::GovernancePolicyInvalid {
+                    reason: format!(
+                        "finality signer registry stake references unknown signer slot_id={} node_id={}",
+                        registry.slot_id, node_id
+                    ),
+                });
+            }
+            if stake == 0 {
+                return Err(WorldError::GovernancePolicyInvalid {
+                    reason: format!(
+                        "finality signer registry stake must be > 0 slot_id={} node_id={}",
+                        registry.slot_id, node_id
+                    ),
+                });
+            }
+            normalized_stakes.insert(node_id, stake);
+        }
+        for node_id in normalized_bindings.keys() {
+            normalized_stakes
+                .entry(node_id.clone())
+                .or_insert(DEFAULT_GOVERNANCE_VALIDATOR_STAKE);
+        }
         if normalized_bindings.len() < usize::from(registry.threshold) {
             return Err(WorldError::GovernancePolicyInvalid {
                 reason: format!(
@@ -201,6 +267,7 @@ impl World {
             });
         }
         registry.signer_bindings = normalized_bindings;
+        registry.validator_stakes = normalized_stakes;
         Ok(registry)
     }
 
@@ -458,9 +525,11 @@ impl World {
                 ),
             });
         }
+        let signed_signer_node_ids = certificate.signatures.keys().cloned().collect();
         let signed_stake_bps = governance_finality_signed_stake_bps(
-            snapshot.signer_node_ids.len(),
-            certificate.signatures.len(),
+            snapshot.signer_node_ids.as_slice(),
+            &snapshot.validator_stakes,
+            &signed_signer_node_ids,
         );
         if signed_stake_bps < certificate.threshold_bps {
             return Err(WorldError::GovernanceFinalityInvalid {
@@ -995,6 +1064,7 @@ impl World {
                 candidate_id,
                 node_id,
                 finality_signer_public_key,
+                stake,
                 operator_owner,
                 public_manifest_hash,
                 requested_at_epoch,
@@ -1003,6 +1073,7 @@ impl World {
                 candidate_id,
                 node_id,
                 finality_signer_public_key,
+                *stake,
                 operator_owner,
                 public_manifest_hash,
                 *requested_at_epoch,

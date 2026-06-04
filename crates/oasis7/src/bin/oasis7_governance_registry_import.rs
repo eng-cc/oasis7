@@ -30,9 +30,14 @@ struct CliOptions {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 struct PublicManifestEntry {
     slot_id: String,
-    signer_id: String,
+    #[serde(default)]
+    signer_id: Option<String>,
+    #[serde(default)]
+    node_id: Option<String>,
     scheme: String,
     public_key_hex: String,
+    #[serde(default)]
+    stake: Option<u64>,
     #[serde(default)]
     threshold: Option<u16>,
     #[serde(default)]
@@ -189,21 +194,22 @@ fn build_finality_registry(
     slot_thresholds: &ManifestSlotThresholds,
 ) -> Result<GovernanceFinalitySignerRegistry, String> {
     let mut signer_bindings = BTreeMap::new();
+    let mut validator_stakes = BTreeMap::new();
     for entry in entries
         .iter()
         .filter(|entry| entry.slot_id == finality_slot_id)
     {
         validate_manifest_entry(entry)?;
-        let signer_id = entry.signer_id.trim();
-        if signer_id.is_empty() {
+        let validator_id = entry_validator_id(entry)?;
+        let stake = entry.stake.unwrap_or(100);
+        if stake == 0 {
             return Err(format!(
-                "finality manifest entry has empty signer_id slot_id={finality_slot_id}"
+                "finality manifest entry stake must be > 0 slot_id={finality_slot_id} validator_id={validator_id}"
             ));
         }
-        signer_bindings.insert(
-            format!("{finality_slot_id}.{signer_id}"),
-            entry.public_key_hex.trim().to_string(),
-        );
+        let binding_key = format!("{finality_slot_id}.{validator_id}");
+        signer_bindings.insert(binding_key.clone(), entry.public_key_hex.trim().to_string());
+        validator_stakes.insert(binding_key, stake);
     }
     if signer_bindings.is_empty() {
         return Err(format!(
@@ -220,6 +226,7 @@ fn build_finality_registry(
         threshold,
         threshold_bps: 0,
         signer_bindings,
+        validator_stakes,
     })
 }
 
@@ -287,9 +294,14 @@ fn resolve_manifest_slot_thresholds(
         let slot_id = entry.slot_id.trim();
         let threshold = entry.threshold.unwrap_or(default_threshold);
         if threshold == 0 {
+            let signer_label = entry
+                .signer_id
+                .as_deref()
+                .or(entry.node_id.as_deref())
+                .unwrap_or("");
             return Err(format!(
                 "manifest threshold must be > 0 slot_id={} signer_id={}",
-                entry.slot_id, entry.signer_id
+                entry.slot_id, signer_label
             ));
         }
         match thresholds.get(slot_id) {
@@ -309,10 +321,15 @@ fn resolve_manifest_slot_thresholds(
 }
 
 fn validate_manifest_entry(entry: &PublicManifestEntry) -> Result<(), String> {
+    let signer_label = entry
+        .signer_id
+        .as_deref()
+        .or(entry.node_id.as_deref())
+        .unwrap_or("");
     if !entry.scheme.trim().eq_ignore_ascii_case("ed25519") {
         return Err(format!(
             "unsupported signer scheme slot_id={} signer_id={} scheme={}",
-            entry.slot_id, entry.signer_id, entry.scheme
+            entry.slot_id, signer_label, entry.scheme
         ));
     }
     let slot_id = entry.slot_id.trim();
@@ -320,19 +337,47 @@ fn validate_manifest_entry(entry: &PublicManifestEntry) -> Result<(), String> {
     if slot_id.is_empty() || public_key_hex.is_empty() {
         return Err("manifest entry slot_id/public_key_hex cannot be empty".to_string());
     }
+    if signer_label.trim().is_empty() {
+        return Err(format!(
+            "manifest entry requires signer_id or node_id slot_id={}",
+            entry.slot_id
+        ));
+    }
     if public_key_hex.len() != 64 || !public_key_hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
         return Err(format!(
             "manifest entry public_key_hex must be 32-byte hex slot_id={} signer_id={}",
-            entry.slot_id, entry.signer_id
+            entry.slot_id, signer_label
         ));
     }
     if entry.threshold.is_some_and(|value| value == 0) {
         return Err(format!(
             "manifest entry threshold must be > 0 slot_id={} signer_id={}",
-            entry.slot_id, entry.signer_id
+            entry.slot_id, signer_label
+        ));
+    }
+    if entry.stake.is_some_and(|value| value == 0) {
+        return Err(format!(
+            "manifest entry stake must be > 0 slot_id={} signer_id={}",
+            entry.slot_id, signer_label
         ));
     }
     Ok(())
+}
+
+fn entry_validator_id(entry: &PublicManifestEntry) -> Result<String, String> {
+    entry
+        .node_id
+        .as_deref()
+        .or(entry.signer_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| {
+            format!(
+                "manifest entry requires signer_id or node_id slot_id={}",
+                entry.slot_id
+            )
+        })
 }
 
 fn hash_json<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
@@ -449,21 +494,24 @@ mod tests {
             serde_json::to_vec_pretty(&vec![
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
-                    "signer_id": "signer01",
+                    "node_id": "validator-a",
                     "scheme": "ed25519",
-                    "public_key_hex": "54e7a02919fff2d49a9c325def8cb0211ea7f7a75a9011b9d0678b9e2a7af6bc"
+                    "public_key_hex": "54e7a02919fff2d49a9c325def8cb0211ea7f7a75a9011b9d0678b9e2a7af6bc",
+                    "stake": 70
                 }),
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
-                    "signer_id": "signer02",
+                    "node_id": "validator-b",
                     "scheme": "ed25519",
-                    "public_key_hex": "38dac17ff403cc19de033e47be7cf7b5354635fbc5c1976d7c532e20494aace4"
+                    "public_key_hex": "38dac17ff403cc19de033e47be7cf7b5354635fbc5c1976d7c532e20494aace4",
+                    "stake": 20
                 }),
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
-                    "signer_id": "signer03",
+                    "node_id": "validator-c",
                     "scheme": "ed25519",
-                    "public_key_hex": "e22bd5029176296712fb1a477f91c15775e5ab858181cb4172839ced526f12c8"
+                    "public_key_hex": "e22bd5029176296712fb1a477f91c15775e5ab858181cb4172839ced526f12c8",
+                    "stake": 10
                 }),
                 serde_json::json!({
                     "slot_id": "msig.genesis.v1",
@@ -528,7 +576,27 @@ mod tests {
         assert_eq!(summary.finality_signer_count, 3);
 
         let world = World::load_from_dir(temp_dir.join("world")).expect("load world");
-        assert!(world.governance_finality_signer_registry().is_some());
+        let finality_registry = world
+            .governance_finality_signer_registry()
+            .expect("finality registry");
+        assert_eq!(
+            finality_registry
+                .validator_stakes
+                .get("governance.finality.v1.validator-a"),
+            Some(&70)
+        );
+        assert_eq!(
+            finality_registry
+                .validator_stakes
+                .get("governance.finality.v1.validator-b"),
+            Some(&20)
+        );
+        assert_eq!(
+            finality_registry
+                .validator_stakes
+                .get("governance.finality.v1.validator-c"),
+            Some(&10)
+        );
         assert!(world.governance_main_token_controller_registry().is_some());
     }
 

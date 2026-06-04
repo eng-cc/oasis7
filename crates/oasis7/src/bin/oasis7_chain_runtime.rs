@@ -295,6 +295,11 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     }
 
     config = apply_traffic_profile_to_node_config(config, &options)?;
+    governance_registry::ensure_world_governance_validator_registry(
+        paths.execution_world_dir.as_path(),
+        options.genesis_validator_registry_path.as_deref(),
+        options.loaded_network_tier_manifest.as_ref(),
+    )?;
     config = governance_registry::apply_world_governance_registry_overrides(
         config,
         paths.execution_world_dir.as_path(),

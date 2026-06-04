@@ -5,6 +5,7 @@ mod release_controls_tests;
 
 const LOCAL_FINALITY_SIGNER_1: &str = "governance.local.finality.signer.1";
 const LOCAL_FINALITY_SIGNER_2: &str = "governance.local.finality.signer.2";
+const TEST_FINALITY_SIGNER_3: &str = "governance.test.finality.signer.3";
 const TEST_RELEASE_BUILDER_IMAGE_DIGEST: &str =
     "sha256:1111111111111111111111111111111111111111111111111111111111111111";
 const TEST_RELEASE_CONTAINER_PLATFORM: &str = "linux-x86_64";
@@ -191,6 +192,15 @@ fn set_module_release_attestation_epoch_snapshot(
     threshold: u16,
     signer_node_ids: &[&str],
 ) {
+    set_module_release_attestation_epoch_snapshot_with_stakes(world, threshold, signer_node_ids, &[])
+}
+
+fn set_module_release_attestation_epoch_snapshot_with_stakes(
+    world: &mut World,
+    threshold: u16,
+    signer_node_ids: &[&str],
+    validator_stakes: &[(&str, u64)],
+) {
     let epoch_len = world
         .governance_execution_policy()
         .epoch_length_ticks
@@ -203,6 +213,10 @@ fn set_module_release_attestation_epoch_snapshot(
             signer_node_ids: signer_node_ids
                 .iter()
                 .map(|signer| signer.to_string())
+                .collect(),
+            validator_stakes: validator_stakes
+                .iter()
+                .map(|(node_id, stake)| ((*node_id).to_string(), *stake))
                 .collect(),
             ..GovernanceFinalityEpochSnapshot::default()
         })
@@ -856,6 +870,116 @@ fn module_release_apply_rejects_when_attestation_threshold_not_met() {
             .get(&request_id)
             .map(|item| item.status),
         Some(ModuleReleaseRequestStatus::Approved)
+    ));
+}
+
+#[test]
+fn module_release_apply_uses_stake_weighted_attestation_threshold_bps() {
+    let mut world = World::new();
+    register_agent(&mut world, "publisher-1");
+    register_agent(&mut world, "operator-1");
+    bind_attestor_node_identity(&mut world, TEST_FINALITY_SIGNER_3);
+
+    let wasm_bytes = b"module-release-weighted-threshold".to_vec();
+    let wasm_hash = util::sha256_hex(&wasm_bytes);
+    world.submit_action(Action::DeployModuleArtifact {
+        publisher_agent_id: "publisher-1".to_string(),
+        wasm_hash: wasm_hash.clone(),
+        wasm_bytes,
+    });
+    world.step().expect("deploy module artifact");
+    world.submit_action(Action::ModuleReleaseSubmit {
+        requester_agent_id: "publisher-1".to_string(),
+        manifest: base_manifest("m.loop.release.weighted.threshold", "0.1.0", &wasm_hash),
+        activate: true,
+        install_target: ModuleInstallTarget::SelfAgent,
+        required_roles: vec!["security".to_string()],
+        profile_changes: ModuleProfileChanges::default(),
+    });
+    world.step().expect("submit module release request");
+    let request_id = match &world.journal().events.last().expect("submit event").body {
+        WorldEventBody::Domain(DomainEvent::ModuleReleaseRequested { request_id, .. }) => {
+            *request_id
+        }
+        other => panic!("expected module release requested event: {other:?}"),
+    };
+    world.submit_action(Action::ModuleReleaseShadow {
+        operator_agent_id: "operator-1".to_string(),
+        request_id,
+    });
+    world.step().expect("shadow module release request");
+    bind_release_roles(&mut world, "operator-1", "operator-1", &["security"]);
+    world.submit_action(Action::ModuleReleaseApproveRole {
+        approver_agent_id: "operator-1".to_string(),
+        request_id,
+        role: "security".to_string(),
+    });
+    world.step().expect("approve required role");
+    set_module_release_attestation_epoch_snapshot_with_stakes(
+        &mut world,
+        2,
+        &[
+            LOCAL_FINALITY_SIGNER_1,
+            LOCAL_FINALITY_SIGNER_2,
+            TEST_FINALITY_SIGNER_3,
+        ],
+        &[
+            (LOCAL_FINALITY_SIGNER_1, 70),
+            (LOCAL_FINALITY_SIGNER_2, 20),
+            (TEST_FINALITY_SIGNER_3, 10),
+        ],
+    );
+    submit_test_module_release_attestation(
+        &mut world,
+        "operator-1",
+        request_id,
+        LOCAL_FINALITY_SIGNER_2,
+        "linux-x86_64",
+        "bafyreleaseattestweightedmid",
+    );
+    world.step().expect("submit mid-stake attestation");
+    submit_test_module_release_attestation(
+        &mut world,
+        "operator-1",
+        request_id,
+        TEST_FINALITY_SIGNER_3,
+        "linux-x86_64",
+        "bafyreleaseattestweightedlow",
+    );
+    world.step().expect("submit low-stake attestation");
+
+    let low_stake_action_id = world.submit_action(Action::ModuleReleaseApply {
+        operator_agent_id: "operator-1".to_string(),
+        request_id,
+    });
+    world.step().expect("apply with low stake attestations");
+    assert_rule_denied_note_for_action(
+        &world,
+        low_stake_action_id,
+        "aggregated_stake_bps=3000",
+    );
+
+    submit_test_module_release_attestation(
+        &mut world,
+        "operator-1",
+        request_id,
+        LOCAL_FINALITY_SIGNER_1,
+        "linux-x86_64",
+        "bafyreleaseattestweightedhigh",
+    );
+    world.step().expect("submit high-stake attestation");
+    world.submit_action(Action::ModuleReleaseApply {
+        operator_agent_id: "operator-1".to_string(),
+        request_id,
+    });
+    world.step().expect("apply with high stake attestations");
+    assert!(matches!(
+        world
+            .state()
+            .module_release_requests
+            .get(&request_id)
+            .map(|item| item.status),
+        Some(ModuleReleaseRequestStatus::Applied)
     ));
 }
 

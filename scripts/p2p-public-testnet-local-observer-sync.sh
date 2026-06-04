@@ -38,8 +38,12 @@ Usage:
 Description:
   Derive the local public_testnet observer env contract from the current
   two-validator ECS env files. The rendered env preserves local-only binds,
-  storage paths, and player-entry settings, while replacing validator,
-  signer, bootstrap-peer, and manifest settings with the live ECS contract.
+  storage paths, and player-entry settings, while replacing bootstrap-peer,
+  manifest, and genesis validator registry settings with the live ECS contract.
+  apply mode writes GENESIS_VALIDATOR_REGISTRY_PATH and generates that genesis
+  registry as a one-time migration adapter from legacy ECS NODE_VALIDATORS_CSV
+  / NODE_VALIDATOR_SIGNERS_CSV. Runtime canonical validator truth remains the
+  genesis/world-state registry, not the legacy CSV env.
   When apply mode installs a manifest source from the repo, it also localizes
   runtime_refs files into the target config directory and rewrites the manifest
   to point at those local copies. reset-state backs up and clears the local
@@ -462,21 +466,12 @@ render_env() {
   local sequencer_env=$2
   local storage_env=$3
   local manifest_path=$4
+  local emit_genesis_registry_path=${5:-0}
 
   local seq_world_id storage_world_id
   seq_world_id=$(required_value "$sequencer_env" WORLD_ID)
   storage_world_id=$(required_value "$storage_env" WORLD_ID)
   [[ "$seq_world_id" == "$storage_world_id" ]] || die "WORLD_ID mismatch between ECS env files"
-
-  local seq_validators storage_validators
-  seq_validators=$(required_value "$sequencer_env" NODE_VALIDATORS_CSV)
-  storage_validators=$(required_value "$storage_env" NODE_VALIDATORS_CSV)
-  [[ "$seq_validators" == "$storage_validators" ]] || die "NODE_VALIDATORS_CSV mismatch between ECS env files"
-
-  local seq_signers storage_signers
-  seq_signers=$(required_value "$sequencer_env" NODE_VALIDATOR_SIGNERS_CSV)
-  storage_signers=$(required_value "$storage_env" NODE_VALIDATOR_SIGNERS_CSV)
-  [[ "$seq_signers" == "$storage_signers" ]] || die "NODE_VALIDATOR_SIGNERS_CSV mismatch between ECS env files"
 
   local seq_role storage_role
   seq_role=$(required_value "$sequencer_env" NODE_ROLE)
@@ -496,6 +491,9 @@ render_env() {
 
   local pos_slot_clock_genesis
   pos_slot_clock_genesis=$(required_value "$sequencer_env" POS_SLOT_CLOCK_GENESIS_UNIX_MS)
+  local local_stack_root genesis_validator_registry_path
+  local_stack_root=$(required_value "$local_env" STACK_ROOT)
+  genesis_validator_registry_path="$local_stack_root/config/genesis-validator-registry.json"
 
   local player_entry_enable player_entry_http_bind player_entry_http_port
   local player_entry_web_bind player_entry_viewer_bind player_entry_deployment_mode
@@ -511,7 +509,7 @@ render_env() {
   cat <<EOF
 HOST_LABEL=$(required_value "$local_env" HOST_LABEL)
 SERVICE_NAME=$(required_value "$local_env" SERVICE_NAME)
-STACK_ROOT=$(required_value "$local_env" STACK_ROOT)
+STACK_ROOT=$local_stack_root
 NODE_ID=$(required_value "$local_env" NODE_ID)
 WORLD_ID=$seq_world_id
 NODE_ROLE=$(required_value "$local_env" NODE_ROLE)
@@ -519,8 +517,6 @@ STORAGE_PROFILE=$(required_value "$sequencer_env" STORAGE_PROFILE)
 STATUS_BIND=$(required_value "$local_env" STATUS_BIND)
 NODE_GOSSIP_BIND=$(required_value "$local_env" NODE_GOSSIP_BIND)
 NODE_GOSSIP_PEERS_CSV=$gossip_peers
-NODE_VALIDATORS_CSV=$seq_validators
-NODE_VALIDATOR_SIGNERS_CSV=$seq_signers
 NODE_TICK_MS=$(required_value "$sequencer_env" NODE_TICK_MS)
 POS_SLOT_DURATION_MS=$(required_value "$sequencer_env" POS_SLOT_DURATION_MS)
 POS_TICKS_PER_SLOT=$(required_value "$sequencer_env" POS_TICKS_PER_SLOT)
@@ -547,6 +543,9 @@ TRAFFIC_MONITOR_OUTPUT_DIR=$(required_value "$local_env" TRAFFIC_MONITOR_OUTPUT_
 TRAFFIC_PROFILE=$(required_value "$local_env" TRAFFIC_PROFILE)
 POS_SLOT_CLOCK_GENESIS_UNIX_MS=$pos_slot_clock_genesis
 EOF
+  if [[ "$emit_genesis_registry_path" == "1" ]]; then
+    printf 'GENESIS_VALIDATOR_REGISTRY_PATH=%s\n' "$genesis_validator_registry_path"
+  fi
   append_if_present PLAYER_ENTRY_ENABLE "$player_entry_enable"
   append_if_present PLAYER_ENTRY_HTTP_BIND "$player_entry_http_bind"
   append_if_present PLAYER_ENTRY_HTTP_PORT "$player_entry_http_port"
@@ -555,6 +554,73 @@ EOF
   append_if_present PLAYER_ENTRY_DEPLOYMENT_MODE "$player_entry_deployment_mode"
   append_if_present PLAYER_ENTRY_LLM_MODE "$player_entry_llm_mode"
   printf 'NETWORK_TIER_MANIFEST_PATH=%s\n' "$manifest_path"
+}
+
+write_genesis_validator_registry() {
+  local validators_csv=$1
+  local signers_csv=$2
+  local output_path=$3
+
+  mkdir -p "$(dirname "$output_path")"
+  env VALIDATORS_CSV="$validators_csv" SIGNERS_CSV="$signers_csv" python3 - <<'PY' > "$output_path"
+import json
+import os
+import sys
+
+validators = {}
+for raw in os.environ["VALIDATORS_CSV"].split(","):
+    raw = raw.strip()
+    if not raw:
+        continue
+    if ":" not in raw:
+        sys.exit(f"validator entry requires id:stake: {raw}")
+    node_id, stake_raw = raw.split(":", 1)
+    node_id = node_id.strip()
+    stake_raw = stake_raw.strip()
+    if not node_id or not stake_raw.isdigit() or int(stake_raw) <= 0:
+        sys.exit(f"invalid validator entry: {raw}")
+    validators[node_id] = int(stake_raw)
+
+signers = {}
+for raw in os.environ["SIGNERS_CSV"].split(","):
+    raw = raw.strip()
+    if not raw:
+        continue
+    if ":" not in raw:
+        sys.exit(f"signer entry requires id:public_key_hex: {raw}")
+    node_id, key_hex = raw.split(":", 1)
+    node_id = node_id.strip()
+    key_hex = key_hex.strip()
+    if not node_id or len(key_hex) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in key_hex):
+        sys.exit(f"invalid signer entry: {raw}")
+    signers[node_id] = key_hex
+
+missing = sorted(set(validators) - set(signers))
+extra = sorted(set(signers) - set(validators))
+if missing:
+    sys.exit(f"missing signer binding for validators: {','.join(missing)}")
+if extra:
+    sys.exit(f"signer binding references unknown validators: {','.join(extra)}")
+if not validators:
+    sys.exit("genesis validator registry requires at least one validator")
+
+threshold = min(len(validators), (2 * len(validators)) // 3 + 1)
+doc = {
+    "slot_id": "governance.finality.v1",
+    "threshold": threshold,
+    "threshold_bps": 0,
+    "validators": [
+        {
+            "node_id": node_id,
+            "scheme": "ed25519",
+            "finality_signer_public_key": signers[node_id],
+            "stake": validators[node_id],
+        }
+        for node_id in sorted(validators)
+    ],
+}
+print(json.dumps(doc, indent=2, sort_keys=True))
+PY
 }
 
 write_rendered_env() {
@@ -880,9 +946,8 @@ case "$mode" in
     require_file "$sequencer_env"
     require_file "$storage_env"
 
-    rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path")
-
     if [[ "$mode" == "render" ]]; then
+      rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path" 0)
       write_rendered_env "$rendered_env" "$out_path"
       exit 0
     fi
@@ -890,6 +955,14 @@ case "$mode" in
     require_file "$start_script_source"
 
     local_stack_root=$(required_value "$local_env" STACK_ROOT)
+    seq_validators=$(required_value "$sequencer_env" NODE_VALIDATORS_CSV)
+    storage_validators=$(required_value "$storage_env" NODE_VALIDATORS_CSV)
+    [[ "$seq_validators" == "$storage_validators" ]] || die "legacy NODE_VALIDATORS_CSV mismatch between ECS env files"
+    seq_signers=$(required_value "$sequencer_env" NODE_VALIDATOR_SIGNERS_CSV)
+    storage_signers=$(required_value "$storage_env" NODE_VALIDATOR_SIGNERS_CSV)
+    [[ "$seq_signers" == "$storage_signers" ]] || die "legacy NODE_VALIDATOR_SIGNERS_CSV mismatch between ECS env files"
+    genesis_validator_registry_path="$local_stack_root/config/genesis-validator-registry.json"
+    rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path" 1)
     if [[ -z "$manifest_dest" && -n "$manifest_source" ]]; then
       manifest_dest=$manifest_path
     fi
@@ -906,6 +979,10 @@ case "$mode" in
     tmp_env="$backup_dir/node.env.rendered"
     printf '%s' "$rendered_env" > "$tmp_env"
     cp "$tmp_env" "$local_env"
+    write_genesis_validator_registry \
+      "$seq_validators" \
+      "$seq_signers" \
+      "$genesis_validator_registry_path"
 
     if [[ -n "$manifest_source" ]]; then
       require_file "$manifest_source"
@@ -929,6 +1006,7 @@ case "$mode" in
     if [[ -n "$manifest_source" ]]; then
       printf 'installed manifest to %s\n' "$manifest_dest"
     fi
+    printf 'installed genesis validator registry to %s\n' "$genesis_validator_registry_path"
     if [[ -n "$start_script_dest" ]]; then
       printf 'installed start script to %s\n' "$start_script_dest"
     fi

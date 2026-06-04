@@ -223,14 +223,11 @@ impl World {
             .filter(|attestation| snapshot_signers.contains(attestation.signer_node_id.trim()))
             .collect();
         let min_unique_signers = snapshot.effective_min_unique_signers();
-        let aggregated_stake_bps = if snapshot.signer_node_ids.is_empty() {
-            0
-        } else {
-            (u128::from(aggregated_signers.len() as u64)
-                .saturating_mul(10_000)
-                .saturating_div(u128::from(snapshot.signer_node_ids.len() as u64)))
-            .min(10_000) as u16
-        };
+        let aggregated_stake_bps = governance_finality_signed_stake_bps(
+            snapshot.signer_node_ids.as_slice(),
+            &snapshot.validator_stakes,
+            &aggregated_signers,
+        );
         if aggregated_signers.len() < min_unique_signers as usize
             || aggregated_stake_bps < snapshot.threshold_bps
         {

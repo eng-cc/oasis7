@@ -1,8 +1,6 @@
 use super::super::*;
 use super::pos;
-#[cfg(feature = "test_tier_full")]
-use ed25519_dalek::Signer;
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer, SigningKey};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -46,7 +44,6 @@ fn bind_finality_signer_with_seed(world: &mut World, node_id: &str, seed_label: 
         .expect("bind governance finality signer identity");
 }
 
-#[cfg(feature = "test_tier_full")]
 fn build_finality_certificate_with_signers(
     world: &World,
     proposal_id: ProposalId,
@@ -82,6 +79,29 @@ fn build_finality_certificate_with_signers(
     }
     certificate.signatures = signatures;
     certificate
+}
+
+#[test]
+fn governance_event_validator_admission_submitted_defaults_legacy_stake() {
+    let value = json!({
+        "type": "ValidatorAdmissionSubmitted",
+        "data": {
+            "controller_account_id": "msig.genesis.v1",
+            "candidate_id": "candidate-legacy",
+            "node_id": "validator-legacy",
+            "finality_signer_public_key": "1111111111111111111111111111111111111111111111111111111111111111",
+            "operator_owner": "ops.legacy",
+            "public_manifest_hash": "manifest-legacy",
+            "requested_at_epoch": 7
+        }
+    });
+
+    let decoded: GovernanceEvent =
+        serde_json::from_value(value).expect("deserialize legacy validator admission event");
+    match decoded {
+        GovernanceEvent::ValidatorAdmissionSubmitted { stake, .. } => assert_eq!(stake, 100),
+        other => panic!("expected validator admission event: {other:?}"),
+    }
 }
 
 fn register_agent(world: &mut World, agent_id: &str, x: i64, y: i64) {
@@ -166,6 +186,11 @@ fn governance_finality_registry_roundtrip_persists_and_drives_epoch_snapshot() {
                     "e22bd5029176296712fb1a477f91c15775e5ab858181cb4172839ced526f12c8".to_string(),
                 ),
             ]),
+            validator_stakes: BTreeMap::from([
+                ("governance.finality.v1.signer01".to_string(), 50),
+                ("governance.finality.v1.signer02".to_string(), 30),
+                ("governance.finality.v1.signer03".to_string(), 20),
+            ]),
         })
         .expect("set finality registry");
     world
@@ -213,6 +238,7 @@ fn governance_finality_registry_roundtrip_persists_and_drives_epoch_snapshot() {
     assert_eq!(snapshot.epoch_id, 7);
     assert_eq!(snapshot.threshold, 2);
     assert_eq!(snapshot.signer_node_ids.len(), 3);
+    assert!(!snapshot.stake_root.is_empty());
     assert_eq!(
         restored.node_identity_public_key("governance.finality.v1.signer01"),
         Some("54e7a02919fff2d49a9c325def8cb0211ea7f7a75a9011b9d0678b9e2a7af6bc")
@@ -581,6 +607,90 @@ fn governance_apply_with_finality_rejects_stake_root_mismatch() {
         panic!("expected GovernanceFinalityInvalid");
     };
     assert!(reason.contains("stake_root mismatch"));
+}
+
+#[test]
+fn governance_apply_with_finality_uses_stake_weighted_threshold_bps() {
+    let mut world = World::new();
+    bind_finality_signer_with_seed(
+        &mut world,
+        LOCAL_FINALITY_SIGNER_1.0,
+        LOCAL_FINALITY_SIGNER_1.1,
+    );
+    bind_finality_signer_with_seed(
+        &mut world,
+        LOCAL_FINALITY_SIGNER_2.0,
+        LOCAL_FINALITY_SIGNER_2.1,
+    );
+    bind_finality_signer_with_seed(
+        &mut world,
+        ROTATED_FINALITY_SIGNER_3.0,
+        ROTATED_FINALITY_SIGNER_3.1,
+    );
+    world
+        .set_governance_finality_epoch_snapshot(GovernanceFinalityEpochSnapshot {
+            epoch_id: 0,
+            threshold: 2,
+            min_unique_signers: 2,
+            threshold_bps: 6_667,
+            signer_node_ids: vec![
+                LOCAL_FINALITY_SIGNER_1.0.to_string(),
+                LOCAL_FINALITY_SIGNER_2.0.to_string(),
+                ROTATED_FINALITY_SIGNER_3.0.to_string(),
+            ],
+            validator_stakes: BTreeMap::from([
+                (LOCAL_FINALITY_SIGNER_1.0.to_string(), 70),
+                (LOCAL_FINALITY_SIGNER_2.0.to_string(), 20),
+                (ROTATED_FINALITY_SIGNER_3.0.to_string(), 10),
+            ]),
+            ..GovernanceFinalityEpochSnapshot::default()
+        })
+        .expect("set weighted epoch snapshot");
+
+    let rejected_manifest = Manifest {
+        version: 2,
+        content: json!({ "name": "weighted-finality-low-stake" }),
+    };
+    let rejected_proposal_id = world
+        .propose_manifest_update(rejected_manifest, "alice")
+        .unwrap();
+    world.shadow_proposal(rejected_proposal_id).unwrap();
+    world
+        .approve_proposal(rejected_proposal_id, "bob", ProposalDecision::Approve)
+        .unwrap();
+    let low_stake_certificate = build_finality_certificate_with_signers(
+        &world,
+        rejected_proposal_id,
+        &[LOCAL_FINALITY_SIGNER_2, ROTATED_FINALITY_SIGNER_3],
+    );
+    let err = world
+        .apply_proposal_with_finality(rejected_proposal_id, &low_stake_certificate)
+        .unwrap_err();
+    let WorldError::GovernanceFinalityInvalid { reason } = err else {
+        panic!("expected GovernanceFinalityInvalid");
+    };
+    assert!(reason.contains("signed stake below threshold_bps"));
+    assert!(reason.contains("signed_stake_bps=3000"));
+
+    let accepted_manifest = Manifest {
+        version: 3,
+        content: json!({ "name": "weighted-finality-high-stake" }),
+    };
+    let accepted_proposal_id = world
+        .propose_manifest_update(accepted_manifest, "alice")
+        .unwrap();
+    world.shadow_proposal(accepted_proposal_id).unwrap();
+    world
+        .approve_proposal(accepted_proposal_id, "bob", ProposalDecision::Approve)
+        .unwrap();
+    let high_stake_certificate = build_finality_certificate_with_signers(
+        &world,
+        accepted_proposal_id,
+        &[LOCAL_FINALITY_SIGNER_1, ROTATED_FINALITY_SIGNER_3],
+    );
+    world
+        .apply_proposal_with_finality(accepted_proposal_id, &high_stake_certificate)
+        .expect("high stake signer set should pass threshold_bps");
 }
 
 #[test]

@@ -106,6 +106,7 @@ pub(super) struct CliOptions {
     pub replication_remote_writer_public_keys: Vec<String>,
     pub network_tier_manifest_path: Option<PathBuf>,
     pub loaded_network_tier_manifest: Option<LoadedNetworkTierManifest>,
+    pub genesis_validator_registry_path: Option<PathBuf>,
     pub config_path: String,
     pub execution_bridge_state_path: Option<PathBuf>,
     pub execution_world_dir: Option<PathBuf>,
@@ -164,6 +165,7 @@ impl Default for CliOptions {
             replication_remote_writer_public_keys: Vec::new(),
             network_tier_manifest_path: None,
             loaded_network_tier_manifest: None,
+            genesis_validator_registry_path: None,
             config_path: DEFAULT_CONFIG_FILE.to_string(),
             execution_bridge_state_path: None,
             execution_world_dir: None,
@@ -388,6 +390,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--network-tier-manifest" => {
                 let raw = parse_required_value(&mut iter, "--network-tier-manifest")?;
                 options.network_tier_manifest_path = Some(PathBuf::from(raw));
+            }
+            "--genesis-validator-registry" => {
+                let raw = parse_required_value(&mut iter, "--genesis-validator-registry")?;
+                options.genesis_validator_registry_path = Some(PathBuf::from(raw));
             }
             "--config" => options.config_path = parse_required_value(&mut iter, "--config")?,
             "--execution-bridge-state" => {
@@ -752,6 +758,8 @@ Options:\n\
   --replication-remote-writer-public-key <public_key_hex>\n\
                                     extra authorized replication fetch requester (repeatable)\n\
   --network-tier-manifest <path>    load formal network tier manifest json and bootstrap peer ref\n\
+  --genesis-validator-registry <path>\n\
+                                    initialize empty execution world validator registry from genesis manifest\n\
   --config <path>                   config file path for node keypair (default: {DEFAULT_CONFIG_FILE})\n\
   --execution-bridge-state <path>   override execution bridge state file path\n\
   --execution-world-dir <path>      override execution world directory\n\

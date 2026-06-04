@@ -5,7 +5,7 @@
 
 审计轮次: 1
 ## 1. Executive Summary
-- Problem Statement: oasis7 已经把 execution world 内的 `governance_finality_signer_registry` / `governance_main_token_controller_registry` 接成 runtime 启动/恢复时的真值入口，但治理 signer 仍缺一条正式的 validator / finality signer 准入、激活、轮换和撤销流程。若新增节点仍靠人工改 env、本地 `NodePosConfig` 或口头审批，就仍不具备 production governance source of truth。
+- Problem Statement: oasis7 已经把 execution world 内的 `governance_finality_signer_registry` / `governance_validator_admissions` / `governance_main_token_controller_registry` 接成 runtime 启动/恢复时的真值入口，并让 validator admission 能携带 governed stake、membership 与 finality signer binding；public-chain 冷启动现在也要求从 genesis/world-state registry 建立初始 validator truth，而不是依赖 `NODE_VALIDATORS_CSV`。genesis runtime import 只覆盖空 world 首启，已有 snapshot/journal world 必须走专用 migration/import；finality 与 module-release threshold_bps 必须按 stake-weighted quorum 执行。但实网 probation、rotation/revocation drill、ceremony 与 QA pass 仍必须闭环，否则新增节点仍可能退回人工改 env、本地 `NodePosConfig` 或口头审批。
 - Proposed Solution: 建立 `MAINNET-2` 专题 PRD，把治理 finality signer 与 controller signer 的外部化目标、source-of-truth 边界、failover、rotation、revocation、operator ownership，以及 validator / finality signer 准入流程一次性冻结下来，并明确生产真值直接上链，而不是继续停留在本地配置或链下 registry。
 - Success Criteria:
   - SC-1: 明确覆盖两类治理 signer：`governance finality signer` 与 `main token controller signer`。
@@ -39,7 +39,7 @@
   2. Flow-P2P-GOVSIGN-002: `runtime 定义 on-chain signer source -> 把 local seed/config 退出 production path -> QA 复核 failover/rotation/revocation`
   3. Flow-P2P-GOVSIGN-003: `治理 signer 发生 compromise/人员调整/设备替换 -> 按 revocation/rotation/failover 执行 -> 审计留痕`
   4. Flow-P2P-GOVSIGN-004: `准备进入创世 ceremony -> 检查 governance signer gate 是否已过 -> 未过则直接阻断`
-  5. Flow-P2P-GOVSIGN-005: `候选 validator 提交 node identity/finality signer/public manifest -> producer/runtime/QA 审核 -> candidate 演练通过 -> activation epoch 冻结 -> governance registry 激活 -> runtime 通过 world-state registry 恢复有效 validator membership`
+  5. Flow-P2P-GOVSIGN-005: `genesis validator registry 写入初始 node identity/stake/finality signer -> 候选 validator 提交 node identity/stake/finality signer/public manifest -> producer/runtime/QA 审核 -> candidate 演练通过 -> activation epoch 冻结 -> governance registry 激活 -> runtime 通过 world-state registry 恢复有效 validator membership、governed stake 与 signer binding`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -49,7 +49,7 @@
 | Revocation policy | `revocation_trigger/disable_path/recovery_path` | 定义 compromise、离岗、节点失效时的停用与恢复 | `undefined -> planned -> gated` | 无快速 disable path 则 block | `runtime_engineer` 牵头 |
 | Failover policy | `failover_scope/activation_rule/rejoin_rule` | 定义 signer 集合降级、恢复与最小阈值行为 | `undefined -> planned -> gated` | 不能在 signer 失效时保持治理可持续性，则不通过 | `qa_engineer` 联审 |
 | Operator ownership | `operator_group/change_authority/audit_sink` | 冻结谁能改 signer policy、谁能批准轮换 | `draft -> enforced` | 无明确 owner 的治理 signer 不得进入 production | `producer_system_designer` 拍板 |
-| Validator / finality signer admission | `candidate_id/node_id/finality_signer_public_key/operator_owner/public_manifest/activation_epoch` | 受理申请、审核、试运行并决定是否激活进入 validator set | `applied -> approved_candidate -> probation_ready -> active` | 只有进入 world-state registry 且 activation 生效后才能算正式 validator；手工 env 改动不算正式准入 | producer/runtime/QA 联审 |
+| Validator / finality signer admission | `candidate_id/node_id/stake/finality_signer_public_key/operator_owner/public_manifest/activation_epoch` | 受理申请、审核、试运行并决定是否激活进入 validator set | `applied -> approved_candidate -> probation_ready -> active` | 只有 membership、governed stake 与 signer binding 进入 world-state registry 且 activation 生效后才能算正式 validator；手工 env 改动不算正式准入 | producer/runtime/QA 联审 |
 | Controller signer appointment boundary | `slot_id/controller_scope/appointment_authority/public_manifest/audit_sink` | 明确 controller signer 只走治理内部 appointment，不走公开 validator 准入 | `draft -> enforced` | 若把 controller slot 当成公开 validator 申请入口，则直接判设计越界 | `producer_system_designer` 拍板 |
 - Acceptance Criteria:
   - AC-1: 专题必须明确列出当前两类真实治理 signer 路径的 `registry-first + local fallback` 结构：finality 走 `governance_finality_signer_registry -> deterministic local seed fallback`，controller 走 `governance_main_token_controller_registry -> NodeConfig.main_token_controller_binding.controller_signer_policies fallback`。
@@ -60,7 +60,7 @@
   - AC-6: 必须明确 production 环境禁止仅靠 `NodeConfig` 本地 policy 维护 controller signer 真值。
   - AC-7: 必须输出 `GOVSIGN-1~4` 任务链与 owner/test tier 映射。
   - AC-8: 模块主 PRD/project/index/README 与 readiness project 必须接入本专题。
-  - AC-9: 必须冻结 validator / finality signer 的准入状态机、申请材料、审核角色与 activation 规则；`world-state registry` 生效前不得把候选节点算作正式 validator。
+  - AC-9: 必须冻结 validator / finality signer 的准入状态机、申请材料、审核角色与 activation 规则；`world-state registry` 中的 membership、governed stake 与 signer binding 生效前不得把候选节点算作正式 validator。
   - AC-10: 必须明确 controller signer 不属于公开 validator 申请路径，只能走治理内部 appointment / freeze / ceremony 流程。
 - Non-Goals:
   - 本轮不直接实现外部治理 signer 服务或 world-state 治理存储。
@@ -72,7 +72,7 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 当前治理 signer 风险分成两层。runtime 现在已经支持在 execution world 存在 registry 时优先读取 `governance_finality_signer_registry` 与 `governance_main_token_controller_registry`，并覆盖本地 validator membership / signer binding / controller policy；但新增 validator/finality signer 仍缺少正式准入和 activation 流程。producer 当前已选定 `直接上链`，即长期 governance truth 以 `on-chain/world-state registry` 为目标，而不是链下 registry。`MAINNET-2` 的目标不是一次写完工程实现，而是先冻结长期治理真值、更新 authority、候选准入流程与失效恢复门禁。
+- Architecture Overview: 当前治理 signer 风险分成两层。runtime 现在已经支持在 execution world 存在 registry 时优先读取 `governance_finality_signer_registry`、`governance_validator_admissions` 与 `governance_main_token_controller_registry`，并覆盖本地 validator membership / governed stake / signer binding / controller policy；validator admission 的代码路径已支持 `submit/approve/activate/revoke` 与 activation epoch 生效，但 shared-network probation、rotation/revocation drill、ceremony 与 QA pass 仍是正式生产口径前的剩余门禁。producer 当前已选定 `直接上链`，即长期 governance truth 以 `on-chain/world-state registry` 为目标，而不是链下 registry。
 - Integration Points:
   - `crates/oasis7/src/runtime/world/governance.rs`
   - `crates/oasis7_node/src/types.rs`
@@ -97,7 +97,7 @@
   - NFR-P2P-GOVSIGN-2: finality/controller signer 必须各自定义 rotation、revocation、failover 与 operator ownership。
   - NFR-P2P-GOVSIGN-3: 在本专题完成前，公开安全口径仍保持 `crypto-hardened preview`。
   - NFR-P2P-GOVSIGN-4: 文档与日志只能记录 signer scope、policy、公钥与审计摘要，不得记录私钥、seed 或助记词。
-  - NFR-P2P-GOVSIGN-5: validator / finality signer 准入必须通过 governance registry 的候选/激活流程生效，不能把本地 env 或 `--node-validator*` 参数修改当作长期 admission 机制。
+  - NFR-P2P-GOVSIGN-5: validator / finality signer 准入必须通过 genesis/world-state registry 与 governance registry 的候选/激活流程生效，不能把本地 env、`NODE_VALIDATORS_CSV` 或 `--node-validator*` 参数修改当作 public tier 的长期 admission 机制。
 - Security & Privacy: 本专题只定义治理 signer 的长期真值和治理流程边界；禁止把任何真实 seed、私钥或生产签名材料落入仓库或证据文档。
 
 ## 5. Risks & Roadmap

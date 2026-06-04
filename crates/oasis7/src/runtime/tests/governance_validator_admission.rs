@@ -23,6 +23,10 @@ fn seed_governance_world(world: &mut World) {
                     "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
                 ),
             ]),
+            validator_stakes: BTreeMap::from([
+                ("validator-a".to_string(), 60),
+                ("validator-b".to_string(), 40),
+            ]),
         })
         .expect("set finality registry");
     world
@@ -65,6 +69,7 @@ fn submit_candidate(world: &mut World, candidate_id: &str, node_id: &str, public
         candidate_id: candidate_id.to_string(),
         node_id: node_id.to_string(),
         finality_signer_public_key: public_key_hex.to_string(),
+        stake: 25,
         operator_owner: "ops.team".to_string(),
         public_manifest_hash: format!("manifest:{candidate_id}"),
     });
@@ -100,6 +105,10 @@ fn validator_admission_lifecycle_updates_effective_registry_and_allows_reapply_a
         .expect("effective registry");
     assert_eq!(active_registry.signer_bindings.len(), 3);
     assert_eq!(
+        active_registry.validator_stakes.get("validator-c"),
+        Some(&25)
+    );
+    assert_eq!(
         active_registry
             .signer_bindings
             .get("validator-c")
@@ -120,6 +129,9 @@ fn validator_admission_lifecycle_updates_effective_registry_and_allows_reapply_a
         .expect("resolve effective registry after revoke")
         .expect("effective registry after revoke");
     assert!(!revoked_registry.signer_bindings.contains_key("validator-c"));
+    assert!(!revoked_registry
+        .validator_stakes
+        .contains_key("validator-c"));
 
     submit_candidate(
         &mut world,
@@ -158,6 +170,10 @@ fn validator_admission_lifecycle_updates_effective_registry_and_allows_reapply_a
             .get("validator-c")
             .map(String::as_str),
         Some("3333333333333333333333333333333333333333333333333333333333333333")
+    );
+    assert_eq!(
+        reactivated_registry.validator_stakes.get("validator-c"),
+        Some(&25)
     );
 }
 
@@ -215,6 +231,10 @@ fn validator_admission_probation_becomes_effective_once_activation_epoch_is_due(
             .map(String::as_str),
         Some("4444444444444444444444444444444444444444444444444444444444444444")
     );
+    assert_eq!(
+        post_epoch_registry.validator_stakes.get("validator-future"),
+        Some(&25)
+    );
 }
 
 #[test]
@@ -267,4 +287,27 @@ fn validator_admission_activate_with_already_due_epoch_becomes_active_immediatel
             .map(String::as_str),
         Some("5555555555555555555555555555555555555555555555555555555555555555")
     );
+    assert_eq!(registry.validator_stakes.get("validator-late"), Some(&25));
+}
+
+#[test]
+fn validator_admission_rejects_zero_stake() {
+    let mut world = World::new();
+    seed_governance_world(&mut world);
+
+    world.submit_action(Action::SubmitGovernanceValidatorAdmission {
+        controller_account_id: "msig.genesis.v1".to_string(),
+        candidate_id: "candidate-zero".to_string(),
+        node_id: "validator-zero".to_string(),
+        finality_signer_public_key:
+            "6666666666666666666666666666666666666666666666666666666666666666".to_string(),
+        stake: 0,
+        operator_owner: "ops.team".to_string(),
+        public_manifest_hash: "manifest:zero".to_string(),
+    });
+    world.step().expect("reject zero stake admission");
+
+    assert!(!world
+        .governance_validator_admissions()
+        .contains_key("candidate-zero"));
 }

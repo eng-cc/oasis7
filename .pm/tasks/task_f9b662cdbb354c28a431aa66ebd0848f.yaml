@@ -1,0 +1,30 @@
+task_uid: task_f9b662cdbb354c28a431aa66ebd0848f
+title: "complete validator admission stake registry"
+owner_role: runtime_engineer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-validator-admission-stake-registry
+execution_log_path: .pm/tasks/task_f9b662cdbb354c28a431aa66ebd0848f.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/prd.md
+  - doc/p2p/project.md
+doc_refs:
+  - doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md
+  - doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md
+related_prd:
+  - PRD-P2P-003
+  - PRD-P2P-026
+acceptance:
+  - "Validator admission records carry governed stake and effective runtime validator set uses governed stake instead of equal-stake fallback."
+  - "Signer binding, admission lifecycle, registry import/audit, runtime startup overrides, docs, and tests are updated consistently."
+handoff_to:
+  - runtime_engineer
+updated_at: 2026-06-04T19:48:55+08:00
+last_started_at: 2026-06-04T15:38:28+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/cargo-dev.sh test -p oasis7 governance_registry -- --nocapture && ./scripts/cargo-dev.sh test -p oasis7 import_writes_governance_registries_into_world -- --nocapture && ./scripts/cargo-dev.sh check -p oasis7 && ./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-04T19:48:54+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-04T19:48:55+08:00
