@@ -9,5 +9,5 @@
 - `volume-02-chapter-001-positioning.md`: 第二卷第一章写前定位，当前覆盖 `CH-037` 到 `CH-046`；用于进入正文前校准任务句、场景切分、人物使用、Agent 边界和行业反差，不是正文。
 - `volume-02-chapter-001.md`: 第二卷第一章试写 v1.0，当前覆盖 `CH-037` 到 `CH-046`。
 - `volume-02-chapter-002-positioning.md`: 第二卷第二章写前定位，当前覆盖 `CH-047` 到 `CH-054`；用于进入正文前校准低风险普通工具重新授权、人物使用、Agent 边界和行业反差，不是正文。
-- `volume-02-chapter-002.md`: 第二卷第二章试写 v0.1，当前覆盖 `CH-047`。
+- `volume-02-chapter-002.md`: 第二卷第二章试写 v0.2，当前覆盖 `CH-047` 到 `CH-048`。
 - `chapter-writing-sop.md`: 根据第一章试写、调研、复审、五方最终审稿和极小润色经验整理的章节写作 SOP。
