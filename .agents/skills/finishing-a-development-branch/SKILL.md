@@ -58,7 +58,7 @@ Use this skill when code and docs are already updated and you are moving into br
 ```
 
 7. Record the PR purpose decision:
-   - `normal_pr_ci_watch`: default for ordinary implementation/documentation PRs. Keep watching required checks, mergeability, review decisions, comments, and unresolved review threads. Treat `REVIEW_REQUIRED` as informational, not as a blocker. If `mergeStateStatus=BLOCKED` is only missing review approval and user/task policy explicitly allows skipping it, use the repository admin merge path as normal flow after re-checking gates.
+   - `normal_pr_ci_watch`: default for ordinary implementation/documentation PRs. Keep watching required checks, mergeability, review decisions, comments, and unresolved review threads. Treat `REVIEW_REQUIRED` as informational, not as a blocker. Treat `mergeStateStatus=BEHIND` as informational too unless GitHub actually requires a branch update or reports a conflict; if the PR is otherwise mergeable and the repository merge path accepts it, merge can proceed without a local rebase. If `mergeStateStatus=BLOCKED` is only missing review approval and user/task policy explicitly allows skipping it, use the repository admin merge path as normal flow after re-checking gates.
    - `manual_packaging_ci_hold`: only when the user/task says the PR exists specifically to run manual-trigger packaging/release CI jobs. Record the manual job/purpose and stop before auto-merge until the operator/user resumes.
 
 8. For `normal_pr_ci_watch`, keep the loop moving without waiting for another prompt:
@@ -81,7 +81,7 @@ Use this skill when code and docs are already updated and you are moving into br
 - local verification rerun for the affected surface
 - pre-PR local role review packet recorded when the next step is PR creation
 - PR purpose decision recorded after PR creation
-- normal PRs are watched through required checks, mergeability, review decisions, and comment closeout to merge; `REVIEW_REQUIRED` alone is not a blocker, and review-approval-only `BLOCKED` may use an explicitly authorized admin merge path; only manual packaging CI PRs may pause before merge
+- normal PRs are watched through required checks, mergeability, review decisions, and comment closeout to merge; `REVIEW_REQUIRED` alone is not a blocker, `BEHIND` alone does not force a local rebase when the repository merge path can still merge cleanly, and review-approval-only `BLOCKED` may use an explicitly authorized admin merge path; only manual packaging CI PRs may pause before merge
 
 ## Post-Merge Cleanup
 

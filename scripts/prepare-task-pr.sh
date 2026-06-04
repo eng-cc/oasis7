@@ -18,6 +18,8 @@ After PR creation, the default workflow continues into required-check/comment/
 mergeability watch, failure fixes, merge, and cleanup unless the task explicitly
 records that the PR exists only to run manual-trigger packaging/release CI.
 REVIEW_REQUIRED is reported as status but is not a blocking item by itself.
+mergeStateStatus=BEHIND is advisory by itself; if GitHub can still merge the PR
+cleanly, the workflow does not force a local rebase before merge.
 When mergeStateStatus=BLOCKED is only missing review approval and user/task
 policy explicitly allows skipping it, the normal flow may use repo admin merge
 after re-checking checks, mergeability, requested changes, comments, and threads.
@@ -467,10 +469,10 @@ if [[ -n "$LOCAL_BASE_REF" ]]; then
 fi
 
 read -r BEHIND_COUNT AHEAD_COUNT <<<"$(git rev-list --left-right --count "$COMPARISON_REF...$SOURCE_BRANCH")"
-if git merge-base --is-ancestor "$COMPARISON_REF" "$SOURCE_BRANCH"; then
-  REBASE_REQUIRED=0
-else
+if [[ "$BEHIND_COUNT" != "0" ]]; then
   REBASE_REQUIRED=1
+else
+  REBASE_REQUIRED=0
 fi
 
 LOCAL_REQUIRED_SCOPE="unavailable"
@@ -560,9 +562,6 @@ CLEANUP_CMD_2="git -C $CANONICAL_REPO_ROOT branch -D $SOURCE_BRANCH"
 PR_URL=""
 if [[ "$CREATE_PR" == "1" ]]; then
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
-  if [[ "$REBASE_REQUIRED" == "1" ]]; then
-    die "source branch is behind $COMPARISON_REF; rebase before creating the PR"
-  fi
   if [[ "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
     die "missing passed pre-PR local role review evidence for $SOURCE_BRANCH at $SOURCE_HEAD ($LOCAL_ROLE_REVIEW_REASON; log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-unknown}; missing: ${LOCAL_ROLE_REVIEW_MISSING_MARKERS:-unknown})"
   fi
@@ -638,7 +637,7 @@ fi
 
 REBASE_NOTE="no"
 if [[ "$REBASE_REQUIRED" == "1" ]]; then
-  REBASE_NOTE="yes"
+  REBASE_NOTE="suggested"
 fi
 
 cat <<INFO
@@ -651,7 +650,7 @@ Task PR preflight summary:
 - remote: $REMOTE_NAME
 - ahead of base: $AHEAD_COUNT
 - behind base: $BEHIND_COUNT
-- rebase required: $REBASE_NOTE
+- branch sync suggested: $REBASE_NOTE
 - upstream: ${UPSTREAM_REF:-"(none)"}
 - unpushed commits: $LOCAL_ONLY_COUNT
 - remote-only commits on source: $REMOTE_ONLY_COUNT
@@ -702,7 +701,7 @@ fi
 
 if [[ "$REBASE_REQUIRED" == "1" ]]; then
   echo
-  echo "Suggested rebase:"
+  echo "Suggested branch sync before merge if GitHub later requires it:"
   echo "  git -C $SOURCE_WORKTREE rebase $COMPARISON_REF"
 fi
 

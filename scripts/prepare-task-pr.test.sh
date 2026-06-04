@@ -47,6 +47,11 @@ case "\${!command_index:-}" in
     ;;
 esac
 
+if [[ -n "\${TEST_REV_LIST_COUNTS:-}" && "\${!command_index:-}" == "rev-list" ]]; then
+  printf '%s\n' "\$TEST_REV_LIST_COUNTS"
+  exit 0
+fi
+
 exec "\$REAL_GIT" "\$@"
 EOF
 chmod +x "$TMPDIR/bin/git"
@@ -343,6 +348,39 @@ if "Pre-PR Local Role Review:" not in stdout or "- status: passed" not in stdout
     raise SystemExit("expected local role review status in output")
 if stderr:
     raise SystemExit(f"did not expect stderr on success path: {stderr}")
+PY
+
+behind_log="$TMPDIR/gh-behind.log"
+behind_git_log="$TMPDIR/git-behind.log"
+behind_out="$TMPDIR/behind.out"
+behind_err="$TMPDIR/behind.err"
+TEST_REV_LIST_COUNTS="1 2" run_prepare "$behind_log" "$behind_git_log" --create >"$behind_out" 2>"$behind_err"
+
+python3 - "$behind_log" "$behind_git_log" "$behind_out" "$behind_err" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+stdout = Path(sys.argv[3]).read_text(encoding="utf-8")
+stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
+
+if gh_lines != ["pr create --base main --head temp/prepare-pr-role-review-test --fill"]:
+    raise SystemExit(f"expected gh pr create on behind-but-allowed path, got: {gh_lines}")
+if not any(
+    line.endswith("push -u origin temp/prepare-pr-role-review-test")
+    or line.endswith("push origin temp/prepare-pr-role-review-test")
+    for line in git_lines
+):
+    raise SystemExit(f"expected push attempt on behind-but-allowed path, got: {git_lines}")
+if "- behind base: 1" not in stdout or "- branch sync suggested: suggested" not in stdout:
+    raise SystemExit(f"expected behind advisory in output, got: {stdout}")
+if "Suggested branch sync before merge if GitHub later requires it:" not in stdout:
+    raise SystemExit(f"expected non-blocking branch-sync suggestion, got: {stdout}")
+if stderr:
+    raise SystemExit(f"did not expect stderr on behind-but-allowed path: {stderr}")
 PY
 
 write_role_review_packet "$SOURCE_HEAD" "addressed"
