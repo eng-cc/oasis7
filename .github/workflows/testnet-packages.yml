@@ -1,0 +1,316 @@
+name: Testnet Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref_or_sha:
+        description: "Branch, tag, or commit SHA to package. Empty uses the selected workflow ref."
+        required: false
+        default: ""
+        type: string
+      build_profile:
+        description: "Cargo profile for package binaries"
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - dev
+      package_scope:
+        description: "Platform package set"
+        required: true
+        default: linux_only
+        type: choice
+        options:
+          - linux_only
+          - linux_macos_x64
+          - all_existing
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  RUST_TOOLCHAIN: 1.96.0
+
+jobs:
+  plan:
+    name: plan-testnet-package-scope
+    runs-on: ubuntu-24.04
+    outputs:
+      ref: ${{ steps.plan.outputs.ref }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ref="${{ inputs.ref_or_sha }}"
+          if [[ -z "${ref}" ]]; then
+            ref="${GITHUB_REF}"
+          fi
+
+          case "${{ inputs.package_scope }}" in
+            linux_only)
+              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"}]}'
+              ;;
+            linux_macos_x64)
+              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"}]}'
+              ;;
+            all_existing)
+              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"},{"os":"windows-2022","platform":"windows-x64","asset_name":"oasis7-windows-x64.exe","target_triple":"native"}]}'
+              ;;
+            *)
+              echo "error: unsupported package_scope=${{ inputs.package_scope }}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
+  build-web-dist:
+    name: build-web-dist
+    needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install viewer web dependencies
+        run: npm ci --prefix crates/oasis7_viewer
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
+          rustup default "${RUST_TOOLCHAIN}"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: testnet-packages-web-wasm-v1
+          cache-on-failure: true
+      - name: Install trunk
+        run: cargo install trunk --locked
+      - name: Build web dists
+        run: |
+          mkdir -p output/testnet-packages/web-dist output/testnet-packages/web-launcher-dist
+          (
+            ./scripts/build-viewer-software-safe.sh
+            ./scripts/copy-viewer-web-dist.sh --dist-dir output/testnet-packages/web-dist
+          )
+          (
+            cd crates/oasis7_client_launcher
+            env -u NO_COLOR trunk build --release --dist ../../output/testnet-packages/web-launcher-dist
+          )
+      - name: Upload web dist artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: testnet-web-dists
+          path: |
+            output/testnet-packages/web-dist
+            output/testnet-packages/web-launcher-dist
+          if-no-files-found: error
+
+  package-native:
+    name: package-${{ matrix.platform }}
+    needs:
+      - plan
+      - build-web-dist
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup default "${RUST_TOOLCHAIN}"
+          if [[ "${{ matrix.target_triple }}" != "native" ]]; then
+            rustup target add "${{ matrix.target_triple }}" --toolchain "${RUST_TOOLCHAIN}"
+          fi
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: testnet-packages-${{ runner.os }}-${{ matrix.target_triple }}-v1
+          cache-on-failure: true
+      - name: Ensure Linux AppImage tooling
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APPIMAGETOOL_VERSION="1.9.1"
+          APPIMAGETOOL_FILENAME="appimagetool-x86_64.AppImage"
+          APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/${APPIMAGETOOL_FILENAME}"
+          APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+
+          mkdir -p "${RUNNER_TEMP}/appimagetool"
+          curl -fsSL "${APPIMAGETOOL_URL}" \
+            -o "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
+          printf '%s  %s\n' \
+            "${APPIMAGETOOL_SHA256}" \
+            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" | sha256sum -c -
+          chmod +x "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
+          ln -sf \
+            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" \
+            "${RUNNER_TEMP}/appimagetool/appimagetool"
+          echo "${RUNNER_TEMP}/appimagetool" >> "${GITHUB_PATH}"
+      - name: Download web dist artifacts
+        uses: actions/download-artifact@v6
+        with:
+          name: testnet-web-dists
+          path: output/testnet-packages
+      - name: Ensure Windows packaging dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $missing = @()
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            $missing += "nsis"
+          }
+          if ($missing.Count -eq 0) {
+            exit 0
+          }
+          choco install $missing -y --no-progress
+      - name: Resolve package version
+        id: package_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="$(git rev-parse --short=12 HEAD)"
+          version="0.0.0+testnet.${GITHUB_RUN_NUMBER}.${short_sha}"
+          echo "value=${version}" >> "${GITHUB_OUTPUT}"
+      - name: Build launcher bundle
+        shell: bash
+        run: |
+          ./scripts/release-prepare-bundle.sh \
+            --platform "${{ matrix.platform }}" \
+            --target-triple "${{ matrix.target_triple }}" \
+            --web-dist output/testnet-packages/web-dist \
+            --web-launcher-dist output/testnet-packages/web-launcher-dist \
+            --out-dir output/testnet-packages/assets \
+            --profile "${{ inputs.build_profile }}"
+      - name: Validate bundle entrypoints
+        shell: bash
+        run: |
+          ./scripts/validate-release-platform-entrypoints.sh \
+            --platform "${{ matrix.platform }}" \
+            --bundle-dir "output/testnet-packages/assets/oasis7-${{ matrix.platform }}" \
+            | tee "output/testnet-packages/assets/${{ matrix.platform }}-entrypoint-validation.log"
+      - name: Stage bundle manifest
+        shell: bash
+        run: |
+          cp \
+            "output/testnet-packages/assets/oasis7-${{ matrix.platform }}/.oasis7-bundle-manifest.json" \
+            "output/testnet-packages/assets/${{ matrix.platform }}-bundle-manifest.json"
+      - name: Package native installer
+        shell: bash
+        run: |
+          ./scripts/package-native-installer.sh \
+            --platform "${{ matrix.platform }}" \
+            --bundle-dir "output/testnet-packages/assets/oasis7-${{ matrix.platform }}" \
+            --out-dir output/testnet-packages/assets \
+            --asset-name "${{ matrix.asset_name }}" \
+            --version "${{ steps.package_version.outputs.value }}"
+      - name: Package secondary Linux .deb
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          ./scripts/package-native-installer.sh \
+            --platform "${{ matrix.platform }}" \
+            --bundle-dir "output/testnet-packages/assets/oasis7-${{ matrix.platform }}" \
+            --out-dir output/testnet-packages/assets \
+            --asset-name "oasis7-linux-x64.deb" \
+            --version "${{ steps.package_version.outputs.value }}"
+      - name: Archive raw Linux bundle
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          tar -C output/testnet-packages/assets \
+            -czf output/testnet-packages/assets/oasis7-linux-x64-bundle.tar.gz \
+            oasis7-linux-x64
+      - name: Write BUILDINFO
+        shell: bash
+        run: |
+          {
+            echo "workflow=Testnet Packages"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_number=${GITHUB_RUN_NUMBER}"
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "requested_ref=${{ needs.plan.outputs.ref }}"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "build_profile=${{ inputs.build_profile }}"
+            echo "package_scope=${{ inputs.package_scope }}"
+            echo "platform=${{ matrix.platform }}"
+            echo "target_triple=${{ matrix.target_triple }}"
+            echo "runner_os=${RUNNER_OS}"
+            echo "package_version=${{ steps.package_version.outputs.value }}"
+            echo "published=false"
+          } > "output/testnet-packages/assets/${{ matrix.platform }}-BUILDINFO"
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd output/testnet-packages/assets
+
+          checksum() {
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$@"
+            else
+              shasum -a 256 "$@"
+            fi
+          }
+
+          files=(
+            "${{ matrix.asset_name }}"
+            "${{ matrix.platform }}-BUILDINFO"
+            "${{ matrix.platform }}-bundle-manifest.json"
+            "${{ matrix.platform }}-entrypoint-validation.log"
+          )
+          if [[ "${{ matrix.platform }}" == "linux-x64" ]]; then
+            files+=(
+              "oasis7-linux-x64.deb"
+              "oasis7-linux-x64-bundle.tar.gz"
+            )
+          fi
+
+          for file in "${files[@]}"; do
+            [[ -f "${file}" ]] || { echo "error: missing package artifact ${file}" >&2; exit 1; }
+          done
+          checksum "${files[@]}" > "${{ matrix.platform }}-SHA256SUMS"
+      - name: Upload testnet package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: testnet-package-${{ matrix.platform }}-${{ steps.package_version.outputs.value }}
+          path: |
+            output/testnet-packages/assets/${{ matrix.asset_name }}
+            output/testnet-packages/assets/${{ matrix.platform }}-BUILDINFO
+            output/testnet-packages/assets/${{ matrix.platform }}-SHA256SUMS
+            output/testnet-packages/assets/${{ matrix.platform }}-bundle-manifest.json
+            output/testnet-packages/assets/${{ matrix.platform }}-entrypoint-validation.log
+            output/testnet-packages/assets/oasis7-linux-x64.deb
+            output/testnet-packages/assets/oasis7-linux-x64-bundle.tar.gz
+          if-no-files-found: warn
