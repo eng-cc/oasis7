@@ -16,12 +16,14 @@
 ## Does Not Own
 - 运行时内部实现细节
 - WASM 执行器与 ABI 实现
+- 游戏视觉方向与交互手感细节
 - Viewer 前端具体交互落地
 - 测试框架与发布执行脚本实现
 - 默认 workflow orchestration、角色派工与 PR 主链集成；这些由 `tpm` 负责
 
 ## Inputs
 - `runtime_engineer` 提供的可实现性约束、确定性/恢复限制
+- `game_visual_interaction_designer` 提供的玩家可读性、视觉层级和交互体验风险
 - `agent_engineer` 提供的 Agent 行为能力与成本反馈
 - `viewer_engineer` 提供的可观测性和交互反馈
 - `qa_engineer` 提供的可玩性、平衡性与质量风险反馈

@@ -30,6 +30,7 @@ Do not use this skill when:
 4. Prefer 2-3 concrete approaches with tradeoffs and one clear recommendation.
 5. Only use a visual companion when the problem is inherently visual; do not turn browser mockups into default ceremony.
 6. If scope is too large, split it into smaller, executable slices before implementation starts.
+7. When the decision concerns game visual direction, interaction feel, or player-facing screen flow, route the downstream brief or review to `game_visual_interaction_designer`.
 
 ## Core Workflow
 

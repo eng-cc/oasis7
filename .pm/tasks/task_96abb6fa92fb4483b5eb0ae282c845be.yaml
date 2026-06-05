@@ -1,0 +1,24 @@
+task_uid: task_96abb6fa92fb4483b5eb0ae282c845be
+title: "Add game visual interaction designer role"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-add-game-visual-interaction-designer-role
+execution_log_path: .pm/tasks/task_96abb6fa92fb4483b5eb0ae282c845be.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Add a standard professional role for game visual and interaction design and sync role lists/templates/workflow responsibility references"
+handoff_to: []
+updated_at: 2026-06-05T18:02:00+08:00
+last_started_at: 2026-06-05T17:39:50+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && ./scripts/pm/workflow-behavior-eval.sh && git diff --check && bash -n scripts/prepare-playability-l4-review.sh"
+last_verified_at: 2026-06-05T18:01:57+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-05T18:01:59+08:00

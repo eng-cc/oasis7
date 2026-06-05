@@ -46,6 +46,7 @@ The formal path is:
 1. Define the involved roles:
    - infer from changed paths, role ownership, task slice history, and user-facing claim
    - include `qa_engineer` when the PR claim depends on verification or release readiness
+   - include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, or UI-heavy claims are touched
    - include `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched
 2. Freeze the review target:
    - changed files or path set
