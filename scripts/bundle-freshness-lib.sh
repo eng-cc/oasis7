@@ -30,6 +30,8 @@ scope = [
     "crates/oasis7/src/bin/oasis7_game_launcher",
     "crates/oasis7/src/bin/oasis7_web_launcher.rs",
     "crates/oasis7/src/bin/oasis7_web_launcher",
+    "crates/oasis7/src/bin/oasis7_governance_registry_import.rs",
+    "crates/oasis7/src/bin/oasis7_governance_registry_audit.rs",
     "crates/oasis7_proto/Cargo.toml",
     "crates/oasis7_proto/src",
     "crates/oasis7_viewer/software_safe.html",

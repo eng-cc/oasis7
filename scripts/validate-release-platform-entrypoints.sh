@@ -129,6 +129,8 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_viewer_live" executable
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
     ;;
   macos-x64)
     require_path "$BUNDLE_DIR/run-client.sh" executable
@@ -140,6 +142,8 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_viewer_live" executable
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
     require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/Info.plist" file
     require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/MacOS/oasis7-client-launcher" executable
     ;;
@@ -149,6 +153,8 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher.exe" file
     require_path "$BUNDLE_DIR/bin/oasis7_viewer_live.exe" file
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime.exe" file
+    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import.exe" file
+    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit.exe" file
     require_path "$BUNDLE_DIR/run-client.cmd" file
     require_path "$BUNDLE_DIR/run-web-launcher.cmd" file
     require_path "$BUNDLE_DIR/run-game.cmd" file
