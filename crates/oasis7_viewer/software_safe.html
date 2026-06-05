@@ -26,6 +26,33 @@
         --font-body: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
         --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
         --font-mono: "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+        --color-world-background: var(--bg);
+        --color-world-depth: var(--bg-deep);
+        --color-panel-surface: var(--panel);
+        --color-panel-strong: var(--panel-strong);
+        --color-stage-surface: var(--panel-stage);
+        --color-border-subtle: var(--border);
+        --color-border-stage: var(--border-strong);
+        --color-text-primary: var(--text);
+        --color-text-muted: var(--muted);
+        --color-agent-primary: var(--accent);
+        --color-objective-accent: var(--accent-strong);
+        --color-route-active: var(--accent);
+        --color-receipt-success: var(--good);
+        --color-blocker-danger: var(--bad);
+        --color-warning: var(--warn);
+        --color-diagnostic-muted: var(--muted);
+        --color-focus-ring: var(--accent-strong);
+        --font-viewer-body: var(--font-body);
+        --font-viewer-display: var(--font-display);
+        --font-viewer-mono: var(--font-mono);
+        --space-panel-gap: 18px;
+        --space-stack-gap: 16px;
+        --space-control-gap: 8px;
+        --radius-tool: 12px;
+        --radius-stage: 18px;
+        --radius-panel: 20px;
+        --motion-feedback-fast: 140ms;
       }
 
       * { box-sizing: border-box; }
@@ -186,6 +213,11 @@
         transform: translateY(-1px);
       }
       button:disabled { opacity: 0.5; cursor: not-allowed; }
+      :where(a, button, canvas, summary, input, textarea, select):focus-visible {
+        outline: 2px solid var(--color-focus-ring);
+        outline-offset: 3px;
+        box-shadow: 0 0 0 4px rgba(208, 168, 91, 0.16);
+      }
       input[type="email"], input[type="number"], input[type="search"], input[type="text"], textarea {
         width: 100%;
         border-radius: 12px;
@@ -548,6 +580,7 @@
       }
       .mobile-rail {
         display: none;
+        grid-area: rail;
       }
       .mobile-rail__link {
         color: var(--text);
@@ -561,6 +594,11 @@
         border: 1px solid rgba(208, 168, 91, 0.26);
         background: rgba(255, 255, 255, 0.04);
         font-size: 13px;
+      }
+      .mobile-rail__link--diagnostics {
+        color: var(--muted);
+        border-color: rgba(152, 177, 150, 0.14);
+        background: rgba(255, 255, 255, 0.02);
       }
       .pixel-world-canvas {
         position: relative;
@@ -766,6 +804,7 @@
         .shell {
           grid-template-columns: 1fr;
           grid-template-areas:
+            "rail"
             "stage"
             "targets"
             "details";

@@ -602,6 +602,9 @@ function MobileJumpRail() {
       <a class="mobile-rail__link" href="#viewer-stage-panel">{tr(locale(), "世界", "World")}</a>
       <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "目标", "Targets")}</a>
       <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "指挥", "Command")}</a>
+      <a class="mobile-rail__link mobile-rail__link--diagnostics" href="#viewer-diagnostics-panel">
+        {tr(locale(), "诊断", "Diagnostics")}
+      </a>
     </nav>
   );
 }
@@ -1054,7 +1057,7 @@ function WorldSummaryPanel() {
           </Show>
         </PanelSection>
       </Show>
-      <details class="panel diagnostic-surface">
+      <details id="viewer-diagnostics-panel" class="panel diagnostic-surface" data-viewer-surface="diagnostics">
         <summary class="panel__header diagnostic-surface__summary">
           <div class="diagnostic-surface__title">
             <div class="panel__title">{tr(locale(), "运行诊断", "Runtime Diagnostics")}</div>
@@ -1856,7 +1859,7 @@ function AppShell() {
     <>
       <MobileJumpRail />
       <HostedLoginGate />
-      <section class="panel panel--targets" id="viewer-targets-panel">
+      <section class="panel panel--targets" id="viewer-targets-panel" data-viewer-surface="targets">
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
@@ -1868,7 +1871,7 @@ function AppShell() {
           <TargetsPanel />
         </div>
       </section>
-      <section class="panel panel--stage" id="viewer-stage-panel">
+      <section class="panel panel--stage" id="viewer-stage-panel" data-viewer-surface="stage">
         <div class="panel__body panel__body--stage">
           <div class="stack">
             <WorldStageHero />
@@ -1877,7 +1880,7 @@ function AppShell() {
           </div>
         </div>
       </section>
-      <section class="panel panel--details" id="viewer-details-panel">
+      <section class="panel panel--details" id="viewer-details-panel" data-viewer-surface="command">
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "指挥与核查", "Command and Inspect")}</div>
           <div class="panel__title">{tr(locale(), "交互与明细", "Interact and Inspect")}</div>
