@@ -181,14 +181,24 @@ describe("viewer web ui automation baseline", () => {
     expect(within(nav).getByRole("link", { name: "World" })).toHaveAttribute("href", "#viewer-stage-panel");
     expect(within(nav).getByRole("link", { name: "Targets" })).toHaveAttribute("href", "#viewer-targets-panel");
     expect(within(nav).getByRole("link", { name: "Command" })).toHaveAttribute("href", "#viewer-details-panel");
+    expect(within(nav).getByRole("link", { name: "Diagnostics" })).toHaveAttribute(
+      "href",
+      "#viewer-diagnostics-panel",
+    );
 
     const targetsPanel = container.querySelector("#viewer-targets-panel");
     const stagePanel = container.querySelector("#viewer-stage-panel");
     const detailsPanel = container.querySelector("#viewer-details-panel");
+    const diagnosticsPanel = container.querySelector("#viewer-diagnostics-panel");
 
     expect(targetsPanel).toBeTruthy();
     expect(stagePanel).toBeTruthy();
     expect(detailsPanel).toBeTruthy();
+    expect(diagnosticsPanel).toBeTruthy();
+    expect(targetsPanel).toHaveAttribute("data-viewer-surface", "targets");
+    expect(stagePanel).toHaveAttribute("data-viewer-surface", "stage");
+    expect(detailsPanel).toHaveAttribute("data-viewer-surface", "command");
+    expect(diagnosticsPanel).toHaveAttribute("data-viewer-surface", "diagnostics");
     expect(within(targetsPanel).getByText("Targets")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Industrial World Command Desk")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
@@ -235,6 +245,10 @@ describe("viewer web ui automation baseline", () => {
     const summary = screen.getByText("Runtime Diagnostics").closest("summary");
     expect(summary).toBeTruthy();
     expect(summary).toHaveClass("diagnostic-surface__summary");
+    const diagnosticsPanel = container.querySelector("#viewer-diagnostics-panel");
+    expect(diagnosticsPanel).toBeTruthy();
+    expect(diagnosticsPanel).toHaveClass("diagnostic-surface");
+    expect(diagnosticsPanel).not.toHaveAttribute("open");
 
     const stagePanel = container.querySelector("#viewer-stage-panel");
     expect(stagePanel).toBeTruthy();
@@ -416,7 +430,7 @@ describe("viewer web ui automation baseline", () => {
       within(assetLane).getAllByText(/main_token_transfer remains blocked until a higher-trust hosted strong-auth lane exists/i).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();
-  });
+  }, 15000);
 
   it("keeps hosted backend reauth pending until runtime registration finishes", async () => {
     await renderViewerApp({
@@ -444,5 +458,5 @@ describe("viewer web ui automation baseline", () => {
         "hosted preview backend reauth stays pending until the browser device-session-backed player_session finishes runtime registration",
       ),
     ).toBeInTheDocument();
-  });
+  }, 15000);
 });

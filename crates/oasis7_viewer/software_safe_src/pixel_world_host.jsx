@@ -1228,7 +1228,7 @@ export function PixelWorldHost(props) {
         />
       </Show>
       <Show when={rendererStatus() === "fallback"}>
-        <div class="callout callout--warn">
+        <div class="callout callout--warn" data-renderer-state="fallback">
           <div class="callout__header">
             <div class="callout__title">{tr(locale(), "Renderer 未接管", "Renderer Not Attached")}</div>
           </div>

@@ -3,6 +3,7 @@
 更新时间: 2026-05-29
 
 ## 从这里开始
+- 想确认 Viewer / player-facing surface 的整体视觉方向、层级、pixel-world 可读性与视觉评审 gate：先读 `viewer-visual-design-spec-2026-06-05.design.md`；涉及 brand book、token、icon/status、资产准入和截图矩阵时继续读 `viewer-brand-system-2026-06-05.design.md`
 - 想执行 Viewer、走 Web 闭环、看命令或手工步骤：先读 `viewer-manual.manual.md`
 - 想确认正式浏览器主入口、`viewer` / `software_safe` 兼容边界或弱机/CI 默认路径：先读 `viewer-web-software-safe-mode-2026-03-16.prd.md`
 - 想确认 `legacy_core.js` 拆分边界、`viewer.js` / `software_safe.js` canonical/compat 关系，或 `pixel-world-bridge` generated runtime 真值：先读 `viewer-web-single-source-build-truth-2026-05-19.prd.md`
@@ -37,7 +38,19 @@
   - `viewer` canonical 入口、`software_safe` alias / bilingual URL / test API 怎么使用
 - 说明: 如果你是来“操作”而不是“做治理判断”，这里通常是第一入口。
 
-### 2. `viewer` 与正式 Web 主入口
+### 2. 视觉方向与评审 gate
+- 首读入口:
+  - `viewer-visual-design-spec-2026-06-05.design.md`
+  - `viewer-brand-system-2026-06-05.design.md`
+  - `viewer-visual-system-review-card-2026-06-05.design.md`
+- 适合问题:
+  - Viewer / player-facing surface 的统一视觉方向是什么
+  - 世界、目标、Agent、路径、回执、诊断的视觉层级怎么排
+  - pixel-world、2D 地图、移动端和视觉 review gate 应该按什么标准验收
+  - brand book、语义 token、icon/status vocabulary、资产语言和截图矩阵如何执行
+  - 本轮视觉系统大项的截图矩阵与模型视觉 review verdict 是什么
+
+### 3. `viewer` 与正式 Web 主入口
 - 首读入口:
   - `viewer-web-software-safe-mode-2026-03-16.prd.md`
   - `viewer-web-runtime-fatal-surfacing-2026-03-12.prd.md`
@@ -47,7 +60,7 @@
   - 弱机 / CI / 无 GPU 环境下的 canonical 路径是什么
   - 浏览器 fatal、语义测试接口、正式主入口怎么对齐
 
-### 3. runtime live / event-driven / control
+### 4. runtime live / event-driven / control
 - 首读入口:
   - `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
   - `viewer-live-runtime-world-migration-phase1-2026-03-04.prd.md`
@@ -58,7 +71,7 @@
   - step/control/live playback 的现行边界是什么
 - 说明: `phase8/9` 已物理合并到主文档，当前不应再从旧阶段文件倒推现行口径。
 
-### 4. chat / prompt / right panel
+### 5. chat / prompt / right panel
 - 首读入口:
   - `viewer-chat-right-panel-polish.prd.md`
   - `viewer-egui-right-panel.prd.md`
@@ -67,7 +80,7 @@
   - 聊天入口、右侧面板、Prompt profile 现在怎样组织
   - 输入法、回车发送、预设编辑这些问题该去哪里看
 
-### 5. release / 体验收口
+### 6. release / 体验收口
 - 首读入口:
   - `viewer-gameplay-release-experience-overhaul.prd.md`
 - 适合问题:
@@ -81,5 +94,7 @@
 
 ## 维护约定
 - 新增 Viewer 专题后，若改变了默认首读路径，应同步更新本页。
+- 任何改变 Viewer 默认视觉方向、player-facing screen flow、pixel-world 层级或视觉评审 gate 的任务，必须同步评估是否更新 `viewer-visual-design-spec-2026-06-05.design.md`。
+- 任何改变 Viewer brand book、语义 token、icon/status vocabulary、资产语言或截图矩阵的任务，必须同步评估是否更新 `viewer-brand-system-2026-06-05.design.md`。
 - 本页只维护簇级入口，不维护完整文件清单。
 - 若未来 `viewer/` 内部继续分裂出更高密度簇，再另开簇内治理专题，而不是把本页扩写成长表。

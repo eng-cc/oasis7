@@ -1,0 +1,26 @@
+task_uid: task_a25bf76359be45719edfcda1759626d1
+title: "Create viewer visual design specification"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-world-simulator-viewer-visual-design-spec
+execution_log_path: .pm/tasks/task_a25bf76359be45719edfcda1759626d1.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/world-simulator/viewer/README.md
+  - doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Add a canonical complete visual design specification for viewer/player-facing surfaces and link it from relevant indexes."
+handoff_to: []
+updated_at: 2026-06-05T22:17:26+08:00
+last_started_at: 2026-06-05T19:42:19+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui && npm --prefix crates/oasis7_viewer run build:software-safe && npm --prefix crates/oasis7_viewer run test:pixel-world:visual && git diff --check && ./scripts/doc-governance-check.sh && out=$(./scripts/pm/lint.sh 2>&1 || true); if printf \"%s\\n\" \"$out\" | rg \"task_a25bf76359be45719edfcda1759626d1\"; then exit 1; else echo \"no pm-lint failures for task_a25bf76359be45719edfcda1759626d1\"; fi"
+last_verified_at: 2026-06-05T22:17:24+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-05T22:17:26+08:00

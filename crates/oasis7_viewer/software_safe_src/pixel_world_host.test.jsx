@@ -430,6 +430,7 @@ describe("pixel world host", () => {
     expect(screen.getByText("Action Receipt")).toBeInTheDocument();
     expect(screen.getByText("Action blocked")).toBeInTheDocument();
     expect(screen.getByText("Smelter build request reached factory-0; iron shortage blocks construction.")).toBeInTheDocument();
+    expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent("Renderer Not Attached");
     const receipt = document.querySelector(".pixel-world-action-receipt");
     expect(receipt).toHaveAttribute("data-receipt-present", "true");
     expect(receipt).toHaveAttribute("data-receipt-state", "blocked");
