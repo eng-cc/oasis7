@@ -1,0 +1,30 @@
+task_uid: task_13afe9621de944e0b35a9a688f734cdf
+title: "Prepare site story volume 02 chapter 03"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_13afe9621de944e0b35a9a688f734cdf.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/chapter-cards/volume-02-chapter-03-cards.md
+  - site/story/outline/novel-outline.md
+  - site/story/research/volume-02-route-research.md
+doc_refs:
+  - site/story/research/volume-02-chapter-03-research.md
+  - site/story/draft/volume-02-chapter-003-positioning.md
+  - site/story/research/README.md
+  - site/story/draft/README.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Complete SOP pre-drafting for second-volume third chapter CH-055..CH-062: external research, write-before positioning, indexes, verification, commit, push, and PR update."
+handoff_to: []
+updated_at: 2026-06-05T13:02:54+08:00
+last_started_at: 2026-06-05T10:47:46+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-003-positioning.md site/story/research/volume-02-chapter-03-research.md site/story/draft/README.md site/story/research/README.md site/story/reviews/editorial-notes.md .pm/tasks/task_13afe9621de944e0b35a9a688f734cdf.execution.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-05T13:02:53+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-05T13:02:54+08:00
