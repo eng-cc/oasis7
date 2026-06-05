@@ -19,6 +19,7 @@
 
 ## Inputs
 - `producer_system_designer` 提供的版本目标与验收标准
+- `game_visual_interaction_designer` 提供的视觉/交互验收口径与玩家感受风险
 - `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` 提供的变更说明和风险提示
 - 自动化运行结果、监控告警、可玩性测试记录
 

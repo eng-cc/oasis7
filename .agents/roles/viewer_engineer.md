@@ -19,6 +19,7 @@
 
 ## Inputs
 - `producer_system_designer` 提供的玩家体验目标和信息优先级
+- `game_visual_interaction_designer` 提供的视觉方向、交互手感、玩家屏幕流程与视觉验收 checklist
 - `runtime_engineer` 提供的状态数据、事件语义与接口约束
 - `agent_engineer` 提供的 Agent 可解释性与交互需求
 - `qa_engineer` 提供的闭环测试结果与易用性问题
@@ -32,6 +33,7 @@
 
 ## Decisions
 - 可独立决定表现层结构、信息布局和前端实现细节
+- 游戏视觉方向、交互手感和玩家屏幕流程判断优先由 `game_visual_interaction_designer` 提供；`viewer_engineer` 负责把可执行规格落地并验证
 - 涉及玩家权能、世界规则暴露、控制边界的变更必须联审
 - 新 UI / API 必须保证可测试、可脚本化、可回归
 

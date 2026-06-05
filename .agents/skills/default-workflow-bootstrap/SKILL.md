@@ -33,8 +33,8 @@ Read-only caveat:
 
 - Read-only and chat-only requests do not skip this bootstrap. They still need
   task/worktree truth before TPM answers, gathers evidence, or dispatches slices.
-- If a read-only question requires product/design/runtime/WASM/agent/viewer/QA or
-  liveops judgment, route to the matching bounded professional slice after
+- If a read-only question requires product/design/game-visual-interaction/runtime/WASM/agent/viewer/QA
+  or liveops judgment, route to the matching bounded professional slice after
   task/worktree bootstrap.
 - Pure fact lookup, path lookup, command-output restatement, or mechanical
   evidence collection can be answered directly by TPM only inside the bound

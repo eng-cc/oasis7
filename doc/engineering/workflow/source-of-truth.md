@@ -45,7 +45,7 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 | Phase / trigger | Skill surface | Requiredness | Formal evidence |
 | --- | --- | --- | --- |
 | Any user request starts | `default-workflow-bootstrap` | Required before fact lookup, chat answer, professional slice dispatch, edits, verification, review, or external messaging unless already inside the bound task worktree | Bootstrap entry in `.pm/tasks/<TASK-UID>.execution.md` |
-| Read-only professional/domain question | Matching professional bounded slice under TPM coordination after task/worktree bootstrap | Required when the answer depends on product/design/runtime/WASM/agent/viewer/QA/liveops judgment; skipped only for pure fact lookup after task truth exists | Role-tagged slice return recorded in `.pm/tasks/<TASK-UID>.execution.md` and summarized to the user |
+| Read-only professional/domain question | Matching professional bounded slice under TPM coordination after task/worktree bootstrap | Required when the answer depends on product/design/game-visual-interaction/runtime/WASM/agent/viewer/QA/liveops judgment; skipped only for pure fact lookup after task truth exists | Role-tagged slice return recorded in `.pm/tasks/<TASK-UID>.execution.md` and summarized to the user |
 | Bound task needs next phase selection | `repo-owned-workflow-router` | Required after bootstrap and whenever phase is unclear | Route entry with selected/skipped skills in `.pm/tasks/<TASK-UID>.execution.md` |
 | Scope is ambiguous, option-heavy, or visual enough to need ideation | `bounded-brainstorming` | Optional, risk-based | Brainstorming output or skip reason in execution log/project |
 | Behavior changes with a stable automated harness | `tdd-test-writer` | Conditional required when RED criteria are met; otherwise skip reason required | RED command, failing evidence, and handoff contract |
@@ -72,6 +72,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - TPM is not a professional execution role. TPM must not be the source of domain/professional analysis, implementation, verification judgment, code review judgment, product/design judgment, runtime/wasm/viewer/agent/QA judgment, or liveops/community messaging.
 - Professional/domain work must be done by the matching bounded subagent slice. This includes:
   - product/system design by `producer_system_designer`
+  - game visual direction, interaction feel, player-facing screen flow, and visual readability by `game_visual_interaction_designer`
   - runtime/gameplay/server logic by `runtime_engineer`
   - WASM/platform/ABI work by `wasm_platform_engineer`
   - agent behavior/prompt/provider work by `agent_engineer`
@@ -198,7 +199,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 ### 5.5 PR and review chain
 - Standard path is local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability.
 - The workflow no longer requests Copilot review as a PR helper step.
-- Before PR creation, TPM must create or dispatch fresh local review subagents for every involved relevant professional role in the diff scope. At minimum, use changed paths, role ownership, and task slice history to select roles; include `qa_engineer` when the claim involves verification or release readiness; include `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched.
+- Before PR creation, TPM must create or dispatch fresh local review subagents for every involved relevant professional role in the diff scope. At minimum, use changed paths, role ownership, and task slice history to select roles; include `qa_engineer` when the claim involves verification or release readiness; include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, or UI-heavy claims are touched; include `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched.
 - Each local role review must return `findings` or `no_findings` plus `residual_risk`. TPM must fix valid findings or record why a finding is stale/rejected with code or doc evidence before PR creation.
 - `scripts/prepare-task-pr.sh --create` must refuse to create the PR unless the task execution log contains a passed pre-PR local role review packet for the source worktree. The packet marker is:
   - `Pre-PR Local Role Review: passed`

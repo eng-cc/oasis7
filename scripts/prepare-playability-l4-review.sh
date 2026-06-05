@@ -48,6 +48,7 @@ USAGE
 
 STANDARD_ROLES=(
   producer_system_designer
+  game_visual_interaction_designer
   qa_engineer
   viewer_engineer
   agent_engineer
