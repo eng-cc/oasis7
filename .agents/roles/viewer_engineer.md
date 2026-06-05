@@ -19,6 +19,7 @@
 
 ## Inputs
 - `producer_system_designer` 提供的玩家体验目标和信息优先级
+- `game_visual_interaction_designer` 提供的视觉方向、交互手感、玩家屏幕流程与视觉验收 checklist
 - `runtime_engineer` 提供的状态数据、事件语义与接口约束
 - `agent_engineer` 提供的 Agent 可解释性与交互需求
 - `qa_engineer` 提供的闭环测试结果与易用性问题

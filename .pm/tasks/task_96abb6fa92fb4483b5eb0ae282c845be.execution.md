@@ -89,3 +89,40 @@ Example:
 - Expected Result: PM lint passes or identifies unrelated pre-existing blockers.
 - Actual Result: failed only on pre-existing unrelated execution-log format issues in `task_202b9f812d49432a9f4360b8a66c5364` and `task_455ea61e04c946469b8b1d22b700f853`; `rg` over lint output found no `task_96abb6fa92fb4483b5eb0ae282c845be` or `game_visual_interaction_designer` failures.
 - Blocker / Next Action: no blocker for this role/process update; historical PM lint debt remains outside this task scope.
+
+## 2026-06-05 18:03:21 CST / tpm
+- 完成内容: Pre-PR local role review request recorded before dispatch.
+- 完成内容:
+  - Review Trigger: pre-PR local role review.
+  - Review Scope: role governance diff from `main...1494562a9c89729006cc72a4668bcc70807efa8f`.
+  - Review Roles: `agent_engineer`, `qa_engineer`, `game_visual_interaction_designer`.
+  - Review Question: confirm whether the new game visual/interaction designer role is coherently registered, routed into relevant workflow gates, and does not blur responsibilities with producer/viewer/QA/TPM roles.
+  - Evidence Available: committed diff `1494562a9c89729006cc72a4668bcc70807efa8f`; fresh closeout verification passed with `./scripts/doc-governance-check.sh && ./scripts/pm/workflow-behavior-eval.sh && git diff --check && bash -n scripts/prepare-playability-l4-review.sh`.
+  - Expected Return Contract: `findings` or `no_findings`, plus `residual_risk`.
+  - Formal Sink: this execution log.
+- 遗留事项: waiting for fresh involved-role subagent review results.
+- Action: Dispatch bounded review slices and integrate findings before PR creation.
+- Validation Command: pending local role review results.
+- Expected Result: each role returns findings/no_findings plus residual risk.
+- Actual Result: pending.
+- Blocker / Next Action: dispatch `agent_engineer`, `qa_engineer`, and `game_visual_interaction_designer` review slices.
+
+## 2026-06-05 18:13:28 CST / tpm
+- 完成内容: Integrated first pre-PR local role review pass and addressed the valid finding.
+- 完成内容:
+  - `qa_engineer`: `no_findings`; residual risk is the known global PM lint blocker from unrelated historical execution logs, not this diff.
+  - `agent_engineer`: `no_findings`; residual risk is static review only and ignored role backlog files are consistent with existing `.pm` patterns.
+  - `game_visual_interaction_designer`: P3 finding in `.agents/roles/viewer_engineer.md` because Viewer Inputs did not list the new role even though the new role outputs implementation briefs / visual acceptance checklist to viewer.
+  - Fix applied: added `game_visual_interaction_designer` to `viewer_engineer` Inputs as the source of visual direction, interaction feel, player-facing screen flow, and visual acceptance checklist.
+- 遗留事项: final delta review pending because the review finding changed the branch after the original reviewed SHA.
+- Action: Verify the review-fix and request final current-HEAD delta confirmation.
+- Validation Command: `./scripts/doc-governance-check.sh`
+- Expected Result: doc governance remains valid after the viewer role input fix.
+- Actual Result: passed (`doc-governance-check: OK`).
+- Validation Command: `./scripts/pm/workflow-behavior-eval.sh`
+- Expected Result: workflow behavior contract remains valid after review-fix.
+- Actual Result: passed (`workflow behavior eval: OK`).
+- Validation Command: `git diff --check`
+- Expected Result: no whitespace errors.
+- Actual Result: passed.
+- Blocker / Next Action: commit review-fix evidence, then ask role reviewers for current-HEAD final/delta confirmation.
