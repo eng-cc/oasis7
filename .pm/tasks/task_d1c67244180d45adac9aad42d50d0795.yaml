@@ -1,0 +1,29 @@
+task_uid: task_d1c67244180d45adac9aad42d50d0795
+title: "Draft site story CH-056"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_d1c67244180d45adac9aad42d50d0795.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/chapter-cards/volume-02-chapter-03-cards.md
+  - site/story/draft/volume-02-chapter-003-positioning.md
+  - site/story/research/volume-02-chapter-03-research.md
+  - site/story/draft/volume-02-chapter-003.md
+doc_refs:
+  - site/story/draft/volume-02-chapter-003.md
+  - site/story/draft/README.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Draft CH-056 / 接收人空格 into second-volume third-chapter prose, update draft index metadata, verify writeback, commit, push, and update PR."
+handoff_to: []
+updated_at: 2026-06-05T15:09:30+08:00
+last_started_at: 2026-06-05T14:26:11+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-003.md site/story/draft/README.md site/story/reviews/editorial-notes.md .pm/tasks/task_d1c67244180d45adac9aad42d50d0795.execution.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-05T15:09:28+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-05T15:09:29+08:00
