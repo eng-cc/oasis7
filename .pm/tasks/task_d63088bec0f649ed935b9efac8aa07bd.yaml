@@ -1,0 +1,27 @@
+task_uid: task_d63088bec0f649ed935b9efac8aa07bd
+title: "Review site story CH-048 focused slice"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_d63088bec0f649ed935b9efac8aa07bd.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/draft/volume-02-chapter-002.md
+doc_refs:
+  - site/story/chapter-cards/volume-02-chapter-02-cards.md
+  - site/story/draft/volume-02-chapter-002-positioning.md
+  - site/story/research/volume-02-chapter-02-research.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Run focused slice review for CH-048 / 工具柜暂锁, record bounded professional findings, apply only required minimal patches, verify, commit, push, and update PR."
+handoff_to: []
+updated_at: 2026-06-04T15:14:11+08:00
+last_started_at: 2026-06-04T14:58:12+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-002.md site/story/chapter-cards/volume-02-chapter-02-cards.md site/story/draft/volume-02-chapter-002-positioning.md site/story/reviews/editorial-notes.md .pm/tasks/task_d63088bec0f649ed935b9efac8aa07bd.execution.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-04T15:14:08+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-04T15:14:11+08:00

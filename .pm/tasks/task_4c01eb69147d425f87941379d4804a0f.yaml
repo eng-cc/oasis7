@@ -1,0 +1,28 @@
+task_uid: task_4c01eb69147d425f87941379d4804a0f
+title: "Draft site story CH-054"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_4c01eb69147d425f87941379d4804a0f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/draft/volume-02-chapter-002.md
+  - site/story/chapter-cards/volume-02-chapter-02-cards.md
+  - site/story/draft/volume-02-chapter-002-positioning.md
+doc_refs:
+  - site/story/draft/volume-02-chapter-002.md
+  - site/story/draft/README.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Draft CH-054 / 第一只手没有接住全部 into second-volume second-chapter prose, update draft metadata/README, verify writeback, commit, push, and update PR."
+handoff_to: []
+updated_at: 2026-06-04T23:52:34+08:00
+last_started_at: 2026-06-04T23:37:03+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-002.md site/story/draft/README.md site/story/reviews/editorial-notes.md .pm/tasks/task_4c01eb69147d425f87941379d4804a0f.execution.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-04T23:52:33+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-04T23:52:34+08:00

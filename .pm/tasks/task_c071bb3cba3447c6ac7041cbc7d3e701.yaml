@@ -1,0 +1,27 @@
+task_uid: task_c071bb3cba3447c6ac7041cbc7d3e701
+title: "Review site story CH-050 focused slice"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_c071bb3cba3447c6ac7041cbc7d3e701.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/draft/volume-02-chapter-002.md
+  - site/story/chapter-cards/volume-02-chapter-02-cards.md
+  - site/story/draft/volume-02-chapter-002-positioning.md
+doc_refs:
+  - site/story/reviews/editorial-notes.md
+  - site/story/draft/volume-02-chapter-002.md
+related_prd: []
+acceptance:
+  - "Focused review CH-050 / 程望川选择旁听 with bounded professional slice evidence, apply any P0/P1 minimal fixes, verify writeback, commit, push, and update PR."
+handoff_to: []
+updated_at: 2026-06-04T17:36:29+08:00
+last_started_at: 2026-06-04T17:24:29+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-002.md site/story/reviews/editorial-notes.md .pm/tasks/task_c071bb3cba3447c6ac7041cbc7d3e701.execution.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-04T17:36:27+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-04T17:36:28+08:00

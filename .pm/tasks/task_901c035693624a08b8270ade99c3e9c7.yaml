@@ -1,0 +1,26 @@
+task_uid: task_901c035693624a08b8270ade99c3e9c7
+title: "Draft site story CH-045"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_901c035693624a08b8270ade99c3e9c7.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+  - site/story/draft/volume-02-chapter-001-positioning.md
+doc_refs:
+  - site/story/draft/volume-02-chapter-001.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Draft CH-045 prose from approved card and prior review boundaries; write execution evidence, verify story/governance checks, close task, commit, push, and update PR."
+handoff_to: []
+updated_at: 2026-06-03T22:14:15+08:00
+last_started_at: 2026-06-03T22:05:00+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && if sed -n '/^## 不投票定生死的小会/,' site/story/draft/volume-02-chapter-001.md | rg -n \"直播|围观|举手|多数意见|达成共识|通过|正式条款|公告|公共提示层.*同步|身份链只作旁证|手感另测|砾光|权威裁判|答案来源|证词|证明程望川|证明回砂|必须继承|恢复资格|掌声|灯光|舞台|投票结果\"; then exit 1; else echo \"CH-045 forbidden-pattern check: OK\"; fi && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-001.md site/story/draft/README.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-03T22:14:14+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T22:14:15+08:00

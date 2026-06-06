@@ -1,0 +1,26 @@
+task_uid: task_0fad57d9652b4c10b5c1b9e8689ced2f
+title: "Research site story volume two opening"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_0fad57d9652b4c10b5c1b9e8689ced2f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - site/story/draft/chapter-writing-sop.md
+doc_refs:
+  - site/story/research/volume-02-route-research.md
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+related_prd: []
+acceptance:
+  - "Write formal external research sources, findings, writing constraints, and rejected directions for volume two before CH-037 prose."
+handoff_to: []
+updated_at: 2026-06-02T21:50:10+08:00
+last_started_at: 2026-06-02T21:47:53+08:00
+last_claim_type: task_complete
+last_verify_command: "bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ./scripts/pm/lint.sh && git diff --check"
+last_verified_at: 2026-06-02T21:50:07+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-02T21:50:10+08:00

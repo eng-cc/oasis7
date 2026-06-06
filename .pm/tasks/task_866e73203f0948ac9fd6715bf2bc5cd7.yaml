@@ -1,0 +1,26 @@
+task_uid: task_866e73203f0948ac9fd6715bf2bc5cd7
+title: "Position site story volume two chapter one"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_866e73203f0948ac9fd6715bf2bc5cd7.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - site/story/draft/chapter-writing-sop.md
+doc_refs:
+  - site/story/research/volume-02-route-research.md
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+related_prd: []
+acceptance:
+  - "Create CH-037 to CH-046 write-before positioning before prose drafting."
+handoff_to: []
+updated_at: 2026-06-02T22:24:40+08:00
+last_started_at: 2026-06-02T22:06:31+08:00
+last_claim_type: task_complete
+last_verify_command: "bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ./scripts/pm/lint.sh && git diff --check"
+last_verified_at: 2026-06-02T22:24:36+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-02T22:24:39+08:00

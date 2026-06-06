@@ -1,0 +1,26 @@
+task_uid: task_a46c0d7db4494132913a04285ddba762
+title: "Plan site story volume 02 chapter 04"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_a46c0d7db4494132913a04285ddba762.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/chapter-cards/volume-02-chapter-04-cards.md
+  - site/story/reviews/editorial-notes.md
+doc_refs:
+  - site/story/chapter-cards/volume-02-chapter-04-cards.md
+  - site/story/draft/volume-02-chapter-004.md
+related_prd: []
+acceptance:
+  - "Run second-volume fourth-chapter SOP pre-drafting for CH-063..CH-070, including chapter positioning, external research notes, professional bounded review, canonical writeback, verification, commit, push, and PR body update before drafting CH-063."
+handoff_to: []
+updated_at: 2026-06-05T20:29:52+08:00
+last_started_at: 2026-06-05T20:13:59+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/research/volume-02-chapter-04-research.md site/story/draft/volume-02-chapter-004-positioning.md site/story/research/README.md site/story/draft/README.md site/story/reviews/editorial-notes.md .pm/tasks/task_a46c0d7db4494132913a04285ddba762.execution.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-05T20:29:49+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-05T20:29:51+08:00

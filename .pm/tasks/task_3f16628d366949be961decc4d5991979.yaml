@@ -1,0 +1,26 @@
+task_uid: task_3f16628d366949be961decc4d5991979
+title: "Review site story CH-043 focused slice"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_3f16628d366949be961decc4d5991979.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/draft/volume-02-chapter-001.md
+doc_refs:
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+  - site/story/draft/volume-02-chapter-001-positioning.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Run focused review for CH-043, write results to editorial notes, and apply only required minimal patches if P1 blockers are found."
+handoff_to: []
+updated_at: 2026-06-03T21:12:16+08:00
+last_started_at: 2026-06-03T21:00:53+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/reviews/editorial-notes.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-03T21:12:15+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T21:12:16+08:00

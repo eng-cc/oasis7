@@ -1,0 +1,26 @@
+task_uid: task_cb88770d63da4b80abcf493d15ccbe0b
+title: "Draft site story CH-046"
+owner_role: tpm
+worktree_hint: oasis7-site-story-next-step
+execution_log_path: .pm/tasks/task_cb88770d63da4b80abcf493d15ccbe0b.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/chapter-cards/volume-02-chapter-01-cards.md
+  - site/story/draft/volume-02-chapter-001-positioning.md
+doc_refs:
+  - site/story/draft/volume-02-chapter-001.md
+  - site/story/reviews/editorial-notes.md
+related_prd: []
+acceptance:
+  - "Draft CH-046 prose from approved card and prior review boundaries; write execution evidence, verify story/governance checks, close task, commit, push, and update PR."
+handoff_to: []
+updated_at: 2026-06-03T23:16:40+08:00
+last_started_at: 2026-06-03T23:07:37+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && if sed -n '/^## 第一条小修宪/,' site/story/draft/volume-02-chapter-001.md | rg -n \"通过|正式发布|公告|同步到外层记录$|盖章|编号|投票|举手|多数意见|达成共识|胜利|终于学会|证明程望川|证明回砂|自动承接|恢复资格|必须继承|身份链证明|签名|抄正|执行排期\"; then exit 1; else echo \"CH-046 forbidden-pattern check: OK\"; fi && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py site/story/draft/volume-02-chapter-001.md site/story/draft/README.md && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"
+last_verified_at: 2026-06-03T23:16:39+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-03T23:16:39+08:00
