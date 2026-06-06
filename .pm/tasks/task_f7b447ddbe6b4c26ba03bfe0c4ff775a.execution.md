@@ -118,7 +118,7 @@ Example:
 - Task UID: task_f7b447ddbe6b4c26ba03bfe0c4ff775a
 - Source Worktree: /home/scc/worktrees/oasis7-game-remove-war-facing-content
 - Source Branch: task/game-remove-war-facing-content
-- Source Head: 90aabaa4561d777e205969e30ef120e482e5375a
+- Source Head: 3b23acc1960e971f2342463d59058d61693a6995
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/tasks/task_f7b447ddbe6b4c26ba03bfe0c4ff775a.execution.md; .pm/tasks/task_f7b447ddbe6b4c26ba03bfe0c4ff775a.yaml; site/index.html; site/en/index.html; site/doc/cn/index.html; site/doc/en/index.html; site/doc/cn/project-overview.html; site/doc/en/project-overview.html; site/deck/index.html; site/deck/en/index.html; world-rule.md; doc/game current gameplay/design surfaces
 - Role Selection Basis: changed paths include public/player-facing copy, gameplay product docs, world-rule content, and verification boundary; producer checks product/gameplay scope, liveops checks external claim envelope, QA checks validation sufficiency and residual-hit classification.
