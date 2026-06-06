@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::BTreeSet, path::Path};
 
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::runtime::ReleaseSecurityPolicy;
@@ -385,25 +385,47 @@ pub(super) fn classify_transport_stability(
             protocol_error_count += 1;
         }
     }
+    let active_peer_ids = replication
+        .peer_healths
+        .iter()
+        .filter(|health| health.status == "active")
+        .map(|health| health.peer_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let protocol_cooldown_peer_ids = replication
+        .protocol_retry_cooldown_peers
+        .values()
+        .flat_map(|peers| peers.iter().map(String::as_str))
+        .collect::<BTreeSet<_>>();
+    let transport_cooldown_peer_ids = replication
+        .transport_retry_cooldown_peers
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let has_stable_active_peer = active_peer_ids.iter().any(|peer_id| {
+        !protocol_cooldown_peer_ids.contains(peer_id)
+            && !transport_cooldown_peer_ids.contains(peer_id)
+    });
+    let transport_cooldown_penalty_peers = if has_stable_active_peer {
+        0
+    } else {
+        replication.transport_retry_cooldown_peers.len()
+    };
+    let protocol_cooldown_penalty_peers = if has_stable_active_peer {
+        0
+    } else {
+        replication
+            .protocol_retry_cooldown_peers
+            .values()
+            .map(Vec::len)
+            .sum::<usize>()
+    };
     let penalty = connection_closed_count
         .saturating_mul(5)
         .saturating_add(insufficient_peers_count.saturating_mul(10))
         .saturating_add(timeout_count.saturating_mul(10))
         .saturating_add(protocol_error_count.saturating_mul(15))
-        .saturating_add(
-            replication
-                .transport_retry_cooldown_peers
-                .len()
-                .saturating_mul(15),
-        )
-        .saturating_add(
-            replication
-                .protocol_retry_cooldown_peers
-                .values()
-                .map(Vec::len)
-                .sum::<usize>()
-                .saturating_mul(20),
-        );
+        .saturating_add(transport_cooldown_penalty_peers.saturating_mul(15))
+        .saturating_add(protocol_cooldown_penalty_peers.saturating_mul(20));
     let score = 100u8.saturating_sub(penalty.min(100) as u8);
     ChainReplicationTransportStability {
         stable: score >= TRANSPORT_STABILITY_MIN_SCORE,

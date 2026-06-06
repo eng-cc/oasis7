@@ -32,7 +32,7 @@ fn classify_transport_stability_ignores_reachability_diagnostics() {
     let stability =
         super::status_payload::classify_transport_stability(&super::ChainReplicationDebugStatus {
             local_peer_id: "peer-local".to_string(),
-            connected_peers: vec!["peer-a".to_string()],
+            connected_peers: vec!["peer-a".to_string(), "peer-b".to_string()],
             peer_healths: vec![super::ChainPeerHealthStatus {
                 peer_id: "peer-a".to_string(),
                 status: "active".to_string(),
@@ -41,9 +41,20 @@ fn classify_transport_stability_ignores_reachability_diagnostics() {
                 active_path_kind: Some("direct".to_string()),
                 source_operator: None,
                 source_asn: None,
+            }, super::ChainPeerHealthStatus {
+                peer_id: "peer-b".to_string(),
+                status: "active".to_string(),
+                issues: Vec::new(),
+                discovery_sources: vec!["static_bootstrap".to_string()],
+                active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
             }],
             registered_protocols: Vec::new(),
-            protocol_retry_cooldown_peers: BTreeMap::new(),
+            protocol_retry_cooldown_peers: BTreeMap::from([(
+                "/aw/node/replication/fetch-commit/1.0.0".to_string(),
+                vec!["peer-b".to_string()],
+            )]),
             transport_retry_cooldown_peers: Vec::new(),
             request_peer_scores: BTreeMap::new(),
             recent_errors: vec![
