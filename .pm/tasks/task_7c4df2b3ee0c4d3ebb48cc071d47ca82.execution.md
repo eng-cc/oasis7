@@ -91,7 +91,7 @@ Example:
 - Task UID: task_7c4df2b3ee0c4d3ebb48cc071d47ca82
 - Source Worktree: /home/scc/worktrees/oasis7-engineering-pm-collaboration-tooling-ergonomics
 - Source Branch: task/engineering-pm-collaboration-tooling-ergonomics
-- Source Head: 17d5cb690b2eca0ab59242d57e62f17e28ba460b
+- Source Head: 17d5cb690480f85e165f36eceec5f962201587b1
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/README.md; .pm/tasks/task_7c4df2b3ee0c4d3ebb48cc071d47ca82.*; doc/engineering/project.md; scripts/pm/append-execution-log.sh; scripts/pm/lint.sh; scripts/pm/pm_store.py; scripts/pm/pm_store_cli.py; scripts/pm/pm_store_reporting.py; scripts/pm/required-tier-smoke.sh; scripts/pm/workflow-lint.sh; scripts/prepare-task-pr.sh
 - Role Selection Basis: PM workflow tooling and verification surfaces require qa_engineer; role collaboration/source-of-truth surface requires agent_engineer.
