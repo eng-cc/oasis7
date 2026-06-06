@@ -16,6 +16,21 @@ fn network_policy_blocks_observer_from_consensus_publish_lane() {
 }
 
 #[test]
+fn storage_runtime_can_explicitly_claim_validator_core_network_role() {
+    let config = NodeConfig::new(
+        "storage-validator",
+        "world-storage-validator",
+        NodeRole::Storage,
+    )
+    .expect("config")
+    .with_network_policy(NodeNetworkPolicy {
+        deployment_mode: PeerDeploymentMode::Private,
+        node_role_claim: PeerNodeRole::ValidatorCore,
+    });
+    assert!(config.is_ok());
+}
+
+#[test]
 fn network_policy_limits_relay_to_control_lane() {
     let policy = NodeNetworkPolicy {
         deployment_mode: PeerDeploymentMode::Public,

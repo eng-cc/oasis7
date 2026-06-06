@@ -381,7 +381,7 @@ impl NodeRuntime {
             }
         }
         let mut replication_network = if let Some(network) = &self.replication_network {
-            let subscribe = !matches!(self.config.role, NodeRole::Sequencer);
+            let subscribe = self.config.replication.is_some();
             match ReplicationNetworkEndpoint::new(
                 network,
                 &self.config.world_id,

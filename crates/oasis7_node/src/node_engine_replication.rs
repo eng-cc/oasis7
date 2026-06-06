@@ -255,6 +255,9 @@ impl PosNodeEngine {
         let messages = endpoint.drain_replications()?;
         let mut rejected = Vec::new();
         for message in messages {
+            if message.node_id == node_id {
+                continue;
+            }
             let committed_successor = checked_replication_successor(
                 self.committed_height,
                 "committed_height",

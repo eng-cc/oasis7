@@ -258,10 +258,13 @@ impl NodeNetworkPolicy {
                 }
             }
             NodeRole::Storage => {
-                if self.node_role_claim != PeerNodeRole::FullStorage {
+                if !matches!(
+                    self.node_role_claim,
+                    PeerNodeRole::FullStorage | PeerNodeRole::ValidatorCore
+                ) {
                     return Err(NodeError::InvalidConfig {
                         reason: format!(
-                            "node role {} requires network node_role_claim=full_storage, got {}",
+                            "node role {} requires network node_role_claim=full_storage or validator_core, got {}",
                             runtime_role, self.node_role_claim
                         ),
                     });

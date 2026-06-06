@@ -138,8 +138,12 @@ impl PosNodeEngine {
             last_broadcast_local_attestation_at_ms: None,
             last_broadcast_committed_height: 0,
             last_broadcast_committed_at_ms: None,
-            replicate_local_commits: matches!(config.role, NodeRole::Sequencer)
-                && config.replication.is_some(),
+            replicate_local_commits: config.replication.is_some()
+                && (matches!(config.role, NodeRole::Sequencer)
+                    || matches!(
+                        config.network_policy.node_role_claim,
+                        oasis7_proto::distributed_dht::PeerNodeRole::ValidatorCore
+                    )),
             require_peer_execution_hashes: config.require_peer_execution_hashes,
             consensus_signer,
             enforce_consensus_signature,
