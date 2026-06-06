@@ -306,7 +306,9 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     )?;
     let effective_validator_signer_bindings =
         config.pos_config.validator_signer_public_keys.clone();
-    let replication_remote_writer_allowlist = build_replication_remote_writer_allowlist(
+    let replication_remote_writer_allowlist =
+        build_replication_remote_writer_allowlist(effective_validator_signer_bindings.values());
+    let replication_fetch_requester_allowlist = build_replication_fetch_requester_allowlist(
         effective_validator_signer_bindings.values(),
         &options.replication_remote_writer_public_keys,
     );
@@ -315,6 +317,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         &keypair,
         &storage_profile_config,
         replication_remote_writer_allowlist.as_slice(),
+        replication_fetch_requester_allowlist.as_slice(),
     )?);
     if let Some(report) = startup_reconcile::reconcile_startup_state_from_execution_latest(
         &paths,
@@ -567,6 +570,7 @@ fn build_node_replication_config(
     keypair: &node_keypair_config::NodeKeypairConfig,
     storage_profile: &StorageProfileConfig,
     remote_writer_allowlist: &[String],
+    fetch_requester_allowlist: &[String],
 ) -> Result<NodeReplicationConfig, String> {
     let signer_keypair = derive_node_consensus_signer_keypair(node_id, keypair)?;
     let replication_root = Path::new("output").join("node-distfs").join(node_id);
@@ -587,15 +591,31 @@ fn build_node_replication_config(
                 cfg.with_remote_writer_allowlist(remote_writer_allowlist.to_vec())
             }
         })
+        .and_then(|cfg| {
+            if fetch_requester_allowlist.is_empty() {
+                Ok(cfg)
+            } else {
+                cfg.with_fetch_requester_allowlist(fetch_requester_allowlist.to_vec())
+            }
+        })
         .map_err(|err| format!("failed to build node replication config: {err:?}"))
 }
 
 fn build_replication_remote_writer_allowlist<'a>(
     validator_signer_public_keys: impl IntoIterator<Item = &'a String>,
-    explicit_remote_writer_public_keys: &[String],
 ) -> Vec<String> {
     let mut allowlist: Vec<String> = validator_signer_public_keys.into_iter().cloned().collect();
-    allowlist.extend(explicit_remote_writer_public_keys.iter().cloned());
+    allowlist.sort();
+    allowlist.dedup();
+    allowlist
+}
+
+fn build_replication_fetch_requester_allowlist<'a>(
+    validator_signer_public_keys: impl IntoIterator<Item = &'a String>,
+    explicit_fetch_requester_public_keys: &[String],
+) -> Vec<String> {
+    let mut allowlist: Vec<String> = validator_signer_public_keys.into_iter().cloned().collect();
+    allowlist.extend(explicit_fetch_requester_public_keys.iter().cloned());
     allowlist.sort();
     allowlist.dedup();
     allowlist

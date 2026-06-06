@@ -686,6 +686,94 @@ fn runtime_fetch_handlers_reject_unsigned_fetch_request_in_signed_mode() {
 }
 
 #[test]
+fn runtime_fetch_handlers_authorize_explicit_fetch_requester_without_writer_access() {
+    let world_id = "world-fetch-requester-hardening";
+    let dir_validator = temp_dir("fetch-requester-validator");
+    let dir_observer = temp_dir("fetch-requester-observer");
+    let (_, observer_public_hex) = deterministic_keypair_hex(120);
+    let (_, other_public_hex) = deterministic_keypair_hex(121);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 111)],
+    );
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+
+    let replication_config = signed_replication_config(dir_validator.clone(), 111)
+        .with_remote_writer_allowlist(vec![other_public_hex])
+        .expect("writer allowlist")
+        .with_fetch_requester_allowlist(vec![observer_public_hex.clone()])
+        .expect("fetch requester allowlist");
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Storage)
+        .expect("config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_auto_attest_all_validators(true)
+        .with_replication(replication_config);
+    let mut runtime = NodeRuntime::new(config)
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    runtime.start().expect("start");
+
+    let observer_replication_config = signed_replication_config(dir_observer.clone(), 120);
+    let observer_replication =
+        ReplicationRuntime::new(&observer_replication_config, "node-observer")
+            .expect("observer replication runtime");
+    let authorized_request = observer_replication
+        .build_fetch_commit_request(world_id, 1)
+        .expect("authorized request");
+    assert_eq!(
+        authorized_request.requester_public_key_hex.as_deref(),
+        Some(observer_public_hex.as_str())
+    );
+    let payload = serde_json::to_vec(&authorized_request).expect("encode authorized request");
+    let response = network
+        .request(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            payload.as_slice(),
+        )
+        .expect("explicit fetch requester should be authorized");
+    let response: super::replication::FetchCommitResponse =
+        serde_json::from_slice(response.as_slice()).expect("decode response");
+    assert!(!response.found);
+
+    let dir_denied = temp_dir("fetch-denied");
+    let unauthorized_replication_config = signed_replication_config(dir_denied.clone(), 122);
+    let unauthorized_replication =
+        ReplicationRuntime::new(&unauthorized_replication_config, "node-denied")
+            .expect("unauthorized replication runtime");
+    let unauthorized_request = unauthorized_replication
+        .build_fetch_commit_request(world_id, 1)
+        .expect("unauthorized request");
+    let payload = serde_json::to_vec(&unauthorized_request).expect("encode unauthorized request");
+    let err = network
+        .request(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            payload.as_slice(),
+        )
+        .expect_err("unlisted fetch requester should be rejected");
+    match err {
+        WorldError::NetworkRequestFailed { code, message, .. } => {
+            assert_eq!(code, DistributedErrorCode::ErrBadRequest);
+            assert!(message.contains("not authorized"));
+            assert!(message.contains("authorized_fetch_requester_count=1"));
+            assert!(message.contains("authorized_fetch_requester_fingerprint="));
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+
+    runtime.stop().expect("stop");
+    let _ = fs::remove_dir_all(dir_validator);
+    let _ = fs::remove_dir_all(dir_observer);
+    let _ = fs::remove_dir_all(dir_denied);
+}
+
+#[test]
 fn runtime_start_rejects_observer_feedback_p2p_without_blob_state_lane_access() {
     let world_id = "world-feedback-observer-gate";
     let dir = temp_dir("feedback-observer-gate");

@@ -139,10 +139,14 @@ fn replication_gap_sync_backfills_when_consensus_height_already_advanced() {
         signed_pos_config_with_signer_seeds(validators, &[("node-a", 143), ("node-b", 144)]);
     let replication_config_a = signed_replication_config(dir_a.clone(), 143)
         .with_remote_writer_allowlist(vec![public_key_b.clone()])
-        .expect("allowlist a");
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
     let replication_config_b = signed_replication_config(dir_b.clone(), 144)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
-        .expect("allowlist b");
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
+        .expect("fetch allowlist b");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
         .with_pos_config(pos_config.clone())
@@ -277,10 +281,14 @@ fn proposal_ahead_updates_replication_gap_sync_target_height() {
         signed_pos_config_with_signer_seeds(validators, &[("node-a", 154), ("node-b", 155)]);
     let replication_config_a = signed_replication_config(dir_a.clone(), 154)
         .with_remote_writer_allowlist(vec![public_key_b.clone()])
-        .expect("allowlist a");
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
     let replication_config_b = signed_replication_config(dir_b.clone(), 155)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
-        .expect("allowlist b");
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
+        .expect("fetch allowlist b");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
         .with_pos_config(pos_config.clone())

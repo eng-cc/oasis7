@@ -4,10 +4,11 @@ use super::{
     apply_traffic_profile_to_node_config, build_chain_balances_payload_from_world,
     build_chain_status_payload, build_default_peer_record,
     build_default_replication_network_config, build_live_node_network_policy_recommendation,
-    build_node_replication_config, build_replication_remote_writer_allowlist,
-    build_validator_signer_public_keys, derive_node_consensus_signer_keypair,
-    derive_node_libp2p_identity_keypair_config, node_keypair_config, parse_options,
-    parse_validator_spec, release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
+    build_node_replication_config, build_replication_fetch_requester_allowlist,
+    build_replication_remote_writer_allowlist, build_validator_signer_public_keys,
+    derive_node_consensus_signer_keypair, derive_node_libp2p_identity_keypair_config,
+    node_keypair_config, parse_options, parse_validator_spec,
+    release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
     DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
 };
 use ed25519_dalek::SigningKey;
@@ -744,7 +745,7 @@ fn build_node_replication_config_uses_storage_profile_budget() {
         public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
     };
     let storage_profile = StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault);
-    let config = build_node_replication_config("node-a", &keypair, &storage_profile, &[])
+    let config = build_node_replication_config("node-a", &keypair, &storage_profile, &[], &[])
         .expect("replication config should build");
 
     assert_eq!(
@@ -785,12 +786,21 @@ fn live_reachability_snapshot_promotes_public_entry_from_autonat_probe() {
 }
 
 #[test]
-fn build_replication_remote_writer_allowlist_combines_validator_and_explicit_keys() {
+fn build_replication_remote_writer_allowlist_uses_only_validator_keys() {
+    let validator_signers = ["bbbb".to_string(), "aaaa".to_string(), "bbbb".to_string()];
+
+    let allowlist = build_replication_remote_writer_allowlist(validator_signers.iter());
+
+    assert_eq!(allowlist, vec!["aaaa".to_string(), "bbbb".to_string()]);
+}
+
+#[test]
+fn build_replication_fetch_requester_allowlist_combines_validator_and_explicit_keys() {
     let validator_signers = ["bbbb".to_string(), "aaaa".to_string(), "bbbb".to_string()];
     let explicit = vec!["cccc".to_string(), "aaaa".to_string()];
 
     let allowlist =
-        build_replication_remote_writer_allowlist(validator_signers.iter(), explicit.as_slice());
+        build_replication_fetch_requester_allowlist(validator_signers.iter(), explicit.as_slice());
 
     assert_eq!(
         allowlist,

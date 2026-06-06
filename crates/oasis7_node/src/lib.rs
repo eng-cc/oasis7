@@ -268,13 +268,19 @@ impl NodeRuntime {
             .replication
             .as_ref()
             .map(|config| {
-                config.clone().with_default_remote_writer_allowlist(
-                    self.config
-                        .pos_config
-                        .validator_signer_public_keys
-                        .values()
-                        .cloned(),
-                )
+                let validator_signer_public_keys = self
+                    .config
+                    .pos_config
+                    .validator_signer_public_keys
+                    .values()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                config
+                    .clone()
+                    .with_default_remote_writer_allowlist(
+                        validator_signer_public_keys.iter().cloned(),
+                    )?
+                    .with_default_fetch_requester_allowlist(validator_signer_public_keys)
             })
             .transpose()?;
         let pos_state_store = effective_replication_config
