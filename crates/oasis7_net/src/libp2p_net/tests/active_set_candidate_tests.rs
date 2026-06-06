@@ -49,14 +49,16 @@ fn active_set_candidate_status_flags_bucket_overflow_without_full_recompute() {
     );
     let candidate = ActivePeerCandidate::from_record_and_path(&candidate_record, &candidate_path);
 
+    let policy = PeerManagerPolicy {
+        min_active_peers_for_share_limits: 0,
+        ..PeerManagerPolicy::default()
+    };
     assert_eq!(
-        candidate_status_with_active_set(&candidate, &stats, &PeerManagerPolicy::default()),
+        candidate_status_with_active_set(&candidate, &stats, &policy),
         PeerManagerHealthStatus::Blocked
     );
     assert!(candidate_would_degrade_admitted_peers(
-        &candidate,
-        &stats,
-        &PeerManagerPolicy::default(),
+        &candidate, &stats, &policy,
     ));
 }
 

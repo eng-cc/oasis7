@@ -166,6 +166,7 @@ pub(super) struct ChainReplicationTransportStability {
     pub(super) stable: bool,
     pub(super) score: u8,
     pub(super) recent_error_count: usize,
+    pub(super) blocking_error_count: usize,
     pub(super) connection_closed_count: usize,
     pub(super) insufficient_peers_count: usize,
     pub(super) timeout_count: usize,
@@ -363,6 +364,9 @@ pub(super) fn classify_transport_stability(
     let mut timeout_count = 0usize;
     let mut protocol_error_count = 0usize;
     for error in &replication.recent_errors {
+        if replication_error_is_diagnostic(error) {
+            continue;
+        }
         let lower = error.to_ascii_lowercase();
         if lower.contains("connectionclosed") || lower.contains("connection closed") {
             connection_closed_count += 1;
@@ -405,11 +409,34 @@ pub(super) fn classify_transport_stability(
         stable: score >= TRANSPORT_STABILITY_MIN_SCORE,
         score,
         recent_error_count: replication.recent_errors.len(),
+        blocking_error_count: blocking_replication_error_count(replication),
         connection_closed_count,
         insufficient_peers_count,
         timeout_count,
         protocol_error_count,
     }
+}
+
+fn blocking_replication_error_count(replication: &super::ChainReplicationDebugStatus) -> usize {
+    replication
+        .recent_errors
+        .iter()
+        .filter(|error| !replication_error_is_diagnostic(error))
+        .count()
+}
+
+fn replication_error_is_diagnostic(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    lower.contains("libp2p autonat")
+        || lower.contains("autonat")
+        || lower.contains("peer record request failed")
+        || lower.contains("missingpeerrecord")
+        || lower.contains("missing_peer_record")
+        || lower.contains("insufficientactivediscoverysources")
+        || lower.contains("insufficient_active_discovery_sources")
+        || lower.contains("single_source_discovery")
+        || lower.contains("quarantine suppresses")
+        || lower.contains("dial condition")
 }
 
 fn reachability_policy_ok(
@@ -566,6 +593,7 @@ pub(super) fn build_chain_node_observability_status(
     );
     let recent_replication_error_count = replication.recent_errors.len();
     let transport_stability = classify_transport_stability(replication);
+    let blocking_replication_error_count = transport_stability.blocking_error_count;
     let reachability_policy_ok = reachability_policy_ok(snapshot, p2p, active_peer_count, policy);
     let storage_degraded = storage_metrics.degraded_reason.is_some()
         || matches!(storage_metrics.last_gc_result.as_str(), "failed");
@@ -784,13 +812,13 @@ pub(super) fn build_chain_node_observability_status(
             "replication discovered peers but has no connected peers".to_string(),
         );
     }
-    if recent_replication_error_count > 0 {
+    if blocking_replication_error_count > 0 {
         push_observability_alert(
             &mut alerts,
             "warn",
             "replication_recent_errors",
             format!(
-                "replication reported {recent_replication_error_count} recent transport/protocol errors"
+                "replication reported {blocking_replication_error_count} recent blocking transport/protocol errors"
             ),
         );
     }

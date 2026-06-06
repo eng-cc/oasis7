@@ -12,6 +12,7 @@ use super::transport_paths::{TransportPath, TransportPathKind};
 pub struct PeerManagerPolicy {
     pub min_active_discovery_sources: usize,
     pub min_peer_discovery_sources: usize,
+    pub min_active_peers_for_share_limits: usize,
     pub max_ipv4_subnet_active_peers: Option<usize>,
     pub max_ipv4_subnet_share_per_mille: u16,
     pub block_ipv4_subnet_share_per_mille: u16,
@@ -29,6 +30,7 @@ impl Default for PeerManagerPolicy {
         Self {
             min_active_discovery_sources: 2,
             min_peer_discovery_sources: 2,
+            min_active_peers_for_share_limits: 4,
             max_ipv4_subnet_active_peers: None,
             max_ipv4_subnet_share_per_mille: 250,
             block_ipv4_subnet_share_per_mille: 500,
@@ -40,6 +42,12 @@ impl Default for PeerManagerPolicy {
             block_asn_share_per_mille: 500,
             max_relayed_active_peer_share_per_mille: 500,
         }
+    }
+}
+
+impl PeerManagerPolicy {
+    pub(super) fn applies_share_limits(&self, active_peer_count: usize) -> bool {
+        active_peer_count >= self.min_active_peers_for_share_limits
     }
 }
 
@@ -190,7 +198,8 @@ pub(super) fn recompute_peer_manager_healths(
                         });
                         hard_block = true;
                     }
-                } else if bucket_count >= 2
+                } else if policy.applies_share_limits(active_set_stats.active_peer_count)
+                    && bucket_count >= 2
                     && meets_or_exceeds_share_limit(
                         bucket_count,
                         active_set_stats.active_peer_count,
@@ -204,7 +213,8 @@ pub(super) fn recompute_peer_manager_healths(
                         limit_per_mille: policy.block_ipv4_subnet_share_per_mille,
                     });
                     hard_block = true;
-                } else if bucket_count >= 2
+                } else if policy.applies_share_limits(active_set_stats.active_peer_count)
+                    && bucket_count >= 2
                     && exceeds_share_limit(
                         bucket_count,
                         active_set_stats.active_peer_count,
@@ -233,7 +243,8 @@ pub(super) fn recompute_peer_manager_healths(
                         .get(domain.as_str())
                         .copied()
                         .unwrap_or(0);
-                    if bucket_count >= 2
+                    if policy.applies_share_limits(active_set_stats.active_peer_count)
+                        && bucket_count >= 2
                         && meets_or_exceeds_share_limit(
                             bucket_count,
                             active_set_stats.active_peer_count,
@@ -247,7 +258,8 @@ pub(super) fn recompute_peer_manager_healths(
                             limit_per_mille: policy.block_relay_domain_share_per_mille,
                         });
                         hard_block = true;
-                    } else if bucket_count >= 2
+                    } else if policy.applies_share_limits(active_set_stats.active_peer_count)
+                        && bucket_count >= 2
                         && exceeds_share_limit(
                             bucket_count,
                             active_set_stats.active_peer_count,
@@ -269,7 +281,8 @@ pub(super) fn recompute_peer_manager_healths(
                     .get(source_operator.as_str())
                     .copied()
                     .unwrap_or(0);
-                if bucket_count >= 2
+                if policy.applies_share_limits(active_set_stats.active_peer_count)
+                    && bucket_count >= 2
                     && meets_or_exceeds_share_limit(
                         bucket_count,
                         active_set_stats.active_peer_count,
@@ -283,7 +296,8 @@ pub(super) fn recompute_peer_manager_healths(
                         limit_per_mille: policy.block_operator_share_per_mille,
                     });
                     hard_block = true;
-                } else if bucket_count >= 2
+                } else if policy.applies_share_limits(active_set_stats.active_peer_count)
+                    && bucket_count >= 2
                     && exceeds_share_limit(
                         bucket_count,
                         active_set_stats.active_peer_count,
@@ -304,7 +318,8 @@ pub(super) fn recompute_peer_manager_healths(
                     .get(source_asn.as_str())
                     .copied()
                     .unwrap_or(0);
-                if bucket_count >= 2
+                if policy.applies_share_limits(active_set_stats.active_peer_count)
+                    && bucket_count >= 2
                     && meets_or_exceeds_share_limit(
                         bucket_count,
                         active_set_stats.active_peer_count,
@@ -318,7 +333,8 @@ pub(super) fn recompute_peer_manager_healths(
                         limit_per_mille: policy.block_asn_share_per_mille,
                     });
                     hard_block = true;
-                } else if bucket_count >= 2
+                } else if policy.applies_share_limits(active_set_stats.active_peer_count)
+                    && bucket_count >= 2
                     && exceeds_share_limit(
                         bucket_count,
                         active_set_stats.active_peer_count,
@@ -578,8 +594,11 @@ mod tests {
             ),
         ]);
 
-        let healths =
-            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        let policy = PeerManagerPolicy {
+            min_active_peers_for_share_limits: 0,
+            ..PeerManagerPolicy::default()
+        };
+        let healths = recompute_peer_manager_healths(&discovered, &active, &policy);
         assert!(healths[&peer_a].issues.iter().any(|issue| matches!(
             issue,
             PeerManagerHealthIssue::Ipv4SubnetConcentration { subnet, .. } if subnet == "192.168.10"
@@ -589,6 +608,54 @@ mod tests {
             PeerManagerHealthIssue::Ipv4SubnetConcentration { subnet, .. } if subnet == "192.168.10"
         )));
         assert_eq!(healths[&peer_c].status, PeerManagerHealthStatus::Active);
+    }
+
+    #[test]
+    fn recompute_defers_share_limits_for_small_static_topology() {
+        let peer_a = PeerId::random();
+        let peer_b = PeerId::random();
+        let peer_c = PeerId::random();
+        let discovery_sources = vec![
+            PeerDiscoverySource::StaticBootstrap,
+            PeerDiscoverySource::Dht,
+        ];
+        let discovered = HashMap::from([
+            (peer_a, sample_record(peer_a, discovery_sources.clone())),
+            (peer_b, sample_record(peer_b, discovery_sources.clone())),
+            (peer_c, sample_record(peer_c, discovery_sources)),
+        ]);
+        let active = HashMap::from([
+            (
+                peer_a,
+                transport_path(
+                    peer_a,
+                    "/ip4/192.168.10.1/udp/4101/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peer_b,
+                transport_path(
+                    peer_b,
+                    "/ip4/192.168.10.2/udp/4102/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peer_c,
+                transport_path(
+                    peer_c,
+                    "/ip4/10.20.30.40/udp/4103/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+        ]);
+
+        let healths =
+            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        for peer in [peer_a, peer_b, peer_c] {
+            assert_eq!(healths[&peer].status, PeerManagerHealthStatus::Active);
+        }
     }
 
     #[test]
@@ -733,8 +800,11 @@ mod tests {
             ),
         ]);
 
-        let healths =
-            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        let policy = PeerManagerPolicy {
+            min_active_peers_for_share_limits: 0,
+            ..PeerManagerPolicy::default()
+        };
+        let healths = recompute_peer_manager_healths(&discovered, &active, &policy);
         for peer in [peer_a, peer_b] {
             assert!(
                 !healths[&peer].issues.iter().any(|issue| matches!(
@@ -792,8 +862,11 @@ mod tests {
             ),
         ]);
 
-        let healths =
-            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        let policy = PeerManagerPolicy {
+            min_active_peers_for_share_limits: 0,
+            ..PeerManagerPolicy::default()
+        };
+        let healths = recompute_peer_manager_healths(&discovered, &active, &policy);
         for peer in [peer_a, peer_b] {
             let health = &healths[&peer];
             assert_eq!(health.status, PeerManagerHealthStatus::Blocked);
@@ -901,8 +974,11 @@ mod tests {
             ),
         ]);
 
-        let healths =
-            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        let policy = PeerManagerPolicy {
+            min_active_peers_for_share_limits: 0,
+            ..PeerManagerPolicy::default()
+        };
+        let healths = recompute_peer_manager_healths(&discovered, &active, &policy);
         for peer in [peer_a, peer_b] {
             let health = &healths[&peer];
             assert_eq!(health.status, PeerManagerHealthStatus::Blocked);
