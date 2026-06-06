@@ -395,6 +395,92 @@ fn runtime_gossip_tracks_peer_heads_when_replication_network_consensus_is_disabl
 }
 
 #[test]
+fn runtime_commit_heads_publish_on_network_and_gossip_transports() {
+    let socket_a = UdpSocket::bind("127.0.0.1:0").expect("bind a");
+    let socket_b = UdpSocket::bind("127.0.0.1:0").expect("bind b");
+    let addr_a = socket_a.local_addr().expect("addr a");
+    let addr_b = socket_b.local_addr().expect("addr b");
+    drop(socket_a);
+    drop(socket_b);
+
+    let world_id = "world-dual-commit-transport";
+    let validators = vec![
+        PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 60,
+        },
+        PosValidator {
+            validator_id: "node-b".to_string(),
+            stake: 40,
+        },
+    ];
+    let network = Arc::new(TestInMemoryNetwork::default());
+    let runtime_network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = network.clone();
+
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick a")
+        .with_pos_validators(validators.clone())
+        .expect("validators a")
+        .with_auto_attest_all_validators(true)
+        .with_gossip_optional(addr_a, vec![addr_b]);
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick b")
+        .with_pos_validators(validators)
+        .expect("validators b")
+        .with_gossip_optional(addr_b, vec![addr_a]);
+
+    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(
+            &runtime_network,
+        )));
+    let mut runtime_b = NodeRuntime::new(config_b)
+        .with_replication_network(NodeReplicationNetworkHandle::new(runtime_network))
+        .with_replication_network_consensus_enabled(false);
+    runtime_a.start().expect("start a");
+    runtime_b.start().expect("start b");
+
+    let commit_topic = super::network_bridge::default_consensus_commit_topic(world_id);
+    let synced = wait_until(Instant::now() + Duration::from_secs(8), || {
+        let snapshot_b = runtime_b.snapshot();
+        let network_published = network
+            .retained
+            .lock()
+            .expect("lock retained")
+            .get(commit_topic.as_str())
+            .is_some_and(|messages| !messages.is_empty());
+        snapshot_b.consensus.known_peer_heads >= 1 && network_published
+    });
+    let snapshot_a = runtime_a.snapshot();
+    let snapshot_b = runtime_b.snapshot();
+
+    runtime_a.stop().expect("stop a");
+    runtime_b.stop().expect("stop b");
+
+    assert!(
+        synced,
+        "commit heads did not publish on both transports: a_committed={} b_known={} b_heads={:?} network_commit_messages={} a_last_error={:?} b_last_error={:?}",
+        snapshot_a.consensus.committed_height,
+        snapshot_b.consensus.known_peer_heads,
+        snapshot_b.consensus.peer_heads,
+        network
+            .retained
+            .lock()
+            .expect("lock retained")
+            .get(commit_topic.as_str())
+            .map(|messages| messages.len())
+            .unwrap_or(0),
+        snapshot_a.last_error,
+        snapshot_b.last_error
+    );
+}
+
+#[test]
 fn runtime_network_consensus_syncs_peer_heads_without_udp_gossip() {
     let validators = vec![
         PosValidator {

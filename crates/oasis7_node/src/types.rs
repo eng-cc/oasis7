@@ -305,7 +305,7 @@ impl NodeNetworkPolicy {
             PeerDeploymentMode::Private
                 | PeerDeploymentMode::RelayOnly
                 | PeerDeploymentMode::ValidatorHidden
-        ) && !matches!(self.node_role_claim, PeerNodeRole::ValidatorCore)
+        )
     }
 
     pub fn allows_lane_operation(
@@ -377,14 +377,10 @@ impl NodeNetworkPolicy {
 }
 
 fn recommend_user_mode(
-    runtime_role: NodeRole,
+    _runtime_role: NodeRole,
     detection: NodeReachabilityAutoDetection,
 ) -> NodeUserMode {
     if !detection.probe_stable {
-        return NodeUserMode::PrivateSafe;
-    }
-
-    if matches!(runtime_role, NodeRole::Sequencer) {
         return NodeUserMode::PrivateSafe;
     }
 

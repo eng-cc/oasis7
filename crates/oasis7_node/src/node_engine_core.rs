@@ -136,8 +136,10 @@ impl PosNodeEngine {
             last_broadcast_proposal_at_ms: None,
             last_broadcast_local_attestation_height: 0,
             last_broadcast_local_attestation_at_ms: None,
-            last_broadcast_committed_height: 0,
-            last_broadcast_committed_at_ms: None,
+            last_broadcast_gossip_committed_height: 0,
+            last_broadcast_gossip_committed_at_ms: None,
+            last_broadcast_network_committed_height: 0,
+            last_broadcast_network_committed_at_ms: None,
             replicate_local_commits: config.replication.is_some()
                 && (matches!(config.role, NodeRole::Sequencer)
                     || matches!(
@@ -336,8 +338,16 @@ impl PosNodeEngine {
                 now_ms,
                 replication.as_deref(),
             )?;
-        } else if let Some(endpoint) = gossip.as_ref() {
+        }
+        if let Some(endpoint) = gossip.as_ref() {
             self.broadcast_local_commit(endpoint, node_id, world_id, now_ms, &decision)?;
+            self.broadcast_replicated_commit_head_gossip(
+                endpoint,
+                node_id,
+                world_id,
+                now_ms,
+                replication.as_deref(),
+            )?;
         }
         if let Some(endpoint) = gossip.as_ref() {
             self.ingest_peer_messages(

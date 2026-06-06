@@ -645,7 +645,8 @@ fn restore_state_snapshot_clamps_stale_heights_and_broadcast_cursors() {
     assert_eq!(engine.next_height, 367);
     assert_eq!(engine.last_broadcast_proposal_height, 366);
     assert_eq!(engine.last_broadcast_local_attestation_height, 366);
-    assert_eq!(engine.last_broadcast_committed_height, 365);
+    assert_eq!(engine.last_broadcast_gossip_committed_height, 365);
+    assert_eq!(engine.last_broadcast_network_committed_height, 365);
     assert!(engine.pending.is_none());
 }
 
