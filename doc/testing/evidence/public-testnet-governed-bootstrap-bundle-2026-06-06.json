@@ -1,0 +1,47 @@
+{
+  "schema_version": "oasis7.release_candidate_bundle.v1",
+  "candidate_id": "public-testnet-governed-bootstrap-20260606",
+  "track": "public_testnet",
+  "created_at": "2026-06-06T03:23:42Z",
+  "repo_root": "/Users/scc/ccwork/worktrees/oasis7-p2p-public-testnet-governed-bootstrap-rebuild",
+  "git_commit": "48de65c9378f32f77c09220dfd10bbc6ecd974ae",
+  "git_worktree_dirty": true,
+  "runtime_build": {
+    "ref": ".tmp/public-testnet-governed-bootstrap-live/oasis7_chain_runtime.linux-x86_64",
+    "resolved_path": "/Users/scc/ccwork/worktrees/oasis7-p2p-public-testnet-governed-bootstrap-rebuild/.tmp/public-testnet-governed-bootstrap-live/oasis7_chain_runtime.linux-x86_64",
+    "kind": "file",
+    "sha256": "4763a211fd3e9fb71322cff786ae922285f53bfe6db2160e906fba3ad1e7ce7a",
+    "size_bytes": 97581816
+  },
+  "world_snapshot": {
+    "ref": "doc/testing/evidence/public-testnet-governed-bootstrap-world-snapshot-placeholder-2026-06-06.json",
+    "resolved_path": "/Users/scc/ccwork/worktrees/oasis7-p2p-public-testnet-governed-bootstrap-rebuild/doc/testing/evidence/public-testnet-governed-bootstrap-world-snapshot-placeholder-2026-06-06.json",
+    "kind": "file",
+    "sha256": "d0a2e49688bed00d3e2522e4817640b239807bfe40f5d19c884e7283a1c6a173",
+    "size_bytes": 232
+  },
+  "governance_manifest": {
+    "ref": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
+    "resolved_path": "/Users/scc/ccwork/worktrees/oasis7-p2p-public-testnet-governed-bootstrap-rebuild/doc/testing/evidence/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
+    "kind": "file",
+    "sha256": "fa1390f788f2aa5800b9c1b8020395bdb40a5b7c5003e6543e8695d3a655938f",
+    "size_bytes": 516
+  },
+  "evidence_refs": [
+    {
+      "ref": "doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md",
+      "resolved_path": "/Users/scc/ccwork/worktrees/oasis7-p2p-public-testnet-governed-bootstrap-rebuild/doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md",
+      "kind": "file",
+      "sha256": "0b69e43711b276f02b1561a7aa2e04d0a4e553dcefba95690db317b47cf20f77",
+      "size_bytes": 2613
+    },
+    {
+      "ref": "doc/testing/evidence/network-tier-signer-truth-binding-2026-06-05.md",
+      "resolved_path": "/Users/scc/ccwork/worktrees/oasis7-p2p-public-testnet-governed-bootstrap-rebuild/doc/testing/evidence/network-tier-signer-truth-binding-2026-06-05.md",
+      "kind": "file",
+      "sha256": "13478a9bc6babd492d8b2b851b589968f1c341ab27dbb09fd025d84c6048060e",
+      "size_bytes": 1434
+    }
+  ],
+  "notes": []
+}

@@ -1,0 +1,19 @@
+{
+  "slot_id": "governance.finality.v1",
+  "threshold": 2,
+  "threshold_bps": 0,
+  "validators": [
+    {
+      "node_id": "triad-testnet-sequencer",
+      "scheme": "ed25519",
+      "finality_signer_public_key": "e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690",
+      "stake": 100
+    },
+    {
+      "node_id": "triad-testnet-storage",
+      "scheme": "ed25519",
+      "finality_signer_public_key": "1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33",
+      "stake": 100
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 {
   "schema_version": "oasis7.genesis.example.v1",
   "network_tier": "public_testnet",
-  "chain_id": "oasis7-public-testnet-example",
-  "world_id": "oasis7-public-testnet-example",
+  "chain_id": "oasis7-public-testnet-governed-20260606",
+  "world_id": "oasis7-public-testnet-governed-20260606",
   "main_token": {
     "symbol": "OC",
     "initial_supply": "10000000000"
@@ -11,12 +11,13 @@
     "governance_public_manifest_ref": "doc/testing/evidence/public-testnet-governance-public-signers-2026-06-05.json",
     "liveops_public_manifest_ref": "doc/testing/evidence/public-testnet-liveops-public-signers-2026-06-05.json",
     "binding_notes_ref": "doc/testing/evidence/network-tier-signer-truth-binding-2026-06-05.md",
-    "fresh_bootstrap_topology_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md"
+    "genesis_validator_registry_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
+    "topology_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md"
   },
   "notes": [
-    "public_testnet example genesis only",
-    "governance and liveops public signer truth are pinned repo-side",
-    "current governed bootstrap candidate freezes 2 validators plus 2 observers",
+    "fresh public_testnet cold-start candidate",
+    "governed validator truth boots with two validators and four total nodes",
+    "observer nodes join outside the genesis validator registry",
     "resettable rehearsal surface",
     "not a mainnet or production settlement artifact"
   ]

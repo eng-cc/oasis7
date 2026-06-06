@@ -1,0 +1,24 @@
+{
+  "schema_version": "oasis7.signer_truth_bundle.v1",
+  "tier": "public_testnet",
+  "truth_kind": "liveops_public_signers",
+  "batch_id": "oasis7-liveops-batch-20260605-01",
+  "generated_on": "2026-06-05",
+  "threshold_hint": 1,
+  "entries": [
+    {
+      "slot_id": "liveops",
+      "signer_id": "signer01",
+      "scheme": "ed25519",
+      "threshold": 1,
+      "public_key_hex": "8aea9343eea44cdbdaf70d2bf42ffb58c81a0829be0418a9395c4bd2a9355ff2"
+    },
+    {
+      "slot_id": "liveops",
+      "signer_id": "signer02",
+      "scheme": "ed25519",
+      "threshold": 1,
+      "public_key_hex": "80ec9c18178903d8bf30368c0485a5b1c80dc721c724cf07e854a539df98e9cf"
+    }
+  ]
+}
