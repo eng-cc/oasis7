@@ -44,12 +44,12 @@
 | --- | --- | --- | --- | --- | --- |
 | 首次控制地板 | `first_control_success`、`ttfc_ms`、`control_hit_rate`、`requires_manual_recover` | headed Web/UI 主路径 `play/step/select` | `blocked -> unstable -> stable` | 首次成功率优先于平均成功率；任何手动恢复都记为失败样本 | `viewer_engineer` / `runtime_engineer` 共同 owner，`qa_engineer` 复核 |
 | 10 分钟信任门 | `first_control_success`、`goal_clarity`、`consequence_readability`、`replay_intent`、`lane` | 汇总 active-LLM 正式 10 分钟样本并输出 trust verdict | `draft -> watch -> continue_playing / hold` | 先验证“控制可信 + 主目标可读 + 愿意继续”；不得单靠 capability 未闭环就判失败 | `qa_engineer` owner，`producer_system_designer` 最终裁决 |
-| 首个持续能力门 | `capability_goal_id`、`capability_progress_percent`、`factory_ready`、`first_product`、`blocked_reason`、`resumed`、`branch_offer` | 在后续 `30` 分钟或 `1~3` 次会话中跟踪首条能力链是否闭环 | `not_started -> industrial_bootstrap -> resilient_production -> branch_ready / blocked` | 必须先有持续产能，再给扩产/治理/冲突分支；不得用单条 10 分钟样本替代 | `producer_system_designer` 冻结口径，`runtime_engineer` / `viewer_engineer` 落地，`qa_engineer` 复核 |
+| 首个持续能力门 | `capability_goal_id`、`capability_progress_percent`、`factory_ready`、`first_product`、`blocked_reason`、`resumed`、`branch_offer` | 在后续 `30` 分钟或 `1~3` 次会话中跟踪首条能力链是否闭环 | `not_started -> industrial_bootstrap -> resilient_production -> branch_ready / blocked` | 必须先有持续产能，再给扩产/治理/协作分支；不得用单条 10 分钟样本替代 | `producer_system_designer` 冻结口径，`runtime_engineer` / `viewer_engineer` 落地，`qa_engineer` 复核 |
 | 首屏噪音治理 | `primary_goal_visible`、`noise_competes_with_goal`、`player_identity_clarity` | 默认首屏仅突出主目标与下一步 | `toolish -> noisy_playable -> player_focused` | 当前目标相关信息优先于历史噪音、operator/debug 信息 | `viewer_engineer` owner |
 | 后果可见化 | `accepted`、`executing`、`produced_or_resumed`、`cost_or_blocker` | 主 HUD / toast / chatter 反馈 | `implicit -> readable -> motivating` | 先解释关键代价与结果，再展示次要日志 | `viewer_engineer` owner，`agent_engineer` 配合语义 |
 
 - Acceptance Criteria:
-  - AC-1: `PRD-GAME-012` 明确未来两周只优先做 5 条 lane，不把战争/治理/元进度扩面写进当前冲刺主目标。
+  - AC-1: `PRD-GAME-012` 明确未来两周只优先做 5 条 lane，不把宏系统/高风险对抗/元进度扩面写进当前冲刺主目标。
   - AC-2: `gameplay` 主文档与 `game` 根 PRD/project 挂载 `PRD-GAME-012`，并给出 `TASK-GAME-061~065` 映射。
   - AC-3: 至少 1 个专题 project 明确写出每条 lane 的 owner role、test tier、验收命令与 done definition。
   - AC-4: 正式 `10-minute trust gate` 必须区分 active-LLM 正式游玩与 `--no-llm` debug/probe lane，避免口径回退到 observer-only 样本。
@@ -59,7 +59,7 @@
   - AC-8: 本专题必须给出“该砍什么 / 该补什么 / 两层门禁如何判定”三类裁决，而不是泛化成长期愿景。
   - AC-9: execution log、根入口与专题 project 的当前阶段判断必须继续保持 `internal_playable_alpha_late`，不借本专题提前放宽 `closed beta` 口径。
 - Non-Goals:
-  - 不在本专题中新增战争、治理、元进度的大范围新功能。
+  - 不在本专题中新增宏系统、高风险对抗、元进度的大范围新功能。
   - 不把 Prompt Ops / operator-only 能力重新包装成默认玩家主路径。
   - 不把 `--no-llm` 调试 lane 重新定义为正式游玩入口。
 
@@ -135,7 +135,7 @@
 
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-RR-001 | 两周内只做 5 条高优先级 retention lane | 同时继续扩大战争/治理/元进度新功能 | 当前主要矛盾是 10 分钟留存，不是功能面不够大。 |
+| DEC-RR-001 | 两周内只做 5 条高优先级 retention lane | 同时继续扩大宏系统/高风险对抗/元进度新功能 | 当前主要矛盾是 10 分钟留存，不是功能面不够大。 |
 | DEC-RR-002 | active-LLM 样本作为正式 retention gate | 继续使用 `--no-llm` 作为正式可玩性结论 | 当前制作人口径已明确 no-LLM 仅保留 observer/debug。 |
 | DEC-RR-003 | 先修控制地板，再做首屏 polish 与中循环加厚 | 先做更漂亮的前端或更宏大的系统宣传 | 玩家信任先于审美放大；不稳定控制会吞掉所有包装收益。 |
 | DEC-RR-004 | 2026-04-09 当前切片先维持 `hold`，不继续累积 retention 样本 | 忽略 fresh `software_safe` floor blocker，继续拿旧 PASS 或 debug/probe 样本拼接 continue 结论 | fresh active-LLM rerun 已证明正式入口第一步仍会被 provider timeout 阻断；在 floor 未恢复前继续累计 10 分钟样本只会污染正式 gate。 |
