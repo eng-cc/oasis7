@@ -53,9 +53,11 @@ jobs:
           version="${tag#v}"
           matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"},{"os":"windows-2022","platform":"windows-x64","asset_name":"oasis7-windows-x64.exe","target_triple":"native"}]}'
 
-          echo "ref=${tag}" >> "${GITHUB_OUTPUT}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "ref=${tag}"
+            echo "version=${version}"
+            echo "matrix=${matrix}"
+          } >> "${GITHUB_OUTPUT}"
 
   release_gate_runtime_core:
     name: release-gate-runtime-core
