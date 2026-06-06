@@ -429,6 +429,9 @@ fn replication_error_is_diagnostic(error: &str) -> bool {
     let lower = error.to_ascii_lowercase();
     lower.contains("libp2p autonat")
         || lower.contains("autonat")
+        || lower.contains("libp2p connection established")
+        || lower.contains("libp2p routing updated")
+        || lower.contains("libp2p transport active")
         || lower.contains("peer record request failed")
         || lower.contains("missingpeerrecord")
         || lower.contains("missing_peer_record")
@@ -479,11 +482,15 @@ fn build_readiness_status(
     observability: &ChainNodeObservabilityStatus,
     policy: ChainReadinessPolicyStatus,
 ) -> ChainReadinessStatus {
-    let failed_gates = observability
-        .alerts
-        .iter()
-        .map(|alert| alert.code.clone())
-        .collect::<Vec<_>>();
+    let failed_gates = if observability.ready {
+        Vec::new()
+    } else {
+        observability
+            .alerts
+            .iter()
+            .map(|alert| alert.code.clone())
+            .collect::<Vec<_>>()
+    };
     ChainReadinessStatus {
         status: if observability.ready {
             "ready"

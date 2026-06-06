@@ -44,6 +44,9 @@ fn classify_transport_stability_ignores_reachability_diagnostics() {
                 "peer record request failed: ConnectionClosed".to_string(),
                 "libp2p peer manager quarantine suppresses failover peer=peer-a".to_string(),
                 "dial condition peer=peer-a already connected or dial in progress".to_string(),
+                "libp2p connection established peer=peer-a".to_string(),
+                "libp2p routing updated peer=peer-a addrs=[/ip4/203.0.113.10/tcp/4001]".to_string(),
+                "libp2p transport active peer=peer-a kind=direct flavor=tcp+noise+yamux addr=/ip4/203.0.113.10/tcp/4001".to_string(),
             ],
         });
 
