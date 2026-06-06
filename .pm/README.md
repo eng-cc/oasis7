@@ -42,6 +42,7 @@
 - `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done(deferred)` 之间同步迁移 task file、task registry 与 owner backlog 条目。
 - `./scripts/pm/task-closeout.sh`：默认 close-phase helper；在 task 已 start 且 execution log 已回写后，若目标状态是 `done`，必须先执行当前回合 fresh verification，然后才统一执行 `workflow-report close -> move-task done|deferred -> pm lint`，再进入 commit / `prepare-task-pr.sh`。
 - `./scripts/pm/claim-ready.sh`：在宣称“完成 / 测试通过 / 可提 PR / 可合并”前，立即执行 fresh verification command；只有本次运行成功，才允许输出 claim-ready 结论。
+- `./scripts/pm/append-execution-log.sh`：结构化追加 `.pm/tasks/<TASK-UID>.execution.md` 条目，要求显式 task_uid、role、完成内容、遗留事项、动作与验证结果，避免手写漏字段。
 - `./scripts/pm/task-execution-log-lint.sh`：校验 task execution log 的路径、标题格式、角色名和条目完整性。
 - `./scripts/pm/promote-memory.sh`：从 signal 提升 active memory，或显式将噪声 signal 标记为 rejected / deferred。
 - `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
@@ -54,7 +55,7 @@
 - `./scripts/pm/working-memory-to-signal.sh`：把选中的 `working_memory` 条目提升成 `source_type=reflection` signal，并回写 `promoted_to`。
 - `./scripts/pm/working-memory-autoflow.sh`：按安全默认值把 `working_memory` 自动提升成 reflection signal，并将 `next_step/open_question` 自动落成 candidate task。
 - `./scripts/pm/reflection-report.sh`：按角色查看 reflection signal 队列，以及每条 signal 已挂出的 candidate task。
-- `./scripts/pm/role-report.sh`：按角色汇总 backlog 状态、任务列表，以及该角色的 active / needs_review / superseded memory。
+- `./scripts/pm/role-report.sh`：按角色汇总 backlog 状态、任务列表，以及该角色的 active / needs_review / superseded memory；带 `--task-uid` 时追加 task-centric collaboration view，汇总 owner/status、execution log、参与角色、slice/review marker 与收口缺口。
 - `./scripts/pm/set-stage.sh`：统一更新 `.pm/stage/current.yaml` 与 `.pm/stage/gate.yaml`，作为 producer 修改阶段当前态的 canonical 入口。
 - `./scripts/pm/stage-lint.sh`：校验 stage/gate 文件完整性、blocking task 可达性，以及 active memory 与 stage 当前态是否漂移。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
@@ -71,6 +72,8 @@
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
 - 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`；若需要手工拆步，再执行“fresh verification” + `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`
 - fresh verification claim：`./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "<fresh verification command>"`
+- 当前 task 严格 lint：`./scripts/pm/workflow-lint.sh --task-uid <TASK-UID> --phase current`；该路径只校验当前 task 的 binding、execution log、owner 与基础协作真值，不引入全仓历史 closeout/PR evidence 噪声。默认 `--phase pr-ready` 仍保留给 PR 创建前 claim-ready/closeout 门禁；`--phase post-pr` 再额外检查 PR evidence 链。
+- 结构化追加 execution log：`./scripts/pm/append-execution-log.sh --task-uid <TASK-UID> --role <owner_role> --completed "..." --pending "..." --action "..." --validation-command "..." --expected-result "..." --actual-result "..." --blocker-next-action "..."`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
 - GitHub PR preflight / 默认 watch-fix-merge 边界：`./scripts/prepare-task-pr.sh`
 - 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
@@ -134,7 +137,8 @@ role report 基础用法：
 - `./scripts/pm/role-report.sh`
 - `./scripts/pm/role-report.sh --role qa_engineer`
 - `./scripts/pm/role-report.sh --role qa_engineer --json`
-- 输出会同时带该角色 backlog 计数、任务列表，以及 active / needs_review / superseded memory。
+- `./scripts/pm/role-report.sh --role qa_engineer --task-uid task_<32hex>`
+- 输出会同时带该角色 backlog 计数、任务列表，以及 active / needs_review / superseded memory；带 `--task-uid` 时额外输出 task collaboration 摘要，方便 owner 合流多个角色 slice 的 evidence 与缺口。
 
 workflow report 基础用法：
 - `./scripts/pm/workflow-report.sh --phase start --role qa_engineer --task-uid task_<32hex>`

@@ -2228,11 +2228,17 @@ def build_memory_report(
     )
 
 
-def build_role_report(root: pathlib.Path, role_filter: str | None, stale_after_days: int) -> dict[str, object]:
+def build_role_report(
+    root: pathlib.Path,
+    role_filter: str | None,
+    stale_after_days: int,
+    task_uid: str | None = None,
+) -> dict[str, object]:
     return build_role_report_helper(
         root,
         role_filter,
         stale_after_days,
+        task_uid=task_uid,
         now_iso=now_iso,
         sync_task_views=sync_task_views,
         load_roles=load_roles,
@@ -2374,6 +2380,42 @@ def cmd_task_lint(args: argparse.Namespace) -> int:
 def cmd_task_execution_log_lint(args: argparse.Namespace) -> int:
     run_task_backlog_lint(args.root)
     print("task-execution-log-lint: OK")
+    return 0
+
+
+def cmd_append_execution_log(args: argparse.Namespace) -> int:
+    task_path, task_fields = find_task_file(args.root, args.task_uid)
+    del task_path
+    if args.role not in load_roles(args.root):
+        raise ValueError(f"unknown execution log role: {args.role}")
+    execution_log_path = str(task_fields.get("execution_log_path") or "")
+    expected_log_path = task_execution_log_relative_path(args.task_uid)
+    if execution_log_path != expected_log_path:
+        raise ValueError(
+            f"task execution_log_path mismatch: {args.task_uid} -> "
+            f"{execution_log_path or '(missing)'} != {expected_log_path}"
+        )
+    append_execution_log_entry(
+        args.root,
+        execution_log_path,
+        role=args.role,
+        completed=args.completed,
+        pending=args.pending,
+        action=args.action,
+        validation_command=args.validation_command,
+        expected_result=args.expected_result,
+        actual_result=args.actual_result,
+        blocker_next_action=args.blocker_next_action,
+    )
+    result = {
+        "task_uid": args.task_uid,
+        "role": args.role,
+        "execution_log_path": execution_log_path,
+    }
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"append-execution-log: appended entry to {execution_log_path}")
     return 0
 
 
@@ -2890,6 +2932,7 @@ def main() -> int:
             "cmd_reflection_report": cmd_reflection_report,
             "cmd_role_report": cmd_role_report,
             "cmd_workflow_report": cmd_workflow_report,
+            "cmd_append_execution_log": cmd_append_execution_log,
             "cmd_promote_memory": cmd_promote_memory,
             "cmd_move_task": cmd_move_task,
             "cmd_compact_task_group": cmd_compact_task_group,

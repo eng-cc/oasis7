@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
@@ -129,10 +130,90 @@ def normalize_list_field(value: object) -> list[object]:
     return [value]
 
 
+def build_task_collaboration_summary(
+    root: pathlib.Path,
+    task_uid: str,
+    *,
+    load_mapping_document,
+) -> OrderedDict[str, object]:
+    task_path = root / ".pm" / "tasks" / f"{task_uid}.yaml"
+    if not task_path.is_file():
+        raise ValueError(f"task not found: {task_uid}")
+    task_fields = load_mapping_document(task_path)
+    execution_log_path = str(task_fields.get("execution_log_path") or f".pm/tasks/{task_uid}.execution.md")
+    execution_log_file = root / execution_log_path
+    text = execution_log_file.read_text(encoding="utf-8") if execution_log_file.is_file() else ""
+
+    entry_roles: list[str] = []
+    for match in re.finditer(r"^## \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} CST / ([a-z_][a-z0-9_]*)$", text, re.MULTILINE):
+        role = match.group(1)
+        if role not in entry_roles:
+            entry_roles.append(role)
+
+    slice_roles: list[str] = []
+    review_roles: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("- role:"):
+            raw_roles = line.split(":", 1)[1]
+            for item in re.split(r"[,/+]", raw_roles):
+                role = item.strip()
+                if role and re.fullmatch(r"[a-z_][a-z0-9_]*", role) and role not in slice_roles:
+                    slice_roles.append(role)
+        elif line.startswith("- Review Roles:"):
+            raw_roles = line.split(":", 1)[1]
+            for item in re.split(r"[,;]", raw_roles):
+                role = item.strip()
+                if role and role not in review_roles:
+                    review_roles.append(role)
+
+    missing_closeout: list[str] = []
+    if not task_fields.get("last_started_at"):
+        missing_closeout.append("last_started_at")
+    if not task_fields.get("last_verified_at") or task_fields.get("last_verification_status") != "verified":
+        missing_closeout.append("verified_claim")
+    if not task_fields.get("last_closed_at"):
+        missing_closeout.append("last_closed_at")
+
+    return OrderedDict(
+        [
+            ("task_uid", task_uid),
+            ("title", task_fields.get("title")),
+            ("owner_role", task_fields.get("owner_role")),
+            ("status", task_fields.get("status")),
+            ("priority", task_fields.get("priority")),
+            ("task_path", str(task_path.relative_to(root))),
+            ("execution_log_path", execution_log_path),
+            ("execution_log_exists", execution_log_file.is_file()),
+            ("execution_entry_count", len(re.findall(r"^## ", text, re.MULTILINE))),
+            ("execution_roles", entry_roles),
+            ("slice_roles", slice_roles),
+            ("subagent_slice_plan_present", "Subagent Slice Plan" in text or "slice type:" in text),
+            ("pre_pr_local_role_review_passed", "Pre-PR Local Role Review: passed" in text),
+            ("review_roles", review_roles),
+            ("review_findings_disposition", _first_execution_log_field(text, "Review Findings Disposition")),
+            ("residual_risk", _first_execution_log_field(text, "Residual Risk")),
+            ("last_started_at", task_fields.get("last_started_at")),
+            ("last_claim_type", task_fields.get("last_claim_type")),
+            ("last_verification_status", task_fields.get("last_verification_status")),
+            ("last_verified_at", task_fields.get("last_verified_at")),
+            ("last_closed_at", task_fields.get("last_closed_at")),
+            ("handoff_to", normalize_list_field(task_fields.get("handoff_to"))),
+            ("missing_closeout_markers", missing_closeout),
+        ]
+    )
+
+
+def _first_execution_log_field(text: str, key: str) -> str | None:
+    match = re.search(rf"^- {re.escape(key)}: (.+)$", text, re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
 def build_role_report(
     root: pathlib.Path,
     role_filter: str | None,
     stale_after_days: int,
+    task_uid: str | None,
     *,
     now_iso,
     sync_task_views,
@@ -239,7 +320,7 @@ def build_role_report(
             "superseded_memory": superseded_by_role[role],
         }
 
-    return {
+    result = {
         "generated_at": now_iso(),
         "stale_after_days": stale_after_days,
         "role_filter": role_filter,
@@ -247,6 +328,13 @@ def build_role_report(
         "backlog_totals": backlog_totals,
         "roles": role_payloads,
     }
+    if task_uid:
+        result["task_collaboration"] = build_task_collaboration_summary(
+            root,
+            task_uid,
+            load_mapping_document=load_mapping_document,
+        )
+    return result
 
 
 def build_signal_summary(
@@ -784,7 +872,12 @@ def cmd_role_report(args, *, build_role_report_impl) -> int:
     if args.stale_after_days < 0:
         raise ValueError("--stale-after-days must be >= 0")
 
-    report = build_role_report_impl(args.root, role_filter=args.role, stale_after_days=args.stale_after_days)
+    report = build_role_report_impl(
+        args.root,
+        role_filter=args.role,
+        stale_after_days=args.stale_after_days,
+        task_uid=args.task_uid,
+    )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
@@ -796,6 +889,26 @@ def cmd_role_report(args, *, build_role_report_impl) -> int:
         f"- role_filter: {report['role_filter'] or '(all roles)'}",
         f"- backlog_totals: {', '.join(f'{k}={v}' for k, v in report['backlog_totals'].items())}",
     ]
+
+    if report.get("task_collaboration"):
+        task = report["task_collaboration"]
+        lines.extend(
+            [
+                "- task_collaboration:",
+                f"  task_uid: {task['task_uid']}",
+                f"  owner_role: {task['owner_role']}",
+                f"  status: {task['status']}",
+                f"  execution_log_path: {task['execution_log_path']}",
+                f"  execution_entries: {task['execution_entry_count']}",
+                f"  execution_roles: {', '.join(task['execution_roles']) if task['execution_roles'] else '(none)'}",
+                f"  slice_roles: {', '.join(task['slice_roles']) if task['slice_roles'] else '(none)'}",
+                f"  review_roles: {', '.join(task['review_roles']) if task['review_roles'] else '(none)'}",
+                f"  pre_pr_local_role_review_passed: {task['pre_pr_local_role_review_passed']}",
+                f"  last_verification_status: {task['last_verification_status'] or '(none)'}",
+                f"  last_closed_at: {task['last_closed_at'] or '(none)'}",
+                f"  missing_closeout_markers: {', '.join(task['missing_closeout_markers']) if task['missing_closeout_markers'] else '(none)'}",
+            ]
+        )
 
     for role, payload in report["roles"].items():
         lines.append(f"- role: {role}")
