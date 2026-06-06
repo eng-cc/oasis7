@@ -127,3 +127,12 @@ Example:
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: no fixes required after review; final validation remains doc-governance-check, git diff --check, and precise public-surface grep.
 - Residual Risk: site/social/** and site/story/** remain outside this pass; historical/runtime war terms remain intentionally for compatibility/provenance; full PM lint remains red on unrelated PM baseline issues.
+
+## 2026-06-06 23:10:00 CST / tpm
+- 完成内容: PR created for normal merge path.
+- 遗留事项: Continue GitHub required checks, mergeability, comments, and review-thread watch until merge and cleanup.
+- Action: `./scripts/prepare-task-pr.sh --create`
+- Validation Command: `./scripts/prepare-task-pr.sh --json`
+- Expected Result: preflight passes with local role review status passed, then PR is created.
+- Actual Result: preflight passed; PR created at `https://github.com/eng-cc/oasis7/pull/365`; source head `600b498daef8da104668a2af4b1f6dd8da6227d4`.
+- Blocker / Next Action: PR purpose decision `normal_pr_ci_watch`; watch required checks, comments, review threads, and mergeability to merge.
