@@ -364,7 +364,7 @@ pub(super) fn classify_transport_stability(
     let mut timeout_count = 0usize;
     let mut protocol_error_count = 0usize;
     for error in &replication.recent_errors {
-        if replication_error_is_diagnostic(error) {
+        if !replication_error_is_blocking(replication, error) {
             continue;
         }
         let lower = error.to_ascii_lowercase();
@@ -421,8 +421,33 @@ fn blocking_replication_error_count(replication: &super::ChainReplicationDebugSt
     replication
         .recent_errors
         .iter()
-        .filter(|error| !replication_error_is_diagnostic(error))
+        .filter(|error| replication_error_is_blocking(replication, error))
         .count()
+}
+
+fn replication_error_is_blocking(
+    replication: &super::ChainReplicationDebugStatus,
+    error: &str,
+) -> bool {
+    if replication_error_is_diagnostic(error) {
+        return false;
+    }
+    let lower = error.to_ascii_lowercase();
+    let active_peer_available = replication
+        .peer_healths
+        .iter()
+        .any(|health| health.status == "active")
+        || !replication.connected_peers.is_empty();
+    if active_peer_available
+        && (lower.contains("connection closed")
+            || lower.contains("connectionclosed")
+            || lower.contains("outgoing connection error")
+            || lower.contains("connection refused")
+            || lower.contains("redundant connections pruned"))
+    {
+        return false;
+    }
+    true
 }
 
 fn replication_error_is_diagnostic(error: &str) -> bool {
@@ -432,6 +457,7 @@ fn replication_error_is_diagnostic(error: &str) -> bool {
         || lower.contains("libp2p connection established")
         || lower.contains("libp2p routing updated")
         || lower.contains("libp2p transport active")
+        || lower.contains("libp2p redundant connections pruned")
         || lower.contains("peer record request failed")
         || lower.contains("missingpeerrecord")
         || lower.contains("missing_peer_record")
