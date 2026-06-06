@@ -2540,3 +2540,32 @@ SOP v0.2 更适合第二章及后续章节使用。后续开写新章时，应�
 
 - 第二卷第五章可以关闭。下一步应进入第二卷整体 closeout / PR readiness review，而不是继续追加第五章正文。
 - 第二卷整体 closeout 必须保留第五章边界：铅笔条款仍只是低规格试运行，第一条未通过，修宪未完成，旧关系未复原，旧资产 / 旧承诺未恢复，公共证明 / 同意 / 作证 / 握手均未成立。
+
+## 2026-06-06 第二卷整体 closeout / PR readiness review
+
+### 范围
+
+对第二卷 `CH-037` 到 `CH-078` 做整体 closeout / PR readiness review。本轮合看第二卷路线调研、章节卡、写前定位、五章正文、focused / chapter-level review notes、README 索引和 PR #338 当前状态；重点确认第二卷 route 是否可以作为 PR #338 当前故事线关闭，并进入 ready-for-PR 前置链路。
+
+### Slice 结果
+
+- `story_structure_editor`: ready。无 P0 / P1。第二卷五章范围在 chapter-cards 与 draft README 中登记一致，五个正文文件覆盖 `CH-037..CH-078` 无缺口；五章章级 closeout 已齐。卷级结构从身份链裂缝、普通工具重新授权、旧承诺接收人留空、私人习惯边界，到铅笔条款低规格试运行，形成完整 route；第五章后续应进入 PR readiness，而不是继续追加正文。
+- `world_agent_boundary_editor`: ready。无 P0 / P1。卷级边界保持：身份连续性只能追溯，不能替代当下关系；普通工具授权保持局部可撤回；旧承诺材料没有自动接收人；私人习惯不进公共证明；铅笔条款仍未编号、未盖章、未通过。全卷没有修宪完成、第一条通过、公开证明、同意、作证、握手、旧关系复原、旧资产 / 旧承诺恢复、备份 / 公共记忆恢复或 `CH-070` 规则先例。
+- `style_continuity_editor`: ready。无 P0 / P1。第二卷已从第一卷高频锚点转向新的物件链：身份链封条、待确认夹、三栏承诺表、未同步记录、未盖章草案等；整体保持物件承托和低压力，不以胜利 essay、政策讲义、情感修复或抽象 thesis 收束。
+- `pr_readiness_editor`: ready。无 P0 / P1。draft README、research README、editorial notes 和当前 task log 均对齐；PR #338 当前本地视图显示 required checks 成功、`mergeable: MERGEABLE`、`mergeStateStatus: BEHIND`、`reviewDecision: REVIEW_REQUIRED`，未见 unresolved blocking PR comment / check。提出 P2：chapter-cards README 中第二卷 2-5 章索引仍写“已规划”，建议同步为正文 / closeout 已完成以免误导 PR 读者。
+
+### 采纳的补丁
+
+- 采纳 `pr_readiness_editor` 的 P2 清晰度建议：更新 `site/story/chapter-cards/README.md` 中第二卷第二章到第五章的索引行，从“已规划”同步为“已记录 / 正文与章级 closeout 已完成”。该补丁只改索引口径，不改章节卡或正文。
+
+### 保留风险
+
+- PR / 卷级摘要只能说“第二卷 route 已为 PR readiness 关闭”，不得说 in-world 第二卷已经修宪完成、第一条通过、旧关系复原或旧资产 / 旧承诺恢复。
+- 第五章 `复查夹留在小板上` 后续仍只能解释为局部继续入口，不得膨胀为持久保管或第二卷胜利。
+- `关系已确认` 必须继续作为误认已撤回的错误痕迹，不得在摘要里写成状态。
+- `BEHIND` 与 `REVIEW_REQUIRED` 是 PR 状态信息；只要 checks 成功、mergeable、无 requested changes / blocking threads，就不是本轮故事 closeout blocker。
+
+### closeout 结论 / 下一步
+
+- 第二卷 `CH-037` 到 `CH-078` route 可以作为 PR #338 当前故事线关闭；无 P0 / P1 阻塞。
+- 下一步进入 pre-PR / ready-for-PR local role review 与 PR 主链状态更新；如果要继续故事内容，应另开后续 route，而不是在本轮继续追加第二卷正文。
