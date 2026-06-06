@@ -207,6 +207,15 @@ function noReceiptSnapshot() {
   return snapshot;
 }
 
+function emptyWorldSnapshot() {
+  const snapshot = clone(noReceiptSnapshot());
+  snapshot.model.agents = {};
+  snapshot.model.locations = {};
+  snapshot.model.agent_prompt_profiles = {};
+  snapshot.model.agent_execution_debug_contexts = {};
+  return snapshot;
+}
+
 async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test_api=1&connect=0&locale=en") {
   activeCleanup?.();
   activeCleanup = null;
@@ -638,6 +647,90 @@ describe("pixel world host", () => {
     expect(receipt).toHaveAttribute("data-receipt-state", "waiting_for_intent");
     expect(receipt).toHaveAttribute("data-receipt-confidence", "none");
     expect(receipt.textContent).not.toContain("agent=agent-0");
+  });
+
+  it("offers an app-level world focus mode with command and diagnostics drawers", async () => {
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+    });
+
+    const host = document.querySelector(".pixel-world-host");
+    expect(host).toHaveAttribute("data-world-focus", "false");
+    expect(screen.queryByText("World Focus")).not.toBeInTheDocument();
+
+    screen.getByRole("button", { name: "Enter World Focus" }).click();
+
+    expect(host).toHaveAttribute("data-world-focus", "true");
+    expect(document.body).toHaveClass("pixel-world-focus-active");
+    expect(screen.getByText("World Focus")).toBeInTheDocument();
+    expect(screen.queryByText("No blocker")).not.toBeInTheDocument();
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Current Prompt");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Recover sustainable capability");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Build smelter mk1");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Missing Material");
+    expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Objective");
+    expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Next Move");
+    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
+    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Routes");
+    expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
+    expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveClass("pixel-world-action-receipt--focus-compact");
+    expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
+    expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent("Renderer Not Attached");
+    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("agents=1");
+    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("targets=1");
+    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("routes=1");
+    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("fragments=2");
+
+    expect(screen.getByRole("button", { name: "Command" })).toHaveClass("pixel-world-focus-control--primary");
+    expect(screen.getByRole("button", { name: "Diagnostics" })).toHaveClass("pixel-world-focus-control--secondary");
+    expect(screen.getByRole("button", { name: "Exit" })).toHaveClass("pixel-world-focus-control--quiet");
+
+    screen.getByRole("button", { name: "Command" }).click();
+    const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
+    expect(commandDrawer.open).toBe(true);
+    expect(commandDrawer).toHaveTextContent("Player Leverage");
+
+    screen.getByRole("button", { name: "Diagnostics" }).click();
+    const diagnosticsDrawer = document.querySelector(".pixel-world-focus-drawer--diagnostics");
+    expect(commandDrawer.open).toBe(false);
+    expect(diagnosticsDrawer.open).toBe(true);
+    expect(diagnosticsDrawer).toHaveTextContent("renderer=fallback");
+    expect(diagnosticsDrawer).toHaveTextContent("runtime=deferred");
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(host).toHaveAttribute("data-world-focus", "false");
+    expect(document.body).not.toHaveClass("pixel-world-focus-active");
+    expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).toBeNull();
+  });
+
+  it("keeps empty focus rail collapsed while preserving fallback world summary", async () => {
+    await renderPixelWorldHost(
+      emptyWorldSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+    });
+
+    expect(document.querySelector('[data-focus-fallback-map="true"]')).toBeNull();
+
+    screen.getByRole("button", { name: "Enter World Focus" }).click();
+
+    expect(document.querySelector(".pixel-world-focus-rail")).toBeNull();
+    const fallbackMap = document.querySelector('[data-focus-fallback-map="true"]');
+    expect(fallbackMap).not.toBeNull();
+    expect(fallbackMap).toHaveTextContent("agents=0");
+    expect(fallbackMap).toHaveTextContent("targets=0");
+    expect(fallbackMap).toHaveTextContent("routes=0");
+    expect(fallbackMap).toHaveTextContent("fragments=0");
+    expect(fallbackMap).toHaveTextContent("Unassigned");
+    expect(fallbackMap).not.toHaveTextContent("Selected");
   });
 
   it("keeps fragment terrain as non-interactive background behind readable agents", async () => {

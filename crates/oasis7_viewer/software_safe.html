@@ -111,6 +111,37 @@
         box-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
       }
       .panel--details { grid-area: details; }
+      body.pixel-world-focus-active {
+        padding: 0;
+        overflow: hidden;
+      }
+      body.pixel-world-focus-active::before,
+      body.pixel-world-focus-active .mobile-rail,
+      body.pixel-world-focus-active .panel--targets,
+      body.pixel-world-focus-active .panel--details,
+      body.pixel-world-focus-active .stage-hero,
+      body.pixel-world-focus-active .pixel-world-host ~ * {
+        display: none;
+      }
+      body.pixel-world-focus-active #app,
+      body.pixel-world-focus-active .shell,
+      body.pixel-world-focus-active .panel--stage,
+      body.pixel-world-focus-active .panel--stage .panel__body,
+      body.pixel-world-focus-active .panel--stage .stack {
+        display: block;
+        position: static;
+        width: 100vw;
+        height: 100vh;
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        overflow: hidden;
+        backdrop-filter: none;
+      }
       .panel--nested {
         background:
           linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
@@ -394,6 +425,10 @@
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
+      .pixel-world-focus-entry {
+        display: flex;
+        justify-content: flex-start;
+      }
       .pixel-world-command-strip {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -499,6 +534,347 @@
       }
       .pixel-world-readout {
         align-items: center;
+      }
+      .pixel-world-host--focus {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: grid;
+        grid-template-rows: 1fr;
+        gap: 0;
+        padding: 0;
+        background: var(--bg-deep);
+        overflow: hidden;
+      }
+      .pixel-world-host--focus > .pixel-world-host__summary,
+      .pixel-world-host--focus > .pixel-world-command-strip,
+      .pixel-world-host--focus > .pixel-world-action-receipt,
+      .pixel-world-host--focus > .pixel-world-readout,
+      .pixel-world-host--focus > .pixel-world-render-diagnostics,
+      .pixel-world-host--focus > .diagnostic:not(.pixel-world-focus-drawer) {
+        display: none;
+      }
+      .pixel-world-host--focus > .callout {
+        position: absolute;
+        z-index: 116;
+        left: 16px;
+        right: 16px;
+        top: 82px;
+        bottom: auto;
+        width: auto;
+        min-width: 0;
+        max-height: 56px;
+        overflow: auto;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background: rgba(24, 14, 10, 0.82);
+        backdrop-filter: blur(10px);
+      }
+      .pixel-world-host--focus > .callout .callout__header {
+        margin-bottom: 0;
+      }
+      .pixel-world-host--focus > .callout .callout__body {
+        display: none;
+      }
+      .pixel-world-host--focus > .pixel-world-canvas {
+        grid-row: 1;
+        width: 100vw;
+        height: 100vh;
+        min-height: 0;
+        border: 0;
+        border-radius: 0;
+      }
+      .pixel-world-host--focus > .pixel-world-canvas--rendered {
+        min-height: 0;
+      }
+      .pixel-world-host--focus .pixel-world-canvas__surface {
+        width: 100%;
+        height: 100%;
+        aspect-ratio: auto;
+      }
+      .pixel-world-focus-hud {
+        position: absolute;
+        z-index: 120;
+        top: 16px;
+        left: 16px;
+        right: 16px;
+        display: grid;
+        grid-template-columns: minmax(140px, 0.8fr) minmax(240px, 1.6fr) minmax(120px, 0.55fr) auto;
+        gap: 8px;
+        align-items: center;
+        pointer-events: none;
+      }
+      .pixel-world-focus-hud__identity,
+      .pixel-world-focus-hud__cell,
+      .pixel-world-focus-controls {
+        border: 1px solid rgba(152, 177, 150, 0.14);
+        border-radius: 6px;
+        background: rgba(7, 12, 10, 0.58);
+        backdrop-filter: blur(10px);
+        box-shadow: none;
+      }
+      .pixel-world-focus-hud__identity,
+      .pixel-world-focus-hud__cell {
+        min-height: 46px;
+        padding: 8px 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        min-width: 0;
+      }
+      .pixel-world-focus-hud__eyebrow,
+      .pixel-world-focus-hud__cell span,
+      .pixel-world-focus-rail__label,
+      .pixel-world-focus-rail__item span {
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      .pixel-world-focus-hud__title,
+      .pixel-world-focus-hud__cell strong,
+      .pixel-world-focus-rail__item strong {
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      }
+      .pixel-world-focus-hud__cell--prompt strong {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pixel-world-focus-hud__cell em {
+        color: var(--accent);
+        font-size: 12px;
+        font-style: normal;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      .pixel-world-focus-hud__cell--blocker[data-blocker-present="true"] {
+        border-color: rgba(248, 113, 113, 0.38);
+      }
+      .pixel-world-focus-hud__cell--blocker[data-blocker-present="true"] strong {
+        color: var(--bad);
+      }
+      .pixel-world-focus-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 7px;
+        pointer-events: auto;
+      }
+      .pixel-world-focus-controls button,
+      .pixel-world-focus-entry button {
+        min-height: 34px;
+      }
+      .pixel-world-focus-control--primary {
+        border-color: rgba(141, 199, 170, 0.55);
+        background: rgba(141, 199, 170, 0.18);
+        color: var(--text);
+        font-weight: 800;
+      }
+      .pixel-world-focus-control--secondary {
+        border-color: rgba(148, 163, 184, 0.22);
+        background: rgba(148, 163, 184, 0.08);
+        color: var(--muted);
+      }
+      .pixel-world-focus-control--quiet {
+        border-color: rgba(152, 177, 150, 0.12);
+        background: transparent;
+        color: var(--muted);
+      }
+      .pixel-world-focus-rail {
+        position: absolute;
+        z-index: 118;
+        left: 16px;
+        top: 82px;
+        width: min(204px, calc(100vw - 32px));
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        border: 1px solid rgba(152, 177, 150, 0.12);
+        border-radius: 6px;
+        background: rgba(7, 12, 10, 0.5);
+        backdrop-filter: blur(8px);
+        pointer-events: none;
+      }
+      .pixel-world-focus-rail__item {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr);
+        gap: 8px;
+        align-items: baseline;
+      }
+      .pixel-world-focus-fallback-map {
+        position: absolute;
+        z-index: 112;
+        inset: 92px 16px 72px 16px;
+        overflow: hidden;
+        border: 1px solid rgba(141, 199, 170, 0.18);
+        border-radius: 8px;
+        background:
+          radial-gradient(circle at 28% 36%, rgba(110, 231, 183, 0.16), transparent 18%),
+          radial-gradient(circle at 70% 62%, rgba(99, 179, 255, 0.13), transparent 22%),
+          rgba(7, 12, 10, 0.22);
+        pointer-events: none;
+      }
+      .pixel-world-focus-fallback-map__grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(141, 199, 170, 0.09) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(141, 199, 170, 0.09) 1px, transparent 1px);
+        background-size: 42px 42px;
+        mask-image: linear-gradient(180deg, transparent, #000 10%, #000 86%, transparent);
+      }
+      .pixel-world-focus-fallback-map__route {
+        position: absolute;
+        left: 29%;
+        right: 29%;
+        top: 49%;
+        height: 4px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(141, 199, 170, 0.62), rgba(99, 179, 255, 0.56));
+        box-shadow: 0 0 20px rgba(99, 179, 255, 0.14);
+      }
+      .pixel-world-focus-fallback-map__route[data-routes="0"] {
+        opacity: 0.26;
+        background: rgba(152, 177, 150, 0.34);
+      }
+      .pixel-world-focus-fallback-map__node {
+        position: absolute;
+        min-width: 124px;
+        max-width: min(220px, 36vw);
+        padding: 9px 10px;
+        border: 1px solid rgba(152, 177, 150, 0.22);
+        border-radius: 6px;
+        background: rgba(7, 12, 10, 0.72);
+        backdrop-filter: blur(6px);
+      }
+      .pixel-world-focus-fallback-map__node span,
+      .pixel-world-focus-fallback-map__meta span {
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+      .pixel-world-focus-fallback-map__node strong {
+        display: block;
+        margin-top: 3px;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      .pixel-world-focus-fallback-map__node--target {
+        left: 16%;
+        top: 28%;
+        border-color: rgba(110, 231, 183, 0.36);
+      }
+      .pixel-world-focus-fallback-map__node--agent {
+        right: 17%;
+        top: 54%;
+        border-color: rgba(99, 179, 255, 0.32);
+      }
+      .pixel-world-focus-fallback-map__node--selected {
+        right: 18px;
+        bottom: 18px;
+        max-width: min(200px, 42vw);
+      }
+      .pixel-world-focus-fallback-map__node--selected[data-selected="false"] {
+        opacity: 0.58;
+      }
+      .pixel-world-focus-fallback-map__meta {
+        position: absolute;
+        left: 14px;
+        bottom: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .pixel-world-focus-fallback-map__meta span {
+        padding: 5px 7px;
+        border: 1px solid rgba(152, 177, 150, 0.14);
+        border-radius: 999px;
+        background: rgba(7, 12, 10, 0.58);
+      }
+      .pixel-world-focus-receipt {
+        position: absolute;
+        z-index: 119;
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        display: flex;
+        justify-content: flex-end;
+        pointer-events: none;
+      }
+      .pixel-world-focus-receipt .pixel-world-action-receipt {
+        width: min(520px, 100%);
+        background: rgba(8, 18, 24, 0.76);
+        backdrop-filter: blur(12px);
+        pointer-events: auto;
+      }
+      .pixel-world-action-receipt--focus-compact {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px 12px;
+        padding: 9px 11px;
+        border-radius: 6px;
+        border-left-width: 2px;
+      }
+      .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__label {
+        grid-column: 1 / -1;
+        line-height: 1;
+      }
+      .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__title {
+        font-size: 13px;
+        line-height: 1.2;
+      }
+      .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__summary {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__detail {
+        display: none;
+      }
+      .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__meta {
+        align-self: end;
+      }
+      .pixel-world-focus-drawer {
+        position: absolute;
+        z-index: 130;
+        right: 16px;
+        top: 96px;
+        width: min(420px, calc(100vw - 32px));
+        max-height: calc(100vh - 124px);
+        overflow: auto;
+        border: 1px solid rgba(152, 177, 150, 0.2);
+        border-radius: 8px;
+        background: rgba(7, 12, 10, 0.9);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+      }
+      .pixel-world-focus-drawer--diagnostics {
+        border-color: rgba(148, 163, 184, 0.18);
+      }
+      .pixel-world-focus-drawer summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 12px 14px;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .pixel-world-focus-drawer summary::-webkit-details-marker {
+        display: none;
+      }
+      .pixel-world-focus-drawer__body {
+        padding: 0 14px 14px;
+      }
+      .pixel-world-focus-drawer:not([open]) {
+        display: none;
       }
       .stage-hero {
         display: flex;
@@ -819,6 +1195,141 @@
         .hero-focus-grid { grid-template-columns: 1fr; }
         .hero-focus-card { min-height: 0; }
         .pixel-world-command-strip { grid-template-columns: 1fr; }
+        .pixel-world-focus-hud {
+          grid-template-columns: minmax(0, 1fr) auto;
+          right: 10px;
+          left: 10px;
+          top: 10px;
+          gap: 6px;
+          max-height: none;
+          overflow: visible;
+        }
+        .pixel-world-focus-hud__identity {
+          display: none;
+        }
+        .pixel-world-focus-hud__cell {
+          min-height: 42px;
+          padding: 7px 8px;
+        }
+        .pixel-world-focus-hud__cell--prompt {
+          grid-column: 1;
+        }
+        .pixel-world-focus-hud__cell--blocker {
+          grid-column: 1 / -1;
+          min-height: 30px;
+          flex-direction: row;
+          justify-content: flex-start;
+          align-items: center;
+          gap: 8px;
+          padding: 5px 8px;
+        }
+        .pixel-world-focus-hud__cell--blocker strong,
+        .pixel-world-focus-hud__cell--prompt strong,
+        .pixel-world-focus-hud__cell em {
+          font-size: 11px;
+          line-height: 1.2;
+        }
+        .pixel-world-focus-controls {
+          grid-column: 2;
+          grid-row: 1;
+          justify-content: flex-end;
+          flex-wrap: nowrap;
+          align-self: stretch;
+          padding: 5px;
+        }
+        .pixel-world-focus-controls button {
+          min-height: 30px;
+          padding: 5px 7px;
+          font-size: 11px;
+        }
+        .pixel-world-focus-rail {
+          top: auto;
+          bottom: 96px;
+          left: 10px;
+          width: min(210px, calc(100vw - 20px));
+          max-height: 90px;
+          overflow: hidden;
+        }
+        .pixel-world-focus-fallback-map {
+          inset: 120px 10px 62px 10px;
+          border-radius: 6px;
+        }
+        .pixel-world-focus-fallback-map__node {
+          min-width: 92px;
+          max-width: 42vw;
+          padding: 7px 8px;
+        }
+        .pixel-world-focus-fallback-map__node strong {
+          font-size: 11px;
+        }
+        .pixel-world-focus-fallback-map__node--target {
+          left: 7%;
+          top: 22%;
+        }
+        .pixel-world-focus-fallback-map__node--agent {
+          right: 7%;
+          top: 48%;
+        }
+        .pixel-world-focus-fallback-map__node--selected {
+          right: 8px;
+          bottom: 40px;
+        }
+        .pixel-world-focus-fallback-map__meta {
+          left: 8px;
+          right: 8px;
+          bottom: 8px;
+          gap: 4px;
+        }
+        .pixel-world-focus-fallback-map__meta span {
+          padding: 4px 6px;
+          font-size: 10px;
+        }
+        .pixel-world-focus-receipt {
+          left: 10px;
+          right: 10px;
+          bottom: 8px;
+          justify-content: stretch;
+        }
+        .pixel-world-focus-receipt .pixel-world-action-receipt {
+          width: 100%;
+        }
+        .pixel-world-action-receipt--focus-compact {
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 5px 8px;
+          padding: 7px 9px;
+          min-height: 46px;
+        }
+        .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__label {
+          display: none;
+        }
+        .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__title,
+        .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__summary,
+        .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__meta {
+          font-size: 11px;
+          line-height: 1.2;
+        }
+        .pixel-world-action-receipt--focus-compact .pixel-world-action-receipt__summary {
+          max-height: 2.4em;
+          white-space: normal;
+          overflow: hidden;
+        }
+        .pixel-world-focus-drawer {
+          top: auto;
+          right: 10px;
+          left: 10px;
+          bottom: 10px;
+          width: auto;
+          max-height: min(56vh, 520px);
+        }
+        .pixel-world-host--focus > .callout {
+          left: 10px;
+          right: 10px;
+          top: 120px;
+          bottom: auto;
+          width: auto;
+          min-width: 0;
+          max-height: 44px;
+        }
         .pixel-world-action-receipt {
           grid-template-columns: 1fr;
           align-items: start;

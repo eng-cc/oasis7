@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show, onCleanup } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, onCleanup, onMount } from "solid-js";
 
 import * as core from "./legacy_core.js";
 import { createPixelWorldRuntimeBridge } from "./pixel_world_runtime_loader.js";
@@ -1118,6 +1118,41 @@ function PixelWorldCanvasRenderer(props) {
   );
 }
 
+function PixelWorldActionReceipt(props) {
+  const receipt = () => props.surface().action_receipt;
+  return (
+    <div
+      class={`pixel-world-action-receipt ${props.class ?? ""}`}
+      data-receipt-present={receipt().present ? "true" : "false"}
+      data-receipt-state={receipt().state}
+      data-receipt-confidence={receipt().confidence}
+    >
+      <div class="pixel-world-action-receipt__label">
+        {tr(props.locale(), "行动回执", "Action Receipt")}
+      </div>
+      <div class="pixel-world-action-receipt__body">
+        <div class="pixel-world-action-receipt__title">
+          {receipt().title}
+        </div>
+        <div class="pixel-world-action-receipt__summary">
+          {receipt().summary}
+        </div>
+        <Show when={receipt().detail}>
+          <div class="pixel-world-action-receipt__detail">
+            {receipt().detail}
+          </div>
+        </Show>
+      </div>
+      <div class="pixel-world-action-receipt__meta">
+        <span>{receipt().confidence}</span>
+        <Show when={receipt().target_agent_id}>
+          <span>{`agent=${receipt().target_agent_id}`}</span>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
 function PixelWorldCommercialHud(props) {
   const surface = () => props.renderState().commercial_surface;
   return (
@@ -1155,35 +1190,10 @@ function PixelWorldCommercialHud(props) {
           </div>
         </div>
       </div>
-      <div
-        class="pixel-world-action-receipt"
-        data-receipt-present={surface().action_receipt.present ? "true" : "false"}
-        data-receipt-state={surface().action_receipt.state}
-        data-receipt-confidence={surface().action_receipt.confidence}
-      >
-        <div class="pixel-world-action-receipt__label">
-          {tr(props.locale(), "行动回执", "Action Receipt")}
-        </div>
-        <div class="pixel-world-action-receipt__body">
-          <div class="pixel-world-action-receipt__title">
-            {surface().action_receipt.title}
-          </div>
-          <div class="pixel-world-action-receipt__summary">
-            {surface().action_receipt.summary}
-          </div>
-          <Show when={surface().action_receipt.detail}>
-            <div class="pixel-world-action-receipt__detail">
-              {surface().action_receipt.detail}
-            </div>
-          </Show>
-        </div>
-        <div class="pixel-world-action-receipt__meta">
-          <span>{surface().action_receipt.confidence}</span>
-          <Show when={surface().action_receipt.target_agent_id}>
-            <span>{`agent=${surface().action_receipt.target_agent_id}`}</span>
-          </Show>
-        </div>
-      </div>
+      <PixelWorldActionReceipt
+        locale={props.locale}
+        surface={surface}
+      />
       <div class="pixel-world-readout badge-row">
         <span class="badge badge--accent">{`agents=${surface().world_read.agents}`}</span>
         <span class="badge">{`routes=${surface().world_read.routes}`}</span>
@@ -1192,6 +1202,119 @@ function PixelWorldCommercialHud(props) {
         <Show when={surface().blocker.label}>
           <span class="badge badge--warn">{`blocker=${surface().blocker.label}`}</span>
         </Show>
+      </div>
+    </Show>
+  );
+}
+
+function PixelWorldFocusHud(props) {
+  const surface = () => props.renderState().commercial_surface;
+  return (
+    <Show when={surface()}>
+      <div class="pixel-world-focus-hud" data-focus-hud="true">
+        <div class="pixel-world-focus-hud__identity">
+          <div class="pixel-world-focus-hud__eyebrow">
+            {tr(props.locale(), "沉浸模式", "World Focus")}
+          </div>
+          <div class="pixel-world-focus-hud__title">
+            {tr(props.locale(), "世界指挥棋盘", "World Command Board")}
+          </div>
+        </div>
+        <div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt">
+          <span>{tr(props.locale(), "当前指令", "Current Prompt")}</span>
+          <strong>{surface().objective.title}</strong>
+          <em>{surface().next_action.label}</em>
+        </div>
+        <div
+          class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"
+          data-blocker-present={surface().blocker.label ? "true" : "false"}
+        >
+          <span>{tr(props.locale(), "阻塞", "Blocker")}</span>
+          <strong>{surface().blocker.label || tr(props.locale(), "暂无阻塞", "No blocker")}</strong>
+        </div>
+        <div class="pixel-world-focus-controls" aria-label={tr(props.locale(), "沉浸模式控制", "World focus controls")}>
+          <button type="button" class="pixel-world-focus-control pixel-world-focus-control--primary" onClick={props.onOpenCommand}>
+            {tr(props.locale(), "命令", "Command")}
+          </button>
+          <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onOpenDiagnostics}>
+            {tr(props.locale(), "诊断", "Diagnostics")}
+          </button>
+          <button type="button" class="pixel-world-focus-control pixel-world-focus-control--quiet" onClick={props.onExit}>
+            {tr(props.locale(), "退出", "Exit")}
+          </button>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+function PixelWorldFocusRail(props) {
+  const surface = () => props.renderState().commercial_surface;
+  const selected = () => props.renderState().selection;
+  const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
+  const routeCount = () => props.renderState().links.length;
+  const hasFocusItems = () => Boolean(activeAgent() || selected() || routeCount() > 0);
+  return (
+    <Show when={surface() && hasFocusItems()}>
+      <div class="pixel-world-focus-rail" data-focus-rail="true">
+        <div class="pixel-world-focus-rail__label">
+          {tr(props.locale(), "焦点", "Focus")}
+        </div>
+        <Show when={activeAgent()}>
+          <div class="pixel-world-focus-rail__item">
+            <span>{tr(props.locale(), "Agent", "Agent")}</span>
+            <strong>{activeAgent()}</strong>
+          </div>
+        </Show>
+        <Show when={selected()}>
+          <div class="pixel-world-focus-rail__item">
+            <span>{tr(props.locale(), "选中", "Selected")}</span>
+            <strong>{`${selected().kind}/${selected().id}`}</strong>
+          </div>
+        </Show>
+        <Show when={routeCount() > 0}>
+          <div class="pixel-world-focus-rail__item">
+            <span>{tr(props.locale(), "路线", "Routes")}</span>
+            <strong>{routeCount()}</strong>
+          </div>
+        </Show>
+      </div>
+    </Show>
+  );
+}
+
+function PixelWorldFocusFallbackMap(props) {
+  const surface = () => props.renderState().commercial_surface;
+  const selected = () => props.renderState().selection;
+  const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
+  return (
+    <Show when={surface()}>
+      <div class="pixel-world-focus-fallback-map" data-focus-fallback-map="true">
+        <div class="pixel-world-focus-fallback-map__grid" />
+        <div class="pixel-world-focus-fallback-map__route" data-routes={props.renderState().links.length} />
+        <div class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--target">
+          <span>{tr(props.locale(), "目标", "Target")}</span>
+          <strong>{surface().objective.title}</strong>
+        </div>
+        <div class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--agent">
+          <span>{tr(props.locale(), "Agent", "Agent")}</span>
+          <strong>{activeAgent() || tr(props.locale(), "待分配", "Unassigned")}</strong>
+        </div>
+        <Show when={selected()}>
+          <div
+            class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--selected"
+            data-selected="true"
+          >
+            <span>{tr(props.locale(), "选中", "Selected")}</span>
+            <strong>{`${selected().kind}/${selected().id}`}</strong>
+          </div>
+        </Show>
+        <div class="pixel-world-focus-fallback-map__meta" aria-label={tr(props.locale(), "Fallback 世界摘要", "Fallback world summary")}>
+          <span>{`agents=${props.renderState().agents.length}`}</span>
+          <span>{`targets=${props.renderState().locations.length}`}</span>
+          <span>{`routes=${props.renderState().links.length}`}</span>
+          <span>{`fragments=${props.renderState().fragment_terrain.length}`}</span>
+        </div>
       </div>
     </Show>
   );
@@ -1242,6 +1365,33 @@ export function PixelWorldHost(props) {
   const [runtimeSource, setRuntimeSource] = createSignal(autoAttachRenderer ? "loading" : "deferred");
   const [cameraState, setCameraState] = createSignal(null);
   const [renderDtoOpen, setRenderDtoOpen] = createSignal(false);
+  const [focusMode, setFocusMode] = createSignal(false);
+  const [commandDrawerOpen, setCommandDrawerOpen] = createSignal(false);
+  const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(false);
+
+  function enterFocusMode() {
+    setFocusMode(true);
+    document.body.classList.add("pixel-world-focus-active");
+    setCommandDrawerOpen(false);
+    setDiagnosticsDrawerOpen(false);
+  }
+
+  function exitFocusMode() {
+    setFocusMode(false);
+    document.body.classList.remove("pixel-world-focus-active");
+    setCommandDrawerOpen(false);
+    setDiagnosticsDrawerOpen(false);
+  }
+
+  function openCommandDrawer() {
+    setCommandDrawerOpen(true);
+    setDiagnosticsDrawerOpen(false);
+  }
+
+  function openDiagnosticsDrawer() {
+    setDiagnosticsDrawerOpen(true);
+    setCommandDrawerOpen(false);
+  }
 
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
@@ -1377,7 +1527,20 @@ export function PixelWorldHost(props) {
     adapter().simulateFatal("simulated embedded renderer fatal fallback");
   }
 
+  onMount(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && focusMode()) {
+        event.preventDefault();
+        exitFocusMode();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+  });
+
   onCleanup(() => {
+    document.body.classList.remove("pixel-world-focus-active");
     adapter().unmount();
     core.updatePixelWorldRuntimeMeta({
       runtimeStatus: "detached",
@@ -1389,7 +1552,10 @@ export function PixelWorldHost(props) {
   });
 
   return (
-    <div class="pixel-world-host stack">
+    <div
+      class={`pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""}`}
+      data-world-focus={focusMode() ? "true" : "false"}
+    >
       <div class="pixel-world-host__summary">
         <div class="pixel-world-host__headline">
           {tr(locale(), "世界指挥棋盘", "World Command Board")}
@@ -1397,7 +1563,25 @@ export function PixelWorldHost(props) {
         <div class="feedback-detail">
           {renderState().commercial_surface?.objective?.detail}
         </div>
+        <div class="pixel-world-focus-entry">
+          <button type="button" onClick={enterFocusMode} aria-pressed={focusMode() ? "true" : "false"}>
+            {tr(locale(), "进入沉浸模式", "Enter World Focus")}
+          </button>
+        </div>
       </div>
+      <Show when={focusMode()}>
+        <PixelWorldFocusHud
+          locale={locale}
+          renderState={renderState}
+          onExit={exitFocusMode}
+          onOpenCommand={openCommandDrawer}
+          onOpenDiagnostics={openDiagnosticsDrawer}
+        />
+        <PixelWorldFocusRail
+          locale={locale}
+          renderState={renderState}
+        />
+      </Show>
       <PixelWorldCommercialHud locale={locale} renderState={renderState} />
       <Show when={rendererStatus() !== "fallback"}>
         <PixelWorldCanvasRenderer
@@ -1439,6 +1623,9 @@ export function PixelWorldHost(props) {
           </div>
         </div>
       </Show>
+      <Show when={focusMode() && rendererStatus() === "fallback"}>
+        <PixelWorldFocusFallbackMap locale={locale} renderState={renderState} />
+      </Show>
       <Show when={rendererStatus() !== "ready"}>
         <PixelWorldCanvasPlaceholder
           locale={locale}
@@ -1447,6 +1634,27 @@ export function PixelWorldHost(props) {
           onSelect={(selection) => adapter().simulateSelect(selection)}
           onHover={(selection) => adapter().simulateHover(selection)}
         />
+      </Show>
+      <Show when={focusMode() && renderState().commercial_surface}>
+        <div class="pixel-world-focus-receipt">
+          <PixelWorldActionReceipt
+            class="pixel-world-action-receipt--focus-compact"
+            locale={locale}
+            surface={() => renderState().commercial_surface}
+          />
+        </div>
+      </Show>
+      <Show when={focusMode()}>
+        <details
+          class="pixel-world-focus-drawer pixel-world-focus-drawer--command"
+          open={commandDrawerOpen()}
+          onToggle={(event) => setCommandDrawerOpen(event.currentTarget.open)}
+        >
+          <summary>{tr(locale(), "命令与目标", "Command and Target")}</summary>
+          <div class="pixel-world-focus-drawer__body">
+            <PixelWorldCommercialHud locale={locale} renderState={renderState} />
+          </div>
+        </details>
       </Show>
       <details class="diagnostic pixel-world-render-diagnostics">
         <summary>{tr(locale(), "Renderer 诊断", "Renderer Diagnostics")}</summary>
@@ -1487,6 +1695,33 @@ export function PixelWorldHost(props) {
           </div>
         </div>
       </details>
+      <Show when={focusMode()}>
+        <details
+          class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"
+          open={diagnosticsDrawerOpen()}
+          onToggle={(event) => setDiagnosticsDrawerOpen(event.currentTarget.open)}
+        >
+          <summary>{tr(locale(), "沉浸诊断", "Focus Diagnostics")}</summary>
+          <div class="pixel-world-focus-drawer__body">
+            <div class="badge-row">
+              <span class="badge">{`renderer=${rendererStatus()}`}</span>
+              <span class="badge">{`runtime=${runtimeSource()}`}</span>
+              <span class="badge">{`derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
+              <Show when={rendererFatal()}>
+                <span class="badge badge--warn">{rendererFatal().code}</span>
+              </Show>
+            </div>
+            <div class="toolbar" style="margin-top:10px;">
+              <button type="button" onClick={requestReadyMode}>
+                {tr(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer")}
+              </button>
+              <button type="button" onClick={setFallbackMode}>
+                {tr(locale(), "切回 Host Fallback", "Back To Host Fallback")}
+              </button>
+            </div>
+          </div>
+        </details>
+      </Show>
       <details
         class="diagnostic"
         onToggle={(event) => setRenderDtoOpen(event.currentTarget.open)}
