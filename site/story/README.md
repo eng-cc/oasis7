@@ -2,22 +2,22 @@
 
 本目录用于维护长篇小说《绿洲 2076》（英文名：oasis 2076）的站点侧资料。
 
-世界背景、总纲、人物、调研、审稿意见、第一卷时间线锚点、第一卷四章章节卡和第一卷正文草稿已重建；第二卷 Agent 归零与修宪路线已完成全卷规划，第一章正文已试写到 `CH-046`。
+世界背景、总纲、人物、调研、审稿意见、第一卷时间线锚点、第一卷四章章节卡和第一卷正文草稿已重建；第二卷 Agent 归零与修宪路线已完成 `CH-037` 到 `CH-078` 的全卷规划、正文试写和卷级 closeout；第三卷温室 / 生活循环路线已完成 `CH-079` 到 `CH-118` 的全卷规划、正文试写和 focused review。
 
 ## 目录
 
 - `background/`: 世界背景已复审更新。
 - `outline/`: 长篇总纲已重建到第一卷目标层级。
 - `characters/`: 人物注册表已开始重建。
-- `timeline/`: 时间线已开始重建，包含第一卷三十六场和第二卷 `TL-037` 到 `TL-078`。
-- `chapter-cards/`: 章节卡已开始重建，第一卷四章已拆完，共三十六场；第二卷五章已规划到 `CH-037` 到 `CH-078`。
+- `timeline/`: 时间线已开始重建，包含第一卷三十六场、第二卷 `TL-037` 到 `TL-078`，以及第三卷 `TL-079` 到 `TL-118`。
+- `chapter-cards/`: 章节卡已开始重建，第一卷四章已拆完，共三十六场；第二卷五章已完成正文与章级 closeout；第三卷五章已完成章节卡、正文与 focused review。
 - `research/`: 调研笔记已开始重建。
 - `reviews/`: 审稿意见已开始重建。
 - `draft/`: 正文草稿和章节写作 SOP 已开始重建。
 
 ## 写作边界
 
-- 当前 `background/world-background.md`、`outline/novel-outline.md`、`characters/character-registry.md`、`timeline/timeline.md` 与 `chapter-cards/` 下第一卷四章章节卡已包含已确认 canon；第一卷已按 `reviews/editorial-notes.md` 封存为稳定基线。第二卷当前已完成全卷规划和第一章正文试写；后续正文仍需逐章按 SOP 进入外部调研、写前定位、正文试写和 focused review。
+- 当前 `background/world-background.md`、`outline/novel-outline.md`、`characters/character-registry.md`、`timeline/timeline.md` 与 `chapter-cards/` 下第一卷四章章节卡已包含已确认 canon；第一卷已按 `reviews/editorial-notes.md` 封存为稳定基线。第二卷 `CH-037` 到 `CH-078` 已作为 Agent 归零与铅笔条款低规格试运行 route 关闭；第三卷 `CH-079` 到 `CH-118` 已完成温室 / 生活循环路线的章节卡、写前定位、正文试写和 focused review，卷尾口径为低规格生活循环入口成立，不是生态自给完成。
 - 新增人物、背景、时间线或正文前，应先明确其是否进入正式故事真值。
 - 每次新增正文前，先补齐对应的大纲、时间线或角色动机，避免后期失控。
 - 从章节卡进入正文时，先按 `draft/chapter-writing-sop.md` 执行社会口味调研、写前定位、正文试写、审稿、最小补丁和复审。
