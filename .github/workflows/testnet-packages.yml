@@ -166,18 +166,27 @@ jobs:
           APPIMAGETOOL_FILENAME="appimagetool-x86_64.AppImage"
           APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/${APPIMAGETOOL_FILENAME}"
           APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+          APPIMAGE_RUNTIME_FILENAME="runtime-x86_64"
+          APPIMAGE_RUNTIME_URL="https://github.com/AppImage/type2-runtime/releases/download/continuous/${APPIMAGE_RUNTIME_FILENAME}"
+          APPIMAGE_RUNTIME_SHA256="a2419dce47568395ae79c01ffa9a5a341dd339581352ff104d073527543177e5"
 
           mkdir -p "${RUNNER_TEMP}/appimagetool"
-          curl -fsSL "${APPIMAGETOOL_URL}" \
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "${APPIMAGETOOL_URL}" \
             -o "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
           printf '%s  %s\n' \
             "${APPIMAGETOOL_SHA256}" \
             "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" | sha256sum -c -
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "${APPIMAGE_RUNTIME_URL}" \
+            -o "${RUNNER_TEMP}/appimagetool/${APPIMAGE_RUNTIME_FILENAME}"
+          printf '%s  %s\n' \
+            "${APPIMAGE_RUNTIME_SHA256}" \
+            "${RUNNER_TEMP}/appimagetool/${APPIMAGE_RUNTIME_FILENAME}" | sha256sum -c -
           chmod +x "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
           ln -sf \
             "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" \
             "${RUNNER_TEMP}/appimagetool/appimagetool"
           echo "${RUNNER_TEMP}/appimagetool" >> "${GITHUB_PATH}"
+          echo "OASIS7_APPIMAGE_RUNTIME_FILE=${RUNNER_TEMP}/appimagetool/${APPIMAGE_RUNTIME_FILENAME}" >> "${GITHUB_ENV}"
       - name: Download web dist artifacts
         uses: actions/download-artifact@v6
         with:
