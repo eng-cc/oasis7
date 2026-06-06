@@ -1,0 +1,638 @@
+name: Mainnet Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Mainnet release tag, e.g. v0.1.0 or 2026-06-03_v1"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mainnet-packages-${{ github.event.inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  RUST_TOOLCHAIN: 1.96.0
+  BUILTIN_WASM_TOOLCHAIN: nightly-2025-12-11
+  BUILTIN_WASM_TARGET: wasm32-unknown-unknown
+
+jobs:
+  plan:
+    name: plan-mainnet-package
+    runs-on: ubuntu-24.04
+    outputs:
+      ref: ${{ steps.plan.outputs.ref }}
+      version: ${{ steps.plan.outputs.version }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ inputs.tag }}"
+          if [[ -z "${tag}" ]]; then
+            echo "error: mainnet package tag is required" >&2
+            exit 1
+          fi
+          if [[ ! "${tag}" =~ ^v[0-9].* && ! "${tag}" =~ ^20[0-9]{2}-[0-9]{2}-[0-9]{2}_v[0-9]+$ ]]; then
+            echo "error: tag must be semver-like (v*) or daily date tag (YYYY-MM-DD_vN): ${tag}" >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"},{"os":"windows-2022","platform":"windows-x64","asset_name":"oasis7-windows-x64.exe","target_triple":"native"}]}'
+
+          echo "ref=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
+  release_gate_runtime_core:
+    name: release-gate-runtime-core
+    needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup default "${RUST_TOOLCHAIN}"
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            jq \
+            netcat-openbsd \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mainnet-packages-release-gate-runtime-core-v1
+          cache-on-failure: true
+      - name: Run runtime core release gate
+        run: |
+          mkdir -p .tmp/release_gate_runtime_core
+          ./scripts/ci-tests.sh full-core | tee .tmp/release_gate_runtime_core/ci-tests-full-core.log
+      - name: Upload runtime core gate summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mainnet-release-gate-runtime-core-summary
+          path: .tmp/release_gate_runtime_core
+          if-no-files-found: warn
+
+  release_gate_runtime_support:
+    name: release-gate-runtime-support
+    needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup default "${RUST_TOOLCHAIN}"
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mainnet-packages-release-gate-runtime-support-v1
+          cache-on-failure: true
+      - name: Run runtime support release gate
+        run: |
+          mkdir -p .tmp/release_gate_runtime_support
+          ./scripts/ci-tests.sh full-support | tee .tmp/release_gate_runtime_support/ci-tests-full-support.log
+      - name: Upload runtime support gate summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mainnet-release-gate-runtime-support-summary
+          path: .tmp/release_gate_runtime_support
+          if-no-files-found: warn
+
+  release_gate_runtime_sync:
+    name: release-gate-runtime-sync
+    needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup default "${RUST_TOOLCHAIN}"
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            jq \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mainnet-packages-release-gate-runtime-sync-v1
+          cache-on-failure: true
+      - name: Install canonical builtin wasm toolchain
+        run: |
+          rustup toolchain install "${BUILTIN_WASM_TOOLCHAIN}" --profile minimal --component rust-src
+          rustup target add "${BUILTIN_WASM_TARGET}" --toolchain "${BUILTIN_WASM_TOOLCHAIN}"
+      - name: Run runtime sync release gate
+        run: |
+          mkdir -p .tmp/release_gate_runtime_sync
+          {
+            echo "+ ./scripts/sync-m1-builtin-wasm-artifacts.sh --check"
+            ./scripts/sync-m1-builtin-wasm-artifacts.sh --check
+            echo "+ ./scripts/sync-m4-builtin-wasm-artifacts.sh --check"
+            ./scripts/sync-m4-builtin-wasm-artifacts.sh --check
+            echo "+ ./scripts/sync-m5-builtin-wasm-artifacts.sh --check"
+            ./scripts/sync-m5-builtin-wasm-artifacts.sh --check
+          } | tee .tmp/release_gate_runtime_sync/runtime-sync-checks.log
+      - name: Upload runtime sync gate summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mainnet-release-gate-runtime-sync-summary
+          path: .tmp/release_gate_runtime_sync
+          if-no-files-found: warn
+
+  release_gate_web:
+    name: release-gate-web
+    needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install viewer web dependencies
+        run: npm ci --prefix crates/oasis7_viewer
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
+          rustup default "${RUST_TOOLCHAIN}"
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            netcat-openbsd \
+            pkg-config \
+            xvfb \
+            xauth \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mainnet-packages-web-wasm-v1
+          cache-on-failure: true
+      - name: Run web strict release gate
+        run: |
+          xvfb-run -a ./scripts/release-gate.sh \
+            --out-dir .tmp/release_gate_web \
+            --skip-ci-full \
+            --skip-sync \
+            --skip-s9 \
+            --skip-s10 \
+            --web-headed
+      - name: Upload web gate summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mainnet-release-gate-web-summary
+          path: .tmp/release_gate_web
+          if-no-files-found: warn
+
+  release_gate_soak:
+    name: release-gate-soak
+    needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup default "${RUST_TOOLCHAIN}"
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            jq \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mainnet-packages-release-gate-soak-v1
+          cache-on-failure: true
+      - name: Prewarm soak runtime binary
+        run: env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime
+      - name: Run soak release gate
+        run: |
+          ./scripts/release-gate.sh \
+            --out-dir .tmp/release_gate_soak \
+            --skip-ci-full \
+            --skip-sync \
+            --skip-web-strict
+      - name: Upload soak gate summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mainnet-release-gate-soak-summary
+          path: |
+            .tmp/release_gate_soak
+            .tmp/release_gate_p2p
+            .tmp/release_gate_s10
+          if-no-files-found: warn
+
+  release_gate:
+    name: release-gate
+    if: always()
+    needs:
+      - release_gate_runtime_core
+      - release_gate_runtime_support
+      - release_gate_runtime_sync
+      - release_gate_web
+      - release_gate_soak
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Assert all release gates passed
+        env:
+          RUNTIME_CORE_RESULT: ${{ needs.release_gate_runtime_core.result }}
+          RUNTIME_SUPPORT_RESULT: ${{ needs.release_gate_runtime_support.result }}
+          RUNTIME_SYNC_RESULT: ${{ needs.release_gate_runtime_sync.result }}
+          WEB_RESULT: ${{ needs.release_gate_web.result }}
+          SOAK_RESULT: ${{ needs.release_gate_soak.result }}
+        run: |
+          failed=0
+          for gate in runtime_core runtime_support runtime_sync web soak; do
+            upper_name=$(printf '%s' "$gate" | tr '[:lower:]' '[:upper:]')
+            result_var="${upper_name}_RESULT"
+            result=${!result_var}
+            echo "${gate}: ${result}"
+            if [[ "$result" != "success" ]]; then
+              failed=1
+            fi
+          done
+          if [[ "$failed" -ne 0 ]]; then
+            echo "error: one or more release sub-gates failed" >&2
+            exit 1
+          fi
+
+  build-web-dist:
+    name: build-web-dist
+    needs:
+      - plan
+      - release_gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install viewer web dependencies
+        run: npm ci --prefix crates/oasis7_viewer
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
+          rustup default "${RUST_TOOLCHAIN}"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mainnet-packages-web-wasm-v1
+          cache-on-failure: true
+      - name: Install trunk
+        run: cargo install trunk --locked
+      - name: Build web dists
+        run: |
+          mkdir -p output/mainnet-packages/web-dist output/mainnet-packages/web-launcher-dist
+          (
+            ./scripts/build-viewer-software-safe.sh
+            ./scripts/copy-viewer-web-dist.sh --dist-dir output/mainnet-packages/web-dist
+          )
+          (
+            cd crates/oasis7_client_launcher
+            env -u NO_COLOR trunk build --release --dist ../../output/mainnet-packages/web-launcher-dist
+          )
+      - name: Upload web dist artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: mainnet-web-dists
+          path: |
+            output/mainnet-packages/web-dist
+            output/mainnet-packages/web-launcher-dist
+          if-no-files-found: error
+
+  package-native:
+    name: package-${{ matrix.platform }}
+    needs:
+      - plan
+      - build-web-dist
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup default "${RUST_TOOLCHAIN}"
+          if [[ "${{ matrix.target_triple }}" != "native" ]]; then
+            rustup target add "${{ matrix.target_triple }}" --toolchain "${RUST_TOOLCHAIN}"
+          fi
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mainnet-packages-${{ runner.os }}-${{ matrix.target_triple }}-v1
+          cache-on-failure: true
+      - name: Ensure Linux AppImage tooling
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APPIMAGETOOL_VERSION="1.9.1"
+          APPIMAGETOOL_FILENAME="appimagetool-x86_64.AppImage"
+          APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/${APPIMAGETOOL_FILENAME}"
+          APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+
+          mkdir -p "${RUNNER_TEMP}/appimagetool"
+          curl -fsSL "${APPIMAGETOOL_URL}" \
+            -o "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
+          printf '%s  %s\n' \
+            "${APPIMAGETOOL_SHA256}" \
+            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" | sha256sum -c -
+          chmod +x "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
+          ln -sf \
+            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" \
+            "${RUNNER_TEMP}/appimagetool/appimagetool"
+          echo "${RUNNER_TEMP}/appimagetool" >> "${GITHUB_PATH}"
+      - name: Download web dist artifacts
+        uses: actions/download-artifact@v6
+        with:
+          name: mainnet-web-dists
+          path: output/mainnet-packages
+      - name: Ensure Windows packaging dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $missing = @()
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            $missing += "nsis"
+          }
+          if ($missing.Count -eq 0) {
+            exit 0
+          }
+          choco install $missing -y --no-progress
+      - name: Build launcher bundle
+        shell: bash
+        run: |
+          ./scripts/release-prepare-bundle.sh \
+            --platform "${{ matrix.platform }}" \
+            --target-triple "${{ matrix.target_triple }}" \
+            --web-dist output/mainnet-packages/web-dist \
+            --web-launcher-dist output/mainnet-packages/web-launcher-dist \
+            --out-dir output/mainnet-packages/assets \
+            --profile release
+      - name: Validate bundle entrypoints
+        shell: bash
+        run: |
+          ./scripts/validate-release-platform-entrypoints.sh \
+            --platform "${{ matrix.platform }}" \
+            --bundle-dir "output/mainnet-packages/assets/oasis7-${{ matrix.platform }}" \
+            | tee "output/mainnet-packages/assets/${{ matrix.platform }}-entrypoint-validation.log"
+      - name: Stage bundle manifest
+        shell: bash
+        run: |
+          cp \
+            "output/mainnet-packages/assets/oasis7-${{ matrix.platform }}/.oasis7-bundle-manifest.json" \
+            "output/mainnet-packages/assets/${{ matrix.platform }}-bundle-manifest.json"
+      - name: Package native installer
+        shell: bash
+        run: |
+          ./scripts/package-native-installer.sh \
+            --platform "${{ matrix.platform }}" \
+            --bundle-dir "output/mainnet-packages/assets/oasis7-${{ matrix.platform }}" \
+            --out-dir output/mainnet-packages/assets \
+            --asset-name "${{ matrix.asset_name }}" \
+            --version "${{ needs.plan.outputs.version }}"
+      - name: Package secondary Linux .deb
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          ./scripts/package-native-installer.sh \
+            --platform "${{ matrix.platform }}" \
+            --bundle-dir "output/mainnet-packages/assets/oasis7-${{ matrix.platform }}" \
+            --out-dir output/mainnet-packages/assets \
+            --asset-name "oasis7-linux-x64.deb" \
+            --version "${{ needs.plan.outputs.version }}"
+      - name: Archive raw Linux bundle
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          tar -C output/mainnet-packages/assets \
+            -czf output/mainnet-packages/assets/oasis7-linux-x64-bundle.tar.gz \
+            oasis7-linux-x64
+      - name: Write BUILDINFO
+        shell: bash
+        run: |
+          {
+            echo "workflow=Mainnet Packages"
+            echo "network_tier=mainnet"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_number=${GITHUB_RUN_NUMBER}"
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "release_tag=${{ needs.plan.outputs.ref }}"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "build_profile=release"
+            echo "package_scope=all_existing"
+            echo "platform=${{ matrix.platform }}"
+            echo "target_triple=${{ matrix.target_triple }}"
+            echo "runner_os=${RUNNER_OS}"
+            echo "package_version=${{ needs.plan.outputs.version }}"
+            echo "published=false"
+          } > "output/mainnet-packages/assets/${{ matrix.platform }}-BUILDINFO"
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd output/mainnet-packages/assets
+
+          checksum() {
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$@"
+            else
+              shasum -a 256 "$@"
+            fi
+          }
+
+          files=(
+            "${{ matrix.asset_name }}"
+            "${{ matrix.platform }}-BUILDINFO"
+            "${{ matrix.platform }}-bundle-manifest.json"
+            "${{ matrix.platform }}-entrypoint-validation.log"
+          )
+          if [[ "${{ matrix.platform }}" == "linux-x64" ]]; then
+            files+=(
+              "oasis7-linux-x64.deb"
+              "oasis7-linux-x64-bundle.tar.gz"
+            )
+          fi
+
+          for file in "${files[@]}"; do
+            [[ -f "${file}" ]] || { echo "error: missing mainnet package artifact ${file}" >&2; exit 1; }
+          done
+          checksum "${files[@]}" > "${{ matrix.platform }}-SHA256SUMS"
+      - name: Stage upload directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          upload_dir="output/mainnet-packages/upload/${{ matrix.platform }}"
+          mkdir -p "${upload_dir}"
+          cp "output/mainnet-packages/assets/${{ matrix.asset_name }}" "${upload_dir}/"
+          cp "output/mainnet-packages/assets/${{ matrix.platform }}-BUILDINFO" "${upload_dir}/"
+          cp "output/mainnet-packages/assets/${{ matrix.platform }}-SHA256SUMS" "${upload_dir}/"
+          cp "output/mainnet-packages/assets/${{ matrix.platform }}-bundle-manifest.json" "${upload_dir}/"
+          cp "output/mainnet-packages/assets/${{ matrix.platform }}-entrypoint-validation.log" "${upload_dir}/"
+          if [[ "${{ matrix.platform }}" == "linux-x64" ]]; then
+            cp "output/mainnet-packages/assets/oasis7-linux-x64.deb" "${upload_dir}/"
+            cp "output/mainnet-packages/assets/oasis7-linux-x64-bundle.tar.gz" "${upload_dir}/"
+          fi
+      - name: Upload mainnet package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: mainnet-package-${{ matrix.platform }}-${{ needs.plan.outputs.version }}
+          path: output/mainnet-packages/upload/${{ matrix.platform }}
+          if-no-files-found: error
+
+  package-index:
+    name: package-index
+    needs:
+      - plan
+      - package-native
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download mainnet package artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: mainnet-package-*
+          path: output/mainnet-packages/index
+          merge-multiple: true
+      - name: Generate aggregate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd output/mainnet-packages/index
+
+          for file in \
+            oasis7-linux-x86_64.AppImage \
+            oasis7-linux-x64.deb \
+            oasis7-linux-x64-bundle.tar.gz \
+            oasis7-macos-x64.dmg \
+            oasis7-windows-x64.exe
+          do
+            [[ -f "${file}" ]] || { echo "error: missing mainnet package artifact ${file}" >&2; exit 1; }
+          done
+
+          sha256sum \
+            oasis7-linux-x86_64.AppImage \
+            oasis7-linux-x64.deb \
+            oasis7-linux-x64-bundle.tar.gz \
+            oasis7-macos-x64.dmg \
+            oasis7-windows-x64.exe \
+            > oasis7-mainnet-checksums.txt
+      - name: Upload aggregate mainnet package index
+        uses: actions/upload-artifact@v7
+        with:
+          name: mainnet-package-index-${{ needs.plan.outputs.version }}
+          path: |
+            output/mainnet-packages/index/oasis7-mainnet-checksums.txt
+            output/mainnet-packages/index/*-BUILDINFO
+            output/mainnet-packages/index/*-SHA256SUMS
+            output/mainnet-packages/index/*-bundle-manifest.json
+            output/mainnet-packages/index/*-entrypoint-validation.log
+          if-no-files-found: error
