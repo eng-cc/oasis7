@@ -150,6 +150,51 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
 }
 
 #[test]
+fn rust_host_state_localizes_command_board_surface_for_zh_locale() {
+    let mut input = sample_input();
+    input["locale"] = json!("zh-CN");
+    input["gameplay"]["goalKind"] = json!("CreateFirstWorldFeedback");
+    input["gameplay"]["goalTitle"] = json!("Create the first visible world feedback");
+    input["gameplay"]["objective"] = json!(
+        "Advance the world once and confirm that your action produces a visible state or event delta."
+    );
+    input["gameplay"]["nextStepHint"] =
+        json!("Request a snapshot, advance 1 step, then inspect the new delta and events.");
+    input["gameplay"]["recommendedAction"]["actionId"] = json!("build_factory_smelter_mk1");
+    input["gameplay"]["recommendedAction"]["label"] = json!("Queue Smelter MK1 construction");
+
+    let state = build_render_state(&input);
+    let surface = &state["commercial_surface"];
+
+    assert_eq!(surface["objective"]["title"], "确认第一条世界反馈");
+    assert_eq!(state["goal_highlight"]["title"], "确认第一条世界反馈");
+    assert_eq!(
+        surface["objective"]["detail"],
+        "先拿到一条明确世界反馈，再继续后续工业选择。"
+    );
+    assert_eq!(surface["next_action"]["label"], "排队建造一型冶炼炉");
+    assert_eq!(
+        surface["next_action"]["detail"],
+        "先请求一次快照，推进 1 步，再检查新的世界变化和事件。"
+    );
+
+    let board_text = format!(
+        "{}{}{}{}",
+        surface["objective"]["title"].as_str().unwrap(),
+        surface["objective"]["detail"].as_str().unwrap(),
+        surface["next_action"]["label"].as_str().unwrap(),
+        surface["next_action"]["detail"].as_str().unwrap()
+    );
+    assert!(!state["goal_highlight"]["title"]
+        .as_str()
+        .unwrap()
+        .contains("Create the first visible world feedback"));
+    assert!(!board_text.contains("Create the first visible world feedback"));
+    assert!(!board_text.contains("Queue Smelter"));
+    assert!(!board_text.contains("Request a snapshot"));
+}
+
+#[test]
 fn rust_host_state_keeps_no_receipt_ambient_events_out_of_player_progress() {
     let mut input = sample_input();
     input["gameplay"] = json!({

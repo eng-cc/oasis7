@@ -350,9 +350,178 @@ function fragmentTerrainStyle(patch, worldBounds, index) {
   };
 }
 
+function fieldValue(value, snakeName, camelName, fallback = undefined) {
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+  if (value[snakeName] !== undefined) {
+    return value[snakeName];
+  }
+  if (camelName && value[camelName] !== undefined) {
+    return value[camelName];
+  }
+  return fallback;
+}
+
+function arrayField(value, snakeName, camelName) {
+  const candidate = fieldValue(value, snakeName, camelName, []);
+  return Array.isArray(candidate) ? candidate : [];
+}
+
+function normalizeVisualEntity(entry) {
+  if (!entry || typeof entry !== "object") {
+    return entry;
+  }
+  return {
+    ...entry,
+    location_id: fieldValue(entry, "location_id", "locationId", null),
+    marker_role: fieldValue(entry, "marker_role", "markerRole", null),
+    marker_alpha: fieldValue(entry, "marker_alpha", "markerAlpha", undefined),
+    position_source: fieldValue(entry, "position_source", "positionSource", null),
+    dominant_compound: fieldValue(entry, "dominant_compound", "dominantCompound", undefined),
+    footprint_cm: fieldValue(entry, "footprint_cm", "footprintCm", undefined),
+  };
+}
+
+function pixelWorldVisualState(renderState) {
+  const state = renderState || {};
+  return {
+    worldBounds: fieldValue(state, "world_bounds", "worldBounds", null),
+    fragmentTerrain: arrayField(state, "fragment_terrain", "fragmentTerrain").map(normalizeVisualEntity),
+    links: arrayField(state, "links", "links"),
+    locations: arrayField(state, "locations", "locations").map(normalizeVisualEntity),
+    agents: arrayField(state, "agents", "agents").map(normalizeVisualEntity),
+    selection: fieldValue(state, "selection", "selection", null),
+    goalHighlight: fieldValue(state, "goal_highlight", "goalHighlight", null),
+    blockerHighlight: fieldValue(state, "blocker_highlight", "blockerHighlight", null),
+  };
+}
+
 function pickKnownAgentId(candidateIds, agents) {
   const knownAgentIds = new Set(agents.map((agent) => agent.id));
   return candidateIds.find((id) => id && knownAgentIds.has(id)) || null;
+}
+
+function normalizeGameplayToken(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll(/\s+/g, "")
+    .replaceAll("_", "")
+    .replaceAll("-", "");
+}
+
+function containsCjk(value) {
+  return /[\u3400-\u9fff]/u.test(String(value || ""));
+}
+
+function zhOrPublished(locale, published, zhFallback, enFallback) {
+  if (!core.isLocaleZh(locale)) {
+    return published || enFallback;
+  }
+  if (published && containsCjk(published)) {
+    return published;
+  }
+  return zhFallback;
+}
+
+function localizedGoalTitle(locale, gameplay) {
+  const published = gameplay?.goalTitle || null;
+  const goalKind = normalizeGameplayToken(gameplay?.goalKind);
+  switch (goalKind) {
+    case "recovercapability":
+      return zhOrPublished(locale, published, "恢复可持续能力", "Recover sustainable capability");
+    case "stabilizefirstline":
+    case "establishfirstcapability":
+      return zhOrPublished(locale, published, "稳定第一条生产线", "Stabilize the first production line");
+    case "choosefirstexpansiontradeoff":
+    case "choosemidlooppath":
+      return zhOrPublished(locale, published, "选择下一条扩张路径", "Choose the next expansion path");
+    case "createfirstworldfeedback":
+      return zhOrPublished(locale, published, "确认第一条世界反馈", "Confirm the first world feedback");
+    default:
+      return zhOrPublished(
+        locale,
+        published,
+        "进入世界，建立第一条能力链",
+        "Enter the world and build the first capability chain",
+      );
+  }
+}
+
+function localizedObjectiveDetail(locale, gameplay) {
+  const published = gameplay?.objective || gameplay?.progressDetail || null;
+  const goalKind = normalizeGameplayToken(gameplay?.goalKind);
+  switch (goalKind) {
+    case "recovercapability":
+      return zhOrPublished(locale, published, "先恢复阻塞点，再确认生产线重新具备可经营能力。", "Recover the blocker first, then confirm the line is operable again.");
+    case "stabilizefirstline":
+    case "establishfirstcapability":
+      return zhOrPublished(locale, published, "先稳定第一条产线，再决定扩张、恢复或分工。", "Stabilize the first line before choosing expansion, recovery, or specialization.");
+    case "choosefirstexpansiontradeoff":
+    case "choosemidlooppath":
+      return zhOrPublished(locale, published, "比较下一步带来的用途、弹性和分支价值，再推进。", "Compare the next move's use, resilience, and branch value before advancing.");
+    case "createfirstworldfeedback":
+      return zhOrPublished(locale, published, "先拿到一条明确世界反馈，再继续后续工业选择。", "Get one clear world feedback signal before continuing industrial choices.");
+    default:
+      return zhOrPublished(
+        locale,
+        published,
+        "先让 Agent、路线和资源关系变得可读，再推进下一步。",
+        "Read the agent, route, and resource relationship before pushing the next move.",
+      );
+  }
+}
+
+function localizedNextActionLabel(locale, gameplay) {
+  const published = gameplay?.recommendedAction?.label
+    || gameplay?.nextStepHint
+    || gameplay?.narrativeNextStep
+    || null;
+  const executeKind = gameplay?.recommendedAction?.executeKind;
+  const actionId = normalizeGameplayToken(gameplay?.recommendedAction?.actionId);
+  const labelToken = normalizeGameplayToken(gameplay?.recommendedAction?.label);
+  if (core.isLocaleZh(locale) && published && containsCjk(published)) {
+    return published;
+  }
+  if (!core.isLocaleZh(locale) && published) {
+    return published;
+  }
+  if (actionId === "buildfactorysmeltermk1" || labelToken.includes("smeltermk1")) {
+    return tr(locale, "排队建造一型冶炼炉", "Queue Smelter MK1 construction");
+  }
+  switch (executeKind) {
+    case "gameplay_action":
+      return tr(locale, "提交推荐玩法动作", "Submit recommended gameplay action");
+    case "step":
+      return tr(locale, "推进世界一步", "Advance the world one step");
+    case "play":
+      return tr(locale, "继续运行世界", "Keep the world running");
+    case "request_snapshot":
+      return tr(locale, "刷新世界快照", "Refresh world snapshot");
+    case "agent_chat":
+      return tr(locale, "向选中 Agent 发送消息", "Message the selected agent");
+    default:
+      return tr(locale, "选择一个 Agent 或推进世界一步", "Select an agent or advance the world one step");
+  }
+}
+
+function localizedOptionalDetail(locale, published) {
+  if (!published) {
+    return null;
+  }
+  if (!core.isLocaleZh(locale) || containsCjk(published)) {
+    return published;
+  }
+  const token = normalizeGameplayToken(published);
+  if (
+    token.includes("requestasnapshot")
+    || token.includes("advance1step")
+    || token.includes("inspectthenewdelta")
+  ) {
+    return "先请求一次快照，推进 1 步，再检查新的世界变化和事件。";
+  }
+  return tr(locale, "查看当前回执和阻塞原因，再决定下一步。", "Read the current receipt and blocker before choosing the next move.");
 }
 
 function actionReceiptTitle(locale, state, present) {
@@ -448,19 +617,16 @@ function buildCommercialSurface({
     selection?.kind === "agent" ? selection.id : null,
     agents[0]?.id,
   ], agents);
-  const objectiveTitle = gameplay?.goalTitle
-    || tr(locale, "进入世界，建立第一条能力链", "Enter the world and build the first capability chain");
-  const objectiveDetail = gameplay?.objective
-    || gameplay?.progressDetail
-    || tr(locale, "先让 Agent、路线和资源关系变得可读，再推进下一步。", "Read the agent, route, and resource relationship before pushing the next move.");
-  const nextActionLabel = gameplay?.recommendedAction?.label
-    || gameplay?.nextStepHint
-    || gameplay?.narrativeNextStep
-    || tr(locale, "选择一个 Agent 或推进世界一步", "Select an agent or advance the world one step");
-  const nextActionDetail = gameplay?.recommendedAction?.disabledReason
-    || gameplay?.nextStepHint
-    || gameplay?.executionSummary
-    || null;
+  const objectiveTitle = localizedGoalTitle(locale, gameplay);
+  const objectiveDetail = localizedObjectiveDetail(locale, gameplay);
+  const nextActionLabel = localizedNextActionLabel(locale, gameplay);
+  const nextActionDetail = localizedOptionalDetail(
+    locale,
+    gameplay?.recommendedAction?.disabledReason
+      || gameplay?.nextStepHint
+      || gameplay?.executionSummary
+      || null,
+  );
   const leverageSummary = gameplay?.acceptedIntentSummary
     || gameplay?.lastWorldChange
     || tr(locale, "还没有一条被正式接受的玩家意图", "No player-facing accepted intent yet");
@@ -558,6 +724,74 @@ function buildVisualHotspots({
     ...entry,
     pos: offsetWorldPosition(anchor, worldBounds, ...(offsets[index % offsets.length] || [0, 0])),
   })).filter((entry) => entry.pos);
+}
+
+function PixelWorldHostVisualLayer(props) {
+  const visualState = () => pixelWorldVisualState(props.renderState());
+  return (
+    <>
+      <div class="pixel-world-canvas__grid" />
+      <For each={visualState().fragmentTerrain.slice(0, 96)}>
+        {(patch, index) => (
+          <div
+            class="pixel-world-fragment-terrain"
+            data-compound={patch.dominant_compound}
+            style={fragmentTerrainStyle(patch, visualState().worldBounds, index())}
+            title={`${patch.location_id}:${patch.dominant_compound}`}
+          />
+        )}
+      </For>
+      <For each={visualState().links.slice(0, 10)}>
+        {(link, index) => (
+          <div
+            class="pixel-world-route"
+            data-route-kind={link.kind}
+            style={routeStyle(link, visualState().worldBounds, index())}
+            title={`${link.kind}:${link.id}`}
+          />
+        )}
+      </For>
+      <For each={visualState().locations.slice(0, 8)}>
+        {(location, index) => (
+          <button
+            class="pixel-world-entity pixel-world-entity--location"
+            data-marker-role={location.marker_role}
+            style={{
+              ...toWorldPercentStyle(location.pos, visualState().worldBounds, {
+                left: `${12 + ((index() % 4) * 21)}%`,
+                top: `${18 + (Math.floor(index() / 4) * 26)}%`,
+              }),
+              opacity: location.marker_alpha,
+            }}
+            title={location.label}
+            onMouseEnter={() => props.onHover({ kind: "location", id: location.id })}
+            onMouseLeave={() => props.onHover(null)}
+            onClick={() => props.onSelect({ kind: "location", id: location.id })}
+          >
+            <span>{location.label.slice(0, 2).toUpperCase()}</span>
+          </button>
+        )}
+      </For>
+      <For each={visualState().agents.slice(0, 10)}>
+        {(agent, index) => (
+          <button
+            class="pixel-world-entity pixel-world-entity--agent"
+            data-position-source={agent.position_source}
+            style={toWorldPercentStyle(agent.pos, visualState().worldBounds, {
+              left: `${18 + ((index() % 5) * 15)}%`,
+              top: `${14 + (Math.floor(index() / 5) * 22)}%`,
+            })}
+            title={agent.label}
+            onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
+            onMouseLeave={() => props.onHover(null)}
+            onClick={() => props.onSelect({ kind: "agent", id: agent.id })}
+          >
+            <span>{agent.label.slice(0, 1).toUpperCase()}</span>
+          </button>
+        )}
+      </For>
+    </>
+  );
 }
 
 function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal }) {
@@ -773,10 +1007,12 @@ export function buildPixelWorldRenderStateFromInput(input) {
     || agents.find((agent) => agent.pos)?.pos
     || locations[0]?.pos
     || worldCenterPosition(worldBounds);
-  const goalHighlight = gameplay?.goalTitle
+  const localizedGoal = localizedGoalTitle(locale, gameplay);
+  const localizedGoalDetail = localizedObjectiveDetail(locale, gameplay);
+  const goalHighlight = localizedGoal
     ? {
-        title: gameplay.goalTitle,
-        objective: gameplay.objective || null,
+        title: localizedGoal,
+        objective: localizedGoalDetail || null,
       }
     : null;
   const blockerHighlight = gameplay?.blockerKind || gameplay?.blockerDetail
@@ -829,6 +1065,7 @@ export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
 
 function PixelWorldCanvasRenderer(props) {
   let canvasRef;
+  const visualState = () => pixelWorldVisualState(props.renderState());
 
   createEffect(() => {
     if (!canvasRef) {
@@ -855,20 +1092,26 @@ function PixelWorldCanvasRenderer(props) {
         height="540"
       />
       <div class="pixel-world-canvas__overlay">
-        <Show when={props.renderState().goal_highlight}>
+        <PixelWorldHostVisualLayer
+          locale={props.locale}
+          renderState={props.renderState}
+          onSelect={props.onSelect}
+          onHover={props.onHover}
+        />
+        <Show when={visualState().goalHighlight}>
           <div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">
-            {`${tr(props.locale(), "目标", "Goal")}: ${props.renderState().goal_highlight.title}`}
+            {`${tr(props.locale(), "目标", "Goal")}: ${visualState().goalHighlight.title}`}
           </div>
         </Show>
-        <Show when={props.renderState().blocker_highlight}>
+        <Show when={visualState().blockerHighlight}>
           <div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">
-            {`${tr(props.locale(), "阻塞", "Blocker")}: ${props.renderState().blocker_highlight.kind}`}
+            {`${tr(props.locale(), "阻塞", "Blocker")}: ${visualState().blockerHighlight.kind}`}
           </div>
         </Show>
       </div>
-      <Show when={props.renderState().selection}>
+      <Show when={visualState().selection}>
         <div class="pixel-world-canvas__selection">
-          {`${tr(props.locale(), "已选中", "Selected")}: ${props.renderState().selection.kind}/${props.renderState().selection.id}`}
+          {`${tr(props.locale(), "已选中", "Selected")}: ${visualState().selection.kind}/${visualState().selection.id}`}
         </div>
       </Show>
     </div>
@@ -955,82 +1198,29 @@ function PixelWorldCommercialHud(props) {
 }
 
 function PixelWorldCanvasPlaceholder(props) {
+  const visualState = () => pixelWorldVisualState(props.renderState());
   return (
     <div class="pixel-world-canvas" data-renderer-ready={props.ready() ? "true" : "false"}>
-      <div class="pixel-world-canvas__grid" />
-      <For each={props.renderState().fragment_terrain.slice(0, 96)}>
-        {(patch, index) => (
-          <div
-            class="pixel-world-fragment-terrain"
-            data-compound={patch.dominant_compound}
-            style={fragmentTerrainStyle(patch, props.renderState().world_bounds, index())}
-            title={`${patch.location_id}:${patch.dominant_compound}`}
-          />
-        )}
-      </For>
-      <For each={props.renderState().links.slice(0, 10)}>
-        {(link, index) => (
-          <div
-            class="pixel-world-route"
-            data-route-kind={link.kind}
-            style={routeStyle(link, props.renderState().world_bounds, index())}
-            title={`${link.kind}:${link.id}`}
-          />
-        )}
-      </For>
-      <For each={props.renderState().locations.slice(0, 8)}>
-        {(location, index) => (
-          <button
-            class="pixel-world-entity pixel-world-entity--location"
-            data-marker-role={location.marker_role}
-            style={{
-              ...toWorldPercentStyle(location.pos, props.renderState().world_bounds, {
-                left: `${12 + ((index() % 4) * 21)}%`,
-                top: `${18 + (Math.floor(index() / 4) * 26)}%`,
-              }),
-              opacity: location.marker_alpha,
-            }}
-            title={location.label}
-            onMouseEnter={() => props.onHover({ kind: "location", id: location.id })}
-            onMouseLeave={() => props.onHover(null)}
-            onClick={() => props.onSelect({ kind: "location", id: location.id })}
-          >
-            <span>{location.label.slice(0, 2).toUpperCase()}</span>
-          </button>
-        )}
-      </For>
-      <For each={props.renderState().agents.slice(0, 10)}>
-        {(agent, index) => (
-          <button
-            class="pixel-world-entity pixel-world-entity--agent"
-            data-position-source={agent.position_source}
-            style={toWorldPercentStyle(agent.pos, props.renderState().world_bounds, {
-              left: `${18 + ((index() % 5) * 15)}%`,
-              top: `${14 + (Math.floor(index() / 5) * 22)}%`,
-            })}
-            title={agent.label}
-            onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
-            onMouseLeave={() => props.onHover(null)}
-            onClick={() => props.onSelect({ kind: "agent", id: agent.id })}
-          >
-            <span>{agent.label.slice(0, 1).toUpperCase()}</span>
-          </button>
-        )}
-      </For>
-      <Show when={props.renderState().selection}>
+      <PixelWorldHostVisualLayer
+        locale={props.locale}
+        renderState={props.renderState}
+        onSelect={props.onSelect}
+        onHover={props.onHover}
+      />
+      <Show when={visualState().selection}>
         <div class="pixel-world-canvas__selection">
-          {`${tr(props.locale(), "已选中", "Selected")}: ${props.renderState().selection.kind}/${props.renderState().selection.id}`}
+          {`${tr(props.locale(), "已选中", "Selected")}: ${visualState().selection.kind}/${visualState().selection.id}`}
         </div>
       </Show>
       <div class="pixel-world-canvas__overlay">
-        <Show when={props.renderState().goal_highlight}>
+        <Show when={visualState().goalHighlight}>
           <div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">
-            {`${tr(props.locale(), "目标", "Goal")}: ${props.renderState().goal_highlight.title}`}
+            {`${tr(props.locale(), "目标", "Goal")}: ${visualState().goalHighlight.title}`}
           </div>
         </Show>
-        <Show when={props.renderState().blocker_highlight}>
+        <Show when={visualState().blockerHighlight}>
           <div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">
-            {`${tr(props.locale(), "阻塞", "Blocker")}: ${props.renderState().blocker_highlight.kind}`}
+            {`${tr(props.locale(), "阻塞", "Blocker")}: ${visualState().blockerHighlight.kind}`}
           </div>
         </Show>
       </div>
@@ -1044,6 +1234,7 @@ export function PixelWorldHost(props) {
   const fallbackRenderState = createMemo(() => buildPixelWorldRenderStateFromInput(renderInput()));
   const [rustRenderState, setRustRenderState] = createSignal(null);
   const renderState = () => rustRenderState() || fallbackRenderState();
+  const visualState = () => pixelWorldVisualState(renderState());
   const autoAttachRenderer = shouldAutoAttachRenderer();
   const [rendererStatus, setRendererStatus] = createSignal(autoAttachRenderer ? "booting" : "fallback");
   const [rendererFatal, setRendererFatal] = createSignal(null);
@@ -1213,6 +1404,8 @@ export function PixelWorldHost(props) {
           locale={locale}
           renderInput={renderInput}
           renderState={renderState}
+          onSelect={(selection) => adapter().simulateSelect(selection)}
+          onHover={(selection) => adapter().simulateHover(selection)}
           onFatal={(message) => adapter().simulateFatal(message)}
           onCanvasMount={(canvas) => {
             mountedCanvas = canvas;
@@ -1258,13 +1451,13 @@ export function PixelWorldHost(props) {
       <details class="diagnostic pixel-world-render-diagnostics">
         <summary>{tr(locale(), "Renderer 诊断", "Renderer Diagnostics")}</summary>
         <div class="pixel-world-host__toolbar badge-row">
-          <span class="badge badge--accent">{`locations=${renderState().locations.length}`}</span>
-          <span class="badge badge--accent">{`fragments=${renderState().fragment_terrain.length}`}</span>
-          <span class="badge badge--accent">{`agents=${renderState().agents.length}`}</span>
-          <span class="badge">{`links=${renderState().links.length}`}</span>
-          <span class="badge">{`hotspots=${renderState().visual_hotspots.length}`}</span>
-          <span class="badge">{`derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
-          <span class="badge">{renderState().world_bounds ? "world_bounds=ready" : "world_bounds=missing"}</span>
+          <span class="badge badge--accent">{`locations=${visualState().locations.length}`}</span>
+          <span class="badge badge--accent">{`fragments=${visualState().fragmentTerrain.length}`}</span>
+          <span class="badge badge--accent">{`agents=${visualState().agents.length}`}</span>
+          <span class="badge">{`links=${visualState().links.length}`}</span>
+          <span class="badge">{`hotspots=${arrayField(renderState(), "visual_hotspots", "visualHotspots").length}`}</span>
+          <span class="badge">{`derived_positions=${visualState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
+          <span class="badge">{visualState().worldBounds ? "world_bounds=ready" : "world_bounds=missing"}</span>
           <span class="badge">{`renderer=${rendererStatus()}`}</span>
           <span class="badge">{`runtime=${runtimeSource()}`}</span>
           <Show when={cameraState()}>

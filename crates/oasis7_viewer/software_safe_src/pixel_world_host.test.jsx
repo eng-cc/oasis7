@@ -14,6 +14,12 @@ vi.mock("./pixel_world_runtime_loader.js", () => ({
     bridge: {
       mount() {
         runtimeMock.mountCalls += 1;
+        if (runtimeMock.deriveRenderState) {
+          return {
+            status: "ready",
+            fatal: null,
+          };
+        }
         const fatal = {
           code: "pixel_world_renderer_runtime_unavailable",
           message: "pixel world wasm runtime is unavailable: missing wasm bridge",
@@ -25,6 +31,12 @@ vi.mock("./pixel_world_runtime_loader.js", () => ({
         };
       },
       update() {
+        if (runtimeMock.deriveRenderState) {
+          return {
+            status: "ready",
+            fatal: null,
+          };
+        }
         return {
           status: "fallback",
         };
@@ -293,6 +305,47 @@ describe("pixel world host", () => {
     });
   }, 15000);
 
+  it("localizes command board goal and next-action copy for the selected UI language", async () => {
+    vi.resetModules();
+    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=zh");
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+
+    const core = await import("./legacy_core.js");
+    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
+
+    core.setViewerLocale("zh-CN");
+    core.injectSnapshot(sampleSnapshot());
+
+    const surface = buildPixelWorldRenderState("zh-CN").commercial_surface;
+    expect(surface.objective.title).toBe("恢复可持续能力");
+    expect(surface.objective.detail).toBe("先恢复阻塞点，再确认生产线重新具备可经营能力。");
+    expect(surface.next_action.label).toBe("排队建造一型冶炼炉");
+    expect(surface.next_action.detail).toBe("查看当前回执和阻塞原因，再决定下一步。");
+    expect(surface.objective.title).not.toMatch(/[A-Za-z]/);
+    expect(surface.next_action.label).not.toMatch(/[A-Za-z]/);
+
+    const liveSnapshot = sampleSnapshot();
+    liveSnapshot.player_gameplay.goal_kind = "CreateFirstWorldFeedback";
+    liveSnapshot.player_gameplay.goal_title = "Create the first visible world feedback";
+    liveSnapshot.player_gameplay.objective = "Advance the world once and confirm that your action produces a visible state or event delta.";
+    liveSnapshot.player_gameplay.next_step_hint = "Request a snapshot, advance 1 step, then inspect the new delta and events.";
+    liveSnapshot.player_gameplay.available_actions[0].label = "Queue Smelter MK1 construction";
+    core.injectSnapshot(liveSnapshot);
+
+    const liveRenderState = buildPixelWorldRenderState("zh-CN");
+    const liveSurface = liveRenderState.commercial_surface;
+    expect(liveRenderState.goal_highlight.title).toBe("确认第一条世界反馈");
+    expect(liveRenderState.goal_highlight.title).not.toMatch(/[A-Za-z]/);
+    expect(liveSurface.objective.title).toBe("确认第一条世界反馈");
+    expect(liveSurface.objective.detail).toBe("先拿到一条明确世界反馈，再继续后续工业选择。");
+    expect(liveSurface.next_action.label).toBe("排队建造一型冶炼炉");
+    expect(liveSurface.next_action.detail).toBe("先请求一次快照，推进 1 步，再检查新的世界变化和事件。");
+    expect(liveSurface.objective.title).not.toMatch(/[A-Za-z]/);
+    expect(liveSurface.objective.detail).not.toMatch(/[A-Za-z]/);
+    expect(liveSurface.next_action.label).not.toMatch(/[A-Za-z]/);
+  });
+
   it("classifies action receipt confidence without treating default intent copy as player action", async () => {
     vi.resetModules();
     window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
@@ -466,19 +519,43 @@ describe("pixel world host", () => {
   it("uses Rust-derived render state from the runtime module when available", async () => {
     runtimeMock.deriveRenderState = vi.fn((input) => ({
       locale: input.locale,
-      world_bounds: { width_cm: 1, depth_cm: 1, height_cm: 1 },
-      locations: [],
-      fragment_terrain: [],
-      agents: [],
-      links: [],
-      selection: null,
-      goal_highlight: {
+      worldBounds: { width_cm: 10_000_000, depth_cm: 5_000_000, height_cm: 1_000_000 },
+      locations: [{
+        id: "loc-0",
+        label: "Factory Anchor",
+        pos: { x_cm: 5_000_000, y_cm: 2_500_000, z_cm: 0 },
+        markerRole: "logic_anchor",
+        markerAlpha: 0.32,
+      }],
+      fragmentTerrain: [{
+        id: "fragment:loc-0:0",
+        locationId: "loc-0",
+        pos: { x_cm: 5_000_000, y_cm: 2_500_000, z_cm: 0 },
+        dominantCompound: "silicate_matrix",
+        footprintCm: 12_000,
+        color: [126, 144, 99],
+      }],
+      agents: [{
+        id: "agent-0",
+        label: "Agent 0",
+        pos: { x_cm: 5_020_000, y_cm: 2_510_000, z_cm: 0 },
+        positionSource: "location_derived",
+      }],
+      links: [{
+        id: "link:agent-0:loc-0",
+        kind: "agent_assignment",
+        from: { x_cm: 5_020_000, y_cm: 2_510_000, z_cm: 0 },
+        to: { x_cm: 5_000_000, y_cm: 2_500_000, z_cm: 0 },
+        emphasis: 0.72,
+      }],
+      selection: { kind: "agent", id: "agent-0" },
+      goalHighlight: {
         title: "Rust derived goal",
         objective: "Rust objective detail",
       },
-      blocker_highlight: null,
-      recent_event_hotspots: [],
-      visual_hotspots: [],
+      blockerHighlight: null,
+      recentEventHotspots: [],
+      visualHotspots: [],
       commercial_surface: {
         objective: {
           title: "Rust derived goal",
@@ -535,6 +612,14 @@ describe("pixel world host", () => {
     });
     expect(screen.getByText("Rust next move")).toBeInTheDocument();
     expect(screen.getByText("Rust leverage summary")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.querySelector(".pixel-world-canvas--rendered")).toBeInTheDocument();
+    });
+    const canvas = document.querySelector(".pixel-world-canvas--rendered");
+    expect(canvas.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(1);
+    expect(canvas.querySelector(".pixel-world-entity--location")).toHaveAttribute("data-marker-role", "logic_anchor");
+    expect(canvas.querySelector(".pixel-world-entity--agent")).toHaveAttribute("data-position-source", "location_derived");
+    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
   });
 

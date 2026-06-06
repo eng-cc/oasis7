@@ -1,5 +1,7 @@
 use std::cell::RefCell;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::mem;
 
 use bevy::prelude::*;
@@ -202,6 +204,7 @@ struct BevyRuntimeState {
     mounted: bool,
     render_state: Option<RenderState>,
     render_version: u64,
+    render_content_signature: u64,
     camera: CameraState,
     camera_fit_version: u64,
     camera_user_override: bool,
@@ -427,6 +430,95 @@ fn shared_snapshot() -> SharedSnapshot {
     })
 }
 
+fn hash_f64(hasher: &mut DefaultHasher, value: f64) {
+    value.to_bits().hash(hasher);
+}
+
+fn hash_position(hasher: &mut DefaultHasher, position: &Position) {
+    hash_f64(hasher, position.x_cm);
+    hash_f64(hasher, position.y_cm);
+    hash_f64(hasher, position.z_cm);
+}
+
+fn hash_optional_position(hasher: &mut DefaultHasher, position: Option<&Position>) {
+    position.is_some().hash(hasher);
+    if let Some(position) = position {
+        hash_position(hasher, position);
+    }
+}
+
+fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    let Some(render_state) = render_state else {
+        return hasher.finish();
+    };
+
+    render_state.world_bounds.is_some().hash(&mut hasher);
+    if let Some(bounds) = render_state.world_bounds.as_ref() {
+        hash_f64(&mut hasher, bounds.width_cm);
+        hash_f64(&mut hasher, bounds.depth_cm);
+        hash_f64(&mut hasher, bounds.height_cm);
+    }
+
+    render_state.locations.len().hash(&mut hasher);
+    for location in &render_state.locations {
+        location.id.hash(&mut hasher);
+        hash_position(&mut hasher, &location.pos);
+        hash_f64(&mut hasher, location.size_hint_px.unwrap_or(0.0));
+        location.marker_role.hash(&mut hasher);
+        hash_f64(&mut hasher, location.marker_alpha.unwrap_or(0.0));
+    }
+
+    render_state.fragment_terrain.len().hash(&mut hasher);
+    for fragment in &render_state.fragment_terrain {
+        fragment.id.hash(&mut hasher);
+        hash_position(&mut hasher, &fragment.pos);
+        hash_f64(&mut hasher, fragment.footprint_cm);
+        fragment.color.hash(&mut hasher);
+        hash_f64(&mut hasher, fragment.emphasis.unwrap_or(0.0));
+    }
+
+    render_state.agents.len().hash(&mut hasher);
+    for agent in &render_state.agents {
+        agent.id.hash(&mut hasher);
+        hash_optional_position(&mut hasher, agent.pos.as_ref());
+        hash_f64(&mut hasher, agent.size_hint_px.unwrap_or(0.0));
+    }
+
+    render_state.links.len().hash(&mut hasher);
+    for link in &render_state.links {
+        link.id.hash(&mut hasher);
+        hash_position(&mut hasher, &link.from);
+        hash_position(&mut hasher, &link.to);
+        hash_f64(&mut hasher, link.emphasis.unwrap_or(0.0));
+    }
+
+    render_state.visual_hotspots.len().hash(&mut hasher);
+    for hotspot in &render_state.visual_hotspots {
+        hotspot.id.hash(&mut hasher);
+        hash_position(&mut hasher, &hotspot.pos);
+        hash_f64(&mut hasher, hotspot.emphasis.unwrap_or(0.0));
+        hash_f64(&mut hasher, hotspot.size_hint_px.unwrap_or(0.0));
+    }
+
+    hasher.finish()
+}
+
+fn apply_external_render_snapshot(runtime: &mut BevyRuntimeState, snapshot: SharedSnapshot) {
+    runtime.mounted = snapshot.mounted;
+    if snapshot.render_version == runtime.render_version {
+        return;
+    }
+
+    let next_signature = render_content_signature(snapshot.render_state.as_ref());
+    if next_signature != runtime.render_content_signature {
+        runtime.camera_fit_version = 0;
+        runtime.render_content_signature = next_signature;
+    }
+    runtime.render_version = snapshot.render_version;
+    runtime.render_state = snapshot.render_state;
+}
+
 fn push_input_event(event: InputEvent) {
     BRIDGE_SHARED.with(|shared| {
         shared.borrow_mut().input_events.push(event);
@@ -468,15 +560,10 @@ fn hit_test(hit_regions: &[HitRegion], x: f64, y: f64) -> Option<(String, String
 
 fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
     let snapshot = shared_snapshot();
-    runtime.mounted = snapshot.mounted;
-    if snapshot.render_version != runtime.render_version {
-        runtime.render_version = snapshot.render_version;
-        runtime.render_state = snapshot.render_state;
-        runtime.camera_fit_version = 0;
-        runtime.camera_user_override = false;
-    }
+    let input_events = snapshot.input_events.clone();
+    apply_external_render_snapshot(&mut runtime, snapshot);
 
-    for event in snapshot.input_events {
+    for event in input_events {
         match event {
             InputEvent::PointerDown { x, y, pointer_id } => {
                 runtime.drag_state = Some(DragState {
@@ -713,6 +800,54 @@ mod tests {
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test;
 
+    fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
+        RenderState {
+            world_bounds: Some(WorldBounds {
+                width_cm: 3_000_000.0,
+                depth_cm: 2_000_000.0,
+                height_cm: 500_000.0,
+            }),
+            locations: vec![Location {
+                id: "loc-0".to_string(),
+                label: "Fragment Field Anchor".to_string(),
+                pos: Position {
+                    x_cm: 1_500_000.0,
+                    y_cm: 1_000_000.0,
+                    z_cm: 0.0,
+                },
+                radius_cm: 30_000.0,
+                resource_summary: "-".to_string(),
+                size_hint_px: Some(10.0),
+                marker_role: Some("logic_anchor".to_string()),
+                marker_alpha: Some(0.32),
+            }],
+            fragment_terrain: vec![],
+            agents: vec![Agent {
+                id: "agent-0".to_string(),
+                label: "Survey Agent".to_string(),
+                pos: Some(Position {
+                    x_cm: 1_520_000.0,
+                    y_cm: 1_015_000.0,
+                    z_cm: 0.0,
+                }),
+                location_id: Some("loc-0".to_string()),
+                resource_summary: "-".to_string(),
+                status_badges: vec!["position=location_derived".to_string()],
+                size_hint_px: Some(16.0),
+            }],
+            links: vec![],
+            visual_hotspots: vec![],
+            selection: Some(Selection {
+                kind: selection_kind.to_string(),
+                id: if selection_kind == "location" {
+                    "loc-0".to_string()
+                } else {
+                    "agent-0".to_string()
+                },
+            }),
+        }
+    }
+
     fn assert_grid_layout_is_stable_for_same_camera_and_size() {
         let camera = CameraState::default();
         let left = build_grid_layout(&camera, 960.0, 540.0);
@@ -835,6 +970,42 @@ mod tests {
         assert!(location_style.layer_z < agent_style.layer_z);
     }
 
+    fn assert_selection_only_render_update_preserves_manual_camera_override() {
+        let mut runtime = BevyRuntimeState {
+            mounted: true,
+            render_state: Some(sample_render_state_for_camera("agent")),
+            render_version: 1,
+            render_content_signature: render_content_signature(None),
+            camera: CameraState {
+                zoom: 2.25,
+                pan_x_px: 42.0,
+                pan_y_px: -18.0,
+            },
+            camera_fit_version: 1,
+            camera_user_override: true,
+            ..Default::default()
+        };
+        let initial_signature = render_content_signature(runtime.render_state.as_ref());
+        runtime.render_content_signature = initial_signature;
+
+        let next_state = sample_render_state_for_camera("location");
+        let snapshot = SharedSnapshot {
+            mounted: true,
+            render_state: Some(next_state),
+            render_version: 2,
+            input_events: Vec::new(),
+        };
+        apply_external_render_snapshot(&mut runtime, snapshot);
+
+        assert_eq!(runtime.render_version, 2);
+        assert_eq!(runtime.render_content_signature, initial_signature);
+        assert_eq!(runtime.camera.zoom, 2.25);
+        assert_eq!(runtime.camera.pan_x_px, 42.0);
+        assert_eq!(runtime.camera.pan_y_px, -18.0);
+        assert!(runtime.camera_user_override);
+        assert_eq!(runtime.camera_fit_version, 1);
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn grid_layout_is_stable_for_same_camera_and_size() {
@@ -871,6 +1042,12 @@ mod tests {
         assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents();
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn selection_only_render_update_preserves_manual_camera_override() {
+        assert_selection_only_render_update_preserves_manual_camera_override();
+    }
+
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen_test]
     fn wasm_grid_layout_is_stable_for_same_camera_and_size() {
@@ -905,5 +1082,11 @@ mod tests {
     #[wasm_bindgen_test]
     fn wasm_bevy_visual_styles_keep_fragments_background_behind_readable_agents() {
         assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test]
+    fn wasm_selection_only_render_update_preserves_manual_camera_override() {
+        assert_selection_only_render_update_preserves_manual_camera_override();
     }
 }

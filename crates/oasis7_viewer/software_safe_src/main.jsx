@@ -856,8 +856,8 @@ function WorldSummaryPanel() {
               </EventCard>
               <PanelSection
                 title={tr(locale(), "能力经济可读性", "Capability Economics")}
-                eyebrow={tr(locale(), "为什么这一步值得继续", "Why This Step Is Worth Continuing")}
-                meta={tr(locale(), "把当前玩法翻译成显式的投入 / 产出 / 新用途 / 修复动作 / 下一步价值，避免工业成长继续退化成只看库存与产量。", "Translate the current loop into explicit input / output / new use / repair move / next value so industrial growth does not collapse into stockpile and throughput alone.")}
+                eyebrow={tr(locale(), "下一步会带来什么", "What The Next Move Changes")}
+                meta={tr(locale(), "把当前玩法拆成投入、产出、新用途、修复动作和下一步效果，帮助玩家判断现在该补资源、推进一步，还是换目标。", "Break the current loop into input, output, new use, repair move, and next effect so the player can choose whether to refill resources, advance one step, or switch targets.")}
               >
                 <div class="summary-grid">
                   <MetricCard

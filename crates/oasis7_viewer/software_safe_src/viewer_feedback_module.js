@@ -247,36 +247,36 @@ export function createViewerFeedbackModule({
       if (goalKind === "recovercapability") {
         return localeText(
           locale,
-          "现在值得继续，是因为这次修复一旦成立，你就从“盯着停机”回到“重新拥有可经营能力”。",
-          "It is worth continuing because once this repair holds, you move from watching a stall back to owning an operable capability.",
+          "完成这次修复后，停住的产线会重新变成可经营能力。",
+          "Once this repair holds, the stalled line becomes an operable capability again.",
         );
       }
       if (goalKind === "stabilizefirstline" || goalKind === "establishfirstcapability") {
         return localeText(
           locale,
-          "现在值得继续，是因为稳定性会把一次成功变成后续扩张、恢复或分工的前提。",
-          "It is worth continuing because stability turns one success into the prerequisite for expansion, recovery, or specialization.",
+          "稳定性会把一次成功变成后续扩张、恢复或分工的前提。",
+          "Stability turns one success into the prerequisite for expansion, recovery, or specialization.",
         );
       }
       if (goalKind === "choosefirstexpansiontradeoff" || goalKind === "choosemidlooppath") {
         return localeText(
           locale,
-          "现在值得继续，是因为下一步会改变你拿到的 leverage 类型，而不只是把同一种产出做得更多。",
-          "It is worth continuing because the next move changes the kind of leverage you get, not just the amount of the same output.",
+          "下一步会改变你拿到的杠杆类型，而不只是把同一种产出做得更多。",
+          "The next move changes the kind of leverage you get, not just the amount of the same output.",
         );
       }
       if (goalKind === "createfirstworldfeedback") {
         return localeText(
           locale,
-          "现在值得继续，是因为确认第一条世界反馈后，后面的工业选择才不再像盲按按钮。",
-          "It is worth continuing because once the first world feedback is confirmed, later industrial choices stop feeling blind.",
+          "先确认第一条世界反馈，后面的工业选择才不再像盲按按钮。",
+          "Confirm the first world feedback so later industrial choices stop feeling blind.",
         );
       }
       return narrativeNextStep
         || localeText(
           locale,
-          "现在值得继续，是因为下一步应该带来新的用途、恢复弹性或更清晰的分支价值。",
-          "It is worth continuing because the next move should create new use, recovery elasticity, or a clearer branch value.",
+          "下一步应该带来新的用途、恢复弹性或更清晰的分支价值。",
+          "The next move should create new use, recovery elasticity, or a clearer branch value.",
         );
     })();
 

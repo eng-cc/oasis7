@@ -21,6 +21,43 @@ fn tr(locale: &str, zh: &str, en: &str) -> String {
     }
 }
 
+fn is_zh_locale(locale: &str) -> bool {
+    locale.to_ascii_lowercase().starts_with("zh")
+}
+
+fn contains_cjk(value: &str) -> bool {
+    value
+        .chars()
+        .any(|ch| ('\u{3400}'..='\u{9fff}').contains(&ch))
+}
+
+fn normalize_gameplay_token(value: Option<&str>) -> String {
+    value
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|ch| !ch.is_whitespace() && *ch != '_' && *ch != '-')
+        .collect()
+}
+
+fn zh_or_published(
+    locale: &str,
+    published: Option<&str>,
+    zh_fallback: &str,
+    en_fallback: &str,
+) -> String {
+    if !is_zh_locale(locale) {
+        return published.unwrap_or(en_fallback).to_string();
+    }
+    if let Some(published) = published {
+        if contains_cjk(published) {
+            return published.to_string();
+        }
+    }
+    zh_fallback.to_string()
+}
+
 fn obj<'a>(value: &'a Value, key: &str) -> &'a Value {
     value.get(key).unwrap_or(&Value::Null)
 }
@@ -529,6 +566,141 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
     })
 }
 
+fn localized_goal_title(locale: &str, gameplay: &Value) -> String {
+    let published = str_key(gameplay, "goalTitle");
+    match normalize_gameplay_token(str_key(gameplay, "goalKind")).as_str() {
+        "recovercapability" => zh_or_published(
+            locale,
+            published,
+            "恢复可持续能力",
+            "Recover sustainable capability",
+        ),
+        "stabilizefirstline" | "establishfirstcapability" => zh_or_published(
+            locale,
+            published,
+            "稳定第一条生产线",
+            "Stabilize the first production line",
+        ),
+        "choosefirstexpansiontradeoff" | "choosemidlooppath" => zh_or_published(
+            locale,
+            published,
+            "选择下一条扩张路径",
+            "Choose the next expansion path",
+        ),
+        "createfirstworldfeedback" => zh_or_published(
+            locale,
+            published,
+            "确认第一条世界反馈",
+            "Confirm the first world feedback",
+        ),
+        _ => zh_or_published(
+            locale,
+            published,
+            "进入世界，建立第一条能力链",
+            "Enter the world and build the first capability chain",
+        ),
+    }
+}
+
+fn localized_objective_detail(locale: &str, gameplay: &Value) -> String {
+    let published = str_key(gameplay, "objective").or_else(|| str_key(gameplay, "progressDetail"));
+    match normalize_gameplay_token(str_key(gameplay, "goalKind")).as_str() {
+        "recovercapability" => zh_or_published(
+            locale,
+            published,
+            "先恢复阻塞点，再确认生产线重新具备可经营能力。",
+            "Recover the blocker first, then confirm the line is operable again.",
+        ),
+        "stabilizefirstline" | "establishfirstcapability" => zh_or_published(
+            locale,
+            published,
+            "先稳定第一条产线，再决定扩张、恢复或分工。",
+            "Stabilize the first line before choosing expansion, recovery, or specialization.",
+        ),
+        "choosefirstexpansiontradeoff" | "choosemidlooppath" => zh_or_published(
+            locale,
+            published,
+            "比较下一步带来的用途、弹性和分支价值，再推进。",
+            "Compare the next move's use, resilience, and branch value before advancing.",
+        ),
+        "createfirstworldfeedback" => zh_or_published(
+            locale,
+            published,
+            "先拿到一条明确世界反馈，再继续后续工业选择。",
+            "Get one clear world feedback signal before continuing industrial choices.",
+        ),
+        _ => zh_or_published(
+            locale,
+            published,
+            "先让 Agent、路线和资源关系变得可读，再推进下一步。",
+            "Read the agent, route, and resource relationship before pushing the next move.",
+        ),
+    }
+}
+
+fn localized_next_action_label(locale: &str, gameplay: &Value) -> String {
+    let recommended_action = obj(gameplay, "recommendedAction");
+    let published = str_key(recommended_action, "label")
+        .or_else(|| str_key(gameplay, "nextStepHint"))
+        .or_else(|| str_key(gameplay, "narrativeNextStep"));
+    if is_zh_locale(locale) && published.map(contains_cjk).unwrap_or(false) {
+        return published.unwrap_or_default().to_string();
+    }
+    if !is_zh_locale(locale) {
+        if let Some(published) = published {
+            return published.to_string();
+        }
+    }
+    let action_id = normalize_gameplay_token(str_key(recommended_action, "actionId"));
+    let label_token = normalize_gameplay_token(str_key(recommended_action, "label"));
+    if action_id == "buildfactorysmeltermk1" || label_token.contains("smeltermk1") {
+        return tr(
+            locale,
+            "排队建造一型冶炼炉",
+            "Queue Smelter MK1 construction",
+        );
+    }
+    match str_key(recommended_action, "executeKind") {
+        Some("gameplay_action") => tr(
+            locale,
+            "提交推荐玩法动作",
+            "Submit recommended gameplay action",
+        ),
+        Some("step") => tr(locale, "推进世界一步", "Advance the world one step"),
+        Some("play") => tr(locale, "继续运行世界", "Keep the world running"),
+        Some("request_snapshot") => tr(locale, "刷新世界快照", "Refresh world snapshot"),
+        Some("agent_chat") => tr(
+            locale,
+            "向选中 Agent 发送消息",
+            "Message the selected agent",
+        ),
+        _ => tr(
+            locale,
+            "选择一个 Agent 或推进世界一步",
+            "Select an agent or advance the world one step",
+        ),
+    }
+}
+
+fn localized_optional_detail(locale: &str, published: Option<&str>) -> Option<String> {
+    let published = published?;
+    if !is_zh_locale(locale) || contains_cjk(published) {
+        return Some(published.to_string());
+    }
+    let token = normalize_gameplay_token(Some(published));
+    if token.contains("requestasnapshot")
+        || token.contains("advance1step")
+        || token.contains("inspectthenewdelta")
+    {
+        return Some("先请求一次快照，推进 1 步，再检查新的世界变化和事件。".to_string());
+    }
+    Some(tr(
+        locale,
+        "查看当前回执和阻塞原因，再决定下一步。",
+        "Read the current receipt and blocker before choosing the next move.",
+    ))
+}
+
 fn build_commercial_surface(
     locale: &str,
     gameplay: &Value,
@@ -551,40 +723,15 @@ fn build_commercial_surface(
         ],
         agents,
     );
-    let objective_title = str_key(gameplay, "goalTitle")
-        .map(ToString::to_string)
-        .unwrap_or_else(|| {
-            tr(
-                locale,
-                "进入世界，建立第一条能力链",
-                "Enter the world and build the first capability chain",
-            )
-        });
-    let objective_detail = str_key(gameplay, "objective")
-        .or_else(|| str_key(gameplay, "progressDetail"))
-        .map(ToString::to_string)
-        .unwrap_or_else(|| {
-            tr(
-                locale,
-                "先让 Agent、路线和资源关系变得可读，再推进下一步。",
-                "Read the agent, route, and resource relationship before pushing the next move.",
-            )
-        });
-    let next_action_label = str_key(obj(gameplay, "recommendedAction"), "label")
-        .or_else(|| str_key(gameplay, "nextStepHint"))
-        .or_else(|| str_key(gameplay, "narrativeNextStep"))
-        .map(ToString::to_string)
-        .unwrap_or_else(|| {
-            tr(
-                locale,
-                "选择一个 Agent 或推进世界一步",
-                "Select an agent or advance the world one step",
-            )
-        });
-    let next_action_detail = str_key(obj(gameplay, "recommendedAction"), "disabledReason")
-        .or_else(|| str_key(gameplay, "nextStepHint"))
-        .or_else(|| str_key(gameplay, "executionSummary"))
-        .map(ToString::to_string);
+    let objective_title = localized_goal_title(locale, gameplay);
+    let objective_detail = localized_objective_detail(locale, gameplay);
+    let next_action_label = localized_next_action_label(locale, gameplay);
+    let next_action_detail = localized_optional_detail(
+        locale,
+        str_key(obj(gameplay, "recommendedAction"), "disabledReason")
+            .or_else(|| str_key(gameplay, "nextStepHint"))
+            .or_else(|| str_key(gameplay, "executionSummary")),
+    );
     let leverage_summary = str_key(gameplay, "acceptedIntentSummary")
         .or_else(|| str_key(gameplay, "lastWorldChange"))
         .map(ToString::to_string)
@@ -755,9 +902,10 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         })
         .or_else(|| world_center_position(&world_bounds));
     let gameplay = obj(input, "gameplay");
-    let goal_highlight = str_key(gameplay, "goalTitle")
-        .map(|title| json!({ "title": title, "objective": string_key(gameplay, "objective") }))
-        .unwrap_or(Value::Null);
+    let goal_highlight = json!({
+        "title": localized_goal_title(&locale, gameplay),
+        "objective": localized_objective_detail(&locale, gameplay),
+    });
     let blocker_highlight = if str_key(gameplay, "blockerKind").is_some()
         || str_key(gameplay, "blockerDetail").is_some()
     {
