@@ -30,7 +30,7 @@
   - 若阶段目标缺少进度 / 阻塞 / 下一步三要素，则不得认定 `#46` 已关闭。
   - 若只有 UI 文案，没有同会话阶段切换与 required-tier 证据，则不得给出 go 结论。
 - 说明:
-  - 本 project 文档只承接 `PostOnboarding` 阶段目标链，不重写工业 / 治理 / 战争底层规则。
+  - 本 project 文档只承接 `PostOnboarding` 阶段目标链，不重写工业 / 治理 / 高风险对抗模块底层规则。
   - v1 先以工业优先的首个持续能力里程碑关闭 `#46`，再扩展中循环分支表达。
   - 2026-03-18 进展：`viewer_engineer` 已基于既有工业事件 / runtime economy event / `lastControlFeedback` 落地 `PostOnboarding` 目标卡、阻塞解释与分支解锁；QA Web 证据仍待 `TASK-GAMEPLAY-POD-004`。
   - 2026-03-19 进展：`qa_engineer` 已新增 `scripts/viewer-post-onboarding-qa.sh`，在 fresh bundle Web 会话中完成 `step(8) -> select(first_agent) -> step(24)` 闭环，并沉淀 `output/playwright/playability/post-onboarding-20260319-094056/` 证据包与 `doc/playability_test_result/card_2026_03_19_09_40_56.md`。截图人工复核确认 `4/4` 后左侧 Mission HUD 已切到 `PostOnboarding`，顶部首局总结改为进入下一阶段语义，onboarding 提示不再持续占据主视图，因此 `#46` 的 required-tier / Web 收口完成。

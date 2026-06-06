@@ -28,11 +28,11 @@
 - 模块边界演进快，文档同步可能滞后。
 - 指标口径不稳定会降低验收一致性。
 ## 1. Executive Summary
-- Problem Statement: 玩法规则、经济系统、战争治理和发行可玩性要求分布在多份专题文档，缺少统一入口来描述游戏模块的产品目标与验收指标。
+- Problem Statement: 玩法规则、经济系统、协作治理和发行可玩性要求分布在多份专题文档，缺少统一入口来描述游戏模块的产品目标与验收指标。
 - Proposed Solution: 以 game PRD 作为 gameplay 设计总入口，统一定义核心循环、规则层边界、数值治理和发行质量门槛。
 - Success Criteria:
   - SC-1: 新增 gameplay 功能均能映射到 PRD-GAME-ID。
-  - SC-2: 核心玩法场景（新手/经济/战争）在测试矩阵中具备对应用例。
+  - SC-2: 核心玩法场景（新手/经济/协作治理）在测试矩阵中具备对应用例。
   - SC-3: 每次版本发布前至少完成一轮可玩性卡片收集并回填闭环。
   - SC-4: 关键玩法规则变更同步更新 game PRD 与 project 文档。
   - SC-5: 微循环关键动作具备可见反馈与计时提示，发布前可玩性卡片评分显著提升。
@@ -53,7 +53,7 @@
   - 纯 API 玩家/自动化代理：需要不依赖浏览器的正式玩家入口，且不损失玩法语义与持续游玩能力。
 - User Scenarios & Frequency:
   - 玩法规则迭代：每个玩法改动周期至少 1 次规则审阅。
-  - 核心循环回归：每周执行，覆盖新手/经济/战争路径。
+  - 核心循环回归：每周执行，覆盖新手/经济/协作治理路径。
   - 发布前可玩性评估：每个候选版本至少 1 次。
   - 缺陷复盘与再平衡：高优先级问题关闭前必须复测。
 - User Stories:
@@ -94,7 +94,7 @@
 | 发行门禁评审 | 证据包、风险等级、放行建议 | 审查后给出 go/no-go | `pending -> reviewed -> released/blocked` | 风险优先级驱动结论 | 发布负责人最终决策 |
 | 分布式执行与治理 | `tick/block hash`、`state_root`、治理提案元数据、身份信誉/抵押 | 发起提案、投票、队列生效、紧急刹车/否决 | `draft -> voting -> queued -> applied/rejected` | tick 全序执行 + epoch 边界生效 | 治理角色+阈值双重校验 |
 | 长期在线 P0 硬化 | 权威源标识、回放哈希、作弊风险分、经济源汇统计、SLO 指标 | 执行权威裁决、回放验证、惩罚/申诉、经济阈值调节、告警确认 | `observed -> validated -> enforced -> recovered` | 先一致性后可用性，异常按严重级优先处置 | 运行值守与治理角色联合审批 |
-| PostOnboarding 目标链 | `stage_id`、`goal_id`、`goal_type`、`progress`、`blocker_primary`、`next_step_hint` | 完成首次行动闭环后生成主目标并持续更新 | `introduced -> active -> blocked -> completed -> branch_ready` | 默认工业持续能力优先，完成首个里程碑后再展开治理 / 冲突 / 扩张方向 | 玩家可见，系统生成，玩法负责人定义口径 |
+| PostOnboarding 目标链 | `stage_id`、`goal_id`、`goal_type`、`progress`、`blocker_primary`、`next_step_hint` | 完成首次行动闭环后生成主目标并持续更新 | `introduced -> active -> blocked -> completed -> branch_ready` | 默认工业持续能力优先，完成首个里程碑后再展开治理 / 协作 / 扩张方向 | 玩家可见，系统生成，玩法负责人定义口径 |
 | 纯 API 客户端等价 | `player_gameplay_snapshot`、`available_actions`、`recent_feedback`、`parity_level` | 客户端查看阶段/目标/阻塞、执行推进/聊天/命令、恢复会话 | `observer_only -> playable -> parity_verified` | UI/API 共用 canonical 语义，不允许各算一套 | 已连接客户端可读；写操作按玩家鉴权 |
 | 阶段准入门禁 | `current_stage`、`candidate_stage`、`claim_envelope`、`trend_status`、`gate_lane_status` | 汇总 headed Web/UI、pure API、no-UI、longrun/recovery 与 liveops 口径，输出升阶或维持原阶段结论 | `internal_playable_alpha -> internal_playable_alpha_late -> closed_beta_candidate -> closed_beta` | 先统一 gate，再允许升级对外口径；任一关键 lane 阻断即整体阻断 | `producer_system_designer` 最终拍板；`qa_engineer` 可独立给阻断建议 |
 | 受控 limited preview 执行 | `preview_round_status`、`callout_id`、`signal_quality`、`claim_drift_status`、`qa_recommendation` | 发起 controlled builder-facing 预览、归档真实信号、持续校验 gate、输出 continue/hold/reassess 结论 | `ready_to_run -> running -> reviewed -> continue/hold/reassess` | 先验证口径是否受控，再判断是否扩大节奏 | `producer_system_designer` 最终拍板；`liveops_community` 执行；`qa_engineer` 守门 |
@@ -106,19 +106,19 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 新手循环（前 1~3 天） | Given `llm_bootstrap` 场景可启动；When 玩家完成“选定目标 -> 首次指令 -> 收到反馈”；Then 在单次会话内形成 `观察 -> 决策 -> 反馈 -> 调整` 闭环。 | 新手引导只消费 runtime 已开放动作（不允许越权改写世界状态）；动作被拒绝时必须返回可解释原因。 | `DomainEvent::ActionAccepted`；viewer 任务循环快照与倒计时提示。 | `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::gameplay_protocol::gameplay_actions_emit_action_accepted_before_resolution_event -- --nocapture`；`env -u RUSTC_WRAPPER cargo test -p oasis7_viewer player_mission_tests:: -- --nocapture` | 必须出现“先接受后解析”的动作证据；玩家任务循环快照能稳定展示剩余提示与反馈计时。 | 阻断合入；补齐失败动作链路日志与 UI 快照，按 P1 建立修复任务并复测。 |
 | 经济循环 | Given 双方具备可结算资源；When 执行 `Open -> Accept -> Settle` 经济合约；Then 合约状态与声誉/税费变化可回放。 | 经济规则不得绕过资源守恒；结算溢出/配额/黑名单冲突必须原子拒绝且不污染状态。 | `DomainEvent::EconomicContractOpened/Accepted/Settled/Expired`；`economic_contracts` 状态与声誉快照。 | `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::gameplay_protocol::economic_contract_ -- --nocapture` | 合约终态必须可解释（`Settled` 或 `Expired`）；税费、信誉奖励与策略上限一致；异常路径无半提交状态。 | 阻断合入；输出冲突合约 ID、策略参数与状态差异，回归通过前不得进入发布评审。 |
-| 战争循环 | Given 至少两联盟且满足动员成本；When 发起宣战并推进 tick；Then 战争按时结算并写入胜负与参与者后果。 | 宣战必须校验联盟成员身份与动员资源；活动战争期间违反约束的动作（如违规加入）必须拒绝。 | `DomainEvent::WarDeclared/WarConcluded`；`wars` 状态（`active/winner/loser/concluded_at`）。 | `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::gameplay_protocol::war_ -- --nocapture` | 战争必须在设计时长内自动收敛；胜负、资源后果与事件链一致；拒绝路径具备明确规则原因。 | 阻断合入；保存冲突 tick 与战报证据，按 P0 进入规则修复并执行全链路复测。 |
+| 协作治理循环 | Given 至少一个组织或协作关系具备可调整规则；When 发起治理提案、资源共享或经济合约；Then 提案、合约或协作状态可审计并能回放。 | 协作治理不得绕过资源守恒、身份授权与审计事件；异常路径必须原子拒绝且不污染状态。 | `DomainEvent::GovernanceProposalOpened/GovernanceVoteCast/GovernanceProposalFinalized`；`governance_votes`、`economic_contracts` 状态。 | `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::gameplay_protocol::governance_ -- --nocapture`；`env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::gameplay_protocol::economic_contract_ -- --nocapture` | 提案、合约或协作调整必须具备可解释终态；拒绝路径具备明确规则原因。 | 阻断合入；保存治理/合约 ID、策略参数与状态差异，回归通过前不得进入发布评审。 |
 - 矩阵基线一致性校验：`env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required scenario_specs_match_ids -- --nocapture`，用于确保场景入口与矩阵引用保持一致。
 - 可玩性问题分级与修复闭环模板（TASK-GAME-003）:
 | 等级 | 判定条件 | 典型影响 | 发布门禁动作 | 修复时限（SLO） |
 | --- | --- | --- | --- | --- |
-| P0 | 关键循环不可达、规则越权、同输入不同结果、核心反馈缺失导致“不可玩”。 | 新手/经济/战争任一主循环中断或产生不可恢复分叉。 | 直接 `blocked`，禁止发布；必须完成复测并由发布负责人确认。 | `<= 24h` 完成修复与复测结论。 |
+| P0 | 关键循环不可达、规则越权、同输入不同结果、核心反馈缺失导致“不可玩”。 | 新手/经济/协作治理任一主循环中断或产生不可恢复分叉。 | 直接 `blocked`，禁止发布；必须完成复测并由发布负责人确认。 | `<= 24h` 完成修复与复测结论。 |
 | P1 | 主循环可运行但体验明显退化，存在稳定复现路径且影响关键指标。 | 玩家可继续游玩但决策反馈延迟、收益失真或冲突结局异常。 | 默认阻断；若需放行必须登记风险豁免 ID 与回滚预案。 | `<= 72h` 完成修复，或进入带风险放行审批。 |
 | P2 | 体验瑕疵或低频异常，不破坏主循环可达性。 | 文案、引导节奏、次要可见性偏差。 | 可带缺陷放行，但必须进入下一版本回归清单。 | 下一个迭代周期前关闭。 |
 | P3 | 观察项或优化建议，暂无稳定复现与用户影响证据。 | 研发/评测发现的潜在改进点。 | 不阻断发布，纳入趋势看板跟踪。 | 按周评审并决定是否升级优先级。 |
 - 闭环执行模板（字段 + 流程）:
 | 阶段 | 必填字段 | 执行动作 | 状态流转 | 验证与证据 | 权限/时限 |
 | --- | --- | --- | --- | --- | --- |
-| 问题提报 | `issue_id`、循环类型（新手/经济/战争）、复现步骤、证据路径、`PRD-GAME-ID` | 创建标准卡片并绑定对应循环与版本。 | `opened` | 至少 1 条可复现证据（事件/日志/UI 截图）。 | 评测者可创建；当日完成。 |
+| 问题提报 | `issue_id`、循环类型（新手/经济/协作治理）、复现步骤、证据路径、`PRD-GAME-ID` | 创建标准卡片并绑定对应循环与版本。 | `opened` | 至少 1 条可复现证据（事件/日志/UI 截图）。 | 评测者可创建；当日完成。 |
 | 问题分级 | 严重级、影响范围、责任人、目标修复版本 | 按分级矩阵打标，确认是否触发发布阻断。 | `opened -> triaged` | 关联门禁条目与预计回归入口。 | 玩法负责人批准；`<= 24h`。 |
 | 修复执行 | 根因、修复提交、测试计划、回滚方案 | 开发修复并同步 PRD/project 追踪关系。 | `triaged -> fixing` | 提交记录 + 定向测试计划。 | 责任开发执行；P0/P1 按 SLO。 |
 | 修复验证 | 回归命令、结果、剩余风险、复测结论 | 执行定向回归与抽样联动回归。 | `fixing -> verified` | 测试日志 + 关键事件/状态对照。 | QA/评审者确认；未通过不得关闭。 |
@@ -131,7 +131,7 @@
 | 阶段 | 触发频率 / 时点 | 必跑入口 | 通过标准 | 输出证据 | 失败处置 |
 | --- | --- | --- | --- | --- | --- |
 | 日常回归（D） | 有 gameplay/viewer 改动的工作日 | `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required scenario_specs_match_ids -- --nocapture`；`env -u RUSTC_WRAPPER cargo test -p oasis7_viewer player_mission_tests:: -- --nocapture` | 两条命令全绿；新增问题中 `P0=0`。 | 当日测试日志 + 问题清单更新。 | 阻断当日合入，转入 `TASK-GAME-003` 闭环。 |
-| 候选版本回归（RC） | 每个候选版本至少 1 轮 | `./scripts/ci-tests.sh required`；`env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::gameplay_protocol:: -- --nocapture` | required 套件通过；新手/经济/战争协议回归无回退；`P0/P1=0` 或具备豁免。 | RC 回归报告 + 命令与结论。 | 标记 `blocked`，禁止进入发布评审。 |
+| 候选版本回归（RC） | 每个候选版本至少 1 轮 | `./scripts/ci-tests.sh required`；`env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::gameplay_protocol:: -- --nocapture` | required 套件通过；新手/经济/协作治理协议回归无回退；`P0/P1=0` 或具备豁免。 | RC 回归报告 + 命令与结论。 | 标记 `blocked`，禁止进入发布评审。 |
 | Web 闭环门禁（D-1） | 发布前 1 天 | `./scripts/run-game-test-ab.sh --headed --with-llm`（S6）；按 `doc/playability_test_result/game-test.prd.md` 填写卡片 | A/B 流程 `PASS`；`console error = 0`；有效控制命中率 `>= 80%`；无未豁免 `P0/P1`。 | `output/playwright/playability/<run_id>/` + `doc/playability_test_result/card_*.md`。 | 阻断发布，进入修复并复跑 S6。 |
 | 发布评审（D0） | 发布会 | 汇总 D/RC/D-1 证据包并执行 go/no-go 评审 | 证据链完整、结论一致、风险闭环清晰。 | 发布结论（`go`/`no-go`）、豁免单、回滚预案。 | 结论为 `no-go` 时冻结版本并触发应急回归。 |
 - 发布证据包最小字段:
@@ -146,7 +146,7 @@
   - AC-4: 发行前可玩性回归必须在 testing 手册与测试结果中可追溯。
   - AC-5: 微循环反馈优化 PRD 定义可见反馈与计时规则，并形成可验证的评分提升目标。
   - AC-6: 新增长期在线分布式专题 PRD，明确 RSM、治理时延生效、身份与惩罚的验收约束。
-  - AC-7: 新手/经济/战争三循环均具备 Given/When/Then、规则层边界、证据事件、`test_tier_required` 命令与失败处置，且可直接用于周回归。
+  - AC-7: 新手/经济/协作治理三循环均具备 Given/When/Then、规则层边界、证据事件、`test_tier_required` 命令与失败处置，且可直接用于周回归。
   - AC-8: 可玩性问题分级模板覆盖 `P0~P3` 判定、发布阻断规则、责任人和时限，并能直接驱动 `opened -> triaged -> fixing -> verified -> closed/deferred` 闭环。
   - AC-9: 发布前门禁明确 D/RC/D-1/D0 节奏、必跑命令、通过阈值与证据包字段，能够直接产出 go/no-go 决策。
   - AC-10: 新增长期在线 P0 专题 PRD，覆盖状态权威分层、确定性回放/回滚、反作弊与反女巫、经济闭环、可运维性五项能力，并提供 PRD-ID 到任务与测试映射。
@@ -197,7 +197,7 @@
   - API 语义缺口：若玩家继续游玩所需字段仅存在于 UI 组装层，则 pure API 入口必须被判定为 `observer_only` 并阻断“等价”口径。
   - 口径漂移：若专题证据已通过但统一 stage gate 未建立，则必须维持 `internal_playable_alpha_late`，不得提前对外升级为 `closed beta`。
 - Non-Functional Requirements:
-  - NFR-GAME-1: 关键玩法回归覆盖率 100%（新手/经济/战争）。
+  - NFR-GAME-1: 关键玩法回归覆盖率 100%（新手/经济/协作治理）。
   - NFR-GAME-2: 高优先级可玩性问题发布前闭环率 >= 95%。
   - NFR-GAME-3: 玩法门禁结论具备完整证据链（命令/日志/结论）。
   - NFR-GAME-4: 玩法规则口径在模块文档中 1 个工作日内同步。
@@ -225,7 +225,7 @@
 ## 5. Risks & Roadmap
 - Phased Rollout:
   - MVP (2026-03-03): 建立 gameplay 统一设计基线与验收指标。
-  - v1.1: 对齐战争/治理/经济三条主循环的跨模块测试门禁。
+  - v1.1: 对齐工业/治理/经济三条主循环的跨模块测试门禁。
   - v2.0: 形成玩法改动到可玩性结果的量化闭环报表。
 - Technical Risks:
   - 风险-1: 玩法复杂度上升导致规则冲突。
@@ -256,7 +256,7 @@
 | DEC-GAME-001 | 以玩法循环为需求主轴组织验收 | 以功能列表平铺验收 | 循环视角更贴近真实体验链路。 |
 | DEC-GAME-002 | 引入问题分级与闭环模板 | 缺陷统一平级处理 | 可优化修复优先级与发布节奏。 |
 | DEC-GAME-003 | 发布评审绑定可玩性证据 | 仅依赖技术测试 | 能降低“可运行但不好玩”的发布风险。 |
-| DEC-GAME-004 | 以“新手/经济/战争”分循环验收矩阵驱动 `TASK-GAME-002` | 仅保留统一 required/full 命令清单 | 分循环矩阵更易映射规则边界、失败处置与责任归属。 |
+| DEC-GAME-004 | 以“新手/经济/协作治理”分循环验收矩阵驱动 `TASK-GAME-002` | 仅保留统一 required/full 命令清单 | 分循环矩阵更易映射规则边界、失败处置与责任归属。 |
 | DEC-GAME-005 | 采用 `P0~P3 + 闭环模板 + deferred 豁免` 的分级机制 | 仅保留缺陷列表，不定义状态与门禁 | 可保证问题优先级、修复责任与发布决策可审计。 |
 | DEC-GAME-006 | 采用 `D/RC/D-1/D0` 四阶段可玩性门禁节奏 | 仅在发布前一次性回归 | 分阶段门禁可提前暴露风险，降低临门一脚失败概率。 |
 | DEC-GAME-007 | 新增独立 `PRD-GAME-006` 作为长期在线 P0 基线 | 将 P0 细节继续堆叠在 `PRD-GAME-005` 现有章节中 | 独立基线更利于跨角色（玩法/运行/安全/经济）协同验收与长期维护。 |

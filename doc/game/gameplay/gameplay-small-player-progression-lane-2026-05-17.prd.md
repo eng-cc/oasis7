@@ -12,7 +12,7 @@
 - Success Criteria:
   - SC-1: `game` 根 PRD / project、`gameplay` 主文档和新专题统一采用 `small-player lane` 口径，不再把“完成首个能力”直接等同于“必须马上加入大组织或进入深治理”。
   - SC-2: 至少冻结 1 条可信的小玩家主线，明确 entry gate、阶段检查点、专业化分支、有限区域影响力和恢复路径。
-  - SC-3: `protected first industrial win` 被正式定义为“低爆炸半径、可恢复、可见 player leverage”的 first win，而不是“军事无敌新手保护泡泡”。
+  - SC-3: `protected first industrial win` 被正式定义为“低爆炸半径、可恢复、可见 player leverage”的 first win，而不是“不可失败的新手保护泡泡”。
   - SC-4: 后续 runtime / viewer / agent / QA 至少各有 1 条 follow-up task，可直接验证“玩家做了什么、世界因此改变了什么、下一步为何仍值得继续”。
   - SC-5: 本专题显式保持当前 `internal_playable_alpha_late` 与 `limited playable technical preview` 边界，不把 `#165` 的专题冻结包装成阶段升级或 broader launch 结论。
 
@@ -38,7 +38,7 @@
 - Critical User Flows:
   1. Flow-SPL-001: `玩家完成 PostOnboarding / first capability -> 系统确认 slot-1 claim / starter funding / current lane entry gate -> 正式转入 small-player lane`
   2. Flow-SPL-002: `系统展示默认 local operator 主线 -> 玩家完成一个受保护的首个工业胜利 -> surface 明确回答 player_action / world_change_due_to_player / next_step`
-  3. Flow-SPL-003: `玩家从默认主线进入 1 条短周期专业化分支 -> 持续贡献一个区域性可见价值，而不是直接进入全球治理或大规模战争`
+  3. Flow-SPL-003: `玩家从默认主线进入 1 条短周期专业化分支 -> 持续贡献一个区域性可见价值，而不是直接进入全球治理或高风险对抗模块`
   4. Flow-SPL-004: `玩家遭遇缺料、停机、claim 丢失或局势挤压 -> 系统提供恢复路径或低成本改道 -> 不要求立即依附 major power 才能继续`
   5. Flow-SPL-005: `玩家累计区域性 player leverage -> 获得 limited-scope regional influence -> 再决定保持独立专业化、局部合作，或自愿进入更大组织/更深治理`
 - Functional Specification Matrix:
@@ -46,8 +46,8 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | small-player lane contract | `lane_id`、`entry_gate`、`requires_major_power_alignment`、`first_win_definition`、`mature_world_value_definition` | 不要求立即加入组织；系统在达成 `first capability` 后显式进入 lane | `not_eligible -> eligible -> active -> specialized -> regionally_useful` | 先完成首个持续能力，再进入小玩家 lane；不得把 onboarding 与 mature-world lane 混写 | `producer_system_designer` 冻结；runtime/viewer/agent/QA 依合同实施 |
-| protected first industrial win | `first_win_goal_id`、`player_action`、`world_change_due_to_player`、`player_leverage_verdict`、`blast_radius_class`、`recovery_cost_class` | 玩家完成 1 次低爆炸半径、可恢复、对世界有可见变化的工业胜利 | `not_started -> executing -> first_win_complete -> stabilized` | “受保护”优先指低战略体量、低爆炸半径和可恢复路径，不等于 PVP/治理免疫 | 任何正式放行结论都必须回答 leverage，而不是 world activity |
-| specialization pack | `specialization_id`、`input_profile`、`output_profile`、`regional_usefulness`、`switch_cost_class`、`org_independence_level` | 玩家从默认 local operator 主线切到 1 条短周期专业化角色 | `unselected -> selected -> delivering -> stable` | 先 local survival，再 specialization；默认避免一开始把玩家导向深治理/大战争 | `agent_engineer` / `viewer_engineer` 对齐；`producer_system_designer` 裁决专业化边界 |
+| protected first industrial win | `first_win_goal_id`、`player_action`、`world_change_due_to_player`、`player_leverage_verdict`、`blast_radius_class`、`recovery_cost_class` | 玩家完成 1 次低爆炸半径、可恢复、对世界有可见变化的工业胜利 | `not_started -> executing -> first_win_complete -> stabilized` | “受保护”优先指低战略体量、低爆炸半径和可恢复路径，不等于高风险模块或治理免疫 | 任何正式放行结论都必须回答 leverage，而不是 world activity |
+| specialization pack | `specialization_id`、`input_profile`、`output_profile`、`regional_usefulness`、`switch_cost_class`、`org_independence_level` | 玩家从默认 local operator 主线切到 1 条短周期专业化角色 | `unselected -> selected -> delivering -> stable` | 先 local survival，再 specialization；默认避免一开始把玩家导向深治理/高风险对抗 | `agent_engineer` / `viewer_engineer` 对齐；`producer_system_designer` 裁决专业化边界 |
 | limited-scope regional influence | `influence_surface_id`、`influence_scope`、`influence_cap`、`expires_on_inactivity`、`converts_to_global_governance` | 玩家通过区域性持续贡献获得有限影响力或优先级 | `locked -> visible -> earned -> decays_on_inactivity` | 区域影响力必须小于 global governance / alliance leadership；默认随停摆或长期闲置衰减 | 不得直接等价为 global vote power、主链治理权或 major-power membership |
 | recovery path | `failure_signature`、`recovery_option_id`、`restoration_scope`、`fallback_specialization_id`、`requires_major_power_sponsorship` | 玩家遭遇 claim/产线/区域性挤压失败时，系统给出恢复或改道选项 | `healthy -> disrupted -> recoverable -> restored/pivoted` | 优先提供低成本修复、局部重建或改道；默认不要求先加入大组织 | `requires_major_power_sponsorship` 默认应为 `no`；只有更高阶路线才允许提升依赖 |
 | anti-grind leverage progression | `leverage_class`、`new_option_unlocked`、`regional_dependency_reduced`、`same_loop_repeat_count`、`grind_only_flag` | 系统在每个阶段 checkpoint 明确玩家拿到的新选择、新议价位或新恢复弹性，而不是只显示“再生产更多” | `unclear -> improving -> differentiated / grind_only` | 连续重复同一生产循环但没有新增 leverage class 时，必须判为 `grind_only` 风险；优先暴露更短周期的新用途或恢复后新分支 | `producer_system_designer` 冻结判据；runtime/viewer/QA 对账 |
@@ -66,9 +66,9 @@
   - AC-9: `game` 根 PRD / project、`gameplay` 主文档、`README`、`prd.index` 与当前 task execution log 必须能互链到 `PRD-GAME-015`。
   - AC-10: 至少拆出 `producer_system_designer`、`runtime_engineer`、`viewer_engineer`、`agent_engineer`、`qa_engineer` 五类后续任务，并给出 `test_tier_required` / `test_tier_full` 验收方向。
 - Non-Goals:
-  - 不在本专题里把小玩家路线直接升级为全球治理路线、联盟领袖路线或大战争主线。
+  - 不在本专题里把小玩家路线直接升级为全球治理路线、联盟领袖路线或高风险对抗主线。
   - 不在本专题里承诺新的免费 claim、额外 unrestricted token 补贴或新的 economic bypass。
-  - 不把“受保护 first win”写成永久新手护盾、战斗无敌或不可被干预的独占区。
+  - 不把“受保护 first win”写成永久新手护盾、不可失败状态或不可被干预的独占区。
   - 不把 `#165` 当作当前 `limited playable technical preview` 的放大器；它只定义玩法承接，不替代外部真实信号。
 
 ## 3. AI System Requirements (If Applicable)
@@ -103,7 +103,7 @@
   - `testing-manual.md`
 - Edge Cases & Error Handling:
   - 区域内已有大型组织垄断：lane 仍需给出局部独立价值和恢复路径，而不是默认判定“新玩家只能加入他们”。
-  - 玩家完成 first capability，但 local site 因缺料/停机/战乱无法继续：必须提供恢复或改道选项，不能让 lane 直接失效。
+  - 玩家完成 first capability，但 local site 因缺料/停机/区域压力无法继续：必须提供恢复或改道选项，不能让 lane 直接失效。
   - 玩家继续玩只能重复同一条工业循环、但没有新局部用途、恢复弹性或谈判空间：必须标记 `grind_only_flag=yes`，并要求系统给出 specialization / repair / pivot，而不是继续鼓励“再刷一会儿”。
   - 世界很活跃，但玩家没有造成明确世界变化：必须标记 `world_activity_only=yes`，且不得把该样本判为 lane success。
   - 玩家主动加入大型组织：允许，但文档必须说明这属于 voluntary escalation，而不是 lane 的强制前提。
@@ -150,6 +150,6 @@
 | --- | --- | --- | --- |
 | DEC-SPL-001 | 新增独立 `PRD-GAME-015`，专门定义 mature-world 小玩家成长线 | 继续把“小玩家如何继续玩”散落在 PostOnboarding、claim economy、playability evidence 与 issue 讨论中 | 当前缺的不是“首个能力能否完成”，而是“完成之后为何仍有独立价值”的正式合同。 |
 | DEC-SPL-002 | 把 `small-player lane` 起点放在 `first capability` 之后，而不是重新塞回首个 10 分钟 | 让 issue #165 与当前 early-retention 冲刺混成一个问题 | `PRD-GAME-012` 当前仍是主 blocker；如果把 mature-world 设计提前塞进 first-session，会打乱当前冲刺排序。 |
-| DEC-SPL-003 | 把 `protected first industrial win` 定义为“低爆炸半径 + 可恢复 + leverage 可见” | 把“保护”写成 PVP/政治完全免疫，或继续不定义保护含义 | 完全免疫会制造失真预期；不定义又会让“首个胜利”在成熟世界里没有真实站得住脚的边界。 |
+| DEC-SPL-003 | 把 `protected first industrial win` 定义为“低爆炸半径 + 可恢复 + leverage 可见” | 把“保护”写成高风险模块/治理完全免疫，或继续不定义保护含义 | 完全免疫会制造失真预期；不定义又会让“首个胜利”在成熟世界里没有真实站得住脚的边界。 |
 | DEC-SPL-004 | 采用“limited-scope regional influence”，明确低于 global governance / alliance leadership | 让小玩家 first-success 直接跳到全局治理权，或反过来完全不给任何区域性影响 | 没有局部影响力，这条线会像重复打工；给太强又会破坏 mature-world 权力结构。 |
 | DEC-SPL-005 | 把 `player leverage != world activity` 写成本专题硬门槛 | 继续允许“世界很活跃”替代“玩家仍然有 meaningful participation” | `#165` 真正要解决的是小玩家是否还在推动世界，而不是世界是否本来就有很多事在发生。 |
