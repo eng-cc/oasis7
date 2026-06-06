@@ -435,7 +435,7 @@ fi
 [[ -n "$SOURCE_WORKTREE" ]] || die "source branch is not checked out in any worktree: $SOURCE_BRANCH"
 ensure_clean_worktree "$SOURCE_WORKTREE" "source"
 WORKFLOW_LINT_OUTPUT=""
-if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --phase current --allow-unbound 2>&1)"; then
+if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --phase pr-ready --allow-unbound 2>&1)"; then
   if [[ "$WORKFLOW_LINT_OUTPUT" == *"unknown arg: --phase"* ]]; then
     WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --allow-unbound 2>&1)" || {
       cat >&2 <<EOF

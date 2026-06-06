@@ -101,3 +101,12 @@ Example:
 - Finding Disposition Evidence: workflow-lint parses real timestamped entries and required-tier smoke asserts template-only logs fail; append-execution-log accepts canonical non-owner roles and smoke asserts agent_engineer cross-role append plus role-report collaboration output.
 - Residual Risk: full ./scripts/pm/lint.sh remains red on unrelated historical .pm debt; scoped required-tier/current-task/doc/workflow behavior gates pass.
 - Blocker / Next Action: Amend commit with standalone packet.
+
+## 2026-06-06 23:45:18 CST / tpm
+- 完成内容: Addressed PR review thread about prepare-task-pr preflight phase.
+- 遗留事项: Verify, commit, push, resolve review thread, then merge.
+- Action: Changed prepare-task-pr.sh to run workflow-lint.sh --phase pr-ready. Changed workflow-lint.sh so pr-ready checks project trace, structured execution entries, claim-ready.sh evidence, task-closeout.sh/workflow-report close evidence, and persisted verification/closeout fields; post-pr is the phase that additionally checks PR evidence. This keeps current-task lint separate without weakening PR creation preflight.
+- Validation Command: ./scripts/pm/claim-ready.sh evidence already persisted by task-closeout.sh verify-command; ./scripts/pm/task-closeout.sh previously set last_verification_status=verified and last_closed_at; pending fresh rerun of workflow-lint --phase pr-ready and prepare-task-pr.test.sh
+- Expected Result: prepare-task-pr preflight uses pr-ready lint and current lint remains available for current-task-only checks.
+- Actual Result: pending verification
+- Blocker / Next Action: Run workflow-lint pr-ready, prepare-task-pr.test, required-tier smoke, and workflow behavior eval.

@@ -72,7 +72,7 @@
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
 - 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`；若需要手工拆步，再执行“fresh verification” + `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`
 - fresh verification claim：`./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "<fresh verification command>"`
-- 当前 task 严格 lint：`./scripts/pm/workflow-lint.sh --task-uid <TASK-UID> --phase current`；该路径只校验当前 task 的 binding、execution log、owner 与基础协作真值，不引入全仓历史 closeout/PR evidence 噪声。默认 `--phase pr-ready` 仍保留给 PR 前完整门禁。
+- 当前 task 严格 lint：`./scripts/pm/workflow-lint.sh --task-uid <TASK-UID> --phase current`；该路径只校验当前 task 的 binding、execution log、owner 与基础协作真值，不引入全仓历史 closeout/PR evidence 噪声。默认 `--phase pr-ready` 仍保留给 PR 创建前 claim-ready/closeout 门禁；`--phase post-pr` 再额外检查 PR evidence 链。
 - 结构化追加 execution log：`./scripts/pm/append-execution-log.sh --task-uid <TASK-UID> --role <owner_role> --completed "..." --pending "..." --action "..." --validation-command "..." --expected-result "..." --actual-result "..." --blocker-next-action "..."`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
 - GitHub PR preflight / 默认 watch-fix-merge 边界：`./scripts/prepare-task-pr.sh`
