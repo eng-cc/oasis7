@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${PM_ROOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 cd "$ROOT_DIR"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/pm/workflow-lint.sh [--task-uid <task_uid>] [--allow-unbound]
+Usage: ./scripts/pm/workflow-lint.sh [--task-uid <task_uid>] [--allow-unbound] [--phase current|pr-ready]
 
 Static consistency checks for the current task:
 - exactly one .pm task binding
@@ -19,28 +20,41 @@ USAGE
 
 TASK_UID=""
 ALLOW_UNBOUND=0
+PHASE="pr-ready"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --task-uid) TASK_UID="${2:-}"; shift 2 ;;
     --allow-unbound) ALLOW_UNBOUND=1; shift ;;
+    --phase) PHASE="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "workflow-lint: unknown arg: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+[[ "$PHASE" == "current" || "$PHASE" == "pr-ready" ]] || { echo "workflow-lint: --phase must be current or pr-ready" >&2; exit 2; }
 
-python3 - "$ROOT_DIR" "$TASK_UID" "$ALLOW_UNBOUND" <<'PY'
+python3 - "$ROOT_DIR" "$TASK_UID" "$ALLOW_UNBOUND" "$PHASE" <<'PY'
 from __future__ import annotations
 import pathlib
+import re
 import subprocess
 import sys
 
 root = pathlib.Path(sys.argv[1])
 explicit_uid = sys.argv[2].strip()
 allow_unbound = sys.argv[3] == "1"
+phase = sys.argv[4]
 sys.path.insert(0, str(root / "scripts" / "pm"))
 from pm_store_docio import load_mapping_document  # type: ignore
 
-branch = subprocess.check_output(["git", "branch", "--show-current"], text=True, cwd=root).strip()
+try:
+    branch = subprocess.check_output(
+        ["git", "branch", "--show-current"],
+        text=True,
+        cwd=root,
+        stderr=subprocess.DEVNULL,
+    ).strip()
+except subprocess.CalledProcessError:
+    branch = ""
 worktree_name = root.name
 ACTIVE_STATUSES = {"candidate", "committed", "blocked"}
 
@@ -91,8 +105,9 @@ for key in ("doc_refs", "source_refs"):
 if not project_docs:
     if (root / "project.md").is_file():
         project_docs = [root / "project.md"]
-check(bool(project_docs), "project.md unresolved from task doc_refs/source_refs; fix: add module project.md to task doc_refs")
-if project_docs:
+if phase == "pr-ready":
+    check(bool(project_docs), "project.md unresolved from task doc_refs/source_refs; fix: add module project.md to task doc_refs")
+if phase == "pr-ready" and project_docs:
     trace_token = f"Trace: .pm/tasks/{uid}.yaml"
     trace_found = any(p.is_file() and trace_token in p.read_text(encoding="utf-8") for p in project_docs)
     check(trace_found, f"project task item lacks Trace for {uid}; fix: add '{trace_token}' in module project.md")
@@ -101,17 +116,30 @@ elog = root / str(task.get("execution_log_path") or "")
 check(elog.is_file(), f"execution log missing: {elog.relative_to(root) if str(task.get('execution_log_path') or '') else '(none)'}; fix: run workflow-report --phase start or update execution_log_path")
 if elog.exists():
     et = elog.read_text(encoding="utf-8")
-    for fld in ["Action:", "Validation Command:", "Expected Result:", "Actual Result:", "Blocker:", "Next Action:"]:
-        check(fld in et, f"execution log missing '{fld}' entries; fix:补齐 execution log 六字段")
-    check("claim-ready.sh" in et or "claim-ready" in et, "execution log missing claim-ready evidence; fix: append claim-ready command/result entry")
-    check("task-closeout.sh" in et or "workflow-report.sh --phase close" in et, "execution log missing closeout evidence; fix: append closeout command/result entry")
-    pr_markers = ("prepare-task-pr.sh", "gh pr create", "PR evidence", "PR URL")
-    check(any(marker in et for marker in pr_markers), "execution log missing PR evidence marker; fix: append prepare-task-pr/PR URL evidence entry")
+    heading_re = re.compile(r"^## \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} CST / [a-z_][a-z0-9_]*$", re.MULTILINE)
+    headings = list(heading_re.finditer(et))
+    entries = []
+    for idx, match in enumerate(headings):
+        start = match.end()
+        end = headings[idx + 1].start() if idx + 1 < len(headings) else len(et)
+        entries.append(et[start:end])
+    required_fields = ["完成内容:", "遗留事项:", "Action:", "Validation Command:", "Expected Result:", "Actual Result:", "Blocker / Next Action:"]
+    check(bool(entries), "execution log missing real entries; fix: use ./scripts/pm/append-execution-log.sh to add a timestamped entry")
+    if entries:
+        complete_entry_found = any(all(fld in entry for fld in required_fields) for entry in entries)
+        missing = [fld for fld in required_fields if not any(fld in entry for entry in entries)]
+        check(complete_entry_found, f"execution log missing one complete structured entry; fix: use ./scripts/pm/append-execution-log.sh or補齊 execution log fields ({', '.join(missing) if missing else 'fields split across entries'})")
+    if phase == "pr-ready":
+        check("claim-ready.sh" in et or "claim-ready" in et, "execution log missing claim-ready evidence; fix: append claim-ready command/result entry")
+        check("task-closeout.sh" in et or "workflow-report.sh --phase close" in et, "execution log missing closeout evidence; fix: append closeout command/result entry")
+        pr_markers = ("prepare-task-pr.sh", "gh pr create", "PR evidence", "PR URL")
+        check(any(marker in et for marker in pr_markers), "execution log missing PR evidence marker; fix: append prepare-task-pr/PR URL evidence entry")
 
-check(bool(task.get("last_claim_type")) and bool(task.get("last_verified_at")) and bool(task.get("last_verification_status")),
-      "claim-ready record incomplete in task yaml; fix: run ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command '<cmd>' --task-uid <task_uid>")
-check(bool(task.get("last_closed_at")),
-      "closeout record missing last_closed_at; fix: run ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <task_uid> --verify-command '<cmd>'")
+if phase == "pr-ready":
+    check(bool(task.get("last_claim_type")) and bool(task.get("last_verified_at")) and bool(task.get("last_verification_status")),
+          "claim-ready record incomplete in task yaml; fix: run ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command '<cmd>' --task-uid <task_uid>")
+    check(bool(task.get("last_closed_at")),
+          "closeout record missing last_closed_at; fix: run ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <task_uid> --verify-command '<cmd>'")
 
 pr_hits = []
 for p in [root / "PR.md", root / ".pm" / "signals" / "inbox.yaml", root / ".pm" / "signals" / "archive.yaml", root / ".pm" / "working_memory"]:
@@ -121,7 +149,8 @@ for p in [root / "PR.md", root / ".pm" / "signals" / "inbox.yaml", root / ".pm" 
         for f in p.glob("*.yaml"):
             if uid in f.read_text(encoding="utf-8"):
                 pr_hits.append(str(f.relative_to(root)))
-check(bool(pr_hits), "PR evidence chain not locatable; fix: include task_uid in PR body/evidence (PR.md or .pm signal/memory)")
+if phase == "pr-ready":
+    check(bool(pr_hits), "PR evidence chain not locatable; fix: include task_uid in PR body/evidence (PR.md or .pm signal/memory)")
 
 if errors:
     print(f"workflow-lint: FAIL ({uid})")
@@ -129,7 +158,7 @@ if errors:
         print(f"- {e}")
     raise SystemExit(1)
 
-print(f"workflow-lint: OK ({uid})")
+print(f"workflow-lint: OK ({uid}, phase={phase})")
 for hit in pr_hits[:5]:
     print(f"- evidence: {hit}")
 PY

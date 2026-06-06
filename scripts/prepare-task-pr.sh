@@ -434,13 +434,25 @@ if [[ -z "$SOURCE_WORKTREE" && "$CURRENT_HEAD" == "$SOURCE_HEAD" ]]; then
 fi
 [[ -n "$SOURCE_WORKTREE" ]] || die "source branch is not checked out in any worktree: $SOURCE_BRANCH"
 ensure_clean_worktree "$SOURCE_WORKTREE" "source"
-if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --allow-unbound 2>&1)"; then
+WORKFLOW_LINT_OUTPUT=""
+if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --phase current --allow-unbound 2>&1)"; then
+  if [[ "$WORKFLOW_LINT_OUTPUT" == *"unknown arg: --phase"* ]]; then
+    WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --allow-unbound 2>&1)" || {
+      cat >&2 <<EOF
+error: workflow-lint preflight failed.
+$WORKFLOW_LINT_OUTPUT
+fix: apply the suggested repair command(s) above, then rerun ./scripts/prepare-task-pr.sh.
+EOF
+      exit 1
+    }
+  else
   cat >&2 <<EOF
 error: workflow-lint preflight failed.
 $WORKFLOW_LINT_OUTPUT
 fix: apply the suggested repair command(s) above, then rerun ./scripts/prepare-task-pr.sh.
 EOF
   exit 1
+  fi
 fi
 
 if [[ "$CREATE_PR" == "1" ]]; then

@@ -574,6 +574,45 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 MEMORY_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json)"
 ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
+APPEND_LOG_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/append-execution-log.sh" \
+  --task-uid "$TASK_UID" \
+  --role qa_engineer \
+  --completed "required-tier smoke appended structured evidence" \
+  --pending "none" \
+  --action "exercise append-execution-log wrapper" \
+  --validation-command "workflow-lint --phase current" \
+  --expected-result "current-task lint accepts a started task without closeout or PR evidence" \
+  --actual-result "append command wrote a complete execution-log entry" \
+  --blocker-next-action "none" \
+  --json)"
+APPEND_CROSS_ROLE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/append-execution-log.sh" \
+  --task-uid "$TASK_UID" \
+  --role agent_engineer \
+  --completed "required-tier smoke appended cross-role structured evidence" \
+  --pending "none" \
+  --action "exercise append-execution-log wrapper for a non-owner role" \
+  --validation-command "role-report --task-uid" \
+  --expected-result "task collaboration view includes the non-owner role execution entry" \
+  --actual-result "append command wrote a complete non-owner role execution-log entry" \
+  --blocker-next-action "none" \
+  --json)"
+WORKFLOW_CURRENT_LINT_STDOUT="$TMPDIR/workflow-current-lint.stdout"
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-lint.sh" --task-uid "$TASK_UID" --phase current >"$WORKFLOW_CURRENT_LINT_STDOUT"
+ROLE_REPORT_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --task-uid "$TASK_UID" --json)"
+EMPTY_LOG_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
+  --owner-role qa_engineer \
+  --title "empty execution log current lint fixture" \
+  --priority P2 \
+  --source-ref .pm/evidence/bootstrap.md \
+  --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md \
+  --acceptance "current workflow lint fails when execution log only has the generated template" \
+  --json)"
+EMPTY_LOG_TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$EMPTY_LOG_TASK_JSON")"
+EMPTY_LOG_CURRENT_LINT_STDOUT="$TMPDIR/empty-log-current-lint.stdout"
+set +e
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-lint.sh" --task-uid "$EMPTY_LOG_TASK_UID" --phase current >"$EMPTY_LOG_CURRENT_LINT_STDOUT" 2>&1
+EMPTY_LOG_CURRENT_LINT_STATUS=$?
+set -e
 WORKFLOW_CLOSE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase close --task-uid "$TASK_UID" --json)"
 mkdir -p "$TMPDIR/.pm/working_memory"
 cat > "$TMPDIR/.pm/working_memory/$TASK_UID.yaml" <<EOF
@@ -756,7 +795,7 @@ if ! rg -q "missing Actual Result" "$TMPDIR/task-execution-log-missing-actual.er
   exit 1
 fi
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" "$TASK_CLOSEOUT_MISSING_VERIFY_STATUS" "$TASK_CLOSEOUT_NO_VERIFY_STATE_JSON" "$TASK_CLOSEOUT_BYPASS_STATUS" "$TASK_CLOSEOUT_BYPASS_STATE_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" "$TASK_CLOSEOUT_MISSING_VERIFY_STATUS" "$TASK_CLOSEOUT_NO_VERIFY_STATE_JSON" "$TASK_CLOSEOUT_BYPASS_STATUS" "$TASK_CLOSEOUT_BYPASS_STATE_JSON" "$APPEND_LOG_JSON" "$ROLE_REPORT_TASK_JSON" "$WORKFLOW_CURRENT_LINT_STDOUT" "$APPEND_CROSS_ROLE_JSON" "$EMPTY_LOG_CURRENT_LINT_STATUS" "$EMPTY_LOG_CURRENT_LINT_STDOUT" <<'PY'
 from __future__ import annotations
 
 import json
@@ -784,11 +823,41 @@ missing_verify_status = int(sys.argv[20])
 missing_verify_state = json.loads(sys.argv[21])
 bypass_status = int(sys.argv[22])
 bypass_state = json.loads(sys.argv[23])
+append_log = json.loads(sys.argv[24])
+role_report_task = json.loads(sys.argv[25])
+workflow_current_lint_stdout = sys.argv[26]
+append_cross_role = json.loads(sys.argv[27])
+empty_log_lint_status = int(sys.argv[28])
+empty_log_lint_stdout = sys.argv[29]
 
 if workflow_start["signal_summary"]["pending_count"] != 0:
     raise SystemExit("qa workflow start should not treat rejected signal as pending")
 if workflow_start["task_context"]["task_uid"] != move_payload["task_uid"]:
     raise SystemExit("workflow start should bind explicit task_uid")
+if append_log["task_uid"] != move_payload["task_uid"]:
+    raise SystemExit("append-execution-log should append to the explicit task")
+if append_cross_role["role"] != "agent_engineer":
+    raise SystemExit("append-execution-log should allow canonical non-owner role entries")
+if "phase=current" not in open(workflow_current_lint_stdout, encoding="utf-8").read():
+    raise SystemExit("workflow-lint --phase current should report current phase success")
+empty_lint_text = open(empty_log_lint_stdout, encoding="utf-8").read()
+if empty_log_lint_status == 0:
+    raise SystemExit("workflow-lint --phase current should fail when the execution log has only template text")
+if "execution log missing real entries" not in empty_lint_text:
+    raise SystemExit("workflow-lint --phase current should reject template-only execution logs")
+task_collaboration = role_report_task.get("task_collaboration")
+if not task_collaboration:
+    raise SystemExit("role-report --task-uid should include task_collaboration")
+if task_collaboration["task_uid"] != move_payload["task_uid"]:
+    raise SystemExit("task_collaboration task_uid mismatch")
+if task_collaboration["owner_role"] != "qa_engineer":
+    raise SystemExit("task_collaboration owner_role mismatch")
+if "qa_engineer" not in task_collaboration["execution_roles"]:
+    raise SystemExit("task_collaboration should include execution log role")
+if "agent_engineer" not in task_collaboration["execution_roles"]:
+    raise SystemExit("task_collaboration should include non-owner execution log role")
+if task_collaboration["execution_entry_count"] < 3:
+    raise SystemExit("task_collaboration should count workflow start plus appended evidence entries")
 if not workflow_start["task_context"]["last_started_at"]:
     raise SystemExit("workflow start should record last_started_at")
 if not workflow_close["task_context"]["last_closed_at"]:
@@ -914,6 +983,9 @@ print(
             "workflow_review": workflow_review,
             "stage_report": stage_report,
             "task_closeout": task_closeout,
+            "append_log": append_log,
+            "append_cross_role": append_cross_role,
+            "role_report_task": role_report_task,
         },
         ensure_ascii=False,
     )
