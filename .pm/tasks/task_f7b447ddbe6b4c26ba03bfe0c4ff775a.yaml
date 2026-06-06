@@ -1,0 +1,29 @@
+task_uid: task_f7b447ddbe6b4c26ba03bfe0c4ff775a
+title: "remove war-facing gameplay/story content"
+owner_role: tpm
+worktree_hint: /home/scc/worktrees/oasis7-game-remove-war-facing-content
+execution_log_path: .pm/tasks/task_f7b447ddbe6b4c26ba03bfe0c4ff775a.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/game/prd.md
+  - doc/game/project.md
+doc_refs:
+  - doc/game/prd.md
+  - doc/game/project.md
+related_prd: []
+acceptance:
+  - "War-related player-facing gameplay/story positioning is removed or downgraded from current content without deleting runtime compatibility code."
+handoff_to:
+  - producer_system_designer
+updated_at: 2026-06-06T22:22:08+08:00
+last_started_at: 2026-06-06T21:52:00+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && git diff --check && ! rg -n '战争|战斗|开战|宣战|战事|作战|军事|battle|combat|fight|fighting|conflict|冲突|\\bwar\\b|\\bWar\\b' site/index.html site/en/index.html site/doc/cn/project-overview.html site/doc/en/project-overview.html site/doc/cn/index.html site/doc/en/index.html site/deck/index.html site/deck/en/index.html -g '!site/deck/vendor/**'"
+last_verified_at: 2026-06-06T22:22:07+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-06T22:22:08+08:00

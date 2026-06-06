@@ -110,4 +110,4 @@
 - 说明:
   - 本专题当前只完成合同冻结，不等于 runtime / viewer / agent / QA 已全部落地。
   - 本专题不改写当前 `PRD-GAME-012` 的 early-retention 主优先级，也不把 `#165` 当作 stage / preview claim envelope 升级依据。
-  - 高风险设计修补后，viewer / QA follow-up 优先新增的是经济可读性与 anti-grind/blocker matrix，而不是继续扩大战争/治理展示面。
+  - 高风险设计修补后，viewer / QA follow-up 优先新增的是经济可读性与 anti-grind/blocker matrix，而不是继续扩大高风险对抗/治理展示面。
