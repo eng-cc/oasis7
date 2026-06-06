@@ -329,6 +329,13 @@ impl PosNodeEngine {
         }
         if let Some(endpoint) = consensus_network.as_ref() {
             self.broadcast_local_commit_network(endpoint, node_id, world_id, now_ms, &decision)?;
+            self.broadcast_replicated_commit_head_network(
+                endpoint,
+                node_id,
+                world_id,
+                now_ms,
+                replication.as_deref(),
+            )?;
         } else if let Some(endpoint) = gossip.as_ref() {
             self.broadcast_local_commit(endpoint, node_id, world_id, now_ms, &decision)?;
         }

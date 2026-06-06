@@ -525,6 +525,91 @@ fn runtime_storage_validator_core_publishes_consensus_heads() {
 }
 
 #[test]
+fn runtime_storage_validator_core_rebroadcasts_replicated_commit_heads() {
+    let dir_a = temp_dir("storage-validator-rebroadcast-a");
+    let dir_b = temp_dir("storage-validator-rebroadcast-b");
+    let validators = vec![
+        PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 60,
+        },
+        PosValidator {
+            validator_id: "node-b".to_string(),
+            stake: 40,
+        },
+    ];
+    let pos_config =
+        signed_pos_config_with_signer_seeds(validators, &[("node-a", 81), ("node-b", 82)]);
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+
+    let config_a =
+        NodeConfig::new("node-a", "world-storage-validator-rebroadcast", NodeRole::Sequencer)
+            .expect("config a")
+            .with_tick_interval(Duration::from_millis(10))
+            .expect("tick a")
+            .with_pos_config(pos_config.clone())
+            .expect("pos config a")
+            .with_auto_attest_all_validators(true)
+            .with_replication(signed_replication_config(dir_a.clone(), 81));
+    let config_b =
+        NodeConfig::new("node-b", "world-storage-validator-rebroadcast", NodeRole::Storage)
+            .expect("config b")
+            .with_tick_interval(Duration::from_millis(10))
+            .expect("tick b")
+            .with_pos_config(pos_config)
+            .expect("pos config b")
+            .with_network_policy(NodeNetworkPolicy {
+                deployment_mode: oasis7_proto::distributed_dht::PeerDeploymentMode::Private,
+                node_role_claim: oasis7_proto::distributed_dht::PeerNodeRole::ValidatorCore,
+            })
+            .expect("storage validator-core policy")
+            .with_auto_attest_all_validators(true)
+            .with_replication(signed_replication_config(dir_b.clone(), 82));
+
+    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    let mut runtime_b = with_noop_execution_hook(NodeRuntime::new(config_b))
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    runtime_a.start().expect("start a");
+    runtime_b.start().expect("start b");
+
+    let synced = wait_until(Instant::now() + Duration::from_secs(8), || {
+        let snapshot_a = runtime_a.snapshot();
+        let snapshot_b = runtime_b.snapshot();
+        snapshot_a
+            .consensus
+            .peer_heads
+            .iter()
+            .any(|head| head.node_id == "node-b")
+            && snapshot_b.consensus.replication_persisted_height >= snapshot_a.consensus.committed_height
+    });
+    let snapshot_a = runtime_a.snapshot();
+    let snapshot_b = runtime_b.snapshot();
+
+    runtime_a.stop().expect("stop a");
+    runtime_b.stop().expect("stop b");
+
+    assert!(
+        synced,
+        "storage validator-core did not rebroadcast replicated heads: a_committed={} a_known={} a_heads={:?} a_last_error={:?} b_committed={} b_repl={} b_known={} b_heads={:?} b_last_error={:?}",
+        snapshot_a.consensus.committed_height,
+        snapshot_a.consensus.known_peer_heads,
+        snapshot_a.consensus.peer_heads,
+        snapshot_a.last_error,
+        snapshot_b.consensus.committed_height,
+        snapshot_b.consensus.replication_persisted_height,
+        snapshot_b.consensus.known_peer_heads,
+        snapshot_b.consensus.peer_heads,
+        snapshot_b.last_error
+    );
+
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
 fn runtime_network_consensus_rebroadcasts_pending_proposal_to_late_joiner() {
     let validators = vec![
         PosValidator {
