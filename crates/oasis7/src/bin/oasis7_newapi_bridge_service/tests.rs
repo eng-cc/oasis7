@@ -22,6 +22,32 @@ use self::tests_support::{
 };
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
+const PRICING_RULES_EXAMPLE_ENV_PATH: &str =
+    "scripts/newapi-bridge-service/pricing-rules.example.env";
+
+fn example_pricing_rules_value() -> String {
+    fs::read_to_string(PRICING_RULES_EXAMPLE_ENV_PATH)
+        .expect("read pricing rules example env")
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("OASIS7_NEWAPI_BRIDGE_PRICING_RULES=")
+                .map(str::trim)
+        })
+        .expect("pricing rules env entry")
+        .trim_matches('"')
+        .to_string()
+}
+
+fn example_pricing_rules() -> Vec<BridgePricingRuleConfig> {
+    example_pricing_rules_value()
+        .split(',')
+        .filter_map(|entry| {
+            let trimmed = entry.trim();
+            (!trimmed.is_empty()).then_some(trimmed)
+        })
+        .map(|entry| super::parse_pricing_rule(entry).expect("parse pricing rule from example env"))
+        .collect()
+}
 
 #[test]
 fn bind_user_persists_binding_and_project_binding() {
@@ -853,7 +879,7 @@ fn parse_cli_options_accepts_bridge_automation_flags() {
         "--chain-base-url".to_string(),
         "http://127.0.0.1:5121".to_string(),
         "--pricing-rule".to_string(),
-        "pv-1:100:15:2".to_string(),
+        example_pricing_rules_value(),
         "--letai-base-url".to_string(),
         "https://api.letai.run".to_string(),
         "--letai-platform-key".to_string(),
@@ -960,12 +986,7 @@ fn test_service_with_endpoints(
                 chain_base_url,
                 chain_timeout_ms: 2_000,
                 chain_confirmations_required,
-                pricing_rules: vec![BridgePricingRuleConfig {
-                    pricing_version: "pv-1".to_string(),
-                    oc_amount: 100,
-                    credit_units: 10,
-                    bonus_units: 5,
-                }],
+                pricing_rules: example_pricing_rules(),
                 letai_base_url,
                 letai_platform_key: Some("platform-key".to_string()),
                 letai_parent_channel_id: Some("parent-channel".to_string()),

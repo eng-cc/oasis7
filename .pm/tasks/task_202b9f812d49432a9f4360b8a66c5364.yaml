@@ -8,7 +8,7 @@ priority: P2
 source_signal: null
 source_refs:
   - AGENTS.md
-  - /Users/scc/Documents/keys/aliyun_ecs.txt
+  - .pm/tasks/task_202b9f812d49432a9f4360b8a66c5364.execution.md
 doc_refs: []
 related_prd: []
 acceptance:

@@ -185,6 +185,9 @@ install -m 0644 \
   scripts/newapi-bridge-service/newapi-bridge-service.env.example \
   "$OUT_DIR_ABS/scripts/newapi-bridge-service/newapi-bridge-service.env.example"
 install -m 0644 \
+  scripts/newapi-bridge-service/pricing-rules.example.env \
+  "$OUT_DIR_ABS/scripts/newapi-bridge-service/pricing-rules.example.env"
+install -m 0644 \
   scripts/newapi-bridge-service/oasis7-newapi-bridge.service \
   "$OUT_DIR_ABS/scripts/newapi-bridge-service/oasis7-newapi-bridge.service"
 install -m 0644 \
@@ -204,6 +207,7 @@ install -m 0644 \
   echo "service=scripts/newapi-bridge-service/oasis7-newapi-bridge.service"
   echo "start_script=scripts/newapi-bridge-service/start-newapi-bridge-service.sh"
   echo "env_example=scripts/newapi-bridge-service/newapi-bridge-service.env.example"
+  echo "pricing_rules_example=scripts/newapi-bridge-service/pricing-rules.example.env"
   echo "runbook=doc/world-runtime/runtime/newapi-bridge-service-operator-runbook.md"
 } > "$OUT_DIR_ABS/BUILDINFO"
 
@@ -213,6 +217,7 @@ install -m 0644 \
     oasis7_newapi_bridge_service \
     scripts/newapi-bridge-service/start-newapi-bridge-service.sh \
     scripts/newapi-bridge-service/newapi-bridge-service.env.example \
+    scripts/newapi-bridge-service/pricing-rules.example.env \
     scripts/newapi-bridge-service/oasis7-newapi-bridge.service \
     doc/world-runtime/runtime/newapi-bridge-service-operator-runbook.md \
     HELP.txt \
