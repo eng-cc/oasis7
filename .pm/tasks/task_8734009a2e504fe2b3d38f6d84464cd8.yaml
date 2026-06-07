@@ -1,0 +1,24 @@
+task_uid: task_8734009a2e504fe2b3d38f6d84464cd8
+title: "Check Bevy pixel world fullscreen support"
+owner_role: tpm
+worktree_hint: /home/scc/worktrees/oasis7-viewer-bevy-pixel-fullscreen-check
+execution_log_path: .pm/tasks/task_8734009a2e504fe2b3d38f6d84464cd8.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/world-simulator/prd.md
+related_prd: []
+acceptance:
+  - "Determine from repo evidence whether Bevy pixel world rendering can run fullscreen."
+handoff_to: []
+updated_at: 2026-06-06T23:13:38+08:00
+last_started_at: 2026-06-06T20:59:10+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host && npm --prefix crates/oasis7_viewer run build:software-safe && git diff --check"
+last_verified_at: 2026-06-06T23:13:37+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-06T23:13:38+08:00
