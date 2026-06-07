@@ -151,6 +151,62 @@ fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64
     let _ = emit_camera_state(&runtime.camera);
 }
 
+fn selection_focus_position(
+    render_state: &RenderState,
+    focus_target: &FocusTarget,
+) -> Option<Position> {
+    match focus_target.kind.as_str() {
+        "agent" => render_state
+            .agents
+            .iter()
+            .find(|agent| agent.id == focus_target.id)
+            .and_then(|agent| agent.pos.clone()),
+        "location" => render_state
+            .locations
+            .iter()
+            .find(|location| location.id == focus_target.id)
+            .map(|location| location.pos.clone()),
+        _ => None,
+    }
+}
+
+fn maybe_focus_selected_entity(runtime: &mut BevyRuntimeState, width: f64, height: f64) {
+    let Some(focus_target) = runtime.pending_focus_target.clone() else {
+        return;
+    };
+    let Some(render_state) = runtime.render_state.as_ref() else {
+        runtime.pending_focus_target = None;
+        return;
+    };
+    let Some(world_bounds) = render_state.world_bounds.as_ref() else {
+        runtime.pending_focus_target = None;
+        return;
+    };
+    let Some(position) = selection_focus_position(render_state, &focus_target) else {
+        runtime.pending_focus_target = None;
+        return;
+    };
+    let Some((selected_x, selected_y)) = to_canvas_point(
+        &position,
+        world_bounds,
+        width,
+        height,
+        &CameraState::default(),
+    ) else {
+        runtime.pending_focus_target = None;
+        return;
+    };
+
+    let centered_x = selected_x - (width / 2.0);
+    let centered_y = selected_y - (height / 2.0);
+    runtime.camera.pan_x_px = -(centered_x * runtime.camera.zoom.max(0.5));
+    runtime.camera.pan_y_px = -(centered_y * runtime.camera.zoom.max(0.5));
+    runtime.camera_user_override = true;
+    runtime.camera_fit_version = runtime.render_version;
+    runtime.pending_focus_target = None;
+    let _ = emit_camera_state(&runtime.camera);
+}
+
 pub(crate) fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -> GridLayoutKey {
     let grid_step = clamp(24.0 * camera.zoom.max(0.5), 12.0, 72.0);
     let offset_x = ((camera.pan_x_px % grid_step) + grid_step) % grid_step;
@@ -806,6 +862,7 @@ pub(crate) fn render_scene(
     runtime.hit_regions.clear();
 
     maybe_auto_fit_camera(&mut runtime, width, height);
+    maybe_focus_selected_entity(&mut runtime, width, height);
     reconcile_grid(&mut commands, &mut runtime, &current_grid, width, height);
     reconcile_fragments(&mut commands, &mut runtime, width, height);
     reconcile_links(&mut commands, &mut runtime, width, height);

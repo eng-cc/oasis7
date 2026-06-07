@@ -1,0 +1,24 @@
+task_uid: task_b0db62ebc21b4f81815398a66c84f366
+title: "local launcher and game playtest on latest main"
+owner_role: tpm
+worktree_hint: /home/scc/worktrees/oasis7-viewer-local-launch-playtest-main
+execution_log_path: .pm/tasks/task_b0db62ebc21b4f81815398a66c84f366.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - scripts/run-game-test.sh
+  - scripts/run-producer-playtest.sh
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-07T14:45:12+08:00
+last_started_at: 2026-06-07T12:25:27+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo test -p pixel_world_bridge -- --nocapture"
+last_verified_at: 2026-06-07T14:45:11+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-07T14:45:12+08:00
