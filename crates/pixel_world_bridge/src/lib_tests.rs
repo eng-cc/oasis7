@@ -1,0 +1,509 @@
+use crate::render::{
+    agent_visual_style, build_grid_layout, classify_fragment_lod, fragment_screen_size_px,
+    fragment_visual_style, location_visual_style, FragmentTerrainLod,
+};
+
+use super::*;
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test;
+
+fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
+    RenderState {
+        world_bounds: Some(WorldBounds {
+            width_cm: 3_000_000.0,
+            depth_cm: 2_000_000.0,
+            height_cm: 500_000.0,
+        }),
+        locations: vec![Location {
+            id: "loc-0".to_string(),
+            label: "Fragment Field Anchor".to_string(),
+            pos: Position {
+                x_cm: 1_500_000.0,
+                y_cm: 1_000_000.0,
+                z_cm: 0.0,
+            },
+            radius_cm: 30_000.0,
+            resource_summary: "-".to_string(),
+            size_hint_px: Some(10.0),
+            marker_role: Some("logic_anchor".to_string()),
+            marker_alpha: Some(0.32),
+        }],
+        fragment_terrain: vec![],
+        agents: vec![Agent {
+            id: "agent-0".to_string(),
+            label: "Survey Agent".to_string(),
+            pos: Some(Position {
+                x_cm: 1_520_000.0,
+                y_cm: 1_015_000.0,
+                z_cm: 0.0,
+            }),
+            location_id: Some("loc-0".to_string()),
+            resource_summary: "-".to_string(),
+            status_badges: vec!["position=location_derived".to_string()],
+            size_hint_px: Some(16.0),
+        }],
+        links: vec![],
+        visual_hotspots: vec![],
+        selection: Some(Selection {
+            kind: selection_kind.to_string(),
+            id: if selection_kind == "location" {
+                "loc-0".to_string()
+            } else {
+                "agent-0".to_string()
+            },
+        }),
+    }
+}
+
+fn assert_grid_layout_is_stable_for_same_camera_and_size() {
+    let camera = CameraState::default();
+    let left = build_grid_layout(&camera, 960.0, 540.0);
+    let right = build_grid_layout(&camera, 960.0, 540.0);
+    assert_eq!(left, right);
+}
+
+fn assert_grid_layout_changes_when_camera_pan_changes() {
+    let mut camera = CameraState::default();
+    let before = build_grid_layout(&camera, 960.0, 540.0);
+    camera.pan_x_px = 10.0;
+    let after = build_grid_layout(&camera, 960.0, 540.0);
+    assert_ne!(before, after);
+}
+
+fn assert_fallback_point_stays_within_canvas() {
+    let point = fallback_point_for_entity("agent-0", 960.0, 540.0, &CameraState::default());
+    assert!(point.0 >= 0.0 && point.0 <= 960.0);
+    assert!(point.1 >= 0.0 && point.1 <= 540.0);
+}
+
+fn assert_fragment_lod_uses_screen_space_size() {
+    let bounds = WorldBounds {
+        width_cm: 1_000_000.0,
+        depth_cm: 1_000_000.0,
+        height_cm: 0.0,
+    };
+    let mut camera = CameraState::default();
+    let background_size = fragment_screen_size_px(10_000.0, &bounds, 1000.0, 1000.0, &camera);
+    assert_eq!(
+        classify_fragment_lod(background_size),
+        FragmentTerrainLod::Background
+    );
+
+    camera.zoom = 2.0;
+    let detail_size = fragment_screen_size_px(10_000.0, &bounds, 1000.0, 1000.0, &camera);
+    assert_eq!(
+        classify_fragment_lod(detail_size),
+        FragmentTerrainLod::Detail
+    );
+    assert_eq!(classify_fragment_lod(1.0), FragmentTerrainLod::Hidden);
+}
+
+fn assert_fragment_lod_keeps_blocks_background_at_agent_readable_scale() {
+    let bounds = WorldBounds {
+        width_cm: 3_000_000.0,
+        depth_cm: 2_000_000.0,
+        height_cm: 0.0,
+    };
+    let mut camera = CameraState::default();
+    camera.zoom = 3.0;
+
+    let screen_size = fragment_screen_size_px(12_000.0, &bounds, 960.0, 540.0, &camera);
+    assert!(screen_size < 10.0);
+    assert_eq!(
+        classify_fragment_lod(screen_size),
+        FragmentTerrainLod::Background
+    );
+}
+
+fn assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents() {
+    let bounds = WorldBounds {
+        width_cm: 3_000_000.0,
+        depth_cm: 2_000_000.0,
+        height_cm: 0.0,
+    };
+    let mut camera = CameraState::default();
+    camera.zoom = 3.0;
+    let fragment = FragmentTerrainPatch {
+        id: "fragment:loc-0:0".to_string(),
+        location_id: "loc-0".to_string(),
+        pos: Position {
+            x_cm: 1_500_000.0,
+            y_cm: 1_000_000.0,
+            z_cm: 0.0,
+        },
+        footprint_cm: 12_000.0,
+        dominant_compound: "silicate_matrix".to_string(),
+        color: [141, 199, 170],
+        emphasis: Some(0.58),
+    };
+    let location = Location {
+        id: "loc-0".to_string(),
+        label: "Fragment Field Anchor".to_string(),
+        pos: Position {
+            x_cm: 1_500_000.0,
+            y_cm: 1_000_000.0,
+            z_cm: 0.0,
+        },
+        radius_cm: 30_000.0,
+        resource_summary: "-".to_string(),
+        size_hint_px: Some(10.0),
+        marker_role: Some("logic_anchor".to_string()),
+        marker_alpha: Some(0.32),
+    };
+    let agent = Agent {
+        id: "agent-0".to_string(),
+        label: "Survey Agent".to_string(),
+        pos: Some(Position {
+            x_cm: 1_520_000.0,
+            y_cm: 1_015_000.0,
+            z_cm: 0.0,
+        }),
+        location_id: Some("loc-0".to_string()),
+        resource_summary: "-".to_string(),
+        status_badges: vec!["position=location_derived".to_string()],
+        size_hint_px: Some(16.0),
+    };
+
+    let fragment_style = fragment_visual_style(&fragment, &bounds, 960.0, 540.0, &camera).unwrap();
+    let location_style = location_visual_style(&location, 0.0);
+    let agent_style = agent_visual_style(&agent, true, 0.0, 0);
+
+    assert_eq!(fragment_style.lod, FragmentTerrainLod::Background);
+    assert!(fragment_style.size_px < agent_style.size_px);
+    assert!(fragment_style.alpha < location_style.alpha);
+    assert!(location_style.alpha < 0.5);
+    assert!(fragment_style.layer_z < location_style.layer_z);
+    assert!(location_style.layer_z < agent_style.layer_z);
+}
+
+fn assert_selection_only_render_update_preserves_manual_camera_override() {
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(sample_render_state_for_camera("agent")),
+        render_version: 1,
+        render_content_signature: render_content_signature(None),
+        camera: CameraState {
+            zoom: 2.25,
+            pan_x_px: 42.0,
+            pan_y_px: -18.0,
+        },
+        camera_fit_version: 1,
+        camera_user_override: true,
+        ..Default::default()
+    };
+    let initial_signature = render_content_signature(runtime.render_state.as_ref());
+    runtime.render_content_signature = initial_signature;
+
+    let next_state = sample_render_state_for_camera("location");
+    let snapshot = SharedSnapshot {
+        mounted: true,
+        render_state: Some(next_state),
+        render_version: 2,
+        input_events: Vec::new(),
+    };
+    apply_external_render_snapshot(&mut runtime, snapshot);
+
+    assert_eq!(runtime.render_version, 2);
+    assert_eq!(runtime.render_content_signature, initial_signature);
+    assert_eq!(runtime.camera.zoom, 2.25);
+    assert_eq!(runtime.camera.pan_x_px, 42.0);
+    assert_eq!(runtime.camera.pan_y_px, -18.0);
+    assert!(runtime.camera_user_override);
+    assert_eq!(runtime.camera_fit_version, 1);
+    assert_eq!(
+        runtime.pending_focus_target,
+        Some(FocusTarget {
+            kind: "location".to_string(),
+            id: "loc-0".to_string(),
+        })
+    );
+}
+
+fn assert_content_render_update_clears_manual_camera_override() {
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(sample_render_state_for_camera("agent")),
+        render_version: 1,
+        render_content_signature: render_content_signature(None),
+        camera: CameraState {
+            zoom: 2.25,
+            pan_x_px: 42.0,
+            pan_y_px: -18.0,
+        },
+        camera_fit_version: 1,
+        camera_user_override: true,
+        ..Default::default()
+    };
+    let initial_signature = render_content_signature(runtime.render_state.as_ref());
+    runtime.render_content_signature = initial_signature;
+
+    let mut next_state = sample_render_state_for_camera("agent");
+    next_state.agents[0].pos = Some(Position {
+        x_cm: 2_500_000.0,
+        y_cm: 1_800_000.0,
+        z_cm: 0.0,
+    });
+    let next_signature = render_content_signature(Some(&next_state));
+    assert_ne!(next_signature, initial_signature);
+
+    let snapshot = SharedSnapshot {
+        mounted: true,
+        render_state: Some(next_state),
+        render_version: 2,
+        input_events: Vec::new(),
+    };
+    apply_external_render_snapshot(&mut runtime, snapshot);
+
+    assert_eq!(runtime.render_version, 2);
+    assert_eq!(runtime.render_content_signature, next_signature);
+    assert!(!runtime.camera_user_override);
+    assert_eq!(runtime.camera_fit_version, 0);
+    assert_eq!(runtime.pending_focus_target, None);
+}
+
+fn assert_selection_change_sets_pending_focus_target() {
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(sample_render_state_for_camera("agent")),
+        render_version: 1,
+        render_content_signature: render_content_signature(None),
+        camera: CameraState {
+            zoom: 1.5,
+            pan_x_px: 12.0,
+            pan_y_px: -6.0,
+        },
+        camera_fit_version: 1,
+        camera_user_override: true,
+        ..Default::default()
+    };
+    let initial_signature = render_content_signature(runtime.render_state.as_ref());
+    runtime.render_content_signature = initial_signature;
+
+    let next_state = sample_render_state_for_camera("location");
+    let snapshot = SharedSnapshot {
+        mounted: true,
+        render_state: Some(next_state),
+        render_version: 2,
+        input_events: Vec::new(),
+    };
+    apply_external_render_snapshot(&mut runtime, snapshot);
+
+    assert_eq!(
+        runtime.pending_focus_target,
+        Some(FocusTarget {
+            kind: "location".to_string(),
+            id: "loc-0".to_string(),
+        })
+    );
+}
+
+fn assert_followed_agent_content_update_reissues_pending_focus() {
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(sample_render_state_for_camera("agent")),
+        render_version: 1,
+        render_content_signature: render_content_signature(None),
+        active_follow_target: Some(FocusTarget {
+            kind: "agent".to_string(),
+            id: "agent-0".to_string(),
+        }),
+        ..Default::default()
+    };
+    let initial_signature = render_content_signature(runtime.render_state.as_ref());
+    runtime.render_content_signature = initial_signature;
+
+    let mut next_state = sample_render_state_for_camera("agent");
+    next_state.agents[0].pos = Some(Position {
+        x_cm: 2_100_000.0,
+        y_cm: 1_400_000.0,
+        z_cm: 0.0,
+    });
+    let snapshot = SharedSnapshot {
+        mounted: true,
+        render_state: Some(next_state),
+        render_version: 2,
+        input_events: Vec::new(),
+    };
+    apply_external_render_snapshot(&mut runtime, snapshot);
+
+    assert_eq!(
+        runtime.pending_focus_target,
+        Some(FocusTarget {
+            kind: "agent".to_string(),
+            id: "agent-0".to_string(),
+        })
+    );
+    assert_eq!(
+        runtime.active_follow_target,
+        Some(FocusTarget {
+            kind: "agent".to_string(),
+            id: "agent-0".to_string(),
+        })
+    );
+}
+
+fn assert_selection_change_to_location_clears_follow_target() {
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(sample_render_state_for_camera("agent")),
+        render_version: 1,
+        render_content_signature: render_content_signature(None),
+        active_follow_target: Some(FocusTarget {
+            kind: "agent".to_string(),
+            id: "agent-0".to_string(),
+        }),
+        ..Default::default()
+    };
+    let initial_signature = render_content_signature(runtime.render_state.as_ref());
+    runtime.render_content_signature = initial_signature;
+
+    let snapshot = SharedSnapshot {
+        mounted: true,
+        render_state: Some(sample_render_state_for_camera("location")),
+        render_version: 2,
+        input_events: Vec::new(),
+    };
+    apply_external_render_snapshot(&mut runtime, snapshot);
+
+    assert_eq!(runtime.active_follow_target, None);
+    assert_eq!(
+        runtime.pending_focus_target,
+        Some(FocusTarget {
+            kind: "location".to_string(),
+            id: "loc-0".to_string(),
+        })
+    );
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn grid_layout_is_stable_for_same_camera_and_size() {
+    assert_grid_layout_is_stable_for_same_camera_and_size();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn grid_layout_changes_when_camera_pan_changes() {
+    assert_grid_layout_changes_when_camera_pan_changes();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn fallback_point_stays_within_canvas() {
+    assert_fallback_point_stays_within_canvas();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn fragment_lod_uses_screen_space_size() {
+    assert_fragment_lod_uses_screen_space_size();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn fragment_lod_keeps_blocks_background_at_agent_readable_scale() {
+    assert_fragment_lod_keeps_blocks_background_at_agent_readable_scale();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn bevy_visual_styles_keep_fragments_background_behind_readable_agents() {
+    assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn selection_only_render_update_preserves_manual_camera_override() {
+    assert_selection_only_render_update_preserves_manual_camera_override();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn content_render_update_clears_manual_camera_override() {
+    assert_content_render_update_clears_manual_camera_override();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn selection_change_sets_pending_focus_target() {
+    assert_selection_change_sets_pending_focus_target();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn followed_agent_content_update_reissues_pending_focus() {
+    assert_followed_agent_content_update_reissues_pending_focus();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn selection_change_to_location_clears_follow_target() {
+    assert_selection_change_to_location_clears_follow_target();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_grid_layout_is_stable_for_same_camera_and_size() {
+    assert_grid_layout_is_stable_for_same_camera_and_size();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_grid_layout_changes_when_camera_pan_changes() {
+    assert_grid_layout_changes_when_camera_pan_changes();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_fallback_point_stays_within_canvas() {
+    assert_fallback_point_stays_within_canvas();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_fragment_lod_uses_screen_space_size() {
+    assert_fragment_lod_uses_screen_space_size();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_fragment_lod_keeps_blocks_background_at_agent_readable_scale() {
+    assert_fragment_lod_keeps_blocks_background_at_agent_readable_scale();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_bevy_visual_styles_keep_fragments_background_behind_readable_agents() {
+    assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_selection_only_render_update_preserves_manual_camera_override() {
+    assert_selection_only_render_update_preserves_manual_camera_override();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_content_render_update_clears_manual_camera_override() {
+    assert_content_render_update_clears_manual_camera_override();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_selection_change_sets_pending_focus_target() {
+    assert_selection_change_sets_pending_focus_target();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_followed_agent_content_update_reissues_pending_focus() {
+    assert_followed_agent_content_update_reissues_pending_focus();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_selection_change_to_location_clears_follow_target() {
+    assert_selection_change_to_location_clears_follow_target();
+}
