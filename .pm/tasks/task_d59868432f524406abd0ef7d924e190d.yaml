@@ -13,11 +13,11 @@ doc_refs: []
 related_prd: []
 acceptance: []
 handoff_to: []
-updated_at: 2026-06-07T20:09:46+08:00
+updated_at: 2026-06-07T20:22:21+08:00
 last_started_at: 2026-06-07T18:57:50+08:00
-last_claim_type: task_complete
-last_verify_command: "cd crates/oasis7_viewer && npm run test:ui -- software_safe_src/main.test.jsx && npm run build:software-safe && git -C /home/scc/worktrees/oasis7-viewer-presentation-notes-right-panel-review diff --check"
-last_verified_at: 2026-06-07T20:09:45+08:00
-last_verification_exit_code: 0
-last_verification_status: verified
+last_claim_type: ready_for_pr
+last_verify_command: "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=false OASIS7_CI_RUN_CONSENSUS_TESTS=false OASIS7_CI_RUN_DISTFS_TESTS=false OASIS7_CI_RUN_OASIS7_NODE_TESTS=false OASIS7_CI_RUN_OASIS7_NET_TESTS=false OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=false OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=true OASIS7_CI_RUN_VIEWER_WASM_CHECK=true OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=false ./scripts/ci-tests.sh required"
+last_verified_at: 2026-06-07T20:22:21+08:00
+last_verification_exit_code: 101
+last_verification_status: blocked
 last_closed_at: 2026-06-07T20:09:46+08:00
