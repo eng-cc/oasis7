@@ -513,6 +513,7 @@ fn apply_external_render_snapshot(runtime: &mut BevyRuntimeState, snapshot: Shar
     let next_signature = render_content_signature(snapshot.render_state.as_ref());
     if next_signature != runtime.render_content_signature {
         runtime.camera_fit_version = 0;
+        runtime.camera_user_override = false;
         runtime.render_content_signature = next_signature;
     }
     runtime.render_version = snapshot.render_version;
@@ -1006,6 +1007,47 @@ mod tests {
         assert_eq!(runtime.camera_fit_version, 1);
     }
 
+    fn assert_content_render_update_clears_manual_camera_override() {
+        let mut runtime = BevyRuntimeState {
+            mounted: true,
+            render_state: Some(sample_render_state_for_camera("agent")),
+            render_version: 1,
+            render_content_signature: render_content_signature(None),
+            camera: CameraState {
+                zoom: 2.25,
+                pan_x_px: 42.0,
+                pan_y_px: -18.0,
+            },
+            camera_fit_version: 1,
+            camera_user_override: true,
+            ..Default::default()
+        };
+        let initial_signature = render_content_signature(runtime.render_state.as_ref());
+        runtime.render_content_signature = initial_signature;
+
+        let mut next_state = sample_render_state_for_camera("agent");
+        next_state.agents[0].pos = Some(Position {
+            x_cm: 2_500_000.0,
+            y_cm: 1_800_000.0,
+            z_cm: 0.0,
+        });
+        let next_signature = render_content_signature(Some(&next_state));
+        assert_ne!(next_signature, initial_signature);
+
+        let snapshot = SharedSnapshot {
+            mounted: true,
+            render_state: Some(next_state),
+            render_version: 2,
+            input_events: Vec::new(),
+        };
+        apply_external_render_snapshot(&mut runtime, snapshot);
+
+        assert_eq!(runtime.render_version, 2);
+        assert_eq!(runtime.render_content_signature, next_signature);
+        assert!(!runtime.camera_user_override);
+        assert_eq!(runtime.camera_fit_version, 0);
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn grid_layout_is_stable_for_same_camera_and_size() {
@@ -1048,6 +1090,12 @@ mod tests {
         assert_selection_only_render_update_preserves_manual_camera_override();
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn content_render_update_clears_manual_camera_override() {
+        assert_content_render_update_clears_manual_camera_override();
+    }
+
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen_test]
     fn wasm_grid_layout_is_stable_for_same_camera_and_size() {
@@ -1088,5 +1136,11 @@ mod tests {
     #[wasm_bindgen_test]
     fn wasm_selection_only_render_update_preserves_manual_camera_override() {
         assert_selection_only_render_update_preserves_manual_camera_override();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test]
+    fn wasm_content_render_update_clears_manual_camera_override() {
+        assert_content_render_update_clears_manual_camera_override();
     }
 }
