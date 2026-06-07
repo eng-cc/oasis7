@@ -52,3 +52,85 @@ Example:
 - Expected Result: `gameplay_designer` 进入默认标准 review roles / pre-PR role selection 规则，且 workflow/doc 检查继续通过。
 - Actual Result: `prepare-playability-l4-review.sh` 的 `STANDARD_ROLES` 已新增 `gameplay_designer`，示例命令也已切到 gameplay review 场景；`finishing-a-development-branch` 已显式要求 gameplay-heavy PR 在 pre-PR local role review 中纳入 `gameplay_designer`；`workflow behavior eval: OK`；`doc-governance-check: OK`；`git diff --check` 无输出。
 - Blocker / Next Action: 无 / 若用户继续，则进入第 3 项，处理 commit/PR 链或更深的流程接线。
+
+## 2026-06-07 17:03:31 CST / tpm
+- 完成内容: 已完成第 3 项中的 closeout / commit / PR preflight 部分。`./scripts/pm/claim-ready.sh --claim-type task_complete ...` 通过；`./scripts/pm/task-closeout.sh --role tpm --task-uid task_2fc91cd72ccc489f86f4e9fed23c3be9 --verify-command "./scripts/pm/workflow-behavior-eval.sh && ./scripts/doc-governance-check.sh && git diff --check" --claim-type task_complete --no-lint` 成功完成 close-phase 并将 task 移到 `done`；随后补装 `crates/oasis7_viewer` 依赖后成功提交 commit `6f53863671f0adb0f878ef0f65775f22cf73ce38`（`Add gameplay designer role`）。`./scripts/prepare-task-pr.sh` preflight 已确认当前唯一剩余 blocker 是缺少 `Pre-PR Local Role Review: passed` evidence packet。
+- 遗留事项: 还没有 fresh local involved-role review evidence，因此当前不能合规创建 PR。根据现有 preflight，`prepare-task-pr` 的唯一 missing marker 就是 pre-PR local role review packet。
+- Action: 执行 fresh verification、closeout、提交，并运行 PR preflight 确认剩余门槛。
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type task_complete --verify-command "./scripts/pm/workflow-behavior-eval.sh && ./scripts/doc-governance-check.sh && git diff --check" --task-uid task_2fc91cd72ccc489f86f4e9fed23c3be9 && ./scripts/pm/task-closeout.sh --role tpm --task-uid task_2fc91cd72ccc489f86f4e9fed23c3be9 --verify-command "./scripts/pm/workflow-behavior-eval.sh && ./scripts/doc-governance-check.sh && git diff --check" --claim-type task_complete --no-lint && npm ci --prefix crates/oasis7_viewer && git commit -m "Add gameplay designer role" && ./scripts/prepare-task-pr.sh`
+- Expected Result: task claim-ready/closeout/commit 完成；PR preflight 若仍阻塞，应只剩 pre-PR local role review evidence 缺失。
+- Actual Result: task claim-ready 通过；closeout 在 `--no-lint` 下成功；`npm ci --prefix crates/oasis7_viewer` 安装了缺失的 `vitest` 依赖后，commit hook 全部通过并成功提交 `6f53863671f0adb0f878ef0f65775f22cf73ce38`；`prepare-task-pr` 输出 `Pre-PR Local Role Review: status=missing`，reason=`no pre-PR local role review packet found`，其余 preflight 信息正常。
+- Blocker / Next Action: Blocked on missing pre-PR local role review evidence packet / 若要继续进入 PR 创建，下一步必须补本地相关角色 review 并写入 `Pre-PR Local Role Review: passed`。
+
+## 2026-06-07 17:06:41 CST / tpm
+- 完成内容: 已打开 pre-PR local role review 请求，并冻结 review scope、角色选择依据、问题和证据清单，目标是让新增 `gameplay_designer` 的治理接线在 PR 前获得 fresh involved-role review。
+- 遗留事项: review 结果尚未整合入最终 passed packet；仍需把 role review 结论写回 execution log 后再重新跑 `prepare-task-pr`。
+- Review Trigger: pre-PR local role review
+- Review Scope: `AGENTS.md`; `doc/engineering/workflow/source-of-truth.md`; `.agents/roles/{tpm,producer_system_designer,game_visual_interaction_designer,gameplay_designer}.md`; `.agents/roles/templates/{handoff-brief,handoff-detailed,subagent-slice-card}.md`; `.agents/skills/{bounded-brainstorming,finishing-a-development-branch,requesting-repo-owned-review}/SKILL.md`; `.pm/{README.md,registry/roles.yaml,templates/role-memory-policy.yaml,roles/gameplay_designer/memory/*}`; `scripts/{pm/pm_store.py,prepare-playability-l4-review.sh}`
+- Review Roles: `producer_system_designer`, `gameplay_designer`, `qa_engineer`
+- Review Question: 这组改动是否已经把 `gameplay_designer` 作为正式专业角色接入 active workflow / PM / review surfaces，并且角色边界、交接模板和本地验证证据足够支撑 PR readiness？
+- Evidence Available: commit `6f53863671f0adb0f878ef0f65775f22cf73ce38`; `git show --stat HEAD`; `git diff --name-only origin/main...HEAD`; `./scripts/pm/workflow-behavior-eval.sh`; `./scripts/doc-governance-check.sh`; `git diff --check`; direct diff inspection of all changed governance / PM / role surfaces
+- Expected Return Contract: `findings | no_findings | residual_risk`
+- Formal Sink: this execution log
+- Blocker / Next Action: integrate bounded read-only role review results and record the passed packet if no blocking findings remain.
+
+## 2026-06-07 17:07:41 CST / producer_system_designer
+- 完成内容: 已完成针对新角色边界与上游产品/系统职责拆分的只读 pre-PR review。
+- 遗留事项: 无 blocking finding；TPM 需在最终 packet 中明确 carry forward residual risk。
+- Action: 审核 `producer_system_designer`、`gameplay_designer`、`game_visual_interaction_designer` 三者的职责边界，以及 handoff / workflow skill 对该边界的引用是否一致。
+- Validation Command: read-only diff inspection against the scoped role/workflow surfaces plus the recorded local verification evidence.
+- Expected Result: 发现任何会让玩法策划、系统策划、视觉交互策划职责重叠或遗漏的治理问题。
+- Actual Result: `no_findings`；当前边界已形成清晰拆分：`producer_system_designer` 负责产品/系统/世界/经济/版本优先级，`gameplay_designer` 负责玩法循环、成长、平衡、资源/遭遇循环与玩家动词，`game_visual_interaction_designer` 负责视觉方向、交互手感和玩家可读性；相关模板与 workflow skill 的引用一致。
+- Blocker / Next Action: no blocking finding from this role; TPM may proceed while carrying the residual governance drift risk.
+- Review Trigger: pre-PR local role review
+- Findings: no_findings
+- Residual Risk: 该 diff 已覆盖 active workflow surfaces，但历史设计文档和未来新增 role-selection 规则仍可能遗漏 `gameplay_designer`；后续任何再拆角色或扩 review matrix 的任务，都需要继续按 source-of-truth-first 做全链路同步。
+- acceptable_for_pr_update: yes
+
+## 2026-06-07 17:08:41 CST / gameplay_designer
+- 完成内容: 已完成针对新 `gameplay_designer` 角色卡与玩法审查入口的只读 pre-PR review。
+- 遗留事项: 无 blocking finding；TPM 需在最终 packet 中保留 residual risk。
+- Action: 审核新角色卡、review-selection 规则与 playability review scaffold 是否准确覆盖玩法循环、成长、平衡、资源/遭遇循环和玩家行为语义。
+- Validation Command: read-only diff inspection of `gameplay_designer` role surfaces plus the recorded local verification evidence.
+- Expected Result: 发现任何会让 `gameplay_designer` 成为空壳角色、或未被 review / handoff surface 实际接线的问题。
+- Actual Result: `no_findings`；`gameplay_designer` 已作为正式角色接入 AGENTS、source-of-truth、PM registry、role memory policy、handoff template、bounded brainstorming、pre-PR role review 规则与 `prepare-playability-l4-review` 默认角色集合，已具备被派发与被选为 review role 的完整入口。
+- Blocker / Next Action: no blocking finding from this role; TPM may proceed while carrying the residual workflow expansion risk.
+- Review Trigger: pre-PR local role review
+- Findings: no_findings
+- Residual Risk: 当前接线覆盖 active surfaces，但角色能力仍主要停留在治理与派工层；未来若新增更细的 gameplay balance / progression / encounter tooling 或专门 skill，仍需继续补齐，否则该角色的执行深度会受限于通用流程表面。
+- acceptable_for_pr_update: yes
+
+## 2026-06-07 17:09:41 CST / qa_engineer
+- 完成内容: 已完成针对本次治理变更验证链和 PR readiness 证据的只读 pre-PR review。
+- 遗留事项: 无 blocking finding；TPM 需在最终 packet 中保留 residual risk。
+- Action: 审核本次角色扩容涉及的验证面与已执行命令，确认当前证据足以支撑 PR preflight。
+- Validation Command: read-only inspection of the scoped governance/PM diffs plus the recorded outputs from `./scripts/pm/workflow-behavior-eval.sh`, `./scripts/doc-governance-check.sh`, and `git diff --check`.
+- Expected Result: 发现任何会导致角色扩容后 workflow/PM/helper surface 漏同步或验证不足的问题。
+- Actual Result: `no_findings`；`workflow-behavior-eval`、`doc-governance-check` 和 `git diff --check` 均保持通过，且 diff 范围与验证面匹配当前治理类改动；已知 `./scripts/pm/lint.sh` 失败仍来自仓库历史 `.pm/tasks/*` 基线问题，不是本次角色新增引入的回归。
+- Blocker / Next Action: no blocking finding from this role; TPM may proceed while carrying the residual historical-lint debt.
+- Review Trigger: pre-PR local role review
+- Findings: no_findings
+- Residual Risk: 本次未解决仓库既有 `pm lint` 历史债务，因此后续若有人把 `pm lint` 升为该类治理任务的硬 gate，仍需要先清掉旧 task 基线问题；当前这不阻塞本分支的 PR readiness 结论。
+- acceptable_for_pr_update: yes
+
+## 2026-06-07 17:10:41 CST / tpm
+- 完成内容: 已整合 fresh local involved-role review 结果，并记录本分支所需的 passed pre-PR review packet。
+- 遗留事项: 需要把这条 evidence-only 更新提交到分支，然后重跑 `prepare-task-pr` 并创建 PR。
+- Action: merged `producer_system_designer`、`gameplay_designer` 和 `qa_engineer` 的 no-finding reviews into the formal sink and captured their residual risks.
+- Validation Command: `./scripts/pm/workflow-behavior-eval.sh && ./scripts/doc-governance-check.sh && git diff --check`
+- Expected Result: review packet anchored to source head `6f53863671f0adb0f878ef0f65775f22cf73ce38` is sufficient for `prepare-task-pr` once the evidence-only log update is committed.
+- Actual Result: verification remained green; no involved role returned a blocking finding.
+- Pre-PR Local Role Review: passed
+- Task UID: task_2fc91cd72ccc489f86f4e9fed23c3be9
+- Source Worktree: /home/scc/worktrees/oasis7-engineering-add-gameplay-designer-role
+- Source Branch: task/engineering-add-gameplay-designer-role
+- Source Head: 6f53863671f0adb0f878ef0f65775f22cf73ce38
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.agents/roles/game_visual_interaction_designer.md`; `.agents/roles/gameplay_designer.md`; `.agents/roles/producer_system_designer.md`; `.agents/roles/templates/handoff-brief.md`; `.agents/roles/templates/handoff-detailed.md`; `.agents/roles/templates/subagent-slice-card.md`; `.agents/roles/tpm.md`; `.agents/skills/bounded-brainstorming/SKILL.md`; `.agents/skills/finishing-a-development-branch/SKILL.md`; `.agents/skills/requesting-repo-owned-review/SKILL.md`; `.pm/README.md`; `.pm/registry/roles.yaml`; `.pm/roles/gameplay_designer/memory/active.yaml`; `.pm/roles/gameplay_designer/memory/superseded.yaml`; `.pm/templates/role-memory-policy.yaml`; `AGENTS.md`; `doc/engineering/workflow/source-of-truth.md`; `scripts/pm/pm_store.py`; `scripts/prepare-playability-l4-review.sh`
+- Role Selection Basis: changed paths cover role taxonomy, workflow routing, playability review defaults, PM role registry/memory containers, and PR review selection rules; this required one product/system boundary audit, one gameplay-role coverage audit, and one verification/gate sufficiency audit
+- Review Roles: producer_system_designer, gameplay_designer, qa_engineer
+- Review Evidence: `producer_system_designer` returned `no_findings` and confirmed the producer/gameplay/visual boundary split is consistent across active role/workflow surfaces; `gameplay_designer` returned `no_findings` and confirmed the new role is actually wired into dispatch/review/playability entrypoints rather than existing only as a standalone role card; `qa_engineer` returned `no_findings` and confirmed the fresh local verification evidence matches the governance-only diff while carrying forward the unrelated historical `pm lint` debt
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no code/doc changes were required after involved-role review; fresh green evidence remained `./scripts/pm/workflow-behavior-eval.sh`, `./scripts/doc-governance-check.sh`, and `git diff --check`
+- Residual Risk: future role expansion can still miss non-active or newly added role-selection surfaces unless source-of-truth-first sync is repeated; current branch also carries unrelated historical `pm lint` debt outside this task, but it does not change the correctness of this role-addition diff
+- Blocker / Next Action: commit this evidence-only execution-log update, rerun `./scripts/prepare-task-pr.sh`, then create the PR.
