@@ -241,6 +241,22 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByRole("button", { name: "Apply Prompt" })).toBeInTheDocument();
   }, 15000);
 
+  it("keeps mounted dom stable across requestRender", async () => {
+    const { core, container } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+    });
+
+    const searchInput = screen.getByRole("searchbox");
+    const selectedBadge = screen.getByText("Current Selection");
+
+    core.state.connectionStatus = "connected";
+    core.requestRender();
+
+    expect(screen.getByRole("searchbox")).toBe(searchInput);
+    expect(screen.getByText("Current Selection")).toBe(selectedBadge);
+    expect(container.querySelector("#viewer-stage-panel")).toBeTruthy();
+  });
+
   it("keeps diagnostics visually demoted behind the player path surface", async () => {
     const { container } = await renderViewerApp();
 
