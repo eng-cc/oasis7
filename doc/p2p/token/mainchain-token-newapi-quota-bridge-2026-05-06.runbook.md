@@ -37,6 +37,8 @@
   - `--letai-parent-channel-id`
 - 定价输入
   - 至少一条 `--pricing-rule <pricing_version:oc_amount:credit_units:bonus_units>`
+  - 当前示例真值只保留在 `scripts/newapi-bridge-service/pricing-rules.example.env`
+  - `newapi-bridge-service.env.example` 只保存该文件路径，不重复保存定价值
 - 运维输入
   - 监听地址 `--bind-addr`
   - 自动 reconcile 间隔 `--reconcile-interval-seconds`
@@ -57,6 +59,11 @@
 示例仅作为 operator 参考，实际值必须来自受控环境：
 
 ```bash
+pricing_rules="$(
+  sed -n 's/^OASIS7_NEWAPI_BRIDGE_PRICING_RULES=\"\(.*\)\"$/\1/p' \
+    scripts/newapi-bridge-service/pricing-rules.example.env
+)"
+
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
   --bind-addr 127.0.0.1:5852 \
   --state-path output/newapi-bridge/bridge-state.json \
@@ -64,15 +71,16 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
   --deposit-account-prefix oc:bridge: \
   --chain-base-url http://127.0.0.1:5010 \
   --chain-confirmations-required 1 \
-  --pricing-rule pv-1:100:10:5 \
   --letai-base-url https://api.letai.run \
   --letai-platform-key "$LETAI_PLATFORM_KEY" \
   --letai-parent-channel-id "$LETAI_PARENT_CHANNEL_ID" \
+  $(printf '%s' "$pricing_rules" | sed 's/,[[:space:]]*/\n/g' | sed '/^$/d; s/^/--pricing-rule /') \
   --reconcile-interval-seconds 15
 ```
 
 约束：
 - `LETAI_PLATFORM_KEY` 只能来自受控服务端环境变量或等价 secret store。
+- 示例 pricing rule 真值只在 `scripts/newapi-bridge-service/pricing-rules.example.env` 维护；`newapi-bridge-service.env.example` 只负责指向该文件；runbook 通过读取该文件展示启动命令。
 - 不要把真实 `platform key` / `parent channel id` 写进 repo、脚本默认值或 public CI log。
 - 若只做手工演练，可把 `--reconcile-interval-seconds` 设为 `0`，改用手工 `POST /v1/bridge/reconcile`。
 

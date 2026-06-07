@@ -90,6 +90,13 @@ Example:
 - Blocker / Next Action: content cleanup is ready for review within this task boundary; PM lint baseline needs a separate PM hygiene task if it must be green.
 
 ## 2026-06-06 22:50:00 CST / tpm
+- 完成内容: Recorded the pre-PR local role review trigger for the public-facing war-content cleanup branch, including scope, roles, evidence, and expected return contract.
+- 遗留事项: Actual review outputs still needed to be integrated into the log after this trigger entry.
+- Action: request repo-owned review from product, liveops, and QA perspectives before PR creation.
+- Validation Command: review-trigger packet only; evidence listed in the entry (`doc-governance-check`, `git diff --check`, and focused public-surface grep) was the review input.
+- Expected Result: involved review roles return findings/no_findings and residual risk on the current-facing copy cleanup.
+- Actual Result: the trigger packet was recorded with precise changed-path scope and available verification evidence.
+- Blocker / Next Action: wait for review results and integrate the final pre-PR review packet.
 - Review Trigger: pre-PR local role review
 - Review Scope: current diff in `/home/scc/worktrees/oasis7-game-remove-war-facing-content` against base `main`; changed paths include public site/deck/docs, `world-rule.md`, `doc/game/**`, and PM task truth for `task_f7b447ddbe6b4c26ba03bfe0c4ff775a`.
 - Review Roles: `producer_system_designer`, `liveops_community`, `qa_engineer`
@@ -99,6 +106,13 @@ Example:
 - Formal Sink: `.pm/tasks/task_f7b447ddbe6b4c26ba03bfe0c4ff775a.execution.md`
 
 ## 2026-06-06 22:58:00 CST / tpm
+- 完成内容: Recorded the first passed pre-PR local role review packet for the war-facing content cleanup branch.
+- 遗留事项: A later commit-specific review packet was still added afterward for the committed head, so this packet was not the final one.
+- Action: integrate role-review outcomes for the uncommitted-diff review snapshot.
+- Validation Command: repo-owned review based on the listed evidence set and changed public/doc surfaces.
+- Expected Result: capture findings disposition and residual risk for the reviewed diff before PR creation.
+- Actual Result: all three involved roles returned `no_findings`, and residual-risk boundaries were documented.
+- Blocker / Next Action: update the packet for the committed head and continue PR-readiness flow.
 - Pre-PR Local Role Review: passed
 - Task UID: `task_f7b447ddbe6b4c26ba03bfe0c4ff775a`
 - Source Worktree: `/home/scc/worktrees/oasis7-game-remove-war-facing-content`
@@ -114,6 +128,13 @@ Example:
 - Residual Risk: `site/social/**` and `site/story/**` remain outside this pass; historical/runtime `war/战争/DeclareWar/WarState/attack` docs remain intentionally for compatibility/provenance; full PM lint remains red on unrelated PM baseline issues.
 
 ## 2026-06-06 23:03:00 CST / tpm
+- 完成内容: Recorded the final passed pre-PR local role review packet for the committed head of the war-facing content cleanup branch.
+- 遗留事项: The broader repo PM-lint baseline was still red on unrelated historical tasks, but no task-local review finding remained.
+- Action: re-state the pre-PR review packet against the committed head so PR readiness is tied to the exact reviewed revision.
+- Validation Command: repo-owned review evidence remained `doc-governance-check`, `git diff --check`, and precise public-surface grep for current-facing war/combat/conflict terms.
+- Expected Result: execution log contains a commit-specific final pre-PR review packet for the exact branch head to be taken forward.
+- Actual Result: the committed head packet recorded `no_findings` from all roles and preserved the scoped residual-risk statement.
+- Blocker / Next Action: proceed with commit/PR flow while treating unrelated PM-lint baseline issues separately.
 - Pre-PR Local Role Review: passed
 - Task UID: task_f7b447ddbe6b4c26ba03bfe0c4ff775a
 - Source Worktree: /home/scc/worktrees/oasis7-game-remove-war-facing-content

@@ -29,6 +29,18 @@ MAX_CREDIT_ATTEMPTS="${OASIS7_NEWAPI_BRIDGE_MAX_CREDIT_ATTEMPTS:-3}"
 CHAIN_BASE_URL="${OASIS7_NEWAPI_BRIDGE_CHAIN_BASE_URL:-}"
 CHAIN_TIMEOUT_MS="${OASIS7_NEWAPI_BRIDGE_CHAIN_TIMEOUT_MS:-5000}"
 CHAIN_CONFIRMATIONS_REQUIRED="${OASIS7_NEWAPI_BRIDGE_CHAIN_CONFIRMATIONS_REQUIRED:-1}"
+PRICING_RULES_FILE="${OASIS7_NEWAPI_BRIDGE_PRICING_RULES_FILE:-$ROOT_DIR/scripts/newapi-bridge-service/pricing-rules.example.env}"
+PRICING_RULES="${OASIS7_NEWAPI_BRIDGE_PRICING_RULES:-}"
+
+if [[ -z "$PRICING_RULES" ]]; then
+  if [[ ! -f "$PRICING_RULES_FILE" ]]; then
+    echo "pricing rules file does not exist: $PRICING_RULES_FILE" >&2
+    exit 1
+  fi
+  PRICING_RULES="$(
+    sed -n 's/^OASIS7_NEWAPI_BRIDGE_PRICING_RULES="\([^"]*\)"$/\1/p' "$PRICING_RULES_FILE"
+  )"
+fi
 
 if [[ ! -x "$BRIDGE_BIN" ]]; then
   echo "bridge binary is not executable: $BRIDGE_BIN" >&2
@@ -59,6 +71,22 @@ fi
 
 if [[ -n "$CHAIN_BASE_URL" ]]; then
   cmd+=(--chain-base-url "$CHAIN_BASE_URL")
+fi
+
+IFS=',' read -r -a pricing_rule_array <<< "$PRICING_RULES"
+pricing_rule_count=0
+for pricing_rule in "${pricing_rule_array[@]}"; do
+  pricing_rule="${pricing_rule//[[:space:]]/}"
+  if [[ -z "$pricing_rule" ]]; then
+    continue
+  fi
+  cmd+=(--pricing-rule "$pricing_rule")
+  pricing_rule_count=$((pricing_rule_count + 1))
+done
+
+if [[ "$pricing_rule_count" -eq 0 ]]; then
+  echo "no usable pricing rules found in OASIS7_NEWAPI_BRIDGE_PRICING_RULES" >&2
+  exit 1
 fi
 
 exec "${cmd[@]}"

@@ -95,6 +95,7 @@
   - `quota_units`
   - `bonus_quota_units`
   - `status`
+  - 示例配置真值入口: `scripts/newapi-bridge-service/pricing-rules.example.env`
 
 ## 4. 状态机
 - `bridge_user_binding`

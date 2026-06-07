@@ -23,6 +23,7 @@
   - platform key 由 operator 提供；parent channel 可选，未配置时走 LetAI 平台默认渠道策略
   - 每个用户的 LetAI project 与 `token_key` 动态创建或复用，并持久化为 bridge 真值
   - bridge-service 必须独立部署
+  - 示例 pricing rule 真值只保留在 `scripts/newapi-bridge-service/pricing-rules.example.env`；其余示例/测试/运行脚本都引用该文件
   - 自动 topup 必须依赖唯一入账映射和 `bridge_ledger` 幂等对账
   - LetAI topup 成功不能只看 2xx，必须附带 query verification snapshot
   - 公开兑换所、自动提现、浏览器热钱包充值都不在当前 allowlist
