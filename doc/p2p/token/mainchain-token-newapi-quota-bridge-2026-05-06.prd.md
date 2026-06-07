@@ -46,7 +46,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 用户绑定 | `bridge_user_id`、`newapi_user_ref`、`oasis_sender_account_id`、`letai_external_user_id`、`platform_user_id`、`status` | 用户完成 bridge 绑定；reconcile 前会以 `external_user_id` upsert LetAI 平台用户 | `unbound -> active`，或 `active -> disabled` | `external_user_id` 默认必须稳定映射到一个 bridge user；后续查询只用 `platform_user_id` | 仅 bridge user 自己可发起；operator 可停用 |
 | 动态项目 | `letai_external_project_id`、`platform_project_id`、`project_name`、`token_key`、`token_status` | confirmed deposit 前后确保每个 bridge user 存在一个专属 LetAI project，并获取项目 `token_key` | `missing -> provisioning -> active`，或 `active -> stale/manual_review` | 一个项目对应一个 `token_key`；同一平台用户下多个项目必须各用各自 `token_key` | 仅 bridge-service 服务账号可创建/刷新 |
-| 入账路由 | `route_id`、`provider_id`、`deposit_account_id`、`pricing_version`、`topup_plan_id`、`expires_at`、optional `deposit_token` | bridge-service 分配唯一 deposit route，并从接入方收款账号池选择入账账号 | `draft -> issued -> settled/expired` | 自动 topup 前必须唯一映射 beneficiary 与 pricing context；默认依赖 route 真值，不要求每 route 一个新链地址；若后续链上转账支持 `message/memo`，可追加一次性 `deposit_token` 作为辅助归因 | 仅 bridge-service 生成；operator 可作废 |
+| 入账路由 | `route_id`、`provider_id`、`deposit_account_id`、`pricing_version`、`topup_plan_id`、`expires_at`、optional `deposit_token` | bridge-service 分配唯一 deposit route，并从接入方收款账号池选择入账账号 | `draft -> issued -> settled/expired` | 自动 topup 前必须唯一映射 beneficiary 与 pricing context；在没有可验证的链上归因 token 前，单个收款账号同一时刻只允许绑定一个活跃 route；若后续链上转账支持 `message/memo` 且 bridge 已能解析必填 `deposit_token`，才允许一个账号承载多个活跃 route | 仅 bridge-service 生成；operator 可作废 |
 | 链上充值检测 | `chain_tx_id`、`amount_oc`、`confirmations`、`required_confirmations`、`block_height` | watcher 轮询 explorer 并写入 `bridge_ledger` | `detected -> pending_confirmations -> confirmed/rejected` | 未达到确认窗口不得进入 LetAI OpenAPI 调用 | 只读链上 |
 | LetAI 用户 upsert | `external_user_id`、`external_user_name`、`email`、`metadata`、`platform_user_id` | 调用 `POST /api/platform/open/users/upsert` 创建或获取平台用户 | `pending_user -> user_ready/manual_review` | 用户创建按 `external_user_id` 幂等；一旦获得 `platform_user_id`，后续 query/topup 必须用内部 ID | 仅 bridge-service 服务账号可调用 |
 | LetAI 项目/Token | `external_project_id`、`platform_project_id`、`token_key` | 调用“创建或获取项目并返回 Token”接口，为用户 project 返回 `token_key` | `pending_project -> project_ready/manual_review` | 项目创建按 `external_project_id` 幂等；`token_key` 缺失视为失败 | 仅 bridge-service 服务账号可调用 |
@@ -63,6 +63,7 @@
   - AC-7: 对外文案必须继续明确这是 `limited preview operator-managed service-credit bridge`；“公开兑换所”“浏览器热钱包充值”“自动提现回 OC”仍在 denylist。
   - AC-8: 专题必须给出 LetAI OpenAPI-specific implementation 任务拆解、验证层级与 owner role，而不是停留在概念讨论。
   - AC-9: 收款账号策略必须明确区分三层边界：`provider-level receiving account pool`、`route-level beneficiary/pricing truth`、`optional transfer message/memo token`；不得把“账号池”误写成“无需 route 真值”。
+  - AC-10: 在 bridge 还不能从链上可靠解析唯一归因 token 前，收款账号池不得让多个活跃 route 共享同一个 `deposit_account_id`；若未来启用池化复用，必须把“唯一归因 token 已 mandatory 且 bridge 可验证解析”写成显式前置条件。
 - Non-Goals:
   - 不实现 `OC <- LetAI quota/token_key` 自动兑回。
   - 不实现链上 AMM、order book、公开做市或价格发现。
@@ -91,7 +92,8 @@
   - “查询用户消耗明细”接口
   - “查询项目 Token 汇总”接口
 - Edge Cases & Error Handling:
-  - 若多个 route 复用同一收款账号池成员，则必须继续依赖 `route_id`、有效期、金额档位、付款账号和 operator 审计字段共同归因；账号池本身不提供订单级唯一性。
+  - 在没有链上可验证归因 token 前，不允许多个活跃 route 复用同一收款账号池成员；否则 watcher 只按 `deposit_account_id` 扫描时会把同一笔链上转账错误归给多个 route。
+  - 若未来启用“同一收款账号承载多个活跃 route”，则必须先满足两条前置条件：链上转账支持 mandatory `message/memo` 或等价字段；bridge watcher/explorer 已把该 token 作为唯一归因输入参与解析和去重。
   - 若 bridge user 未先完成绑定，就直接向 deposit route 充值，系统必须进入 `manual_review`，不得猜测用户。
   - 若 `users/upsert` 未返回稳定 `platform_user_id`，后续 project/topup/query 必须阻断并进入 `manual_review`。
   - 若项目创建成功但未返回 `token_key`，必须标记为 `project_token_missing`，不得继续 topup。

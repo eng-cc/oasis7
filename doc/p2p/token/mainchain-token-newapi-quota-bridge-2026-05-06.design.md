@@ -149,7 +149,7 @@
   - 输入: `bridge_user_id`, `pricing_version` 或 `topup_plan_id`
   - 当前代码输出: `route_id`, `deposit_account_id`, `expires_at`
   - 目标态扩展输出: `route_id`, `provider_id`, `deposit_account_id`, optional `deposit_token`, `expires_at`
-  - 约束: 每个活跃 route 必须可唯一映射 beneficiary；目标态里 `deposit_account_id` 默认从 `bridge_user_binding.provider_id` 对应的接入方收款账号池选择，不要求 route 自己拥有独立链地址。
+  - 约束: 每个活跃 route 必须可唯一映射 beneficiary；目标态里 `deposit_account_id` 默认从 `bridge_user_binding.provider_id` 对应的接入方收款账号池选择，不要求 route 自己拥有独立链地址；但在 bridge 尚不能验证链上唯一归因 token 前，同一个 `deposit_account_id` 同一时刻只允许分配给一个活跃 route。
 - `POST /v1/bridge/reconcile`
   - 输入: 空 body；由 operator 或后台 interval 触发一次 `scan routes -> observe deposits -> ensure user/project/token -> topup -> verify`
   - 输出: `latest_committed_height`、`observed_new_deposit_count`、`reconciled_credit_count`、`manual_review_count`
@@ -171,19 +171,21 @@
 
 ## 6. 编排顺序
 1. 当前代码只生成 route 并返回 `deposit_account_id`；目标态扩展为 route allocator 按 `bridge_user_binding.provider_id` 选择一个 active 收款账号池成员，并可选签发一次性 `deposit_token`。
-2. watcher 观察 route 对应链上 confirmed deposit。
-3. pricing engine 把 `OC` 金额折算成 LetAI `quota`。
-4. `users/upsert` 确保 `platform_user_id` 存在，并回写 binding。
-5. `ensure project + token_key` 确保 bridge user 绑定独立 project，回写 `platform_project_id/token_key`。
-6. 调用 topup，使用稳定 `external_order_id`。
-7. 调用用户概览 / 日志 / 项目汇总做验证。
-8. 回写 ledger snapshots，标记 `reconciled` 或 `manual_review`。
+2. 在没有 mandatory `deposit_token` 解析能力前，allocator 只允许“一账号一个活跃 route”；只有当链上 token 已 mandatory 且 watcher/explorer 能用它做唯一归因时，才允许同一账号承载多个活跃 route。
+3. watcher 观察 route 对应链上 confirmed deposit。
+4. pricing engine 把 `OC` 金额折算成 LetAI `quota`。
+5. `users/upsert` 确保 `platform_user_id` 存在，并回写 binding。
+6. `ensure project + token_key` 确保 bridge user 绑定独立 project，回写 `platform_project_id/token_key`。
+7. 调用 topup，使用稳定 `external_order_id`。
+8. 调用用户概览 / 日志 / 项目汇总做验证。
+9. 回写 ledger snapshots，标记 `reconciled` 或 `manual_review`。
 
 ## 7. 收款策略
 - 当前推荐:
   - 每个 newapi 接入方维护一组受控 OC 收款账号。
   - 初始规模可用小池化，例如 5 个账号。
   - 每次充值仍然生成独立 route，route 只是在账号池里选择一个当前可用账号，而不是现生成新地址。
+  - 在没有 mandatory `deposit_token` 前，账号池成员不得同时服务多个活跃 route；小池化的含义是“一个接入方有多个候选账号可轮转”，不是“一个账号同时混多笔活跃订单”。
   - `provider_id` 必须在 bind 阶段就固定到 `bridge_user_binding`，避免 route 分配时临时猜测“属于哪个接入方”。
 - 归因顺序:
   1. `route_id` / `provider_id`
@@ -203,6 +205,7 @@
   - 若未来链上转账支持 `message/memo`，默认只放短 `deposit_token`。
   - `deposit_token` 只做辅助归因，不替代 bridge state / ledger。
   - 不建议把完整加密对账信息直接塞进链上消息体。
+  - 只有当 `deposit_token` 变成 mandatory 且 watcher/explorer 已把它纳入唯一归因和去重输入后，才允许同一个收款账号同时承载多个活跃 route。
 
 ## 8. 推荐实现顺序
 1. 先扩展 `model.rs` / `store.rs`，补齐 `provider_id`、收款账号池、LetAI user/project/token/topup/query 字段。
