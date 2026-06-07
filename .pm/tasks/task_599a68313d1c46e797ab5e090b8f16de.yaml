@@ -1,0 +1,25 @@
+task_uid: task_599a68313d1c46e797ab5e090b8f16de
+title: "document bridge receiving account strategy"
+owner_role: tpm
+worktree_hint: /home/scc/worktrees/oasis7-p2p-bridge-receiving-accounts-docs
+execution_log_path: .pm/tasks/task_599a68313d1c46e797ab5e090b8f16de.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md
+  - crates/oasis7/src/bin/oasis7_newapi_bridge_service/service.rs
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-07T19:27:42+08:00
+last_started_at: 2026-06-07T18:34:02+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/doc-governance-check.sh
+last_verified_at: 2026-06-07T19:27:41+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-07T19:27:42+08:00

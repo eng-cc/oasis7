@@ -14,6 +14,7 @@
   - SC-3: 模型调用语义必须冻结为“项目 `token_key` 用于实际调用模型接口，平台 Key 只用于开放管理接口”，不得混用。
   - SC-4: 同一平台用户下可存在多个项目；bridge 默认必须为每个 bridge user 动态创建或复用一个独立 project，并把该 project 的 `token_key` 持久化为唯一真值。
   - SC-5: 对外 claim 必须继续明确为 `limited preview operator-managed service-credit bridge`；不支持 `OC <- quota/token_key` 兑回，不承诺公开兑换所、AMM、浏览器热钱包充值或自动提现。
+  - SC-6: 收款策略必须冻结为“每个 newapi 接入方维护一组受控 OC 收款账号，route 负责把单次充值映射到该账号池内的某个可用账号”；当前默认推荐小池化（例如 5 个账号）而不是全平台单账号或每单现生地址。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -34,7 +35,7 @@
   - PRD-P2P-TBRIDGE-003: As a LetAI Run operator, I want the bridge to call official OpenAPI endpoints for user/project/token/topup/query, so that repo truth matches actual product semantics instead of a generic adapter placeholder.
   - PRD-P2P-TBRIDGE-004: As a `qa_engineer`, I want stable anomaly states and verification snapshots, so that user/project create drift、topup retry、query mismatch 和 `token_key` 缺失都不会静默变成错误额度。
 - Critical User Flows:
-  1. Flow-TBRIDGE-001: `用户先绑定 bridge user -> operator 已提供 parent channel / platform key -> bridge-service 分配唯一 deposit route -> 用户向 route 转入 OC`
+  1. Flow-TBRIDGE-001: `用户先绑定 bridge user -> operator 已提供 parent channel / platform key 与接入方收款账号池 -> bridge-service 分配唯一 deposit route -> route 选择池内一个可用收款账号 -> 用户向该账号转入 OC`
   2. Flow-TBRIDGE-002: `chain watcher 观察到 confirmed deposit -> bridge_ledger 命中定价表 -> bridge-service 通过 POST /api/platform/open/users/upsert 确保平台用户存在`
   3. Flow-TBRIDGE-003: `bridge-service 根据 bridge user 动态创建或复用用户专属 project -> 获取该 project 的 token_key -> 持久化 platform_project_id/token_key`
   4. Flow-TBRIDGE-004: `bridge-service 调用 POST /api/platform/open/users/:platform_user_id/topups，写入 external_order_id/quota/amount/currency -> 使用额度概览和日志接口做验证 -> ledger 转为 reconciled`
@@ -45,7 +46,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 用户绑定 | `bridge_user_id`、`newapi_user_ref`、`oasis_sender_account_id`、`letai_external_user_id`、`platform_user_id`、`status` | 用户完成 bridge 绑定；reconcile 前会以 `external_user_id` upsert LetAI 平台用户 | `unbound -> active`，或 `active -> disabled` | `external_user_id` 默认必须稳定映射到一个 bridge user；后续查询只用 `platform_user_id` | 仅 bridge user 自己可发起；operator 可停用 |
 | 动态项目 | `letai_external_project_id`、`platform_project_id`、`project_name`、`token_key`、`token_status` | confirmed deposit 前后确保每个 bridge user 存在一个专属 LetAI project，并获取项目 `token_key` | `missing -> provisioning -> active`，或 `active -> stale/manual_review` | 一个项目对应一个 `token_key`；同一平台用户下多个项目必须各用各自 `token_key` | 仅 bridge-service 服务账号可创建/刷新 |
-| 入账路由 | `route_id`、`deposit_account_id`、`pricing_version`、`topup_plan_id`、`expires_at` | bridge-service 分配唯一 deposit route | `draft -> issued -> settled/expired` | 自动 topup 前必须唯一映射 beneficiary 与 pricing context | 仅 bridge-service 生成；operator 可作废 |
+| 入账路由 | `route_id`、`provider_id`、`deposit_account_id`、`pricing_version`、`topup_plan_id`、`expires_at`、optional `deposit_token` | bridge-service 分配唯一 deposit route，并从接入方收款账号池选择入账账号 | `draft -> issued -> settled/expired` | 自动 topup 前必须唯一映射 beneficiary 与 pricing context；默认依赖 route 真值，不要求每 route 一个新链地址；若后续链上转账支持 `message/memo`，可追加一次性 `deposit_token` 作为辅助归因 | 仅 bridge-service 生成；operator 可作废 |
 | 链上充值检测 | `chain_tx_id`、`amount_oc`、`confirmations`、`required_confirmations`、`block_height` | watcher 轮询 explorer 并写入 `bridge_ledger` | `detected -> pending_confirmations -> confirmed/rejected` | 未达到确认窗口不得进入 LetAI OpenAPI 调用 | 只读链上 |
 | LetAI 用户 upsert | `external_user_id`、`external_user_name`、`email`、`metadata`、`platform_user_id` | 调用 `POST /api/platform/open/users/upsert` 创建或获取平台用户 | `pending_user -> user_ready/manual_review` | 用户创建按 `external_user_id` 幂等；一旦获得 `platform_user_id`，后续 query/topup 必须用内部 ID | 仅 bridge-service 服务账号可调用 |
 | LetAI 项目/Token | `external_project_id`、`platform_project_id`、`token_key` | 调用“创建或获取项目并返回 Token”接口，为用户 project 返回 `token_key` | `pending_project -> project_ready/manual_review` | 项目创建按 `external_project_id` 幂等；`token_key` 缺失视为失败 | 仅 bridge-service 服务账号可调用 |
@@ -61,6 +62,7 @@
   - AC-6: topup 成功判定必须至少包含一次验证查询回写；不得把单次 HTTP `2xx` 直接当成 reconciled。
   - AC-7: 对外文案必须继续明确这是 `limited preview operator-managed service-credit bridge`；“公开兑换所”“浏览器热钱包充值”“自动提现回 OC”仍在 denylist。
   - AC-8: 专题必须给出 LetAI OpenAPI-specific implementation 任务拆解、验证层级与 owner role，而不是停留在概念讨论。
+  - AC-9: 收款账号策略必须明确区分三层边界：`provider-level receiving account pool`、`route-level beneficiary/pricing truth`、`optional transfer message/memo token`；不得把“账号池”误写成“无需 route 真值”。
 - Non-Goals:
   - 不实现 `OC <- LetAI quota/token_key` 自动兑回。
   - 不实现链上 AMM、order book、公开做市或价格发现。
@@ -89,6 +91,7 @@
   - “查询用户消耗明细”接口
   - “查询项目 Token 汇总”接口
 - Edge Cases & Error Handling:
+  - 若多个 route 复用同一收款账号池成员，则必须继续依赖 `route_id`、有效期、金额档位、付款账号和 operator 审计字段共同归因；账号池本身不提供订单级唯一性。
   - 若 bridge user 未先完成绑定，就直接向 deposit route 充值，系统必须进入 `manual_review`，不得猜测用户。
   - 若 `users/upsert` 未返回稳定 `platform_user_id`，后续 project/topup/query 必须阻断并进入 `manual_review`。
   - 若项目创建成功但未返回 `token_key`，必须标记为 `project_token_missing`，不得继续 topup。
@@ -105,6 +108,8 @@
   - NFR-TBRIDGE-5: bridge-service 的 platform key / parent channel credential 只允许留在受控服务端环境，不得进入 HTML/bootstrap/public JS。
   - NFR-TBRIDGE-6: `quota` 单位必须按 LetAI 文档真值保存；若对外要显示 USD，仅允许以 `quota / 500000` 作为审计换算展示，不能回写为业务真值。
   - NFR-TBRIDGE-7: implementation 前后都不得在 repo 内写死平台外部账号或渠道私密配置；parent channel 只通过 operator CLI/config 注入。
+  - NFR-TBRIDGE-8: 收款账号池必须由 operator 控制真实公私钥或等价 custody 权限；`deposit_account_id` 不能长期只停留在逻辑命名而没有真实收款控制面。
+  - NFR-TBRIDGE-9: 若后续引入链上 `message/memo`，bridge 默认只接受短 `deposit_token/route token`，不把完整加密业务载荷直接作为链上对账真值。
 - Security & Privacy: bridge-service 持有 LetAI 平台级 Key、链侧 watcher 配置和本地审计状态，必须与 runtime、公网页面和浏览器完全隔离。`token_key` 属于用户项目凭证，虽然 bridge 需要持久化它，但不得经 public API 明文向未授权调用方广播。
 
 ## 5. Risks & Roadmap
@@ -135,3 +140,5 @@
 | DEC-TBRIDGE-003 | parent channel 由 operator 提供，每个 bridge user 动态创建/复用独立 project | 一个父级渠道下所有用户共享同一个项目/`token_key` | 文档已明确“一项目一 token_key”，同用户多项目也要各自独立；共享项目会破坏用户隔离和审计。 |
 | DEC-TBRIDGE-004 | topup 成功必须附带 query verification snapshot | 仅按 topup 接口 2xx 判定成功 | 充值幂等和异步一致性要求决定了 2xx 不能代表最终额度已生效。 |
 | DEC-TBRIDGE-005 | 继续冻结 one-way service-credit bridge + denylist claim | 对外包装成“用户买到模型 token，可自由兑回” | 当前能力只覆盖受控服务额度充值，不是公开交易所产品。 |
+| DEC-TBRIDGE-006 | 收款面默认采用“每个 newapi 接入方一组受控 OC 收款账号 + 每次充值保留独立 route 真值” | 全平台单账号，或每笔充值现生成新地址 | 接入方级账号池能先提供资金控制与轮换边界，同时避免把订单级唯一性完全压到链地址生成上。 |
+| DEC-TBRIDGE-007 | 若链上转账后续支持 `message/memo`，默认只承载短 `deposit_token` 作为辅助归因 | 直接把整包加密对账信息塞进 `message` | 短 token 更稳，更适合长度、兼容和重放控制；完整业务真值仍应保留在 bridge state / ledger。 |
