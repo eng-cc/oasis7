@@ -111,8 +111,8 @@ Example:
 - Task UID: task_f9bb47b4d9924f1cb66acc779e0acbad
 - Source Worktree: /home/scc/worktrees/oasis7-viewer-physical-unit-right-panel-audit
 - Source Branch: task/viewer-physical-unit-right-panel-audit
-- Source Head: 8f5c28039
-- Comparison Ref: main
+- Source Head: e441302ed7a3938aae3407c0db05bd8051592321
+- Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_f9bb47b4d9924f1cb66acc779e0acbad.execution.md; .pm/tasks/task_f9bb47b4d9924f1cb66acc779e0acbad.yaml; crates/oasis7_viewer/software_safe_src/main.jsx; crates/oasis7_viewer/viewer.js
 - Role Selection Basis: changed paths touch visible viewer UI, generated viewer bundle, and PR-readiness verification claim; include `game_visual_interaction_designer` for visible hierarchy, `viewer_engineer` for implementation consistency, `qa_engineer` for verification sufficiency; skip `gameplay_designer` and `liveops_community` because no gameplay rule or external messaging surface changed
 - Review Roles: viewer_engineer, game_visual_interaction_designer, qa_engineer
