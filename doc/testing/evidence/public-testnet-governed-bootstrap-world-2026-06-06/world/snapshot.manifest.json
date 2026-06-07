@@ -1,0 +1,12 @@
+{
+  "world_id": "world",
+  "epoch": 0,
+  "chunks": [
+    {
+      "chunk_id": "0-0000",
+      "content_hash": "0325591d41fd5359acfc941e9744a44738db776dad5b0b9dcfbcb4d85fa4aac8",
+      "size_bytes": 7573
+    }
+  ],
+  "state_root": "0325591d41fd5359acfc941e9744a44738db776dad5b0b9dcfbcb4d85fa4aac8"
+}

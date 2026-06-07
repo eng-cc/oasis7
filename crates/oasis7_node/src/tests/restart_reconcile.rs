@@ -99,3 +99,125 @@ fn runtime_restart_reconciles_stale_pos_state_from_persisted_replication_height(
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn observer_restart_replays_persisted_commits_when_execution_head_lags_committed_height() {
+    let dir_remote = temp_dir("observer-restart-replay-remote");
+    let dir_local = temp_dir("observer-restart-replay-local");
+    let world_id = "world-observer-restart-replay";
+    let (_, public_key_a) = deterministic_keypair_hex(210);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 210)],
+    );
+    let remote_config = signed_replication_config(dir_remote.clone(), 210);
+    let local_config = signed_replication_config(dir_local.clone(), 211)
+        .with_remote_writer_allowlist(vec![public_key_a])
+        .expect("local remote writer allowlist");
+    let mut remote_replication =
+        super::super::replication::ReplicationRuntime::new(&remote_config, "node-a")
+            .expect("remote replication runtime");
+    let mut local_replication =
+        super::super::replication::ReplicationRuntime::new(&local_config, "node-b")
+            .expect("local replication runtime");
+
+    for height in 1..=3_u64 {
+        let decision = PosDecision {
+            height,
+            slot: height,
+            epoch: 0,
+            status: PosConsensusStatus::Committed,
+            block_hash: format!("block-{height}"),
+            action_root: empty_action_root(),
+            committed_actions: Vec::new(),
+            approved_stake: 100,
+            rejected_stake: 0,
+            required_stake: 67,
+            total_stake: 100,
+        };
+        let execution_block_hash = format!("exec-block-{height:020}");
+        let execution_state_root = format!("exec-state-{height:020}");
+        let message = remote_replication
+            .build_local_commit_message(
+                "node-a",
+                world_id,
+                1_000 + i64::try_from(height).expect("height fits i64"),
+                &decision,
+                Some(execution_block_hash.as_str()),
+                Some(execution_state_root.as_str()),
+            )
+            .expect("build remote commit")
+            .expect("remote message");
+        local_replication
+            .apply_remote_message("node-b", world_id, &message)
+            .expect("apply remote commit");
+    }
+    assert_eq!(
+        local_replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted height"),
+        3
+    );
+
+    let stale_state = super::super::pos_state_store::PosNodeStateSnapshot {
+        next_height: 4,
+        next_slot: 3,
+        last_observed_slot: 3,
+        missed_slot_count: 0,
+        last_observed_tick: 30,
+        missed_tick_count: 0,
+        committed_height: 3,
+        network_committed_height: 3,
+        last_broadcast_proposal_height: 0,
+        last_broadcast_local_attestation_height: 0,
+        last_broadcast_committed_height: 3,
+        last_committed_block_hash: Some("block-3".to_string()),
+        last_execution_height: 0,
+        last_execution_block_hash: None,
+        last_execution_state_root: None,
+    };
+    fs::write(
+        dir_local.join("node_pos_state.json"),
+        serde_json::to_vec_pretty(&stale_state).expect("serialize stale observer state"),
+    )
+    .expect("write stale observer state");
+
+    let execution_calls: Arc<Mutex<Vec<NodeExecutionCommitContext>>> =
+        Arc::new(Mutex::new(Vec::new()));
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("observer config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("observer tick")
+        .with_pos_config(pos_config)
+        .expect("observer pos config")
+        .with_replication(local_config);
+    let mut runtime = NodeRuntime::new(config)
+        .with_execution_hook(RecordingExecutionHook::new(Arc::clone(&execution_calls)));
+    runtime.start().expect("start observer");
+    let reconciled = wait_until(Instant::now() + Duration::from_secs(1), || {
+        runtime.snapshot().consensus.last_execution_height >= 3
+    });
+    runtime.stop().expect("stop observer");
+    let snapshot = runtime.snapshot();
+    assert!(snapshot.last_error.is_none(), "{:?}", snapshot.last_error);
+    assert!(
+        reconciled,
+        "observer did not replay persisted execution commits: committed_height={} last_execution_height={} last_error={:?}",
+        snapshot.consensus.committed_height,
+        snapshot.consensus.last_execution_height,
+        snapshot.last_error
+    );
+    assert_eq!(snapshot.consensus.committed_height, 3);
+    assert_eq!(snapshot.consensus.last_execution_height, 3);
+    let calls = execution_calls
+        .lock()
+        .expect("lock execution calls after observer replay");
+    let heights = calls.iter().map(|context| context.height).collect::<Vec<_>>();
+    assert_eq!(heights, vec![1, 2, 3]);
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}

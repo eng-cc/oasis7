@@ -116,6 +116,18 @@ use traffic_status::build_chain_traffic_status;
 #[cfg(test)]
 use traffic_status::ChainTrafficStatus;
 use wasm_status::build_chain_wasm_status;
+
+fn node_role_requires_execution_commit(role: NodeRole) -> bool {
+    matches!(role, NodeRole::Sequencer)
+}
+
+fn node_role_materializes_execution_state(role: NodeRole) -> bool {
+    matches!(
+        role,
+        NodeRole::Sequencer | NodeRole::Storage | NodeRole::Observer
+    )
+}
+
 #[cfg(test)]
 mod execution_bridge {
     use std::path::Path;
@@ -282,7 +294,8 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     config = config
         .with_auto_attest_all_validators(options.node_auto_attest_all_validators)
         .with_allow_local_proposals(matches!(options.node_role, NodeRole::Sequencer));
-    let require_execution = matches!(options.node_role, NodeRole::Sequencer);
+    let require_execution = node_role_requires_execution_commit(options.node_role);
+    let materialize_execution = node_role_materializes_execution_state(options.node_role);
     config = config
         .with_require_execution_on_commit(require_execution)
         .with_require_peer_execution_hashes(require_execution);
@@ -314,6 +327,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     );
     config = config.with_replication(build_node_replication_config(
         options.node_id.as_str(),
+        paths.replication_root.as_path(),
         &keypair,
         &storage_profile_config,
         replication_remote_writer_allowlist.as_slice(),
@@ -335,7 +349,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     }
 
     let mut runtime = NodeRuntime::new(config);
-    if require_execution {
+    if materialize_execution {
         let execution_driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
             paths.execution_bridge_state_path.clone(),
             paths.execution_world_dir.clone(),
@@ -502,9 +516,11 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
 }
 
 fn resolve_runtime_paths(options: &CliOptions) -> RuntimePaths {
-    let root = Path::new("output")
-        .join("chain-runtime")
-        .join(options.node_id.as_str());
+    let root = options.runtime_root.clone().unwrap_or_else(|| {
+        Path::new("output")
+            .join("chain-runtime")
+            .join(options.node_id.as_str())
+    });
     RuntimePaths {
         runtime_root: root.clone(),
         execution_bridge_state_path: options
@@ -523,9 +539,11 @@ fn resolve_runtime_paths(options: &CliOptions) -> RuntimePaths {
             .storage_root
             .clone()
             .unwrap_or_else(|| root.join("store")),
-        replication_root: Path::new("output")
-            .join("node-distfs")
-            .join(options.node_id.as_str()),
+        replication_root: options.replication_root.clone().unwrap_or_else(|| {
+            Path::new("output")
+                .join("node-distfs")
+                .join(options.node_id.as_str())
+        }),
         reward_runtime_state_path: root.join(DEFAULT_REWARD_RUNTIME_STATE_FILE),
         reward_runtime_distfs_probe_state_path: root
             .join(DEFAULT_REWARD_RUNTIME_DISTFS_PROBE_STATE_FILE),
@@ -567,14 +585,14 @@ pub(crate) fn release_security_policy_for_storage_profile(
 
 fn build_node_replication_config(
     node_id: &str,
+    replication_root: &Path,
     keypair: &node_keypair_config::NodeKeypairConfig,
     storage_profile: &StorageProfileConfig,
     remote_writer_allowlist: &[String],
     fetch_requester_allowlist: &[String],
 ) -> Result<NodeReplicationConfig, String> {
     let signer_keypair = derive_node_consensus_signer_keypair(node_id, keypair)?;
-    let replication_root = Path::new("output").join("node-distfs").join(node_id);
-    NodeReplicationConfig::new(replication_root)
+    NodeReplicationConfig::new(replication_root.to_path_buf())
         .and_then(|cfg| {
             cfg.with_max_hot_commit_messages(storage_profile.replication_max_hot_commit_messages)
         })

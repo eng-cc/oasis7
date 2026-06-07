@@ -59,6 +59,8 @@ fn parse_options_defaults() {
     assert!(options.replication_network_listen_addrs.is_empty());
     assert!(options.replication_network_bootstrap_peers.is_empty());
     assert!(options.replication_remote_writer_public_keys.is_empty());
+    assert!(options.runtime_root.is_none());
+    assert!(options.replication_root.is_none());
     assert_eq!(options.p2p_max_ipv4_subnet_active_peers, None);
 }
 
@@ -100,6 +102,10 @@ fn parse_options_reads_custom_values() {
             "3",
             "--execution-world-dir",
             "custom/world",
+            "--runtime-root",
+            "custom/runtime",
+            "--replication-root",
+            "custom/replication",
             "--reward-runtime-epoch-duration-secs",
             "60",
             "--reward-points-per-credit",
@@ -144,6 +150,20 @@ fn parse_options_reads_custom_values() {
             .as_ref()
             .map(|p| p.to_string_lossy().to_string()),
         Some("custom/world".to_string())
+    );
+    assert_eq!(
+        options
+            .runtime_root
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string()),
+        Some("custom/runtime".to_string())
+    );
+    assert_eq!(
+        options
+            .replication_root
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string()),
+        Some("custom/replication".to_string())
     );
 }
 
@@ -195,6 +215,20 @@ fn parse_validator_signer_public_key_spec_rejects_missing_public_key() {
     let err = parse_validator_signer_public_key_spec("node-a:")
         .expect_err("missing signer public key must fail");
     assert!(err.contains("public_key_hex cannot be empty"));
+}
+
+#[test]
+fn sequencer_requires_execution_commit_but_all_runtime_roles_materialize_execution_state() {
+    assert!(super::node_role_requires_execution_commit(NodeRole::Sequencer));
+    assert!(!super::node_role_requires_execution_commit(NodeRole::Observer));
+    assert!(!super::node_role_requires_execution_commit(NodeRole::Storage));
+
+    for role in [NodeRole::Sequencer, NodeRole::Observer, NodeRole::Storage] {
+        assert!(
+            super::node_role_materializes_execution_state(role),
+            "expected {role:?} to materialize execution state"
+        );
+    }
 }
 
 #[test]
@@ -326,6 +360,44 @@ fn default_runtime_paths_depend_on_node_id() {
         .execution_world_dir
         .to_string_lossy()
         .contains("output/chain-runtime/node-z"));
+    assert!(paths
+        .runtime_root
+        .to_string_lossy()
+        .contains("output/chain-runtime/node-z"));
+    assert!(paths
+        .replication_root
+        .to_string_lossy()
+        .contains("output/node-distfs/node-z"));
+}
+
+#[test]
+fn custom_runtime_root_overrides_default_runtime_paths() {
+    let options = CliOptions {
+        node_id: "node-z".to_string(),
+        runtime_root: Some("custom/runtime".into()),
+        ..CliOptions::default()
+    };
+    let paths = super::resolve_runtime_paths(&options);
+    assert_eq!(paths.runtime_root, Path::new("custom/runtime"));
+    assert_eq!(
+        paths.reward_runtime_report_dir,
+        Path::new("custom/runtime").join("reward-runtime-report")
+    );
+    assert_eq!(
+        paths.reward_runtime_state_path,
+        Path::new("custom/runtime").join("reward-runtime-state.json")
+    );
+}
+
+#[test]
+fn custom_replication_root_overrides_default_runtime_path() {
+    let options = CliOptions {
+        node_id: "node-z".to_string(),
+        replication_root: Some("custom/replication".into()),
+        ..CliOptions::default()
+    };
+    let paths = super::resolve_runtime_paths(&options);
+    assert_eq!(paths.replication_root, Path::new("custom/replication"));
 }
 
 #[test]
@@ -745,13 +817,21 @@ fn build_node_replication_config_uses_storage_profile_budget() {
         public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
     };
     let storage_profile = StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault);
-    let config = build_node_replication_config("node-a", &keypair, &storage_profile, &[], &[])
-        .expect("replication config should build");
+    let config = build_node_replication_config(
+        "node-a",
+        Path::new("custom/replication"),
+        &keypair,
+        &storage_profile,
+        &[],
+        &[],
+    )
+    .expect("replication config should build");
 
     assert_eq!(
         config.max_hot_commit_messages(),
         storage_profile.replication_max_hot_commit_messages
     );
+    assert_eq!(config.root_dir, Path::new("custom/replication"));
 }
 
 #[test]

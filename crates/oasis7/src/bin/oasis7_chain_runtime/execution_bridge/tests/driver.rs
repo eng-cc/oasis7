@@ -48,6 +48,15 @@ fn load_execution_world_defaults_to_hardened_release_policy() {
         missing_world.main_token_config().initial_supply,
         FROZEN_MAIN_TOKEN_INITIAL_SUPPLY
     );
+    assert!(
+        missing_world.state().agents.is_empty(),
+        "chain runtime empty world bootstrap should not inject viewer/demo agents"
+    );
+    assert_eq!(
+        missing_world.journal().len(),
+        0,
+        "chain runtime empty world bootstrap should stay pristine"
+    );
 
     let legacy_world_dir = dir.join("legacy");
     let legacy_world = RuntimeWorld::new();
@@ -76,6 +85,8 @@ fn load_execution_world_with_dev_local_policy_keeps_generic_supply_for_missing_w
         &ReleaseSecurityPolicy::default()
     );
     assert_eq!(missing_world.main_token_config().initial_supply, 0);
+    assert!(missing_world.state().agents.is_empty());
+    assert_eq!(missing_world.journal().len(), 0);
 
     let _ = fs::remove_dir_all(dir);
 }

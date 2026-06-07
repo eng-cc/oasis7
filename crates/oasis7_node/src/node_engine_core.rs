@@ -1011,6 +1011,22 @@ impl PosNodeEngine {
         }
     }
 
+    pub(super) fn remember_execution_binding(
+        &mut self,
+        height: u64,
+        execution_block_hash: String,
+        execution_state_root: String,
+    ) {
+        self.execution_bindings
+            .insert(height, (execution_block_hash, execution_state_root));
+        while self.execution_bindings.len() > EXECUTION_BINDING_HISTORY_LIMIT {
+            let Some(first_height) = self.execution_bindings.keys().next().copied() else {
+                break;
+            };
+            self.execution_bindings.remove(&first_height);
+        }
+    }
+
     pub(super) fn validate_peer_commit_execution_binding(
         &self,
         height: u64,

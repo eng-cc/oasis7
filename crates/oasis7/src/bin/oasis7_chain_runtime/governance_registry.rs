@@ -14,6 +14,7 @@ use serde::Deserialize;
 
 const DEFAULT_FINALITY_SLOT_ID: &str = "governance.finality.v1";
 const GOVERNANCE_REGISTRY_DEFAULT_VALIDATOR_STAKE: u64 = 100;
+const DEFAULT_CONTROLLER_THRESHOLD: u16 = 2;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -30,6 +31,19 @@ struct GenesisValidatorRegistryDocument {
     #[serde(default)]
     threshold_bps: u16,
     validators: Vec<GenesisValidatorRegistryEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GovernanceBootstrapGenesisDocument {
+    #[serde(default)]
+    governance_bootstrap_refs: Option<GovernanceBootstrapRefs>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GovernanceBootstrapRefs {
+    governance_public_manifest_ref: String,
+    #[serde(default)]
+    genesis_validator_registry_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -52,6 +66,19 @@ struct GenesisValidatorRegistryEntry {
     threshold: Option<u16>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GovernancePublicManifest {
+    Bundle(GovernancePublicManifestBundle),
+    Entries(Vec<GenesisValidatorRegistryEntry>),
+}
+
+#[derive(Debug, Deserialize)]
+struct GovernancePublicManifestBundle {
+    #[serde(default)]
+    entries: Vec<GenesisValidatorRegistryEntry>,
+}
+
 fn default_finality_slot_id() -> String {
     DEFAULT_FINALITY_SLOT_ID.to_string()
 }
@@ -69,6 +96,13 @@ pub(super) fn ensure_world_governance_validator_registry(
     genesis_validator_registry_path: Option<&Path>,
     loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
 ) -> Result<(), String> {
+    if import_network_tier_governance_bootstrap(
+        execution_world_dir,
+        genesis_validator_registry_path,
+        loaded_network_tier_manifest,
+    )? {
+        return Ok(());
+    }
     if world_has_effective_finality_registry(execution_world_dir)? {
         return Ok(());
     }
@@ -83,6 +117,95 @@ pub(super) fn ensure_world_governance_validator_registry(
         ));
     }
     Ok(())
+}
+
+fn import_network_tier_governance_bootstrap(
+    execution_world_dir: &Path,
+    explicit_genesis_validator_registry_path: Option<&Path>,
+    loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
+) -> Result<bool, String> {
+    let Some(loaded) = loaded_network_tier_manifest else {
+        return Ok(false);
+    };
+    let manifest_path = Path::new(loaded.source_path.as_str());
+    let genesis_path = resolve_network_tier_runtime_ref_path(
+        manifest_path,
+        loaded.manifest.runtime_refs.genesis_ref.as_str(),
+    );
+    if !genesis_path.is_file() {
+        return Ok(false);
+    }
+    let genesis_bytes = std::fs::read(genesis_path.as_path()).map_err(|err| {
+        format!(
+            "read network tier genesis_ref {} failed: {err}",
+            genesis_path.display()
+        )
+    })?;
+    let genesis: GovernanceBootstrapGenesisDocument =
+        serde_json::from_slice(genesis_bytes.as_slice()).map_err(|err| {
+            format!(
+                "parse network tier genesis_ref {} failed: {err}",
+                genesis_path.display()
+            )
+        })?;
+    let Some(bootstrap_refs) = genesis.governance_bootstrap_refs else {
+        return Ok(false);
+    };
+
+    let mut world = super::execution_bridge::load_execution_world(execution_world_dir)?;
+    let needs_finality = world
+        .resolve_governance_effective_finality_signer_registry()
+        .map_err(|err| {
+            format!("failed to resolve world governance effective finality registry: {err:?}")
+        })?
+        .is_none();
+    let needs_controller = world.governance_main_token_controller_registry().is_none();
+    if !needs_finality && !needs_controller {
+        return Ok(true);
+    }
+    if !world_is_bootstrap_only(&world) {
+        return Ok(false);
+    }
+
+    if needs_finality {
+        let genesis_registry_path = explicit_genesis_validator_registry_path
+            .map(Path::to_path_buf)
+            .or_else(|| {
+                bootstrap_refs
+                    .genesis_validator_registry_ref
+                    .as_deref()
+                    .map(|raw| resolve_network_tier_runtime_ref_path(genesis_path.as_path(), raw))
+            })
+            .ok_or_else(|| {
+                "governance bootstrap refs missing genesis_validator_registry_ref and no explicit --genesis-validator-registry was provided".to_string()
+            })?;
+        let finality_registry = load_genesis_finality_registry(genesis_registry_path.as_path())?;
+        world
+            .set_governance_finality_signer_registry(finality_registry)
+            .map_err(|err| format!("write network-tier finality registry failed: {err:?}"))?;
+    }
+
+    if needs_controller {
+        let governance_manifest_path = resolve_network_tier_runtime_ref_path(
+            genesis_path.as_path(),
+            bootstrap_refs.governance_public_manifest_ref.as_str(),
+        );
+        let controller_entries =
+            load_governance_public_manifest_entries(governance_manifest_path.as_path())?;
+        let controller_registry =
+            build_main_token_controller_registry_from_entries(controller_entries.as_slice())?;
+        world
+            .set_governance_main_token_controller_registry(controller_registry)
+            .map_err(|err| format!("write network-tier controller registry failed: {err:?}"))?;
+    }
+
+    world.save_to_dir(execution_world_dir).map_err(|err| {
+        format!(
+            "save execution world {} after network-tier governance bootstrap import failed: {err:?}",
+            execution_world_dir.display()
+        )
+    })?;
+    Ok(true)
 }
 
 pub(super) fn apply_world_governance_registry_overrides(
@@ -130,20 +253,7 @@ fn import_genesis_validator_registry(
     execution_world_dir: &Path,
     manifest_path: &Path,
 ) -> Result<(), String> {
-    let manifest_bytes = std::fs::read(manifest_path).map_err(|err| {
-        format!(
-            "read genesis validator registry {} failed: {err}",
-            manifest_path.display()
-        )
-    })?;
-    let manifest: GenesisValidatorRegistryManifest =
-        serde_json::from_slice(manifest_bytes.as_slice()).map_err(|err| {
-            format!(
-                "decode genesis validator registry {} failed: {err}",
-                manifest_path.display()
-            )
-        })?;
-    let registry = build_genesis_finality_registry(manifest)?;
+    let registry = load_genesis_finality_registry(manifest_path)?;
     if execution_world_has_persisted_state(execution_world_dir) {
         return Err(format!(
             "refusing to import genesis validator registry into existing execution world {} without reconciliation; use the dedicated governance registry import/migration path for non-empty worlds",
@@ -168,6 +278,47 @@ fn import_genesis_validator_registry(
             "save execution world {} after genesis validator registry import failed: {err:?}",
             execution_world_dir.display()
         )
+    })
+}
+
+fn load_genesis_finality_registry(
+    manifest_path: &Path,
+) -> Result<GovernanceFinalitySignerRegistry, String> {
+    let manifest_bytes = std::fs::read(manifest_path).map_err(|err| {
+        format!(
+            "read genesis validator registry {} failed: {err}",
+            manifest_path.display()
+        )
+    })?;
+    let manifest: GenesisValidatorRegistryManifest =
+        serde_json::from_slice(manifest_bytes.as_slice()).map_err(|err| {
+            format!(
+                "decode genesis validator registry {} failed: {err}",
+                manifest_path.display()
+            )
+        })?;
+    build_genesis_finality_registry(manifest)
+}
+
+fn load_governance_public_manifest_entries(
+    manifest_path: &Path,
+) -> Result<Vec<GenesisValidatorRegistryEntry>, String> {
+    let manifest_bytes = std::fs::read(manifest_path).map_err(|err| {
+        format!(
+            "read governance public manifest {} failed: {err}",
+            manifest_path.display()
+        )
+    })?;
+    let manifest: GovernancePublicManifest = serde_json::from_slice(manifest_bytes.as_slice())
+        .map_err(|err| {
+            format!(
+                "decode governance public manifest {} failed: {err}",
+                manifest_path.display()
+            )
+        })?;
+    Ok(match manifest {
+        GovernancePublicManifest::Bundle(bundle) => bundle.entries,
+        GovernancePublicManifest::Entries(entries) => entries,
     })
 }
 
@@ -221,6 +372,58 @@ fn explicit_public_manifest_threshold(
     }
 }
 
+fn build_main_token_controller_registry_from_entries(
+    entries: &[GenesisValidatorRegistryEntry],
+) -> Result<GovernanceMainTokenControllerRegistry, String> {
+    let mut controller_signer_policies = BTreeMap::new();
+    for entry in entries
+        .iter()
+        .filter(|entry| entry.slot_id.as_deref() != Some(DEFAULT_FINALITY_SLOT_ID))
+    {
+        validate_governance_public_manifest_entry(entry)?;
+        let slot_id = entry
+            .slot_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "governance public manifest entry requires slot_id".to_string())?
+            .to_string();
+        let threshold = entry.threshold.unwrap_or(DEFAULT_CONTROLLER_THRESHOLD);
+        controller_signer_policies
+            .entry(slot_id)
+            .or_insert_with(|| GovernanceThresholdSignerPolicy {
+                threshold,
+                allowed_public_keys: BTreeSet::new(),
+            })
+            .allowed_public_keys
+            .insert(genesis_validator_entry_public_key(entry)?.to_string());
+    }
+    if controller_signer_policies.is_empty() {
+        return Err(
+            "governance public manifests do not contain any controller signer slots".to_string(),
+        );
+    }
+    Ok(GovernanceMainTokenControllerRegistry {
+        genesis_controller_account_id: "msig.genesis.v1".to_string(),
+        treasury_bucket_controller_slots: BTreeMap::from([
+            (
+                "staking_reward_pool".to_string(),
+                "msig.staking_governance.v1".to_string(),
+            ),
+            (
+                "ecosystem_pool".to_string(),
+                "msig.ecosystem_governance.v1".to_string(),
+            ),
+            (
+                "security_reserve".to_string(),
+                "msig.security_council.v1".to_string(),
+            ),
+        ]),
+        restricted_starter_claim_admin_account_ids: BTreeSet::new(),
+        controller_signer_policies,
+    })
+}
+
 fn execution_world_has_persisted_state(execution_world_dir: &Path) -> bool {
     [
         "snapshot.json",
@@ -231,6 +434,10 @@ fn execution_world_has_persisted_state(execution_world_dir: &Path) -> bool {
     .iter()
     .any(|name| execution_world_dir.join(name).exists())
         || execution_world_dir.join(".distfs-state").exists()
+}
+
+fn world_is_bootstrap_only(world: &oasis7::runtime::World) -> bool {
+    world.snapshot().tick_consensus_records.is_empty() && world.journal().is_empty()
 }
 
 fn build_genesis_finality_registry_from_entries(
@@ -251,16 +458,17 @@ fn build_genesis_finality_registry_from_entries(
     for entry in entries {
         validate_genesis_validator_entry(entry)?;
         let node_id = genesis_validator_entry_node_id(entry)?;
+        let binding_key = governance_finality_binding_key(slot_id, node_id.as_str());
         let public_key_hex = genesis_validator_entry_public_key(entry)?;
         if signer_bindings
-            .insert(node_id.clone(), public_key_hex.to_string())
+            .insert(binding_key.clone(), public_key_hex.to_string())
             .is_some()
         {
             return Err(format!(
-                "genesis validator registry duplicates node_id {node_id}"
+                "genesis validator registry duplicates validator binding {binding_key}"
             ));
         }
-        validator_stakes.insert(node_id, entry.stake);
+        validator_stakes.insert(binding_key, entry.stake);
     }
     if signer_bindings.is_empty() {
         return Err(format!(
@@ -282,6 +490,10 @@ fn build_genesis_finality_registry_from_entries(
     })
 }
 
+fn governance_finality_binding_key(slot_id: &str, validator_id: &str) -> String {
+    format!("{}.{}", slot_id.trim(), validator_id.trim())
+}
+
 fn validate_genesis_validator_entry(entry: &GenesisValidatorRegistryEntry) -> Result<(), String> {
     if !entry.scheme.trim().eq_ignore_ascii_case("ed25519") {
         return Err(format!(
@@ -299,6 +511,41 @@ fn validate_genesis_validator_entry(entry: &GenesisValidatorRegistryEntry) -> Re
     if public_key_hex.len() != 64 || !public_key_hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
         return Err(format!(
             "genesis validator registry finality signer public key must be 32-byte hex: node_id={:?} signer_id={:?}",
+            entry.node_id, entry.signer_id
+        ));
+    }
+    Ok(())
+}
+
+fn validate_governance_public_manifest_entry(
+    entry: &GenesisValidatorRegistryEntry,
+) -> Result<(), String> {
+    if !entry.scheme.trim().eq_ignore_ascii_case("ed25519") {
+        return Err(format!(
+            "governance public manifest only supports ed25519 signers: slot_id={:?} node_id={:?} signer_id={:?} scheme={}",
+            entry.slot_id, entry.node_id, entry.signer_id, entry.scheme
+        ));
+    }
+    let slot_id = entry
+        .slot_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "governance public manifest entry requires slot_id".to_string())?;
+    if slot_id == DEFAULT_FINALITY_SLOT_ID {
+        return Ok(());
+    }
+    let _ = genesis_validator_entry_node_id(entry)?;
+    let public_key_hex = genesis_validator_entry_public_key(entry)?;
+    if public_key_hex.len() != 64 || !public_key_hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(format!(
+            "governance public manifest public key must be 32-byte hex: slot_id={slot_id} node_id={:?} signer_id={:?}",
+            entry.node_id, entry.signer_id
+        ));
+    }
+    if entry.threshold.is_some_and(|value| value == 0) {
+        return Err(format!(
+            "governance public manifest threshold must be > 0: slot_id={slot_id} node_id={:?} signer_id={:?}",
             entry.node_id, entry.signer_id
         ));
     }
@@ -374,6 +621,29 @@ fn public_tier_missing_registry_error(
         tier,
         admission
     )
+}
+
+fn resolve_network_tier_runtime_ref_path(
+    manifest_path: &Path,
+    raw_ref: &str,
+) -> std::path::PathBuf {
+    let candidate = std::path::PathBuf::from(raw_ref);
+    if candidate.is_absolute() {
+        return candidate;
+    }
+    if candidate.exists() {
+        return candidate;
+    }
+    for ancestor in manifest_path.ancestors() {
+        let rooted_candidate = ancestor.join(candidate.clone());
+        if rooted_candidate.exists() {
+            return rooted_candidate;
+        }
+    }
+    manifest_path
+        .parent()
+        .map(|parent| parent.join(candidate.clone()))
+        .unwrap_or(candidate)
 }
 
 fn node_pos_config_from_world_finality_registry(
@@ -488,7 +758,7 @@ mod tests {
     };
     use oasis7_node::{NodeConfig, NodeRole};
     use std::collections::{BTreeMap, BTreeSet};
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_dir(prefix: &str) -> PathBuf {
@@ -536,6 +806,55 @@ mod tests {
                         "mainnet_live".to_string(),
                         "production_oc_settlement".to_string(),
                     ],
+                },
+                promotion_policy: NetworkTierPromotionPolicy {
+                    promote_from: vec!["shared_devnet".to_string()],
+                    required_gates: vec!["shared_devnet_pass".to_string()],
+                },
+                evidence_refs: Vec::new(),
+            },
+            bootstrap_peers: Vec::new(),
+        }
+    }
+
+    fn public_testnet_loaded_manifest_with_paths(
+        source_path: &Path,
+        genesis_ref: &str,
+        bootstrap_peer_ref: &str,
+    ) -> LoadedNetworkTierManifest {
+        LoadedNetworkTierManifest {
+            source_path: source_path.display().to_string(),
+            manifest: NetworkTierManifest {
+                schema_version: NETWORK_TIER_MANIFEST_SCHEMA_V1.to_string(),
+                tier: "public_testnet".to_string(),
+                status: "rehearsal".to_string(),
+                network_id: "oasis7-public-testnet-governed".to_string(),
+                chain_id: "oasis7-public-testnet-governed".to_string(),
+                runtime_refs: NetworkTierRuntimeRefs {
+                    release_candidate_bundle_ref: "bundle.json".to_string(),
+                    genesis_ref: genesis_ref.to_string(),
+                    bootstrap_peer_ref: bootstrap_peer_ref.to_string(),
+                },
+                endpoint_policy: NetworkTierEndpointPolicy {
+                    rpc_ref: "rpc.json".to_string(),
+                    explorer_ref: "explorer.json".to_string(),
+                    faucet_ref: Some("faucet.json".to_string()),
+                },
+                validator_policy: NetworkTierValidatorPolicy {
+                    governance_mode: "governance_registry".to_string(),
+                    validator_admission: "allowlist_or_governed_candidate".to_string(),
+                    target_validator_count: 2,
+                    allow_observer_nodes: true,
+                },
+                token_policy: NetworkTierTokenPolicy {
+                    symbol: "OC".to_string(),
+                    faucet_mode: "guarded_testnet_faucet".to_string(),
+                    reset_policy: "resettable".to_string(),
+                    value_semantics: "testnet".to_string(),
+                },
+                claims_policy: NetworkTierClaimsPolicy {
+                    allowed_claims: vec!["public_testnet".to_string()],
+                    denied_claims: vec!["mainnet_live".to_string()],
                 },
                 promotion_policy: NetworkTierPromotionPolicy {
                     promote_from: vec!["shared_devnet".to_string()],
@@ -766,6 +1085,365 @@ mod tests {
                 .get("validator-c")
                 .map(String::as_str),
             Some("3333333333333333333333333333333333333333333333333333333333333333")
+        );
+    }
+
+    #[test]
+    fn network_tier_genesis_bootstrap_initializes_full_governance_world_for_empty_observer() {
+        let temp_dir = temp_dir("network-tier-governance-bootstrap");
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let execution_world_dir = temp_dir.join("world");
+        let manifest_path = temp_dir.join("network-tier.json");
+        let bootstrap_path = temp_dir.join("bootstrap.txt");
+        let genesis_path = temp_dir.join("genesis.json");
+        let governance_manifest_path = temp_dir.join("governance-public.json");
+        let liveops_manifest_path = temp_dir.join("liveops-public.json");
+        let validator_registry_path = temp_dir.join("genesis-validator-registry.json");
+        std::fs::write(bootstrap_path.as_path(), b"").expect("write bootstrap peers");
+        std::fs::write(
+            governance_manifest_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": "oasis7.signer_truth_bundle.v1",
+                "entries": [
+                    {
+                        "slot_id": "msig.genesis.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+                    },
+                    {
+                        "slot_id": "msig.genesis.v1",
+                        "signer_id": "signer02",
+                        "scheme": "ed25519",
+                        "public_key_hex": "2222222222222222222222222222222222222222222222222222222222222222"
+                    },
+                    {
+                        "slot_id": "msig.staking_governance.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "3333333333333333333333333333333333333333333333333333333333333333"
+                    },
+                    {
+                        "slot_id": "msig.staking_governance.v1",
+                        "signer_id": "signer02",
+                        "scheme": "ed25519",
+                        "public_key_hex": "4444444444444444444444444444444444444444444444444444444444444444"
+                    },
+                    {
+                        "slot_id": "msig.ecosystem_governance.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "6666666666666666666666666666666666666666666666666666666666666666"
+                    },
+                    {
+                        "slot_id": "msig.ecosystem_governance.v1",
+                        "signer_id": "signer02",
+                        "scheme": "ed25519",
+                        "public_key_hex": "7777777777777777777777777777777777777777777777777777777777777777"
+                    },
+                    {
+                        "slot_id": "msig.security_council.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "8888888888888888888888888888888888888888888888888888888888888888"
+                    },
+                    {
+                        "slot_id": "msig.security_council.v1",
+                        "signer_id": "signer02",
+                        "scheme": "ed25519",
+                        "public_key_hex": "9999999999999999999999999999999999999999999999999999999999999999"
+                    }
+                ]
+            }))
+            .expect("encode governance manifest"),
+        )
+        .expect("write governance manifest");
+        std::fs::write(
+            liveops_manifest_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": "oasis7.signer_truth_bundle.v1",
+                "entries": [
+                    {
+                        "slot_id": "liveops",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "threshold": 1,
+                        "public_key_hex": "5555555555555555555555555555555555555555555555555555555555555555"
+                    }
+                ]
+            }))
+            .expect("encode liveops manifest"),
+        )
+        .expect("write liveops manifest");
+        std::fs::write(
+            validator_registry_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "slot_id": "governance.finality.v1",
+                "threshold": 2,
+                "validators": [
+                    {
+                        "node_id": "triad-testnet-sequencer",
+                        "scheme": "ed25519",
+                        "finality_signer_public_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "stake": 60
+                    },
+                    {
+                        "node_id": "triad-testnet-storage",
+                        "scheme": "ed25519",
+                        "finality_signer_public_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "stake": 40
+                    }
+                ]
+            }))
+            .expect("encode validator registry"),
+        )
+        .expect("write validator registry");
+        std::fs::write(
+            genesis_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": "oasis7.genesis.example.v1",
+                "network_tier": "public_testnet",
+                "chain_id": "oasis7-public-testnet-governed",
+                "world_id": "oasis7-public-testnet-governed",
+                "governance_bootstrap_refs": {
+                    "governance_public_manifest_ref": governance_manifest_path.file_name().unwrap().to_string_lossy(),
+                    "liveops_public_manifest_ref": liveops_manifest_path.file_name().unwrap().to_string_lossy(),
+                    "genesis_validator_registry_ref": validator_registry_path.file_name().unwrap().to_string_lossy()
+                }
+            }))
+            .expect("encode genesis"),
+        )
+        .expect("write genesis");
+        let loaded_manifest = public_testnet_loaded_manifest_with_paths(
+            manifest_path.as_path(),
+            genesis_path.file_name().unwrap().to_str().unwrap(),
+            bootstrap_path.file_name().unwrap().to_str().unwrap(),
+        );
+
+        ensure_world_governance_validator_registry(
+            execution_world_dir.as_path(),
+            None,
+            Some(&loaded_manifest),
+        )
+        .expect("bootstrap governance world");
+
+        let world = World::load_from_dir(execution_world_dir.as_path()).expect("load world");
+        let finality_registry = world
+            .resolve_governance_effective_finality_signer_registry()
+            .expect("resolve finality registry")
+            .expect("finality registry");
+        let controller_registry = world
+            .governance_main_token_controller_registry()
+            .cloned()
+            .expect("controller registry");
+
+        assert_eq!(finality_registry.threshold, 2);
+        assert_eq!(
+            finality_registry
+                .signer_bindings
+                .get("governance.finality.v1.triad-testnet-sequencer")
+                .map(String::as_str),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert_eq!(
+            world.node_identity_public_key("governance.finality.v1.triad-testnet-sequencer"),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert_eq!(
+            controller_registry
+                .controller_signer_policies
+                .get("msig.genesis.v1")
+                .map(|policy| policy.threshold),
+            Some(2)
+        );
+        assert_eq!(
+            controller_registry
+                .controller_signer_policies
+                .get("msig.security_council.v1")
+                .map(|policy| policy.threshold),
+            Some(2)
+        );
+        assert_eq!(world.snapshot().tick_consensus_records.len(), 0);
+        assert_eq!(world.journal().len(), 0);
+    }
+
+    #[test]
+    fn network_tier_genesis_bootstrap_resolves_repo_root_relative_child_refs() {
+        let repo_root = temp_dir("network-tier-bootstrap-repo-root");
+        let evidence_dir = repo_root.join("doc/testing/evidence");
+        std::fs::create_dir_all(&evidence_dir).expect("create evidence dir");
+        let execution_world_dir = repo_root.join("world");
+        let manifest_path = repo_root.join("network-tier.json");
+        let bootstrap_path = repo_root.join("bootstrap.txt");
+        let genesis_path = evidence_dir.join("public-testnet-governed-bootstrap-genesis.json");
+        let governance_manifest_path =
+            evidence_dir.join("public-testnet-governance-public-signers.json");
+        let liveops_manifest_path = evidence_dir.join("public-testnet-liveops-public-signers.json");
+        let validator_registry_path =
+            evidence_dir.join("public-testnet-governed-bootstrap-validator-registry.json");
+
+        std::fs::write(bootstrap_path.as_path(), b"").expect("write bootstrap peers");
+        std::fs::write(
+            governance_manifest_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": "oasis7.signer_truth_bundle.v1",
+                "entries": [
+                    {
+                        "slot_id": "msig.genesis.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+                    },
+                    {
+                        "slot_id": "msig.genesis.v1",
+                        "signer_id": "signer02",
+                        "scheme": "ed25519",
+                        "public_key_hex": "2222222222222222222222222222222222222222222222222222222222222222"
+                    },
+                    {
+                        "slot_id": "msig.staking_governance.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "3333333333333333333333333333333333333333333333333333333333333333"
+                    },
+                    {
+                        "slot_id": "msig.staking_governance.v1",
+                        "signer_id": "signer02",
+                        "scheme": "ed25519",
+                        "public_key_hex": "4444444444444444444444444444444444444444444444444444444444444444"
+                    },
+                    {
+                        "slot_id": "msig.ecosystem_governance.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "5555555555555555555555555555555555555555555555555555555555555555"
+                    },
+                    {
+                        "slot_id": "msig.ecosystem_governance.v1",
+                        "signer_id": "signer02",
+                        "scheme": "ed25519",
+                        "public_key_hex": "6666666666666666666666666666666666666666666666666666666666666666"
+                    },
+                    {
+                        "slot_id": "msig.security_council.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "7777777777777777777777777777777777777777777777777777777777777777"
+                    },
+                    {
+                        "slot_id": "msig.security_council.v1",
+                        "signer_id": "signer02",
+                        "scheme": "ed25519",
+                        "public_key_hex": "8888888888888888888888888888888888888888888888888888888888888888"
+                    },
+                    {
+                        "slot_id": "governance.finality.v1",
+                        "signer_id": "triad-testnet-sequencer",
+                        "scheme": "ed25519",
+                        "threshold": 2,
+                        "public_key_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    },
+                    {
+                        "slot_id": "governance.finality.v1",
+                        "signer_id": "triad-testnet-storage",
+                        "scheme": "ed25519",
+                        "threshold": 2,
+                        "public_key_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    }
+                ]
+            }))
+            .expect("encode governance manifest"),
+        )
+        .expect("write governance manifest");
+        std::fs::write(
+            liveops_manifest_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": "oasis7.signer_truth_bundle.v1",
+                "entries": [
+                    {
+                        "slot_id": "liveops",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "threshold": 1,
+                        "public_key_hex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    }
+                ]
+            }))
+            .expect("encode liveops manifest"),
+        )
+        .expect("write liveops manifest");
+        std::fs::write(
+            validator_registry_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "slot_id": "governance.finality.v1",
+                "threshold": 2,
+                "validators": [
+                    {
+                        "node_id": "triad-testnet-sequencer",
+                        "scheme": "ed25519",
+                        "finality_signer_public_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "stake": 60
+                    },
+                    {
+                        "node_id": "triad-testnet-storage",
+                        "scheme": "ed25519",
+                        "finality_signer_public_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "stake": 40
+                    }
+                ]
+            }))
+            .expect("encode validator registry"),
+        )
+        .expect("write validator registry");
+        std::fs::write(
+            genesis_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": "oasis7.genesis.example.v1",
+                "network_tier": "public_testnet",
+                "chain_id": "oasis7-public-testnet-governed",
+                "world_id": "oasis7-public-testnet-governed",
+                "governance_bootstrap_refs": {
+                    "governance_public_manifest_ref": "doc/testing/evidence/public-testnet-governance-public-signers.json",
+                    "liveops_public_manifest_ref": "doc/testing/evidence/public-testnet-liveops-public-signers.json",
+                    "genesis_validator_registry_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-registry.json"
+                }
+            }))
+            .expect("encode genesis"),
+        )
+        .expect("write genesis");
+        std::fs::write(manifest_path.as_path(), b"{}").expect("touch manifest path");
+
+        let loaded_manifest = public_testnet_loaded_manifest_with_paths(
+            manifest_path.as_path(),
+            genesis_path.as_path().to_str().unwrap(),
+            bootstrap_path.as_path().to_str().unwrap(),
+        );
+
+        ensure_world_governance_validator_registry(
+            execution_world_dir.as_path(),
+            None,
+            Some(&loaded_manifest),
+        )
+        .expect("bootstrap governance world");
+
+        let world = World::load_from_dir(execution_world_dir.as_path()).expect("load world");
+        let finality_registry = world
+            .resolve_governance_effective_finality_signer_registry()
+            .expect("resolve finality registry")
+            .expect("finality registry");
+        assert_eq!(
+            finality_registry
+                .signer_bindings
+                .get("governance.finality.v1.triad-testnet-sequencer")
+                .map(String::as_str),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert_eq!(
+            world
+                .governance_main_token_controller_registry()
+                .and_then(|registry| registry.controller_signer_policies.get("msig.genesis.v1"))
+                .map(|policy| policy.threshold),
+            Some(2)
         );
     }
 

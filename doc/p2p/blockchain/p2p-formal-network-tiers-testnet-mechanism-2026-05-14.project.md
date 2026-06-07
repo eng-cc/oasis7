@@ -104,7 +104,7 @@
 - `doc/testing/evidence/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json`
 - `doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json`
 - `doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt`
-- `doc/testing/evidence/public-testnet-governed-bootstrap-world-snapshot-placeholder-2026-06-06.json`
+- `doc/testing/evidence/public-testnet-governed-bootstrap-world-2026-06-06/`
 - `doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json`
 - `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
 - `doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md`

@@ -14,6 +14,20 @@ impl NodeExecutionHook for PanicExecutionHook {
     }
 }
 
+struct GapWaitingExecutionHook;
+
+impl NodeExecutionHook for GapWaitingExecutionHook {
+    fn on_commit(
+        &mut self,
+        _context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        Err(format!(
+            "{}: last_applied=0 incoming=8 predecessor=7",
+            EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE
+        ))
+    }
+}
+
 #[test]
 fn pos_engine_commits_single_validator_head() {
     let config = NodeConfig::new("node-a", "world-a", NodeRole::Observer).expect("config");
@@ -530,6 +544,37 @@ fn sequencer_commit_binding_rejects_missing_execution_hashes() {
     assert!(
         matches!(err, NodeError::Consensus { reason } if reason.contains("missing execution binding"))
     );
+}
+
+#[test]
+fn synced_non_sequencer_commit_keeps_verified_execution_binding_without_local_materialization() {
+    let config = NodeConfig::new("node-b", "world-synced-exec-binding", NodeRole::Storage)
+        .expect("config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let payload = super::replication_state_reconcile::ReplicationCommitPayload {
+        world_id: config.world_id.clone(),
+        node_id: "node-a".to_string(),
+        height: 8,
+        slot: 8,
+        epoch: 0,
+        block_hash: "block-8".to_string(),
+        action_root: empty_action_root(),
+        actions: Vec::new(),
+        committed_at_ms: 8_000,
+        execution_block_hash: Some("exec-block-8".to_string()),
+        execution_state_root: Some("exec-state-8".to_string()),
+    };
+    let mut hook = GapWaitingExecutionHook;
+
+    engine
+        .apply_synced_replication_commit(&config.world_id, &payload, Some(&mut hook))
+        .expect("apply synced replication commit");
+
+    assert_eq!(engine.last_execution_height, 0);
+    assert_eq!(engine.commit_execution_binding_for_height(8).expect("binding"), (
+        Some("exec-block-8"),
+        Some("exec-state-8"),
+    ));
 }
 
 #[test]

@@ -28,9 +28,11 @@ mkdir -p \
   "$APP_ROOT/logs" \
   "$APP_ROOT/data" \
   "$(dirname "$CONFIG_PATH")" \
+  "${RUNTIME_ROOT:-$APP_ROOT/runtime-root}" \
   "$EXECUTION_WORLD_DIR" \
   "$EXECUTION_RECORDS_DIR" \
-  "$STORAGE_ROOT"
+  "$STORAGE_ROOT" \
+  "${REPLICATION_ROOT:-$APP_ROOT/replication-root}"
 
 # Public tiers use the execution-world governance registry as validator truth.
 # NODE_VALIDATORS_CSV / NODE_VALIDATOR_SIGNERS_CSV are kept only as dev/legacy
@@ -55,6 +57,7 @@ cmd=(
   --pos-proposal-tick-phase "$POS_PROPOSAL_TICK_PHASE"
   --pos-max-past-slot-lag "$POS_MAX_PAST_SLOT_LAG"
   --config "$CONFIG_PATH"
+  --runtime-root "${RUNTIME_ROOT:-$APP_ROOT/runtime-root}"
   --execution-world-dir "$EXECUTION_WORLD_DIR"
   --execution-records-dir "$EXECUTION_RECORDS_DIR"
   --storage-root "$STORAGE_ROOT"
@@ -62,6 +65,11 @@ cmd=(
   --reward-points-per-credit "$REWARD_POINTS_PER_CREDIT"
   --node-gossip-bind "$NODE_GOSSIP_BIND"
 )
+
+replication_root="${REPLICATION_ROOT:-}"
+if [[ -n "$replication_root" ]]; then
+  cmd+=(--replication-root "$replication_root")
+fi
 
 if [[ "${POS_ADAPTIVE_TICK_SCHEDULER:-0}" == "1" ]]; then
   cmd+=(--pos-adaptive-tick-scheduler)
