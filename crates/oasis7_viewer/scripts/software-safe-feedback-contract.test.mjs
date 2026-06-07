@@ -144,7 +144,7 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.match(gameplaySummary.economicSurface.input, /material chain/i);
   assert.match(gameplaySummary.economicSurface.output, /gameplay blocked before requested advance completed/i);
   assert.match(gameplaySummary.economicSurface.repairAction, /Advance 1 step/i);
-  assert.match(gameplaySummary.economicSurface.nextValue, /move from watching a stall back to owning an operable capability/i);
+  assert.match(gameplaySummary.economicSurface.nextValue, /stalled line becomes an operable capability again/i);
   assert.match(gameplaySummary.assetGovernanceHandoff, /no main token transfer form/i);
   assert.equal(core.getState().gameplaySummary.goalTitle, "Recover sustainable capability");
 }

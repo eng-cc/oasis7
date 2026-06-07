@@ -108,6 +108,19 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
     }
 }
 
+fn sample_render_state_with_selection(
+    fragment_footprint_cm: f64,
+    kind: &str,
+    id: &str,
+) -> RenderState {
+    let mut render_state = sample_render_state(fragment_footprint_cm);
+    render_state.selection = Some(Selection {
+        kind: kind.to_string(),
+        id: id.to_string(),
+    });
+    render_state
+}
+
 fn test_runtime(render_state: RenderState) -> BevyRuntimeState {
     BevyRuntimeState {
         mounted: true,
@@ -497,4 +510,33 @@ fn bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy() {
     assert!(summary.location_sample_rgba[1] > summary.location_sample_rgba[0]);
 
     write_pixel_probe_if_requested(&image, &summary);
+}
+
+#[test]
+fn bevy_pixel_regression_keeps_canvas_visible_for_agent_and_location_selection() {
+    for (kind, id) in [("agent", "agent-0"), ("location", "loc-0")] {
+        let mut app = render_test_app(sample_render_state_with_selection(12_000.0, kind, id));
+        let (_, summary) = rasterize_pixel_regression(&mut app);
+
+        assert!(
+            summary.non_background_pixels >= 350,
+            "{kind} selection should keep the pixel-world canvas nonblank"
+        );
+        assert!(
+            summary.fragment_pixels > 0,
+            "{kind} selection should keep fragment pixels"
+        );
+        assert!(
+            summary.location_pixels > 0,
+            "{kind} selection should keep location pixels"
+        );
+        assert!(
+            summary.agent_pixels > 0,
+            "{kind} selection should keep agent pixels"
+        );
+        assert_ne!(
+            summary.raw_rgba_fnv1a64, "c3c91248ad807f7b",
+            "{kind} selection should not rasterize as the all-background frame"
+        );
+    }
 }
