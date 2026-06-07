@@ -42,12 +42,13 @@ Options:
 Examples:
   ./scripts/prepare-playability-l4-review.sh
   ./scripts/prepare-playability-l4-review.sh --with-l4a-stack --change-scope "software_safe onboarding followup"
-  ./scripts/prepare-playability-l4-review.sh --role producer_system_designer --role qa_engineer --persona new_player_confused
+  ./scripts/prepare-playability-l4-review.sh --role gameplay_designer --role qa_engineer --persona new_player_confused
 USAGE
 }
 
 STANDARD_ROLES=(
   producer_system_designer
+  gameplay_designer
   game_visual_interaction_designer
   qa_engineer
   viewer_engineer

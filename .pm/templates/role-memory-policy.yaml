@@ -53,6 +53,21 @@ roles:
       - 一次性版本讨论
       - 未冻结的玩法脑暴
       - 当天执行流水
+  gameplay_designer:
+    topic_prefix_allowlist:
+      - gameplay.loop.*
+      - gameplay.balance.*
+      - gameplay.progression.*
+      - gameplay.encounter.*
+      - gameplay.resource_flow.*
+    allowed_promotion_reasons:
+      - policy_boundary
+      - stable_pattern
+      - ux_constraint
+    disallowed_examples:
+      - 单次试玩主观好恶
+      - 未验证的数值拍脑袋
+      - 一次性临时活动脚本
   runtime_engineer:
     topic_prefix_allowlist:
       - runtime.contract.*

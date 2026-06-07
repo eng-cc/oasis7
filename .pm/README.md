@@ -21,6 +21,8 @@
 
 首批标准角色：
 - `producer_system_designer`
+- `gameplay_designer`
+- `game_visual_interaction_designer`
 - `runtime_engineer`
 - `wasm_platform_engineer`
 - `agent_engineer`

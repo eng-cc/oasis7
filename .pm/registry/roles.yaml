@@ -19,6 +19,15 @@ roles:
     committed_path: .pm/roles/game_visual_interaction_designer/backlog/committed.yaml
     blocked_path: .pm/roles/game_visual_interaction_designer/backlog/blocked.yaml
     done_path: .pm/roles/game_visual_interaction_designer/backlog/done.yaml
+  - role_name: gameplay_designer
+    is_active: true
+    introduced_at: 2026-06-07
+    memory_active_path: .pm/roles/gameplay_designer/memory/active.yaml
+    memory_superseded_path: .pm/roles/gameplay_designer/memory/superseded.yaml
+    candidate_path: .pm/roles/gameplay_designer/backlog/candidate.yaml
+    committed_path: .pm/roles/gameplay_designer/backlog/committed.yaml
+    blocked_path: .pm/roles/gameplay_designer/backlog/blocked.yaml
+    done_path: .pm/roles/gameplay_designer/backlog/done.yaml
   - role_name: liveops_community
     is_active: true
     introduced_at: 2026-03-30

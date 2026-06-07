@@ -35,6 +35,12 @@ Use this skill when code and docs are already updated and you are moving into br
 4. Commit exactly this task slice.
 5. Dispatch fresh local subagent review for every involved relevant role, address valid findings, and record the passed evidence packet:
 
+Use the same role-selection rule as `requesting-repo-owned-review`, including:
+- `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched
+- `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, or UI-heavy claims are touched
+- `qa_engineer` when the claim depends on verification or release readiness
+- `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched
+
 ```markdown
 - Pre-PR Local Role Review: passed
 - Task UID: <task_uid>
