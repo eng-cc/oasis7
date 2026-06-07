@@ -367,6 +367,8 @@ observer seed/state-sync bundle 至少要覆盖：
 2. observer env 使用当前 validator writer allowlist
 3. observer manifest 指向当前 deployment truth genesis/manifest
 4. observer state 先 reset，再导入 verified seed/state-sync bundle
+5. local observer 使用的 bundle copy 必须把 `runtime_build.sha256` 刷成当前本机 runtime 真值；不要直接复用 validator Linux package hash 去校验本地 macOS debug/release binary
+6. detached local observer 启动时不要让 `start-node.sh` 自己作为长期父进程驻留；若需要后台常驻，应直接启动 `logs/last-command.sh` 里展开后的 runtime binary 命令
 
 ### Start order
 1. `triad-testnet-local`
@@ -393,6 +395,7 @@ curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committ
 2. `fetch requester is not authorized`
 3. `BlobNotFound`
 4. `height 1 peer commit execution mismatch`
+5. `network tier runtime bundle hash mismatch`
 
 ## 13. Phase G - Final Health Verification
 ### Goal
