@@ -1744,13 +1744,6 @@ function DetailsPanel() {
         </div>
         <div class="stack" style="margin-top:10px;">
           <MetricCard
-            label={tr(locale(), "物理真值单位", "Canonical Physical Unit")}
-            value={worldScaleSurface().physicalTruth.canonicalUnitLabel || "-"}
-          >
-            <Badge>{tr(locale(), "整数厘米", "integer centimeters")}</Badge>
-          </MetricCard>
-          <div class="feedback-detail">{worldScaleSurface().physicalTruth.canonicalUnitDetail}</div>
-          <MetricCard
             label={tr(locale(), "世界边界", "World Bounds")}
             value={worldScaleSurface().physicalTruth.worldBoundsLabel || tr(locale(), "未发布", "not published")}
           >
@@ -1825,8 +1818,8 @@ function DetailsPanel() {
           <EmptyState>
             {tr(
               locale(),
-              "主状态已经在中间的“世界摘要”里展示；这里现在专门保留“厘米真值 vs 表现层夸张”的读图锚点，原始快照仍按需展开。",
-              "The main runtime state already lives in World Summary; this section now reserves the reading anchors for centimeter truth vs presentation exaggeration, while raw snapshots stay collapsible.",
+              "主状态已经在中间的“世界摘要”里展示；这里保留世界边界、距离样本和表现层说明，原始快照仍按需展开。",
+              "The main runtime state already lives in World Summary; this section keeps world bounds, distance samples, and presentation notes, while raw snapshots stay collapsible.",
             )}
           </EmptyState>
         </div>
