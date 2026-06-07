@@ -75,6 +75,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - gameplay design by `gameplay_designer`
   - game visual direction, interaction feel, player-facing screen flow, and visual readability by `game_visual_interaction_designer`
   - runtime/gameplay/server logic by `runtime_engineer`
+  - blockchain/node operations, deployment choreography, upgrade/rollback drills, fleet health baselines, and node runbooks by `blockchain_ops_engineer`
   - WASM/platform/ABI work by `wasm_platform_engineer`
   - agent behavior/prompt/provider work by `agent_engineer`
   - Viewer/Web/UI work by `viewer_engineer`
@@ -88,7 +89,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Do not first classify a request as "read-only", "chat-only", "pure fact lookup", or "professional judgment" to decide whether task/worktree truth is needed. That classification happens only after bootstrap, inside the bound task/worktree, and only controls whether TPM can answer from objective evidence or must dispatch a professional slice.
 - Read-only/chat-only requests still split by judgment type after task truth exists:
   - Pure fact lookup, path lookup, command-output restatement, or mechanical evidence collection may be handled by TPM inside the bound task worktree, as long as the answer does not present a professional/domain conclusion.
-  - Read-only professional/domain questions must be dispatched to the matching bounded professional role slice before the answer is presented as authoritative. Examples: "does viewer have a performance collection/evaluation mechanism", "is this QA evidence release-blocking", "what runtime design risk is present", "is this gameplay loop balanced/readable", or "how should LiveOps message this incident".
+  - Read-only professional/domain questions must be dispatched to the matching bounded professional role slice before the answer is presented as authoritative. Examples: "does viewer have a performance collection/evaluation mechanism", "is this QA evidence release-blocking", "what runtime design risk is present", "is this gameplay loop balanced/readable", "what node-ops risk is present in this rollout", or "how should LiveOps message this incident".
   - Such read-only professional slices require the same `.pm` task and canonical task worktree as any other request. Their required sink is `.pm/tasks/<TASK-UID>.execution.md`, plus the role-tagged user-facing answer.
   - TPM may gather raw files, commands, or repo context before dispatch only after bootstrap; the final user-facing answer must label TPM synthesis separately from professional role conclusions and cite the role/evidence that owns each professional conclusion.
 - Canonical truth per user request must remain single-threaded:
