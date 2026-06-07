@@ -32,14 +32,14 @@
 - [ ] 已定义完成信号（patch / findings / evidence / review）与回传路径，避免并行漂移到新真值。
 
 ## Example (copy/paste)
-- role: producer_system_designer
+- role: gameplay_designer
 - slice type: implementation
 - model configuration: see intended/actual fields
 - intended model configuration: workflow source-of-truth `Default subagent runtime`
 - actual dispatched model/reasoning: requested default runtime, or `inherited/unverified` with reason if the connector cannot select/report the model or actual dispatch cannot be verified
 - context delivery mode: full-thread/full-history fork
 - mandatory context packet: see mandatory context checklist/packet
-- mandatory context checklist/packet: `AGENTS.md` + `.agents/roles/producer_system_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/<module>/project.md` task `<task slug>` + `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + current branch/diff summary
+- mandatory context checklist/packet: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/<module>/project.md` task `<task slug>` + `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）
 - return contract: patch + test evidence
 - validation command: `./scripts/cargo-dev.sh test -p foo`

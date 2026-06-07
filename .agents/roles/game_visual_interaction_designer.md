@@ -21,6 +21,7 @@
 
 ## Inputs
 - `producer_system_designer` 提供的玩家体验目标、玩法边界、版本优先级和规则语义
+- `gameplay_designer` 提供的核心玩法 loop、玩家动作收益、数值风险与反馈优先级
 - `viewer_engineer` 提供的可实现 UI/渲染约束、现有交互面和自动化入口
 - `runtime_engineer` 提供的状态数据、世界变化和动作回执语义
 - `agent_engineer` 提供的 Agent 可解释性、可控性和反馈需求
@@ -38,6 +39,7 @@
 - 可独立判断玩家第一眼可读性、交互反馈质量、视觉层级和体验一致性
 - 可要求在 UI-heavy / renderer / player-facing flow 改动中补视觉 companion、截图证据或交互 smoke
 - 涉及规则语义、玩家权能、经济平衡或长期目标时，必须联动 `producer_system_designer`
+- 涉及玩法节奏、操作收益、数值平衡或关卡/资源 loop 取舍时，必须联动 `gameplay_designer`
 - 涉及实现可行性、渲染性能、自动化测试或浏览器闭环时，必须联动 `viewer_engineer` 与 `qa_engineer`
 - 涉及玩家承诺、外部话术或社区反馈归因时，必须联动 `liveops_community`
 

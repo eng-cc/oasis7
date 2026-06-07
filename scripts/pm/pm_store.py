@@ -71,6 +71,7 @@ ALLOWED_MEMORY_REJECTION_REASONS = {
 }
 ROLE_MEMORY_PREFIXES = {
     "agent_engineer": "AGENT",
+    "gameplay_designer": "GAMEPLAY",
     "liveops_community": "LIVEOPS",
     "producer_system_designer": "PRODUCER",
     "qa_engineer": "QA",

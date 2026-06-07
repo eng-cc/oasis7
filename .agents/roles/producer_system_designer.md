@@ -14,6 +14,7 @@
 - 相关文档：`doc/core/*`、`doc/game/*` 以及涉及世界规则口径的跨模块 PRD
 
 ## Does Not Own
+- 玩法细则、数值平衡和 moment-to-moment loop 调优
 - 运行时内部实现细节
 - WASM 执行器与 ABI 实现
 - 游戏视觉方向与交互手感细节
@@ -22,6 +23,7 @@
 - 默认 workflow orchestration、角色派工与 PR 主链集成；这些由 `tpm` 负责
 
 ## Inputs
+- `gameplay_designer` 提供的核心玩法循环、成长/任务/战斗/资源体验与平衡反馈
 - `runtime_engineer` 提供的可实现性约束、确定性/恢复限制
 - `game_visual_interaction_designer` 提供的玩家可读性、视觉层级和交互体验风险
 - `agent_engineer` 提供的 Agent 行为能力与成本反馈
@@ -39,6 +41,7 @@
 
 ## Decisions
 - 可独立决定版本优先级、玩法目标和规则方向
+- 涉及具体玩法 loop 设计、数值平衡或玩家操作收益曲线时，必须联动 `gameplay_designer`
 - 可建议 `tpm` 派生哪些专业 subagent、采用何种验证或 review 切片，但最终派工与集成由 `tpm` 决定
 - 涉及 runtime/consensus/WASM 安全边界的变更，必须与相关工程 owner 联审
 - 涉及玩家承诺、对外口径或长期治理的变更，必须同步更新 `README.md` / `doc/readme/*` / `doc/core/*`

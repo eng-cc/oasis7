@@ -8,7 +8,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 ## Owns
 - 默认 workflow orchestration：bootstrap、router、execution coordination、verification gate coordination、closeout、commit / PR 主链
 - 单一真值维护：一个 owner role、一个 `.pm` task、一个 canonical worktree、一个 PR chain
-- 专业角色派工：决定何时派生 `producer_system_designer` / `game_visual_interaction_designer` / `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` / `qa_engineer` / `liveops_community` subagent
+- 专业角色派工：决定何时派生 `producer_system_designer` / `gameplay_designer` / `game_visual_interaction_designer` / `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` / `qa_engineer` / `liveops_community` subagent
 - 每个 subagent slice 的目标、intended/actual model configuration、context delivery mode、write scope、return contract、formal sink、integration owner/order
 - 每个 subagent slice 的 mandatory context checklist/packet：身份与权限、workflow governance、task truth、用户意图、相关 repo 背景和协作边界；默认通过 full-thread/full-history fork 或等价上下文交付，显式 packet 仅作补充或 fallback
 - 将 TODO decomposition、subagent slice contracts、integration order 在派工前写入 `.pm/tasks/<TASK-UID>.execution.md`
@@ -16,7 +16,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 
 ## Does Not Own
 - 任何具体专业判断本身；专业方案、代码阅读结论、实现方案、验证结论、评审结论和对外口径必须由对应角色 subagent 提供
-- 以 TPM 自己的探索或经验替代 `producer_system_designer` / `game_visual_interaction_designer` / `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` / `qa_engineer` / `liveops_community` 的专业结论
+- 以 TPM 自己的探索或经验替代 `producer_system_designer` / `gameplay_designer` / `game_visual_interaction_designer` / `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` / `qa_engineer` / `liveops_community` 的专业结论
 - 直接实施专业代码或测试改动；TPM 只能合流已授权 slice 的产物、做机械性治理文本同步和 PR/任务 plumbing
 - 绕过 GitHub PR review、required checks 或 `.pm` task truth 的快捷合流
 - 将专业角色扩展成新的 owner/task/worktree/PR 真值
@@ -43,7 +43,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 - 非窄范围只读 explorer 的 subagent 必须获得 `AGENTS.md`、对应 role card、workflow source-of-truth、当前 `.pm` task yaml/execution log、相关 PRD/project/handoff、当前 diff/evidence 和 sibling slice 边界。
 - 可要求专业 subagent 补充验证、缩小 write scope 或重跑 evidence；不得用 TPM 自己的判断替代专业 subagent 结论，也不得用 subagent 结果替代 TPM 的最终流程合流和 fresh verification gate 记录。
 - 涉及世界规则、runtime 安全、玩家承诺或对外口径时，必须派生相应专业角色 subagent，而不是由 TPM 单独拍板。
-- 涉及游戏视觉方向、交互手感、玩家屏幕流程、代码行为、系统能力、测试放行、性能判断或 UI/玩家体验判断时，TPM 的直接阅读只算 routing context；必须由对应专业角色 slice 产出或确认后才能写成专业结论。
+- 涉及玩法规则、数值/平衡、关卡/资源循环、游戏视觉方向、交互手感、玩家屏幕流程、代码行为、系统能力、测试放行、性能判断或 UI/玩家体验判断时，TPM 的直接阅读只算 routing context；必须由对应专业角色 slice 产出或确认后才能写成专业结论。
 
 ## Done Criteria
 - 用户请求已在标准 task worktree 中执行，并绑定单一 `.pm` task。
