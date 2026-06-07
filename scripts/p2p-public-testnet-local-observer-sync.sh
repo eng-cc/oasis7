@@ -99,6 +99,25 @@ optional_value() {
   raw_value "$path" "$key" 2>/dev/null || true
 }
 
+optional_resolved_env_value() {
+  local env_file=$1
+  local key=$2
+  local value
+
+  if ! raw_value "$env_file" "$key" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  value=$(ENV_FILE="$env_file" KEY_NAME="$key" bash -lc '
+    source "$ENV_FILE"
+    value="${!KEY_NAME:-}"
+    [[ -n "$value" ]] || exit 1
+    printf "%s" "$value"
+  ' 2>/dev/null) || return 0
+
+  printf '%s' "$value"
+}
+
 join_unique_csv() {
   local first_csv=$1
   local second_csv=$2
@@ -473,10 +492,13 @@ render_env() {
   storage_world_id=$(required_value "$storage_env" WORLD_ID)
   [[ "$seq_world_id" == "$storage_world_id" ]] || die "WORLD_ID mismatch between ECS env files"
 
-  local seq_role storage_role
+  local seq_role storage_role local_role
   seq_role=$(required_value "$sequencer_env" NODE_ROLE)
   storage_role=$(required_value "$storage_env" NODE_ROLE)
-  [[ "$seq_role" == "$storage_role" ]] || die "NODE_ROLE mismatch between ECS env files"
+  local_role=$(required_value "$local_env" NODE_ROLE)
+  [[ "$local_role" == "observer" ]] || die "local observer env must declare NODE_ROLE=observer"
+  [[ "$seq_role" == "sequencer" ]] || die "sequencer env must declare NODE_ROLE=sequencer"
+  [[ "$storage_role" == "storage" ]] || die "storage env must declare NODE_ROLE=storage"
 
   local gossip_peers replication_peers replication_remote_writers
   gossip_peers=$(join_unique_csv \
@@ -491,8 +513,10 @@ render_env() {
 
   local pos_slot_clock_genesis
   pos_slot_clock_genesis=$(required_value "$sequencer_env" POS_SLOT_CLOCK_GENESIS_UNIX_MS)
-  local local_stack_root genesis_validator_registry_path
+  local local_stack_root local_runtime_root local_replication_root genesis_validator_registry_path
   local_stack_root=$(required_value "$local_env" STACK_ROOT)
+  local_runtime_root=$(optional_resolved_env_value "$local_env" RUNTIME_ROOT)
+  local_replication_root=$(optional_resolved_env_value "$local_env" REPLICATION_ROOT)
   genesis_validator_registry_path="$local_stack_root/config/genesis-validator-registry.json"
 
   local player_entry_enable player_entry_http_bind player_entry_http_port
@@ -532,6 +556,8 @@ CONFIG_PATH=$(required_value "$local_env" CONFIG_PATH)
 EXECUTION_WORLD_DIR=$(required_value "$local_env" EXECUTION_WORLD_DIR)
 EXECUTION_RECORDS_DIR=$(required_value "$local_env" EXECUTION_RECORDS_DIR)
 STORAGE_ROOT=$(required_value "$local_env" STORAGE_ROOT)
+$(append_if_present "RUNTIME_ROOT" "$local_runtime_root")
+$(append_if_present "REPLICATION_ROOT" "$local_replication_root")
 REPLICATION_NETWORK_LISTEN_ADDRS_CSV=$(required_value "$local_env" REPLICATION_NETWORK_LISTEN_ADDRS_CSV)
 REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=$replication_peers
 REPLICATION_REMOTE_WRITERS_CSV=$replication_remote_writers
@@ -655,7 +681,7 @@ reset_local_state() {
   local backup_dir=$2
 
   local local_stack_root node_id execution_world_dir execution_records_dir
-  local replication_root execution_bridge_state_path
+  local replication_root runtime_root execution_bridge_state_path
   local storage_root
 
   local_stack_root=$(resolved_env_value "$local_env" STACK_ROOT)
@@ -663,7 +689,11 @@ reset_local_state() {
   execution_world_dir=$(resolved_env_value "$local_env" EXECUTION_WORLD_DIR)
   execution_records_dir=$(resolved_env_value "$local_env" EXECUTION_RECORDS_DIR)
   storage_root=$(resolved_env_value "$local_env" STORAGE_ROOT)
-  replication_root="$local_stack_root/output/node-distfs/$node_id"
+  replication_root=$(optional_resolved_env_value "$local_env" REPLICATION_ROOT)
+  if [[ -z "$replication_root" ]]; then
+    replication_root="$local_stack_root/output/node-distfs/$node_id"
+  fi
+  runtime_root=$(optional_resolved_env_value "$local_env" RUNTIME_ROOT)
   execution_bridge_state_path="$local_stack_root/output/chain-runtime/$node_id/reward-runtime-execution-bridge-state.json"
 
   if [[ -z "$backup_dir" ]]; then
@@ -674,7 +704,10 @@ reset_local_state() {
 
   backup_and_remove_path "$execution_world_dir" "$backup_dir/execution-world"
   backup_and_remove_path "$execution_records_dir" "$backup_dir/execution-records"
-  backup_and_remove_path "$replication_root" "$backup_dir/node-distfs/$node_id"
+  backup_and_remove_path "$replication_root" "$backup_dir/replication-root"
+  if [[ -n "$runtime_root" ]]; then
+    backup_and_remove_path "$runtime_root" "$backup_dir/runtime-root"
+  fi
   backup_and_remove_path \
     "$execution_bridge_state_path" \
     "$backup_dir/chain-runtime/$node_id/$(basename "$execution_bridge_state_path")"
@@ -690,7 +723,7 @@ seed_local_state_from_remote() {
   local backup_dir=$4
 
   local local_stack_root local_node_id local_execution_world_dir local_execution_records_dir
-  local local_storage_root local_replication_root local_execution_bridge_state_path
+  local local_storage_root local_replication_root local_runtime_root local_execution_bridge_state_path
   local local_simulator_dir
   local remote_stack_root remote_node_id remote_execution_world_dir remote_execution_records_dir
   local remote_storage_root remote_replication_root remote_execution_bridge_state_path
@@ -702,7 +735,11 @@ seed_local_state_from_remote() {
   local_execution_world_dir=$(resolved_env_value "$local_env" EXECUTION_WORLD_DIR)
   local_execution_records_dir=$(resolved_env_value "$local_env" EXECUTION_RECORDS_DIR)
   local_storage_root=$(resolved_env_value "$local_env" STORAGE_ROOT)
-  local_replication_root="$local_stack_root/output/node-distfs/$local_node_id"
+  local_replication_root=$(optional_resolved_env_value "$local_env" REPLICATION_ROOT)
+  if [[ -z "$local_replication_root" ]]; then
+    local_replication_root="$local_stack_root/output/node-distfs/$local_node_id"
+  fi
+  local_runtime_root=$(optional_resolved_env_value "$local_env" RUNTIME_ROOT)
   local_execution_bridge_state_path="$local_stack_root/output/chain-runtime/$local_node_id/reward-runtime-execution-bridge-state.json"
   local_simulator_dir="${local_execution_world_dir}-simulator-mirror"
 
@@ -728,7 +765,10 @@ seed_local_state_from_remote() {
   backup_and_remove_path "$local_simulator_dir" "$backup_dir/execution-world-simulator-mirror"
   backup_and_remove_path "$local_execution_records_dir" "$backup_dir/execution-records"
   backup_and_remove_path "$local_storage_root" "$backup_dir/storage"
-  backup_and_remove_path "$local_replication_root" "$backup_dir/node-distfs/$local_node_id"
+  backup_and_remove_path "$local_replication_root" "$backup_dir/replication-root"
+  if [[ -n "$local_runtime_root" ]]; then
+    backup_and_remove_path "$local_runtime_root" "$backup_dir/runtime-root"
+  fi
   backup_and_remove_path \
     "$local_execution_bridge_state_path" \
     "$backup_dir/chain-runtime/$local_node_id/$(basename "$local_execution_bridge_state_path")"
@@ -736,6 +776,9 @@ seed_local_state_from_remote() {
   mkdir -p "$(dirname "$local_execution_bridge_state_path")"
   mkdir -p "$local_execution_records_dir" "$local_storage_root" "$local_replication_root"
   mkdir -p "$local_execution_world_dir" "$local_simulator_dir"
+  if [[ -n "$local_runtime_root" ]]; then
+    mkdir -p "$local_runtime_root"
+  fi
 
   remote_stage_dir=$(stage_remote_seed_tree \
     "$remote_host" \
@@ -754,16 +797,16 @@ seed_local_state_from_remote() {
     "$remote_host:$remote_stage_dir/execution-world/journal.json" \
     "$local_execution_world_dir/journal.json"
   if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/execution-records"; then
-    stream_remote_tar_dir_to_local \
+    stream_remote_tar_contents_to_local \
       "$remote_host" \
       "$remote_stage_dir/execution-records" \
-      "$(dirname "$local_execution_records_dir")"
+      "$local_execution_records_dir"
   fi
   if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/storage"; then
-    stream_remote_tar_dir_to_local \
+    stream_remote_tar_contents_to_local \
       "$remote_host" \
       "$remote_stage_dir/storage" \
-      "$(dirname "$local_storage_root")"
+      "$local_storage_root"
   fi
   if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/replication-root"; then
     stream_remote_tar_contents_to_local \

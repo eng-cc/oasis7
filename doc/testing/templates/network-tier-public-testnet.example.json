@@ -9,15 +9,20 @@
     "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
     "bootstrap_peer_ref": "doc/testing/templates/public-testnet-bootstrap.example.txt"
   },
+  "signer_truth_refs": {
+    "governance_public_manifest_ref": "doc/testing/evidence/public-testnet-governance-public-signers-2026-06-05.json",
+    "liveops_public_manifest_ref": "doc/testing/evidence/public-testnet-liveops-public-signers-2026-06-05.json",
+    "binding_notes_ref": "doc/testing/evidence/network-tier-signer-truth-binding-2026-06-05.md"
+  },
   "endpoint_policy": {
     "rpc_ref": "https://public-testnet.example.invalid/rpc",
     "explorer_ref": "https://public-testnet.example.invalid/explorer",
     "faucet_ref": "https://public-testnet.example.invalid/faucet"
   },
   "validator_policy": {
-    "governance_mode": "shared_ops",
+    "governance_mode": "governance_registry",
     "validator_admission": "allowlist_or_governed_candidate",
-    "target_validator_count": 4,
+    "target_validator_count": 2,
     "allow_observer_nodes": true
   },
   "token_policy": {
@@ -48,6 +53,10 @@
     ]
   },
   "evidence_refs": [
-    "doc/testing/evidence/public-testnet-skeleton-example.md"
+    "doc/testing/evidence/public-testnet-skeleton-example.md",
+    "doc/testing/evidence/network-tier-signer-truth-binding-2026-06-05.md",
+    "doc/testing/evidence/public-testnet-governance-public-signers-2026-06-05.json",
+    "doc/testing/evidence/public-testnet-liveops-public-signers-2026-06-05.json",
+    "doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md"
   ]
 }

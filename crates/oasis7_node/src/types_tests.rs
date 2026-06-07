@@ -16,6 +16,21 @@ fn network_policy_blocks_observer_from_consensus_publish_lane() {
 }
 
 #[test]
+fn storage_runtime_can_explicitly_claim_validator_core_network_role() {
+    let config = NodeConfig::new(
+        "storage-validator",
+        "world-storage-validator",
+        NodeRole::Storage,
+    )
+    .expect("config")
+    .with_network_policy(NodeNetworkPolicy {
+        deployment_mode: PeerDeploymentMode::Private,
+        node_role_claim: PeerNodeRole::ValidatorCore,
+    });
+    assert!(config.is_ok());
+}
+
+#[test]
 fn network_policy_limits_relay_to_control_lane() {
     let policy = NodeNetworkPolicy {
         deployment_mode: PeerDeploymentMode::Public,
@@ -139,7 +154,42 @@ fn unstable_probe_falls_back_to_private_safe() {
 }
 
 #[test]
-fn sequencer_auto_join_never_auto_promotes_to_public_entry() {
+fn sequencer_auto_join_requires_confirmation_before_public_entry_upgrade() {
+    let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
+        NodeRole::Sequencer,
+        NodeUserMode::AutoJoin,
+        NodeReachabilityAutoDetection {
+            observed_reachability: Some(PeerReachabilityClass::Public),
+            hole_punch_viability: NodeHolePunchViability::Viable,
+            relay_available: true,
+            probe_stable: true,
+            ..NodeReachabilityAutoDetection::default()
+        },
+        false,
+    )
+    .expect("recommendation");
+
+    assert_eq!(
+        recommendation.recommended_user_mode,
+        NodeUserMode::PublicEntry
+    );
+    assert_eq!(
+        recommendation.effective_user_mode,
+        NodeUserMode::PrivateSafe
+    );
+    assert!(recommendation.requires_explicit_public_entry_confirmation);
+    assert_eq!(
+        recommendation.effective_policy.deployment_mode,
+        PeerDeploymentMode::Private
+    );
+    assert_eq!(
+        recommendation.effective_policy.node_role_claim,
+        PeerNodeRole::ValidatorCore
+    );
+}
+
+#[test]
+fn sequencer_auto_join_can_promote_to_public_entry_after_consent() {
     let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
         NodeRole::Sequencer,
         NodeUserMode::AutoJoin,
@@ -156,16 +206,24 @@ fn sequencer_auto_join_never_auto_promotes_to_public_entry() {
 
     assert_eq!(
         recommendation.recommended_user_mode,
-        NodeUserMode::PrivateSafe
+        NodeUserMode::PublicEntry
     );
     assert_eq!(
         recommendation.effective_user_mode,
-        NodeUserMode::PrivateSafe
+        NodeUserMode::PublicEntry
+    );
+    assert!(!recommendation.requires_explicit_public_entry_confirmation);
+    assert_eq!(
+        recommendation.effective_policy.deployment_mode,
+        PeerDeploymentMode::Hybrid
     );
     assert_eq!(
         recommendation.effective_policy.node_role_claim,
         PeerNodeRole::ValidatorCore
     );
+    assert!(recommendation
+        .effective_policy
+        .public_direct_surface_allowed());
 }
 
 #[test]

@@ -139,10 +139,14 @@ fn replication_gap_sync_backfills_when_consensus_height_already_advanced() {
         signed_pos_config_with_signer_seeds(validators, &[("node-a", 143), ("node-b", 144)]);
     let replication_config_a = signed_replication_config(dir_a.clone(), 143)
         .with_remote_writer_allowlist(vec![public_key_b.clone()])
-        .expect("allowlist a");
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
     let replication_config_b = signed_replication_config(dir_b.clone(), 144)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
-        .expect("allowlist b");
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
+        .expect("fetch allowlist b");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
         .with_pos_config(pos_config.clone())
@@ -277,10 +281,14 @@ fn proposal_ahead_updates_replication_gap_sync_target_height() {
         signed_pos_config_with_signer_seeds(validators, &[("node-a", 154), ("node-b", 155)]);
     let replication_config_a = signed_replication_config(dir_a.clone(), 154)
         .with_remote_writer_allowlist(vec![public_key_b.clone()])
-        .expect("allowlist a");
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
     let replication_config_b = signed_replication_config(dir_b.clone(), 155)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
-        .expect("allowlist b");
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
+        .expect("fetch allowlist b");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
         .with_pos_config(pos_config.clone())
@@ -643,6 +651,72 @@ fn proposer_local_replication_advances_persisted_height_without_network_endpoint
     assert_eq!(engine.replication_persisted_height, 1);
     assert_eq!(engine.last_replication_gap_sync_blocked_height, None);
     assert_eq!(engine.last_replication_gap_sync_blocked_reason, None);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn storage_validator_core_local_replication_advances_persisted_height() {
+    let world_id = "world-storage-validator-local-replication";
+    let dir = temp_dir("storage-validator-local-replication");
+    let validators = vec![PosValidator {
+        validator_id: "node-storage".to_string(),
+        stake: 100,
+    }];
+    let pos_config = signed_pos_config_with_signer_seeds(validators, &[("node-storage", 58)]);
+    let config = NodeConfig::new("node-storage", world_id, NodeRole::Storage)
+        .expect("config")
+        .with_network_policy(NodeNetworkPolicy {
+            deployment_mode: oasis7_proto::distributed_dht::PeerDeploymentMode::Private,
+            node_role_claim: oasis7_proto::distributed_dht::PeerNodeRole::ValidatorCore,
+        })
+        .expect("storage validator-core policy")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 58));
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.last_execution_height = 1;
+    engine.last_execution_block_hash = Some("exec-block-1".to_string());
+    engine.last_execution_state_root = Some("exec-state-1".to_string());
+
+    let mut replication = ReplicationRuntime::new(
+        config.replication.as_ref().expect("replication"),
+        "node-storage",
+    )
+    .expect("replication runtime");
+    let decision = PosDecision {
+        height: 1,
+        slot: 0,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "block-1".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+
+    engine
+        .broadcast_local_replication(
+            None,
+            None,
+            "node-storage",
+            world_id,
+            1_000,
+            &decision,
+            Some(&mut replication),
+        )
+        .expect("broadcast local replication");
+
+    assert_eq!(
+        replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted height"),
+        1
+    );
+    assert_eq!(engine.replication_persisted_height, 1);
 
     let _ = fs::remove_dir_all(&dir);
 }

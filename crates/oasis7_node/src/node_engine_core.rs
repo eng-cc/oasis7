@@ -136,10 +136,16 @@ impl PosNodeEngine {
             last_broadcast_proposal_at_ms: None,
             last_broadcast_local_attestation_height: 0,
             last_broadcast_local_attestation_at_ms: None,
-            last_broadcast_committed_height: 0,
-            last_broadcast_committed_at_ms: None,
-            replicate_local_commits: matches!(config.role, NodeRole::Sequencer)
-                && config.replication.is_some(),
+            last_broadcast_gossip_committed_height: 0,
+            last_broadcast_gossip_committed_at_ms: None,
+            last_broadcast_network_committed_height: 0,
+            last_broadcast_network_committed_at_ms: None,
+            replicate_local_commits: config.replication.is_some()
+                && (matches!(config.role, NodeRole::Sequencer)
+                    || matches!(
+                        config.network_policy.node_role_claim,
+                        oasis7_proto::distributed_dht::PeerNodeRole::ValidatorCore
+                    )),
             require_peer_execution_hashes: config.require_peer_execution_hashes,
             consensus_signer,
             enforce_consensus_signature,
@@ -325,8 +331,23 @@ impl PosNodeEngine {
         }
         if let Some(endpoint) = consensus_network.as_ref() {
             self.broadcast_local_commit_network(endpoint, node_id, world_id, now_ms, &decision)?;
-        } else if let Some(endpoint) = gossip.as_ref() {
+            self.broadcast_replicated_commit_head_network(
+                endpoint,
+                node_id,
+                world_id,
+                now_ms,
+                replication.as_deref(),
+            )?;
+        }
+        if let Some(endpoint) = gossip.as_ref() {
             self.broadcast_local_commit(endpoint, node_id, world_id, now_ms, &decision)?;
+            self.broadcast_replicated_commit_head_gossip(
+                endpoint,
+                node_id,
+                world_id,
+                now_ms,
+                replication.as_deref(),
+            )?;
         }
         if let Some(endpoint) = gossip.as_ref() {
             self.ingest_peer_messages(
@@ -990,6 +1011,22 @@ impl PosNodeEngine {
         }
     }
 
+    pub(super) fn remember_execution_binding(
+        &mut self,
+        height: u64,
+        execution_block_hash: String,
+        execution_state_root: String,
+    ) {
+        self.execution_bindings
+            .insert(height, (execution_block_hash, execution_state_root));
+        while self.execution_bindings.len() > EXECUTION_BINDING_HISTORY_LIMIT {
+            let Some(first_height) = self.execution_bindings.keys().next().copied() else {
+                break;
+            };
+            self.execution_bindings.remove(&first_height);
+        }
+    }
+
     pub(super) fn validate_peer_commit_execution_binding(
         &self,
         height: u64,
@@ -1090,93 +1127,5 @@ fn summarize_finality_latency(latencies: impl Iterator<Item = i64>) -> NodeFinal
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct GapWaitingExecutionHook;
-
-    impl NodeExecutionHook for GapWaitingExecutionHook {
-        fn on_commit(
-            &mut self,
-            _context: NodeExecutionCommitContext,
-        ) -> Result<NodeExecutionCommitResult, String> {
-            Err(format!(
-                "{}: last_applied=0 incoming=8 predecessor=7",
-                EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE
-            ))
-        }
-    }
-
-    #[test]
-    fn committed_execution_waits_for_gap_sync_when_predecessor_record_is_missing() {
-        let config = NodeConfig::new("node-b", "world-gap-sync-exec-wait", NodeRole::Observer)
-            .expect("config");
-        let mut engine = PosNodeEngine::new(&config).expect("engine");
-        let decision = PosDecision {
-            height: 8,
-            slot: 8,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: "block-8".to_string(),
-            action_root: compute_consensus_action_root(&[]).expect("empty action root"),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
-        let mut hook = GapWaitingExecutionHook;
-
-        engine
-            .apply_committed_execution(
-                &config.node_id,
-                &config.world_id,
-                8_000,
-                &decision,
-                Some(&mut hook),
-            )
-            .expect("defer gap execution");
-
-        assert_eq!(engine.last_execution_height, 0);
-        assert!(engine.last_execution_block_hash.is_none());
-        assert!(engine.last_execution_state_root.is_none());
-    }
-
-    #[test]
-    fn sequencer_committed_execution_does_not_wait_for_gap_sync() {
-        let config = NodeConfig::new("node-b", "world-gap-sync-exec-fail", NodeRole::Sequencer)
-            .expect("config");
-        let mut engine = PosNodeEngine::new(&config).expect("engine");
-        let decision = PosDecision {
-            height: 8,
-            slot: 8,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: "block-8".to_string(),
-            action_root: compute_consensus_action_root(&[]).expect("empty action root"),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
-        let mut hook = GapWaitingExecutionHook;
-
-        let err = engine
-            .apply_committed_execution(
-                &config.node_id,
-                &config.world_id,
-                8_000,
-                &decision,
-                Some(&mut hook),
-            )
-            .expect_err("sequencer must fail when execution cannot bridge the predecessor gap");
-
-        assert!(
-            matches!(err, NodeError::Execution { reason } if reason.contains("missing predecessor record"))
-        );
-        assert_eq!(engine.last_execution_height, 0);
-        assert!(engine.last_execution_block_hash.is_none());
-        assert!(engine.last_execution_state_root.is_none());
-    }
-}
+#[path = "node_engine_core_tests.rs"]
+mod tests;

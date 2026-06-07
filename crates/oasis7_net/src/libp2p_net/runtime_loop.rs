@@ -236,9 +236,18 @@ pub(super) fn peer_requires_active_quarantine(
         PeerManagerHealthStatus::Blocked => !health
             .issues
             .iter()
-            .all(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)),
+            .all(peer_health_issue_is_record_exchange_pending),
         PeerManagerHealthStatus::Active | PeerManagerHealthStatus::Candidate => false,
     }
+}
+
+fn peer_health_issue_is_record_exchange_pending(issue: &PeerManagerHealthIssue) -> bool {
+    matches!(
+        issue,
+        PeerManagerHealthIssue::MissingPeerRecord
+            | PeerManagerHealthIssue::InsufficientActiveDiscoverySources { .. }
+            | PeerManagerHealthIssue::SingleSourceDiscovery { .. }
+    )
 }
 
 #[cfg(test)]

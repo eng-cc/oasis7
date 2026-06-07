@@ -8,6 +8,7 @@ OUT_DIR=""
 ASSET_NAME=""
 VERSION=""
 DRY_RUN=0
+APPIMAGE_RUNTIME_FILE="${OASIS7_APPIMAGE_RUNTIME_FILE:-}"
 
 usage() {
   cat <<'USAGE'
@@ -21,6 +22,8 @@ Options:
   --out-dir <path>     required: output directory for packaged installer
   --asset-name <name>  required: final asset filename (.AppImage | .deb | .dmg | .exe)
   --version <value>    required: release version (for example 0.0.40)
+  --appimage-runtime-file <path>
+                       optional: pre-downloaded AppImage type2 runtime for Linux
   --dry-run            print commands only; do not execute
   -h, --help           show this help
 USAGE
@@ -36,6 +39,9 @@ run() {
 
 ensure_command() {
   local cmd="$1"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    return 0
+  fi
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "error: required command not found: $cmd" >&2
     exit 1
@@ -105,6 +111,10 @@ while [[ $# -gt 0 ]]; do
       VERSION="${2:-}"
       shift 2
       ;;
+    --appimage-runtime-file)
+      APPIMAGE_RUNTIME_FILE="${2:-}"
+      shift 2
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
@@ -138,6 +148,10 @@ BUNDLE_DIR="$(resolve_abs_path "$BUNDLE_DIR")"
 OUT_DIR="$(resolve_abs_path "$OUT_DIR")"
 OUT_FILE="$OUT_DIR/$ASSET_NAME"
 RELEASE_VERSION="$(normalize_release_version "$VERSION")"
+
+if [[ -n "$APPIMAGE_RUNTIME_FILE" ]]; then
+  APPIMAGE_RUNTIME_FILE="$(resolve_abs_path "$APPIMAGE_RUNTIME_FILE")"
+fi
 
 if [[ -z "$RELEASE_VERSION" ]]; then
   echo "error: normalized release version is empty: $VERSION" >&2
@@ -207,6 +221,11 @@ EOF
       require_bundle_path "$BUNDLE_DIR/run-client.sh"
       ICON_SRC="$ROOT_DIR/site/assets/images/favicon.svg"
       require_bundle_path "$ICON_SRC"
+      APPIMAGETOOL_ARGS=(--no-appstream)
+      if [[ -n "$APPIMAGE_RUNTIME_FILE" ]]; then
+        require_bundle_path "$APPIMAGE_RUNTIME_FILE"
+        APPIMAGETOOL_ARGS=(--runtime-file "$APPIMAGE_RUNTIME_FILE" "${APPIMAGETOOL_ARGS[@]}")
+      fi
       APPDIR="$TMP_DIR/oasis7.AppDir"
       APP_ROOT="$APPDIR/usr/lib/oasis7"
 
@@ -219,7 +238,7 @@ EOF
         echo "+ copy $ICON_SRC -> $APPDIR/oasis7.svg"
         echo "+ ln -s oasis7.svg '$APPDIR/.DirIcon'"
         echo "+ ln -s ../lib/oasis7/run-client.sh '$APPDIR/usr/bin/oasis7'"
-        echo "+ env ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 appimagetool --no-appstream '$APPDIR' '$OUT_FILE'"
+        echo "+ env ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 appimagetool ${APPIMAGETOOL_ARGS[*]} '$APPDIR' '$OUT_FILE'"
         exit 0
       fi
 
@@ -248,7 +267,7 @@ EOF
       ln -s oasis7.svg "$APPDIR/.DirIcon"
       ln -s ../lib/oasis7/run-client.sh "$APPDIR/usr/bin/oasis7"
 
-      env ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 appimagetool --no-appstream "$APPDIR" "$OUT_FILE"
+      env ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 appimagetool "${APPIMAGETOOL_ARGS[@]}" "$APPDIR" "$OUT_FILE"
     else
       echo "error: linux-x64 asset must end with .AppImage or .deb" >&2
       exit 1

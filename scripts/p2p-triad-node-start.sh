@@ -16,6 +16,10 @@ ensure_integer() {
   fi
 }
 
+iso_now() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+}
+
 RELEASE_LINK="${RELEASE_LINK:-$APP_ROOT/current}"
 BIN="${BIN:-$RELEASE_LINK/bin/oasis7_chain_runtime}"
 [[ -x "$BIN" ]] || { echo "missing runtime binary: $BIN" >&2; exit 1; }
@@ -24,9 +28,11 @@ mkdir -p \
   "$APP_ROOT/logs" \
   "$APP_ROOT/data" \
   "$(dirname "$CONFIG_PATH")" \
+  "${RUNTIME_ROOT:-$APP_ROOT/runtime-root}" \
   "$EXECUTION_WORLD_DIR" \
   "$EXECUTION_RECORDS_DIR" \
-  "$STORAGE_ROOT"
+  "$STORAGE_ROOT" \
+  "${REPLICATION_ROOT:-$APP_ROOT/replication-root}"
 
 # Public tiers use the execution-world governance registry as validator truth.
 # NODE_VALIDATORS_CSV / NODE_VALIDATOR_SIGNERS_CSV are kept only as dev/legacy
@@ -51,6 +57,7 @@ cmd=(
   --pos-proposal-tick-phase "$POS_PROPOSAL_TICK_PHASE"
   --pos-max-past-slot-lag "$POS_MAX_PAST_SLOT_LAG"
   --config "$CONFIG_PATH"
+  --runtime-root "${RUNTIME_ROOT:-$APP_ROOT/runtime-root}"
   --execution-world-dir "$EXECUTION_WORLD_DIR"
   --execution-records-dir "$EXECUTION_RECORDS_DIR"
   --storage-root "$STORAGE_ROOT"
@@ -58,6 +65,11 @@ cmd=(
   --reward-points-per-credit "$REWARD_POINTS_PER_CREDIT"
   --node-gossip-bind "$NODE_GOSSIP_BIND"
 )
+
+replication_root="${REPLICATION_ROOT:-}"
+if [[ -n "$replication_root" ]]; then
+  cmd+=(--replication-root "$replication_root")
+fi
 
 if [[ "${POS_ADAPTIVE_TICK_SCHEDULER:-0}" == "1" ]]; then
   cmd+=(--pos-adaptive-tick-scheduler)
@@ -86,19 +98,75 @@ if [[ -n "${NODE_AUTO_ATTEST_FLAG:-}" ]]; then
   cmd+=("$NODE_AUTO_ATTEST_FLAG")
 fi
 
-for peer in "${peers[@]}"; do
+p2p_user_mode="${P2P_USER_MODE:-}"
+if [[ -n "$p2p_user_mode" ]]; then
+  cmd+=(--p2p-user-mode "$p2p_user_mode")
+fi
+
+p2p_detected_reachability="${P2P_DETECTED_REACHABILITY:-}"
+if [[ -n "$p2p_detected_reachability" ]]; then
+  cmd+=(--p2p-detected-reachability "$p2p_detected_reachability")
+fi
+
+p2p_detected_hole_punch="${P2P_DETECTED_HOLE_PUNCH:-}"
+if [[ -n "$p2p_detected_hole_punch" ]]; then
+  cmd+=(--p2p-detected-hole-punch "$p2p_detected_hole_punch")
+fi
+
+case "${P2P_DETECTED_RELAY_AVAILABLE:-}" in
+  1|true|TRUE|yes|YES) cmd+=(--p2p-detected-relay-available) ;;
+  0|false|FALSE|no|NO) cmd+=(--p2p-detected-relay-unavailable) ;;
+  "") ;;
+  *) echo "invalid P2P_DETECTED_RELAY_AVAILABLE: $P2P_DETECTED_RELAY_AVAILABLE" >&2; exit 2 ;;
+esac
+
+case "${P2P_DETECTED_PROBE_STABLE:-}" in
+  1|true|TRUE|yes|YES) cmd+=(--p2p-detected-probe-stable) ;;
+  0|false|FALSE|no|NO) cmd+=(--p2p-detected-probe-unstable) ;;
+  "") ;;
+  *) echo "invalid P2P_DETECTED_PROBE_STABLE: $P2P_DETECTED_PROBE_STABLE" >&2; exit 2 ;;
+esac
+
+case "${P2P_ACCEPT_PUBLIC_ENTRY:-}" in
+  1|true|TRUE|yes|YES) cmd+=(--p2p-accept-public-entry) ;;
+  0|false|FALSE|no|NO) cmd+=(--p2p-reject-public-entry) ;;
+  "") ;;
+  *) echo "invalid P2P_ACCEPT_PUBLIC_ENTRY: $P2P_ACCEPT_PUBLIC_ENTRY" >&2; exit 2 ;;
+esac
+
+p2p_deployment_mode="${P2P_DEPLOYMENT_MODE:-}"
+if [[ -n "$p2p_deployment_mode" ]]; then
+  cmd+=(--p2p-deployment-mode "$p2p_deployment_mode")
+fi
+
+p2p_node_role="${P2P_NODE_ROLE:-}"
+if [[ -n "$p2p_node_role" ]]; then
+  cmd+=(--p2p-node-role "$p2p_node_role")
+fi
+
+p2p_source_operator="${P2P_SOURCE_OPERATOR:-}"
+if [[ -n "$p2p_source_operator" ]]; then
+  cmd+=(--p2p-source-operator "$p2p_source_operator")
+fi
+
+p2p_source_asn="${P2P_SOURCE_ASN:-}"
+if [[ -n "$p2p_source_asn" ]]; then
+  cmd+=(--p2p-source-asn "$p2p_source_asn")
+fi
+
+for peer in "${peers[@]-}"; do
   [[ -n "$peer" ]] && cmd+=(--node-gossip-peer "$peer")
 done
 
-for listen in "${replication_listens[@]}"; do
+for listen in "${replication_listens[@]-}"; do
   [[ -n "$listen" ]] && cmd+=(--replication-network-listen "$listen")
 done
 
-for peer in "${replication_peers[@]}"; do
+for peer in "${replication_peers[@]-}"; do
   [[ -n "$peer" ]] && cmd+=(--replication-network-peer "$peer")
 done
 
-for writer in "${replication_remote_writers[@]}"; do
+for writer in "${replication_remote_writers[@]-}"; do
   [[ -n "$writer" ]] && cmd+=(--replication-remote-writer-public-key "$writer")
 done
 
@@ -116,11 +184,11 @@ genesis_validator_registry_path="${GENESIS_VALIDATOR_REGISTRY_PATH:-}"
 if [[ -n "$genesis_validator_registry_path" ]]; then
   cmd+=(--genesis-validator-registry "$genesis_validator_registry_path")
 elif [[ -z "$network_tier_manifest_path" || "${ALLOW_LEGACY_NODE_VALIDATORS_CSV:-0}" == "1" ]]; then
-  for validator in "${legacy_validators[@]}"; do
+  for validator in "${legacy_validators[@]-}"; do
     [[ -n "$validator" ]] && cmd+=(--node-validator "$validator")
   done
 
-  for signer in "${legacy_validator_signers[@]}"; do
+  for signer in "${legacy_validator_signers[@]-}"; do
     [[ -n "$signer" ]] && cmd+=(--node-validator-signer-public-key "$signer")
   done
 fi
@@ -141,7 +209,7 @@ last_command_file="$APP_ROOT/logs/last-command.sh"
 monitor_command_file="$APP_ROOT/logs/last-traffic-monitor-command.sh"
 monitor_supervisor_log="$APP_ROOT/logs/traffic-monitor-supervisor.log"
 
-printf '%s\n' "$(date -Is) starting $NODE_ROLE node $NODE_ID" >> "$startup_log"
+printf '%s\n' "$(iso_now) starting $NODE_ROLE node $NODE_ID" >> "$startup_log"
 printf '%q ' "${cmd[@]}" > "$last_command_file"
 printf '\n' >> "$last_command_file"
 
@@ -205,7 +273,7 @@ trap cleanup EXIT TERM INT
 runtime_pid=$!
 
 if (( ${#monitor_cmd[@]} > 0 )); then
-  printf '%s\n' "$(date -Is) starting traffic monitor for $NODE_ID" >> "$startup_log"
+  printf '%s\n' "$(iso_now) starting traffic monitor for $NODE_ID" >> "$startup_log"
   "${monitor_cmd[@]}" >> "$monitor_supervisor_log" 2>&1 &
   monitor_pid=$!
 fi

@@ -1,0 +1,164 @@
+[
+  {
+    "slot_id": "msig.genesis.v1",
+    "signer_id": "signer01",
+    "scheme": "ed25519",
+    "public_key_hex": "13492e7d7aec92fdd61cf9126d2e930f3a86ffae5199b64862c5b582a6344d13"
+  },
+  {
+    "slot_id": "msig.genesis.v1",
+    "signer_id": "signer02",
+    "scheme": "ed25519",
+    "public_key_hex": "1c7140281e0b1d19d281c2a9410a3c3a7a48cca3c06fd02782def9ee0f70005a"
+  },
+  {
+    "slot_id": "msig.genesis.v1",
+    "signer_id": "signer03",
+    "scheme": "ed25519",
+    "public_key_hex": "94d659cddc18043201e701285c607ff48a8e2152717d7116ea54eaec9ac1e16a"
+  },
+  {
+    "slot_id": "msig.team_core.v1",
+    "signer_id": "signer01",
+    "scheme": "ed25519",
+    "public_key_hex": "59f58d1024d8e3200de17adc20348cbefec6ed8fc7d9c2275bafe4c54dbf8930"
+  },
+  {
+    "slot_id": "msig.team_core.v1",
+    "signer_id": "signer02",
+    "scheme": "ed25519",
+    "public_key_hex": "9f64f9b03264e0fb639be04353776f61bd19986bd19aecd10bc0ebc92f2208ad"
+  },
+  {
+    "slot_id": "msig.team_core.v1",
+    "signer_id": "signer03",
+    "scheme": "ed25519",
+    "public_key_hex": "e586f3908cc0540a934869ec750b00595148ba664c1f166388560b81d7413e39"
+  },
+  {
+    "slot_id": "msig.reward_reserve.v1",
+    "signer_id": "signer01",
+    "scheme": "ed25519",
+    "public_key_hex": "29d821335f635c3d24d8e22465aac47dcb3c125774e9964f6f5ab2cfb429ff61"
+  },
+  {
+    "slot_id": "msig.reward_reserve.v1",
+    "signer_id": "signer02",
+    "scheme": "ed25519",
+    "public_key_hex": "6cde8cf3ea0b0ea4167f2489ca62cabb47e383b370ecc94e359debe99048b9d5"
+  },
+  {
+    "slot_id": "msig.reward_reserve.v1",
+    "signer_id": "signer03",
+    "scheme": "ed25519",
+    "public_key_hex": "eeb2033a3bbd2c4c5106b632b8d607bbe429e80f4a8160306cccd12b5146a110"
+  },
+  {
+    "slot_id": "msig.node_committee.v1",
+    "signer_id": "signer01",
+    "scheme": "ed25519",
+    "public_key_hex": "d2b9e16cb8acd9889d1a6ac5a32cabbd89d9d8844cdbdcf63b55808f561d9d29"
+  },
+  {
+    "slot_id": "msig.node_committee.v1",
+    "signer_id": "signer02",
+    "scheme": "ed25519",
+    "public_key_hex": "eaa775eb3286e817ac71f5308a917b52fbbe6404a4c8a6f96ecf26ea87f64f86"
+  },
+  {
+    "slot_id": "msig.node_committee.v1",
+    "signer_id": "signer03",
+    "scheme": "ed25519",
+    "public_key_hex": "6a07dd0be954d34d82ed482ce29cb7e84d8636a294e4de77c97c2f1f3858ce3d"
+  },
+  {
+    "slot_id": "msig.staking_governance.v1",
+    "signer_id": "signer01",
+    "scheme": "ed25519",
+    "public_key_hex": "156754b8c7b5d8a102919ac28c2c30d702a9ba3d2a7848e20f61feb7b20b0b9f"
+  },
+  {
+    "slot_id": "msig.staking_governance.v1",
+    "signer_id": "signer02",
+    "scheme": "ed25519",
+    "public_key_hex": "6114e27688843f9e3ed138f4fa661fa1abeb70288afa00d1a3aac330035f7044"
+  },
+  {
+    "slot_id": "msig.staking_governance.v1",
+    "signer_id": "signer03",
+    "scheme": "ed25519",
+    "public_key_hex": "c982d809b96e2ad8e7e2fac582246dad0894a12fa0e354ca4cdf266b10fa5dcf"
+  },
+  {
+    "slot_id": "msig.ecosystem_governance.v1",
+    "signer_id": "signer01",
+    "scheme": "ed25519",
+    "public_key_hex": "816ae2a5f0b353230f75e31fd282d3daab595d88a197b1d91b95d1b4d02d8682"
+  },
+  {
+    "slot_id": "msig.ecosystem_governance.v1",
+    "signer_id": "signer02",
+    "scheme": "ed25519",
+    "public_key_hex": "64a763d33ac8cebbdcc90c32fbdba8a6699b547b0429b19d6fe3f9a2760abdfb"
+  },
+  {
+    "slot_id": "msig.ecosystem_governance.v1",
+    "signer_id": "signer03",
+    "scheme": "ed25519",
+    "public_key_hex": "a1536552953e76d945e984a39321b841730648e45dfb3f3b947078e88862a93d"
+  },
+  {
+    "slot_id": "msig.security_council.v1",
+    "signer_id": "signer01",
+    "scheme": "ed25519",
+    "public_key_hex": "bf472494c00c425e4e41f993b8760bf09f9708b628a5b8e7c8af0aa31b8e69be"
+  },
+  {
+    "slot_id": "msig.security_council.v1",
+    "signer_id": "signer02",
+    "scheme": "ed25519",
+    "public_key_hex": "bfc6e11703b30ec02eee82003f9c3d59d3a74cb35d9206842a383a0a9b2596cc"
+  },
+  {
+    "slot_id": "msig.security_council.v1",
+    "signer_id": "signer03",
+    "scheme": "ed25519",
+    "public_key_hex": "47b2daff693674ffba9d52188b62938d91b1acaa4df0efc87edf85b92042d83c"
+  },
+  {
+    "slot_id": "msig.foundation_ops.v1",
+    "signer_id": "signer01",
+    "scheme": "ed25519",
+    "public_key_hex": "e88d06f092ec8a227d228e55dd13fb56e52396bf43769f9fe72d8c24f6148626"
+  },
+  {
+    "slot_id": "msig.foundation_ops.v1",
+    "signer_id": "signer02",
+    "scheme": "ed25519",
+    "public_key_hex": "347c2f51a244574bda50a3215b6798198ff217e6f2016744edca0d314b1d8a78"
+  },
+  {
+    "slot_id": "msig.foundation_ops.v1",
+    "signer_id": "signer03",
+    "scheme": "ed25519",
+    "public_key_hex": "46bd2f2c506645909b63a2f1fda24eaa72ff814bfb40dde6d71b4da960b5deb6"
+  },
+  {
+    "slot_id": "governance.finality.v1",
+    "signer_id": "triad-testnet-sequencer",
+    "node_id": "triad-testnet-sequencer",
+    "scheme": "ed25519",
+    "threshold": 2,
+    "public_key_hex": "e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690",
+    "stake": 100
+  },
+  {
+    "slot_id": "governance.finality.v1",
+    "signer_id": "triad-testnet-storage",
+    "node_id": "triad-testnet-storage",
+    "scheme": "ed25519",
+    "threshold": 2,
+    "public_key_hex": "1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33",
+    "stake": 100
+  }
+]

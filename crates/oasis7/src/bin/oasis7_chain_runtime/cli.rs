@@ -108,10 +108,12 @@ pub(super) struct CliOptions {
     pub loaded_network_tier_manifest: Option<LoadedNetworkTierManifest>,
     pub genesis_validator_registry_path: Option<PathBuf>,
     pub config_path: String,
+    pub runtime_root: Option<PathBuf>,
     pub execution_bridge_state_path: Option<PathBuf>,
     pub execution_world_dir: Option<PathBuf>,
     pub execution_records_dir: Option<PathBuf>,
     pub storage_root: Option<PathBuf>,
+    pub replication_root: Option<PathBuf>,
     pub reward_runtime_enabled: bool,
     pub reward_runtime_signer_node_id: Option<String>,
     pub reward_runtime_epoch_duration_secs: Option<u64>,
@@ -167,10 +169,12 @@ impl Default for CliOptions {
             loaded_network_tier_manifest: None,
             genesis_validator_registry_path: None,
             config_path: DEFAULT_CONFIG_FILE.to_string(),
+            runtime_root: None,
             execution_bridge_state_path: None,
             execution_world_dir: None,
             execution_records_dir: None,
             storage_root: None,
+            replication_root: None,
             reward_runtime_enabled: true,
             reward_runtime_signer_node_id: None,
             reward_runtime_epoch_duration_secs: None,
@@ -396,6 +400,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 options.genesis_validator_registry_path = Some(PathBuf::from(raw));
             }
             "--config" => options.config_path = parse_required_value(&mut iter, "--config")?,
+            "--runtime-root" => {
+                let raw = parse_required_value(&mut iter, "--runtime-root")?;
+                options.runtime_root = Some(PathBuf::from(raw));
+            }
             "--execution-bridge-state" => {
                 let raw = parse_required_value(&mut iter, "--execution-bridge-state")?;
                 options.execution_bridge_state_path = Some(PathBuf::from(raw));
@@ -411,6 +419,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--storage-root" => {
                 let raw = parse_required_value(&mut iter, "--storage-root")?;
                 options.storage_root = Some(PathBuf::from(raw));
+            }
+            "--replication-root" => {
+                let raw = parse_required_value(&mut iter, "--replication-root")?;
+                options.replication_root = Some(PathBuf::from(raw));
             }
             "--reward-runtime-enable" => options.reward_runtime_enabled = true,
             "--reward-runtime-disable" => options.reward_runtime_enabled = false,
@@ -761,10 +773,12 @@ Options:\n\
   --genesis-validator-registry <path>\n\
                                     initialize empty execution world validator registry from genesis manifest\n\
   --config <path>                   config file path for node keypair (default: {DEFAULT_CONFIG_FILE})\n\
+  --runtime-root <path>             override chain runtime state root directory\n\
   --execution-bridge-state <path>   override execution bridge state file path\n\
   --execution-world-dir <path>      override execution world directory\n\
   --execution-records-dir <path>    override execution records directory\n\
   --storage-root <path>             override execution CAS/storage root\n\
+  --replication-root <path>         override replication root directory\n\
   --reward-runtime-enable           enable reward runtime worker (default)\n\
   --reward-runtime-disable          disable reward runtime worker\n\
   --reward-runtime-signer-node-id <id>\n\

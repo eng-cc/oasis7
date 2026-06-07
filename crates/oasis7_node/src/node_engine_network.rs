@@ -337,6 +337,18 @@ impl PosNodeEngine {
                 payload.height, err
             ),
         })?;
+        if self.execution_binding_for_height(payload.height).is_none() {
+            if let (Some(execution_block_hash), Some(execution_state_root)) = (
+                payload.execution_block_hash.clone(),
+                payload.execution_state_root.clone(),
+            ) {
+                self.remember_execution_binding(
+                    payload.height,
+                    execution_block_hash,
+                    execution_state_root,
+                );
+            }
+        }
         Ok((payload.block_hash.clone(), payload.committed_at_ms))
     }
 

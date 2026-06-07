@@ -68,13 +68,20 @@ pub(super) fn reconcile_engine_with_persisted_replication(
         )?;
         return Ok(());
     }
-    if latest_persisted_height <= engine.committed_height {
-        engine.replication_persisted_height = engine
-            .replication_persisted_height
-            .max(latest_persisted_height);
-        return Ok(());
-    }
-    let mut height =
+    engine.replication_persisted_height = engine
+        .replication_persisted_height
+        .max(latest_persisted_height);
+    let replay_start_height = if execution_hook.is_some() {
+        engine
+            .last_execution_height
+            .checked_add(1)
+            .ok_or_else(|| NodeError::Replication {
+                reason: format!(
+                    "persisted replication reconcile execution replay overflow after last_execution_height={}",
+                    engine.last_execution_height
+                ),
+            })?
+    } else {
         engine
             .committed_height
             .checked_add(1)
@@ -83,11 +90,34 @@ pub(super) fn reconcile_engine_with_persisted_replication(
                     "persisted replication reconcile height overflow after committed_height={}",
                     engine.committed_height
                 ),
-            })?;
+            })?
+    };
+    if replay_start_height > latest_persisted_height {
+        return Ok(());
+    }
+    replay_persisted_replication_commits(
+        engine,
+        replication,
+        world_id,
+        replay_start_height,
+        latest_persisted_height,
+        &mut execution_hook,
+    )
+}
+
+fn replay_persisted_replication_commits(
+    engine: &mut PosNodeEngine,
+    replication: &ReplicationRuntime,
+    world_id: &str,
+    start_height: u64,
+    latest_persisted_height: u64,
+    execution_hook: &mut Option<&mut dyn NodeExecutionHook>,
+) -> Result<(), NodeError> {
+    let mut height = start_height;
     while height <= latest_persisted_height {
         let message = load_validated_persisted_commit(replication, world_id, height)?;
         let payload = parse_validated_persisted_commit_payload(world_id, height, &message)?;
-        with_execution_hook(&mut execution_hook, |hook| {
+        with_execution_hook(execution_hook, |hook| {
             engine.apply_synced_replication_commit(world_id, &payload, hook)
         })?;
         if height == latest_persisted_height {

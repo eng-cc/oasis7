@@ -14,7 +14,6 @@ use oasis7::simulator::{
     Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldJournal as SimulatorJournal,
     WorldKernel, WorldSnapshot as SimulatorSnapshot,
 };
-use oasis7::viewer::viewer_bootstrap_formal_release_runtime_world;
 use oasis7_node::{
     compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionCommitResult,
     NodeExecutionHook, NodeSnapshot, EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE,
@@ -721,8 +720,7 @@ pub(crate) fn load_execution_world_with_policy(
     let snapshot_path = world_dir.join("snapshot.json");
     let journal_path = world_dir.join("journal.json");
     if !snapshot_path.exists() || !journal_path.exists() {
-        let mut world = viewer_bootstrap_formal_release_runtime_world()
-            .map(|(world, _)| world)?
+        let mut world = RuntimeWorld::new_production_hardened()
             .with_release_security_policy(release_security_policy.clone());
         normalize_execution_world_main_token_config_for_policy(&mut world, release_security_policy);
         return Ok(world);

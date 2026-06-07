@@ -19,8 +19,14 @@ pub(super) use status_payload_network_head::{
     applied_slashing_receipt_hashes, build_network_head_status, pending_slashing_intent_count,
     readiness_policy, ChainConsensusNetworkHeadStatus, ChainReadinessPolicyStatus,
 };
+#[path = "status_payload_observability.rs"]
+mod status_payload_observability;
 #[path = "status_payload_state_sync.rs"]
 mod status_payload_state_sync;
+pub(crate) use status_payload_observability::{
+    build_liveness_status, classify_transport_stability, observability_status_for_alerts,
+    observability_summary_for_alerts, push_observability_alert, reachability_policy_ok,
+};
 use status_payload_state_sync::{
     consensus_participation_hold_reason, state_sync_fallback_reason,
     state_sync_trusted_checkpoint_required_height,
@@ -166,6 +172,7 @@ pub(super) struct ChainReplicationTransportStability {
     pub(super) stable: bool,
     pub(super) score: u8,
     pub(super) recent_error_count: usize,
+    pub(super) blocking_error_count: usize,
     pub(super) connection_closed_count: usize,
     pub(super) insufficient_peers_count: usize,
     pub(super) timeout_count: usize,
@@ -324,139 +331,19 @@ pub(super) fn build_chain_p2p_status(
     }
 }
 
-fn push_observability_alert(
-    alerts: &mut Vec<ChainNodeObservabilityAlert>,
-    severity: &str,
-    code: &str,
-    summary: String,
-) {
-    alerts.push(ChainNodeObservabilityAlert {
-        severity: severity.to_string(),
-        code: code.to_string(),
-        summary,
-    });
-}
-
-fn observability_status_for_alerts(alerts: &[ChainNodeObservabilityAlert]) -> String {
-    if alerts.iter().any(|alert| alert.severity == "critical") {
-        "critical".to_string()
-    } else if alerts.iter().any(|alert| alert.severity == "warn") {
-        "warn".to_string()
-    } else {
-        "ok".to_string()
-    }
-}
-
-fn observability_summary_for_alerts(alerts: &[ChainNodeObservabilityAlert]) -> String {
-    match alerts {
-        [] => "no active node alerts".to_string(),
-        [only] => only.summary.clone(),
-        _ => format!("{}; +{} more alerts", alerts[0].summary, alerts.len() - 1),
-    }
-}
-
-pub(super) fn classify_transport_stability(
-    replication: &super::ChainReplicationDebugStatus,
-) -> ChainReplicationTransportStability {
-    let mut connection_closed_count = 0usize;
-    let mut insufficient_peers_count = 0usize;
-    let mut timeout_count = 0usize;
-    let mut protocol_error_count = 0usize;
-    for error in &replication.recent_errors {
-        let lower = error.to_ascii_lowercase();
-        if lower.contains("connectionclosed") || lower.contains("connection closed") {
-            connection_closed_count += 1;
-        }
-        if lower.contains("insufficientpeers") || lower.contains("insufficient peers") {
-            insufficient_peers_count += 1;
-        }
-        if lower.contains("timeout") {
-            timeout_count += 1;
-        }
-        if lower.contains("protocol")
-            || lower.contains("unsupported")
-            || lower.contains("mismatch")
-            || lower.contains("unavailable")
-        {
-            protocol_error_count += 1;
-        }
-    }
-    let penalty = connection_closed_count
-        .saturating_mul(5)
-        .saturating_add(insufficient_peers_count.saturating_mul(10))
-        .saturating_add(timeout_count.saturating_mul(10))
-        .saturating_add(protocol_error_count.saturating_mul(15))
-        .saturating_add(
-            replication
-                .transport_retry_cooldown_peers
-                .len()
-                .saturating_mul(15),
-        )
-        .saturating_add(
-            replication
-                .protocol_retry_cooldown_peers
-                .values()
-                .map(Vec::len)
-                .sum::<usize>()
-                .saturating_mul(20),
-        );
-    let score = 100u8.saturating_sub(penalty.min(100) as u8);
-    ChainReplicationTransportStability {
-        stable: score >= TRANSPORT_STABILITY_MIN_SCORE,
-        score,
-        recent_error_count: replication.recent_errors.len(),
-        connection_closed_count,
-        insufficient_peers_count,
-        timeout_count,
-        protocol_error_count,
-    }
-}
-
-fn reachability_policy_ok(
-    snapshot: &NodeSnapshot,
-    p2p: &ChainP2pStatus,
-    active_peer_count: usize,
-    policy: &ChainReadinessPolicyStatus,
-) -> bool {
-    if !snapshot.replication_enabled {
-        return true;
-    }
-    if snapshot.role.as_str() == "observer" {
-        return active_peer_count > 0 || p2p.relay_available;
-    }
-    let has_public_direct = p2p.detected_reachability.as_deref() == Some("public")
-        || p2p.autonat_status == "public"
-        || p2p.public_port_reachability == "reachable"
-        || !p2p.confirmed_external_direct_addrs.is_empty()
-        || p2p.observed_public_addr.is_some();
-    if policy.tier == "mainnet" && policy.relay_policy == "public_direct_or_governed_relay" {
-        return has_public_direct || (p2p.relay_available && active_peer_count >= 2);
-    }
-    has_public_direct || p2p.relay_available
-}
-
-fn build_liveness_status(snapshot: &NodeSnapshot) -> ChainLivenessStatus {
-    let status = if snapshot.running && snapshot.last_error.is_none() {
-        "ok"
-    } else {
-        "critical"
-    };
-    ChainLivenessStatus {
-        status: status.to_string(),
-        running: snapshot.running,
-        runtime_last_error: snapshot.last_error.clone(),
-    }
-}
-
 fn build_readiness_status(
     observability: &ChainNodeObservabilityStatus,
     policy: ChainReadinessPolicyStatus,
 ) -> ChainReadinessStatus {
-    let failed_gates = observability
-        .alerts
-        .iter()
-        .map(|alert| alert.code.clone())
-        .collect::<Vec<_>>();
+    let failed_gates = if observability.ready {
+        Vec::new()
+    } else {
+        observability
+            .alerts
+            .iter()
+            .map(|alert| alert.code.clone())
+            .collect::<Vec<_>>()
+    };
     ChainReadinessStatus {
         status: if observability.ready {
             "ready"
@@ -566,6 +453,7 @@ pub(super) fn build_chain_node_observability_status(
     );
     let recent_replication_error_count = replication.recent_errors.len();
     let transport_stability = classify_transport_stability(replication);
+    let blocking_replication_error_count = transport_stability.blocking_error_count;
     let reachability_policy_ok = reachability_policy_ok(snapshot, p2p, active_peer_count, policy);
     let storage_degraded = storage_metrics.degraded_reason.is_some()
         || matches!(storage_metrics.last_gc_result.as_str(), "failed");
@@ -784,13 +672,13 @@ pub(super) fn build_chain_node_observability_status(
             "replication discovered peers but has no connected peers".to_string(),
         );
     }
-    if recent_replication_error_count > 0 {
+    if blocking_replication_error_count > 0 {
         push_observability_alert(
             &mut alerts,
             "warn",
             "replication_recent_errors",
             format!(
-                "replication reported {recent_replication_error_count} recent transport/protocol errors"
+                "replication reported {blocking_replication_error_count} recent blocking transport/protocol errors"
             ),
         );
     }

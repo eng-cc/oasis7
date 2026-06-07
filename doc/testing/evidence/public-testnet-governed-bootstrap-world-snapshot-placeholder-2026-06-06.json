@@ -1,0 +1,5 @@
+{
+  "kind": "fresh_public_testnet_cold_start_placeholder",
+  "world_id": "oasis7-public-testnet-governed-20260606",
+  "note": "Cold-start bootstrap begins from an empty execution world plus a governed genesis validator registry."
+}

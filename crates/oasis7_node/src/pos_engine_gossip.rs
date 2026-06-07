@@ -302,8 +302,8 @@ impl PosNodeEngine {
         }
         if !self.should_broadcast_height(
             decision.height,
-            self.last_broadcast_committed_height,
-            self.last_broadcast_committed_at_ms,
+            self.last_broadcast_gossip_committed_height,
+            self.last_broadcast_gossip_committed_at_ms,
             now_ms,
         ) {
             return Ok(());
@@ -331,8 +331,8 @@ impl PosNodeEngine {
             sign_commit_message(&mut message, signer)?;
         }
         endpoint.broadcast_commit(&message)?;
-        self.last_broadcast_committed_height = decision.height;
-        self.last_broadcast_committed_at_ms = Some(now_ms);
+        self.last_broadcast_gossip_committed_height = decision.height;
+        self.last_broadcast_gossip_committed_at_ms = Some(now_ms);
         Ok(())
     }
 
@@ -352,8 +352,8 @@ impl PosNodeEngine {
         }
         if !self.should_broadcast_height(
             decision.height,
-            self.last_broadcast_committed_height,
-            self.last_broadcast_committed_at_ms,
+            self.last_broadcast_network_committed_height,
+            self.last_broadcast_network_committed_at_ms,
             now_ms,
         ) {
             return Ok(());
@@ -381,8 +381,120 @@ impl PosNodeEngine {
             sign_commit_message(&mut message, signer)?;
         }
         endpoint.publish_commit(&message)?;
-        self.last_broadcast_committed_height = decision.height;
-        self.last_broadcast_committed_at_ms = Some(now_ms);
+        self.last_broadcast_network_committed_height = decision.height;
+        self.last_broadcast_network_committed_at_ms = Some(now_ms);
+        Ok(())
+    }
+
+    fn replicated_commit_head_message(
+        &mut self,
+        node_id: &str,
+        world_id: &str,
+        replication: Option<&ReplicationRuntime>,
+    ) -> Result<Option<(u64, GossipCommitMessage)>, NodeError> {
+        let Some(replication) = replication else {
+            return Ok(None);
+        };
+        let height = self.replication_persisted_height.min(self.committed_height);
+        if height == 0 {
+            return Ok(None);
+        }
+        let Some(message) = replication.load_commit_message_by_height(world_id, height)? else {
+            return Ok(None);
+        };
+        let payload =
+            parse_replication_commit_payload(message.payload.as_slice()).ok_or_else(|| {
+                NodeError::Replication {
+                    reason: format!(
+                        "replicated commit head payload decode failed at height {height}"
+                    ),
+                }
+            })?;
+        if payload.world_id != world_id || payload.height != height {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "replicated commit head mismatch expected_world={} expected_height={} actual_world={} actual_height={}",
+                    world_id, height, payload.world_id, payload.height
+                ),
+            });
+        }
+        let mut commit = GossipCommitMessage {
+            version: 1,
+            world_id: world_id.to_string(),
+            node_id: node_id.to_string(),
+            player_id: self.node_player_id.clone(),
+            height: payload.height,
+            slot: payload.slot,
+            epoch: payload.epoch,
+            block_hash: payload.block_hash,
+            action_root: payload.action_root,
+            actions: payload.actions,
+            committed_at_ms: payload.committed_at_ms,
+            execution_block_hash: payload.execution_block_hash,
+            execution_state_root: payload.execution_state_root,
+            public_key_hex: None,
+            signature_hex: None,
+        };
+        if let Some(signer) = self.consensus_signer.as_ref() {
+            sign_commit_message(&mut commit, signer)?;
+        }
+        Ok(Some((height, commit)))
+    }
+
+    pub(super) fn broadcast_replicated_commit_head_network(
+        &mut self,
+        endpoint: &ConsensusNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
+        now_ms: i64,
+        replication: Option<&ReplicationRuntime>,
+    ) -> Result<(), NodeError> {
+        if !endpoint.allows_publish() {
+            return Ok(());
+        }
+        let Some((height, commit)) =
+            self.replicated_commit_head_message(node_id, world_id, replication)?
+        else {
+            return Ok(());
+        };
+        if !self.should_broadcast_height(
+            height,
+            self.last_broadcast_network_committed_height,
+            self.last_broadcast_network_committed_at_ms,
+            now_ms,
+        ) {
+            return Ok(());
+        }
+        endpoint.publish_commit(&commit)?;
+        self.last_broadcast_network_committed_height = height;
+        self.last_broadcast_network_committed_at_ms = Some(now_ms);
+        Ok(())
+    }
+
+    pub(super) fn broadcast_replicated_commit_head_gossip(
+        &mut self,
+        endpoint: &GossipEndpoint,
+        node_id: &str,
+        world_id: &str,
+        now_ms: i64,
+        replication: Option<&ReplicationRuntime>,
+    ) -> Result<(), NodeError> {
+        let Some((height, commit)) =
+            self.replicated_commit_head_message(node_id, world_id, replication)?
+        else {
+            return Ok(());
+        };
+        if !self.should_broadcast_height(
+            height,
+            self.last_broadcast_gossip_committed_height,
+            self.last_broadcast_gossip_committed_at_ms,
+            now_ms,
+        ) {
+            return Ok(());
+        }
+        endpoint.broadcast_commit(&commit)?;
+        self.last_broadcast_gossip_committed_height = height;
+        self.last_broadcast_gossip_committed_at_ms = Some(now_ms);
         Ok(())
     }
 }

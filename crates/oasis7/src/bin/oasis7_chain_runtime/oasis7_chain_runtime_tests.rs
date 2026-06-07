@@ -2,21 +2,20 @@ use super::cli::parse_validator_signer_public_key_spec;
 use super::cli::TrafficProfile;
 use super::{
     apply_traffic_profile_to_node_config, build_chain_balances_payload_from_world,
-    build_chain_status_payload, build_default_peer_record,
-    build_default_replication_network_config, build_live_node_network_policy_recommendation,
-    build_node_replication_config, build_replication_remote_writer_allowlist,
+    build_default_peer_record, build_default_replication_network_config,
+    build_live_node_network_policy_recommendation, build_node_replication_config,
+    build_replication_fetch_requester_allowlist, build_replication_remote_writer_allowlist,
     build_validator_signer_public_keys, derive_node_consensus_signer_keypair,
     derive_node_libp2p_identity_keypair_config, node_keypair_config, parse_options,
-    parse_validator_spec, release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
-    DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
+    parse_validator_spec, CliOptions, DEFAULT_NODE_ID, DEFAULT_REPLICATION_NETWORK_LISTEN,
+    DEFAULT_STATUS_BIND,
 };
 use ed25519_dalek::SigningKey;
-use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
+use oasis7::runtime::World as RuntimeWorld;
 use oasis7_node::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
-    LiveTransportKind, NodeAutoNatStatus, NodeConfig, NodeConsensusSnapshot,
-    NodeHolePunchViability, NodeNetworkPolicy, NodePublicPortReachability,
-    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode, PosValidator,
+    LiveTransportKind, NodeAutoNatStatus, NodeConfig, NodeHolePunchViability, NodeNetworkPolicy,
+    NodePublicPortReachability, NodeRole, NodeUserMode, PosValidator,
 };
 use oasis7_proto::distributed_dht::{
     PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
@@ -58,6 +57,8 @@ fn parse_options_defaults() {
     assert!(options.replication_network_listen_addrs.is_empty());
     assert!(options.replication_network_bootstrap_peers.is_empty());
     assert!(options.replication_remote_writer_public_keys.is_empty());
+    assert!(options.runtime_root.is_none());
+    assert!(options.replication_root.is_none());
     assert_eq!(options.p2p_max_ipv4_subnet_active_peers, None);
 }
 
@@ -99,6 +100,10 @@ fn parse_options_reads_custom_values() {
             "3",
             "--execution-world-dir",
             "custom/world",
+            "--runtime-root",
+            "custom/runtime",
+            "--replication-root",
+            "custom/replication",
             "--reward-runtime-epoch-duration-secs",
             "60",
             "--reward-points-per-credit",
@@ -143,6 +148,20 @@ fn parse_options_reads_custom_values() {
             .as_ref()
             .map(|p| p.to_string_lossy().to_string()),
         Some("custom/world".to_string())
+    );
+    assert_eq!(
+        options
+            .runtime_root
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string()),
+        Some("custom/runtime".to_string())
+    );
+    assert_eq!(
+        options
+            .replication_root
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string()),
+        Some("custom/replication".to_string())
     );
 }
 
@@ -194,6 +213,26 @@ fn parse_validator_signer_public_key_spec_rejects_missing_public_key() {
     let err = parse_validator_signer_public_key_spec("node-a:")
         .expect_err("missing signer public key must fail");
     assert!(err.contains("public_key_hex cannot be empty"));
+}
+
+#[test]
+fn sequencer_requires_execution_commit_but_all_runtime_roles_materialize_execution_state() {
+    assert!(super::node_role_requires_execution_commit(
+        NodeRole::Sequencer
+    ));
+    assert!(!super::node_role_requires_execution_commit(
+        NodeRole::Observer
+    ));
+    assert!(!super::node_role_requires_execution_commit(
+        NodeRole::Storage
+    ));
+
+    for role in [NodeRole::Sequencer, NodeRole::Observer, NodeRole::Storage] {
+        assert!(
+            super::node_role_materializes_execution_state(role),
+            "expected {role:?} to materialize execution state"
+        );
+    }
 }
 
 #[test]
@@ -325,6 +364,44 @@ fn default_runtime_paths_depend_on_node_id() {
         .execution_world_dir
         .to_string_lossy()
         .contains("output/chain-runtime/node-z"));
+    assert!(paths
+        .runtime_root
+        .to_string_lossy()
+        .contains("output/chain-runtime/node-z"));
+    assert!(paths
+        .replication_root
+        .to_string_lossy()
+        .contains("output/node-distfs/node-z"));
+}
+
+#[test]
+fn custom_runtime_root_overrides_default_runtime_paths() {
+    let options = CliOptions {
+        node_id: "node-z".to_string(),
+        runtime_root: Some("custom/runtime".into()),
+        ..CliOptions::default()
+    };
+    let paths = super::resolve_runtime_paths(&options);
+    assert_eq!(paths.runtime_root, Path::new("custom/runtime"));
+    assert_eq!(
+        paths.reward_runtime_report_dir,
+        Path::new("custom/runtime").join("reward-runtime-report")
+    );
+    assert_eq!(
+        paths.reward_runtime_state_path,
+        Path::new("custom/runtime").join("reward-runtime-state.json")
+    );
+}
+
+#[test]
+fn custom_replication_root_overrides_default_runtime_path() {
+    let options = CliOptions {
+        node_id: "node-z".to_string(),
+        replication_root: Some("custom/replication".into()),
+        ..CliOptions::default()
+    };
+    let paths = super::resolve_runtime_paths(&options);
+    assert_eq!(paths.replication_root, Path::new("custom/replication"));
 }
 
 #[test]
@@ -744,13 +821,21 @@ fn build_node_replication_config_uses_storage_profile_budget() {
         public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
     };
     let storage_profile = StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault);
-    let config = build_node_replication_config("node-a", &keypair, &storage_profile, &[])
-        .expect("replication config should build");
+    let config = build_node_replication_config(
+        "node-a",
+        Path::new("custom/replication"),
+        &keypair,
+        &storage_profile,
+        &[],
+        &[],
+    )
+    .expect("replication config should build");
 
     assert_eq!(
         config.max_hot_commit_messages(),
         storage_profile.replication_max_hot_commit_messages
     );
+    assert_eq!(config.root_dir, Path::new("custom/replication"));
 }
 
 #[test]
@@ -785,12 +870,21 @@ fn live_reachability_snapshot_promotes_public_entry_from_autonat_probe() {
 }
 
 #[test]
-fn build_replication_remote_writer_allowlist_combines_validator_and_explicit_keys() {
+fn build_replication_remote_writer_allowlist_uses_only_validator_keys() {
+    let validator_signers = ["bbbb".to_string(), "aaaa".to_string(), "bbbb".to_string()];
+
+    let allowlist = build_replication_remote_writer_allowlist(validator_signers.iter());
+
+    assert_eq!(allowlist, vec!["aaaa".to_string(), "bbbb".to_string()]);
+}
+
+#[test]
+fn build_replication_fetch_requester_allowlist_combines_validator_and_explicit_keys() {
     let validator_signers = ["bbbb".to_string(), "aaaa".to_string(), "bbbb".to_string()];
     let explicit = vec!["cccc".to_string(), "aaaa".to_string()];
 
     let allowlist =
-        build_replication_remote_writer_allowlist(validator_signers.iter(), explicit.as_slice());
+        build_replication_fetch_requester_allowlist(validator_signers.iter(), explicit.as_slice());
 
     assert_eq!(
         allowlist,
@@ -874,270 +968,5 @@ fn derive_node_libp2p_identity_keypair_is_deterministic_and_node_scoped() {
     assert_ne!(
         libp2p_a.public().to_peer_id(),
         libp2p_b.public().to_peer_id()
-    );
-}
-
-#[test]
-fn production_release_policy_status_payload_reports_effective_policy() {
-    let snapshot = NodeSnapshot {
-        node_id: "node-a".to_string(),
-        player_id: "player-a".to_string(),
-        world_id: "live-a".to_string(),
-        role: NodeRole::Sequencer,
-        replication_enabled: false,
-        running: true,
-        tick_count: 1,
-        last_tick_unix_ms: Some(1_700_000_000_000),
-        consensus: NodeConsensusSnapshot::default(),
-        last_error: None,
-    };
-    let reward_runtime = super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
-        enabled: true,
-        metrics_available: true,
-        report_dir: "/tmp/reports".to_string(),
-        report_count: 0,
-        latest_epoch_index: 0,
-        latest_report_observed_at_unix_ms: 0,
-        latest_total_distributed_points: 0,
-        latest_minted_record_count: 0,
-        cumulative_minted_record_count: 0,
-        distfs_total_checks: 0,
-        distfs_failed_checks: 0,
-        distfs_failure_ratio: 0.0,
-        settlement_apply_attempts_total: 0,
-        settlement_apply_failures_total: 0,
-        settlement_apply_failure_ratio: 0.0,
-        invariant_ok: true,
-        last_error: None,
-    };
-    let storage = super::storage_metrics::StorageMetricsSnapshot {
-        storage_profile: "release_default".to_string(),
-        effective_budget: StorageProfileConfig::from(StorageProfile::ReleaseDefault),
-        bytes_by_dir: BTreeMap::new(),
-        blob_counts: BTreeMap::new(),
-        ref_count: 0,
-        pin_count: 0,
-        retained_heights: Vec::new(),
-        checkpoint_count: 0,
-        replay_summary: super::storage_metrics::StorageReplaySummary::default(),
-        orphan_blob_count: 0,
-        last_gc_at_ms: None,
-        last_gc_result: "not_available".to_string(),
-        last_gc_error: None,
-        degraded_reason: None,
-    };
-    let release_security_policy =
-        release_security_policy_for_storage_profile(StorageProfile::ReleaseDefault);
-
-    let payload = build_chain_status_payload(
-        snapshot,
-        Path::new("/tmp/execution-world"),
-        None,
-        &NodeNetworkPolicy::recommend_for_user_mode(
-            NodeRole::Sequencer,
-            NodeUserMode::PrivateSafe,
-            NodeReachabilityAutoDetection::default(),
-            false,
-        )
-        .expect("recommendation"),
-        Some("private_safe".to_string()),
-        NodeNetworkPolicy {
-            deployment_mode: PeerDeploymentMode::Private,
-            node_role_claim: PeerNodeRole::ValidatorCore,
-        },
-        &Libp2pReachabilitySnapshot::default(),
-        NodeReachabilityAutoDetection::default(),
-        release_security_policy.clone(),
-        reward_runtime,
-        storage,
-        super::wasm_status::ChainWasmStatus {
-            metrics_available: false,
-            observed_since_unix_ms: None,
-            degraded_reason: Some("build metrics path not configured".to_string()),
-            build: super::wasm_status::ChainWasmBuildStatus {
-                metrics_available: false,
-                observed_since_unix_ms: None,
-                degraded_reason: Some("build metrics path not configured".to_string()),
-                total_build_wall_ms: None,
-                cargo_build_ms: None,
-                canonicalize_ms: None,
-                hash_ms: None,
-                receipt_write_ms: None,
-                metadata_write_ms: None,
-                wasm_size_bytes: None,
-            },
-            executor: oasis7_wasm_executor::WasmExecutorMetricsSnapshot::empty(),
-            router: oasis7_wasm_router::WasmRouterMetricsSnapshot::empty(),
-        },
-        super::ChainTrafficStatus {
-            udp_gossip: None,
-            libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
-        },
-        super::transfer_submit_api::ChainTransferMetricsStatus {
-            tracked_records: 0,
-            accepted_count: 0,
-            pending_count: 0,
-            confirmed_count: 0,
-            failed_count: 0,
-            timeout_count: 0,
-            inflight_count: 0,
-            oldest_inflight_age_ms: None,
-            recent_confirmation_latency:
-                super::transfer_submit_api::ChainTransferLatencySummaryStatus {
-                    sample_count: 0,
-                    avg_latency_ms: None,
-                    max_latency_ms: None,
-                    p50_latency_ms: None,
-                    p95_latency_ms: None,
-                },
-        },
-        super::ChainReplicationDebugStatus::default(),
-    );
-
-    assert_eq!(
-        payload.release_security_policy,
-        ReleaseSecurityPolicy::production_hardened()
-    );
-    assert!(payload.release_security_policy.is_production_hardened());
-    assert_eq!(payload.p2p.effective_user_mode, "private_safe");
-    assert_eq!(
-        payload.p2p.applied_effective_user_mode.as_deref(),
-        Some("private_safe")
-    );
-}
-
-#[test]
-fn status_payload_reports_effective_policy_when_raw_override_differs_from_recommendation() {
-    let snapshot = NodeSnapshot {
-        node_id: "node-a".to_string(),
-        player_id: "player-a".to_string(),
-        world_id: "live-a".to_string(),
-        role: NodeRole::Observer,
-        replication_enabled: false,
-        running: true,
-        tick_count: 1,
-        last_tick_unix_ms: Some(1_700_000_000_000),
-        consensus: NodeConsensusSnapshot::default(),
-        last_error: None,
-    };
-    let reward_runtime = super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
-        enabled: true,
-        metrics_available: true,
-        report_dir: "/tmp/reports".to_string(),
-        report_count: 0,
-        latest_epoch_index: 0,
-        latest_report_observed_at_unix_ms: 0,
-        latest_total_distributed_points: 0,
-        latest_minted_record_count: 0,
-        cumulative_minted_record_count: 0,
-        distfs_total_checks: 0,
-        distfs_failed_checks: 0,
-        distfs_failure_ratio: 0.0,
-        settlement_apply_attempts_total: 0,
-        settlement_apply_failures_total: 0,
-        settlement_apply_failure_ratio: 0.0,
-        invariant_ok: true,
-        last_error: None,
-    };
-    let storage = super::storage_metrics::StorageMetricsSnapshot {
-        storage_profile: "dev_local".to_string(),
-        effective_budget: StorageProfileConfig::from(StorageProfile::DevLocal),
-        bytes_by_dir: BTreeMap::new(),
-        blob_counts: BTreeMap::new(),
-        ref_count: 0,
-        pin_count: 0,
-        retained_heights: Vec::new(),
-        checkpoint_count: 0,
-        replay_summary: super::storage_metrics::StorageReplaySummary::default(),
-        orphan_blob_count: 0,
-        last_gc_at_ms: None,
-        last_gc_result: "not_available".to_string(),
-        last_gc_error: None,
-        degraded_reason: None,
-    };
-    let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
-        NodeRole::Observer,
-        NodeUserMode::PrivateSafe,
-        NodeReachabilityAutoDetection::default(),
-        false,
-    )
-    .expect("recommendation");
-
-    let payload = build_chain_status_payload(
-        snapshot,
-        Path::new("/tmp/execution-world"),
-        None,
-        &recommendation,
-        None,
-        NodeNetworkPolicy {
-            deployment_mode: PeerDeploymentMode::Public,
-            node_role_claim: PeerNodeRole::Relay,
-        },
-        &Libp2pReachabilitySnapshot::default(),
-        NodeReachabilityAutoDetection::default(),
-        ReleaseSecurityPolicy::default(),
-        reward_runtime,
-        storage,
-        super::wasm_status::ChainWasmStatus {
-            metrics_available: false,
-            observed_since_unix_ms: None,
-            degraded_reason: Some("build metrics path not configured".to_string()),
-            build: super::wasm_status::ChainWasmBuildStatus {
-                metrics_available: false,
-                observed_since_unix_ms: None,
-                degraded_reason: Some("build metrics path not configured".to_string()),
-                total_build_wall_ms: None,
-                cargo_build_ms: None,
-                canonicalize_ms: None,
-                hash_ms: None,
-                receipt_write_ms: None,
-                metadata_write_ms: None,
-                wasm_size_bytes: None,
-            },
-            executor: oasis7_wasm_executor::WasmExecutorMetricsSnapshot::empty(),
-            router: oasis7_wasm_router::WasmRouterMetricsSnapshot::empty(),
-        },
-        super::ChainTrafficStatus {
-            udp_gossip: None,
-            libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
-        },
-        super::transfer_submit_api::ChainTransferMetricsStatus {
-            tracked_records: 0,
-            accepted_count: 0,
-            pending_count: 0,
-            confirmed_count: 0,
-            failed_count: 0,
-            timeout_count: 0,
-            inflight_count: 0,
-            oldest_inflight_age_ms: None,
-            recent_confirmation_latency:
-                super::transfer_submit_api::ChainTransferLatencySummaryStatus {
-                    sample_count: 0,
-                    avg_latency_ms: None,
-                    max_latency_ms: None,
-                    p50_latency_ms: None,
-                    p95_latency_ms: None,
-                },
-        },
-        super::ChainReplicationDebugStatus::default(),
-    );
-
-    assert_eq!(payload.p2p.requested_user_mode, "private_safe");
-    assert_eq!(payload.p2p.effective_user_mode, "private_safe");
-    assert_eq!(payload.p2p.applied_effective_user_mode, None);
-    assert_eq!(payload.p2p.deployment_mode, "public");
-    assert_eq!(payload.p2p.node_role_claim, "relay");
-}
-
-#[test]
-fn feedback_p2p_is_disabled_for_observer_role() {
-    assert!(
-        super::feedback_p2p_config_for_role(NodeRole::Observer, TrafficProfile::Default).is_none()
-    );
-    assert!(
-        super::feedback_p2p_config_for_role(NodeRole::Sequencer, TrafficProfile::Default).is_some()
-    );
-    assert!(
-        super::feedback_p2p_config_for_role(NodeRole::Storage, TrafficProfile::Default).is_some()
     );
 }

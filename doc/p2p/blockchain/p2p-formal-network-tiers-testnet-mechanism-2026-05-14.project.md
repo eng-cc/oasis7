@@ -18,6 +18,7 @@
   - 已完成 local sync path：新增 `scripts/p2p-public-testnet-local-observer-sync.sh`，并已实际把本机 observer 收口到 two-validator contract、formal manifest 与 repo-owned `start-node.sh`。
   - 已完成 operator reset path：同一脚本已新增 `reset-state`，可 repo-owned 备份并清空 local observer 的 execution world / execution records / distfs replication root / reward execution bridge state。
   - 已完成 runtime drift guard：`oasis7_chain_runtime` 现会在加载 `--network-tier-manifest` 时同步读取 `release_candidate_bundle_ref`，强校验 `runtime_build.sha256` 与当前可执行文件一致；若 bundle/runtime 漂移，启动阶段直接 fail closed，不再把问题拖到后续 replay/gap-sync 才暴露。
+  - 已完成 governed bootstrap artifact set：新增 repo-owned `public_testnet` cold-start candidate，明确当前 honest 四节点方案是 `2 validators + 2 observers`，并冻结 concrete genesis validator registry、bootstrap peers、bundle、manifest 与 topology evidence。
 - `qa_engineer` + `liveops_community` / TIER-3:
   - 已完成 skeleton：建立 first `public_testnet` rehearsal / exit-review 模板，并补 `network-tier-exit-review.sh` 作为 formal gate 汇总入口。
   - 已完成 readiness gate：新增 `network-tier-public-testnet-readiness.sh`、lane scaffold 与 skeleton evidence placeholder，可把 `public_testnet` 从“只有 manifest skeleton”与“具备 live candidate lane evidence”区分开。
@@ -25,6 +26,7 @@
   - 已完成 fresh audit：新增 repo-owned live manifest / bundle / bootstrap peers mirror，并用 `public-testnet-ecs-freshness-audit-2026-05-22.md` 同窗复核当前 ECS + local 现网；结果证明 public endpoint 仍在，但 local observer 已脱离 formal manifest 合同，sequencer 也出现 predecessor-gap runtime error，因此不能维持先前更乐观的 lane 判定。
 - `producer_system_designer` / TIER-3.5:
   - 已完成 checklist：新增 companion runbook，把 seven-lane owner、最小 evidence、执行顺序、canonical 命令与禁止 claims 冻结成单一入口。
+  - 已完成 fresh bootstrap operator runbook：新增 `doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`，把 governed bootstrap artifacts 如何真正起 validator pair、何时接两台 observer、哪些失败应视为 bootstrap bug 还是 observer follow-up，固定成单一 operator-facing 路径。
 - `producer_system_designer` + `runtime_engineer` / TIER-4:
   - 剩余 live 工作：把 `public_testnet exit review -> mainnet gating` 接入 live `MAINNET-1~4` evidence、public claims policy 执行面与正式 no-reset commitment。
 
@@ -43,6 +45,7 @@
   - 已建立 live `public_testnet` 的 public RPC / explorer / guarded faucet / reset-policy / claims-boundary evidence，其中 `claims_boundary_review` 已有独立 `qa_engineer` verdict。
   - 已把 current live candidate manifest / bundle / bootstrap peers 镜像回 repo-owned evidence，可作为 readiness review 的单一运行输入。
   - 已把 local observer remediation 收口成 repo-owned sync 脚本与 operator evidence，避免继续依赖 `/opt` 手改。
+  - 已补 `public_testnet` fresh governed bootstrap artifact set，可作为“四节点 testnet 从 0 重建”的起始真值，而不再依赖旧 live-candidate 恢复链路。
   - 已明确 `shared_devnet` 仍是 shared release-train，不等于 live public testnet；aggregate readiness 仍不能跳过 `shared_devnet_pass`。
 - 当前缺口:
   - `shared_devnet_pass` 仍未满足，因此 formal `public_testnet` 仍不能进入 `ready_for_live_candidate`。
@@ -63,6 +66,7 @@
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md`
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
+- `doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`
 - `crates/oasis7/src/network_tier_manifest.rs`
 - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
 - `crates/oasis7/src/bin/oasis7_chain_runtime/cli.rs`
@@ -97,6 +101,13 @@
 - `doc/testing/evidence/public-testnet-live-candidate-bundle-2026-05-22.json`
 - `doc/testing/evidence/public-testnet-live-candidate-bootstrap-peers-2026-05-22.txt`
 - `doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
+- `doc/testing/evidence/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json`
+- `doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json`
+- `doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt`
+- `doc/testing/evidence/public-testnet-governed-bootstrap-world-2026-06-06/`
+- `doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json`
+- `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
+- `doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md`
 - `doc/testing/evidence/public-testnet-ecs-freshness-audit-2026-05-22.md`
 - `doc/testing/evidence/public-testnet-local-observer-contract-sync-2026-05-22.md`
 - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`

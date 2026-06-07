@@ -7,8 +7,16 @@
     "symbol": "OC",
     "initial_supply": "10000000000"
   },
+  "governance_bootstrap_refs": {
+    "governance_public_manifest_ref": "doc/testing/evidence/public-testnet-governance-public-signers-2026-06-05.json",
+    "liveops_public_manifest_ref": "doc/testing/evidence/public-testnet-liveops-public-signers-2026-06-05.json",
+    "binding_notes_ref": "doc/testing/evidence/network-tier-signer-truth-binding-2026-06-05.md",
+    "fresh_bootstrap_topology_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md"
+  },
   "notes": [
     "public_testnet example genesis only",
+    "governance and liveops public signer truth are pinned repo-side",
+    "current governed bootstrap candidate freezes 2 validators plus 2 observers",
     "resettable rehearsal surface",
     "not a mainnet or production settlement artifact"
   ]

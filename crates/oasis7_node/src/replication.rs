@@ -52,6 +52,7 @@ pub struct NodeReplicationConfig {
     signing_public_key_hex: Option<String>,
     enforce_signature: bool,
     remote_writer_allowlist: BTreeSet<String>,
+    fetch_requester_allowlist: BTreeSet<String>,
     max_hot_commit_messages: usize,
 }
 
@@ -69,6 +70,7 @@ impl NodeReplicationConfig {
             signing_public_key_hex: None,
             enforce_signature: false,
             remote_writer_allowlist: BTreeSet::new(),
+            fetch_requester_allowlist: BTreeSet::new(),
             max_hot_commit_messages: DEFAULT_MAX_HOT_COMMIT_MESSAGES,
         })
     }
@@ -109,6 +111,22 @@ impl NodeReplicationConfig {
         Ok(self)
     }
 
+    pub fn with_fetch_requester_allowlist(
+        mut self,
+        fetch_requester_allowlist: Vec<String>,
+    ) -> Result<Self, NodeError> {
+        let mut normalized = BTreeSet::new();
+        for requester_id in fetch_requester_allowlist {
+            let normalized_requester_id = normalize_replication_public_key_hex_for_config(
+                requester_id.as_str(),
+                "replication fetch_requester_allowlist entry",
+            )?;
+            normalized.insert(normalized_requester_id);
+        }
+        self.fetch_requester_allowlist = normalized;
+        Ok(self)
+    }
+
     pub fn with_max_hot_commit_messages(
         mut self,
         max_hot_commit_messages: usize,
@@ -142,6 +160,25 @@ impl NodeReplicationConfig {
             normalized.insert(normalized_writer_id);
         }
         self.remote_writer_allowlist = normalized;
+        Ok(self)
+    }
+
+    pub(crate) fn with_default_fetch_requester_allowlist(
+        mut self,
+        defaults: impl IntoIterator<Item = String>,
+    ) -> Result<Self, NodeError> {
+        if !self.fetch_requester_allowlist.is_empty() {
+            return Ok(self);
+        }
+        let mut normalized = BTreeSet::new();
+        for requester_id in defaults {
+            let normalized_requester_id = normalize_replication_public_key_hex_for_config(
+                requester_id.as_str(),
+                "replication fetch requester default",
+            )?;
+            normalized.insert(normalized_requester_id);
+        }
+        self.fetch_requester_allowlist = normalized;
         Ok(self)
     }
 
@@ -219,16 +256,16 @@ impl NodeReplicationConfig {
         request_label: &str,
     ) -> Result<(), NodeError> {
         let require_auth = self.enforce_consensus_signature()
-            || !self.remote_writer_allowlist.is_empty()
+            || !self.fetch_requester_allowlist.is_empty()
             || requester_public_key_hex.is_some()
             || requester_signature_hex.is_some();
         if !require_auth {
             return Ok(());
         }
-        if self.remote_writer_allowlist.is_empty() {
+        if self.fetch_requester_allowlist.is_empty() {
             return Err(NodeError::Replication {
                 reason: format!(
-                    "{request_label} authorization failed: replication remote writer allowlist is empty while signature enforcement is enabled"
+                    "{request_label} authorization failed: replication fetch requester allowlist is empty while signature enforcement is enabled"
                 ),
             });
         }
@@ -255,12 +292,14 @@ impl NodeReplicationConfig {
             request_label,
         )?;
         if !self
-            .remote_writer_allowlist
+            .fetch_requester_allowlist
             .contains(normalized_requester_public_key_hex.as_str())
         {
             return Err(NodeError::Replication {
                 reason: format!(
-                    "{request_label} requester is not authorized: requester_public_key_hex={normalized_requester_public_key_hex}"
+                    "{request_label} requester is not authorized: requester_public_key_hex={normalized_requester_public_key_hex} authorized_fetch_requester_count={} authorized_fetch_requester_fingerprint={}",
+                    self.fetch_requester_allowlist.len(),
+                    allowlist_fingerprint(&self.fetch_requester_allowlist),
                 ),
             });
         }
@@ -289,6 +328,17 @@ impl NodeReplicationConfig {
             .join(COMMIT_MESSAGE_DIR)
             .join(format!("{:020}.json", height))
     }
+}
+
+fn allowlist_fingerprint(allowlist: &BTreeSet<String>) -> String {
+    blake3_hex(
+        allowlist
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join("\n")
+            .as_bytes(),
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

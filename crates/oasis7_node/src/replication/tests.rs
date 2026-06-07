@@ -263,8 +263,8 @@ fn build_fetch_commit_request_signs_with_runtime_signer() {
         .expect("config")
         .with_signing_keypair(local_private_hex, local_public_hex.clone())
         .expect("signing keypair")
-        .with_remote_writer_allowlist(vec![local_public_hex.clone()])
-        .expect("allowlist");
+        .with_fetch_requester_allowlist(vec![local_public_hex.clone()])
+        .expect("fetch allowlist");
     let runtime = ReplicationRuntime::new(&config, "node-a").expect("runtime");
 
     let request = runtime
@@ -291,8 +291,8 @@ fn authorize_fetch_commit_request_rejects_missing_signature_when_required() {
         .expect("config")
         .with_signing_keypair(local_private_hex, local_public_hex)
         .expect("signing keypair")
-        .with_remote_writer_allowlist(vec![allowed_public_hex.clone()])
-        .expect("allowlist");
+        .with_fetch_requester_allowlist(vec![allowed_public_hex.clone()])
+        .expect("fetch allowlist");
     let request = FetchCommitRequest {
         world_id: "world-fetch-sign".to_string(),
         height: 9,
@@ -322,8 +322,8 @@ fn authorize_fetch_blob_request_rejects_requester_outside_allowlist() {
         .expect("config")
         .with_signing_keypair(local_private_hex, local_public_hex)
         .expect("signing keypair")
-        .with_remote_writer_allowlist(vec![allowed_public_hex])
-        .expect("allowlist");
+        .with_fetch_requester_allowlist(vec![allowed_public_hex])
+        .expect("fetch allowlist");
     let signer = ReplicationSigningKey {
         signing_key: signing_key_from_hex(requester_private_hex.as_str()).expect("signing key"),
         public_key_hex: requester_public_hex.clone(),
@@ -339,7 +339,40 @@ fn authorize_fetch_blob_request_rejects_requester_outside_allowlist() {
     let err = config
         .authorize_fetch_blob_request(&request)
         .expect_err("out-of-allowlist requester should fail");
-    assert!(matches!(err, NodeError::Replication { reason } if reason.contains("not authorized")));
+    assert!(matches!(
+        err,
+        NodeError::Replication { reason }
+            if reason.contains("not authorized")
+                && reason.contains("authorized_fetch_requester_count=1")
+                && reason.contains("authorized_fetch_requester_fingerprint=")
+    ));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn fetch_requester_allowlist_does_not_authorize_remote_writer() {
+    let dir = temp_dir("fetch-requester-is-not-writer");
+    let (_, fetcher_public_hex) = deterministic_keypair_hex(47);
+    let (_, writer_public_hex) = deterministic_keypair_hex(48);
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_remote_writer_allowlist(vec![writer_public_hex])
+        .expect("writer allowlist")
+        .with_fetch_requester_allowlist(vec![fetcher_public_hex.clone()])
+        .expect("fetch allowlist");
+    let runtime = ReplicationRuntime::new(&config, "node-b").expect("runtime");
+    let message = signed_remote_message(47, "world-fetcher-not-writer", "node-a", 1);
+
+    let err = runtime
+        .validate_remote_message_for_observe("node-b", "world-fetcher-not-writer", &message)
+        .expect_err("fetch requester must not be treated as writer");
+    assert!(matches!(
+        err,
+        NodeError::Replication { reason }
+            if reason.contains("replication remote writer is not authorized")
+                && reason.contains(fetcher_public_hex.as_str())
+    ));
 
     let _ = std::fs::remove_dir_all(&dir);
 }

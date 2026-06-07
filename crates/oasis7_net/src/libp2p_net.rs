@@ -638,12 +638,7 @@ impl Libp2pNetwork {
                                     }
                                 }
                                 SwarmEvent::Behaviour(BehaviourEvent::Autonat(event)) => {
-                                    push_bounded_clone(
-                                        &event_errors,
-                                        handle_autonat_event(&event_reachability, &event),
-                                        max_error_messages,
-                                        "lock errors",
-                                    );
+                                    handle_autonat_event(&event_reachability, &event);
                                 }
                                 SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
                                     match event {
