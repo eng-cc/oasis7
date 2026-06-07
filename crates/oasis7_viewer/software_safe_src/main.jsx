@@ -1897,11 +1897,7 @@ export function mountViewerApp(root = document.getElementById("app")) {
   }
 
   let dispose = mount(() => <AppShell />, root);
-  core.setRenderHook(() => {
-    dispose();
-    root.textContent = "";
-    dispose = mount(() => <AppShell />, root);
-  });
+  core.setRenderHook(() => {});
 
   core.initializeSoftwareSafeCore();
 

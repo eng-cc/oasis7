@@ -1,0 +1,28 @@
+task_uid: task_83a8baa9103a45c58c27d2ec78227a82
+title: "viewer web refresh and selection stability"
+owner_role: tpm
+worktree_hint: /home/scc/worktrees/oasis7-viewer-web-refresh-selection-stability
+execution_log_path: .pm/tasks/task_83a8baa9103a45c58c27d2ec78227a82.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.prd.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd: []
+acceptance:
+  - "Viewer 页面不再出现持续性自刷新/闪烁。"
+  - "页面稳定时用户文本选中状态不会被周期性刷新打断。"
+  - "补充最小回归覆盖，防止刷新循环回归。"
+handoff_to: []
+updated_at: 2026-06-07T19:20:31+08:00
+last_started_at: 2026-06-07T18:56:45+08:00
+last_claim_type: task_complete
+last_verify_command: "cd crates/oasis7_viewer && npm run test:ui"
+last_verified_at: 2026-06-07T19:20:30+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-07T19:20:31+08:00

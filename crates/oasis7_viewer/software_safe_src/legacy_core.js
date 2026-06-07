@@ -1,6 +1,7 @@
 import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
+import { createMutable } from "solid-js/store";
 import {
   createInitialHostedLoginState,
   resetHostedLoginChallenge as resetHostedLoginChallengeState,
@@ -45,7 +46,7 @@ const ED25519_PKCS8_PREFIX = new Uint8Array([
 ]);
 const textEncoder = new TextEncoder();
 
-export const state = {
+export const state = createMutable({
   uiLocale: "en",
   promptOverridesVisible: false,
   connectionStatus: "connecting",
@@ -140,14 +141,14 @@ export const state = {
     lastGrantExpiresAtUnixMs: null,
     lastGrantError: null,
   },
-};
+  selectedSearch: "",
+});
 
 let socket = null;
 let reconnectTimer = null;
 let hostedSessionRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
-let selectedSearch = "";
 let semanticSendLoop = null;
 const pendingControlFeedback = new Map();
 const pendingSemanticCommands = [];
@@ -201,11 +202,11 @@ export const setSoftwareSafeLocale = setViewerLocale;
 export const toggleSoftwareSafeLocale = toggleViewerLocale;
 
 export function getSelectedSearch() {
-  return selectedSearch;
+  return state.selectedSearch;
 }
 
 export function setSelectedSearch(value) {
-  selectedSearch = String(value || "");
+  state.selectedSearch = String(value || "");
   render();
 }
 
@@ -2715,7 +2716,7 @@ function resourceSummary(resources) {
 
 function modelLists() {
   const { agents, locations } = entityCollections();
-  const keyword = selectedSearch.trim().toLowerCase();
+  const keyword = String(state.selectedSearch || "").trim().toLowerCase();
   const filter = (entry, label) => {
     if (!keyword) return true;
     return String(label).toLowerCase().includes(keyword);
@@ -2768,7 +2769,7 @@ function renderLists() {
     <div class="stack">
       <div class="field">
         <label for="entity-search">Filter targets</label>
-        <input id="entity-search" type="search" placeholder="Search agents or locations" value="${escapeHtml(selectedSearch)}" />
+        <input id="entity-search" type="search" placeholder="Search agents or locations" value="${escapeHtml(state.selectedSearch)}" />
       </div>
       <div>
         <div class="panel__title" style="margin-bottom:10px;">Agents</div>
@@ -3253,7 +3254,7 @@ function bindEvents() {
   const searchInput = document.getElementById("entity-search");
   if (searchInput) {
     searchInput.addEventListener("input", (event) => {
-      selectedSearch = String(event.target.value || "");
+      state.selectedSearch = String(event.target.value || "");
       renderLists();
       bindEvents();
     });
