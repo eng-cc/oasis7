@@ -10,6 +10,15 @@ roles:
     committed_path: .pm/roles/agent_engineer/backlog/committed.yaml
     blocked_path: .pm/roles/agent_engineer/backlog/blocked.yaml
     done_path: .pm/roles/agent_engineer/backlog/done.yaml
+  - role_name: blockchain_ops_engineer
+    is_active: true
+    introduced_at: 2026-06-07
+    memory_active_path: .pm/roles/blockchain_ops_engineer/memory/active.yaml
+    memory_superseded_path: .pm/roles/blockchain_ops_engineer/memory/superseded.yaml
+    candidate_path: .pm/roles/blockchain_ops_engineer/backlog/candidate.yaml
+    committed_path: .pm/roles/blockchain_ops_engineer/backlog/committed.yaml
+    blocked_path: .pm/roles/blockchain_ops_engineer/backlog/blocked.yaml
+    done_path: .pm/roles/blockchain_ops_engineer/backlog/done.yaml
   - role_name: game_visual_interaction_designer
     is_active: true
     introduced_at: 2026-06-05

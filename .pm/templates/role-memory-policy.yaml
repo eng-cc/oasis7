@@ -84,6 +84,22 @@ roles:
       - 本次改了哪个函数
       - 单次命令结果
       - 临时 debug 过程
+  blockchain_ops_engineer:
+    topic_prefix_allowlist:
+      - blockchain_ops.deploy.*
+      - blockchain_ops.topology.*
+      - blockchain_ops.health_baseline.*
+      - blockchain_ops.restore_drill.*
+      - blockchain_ops.failure_signature.*
+    allowed_promotion_reasons:
+      - engineering_constraint
+      - failure_signature
+      - repro_pattern
+      - stable_pattern
+    disallowed_examples:
+      - 单次 shell 操作历史
+      - 一次性人工重启记录
+      - 未复核的临时运维猜想
   wasm_platform_engineer:
     topic_prefix_allowlist:
       - wasm.abi.*

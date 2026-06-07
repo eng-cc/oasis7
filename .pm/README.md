@@ -24,6 +24,7 @@
 - `gameplay_designer`
 - `game_visual_interaction_designer`
 - `runtime_engineer`
+- `blockchain_ops_engineer`
 - `wasm_platform_engineer`
 - `agent_engineer`
 - `viewer_engineer`

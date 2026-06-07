@@ -51,3 +51,4 @@
 - 一个 slice 一张卡；多角色并行时，必须逐张卡校验 disjoint scope checklist。
 - slice card 链接/引用必须回写 `.pm/tasks/<TASK-UID>.execution.md` 对应条目；未写入 task execution log 的派工不视为有效派工。
 - 除窄范围只读 explorer 且写明豁免原因外，`AGENTS.md`、对应 role card、workflow source-of-truth、当前 `.pm` task yaml/execution log 必须包含在 context packet 中。
+- 标准角色名以 `.agents/roles/*.md` 为准；当前包含 `producer_system_designer`、`gameplay_designer`、`game_visual_interaction_designer`、`runtime_engineer`、`blockchain_ops_engineer`、`wasm_platform_engineer`、`agent_engineer`、`viewer_engineer`、`qa_engineer`、`liveops_community`。
