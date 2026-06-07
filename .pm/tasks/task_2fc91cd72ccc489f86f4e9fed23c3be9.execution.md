@@ -65,6 +65,10 @@ Example:
 ## 2026-06-07 17:06:41 CST / tpm
 - 完成内容: 已打开 pre-PR local role review 请求，并冻结 review scope、角色选择依据、问题和证据清单，目标是让新增 `gameplay_designer` 的治理接线在 PR 前获得 fresh involved-role review。
 - 遗留事项: review 结果尚未整合入最终 passed packet；仍需把 role review 结论写回 execution log 后再重新跑 `prepare-task-pr`。
+- Action: 记录 fresh pre-PR local role review request，明确 review scope、角色集合、问题、可用证据和 formal sink，然后再整合后续 role review 返回。
+- Validation Command: `git show --stat HEAD && git diff --name-only origin/main...HEAD && ./scripts/pm/workflow-behavior-eval.sh && ./scripts/doc-governance-check.sh && git diff --check`
+- Expected Result: review request entry 自身具备完整 execution-log 必填字段，并且对应的 changed-path / verification evidence 能支撑后续 involved-role review dispatch。
+- Actual Result: review request 已写入 execution log；changed-path 与 verification evidence 已冻结，可直接作为 `producer_system_designer`、`gameplay_designer`、`qa_engineer` 的 read-only review 输入。
 - Review Trigger: pre-PR local role review
 - Review Scope: `AGENTS.md`; `doc/engineering/workflow/source-of-truth.md`; `.agents/roles/{tpm,producer_system_designer,game_visual_interaction_designer,gameplay_designer}.md`; `.agents/roles/templates/{handoff-brief,handoff-detailed,subagent-slice-card}.md`; `.agents/skills/{bounded-brainstorming,finishing-a-development-branch,requesting-repo-owned-review}/SKILL.md`; `.pm/{README.md,registry/roles.yaml,templates/role-memory-policy.yaml,roles/gameplay_designer/memory/*}`; `scripts/{pm/pm_store.py,prepare-playability-l4-review.sh}`
 - Review Roles: `producer_system_designer`, `gameplay_designer`, `qa_engineer`
@@ -146,3 +150,12 @@ Example:
 - Expected Result: branch is pushed, pre-PR local role review evidence is accepted, and a GitHub PR is created for the task branch.
 - Actual Result: passed; helper accepted `Pre-PR Local Role Review: passed`, pushed `task/engineering-add-gameplay-designer-role`, and created PR #371.
 - Blocker / Next Action: inspect PR #371 checks, mergeability, comments, and unresolved review threads.
+
+## 2026-06-07 17:31:41 CST / tpm
+- 完成内容: 已处理 PR #371 的 review thread `PRRT_kwDORHhWec6HpGTw`，为 `2026-06-07 17:06:41 CST / tpm` 的 pre-PR review request entry 补齐缺失的 `Action / Validation Command / Expected Result / Actual Result` 字段。
+- 遗留事项: 仍需提交并推送这条 execution-log 修复，回复/resolve review thread，然后继续合入流程。
+- Action: 根据 review comment 指向的 PM truth 要求，只修复当前 task execution log entry 的缺字段问题，不扩展到仓库既有历史 `.pm/tasks/*` lint 债务。
+- Validation Command: `python3 scripts/pm/pm_store.py task-execution-log-lint . 2>&1 | rg "task_2fc91cd72ccc489f86f4e9fed23c3be9|17:06:41|missing Action|missing Validation Command|missing Expected Result|missing Actual Result" && python3 scripts/pm/pm_store.py task-lint . 2>&1 | rg "task_2fc91cd72ccc489f86f4e9fed23c3be9|17:06:41|missing Action|missing Validation Command|missing Expected Result|missing Actual Result" && git diff --check`
+- Expected Result: 当前 task 不再因 17:06 review-request entry 缺字段而出现在 lint failure 中；若 `task-lint` 仍失败，也只能是仓库历史 task 债务。
+- Actual Result: 当前 task 未再出现在 `task-execution-log-lint` / `task-lint` 的 failure 输出中；剩余失败均指向历史 task，例如 `task_031e846e8bef41179637ec9ba8c487aa`、`task_202b9f812d49432a9f4360b8a66c5364`、`task_455ea61e04c946469b8b1d22b700f853` 等；`git diff --check` 通过。
+- Blocker / Next Action: commit and push this execution-log review fix, then reply/resolve the PR thread and re-check mergeability for final merge.
