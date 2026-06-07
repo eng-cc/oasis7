@@ -8347,7 +8347,9 @@ function WorldSummaryPanel() {
           },
           get fallback() {
             return createComponent(EmptyState, {
-              children: "先选中一个行动体，才能把无头执行通道和当前 debug_viewer 观察通道做对照。"
+              get children() {
+                return tr(locale(), "先选中一个行动体，才能把无头执行通道和当前 debug_viewer 观察通道做对照。", "Select an agent to compare the headless execution lane against the current debug_viewer observer lane.");
+              }
             });
           },
           children: (debug) => [(() => {
