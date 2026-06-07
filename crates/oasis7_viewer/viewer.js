@@ -1,5 +1,6 @@
 const IS_DEV = false;
 const equalFn = (a, b) => a === b;
+const $PROXY = /* @__PURE__ */ Symbol("solid-proxy");
 const $TRACK = /* @__PURE__ */ Symbol("solid-track");
 const signalOptions = {
   equals: equalFn
@@ -71,6 +72,9 @@ function createMemo(fn, value, options) {
   updateComputation(c);
   return readSignal.bind(c);
 }
+function batch(fn) {
+  return runUpdates(fn, false);
+}
 function untrack(fn) {
   if (Listener === null) return fn();
   const listener = Listener;
@@ -90,6 +94,9 @@ function onCleanup(fn) {
   else if (Owner.cleanups === null) Owner.cleanups = [fn];
   else Owner.cleanups.push(fn);
   return fn;
+}
+function getListener() {
+  return Listener;
 }
 function readSignal() {
   if (this.sources && this.state) {
@@ -677,7 +684,7 @@ function insertExpression(parent, value, current, marker, unwrapArray) {
   } else ;
   return current;
 }
-function normalizeIncomingArray(normalized, array, current, unwrap) {
+function normalizeIncomingArray(normalized, array, current, unwrap2) {
   let dynamic = false;
   for (let i = 0, len = array.length; i < len; i++) {
     let item = array[i], prev = current && current[normalized.length], t;
@@ -687,7 +694,7 @@ function normalizeIncomingArray(normalized, array, current, unwrap) {
     } else if (Array.isArray(item)) {
       dynamic = normalizeIncomingArray(normalized, item, prev) || dynamic;
     } else if (t === "function") {
-      if (unwrap) {
+      if (unwrap2) {
         while (typeof item === "function") item = item();
         dynamic = normalizeIncomingArray(normalized, Array.isArray(item) ? item : [item], Array.isArray(prev) ? prev : [prev]) || dynamic;
       } else {
@@ -1966,6 +1973,167 @@ function createViewerHostedAuthStateModule({
     resolveViewerAuthState: resolveViewerAuthState2
   };
 }
+const $RAW = /* @__PURE__ */ Symbol("store-raw"), $NODE = /* @__PURE__ */ Symbol("store-node"), $HAS = /* @__PURE__ */ Symbol("store-has"), $SELF = /* @__PURE__ */ Symbol("store-self");
+function isWrappable(obj) {
+  let proto;
+  return obj != null && typeof obj === "object" && (obj[$PROXY] || !(proto = Object.getPrototypeOf(obj)) || proto === Object.prototype || Array.isArray(obj));
+}
+function unwrap(item, set = /* @__PURE__ */ new Set()) {
+  let result, unwrapped, v, prop;
+  if (result = item != null && item[$RAW]) return result;
+  if (!isWrappable(item) || set.has(item)) return item;
+  if (Array.isArray(item)) {
+    if (Object.isFrozen(item)) item = item.slice(0);
+    else set.add(item);
+    for (let i = 0, l = item.length; i < l; i++) {
+      v = item[i];
+      if ((unwrapped = unwrap(v, set)) !== v) item[i] = unwrapped;
+    }
+  } else {
+    if (Object.isFrozen(item)) item = Object.assign({}, item);
+    else set.add(item);
+    const keys = Object.keys(item), desc = Object.getOwnPropertyDescriptors(item);
+    for (let i = 0, l = keys.length; i < l; i++) {
+      prop = keys[i];
+      if (desc[prop].get) continue;
+      v = item[prop];
+      if ((unwrapped = unwrap(v, set)) !== v) item[prop] = unwrapped;
+    }
+  }
+  return item;
+}
+function getNodes(target, symbol) {
+  let nodes = target[symbol];
+  if (!nodes) Object.defineProperty(target, symbol, {
+    value: nodes = /* @__PURE__ */ Object.create(null)
+  });
+  return nodes;
+}
+function getNode(nodes, property, value) {
+  if (nodes[property]) return nodes[property];
+  const [s, set] = createSignal(value, {
+    equals: false,
+    internal: true
+  });
+  s.$ = set;
+  return nodes[property] = s;
+}
+function trackSelf(target) {
+  getListener() && getNode(getNodes(target, $NODE), $SELF)();
+}
+function ownKeys(target) {
+  trackSelf(target);
+  return Reflect.ownKeys(target);
+}
+function setProperty(state2, property, value, deleting = false) {
+  if (!deleting && state2[property] === value) return;
+  const prev = state2[property], len = state2.length;
+  if (value === void 0) {
+    delete state2[property];
+    if (state2[$HAS] && state2[$HAS][property] && prev !== void 0) state2[$HAS][property].$();
+  } else {
+    state2[property] = value;
+    if (state2[$HAS] && state2[$HAS][property] && prev === void 0) state2[$HAS][property].$();
+  }
+  let nodes = getNodes(state2, $NODE), node;
+  if (node = getNode(nodes, property, prev)) node.$(() => value);
+  if (Array.isArray(state2) && state2.length !== len) {
+    for (let i = state2.length; i < len; i++) (node = nodes[i]) && node.$();
+    (node = getNode(nodes, "length", len)) && node.$(state2.length);
+  }
+  (node = nodes[$SELF]) && node.$();
+}
+function proxyDescriptor(target, property) {
+  const desc = Reflect.getOwnPropertyDescriptor(target, property);
+  if (!desc || desc.get || desc.set || !desc.configurable || property === $PROXY || property === $NODE) return desc;
+  delete desc.value;
+  delete desc.writable;
+  desc.get = () => target[$PROXY][property];
+  desc.set = (v) => target[$PROXY][property] = v;
+  return desc;
+}
+const proxyTraps = {
+  get(target, property, receiver) {
+    if (property === $RAW) return target;
+    if (property === $PROXY) return receiver;
+    if (property === $TRACK) {
+      trackSelf(target);
+      return receiver;
+    }
+    const nodes = getNodes(target, $NODE);
+    const tracked = nodes[property];
+    let value = tracked ? tracked() : target[property];
+    if (property === $NODE || property === $HAS || property === "__proto__") return value;
+    if (!tracked) {
+      const desc = Object.getOwnPropertyDescriptor(target, property);
+      const isFunction = typeof value === "function";
+      if (getListener() && (!isFunction || target.hasOwnProperty(property)) && !(desc && desc.get)) value = getNode(nodes, property, value)();
+      else if (value != null && isFunction && value === Array.prototype[property]) {
+        return (...args) => batch(() => Array.prototype[property].apply(receiver, args));
+      }
+    }
+    return isWrappable(value) ? wrap(value) : value;
+  },
+  has(target, property) {
+    if (property === $RAW || property === $PROXY || property === $TRACK || property === $NODE || property === $HAS || property === "__proto__") return true;
+    getListener() && getNode(getNodes(target, $HAS), property)();
+    return property in target;
+  },
+  set(target, property, value) {
+    batch(() => setProperty(target, property, unwrap(value)));
+    return true;
+  },
+  deleteProperty(target, property) {
+    batch(() => setProperty(target, property, void 0, true));
+    return true;
+  },
+  ownKeys,
+  getOwnPropertyDescriptor: proxyDescriptor
+};
+function wrap(value) {
+  let p = value[$PROXY];
+  if (!p) {
+    Object.defineProperty(value, $PROXY, {
+      value: p = new Proxy(value, proxyTraps)
+    });
+    const keys = Object.keys(value), desc = Object.getOwnPropertyDescriptors(value);
+    const proto = Object.getPrototypeOf(value);
+    const isClass = proto !== null && value !== null && typeof value === "object" && !Array.isArray(value) && proto !== Object.prototype;
+    if (isClass) {
+      let curProto = proto;
+      while (curProto != null) {
+        const descriptors = Object.getOwnPropertyDescriptors(curProto);
+        keys.push(...Object.keys(descriptors));
+        Object.assign(desc, descriptors);
+        curProto = Object.getPrototypeOf(curProto);
+      }
+    }
+    for (let i = 0, l = keys.length; i < l; i++) {
+      const prop = keys[i];
+      if (isClass && prop === "constructor") continue;
+      if (desc[prop].get) {
+        const get = desc[prop].get.bind(p);
+        Object.defineProperty(value, prop, {
+          get,
+          configurable: true
+        });
+      }
+      if (desc[prop].set) {
+        const og = desc[prop].set, set = (v) => batch(() => og.call(p, v));
+        Object.defineProperty(value, prop, {
+          set,
+          configurable: true
+        });
+      }
+    }
+  }
+  return p;
+}
+function createMutable(state2, options) {
+  const unwrappedStore = unwrap(state2 || {});
+  const wrappedStore = wrap(unwrappedStore);
+  return wrappedStore;
+}
 function createInitialHostedLoginState() {
   return {
     channel: "email",
@@ -2307,7 +2475,7 @@ const ED25519_PKCS8_PREFIX = new Uint8Array([
   32
 ]);
 const textEncoder = new TextEncoder();
-const state = {
+const state = createMutable({
   uiLocale: "en",
   promptOverridesVisible: false,
   connectionStatus: "connecting",
@@ -2401,14 +2569,14 @@ const state = {
     lastGrantActionId: null,
     lastGrantExpiresAtUnixMs: null,
     lastGrantError: null
-  }
-};
+  },
+  selectedSearch: ""
+});
 let socket = null;
 let reconnectTimer = null;
 let hostedSessionRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
-let selectedSearch = "";
 let semanticSendLoop = null;
 const pendingControlFeedback = /* @__PURE__ */ new Map();
 const pendingSemanticCommands = [];
@@ -2451,10 +2619,10 @@ const {
   windowRef: window
 });
 function getSelectedSearch() {
-  return selectedSearch;
+  return state.selectedSearch;
 }
 function setSelectedSearch(value) {
-  selectedSearch = String(value || "");
+  state.selectedSearch = String(value || "");
   render();
 }
 function setRenderHook(nextHook) {
@@ -4737,7 +4905,7 @@ function resourceSummary(resources) {
 }
 function modelLists() {
   const { agents, locations } = entityCollections();
-  const keyword = selectedSearch.trim().toLowerCase();
+  const keyword = String(state.selectedSearch || "").trim().toLowerCase();
   const filter = (entry, label) => {
     if (!keyword) return true;
     return String(label).toLowerCase().includes(keyword);
@@ -9428,9 +9596,6 @@ function mountViewerApp(root = document.getElementById("app")) {
   }
   let dispose2 = render$1(() => createComponent(AppShell, {}), root);
   setRenderHook(() => {
-    dispose2();
-    root.textContent = "";
-    dispose2 = render$1(() => createComponent(AppShell, {}), root);
   });
   initializeSoftwareSafeCore();
   return () => {
