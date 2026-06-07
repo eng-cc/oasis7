@@ -120,18 +120,39 @@ PY
 resolve_binary_path() {
   local release_dir="$1"
   local bin_name="$2"
+  python3 - "$release_dir" "$bin_name" <<'PY'
+from pathlib import Path
+import os
+import sys
 
-  if [[ -f "$release_dir/$bin_name" ]]; then
-    printf '%s\n' "$release_dir/$bin_name"
-    return 0
-  fi
-  if [[ -f "$release_dir/${bin_name}.exe" ]]; then
-    printf '%s\n' "$release_dir/${bin_name}.exe"
-    return 0
-  fi
+release_dir = Path(sys.argv[1])
+bin_name = sys.argv[2]
 
-  echo "error: unable to find built binary for ${bin_name} under ${release_dir}" >&2
-  return 1
+candidates = []
+if os.name == "nt":
+    candidates.extend(
+        [
+            release_dir / f"{bin_name}.exe",
+            release_dir / bin_name,
+        ]
+    )
+else:
+    candidates.extend(
+        [
+            release_dir / bin_name,
+            release_dir / f"{bin_name}.exe",
+        ]
+    )
+
+for candidate in candidates:
+    if candidate.is_file():
+        print(candidate)
+        raise SystemExit(0)
+
+raise SystemExit(
+    f"error: unable to find built binary for {bin_name} under {release_dir}"
+)
+PY
 }
 
 measure_checkout() {
