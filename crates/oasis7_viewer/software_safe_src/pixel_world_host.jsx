@@ -733,6 +733,9 @@ function buildVisualHotspots({
 
 function PixelWorldHostVisualLayer(props) {
   const visualState = () => pixelWorldVisualState(props.renderState());
+  if (!props.enabled) {
+    return <></>;
+  }
   return (
     <>
       <div class="pixel-world-canvas__grid" />
@@ -1098,6 +1101,7 @@ function PixelWorldCanvasRenderer(props) {
       />
       <div class="pixel-world-canvas__overlay">
         <PixelWorldHostVisualLayer
+          enabled={false}
           locale={props.locale}
           renderState={props.renderState}
           onSelect={props.onSelect}
@@ -1330,6 +1334,7 @@ function PixelWorldCanvasPlaceholder(props) {
   return (
     <div class="pixel-world-canvas" data-renderer-ready={props.ready() ? "true" : "false"}>
       <PixelWorldHostVisualLayer
+        enabled={true}
         locale={props.locale}
         renderState={props.renderState}
         onSelect={props.onSelect}

@@ -1,0 +1,25 @@
+task_uid: task_596da2930945486086745f83121a8377
+title: "launch latest main for local playtest"
+owner_role: tpm
+worktree_hint: /home/scc/worktrees/oasis7-viewer-local-main-launch-playtest
+execution_log_path: .pm/tasks/task_596da2930945486086745f83121a8377.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - scripts/run-game-test.sh
+  - scripts/run-producer-playtest.sh
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-07T22:32:15+08:00
+last_started_at: 2026-06-07T17:08:04+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host && npm --prefix crates/oasis7_viewer run build:software-safe && ./scripts/copy-viewer-web-dist.sh --dist-dir output/harness/wt-0ec30d26/bundle/game-launcher-producer-local/web && git diff --check"
+last_verified_at: 2026-06-07T22:32:12+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-07T22:32:14+08:00

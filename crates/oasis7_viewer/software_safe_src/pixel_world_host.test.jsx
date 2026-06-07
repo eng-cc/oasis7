@@ -625,9 +625,10 @@ describe("pixel world host", () => {
       expect(document.querySelector(".pixel-world-canvas--rendered")).toBeInTheDocument();
     });
     const canvas = document.querySelector(".pixel-world-canvas--rendered");
-    expect(canvas.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(1);
-    expect(canvas.querySelector(".pixel-world-entity--location")).toHaveAttribute("data-marker-role", "logic_anchor");
-    expect(canvas.querySelector(".pixel-world-entity--agent")).toHaveAttribute("data-position-source", "location_derived");
+    expect(canvas.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(0);
+    expect(canvas.querySelector(".pixel-world-entity--location")).toBeNull();
+    expect(canvas.querySelector(".pixel-world-entity--agent")).toBeNull();
+    expect(canvas.querySelector(".pixel-world-route")).toBeNull();
     expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
   });

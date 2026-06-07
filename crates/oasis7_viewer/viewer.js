@@ -5724,6 +5724,9 @@ function buildVisualHotspots({
 }
 function PixelWorldHostVisualLayer(props) {
   const visualState = () => pixelWorldVisualState(props.renderState());
+  if (!props.enabled) {
+    return [];
+  }
   return [_tmpl$$1(), createComponent(For, {
     get each() {
       return visualState().fragmentTerrain.slice(0, 96);
@@ -6092,6 +6095,7 @@ function PixelWorldCanvasRenderer(props) {
     var _ref$ = canvasRef;
     typeof _ref$ === "function" ? use(_ref$, _el$9) : canvasRef = _el$9;
     insert(_el$0, createComponent(PixelWorldHostVisualLayer, {
+      enabled: false,
       get locale() {
         return props.locale;
       },
@@ -6379,6 +6383,7 @@ function PixelWorldCanvasPlaceholder(props) {
   return (() => {
     var _el$83 = _tmpl$20$1(), _el$85 = _el$83.firstChild;
     insert(_el$83, createComponent(PixelWorldHostVisualLayer, {
+      enabled: true,
       get locale() {
         return props.locale;
       },
