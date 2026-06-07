@@ -893,11 +893,81 @@
         justify-content: space-between;
         gap: 16px;
       }
+      .stage-hero__eyebrow-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
       .stage-hero__eyebrow {
         color: var(--accent-strong);
         font-size: 11px;
         letter-spacing: 0.18em;
         text-transform: uppercase;
+      }
+      .inline-help-tip {
+        display: block;
+        width: min(100%, 360px);
+      }
+      .inline-help-tip__button {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        border-color: rgba(208, 168, 91, 0.42);
+      }
+      .inline-help-tip__panel {
+        position: static;
+        width: min(100%, 360px);
+        margin-top: 10px;
+        padding: 12px 14px;
+        border: 1px solid rgba(208, 168, 91, 0.32);
+        border-radius: 12px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0)),
+          rgba(8, 12, 10, 0.96);
+        box-shadow: 0 20px 44px rgba(0, 0, 0, 0.34);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        opacity: 0;
+        max-height: 0;
+        overflow: hidden;
+        padding-top: 0;
+        padding-bottom: 0;
+        transform: none;
+        pointer-events: none;
+        transition:
+          opacity var(--motion-feedback-fast) ease,
+          max-height var(--motion-feedback-fast) ease,
+          padding var(--motion-feedback-fast) ease;
+      }
+      .inline-help-tip:hover .inline-help-tip__panel,
+      .inline-help-tip:focus-within .inline-help-tip__panel,
+      .inline-help-tip[data-open="true"] .inline-help-tip__panel {
+        opacity: 1;
+        max-height: 320px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        pointer-events: auto;
+      }
+      .inline-help-tip__title {
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .inline-help-tip__body {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
       }
       .stage-hero__title {
         font-family: var(--font-display);
@@ -1191,6 +1261,12 @@
         .diagnostic-surface__summary { align-items: flex-start; flex-direction: column; }
         .stage-hero__topline { flex-direction: column; }
         .stage-hero__title { max-width: none; }
+        .inline-help-tip {
+          width: 100%;
+        }
+        .inline-help-tip__panel {
+          width: min(100%, 420px);
+        }
         .hero-focus-grid { grid-template-columns: 1fr; }
         .hero-focus-card { min-height: 0; }
         .pixel-world-command-strip { grid-template-columns: 1fr; }

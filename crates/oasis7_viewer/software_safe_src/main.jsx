@@ -57,6 +57,55 @@ function DiagnosticDetails(props) {
   );
 }
 
+function InlineHelpTip(props) {
+  const locale = () => props.locale ?? uiLocale();
+  const [isOpen, setIsOpen] = createSignal(false);
+  let rootRef;
+
+  onMount(() => {
+    const handlePointerDown = (event) => {
+      if (!rootRef?.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    onCleanup(() => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    });
+  });
+
+  return (
+    <div ref={rootRef} class="inline-help-tip" data-open={isOpen() ? "true" : "false"}>
+      <button
+        type="button"
+        class="inline-help-tip__button"
+        aria-label={props.label ?? tr(locale(), "打开比例说明", "Open scale guidance")}
+        aria-describedby={props.id}
+        aria-expanded={isOpen() ? "true" : "false"}
+        aria-controls={props.id}
+        onClick={() => setIsOpen((value) => !value)}
+      >
+        ?
+      </button>
+      <div id={props.id} class="inline-help-tip__panel" aria-hidden={isOpen() ? "false" : "true"}>
+        <div class="inline-help-tip__title">{props.title ?? tr(locale(), "比例说明", "Scale Guidance")}</div>
+        <div class="inline-help-tip__body">
+          <For each={props.lines ?? []}>
+            {(line) => <div class="feedback-detail">{line}</div>}
+          </For>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FeedbackCard(props) {
   return (
     <div class="feedback-card">
@@ -505,6 +554,7 @@ function renderResourceSummary(resources) {
 function WorldStageHero() {
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
+  const presentationScale = () => core.buildWorldScaleSurface(locale()).presentationScale;
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
       ? `${core.state.selectedKind}:${core.state.selectedId}`
@@ -533,7 +583,20 @@ function WorldStageHero() {
     <div class="stage-hero">
       <div class="stage-hero__topline">
         <div class="stack" style="gap:10px;">
-          <div class="stage-hero__eyebrow">{tr(locale(), "工业世界指挥桌", "Industrial World Command Desk")}</div>
+          <div class="stage-hero__eyebrow-row">
+            <div class="stage-hero__eyebrow">{tr(locale(), "工业世界指挥桌", "Industrial World Command Desk")}</div>
+            <InlineHelpTip
+              locale={locale()}
+              id="viewer-stage-scale-tip"
+              label={tr(locale(), "打开表现层比例说明", "Open presentation scale guidance")}
+              title={tr(locale(), "表现层说明", "Presentation Notes")}
+              lines={[
+                presentationScale().markerTruthNote,
+                presentationScale().zoomTruthNote,
+                presentationScale().softwareSafeNote,
+              ]}
+            />
+          </div>
           <div class="stage-hero__title">
             {gameplaySummary()?.goalTitle || tr(locale(), "进入世界，先看局势，再做动作", "Read the world first, then act.")}
           </div>
@@ -1806,20 +1869,11 @@ function DetailsPanel() {
               </Show>
             </div>
           </div>
-          <EventCard
-            title={tr(locale(), "表现层说明", "Presentation Notes")}
-            badge={tr(locale(), "不要误读 marker", "Do not trust marker size")}
-            badgeClass="badge badge--warn"
-          >
-            <div class="feedback-summary">{worldScaleSurface().presentationScale.markerTruthNote}</div>
-            <div class="feedback-detail">{worldScaleSurface().presentationScale.zoomTruthNote}</div>
-            <div class="feedback-detail">{worldScaleSurface().presentationScale.softwareSafeNote}</div>
-          </EventCard>
           <EmptyState>
             {tr(
               locale(),
-              "主状态已经在中间的“世界摘要”里展示；这里保留世界边界、距离样本和表现层说明，原始快照仍按需展开。",
-              "The main runtime state already lives in World Summary; this section keeps world bounds, distance samples, and presentation notes, while raw snapshots stay collapsible.",
+              "主状态已经在中间的“世界摘要”里展示；这里保留世界边界和距离样本，原始快照仍按需展开。",
+              "The main runtime state already lives in World Summary; this section keeps world bounds and distance samples, while raw snapshots stay collapsible.",
             )}
           </EmptyState>
         </div>

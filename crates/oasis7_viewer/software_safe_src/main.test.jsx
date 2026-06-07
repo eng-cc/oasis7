@@ -219,6 +219,43 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByTestId("pixel-world-host")).toHaveTextContent("pixel-world-host:en");
   }, 15000);
 
+  it("moves presentation notes into the stage help tip instead of the right details rail", async () => {
+    const { container } = await renderViewerApp();
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    const detailsPanel = container.querySelector("#viewer-details-panel");
+    const helpButton = within(stagePanel).getByRole("button", { name: /open presentation scale guidance/i });
+
+    expect(helpButton).toHaveAttribute("aria-expanded", "false");
+    expect(within(detailsPanel).queryByText("Do not trust marker size")).not.toBeInTheDocument();
+
+    fireEvent.click(helpButton);
+
+    expect(helpButton).toHaveAttribute("aria-expanded", "true");
+    expect(within(stagePanel).getByText("Presentation Notes")).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/do not read on-screen diameter as real geometry size/i)).toBeInTheDocument();
+    expect(helpButton).toHaveAttribute("aria-describedby", "viewer-stage-scale-tip");
+  });
+
+  it("dismisses the stage help tip on escape and outside click", async () => {
+    const { container } = await renderViewerApp();
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    const helpButton = within(stagePanel).getByRole("button", { name: /open presentation scale guidance/i });
+
+    fireEvent.click(helpButton);
+    expect(helpButton).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(helpButton).toHaveAttribute("aria-expanded", "false"));
+
+    fireEvent.click(helpButton);
+    expect(helpButton).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.pointerDown(document.body);
+    await waitFor(() => expect(helpButton).toHaveAttribute("aria-expanded", "false"));
+  });
+
   it("unlocks agent chat and prompt override surfaces once an agent is selected", async () => {
     const { core } = await renderViewerApp({
       selection: { kind: "agent", id: "agent-0" },
