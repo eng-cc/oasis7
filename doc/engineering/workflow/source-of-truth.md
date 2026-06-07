@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.16**
+Version: **v1.4.17**
 Last Updated: **2026-06-07**
 
 ## 0. Purpose
@@ -45,7 +45,7 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 | Phase / trigger | Skill surface | Requiredness | Formal evidence |
 | --- | --- | --- | --- |
 | Any user request starts | `default-workflow-bootstrap` | Required before fact lookup, chat answer, professional slice dispatch, edits, verification, review, or external messaging unless already inside the bound task worktree | Bootstrap entry in `.pm/tasks/<TASK-UID>.execution.md` |
-| Read-only professional/domain question | Matching professional bounded slice under TPM coordination after task/worktree bootstrap | Required when the answer depends on product/design/game-visual-interaction/runtime/WASM/agent/viewer/QA/liveops judgment; skipped only for pure fact lookup after task truth exists | Role-tagged slice return recorded in `.pm/tasks/<TASK-UID>.execution.md` and summarized to the user |
+| Read-only professional/domain question | Matching professional bounded slice under TPM coordination after task/worktree bootstrap | Required when the answer depends on product/design/gameplay/game-visual-interaction/runtime/blockchain-ops/WASM/agent/viewer/QA/liveops judgment; skipped only for pure fact lookup after task truth exists | Role-tagged slice return recorded in `.pm/tasks/<TASK-UID>.execution.md` and summarized to the user |
 | Bound task needs next phase selection | `repo-owned-workflow-router` | Required after bootstrap and whenever phase is unclear | Route entry with selected/skipped skills in `.pm/tasks/<TASK-UID>.execution.md` |
 | Scope is ambiguous, option-heavy, or visual enough to need ideation | `bounded-brainstorming` | Optional, risk-based | Brainstorming output or skip reason in execution log/project |
 | Behavior changes with a stable automated harness | `tdd-test-writer` | Conditional required when RED criteria are met; otherwise skip reason required | RED command, failing evidence, and handoff contract |
@@ -236,6 +236,9 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.17 (2026-06-07)**
+  - Added `blockchain_ops_engineer` to the formal professional-role roster and read-only specialist routing matrix.
+  - Synced canonical role enumerations so handoff and slice-card surfaces stay aligned with the standard role list.
 - **v1.4.16 (2026-06-07)**
   - Added `gameplay_designer` as a formal professional role between system/product design and visual/interaction design.
   - Clarified that gameplay-loop, progression, balance, encounter/resource-loop, and player-verb judgments belong to `gameplay_designer`.

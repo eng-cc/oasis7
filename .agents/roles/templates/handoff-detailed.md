@@ -3,8 +3,6 @@
 ## Meta
 - Handoff ID:
 - Date:
-- From Role: `producer_system_designer | game_visual_interaction_designer | runtime_engineer | blockchain_ops_engineer | wasm_platform_engineer | agent_engineer | viewer_engineer | qa_engineer | liveops_community`
-- To Role: `producer_system_designer | game_visual_interaction_designer | runtime_engineer | blockchain_ops_engineer | wasm_platform_engineer | agent_engineer | viewer_engineer | qa_engineer | liveops_community`
 - From Role: `producer_system_designer | gameplay_designer | game_visual_interaction_designer | runtime_engineer | blockchain_ops_engineer | wasm_platform_engineer | agent_engineer | viewer_engineer | qa_engineer | liveops_community`
 - To Role: `producer_system_designer | gameplay_designer | game_visual_interaction_designer | runtime_engineer | blockchain_ops_engineer | wasm_platform_engineer | agent_engineer | viewer_engineer | qa_engineer | liveops_community`
 - Related Module:
