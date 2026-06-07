@@ -134,3 +134,15 @@ Example:
 - Finding Disposition Evidence: no code/doc changes were required after involved-role review; fresh green evidence remained `./scripts/pm/workflow-behavior-eval.sh`, `./scripts/doc-governance-check.sh`, and `git diff --check`
 - Residual Risk: future role expansion can still miss non-active or newly added role-selection surfaces unless source-of-truth-first sync is repeated; current branch also carries unrelated historical `pm lint` debt outside this task, but it does not change the correctness of this role-addition diff
 - Blocker / Next Action: commit this evidence-only execution-log update, rerun `./scripts/prepare-task-pr.sh`, then create the PR.
+
+## 2026-06-07 17:12:41 CST / tpm
+- 完成内容: 已推送 task branch 并创建 GitHub PR。
+- 遗留事项: 继续按默认主链观察 required checks、mergeability、PR comments 与 review threads；当前分支相对 `origin/main` 仍 behind 3 commits，但这在 GitHub 可直接合并时只是 advisory，不是本地阻塞项。
+- PR: https://github.com/eng-cc/oasis7/pull/371
+- PR Purpose Decision: `normal_pr_ci_watch`
+- Why: 这是普通治理/工作流扩容 PR，不是为了触发 manual packaging/release CI 的停靠 PR。
+- Action: continue GitHub PR watch/fix/merge path from PR #371.
+- Validation Command: `./scripts/prepare-task-pr.sh --create`
+- Expected Result: branch is pushed, pre-PR local role review evidence is accepted, and a GitHub PR is created for the task branch.
+- Actual Result: passed; helper accepted `Pre-PR Local Role Review: passed`, pushed `task/engineering-add-gameplay-designer-role`, and created PR #371.
+- Blocker / Next Action: inspect PR #371 checks, mergeability, comments, and unresolved review threads.
