@@ -362,7 +362,7 @@ function HostedLoginGate() {
           <div class="feedback-summary">
             {tr(
               locale(),
-              "当前是 hosted public join。先领取玩家会话，再进入聊天、玩法动作和后续授权。",
+              "当前是托管公开加入模式。先领取玩家会话，再进入聊天、玩法动作和后续授权。",
               "This is hosted public join. Acquire a player session first, then continue to chat, gameplay actions, and later authorization.",
             )}
           </div>
@@ -395,7 +395,7 @@ function EmptyEntityRecoveryCard(props) {
         {gameplay()?.blockerDetail
           || tr(
             locale(),
-            "runtime 已发布玩法摘要，但当前快照还没有可选 Agent 或地点。",
+            "运行时已发布玩法摘要，但当前快照还没有可选行动体或地点。",
             "Runtime published gameplay summary, but the current snapshot still has no selectable agents or locations.",
           )}
       </div>
@@ -411,7 +411,7 @@ function EmptyEntityRecoveryCard(props) {
       <div class="feedback-detail">
         {tr(
           locale(),
-          "如果中间栏仍保留“刷新快照”动作，先从那里重拉一次；如果数量仍然是 0，就需要修复或重启 runtime world bootstrap。",
+          "如果中间栏仍保留“刷新快照”动作，先从那里重拉一次；如果数量仍然是 0，就需要修复或重启运行时世界引导流程。",
           "If the middle column still exposes a refresh action, pull a fresh snapshot there first. If the counts stay at 0, repair or restart the runtime world bootstrap.",
         )}
       </div>
@@ -429,7 +429,7 @@ function ViewerEntryMenu() {
       <div class="entry-menu__panel stack">
         <div>
           <div class="panel__title" style="margin-bottom:10px;">
-            {tr(locale(), "语言与 Viewer 入口", "Language and Viewer Entry")}
+            {tr(locale(), "语言与观察器入口", "Language and Viewer Entry")}
           </div>
           <div class="feedback-detail">
             {tr(
@@ -561,8 +561,8 @@ function WorldStageHero() {
       : null;
   const selectionHint = () =>
     core.state.selectedKind && core.state.selectedId
-      ? tr(locale(), "右侧命令面会围绕这个对象展开。", "The command surface on the right now follows this target.")
-      : tr(locale(), "先从左侧锁定一个 Agent 或地点，再进入右侧命令面。", "Lock onto an agent or location from the left before entering the command surface.");
+      ? tr(locale(), "右侧指挥面板会围绕这个对象展开。", "The command surface on the right now follows this target.")
+      : tr(locale(), "先从左侧锁定一个行动体或地点，再进入右侧指挥面板。", "Lock onto an agent or location from the left before entering the command surface.");
   const stageLabel = () => gameplayStageLabel(gameplaySummary()?.stageStatus, locale());
   const nextStepCopy = () =>
     gameplaySummary()?.narrativeNextStep
@@ -693,7 +693,7 @@ function TargetsPanel() {
       <EmptyState>
         {tr(
           locale(),
-          "先从这里锁定一个 Agent 或地点。中间读局势，右侧只处理你当前选中的目标。",
+          "先从这里锁定一个行动体或地点。中间查看局势，右侧只处理你当前选中的目标。",
           "Lock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.",
         )}
       </EmptyState>
@@ -702,17 +702,17 @@ function TargetsPanel() {
         <input
           id="entity-search"
           type="search"
-          placeholder={tr(locale(), "搜索 Agent 或地点", "Search agents or locations")}
+          placeholder={tr(locale(), "搜索行动体或地点", "Search agents or locations")}
           value={core.getSelectedSearch()}
           onInput={(event) => core.setSelectedSearch(event.currentTarget.value)}
         />
       </div>
       <div>
-        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "Agents", "Agents")}</div>
+        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "行动体", "Agents")}</div>
         <div class="list">
           <Show
             when={lists().agents.length > 0}
-            fallback={<EmptyState>{tr(locale(), "当前快照里没有 Agent。", "No agents in current snapshot.")}</EmptyState>}
+            fallback={<EmptyState>{tr(locale(), "当前快照里没有行动体。", "No agents in current snapshot.")}</EmptyState>}
           >
             <For each={lists().agents}>
               {(agent) => (
@@ -816,11 +816,11 @@ function WorldSummaryPanel() {
       <PanelSection
         title={tr(locale(), "正式玩法摘要", "Formal Gameplay Summary")}
         eyebrow={tr(locale(), "玩家主路径", "Player Path")}
-        meta={tr(locale(), "先看目标、阻塞和下一步，再决定是否进入右侧命令区。", "Read the goal, blocker, and next step first, then decide whether to enter the command surface.")}
+        meta={tr(locale(), "先看目标、阻塞和下一步，再决定是否进入右侧指挥区。", "Read the goal, blocker, and next step first, then decide whether to enter the command surface.")}
       >
         <Show
           when={gameplaySummary()}
-          fallback={<EmptyState>{tr(locale(), "等待首条 canonical gameplay 快照…", "Waiting for the first canonical gameplay snapshot…")}</EmptyState>}
+          fallback={<EmptyState>{tr(locale(), "等待首条规范玩法快照…", "Waiting for the first canonical gameplay snapshot…")}</EmptyState>}
         >
           {(gameplay) => (
             <>
@@ -905,7 +905,7 @@ function WorldSummaryPanel() {
                   <Badge class="badge badge--accent">{tr(locale(), "下一步", "Next Step")}</Badge>
                 </div>
                 <div class="feedback-summary">
-                  {gameplay().narrativeNextStep || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update.")}
+                  {gameplay().narrativeNextStep || tr(locale(), "等待下一次运行时指引更新。", "Wait for the next runtime guidance update.")}
                 </div>
                 <Show when={gameplay().branchHint}>
                   <div class="feedback-detail">{gameplay().branchHint}</div>
@@ -1009,7 +1009,7 @@ function WorldSummaryPanel() {
                 <div class="action-grid">
                   <Show
                     when={gameplay().availableActions.length > 0}
-                    fallback={<EmptyState>{tr(locale(), "当前还没有发布 canonical gameplay 动作。", "No canonical gameplay actions published yet.")}</EmptyState>}
+                    fallback={<EmptyState>{tr(locale(), "当前还没有发布规范玩法动作。", "No canonical gameplay actions published yet.")}</EmptyState>}
                   >
                     <For each={gameplay().availableActions}>
                       {(action) => (
@@ -1030,7 +1030,7 @@ function WorldSummaryPanel() {
                         >
                           <div class="feedback-detail">
                             {action.disabledReason
-                              || tr(locale(), "无需打开 visual QA viewer，也可以直接从正式 Web 入口执行。", "Playable from the formal Web entry without opening the visual QA viewer.")}
+                              || tr(locale(), "无需打开可视化质检观察器，也可以直接从正式网页入口执行。", "Playable from the formal Web entry without opening the visual QA viewer.")}
                           </div>
                           <Show
                             when={action.executeKind === "request_snapshot" || action.executeKind === "step" || action.executeKind === "play" || action.executeKind === "gameplay_action"}
@@ -1127,7 +1127,7 @@ function WorldSummaryPanel() {
             <div class="diagnostic-surface__meta">
               {tr(
                 locale(),
-                "执行 lane、auth/session、托管矩阵与最近事件都收在这里，避免它们继续抢占主玩法首屏。",
+                "执行通道、认证/会话、托管矩阵与最近事件都收在这里，避免它们继续抢占主玩法首屏。",
                 "Execution lanes, auth/session truth, hosted matrix, and recent events live here so they no longer dominate the primary gameplay viewport.",
               )}
             </div>
@@ -1145,7 +1145,7 @@ function WorldSummaryPanel() {
             <Badge>{`renderer=${state.renderer || "n/a"}`}</Badge>
             <Badge>{`controlProfile=${state.controlProfile}`}</Badge>
           </div>
-          <PanelSection title={tr(locale(), "执行 Lane", "Execution Lanes")}>
+          <PanelSection title={tr(locale(), "执行通道", "Execution Lanes")}>
             <div class="badge-row">
               <Badge class="badge badge--accent">debug_viewer</Badge>
               <Badge>{`status=${state.debugViewerStatus}`}</Badge>
@@ -1155,7 +1155,7 @@ function WorldSummaryPanel() {
             <EmptyState style="margin-top:-2px;">
               {tr(
                 locale(),
-                "debug_viewer 是只读订阅 lane，只负责消费 runtime 快照和事件；关闭这个 viewer 不会停止 agent lane。",
+                "debug_viewer 是只读订阅通道，只负责消费运行时快照和事件；关闭这个观察器不会停止行动体通道。",
                 "debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer does not stop the agent lane.",
               )}
             </EmptyState>
@@ -1163,8 +1163,7 @@ function WorldSummaryPanel() {
               when={selectedDebug()}
               fallback={
                 <EmptyState>
-                  Select an agent to compare the headless execution lane against this debug_viewer observer
-                  lane.
+                  先选中一个行动体，才能把无头执行通道和当前 debug_viewer 观察通道做对照。
                 </EmptyState>
               }
             >
@@ -1185,7 +1184,7 @@ function WorldSummaryPanel() {
                   <EmptyState style="margin-top:-2px;">
                     {tr(
                       locale(),
-                      "上面的 lane badge 表示 phase-1 期望执行 contract；下面的 provider check badge 表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。",
+                      "上面的通道徽标表示 phase-1 期望执行契约；下面的提供方检查徽标表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。",
                       "Lane badges show the expected phase-1 execution contract. Provider check badges below show the actual runtime_live probe against /v1/provider/info and /v1/provider/health.",
                     )}
                   </EmptyState>
@@ -1271,8 +1270,11 @@ function WorldSummaryPanel() {
               <Badge>{state.auth.pendingForceRebind ? "mode=force_rebind" : "mode=awaiting_retry"}</Badge>
             </div>
             <EmptyState>
-              Player session is switching to the requested agent and the current action will continue after
-              registration succeeds.
+              {tr(
+                locale(),
+                "玩家会话正在切换到请求的行动体；注册成功后，当前动作会继续执行。",
+                "Player session is switching to the requested agent and the current action will continue after registration succeeds.",
+              )}
             </EmptyState>
           </Show>
           <Show when={state.hostedAdmission}>
@@ -1301,7 +1303,7 @@ function WorldSummaryPanel() {
               <Badge class="badge badge--warn">{`runtimeProbeError=${state.hostedAdmission.runtime_probe_error}`}</Badge>
             </div>
           </Show>
-          <PanelSection title="Session Ladder">
+            <PanelSection title={tr(locale(), "会话阶梯", "Session Ladder")}>
             <EmptyState>{authSurface().currentTierReason}</EmptyState>
             <div class="event-list">
               <For each={authSurface().tiers}>
@@ -1336,7 +1338,7 @@ function WorldSummaryPanel() {
               <EmptyState>
                 {tr(
                   locale(),
-                  "这里是 launcher 导出的 hosted public-join 真值面。QA 应该直接读取这些 action id，而不是只靠按钮状态推断。",
+                  "这里是启动器导出的托管公开加入真值面。质检应直接读取这些动作编号，而不是只靠按钮状态推断。",
                   "This is the hosted public-join truth surface exported by the launcher. QA should read these action ids directly instead of inferring from button state alone.",
                 )}
               </EmptyState>
@@ -1360,7 +1362,7 @@ function WorldSummaryPanel() {
             </PanelSection>
           </Show>
           <div class="summary-grid">
-            <MetricCard label={tr(locale(), "Prompt 反馈", "Prompt Feedback")} value={promptFeedback()?.stage || "idle"}>
+            <MetricCard label={tr(locale(), "提示词反馈", "Prompt Feedback")} value={promptFeedback()?.stage || "idle"}>
               <Show when={promptFeedbackDisplay()}>
                 <Badge class={promptFeedbackDisplay().badgeClass}>
                   {promptFeedbackDisplay().label}
@@ -1378,7 +1380,7 @@ function WorldSummaryPanel() {
           <div>
             <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "最近事件", "Recent Events")}</div>
             <div class="event-list">
-              <Show when={state.recentEvents.length > 0} fallback={<EmptyState>{tr(locale(), "等待 live 事件…", "Waiting for live events…")}</EmptyState>}>
+              <Show when={state.recentEvents.length > 0} fallback={<EmptyState>{tr(locale(), "等待实时事件…", "Waiting for live events…")}</EmptyState>}>
                 <For each={state.recentEvents}>
                   {(event) => (
                     <EventCard
@@ -1429,7 +1431,7 @@ function InteractionPanel() {
     mainTokenTransferCapability().enabled
       ? tr(
           locale(),
-          "contract 表明这个 lane 具备 strong_auth 级 main_token_transfer 能力，但 viewer 这里仍然不会直接暴露转账表单。",
+          "契约表明这个通道具备 strong_auth 级 main_token_transfer 能力，但观察器这里仍然不会直接暴露转账表单。",
           "Contract marks main_token_transfer as strong_auth-capable on this lane, but viewer still exposes no transfer form here.",
         )
       : mainTokenTransferCapability().reason;
@@ -1437,24 +1439,24 @@ function InteractionPanel() {
     promptOverridesVisible()
       ? tr(
           locale(),
-          "高级 Prompt 设置已展开；你可以继续做 preview/apply/rollback，页面也会显示最近一次反馈。",
+          "高级提示词设置已展开；你可以继续做预览、应用、回滚，页面也会显示最近一次反馈。",
           "Advanced prompt settings are expanded; preview/apply/rollback and the latest prompt feedback are visible.",
         )
       : tr(
           locale(),
-          "Prompt Overrides 默认收起，避免把 operator 级编辑控件直接堆在主入口。显式展开后仍可做 preview/apply/rollback，`__AW_TEST__.sendPromptControl(...)` 也保持可用。",
+          "提示词覆盖默认收起，避免把操作员级编辑控件直接堆在主入口。显式展开后仍可做预览、应用、回滚，`__AW_TEST__.sendPromptControl(...)` 也保持可用。",
           "Prompt Overrides stay hidden by default so operator-level editing controls do not dominate the primary entry. Expanding them keeps preview/apply/rollback available, and `__AW_TEST__.sendPromptControl(...)` remains available.",
         );
   const promptSettingsButtonLabel = () =>
     promptOverridesVisible()
-      ? tr(locale(), "收起 Prompt Overrides", "Hide Prompt Overrides")
-      : tr(locale(), "显示 Prompt Overrides", "Show Prompt Overrides");
+      ? tr(locale(), "收起提示词覆盖", "Hide Prompt Overrides")
+      : tr(locale(), "显示提示词覆盖", "Show Prompt Overrides");
 
   if (!agentId()) {
     if (gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities") {
       return <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />;
     }
-    return <EmptyState>{tr(locale(), "先选中一个 Agent，才能解锁 prompt/chat 控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>;
+    return <EmptyState>{tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>;
   }
 
   return (
@@ -1470,9 +1472,9 @@ function InteractionPanel() {
         <EmptyState>
           {tr(
             locale(),
-            `当前选中的 Agent 正通过 provider-backed loopback bridge 运行在 ${
+            `当前选中的行动体正通过提供方回环桥接运行在 ${
               debugContext()?.execution_mode || "headless_agent"
-            }；viewer 仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用 prompt/chat。`,
+            }；观察器仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用提示词和聊天。`,
             `Selected agent currently runs through the provider-backed loopback bridge in ${
               debugContext()?.execution_mode || "headless_agent"
             }; viewer stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`,
@@ -1507,8 +1509,8 @@ function InteractionPanel() {
       </div>
       <EmptyState>{assetLaneDetail()}</EmptyState>
       <PanelSection
-        title={tr(locale(), "Agent 聊天", "Agent Chat")}
-        eyebrow={tr(locale(), "命令面", "Command Surface")}
+        title={tr(locale(), "行动体聊天", "Agent Chat")}
+        eyebrow={tr(locale(), "指挥面板", "Command Surface")}
         meta={tr(locale(), "主舞台负责看局势；这里负责向当前目标发消息和读回复。", "The stage is for reading the situation. This surface is for messaging the current target and reading replies.")}
       >
         <div class="field">
@@ -1516,7 +1518,7 @@ function InteractionPanel() {
           <textarea
             id="agent-chat-message"
             rows="4"
-            placeholder={tr(locale(), "给当前选中的 Agent 发一条消息", "Send a message to the selected agent")}
+            placeholder={tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent")}
             disabled={!chatCapability().enabled}
             value={core.state.chatDraft.message}
             onInput={(event) => {
@@ -1540,7 +1542,7 @@ function InteractionPanel() {
         <div>
           <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "消息流", "Message Flow")}</div>
           <div class="event-list">
-            <Show when={chatHistory().length > 0} fallback={<EmptyState>{tr(locale(), "这个 Agent 还没有聊天历史。", "No chat history for this agent yet.")}</EmptyState>}>
+            <Show when={chatHistory().length > 0} fallback={<EmptyState>{tr(locale(), "这个行动体还没有聊天历史。", "No chat history for this agent yet.")}</EmptyState>}>
               <For each={chatHistory()}>
                 {(entry) => (
                   <EventCard
@@ -1561,9 +1563,9 @@ function InteractionPanel() {
         </div>
       </PanelSection>
       <PanelSection
-        title={tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings")}
+        title={tr(locale(), "高级提示词设置", "Advanced Prompt Settings")}
         eyebrow={tr(locale(), "高级控制", "Advanced Controls")}
-        meta={tr(locale(), "保留 operator 级 prompt 控制，但默认收起，不与玩家主路径竞争。", "Operator-level prompt controls stay available here, but collapsed by default so they do not compete with the player path.")}
+        meta={tr(locale(), "保留操作员级提示词控制，但默认收起，不与玩家主路径竞争。", "Operator-level prompt controls stay available here, but collapsed by default so they do not compete with the player path.")}
       >
         <div class="badge-row">
           <Badge>{`activePrompt=v${promptVersionState().currentVersion}`}</Badge>
@@ -1589,7 +1591,7 @@ function InteractionPanel() {
         </div>
       </PanelSection>
       <Show when={promptOverridesVisible()}>
-        <PanelSection title="Prompt Overrides">
+        <PanelSection title={tr(locale(), "提示词覆盖", "Prompt Overrides")}>
           <div class="feedback-detail">{promptVersionState().summary}</div>
           <div class="feedback-detail">{promptVersionState().detail}</div>
           <Show
@@ -1612,7 +1614,7 @@ function InteractionPanel() {
             </div>
           </Show>
           <div class="field">
-            <label for="prompt-system">{tr(locale(), "System Prompt 覆盖", "System Prompt Override")}</label>
+            <label for="prompt-system">{tr(locale(), "系统提示词覆盖", "System Prompt Override")}</label>
             <textarea
               id="prompt-system"
               rows="4"
@@ -1656,14 +1658,14 @@ function InteractionPanel() {
               disabled={!promptCapability().enabled}
               onClick={() => core.sendPromptControl("preview", null)}
             >
-              {tr(locale(), "预览 Prompt", "Preview Prompt")}
+              {tr(locale(), "预览提示词", "Preview Prompt")}
             </button>
             <button
               data-prompt-action="apply"
               disabled={!promptCapability().enabled}
               onClick={() => core.sendPromptControl("apply", null)}
             >
-              {tr(locale(), "应用 Prompt", "Apply Prompt")}
+              {tr(locale(), "应用提示词", "Apply Prompt")}
             </button>
           </div>
           <div class="toolbar">
@@ -1692,10 +1694,10 @@ function InteractionPanel() {
                 });
               }}
             >
-              {tr(locale(), "回滚 Prompt", "Rollback Prompt")}
+              {tr(locale(), "回滚提示词", "Rollback Prompt")}
             </button>
           </div>
-          <Show when={promptFeedback()} fallback={<EmptyState>{tr(locale(), "还没有 Prompt 反馈。", "No prompt feedback yet.")}</EmptyState>}>
+          <Show when={promptFeedback()} fallback={<EmptyState>{tr(locale(), "还没有提示词反馈。", "No prompt feedback yet.")}</EmptyState>}>
             {(feedback) => <FeedbackCard feedback={feedback()} display={promptFeedbackDisplay()} />}
           </Show>
           <Show when={core.state.strongAuth.lastGrantActionId}>
@@ -1711,7 +1713,7 @@ function InteractionPanel() {
         </PanelSection>
       </Show>
       <PanelSection
-        title={tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane")}
+        title={tr(locale(), "资产 / 治理通道", "Asset / Governance Lane")}
         eyebrow={tr(locale(), "后置能力", "Deferred Surface")}
         meta={tr(locale(), "这类能力保留在右侧底部，只作为边界说明，不再抢占聊天与主玩法路径。", "These capabilities stay at the bottom of the right column as boundary guidance instead of competing with chat and the main player path.")}
       >
@@ -1725,7 +1727,7 @@ function InteractionPanel() {
         <EmptyState>{assetLaneDetail()}</EmptyState>
         <EmptyState>
           {mainTokenTransferPolicy()?.reason
-            || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.")}
+            || tr(locale(), "当前通道没有 main_token_transfer 的托管动作策略。", "No hosted action policy is available for main_token_transfer on this lane.")}
         </EmptyState>
         <div class="toolbar">
           <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
@@ -1781,7 +1783,7 @@ function DetailsPanel() {
                 title={tr(locale(), "对象明细暂时不可用", "Object Details Are Temporarily Unavailable")}
               />
             )
-            : <EmptyState>{tr(locale(), "请先从左侧列表选一个 Agent 或地点。", "Select an agent or location from the left list.")}</EmptyState>
+            : <EmptyState>{tr(locale(), "请先从左侧列表选一个行动体或地点。", "Select an agent or location from the left list.")}</EmptyState>
         }
       >
         {(selected) => (
@@ -1883,7 +1885,7 @@ function DetailsPanel() {
             label={tr(locale(), "展开原始快照诊断", "Expand Raw Snapshot Diagnostics")}
             note={tr(
               locale(),
-              "只在需要排查快照结构或 hosted access 原始字段时展开。",
+              "只在需要排查快照结构或托管接入原始字段时展开。",
               "Expand only when you need to inspect the raw snapshot shape or hosted access fields.",
             )}
             value={snapshotSummary}
@@ -1911,7 +1913,7 @@ function AppShell() {
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
           <div class="panel__meta-copy">
-            {tr(locale(), "先锁定对象，再进入世界舞台或右侧命令面。", "Lock onto a target first, then move into the stage or command surface.")}
+            {tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}
           </div>
         </div>
         <div class="panel__body">
@@ -1932,7 +1934,7 @@ function AppShell() {
           <div class="panel__eyebrow">{tr(locale(), "指挥与核查", "Command and Inspect")}</div>
           <div class="panel__title">{tr(locale(), "交互与明细", "Interact and Inspect")}</div>
           <div class="panel__meta-copy">
-            {tr(locale(), "只有锁定目标后才进入这里。聊天优先，Prompt 与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it.")}
+            {tr(locale(), "只有锁定目标后才进入这里。聊天优先，提示词与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it.")}
           </div>
         </div>
         <div class="panel__body">
