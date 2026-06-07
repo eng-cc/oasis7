@@ -59,6 +59,11 @@
 示例仅作为 operator 参考，实际值必须来自受控环境：
 
 ```bash
+pricing_rules="$(
+  sed -n 's/^OASIS7_NEWAPI_BRIDGE_PRICING_RULES=\"\(.*\)\"$/\1/p' \
+    scripts/newapi-bridge-service/pricing-rules.example.env
+)"
+
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
   --bind-addr 127.0.0.1:5852 \
   --state-path output/newapi-bridge/bridge-state.json \
@@ -66,10 +71,10 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
   --deposit-account-prefix oc:bridge: \
   --chain-base-url http://127.0.0.1:5010 \
   --chain-confirmations-required 1 \
-  --pricing-rule "$(sed -n 's/^OASIS7_NEWAPI_BRIDGE_PRICING_RULES=\"\\(.*\\)\"$/\\1/p' scripts/newapi-bridge-service/pricing-rules.example.env)" \
   --letai-base-url https://api.letai.run \
   --letai-platform-key "$LETAI_PLATFORM_KEY" \
   --letai-parent-channel-id "$LETAI_PARENT_CHANNEL_ID" \
+  $(printf '%s' "$pricing_rules" | sed 's/,[[:space:]]*/\n/g' | sed '/^$/d; s/^/--pricing-rule /') \
   --reconcile-interval-seconds 15
 ```
 

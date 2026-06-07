@@ -22,11 +22,14 @@ use self::tests_support::{
 };
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
-const PRICING_RULES_EXAMPLE_ENV_PATH: &str =
-    "scripts/newapi-bridge-service/pricing-rules.example.env";
+
+fn pricing_rules_example_env_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/newapi-bridge-service/pricing-rules.example.env")
+}
 
 fn example_pricing_rules_value() -> String {
-    fs::read_to_string(PRICING_RULES_EXAMPLE_ENV_PATH)
+    fs::read_to_string(pricing_rules_example_env_path())
         .expect("read pricing rules example env")
         .lines()
         .find_map(|line| {
@@ -325,7 +328,7 @@ fn reconcile_provisions_letai_user_project_token_and_marks_reconciled() {
 
     let snapshot = test_service.service.snapshot();
     assert_eq!(snapshot.ledger[0].state, BridgeLedgerState::Reconciled);
-    assert_eq!(snapshot.ledger[0].quota, Some(15));
+    assert_eq!(snapshot.ledger[0].quota, Some(100_000));
     assert_eq!(
         snapshot.ledger[0].external_order_id.as_deref(),
         Some("letai-topup:bridge-deposit-000001")
