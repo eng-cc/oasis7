@@ -1,0 +1,23 @@
+task_uid: task_d59868432f524406abd0ef7d924e190d
+title: "viewer presentation notes right panel review"
+owner_role: tpm
+worktree_hint: /home/scc/worktrees/oasis7-viewer-presentation-notes-right-panel-review
+execution_log_path: .pm/tasks/task_d59868432f524406abd0ef7d924e190d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - crates/oasis7_viewer/software_safe_src/main.jsx
+  - AGENTS.md
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-07T20:22:21+08:00
+last_started_at: 2026-06-07T18:57:50+08:00
+last_claim_type: ready_for_pr
+last_verify_command: "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=false OASIS7_CI_RUN_CONSENSUS_TESTS=false OASIS7_CI_RUN_DISTFS_TESTS=false OASIS7_CI_RUN_OASIS7_NODE_TESTS=false OASIS7_CI_RUN_OASIS7_NET_TESTS=false OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=false OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=true OASIS7_CI_RUN_VIEWER_WASM_CHECK=true OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=false ./scripts/ci-tests.sh required"
+last_verified_at: 2026-06-07T20:22:21+08:00
+last_verification_exit_code: 101
+last_verification_status: blocked
+last_closed_at: 2026-06-07T20:09:46+08:00
