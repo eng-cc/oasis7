@@ -104,6 +104,31 @@
 - 备注:
   - 当前仅作为 side observer 接入，不纳入正式 validator set。
 
+### 新增 Windows 机器
+- host:
+  - `192.168.1.3`
+- login_target:
+  - `Administrator@192.168.1.3:220708`
+- system:
+  - `Windows`
+- intended_scope:
+  - `testnet node inventory`
+- role:
+  - `pending_assignment`
+- service:
+  - `not yet recorded in repo evidence`
+- status_bind:
+  - `not yet recorded in repo evidence`
+- peers:
+  - `not yet recorded in repo evidence`
+- validators:
+  - `not yet recorded in repo evidence`
+- auto_attest:
+  - `unknown`
+- 备注:
+  - 该机器于 `2026-06-07` 从 operator 入口清单新增到仓库 inventory。
+  - 当前只冻结“已加入 testnet 节点库存”的事实，不宣称该机已经部署 runtime、加入 active peer set 或纳入正式 validator set。
+
 ## 验证快照
 ### 云上老机器 `triad-sequencer-a`
 - service:

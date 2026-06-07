@@ -44,3 +44,13 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_a3e70249b4754bf7a3d896541c2ffc07.yaml
+  - task_uid: task_494b9cd1a63544bca3c1e69f17af1918
+    title: "add new windows machine to testnet node inventory"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "testnet node inventory includes the newly added Windows machine from aliyun_ecs.txt"
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_494b9cd1a63544bca3c1e69f17af1918.yaml

@@ -53,6 +53,20 @@
 2. `public_testnet` readiness 仍以 `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 的 seven-lane checklist 为准。
 3. hosted-login 的 test/prod 两套已经分开部署，但仍建议补完整 `login/complete` 自动 smoke，以便把 OTP 收件箱验证也纳入日常 gate。
 
+## 3.1 当前 testnet 节点入口清单
+以下条目用于补充当前 repo 已知的 testnet 节点入口/登录目标，避免只在 operator 本地文本里追加而没有回写仓库真值。
+
+| 主机 / 入口 | 系统 | 当前角色 | 说明 |
+| --- | --- | --- | --- |
+| `39.104.204.172` | Linux ECS | `triad-testnet-sequencer` / testnet sequencer | 云上 testnet 节点；仍以 live evidence/runtimes 文档为准 |
+| `39.104.205.67` | Linux ECS | `triad-testnet-storage` / testnet storage | 云上 testnet 节点；仍以 live evidence/runtimes 文档为准 |
+| `192.168.1.4` | 本地 Linux | `triad-testnet-local` / local observer or local testnet node | 已在既有 execution/evidence 中出现的本地 testnet 节点入口 |
+| `192.168.1.3` | Windows | `Administrator@192.168.1.3:220708` | 2026-06-07 新增的 Windows 机器；已纳入 testnet 节点 inventory，但当前文档只冻结入口信息，不代表已完成 deploy/health/readiness 验证 |
+
+补充说明：
+1. 这里记录的是“当前已知 testnet 节点入口/库存”，不是自动等价于“都在 active validator set”。
+2. 对 `192.168.1.3` 的当前 repo 真值仅限于 operator 入口已登记；若后续在该机上实际部署 runtime、launcher 或 observer，需要把服务名、状态端口、验证命令和 same-window evidence 继续回写到对应 runbook / evidence / `.pm` execution log。
+
 ## 4. Hosted Login 环境矩阵
 | 项 | 测试环境 | 正式环境 |
 | --- | --- | --- |
