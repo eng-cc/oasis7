@@ -4972,6 +4972,11 @@ function tr$1(locale, zh, en) {
 }
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
 const DEFER_RENDERER_VALUES = /* @__PURE__ */ new Set(["0", "false", "no", "off", "defer", "fallback"]);
+const pixelWorldFocusUiSessionState = {
+  focusMode: false,
+  commandDrawerOpen: false,
+  diagnosticsDrawerOpen: false
+};
 const FRAGMENT_TERRAIN_PALETTE = {
   silicate_matrix: [126, 144, 99],
   iron_nickel_alloy: [176, 184, 196],
@@ -6267,28 +6272,38 @@ function PixelWorldHost(props) {
   const [runtimeSource, setRuntimeSource] = createSignal(autoAttachRenderer ? "loading" : "deferred");
   const [cameraState, setCameraState] = createSignal(null);
   const [renderDtoOpen, setRenderDtoOpen] = createSignal(false);
-  const [focusMode, setFocusMode] = createSignal(false);
-  const [commandDrawerOpen, setCommandDrawerOpen] = createSignal(false);
-  const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(false);
+  const [focusMode, setFocusMode] = createSignal(pixelWorldFocusUiSessionState.focusMode);
+  const [commandDrawerOpen, setCommandDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.commandDrawerOpen);
+  const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.diagnosticsDrawerOpen);
+  function setPersistentFocusMode(next) {
+    pixelWorldFocusUiSessionState.focusMode = next;
+    setFocusMode(next);
+  }
+  function setPersistentCommandDrawerOpen(next) {
+    pixelWorldFocusUiSessionState.commandDrawerOpen = next;
+    setCommandDrawerOpen(next);
+  }
+  function setPersistentDiagnosticsDrawerOpen(next) {
+    pixelWorldFocusUiSessionState.diagnosticsDrawerOpen = next;
+    setDiagnosticsDrawerOpen(next);
+  }
   function enterFocusMode() {
-    setFocusMode(true);
-    document.body.classList.add("pixel-world-focus-active");
-    setCommandDrawerOpen(false);
-    setDiagnosticsDrawerOpen(false);
+    setPersistentFocusMode(true);
+    setPersistentCommandDrawerOpen(false);
+    setPersistentDiagnosticsDrawerOpen(false);
   }
   function exitFocusMode() {
-    setFocusMode(false);
-    document.body.classList.remove("pixel-world-focus-active");
-    setCommandDrawerOpen(false);
-    setDiagnosticsDrawerOpen(false);
+    setPersistentFocusMode(false);
+    setPersistentCommandDrawerOpen(false);
+    setPersistentDiagnosticsDrawerOpen(false);
   }
   function openCommandDrawer() {
-    setCommandDrawerOpen(true);
-    setDiagnosticsDrawerOpen(false);
+    setPersistentCommandDrawerOpen(true);
+    setPersistentDiagnosticsDrawerOpen(false);
   }
   function openDiagnosticsDrawer() {
-    setDiagnosticsDrawerOpen(true);
-    setCommandDrawerOpen(false);
+    setPersistentDiagnosticsDrawerOpen(true);
+    setPersistentCommandDrawerOpen(false);
   }
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
@@ -6427,6 +6442,9 @@ function PixelWorldHost(props) {
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
   });
+  createEffect(() => {
+    document.body.classList.toggle("pixel-world-focus-active", focusMode());
+  });
   onCleanup(() => {
     document.body.classList.remove("pixel-world-focus-active");
     adapter().unmount();
@@ -6557,7 +6575,7 @@ function PixelWorldHost(props) {
       },
       get children() {
         var _el$101 = _tmpl$24$1(), _el$102 = _el$101.firstChild, _el$103 = _el$102.nextSibling;
-        _el$101.addEventListener("toggle", (event) => setCommandDrawerOpen(event.currentTarget.open));
+        _el$101.addEventListener("toggle", (event) => setPersistentCommandDrawerOpen(event.currentTarget.open));
         insert(_el$102, () => tr$1(locale(), "命令与目标", "Command and Target"));
         insert(_el$103, createComponent(PixelWorldCommercialHud, {
           locale,
@@ -6620,7 +6638,7 @@ function PixelWorldHost(props) {
       },
       get children() {
         var _el$123 = _tmpl$26$1(), _el$124 = _el$123.firstChild, _el$125 = _el$124.nextSibling, _el$126 = _el$125.firstChild, _el$127 = _el$126.firstChild, _el$128 = _el$127.nextSibling, _el$129 = _el$128.nextSibling, _el$131 = _el$126.nextSibling, _el$132 = _el$131.firstChild, _el$133 = _el$132.nextSibling;
-        _el$123.addEventListener("toggle", (event) => setDiagnosticsDrawerOpen(event.currentTarget.open));
+        _el$123.addEventListener("toggle", (event) => setPersistentDiagnosticsDrawerOpen(event.currentTarget.open));
         insert(_el$124, () => tr$1(locale(), "沉浸诊断", "Focus Diagnostics"));
         insert(_el$127, () => `renderer=${rendererStatus()}`);
         insert(_el$128, () => `runtime=${runtimeSource()}`);

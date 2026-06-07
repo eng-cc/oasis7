@@ -733,6 +733,49 @@ describe("pixel world host", () => {
     expect(fallbackMap).not.toHaveTextContent("Selected");
   });
 
+  it("preserves world focus UI state across host remounts", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+
+    const core = await import("./legacy_core.js");
+    const { PixelWorldHost } = await import("./pixel_world_host.jsx");
+    core.setViewerLocale("en");
+    core.injectSnapshot(sampleSnapshot());
+
+    const firstView = render(() => <PixelWorldHost locale="en" />);
+    activeCleanup = firstView.unmount;
+
+    await waitFor(() => {
+      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+    });
+
+    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    screen.getByRole("button", { name: "Diagnostics" }).click();
+
+    const firstHost = document.querySelector(".pixel-world-host");
+    expect(firstHost).toHaveAttribute("data-world-focus", "true");
+    expect(document.body).toHaveClass("pixel-world-focus-active");
+    expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")?.open).toBe(true);
+
+    firstView.unmount();
+    if (activeCleanup === firstView.unmount) {
+      activeCleanup = null;
+    }
+
+    const secondView = render(() => <PixelWorldHost locale="en" />);
+    activeCleanup = secondView.unmount;
+
+    const secondHost = document.querySelector(".pixel-world-host");
+    expect(secondHost).toHaveAttribute("data-world-focus", "true");
+    expect(document.body).toHaveClass("pixel-world-focus-active");
+    expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")?.open).toBe(true);
+    expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveProperty("open", false);
+  });
+
   it("keeps fragment terrain as non-interactive background behind readable agents", async () => {
     await renderPixelWorldHost();
 
