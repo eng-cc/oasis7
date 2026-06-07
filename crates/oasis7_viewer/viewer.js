@@ -7327,7 +7327,7 @@ function HostedLoginGate() {
         "class": "badge badge--warn",
         children: "auth=missing"
       }), null);
-      insert(_el$58, () => tr(locale(), "当前是 hosted public join。先领取玩家会话，再进入聊天、玩法动作和后续授权。", "This is hosted public join. Acquire a player session first, then continue to chat, gameplay actions, and later authorization."));
+      insert(_el$58, () => tr(locale(), "当前是托管公开加入模式。先领取玩家会话，再进入聊天、玩法动作和后续授权。", "This is hosted public join. Acquire a player session first, then continue to chat, gameplay actions, and later authorization."));
       insert(_el$53, createComponent(HostedLoginForm, {
         get locale() {
           return locale();
@@ -7366,7 +7366,7 @@ function EmptyEntityRecoveryCard(props) {
     get children() {
       return [(() => {
         var _el$59 = _tmpl$21();
-        insert(_el$59, () => gameplay()?.blockerDetail || tr(locale(), "runtime 已发布玩法摘要，但当前快照还没有可选 Agent 或地点。", "Runtime published gameplay summary, but the current snapshot still has no selectable agents or locations."));
+        insert(_el$59, () => gameplay()?.blockerDetail || tr(locale(), "运行时已发布玩法摘要，但当前快照还没有可选行动体或地点。", "Runtime published gameplay summary, but the current snapshot still has no selectable agents or locations."));
         return _el$59;
       })(), createComponent(Show, {
         get when() {
@@ -7397,7 +7397,7 @@ function EmptyEntityRecoveryCard(props) {
         }
       }), (() => {
         var _el$62 = _tmpl$4();
-        insert(_el$62, () => tr(locale(), "如果中间栏仍保留“刷新快照”动作，先从那里重拉一次；如果数量仍然是 0，就需要修复或重启 runtime world bootstrap。", "If the middle column still exposes a refresh action, pull a fresh snapshot there first. If the counts stay at 0, repair or restart the runtime world bootstrap."));
+        insert(_el$62, () => tr(locale(), "如果中间栏仍保留“刷新快照”动作，先从那里重拉一次；如果数量仍然是 0，就需要修复或重启运行时世界引导流程。", "If the middle column still exposes a refresh action, pull a fresh snapshot there first. If the counts stay at 0, repair or restart the runtime world bootstrap."));
         return _el$62;
       })()];
     }
@@ -7409,7 +7409,7 @@ function ViewerEntryMenu() {
   return (() => {
     var _el$63 = _tmpl$22(), _el$64 = _el$63.firstChild, _el$65 = _el$64.nextSibling, _el$66 = _el$65.firstChild, _el$67 = _el$66.firstChild, _el$68 = _el$67.nextSibling, _el$69 = _el$66.nextSibling, _el$70 = _el$69.firstChild, _el$71 = _el$70.nextSibling, _el$72 = _el$69.nextSibling, _el$73 = _el$72.nextSibling;
     insert(_el$64, () => tr(locale(), "入口", "Entry"));
-    insert(_el$67, () => tr(locale(), "语言与 Viewer 入口", "Language and Viewer Entry"));
+    insert(_el$67, () => tr(locale(), "语言与观察器入口", "Language and Viewer Entry"));
     insert(_el$68, () => tr(locale(), "主玩法继续留在当前页面；这里只保留语言切换。", "Primary gameplay stays on this page. This menu only keeps locale switching."));
     _el$70.$$click = () => setViewerLocale("zh");
     _el$71.$$click = () => setViewerLocale("en");
@@ -7503,7 +7503,7 @@ function WorldStageHero() {
   const gameplaySummary = () => buildGameplaySummary(locale());
   const presentationScale = () => buildWorldScaleSurface(locale()).presentationScale;
   const selectedLabel = () => state.selectedKind && state.selectedId ? `${state.selectedKind}:${state.selectedId}` : null;
-  const selectionHint = () => state.selectedKind && state.selectedId ? tr(locale(), "右侧命令面会围绕这个对象展开。", "The command surface on the right now follows this target.") : tr(locale(), "先从左侧锁定一个 Agent 或地点，再进入右侧命令面。", "Lock onto an agent or location from the left before entering the command surface.");
+  const selectionHint = () => state.selectedKind && state.selectedId ? tr(locale(), "右侧指挥面板会围绕这个对象展开。", "The command surface on the right now follows this target.") : tr(locale(), "先从左侧锁定一个行动体或地点，再进入右侧指挥面板。", "Lock onto an agent or location from the left before entering the command surface.");
   const stageLabel = () => gameplayStageLabel(gameplaySummary()?.stageStatus, locale());
   const nextStepCopy = () => gameplaySummary()?.narrativeNextStep || tr(locale(), "先读世界状态，再决定是否推进、恢复或对目标发消息。", "Read the world first, then decide whether to advance, resume, or message the target.");
   const acceptedIntentTitle = () => gameplaySummary()?.acceptedIntentSummary || tr(locale(), "先提交一条明确意图", "Commit one clear intent first");
@@ -7625,12 +7625,12 @@ function TargetsPanel() {
     }), _el$101);
     insert(_el$100, createComponent(EmptyState, {
       get children() {
-        return tr(locale(), "先从这里锁定一个 Agent 或地点。中间读局势，右侧只处理你当前选中的目标。", "Lock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.");
+        return tr(locale(), "先从这里锁定一个行动体或地点。中间查看局势，右侧只处理你当前选中的目标。", "Lock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.");
       }
     }), _el$101);
     insert(_el$102, () => tr(locale(), "筛选目标", "Filter targets"));
     _el$103.$$input = (event) => setSelectedSearch(event.currentTarget.value);
-    insert(_el$105, () => tr(locale(), "Agents", "Agents"));
+    insert(_el$105, () => tr(locale(), "行动体", "Agents"));
     insert(_el$106, createComponent(Show, {
       get when() {
         return lists().agents.length > 0;
@@ -7638,7 +7638,7 @@ function TargetsPanel() {
       get fallback() {
         return createComponent(EmptyState, {
           get children() {
-            return tr(locale(), "当前快照里没有 Agent。", "No agents in current snapshot.");
+            return tr(locale(), "当前快照里没有行动体。", "No agents in current snapshot.");
           }
         });
       },
@@ -7708,7 +7708,7 @@ function TargetsPanel() {
         });
       }
     }));
-    createRenderEffect(() => setAttribute(_el$103, "placeholder", tr(locale(), "搜索 Agent 或地点", "Search agents or locations")));
+    createRenderEffect(() => setAttribute(_el$103, "placeholder", tr(locale(), "搜索行动体或地点", "Search agents or locations")));
     createRenderEffect(() => _el$103.value = getSelectedSearch());
     return _el$100;
   })();
@@ -7741,7 +7741,7 @@ function WorldSummaryPanel() {
         return tr(locale(), "玩家主路径", "Player Path");
       },
       get meta() {
-        return tr(locale(), "先看目标、阻塞和下一步，再决定是否进入右侧命令区。", "Read the goal, blocker, and next step first, then decide whether to enter the command surface.");
+        return tr(locale(), "先看目标、阻塞和下一步，再决定是否进入右侧指挥区。", "Read the goal, blocker, and next step first, then decide whether to enter the command surface.");
       },
       get children() {
         return createComponent(Show, {
@@ -7751,7 +7751,7 @@ function WorldSummaryPanel() {
           get fallback() {
             return createComponent(EmptyState, {
               get children() {
-                return tr(locale(), "等待首条 canonical gameplay 快照…", "Waiting for the first canonical gameplay snapshot…");
+                return tr(locale(), "等待首条规范玩法快照…", "Waiting for the first canonical gameplay snapshot…");
               }
             });
           },
@@ -7934,7 +7934,7 @@ function WorldSummaryPanel() {
                 return _el$156;
               })(), (() => {
                 var _el$157 = _tmpl$21();
-                insert(_el$157, () => gameplay().narrativeNextStep || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update."));
+                insert(_el$157, () => gameplay().narrativeNextStep || tr(locale(), "等待下一次运行时指引更新。", "Wait for the next runtime guidance update."));
                 return _el$157;
               })(), createComponent(Show, {
                 get when() {
@@ -8117,7 +8117,7 @@ function WorldSummaryPanel() {
               get fallback() {
                 return createComponent(EmptyState, {
                   get children() {
-                    return tr(locale(), "当前还没有发布 canonical gameplay 动作。", "No canonical gameplay actions published yet.");
+                    return tr(locale(), "当前还没有发布规范玩法动作。", "No canonical gameplay actions published yet.");
                   }
                 });
               },
@@ -8143,7 +8143,7 @@ function WorldSummaryPanel() {
                     get children() {
                       return [(() => {
                         var _el$173 = _tmpl$4();
-                        insert(_el$173, () => action.disabledReason || tr(locale(), "无需打开 visual QA viewer，也可以直接从正式 Web 入口执行。", "Playable from the formal Web entry without opening the visual QA viewer."));
+                        insert(_el$173, () => action.disabledReason || tr(locale(), "无需打开可视化质检观察器，也可以直接从正式网页入口执行。", "Playable from the formal Web entry without opening the visual QA viewer."));
                         return _el$173;
                       })(), createComponent(Show, {
                         get when() {
@@ -8280,7 +8280,7 @@ function WorldSummaryPanel() {
       }
     }), _el$121);
     insert(_el$124, () => tr(locale(), "运行诊断", "Runtime Diagnostics"));
-    insert(_el$125, () => tr(locale(), "执行 lane、auth/session、托管矩阵与最近事件都收在这里，避免它们继续抢占主玩法首屏。", "Execution lanes, auth/session truth, hosted matrix, and recent events live here so they no longer dominate the primary gameplay viewport."));
+    insert(_el$125, () => tr(locale(), "执行通道、认证/会话、托管矩阵与最近事件都收在这里，避免它们继续抢占主玩法首屏。", "Execution lanes, auth/session truth, hosted matrix, and recent events live here so they no longer dominate the primary gameplay viewport."));
     insert(_el$126, createComponent(For, {
       get each() {
         return diagnosticsSummaryBadges();
@@ -8311,7 +8311,7 @@ function WorldSummaryPanel() {
     }), null);
     insert(_el$127, createComponent(PanelSection, {
       get title() {
-        return tr(locale(), "执行 Lane", "Execution Lanes");
+        return tr(locale(), "执行通道", "Execution Lanes");
       },
       get children() {
         return [(() => {
@@ -8339,7 +8339,7 @@ function WorldSummaryPanel() {
         })(), createComponent(EmptyState, {
           style: "margin-top:-2px;",
           get children() {
-            return tr(locale(), "debug_viewer 是只读订阅 lane，只负责消费 runtime 快照和事件；关闭这个 viewer 不会停止 agent lane。", "debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer does not stop the agent lane.");
+            return tr(locale(), "debug_viewer 是只读订阅通道，只负责消费运行时快照和事件；关闭这个观察器不会停止行动体通道。", "debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer does not stop the agent lane.");
           }
         }), createComponent(Show, {
           get when() {
@@ -8347,7 +8347,9 @@ function WorldSummaryPanel() {
           },
           get fallback() {
             return createComponent(EmptyState, {
-              children: "Select an agent to compare the headless execution lane against this debug_viewer observer lane."
+              get children() {
+                return tr(locale(), "先选中一个行动体，才能把无头执行通道和当前 debug_viewer 观察通道做对照。", "Select an agent to compare the headless execution lane against the current debug_viewer observer lane.");
+              }
             });
           },
           children: (debug) => [(() => {
@@ -8398,7 +8400,7 @@ function WorldSummaryPanel() {
           })(), createComponent(EmptyState, {
             style: "margin-top:-2px;",
             get children() {
-              return tr(locale(), "上面的 lane badge 表示 phase-1 期望执行 contract；下面的 provider check badge 表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。", "Lane badges show the expected phase-1 execution contract. Provider check badges below show the actual runtime_live probe against /v1/provider/info and /v1/provider/health.");
+              return tr(locale(), "上面的通道徽标表示 phase-1 期望执行契约；下面的提供方检查徽标表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。", "Lane badges show the expected phase-1 execution contract. Provider check badges below show the actual runtime_live probe against /v1/provider/info and /v1/provider/health.");
             }
           }), (() => {
             var _el$180 = _tmpl$15();
@@ -8593,7 +8595,9 @@ function WorldSummaryPanel() {
           }), null);
           return _el$134;
         })(), createComponent(EmptyState, {
-          children: "Player session is switching to the requested agent and the current action will continue after registration succeeds."
+          get children() {
+            return tr(locale(), "玩家会话正在切换到请求的行动体；注册成功后，当前动作会继续执行。", "Player session is switching to the requested agent and the current action will continue after registration succeeds.");
+          }
         })];
       }
     }), _el$139);
@@ -8667,7 +8671,9 @@ function WorldSummaryPanel() {
       }
     }), _el$139);
     insert(_el$127, createComponent(PanelSection, {
-      title: "Session Ladder",
+      get title() {
+        return tr(locale(), "会话阶梯", "Session Ladder");
+      },
       get children() {
         return [createComponent(EmptyState, {
           get children() {
@@ -8739,7 +8745,7 @@ function WorldSummaryPanel() {
           get children() {
             return [createComponent(EmptyState, {
               get children() {
-                return tr(locale(), "这里是 launcher 导出的 hosted public-join 真值面。QA 应该直接读取这些 action id，而不是只靠按钮状态推断。", "This is the hosted public-join truth surface exported by the launcher. QA should read these action ids directly instead of inferring from button state alone.");
+                return tr(locale(), "这里是启动器导出的托管公开加入真值面。质检应直接读取这些动作编号，而不是只靠按钮状态推断。", "This is the hosted public-join truth surface exported by the launcher. QA should read these action ids directly instead of inferring from button state alone.");
               }
             }), (() => {
               var _el$138 = _tmpl$30();
@@ -8788,7 +8794,7 @@ function WorldSummaryPanel() {
     }), _el$139);
     insert(_el$139, createComponent(MetricCard, {
       get label() {
-        return tr(locale(), "Prompt 反馈", "Prompt Feedback");
+        return tr(locale(), "提示词反馈", "Prompt Feedback");
       },
       get value() {
         return promptFeedback()?.stage || "idle";
@@ -8844,7 +8850,7 @@ function WorldSummaryPanel() {
       get fallback() {
         return createComponent(EmptyState, {
           get children() {
-            return tr(locale(), "等待 live 事件…", "Waiting for live events…");
+            return tr(locale(), "等待实时事件…", "Waiting for live events…");
           }
         });
       },
@@ -8897,9 +8903,9 @@ function InteractionPanel() {
   const interactionEnabled = () => promptCapability().enabled;
   const promptOverridesVisible = () => !!state.promptOverridesVisible;
   const assetLaneStatusText = () => mainTokenTransferCapability().enabled ? tr(locale(), "仅预览", "preview_only") : mainTokenTransferCapability().code || "blocked";
-  const assetLaneDetail = () => mainTokenTransferCapability().enabled ? tr(locale(), "contract 表明这个 lane 具备 strong_auth 级 main_token_transfer 能力，但 viewer 这里仍然不会直接暴露转账表单。", "Contract marks main_token_transfer as strong_auth-capable on this lane, but viewer still exposes no transfer form here.") : mainTokenTransferCapability().reason;
-  const promptSettingsSummary = () => promptOverridesVisible() ? tr(locale(), "高级 Prompt 设置已展开；你可以继续做 preview/apply/rollback，页面也会显示最近一次反馈。", "Advanced prompt settings are expanded; preview/apply/rollback and the latest prompt feedback are visible.") : tr(locale(), "Prompt Overrides 默认收起，避免把 operator 级编辑控件直接堆在主入口。显式展开后仍可做 preview/apply/rollback，`__AW_TEST__.sendPromptControl(...)` 也保持可用。", "Prompt Overrides stay hidden by default so operator-level editing controls do not dominate the primary entry. Expanding them keeps preview/apply/rollback available, and `__AW_TEST__.sendPromptControl(...)` remains available.");
-  const promptSettingsButtonLabel = () => promptOverridesVisible() ? tr(locale(), "收起 Prompt Overrides", "Hide Prompt Overrides") : tr(locale(), "显示 Prompt Overrides", "Show Prompt Overrides");
+  const assetLaneDetail = () => mainTokenTransferCapability().enabled ? tr(locale(), "契约表明这个通道具备 strong_auth 级 main_token_transfer 能力，但观察器这里仍然不会直接暴露转账表单。", "Contract marks main_token_transfer as strong_auth-capable on this lane, but viewer still exposes no transfer form here.") : mainTokenTransferCapability().reason;
+  const promptSettingsSummary = () => promptOverridesVisible() ? tr(locale(), "高级提示词设置已展开；你可以继续做预览、应用、回滚，页面也会显示最近一次反馈。", "Advanced prompt settings are expanded; preview/apply/rollback and the latest prompt feedback are visible.") : tr(locale(), "提示词覆盖默认收起，避免把操作员级编辑控件直接堆在主入口。显式展开后仍可做预览、应用、回滚，`__AW_TEST__.sendPromptControl(...)` 也保持可用。", "Prompt Overrides stay hidden by default so operator-level editing controls do not dominate the primary entry. Expanding them keeps preview/apply/rollback available, and `__AW_TEST__.sendPromptControl(...)` remains available.");
+  const promptSettingsButtonLabel = () => promptOverridesVisible() ? tr(locale(), "收起提示词覆盖", "Hide Prompt Overrides") : tr(locale(), "显示提示词覆盖", "Show Prompt Overrides");
   if (!agentId()) {
     if (gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities") {
       return createComponent(EmptyEntityRecoveryCard, {
@@ -8911,7 +8917,7 @@ function InteractionPanel() {
     }
     return createComponent(EmptyState, {
       get children() {
-        return tr(locale(), "先选中一个 Agent，才能解锁 prompt/chat 控制。", "Select an agent to unlock prompt/chat controls.");
+        return tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.");
       }
     });
   }
@@ -8943,7 +8949,7 @@ function InteractionPanel() {
       get children() {
         return createComponent(EmptyState, {
           get children() {
-            return tr(locale(), `当前选中的 Agent 正通过 provider-backed loopback bridge 运行在 ${debugContext()?.execution_mode || "headless_agent"}；viewer 仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用 prompt/chat。`, `Selected agent currently runs through the provider-backed loopback bridge in ${debugContext()?.execution_mode || "headless_agent"}; viewer stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`);
+            return tr(locale(), `当前选中的行动体正通过提供方回环桥接运行在 ${debugContext()?.execution_mode || "headless_agent"}；观察器仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用提示词和聊天。`, `Selected agent currently runs through the provider-backed loopback bridge in ${debugContext()?.execution_mode || "headless_agent"}; viewer stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`);
           }
         });
       }
@@ -9034,10 +9040,10 @@ function InteractionPanel() {
     }), null);
     insert(_el$183, createComponent(PanelSection, {
       get title() {
-        return tr(locale(), "Agent 聊天", "Agent Chat");
+        return tr(locale(), "行动体聊天", "Agent Chat");
       },
       get eyebrow() {
-        return tr(locale(), "命令面", "Command Surface");
+        return tr(locale(), "指挥面板", "Command Surface");
       },
       get meta() {
         return tr(locale(), "主舞台负责看局势；这里负责向当前目标发消息和读回复。", "The stage is for reading the situation. This surface is for messaging the current target and reading replies.");
@@ -9051,7 +9057,7 @@ function InteractionPanel() {
             state.chatDraft.dirty = true;
           };
           createRenderEffect((_p$) => {
-            var _v$17 = tr(locale(), "给当前选中的 Agent 发一条消息", "Send a message to the selected agent"), _v$18 = !chatCapability().enabled;
+            var _v$17 = tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$18 = !chatCapability().enabled;
             _v$17 !== _p$.e && setAttribute(_el$189, "placeholder", _p$.e = _v$17);
             _v$18 !== _p$.t && (_el$189.disabled = _p$.t = _v$18);
             return _p$;
@@ -9096,7 +9102,7 @@ function InteractionPanel() {
             get fallback() {
               return createComponent(EmptyState, {
                 get children() {
-                  return tr(locale(), "这个 Agent 还没有聊天历史。", "No chat history for this agent yet.");
+                  return tr(locale(), "这个行动体还没有聊天历史。", "No chat history for this agent yet.");
                 }
               });
             },
@@ -9130,13 +9136,13 @@ function InteractionPanel() {
     }), null);
     insert(_el$183, createComponent(PanelSection, {
       get title() {
-        return tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings");
+        return tr(locale(), "高级提示词设置", "Advanced Prompt Settings");
       },
       get eyebrow() {
         return tr(locale(), "高级控制", "Advanced Controls");
       },
       get meta() {
-        return tr(locale(), "保留 operator 级 prompt 控制，但默认收起，不与玩家主路径竞争。", "Operator-level prompt controls stay available here, but collapsed by default so they do not compete with the player path.");
+        return tr(locale(), "保留操作员级提示词控制，但默认收起，不与玩家主路径竞争。", "Operator-level prompt controls stay available here, but collapsed by default so they do not compete with the player path.");
       },
       get children() {
         return [(() => {
@@ -9195,7 +9201,9 @@ function InteractionPanel() {
       },
       get children() {
         return createComponent(PanelSection, {
-          title: "Prompt Overrides",
+          get title() {
+            return tr(locale(), "提示词覆盖", "Prompt Overrides");
+          },
           get children() {
             return [(() => {
               var _el$198 = _tmpl$4();
@@ -9220,7 +9228,7 @@ function InteractionPanel() {
               }
             }), (() => {
               var _el$203 = _tmpl$41(), _el$204 = _el$203.firstChild, _el$205 = _el$204.nextSibling;
-              insert(_el$204, () => tr(locale(), "System Prompt 覆盖", "System Prompt Override"));
+              insert(_el$204, () => tr(locale(), "系统提示词覆盖", "System Prompt Override"));
               _el$205.$$input = (event) => {
                 state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
@@ -9251,9 +9259,9 @@ function InteractionPanel() {
             })(), (() => {
               var _el$212 = _tmpl$44(), _el$213 = _el$212.firstChild, _el$214 = _el$213.nextSibling;
               _el$213.$$click = () => sendPromptControl("preview", null);
-              insert(_el$213, () => tr(locale(), "预览 Prompt", "Preview Prompt"));
+              insert(_el$213, () => tr(locale(), "预览提示词", "Preview Prompt"));
               _el$214.$$click = () => sendPromptControl("apply", null);
-              insert(_el$214, () => tr(locale(), "应用 Prompt", "Apply Prompt"));
+              insert(_el$214, () => tr(locale(), "应用提示词", "Apply Prompt"));
               createRenderEffect((_p$) => {
                 var _v$19 = !promptCapability().enabled, _v$20 = !promptCapability().enabled;
                 _v$19 !== _p$.e && (_el$213.disabled = _p$.e = _v$19);
@@ -9277,7 +9285,7 @@ function InteractionPanel() {
                   toVersion: Number(state.promptDraft.rollbackTargetVersion || 0)
                 });
               };
-              insert(_el$219, () => tr(locale(), "回滚 Prompt", "Rollback Prompt"));
+              insert(_el$219, () => tr(locale(), "回滚提示词", "Rollback Prompt"));
               createRenderEffect((_p$) => {
                 var _v$21 = !promptCapability().enabled, _v$22 = !promptCapability().enabled;
                 _v$21 !== _p$.e && (_el$218.disabled = _p$.e = _v$21);
@@ -9296,7 +9304,7 @@ function InteractionPanel() {
               get fallback() {
                 return createComponent(EmptyState, {
                   get children() {
-                    return tr(locale(), "还没有 Prompt 反馈。", "No prompt feedback yet.");
+                    return tr(locale(), "还没有提示词反馈。", "No prompt feedback yet.");
                   }
                 });
               },
@@ -9338,7 +9346,7 @@ function InteractionPanel() {
     }), null);
     insert(_el$183, createComponent(PanelSection, {
       get title() {
-        return tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane");
+        return tr(locale(), "资产 / 治理通道", "Asset / Governance Lane");
       },
       get eyebrow() {
         return tr(locale(), "后置能力", "Deferred Surface");
@@ -9374,7 +9382,7 @@ function InteractionPanel() {
           }
         }), createComponent(EmptyState, {
           get children() {
-            return mainTokenTransferPolicy()?.reason || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.");
+            return mainTokenTransferPolicy()?.reason || tr(locale(), "当前通道没有 main_token_transfer 的托管动作策略。", "No hosted action policy is available for main_token_transfer on this lane.");
           }
         }), (() => {
           var _el$221 = _tmpl$46(), _el$222 = _el$221.firstChild;
@@ -9438,7 +9446,7 @@ function DetailsPanel() {
           }
         }) : createComponent(EmptyState, {
           get children() {
-            return tr(locale(), "请先从左侧列表选一个 Agent 或地点。", "Select an agent or location from the left list.");
+            return tr(locale(), "请先从左侧列表选一个行动体或地点。", "Select an agent or location from the left list.");
           }
         });
       },
@@ -9594,7 +9602,7 @@ function DetailsPanel() {
             return tr(locale(), "展开原始快照诊断", "Expand Raw Snapshot Diagnostics");
           },
           get note() {
-            return tr(locale(), "只在需要排查快照结构或 hosted access 原始字段时展开。", "Expand only when you need to inspect the raw snapshot shape or hosted access fields.");
+            return tr(locale(), "只在需要排查快照结构或托管接入原始字段时展开。", "Expand only when you need to inspect the raw snapshot shape or hosted access fields.");
           },
           value: snapshotSummary
         });
@@ -9620,7 +9628,7 @@ function AppShell() {
     var _el$243 = _tmpl$51(), _el$244 = _el$243.firstChild, _el$245 = _el$244.firstChild, _el$246 = _el$245.nextSibling, _el$247 = _el$246.nextSibling, _el$248 = _el$244.nextSibling;
     insert(_el$245, () => tr(locale(), "导航", "Navigate"));
     insert(_el$246, () => tr(locale(), "目标", "Targets"));
-    insert(_el$247, () => tr(locale(), "先锁定对象，再进入世界舞台或右侧命令面。", "Lock onto a target first, then move into the stage or command surface."));
+    insert(_el$247, () => tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface."));
     insert(_el$248, createComponent(TargetsPanel, {}));
     return _el$243;
   })(), (() => {
@@ -9637,7 +9645,7 @@ function AppShell() {
     var _el$252 = _tmpl$53(), _el$253 = _el$252.firstChild, _el$254 = _el$253.firstChild, _el$255 = _el$254.nextSibling, _el$256 = _el$255.nextSibling, _el$257 = _el$253.nextSibling;
     insert(_el$254, () => tr(locale(), "指挥与核查", "Command and Inspect"));
     insert(_el$255, () => tr(locale(), "交互与明细", "Interact and Inspect"));
-    insert(_el$256, () => tr(locale(), "只有锁定目标后才进入这里。聊天优先，Prompt 与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
+    insert(_el$256, () => tr(locale(), "只有锁定目标后才进入这里。聊天优先，提示词与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
     insert(_el$257, createComponent(DetailsPanel, {}));
     return _el$252;
   })()];
