@@ -215,7 +215,10 @@ fn observer_restart_replays_persisted_commits_when_execution_head_lags_committed
     let calls = execution_calls
         .lock()
         .expect("lock execution calls after observer replay");
-    let heights = calls.iter().map(|context| context.height).collect::<Vec<_>>();
+    let heights = calls
+        .iter()
+        .map(|context| context.height)
+        .collect::<Vec<_>>();
     assert_eq!(heights, vec![1, 2, 3]);
 
     let _ = fs::remove_dir_all(&dir_remote);
