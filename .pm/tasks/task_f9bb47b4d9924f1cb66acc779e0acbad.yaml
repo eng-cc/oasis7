@@ -1,0 +1,24 @@
+task_uid: task_f9bb47b4d9924f1cb66acc779e0acbad
+title: "viewer right panel physical unit display judgment"
+owner_role: tpm
+worktree_hint: /home/scc/worktrees/oasis7-viewer-physical-unit-right-panel-audit
+execution_log_path: .pm/tasks/task_f9bb47b4d9924f1cb66acc779e0acbad.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md
+  - crates/oasis7_viewer/software_safe_src/viewer_world_scale_module.js
+doc_refs:
+  - doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-07T18:19:17+08:00
+last_started_at: 2026-06-07T17:55:55+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && git diff --check && (cd crates/oasis7_viewer && npm run build:software-safe && npm run test:ui)"
+last_verified_at: 2026-06-07T18:19:15+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-07T18:19:16+08:00

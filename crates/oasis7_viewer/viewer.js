@@ -6670,7 +6670,7 @@ function PixelWorldHost(props) {
   })();
 }
 delegateEvents(["click"]);
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=feedback-detail style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$12 = /* @__PURE__ */ template(`<div><div class=panel__header><div class=stack style=gap:4px><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$13 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$14 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$15 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$16 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$18 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$21 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class=panel__title style=margin-bottom:10px></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$22 = /* @__PURE__ */ template(`<div class=stage-hero><div class=stage-hero__topline><div class=stack style=gap:10px><div class=stage-hero__eyebrow></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class=hero-focus-grid><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body">`), _tmpl$23 = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel></a><a class="mobile-rail__link mobile-rail__link--diagnostics"href=#viewer-diagnostics-panel>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$25 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$26 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$28 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=stack><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:10px>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$33 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=action-grid>`), _tmpl$34 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$36 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$37 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$38 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$39 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$41 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$42 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$43 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$44 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$45 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$46 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$47 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$48 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px></div><div class=badge-row></div><div class=stack style=margin-top:10px><div class=feedback-detail></div><div class=feedback-detail></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$49 = /* @__PURE__ */ template(`<div class=feedback-detail>=`), _tmpl$50 = /* @__PURE__ */ template(`<section class="panel panel--targets"id=viewer-targets-panel data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`), _tmpl$51 = /* @__PURE__ */ template(`<section class="panel panel--stage"id=viewer-stage-panel data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack>`), _tmpl$52 = /* @__PURE__ */ template(`<section class="panel panel--details"id=viewer-details-panel data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=feedback-detail style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$12 = /* @__PURE__ */ template(`<div><div class=panel__header><div class=stack style=gap:4px><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$13 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$14 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$15 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$16 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$18 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$21 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class=panel__title style=margin-bottom:10px></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$22 = /* @__PURE__ */ template(`<div class=stage-hero><div class=stage-hero__topline><div class=stack style=gap:10px><div class=stage-hero__eyebrow></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class=hero-focus-grid><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body">`), _tmpl$23 = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel></a><a class="mobile-rail__link mobile-rail__link--diagnostics"href=#viewer-diagnostics-panel>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$25 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$26 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$28 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=stack><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:10px>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$33 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=action-grid>`), _tmpl$34 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$36 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$37 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$38 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$39 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$41 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$42 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$43 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$44 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$45 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$46 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$47 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$48 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px></div><div class=badge-row></div><div class=stack style=margin-top:10px><div class=feedback-detail></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$49 = /* @__PURE__ */ template(`<div class=feedback-detail>=`), _tmpl$50 = /* @__PURE__ */ template(`<section class="panel panel--targets"id=viewer-targets-panel data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`), _tmpl$51 = /* @__PURE__ */ template(`<section class="panel panel--stage"id=viewer-stage-panel data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack>`), _tmpl$52 = /* @__PURE__ */ template(`<section class="panel panel--details"id=viewer-details-panel data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`);
 function uiLocale() {
   return state.uiLocale;
 }
@@ -9148,7 +9148,7 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
-    var _el$216 = _tmpl$48(), _el$217 = _el$216.firstChild, _el$218 = _el$217.nextSibling, _el$219 = _el$218.firstChild, _el$220 = _el$219.nextSibling, _el$221 = _el$220.nextSibling, _el$222 = _el$221.firstChild, _el$223 = _el$222.nextSibling, _el$224 = _el$223.nextSibling, _el$225 = _el$224.firstChild, _el$226 = _el$225.nextSibling;
+    var _el$216 = _tmpl$48(), _el$217 = _el$216.firstChild, _el$218 = _el$217.nextSibling, _el$219 = _el$218.firstChild, _el$220 = _el$219.nextSibling, _el$221 = _el$220.nextSibling, _el$222 = _el$221.firstChild, _el$223 = _el$222.nextSibling, _el$224 = _el$223.firstChild, _el$225 = _el$224.nextSibling;
     insert(_el$217, createComponent(Badge, {
       "class": "badge badge--accent",
       get children() {
@@ -9216,22 +9216,6 @@ function DetailsPanel() {
     }), null);
     insert(_el$221, createComponent(MetricCard, {
       get label() {
-        return tr(locale(), "物理真值单位", "Canonical Physical Unit");
-      },
-      get value() {
-        return worldScaleSurface().physicalTruth.canonicalUnitLabel || "-";
-      },
-      get children() {
-        return createComponent(Badge, {
-          get children() {
-            return tr(locale(), "整数厘米", "integer centimeters");
-          }
-        });
-      }
-    }), _el$222);
-    insert(_el$222, () => worldScaleSurface().physicalTruth.canonicalUnitDetail);
-    insert(_el$221, createComponent(MetricCard, {
-      get label() {
         return tr(locale(), "世界边界", "World Bounds");
       },
       get value() {
@@ -9244,8 +9228,8 @@ function DetailsPanel() {
           }
         });
       }
-    }), _el$223);
-    insert(_el$223, () => worldScaleSurface().physicalTruth.worldBoundsDetail);
+    }), _el$222);
+    insert(_el$222, () => worldScaleSurface().physicalTruth.worldBoundsDetail);
     insert(_el$221, createComponent(Show, {
       get when() {
         return worldScaleSurface().physicalTruth.anchor;
@@ -9263,25 +9247,25 @@ function DetailsPanel() {
         },
         get children() {
           return [(() => {
-            var _el$233 = _tmpl$20();
-            insert(_el$233, () => anchor().positionLabel || tr(locale(), "缺少可读坐标。", "Missing readable coordinates."));
-            return _el$233;
+            var _el$232 = _tmpl$20();
+            insert(_el$232, () => anchor().positionLabel || tr(locale(), "缺少可读坐标。", "Missing readable coordinates."));
+            return _el$232;
           })(), createComponent(Show, {
             get when() {
               return anchor().radiusLabel;
             },
             get children() {
-              var _el$234 = _tmpl$49(), _el$235 = _el$234.firstChild;
-              insert(_el$234, () => tr(locale(), "地点半径真值", "Location radius truth"), _el$235);
-              insert(_el$234, () => anchor().radiusLabel, null);
-              return _el$234;
+              var _el$233 = _tmpl$49(), _el$234 = _el$233.firstChild;
+              insert(_el$233, () => tr(locale(), "地点半径真值", "Location radius truth"), _el$234);
+              insert(_el$233, () => anchor().radiusLabel, null);
+              return _el$233;
             }
           })];
         }
       })
-    }), _el$224);
-    insert(_el$225, () => tr(locale(), "最近距离样本", "Nearest Distance Samples"));
-    insert(_el$226, createComponent(Show, {
+    }), _el$223);
+    insert(_el$224, () => tr(locale(), "最近距离样本", "Nearest Distance Samples"));
+    insert(_el$225, createComponent(Show, {
       get when() {
         return worldScaleSurface().physicalTruth.nearestLocations.length > 0;
       },
@@ -9310,19 +9294,19 @@ function DetailsPanel() {
             },
             get children() {
               return [(() => {
-                var _el$236 = _tmpl$49(), _el$237 = _el$236.firstChild;
-                insert(_el$236, () => tr(locale(), "真实距离", "Physical distance"), _el$237);
-                insert(_el$236, () => location.distanceLabel || "-", null);
-                return _el$236;
+                var _el$235 = _tmpl$49(), _el$236 = _el$235.firstChild;
+                insert(_el$235, () => tr(locale(), "真实距离", "Physical distance"), _el$236);
+                insert(_el$235, () => location.distanceLabel || "-", null);
+                return _el$235;
               })(), createComponent(Show, {
                 get when() {
                   return location.radiusLabel;
                 },
                 get children() {
-                  var _el$238 = _tmpl$49(), _el$239 = _el$238.firstChild;
-                  insert(_el$238, () => tr(locale(), "地点半径", "Location radius"), _el$239);
-                  insert(_el$238, () => location.radiusLabel, null);
-                  return _el$238;
+                  var _el$237 = _tmpl$49(), _el$238 = _el$237.firstChild;
+                  insert(_el$237, () => tr(locale(), "地点半径", "Location radius"), _el$238);
+                  insert(_el$237, () => location.radiusLabel, null);
+                  return _el$237;
                 }
               })];
             }
@@ -9340,23 +9324,23 @@ function DetailsPanel() {
       badgeClass: "badge badge--warn",
       get children() {
         return [(() => {
-          var _el$227 = _tmpl$20();
-          insert(_el$227, () => worldScaleSurface().presentationScale.markerTruthNote);
+          var _el$226 = _tmpl$20();
+          insert(_el$226, () => worldScaleSurface().presentationScale.markerTruthNote);
+          return _el$226;
+        })(), (() => {
+          var _el$227 = _tmpl$4();
+          insert(_el$227, () => worldScaleSurface().presentationScale.zoomTruthNote);
           return _el$227;
         })(), (() => {
           var _el$228 = _tmpl$4();
-          insert(_el$228, () => worldScaleSurface().presentationScale.zoomTruthNote);
+          insert(_el$228, () => worldScaleSurface().presentationScale.softwareSafeNote);
           return _el$228;
-        })(), (() => {
-          var _el$229 = _tmpl$4();
-          insert(_el$229, () => worldScaleSurface().presentationScale.softwareSafeNote);
-          return _el$229;
         })()];
       }
     }), null);
     insert(_el$221, createComponent(EmptyState, {
       get children() {
-        return tr(locale(), "主状态已经在中间的“世界摘要”里展示；这里现在专门保留“厘米真值 vs 表现层夸张”的读图锚点，原始快照仍按需展开。", "The main runtime state already lives in World Summary; this section now reserves the reading anchors for centimeter truth vs presentation exaggeration, while raw snapshots stay collapsible.");
+        return tr(locale(), "主状态已经在中间的“世界摘要”里展示；这里保留世界边界、距离样本和表现层说明，原始快照仍按需展开。", "The main runtime state already lives in World Summary; this section keeps world bounds, distance samples, and presentation notes, while raw snapshots stay collapsible.");
       }
     }), null);
     insert(_el$218, createComponent(Show, {
@@ -9383,10 +9367,10 @@ function DetailsPanel() {
         return state.lastError;
       },
       get children() {
-        var _el$230 = _tmpl$47(), _el$231 = _el$230.firstChild, _el$232 = _el$231.nextSibling;
-        insert(_el$231, () => tr(locale(), "最近错误", "Last Error"));
-        insert(_el$232, () => state.lastError);
-        return _el$230;
+        var _el$229 = _tmpl$47(), _el$230 = _el$229.firstChild, _el$231 = _el$230.nextSibling;
+        insert(_el$230, () => tr(locale(), "最近错误", "Last Error"));
+        insert(_el$231, () => state.lastError);
+        return _el$229;
       }
     }), null);
     return _el$216;
@@ -9395,29 +9379,29 @@ function DetailsPanel() {
 function AppShell() {
   const locale = () => uiLocale();
   return [createComponent(MobileJumpRail, {}), createComponent(HostedLoginGate, {}), (() => {
-    var _el$240 = _tmpl$50(), _el$241 = _el$240.firstChild, _el$242 = _el$241.firstChild, _el$243 = _el$242.nextSibling, _el$244 = _el$243.nextSibling, _el$245 = _el$241.nextSibling;
-    insert(_el$242, () => tr(locale(), "导航", "Navigate"));
-    insert(_el$243, () => tr(locale(), "目标", "Targets"));
-    insert(_el$244, () => tr(locale(), "先锁定对象，再进入世界舞台或右侧命令面。", "Lock onto a target first, then move into the stage or command surface."));
-    insert(_el$245, createComponent(TargetsPanel, {}));
-    return _el$240;
+    var _el$239 = _tmpl$50(), _el$240 = _el$239.firstChild, _el$241 = _el$240.firstChild, _el$242 = _el$241.nextSibling, _el$243 = _el$242.nextSibling, _el$244 = _el$240.nextSibling;
+    insert(_el$241, () => tr(locale(), "导航", "Navigate"));
+    insert(_el$242, () => tr(locale(), "目标", "Targets"));
+    insert(_el$243, () => tr(locale(), "先锁定对象，再进入世界舞台或右侧命令面。", "Lock onto a target first, then move into the stage or command surface."));
+    insert(_el$244, createComponent(TargetsPanel, {}));
+    return _el$239;
   })(), (() => {
-    var _el$246 = _tmpl$51(), _el$247 = _el$246.firstChild, _el$248 = _el$247.firstChild;
-    insert(_el$248, createComponent(WorldStageHero, {}), null);
-    insert(_el$248, createComponent(PixelWorldHost, {
+    var _el$245 = _tmpl$51(), _el$246 = _el$245.firstChild, _el$247 = _el$246.firstChild;
+    insert(_el$247, createComponent(WorldStageHero, {}), null);
+    insert(_el$247, createComponent(PixelWorldHost, {
       get locale() {
         return locale();
       }
     }), null);
-    insert(_el$248, createComponent(WorldSummaryPanel, {}), null);
-    return _el$246;
+    insert(_el$247, createComponent(WorldSummaryPanel, {}), null);
+    return _el$245;
   })(), (() => {
-    var _el$249 = _tmpl$52(), _el$250 = _el$249.firstChild, _el$251 = _el$250.firstChild, _el$252 = _el$251.nextSibling, _el$253 = _el$252.nextSibling, _el$254 = _el$250.nextSibling;
-    insert(_el$251, () => tr(locale(), "指挥与核查", "Command and Inspect"));
-    insert(_el$252, () => tr(locale(), "交互与明细", "Interact and Inspect"));
-    insert(_el$253, () => tr(locale(), "只有锁定目标后才进入这里。聊天优先，Prompt 与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
-    insert(_el$254, createComponent(DetailsPanel, {}));
-    return _el$249;
+    var _el$248 = _tmpl$52(), _el$249 = _el$248.firstChild, _el$250 = _el$249.firstChild, _el$251 = _el$250.nextSibling, _el$252 = _el$251.nextSibling, _el$253 = _el$249.nextSibling;
+    insert(_el$250, () => tr(locale(), "指挥与核查", "Command and Inspect"));
+    insert(_el$251, () => tr(locale(), "交互与明细", "Interact and Inspect"));
+    insert(_el$252, () => tr(locale(), "只有锁定目标后才进入这里。聊天优先，Prompt 与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
+    insert(_el$253, createComponent(DetailsPanel, {}));
+    return _el$248;
   })()];
 }
 function mountViewerApp(root = document.getElementById("app")) {
