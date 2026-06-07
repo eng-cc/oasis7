@@ -7,8 +7,8 @@ status: committed
 priority: P1
 source_signal: SIG-PM-0057
 source_refs:
-  - /Users/scc/ccwork/worktrees/oasis7-p2p-network-truth-binding/doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json
-  - /Users/scc/ccwork/worktrees/oasis7-p2p-network-truth-binding/doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md
+  - doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json
+  - doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md
 doc_refs: []
 related_prd: []
 acceptance:
