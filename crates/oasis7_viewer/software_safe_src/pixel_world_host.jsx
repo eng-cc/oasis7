@@ -9,6 +9,11 @@ function tr(locale, zh, en) {
 
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
 const DEFER_RENDERER_VALUES = new Set(["0", "false", "no", "off", "defer", "fallback"]);
+const pixelWorldFocusUiSessionState = {
+  focusMode: false,
+  commandDrawerOpen: false,
+  diagnosticsDrawerOpen: false,
+};
 const FRAGMENT_TERRAIN_PALETTE = {
   silicate_matrix: [126, 144, 99],
   iron_nickel_alloy: [176, 184, 196],
@@ -1365,32 +1370,45 @@ export function PixelWorldHost(props) {
   const [runtimeSource, setRuntimeSource] = createSignal(autoAttachRenderer ? "loading" : "deferred");
   const [cameraState, setCameraState] = createSignal(null);
   const [renderDtoOpen, setRenderDtoOpen] = createSignal(false);
-  const [focusMode, setFocusMode] = createSignal(false);
-  const [commandDrawerOpen, setCommandDrawerOpen] = createSignal(false);
-  const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(false);
+  const [focusMode, setFocusMode] = createSignal(pixelWorldFocusUiSessionState.focusMode);
+  const [commandDrawerOpen, setCommandDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.commandDrawerOpen);
+  const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.diagnosticsDrawerOpen);
+
+  function setPersistentFocusMode(next) {
+    pixelWorldFocusUiSessionState.focusMode = next;
+    setFocusMode(next);
+  }
+
+  function setPersistentCommandDrawerOpen(next) {
+    pixelWorldFocusUiSessionState.commandDrawerOpen = next;
+    setCommandDrawerOpen(next);
+  }
+
+  function setPersistentDiagnosticsDrawerOpen(next) {
+    pixelWorldFocusUiSessionState.diagnosticsDrawerOpen = next;
+    setDiagnosticsDrawerOpen(next);
+  }
 
   function enterFocusMode() {
-    setFocusMode(true);
-    document.body.classList.add("pixel-world-focus-active");
-    setCommandDrawerOpen(false);
-    setDiagnosticsDrawerOpen(false);
+    setPersistentFocusMode(true);
+    setPersistentCommandDrawerOpen(false);
+    setPersistentDiagnosticsDrawerOpen(false);
   }
 
   function exitFocusMode() {
-    setFocusMode(false);
-    document.body.classList.remove("pixel-world-focus-active");
-    setCommandDrawerOpen(false);
-    setDiagnosticsDrawerOpen(false);
+    setPersistentFocusMode(false);
+    setPersistentCommandDrawerOpen(false);
+    setPersistentDiagnosticsDrawerOpen(false);
   }
 
   function openCommandDrawer() {
-    setCommandDrawerOpen(true);
-    setDiagnosticsDrawerOpen(false);
+    setPersistentCommandDrawerOpen(true);
+    setPersistentDiagnosticsDrawerOpen(false);
   }
 
   function openDiagnosticsDrawer() {
-    setDiagnosticsDrawerOpen(true);
-    setCommandDrawerOpen(false);
+    setPersistentDiagnosticsDrawerOpen(true);
+    setPersistentCommandDrawerOpen(false);
   }
 
   const adapter = createMemo(() => createPixelWorldHostAdapter({
@@ -1539,6 +1557,10 @@ export function PixelWorldHost(props) {
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
   });
 
+  createEffect(() => {
+    document.body.classList.toggle("pixel-world-focus-active", focusMode());
+  });
+
   onCleanup(() => {
     document.body.classList.remove("pixel-world-focus-active");
     adapter().unmount();
@@ -1648,7 +1670,7 @@ export function PixelWorldHost(props) {
         <details
           class="pixel-world-focus-drawer pixel-world-focus-drawer--command"
           open={commandDrawerOpen()}
-          onToggle={(event) => setCommandDrawerOpen(event.currentTarget.open)}
+          onToggle={(event) => setPersistentCommandDrawerOpen(event.currentTarget.open)}
         >
           <summary>{tr(locale(), "命令与目标", "Command and Target")}</summary>
           <div class="pixel-world-focus-drawer__body">
@@ -1699,7 +1721,7 @@ export function PixelWorldHost(props) {
         <details
           class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"
           open={diagnosticsDrawerOpen()}
-          onToggle={(event) => setDiagnosticsDrawerOpen(event.currentTarget.open)}
+          onToggle={(event) => setPersistentDiagnosticsDrawerOpen(event.currentTarget.open)}
         >
           <summary>{tr(locale(), "沉浸诊断", "Focus Diagnostics")}</summary>
           <div class="pixel-world-focus-drawer__body">
