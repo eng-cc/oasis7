@@ -53,6 +53,7 @@ pub struct NodeReplicationConfig {
     enforce_signature: bool,
     remote_writer_allowlist: BTreeSet<String>,
     fetch_requester_allowlist: BTreeSet<String>,
+    allow_any_signed_fetch_requester: bool,
     max_hot_commit_messages: usize,
 }
 
@@ -71,6 +72,7 @@ impl NodeReplicationConfig {
             enforce_signature: false,
             remote_writer_allowlist: BTreeSet::new(),
             fetch_requester_allowlist: BTreeSet::new(),
+            allow_any_signed_fetch_requester: false,
             max_hot_commit_messages: DEFAULT_MAX_HOT_COMMIT_MESSAGES,
         })
     }
@@ -125,6 +127,11 @@ impl NodeReplicationConfig {
         }
         self.fetch_requester_allowlist = normalized;
         Ok(self)
+    }
+
+    pub fn with_any_signed_fetch_requester_allowed(mut self, allowed: bool) -> Self {
+        self.allow_any_signed_fetch_requester = allowed;
+        self
     }
 
     pub fn with_max_hot_commit_messages(
@@ -257,12 +264,13 @@ impl NodeReplicationConfig {
     ) -> Result<(), NodeError> {
         let require_auth = self.enforce_consensus_signature()
             || !self.fetch_requester_allowlist.is_empty()
+            || self.allow_any_signed_fetch_requester
             || requester_public_key_hex.is_some()
             || requester_signature_hex.is_some();
         if !require_auth {
             return Ok(());
         }
-        if self.fetch_requester_allowlist.is_empty() {
+        if self.fetch_requester_allowlist.is_empty() && !self.allow_any_signed_fetch_requester {
             return Err(NodeError::Replication {
                 reason: format!(
                     "{request_label} authorization failed: replication fetch requester allowlist is empty while signature enforcement is enabled"
@@ -291,6 +299,9 @@ impl NodeReplicationConfig {
             signing_payload,
             request_label,
         )?;
+        if self.allow_any_signed_fetch_requester {
+            return Ok(());
+        }
         if !self
             .fetch_requester_allowlist
             .contains(normalized_requester_public_key_hex.as_str())
