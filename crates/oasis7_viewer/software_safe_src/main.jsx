@@ -1745,6 +1745,22 @@ function DetailsPanel() {
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
   const worldScaleSurface = () => core.buildWorldScaleSurface(locale());
+  const worldMetaSummary = () => {
+    const physicalTruth = worldScaleSurface().physicalTruth;
+    const segments = [];
+    if (physicalTruth.worldBoundsLabel) {
+      segments.push(
+        tr(locale(), "世界边界", "World Bounds") + ` ${physicalTruth.worldBoundsLabel}`,
+      );
+    }
+    const nearestLocation = physicalTruth.nearestLocations[0];
+    if (nearestLocation?.distanceLabel) {
+      segments.push(
+        tr(locale(), "最近距离", "Nearest") + ` ${nearestLocation.distanceLabel}`,
+      );
+    }
+    return segments.length > 0 ? segments.join(" · ") : tr(locale(), "当前未发布世界尺度摘要。", "No world scale summary is published yet.");
+  };
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
       ? `${core.state.selectedKind}:${core.state.selectedId}`
@@ -1810,79 +1826,9 @@ function DetailsPanel() {
           <Badge>{`locations=${snapshotCounts().locations}`}</Badge>
           <Badge>{`promptProfiles=${snapshotCounts().promptProfiles}`}</Badge>
           <Badge>{`debugContexts=${snapshotCounts().executionDebugContexts}`}</Badge>
+          <Badge>{tr(locale(), "snapshot.config.space", "snapshot.config.space")}</Badge>
         </div>
-        <div class="stack" style="margin-top:10px;">
-          <MetricCard
-            label={tr(locale(), "世界边界", "World Bounds")}
-            value={worldScaleSurface().physicalTruth.worldBoundsLabel || tr(locale(), "未发布", "not published")}
-          >
-            <Badge>{tr(locale(), "snapshot.config.space", "snapshot.config.space")}</Badge>
-          </MetricCard>
-          <div class="feedback-detail">{worldScaleSurface().physicalTruth.worldBoundsDetail}</div>
-          <Show when={worldScaleSurface().physicalTruth.anchor}>
-            {(anchor) => (
-              <EventCard
-                title={anchor().label}
-                badge={anchor().kind}
-                badgeClass="badge badge--accent"
-                meta={`id=${anchor().id}${anchor().locationId ? ` · location=${anchor().locationId}` : ""}`}
-              >
-                <div class="feedback-summary">
-                  {anchor().positionLabel || tr(locale(), "缺少可读坐标。", "Missing readable coordinates.")}
-                </div>
-                <Show when={anchor().radiusLabel}>
-                  <div class="feedback-detail">
-                    {tr(locale(), "地点半径真值", "Location radius truth")}={anchor().radiusLabel}
-                  </div>
-                </Show>
-              </EventCard>
-            )}
-          </Show>
-          <div>
-            <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "最近距离样本", "Nearest Distance Samples")}</div>
-            <div class="event-list">
-              <Show
-                when={worldScaleSurface().physicalTruth.nearestLocations.length > 0}
-                fallback={
-                  <EmptyState>
-                    {tr(
-                      locale(),
-                      "当前没有足够的地点数据来给出距离样本。",
-                      "The current snapshot does not expose enough locations to show distance samples.",
-                    )}
-                  </EmptyState>
-                }
-              >
-                <For each={worldScaleSurface().physicalTruth.nearestLocations}>
-                  {(location) => (
-                    <EventCard
-                      title={location.name}
-                      badge={location.distanceLabel || "-"}
-                      badgeClass="badge badge--good"
-                      meta={`id=${location.id}`}
-                    >
-                      <div class="feedback-detail">
-                        {tr(locale(), "真实距离", "Physical distance")}={location.distanceLabel || "-"}
-                      </div>
-                      <Show when={location.radiusLabel}>
-                        <div class="feedback-detail">
-                          {tr(locale(), "地点半径", "Location radius")}={location.radiusLabel}
-                        </div>
-                      </Show>
-                    </EventCard>
-                  )}
-                </For>
-              </Show>
-            </div>
-          </div>
-          <EmptyState>
-            {tr(
-              locale(),
-              "主状态已经在中间的“世界摘要”里展示；这里保留世界边界和距离样本，原始快照仍按需展开。",
-              "The main runtime state already lives in World Summary; this section keeps world bounds and distance samples, while raw snapshots stay collapsible.",
-            )}
-          </EmptyState>
-        </div>
+        <div class="feedback-detail" style="margin-top:10px;">{worldMetaSummary()}</div>
         <Show when={hasSnapshotDiagnostics()}>
           <DiagnosticDetails
             locale={locale()}
