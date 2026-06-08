@@ -150,7 +150,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 ### 5.2 TPM planning and subagent dispatch
 - For every request, TPM must record the current plan, TODO decomposition when needed, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
 - Each subagent slice must declare role, slice type, intended model configuration, actual dispatched model/reasoning, context delivery mode, mandatory context checklist/packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
-- Default subagent runtime is `gpt-5.5` with `reasoning_effort=medium` (shorthand: `gpt-5.5-medium`). TPM should request this default for bounded professional slices when the available subagent tool permits model selection, unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
+- Default subagent runtime policy is defined only in `.codex/config.toml` under `[workflow.subagent_runtime]`. TPM should request that configured default for bounded professional slices when the available subagent tool permits model selection, unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
 - Compatibility marker: Any non-default subagent model or reasoning effort must be recorded in the slice contract.
 - Any actual non-default subagent model or reasoning effort must be recorded in the slice contract with the reason, such as high-risk architecture/review work, simple read-only exploration, a user-specified override, a connector/tool limitation that forces inheritance from the parent thread, or a requested model/reasoning selection whose actual dispatch cannot be verified. If the actual dispatched model cannot be verified, the contract must say `actual model: inherited/unverified` and explain why.
 - Context delivery defaults to full-thread/full-history fork or the closest available equivalent so the subagent receives the same conversation and repository-governance context as TPM. The slice contract must still record a mandatory context checklist identifying the governance/task/user/repo/collaboration context the subagent is expected to have. A manually assembled explicit context packet is allowed only as a delivery supplement or fallback when full-history fork is unavailable, unsafe, stalled, or incompatible with required model/reasoning selection; the slice contract must record that fallback reason.
@@ -260,8 +260,11 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - Replaced the optional/risk-based local supplemental review gate with a required pre-PR local role-subagent review gate.
   - Removed the Copilot review request from the standard PR helper flow.
   - Required `prepare-task-pr.sh --create` to verify passed local role review evidence in the task execution log before creating a PR.
+- **v1.4.17 (2026-06-08)**
+  - Moved the concrete default subagent runtime value into the repo-tracked `.codex/config.toml` `[workflow.subagent_runtime]` block so the model configuration has one canonical source.
+  - Updated the workflow source-of-truth and workflow eval contract to reference the config-backed policy instead of carrying the concrete runtime value in prose.
 - **v1.4.10 (2026-06-03)**
-  - Updated the default subagent runtime policy to `gpt-5.5` with `reasoning_effort=medium`.
+  - Updated the default subagent runtime policy.
   - Consolidated synced guidance, templates, and workflow eval checks to reference the section 5.2 `Default subagent runtime` policy instead of duplicating the concrete model string.
   - Added the `capture-todo.sh` pre-task discovery intake path for loose TODOs and follow-up ideas that should become `reflection` signals before any explicit `.pm` task promotion.
 - **v1.4.9 (2026-06-02)**
@@ -276,7 +279,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - Defined the sink for unbound read-only professional slices as the role-tagged user-facing answer or preserved chat/thread transcript. Superseded by v1.4.8, which forbids unbound read-only professional slices.
   - Clarified that `.pm` execution-log sinks are mandatory for task-bound or repository-changing subagent work, not for standalone read-only professional answers. Superseded by v1.4.8, which requires `.pm` task truth for every request.
 - **v1.4.6 (2026-06-01)**
-  - Added the default subagent runtime policy, originally `gpt-5.4` with `reasoning_effort=medium`.
+  - Added the default subagent runtime policy.
   - Required slice contracts to record model configuration and reasons for non-default model/reasoning overrides.
 - **v1.4.5 (2026-06-01)**
   - Split read-only/chat-only handling into pure fact lookup versus read-only professional/domain judgment.

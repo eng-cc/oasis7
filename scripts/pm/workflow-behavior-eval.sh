@@ -69,21 +69,31 @@ import re
 import sys
 from pathlib import Path
 
+def load_default_subagent_runtime(text: str) -> dict[str, str]:
+    section = None
+    values: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip()
+            continue
+        if section == "workflow.subagent_runtime" and "=" in line:
+            key, raw_value = line.split("=", 1)
+            values[key.strip()] = raw_value.strip().strip('"')
+    return values
+
 root = Path(sys.argv[1])
 bt = chr(96)
 source_text = (root / "doc/engineering/workflow/source-of-truth.md").read_text(encoding="utf-8")
-default_runtime_match = re.search(
-    r"Default subagent runtime is `([^`]+)` with `reasoning_effort=([^`]+)` "
-    r"\(shorthand: `([^`]+)`\)",
-    source_text,
-)
-if not default_runtime_match:
-    raise SystemExit("workflow-behavior-eval: source-of-truth missing parseable Default subagent runtime policy")
-default_model, default_reasoning, default_shorthand = default_runtime_match.groups()
-default_runtime_marker = (
-    f"Default subagent runtime is `{default_model}` with "
-    f"`reasoning_effort={default_reasoning}`"
-)
+default_runtime = load_default_subagent_runtime((root / ".codex/config.toml").read_text(encoding="utf-8"))
+default_model = default_runtime.get("model")
+default_reasoning = default_runtime.get("reasoning_effort")
+default_shorthand = default_runtime.get("shorthand")
+if not all(isinstance(value, str) and value for value in (default_model, default_reasoning, default_shorthand)):
+    raise SystemExit("workflow-behavior-eval: .codex/config.toml missing subagent runtime model/reasoning/shorthand strings")
+default_runtime_config_marker = ".codex/config.toml` under `[workflow.subagent_runtime]`"
 
 checks = [
     (
@@ -109,8 +119,7 @@ checks = [
             "Every user request must enter the standard worktree flow before any substantive handling begins",
             "Read-only professional/domain questions must be dispatched to the matching bounded professional role slice",
             "The task/worktree decision and the professional-slice decision are intentionally decoupled",
-            default_runtime_marker,
-            f"shorthand: `{default_shorthand}`",
+            default_runtime_config_marker,
             "Any non-default subagent model or reasoning effort must be recorded in the slice contract",
         ],
     ),
@@ -148,6 +157,7 @@ checks = [
             "只读专业 slice 的 contract、证据和 sink 必须写入",
             "subagent 默认模型",
             "Default subagent runtime",
+            "[workflow.subagent_runtime]",
         ],
     ),
     (
@@ -160,6 +170,7 @@ checks = [
             "专业角色以 subagent 形式提供切片工作",
             "不得用 TPM 自己的判断替代专业 subagent 结论",
             "Default subagent runtime",
+            "[workflow.subagent_runtime]",
             "派工前必须把当前 TODO",
             "mandatory context packet",
             "workflow source-of-truth",
@@ -363,9 +374,25 @@ import re
 import sys
 from pathlib import Path
 
+def load_default_subagent_runtime(text: str) -> dict[str, str]:
+    section = None
+    values: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip()
+            continue
+        if section == "workflow.subagent_runtime" and "=" in line:
+            key, raw_value = line.split("=", 1)
+            values[key.strip()] = raw_value.strip().strip('"')
+    return values
+
 root = Path(sys.argv[1])
 
 surfaces = {
+    ".codex/config.toml": (root / ".codex/config.toml").read_text(encoding="utf-8"),
     "AGENTS.md": (root / "AGENTS.md").read_text(encoding="utf-8"),
     ".agents/skills/default-workflow-bootstrap/SKILL.md": (
         root / ".agents/skills/default-workflow-bootstrap/SKILL.md"
@@ -410,18 +437,12 @@ surfaces = {
         root / ".agents/skills/game-architect/SKILL.md"
     ).read_text(encoding="utf-8"),
 }
-default_runtime_match = re.search(
-    r"Default subagent runtime is `([^`]+)` with `reasoning_effort=([^`]+)` "
-    r"\(shorthand: `([^`]+)`\)",
-    surfaces["doc/engineering/workflow/source-of-truth.md"],
-)
-if not default_runtime_match:
-    raise SystemExit("workflow-behavior-eval: source-of-truth missing parseable Default subagent runtime policy")
-default_model, default_reasoning, default_shorthand = default_runtime_match.groups()
-default_runtime_marker = (
-    f"Default subagent runtime is `{default_model}` with "
-    f"`reasoning_effort={default_reasoning}`"
-)
+default_runtime = load_default_subagent_runtime(surfaces[".codex/config.toml"])
+default_model = default_runtime.get("model")
+default_reasoning = default_runtime.get("reasoning_effort")
+default_shorthand = default_runtime.get("shorthand")
+if not all(isinstance(value, str) and value for value in (default_model, default_reasoning, default_shorthand)):
+    raise SystemExit("workflow-behavior-eval: .codex/config.toml missing subagent runtime model/reasoning/shorthand strings")
 
 scenarios = [
     {
@@ -570,8 +591,8 @@ scenarios = [
         "expected_route": f"TPM records {default_shorthand} as the source-of-truth default subagent model configuration",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
-            default_runtime_marker,
-            f"shorthand: `{default_shorthand}`",
+            ".codex/config.toml",
+            "[workflow.subagent_runtime]",
             "Any non-default subagent model or reasoning effort must be recorded in the slice contract",
         ],
     },
