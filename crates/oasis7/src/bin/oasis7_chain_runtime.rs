@@ -593,10 +593,58 @@ fn quarantine_observer_execution_state(paths: &RuntimePaths, reason: &str) -> Re
         )?;
     }
 
+    if paths.execution_records_dir.exists() {
+        let quarantine_path = paths.execution_records_dir.with_file_name(format!(
+            "{}.invalid-{quarantine_suffix}",
+            paths.execution_records_dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("execution-records")
+        ));
+        fs::rename(
+            paths.execution_records_dir.as_path(),
+            quarantine_path.as_path(),
+        )
+        .map_err(|rename_err| {
+            format!(
+                "observer execution records recovery failed: quarantine {} -> {} after load error ({}) failed: {}",
+                paths.execution_records_dir.display(),
+                quarantine_path.display(),
+                reason,
+                rename_err
+            )
+        })?;
+    }
+
+    if paths.execution_bridge_state_path.exists() {
+        let quarantine_path = paths
+            .execution_bridge_state_path
+            .with_file_name(format!(
+                "{}.invalid-{quarantine_suffix}",
+                paths.execution_bridge_state_path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("reward-runtime-execution-bridge-state.json")
+            ));
+        fs::rename(
+            paths.execution_bridge_state_path.as_path(),
+            quarantine_path.as_path(),
+        )
+        .map_err(|rename_err| {
+            format!(
+                "observer execution bridge state recovery failed: quarantine {} -> {} after load error ({}) failed: {}",
+                paths.execution_bridge_state_path.display(),
+                quarantine_path.display(),
+                reason,
+                rename_err
+            )
+        })?;
+    }
+
     emit_stderr_or_event(
         Level::WARN,
         format!(
-            "observer execution state was invalid and has been quarantined; runtime will restart from clean bootstrap state: {reason}"
+            "observer execution state was invalid and has been quarantined with dependent replay state; runtime will restart from clean bootstrap state: {reason}"
         )
         .as_str(),
         "observer execution state quarantined",
