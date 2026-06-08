@@ -74,6 +74,13 @@ if [[ -z "$binary_name" ]]; then
   binary_name="$package_name"
 fi
 
+out_dir=$(python3 - "$out_dir" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve())
+PY
+)
+
 mkdir -p "$out_dir/logs"
 
 tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-compile-metrics-XXXXXX")
