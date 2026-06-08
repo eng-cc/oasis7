@@ -1,25 +1,21 @@
 ---
 name: xiaohongshu
-description: |
-  小红书（RedNote）内容工具。使用场景：
-  - 搜索小红书笔记并获取详情
-  - 获取首页推荐列表
-  - 获取帖子详情（正文、图片、互动数据、评论）
-  - 发表评论 / 回复评论
-  - 获取用户主页和笔记列表
-  - 点赞、收藏帖子
-  - 发布图文或视频笔记
-  - 热点话题跟踪与分析报告
-  - 帖子导出为长图
-  触发词示例：
-  - "搜一下小红书上的XX"
-  - "跟踪一下小红书上的XX热点"
-  - "分析小红书上关于XX的讨论"
-  - "小红书XX话题报告"
-  - "生成XX的小红书舆情报告"
+description: Use when searching, reading, analyzing, exporting, commenting on, liking, collecting, or publishing XiaoHongShu / RedNote posts and topic reports.
 ---
 
 # 小红书 MCP Skill
+
+## When to Use
+
+Use this skill when:
+
+- XiaoHongShu / RedNote search, post details, comments, likes, collections, publishing, export, or topic tracking are requested
+- a task needs XiaoHongShu content or engagement workflow automation
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 基于 [xiaohongshu-mcp](https://github.com/xpzouying/xiaohongshu-mcp) 封装的 shell 脚本工具集。
 
@@ -200,3 +196,8 @@ posts.json 格式：
 - 同一账号避免多客户端同时操作
 - 发布限制：标题≤20字符，正文≤1000字符，日发布≤50条
 - Linux 服务器无桌面环境需安装 xvfb（`apt-get install xvfb`，脚本自动管理）
+
+## Guardrails
+
+- Respect platform account state, privacy, and user intent for publishing or engagement actions.
+- Do not fabricate metrics or comments when API access is unavailable.

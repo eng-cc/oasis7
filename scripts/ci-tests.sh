@@ -148,6 +148,7 @@ run_oasis7_client_launcher_web_build() {
 
 run_required_gate_checks() {
   run ./scripts/doc-governance-check.sh
+  run ./scripts/lint-skills.sh
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh
   run ./scripts/cargo-dev-lib.test.sh

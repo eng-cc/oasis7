@@ -1,9 +1,21 @@
 ---
 name: xiaohongshu-note-analyzer
-description: 全面分析小红书笔记的内容质量、关键词优化、标题吸引力、敏感内容风险、商业化程度、互动潜力等。适用于发布前审核、内容优化建议、提升笔记曝光率。触发词包括"分析小红书笔记"、"小红书内容审核"、"笔记优化"、"XHS分析"，或上传小红书笔记内容请求分析。
+description: Use when reviewing or optimizing XiaoHongShu / RedNote note content for title quality, keywords, sensitivity risk, commercialization level, and engagement potential.
 ---
 
 # 小红书笔记分析器 (XiaoHongShu Note Analyzer)
+
+## When to Use
+
+Use this skill when:
+
+- a XiaoHongShu / RedNote note needs pre-publish review or optimization
+- the task asks for title, keyword, sensitivity, commercialization, or engagement-potential analysis
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 对小红书笔记进行全方位分析，提供优化建议，提升内容质量和曝光率。
 
@@ -188,3 +200,8 @@ description: 全面分析小红书笔记的内容质量、关键词优化、标�
 ## 分析示例
 
 详见 `references/analysis-examples.md`
+
+## Guardrails
+
+- Separate style/engagement advice from factual compliance claims.
+- Do not over-optimize content in ways that misrepresent the author or product.

@@ -1,9 +1,7 @@
 ---
 name: asset-optimization
 version: "2.0.0"
-description: |
-  Asset pipeline optimization, compression, streaming, and resource management
-  for efficient game development and delivery.
+description: Use when optimizing game assets, compression, streaming, resource loading, asset bundles, memory use, or delivery pipelines.
 sasmp_version: "1.3.0"
 bonded_agent: 06-tools-pipeline
 bond_type: PRIMARY_BOND
@@ -31,6 +29,18 @@ observability:
 ---
 
 # Asset Optimization
+
+## When to Use
+
+Use this skill when:
+
+- asset size, compression, streaming, loading, bundles, memory, or delivery pipeline decisions are in scope
+- a task needs reusable asset-pipeline optimization guidance
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 ## Asset Pipeline Overview
 
@@ -212,3 +222,8 @@ def process_textures(input_dir: Path, output_dir: Path, platform: str):
 ---
 
 **Use this skill**: When optimizing assets, managing memory, or streamlining pipelines.
+
+## Guardrails
+
+- Measure before and after when optimization claims matter.
+- Do not trade away visual quality or loading correctness without task acceptance.

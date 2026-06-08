@@ -32,6 +32,10 @@ Do not use this skill when:
 
 - 如需 supporting files，在这里列出并说明用途
 
+## Known Failure Modes
+
+- 核心 workflow skill 必填；其他 skill 视复用风险填写
+
 ## Guardrails
 
 - 

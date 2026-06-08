@@ -462,12 +462,14 @@ if abs_hits=$(regex_match_with_line_numbers '/(Users|home)/[^[:space:]]+' "${all
 fi
 
 # 2) line count check
-for file in "${all_doc_files[@]}"; do
-  line_count=$(wc -l < "$file" | tr -d ' ')
-  if ((line_count > 1000)); then
-    fail "$file exceeds 1000 lines (${line_count})"
-  fi
-done
+if [[ ${#all_doc_files[@]} -gt 0 ]]; then
+  while IFS=$'\t' read -r line_count file; do
+    [[ -n "$file" ]] || continue
+    if ((line_count > 1000)); then
+      fail "$file exceeds 1000 lines (${line_count})"
+    fi
+  done < <(awk 'FNR == 1 { if (NR > 1) print count "\t" prev; prev = FILENAME; count = 0 } { count++ } END { if (NR > 0) print count "\t" prev }' "${all_doc_files[@]}")
+fi
 
 # 3) project docs required sections + paired design required sections
 for project_doc in "${project_docs[@]}"; do

@@ -1,6 +1,6 @@
 # 项目运行模式
 1. 你是 `tpm` 默认主 Agent / workflow coordinator / integrator；TPM 只负责流程协调、任务真值、派工、合流和 PR 主链，不承担任何专业分析、实现、验证判断、评审判断或对外口径。
-2. 其他专业角色必须以 subagent slice 形式参与；所有专业性工作必须由对应专业角色以 bounded subagent slice 形式完成，TPM 不得把自己的代码阅读、经验判断或总结包装成专业角色结论。
+2. 其他专业角色必须以 subagent slice 形式参与；所有专业性工作必须由对应专业角色以 bounded subagent slice 形式完成，TPM 不得把自己的代码阅读、经验判断或总结包装成专业角色结论。项目策略已授权 TPM 在 workflow 要求时直接派发所需 bounded 专业 subagent slice，不需要逐次向用户请求额外许可；若当前运行环境、connector 或工具策略阻止实际派发，TPM 必须在 `.pm/tasks/<TASK-UID>.execution.md` 记录 intended dispatch、actual limitation、fallback evidence path 和 attribution boundary，且不得把 fallback 下的 TPM 分析包装成专业角色结论。
 3. 每个需求只允许单一 owner role、单一 `.pm` task、单一 canonical worktree、单一 PR 主链。
 4. 详细流程规范统一以 `doc/engineering/workflow/source-of-truth.md` 为准（唯一真值）。
 
@@ -29,6 +29,7 @@
 
 - `default-workflow-bootstrap`: 任何用户请求都必须先经过 repo-owned bootstrap，确认标准 task worktree / `.pm` task / owner role 真值，再进入后续 workflow surface；禁止用只读、聊天、纯事实读取绕过 bootstrap。
 - 只读专业判断分流：只读/聊天请求也必须先进入 task/worktree bootstrap；但凡输出产品/系统设计、游戏视觉/交互、runtime、blockchain ops、WASM、agent、viewer、QA、LiveOps/community 等专业结论，仍必须由对应专业角色 slice 给出或验证，TPM 只能合流与标注来源。
+- subagent 派发授权：oasis7 项目策略已授权 TPM 在 workflow 要求时直接派发所需 bounded 专业 subagent slice，不需要逐次向用户请求额外许可；若当前运行环境、connector 或工具策略阻止实际派发，TPM 必须在 `.pm/tasks/<TASK-UID>.execution.md` 记录 intended dispatch、actual limitation、fallback evidence path 和 attribution boundary，且不得把 fallback 下的 TPM 分析包装成专业角色结论。
 - subagent 默认模型：具体默认值以 `.codex/config.toml` 的 `[workflow.subagent_runtime]` 为唯一配置真值，并由 `doc/engineering/workflow/source-of-truth.md#52-tpm-planning-and-subagent-dispatch` 的 `Default subagent runtime` policy 引用；专业角色 slice 默认请求该 runtime，若用户要求其他模型、slice 明确需要更强/更快/更省配置，当前 subagent 工具只能继承父线程模型，或请求选择后无法验证实际派发模型，必须在 slice contract 同时记录 intended model、actual dispatched model/reasoning 与原因；无法验证实际模型时记录 `actual model: inherited/unverified`。
 - subagent 默认上下文：专业角色 slice 默认使用 full-thread/full-history fork 或最接近的等价上下文；slice contract 仍必须记录 mandatory context checklist。手工显式 context packet 只能作为补充或 fallback，且必须记录为什么不能使用默认 fork（例如工具限制、上下文安全、模型选择冲突或默认 fork 卡住）。
 - 兼容契约词：`mandatory context packet` 在当前语义下指必须记录的 mandatory context checklist/packet，不等同于必须手工组装显式上下文包。

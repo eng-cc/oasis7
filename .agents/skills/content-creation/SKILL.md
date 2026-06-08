@@ -1,10 +1,22 @@
 ---
 name: content-creation
-description: Draft marketing content across channels — blog posts, social media, email newsletters, landing pages, press releases, and case studies. Use when writing any marketing content, when you need channel-specific formatting, SEO-optimized copy, headline options, or calls to action.
+description: Use when drafting marketing content across channels, including blog posts, social media, email newsletters, landing pages, press releases, case studies, SEO copy, headlines, or calls to action.
 user-invocable: false
 ---
 
 # Content Creation Skill
+
+## When to Use
+
+Use this skill when:
+
+- marketing or channel copy needs to be drafted, adapted, or optimized
+- the output needs SEO, headline, CTA, or campaign-format guidance
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 Guidelines and frameworks for creating effective marketing content across channels.
 
@@ -155,3 +167,8 @@ Guidelines and frameworks for creating effective marketing content across channe
 - At the end of blog posts (after you have earned the reader's trust)
 - In-line within content when contextually relevant (e.g., a related guide mention)
 - Repeat the primary CTA at the bottom of long-form pages
+
+## Guardrails
+
+- Keep claims factual and channel-appropriate.
+- Do not invent data, endorsements, or customer outcomes.

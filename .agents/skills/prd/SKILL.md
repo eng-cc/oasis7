@@ -1,6 +1,6 @@
 ---
 name: prd
-description: 'Generate high-quality Product Requirements Documents (PRDs) for software systems and AI-powered features. Includes executive summaries, user stories, technical specifications, and risk analysis.'
+description: Use when generating or improving Product Requirements Documents with executive summaries, user stories, technical specifications, acceptance criteria, and risk analysis.
 license: MIT
 ---
 
@@ -214,3 +214,8 @@ Critical dimensions that cannot be `❌`:
 - Functional specification completeness
 - Edge case coverage
 - Testability
+
+## Guardrails
+
+- Keep PRDs aligned with repo truth and acceptance evidence.
+- Do not let generated PRD content replace `.pm` task truth in oasis7.
