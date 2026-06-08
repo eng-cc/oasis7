@@ -89,8 +89,9 @@ trap cleanup EXIT
 measure_command_seconds() {
   local checkout_path="$1"
   local target_dir="$2"
-  local log_path="$3"
-  shift 3
+  local cargo_home="$3"
+  local log_path="$4"
+  shift 4
 
   local start_ns
   local end_ns
@@ -102,6 +103,7 @@ PY
   (
     cd "$checkout_path"
     export CARGO_TARGET_DIR="$target_dir"
+    export CARGO_HOME="$cargo_home"
     "$@"
   ) >"$log_path" 2>&1
   end_ns=$(python3 - <<'PY'
@@ -162,7 +164,8 @@ measure_checkout() {
 
   local check_target="$tmp_root/${label}-check-target"
   local release_target="$tmp_root/${label}-release-target"
-  mkdir -p "$check_target" "$release_target"
+  local cargo_home="$tmp_root/${label}-cargo-home"
+  mkdir -p "$check_target" "$release_target" "$cargo_home"
 
   local package_count
   package_count=$(
@@ -187,10 +190,16 @@ measure_checkout() {
   fi
 
   local check_seconds
+  (
+    cd "$checkout_path"
+    export CARGO_HOME="$cargo_home"
+    cargo fetch --locked >/dev/null 2>"$out_dir/logs/${label}-cargo-fetch.log"
+  )
   check_seconds=$(
     measure_command_seconds \
       "$checkout_path" \
       "$check_target" \
+      "$cargo_home" \
       "$out_dir/logs/${label}-cargo-check.log" \
       env -u RUSTC_WRAPPER cargo check -p "$package_name"
   )
@@ -200,6 +209,7 @@ measure_checkout() {
     measure_command_seconds \
       "$checkout_path" \
       "$release_target" \
+      "$cargo_home" \
       "$out_dir/logs/${label}-cargo-build-release.log" \
       env -u RUSTC_WRAPPER cargo build -p "$package_name" --release --bin "$binary_name"
   )
