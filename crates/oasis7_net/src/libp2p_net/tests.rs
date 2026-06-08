@@ -392,6 +392,34 @@ fn peer_requires_active_quarantine_skips_missing_peer_record_block() {
 }
 
 #[test]
+fn peer_requires_active_quarantine_skips_bootstrap_warmup_block_combo() {
+    let warmup_blocked_peer = PeerId::random();
+    let healths = HashMap::from([(
+        warmup_blocked_peer,
+        PeerManagerPeerHealth {
+            peer_id: warmup_blocked_peer.to_string(),
+            status: PeerManagerHealthStatus::Blocked,
+            issues: vec![
+                PeerManagerHealthIssue::MissingPeerRecord,
+                PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
+                    observed_sources: 0,
+                    required_sources: 2,
+                },
+            ],
+            discovery_sources: vec![crate::dht::PeerDiscoverySource::StaticBootstrap],
+            active_path_kind: Some("direct".to_string()),
+            source_operator: None,
+            source_asn: None,
+        },
+    )]);
+
+    assert!(!peer_requires_active_quarantine(
+        warmup_blocked_peer,
+        &healths
+    ));
+}
+
+#[test]
 fn collect_quarantined_active_peers_only_returns_quarantined_active_set() {
     let active_peer = PeerId::random();
     let suspect_peer = PeerId::random();
