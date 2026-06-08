@@ -118,6 +118,7 @@ import hashlib
 import json
 import os
 import shutil
+import string
 import sys
 from pathlib import Path
 
@@ -133,7 +134,8 @@ def parse_env(path: Path) -> dict[str, str]:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        values[key] = os.path.expandvars(value.strip())
+        merged_env = {**os.environ, **values}
+        values[key] = string.Template(value.strip()).safe_substitute(merged_env)
     return values
 
 

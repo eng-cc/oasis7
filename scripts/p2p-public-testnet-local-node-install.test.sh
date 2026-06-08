@@ -55,15 +55,15 @@ EOF
 cat >"$source_stack/node.env" <<EOF
 STACK_ROOT=$source_stack
 NODE_ID=triad-testnet-fourth-local
-CONFIG_PATH=$source_stack/config.toml
-EXECUTION_WORLD_DIR=$source_stack/world
-EXECUTION_RECORDS_DIR=$source_stack/execution-records
-STORAGE_ROOT=$source_stack/store
-RUNTIME_ROOT=$source_stack/runtime-root
-REPLICATION_ROOT=$source_stack/replication-root
-NETWORK_TIER_MANIFEST_PATH=$source_stack/manifest.json
-GENESIS_VALIDATOR_REGISTRY_PATH=$source_stack/config/genesis-validator-registry.json
-TRAFFIC_MONITOR_OUTPUT_DIR=$source_stack/output/traffic-monitor
+CONFIG_PATH=\$STACK_ROOT/config.toml
+EXECUTION_WORLD_DIR=\$STACK_ROOT/world
+EXECUTION_RECORDS_DIR=\${STACK_ROOT}/execution-records
+STORAGE_ROOT=\$STACK_ROOT/store
+RUNTIME_ROOT=\$STACK_ROOT/runtime-root
+REPLICATION_ROOT=\$STACK_ROOT/replication-root
+NETWORK_TIER_MANIFEST_PATH=\$STACK_ROOT/manifest.json
+GENESIS_VALIDATOR_REGISTRY_PATH=\${STACK_ROOT}/config/genesis-validator-registry.json
+TRAFFIC_MONITOR_OUTPUT_DIR=\$STACK_ROOT/output/traffic-monitor
 EOF
 
 "$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
@@ -79,6 +79,8 @@ test -f "$node_root_abs/node.env"
 test -f "$node_root_abs/manifest.json"
 test -f "$node_root_abs/runtime-bundle.json"
 test -f "$node_root_abs/.tmp/local-node-install-test/governance-public-signers.json"
+test -f "$node_root_abs/config.toml"
+test -f "$node_root_abs/config/genesis-validator-registry.json"
 test -f "$node_root_abs/oasis7.testnet.smoke.plist"
 
 expected_sha=$(shasum -a 256 "$node_root_abs/bin/oasis7_chain_runtime" | awk '{print $1}')
