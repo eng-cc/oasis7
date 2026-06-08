@@ -1,13 +1,17 @@
 use super::cli::parse_validator_signer_public_key_spec;
 use super::cli::TrafficProfile;
+use super::execution_bridge;
 use super::{
     apply_traffic_profile_to_node_config, build_chain_balances_payload_from_world,
-    build_default_peer_record, build_default_replication_network_config,
-    build_live_node_network_policy_recommendation, build_node_replication_config,
-    build_replication_fetch_requester_allowlist, build_replication_remote_writer_allowlist,
-    build_validator_signer_public_keys, derive_node_consensus_signer_keypair,
-    derive_node_libp2p_identity_keypair_config, network_tier_allows_open_observer_fetch,
-    node_keypair_config, parse_options, parse_validator_spec, CliOptions, DEFAULT_NODE_ID,
+    build_chain_status_payload, build_default_peer_record,
+    build_default_replication_network_config, build_live_node_network_policy_recommendation,
+    build_node_replication_config, build_replication_fetch_requester_allowlist,
+    build_replication_remote_writer_allowlist, build_validator_signer_public_keys,
+    derive_node_consensus_signer_keypair, derive_node_libp2p_identity_keypair_config,
+    governance_registry, maybe_recover_observer_execution_state,
+    network_tier_allows_open_observer_fetch, node_keypair_config, parse_options,
+    parse_validator_spec, release_security_policy_for_storage_profile, CliOptions, RuntimePaths,
+    DEFAULT_NODE_ID,
     DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
 };
 use ed25519_dalek::SigningKey;
@@ -16,18 +20,29 @@ use oasis7::network_tier_manifest::{
     NetworkTierManifest, NetworkTierPromotionPolicy, NetworkTierRuntimeRefs,
     NetworkTierTokenPolicy, NetworkTierValidatorPolicy, NETWORK_TIER_MANIFEST_SCHEMA_V1,
 };
-use oasis7::runtime::World as RuntimeWorld;
+use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
 use oasis7_node::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
-    LiveTransportKind, NodeAutoNatStatus, NodeConfig, NodeHolePunchViability, NodeNetworkPolicy,
-    NodePublicPortReachability, NodeRole, NodeUserMode, PosValidator,
+    LiveTransportKind, NodeAutoNatStatus, NodeConfig, NodeConsensusSnapshot,
+    NodeHolePunchViability, NodeNetworkPolicy, NodePublicPortReachability,
+    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode, PosValidator,
 };
 use oasis7_proto::distributed_dht::{
     PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
 };
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+fn temp_dir(prefix: &str) -> std::path::PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("duration since epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("oasis7-chain-runtime-{prefix}-{unique}"))
+}
 
 #[test]
 fn parse_options_defaults() {
@@ -962,6 +977,186 @@ fn test_network_tier_manifest(tier: &str, allow_observer_nodes: bool) -> LoadedN
         },
         bootstrap_peers: vec![],
     }
+}
+
+#[test]
+fn observer_invalid_execution_world_is_quarantined_before_runtime_init() {
+    let dir = temp_dir("observer-invalid-execution-world");
+    let execution_world_dir = dir.join("world");
+    let simulator_world_dir =
+        execution_bridge::simulator_world_dir_from_execution_world_dir(&execution_world_dir);
+    let execution_records_dir = dir.join("records");
+    let execution_bridge_state_path = dir.join("bridge-state.json");
+    fs::create_dir_all(execution_world_dir.as_path()).expect("create execution world dir");
+    fs::create_dir_all(simulator_world_dir.as_path()).expect("create simulator world dir");
+    fs::create_dir_all(execution_records_dir.as_path()).expect("create execution records dir");
+    fs::write(execution_world_dir.join("snapshot.json"), b"{").expect("write corrupt snapshot");
+    fs::write(execution_world_dir.join("journal.json"), b"{}").expect("write journal");
+    fs::write(simulator_world_dir.join("snapshot.json"), b"{}").expect("write simulator snapshot");
+    fs::write(simulator_world_dir.join("journal.json"), b"{}").expect("write simulator journal");
+    fs::write(
+        execution_records_dir.join("00000000000000000001.json"),
+        b"{}",
+    )
+    .expect("write execution record");
+    fs::write(execution_bridge_state_path.as_path(), b"{}").expect("write bridge state");
+
+    let paths = RuntimePaths {
+        runtime_root: dir.join("runtime-root"),
+        execution_bridge_state_path: execution_bridge_state_path.clone(),
+        execution_world_dir: execution_world_dir.clone(),
+        execution_records_dir: execution_records_dir.clone(),
+        storage_root: dir.join("store"),
+        replication_root: dir.join("replication"),
+        reward_runtime_state_path: dir.join("reward-state.json"),
+        reward_runtime_distfs_probe_state_path: dir.join("distfs-probe-state.json"),
+        reward_runtime_report_dir: dir.join("reward-report"),
+        reward_runtime_storage_metrics_path: dir.join("storage-metrics.json"),
+    };
+
+    maybe_recover_observer_execution_state(NodeRole::Observer, &paths)
+        .expect("observer recovery should quarantine invalid world");
+
+    assert!(!execution_world_dir.exists());
+    assert!(!simulator_world_dir.exists());
+    assert!(!execution_records_dir.exists());
+    assert!(!execution_bridge_state_path.exists());
+    let quarantined_worlds = fs::read_dir(dir.as_path())
+        .expect("read temp dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .filter(|name| name.starts_with("world.invalid-"))
+        .count();
+    let quarantined_simulators = fs::read_dir(dir.as_path())
+        .expect("read temp dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .filter(|name| name.starts_with("world-simulator-mirror.invalid-"))
+        .count();
+    let quarantined_records = fs::read_dir(dir.as_path())
+        .expect("read temp dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .filter(|name| name.starts_with("records.invalid-"))
+        .count();
+    let quarantined_bridge_states = fs::read_dir(dir.as_path())
+        .expect("read temp dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .filter(|name| name.starts_with("bridge-state.json.invalid-"))
+        .count();
+    assert_eq!(quarantined_worlds, 1);
+    assert_eq!(quarantined_simulators, 1);
+    assert_eq!(quarantined_records, 1);
+    assert_eq!(quarantined_bridge_states, 1);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn observer_quarantine_allows_genesis_registry_reimport_on_clean_world() {
+    let dir = temp_dir("observer-quarantine-registry-reimport");
+    let execution_world_dir = dir.join("world");
+    let simulator_world_dir =
+        execution_bridge::simulator_world_dir_from_execution_world_dir(&execution_world_dir);
+    fs::create_dir_all(execution_world_dir.as_path()).expect("create execution world dir");
+    fs::create_dir_all(simulator_world_dir.as_path()).expect("create simulator world dir");
+    fs::write(execution_world_dir.join("snapshot.json"), b"{").expect("write corrupt snapshot");
+    fs::write(execution_world_dir.join("journal.json"), b"{}").expect("write journal");
+
+    let manifest_path = dir.join("genesis-validator-registry.json");
+    fs::write(
+        manifest_path.as_path(),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "slot_id": "governance.finality.v1",
+            "threshold": 1,
+            "validators": [
+                {
+                    "node_id": "validator-a",
+                    "scheme": "ed25519",
+                    "finality_signer_public_key": "1111111111111111111111111111111111111111111111111111111111111111",
+                    "stake": 100
+                }
+            ]
+        }))
+        .expect("encode manifest"),
+    )
+    .expect("write manifest");
+
+    let paths = RuntimePaths {
+        runtime_root: dir.join("runtime-root"),
+        execution_bridge_state_path: dir.join("bridge-state.json"),
+        execution_world_dir: execution_world_dir.clone(),
+        execution_records_dir: dir.join("records"),
+        storage_root: dir.join("store"),
+        replication_root: dir.join("replication"),
+        reward_runtime_state_path: dir.join("reward-state.json"),
+        reward_runtime_distfs_probe_state_path: dir.join("distfs-probe-state.json"),
+        reward_runtime_report_dir: dir.join("reward-report"),
+        reward_runtime_storage_metrics_path: dir.join("storage-metrics.json"),
+    };
+
+    maybe_recover_observer_execution_state(NodeRole::Observer, &paths)
+        .expect("observer recovery should quarantine invalid world");
+    governance_registry::ensure_world_governance_validator_registry(
+        execution_world_dir.as_path(),
+        Some(manifest_path.as_path()),
+        None,
+    )
+    .expect("genesis registry should import into clean world after quarantine");
+
+    let world = execution_bridge::load_execution_world(execution_world_dir.as_path())
+        .expect("load recovered execution world");
+    let registry = world
+        .resolve_governance_effective_finality_signer_registry()
+        .expect("resolve registry")
+        .expect("registry imported");
+    assert_eq!(registry.threshold, 1);
+    assert_eq!(
+        registry
+            .signer_bindings
+            .get("validator-a")
+            .map(String::as_str),
+        Some("1111111111111111111111111111111111111111111111111111111111111111")
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn non_observer_invalid_execution_world_is_not_quarantined() {
+    let dir = temp_dir("storage-invalid-execution-world");
+    let execution_world_dir = dir.join("world");
+    fs::create_dir_all(execution_world_dir.as_path()).expect("create execution world dir");
+    fs::write(execution_world_dir.join("snapshot.json"), b"{").expect("write corrupt snapshot");
+    fs::write(execution_world_dir.join("journal.json"), b"{}").expect("write journal");
+
+    let paths = RuntimePaths {
+        runtime_root: dir.join("runtime-root"),
+        execution_bridge_state_path: dir.join("bridge-state.json"),
+        execution_world_dir: execution_world_dir.clone(),
+        execution_records_dir: dir.join("records"),
+        storage_root: dir.join("store"),
+        replication_root: dir.join("replication"),
+        reward_runtime_state_path: dir.join("reward-state.json"),
+        reward_runtime_distfs_probe_state_path: dir.join("distfs-probe-state.json"),
+        reward_runtime_report_dir: dir.join("reward-report"),
+        reward_runtime_storage_metrics_path: dir.join("storage-metrics.json"),
+    };
+
+    maybe_recover_observer_execution_state(NodeRole::Storage, &paths)
+        .expect("non-observer should bypass quarantine path");
+
+    assert!(execution_world_dir.exists());
+    let quarantined_worlds = fs::read_dir(dir.as_path())
+        .expect("read temp dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .filter(|name| name.starts_with("world.invalid-"))
+        .count();
+    assert_eq!(quarantined_worlds, 0);
+
+    let _ = fs::remove_dir_all(dir);
 }
 
 #[test]

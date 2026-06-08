@@ -264,6 +264,7 @@ fn build_transfer_submit_action_payload_encodes_runtime_action() {
                 to_account_id,
                 amount,
                 nonce,
+                ..
             } => {
                 let expected = build_signed_transfer_request(7, 8, 7, 2);
                 assert_eq!(from_account_id, expected.from_account_id);

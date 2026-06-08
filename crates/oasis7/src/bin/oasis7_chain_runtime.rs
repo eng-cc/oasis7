@@ -193,6 +193,17 @@ mod execution_bridge {
                 world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
             })
     }
+
+    pub(super) fn simulator_world_dir_from_execution_world_dir(
+        world_dir: &Path,
+    ) -> std::path::PathBuf {
+        match world_dir.file_name().and_then(|name| name.to_str()) {
+            Some(name) if !name.is_empty() => {
+                world_dir.with_file_name(format!("{name}-simulator-mirror"))
+            }
+            _ => world_dir.join("simulator-mirror"),
+        }
+    }
 }
 
 const DEFAULT_RECENT_MINT_RECORD_LIMIT: usize = 20;
@@ -256,6 +267,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     let storage_profile_config = StorageProfileConfig::from(options.storage_profile);
     let release_security_policy =
         release_security_policy_for_storage_profile(options.storage_profile);
+    maybe_recover_observer_execution_state(options.node_role, &paths)?;
 
     let mut config = NodeConfig::new(
         options.node_id.clone(),
@@ -517,6 +529,79 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
 
         thread::sleep(Duration::from_millis(300));
     }
+}
+
+fn maybe_recover_observer_execution_state(
+    node_role: NodeRole,
+    paths: &RuntimePaths,
+) -> Result<(), String> {
+    if !matches!(node_role, NodeRole::Observer) {
+        return Ok(());
+    }
+    match execution_bridge::load_execution_world(paths.execution_world_dir.as_path()) {
+        Ok(_) => Ok(()),
+        Err(err) => quarantine_observer_execution_state(paths, err.as_str()),
+    }
+}
+
+fn quarantine_observer_execution_state(paths: &RuntimePaths, reason: &str) -> Result<(), String> {
+    let quarantine_suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let execution_world_dir = paths.execution_world_dir.as_path();
+    let simulator_world_dir =
+        execution_bridge::simulator_world_dir_from_execution_world_dir(execution_world_dir);
+
+    if execution_world_dir.exists() {
+        let quarantine_path = execution_world_dir.with_file_name(format!(
+            "{}.invalid-{quarantine_suffix}",
+            execution_world_dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("execution-world")
+        ));
+        fs::rename(execution_world_dir, quarantine_path.as_path()).map_err(|rename_err| {
+            format!(
+                "observer execution world recovery failed: quarantine {} -> {} after load error ({}) failed: {}",
+                execution_world_dir.display(),
+                quarantine_path.display(),
+                reason,
+                rename_err
+            )
+        })?;
+    }
+
+    if simulator_world_dir.exists() {
+        let quarantine_path = simulator_world_dir.with_file_name(format!(
+            "{}.invalid-{quarantine_suffix}",
+            simulator_world_dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("execution-world-simulator-mirror")
+        ));
+        fs::rename(simulator_world_dir.as_path(), quarantine_path.as_path()).map_err(
+            |rename_err| {
+                format!(
+                    "observer simulator mirror recovery failed: quarantine {} -> {} after load error ({}) failed: {}",
+                    simulator_world_dir.display(),
+                    quarantine_path.display(),
+                    reason,
+                    rename_err
+                )
+            },
+        )?;
+    }
+
+    emit_stderr_or_event(
+        Level::WARN,
+        format!(
+            "observer execution state was invalid and has been quarantined; runtime will restart from clean bootstrap state: {reason}"
+        )
+        .as_str(),
+        "observer execution state quarantined",
+    );
+    Ok(())
 }
 
 fn resolve_runtime_paths(options: &CliOptions) -> RuntimePaths {
