@@ -112,6 +112,13 @@ role reviews and addressing findings:
   - local repo-owned review outcome
   - GitHub PR review readiness
 
+## Known Failure Modes
+
+- Treating the local role review as optional when the branch is already on the PR path.
+- Recording a review request in chat only, leaving `.pm` without the evidence packet required by preflight.
+- Selecting roles from convenience instead of changed paths, role ownership, task history, and user-facing claims.
+- Resolving or dismissing GitHub review threads based only on local repo-owned review evidence.
+
 ## Guardrails
 
 - Do not leave PR creation without a passed pre-PR local role review packet.

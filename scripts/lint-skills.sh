@@ -15,6 +15,10 @@ ROOT = Path(".agents/skills")
 MAX_ENTRYPOINT_LINES = 300
 CORE_SKILLS_REQUIRING_FAILURE_MODES = {
     "default-workflow-bootstrap",
+    "executing-project-tasks",
+    "finishing-a-development-branch",
+    "receiving-code-review",
+    "requesting-repo-owned-review",
     "repo-owned-workflow-router",
     "verification-before-completion",
     "writing-repo-owned-skills",

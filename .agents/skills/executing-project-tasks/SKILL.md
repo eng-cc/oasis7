@@ -78,6 +78,13 @@ When blocked, lead with:
 - what failed or was unclear
 - what doc or decision needs to change before continuing
 
+## Known Failure Modes
+
+- Executing implementation from an informal chat plan instead of canonical `.pm`, PRD, project, or handoff truth.
+- Batching several behavior changes before recording step evidence, which makes later verification failures hard to attribute.
+- Treating planned verification as equivalent to observed verification output.
+- Continuing after repeated identical failures without recording a blocker or narrowing the failing surface.
+
 ## Guardrails
 
 - Do not create a second planning system outside `prd.md` / `project.md` / `.pm`.
