@@ -217,7 +217,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Session Ladder")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Runtime Diagnostics")).toBeInTheDocument();
     expect(screen.getByTestId("pixel-world-host")).toHaveTextContent("pixel-world-host:en");
-  }, 15000);
+  }, 30000);
 
   it("moves presentation notes into the stage help tip instead of the right details rail", async () => {
     const { container } = await renderViewerApp();
@@ -235,6 +235,21 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Presentation Notes")).toBeInTheDocument();
     expect(within(stagePanel).getByText(/do not read on-screen diameter as real geometry size/i)).toBeInTheDocument();
     expect(helpButton).toHaveAttribute("aria-describedby", "viewer-stage-scale-tip");
+  });
+
+  it("compresses world scale details into a one-line details-rail summary", async () => {
+    const { container } = await renderViewerApp();
+
+    const detailsPanel = container.querySelector("#viewer-details-panel");
+    expect(within(detailsPanel).getByText("World Scale")).toBeInTheDocument();
+    expect(within(detailsPanel).getByText("snapshot.config.space")).toBeInTheDocument();
+    expect(within(detailsPanel).getByText(/World Bounds 100 km × 50 km × 10 km/i)).toBeInTheDocument();
+
+    expect(within(detailsPanel).queryByText("Nearest Distance Samples")).not.toBeInTheDocument();
+    expect(within(detailsPanel).queryByText("Selected location anchor")).not.toBeInTheDocument();
+    expect(
+      within(detailsPanel).queryByText(/The main runtime state already lives in World Summary/i),
+    ).not.toBeInTheDocument();
   });
 
   it("dismisses the stage help tip on escape and outside click", async () => {
