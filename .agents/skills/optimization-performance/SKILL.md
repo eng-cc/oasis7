@@ -1,9 +1,7 @@
 ---
 name: optimization-performance
 version: "2.0.0"
-description: |
-  Game optimization, performance profiling, multi-platform support, and
-  frame rate optimization for smooth gameplay experiences.
+description: Use when optimizing game performance, profiling frame rate, CPU/GPU bottlenecks, loading time, scalability, or multi-platform runtime behavior.
 sasmp_version: "1.3.0"
 bonded_agent: 02-game-programmer
 bond_type: SECONDARY_BOND
@@ -31,6 +29,18 @@ observability:
 ---
 
 # Optimization & Performance
+
+## When to Use
+
+Use this skill when:
+
+- frame rate, profiling, bottlenecks, loading, scalability, or platform performance is in scope
+- a task needs performance optimization strategy or verification guidance
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 ## Performance Targets
 
@@ -222,3 +232,8 @@ VR OPTIMIZATION:
 ---
 
 **Use this skill**: When optimizing games, profiling performance, or supporting multiple platforms.
+
+## Guardrails
+
+- Prefer profiler or benchmark evidence over intuition.
+- Do not optimize one metric while silently regressing correctness or player experience.

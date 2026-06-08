@@ -1,9 +1,7 @@
 ---
 name: audio-systems
 version: "2.0.0"
-description: |
-  Game audio systems, music, spatial audio, sound effects, and voice implementation.
-  Build immersive audio experiences with professional middleware integration.
+description: Use when implementing or tuning game audio systems, music, spatial audio, sound effects, voice, or audio middleware integration.
 sasmp_version: "1.3.0"
 bonded_agent: 04-audio-sound-design
 bond_type: PRIMARY_BOND
@@ -31,6 +29,18 @@ observability:
 ---
 
 # Audio & Sound Systems
+
+## When to Use
+
+Use this skill when:
+
+- audio implementation, middleware, music, SFX, voice, or spatial sound behavior is in scope
+- a task needs game audio design or integration guidance
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 ## Audio Architecture
 
@@ -253,3 +263,8 @@ MUSIC STATE TRANSITIONS:
 ---
 
 **Use this skill**: When implementing audio, designing sound, or composing music.
+
+## Guardrails
+
+- Verify audio behavior in the target runtime or middleware path when possible.
+- Do not treat placeholder audio as final player-facing feedback.

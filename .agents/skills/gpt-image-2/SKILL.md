@@ -1,20 +1,25 @@
 ---
 name: gpt-image-2
 displayName: "🪞 GPT Image 2 — Image Generation via Your ChatGPT Subscription"
-description: >
-  Generate images with GPT Image 2 (ChatGPT Images 2.0) inside Claude Code,
-  using your existing ChatGPT Plus or Pro subscription — no separate OpenAI
-  access, no per-image billing. Supports text-to-image, image-to-image
-  editing, style transfer, and multi-reference composition via the local
-  Codex CLI. Triggers on "gpt image 2", "gpt-image-2", "ChatGPT Images 2.0",
-  "image 2", or any explicit ask to generate or edit an image through the
-  user's ChatGPT plan.
+description: Use when generating or editing raster images through GPT Image 2 / ChatGPT Images 2.0 using the user's ChatGPT subscription.
 emoji: "🪞"
 homepage: https://agentspace.so
 license: MIT
 ---
 
 # 🪞 GPT Image 2 — Image Generation via Your ChatGPT Subscription
+
+## When to Use
+
+Use this skill when:
+
+- the user asks to generate, edit, or transform bitmap images with GPT Image 2
+- multi-reference composition, style transfer, or transparent cutouts are requested through the ChatGPT subscription path
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 [agentspace.so](https://agentspace.so/?utm_source=skills.sh&utm_medium=skill&utm_campaign=gpt-image-2) · [GitHub](https://github.com/agentspace-so/agent-skills/tree/main/gpt-image-2)
 
@@ -136,3 +141,8 @@ The script is narrowly scoped on purpose:
 ## What this skill is not
 
 Not a direct OpenAI API client. Not a capability grant — it depends on the user's working Codex CLI login. Not a multi-tenant service, and not concurrency-safe across simultaneous local invocations; treat it as a one-invocation-at-a-time helper.
+
+## Guardrails
+
+- Use raster image generation only when bitmap output is appropriate.
+- Do not replace repo-native vector/code assets with generated images when the existing system should own them.

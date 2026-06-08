@@ -1,6 +1,6 @@
 ---
 name: repo-owned-workflow-router
-description: Use after default workflow bootstrap has established task truth, or whenever you need to decide which repo-owned workflow skill applies next. Routes the task through bounded brainstorming, behavior-first TDD, execution, verification, and closeout without replacing oasis7 root truth.
+description: Use when a bound oasis7 task needs phase selection across repo-owned workflow skills after bootstrap has established task truth.
 ---
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
@@ -144,3 +144,10 @@ WORKFLOW ROUTE DECIDED
 - Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
 - Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current `.pm` task truth, and scoped repo context recorded in the mandatory context checklist/packet.
 - Do not let TPM direct exploration become a professional conclusion; professional findings must be owned or verified by the matching role slice.
+
+## Known Failure Modes
+
+- Treating this router as permission to skip the mandatory `.pm` execution-log writeback; route decisions are task truth.
+- Selecting every workflow skill because the phase map exists; use the narrowest applicable surface and record skipped gates when they matter.
+- Reporting TPM evidence gathering as a professional conclusion; dispatch or attribute the matching role slice when judgment is involved.
+- Forgetting to update the route after scope changes; append the changed route before continuing work.

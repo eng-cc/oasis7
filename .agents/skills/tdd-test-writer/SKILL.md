@@ -1,9 +1,21 @@
 ---
 name: tdd-test-writer
-description: Writes failing tests first for test-driven development and hands off a strict implementation contract that requires agents to make those tests pass without weakening the tests. Use when users ask for test-first workflows, RED/GREEN cycles, or behavior-gating tasks with automated tests.
+description: Use when a behavior-changing task needs failing tests first, RED/GREEN handoff, or automated behavior gates before implementation.
 ---
 
 # TDD Test Writer
+
+## When to Use
+
+Use this skill when:
+
+- the user asks for TDD, RED/GREEN, failing tests first, or behavior-gated implementation
+- a behavior-changing task has a stable automated test surface and needs a strict implementation contract
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 Use this skill to complete the RED phase of TDD: define behavior with tests first, verify they fail for the right reason, then hand off implementation with objective pass criteria.
 
@@ -124,3 +136,8 @@ TDD RED PHASE COMPLETE
 - Assertions are specific enough to prevent false positives.
 - Regression coverage is present for bugfix-driven tasks.
 - Handoff is precise enough that another agent can execute without clarifications.
+
+## Guardrails
+
+- Do not weaken tests to make GREEN easier.
+- Do not use TDD as a hard gate when no stable automated harness exists.

@@ -30,6 +30,7 @@
 - 触发 skill：`.agents/skills/writing-repo-owned-skills/SKILL.md`
 - 模板：`.agents/skills/templates/SKILL.template.md`
 - 自检清单：`.agents/skills/checklists/skill-authoring-checklist.md`
+- 静态校验：`./scripts/lint-skills.sh`
 
 ## Domain-Specific Entry Points
 
@@ -62,6 +63,14 @@ Specialist skills are domain-triggered through TPM routing or professional subag
 - 更强调 trigger wording 的 description 写法
 - supporting files 只在 heavy reference / reusable tools 时引入
 - 发布前至少做一次 repo-owned 验证，而不是只凭自我判断
+
+## Skill Hygiene Gates
+
+- `SKILL.md` 是入口，不是整本手册；超过 lint 阈值的详细说明、示例、命令矩阵应移入 `references/`、`scripts/`、`assets/`、`templates/` 等 supporting files。
+- `description` 必须以 `Use when` 开头，只描述触发条件。
+- entrypoint 中列出的 supporting files 必须真实存在。
+- 核心 workflow skill 必须保留 `Known Failure Modes`，把反复踩过的流程坑写进入口。
+- 修改本地 skill surface 后运行 `./scripts/lint-skills.sh`。
 
 当前不直接引入：
 

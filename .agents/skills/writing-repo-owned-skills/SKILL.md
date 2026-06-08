@@ -76,6 +76,7 @@ Do not directly borrow:
 Before claiming the skill is ready:
 
 - confirm referenced commands / paths exist
+- run `./scripts/lint-skills.sh`
 - run `./scripts/doc-governance-check.sh`
 - run `./scripts/pm/lint.sh`
 - run `git diff --check`
@@ -88,3 +89,10 @@ If the skill introduces or documents a helper-driven workflow, also run at least
 - Do not summarize the entire workflow in `description`; keep it as trigger wording only.
 - Do not create a skill just because the topic is important; create one only if it is reusable and repo-owned.
 - Do not leave bounded borrowing implicit; say what remains deferred or rejected.
+
+## Known Failure Modes
+
+- Letting `SKILL.md` become the whole manual; keep entrypoints concise and move detailed examples, catalogues, or command matrices to `references/`.
+- Writing a broad capability description that does not start with `Use when`; this makes skill discovery less predictable.
+- Adding supporting files without mentioning when to read them from the entrypoint.
+- Adding prose rules for something a script can enforce; prefer a lint/check when the rule is mechanical.

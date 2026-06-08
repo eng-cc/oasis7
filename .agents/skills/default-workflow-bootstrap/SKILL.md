@@ -1,6 +1,6 @@
 ---
 name: default-workflow-bootstrap
-description: Use at the start of any user request to ensure standard task worktree truth exists, then hand off to the correct repo-owned workflow surface.
+description: Use when any oasis7 user request starts and needs standard task worktree, `.pm` task, owner role truth, and routing into the repo-owned workflow surface.
 ---
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
@@ -125,10 +125,18 @@ WORKFLOW BOOTSTRAP DECIDED
 - Do force this bootstrap onto chat-only or read-only requests, even when they do not change repository state.
 - Do not treat read-only professional/domain questions as TPM-owned conclusions just because bootstrap has completed; the matching professional slice still owns the conclusion.
 
+## Known Failure Modes
+
+- Treating a request as "just a quick question" before task/worktree truth exists; run the bootstrap first, then decide whether the answer is pure evidence or needs a role slice.
+- Creating a task from an invalid external `source_ref`; use a repository path as the PM source and record external URLs in the execution log evidence instead.
+- Reusing a dirty or unrelated worktree because it is convenient; reuse needs explicit user authorization and matching task truth.
+- Stopping after worktree creation; this skill's job includes routing into the next workflow surface and recording the decision.
+
 ## Verification
 
 - Minimum verification commands after changing this surface:
   - `./scripts/pm/workflow-behavior-eval.sh`
+  - `./scripts/lint-skills.sh`
   - `./scripts/pm/lint.sh`
   - `./scripts/doc-governance-check.sh`
   - `git diff --check`

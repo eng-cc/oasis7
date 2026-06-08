@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.17**
-Last Updated: **2026-06-07**
+Version: **v1.4.19**
+Last Updated: **2026-06-08**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -55,7 +55,7 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 | About to claim done/tests-pass/ready-for-PR/ready-to-merge | `verification-before-completion` | Required before completion claims | Fresh verification command/output or claim-ready evidence |
 | Implementation is done and branch needs closeout/commit/PR/watch/merge | `finishing-a-development-branch` | Required for development branch closeout | Closeout output, commit, PR linkage, PR purpose decision, CI/review watch evidence, merge/cleanup evidence |
 | GitHub PR receives review comments or requested changes | `receiving-code-review` | Required for actionable PR review feedback | Comment verification, fix evidence, thread status |
-| Workflow skill/docs themselves are created or edited | `writing-repo-owned-skills` | Required for local skill surface changes | Source-of-truth-first sync plus governance checks |
+| Workflow skill/docs themselves are created or edited | `writing-repo-owned-skills` | Required for local skill surface changes | Source-of-truth-first sync plus `./scripts/lint-skills.sh` and governance checks |
 
 ### 1.2 Specialist Skill Reachability
 Specialist skills are not mandatory workflow phases. They become reachable through TPM routing or professional subagent slice planning when the task domain matches their trigger.
@@ -149,6 +149,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 
 ### 5.2 TPM planning and subagent dispatch
 - For every request, TPM must record the current plan, TODO decomposition when needed, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
+- Project policy authorizes TPM to dispatch required bounded professional subagent slices directly whenever this workflow requires them; TPM must not pause for per-slice user permission. If the current runtime, connector, or tool policy prevents actual subagent dispatch, TPM must record the intended dispatch, actual limitation, fallback evidence path, and attribution boundary in `.pm/tasks/<TASK-UID>.execution.md`, and must not present TPM's own analysis as a professional role conclusion.
 - Each subagent slice must declare role, slice type, intended model configuration, actual dispatched model/reasoning, context delivery mode, mandatory context checklist/packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
 - Default subagent runtime policy is defined only in `.codex/config.toml` under `[workflow.subagent_runtime]`. TPM should request that configured default for bounded professional slices when the available subagent tool permits model selection, unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
 - Compatibility marker: Any non-default subagent model or reasoning effort must be recorded in the slice contract.
@@ -236,6 +237,12 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.19 (2026-06-08)**
+  - Clarified that oasis7 project policy authorizes TPM to dispatch required bounded professional subagent slices without per-slice user permission.
+  - Required TPM to record intended dispatch, runtime/tool limitation, fallback evidence path, and attribution boundary when actual subagent dispatch is blocked by the current environment.
+- **v1.4.18 (2026-06-08)**
+  - Added `./scripts/lint-skills.sh` as the local skill-surface hygiene gate for entrypoint size, trigger-focused descriptions, supporting-file reachability, and core workflow failure-mode sections.
+  - Clarified that `writing-repo-owned-skills` verification includes the skill lint gate alongside existing governance checks.
 - **v1.4.17 (2026-06-07)**
   - Added `blockchain_ops_engineer` to the formal professional-role roster and read-only specialist routing matrix.
   - Synced canonical role enumerations so handoff and slice-card surfaces stay aligned with the standard role list.

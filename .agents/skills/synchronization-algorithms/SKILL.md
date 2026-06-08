@@ -1,9 +1,7 @@
 ---
 name: synchronization-algorithms
 version: "2.0.0"
-description: |
-  Network synchronization, lag compensation, client prediction, and state
-  consistency for responsive multiplayer games.
+description: Use when implementing or analyzing multiplayer synchronization, lag compensation, client prediction, interpolation, reconciliation, or state consistency.
 sasmp_version: "1.3.0"
 bonded_agent: 05-networking-multiplayer
 bond_type: PRIMARY_BOND
@@ -32,6 +30,18 @@ observability:
 ---
 
 # Multiplayer Synchronization
+
+## When to Use
+
+Use this skill when:
+
+- multiplayer state consistency, prediction, lag compensation, reconciliation, interpolation, or rollback is in scope
+- a networked gameplay feature needs synchronization guidance
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 ## Synchronization Techniques
 
@@ -240,3 +250,8 @@ LOCKSTEP (RTS Games):
 ---
 
 **Use this skill**: When building multiplayer systems, optimizing netcode, or fixing desync issues.
+
+## Guardrails
+
+- State the network model and authority boundary before proposing algorithms.
+- Do not hide latency or consistency tradeoffs behind generic synchronization terms.

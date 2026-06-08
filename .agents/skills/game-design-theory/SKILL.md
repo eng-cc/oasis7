@@ -1,9 +1,7 @@
 ---
 name: game-design-theory
 version: "2.0.0"
-description: |
-  Comprehensive game design theory covering MDA framework, player psychology,
-  balance principles, and progression systems. Master why games are fun.
+description: Use when analyzing or designing game systems through MDA, player psychology, balance principles, progression, motivation, or fun-factor theory.
 sasmp_version: "1.3.0"
 bonded_agent: 01-game-designer
 bond_type: PRIMARY_BOND
@@ -31,6 +29,18 @@ observability:
 ---
 
 # Game Design Theory
+
+## When to Use
+
+Use this skill when:
+
+- a game design decision needs theory-backed framing
+- the task involves motivation, MDA, progression, balance, retention, or player psychology
+
+Do not use this skill when:
+
+- the task does not match the trigger conditions above
+
 
 ## The MDA Framework
 
@@ -210,3 +220,8 @@ POLISH:
 ---
 
 **Use this skill**: When designing game systems, understanding player psychology, or balancing gameplay.
+
+## Guardrails
+
+- Use theory to frame decisions, not to override current repo/game evidence.
+- Route concrete gameplay conclusions through the matching professional slice when required.

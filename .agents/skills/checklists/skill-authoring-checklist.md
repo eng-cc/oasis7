@@ -15,10 +15,12 @@
 ## Body
 
 - [ ] 写清 `When to Use`
+- [ ] `SKILL.md` 保持入口大小；详细示例、命令矩阵、长参考材料已移入 supporting files
 - [ ] 写清 repo-specific workflow / pattern / helper
 - [ ] 写清 oasis7 相关路径、命令、review 边界或验证入口
 - [ ] 写清 guardrails / anti-patterns
-- [ ] 如需 supporting files，理由是 heavy reference 或 reusable tool，而不是把普通正文拆碎
+- [ ] 如需 supporting files，理由是 heavy reference 或 reusable tool，且 entrypoint 写明何时读取
+- [ ] 核心 workflow skill 已写 `Known Failure Modes`
 
 ## Truth Alignment
 
@@ -30,6 +32,7 @@
 ## Verification
 
 - [ ] 至少跑过一轮 repo-owned 验证，而不是只靠静态阅读
+- [ ] skill surface 已跑 `./scripts/lint-skills.sh`
 - [ ] 文档类改动已跑 `./scripts/doc-governance-check.sh`
 - [ ] 任务收口前已跑 `./scripts/pm/lint.sh`
 - [ ] diff 干净可提交：`git diff --check`

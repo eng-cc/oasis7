@@ -73,3 +73,10 @@ Do not collapse multi-check state into a blanket "ready" claim unless every requ
 - Never claim success from expected behavior alone.
 - Never infer "merge ready" from "thread resolved".
 - Never say tests passed unless you ran the relevant test command in this turn.
+
+## Known Failure Modes
+
+- Reusing yesterday's successful output or a previous agent's summary as fresh verification; rerun or clearly report that verification is stale.
+- Collapsing multiple required checks into one success claim when only one command ran; list each passed, failed, or blocked check.
+- Treating "no visible error" as test success without inspecting the command exit status and relevant output.
+- Calling a branch ready for PR before the pre-PR local role review packet is present when that gate applies.

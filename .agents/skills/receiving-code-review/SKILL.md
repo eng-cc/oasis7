@@ -61,6 +61,13 @@ If the PR purpose decision is `manual_packaging_ci_hold`, do not convert packagi
 - Comments about docs still need `./scripts/doc-governance-check.sh`.
 - Comments about PM flow still need `./scripts/pm/lint.sh`.
 
+## Known Failure Modes
+
+- Accepting review comments without checking whether they are valid against the current diff and repo truth.
+- Resolving a thread before the fix is pushed and the targeted verification has passed.
+- Treating thread resolution as proof that the whole PR is merge-ready.
+- Letting a review fix broaden into unrelated cleanup or silently revert sibling/user changes.
+
 ## Guardrails
 
 - "Thread resolved" is not the same as "PR ready to merge".

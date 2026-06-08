@@ -95,6 +95,13 @@ Use the same role-selection rule as `requesting-repo-owned-review`, including:
 - remove the task worktree
 - delete the task branch after leaving that worktree
 
+## Known Failure Modes
+
+- Stopping at PR creation for a normal PR instead of continuing through checks, comments, mergeability, merge, and cleanup.
+- Treating `REVIEW_REQUIRED` or `BEHIND` as automatic blockers when repo policy says they are informational by themselves.
+- Merging before checking unresolved comments, review threads, requested changes, and required checks.
+- Deleting or cleaning up the worktree before the merge and main-branch sync are actually complete.
+
 ## Guardrails
 
 - Do not land locally unless the user explicitly asks for local landing.
