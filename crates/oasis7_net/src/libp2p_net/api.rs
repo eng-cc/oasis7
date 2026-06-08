@@ -224,6 +224,14 @@ fn connected_or_active_transport_peers_from_healths(
         return admissible_connected_peers;
     }
     if !connected_peers.is_empty() {
+        let soft_only_connected = connected_peers
+            .iter()
+            .copied()
+            .filter(|peer_id| !blocked_peers.contains(peer_id))
+            .collect::<Vec<_>>();
+        if !soft_only_connected.is_empty() {
+            return soft_only_connected;
+        }
         return Vec::new();
     }
     active_transport_peers_from_healths(peer_healths, &blocked_peers, &soft_deprioritized_peers)

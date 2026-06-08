@@ -175,3 +175,46 @@ fn admissible_request_peers_prefers_soft_deprioritized_connected_peer_over_activ
         vec![connected_soft_peer]
     );
 }
+
+#[test]
+fn admissible_request_peers_keeps_connected_soft_bootstrap_peers_when_no_healthy_choice_exists() {
+    let network = Libp2pNetwork::new(Libp2pNetworkConfig::default());
+    let bootstrap_peer_a = PeerId::random();
+    let bootstrap_peer_b = PeerId::random();
+
+    {
+        let mut connected_peers = network
+            .connected_peers
+            .lock()
+            .expect("lock connected peers");
+        connected_peers.insert(bootstrap_peer_a);
+        connected_peers.insert(bootstrap_peer_b);
+    }
+    {
+        let mut peer_healths = network.peer_healths.lock().expect("lock peer healths");
+        for peer_id in [bootstrap_peer_a, bootstrap_peer_b] {
+            peer_healths.insert(
+                peer_id.to_string(),
+                test_peer_health(
+                    peer_id,
+                    PeerManagerHealthStatus::Blocked,
+                    vec![
+                        PeerManagerHealthIssue::MissingPeerRecord,
+                        PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
+                            observed_sources: 1,
+                            required_sources: 2,
+                        },
+                    ],
+                    Some("direct"),
+                ),
+            );
+        }
+    }
+
+    let mut expected = vec![bootstrap_peer_a, bootstrap_peer_b];
+    expected.sort_by_key(|peer| peer.to_bytes());
+    assert_eq!(
+        network.admissible_request_peers(),
+        expected
+    );
+}
