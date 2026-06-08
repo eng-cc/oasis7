@@ -39,7 +39,6 @@ scope = [
     "crates/oasis7_viewer/vite.software-safe.config.mjs",
     "crates/oasis7_viewer/scripts",
     "crates/oasis7_viewer/software_safe_src",
-    "crates/oasis7_viewer/pixel-world-bridge",
     "crates/oasis7_viewer/favicon.ico",
     "crates/pixel_world_bridge/Cargo.toml",
     "crates/pixel_world_bridge/src",

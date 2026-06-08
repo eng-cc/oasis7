@@ -38,7 +38,7 @@
   - SC-6: `doc/scripts/precommit/**` 等活跃脚本手册中的当前 crate 命令、依赖说明与 CI 帮助文案必须统一使用 `oasis7*` 口径；旧品牌包名仅允许保留在历史记录或外部原文引用中。
   - SC-7: Viewer Web 相关脚本文档只允许围绕 `software_safe` 静态入口、freshness gate 与 browser automation 维护当前真值；已移除的 native fallback / 贴图质检 / 视觉基线工具不得继续作为活跃脚本入口保留。
   - SC-8: repo-owned provider real-play helper 文档与脚本（公开 `site/skills/oasis7.md` 以及 `scripts/setup-provider-oasis7-runtime.sh`、`scripts/provider-parity-p0.sh`）中的当前 cargo 运行命令与入口路径必须统一使用 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在兼容说明、历史证据或外部原文引用中。
-  - SC-9: `run-game-test.sh`、`run-producer-playtest.sh` 与新的 worktree harness 主入口必须支持“每个 git worktree 一套独立端口、独立 bundle、独立日志 / 产物目录、独立浏览器 session”的隔离执行，不再默认复用全局端口与全局 bundle 目录。
+  - SC-9: `run-launcher-stack.sh`、`run-producer-playtest.sh` 与新的 worktree harness 主入口必须支持“每个 git worktree 一套独立端口、独立 bundle、独立日志 / 产物目录、独立浏览器 session”的隔离执行，不再默认复用全局端口与全局 bundle 目录。
   - SC-10: 仓库必须提供标准化 `git worktree` 创建入口，让每个新需求都能按统一命名、统一路径和统一失败语义落到独立 worktree，而不是依赖人工手写 `git worktree add`。
   - SC-11: 标准化 task worktree bootstrap 入口必须支持“创建后立刻检查模块 PRD / project / 当日 devlog”和“可选预热该 worktree 的隔离 harness”，让新需求能直接进入文档与验证闭环。
   - SC-12: 仓库必须提供标准化 task worktree GitHub PR 收口入口，让已完成需求能够在干净状态下统一执行 PR preflight / create；创建 PR 前必须已有 source-bound 的本地相关角色 subagent review evidence packet，并继续把 required checks、requested changes、comment/thread closeout、mergeability 与 GitHub merge path 作为 `main` 的服务端保护边界；普通 PR 创建后默认继续 watch required checks / mergeability / comments，`REVIEW_REQUIRED` 仅回报不阻塞，review-approval-only `BLOCKED` 在用户/task policy 明确授权时可走 repo admin merge path，失败修复并重推，存在 actionable comments 则回复/整改/resolve，通过且 comments/thread 已收口后合入与清理。
@@ -117,7 +117,7 @@
   - AC-7: scripts 模块不得继续维护已删除的 `capture-viewer-frame`、texture inspector、theme preview 等 Viewer 3D/视觉 QA 工具专题。
   - AC-8: `site/skills/oasis7.md`、`scripts/setup-provider-oasis7-runtime.sh` 与 `scripts/provider-parity-p0.sh` 关联的当前 `cargo run -p` 命令和入口路径必须写为 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在兼容说明、历史证据或外部原文引用中。
   - AC-9: 新增 `scripts/worktree-harness.sh` 作为 worktree 级主入口，至少提供 `up/down/status/url/logs/smoke` 六个动作，并把当前 worktree 的运行状态写入稳定 `state.json`。
-  - AC-10: `scripts/run-game-test.sh` 必须支持把 `run-id`、`output-dir`、`meta-file` 与 ready payload 交给上层 harness 注入，避免上层通过 grep stdout 猜测 URL/日志路径。
+  - AC-10: `scripts/run-launcher-stack.sh` 必须支持把 `run-id`、`output-dir`、`meta-file` 与 ready payload 交给上层 harness 注入，避免上层通过 grep stdout 猜测 URL/日志路径。
   - AC-11: `scripts/run-producer-playtest.sh` 默认 bundle 根目录必须可按 worktree 隔离，不再强制复用全局 `output/release/game-launcher-producer-local`。
   - AC-12: 新增 `scripts/new-task-worktree.sh`，默认根据 `<module> <task>` 生成稳定分支名与 worktree 路径，并执行 `git worktree add`。
   - AC-13: `scripts/new-task-worktree.sh` 默认在源 worktree 脏时阻断，并给出显式 override；对已存在路径、已被其他 worktree 占用的分支和非法空 slug 提供清晰失败语义。
@@ -163,7 +163,7 @@
   - `doc/scripts/precommit/`
   - `doc/scripts/viewer-tools/`
   - `doc/scripts/wasm/`
-  - `scripts/run-game-test.sh`
+  - `scripts/run-launcher-stack.sh`
   - `scripts/run-producer-playtest.sh`
   - `scripts/worktree-harness.sh`
   - `scripts/cargo-dev.sh`
@@ -224,7 +224,7 @@
 - Technical Risks:
   - 风险-1: 历史脚本行为差异导致切换成本。
   - 风险-2: 入口过多导致文档与实际调用脱节。
-  - 风险-3: 若 worktree harness 只包壳而不下沉到 `run-game-test.sh` / `run-producer-playtest.sh` 契约层，后续上层脚本仍会靠 grep stdout 和全局目录工作，隔离性会继续失真。
+  - 风险-3: 若 worktree harness 只包壳而不下沉到 `run-launcher-stack.sh` / `run-producer-playtest.sh` 契约层，后续上层脚本仍会靠 grep stdout 和全局目录工作，隔离性会继续失真。
   - 风险-4: 若 worktree 创建仍停留在口头规范而无标准脚本，团队会继续混用手工 branch/path 命名，导致多任务并行难以搜索、回收与审计。
   - 风险-5: 若 `--with-harness` 破坏 JSON/stdout 纯度，agent 侧自动化会从“稳定入口”退回“半结构化抓取”。
   - 风险-6: 若 GitHub PR 收口仍依赖手工 push / gh 序列，不同人会混用本地 landing、直接 push 与半手工 PR 路径，导致默认保护边界和 task worktree 回收时机失控。

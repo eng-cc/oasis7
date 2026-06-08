@@ -60,7 +60,7 @@ require_file() {
 software_safe_html="$VIEWER_ROOT/software_safe.html"
 viewer_js="$VIEWER_ROOT/viewer.js"
 compat_js="$VIEWER_ROOT/software_safe.js"
-pixel_world_bridge_dir="$VIEWER_ROOT/pixel-world-bridge"
+pixel_world_bridge_dir="$VIEWER_ROOT/dist/pixel-world-bridge"
 
 require_file "$software_safe_html"
 require_file "$viewer_js"

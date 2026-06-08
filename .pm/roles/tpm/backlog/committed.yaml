@@ -35,3 +35,22 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_6f255d6605fb429e964780141ed8a6e0.yaml
+  - task_uid: task_a3e70249b4754bf7a3d896541c2ffc07
+    title: "recover PR path for pixel world overlay fix"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance: []
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_a3e70249b4754bf7a3d896541c2ffc07.yaml
+  - task_uid: task_c800f65c39034458b6e48b970f019250
+    title: "launch latest main launcher for local playtest"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "Latest local main is available in an isolated task worktree and launcher stack can be started for manual playtest."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_c800f65c39034458b6e48b970f019250.yaml

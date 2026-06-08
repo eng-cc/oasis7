@@ -32,11 +32,9 @@ printf 'export default {};\n' > "$tmp_repo/crates/oasis7_viewer/vite.software-sa
 mkdir -p \
   "$tmp_repo/crates/oasis7_viewer/scripts" \
   "$tmp_repo/crates/oasis7_viewer/software_safe_src" \
-  "$tmp_repo/crates/oasis7_viewer/pixel-world-bridge" \
   "$tmp_repo/crates/pixel_world_bridge/src"
 printf 'console.log("finalize");\n' > "$tmp_repo/crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs"
 printf 'console.log("src");\n' > "$tmp_repo/crates/oasis7_viewer/software_safe_src/main.jsx"
-printf 'export function createPixelWorldBridge() {}\n' > "$tmp_repo/crates/oasis7_viewer/pixel-world-bridge/pixel_world_bridge.js"
 printf 'export function createPixelWorldBridge() { return \"old\"; }\n' > "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/pixel_world_bridge.js"
 printf 'icon\n' > "$tmp_repo/crates/oasis7_viewer/favicon.ico"
 printf 'icon\n' > "$tmp_repo/crates/oasis7_viewer/dist/favicon.ico"
@@ -60,7 +58,6 @@ touch -d '2026-03-17 00:00:00' \
   "$tmp_repo/crates/oasis7_viewer/software_safe.js" \
   "$tmp_repo/crates/oasis7_viewer/software_safe.html" \
   "$tmp_repo/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
-  "$tmp_repo/crates/oasis7_viewer/pixel-world-bridge/pixel_world_bridge.js" \
   "$tmp_repo/crates/oasis7_viewer/favicon.ico"
 
 cat > "$tmp_repo/bin/npm" <<'NPM'

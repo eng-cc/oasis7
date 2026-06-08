@@ -277,9 +277,9 @@ PY
     cp "$repo_root/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
       "$rebuilt_dir/software_safe_first_agent_claim_evidence.html"
     cp "$repo_root/crates/oasis7_viewer/favicon.ico" "$rebuilt_dir/favicon.ico"
-    if [[ -d "$repo_root/crates/oasis7_viewer/pixel-world-bridge" ]]; then
+    if [[ -d "$repo_root/crates/oasis7_viewer/dist/pixel-world-bridge" ]]; then
       rm -rf "$rebuilt_dir/pixel-world-bridge"
-      cp -R "$repo_root/crates/oasis7_viewer/pixel-world-bridge" "$rebuilt_dir/pixel-world-bridge"
+      cp -R "$repo_root/crates/oasis7_viewer/dist/pixel-world-bridge" "$rebuilt_dir/pixel-world-bridge"
     fi
   fi
   viewer_web_dist_write_manifest "$repo_root" "$rebuilt_dir"

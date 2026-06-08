@@ -151,7 +151,7 @@
 
 ### L4A synthetic 内部闭环层（Web 为默认）
 - 目标：验证 formal player surface 的真实可用性（加载、交互、状态可见、无 console error），并在此基础上完成 synthetic internal playability review。
-- 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。这一层属于 `L4A synthetic`，可以产出 UI 闭环、subagent review、persona panel 等内部模拟证据。`scripts/run-game-test.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断。launcher stack 与 `--with-harness` 预热都走 formal gameplay 的 active LLM path；`--no-llm` 只保留给直接 `oasis7_viewer_live` 观战/调试排障。
+- 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。这一层属于 `L4A synthetic`，可以产出 UI 闭环、subagent review、persona panel 等内部模拟证据。`scripts/run-launcher-stack.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断。launcher stack 与 `--with-harness` 预热都走 formal gameplay 的 active LLM path；`--no-llm` 只保留给直接 `oasis7_viewer_live` 观战/调试排障。
 - 完整 `L4` scaffold：先运行 `./scripts/prepare-playability-l4-review.sh --with-l4a-stack`。它会在当前 worktree 自己的 `output/harness/<worktree_id>/artifacts/playability-l4-<timestamp>/` 下生成 `l4-review-packet.md`、`role-review-cards/*.md`、`persona-cards/*.md`、`l4-summary.md`、`commands.sh`、`manifest.json`，并在 `evidence/` 下冻结当前 `L4A` harness state / URL。这个入口继承 formal gameplay 的 active LLM provider preflight；若当前环境缺少 `OASIS7_LLM_MODEL` / 等价 `config.toml`，会在 harness 启动前 fail-fast。
 - 最低完成定义：至少回填 review packet、`producer_system_designer` / `qa_engineer` 角色卡，以及命中的其余角色卡与 persona cards；只跑 harness / S6，不回填这些卡片，不算 `L4A` 完成。
 - 结论边界：这一层可以回答“synthetic 看起来会不会继续玩”，不能直接回答“真人是否真的想继续玩”。
@@ -164,7 +164,7 @@
 - 最低完成定义：脚本实际跑过、agent 实际游玩过、`evidence/l4b-agent-*/l4b-agent-summary.json` 与 `l4b-agent-playtest-card.md`（或等价正式卡片）已落盘，并在 `l4-summary.md` 明确写出 `L4B` verdict；只有启动脚本，没有 agent 主动操作或 summary，不算完整 `L4B`。
 - 结论边界：这一层可以回答“agent 在真实操作链路里是否表现出继续玩的倾向”，并应尽量逼近真人评审效果，但仍不能自动等价于 `L5` 真实人类或外部市场验证。
 - 可选内部真人佐证：制作人试玩 / QA headed rerun 仍可沿用 `./scripts/run-producer-playtest.sh`；如执行，必须把结果写入 `optional-internal-human-corroboration.md` 或等价正式卡片，并在 `l4-summary.md` 里明确它是 `L4B` corroboration / contradiction，而不是新层级。只有人类试玩而没有对 `L4B` 的对照说明，不算合格佐证。
-- source-tree `oasis7-run.sh play` 与 `run-game-test.sh` 的 Viewer Web 开发态入口都必须走 freshness gate；当 `crates/oasis7_viewer/index.html`、`software_safe.html`、`software_safe.js`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist，而不是继续拿 stale `dist` 给 Web 闭环下结论。
+- source-tree `oasis7-run.sh play` 与 `run-launcher-stack.sh` 的 Viewer Web 开发态入口都必须走 freshness gate；当 `crates/oasis7_viewer/index.html`、`software_safe.html`、`software_safe.js`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist，而不是继续拿 stale `dist` 给 Web 闭环下结论。
 
 ### L5 真实人类 / 受控线上验证层
 - 目标：验证真实人类或受控外部玩家在真实时间、注意力和机会成本约束下，是否仍愿意继续玩；这是 `L4B` 之上的正式验证层。
@@ -399,8 +399,8 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先查看 `window.__AW_TEST__.getState().renderMode`。
   - `renderMode=viewer`（或兼容 alias `software_safe`）：允许继续做最小闭环验证（连接、选择目标、自然实时推进；若运行态被 blocker 卡住，则要求 blocker 文案显式可见）。
   - `renderMode` 既不是 `viewer` 也不是兼容 alias `software_safe`：仍按图形环境阻断处理；默认先使用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件路径。
-- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B embodied-agent`，优先执行 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json`，由它内部调用 `./scripts/run-producer-playtest.sh --open-headed` 并自动采集证据，再审阅/补齐 `l4b-agent-playtest-card.md`。若需要内部人类 spot-check，只能沿用同一入口并把结果写进 `optional-internal-human-corroboration.md` 或等价正式卡片，作为 `L4B` 校准附录。仅执行启动脚本、不产出 `L4B` summary/card，不算 `L4B` 完成；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-game-test.sh --bundle-dir <bundle>` 启动。
-- agent / QA 若只是想在当前 worktree 内起一套隔离回归栈，优先执行 `./scripts/worktree-harness.sh up`，然后通过 `./scripts/worktree-harness.sh url` / `status --json` / `logs` 获取 URL 与状态；`run-game-test.sh` 继续作为该 harness 的底层启动器，不应再被当作并行 worktree 回归的顶层主入口。
+- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B embodied-agent`，优先执行 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json`，由它内部调用 `./scripts/run-producer-playtest.sh --open-headed` 并自动采集证据，再审阅/补齐 `l4b-agent-playtest-card.md`。若需要内部人类 spot-check，只能沿用同一入口并把结果写进 `optional-internal-human-corroboration.md` 或等价正式卡片，作为 `L4B` 校准附录。仅执行启动脚本、不产出 `L4B` summary/card，不算 `L4B` 完成；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-launcher-stack.sh --bundle-dir <bundle>` 启动。
+- agent / QA 若只是想在当前 worktree 内起一套隔离回归栈，优先执行 `./scripts/worktree-harness.sh up`，然后通过 `./scripts/worktree-harness.sh url` / `status --json` / `logs` 获取 URL 与状态；`run-launcher-stack.sh` 继续作为该 harness 的底层启动器，不应再被当作并行 worktree 回归的顶层主入口。
 - 不要把 Viewer 页面专用的 `agent-browser` 操作步骤直接套用到 launcher 控制面动作执行上。
 - 涉及 `Explorer / Transfer` 的闭环时，先准备可观测数据，再执行查询与字段断言；不得只以“页面打开了/接口返回 200”判定通过。
 - 防误用约束：
@@ -444,7 +444,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
 ./scripts/worktree-harness.sh down
 ./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local
 ./scripts/check-active-llm-provider.sh --pretty
-./scripts/run-game-test.sh --bundle-dir output/release/game-launcher-local --with-llm
+./scripts/run-launcher-stack.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/run-game-test-ab.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/viewer-post-onboarding-qa.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/viewer-post-onboarding-headless-smoke.sh --bundle-dir output/release/game-launcher-local --with-llm
@@ -453,7 +453,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 sna
 ./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --with-llm
 ```
   - active-LLM 预检：
-    `run-game-test.sh` 现在会在启动 launcher 前先跑一次 active LLM provider probe，复用同一套 `config.toml` / `OASIS7_LLM_*` 配置，并同时验证 Responses hello 文本响应与 required tool-call 合约；若 provider/model/auth/base URL 当前不可用，或模型能回文本但不能稳定返回 tool call，会直接 fail-fast，不再等到首个 `step` 才暴露。需要故意保留“stack 可启动但 formal lane 在首步 blocked”的负向验证时，显式加 `--skip-llm-provider-preflight`。
+    `run-launcher-stack.sh` 现在会在启动 launcher 前先跑一次 active LLM provider probe，复用同一套 `config.toml` / `OASIS7_LLM_*` 配置，并同时验证 Responses hello 文本响应与 required tool-call 合约；若 provider/model/auth/base URL 当前不可用，或模型能回文本但不能稳定返回 tool call，会直接 fail-fast，不再等到首个 `step` 才暴露。需要故意保留“stack 可启动但 formal lane 在首步 blocked”的负向验证时，显式加 `--skip-llm-provider-preflight`。
 
 ### S7：场景矩阵回归套件（L1 + L4）
 ```bash

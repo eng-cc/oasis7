@@ -10,7 +10,7 @@
 - Problem Statement: 多个运行脚本仍依赖 `oasis7_viewer_live` 旧节点参数链路（`--node-*`/`--topology`/`--reward-runtime-*`），在新启动架构下已失效且错误提示不清晰。
 - Proposed Solution: 将日常脚本迁移到 `oasis7_game_launcher`，并对尚未重构完成的长跑脚本提供显式阻断与迁移指引，统一启动口径。
 - Success Criteria:
-  - SC-1: `run-game-test.sh` 与当时仍存在的 `viewer-release-qa-loop.sh` 已迁移到 `oasis7_game_launcher` 调用链路；当前 Web 主链路只保留 `software_safe` 相关回归脚本。
+  - SC-1: `run-launcher-stack.sh` 与当时仍存在的 `viewer-release-qa-loop.sh` 已迁移到 `oasis7_game_launcher` 调用链路；当前 Web 主链路只保留 `software_safe` 相关回归脚本。
   - SC-2: `s10-five-node-game-soak.sh` 与 `p2p-longrun-soak.sh` 在旧参数路径下启动前明确失败并给出迁移方向。
   - SC-3: 文档与手册口径同步到“单机优先 `oasis7_game_launcher`、多节点建议 `oasis7_chain_runtime`”。
   - SC-4: 迁移后脚本失败信息可定位，不再出现隐式参数失效。
@@ -62,7 +62,7 @@
 ## 4. Technical Specifications
 - Architecture Overview: 启动入口分层为“单机场景 `oasis7_game_launcher` + 多节点场景 `oasis7_chain_runtime`”，脚本按场景选择入口并对失效链路 fail-fast。
 - Integration Points:
-  - `scripts/run-game-test.sh`
+  - `scripts/run-launcher-stack.sh`
   - 历史上的 `scripts/viewer-release-qa-loop.sh`
   - `scripts/s10-five-node-game-soak.sh`
   - `scripts/p2p-longrun-soak.sh`

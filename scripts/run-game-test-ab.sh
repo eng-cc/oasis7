@@ -32,7 +32,7 @@ Options:
   -h, --help                Show this help
 
 If --url is omitted, the script starts:
-  ./scripts/run-game-test.sh [remaining args...]
+  ./scripts/run-launcher-stack.sh [remaining args...]
 
 Preferred producer/release example:
   ./scripts/run-game-test-ab.sh --bundle-dir output/release/game-launcher-local --no-llm
@@ -426,14 +426,14 @@ trap cleanup EXIT INT TERM
 if [[ -z "$GAME_URL" ]]; then
   {
     echo "### [bootstrap_stack] $(date '+%H:%M:%S')"
-    echo "./scripts/run-game-test.sh ${STACK_ARGS[*]}"
+    echo "./scripts/run-launcher-stack.sh ${STACK_ARGS[*]}"
     echo
   } | tee -a "$AB_LOG" >/dev/null
 
   if command -v stdbuf >/dev/null 2>&1; then
-    stdbuf -oL -eL ./scripts/run-game-test.sh "${STACK_ARGS[@]}" >"$RUN_GAME_TEST_LOG" 2>&1 &
+    stdbuf -oL -eL ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$RUN_GAME_TEST_LOG" 2>&1 &
   else
-    ./scripts/run-game-test.sh "${STACK_ARGS[@]}" >"$RUN_GAME_TEST_LOG" 2>&1 &
+    ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$RUN_GAME_TEST_LOG" 2>&1 &
   fi
   STACK_PID=$!
 
@@ -450,7 +450,7 @@ if [[ -z "$GAME_URL" ]]; then
   done
 
   if [[ -z "$GAME_URL" ]]; then
-    echo "error: timeout waiting for game URL from run-game-test.sh" >&2
+    echo "error: timeout waiting for game URL from run-launcher-stack.sh" >&2
     tail -n 120 "$RUN_GAME_TEST_LOG" >&2 || true
     exit 1
   fi
