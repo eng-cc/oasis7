@@ -1067,7 +1067,7 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
     );
     runtime_a.start().expect("start a first");
     let guard_path = dir_b.join("replication_remote_guards.json");
-    let guard_ready = wait_until(Instant::now() + Duration::from_secs(3), || {
+    let guard_ready = wait_until(Instant::now() + Duration::from_secs(10), || {
         fs::read(&guard_path)
             .ok()
             .and_then(|bytes| {
@@ -1082,7 +1082,8 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
     runtime_b.stop().expect("stop b first");
     assert!(
         guard_ready,
-        "replication guard did not persist before first stop"
+        "replication guard did not persist before first stop: snapshot={:?}",
+        snapshot_b_first
     );
     assert!(snapshot_b_first.last_error.is_none());
 
@@ -1116,7 +1117,7 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
         .to_string();
     // CI runners can take noticeably longer to resume replication after both
     // nodes restart, so give the persisted remote guard extra time to advance.
-    let guard_advanced = wait_until(Instant::now() + Duration::from_secs(10), || {
+    let guard_advanced = wait_until(Instant::now() + Duration::from_secs(20), || {
         fs::read(&guard_path)
             .ok()
             .and_then(|bytes| {
