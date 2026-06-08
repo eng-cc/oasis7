@@ -74,8 +74,8 @@ Example:
 - Task UID: task_deabe05bbc894f569f0caaf5db5970a7
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-subagent-standing-authorization-wording
 - Source Branch: task/engineering-subagent-standing-authorization-wording
-- Source Head: 212a92a8ac052b7719212ab2822617211101c8cf
-- Comparison Ref: origin/main
+- Source Head: f5cd54ae6d4d2c0eb2881a774d157248f8298b38
+- Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `AGENTS.md`; `doc/engineering/workflow/source-of-truth.md`; `.pm/tasks/task_deabe05bbc894f569f0caaf5db5970a7.yaml`; `.pm/tasks/task_deabe05bbc894f569f0caaf5db5970a7.execution.md`
 - Role Selection Basis: governance wording changes affect agent delegation/subagent behavior and role attribution; selected `agent_engineer`; no UI/gameplay/runtime/liveops surfaces touched; no QA slice required beyond recorded verification evidence.
 - Review Roles: agent_engineer
