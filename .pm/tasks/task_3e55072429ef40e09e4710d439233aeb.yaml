@@ -1,0 +1,26 @@
+task_uid: task_3e55072429ef40e09e4710d439233aeb
+title: "fix bevy pixel world agent selection click"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-viewer-bevy-agent-selection-click
+execution_log_path: .pm/tasks/task_3e55072429ef40e09e4710d439233aeb.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/world-simulator/prd.md
+doc_refs:
+  - doc/world-simulator/project.md
+  - doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-08T21:35:33+08:00
+last_started_at: 2026-06-08T20:24:26+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/pixel_world_runtime_module_wasm.test.js && npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/pixel_world_host.test.jsx && npm --prefix crates/oasis7_viewer run build:software-safe && git diff --check"
+last_verified_at: 2026-06-08T21:35:32+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-08T21:35:33+08:00
