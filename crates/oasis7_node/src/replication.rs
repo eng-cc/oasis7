@@ -1,8 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-
+use crate::{NodeConsensusAction, NodeError, PosConsensusStatus, PosDecision};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use oasis7_distfs::{
     apply_replication_record, blake3_hex, build_replication_record_with_epoch, BlobStore as _,
@@ -11,9 +7,10 @@ use oasis7_distfs::{
 };
 use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
-
-use crate::{NodeConsensusAction, NodeError, PosConsensusStatus, PosDecision};
-
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 const REPLICATION_VERSION: u8 = 1;
 const COMMIT_FILE_PREFIX: &str = "consensus/commits";
 const COMMIT_MESSAGE_DIR: &str = "replication_commit_messages";
@@ -23,7 +20,6 @@ const DEFAULT_MAX_HOT_COMMIT_MESSAGES: usize = 4096;
 pub(crate) const REPLICATION_FETCH_COMMIT_PROTOCOL: &str =
     "/aw/node/replication/fetch-commit/1.0.0";
 pub(crate) const REPLICATION_FETCH_BLOB_PROTOCOL: &str = "/aw/node/replication/fetch-blob/1.0.0";
-
 mod commit_retention;
 #[path = "replication_support.rs"]
 mod support;
@@ -44,7 +40,6 @@ use self::support::{
     write_json_pretty,
 };
 pub(crate) use self::support::{load_blob_from_root, load_commit_message_from_root};
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeReplicationConfig {
     pub root_dir: PathBuf,
@@ -53,6 +48,7 @@ pub struct NodeReplicationConfig {
     enforce_signature: bool,
     remote_writer_allowlist: BTreeSet<String>,
     fetch_requester_allowlist: BTreeSet<String>,
+    allow_any_signed_fetch_requester: bool,
     max_hot_commit_messages: usize,
 }
 
@@ -71,6 +67,7 @@ impl NodeReplicationConfig {
             enforce_signature: false,
             remote_writer_allowlist: BTreeSet::new(),
             fetch_requester_allowlist: BTreeSet::new(),
+            allow_any_signed_fetch_requester: false,
             max_hot_commit_messages: DEFAULT_MAX_HOT_COMMIT_MESSAGES,
         })
     }
@@ -125,6 +122,11 @@ impl NodeReplicationConfig {
         }
         self.fetch_requester_allowlist = normalized;
         Ok(self)
+    }
+
+    pub fn with_any_signed_fetch_requester_allowed(mut self, allowed: bool) -> Self {
+        self.allow_any_signed_fetch_requester = allowed;
+        self
     }
 
     pub fn with_max_hot_commit_messages(
@@ -257,12 +259,13 @@ impl NodeReplicationConfig {
     ) -> Result<(), NodeError> {
         let require_auth = self.enforce_consensus_signature()
             || !self.fetch_requester_allowlist.is_empty()
+            || self.allow_any_signed_fetch_requester
             || requester_public_key_hex.is_some()
             || requester_signature_hex.is_some();
         if !require_auth {
             return Ok(());
         }
-        if self.fetch_requester_allowlist.is_empty() {
+        if self.fetch_requester_allowlist.is_empty() && !self.allow_any_signed_fetch_requester {
             return Err(NodeError::Replication {
                 reason: format!(
                     "{request_label} authorization failed: replication fetch requester allowlist is empty while signature enforcement is enabled"
@@ -291,6 +294,9 @@ impl NodeReplicationConfig {
             signing_payload,
             request_label,
         )?;
+        if self.allow_any_signed_fetch_requester {
+            return Ok(());
+        }
         if !self
             .fetch_requester_allowlist
             .contains(normalized_requester_public_key_hex.as_str())
@@ -309,15 +315,12 @@ impl NodeReplicationConfig {
     fn store_root(&self) -> PathBuf {
         self.root_dir.join("store")
     }
-
     fn guard_state_path(&self) -> PathBuf {
         self.root_dir.join("replication_guard.json")
     }
-
     fn remote_guard_state_path(&self) -> PathBuf {
         self.root_dir.join("replication_remote_guards.json")
     }
-
     fn writer_state_path(&self, node_id: &str) -> PathBuf {
         self.root_dir
             .join(format!("replication_writer_state_{node_id}.json"))
@@ -1149,7 +1152,6 @@ impl ReplicationRuntime {
         Ok(())
     }
 }
-
 fn checked_replication_counter_increment(
     current: u64,
     field: &str,
@@ -1161,7 +1163,6 @@ fn checked_replication_counter_increment(
             reason: format!("{field} overflow while {context}: current={current}"),
         })
 }
-
 fn seeded_writer_epoch(writer_id: Option<&str>) -> u64 {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1170,7 +1171,6 @@ fn seeded_writer_epoch(writer_id: Option<&str>) -> u64 {
         .unwrap_or(DEFAULT_WRITER_EPOCH);
     seeded_writer_epoch_from_millis(now_ms, writer_id)
 }
-
 fn seeded_writer_epoch_from_millis(now_ms: u64, writer_id: Option<&str>) -> u64 {
     const WRITER_EPOCH_NONCE_BITS: u32 = 16;
     let base = now_ms.max(DEFAULT_WRITER_EPOCH);
@@ -1184,7 +1184,6 @@ fn seeded_writer_epoch_from_millis(now_ms: u64, writer_id: Option<&str>) -> u64 
         .and_then(|shifted| shifted.checked_add(writer_nonce))
         .unwrap_or(base.max(DEFAULT_WRITER_EPOCH))
 }
-
 fn commit_height_from_payload(payload: &[u8]) -> Option<u64> {
     serde_json::from_slice::<ReplicatedCommitPayload>(payload)
         .ok()

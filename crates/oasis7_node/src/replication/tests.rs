@@ -351,6 +351,51 @@ fn authorize_fetch_blob_request_rejects_requester_outside_allowlist() {
 }
 
 #[test]
+fn signed_fetch_requester_open_policy_does_not_authorize_remote_writer() {
+    let dir = temp_dir("signed-fetch-open-policy");
+    let (local_private_hex, local_public_hex) = deterministic_keypair_hex(146);
+    let (requester_private_hex, requester_public_hex) = deterministic_keypair_hex(147);
+    let (_, writer_public_hex) = deterministic_keypair_hex(148);
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_signing_keypair(local_private_hex, local_public_hex)
+        .expect("signing keypair")
+        .with_remote_writer_allowlist(vec![writer_public_hex])
+        .expect("writer allowlist")
+        .with_any_signed_fetch_requester_allowed(true);
+    let signer = ReplicationSigningKey {
+        signing_key: signing_key_from_hex(requester_private_hex.as_str()).expect("signing key"),
+        public_key_hex: requester_public_hex.clone(),
+    };
+    let mut request = FetchCommitRequest {
+        world_id: "world-signed-fetch-open".to_string(),
+        height: 11,
+        requester_public_key_hex: Some(requester_public_hex.clone()),
+        requester_signature_hex: None,
+    };
+    request.requester_signature_hex =
+        Some(sign_fetch_commit_request(&request, &signer).expect("sign fetch"));
+
+    config
+        .authorize_fetch_commit_request(&request)
+        .expect("signed fetch requester should be admitted by open read policy");
+
+    let runtime = ReplicationRuntime::new(&config, "node-open-read").expect("runtime");
+    let message = signed_remote_message(147, "world-signed-fetch-open", "node-a", 1);
+    let err = runtime
+        .validate_remote_message_for_observe("node-open-read", "world-signed-fetch-open", &message)
+        .expect_err("open read requester must not be treated as writer");
+    assert!(matches!(
+        err,
+        NodeError::Replication { reason }
+            if reason.contains("replication remote writer is not authorized")
+                && reason.contains(requester_public_hex.as_str())
+    ));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn fetch_requester_allowlist_does_not_authorize_remote_writer() {
     let dir = temp_dir("fetch-requester-is-not-writer");
     let (_, fetcher_public_hex) = deterministic_keypair_hex(47);

@@ -11,6 +11,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::SigningKey;
+use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::observability::{emit_stderr_or_event, init_tracing};
 use oasis7::runtime::{
     NodeAssetBalance, NodeRewardMintRecord, ReleaseSecurityPolicy, RewardAssetConfig,
@@ -325,6 +326,8 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         effective_validator_signer_bindings.values(),
         &options.replication_remote_writer_public_keys,
     );
+    let allow_any_signed_fetch_requester =
+        network_tier_allows_open_observer_fetch(options.loaded_network_tier_manifest.as_ref());
     config = config.with_replication(build_node_replication_config(
         options.node_id.as_str(),
         paths.replication_root.as_path(),
@@ -332,6 +335,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         &storage_profile_config,
         replication_remote_writer_allowlist.as_slice(),
         replication_fetch_requester_allowlist.as_slice(),
+        allow_any_signed_fetch_requester,
     )?);
     if let Some(report) = startup_reconcile::reconcile_startup_state_from_execution_latest(
         &paths,
@@ -590,6 +594,7 @@ fn build_node_replication_config(
     storage_profile: &StorageProfileConfig,
     remote_writer_allowlist: &[String],
     fetch_requester_allowlist: &[String],
+    allow_any_signed_fetch_requester: bool,
 ) -> Result<NodeReplicationConfig, String> {
     let signer_keypair = derive_node_consensus_signer_keypair(node_id, keypair)?;
     NodeReplicationConfig::new(replication_root.to_path_buf())
@@ -616,6 +621,7 @@ fn build_node_replication_config(
                 cfg.with_fetch_requester_allowlist(fetch_requester_allowlist.to_vec())
             }
         })
+        .map(|cfg| cfg.with_any_signed_fetch_requester_allowed(allow_any_signed_fetch_requester))
         .map_err(|err| format!("failed to build node replication config: {err:?}"))
 }
 
@@ -637,6 +643,16 @@ fn build_replication_fetch_requester_allowlist<'a>(
     allowlist.sort();
     allowlist.dedup();
     allowlist
+}
+
+fn network_tier_allows_open_observer_fetch(
+    loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
+) -> bool {
+    let Some(loaded) = loaded_network_tier_manifest else {
+        return false;
+    };
+    loaded.manifest.tier == "public_testnet"
+        && loaded.manifest.validator_policy.allow_observer_nodes
 }
 
 fn attach_default_replication_network(

@@ -364,7 +364,7 @@ observer seed/state-sync bundle 至少要覆盖：
 
 ### Required prep
 1. observer env 使用当前 deployment truth bootstrap peer ids
-2. observer env 使用当前 validator writer allowlist
+2. observer env 使用当前 validator writer allowlist；fetch requester 不再需要逐个 observer 手动加 allowlist，只要 validators 运行的 runtime 对 `public_testnet` + `allow_observer_nodes=true` 开启开放签名读取策略
 3. observer manifest 指向当前 deployment truth genesis/manifest
 4. observer state 先 reset，再导入 verified seed/state-sync bundle
 5. local observer 使用的 bundle copy 必须把 `runtime_build.sha256` 刷成当前本机 runtime 真值；不要直接复用 validator Linux package hash 去校验本地 macOS debug/release binary
@@ -392,7 +392,7 @@ curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committ
 出现以下任一项，observer 接入失败，回到 Phase E：
 
 1. `WrongPeerId`
-2. `fetch requester is not authorized`
+2. `fetch requester is not authorized`；这通常表示 validator 仍在旧 runtime、manifest 不是 `public_testnet`、`allow_observer_nodes` 未开启，或 requester 签名无效，而不是需要手动登记每个 observer
 3. `BlobNotFound`
 4. `height 1 peer commit execution mismatch`
 5. `network tier runtime bundle hash mismatch`

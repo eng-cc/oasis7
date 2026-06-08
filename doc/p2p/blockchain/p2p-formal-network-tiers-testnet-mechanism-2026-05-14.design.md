@@ -55,6 +55,8 @@
 - 规则-2: `public_testnet` 必须显式具备 public RPC、explorer、guarded faucet 与 reset policy。
 - 规则-3: `mainnet` 必须显式具备 `faucet_mode=none`、`reset_policy=frozen`、`value_semantics=production`，并把 `MAINNET-1~4` 固定到 `required_gates`。
 - 规则-4: 这轮新增的 manifest validate 既检查字段存在性，也检查 tier 语义组合，避免“字段都齐了但还是 testnet/mainnet 混写”。
+- 规则-5: `public_testnet` 且 `validator_policy.allow_observer_nodes=true` 时，observer/read-only fetch 准入采用开放签名策略：任意具备有效 requester 签名的节点可以读取 commit/blob 并完成 observer 同步，不需要手动刷新 validator 的 fetch requester allowlist。
+- 规则-6: validator/remote writer 准入仍由 validator set、governance registry 或显式 writer allowlist 控制；observer 自动入网不得授予 gossip write、共识签名或 validator 身份。
 
 ## 与现有专题的关系
 - `p2p-shared-network-release-train-minimum-2026-03-24`：

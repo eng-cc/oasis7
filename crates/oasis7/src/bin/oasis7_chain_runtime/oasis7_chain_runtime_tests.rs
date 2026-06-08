@@ -6,11 +6,16 @@ use super::{
     build_live_node_network_policy_recommendation, build_node_replication_config,
     build_replication_fetch_requester_allowlist, build_replication_remote_writer_allowlist,
     build_validator_signer_public_keys, derive_node_consensus_signer_keypair,
-    derive_node_libp2p_identity_keypair_config, node_keypair_config, parse_options,
-    parse_validator_spec, CliOptions, DEFAULT_NODE_ID, DEFAULT_REPLICATION_NETWORK_LISTEN,
-    DEFAULT_STATUS_BIND,
+    derive_node_libp2p_identity_keypair_config, network_tier_allows_open_observer_fetch,
+    node_keypair_config, parse_options, parse_validator_spec, CliOptions, DEFAULT_NODE_ID,
+    DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
 };
 use ed25519_dalek::SigningKey;
+use oasis7::network_tier_manifest::{
+    LoadedNetworkTierManifest, NetworkTierClaimsPolicy, NetworkTierEndpointPolicy,
+    NetworkTierManifest, NetworkTierPromotionPolicy, NetworkTierRuntimeRefs,
+    NetworkTierTokenPolicy, NetworkTierValidatorPolicy, NETWORK_TIER_MANIFEST_SCHEMA_V1,
+};
 use oasis7::runtime::World as RuntimeWorld;
 use oasis7_node::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
@@ -828,6 +833,7 @@ fn build_node_replication_config_uses_storage_profile_budget() {
         &storage_profile,
         &[],
         &[],
+        false,
     )
     .expect("replication config should build");
 
@@ -890,6 +896,72 @@ fn build_replication_fetch_requester_allowlist_combines_validator_and_explicit_k
         allowlist,
         vec!["aaaa".to_string(), "bbbb".to_string(), "cccc".to_string()]
     );
+}
+
+#[test]
+fn public_testnet_manifest_allows_open_observer_fetch_without_validator_admission() {
+    let loaded = test_network_tier_manifest("public_testnet", true);
+
+    assert!(network_tier_allows_open_observer_fetch(Some(&loaded)));
+}
+
+#[test]
+fn public_testnet_manifest_without_observer_policy_does_not_allow_open_observer_fetch() {
+    let loaded = test_network_tier_manifest("public_testnet", false);
+
+    assert!(!network_tier_allows_open_observer_fetch(Some(&loaded)));
+}
+
+#[test]
+fn mainnet_manifest_does_not_allow_open_observer_fetch() {
+    let loaded = test_network_tier_manifest("mainnet", true);
+
+    assert!(!network_tier_allows_open_observer_fetch(Some(&loaded)));
+}
+
+fn test_network_tier_manifest(tier: &str, allow_observer_nodes: bool) -> LoadedNetworkTierManifest {
+    LoadedNetworkTierManifest {
+        source_path: "test-manifest.json".to_string(),
+        manifest: NetworkTierManifest {
+            schema_version: NETWORK_TIER_MANIFEST_SCHEMA_V1.to_string(),
+            tier: tier.to_string(),
+            status: "rehearsal".to_string(),
+            network_id: format!("oasis7-{tier}"),
+            chain_id: format!("oasis7-{tier}"),
+            runtime_refs: NetworkTierRuntimeRefs {
+                release_candidate_bundle_ref: "bundle.json".to_string(),
+                genesis_ref: "genesis.json".to_string(),
+                bootstrap_peer_ref: "peers.txt".to_string(),
+            },
+            endpoint_policy: NetworkTierEndpointPolicy {
+                rpc_ref: "http://127.0.0.1:6631".to_string(),
+                explorer_ref: "http://127.0.0.1:6632/explorer".to_string(),
+                faucet_ref: Some("none".to_string()),
+            },
+            validator_policy: NetworkTierValidatorPolicy {
+                governance_mode: "governance_registry".to_string(),
+                validator_admission: "allowlist_or_governed_candidate".to_string(),
+                target_validator_count: 2,
+                allow_observer_nodes,
+            },
+            token_policy: NetworkTierTokenPolicy {
+                symbol: "OC".to_string(),
+                faucet_mode: "guarded_testnet_faucet".to_string(),
+                reset_policy: "resettable".to_string(),
+                value_semantics: "testnet".to_string(),
+            },
+            claims_policy: NetworkTierClaimsPolicy {
+                allowed_claims: vec!["public_testnet".to_string()],
+                denied_claims: vec!["mainnet_live".to_string()],
+            },
+            promotion_policy: NetworkTierPromotionPolicy {
+                promote_from: vec!["shared_devnet".to_string()],
+                required_gates: vec!["shared_devnet_pass".to_string()],
+            },
+            evidence_refs: vec![],
+        },
+        bootstrap_peers: vec![],
+    }
 }
 
 #[test]
