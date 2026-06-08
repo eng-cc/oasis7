@@ -12,7 +12,7 @@ Validate the #46 PostOnboarding handoff prerequisites in no-UI mode by speaking 
 Viewer live TCP protocol directly.
 
 Default flow:
-1. bootstrap a fresh stack via ./scripts/run-game-test.sh
+1. bootstrap a fresh stack via ./scripts/run-launcher-stack.sh
 2. connect to the live TCP endpoint
 3. hello + subscribe + request_snapshot
 4. step(8) and step(24) in the same session
@@ -159,12 +159,12 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if [[ -z "$live_addr" ]]; then
-  ./scripts/run-game-test.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
+  ./scripts/run-launcher-stack.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
   stack_pid=$!
 
   for ((i = 0; i < startup_timeout_secs; i++)); do
     if ! kill -0 "$stack_pid" >/dev/null 2>&1; then
-      echo "error: run-game-test.sh exited unexpectedly" >&2
+      echo "error: run-launcher-stack.sh exited unexpectedly" >&2
       tail -n 120 "$run_log" >&2 || true
       exit 1
     fi

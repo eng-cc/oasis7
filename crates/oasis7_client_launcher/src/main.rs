@@ -34,6 +34,8 @@ use web_sys::wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
 use web_sys::HtmlCanvasElement;
 #[cfg(target_arch = "wasm32")]
+use web_sys::{Document, HtmlElement};
+#[cfg(target_arch = "wasm32")]
 use web_time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -185,9 +187,13 @@ fn main() -> eframe::Result<()> {
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    let web_options = eframe::WebOptions::default();
-    let canvas = web_sys::window()
-        .and_then(|window| window.document())
+    let web_options = eframe::WebOptions {
+        webgl_context_option: eframe::WebGlContextOption::WebGl1,
+        ..Default::default()
+    };
+    let document = web_sys::window().and_then(|window| window.document());
+    let canvas = document
+        .as_ref()
         .and_then(|document| document.get_element_by_id(WEB_CANVAS_ID))
         .and_then(|element| element.dyn_into::<HtmlCanvasElement>().ok())
         .unwrap_or_else(|| panic!("missing launcher canvas: #{WEB_CANVAS_ID}"));
@@ -204,9 +210,44 @@ fn main() {
             )
             .await;
         if let Err(err) = start_result {
+            render_web_boot_failure(
+                document.as_ref(),
+                format!("failed to start launcher web app: {err:?}").as_str(),
+            );
             eprintln!("failed to start launcher web app: {err:?}");
         }
     });
+}
+
+#[cfg(target_arch = "wasm32")]
+fn render_web_boot_failure(document: Option<&Document>, message: &str) {
+    let Some(document) = document else {
+        return;
+    };
+    let Some(body) = document.body() else {
+        return;
+    };
+
+    let panel = if let Some(existing) = document.get_element_by_id("oasis7-launcher-web-error") {
+        existing
+    } else {
+        let Ok(panel) = document.create_element("pre") else {
+            return;
+        };
+        panel.set_id("oasis7-launcher-web-error");
+        let _ = panel.set_attribute(
+            "style",
+            "position:fixed;left:16px;right:16px;top:16px;z-index:9999;white-space:pre-wrap;\
+             background:#2b1f1f;color:#ffe9e9;border:1px solid #c96f6f;padding:12px;\
+             font:12px/1.5 monospace;max-height:40vh;overflow:auto;",
+        );
+        let _ = body.append_child(&panel);
+        panel
+    };
+
+    if let Some(panel) = panel.dyn_ref::<HtmlElement>() {
+        panel.set_inner_text(message);
+    }
 }
 
 fn configure_egui_fonts(context: &egui::Context) {

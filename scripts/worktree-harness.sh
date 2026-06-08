@@ -181,7 +181,7 @@ case "$action" in
     done
     [[ "$SMOKE_TIMEOUT" =~ ^[0-9]+$ ]] || { echo "error: --smoke-timeout must be a non-negative integer" >&2; exit 2; }
     if [[ "$ENABLE_LLM" != "1" ]]; then
-      echo "error: worktree harness now boots through ./scripts/run-game-test.sh and oasis7_game_launcher, both of which require active LLM access" >&2
+      echo "error: worktree harness now boots through ./scripts/run-launcher-stack.sh and oasis7_game_launcher, both of which require active LLM access" >&2
       echo "hint: use direct oasis7_viewer_live --no-llm only for observer/debug diagnostics outside the launcher stack" >&2
       exit 2
     fi
@@ -267,13 +267,13 @@ PY
     )
     run_args+=(--with-llm)
 
-    nohup ./scripts/run-game-test.sh "${run_args[@]}" >"$STARTUP_LOG" 2>&1 < /dev/null &
+    nohup ./scripts/run-launcher-stack.sh "${run_args[@]}" >"$STARTUP_LOG" 2>&1 < /dev/null &
     HARNESS_PID=$!
     wh_state_write "$STATE_FILE" "{\"harness_pid\": $HARNESS_PID}"
 
     for _ in $(seq 1 180); do
       if ! wh_pid_alive "$HARNESS_PID"; then
-        echo "error: worktree harness boot failed; run-game-test.sh exited unexpectedly" >&2
+        echo "error: worktree harness boot failed; run-launcher-stack.sh exited unexpectedly" >&2
         tail -n 120 "$STARTUP_LOG" >&2 || true
         exit 1
       fi

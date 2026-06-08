@@ -12,13 +12,13 @@
 - 身份层：解析当前 `git worktree` 并生成稳定 `worktree_id`。
 - 资源层：为该 worktree 分配独立端口组、bundle 根目录、runtime/artifact/browser 目录。
 - 执行层：通过 `worktree-harness.sh up/down/status/url/logs/smoke` 驱动底层脚本。
-- 契约层：`run-game-test.sh` 对外暴露 `--output-dir`、`--run-id`、`--meta-file`、`--json-ready`，`run-producer-playtest.sh` 接受 worktree 级 bundle / log 路径。
+- 契约层：`run-launcher-stack.sh` 对外暴露 `--output-dir`、`--run-id`、`--meta-file`、`--json-ready`，`run-producer-playtest.sh` 接受 worktree 级 bundle / log 路径。
 - 状态层：统一写 `output/harness/<worktree_id>/state.json`，供 agent 与其他脚本消费。
 
 ## 3. 关键接口 / 入口
 - 主入口：`scripts/worktree-harness.sh`
 - 状态库：`scripts/worktree-harness-lib.sh`
-- 底层启动器：`scripts/run-game-test.sh`
+- 底层启动器：`scripts/run-launcher-stack.sh`
 - producer 入口：`scripts/run-producer-playtest.sh`
 - 测试手册入口：`testing-manual.md`
 

@@ -6,13 +6,13 @@
 审计轮次: 1
 
 ## 1. Executive Summary
-- Problem Statement: 当前 `run-game-test.sh` 与 `run-producer-playtest.sh` 仍默认使用固定端口、时间戳散落产物目录与全局 bundle 路径，agent 若在多个 git worktree 中并行起栈，会互相争抢端口、复用旧 bundle、污染浏览器 session，并迫使上层脚本通过 grep stdout 猜测 URL/日志路径。
-- Proposed Solution: 新增 `scripts/worktree-harness.sh` 作为 worktree 级主入口，为当前 git worktree 派生稳定 `worktree_id`、端口组、bundle 根目录、artifact 根目录与浏览器 session，并将这些状态落盘到 `output/harness/<worktree_id>/state.json`。同时扩展 `run-game-test.sh` / `run-producer-playtest.sh` 契约，允许上层显式注入 `run-id`、`output-dir`、`meta-file` 与 ready payload。
+- Problem Statement: 当前 `run-launcher-stack.sh` 与 `run-producer-playtest.sh` 仍默认使用固定端口、时间戳散落产物目录与全局 bundle 路径，agent 若在多个 git worktree 中并行起栈，会互相争抢端口、复用旧 bundle、污染浏览器 session，并迫使上层脚本通过 grep stdout 猜测 URL/日志路径。
+- Proposed Solution: 新增 `scripts/worktree-harness.sh` 作为 worktree 级主入口，为当前 git worktree 派生稳定 `worktree_id`、端口组、bundle 根目录、artifact 根目录与浏览器 session，并将这些状态落盘到 `output/harness/<worktree_id>/state.json`。同时扩展 `run-launcher-stack.sh` / `run-producer-playtest.sh` 契约，允许上层显式注入 `run-id`、`output-dir`、`meta-file` 与 ready payload。
 - Success Criteria:
   - SC-1: 每个 worktree 都能通过统一入口执行 `up/down/status/url/logs/smoke`。
   - SC-2: 不同 worktree 默认不会因固定端口或共享 bundle 目录互相冲突。
   - SC-3: `state.json` 提供机器可读的 URL、端口组、PID、bundle 与 artifact 路径。
-  - SC-4: `run-game-test.sh` 不再要求上层通过 grep stdout 才能获取 ready 信息。
+  - SC-4: `run-launcher-stack.sh` 不再要求上层通过 grep stdout 才能获取 ready 信息。
   - SC-5: `run-producer-playtest.sh` 默认 bundle 目录可按 worktree 隔离。
 
 ## 2. User Experience & Functionality
@@ -42,7 +42,7 @@
 | smoke 入口 | `smoke_timeout`、`session_name`、`open_headed` | 复用当前 stack 执行最小 smoke | `ready -> verifying -> pass/fail` | 默认优先复用 formal gameplay 的 active LLM stack；`--no-llm` 只保留给 direct viewer diagnostics | QA / agent 可触发 |
 - Acceptance Criteria:
   - AC-1: `scripts/worktree-harness.sh --help` 明确列出 `up/down/status/url/logs/smoke`。
-  - AC-2: `scripts/run-game-test.sh` 支持 `--output-dir`、`--run-id`、`--meta-file` 与 `--json-ready`。
+  - AC-2: `scripts/run-launcher-stack.sh` 支持 `--output-dir`、`--run-id`、`--meta-file` 与 `--json-ready`。
   - AC-3: `scripts/run-producer-playtest.sh` 支持按 worktree 指定 bundle 根目录与启动日志路径。
   - AC-4: `state.json` 至少包含 `worktree_id`、`viewer_url`、`launcher_pid`、`viewer_port`、`web_bind`、`bundle_dir`、`artifact_dir`。
   - AC-5: 并行 worktree 运行时，默认端口与 bundle 根目录不共享。
@@ -52,15 +52,15 @@
   - 不改动业务 runtime / Viewer 功能语义。
 
 ## 3. AI System Requirements (If Applicable)
-- Tool Requirements: `git`、`python3`、`agent-browser`（用于 `smoke`）、现有 `run-game-test.sh` / `run-producer-playtest.sh`。
+- Tool Requirements: `git`、`python3`、`agent-browser`（用于 `smoke`）、现有 `run-launcher-stack.sh` / `run-producer-playtest.sh`。
 - Evaluation Strategy: 通过双实例并行成功率、状态文件完整率、URL/日志自动发现成功率评估 harness 质量。
 
 ## 4. Technical Specifications
-- Architecture Overview: `worktree-harness.sh` 作为 worktree 级包装器，负责解析当前 git worktree 身份、准备隔离目录、分配端口、调用 `run-game-test.sh` / `run-producer-playtest.sh`，并将最终状态汇总到稳定 `state.json`。底层启动逻辑仍由既有脚本负责。
+- Architecture Overview: `worktree-harness.sh` 作为 worktree 级包装器，负责解析当前 git worktree 身份、准备隔离目录、分配端口、调用 `run-launcher-stack.sh` / `run-producer-playtest.sh`，并将最终状态汇总到稳定 `state.json`。底层启动逻辑仍由既有脚本负责。
 - Integration Points:
   - `scripts/worktree-harness.sh`
   - `scripts/worktree-harness-lib.sh`
-  - `scripts/run-game-test.sh`
+  - `scripts/run-launcher-stack.sh`
   - `scripts/run-producer-playtest.sh`
   - `testing-manual.md`
   - `doc/scripts/project.md`
@@ -83,7 +83,7 @@
   - v2.0 (WTH-3): 为每个 worktree 叠加临时观测侧车与更强 agent 自治回路。
 - Technical Risks:
   - 风险-1: 若端口预占逻辑不稳，仍可能出现竞态冲突。
-  - 风险-2: 若 `run-game-test.sh` 继续保留过多 stdout 约定，上层仍会偷偷回到 grep 驱动。
+  - 风险-2: 若 `run-launcher-stack.sh` 继续保留过多 stdout 约定，上层仍会偷偷回到 grep 驱动。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:

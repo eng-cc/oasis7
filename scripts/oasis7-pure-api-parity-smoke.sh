@@ -13,7 +13,7 @@ Validate the pure API gameplay path against the live TCP protocol using
 `oasis7_pure_api_client`.
 
 Default flow:
-1. bootstrap a fresh stack via ./scripts/run-game-test.sh
+1. bootstrap a fresh stack via ./scripts/run-launcher-stack.sh
 2. build the local `oasis7_pure_api_client` binary
 3. capture initial player_gameplay snapshot
 4. submit canonical `gameplay_action` to build the first smelter
@@ -210,12 +210,12 @@ client_bin="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_pure_api_clien
 }
 
 if [[ -z "$live_addr" ]]; then
-  ./scripts/run-game-test.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
+  ./scripts/run-launcher-stack.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
   stack_pid=$!
 
   for ((i = 0; i < startup_timeout_secs; i++)); do
     if ! kill -0 "$stack_pid" >/dev/null 2>&1; then
-      echo "error: run-game-test.sh exited unexpectedly" >&2
+      echo "error: run-launcher-stack.sh exited unexpectedly" >&2
       tail -n 120 "$run_log" >&2 || true
       exit 1
     fi

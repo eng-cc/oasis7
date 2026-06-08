@@ -202,7 +202,7 @@ trap cleanup EXIT
 game_url="$provided_url"
 if [[ -z "$game_url" ]]; then
   run_log="$out_dir/run-game-test.log"
-  ./scripts/run-game-test.sh --skip-llm-provider-preflight "${run_game_test_args[@]}" >"$run_log" 2>&1 &
+  ./scripts/run-launcher-stack.sh --skip-llm-provider-preflight "${run_game_test_args[@]}" >"$run_log" 2>&1 &
   launcher_pid=$!
   deadline=$((SECONDS + startup_timeout_secs))
   while (( SECONDS < deadline )); do

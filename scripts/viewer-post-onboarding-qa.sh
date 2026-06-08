@@ -13,7 +13,7 @@ Usage: ./scripts/viewer-post-onboarding-qa.sh [options] [run-game-test options..
 Validate the #46 PostOnboarding handoff in a real Web session.
 
 Default flow:
-1. bootstrap a Viewer stack via ./scripts/run-game-test.sh
+1. bootstrap a Viewer stack via ./scripts/run-launcher-stack.sh
 2. open the Viewer in headed agent-browser
 3. create one completed world-feedback step
 4. select the first agent and capture the PostOnboarding handoff state
@@ -147,15 +147,15 @@ trap cleanup EXIT INT TERM
 
 if [[ -z "$game_url" ]]; then
   if command -v stdbuf >/dev/null 2>&1; then
-    stdbuf -oL -eL ./scripts/run-game-test.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
+    stdbuf -oL -eL ./scripts/run-launcher-stack.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
   else
-    ./scripts/run-game-test.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
+    ./scripts/run-launcher-stack.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
   fi
   stack_pid=$!
 
   for ((i = 0; i < startup_timeout_secs; i++)); do
     if ! kill -0 "$stack_pid" >/dev/null 2>&1; then
-      echo "error: run-game-test.sh exited unexpectedly" >&2
+      echo "error: run-launcher-stack.sh exited unexpectedly" >&2
       tail -n 120 "$run_log" >&2 || true
       exit 1
     fi
@@ -166,7 +166,7 @@ if [[ -z "$game_url" ]]; then
   done
 
   [[ -n "$game_url" ]] || {
-    echo "error: timeout waiting for Viewer URL from run-game-test.sh" >&2
+    echo "error: timeout waiting for Viewer URL from run-launcher-stack.sh" >&2
     tail -n 120 "$run_log" >&2 || true
     exit 1
   }

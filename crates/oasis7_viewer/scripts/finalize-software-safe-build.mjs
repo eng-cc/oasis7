@@ -8,10 +8,11 @@ const viewerRoot = resolve(scriptsDir, "..");
 const workspaceRoot = resolve(viewerRoot, "..", "..");
 const tempOutDir = resolve(viewerRoot, ".software-safe-build");
 const softwareSafeSrcDir = resolve(viewerRoot, "software_safe_src");
+const viewerDistDir = resolve(viewerRoot, "dist");
 const builtBundlePath = resolve(tempOutDir, "viewer.js");
 const finalCanonicalBundlePath = resolve(viewerRoot, "viewer.js");
 const finalCompatBundlePath = resolve(viewerRoot, "software_safe.js");
-const pixelWorldRuntimeDir = resolve(viewerRoot, "pixel-world-bridge");
+const pixelWorldRuntimeDir = resolve(viewerDistDir, "pixel-world-bridge");
 const pixelWorldRuntimeSourcePath = resolve(softwareSafeSrcDir, "pixel_world_runtime_module_wasm.js");
 const pixelWorldRuntimeModulePath = resolve(pixelWorldRuntimeDir, "pixel_world_bridge.js");
 const pixelWorldCompiledWasmPath = resolve(
@@ -152,6 +153,7 @@ await runChecked("env", [
 ]);
 await access(pixelWorldCompiledWasmPath);
 await rm(pixelWorldRuntimeDir, { recursive: true, force: true });
+await mkdir(viewerDistDir, { recursive: true });
 await mkdir(pixelWorldRuntimeDir, { recursive: true });
 const wasmBindgenCommand = await resolveWasmBindgenCommand();
 await runChecked(wasmBindgenCommand, [
