@@ -314,9 +314,12 @@ else
   run rm -rf "$BUNDLE_WEB_LAUNCHER_DIR"
   run mkdir -p "$BUNDLE_WEB_LAUNCHER_DIR"
   if [[ "$PROFILE" == "release" ]]; then
-    run bash -lc "cd '$ROOT_DIR/crates/oasis7_client_launcher' && env -u NO_COLOR trunk build --release --dist '$BUNDLE_WEB_LAUNCHER_DIR'"
+    run "$ROOT_DIR/scripts/build-client-launcher-web.sh" \
+      --release \
+      --dist-dir "$BUNDLE_WEB_LAUNCHER_DIR"
   else
-    run bash -lc "cd '$ROOT_DIR/crates/oasis7_client_launcher' && env -u NO_COLOR trunk build --dist '$BUNDLE_WEB_LAUNCHER_DIR'"
+    run "$ROOT_DIR/scripts/build-client-launcher-web.sh" \
+      --dist-dir "$BUNDLE_WEB_LAUNCHER_DIR"
   fi
 fi
 

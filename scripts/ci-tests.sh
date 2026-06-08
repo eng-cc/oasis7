@@ -140,10 +140,9 @@ run_hosted_account_local_smoke() {
 
 run_oasis7_client_launcher_web_build() {
   run mkdir -p output/release/web-launcher-dist
-  (
-    cd crates/oasis7_client_launcher
-    run env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist
-  )
+  run ./scripts/build-client-launcher-web.sh \
+    --release \
+    --dist-dir "$PWD/output/release/web-launcher-dist"
 }
 
 run_required_gate_checks() {
