@@ -112,8 +112,8 @@ Example:
 - Task UID: task_deabe05bbc894f569f0caaf5db5970a7
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-subagent-standing-authorization-wording
 - Source Branch: task/engineering-subagent-standing-authorization-wording
-- Source Head: 212a92a8ac052b7719212ab2822617211101c8cf
-- Comparison Ref: origin/main
+- Source Head: f8566e1ffd78664713f438bbbd45826009020c21
+- Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `AGENTS.md`; `doc/engineering/workflow/source-of-truth.md`; `.pm/tasks/task_deabe05bbc894f569f0caaf5db5970a7.yaml`; `.pm/tasks/task_deabe05bbc894f569f0caaf5db5970a7.execution.md`
 - Role Selection Basis: governance wording affects agent/subagent delegation semantics and role attribution, so `agent_engineer` reviewed wording behavior; user explicitly requested `qa_engineer` pre-PR review for verification-evidence sufficiency and failure classification. No UI/gameplay/runtime/liveops surfaces touched.
 - Review Roles: agent_engineer, qa_engineer
@@ -122,3 +122,52 @@ Example:
 - Finding Disposition Evidence: not applicable; no findings returned by either role.
 - Residual Risk: Low; PR still requires GitHub checks plus comment/thread closeout before merge, and PR verification notes should mention unrelated repository-wide PM/workflow eval noise.
 - Blocker / Next Action: run focused verification and prepare PR.
+
+## 2026-06-08 20:58:44 CST / agent_engineer
+- 完成内容: Narrow-scope committed-diff review only, per user request.
+- 遗留事项: no merge-blocking finding from this narrow review; this does not include broader repo checks.
+- Review Scope: committed diff for `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and task files only.
+- Findings: no_findings.
+- Residual Risk: Low. The authorization bridge remains scoped to workflow-required professional role slices and matching repo-owned workflow slices, preserves fallback attribution, and does not alter model/context recording boundaries.
+- Blocker / Next Action: none from this narrow review.
+
+## 2026-06-08 20:58:44 CST / qa_engineer
+- 完成内容: Narrow-scope QA recheck completed for committed governance wording diff and task verification entries only.
+- 遗留事项: none for this QA scope.
+- Action: inspected committed diff for `AGENTS.md` and `doc/engineering/workflow/source-of-truth.md`, plus verification-related entries in this task execution log.
+- Validation Command: `git diff origin/main...HEAD -- AGENTS.md doc/engineering/workflow/source-of-truth.md`; `rg -n "Verification pass|Validation Command|Actual Result|workflow-behavior-eval|pm/lint|doc-governance-check|lint-skills|git diff --check|qa_engineer|Pre-PR Local Role Review" .pm/tasks/task_deabe05bbc894f569f0caaf5db5970a7.execution.md`.
+- Expected Result: wording-only diff remains scoped; verification evidence is sufficient for the wording change; known broad failures are identified as unrelated/pre-existing.
+- Actual Result: no_findings. The committed diff only clarifies standing workflow subagent authorization in `AGENTS.md` and source-of-truth section 5.2/changelog. The recorded passing checks `doc-governance-check`, `lint-skills`, and `git diff --check` are sufficient for this wording-only PR. Recorded `workflow-behavior-eval` and `pm/lint` failures are unrelated/pre-existing repository-wide hygiene issues, not release/merge blockers for this diff.
+- Residual Risk: Low; residual risk is limited to existing repository-wide workflow/PM lint noise outside this task scope.
+- Blocker / Next Action: no QA blocker from this narrowed review.
+
+## 2026-06-08 21:00:18 CST / tpm
+- 完成内容: Final pre-PR local role review packet recorded for committed diff.
+- 遗留事项: amend review evidence into the task commit, run focused verification, create PR, and continue normal PR watch/merge.
+- Action: integrated narrowed `agent_engineer` and `qa_engineer` committed-diff rechecks after source commit `212a92a8ac052b7719212ab2822617211101c8cf`.
+- Validation Command: inspect execution log review entries and current `git status`.
+- Expected Result: execution log has a final pre-PR review packet whose reviewed source head is the committed governance diff; later uncommitted changes are only task review evidence.
+- Actual Result: both role rechecks returned `no_findings`; only this execution-log review evidence remains to amend.
+- Pre-PR Local Role Review: passed
+- Task UID: task_deabe05bbc894f569f0caaf5db5970a7
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-subagent-standing-authorization-wording
+- Source Branch: task/engineering-subagent-standing-authorization-wording
+- Source Head: f8566e1ffd78664713f438bbbd45826009020c21
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `AGENTS.md`; `doc/engineering/workflow/source-of-truth.md`; `.pm/tasks/task_deabe05bbc894f569f0caaf5db5970a7.yaml`; `.pm/tasks/task_deabe05bbc894f569f0caaf5db5970a7.execution.md`
+- Role Selection Basis: governance wording affects agent/subagent delegation semantics and role attribution, so `agent_engineer` reviewed wording behavior; `qa_engineer` reviewed verification-evidence sufficiency and known failure classification. No UI/gameplay/runtime/liveops surfaces touched.
+- Review Roles: agent_engineer, qa_engineer
+- Review Evidence: `2026-06-08 20:58:44 CST / agent_engineer` and `2026-06-08 20:58:44 CST / qa_engineer` entries in this execution log.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: not applicable; no findings returned by either role.
+- Residual Risk: Low; PR notes should mention unrelated repository-wide `workflow-behavior-eval` and `pm/lint` noise, while the focused doc/skill/diff checks passed for this wording-only change.
+- Blocker / Next Action: amend review evidence into the commit, then run `prepare-task-pr.sh --create`.
+
+## 2026-06-08 21:13:40 CST / tpm
+- 完成内容: Post-review verification update before amend.
+- 遗留事项: PR notes must state that closeout fresh verification passed `doc-governance-check`; a later post-review rerun was terminated after hanging in `doc-governance-check.sh`.
+- Action: reran focused hygiene checks after review evidence edits; terminated a hung `doc-governance-check.sh` process group after it produced no output for over 10 minutes.
+- Validation Command: `git diff --check`; `./scripts/lint-skills.sh`; attempted `./scripts/doc-governance-check.sh`.
+- Expected Result: diff hygiene and skill lint pass; doc governance remains covered by the closeout fresh verification or reports a clear failure.
+- Actual Result: `git diff --check` passed; `lint-skills: OK (30 skill entrypoints checked)`; post-review `doc-governance-check.sh` rerun hung with no output and was terminated, while task closeout earlier verified `./scripts/doc-governance-check.sh && ./scripts/lint-skills.sh && git diff --check` with exit code 0 at `2026-06-08T20:27:43+08:00`.
+- Blocker / Next Action: amend review evidence, then run PR preflight/create with the recorded verification caveat.
