@@ -74,8 +74,6 @@ export const state = createMutable({
   pixelWorldCamera: null,
   pixelWorldFatal: null,
   controlProfile: "playback",
-  debugViewerMode: "debug_viewer",
-  debugViewerStatus: "detached",
   worldId: null,
   server: null,
   wsUrl: null,
@@ -314,7 +312,6 @@ const {
 } = createViewerAuthSurfaceModule({
   getSearchParams,
   localeText,
-  selectedAgentInteractionMode: () => selectedAgentInteractionMode(),
   state,
   windowRef: window,
 });
@@ -510,8 +507,6 @@ function getState() {
     uiLocale: state.uiLocale,
     promptOverridesVisible: state.promptOverridesVisible,
     controlProfile: state.controlProfile,
-    debugViewerMode: state.debugViewerMode,
-    debugViewerStatus: state.debugViewerStatus,
     worldId: state.worldId,
     server: state.server,
     wsUrl: state.wsUrl,
@@ -548,7 +543,6 @@ function getState() {
     strongAuthLastGrantActionId: state.strongAuth.lastGrantActionId,
     strongAuthLastGrantExpiresAtUnixMs: state.strongAuth.lastGrantExpiresAtUnixMs,
     strongAuthLastGrantError: state.strongAuth.lastGrantError,
-    selectedAgentInteractionMode: selectedAgentInteractionMode(),
     selectedAgentDebug: clone(selectedAgentExecutionDebugContext()),
     selectedPromptVersion: state.promptDraft.currentVersion || 0,
     promptRollbackTargetVersion: state.promptDraft.rollbackTargetVersion || 0,
@@ -563,7 +557,6 @@ function reportFatalError(message, source = "runtime") {
     state.errorCount += 1;
   }
   state.connectionStatus = "error";
-  state.debugViewerStatus = "error";
   state.lastError = text;
   render();
 }
@@ -635,14 +628,6 @@ function selectedAgentExecutionDebugContext() {
     return null;
   }
   return state.snapshot?.model?.agent_execution_debug_contexts?.[agentId] || null;
-}
-
-function selectedAgentInteractionMode() {
-  const debugContext = selectedAgentExecutionDebugContext();
-  if (debugContext?.provider_mode === "provider_loopback_http") {
-    return "observer_only";
-  }
-  return "interactive";
 }
 
 function syncAgentInteractionDrafts(force = false) {
@@ -774,8 +759,8 @@ function describeControls() {
     ],
     usage: "Use fillControlExample(action), sendControl(action), sendGameplayAction(actionIdOrPayload), sendAgentChat(agentId, message), sendPromptControl(mode, payload).",
     notes: [
-      "viewer acts as a debug_viewer lane: it subscribes to runtime snapshots/events and does not own world authority",
-      "when selectedAgentDebug.provider_mode=provider_loopback_http, prompt/chat stay observer-only in runtime live",
+      "viewer consumes runtime snapshots/events without becoming a separate execution lane",
+      "selectedAgentDebug reports the current provider-backed lane metadata when available",
       "without viewer auth bootstrap the browser stays guest_session only; hosted public join player-session issuance is still pending",
     ],
   };
@@ -2581,7 +2566,6 @@ function handleViewerMessage(message) {
       state.server = message.server || null;
       state.worldId = message.world_id || null;
       state.controlProfile = message.control_profile || "playback";
-      state.debugViewerStatus = "subscribed";
       void ensureHostedPlayerAuthAvailable().then(() => {
         syncHostedPlayerSessionOnConnect();
         render();
@@ -2646,7 +2630,6 @@ function handleViewerMessage(message) {
 function attachSocket(ws) {
   ws.addEventListener("open", () => {
     state.connectionStatus = "connected";
-    state.debugViewerStatus = "detached";
     state.lastError = null;
     sendJson({ type: "hello", client: "viewer", version: 1 });
     sendJson({ type: "subscribe", streams: ["snapshot", "events", "metrics"], event_kinds: [] });
@@ -2670,7 +2653,6 @@ function attachSocket(ws) {
 
   ws.addEventListener("close", () => {
     state.connectionStatus = "connecting";
-    state.debugViewerStatus = "detached";
     if (state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap") {
       state.auth.syncInFlight = false;
       state.auth.runtimeStatus = "disconnected";
@@ -2833,7 +2815,6 @@ function renderSummary() {
       <div class="badge-row">
         <span class="badge badge--accent">viewer</span>
         <span class="${connectionBadgeClass()}">${escapeHtml(state.connectionStatus)}</span>
-        <span class="badge">debugViewer=${escapeHtml(`${state.debugViewerMode}:${state.debugViewerStatus}`)}</span>
         <span class="badge">rendererClass=${escapeHtml(state.rendererClass)}</span>
         <span class="badge">controlProfile=${escapeHtml(state.controlProfile)}</span>
       </div>
@@ -2851,16 +2832,11 @@ function renderSummary() {
       <div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
         <div class="panel__header"><div class="panel__title">Execution Lanes</div></div>
         <div class="panel__body stack">
-          <div class="badge-row">
-            <span class="badge badge--accent">debug_viewer</span>
-            <span class="badge">status=${escapeHtml(state.debugViewerStatus)}</span>
-            <span class="badge">renderMode=${escapeHtml(state.renderMode)}</span>
-            <span class="badge">entryReason=${escapeHtml(state.viewerReason || "-")}</span>
-          </div>
-          <div class="empty" style="margin-top:-2px;">debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer does not stop the agent lane.</div>
           ${selectedDebug
             ? `<div class="badge-row">
                 <span class="badge badge--accent">selected agent lane</span>
+                <span class="badge">renderMode=${escapeHtml(state.renderMode)}</span>
+                <span class="badge">entryReason=${escapeHtml(state.viewerReason || "-")}</span>
                 <span class="badge">provider=${escapeHtml(selectedDebug.provider_mode || "-")}</span>
                 <span class="badge">mode=${escapeHtml(selectedDebug.execution_mode || "-")}</span>
                 <span class="badge">env=${escapeHtml(selectedDebug.environment_class || "-")}</span>
@@ -2872,7 +2848,7 @@ function renderSummary() {
                 <span class="badge">providerFallback=${escapeHtml(selectedDebug.fallback_reason || "-")}</span>
               </div>
               <pre class="json">${escapeHtml(JSON.stringify(selectedDebug, null, 2))}</pre>`
-            : '<div class="empty">Select an agent to compare the headless execution lane against this debug_viewer observer lane.</div>'}
+            : '<div class="empty">Select an agent to inspect the current execution-lane metadata.</div>'}
         </div>
       </div>
       <div class="badge-row">
@@ -3066,7 +3042,6 @@ function renderInteractionPanel() {
     return '<div class="empty">Select an agent to unlock prompt/chat controls.</div>';
   }
   const binding = selectedAgentBindingInfo();
-  const debugContext = selectedAgentExecutionDebugContext();
   const promptFeedback = snapshotSemanticFeedback(state.lastPromptFeedback);
   const chatFeedback = snapshotSemanticFeedback(state.lastChatFeedback);
   const authSurface = buildAuthSurfaceModel();
@@ -3082,12 +3057,10 @@ function renderInteractionPanel() {
          <input id="strong-auth-approval-code" type="password" autocomplete="off" value="${escapeHtml(state.strongAuth.approvalCode || "")}" />
        </div>`
     : "";
-  const authNotice = debugContext?.provider_mode === "provider_loopback_http"
-    ? `<div class="empty">Selected agent currently runs through the provider-backed loopback bridge in ${escapeHtml(debugContext?.execution_mode || "headless_agent")}; viewer stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.</div>`
-    : interactionEnabled
-      ? `<div class="badge-row"><span class="badge badge--good">${escapeHtml(authSurface.currentTier)}</span><span class="badge">player=${escapeHtml(state.auth.playerId)}</span><span class="badge">source=${escapeHtml(authSurface.source)}</span></div>
-         <div class="empty">${escapeHtml(promptCapability.reason)}</div>`
-      : `<div class="empty">${escapeHtml(promptCapability.reason)}</div>`;
+  const authNotice = interactionEnabled
+    ? `<div class="badge-row"><span class="badge badge--good">${escapeHtml(authSurface.currentTier)}</span><span class="badge">player=${escapeHtml(state.auth.playerId)}</span><span class="badge">source=${escapeHtml(authSurface.source)}</span></div>
+       <div class="empty">${escapeHtml(promptCapability.reason)}</div>`
+    : `<div class="empty">${escapeHtml(promptCapability.reason)}</div>`;
   const chatHistory = state.chatHistory
     .filter((entry) => entry.agentId === agentId || entry.targetAgentId === agentId)
     .slice(0, 12);

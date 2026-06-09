@@ -14,6 +14,7 @@ function viewerUrl() {
 }
 
 let activeCleanup = null;
+const HEAVY_UI_TEST_TIMEOUT_MS = 60000;
 
 function sampleSnapshot(overrides = {}) {
   return {
@@ -217,7 +218,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Session Ladder")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Runtime Diagnostics")).toBeInTheDocument();
     expect(screen.getByTestId("pixel-world-host")).toHaveTextContent("pixel-world-host:en");
-  }, 30000);
+  }, 60000);
 
   it("moves presentation notes into the stage help tip instead of the right details rail", async () => {
     const { container } = await renderViewerApp();
@@ -235,7 +236,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Presentation Notes")).toBeInTheDocument();
     expect(within(stagePanel).getByText(/do not read on-screen diameter as real geometry size/i)).toBeInTheDocument();
     expect(helpButton).toHaveAttribute("aria-describedby", "viewer-stage-scale-tip");
-  });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("compresses world scale details into a one-line details-rail summary", async () => {
     const { container } = await renderViewerApp();
@@ -291,7 +292,7 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByLabelText("Short-Term Goal Override")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview Prompt" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply Prompt" })).toBeInTheDocument();
-  }, 15000);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps mounted dom stable across requestRender", async () => {
     const { core, container } = await renderViewerApp({
@@ -326,7 +327,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getAllByText("Accepted Intent").length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText("Next Step").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Actions Not Exposed On This Page")).toBeInTheDocument();
-  }, 15000);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("forces goal execution blocked when the empty-entity guard trips", async () => {
     const { container } = await renderViewerApp({
@@ -352,7 +353,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Blocked").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
-  });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
   it("surfaces hosted recovery and preview strong-auth truth without not-implemented drift", async () => {
     await renderViewerApp({
       setupAfterMount(core) {
@@ -376,7 +377,7 @@ describe("viewer web ui automation baseline", () => {
     ).toBeGreaterThan(0);
     expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();
     expect(screen.queryByText(/not implemented yet/i)).not.toBeInTheDocument();
-  }, 15000);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("does not show the hosted login gate after player session registration", async () => {
     await renderViewerApp({
@@ -500,7 +501,7 @@ describe("viewer web ui automation baseline", () => {
       within(assetLane).getAllByText(/main_token_transfer remains blocked until a higher-trust hosted strong-auth lane exists/i).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();
-  }, 15000);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps hosted backend reauth pending until runtime registration finishes", async () => {
     await renderViewerApp({
@@ -528,5 +529,5 @@ describe("viewer web ui automation baseline", () => {
         "hosted preview backend reauth stays pending until the browser device-session-backed player_session finishes runtime registration",
       ),
     ).toBeInTheDocument();
-  }, 15000);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 });

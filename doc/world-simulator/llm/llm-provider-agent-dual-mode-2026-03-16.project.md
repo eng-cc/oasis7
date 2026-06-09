@@ -1,4 +1,4 @@
-# Agent 直连执行 Lane（Local Provider provider: player_parity / headless_agent / debug_viewer）（2026-03-16）项目管理文档
+# Agent 直连执行 Lane（Local Provider provider: player_parity / headless_agent）（2026-03-16）项目管理文档
 
 - 对应需求文档: `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md`
 - 关联专题:
@@ -11,9 +11,8 @@
 - [x] T0 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 完成 agent 直连 execution lane 专题 PRD / Project 建模，并回写模块主文档、索引与 devlog。
 - [x] T1 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `agent_engineer` 牵头冻结 `player_parity` / `headless_agent` 的 observation/action contract、schema version 与禁止泄露的真值边界，并形成 supporting spec `provider-agent-dual-mode-contract-2026-03-16.md`。
 - [x] T2 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `runtime_engineer` 落地 mode metadata、统一 replay/summary 追踪字段，并确保所有模式共享权威动作校验。
-- [x] T3 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `viewer_engineer` 把 `debug_viewer` 明确收口为旁路订阅层，并补 mode/fallback 可观测性与 software-safe 对照入口。
 - [x] T3.5 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `agent_engineer` 接通真实 `player_parity` 执行 lane 到 runtime live / `oasis7_game_launcher` / `oasis7_provider_parity_bench` / `oasis7`，并完成 `headless_agent` / `player_parity` 双 smoke 采证，解除 T4 代码阻断。
-- [x] T3.6 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `producer_system_designer` 重构 `oasis7` operator 入口说明，把 `headless_agent`、`player_parity`、`debug_viewer` 与 `software_safe` 的职责分层直接写到技能文档，避免只读 skill 的操作者把 Viewer 误解为 Local Provider 主执行依赖。
+- [x] local-provider-operator-entry-role-layering (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `producer_system_designer` 重构 `oasis7` operator 入口说明，把 `headless_agent`、`player_parity` 与 `software_safe` 的职责分层直接写到技能文档，避免只读 skill 的操作者把 Viewer 误解为 Local Provider 主执行依赖。 Trace: .pm/tasks/task_58ad0f9d550c40028a078b0f88978572.yaml
 - [x] T3.7 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `producer_system_designer` 将 `oasis7` 中非关键的 UI/observer 说明拆到独立 reference，保持主 skill 优先暴露 `headless_agent` / `player_parity` 的执行路径。
 - [x] T4 (PRD-WORLD_SIMULATOR-040) [test_tier_full]: 由 `qa_engineer` / `producer_system_designer` 对同一 Local Provider 场景执行 `player_parity` vs `headless_agent` 对照采证，形成默认模式与阻断结论。
 - [x] T4.1 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `producer_system_designer` 固化 2026-04-06 formal review，记录当前 `agent_direct_connect` 在 launcher 可达性、dual-mode observation、provider handshake 与 fallback 审计链上的 confirmed gap，并回写 follow-up owner/顺序。

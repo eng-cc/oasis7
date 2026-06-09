@@ -1,4 +1,4 @@
-# Agent 直连执行 Lane（provider: player_parity / headless_agent / debug_viewer）（2026-03-16）
+# Agent 直连执行 Lane（provider: player_parity / headless_agent）（2026-03-16）
 
 - 对应项目管理文档: `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md`
 - 关联专题:
@@ -9,7 +9,7 @@
 审计轮次: 1
 
 ## 目标
-- 建立 provider-backed Local Provider 当前组合（`agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`）的统一执行 lane 口径（`player_parity` / `headless_agent` / `debug_viewer`）；`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias。
+- 建立 provider-backed Local Provider 当前组合（`agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`）的统一执行 lane 口径（`player_parity` / `headless_agent`）；`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias。
 - 按 `PRD-CORE-009` 明确本专题定义的是 agent 直连接入下的 execution lane，而不是新的玩家访问模式；其中 `software_safe` 仅作为相关玩家访问模式引用。
 - 明确图形界面是可选观战/调试层，而不是 Local Provider Agent 主执行闭环的必需依赖。
 - 为后续 `agent_engineer` / `runtime_engineer` / `viewer_engineer` / `qa_engineer` 的 contract、实现与验证任务提供正式 PRD 边界。
@@ -33,14 +33,13 @@
 
 ## 1. Executive Summary
 - Problem Statement: 当前 provider-backed Local Provider 路径（兼容 alias=`agent_direct_connect/provider_loopback_http`）真实试玩与 parity 采证虽然已经回答了“能否接入”“是否接近内置 agent 体验”，但默认工作流仍容易把 agent 可玩性验证与图形界面、GPU/浏览器环境耦合起来，导致自动化回归、低配部署与失败分诊成本偏高。若不把“图形界面是可选调试层而非主执行依赖”写成正式产品要求，后续 agent 直连玩法能力会继续被 GUI 环境稳定性绑架。
-- Proposed Solution: 为当前 provider-backed Local Provider 路径定义双轨执行 lane：`player_parity` 保留受约束、接近玩家的信息视角，用于评估“像不像玩家在玩”；`headless_agent` 提供不依赖图形界面的结构化观测与统一动作接口，用于稳定自动化、回归和低配环境运行；同时保留 `debug_viewer` 作为旁路观战与问题定位层，而不是权威执行依赖。
+- Proposed Solution: 为当前 provider-backed Local Provider 路径定义双轨执行 lane：`player_parity` 保留受约束、接近玩家的信息视角，用于评估“像不像玩家在玩”；`headless_agent` 提供不依赖图形界面的结构化观测与统一动作接口，用于稳定自动化、回归和低配环境运行。
 - Success Criteria:
   - SC-1: 在无 GUI / 无 GPU / 无浏览器环境下，`headless_agent` 能完成首期 `P0` Local Provider 核心玩法 smoke，成功率不低于 95%。
   - SC-2: 同一 seed / 同一 observation fixture 下，`headless_agent` 模式的关键结果可复现率不低于 99%。
   - SC-3: `player_parity` 与 `headless_agent` 在首期纳入场景中的任务结果偏差保持在专题定义阈值内，不得破坏 `PRD-WORLD_SIMULATOR-038` 的 parity 判定口径。
   - SC-4: Viewer / Web / native 图形链路失败时，Agent 主流程仍可继续执行、回放并输出结构化失败签名，不再出现“GUI 挂了 = 玩法闭环无法验证”的单点阻断。
   - SC-5: 所有 agent 直连 execution lane 都必须通过同一 runtime 动作校验与回放链路，禁止出现“headless 走旁路作弊、GUI 走正式规则”的双重标准。
-  - SC-6: `debug_viewer` 关闭时不影响 Agent 主闭环；开启时必须能区分当前运行模式、观测版本与动作版本，便于 QA / producer 审阅。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -52,7 +51,6 @@
 - User Scenarios & Frequency:
   - 日常 CI / 夜间回归：默认使用 `headless_agent`。
   - 制作人体验验收 / 玩家感知评估：使用 `player_parity`。
-  - 线上事故复盘 / 本地调试 / 演示：按需打开 `debug_viewer` 旁路观战。
   - 低配开发机 / 无 GPU 服务器：只运行 `headless_agent`，不要求图形界面。
   - 若对外描述玩家入口，必须先标明当前对应的玩家访问模式（通常为 `software_safe`），再附加本专题 lane。
 - User Stories:
@@ -64,9 +62,7 @@
      `启动 Local Provider 场景 -> 注入 headless observation -> Agent 选择统一动作 -> runtime 校验执行 -> 记录结果 / 失败签名 / replay -> 输出 required 结论`。
   2. Flow-PROVIDER-DUAL-002（玩家视角对照）:
      `以 player_parity 观测模式运行相同场景 -> Agent 使用同一动作接口 -> 产出任务结果、等待时延、失败原因 -> 与 headless / builtin 样本对比`。
-  3. Flow-PROVIDER-DUAL-003（Viewer 旁路调试）:
-     `任一模式运行中 -> 打开 debug_viewer 订阅状态/事件/解释 -> 人类观战与定位 -> 不改变 Agent 权威执行路径`。
-  4. Flow-PROVIDER-DUAL-004（模式降级）:
+  3. Flow-PROVIDER-DUAL-003（模式降级）:
      `GUI / WebGL / 浏览器环境不可用 -> 系统明确切到 headless_agent 或 software-safe 调试模式 -> Agent 主流程继续 -> 记录降级原因`。
 - Functional Specification Matrix:
 
@@ -74,7 +70,6 @@
 | --- | --- | --- | --- | --- | --- |
 | `player_parity` 模式 | `mode=player_parity`、有限视野、附近实体、当前任务与可交互对象 | Agent 仅通过标准动作集操作 | `idle -> observing -> acting -> resolved` | 以接近玩家的受约束信息为准，不得泄露隐藏真值 | 默认可用于制作人/QA 对照 |
 | `headless_agent` 模式 | `mode=headless_agent`、结构化局部状态、碰撞/平台拓扑、最近事件、任务上下文 | Agent 使用同一动作集，不依赖 GUI | `idle -> observing -> acting -> resolved` | 优先保证稳定性、复现性与可回放性 | CI / 服务器默认模式 |
-| `debug_viewer` 调试旁路 | `mode_label`、观测版本、动作版本、replay id、最近事件/反馈 | 打开/关闭 Viewer 不影响 Agent 主流程 | `detached -> subscribed -> detached` | 仅订阅 runtime 权威状态，不参与决策 | 只读、不可直接改世界状态 |
 | 统一动作接口 | `wait / wait_ticks / move_agent / speak_to_nearby / inspect_target / simple_interact` | 所有模式共享同一低频间接控制动作语义 | `proposed -> validated -> applied/rejected` | 以 runtime 权威校验结果为准；未来 embodied 动作需单独升版并通过 `PRD-GAME-013` gate | 禁止模式专属作弊动作 |
 | 统一观测版本 | `observation_schema_version`、`action_schema_version` | 模式切换必须显式暴露版本 | `draft -> frozen -> audited` | 回放与 benchmark 必须记录 schema 版本 | 仅 owner / 联审可升级 |
 | 模式降级与失败签名 | `fallback_reason`、`blocked_by`、`environment_class` | 环境失败时给出显式降级/阻断 | `normal -> degraded -> recovered/blocked` | 优先区分玩法失败与图形失败 | QA / producer 可审阅 |
@@ -82,9 +77,7 @@
 - Acceptance Criteria:
   - AC-1: `headless_agent` 不要求 GUI、GPU、浏览器也能跑通 Local Provider 核心玩法 smoke。
   - AC-2: `player_parity` 与 `headless_agent` 共用同一动作 contract 与 runtime 校验，不得出现“某模式专属捷径”。
-  - AC-3: `debug_viewer` 必须是旁路层，关闭 Viewer 不影响 Agent 权威执行、回放与 summary 产出。
   - AC-4: 回放 / summary / benchmark 产物中必须带有 `mode`、`observation_schema_version`、`action_schema_version`。
-  - AC-4.1: `software_safe` / Web Viewer 必须显式展示 `debug_viewer` 订阅状态，并把“execution lane 期望 metadata”和“provider 实际 readiness check”分开展示：前者至少包含选中 Agent 当前 `mode/schema/environment/fallback` 摘要，后者至少包含 `provider_check_status/source/fallback_reason/capabilities/supported_action_sets/error`；不得再让观战层看起来像执行依赖，也不得把期望 lane metadata 误读成 provider 实际握手真值。
   - AC-5: QA 可以对同一场景同时产出 `player_parity` 与 `headless_agent` 对照证据，并给出偏差结论。
   - AC-6: 若 `player_parity` 未通过而 `headless_agent` 通过，系统仍不得宣称“玩家体验等价”；两条口径必须分开汇报。
   - AC-6.1: 本专题恢复 `completed` 只表示 dual-mode contract / reachability / audit remediation 已收口；是否允许默认启用或扩大覆盖范围，仍必须单独满足 `PRD-WORLD_SIMULATOR-038` 的 `behavior_parity_pass + latency_class` 门禁。
@@ -92,7 +85,7 @@
 - 本专题不追求像素级视觉智能 benchmark，也不要求 Local Provider 首期仅靠屏幕像素完成全部感知。
 - 本专题不允许为 `headless_agent` 提供绕过 runtime 的直接状态改写能力。
 - 本专题不把 Viewer 做成 Agent 的必需输入源。
-- 本专题不把 `player_parity` / `headless_agent` / `debug_viewer` 升格成新的玩家访问模式。
+- 本专题不把 `player_parity` / `headless_agent` 升格成新的玩家访问模式。
 - 本专题不把 `jump / attack / use_item / block_editing` 之类 embodied 动作写成当前正式 contract；若未来需要，必须作为独立 candidate lane 审核。
 - 本专题不单独授予 Local Provider 默认启用资格；默认启用与扩面仍由 `PRD-WORLD_SIMULATOR-038` 决定。
 - 本专题不在此轮解决全部多 Agent 并发策略，只先定义模式与契约边界。
@@ -103,7 +96,6 @@
   - 统一 action API（所有模式共用）
   - replay / seed 固定能力
   - mode / schema version 元数据透传
-  - 可选 `debug_viewer` 状态/事件/解释订阅接口
 - Evaluation Strategy:
   - 任务成功率：按场景目标达成率评估
   - 一致性：同 seed 多次运行结果差异
@@ -116,11 +108,10 @@
   - Runtime 仍是唯一权威执行层，负责动作校验、事件生成、回放与结果归档。
   - Observation Adapter 负责把同一世界状态映射成 `player_parity` 或 `headless_agent` 观测结构。
   - Agent 仅通过统一动作接口与 runtime 交互。
-  - `debug_viewer` 作为旁路订阅层，消费 runtime 输出而不反向成为执行依赖。
 - Integration Points:
   - `agent_engineer`: 观测/动作 contract 与 provider 适配
   - `runtime_engineer`: 权威执行、replay、mode metadata、失败签名
-  - `viewer_engineer`: `debug_viewer` / software-safe 可观测性与旁路订阅
+  - `viewer_engineer`: software-safe 可观测性与执行通道元数据展示
   - `qa_engineer`: 双模式对照回归、偏差报告、阻断结论
 - Edge Cases & Error Handling:
   - GUI / 浏览器不可用：默认降级到 `headless_agent`，并记录 `fallback_reason`。
@@ -144,7 +135,6 @@
   - M1: 定义双轨模式 PRD、project、追踪字段与口径边界。
   - M2: 落地 observation/action contract 与 mode metadata，优先跑通 `headless_agent` required smoke。
   - M3: 接入 `player_parity` 受约束观察，对照 `headless_agent` 与 builtin/Local Provider parity 结果。
-  - M4: 接入 `debug_viewer` 旁路观战与 replay diff，形成 producer / QA 评审闭环。
 - Technical Risks:
   - 风险-1: `headless_agent` 若暴露过强真值，可能破坏“像玩家在玩”的产品口径。
   - 风险-2: `player_parity` 若过弱，可能导致稳定性不足、评测成本过高。
@@ -177,7 +167,7 @@
 - 风险 2：`player_parity` 若过弱，会导致稳定性不足、评测成本过高。
   - 缓解：把 `headless_agent` 设为默认回归主线，把 `player_parity` 作为体验对照与准入门禁，而非唯一执行路径。
 - 风险 3：Viewer 若继续承担控制责任，会导致名义双轨、实际仍被 GUI 单点绑定。
-  - 缓解：明确 `debug_viewer` 为旁路订阅层，关闭 Viewer 不影响 Agent 主闭环。
+  - 缓解：保持 Viewer 不承担权威执行责任，并把执行通道元数据与 provider readiness 分开展示。
 
 ## 里程碑
 - M1：完成双轨模式 PRD / Project 建模，并回写模块主文档、索引与 devlog。

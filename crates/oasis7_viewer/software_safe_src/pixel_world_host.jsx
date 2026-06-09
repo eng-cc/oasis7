@@ -1395,7 +1395,6 @@ function PixelWorldFocusCommandSurface(props) {
   const authSurface = () => core.buildAuthSurfaceModel();
   const chatCapability = () => authSurface().capabilities.agent_chat;
   const binding = () => core.selectedAgentBindingInfo();
-  const debugContext = () => core.selectedAgentExecutionDebugContext();
   const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
   const chatHistory = () =>
@@ -1419,23 +1418,8 @@ function PixelWorldFocusCommandSurface(props) {
             {chatCapability().enabled ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
           </span>
         </div>
-        <Show when={debugContext()?.provider_mode === "provider_loopback_http"}>
-          <div class="empty">
-            {tr(
-              locale(),
-              `当前选中的行动体正通过提供方回环桥接运行在 ${
-                debugContext()?.execution_mode || "headless_agent"
-              }；观察器仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用聊天。`,
-              `Selected agent currently runs through the provider-backed loopback bridge in ${
-                debugContext()?.execution_mode || "headless_agent"
-              }; viewer stays in debug_viewer observer-only mode, so chat is intentionally disabled here.`,
-            )}
-          </div>
-        </Show>
-        <Show when={!debugContext()?.provider_mode || debugContext()?.provider_mode !== "provider_loopback_http"}>
-          <Show when={!chatCapability().enabled}>
-            <div class="empty">{chatCapability().reason}</div>
-          </Show>
+        <Show when={!chatCapability().enabled}>
+          <div class="empty">{chatCapability().reason}</div>
         </Show>
         <div class="panel panel--nested">
           <div class="panel__header">
