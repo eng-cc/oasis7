@@ -363,12 +363,7 @@ impl PosNodeEngine {
             }
             if persisted_commit {
                 if let Some((height, block_hash, committed_at_ms)) = executed_commit {
-                    let _ = committed_at_ms;
-                    self.record_synced_replication_height(
-                        height,
-                        block_hash,
-                        crate::runtime_util::now_unix_ms(),
-                    )?;
+                    self.record_synced_replication_height(height, block_hash, committed_at_ms)?;
                     if let Some(callback) = progress_callback.as_deref_mut() {
                         let decision = self.idle_pending_decision()?;
                         callback(self.snapshot_from_decision(&decision));
@@ -518,12 +513,7 @@ impl PosNodeEngine {
                 )?;
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
-                let _ = committed_at_ms;
-                self.record_synced_replication_height(
-                    next_height,
-                    block_hash,
-                    crate::runtime_util::now_unix_ms(),
-                )?;
+                self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
                 if let Some(callback) = progress_callback.as_deref_mut() {
                     let decision = self.idle_pending_decision()?;
                     callback(self.snapshot_from_decision(&decision));
