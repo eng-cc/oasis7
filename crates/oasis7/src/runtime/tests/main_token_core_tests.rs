@@ -485,6 +485,17 @@ fn main_token_transfer_action_moves_liquid_balance_and_updates_nonce() {
         to_account_id: "player:bob".to_string(),
         amount: 250,
         nonce: 1,
+        asset_id: Some("main_token".to_string()),
+        memo: Some("bridge:deposit:alpha".to_string()),
+        chain_id: None,
+        network_id: None,
+        tx_version: None,
+        tx_type: None,
+        valid_until_unix_ms: None,
+        max_fee: None,
+        fee_asset_id: None,
+        application_payload_hash: None,
+        client_request_id: None,
     });
     world.step().expect("transfer main token");
 
@@ -503,11 +514,15 @@ fn main_token_transfer_action_moves_liquid_balance_and_updates_nonce() {
             to_account_id,
             amount,
             nonce,
+            asset_id,
+            memo,
         }) => {
             assert_eq!(from_account_id, "player:alice");
             assert_eq!(to_account_id, "player:bob");
             assert_eq!(*amount, 250);
             assert_eq!(*nonce, 1);
+            assert_eq!(asset_id.as_deref(), Some("main_token"));
+            assert_eq!(memo.as_deref(), Some("bridge:deposit:alpha"));
         }
         other => panic!("expected MainTokenTransferred, got {other:?}"),
     }
@@ -538,6 +553,17 @@ fn main_token_transfer_action_rejects_insufficient_balance_without_mutation() {
         to_account_id: "player:bob".to_string(),
         amount: 11,
         nonce: 1,
+        asset_id: Some("main_token".to_string()),
+        memo: Some("overspend".to_string()),
+        chain_id: None,
+        network_id: None,
+        tx_version: None,
+        tx_type: None,
+        valid_until_unix_ms: None,
+        max_fee: None,
+        fee_asset_id: None,
+        application_payload_hash: None,
+        client_request_id: None,
     });
     world
         .step()
@@ -583,6 +609,17 @@ fn main_token_transfer_action_rejects_nonce_replay() {
         to_account_id: "player:bob".to_string(),
         amount: 30,
         nonce: 1,
+        asset_id: None,
+        memo: None,
+        chain_id: None,
+        network_id: None,
+        tx_version: None,
+        tx_type: None,
+        valid_until_unix_ms: None,
+        max_fee: None,
+        fee_asset_id: None,
+        application_payload_hash: None,
+        client_request_id: None,
     });
     world.step().expect("first transfer");
     assert_eq!(
@@ -595,6 +632,17 @@ fn main_token_transfer_action_rejects_nonce_replay() {
         to_account_id: "player:bob".to_string(),
         amount: 10,
         nonce: 1,
+        asset_id: None,
+        memo: None,
+        chain_id: None,
+        network_id: None,
+        tx_version: None,
+        tx_type: None,
+        valid_until_unix_ms: None,
+        max_fee: None,
+        fee_asset_id: None,
+        application_payload_hash: None,
+        client_request_id: None,
     });
     world.step().expect("replay transfer should be rejected");
 

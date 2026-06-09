@@ -136,7 +136,7 @@ pub(super) fn normalize_account_id(raw: &str, field: &str) -> Result<String, Str
     Ok(account_id.to_string())
 }
 
-fn is_allowed_account_id_byte(byte: u8) -> bool {
+pub(super) fn is_allowed_account_id_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'-' | b'_' | b'.')
 }
 
@@ -165,6 +165,17 @@ pub(super) fn build_transfer_submit_action(request: &ChainTransferSubmitRequest)
         to_account_id: request.to_account_id.clone(),
         amount: request.amount,
         nonce: request.nonce,
+        asset_id: request.asset_id.clone(),
+        memo: request.memo.clone(),
+        chain_id: request.chain_id.clone(),
+        network_id: request.network_id.clone(),
+        tx_version: request.tx_version,
+        tx_type: request.tx_type.clone(),
+        valid_until_unix_ms: request.valid_until_unix_ms,
+        max_fee: request.max_fee,
+        fee_asset_id: request.fee_asset_id.clone(),
+        application_payload_hash: request.application_payload_hash.clone(),
+        client_request_id: request.client_request_id.clone(),
     }
 }
 

@@ -13,8 +13,12 @@ use super::WebTransferSubmitRequest;
 const MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION: u8 = 1;
 #[cfg(target_arch = "wasm32")]
 const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "octransferauth:v1:";
+#[cfg(target_arch = "wasm32")]
+const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V2_PREFIX: &str = "octransferauth:v2:";
 const VIEWER_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
+const TRANSFER_TX_VERSION_V2: u8 = 2;
+const TRANSFER_TX_TYPE_ASSET_TRANSFER: &str = "asset_transfer";
 #[cfg(test)]
 pub(crate) static TRANSFER_AUTH_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[cfg(not(target_arch = "wasm32"))]
@@ -41,6 +45,28 @@ struct TransferActionData<'a> {
     to_account_id: &'a str,
     amount: u64,
     nonce: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    asset_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memo: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    network_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_version: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_type: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    valid_until_unix_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_fee: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fee_asset_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    application_payload_hash: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_request_id: Option<&'a str>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -65,22 +91,45 @@ pub(super) fn build_signed_web_transfer_submit_request(
     to_account_id: &str,
     amount: u64,
     nonce: u64,
+    chain_id: Option<&str>,
+    network_id: Option<&str>,
 ) -> Result<WebTransferSubmitRequest, String> {
     let signer = resolve_transfer_auth_signer()?;
     let from_account_id = from_account_id.trim().to_string();
     let to_account_id = to_account_id.trim().to_string();
+    let chain_id = chain_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let network_id = network_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
     let (public_key, signature) = sign_transfer_request(
         signer,
         from_account_id.as_str(),
         to_account_id.as_str(),
         amount,
         nonce,
+        chain_id.as_deref(),
+        network_id.as_deref(),
     )?;
     Ok(WebTransferSubmitRequest {
         from_account_id,
         to_account_id,
         amount,
         nonce,
+        asset_id: Some("main_token".to_string()),
+        memo: None,
+        chain_id,
+        network_id,
+        tx_version: Some(TRANSFER_TX_VERSION_V2),
+        tx_type: Some(TRANSFER_TX_TYPE_ASSET_TRANSFER.to_string()),
+        valid_until_unix_ms: None,
+        max_fee: None,
+        fee_asset_id: None,
+        application_payload_hash: None,
+        client_request_id: None,
         public_key,
         signature,
     })
@@ -93,12 +142,25 @@ fn sign_transfer_request(
     to_account_id: &str,
     amount: u64,
     nonce: u64,
+    chain_id: Option<&str>,
+    network_id: Option<&str>,
 ) -> Result<(String, String), String> {
     let action = Action::TransferMainToken {
         from_account_id: from_account_id.to_string(),
         to_account_id: to_account_id.to_string(),
         amount,
         nonce,
+        asset_id: Some("main_token".to_string()),
+        memo: None,
+        chain_id: chain_id.map(ToOwned::to_owned),
+        network_id: network_id.map(ToOwned::to_owned),
+        tx_version: Some(TRANSFER_TX_VERSION_V2),
+        tx_type: Some(TRANSFER_TX_TYPE_ASSET_TRANSFER.to_string()),
+        valid_until_unix_ms: None,
+        max_fee: None,
+        fee_asset_id: None,
+        application_payload_hash: None,
+        client_request_id: None,
     };
     let proof = sign_main_token_runtime_action_auth(
         &action,
@@ -221,6 +283,8 @@ fn sign_transfer_request(
     to_account_id: &str,
     amount: u64,
     nonce: u64,
+    chain_id: Option<&str>,
+    network_id: Option<&str>,
 ) -> Result<(String, String), String> {
     let public_key = normalize_hex_array::<32>(
         signer.public_key.as_str(),
@@ -250,13 +314,15 @@ fn sign_transfer_request(
         amount,
         nonce,
         public_key.as_str(),
+        chain_id,
+        network_id,
     )?;
     let signature = signing_key.sign(payload.as_slice());
     Ok((
         public_key,
         format!(
             "{}{}",
-            MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX,
+            MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V2_PREFIX,
             hex::encode(signature.to_bytes())
         ),
     ))
@@ -269,6 +335,8 @@ fn build_transfer_signing_payload(
     amount: u64,
     nonce: u64,
     public_key: &str,
+    chain_id: Option<&str>,
+    network_id: Option<&str>,
 ) -> Result<Vec<u8>, String> {
     let envelope = MainTokenTransferSigningEnvelope {
         version: MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION,
@@ -280,6 +348,17 @@ fn build_transfer_signing_payload(
             to_account_id,
             amount,
             nonce,
+            asset_id: Some("main_token"),
+            memo: None,
+            chain_id,
+            network_id,
+            tx_version: Some(TRANSFER_TX_VERSION_V2),
+            tx_type: Some(TRANSFER_TX_TYPE_ASSET_TRANSFER),
+            valid_until_unix_ms: None,
+            max_fee: None,
+            fee_asset_id: None,
+            application_payload_hash: None,
+            client_request_id: None,
         }),
     };
     serde_json::to_vec(&envelope)
@@ -352,6 +431,28 @@ mod tests {
         to_account_id: &'a str,
         amount: u64,
         nonce: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        asset_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        memo: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        chain_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        network_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tx_version: Option<u8>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tx_type: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        valid_until_unix_ms: Option<i64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_fee: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fee_asset_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        application_payload_hash: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        client_request_id: Option<&'a str>,
     }
 
     #[derive(Debug, Serialize)]
@@ -375,6 +476,28 @@ mod tests {
         to_account_id: &'a str,
         amount: u64,
         nonce: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        asset_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        memo: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        chain_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        network_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tx_version: Option<u8>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tx_type: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        valid_until_unix_ms: Option<i64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_fee: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fee_asset_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        application_payload_hash: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        client_request_id: Option<&'a str>,
     }
 
     #[derive(Debug, Serialize)]
@@ -426,6 +549,17 @@ mod tests {
             to_account_id: "protocol:treasury".to_string(),
             amount: 7,
             nonce: 3,
+            asset_id: Some("main_token".to_string()),
+            memo: None,
+            chain_id: None,
+            network_id: None,
+            tx_version: Some(2),
+            tx_type: Some("asset_transfer".to_string()),
+            valid_until_unix_ms: None,
+            max_fee: None,
+            fee_asset_id: None,
+            application_payload_hash: None,
+            client_request_id: None,
         };
         std::env::set_var(VIEWER_AUTH_PUBLIC_KEY_ENV, public_key.as_str());
         std::env::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, private_key.as_str());
@@ -434,6 +568,8 @@ mod tests {
             "protocol:treasury",
             7,
             3,
+            None,
+            None,
         )
         .expect("signed request");
         let verified = verify_main_token_runtime_action_auth(
@@ -463,6 +599,17 @@ mod tests {
             to_account_id: "protocol:treasury".to_string(),
             amount: 7,
             nonce: 9,
+            asset_id: Some("main_token".to_string()),
+            memo: None,
+            chain_id: None,
+            network_id: None,
+            tx_version: Some(2),
+            tx_type: Some("asset_transfer".to_string()),
+            valid_until_unix_ms: None,
+            max_fee: None,
+            fee_asset_id: None,
+            application_payload_hash: None,
+            client_request_id: None,
         };
         let proof = sign_main_token_runtime_action_auth(
             &action,
@@ -482,6 +629,17 @@ mod tests {
                 to_account_id: "protocol:treasury",
                 amount: 7,
                 nonce: 9,
+                asset_id: Some("main_token"),
+                memo: None,
+                chain_id: None,
+                network_id: None,
+                tx_version: Some(2),
+                tx_type: Some("asset_transfer"),
+                valid_until_unix_ms: None,
+                max_fee: None,
+                fee_asset_id: None,
+                application_payload_hash: None,
+                client_request_id: None,
             }),
         })
         .expect("native payload");
@@ -496,6 +654,17 @@ mod tests {
                 to_account_id: "protocol:treasury",
                 amount: 7,
                 nonce: 9,
+                asset_id: Some("main_token"),
+                memo: None,
+                chain_id: None,
+                network_id: None,
+                tx_version: Some(2),
+                tx_type: Some("asset_transfer"),
+                valid_until_unix_ms: None,
+                max_fee: None,
+                fee_asset_id: None,
+                application_payload_hash: None,
+                client_request_id: None,
             }),
         })
         .expect("wasm payload");
@@ -507,7 +676,7 @@ mod tests {
 
         let signature = proof.signature.expect("signature");
         let signature_hex = signature
-            .strip_prefix("octransferauth:v1:")
+            .strip_prefix("octransferauth:v2:")
             .expect("transfer prefix");
         let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(
             &hex::decode(public_key.as_str())

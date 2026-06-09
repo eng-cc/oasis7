@@ -108,6 +108,8 @@ fn build_transfer_submit_request(
         draft.to_account_id.as_str(),
         amount,
         nonce,
+        None,
+        None,
     )
 }
 

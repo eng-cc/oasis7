@@ -1,5 +1,6 @@
 use super::*;
 use crate::node_engine_slashing::{build_validator_stake_proof_chain, evidence_hash};
+use crate::node_engine_transfer_filter::should_drop_transfer_action_before_proposal;
 
 const GOSSIP_REVERSE_PATH_SEED_INTERVAL_MS: i64 = 5_000;
 
@@ -546,8 +547,7 @@ impl PosNodeEngine {
         if proposer_id != node_id {
             return self.idle_pending_decision();
         }
-        let committed_actions =
-            drain_ordered_consensus_actions(&mut self.pending_consensus_actions);
+        let committed_actions = self.drain_proposable_consensus_actions(now_ms)?;
         let action_root = compute_consensus_action_root(committed_actions.as_slice())?;
         let parent_block_hash = self
             .last_committed_block_hash
@@ -579,6 +579,21 @@ impl PosNodeEngine {
             now_ms,
         )
         .map_err(node_pos_error)
+    }
+
+    fn drain_proposable_consensus_actions(
+        &mut self,
+        now_ms: i64,
+    ) -> Result<Vec<NodeConsensusAction>, NodeError> {
+        let queued = drain_ordered_consensus_actions(&mut self.pending_consensus_actions);
+        let mut filtered = Vec::with_capacity(queued.len());
+        for action in queued {
+            if should_drop_transfer_action_before_proposal(&action, now_ms)? {
+                continue;
+            }
+            filtered.push(action);
+        }
+        Ok(filtered)
     }
 
     pub(super) fn advance_pending_attestations(

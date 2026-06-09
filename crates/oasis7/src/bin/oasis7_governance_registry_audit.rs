@@ -423,6 +423,7 @@ mod tests {
         std::fs::create_dir_all(&root).expect("create root");
         let world_dir = root.join("world");
         let manifest_path = root.join("public_manifest.json");
+        std::fs::create_dir_all(&world_dir).expect("create world dir");
         let mut world = World::new();
         world
             .set_governance_finality_signer_registry(GovernanceFinalitySignerRegistry {
@@ -614,6 +615,7 @@ mod tests {
         std::fs::create_dir_all(&root).expect("create root");
         let world_dir = root.join("world");
         let manifest_path = root.join("public_manifest.json");
+        std::fs::create_dir_all(&world_dir).expect("create world dir");
         let mut world = World::new();
         world
             .set_governance_finality_signer_registry(GovernanceFinalitySignerRegistry {
@@ -784,6 +786,7 @@ mod tests {
         std::fs::create_dir_all(&root).expect("create root");
         let world_dir = root.join("world");
         let manifest_path = root.join("public_manifest.json");
+        std::fs::create_dir_all(&world_dir).expect("create world dir");
         let mut world = World::new();
         world
             .set_governance_execution_policy(GovernanceExecutionPolicy {

@@ -1029,7 +1029,7 @@ fn query_chain_status_endpoint_reads_p2p_payload() {
         let bytes = stream.read(&mut request).expect("read request");
         let request_text = String::from_utf8_lossy(&request[..bytes]);
         assert!(request_text.starts_with("GET /v1/chain/status HTTP/1.1"));
-        let body = r#"{"ok":false,"p2p":{"requested_user_mode":"auto_join","recommended_user_mode":"public_entry","effective_user_mode":"private_safe","applied_effective_user_mode":"private_safe","requires_explicit_public_entry_confirmation":true,"detected_reachability":"public","hole_punch_viability":"viable","relay_available":false,"probe_stable":true,"deployment_mode":"private","node_role_claim":"validator_core","rationale":["observed_reachability=public","public entry confirmation pending"]},"observability":{"status":"warn","summary":"network committed height is ahead by 2","ready":false,"connected_peer_count":1,"active_peer_count":1,"candidate_peer_count":0,"suspect_peer_count":0,"blocked_peer_count":0,"peer_with_issues_count":0,"known_peer_heads":1,"network_head_available":true,"network_height_lag":2,"transport_stable":true,"transport_stability_score":100,"reachability_policy_ok":true,"recent_replication_error_count":0,"storage_degraded":false,"reward_runtime_degraded":false,"alerts":[{"severity":"warn","code":"consensus_network_lag","summary":"network committed height is ahead by 2"}]},"replication":{"local_peer_id":"peer-local","connected_peers":["peer-a"],"peer_healths":[{"peer_id":"peer-a","status":"active","issues":[],"discovery_sources":["bootstrap"],"active_path_kind":"direct"}]}}"#;
+        let body = r#"{"ok":false,"network_tier":{"chain_id":"oasis7-public-testnet","network_id":"oasis7-public-testnet"},"p2p":{"requested_user_mode":"auto_join","recommended_user_mode":"public_entry","effective_user_mode":"private_safe","applied_effective_user_mode":"private_safe","requires_explicit_public_entry_confirmation":true,"detected_reachability":"public","hole_punch_viability":"viable","relay_available":false,"probe_stable":true,"deployment_mode":"private","node_role_claim":"validator_core","rationale":["observed_reachability=public","public entry confirmation pending"]},"observability":{"status":"warn","summary":"network committed height is ahead by 2","ready":false,"connected_peer_count":1,"active_peer_count":1,"candidate_peer_count":0,"suspect_peer_count":0,"blocked_peer_count":0,"peer_with_issues_count":0,"known_peer_heads":1,"network_head_available":true,"network_height_lag":2,"transport_stable":true,"transport_stability_score":100,"reachability_policy_ok":true,"recent_replication_error_count":0,"storage_degraded":false,"reward_runtime_degraded":false,"alerts":[{"severity":"warn","code":"consensus_network_lag","summary":"network committed height is ahead by 2"}]},"replication":{"local_peer_id":"peer-local","connected_peers":["peer-a"],"peer_healths":[{"peer_id":"peer-a","status":"active","issues":[],"discovery_sources":["bootstrap"],"active_path_kind":"direct"}]}}"#;
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             body.len(),
@@ -1042,6 +1042,9 @@ fn query_chain_status_endpoint_reads_p2p_payload() {
 
     let status_snapshot =
         query_chain_status_endpoint(format!("127.0.0.1:{}", bind.port()).as_str()).expect("ok");
+    let identity = status_snapshot.identity.expect("live chain identity");
+    assert_eq!(identity.chain_id, "oasis7-public-testnet");
+    assert_eq!(identity.network_id, "oasis7-public-testnet");
     let p2p_status = status_snapshot.p2p;
     assert_eq!(p2p_status.recommended_user_mode, "public_entry");
     assert_eq!(

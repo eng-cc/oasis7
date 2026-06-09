@@ -43,6 +43,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "main_tests_chain_args.rs"]
 mod chain_args_tests;
+#[path = "main_tests_chain_validation.rs"]
+mod chain_validation_tests;
 #[path = "main_tests_explorer.rs"]
 mod explorer_tests;
 #[path = "main_tests_onboarding.rs"]
@@ -773,6 +775,7 @@ fn apply_web_snapshot_preserves_chain_recovery_payload_but_disables_legacy_local
         detail: None,
         chain_status: "stale_execution_world".to_string(),
         chain_detail: Some("stale execution world detected".to_string()),
+        chain_identity: None,
         chain_p2p_status: None,
         chain_observability_status: None,
         chain_replication_status: None,
@@ -823,6 +826,7 @@ fn apply_web_snapshot_normalizes_hosted_public_join_chain_disable() {
         detail: None,
         chain_status: "not_started".to_string(),
         chain_detail: None,
+        chain_identity: None,
         chain_p2p_status: None,
         chain_observability_status: None,
         chain_replication_status: None,
@@ -855,6 +859,7 @@ fn apply_web_snapshot_preserves_local_dirty_config_when_snapshot_differs() {
         detail: None,
         chain_status: "not_started".to_string(),
         chain_detail: None,
+        chain_identity: None,
         chain_p2p_status: None,
         chain_observability_status: None,
         chain_replication_status: None,
@@ -879,6 +884,7 @@ fn apply_web_snapshot_clears_dirty_flag_when_snapshot_matches_local_config() {
         detail: None,
         chain_status: "not_started".to_string(),
         chain_detail: None,
+        chain_identity: None,
         chain_p2p_status: None,
         chain_observability_status: None,
         chain_replication_status: None,
@@ -911,6 +917,10 @@ fn apply_web_snapshot_marks_control_plane_snapshot_received() {
         detail: None,
         chain_status: "not_started".to_string(),
         chain_detail: None,
+        chain_identity: Some(crate::web_api_support::WebChainIdentityStatus {
+            chain_id: "oasis7-public-testnet".to_string(),
+            network_id: "oasis7-public-testnet".to_string(),
+        }),
         chain_p2p_status: None,
         chain_observability_status: None,
         chain_replication_status: None,
@@ -922,6 +932,9 @@ fn apply_web_snapshot_marks_control_plane_snapshot_received() {
 
     app.apply_web_snapshot(snapshot);
     assert!(app.control_plane_snapshot_received);
+    let identity = app.chain_identity.clone().expect("live chain identity");
+    assert_eq!(identity.chain_id, "oasis7-public-testnet");
+    assert_eq!(identity.network_id, "oasis7-public-testnet");
 }
 
 #[test]
@@ -1107,75 +1120,6 @@ fn collect_required_config_issues_accepts_bundle_relative_web_path_from_launcher
     assert!(!issues.contains(&ConfigIssue::LauncherBinMissing));
 
     let _ = fs::remove_dir_all(bundle_root);
-}
-
-#[test]
-fn collect_chain_required_config_issues_accepts_valid_required_fields() {
-    let chain_runtime_bin = std::env::current_exe()
-        .expect("current exe")
-        .to_string_lossy()
-        .to_string();
-    let config = LaunchConfig {
-        chain_enabled: true,
-        chain_runtime_bin,
-        chain_status_bind: "127.0.0.1:6121".to_string(),
-        chain_node_id: "chain-node-a".to_string(),
-        chain_world_id: "live-chain-a".to_string(),
-        chain_node_role: "sequencer".to_string(),
-        chain_node_tick_ms: "200".to_string(),
-        chain_node_validators: "node-a:100".to_string(),
-        ..LaunchConfig::default()
-    };
-
-    let issues = collect_chain_required_config_issues(&config);
-    assert!(issues.is_empty());
-}
-
-#[test]
-fn collect_chain_required_config_issues_requires_public_entry_confirmation() {
-    let issues = collect_chain_required_config_issues(&LaunchConfig {
-        deployment_mode: "trusted_local_only".to_string(),
-        chain_enabled: true,
-        chain_runtime_bin: std::env::current_exe()
-            .expect("current exe")
-            .to_string_lossy()
-            .to_string(),
-        chain_status_bind: "127.0.0.1:6121".to_string(),
-        chain_node_id: "chain-node-a".to_string(),
-        chain_node_role: "sequencer".to_string(),
-        chain_p2p_user_mode: "public_entry".to_string(),
-        chain_p2p_accept_public_entry: false,
-        chain_node_validators: "node-a:100".to_string(),
-        ..LaunchConfig::default()
-    });
-    assert!(issues.contains(&ConfigIssue::ChainPublicEntryConfirmationRequired));
-}
-
-#[test]
-fn build_chain_runtime_args_requires_public_entry_confirmation() {
-    let err = build_chain_runtime_args(&LaunchConfig {
-        deployment_mode: "trusted_local_only".to_string(),
-        chain_enabled: true,
-        chain_runtime_bin: "/tmp/oasis7_chain_runtime".to_string(),
-        chain_status_bind: "127.0.0.1:6121".to_string(),
-        chain_node_id: "chain-node-a".to_string(),
-        chain_node_role: "storage".to_string(),
-        chain_p2p_user_mode: "public_entry".to_string(),
-        chain_p2p_accept_public_entry: false,
-        chain_node_validators: "node-a:100".to_string(),
-        ..LaunchConfig::default()
-    })
-    .expect_err("public entry should require explicit confirmation");
-    assert!(err.contains("explicit confirmation"));
-}
-
-#[test]
-fn issue_field_ids_maps_phase_out_of_range_to_related_fields() {
-    let ids = issue_field_ids(ConfigIssue::ChainPosProposalTickPhaseOutOfRange);
-    assert_eq!(
-        ids,
-        &["chain_pos_ticks_per_slot", "chain_pos_proposal_tick_phase"]
-    );
 }
 
 fn make_temp_dir(label: &str) -> PathBuf {

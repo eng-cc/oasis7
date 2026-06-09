@@ -1,15 +1,22 @@
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::{
     host_for_url, parse_host_port, runtime_paths, ChainNodeObservabilitySnapshot,
     ChainP2pStatusSnapshot, ChainReplicationSnapshot, CHAIN_STATUS_PROBE_TIMEOUT_MS,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ChainIdentitySnapshot {
+    pub(crate) chain_id: String,
+    pub(crate) network_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ChainStatusProbeSnapshot {
+    pub(crate) identity: Option<ChainIdentitySnapshot>,
     pub(crate) p2p: ChainP2pStatusSnapshot,
     pub(crate) observability: ChainNodeObservabilitySnapshot,
     pub(crate) replication: ChainReplicationSnapshot,
@@ -78,7 +85,14 @@ fn parse_chain_status_probe_response(
     }
 
     #[derive(Deserialize)]
+    struct ChainNetworkTierProbeResponse {
+        chain_id: String,
+        network_id: String,
+    }
+
+    #[derive(Deserialize)]
     struct ChainStatusProbeResponse {
+        network_tier: Option<ChainNetworkTierProbeResponse>,
         p2p: ChainP2pStatusSnapshot,
         observability: ChainNodeObservabilitySnapshot,
         replication: ChainReplicationSnapshot,
@@ -87,6 +101,18 @@ fn parse_chain_status_probe_response(
     let payload: ChainStatusProbeResponse = serde_json::from_slice(body)
         .map_err(|err| format!("parse chain status probe JSON failed: {err}"))?;
     Ok(ChainStatusProbeSnapshot {
+        identity: payload.network_tier.and_then(|tier| {
+            let chain_id = tier.chain_id.trim().to_string();
+            let network_id = tier.network_id.trim().to_string();
+            if chain_id.is_empty() || network_id.is_empty() {
+                None
+            } else {
+                Some(ChainIdentitySnapshot {
+                    chain_id,
+                    network_id,
+                })
+            }
+        }),
         p2p: payload.p2p,
         observability: payload.observability,
         replication: payload.replication,

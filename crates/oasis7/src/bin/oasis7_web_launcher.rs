@@ -373,6 +373,7 @@ struct ServiceState {
     process_state: ProcessState,
     running: Option<RunningProcess>,
     chain_runtime_status: ChainRuntimeStatus,
+    chain_identity: Option<ChainIdentitySnapshot>,
     chain_p2p_status: Option<ChainP2pStatusSnapshot>,
     chain_observability_status: Option<ChainNodeObservabilitySnapshot>,
     chain_replication_status: Option<ChainReplicationSnapshot>,
@@ -404,6 +405,7 @@ impl ServiceState {
             process_state: ProcessState::Idle,
             running: None,
             chain_runtime_status,
+            chain_identity: None,
             chain_p2p_status: None,
             chain_observability_status: None,
             chain_replication_status: None,
@@ -440,6 +442,8 @@ struct StateSnapshot {
     chain_pid: Option<u32>,
     chain_running: bool,
     chain_runtime_bin: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_identity: Option<ChainIdentitySnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     chain_p2p_status: Option<ChainP2pStatusSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -483,6 +487,28 @@ struct ChainTransferSubmitRequest {
     to_account_id: String,
     amount: u64,
     nonce: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    asset_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    memo: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    chain_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    network_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tx_version: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tx_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    valid_until_unix_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max_fee: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fee_asset_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    application_payload_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    client_request_id: Option<String>,
     public_key: String,
     signature: String,
 }

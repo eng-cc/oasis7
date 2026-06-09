@@ -43,6 +43,7 @@ impl Default for RuntimeState {
 const CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION: u8 = 1;
 const MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION: u8 = 1;
 const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "octransferauth:v1:";
+const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V2_PREFIX: &str = "octransferauth:v2:";
 const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "occlaimauth:v1:";
 const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "ocgenesisauth:v1:";
 const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "octreasuryauth:v1:";
@@ -135,6 +136,28 @@ struct LocalTransferMainTokenSigningData<'a> {
     to_account_id: &'a str,
     amount: u64,
     nonce: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    asset_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memo: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    network_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_version: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_type: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    valid_until_unix_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_fee: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fee_asset_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    application_payload_hash: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_request_id: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -651,6 +674,19 @@ fn build_local_main_token_action_signing_action(
                     .get("nonce")
                     .and_then(JsonValue::as_u64)
                     .ok_or_else(|| "transfer action missing nonce".to_string())?,
+                asset_id: data.get("asset_id").and_then(JsonValue::as_str),
+                memo: data.get("memo").and_then(JsonValue::as_str),
+                chain_id: data.get("chain_id").and_then(JsonValue::as_str),
+                network_id: data.get("network_id").and_then(JsonValue::as_str),
+                tx_version: data.get("tx_version").and_then(JsonValue::as_u64),
+                tx_type: data.get("tx_type").and_then(JsonValue::as_str),
+                valid_until_unix_ms: data.get("valid_until_unix_ms").and_then(JsonValue::as_i64),
+                max_fee: data.get("max_fee").and_then(JsonValue::as_u64),
+                fee_asset_id: data.get("fee_asset_id").and_then(JsonValue::as_str),
+                application_payload_hash: data
+                    .get("application_payload_hash")
+                    .and_then(JsonValue::as_str),
+                client_request_id: data.get("client_request_id").and_then(JsonValue::as_str),
             },
         )),
         "ClaimMainTokenVesting" => Ok(LocalMainTokenActionSigningPayload::ClaimMainTokenVesting(
@@ -1022,7 +1058,24 @@ fn local_main_token_action_operation(action: &JsonValue) -> Result<&'static str,
 
 fn local_main_token_action_signature_prefix(action: &JsonValue) -> Result<&'static str, String> {
     match local_runtime_action_kind(action) {
-        Some("TransferMainToken") => Ok(MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX),
+        Some("TransferMainToken") => {
+            let data = local_runtime_action_data(action)?;
+            let uses_v2_context = data.get("chain_id").is_some()
+                || data.get("network_id").is_some()
+                || data.get("tx_version").is_some()
+                || data.get("tx_type").is_some()
+                || data.get("valid_until_unix_ms").is_some()
+                || data
+                    .get("asset_id")
+                    .and_then(JsonValue::as_str)
+                    .is_some_and(|value| value != "main_token")
+                || data.get("memo").is_some();
+            if uses_v2_context {
+                Ok(MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V2_PREFIX)
+            } else {
+                Ok(MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX)
+            }
+        }
         Some("ClaimMainTokenVesting") => Ok(MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX),
         Some("InitializeMainTokenGenesis") => Ok(MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX),
         Some("DistributeMainTokenTreasury") => Ok(MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX),

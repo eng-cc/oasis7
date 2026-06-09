@@ -647,11 +647,24 @@ impl ClientLauncherApp {
         };
 
         self.transfer_draft.nonce = nonce.to_string();
+        let Some(chain_identity) = self.chain_identity.as_ref() else {
+            let message = self
+                .tr(
+                    "转账提交失败：未获取到运行中链身份，请等待链状态就绪",
+                    "Transfer submit failed: live chain identity is unavailable; wait for chain status to become ready",
+                )
+                .to_string();
+            self.append_log(message.clone());
+            self.transfer_submit_state = TransferSubmitState::Failed(message);
+            return;
+        };
         let request = match crate::transfer_auth::build_signed_web_transfer_submit_request(
             self.transfer_draft.from_account_id.as_str(),
             self.transfer_draft.to_account_id.as_str(),
             amount,
             nonce,
+            Some(chain_identity.chain_id.as_str()),
+            Some(chain_identity.network_id.as_str()),
         ) {
             Ok(request) => request,
             Err(err) => {

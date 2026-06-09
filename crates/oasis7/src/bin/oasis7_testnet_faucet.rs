@@ -102,6 +102,22 @@ struct ChainTransferSubmitRequest {
     to_account_id: String,
     amount: u64,
     nonce: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    asset_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    network_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_version: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    valid_until_unix_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_request_id: Option<String>,
     public_key: String,
     signature: String,
 }
@@ -946,6 +962,17 @@ fn build_signed_transfer_request(
         to_account_id: to_account_id.to_string(),
         amount,
         nonce,
+        asset_id: None,
+        memo: None,
+        chain_id: None,
+        network_id: None,
+        tx_version: None,
+        tx_type: None,
+        valid_until_unix_ms: None,
+        max_fee: None,
+        fee_asset_id: None,
+        application_payload_hash: None,
+        client_request_id: None,
     };
     let proof =
         sign_main_token_runtime_action_auth(&action, from_account_id, public_key, private_key)
@@ -955,6 +982,14 @@ fn build_signed_transfer_request(
         to_account_id: to_account_id.to_string(),
         amount,
         nonce,
+        asset_id: None,
+        memo: None,
+        chain_id: None,
+        network_id: None,
+        tx_version: None,
+        tx_type: None,
+        valid_until_unix_ms: None,
+        client_request_id: None,
         public_key: proof
             .public_key
             .ok_or_else(|| "signed transfer proof missing public_key".to_string())?,

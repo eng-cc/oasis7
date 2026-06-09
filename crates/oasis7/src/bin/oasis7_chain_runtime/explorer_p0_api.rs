@@ -50,6 +50,28 @@ pub(super) struct ExplorerTxItem {
     pub(super) to_account_id: String,
     pub(super) amount: u64,
     pub(super) nonce: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) asset_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) memo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) chain_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) network_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) tx_version: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) tx_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) valid_until_unix_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) max_fee: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) fee_asset_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) application_payload_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) client_request_id: Option<String>,
     pub(super) status: TransferLifecycleStatus,
     pub(super) submitted_at_unix_ms: i64,
     pub(super) updated_at_unix_ms: i64,
