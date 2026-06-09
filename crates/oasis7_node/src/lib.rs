@@ -873,6 +873,7 @@ struct PosNodeEngine {
     missed_slot_count: u64,
     local_validator_id: String,
     node_player_id: String,
+    role: NodeRole,
     gossip_reverse_path_seeding_enabled: bool,
     last_gossip_reverse_path_seed_at_ms: Option<i64>,
     allow_local_proposals: bool,

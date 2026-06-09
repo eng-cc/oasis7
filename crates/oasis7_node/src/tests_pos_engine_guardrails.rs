@@ -14,20 +14,6 @@ impl NodeExecutionHook for PanicExecutionHook {
     }
 }
 
-struct GapWaitingExecutionHook;
-
-impl NodeExecutionHook for GapWaitingExecutionHook {
-    fn on_commit(
-        &mut self,
-        _context: NodeExecutionCommitContext,
-    ) -> Result<NodeExecutionCommitResult, String> {
-        Err(format!(
-            "{}: last_applied=0 incoming=8 predecessor=7",
-            EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE
-        ))
-    }
-}
-
 #[test]
 fn pos_engine_commits_single_validator_head() {
     let config = NodeConfig::new("node-a", "world-a", NodeRole::Observer).expect("config");
@@ -564,13 +550,17 @@ fn synced_non_sequencer_commit_keeps_verified_execution_binding_without_local_ma
         execution_block_hash: Some("exec-block-8".to_string()),
         execution_state_root: Some("exec-state-8".to_string()),
     };
-    let mut hook = GapWaitingExecutionHook;
+    let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut hook = PanicExecutionHook {
+        called: Arc::clone(&called),
+    };
 
     engine
         .apply_synced_replication_commit(&config.world_id, &payload, Some(&mut hook))
         .expect("apply synced replication commit");
 
-    assert_eq!(engine.last_execution_height, 0);
+    assert!(!called.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(engine.last_execution_height, 8);
     assert_eq!(engine.commit_execution_binding_for_height(8).expect("binding"), (
         Some("exec-block-8"),
         Some("exec-state-8"),

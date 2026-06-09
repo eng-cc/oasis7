@@ -318,6 +318,33 @@ impl PosNodeEngine {
             required_stake: self.required_stake,
             total_stake: self.total_stake,
         };
+        if !matches!(self.role, NodeRole::Sequencer) {
+            if let (Some(execution_block_hash), Some(execution_state_root)) = (
+                payload.execution_block_hash.as_deref(),
+                payload.execution_state_root.as_deref(),
+            ) {
+                self.validate_peer_commit_execution_binding(
+                    payload.height,
+                    Some(execution_block_hash),
+                    Some(execution_state_root),
+                )
+                .map_err(|err| NodeError::Replication {
+                    reason: format!(
+                        "synced replication height {} execution hash validation failed: {}",
+                        payload.height, err
+                    ),
+                })?;
+                self.remember_execution_binding(
+                    payload.height,
+                    execution_block_hash.to_string(),
+                    execution_state_root.to_string(),
+                );
+                self.last_execution_height = self.last_execution_height.max(payload.height);
+                self.last_execution_block_hash = Some(execution_block_hash.to_string());
+                self.last_execution_state_root = Some(execution_state_root.to_string());
+                return Ok((payload.block_hash.clone(), payload.committed_at_ms));
+            }
+        }
         let local_node_id = self.local_validator_id.clone();
         self.apply_committed_execution(
             local_node_id.as_str(),

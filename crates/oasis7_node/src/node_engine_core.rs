@@ -111,6 +111,7 @@ impl PosNodeEngine {
             missed_slot_count: 0,
             local_validator_id: config.node_id.clone(),
             node_player_id: config.player_id.clone(),
+            role: config.role,
             gossip_reverse_path_seeding_enabled: matches!(config.role, NodeRole::Observer),
             last_gossip_reverse_path_seed_at_ms: None,
             allow_local_proposals: config.allow_local_proposals,
