@@ -3,11 +3,16 @@ name = "pixel_world_bridge"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["webgl2_runtime"]
+webgl2_runtime = ["bevy/webgl2"]
+webgpu_runtime = ["bevy/webgpu"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bevy = { version = "0.18.0", default-features = false, features = ["2d", "web", "webgpu"] }
+bevy = { version = "0.18.0", default-features = false, features = ["2d", "web"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde-wasm-bindgen = "0.6"

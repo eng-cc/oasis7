@@ -170,3 +170,12 @@ Example:
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: `qa_engineer` 的流程性 findings 已被 fresh required validation 通过所消解；`runtime_engineer` 只读核对进一步确认 `oasis7_newapi_bridge_service` 的早先失败来自 shared target 缓存复用旧 worktree 产物，而非当前分支代码回归。代码改动本身无新增 findings，且 `wasm_platform_engineer` 维持 `no_findings`。
 - Residual Risk: 代码层剩余风险低。当前未收口项是环境差异而非仓库改动本身: Codex in-app browser 仍落在 `backend: Gl`，所以本 PR 只能声明“为 pixel world bridge 启用 Bevy WebGPU，并在外部 Chrome 验证生效”，不能宣称内嵌浏览器 CPU fallback 已被修复。
+
+## 2026-06-09 10:26:30 CST / tpm
+- 完成内容: 已处理 PR #389 上的 GitHub review thread `PRRT_kwDORHhWec6IAlas`。该评论指出单一 `bevy/webgpu` 产物会覆盖原有 `webgl2` 路径，导致无 `navigator.gpu` 的浏览器/会话失去原本可用的 WebGL2 fallback；经核对 Bevy 0.18 feature 语义后，评论成立。
+- 遗留事项: 需要推送修复 commit，并在 GitHub 上回复/resolve 该 thread；随后继续观察已有 CI。
+- Action: 将 `pixel_world_bridge` crate features 拆为 `webgpu_runtime` 与 `webgl2_runtime`；software-safe build 产出 `dist/pixel-world-bridge/webgpu/*` 与 `dist/pixel-world-bridge/webgl2/*` 两套 bridge 产物；保留顶层 `dist/pixel-world-bridge/pixel_world_bridge.js` 作为 selector 入口，按 `navigator.gpu` 能力动态选择 backend；同步更新 selector 单测与 bundle freshness manifest。
+- Validation Command: `npm --prefix crates/oasis7_viewer run test:ui`; `./scripts/build-viewer-software-safe.sh`; `./scripts/copy-viewer-web-dist.test.sh`; `./scripts/agent-browser-viewer-dist-freshness-test.sh`; `cargo test -p pixel_world_bridge --lib`; `./scripts/pr-review-thread-closeout.sh --unresolved-only`
+- Expected Result: 支持 WebGPU 的浏览器继续走 `webgpu` 产物；无 `navigator.gpu` 的环境保留 `webgl2` fallback 路径；公共 runtime 入口和现有 viewer contract 不变；用于支撑 review 的局部验证全部 fresh 通过。
+- Actual Result: 修复成立。`crates/oasis7_viewer/dist/pixel-world-bridge/` 下已同时生成顶层 selector、`webgpu/` 和 `webgl2/` 两套 bindgen/runtime 文件；`npm --prefix crates/oasis7_viewer run test:ui` 36/36 通过，新增 selector 分支测试 green；`./scripts/build-viewer-software-safe.sh`、`./scripts/copy-viewer-web-dist.test.sh`、`./scripts/agent-browser-viewer-dist-freshness-test.sh`、以及 `cargo test -p pixel_world_bridge --lib` fresh 通过。未解决 review thread inventory 仍只剩这 1 条，等待推送后回复/resolve。
+- Blocker / Next Action: 提交并推送 review fix commit；在 PR thread 中说明“保留 WebGL2 build path”已修复并附上验证证据；之后继续回到 PR checks/watch loop。

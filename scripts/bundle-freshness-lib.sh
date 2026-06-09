@@ -131,11 +131,23 @@ viewer_wasm_path, viewer_wasm_sha256 = hash_first("web/*.wasm")
 pixel_world_runtime_module_path, pixel_world_runtime_module_sha256 = hash_exact(
     "web/pixel-world-bridge/pixel_world_bridge.js"
 )
-pixel_world_bindgen_js_path, pixel_world_bindgen_js_sha256 = hash_exact(
-    "web/pixel-world-bridge/pixel_world_bridge_bindgen.js"
+pixel_world_webgl2_runtime_module_path, pixel_world_webgl2_runtime_module_sha256 = hash_exact(
+    "web/pixel-world-bridge/webgl2/pixel_world_bridge.js"
 )
-pixel_world_bindgen_wasm_path, pixel_world_bindgen_wasm_sha256 = hash_exact(
-    "web/pixel-world-bridge/pixel_world_bridge_bindgen_bg.wasm"
+pixel_world_webgl2_bindgen_js_path, pixel_world_webgl2_bindgen_js_sha256 = hash_exact(
+    "web/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js"
+)
+pixel_world_webgl2_bindgen_wasm_path, pixel_world_webgl2_bindgen_wasm_sha256 = hash_exact(
+    "web/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
+)
+pixel_world_webgpu_runtime_module_path, pixel_world_webgpu_runtime_module_sha256 = hash_exact(
+    "web/pixel-world-bridge/webgpu/pixel_world_bridge.js"
+)
+pixel_world_webgpu_bindgen_js_path, pixel_world_webgpu_bindgen_js_sha256 = hash_exact(
+    "web/pixel-world-bridge/webgpu/pixel_world_bridge_bindgen.js"
+)
+pixel_world_webgpu_bindgen_wasm_path, pixel_world_webgpu_bindgen_wasm_sha256 = hash_exact(
+    "web/pixel-world-bridge/webgpu/pixel_world_bridge_bindgen_bg.wasm"
 )
 launcher_js_path, launcher_js_sha256 = hash_first("web-launcher/*.js")
 launcher_wasm_path, launcher_wasm_sha256 = hash_first("web-launcher/*.wasm")
@@ -151,10 +163,18 @@ manifest = {
         "viewerWasmSha256": viewer_wasm_sha256,
         "pixelWorldRuntimeModulePath": pixel_world_runtime_module_path,
         "pixelWorldRuntimeModuleSha256": pixel_world_runtime_module_sha256,
-        "pixelWorldBindgenJsPath": pixel_world_bindgen_js_path,
-        "pixelWorldBindgenJsSha256": pixel_world_bindgen_js_sha256,
-        "pixelWorldBindgenWasmPath": pixel_world_bindgen_wasm_path,
-        "pixelWorldBindgenWasmSha256": pixel_world_bindgen_wasm_sha256,
+        "pixelWorldWebgl2RuntimeModulePath": pixel_world_webgl2_runtime_module_path,
+        "pixelWorldWebgl2RuntimeModuleSha256": pixel_world_webgl2_runtime_module_sha256,
+        "pixelWorldWebgl2BindgenJsPath": pixel_world_webgl2_bindgen_js_path,
+        "pixelWorldWebgl2BindgenJsSha256": pixel_world_webgl2_bindgen_js_sha256,
+        "pixelWorldWebgl2BindgenWasmPath": pixel_world_webgl2_bindgen_wasm_path,
+        "pixelWorldWebgl2BindgenWasmSha256": pixel_world_webgl2_bindgen_wasm_sha256,
+        "pixelWorldWebgpuRuntimeModulePath": pixel_world_webgpu_runtime_module_path,
+        "pixelWorldWebgpuRuntimeModuleSha256": pixel_world_webgpu_runtime_module_sha256,
+        "pixelWorldWebgpuBindgenJsPath": pixel_world_webgpu_bindgen_js_path,
+        "pixelWorldWebgpuBindgenJsSha256": pixel_world_webgpu_bindgen_js_sha256,
+        "pixelWorldWebgpuBindgenWasmPath": pixel_world_webgpu_bindgen_wasm_path,
+        "pixelWorldWebgpuBindgenWasmSha256": pixel_world_webgpu_bindgen_wasm_sha256,
         "launcherJsPath": launcher_js_path,
         "launcherJsSha256": launcher_js_sha256,
         "launcherWasmPath": launcher_wasm_path,

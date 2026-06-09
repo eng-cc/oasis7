@@ -5,6 +5,10 @@ import {
   createPixelWorldRuntimeBridge,
 } from "./pixel_world_runtime_loader.js";
 import { derivePixelWorldRenderState as deriveStubRenderState } from "./pixel_world_runtime_module_stub.js";
+import {
+  __resetPixelWorldRuntimeModuleForTest,
+  resolveBackendModuleUrlForTest,
+} from "./pixel_world_runtime_module_selector.js";
 
 describe("pixel world runtime loader", () => {
   it("uses the wasm runtime module when it loads successfully", async () => {
@@ -52,6 +56,18 @@ describe("pixel world runtime loader", () => {
       code: PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
       message: expect.stringContaining("missing wasm bridge"),
     }));
+  });
+
+  it("selects the webgpu backend when navigator.gpu is available", () => {
+    __resetPixelWorldRuntimeModuleForTest();
+    expect(resolveBackendModuleUrlForTest({
+      gpu: {},
+    })).toContain("/webgpu/pixel_world_bridge.js");
+  });
+
+  it("selects the webgl2 backend when navigator.gpu is unavailable", () => {
+    __resetPixelWorldRuntimeModuleForTest();
+    expect(resolveBackendModuleUrlForTest({})).toContain("/webgl2/pixel_world_bridge.js");
   });
 
   it("keeps the static runtime stub derivation explicitly unavailable", () => {
