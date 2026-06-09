@@ -109,6 +109,49 @@ describe("viewer performance metrics", () => {
     expect(markdown).toContain("http://127.0.0.1/viewer");
   });
 
+  it("fails when the probe finishes on fallback or without the wasm runtime", () => {
+    const summary = summarizeViewerPerformance({
+      runId: "renderer-regressed",
+      profile: "smoke",
+      durationMs: 1800,
+      sampleDurationMs: 1800,
+      frameIntervals: Array.from({ length: 110 }, (_, index) => (index % 12 === 0 ? 18 : 16)),
+      longTasks: [],
+      domReadiness: {
+        domContentLoadedMs: 240,
+        loadEventMs: 320,
+        domInteractiveMs: 200,
+      },
+      interactionLatencies: [42, 51, 65, 58],
+      dom: { nodeCount: 240, panelCount: 3, interactiveElementCount: 18, renderedCanvasCount: 0, fallbackShellCount: 1 },
+      finalState: {
+        pixelWorldRuntimeStatus: "fallback",
+        pixelWorldRuntimeSource: "detached",
+      },
+      thresholds: {
+        minFrameSamples: 100,
+        minFps: 50,
+        maxFrameP95Ms: 24,
+        maxFrameP99Ms: 24,
+        maxLongTaskCount: 0,
+        maxLongTaskTotalMs: 0,
+        maxDomContentLoadedMs: 1000,
+        maxLoadEventMs: 1000,
+        maxInteractionP95Ms: 100,
+      },
+    });
+
+    const failed = evaluateViewerPerformance(summary).gates
+      .filter((gate) => gate.status === "fail")
+      .map((gate) => gate.id);
+
+    expect(summary.status).toBe("fail");
+    expect(failed).toContain("pixel_world_runtime_status");
+    expect(failed).toContain("pixel_world_runtime_source");
+    expect(failed).toContain("rendered_canvas_count");
+    expect(failed).toContain("fallback_shell_count");
+  });
+
   it("keeps the probe artifact schema stable", () => {
     const summary = summarizeViewerPerformance({
       runId: "schema",

@@ -94,6 +94,20 @@ function compareGate(id, label, actual, threshold, comparator) {
   };
 }
 
+function compareExactGate(id, label, actual, expected) {
+  if (actual == null) {
+    return skipGate(id, label, expected);
+  }
+  return {
+    id,
+    label,
+    actual,
+    threshold: expected,
+    comparator: "===",
+    status: actual === expected ? "pass" : "fail",
+  };
+}
+
 export function normalizeViewerPerfThresholds(overrides = {}) {
   const thresholds = { ...DEFAULT_VIEWER_PERF_THRESHOLDS, ...overrides };
   thresholds.frameBudgetMs = Math.max(1, asNumber(thresholds.frameBudgetMs, 16.7));
@@ -217,6 +231,7 @@ export function summarizeViewerPerformance({
 export function evaluateViewerPerformance(summary) {
   const metrics = summary?.metrics || {};
   const thresholds = normalizeViewerPerfThresholds(summary?.thresholds || {});
+  const finalState = summary?.finalState || {};
   const gates = [
     compareGate("frame_samples", "frame sample count", asNumber(metrics.frameSamples), thresholds.minFrameSamples, ">="),
     compareGate("fps_avg", "average FPS", asNumber(metrics.fpsAvg), thresholds.minFps, ">="),
@@ -227,6 +242,10 @@ export function evaluateViewerPerformance(summary) {
     compareGate("dom_content_loaded_ms", "DOMContentLoaded", asNumber(metrics.domContentLoadedMs), thresholds.maxDomContentLoadedMs, "<="),
     compareGate("load_event_ms", "load event", asNumber(metrics.loadEventMs), thresholds.maxLoadEventMs, "<="),
     compareGate("interaction_p95_ms", "interaction p95", asNumber(metrics.interactionP95Ms), thresholds.maxInteractionP95Ms, "<="),
+    compareExactGate("pixel_world_runtime_status", "pixel world runtime status", finalState.pixelWorldRuntimeStatus ?? null, "ready"),
+    compareExactGate("pixel_world_runtime_source", "pixel world runtime source", finalState.pixelWorldRuntimeSource ?? null, "wasm_bindgen_runtime"),
+    compareGate("rendered_canvas_count", "rendered canvas count", asNumber(metrics.renderedCanvasCount), 1, ">="),
+    compareGate("fallback_shell_count", "fallback shell count", asNumber(metrics.fallbackShellCount), 0, "<="),
   ];
   return {
     status: gates.every((gate) => gate.status !== "fail") ? "pass" : "fail",
