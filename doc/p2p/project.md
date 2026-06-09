@@ -489,17 +489,18 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] mainchain-token-newapi-quota-bridge-proposal (PRD-P2P-027) [test_tier_required]: 新增“主链 Token 到 LetAI Run OpenAPI 额度桥接方案”专题 PRD / design / project，并冻结 `one-way OC -> LetAI Run OpenAPI quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、动态 project/`token_key`、query verification、manual review 风控与“不是公开兑换所 / 不支持自动提现回 OC”口径。 Trace: .pm/tasks/task_439da73e233f4395923f4d8cff007305.yaml
+- [x] ideal-transaction-model-doc-freeze (PRD-P2P-028A) [test_tier_required]: 新增“主链理想化交易升级方案”专题 PRD / design / project，并冻结不受当前实现约束的理想交易对象字段分组、完整 JSON 草案、理想签名域、理想回执、bridge/ledger/explorer 映射与最小理想升级集；后续 `p2p-chain-transfer-submit-client` 执行切片已完成 Phase 1 metadata-only 字段闭环，并把 `fee_payer` / `sponsor` / `priority_fee` / real fee debit 降级为未来可选 Phase 2+ fee/auth execution model。 Trace: .pm/tasks/task_5ea9d9779665405face4c4984c056613.yaml
   - 产物文件:
     - `doc/p2p/prd.md`
     - `doc/p2p/project.md`
     - `doc/p2p/README.md`
     - `doc/p2p/prd.index.md`
-    - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
-    - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md`
-    - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
-    - `.pm/tasks/task_439da73e233f4395923f4d8cff007305.execution.md`
+    - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md`
+    - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.design.md`
+    - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.project.md`
+    - `.pm/tasks/task_5ea9d9779665405face4c4984c056613.execution.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "LetAI|OpenAPI|token_key|platform_user_id|platform_project_id|external_order_id|bridge-service|bridge_ledger|one-way|自动提现|公开兑换所" doc/p2p/prd.md doc/p2p/project.md doc/p2p/README.md doc/p2p/prd.index.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
+    - `rg -n "chain_id|network_id|tx_version|tx_type|valid_until_unix_ms|asset_id|memo|application_payload_hash|max_fee|fee_asset_id|client_request_id|fee_payer|sponsor|priority_fee|real fee debit|metadata-only|Phase 2" doc/p2p/prd.md doc/p2p/project.md doc/p2p/README.md doc/p2p/prd.index.md doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.design.md doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] formal-network-tiers-testnet-mechanism (PRD-P2P-028) [test_tier_required]: 新增“正式网络分层与 testnet 机制”专题 PRD / design / project，并落 repo-owned `network_tier_manifest` skeleton、smoke 与 `shared_devnet/public_testnet/mainnet` example manifests，明确 `shared_devnet != public_testnet`、`public_testnet` 具备 public RPC/explorer/faucet/reset 语义、`mainnet` 绑定 `no faucet + frozen reset + MAINNET-1~4` gate；后续已补 `network-tier-public-testnet-readiness.sh`、lane scaffold 与 skeleton placeholder，用于把 skeleton 与 live candidate readiness 区分开。 Trace: .pm/tasks/task_7021c28970ef4f40b0367563df7f1e32.yaml

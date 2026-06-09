@@ -176,6 +176,17 @@ impl ExplorerStore {
                 to_account_id: request.to_account_id.clone(),
                 amount: request.amount,
                 nonce: request.nonce,
+                asset_id: request.asset_id.clone(),
+                memo: request.memo.clone(),
+                chain_id: request.chain_id.clone(),
+                network_id: request.network_id.clone(),
+                tx_version: request.tx_version,
+                tx_type: request.tx_type.clone(),
+                valid_until_unix_ms: request.valid_until_unix_ms,
+                max_fee: request.max_fee,
+                fee_asset_id: request.fee_asset_id.clone(),
+                application_payload_hash: request.application_payload_hash.clone(),
+                client_request_id: request.client_request_id.clone(),
                 status: TransferLifecycleStatus::Accepted,
                 submitted_at_unix_ms: now_ms,
                 updated_at_unix_ms: now_ms,
@@ -185,6 +196,17 @@ impl ExplorerStore {
                 error: None,
             });
         item.status = TransferLifecycleStatus::Accepted;
+        item.asset_id = request.asset_id.clone();
+        item.memo = request.memo.clone();
+        item.chain_id = request.chain_id.clone();
+        item.network_id = request.network_id.clone();
+        item.tx_version = request.tx_version;
+        item.tx_type = request.tx_type.clone();
+        item.valid_until_unix_ms = request.valid_until_unix_ms;
+        item.max_fee = request.max_fee;
+        item.fee_asset_id = request.fee_asset_id.clone();
+        item.application_payload_hash = request.application_payload_hash.clone();
+        item.client_request_id = request.client_request_id.clone();
         item.updated_at_unix_ms = now_ms;
         if item.submitted_at_unix_ms <= 0 {
             item.submitted_at_unix_ms = now_ms;
@@ -244,6 +266,18 @@ impl ExplorerStore {
                     to_account_id,
                     amount,
                     nonce,
+                    asset_id,
+                    memo,
+                    chain_id,
+                    network_id,
+                    tx_version,
+                    tx_type,
+                    valid_until_unix_ms,
+                    max_fee,
+                    fee_asset_id,
+                    application_payload_hash,
+                    client_request_id,
+                    ..
                 } = runtime_action
                 else {
                     continue;
@@ -278,6 +312,17 @@ impl ExplorerStore {
                         to_account_id: to_account_id.clone(),
                         amount,
                         nonce,
+                        asset_id: asset_id.clone(),
+                        memo: memo.clone(),
+                        chain_id: chain_id.clone(),
+                        network_id: network_id.clone(),
+                        tx_version,
+                        tx_type: tx_type.clone(),
+                        valid_until_unix_ms,
+                        max_fee,
+                        fee_asset_id: fee_asset_id.clone(),
+                        application_payload_hash: application_payload_hash.clone(),
+                        client_request_id: client_request_id.clone(),
                         status: TransferLifecycleStatus::Confirmed,
                         submitted_at_unix_ms: batch.committed_at_unix_ms,
                         updated_at_unix_ms: batch.committed_at_unix_ms,
@@ -290,6 +335,17 @@ impl ExplorerStore {
                 tx_item.to_account_id = to_account_id;
                 tx_item.amount = amount;
                 tx_item.nonce = nonce;
+                tx_item.asset_id = asset_id;
+                tx_item.memo = memo;
+                tx_item.chain_id = chain_id;
+                tx_item.network_id = network_id;
+                tx_item.tx_version = tx_version;
+                tx_item.tx_type = tx_type;
+                tx_item.valid_until_unix_ms = valid_until_unix_ms;
+                tx_item.max_fee = max_fee;
+                tx_item.fee_asset_id = fee_asset_id;
+                tx_item.application_payload_hash = application_payload_hash;
+                tx_item.client_request_id = client_request_id;
                 tx_item.status = TransferLifecycleStatus::Confirmed;
                 tx_item.updated_at_unix_ms = batch.committed_at_unix_ms;
                 if tx_item.submitted_at_unix_ms <= 0 {

@@ -23,6 +23,28 @@ pub(super) struct ExplorerTransferTxItem {
     pub(super) to_account_id: String,
     pub(super) amount: u64,
     pub(super) nonce: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) asset_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) memo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) chain_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) network_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) tx_version: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) tx_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) valid_until_unix_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) max_fee: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) fee_asset_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) application_payload_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) client_request_id: Option<String>,
     pub(super) status: super::TransferLifecycleStatus,
     pub(super) submitted_at_unix_ms: i64,
     pub(super) updated_at_unix_ms: i64,
@@ -833,6 +855,17 @@ fn record_to_tx_item(record: super::ChainTransferRecord) -> ExplorerTransferTxIt
         to_account_id: record.to_account_id,
         amount: record.amount,
         nonce: record.nonce,
+        asset_id: record.asset_id,
+        memo: record.memo,
+        chain_id: record.chain_id,
+        network_id: record.network_id,
+        tx_version: record.tx_version,
+        tx_type: record.tx_type,
+        valid_until_unix_ms: record.valid_until_unix_ms,
+        max_fee: record.max_fee,
+        fee_asset_id: record.fee_asset_id,
+        application_payload_hash: record.application_payload_hash,
+        client_request_id: record.client_request_id,
         status: record.status,
         submitted_at_unix_ms: record.submitted_at_unix_ms,
         updated_at_unix_ms: record.updated_at_unix_ms,

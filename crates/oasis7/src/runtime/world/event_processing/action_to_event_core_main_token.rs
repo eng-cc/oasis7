@@ -15,9 +15,13 @@ impl World {
         to_account_id: &str,
         amount: u64,
         nonce: u64,
+        asset_id: Option<&str>,
+        memo: Option<&str>,
     ) -> DomainEvent {
         let from_account_id = from_account_id.trim();
         let to_account_id = to_account_id.trim();
+        let asset_id = asset_id.map(str::trim).filter(|value| !value.is_empty());
+        let memo = memo.map(str::trim).filter(|value| !value.is_empty());
         if from_account_id.is_empty() {
             return DomainEvent::ActionRejected {
                 action_id,
@@ -64,6 +68,8 @@ impl World {
             to_account_id: to_account_id.to_string(),
             amount,
             nonce,
+            asset_id: asset_id.map(ToOwned::to_owned),
+            memo: memo.map(ToOwned::to_owned),
         };
         let mut preview_state = self.state.clone();
         if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {

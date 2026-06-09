@@ -442,6 +442,9 @@ impl World {
                 to_account_id,
                 amount,
                 nonce,
+                asset_id,
+                memo,
+                ..
             } => Ok(WorldEventBody::Domain(
                 self.evaluate_transfer_main_token_action(
                     action_id,
@@ -449,6 +452,8 @@ impl World {
                     to_account_id.as_str(),
                     *amount,
                     *nonce,
+                    asset_id.as_deref(),
+                    memo.as_deref(),
                 ),
             )),
             Action::ApplyMainTokenEpochIssuance {

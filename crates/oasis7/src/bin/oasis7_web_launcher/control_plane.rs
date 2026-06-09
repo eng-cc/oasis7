@@ -28,7 +28,7 @@ mod support;
 #[path = "control_plane/tests.rs"]
 mod tests;
 use self::chain_requests::{submit_chain_feedback_remote, submit_chain_transfer_remote};
-pub(super) use self::chain_status_probe::query_chain_status_endpoint;
+pub(super) use self::chain_status_probe::{query_chain_status_endpoint, ChainIdentitySnapshot};
 #[cfg(test)]
 use self::support::resolve_viewer_static_env_override;
 use self::support::{
@@ -268,6 +268,7 @@ pub(super) fn poll_chain_process_state(state: &mut ServiceState) {
 pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
     if !state.config.chain_enabled || local_chain_runtime_is_blocked(&state.config) {
         state.chain_runtime_status = ChainRuntimeStatus::Disabled;
+        state.chain_identity = None;
         state.chain_p2p_status = None;
         state.chain_observability_status = None;
         state.chain_replication_status = None;
@@ -284,6 +285,7 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
                 | ChainRuntimeStatus::Unreachable(_)
         ) {
             state.chain_runtime_status = ChainRuntimeStatus::NotStarted;
+            state.chain_identity = None;
             state.chain_p2p_status = None;
             state.chain_observability_status = None;
             state.chain_replication_status = None;
@@ -305,12 +307,14 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
     match query_chain_status_endpoint(state.config.chain_status_bind.as_str()) {
         Ok(status_snapshot) => {
             state.chain_runtime_status = ChainRuntimeStatus::Ready;
+            state.chain_identity = status_snapshot.identity;
             state.chain_p2p_status = Some(status_snapshot.p2p);
             state.chain_observability_status = Some(status_snapshot.observability);
             state.chain_replication_status = Some(status_snapshot.replication);
             state.chain_recovery = None;
         }
         Err(err) => {
+            state.chain_identity = None;
             state.chain_p2p_status = None;
             state.chain_observability_status = None;
             state.chain_replication_status = None;
@@ -705,6 +709,7 @@ pub(super) fn snapshot_from_state(
             &state.config,
             state.chain_runtime_bin.as_str(),
         ),
+        chain_identity: state.chain_identity.clone(),
         chain_p2p_status: state.chain_p2p_status.clone(),
         chain_observability_status: state.chain_observability_status.clone(),
         chain_replication_status: state.chain_replication_status.clone(),

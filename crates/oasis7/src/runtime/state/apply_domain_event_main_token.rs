@@ -43,6 +43,7 @@ impl WorldState {
                 to_account_id,
                 amount,
                 nonce,
+                ..
             } => self.apply_main_token_transfer(from_account_id, to_account_id, *amount, *nonce)?,
             DomainEvent::MainTokenEpochIssued {
                 epoch_index,

@@ -121,12 +121,19 @@ pub(crate) struct WebChainNodeObservabilityStatus {
     pub(crate) alerts: Vec<WebChainNodeObservabilityAlert>,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub(crate) struct WebChainIdentityStatus {
+    pub(crate) chain_id: String,
+    pub(crate) network_id: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WebStateSnapshot {
     pub(crate) status: String,
     pub(crate) detail: Option<String>,
     pub(crate) chain_status: String,
     pub(crate) chain_detail: Option<String>,
+    pub(crate) chain_identity: Option<WebChainIdentityStatus>,
     pub(crate) chain_p2p_status: Option<WebChainP2pStatus>,
     pub(crate) chain_observability_status: Option<WebChainNodeObservabilityStatus>,
     pub(crate) chain_replication_status: Option<WebChainReplicationStatus>,
@@ -168,6 +175,28 @@ pub(crate) struct WebTransferSubmitRequest {
     pub(crate) to_account_id: String,
     pub(crate) amount: u64,
     pub(crate) nonce: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) asset_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) memo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) chain_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) network_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) tx_version: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) tx_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) valid_until_unix_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) max_fee: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) fee_asset_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) application_payload_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) client_request_id: Option<String>,
     pub(crate) public_key: String,
     pub(crate) signature: String,
 }

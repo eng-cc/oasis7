@@ -8,6 +8,7 @@ fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
         detail: None,
         chain_status: "ready".to_string(),
         chain_detail: None,
+        chain_identity: None,
         chain_p2p_status: Some(super::WebChainP2pStatus {
             requested_user_mode: "auto_join".to_string(),
             recommended_user_mode: "public_entry".to_string(),

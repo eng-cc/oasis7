@@ -287,6 +287,10 @@ pub enum DomainEvent {
         to_account_id: String,
         amount: u64,
         nonce: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asset_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        memo: Option<String>,
     },
     MainTokenEpochIssued {
         epoch_index: u64,

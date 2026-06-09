@@ -6,6 +6,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from typing import Optional
 
 
 DEFAULT_BASE_URL = "https://api.letai.run/v1"
@@ -143,7 +144,7 @@ def load_newapi_bridge_state_route(route_label: str) -> dict:
     return {"api_key": token_key}
 
 
-def resolve_newapi_binding(bindings: list, route_label: str) -> dict | None:
+def resolve_newapi_binding(bindings: list, route_label: str) -> Optional[dict]:
     normalized_label = route_label.strip()
     by_ref = normalized_label
     by_bridge_user_id = normalized_label

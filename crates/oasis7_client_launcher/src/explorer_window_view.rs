@@ -770,6 +770,78 @@ impl ClientLauncherApp {
                         );
                         Self::render_explorer_detail_row(
                             ui,
+                            "asset_id",
+                            tx.asset_id.as_deref().unwrap_or("n/a"),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "memo",
+                            tx.memo.as_deref().unwrap_or("n/a"),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "chain_id",
+                            tx.chain_id.as_deref().unwrap_or("n/a"),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "network_id",
+                            tx.network_id.as_deref().unwrap_or("n/a"),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "tx_version",
+                            &tx.tx_version
+                                .map(|value| value.to_string())
+                                .unwrap_or_else(|| "n/a".to_string()),
+                            false,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "tx_type",
+                            tx.tx_type.as_deref().unwrap_or("n/a"),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "valid_until_unix_ms",
+                            &tx.valid_until_unix_ms
+                                .map(|value| value.to_string())
+                                .unwrap_or_else(|| "n/a".to_string()),
+                            false,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "max_fee",
+                            &tx.max_fee
+                                .map(|value| value.to_string())
+                                .unwrap_or_else(|| "n/a".to_string()),
+                            false,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "fee_asset_id",
+                            tx.fee_asset_id.as_deref().unwrap_or("n/a"),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "application_payload_hash",
+                            tx.application_payload_hash.as_deref().unwrap_or("n/a"),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "client_request_id",
+                            tx.client_request_id.as_deref().unwrap_or("n/a"),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
                             "submitted_at",
                             &tx.submitted_at_unix_ms.to_string(),
                             false,
@@ -1074,6 +1146,26 @@ impl ClientLauncherApp {
                 "{} -> {} · amount {} · nonce {}",
                 tx.from_account_id, tx.to_account_id, tx.amount, tx.nonce
             ));
+            if tx.asset_id.is_some() || tx.memo.is_some() {
+                ui.small(format!(
+                    "asset {} · memo {}",
+                    tx.asset_id.as_deref().unwrap_or("n/a"),
+                    tx.memo.as_deref().unwrap_or("n/a"),
+                ));
+            }
+            if tx.chain_id.is_some()
+                || tx.network_id.is_some()
+                || tx.tx_type.is_some()
+                || tx.tx_version.is_some()
+            {
+                ui.small(format!(
+                    "chain {} · network {} · type {} · v{}",
+                    tx.chain_id.as_deref().unwrap_or("n/a"),
+                    tx.network_id.as_deref().unwrap_or("n/a"),
+                    tx.tx_type.as_deref().unwrap_or("n/a"),
+                    tx.tx_version.unwrap_or_default()
+                ));
+            }
             ui.small(format!(
                 "block {} · submitted {}",
                 tx.block_height

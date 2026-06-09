@@ -16,6 +16,15 @@ use serde::{Deserialize, Serialize};
 
 #[path = "transfer_submit_explorer_p1_api.rs"]
 mod explorer_p1_api;
+#[path = "transfer_submit_api_types.rs"]
+mod types;
+
+pub(super) use self::types::{
+    ChainExplorerOverviewResponse, ChainTransferAccountEntry, ChainTransferAccountsResponse,
+    ChainTransferHistoryResponse, ChainTransferLatencySummaryStatus, ChainTransferMetricsStatus,
+    ChainTransferRecord, ChainTransferStatusResponse, ChainTransferSubmitRequest,
+    ChainTransferSubmitResponse, TransferLifecycleCounters,
+};
 
 const TRANSFER_SUBMIT_PATH: &str = "/v1/chain/transfer/submit";
 const TRANSFER_STATUS_PATH: &str = "/v1/chain/transfer/status";
@@ -36,6 +45,9 @@ const TRANSFER_ERROR_SUBMIT_FAILED: &str = "submit_failed";
 const TRANSFER_ERROR_NOT_FOUND: &str = "not_found";
 const TRANSFER_ERROR_INVALID_SIGNATURE: &str = "invalid_signature";
 const TRANSFER_ERROR_ACCOUNT_AUTH_MISMATCH: &str = "account_auth_mismatch";
+const TRANSFER_ERROR_EXPIRED: &str = "expired";
+const TRANSFER_TX_VERSION_V2: u8 = 2;
+const TRANSFER_TX_TYPE_ASSET_TRANSFER: &str = "asset_transfer";
 
 static NEXT_TRANSFER_ACTION_ID: AtomicU64 = AtomicU64::new(1);
 static TRANSFER_TRACKER: OnceLock<Mutex<TransferTracker>> = OnceLock::new();
@@ -64,295 +76,6 @@ pub(super) enum TransferLifecycleStatus {
     Timeout,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ChainTransferSubmitRequest {
-    pub(super) from_account_id: String,
-    pub(super) to_account_id: String,
-    pub(super) amount: u64,
-    pub(super) nonce: u64,
-    pub(super) public_key: String,
-    pub(super) signature: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ChainTransferSubmitResponse {
-    pub(super) ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) action_id: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) submitted_at_unix_ms: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) lifecycle_status: Option<TransferLifecycleStatus>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error: Option<String>,
-}
-
-impl ChainTransferSubmitResponse {
-    pub(super) fn success(action_id: u64, submitted_at_unix_ms: i64) -> Self {
-        Self {
-            ok: true,
-            action_id: Some(action_id),
-            submitted_at_unix_ms: Some(submitted_at_unix_ms),
-            lifecycle_status: Some(TransferLifecycleStatus::Accepted),
-            error_code: None,
-            error: None,
-        }
-    }
-
-    pub(super) fn error(error_code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            ok: false,
-            action_id: None,
-            submitted_at_unix_ms: None,
-            lifecycle_status: None,
-            error_code: Some(error_code.into()),
-            error: Some(message.into()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ChainTransferRecord {
-    pub(super) action_id: u64,
-    pub(super) from_account_id: String,
-    pub(super) to_account_id: String,
-    pub(super) amount: u64,
-    pub(super) nonce: u64,
-    pub(super) status: TransferLifecycleStatus,
-    pub(super) submitted_at_unix_ms: i64,
-    pub(super) updated_at_unix_ms: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ChainTransferStatusResponse {
-    pub(super) ok: bool,
-    pub(super) observed_at_unix_ms: i64,
-    pub(super) action_id: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) status: Option<ChainTransferRecord>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error: Option<String>,
-}
-
-impl ChainTransferStatusResponse {
-    fn success(action_id: u64, status: ChainTransferRecord) -> Self {
-        Self {
-            ok: true,
-            observed_at_unix_ms: super::now_unix_ms(),
-            action_id,
-            status: Some(status),
-            error_code: None,
-            error: None,
-        }
-    }
-
-    fn error(action_id: u64, code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            ok: false,
-            observed_at_unix_ms: super::now_unix_ms(),
-            action_id,
-            status: None,
-            error_code: Some(code.into()),
-            error: Some(message.into()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ChainTransferHistoryResponse {
-    pub(super) ok: bool,
-    pub(super) observed_at_unix_ms: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) account_filter: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) status_filter: Option<TransferLifecycleStatus>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) action_filter: Option<u64>,
-    pub(super) limit: usize,
-    pub(super) total: usize,
-    pub(super) items: Vec<ChainTransferRecord>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error: Option<String>,
-}
-
-impl ChainTransferHistoryResponse {
-    fn success(
-        account_filter: Option<String>,
-        status_filter: Option<TransferLifecycleStatus>,
-        action_filter: Option<u64>,
-        limit: usize,
-        total: usize,
-        items: Vec<ChainTransferRecord>,
-    ) -> Self {
-        Self {
-            ok: true,
-            observed_at_unix_ms: super::now_unix_ms(),
-            account_filter,
-            status_filter,
-            action_filter,
-            limit,
-            total,
-            items,
-            error_code: None,
-            error: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ChainTransferAccountEntry {
-    pub(super) account_id: String,
-    pub(super) liquid_balance: u64,
-    pub(super) vested_balance: u64,
-    pub(super) restricted_starter_claim_balance: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) last_transfer_nonce: Option<u64>,
-    pub(super) next_nonce_hint: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ChainTransferAccountsResponse {
-    pub(super) ok: bool,
-    pub(super) observed_at_unix_ms: i64,
-    pub(super) node_id: String,
-    pub(super) world_id: String,
-    pub(super) accounts: Vec<ChainTransferAccountEntry>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error: Option<String>,
-}
-
-impl ChainTransferAccountsResponse {
-    fn success(node_id: &str, world_id: &str, accounts: Vec<ChainTransferAccountEntry>) -> Self {
-        Self {
-            ok: true,
-            observed_at_unix_ms: super::now_unix_ms(),
-            node_id: node_id.to_string(),
-            world_id: world_id.to_string(),
-            accounts,
-            error_code: None,
-            error: None,
-        }
-    }
-
-    fn error(
-        node_id: &str,
-        world_id: &str,
-        code: impl Into<String>,
-        message: impl Into<String>,
-    ) -> Self {
-        Self {
-            ok: false,
-            observed_at_unix_ms: super::now_unix_ms(),
-            node_id: node_id.to_string(),
-            world_id: world_id.to_string(),
-            accounts: Vec::new(),
-            error_code: Some(code.into()),
-            error: Some(message.into()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ChainExplorerOverviewResponse {
-    pub(super) ok: bool,
-    pub(super) observed_at_unix_ms: i64,
-    pub(super) node_id: String,
-    pub(super) world_id: String,
-    pub(super) latest_height: u64,
-    pub(super) committed_height: u64,
-    pub(super) network_committed_height: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) last_block_hash: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) last_execution_block_hash: Option<String>,
-    pub(super) tracked_records: usize,
-    pub(super) transfer_total: usize,
-    pub(super) transfer_accepted: usize,
-    pub(super) transfer_pending: usize,
-    pub(super) transfer_confirmed: usize,
-    pub(super) transfer_failed: usize,
-    pub(super) transfer_timeout: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(super) struct ChainTransferLatencySummaryStatus {
-    pub(super) sample_count: usize,
-    pub(super) avg_latency_ms: Option<i64>,
-    pub(super) max_latency_ms: Option<i64>,
-    pub(super) p50_latency_ms: Option<i64>,
-    pub(super) p95_latency_ms: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(super) struct ChainTransferMetricsStatus {
-    pub(super) tracked_records: usize,
-    pub(super) accepted_count: usize,
-    pub(super) pending_count: usize,
-    pub(super) confirmed_count: usize,
-    pub(super) failed_count: usize,
-    pub(super) timeout_count: usize,
-    pub(super) inflight_count: usize,
-    pub(super) oldest_inflight_age_ms: Option<i64>,
-    pub(super) recent_confirmation_latency: ChainTransferLatencySummaryStatus,
-}
-
-impl ChainExplorerOverviewResponse {
-    fn success(
-        node_id: &str,
-        world_id: &str,
-        snapshot: &oasis7_node::NodeSnapshot,
-        counters: TransferLifecycleCounters,
-    ) -> Self {
-        Self {
-            ok: true,
-            observed_at_unix_ms: super::now_unix_ms(),
-            node_id: node_id.to_string(),
-            world_id: world_id.to_string(),
-            latest_height: snapshot.consensus.latest_height,
-            committed_height: snapshot.consensus.committed_height,
-            network_committed_height: snapshot.consensus.network_committed_height,
-            last_block_hash: snapshot.consensus.last_block_hash.clone(),
-            last_execution_block_hash: snapshot.consensus.last_execution_block_hash.clone(),
-            tracked_records: counters.total,
-            transfer_total: counters.total,
-            transfer_accepted: counters.accepted,
-            transfer_pending: counters.pending,
-            transfer_confirmed: counters.confirmed,
-            transfer_failed: counters.failed,
-            transfer_timeout: counters.timeout,
-            error_code: None,
-            error: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct TransferLifecycleCounters {
-    total: usize,
-    accepted: usize,
-    pending: usize,
-    confirmed: usize,
-    failed: usize,
-    timeout: usize,
-}
-
 #[derive(Debug, Clone)]
 struct TrackedTransfer {
     action_id: u64,
@@ -360,6 +83,17 @@ struct TrackedTransfer {
     to_account_id: String,
     amount: u64,
     nonce: u64,
+    asset_id: Option<String>,
+    memo: Option<String>,
+    chain_id: Option<String>,
+    network_id: Option<String>,
+    tx_version: Option<u8>,
+    tx_type: Option<String>,
+    valid_until_unix_ms: Option<i64>,
+    max_fee: Option<u64>,
+    fee_asset_id: Option<String>,
+    application_payload_hash: Option<String>,
+    client_request_id: Option<String>,
     status: TransferLifecycleStatus,
     submitted_at_unix_ms: i64,
     updated_at_unix_ms: i64,
@@ -375,6 +109,17 @@ impl TrackedTransfer {
             to_account_id: self.to_account_id.clone(),
             amount: self.amount,
             nonce: self.nonce,
+            asset_id: self.asset_id.clone(),
+            memo: self.memo.clone(),
+            chain_id: self.chain_id.clone(),
+            network_id: self.network_id.clone(),
+            tx_version: self.tx_version,
+            tx_type: self.tx_type.clone(),
+            valid_until_unix_ms: self.valid_until_unix_ms,
+            max_fee: self.max_fee,
+            fee_asset_id: self.fee_asset_id.clone(),
+            application_payload_hash: self.application_payload_hash.clone(),
+            client_request_id: self.client_request_id.clone(),
             status: self.status,
             submitted_at_unix_ms: self.submitted_at_unix_ms,
             updated_at_unix_ms: self.updated_at_unix_ms,
@@ -403,6 +148,17 @@ impl TransferTracker {
             to_account_id: request.to_account_id.clone(),
             amount: request.amount,
             nonce: request.nonce,
+            asset_id: request.asset_id.clone(),
+            memo: request.memo.clone(),
+            chain_id: request.chain_id.clone(),
+            network_id: request.network_id.clone(),
+            tx_version: request.tx_version,
+            tx_type: request.tx_type.clone(),
+            valid_until_unix_ms: request.valid_until_unix_ms,
+            max_fee: request.max_fee,
+            fee_asset_id: request.fee_asset_id.clone(),
+            application_payload_hash: request.application_payload_hash.clone(),
+            client_request_id: request.client_request_id.clone(),
             status: TransferLifecycleStatus::Accepted,
             submitted_at_unix_ms: now_ms,
             updated_at_unix_ms: now_ms,
@@ -421,12 +177,34 @@ impl TransferTracker {
         to_account_id: String,
         amount: u64,
         nonce: u64,
+        asset_id: Option<String>,
+        memo: Option<String>,
+        chain_id: Option<String>,
+        network_id: Option<String>,
+        tx_version: Option<u8>,
+        tx_type: Option<String>,
+        valid_until_unix_ms: Option<i64>,
+        max_fee: Option<u64>,
+        fee_asset_id: Option<String>,
+        application_payload_hash: Option<String>,
+        client_request_id: Option<String>,
         committed_at_unix_ms: i64,
     ) {
         match self.by_action_id.get_mut(&action_id) {
             Some(existing) => {
                 existing.status = TransferLifecycleStatus::Confirmed;
                 existing.updated_at_unix_ms = committed_at_unix_ms;
+                existing.asset_id = asset_id;
+                existing.memo = memo;
+                existing.chain_id = chain_id;
+                existing.network_id = network_id;
+                existing.tx_version = tx_version;
+                existing.tx_type = tx_type;
+                existing.valid_until_unix_ms = valid_until_unix_ms;
+                existing.max_fee = max_fee;
+                existing.fee_asset_id = fee_asset_id;
+                existing.application_payload_hash = application_payload_hash;
+                existing.client_request_id = client_request_id;
                 existing.error_code = None;
                 existing.error = None;
             }
@@ -439,6 +217,17 @@ impl TransferTracker {
                         to_account_id,
                         amount,
                         nonce,
+                        asset_id,
+                        memo,
+                        chain_id,
+                        network_id,
+                        tx_version,
+                        tx_type,
+                        valid_until_unix_ms,
+                        max_fee,
+                        fee_asset_id,
+                        application_payload_hash,
+                        client_request_id,
                         status: TransferLifecycleStatus::Confirmed,
                         submitted_at_unix_ms: committed_at_unix_ms,
                         updated_at_unix_ms: committed_at_unix_ms,
@@ -1018,6 +807,18 @@ fn preflight_validate_transfer_request(
     execution_world_dir: &Path,
     request: &ChainTransferSubmitRequest,
 ) -> Result<(), (String, String)> {
+    if let Some(valid_until_unix_ms) = request.valid_until_unix_ms {
+        let now_ms = super::now_unix_ms();
+        if valid_until_unix_ms < now_ms {
+            return Err((
+                TRANSFER_ERROR_EXPIRED.to_string(),
+                format!(
+                    "transfer request expired: valid_until_unix_ms={valid_until_unix_ms} now_unix_ms={now_ms}"
+                ),
+            ));
+        }
+    }
+
     let world = match super::execution_bridge::load_execution_world(execution_world_dir) {
         Ok(world) => world,
         Err(err) => {
@@ -1085,6 +886,18 @@ fn sync_tracker_from_runtime(
                 to_account_id,
                 amount,
                 nonce,
+                asset_id,
+                memo,
+                chain_id,
+                network_id,
+                tx_version,
+                tx_type,
+                valid_until_unix_ms,
+                max_fee,
+                fee_asset_id,
+                application_payload_hash,
+                client_request_id,
+                ..
             } = action
             else {
                 continue;
@@ -1095,6 +908,17 @@ fn sync_tracker_from_runtime(
                 to_account_id,
                 amount,
                 nonce,
+                asset_id,
+                memo,
+                chain_id,
+                network_id,
+                tx_version,
+                tx_type,
+                valid_until_unix_ms,
+                max_fee,
+                fee_asset_id,
+                application_payload_hash,
+                client_request_id,
                 batch.committed_at_unix_ms,
             );
         }
@@ -1158,6 +982,41 @@ pub(super) fn parse_transfer_submit_request(
         normalize_public_key_field(request.public_key.as_str(), "transfer public_key")?;
     request.signature =
         normalize_signature_field(request.signature.as_str(), "transfer signature")?;
+    request.chain_id = request
+        .chain_id
+        .as_deref()
+        .map(|raw| normalize_protocol_string(raw, "chain_id"))
+        .transpose()?;
+    request.network_id = request
+        .network_id
+        .as_deref()
+        .map(|raw| normalize_protocol_string(raw, "network_id"))
+        .transpose()?;
+    request.asset_id = request
+        .asset_id
+        .as_deref()
+        .map(|raw| normalize_protocol_string(raw, "asset_id"))
+        .transpose()?;
+    request.fee_asset_id = request
+        .fee_asset_id
+        .as_deref()
+        .map(|raw| normalize_protocol_string(raw, "fee_asset_id"))
+        .transpose()?;
+    request.client_request_id = request
+        .client_request_id
+        .as_deref()
+        .map(|raw| normalize_protocol_string(raw, "client_request_id"))
+        .transpose()?;
+    request.tx_type = request
+        .tx_type
+        .as_deref()
+        .map(|raw| normalize_protocol_string(raw, "tx_type"))
+        .transpose()?;
+    request.memo = request
+        .memo
+        .as_deref()
+        .map(normalize_transfer_memo)
+        .transpose()?;
 
     if request.from_account_id == request.to_account_id {
         return Err("transfer from_account_id and to_account_id cannot be the same".to_string());
@@ -1168,7 +1027,69 @@ pub(super) fn parse_transfer_submit_request(
     if request.nonce == 0 {
         return Err("transfer nonce must be > 0".to_string());
     }
+    let uses_v2_context = request.chain_id.is_some()
+        || request.network_id.is_some()
+        || request.tx_version.is_some()
+        || request.tx_type.is_some()
+        || request.valid_until_unix_ms.is_some()
+        || request.max_fee.is_some()
+        || request.fee_asset_id.is_some()
+        || request.client_request_id.is_some()
+        || request
+            .asset_id
+            .as_deref()
+            .is_some_and(|value| value != "main_token")
+        || request.memo.is_some();
+    if uses_v2_context {
+        if request.tx_version != Some(TRANSFER_TX_VERSION_V2) {
+            return Err(format!(
+                "transfer tx_version must be {TRANSFER_TX_VERSION_V2} when v2 context fields are present"
+            ));
+        }
+        if request.tx_type.as_deref() != Some(TRANSFER_TX_TYPE_ASSET_TRANSFER) {
+            return Err(format!(
+                "transfer tx_type must be {TRANSFER_TX_TYPE_ASSET_TRANSFER} when v2 context fields are present"
+            ));
+        }
+        if request.valid_until_unix_ms.is_some_and(|value| value <= 0) {
+            return Err("transfer valid_until_unix_ms must be > 0".to_string());
+        }
+        if request.max_fee.is_some_and(|value| value == 0) {
+            return Err("transfer max_fee must be > 0".to_string());
+        }
+        if request.max_fee.is_some() && request.fee_asset_id.is_none() {
+            return Err("transfer fee_asset_id is required when max_fee is present".to_string());
+        }
+    }
     Ok(request)
+}
+
+fn normalize_protocol_string(raw: &str, label: &str) -> Result<String, String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err(format!("{label} cannot be empty"));
+    }
+    if value.len() > ACCOUNT_ID_MAX_LEN {
+        return Err(format!("{label} exceeds max length {ACCOUNT_ID_MAX_LEN}"));
+    }
+    if !value
+        .bytes()
+        .all(transfer_submit_api_support::is_allowed_account_id_byte)
+    {
+        return Err(format!("{label} contains unsupported characters"));
+    }
+    Ok(value.to_string())
+}
+
+fn normalize_transfer_memo(raw: &str) -> Result<String, String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err("memo cannot be empty".to_string());
+    }
+    if value.len() > ACCOUNT_ID_MAX_LEN {
+        return Err(format!("memo exceeds max length {ACCOUNT_ID_MAX_LEN}"));
+    }
+    Ok(value.to_string())
 }
 
 fn verify_transfer_submit_request_auth(

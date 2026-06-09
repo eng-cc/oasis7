@@ -503,6 +503,7 @@ impl ClientLauncherApp {
             snapshot.chain_status.as_str(),
             snapshot.chain_detail.as_deref(),
         );
+        self.chain_identity = snapshot.chain_identity;
         self.chain_p2p_status = snapshot.chain_p2p_status;
         self.chain_observability_status = snapshot.chain_observability_status;
         self.chain_replication_status = snapshot.chain_replication_status;
