@@ -6,7 +6,7 @@
 - role:
 - slice type:
 - intended multi-agent runtime: repo-configured `multi_agent_v2`.
-- actual multi-agent runtime/tool namespace: selected/exposed runtime when the tool reports it; otherwise `multi_agent`/`multi_agent_v1` fallback or `inherited/unverified` with connector/tool limitation.
+- actual multi-agent runtime/tool namespace: record the exact reported runtime label, namespace, or exposed tool surface when known; otherwise record the connector/tool limitation, and use `inherited/unverified` only when the actual dispatch surface cannot be verified.
 - model configuration: compatibility marker; fill the intended/actual fields below.
 - intended model configuration: workflow source-of-truth `Default subagent runtime` by default; record reason for any requested override.
 - actual dispatched model/reasoning: selected model/reasoning when the tool permits and reports it; otherwise `inherited/unverified` plus connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified.
@@ -37,7 +37,7 @@
 - role: gameplay_designer
 - slice type: implementation
 - intended multi-agent runtime: repo-configured `multi_agent_v2`
-- actual multi-agent runtime/tool namespace: `multi_agent_v2`, or `multi_agent_v1` / `inherited/unverified` with reason if the connector cannot select/report v2
+- actual multi-agent runtime/tool namespace: `multi_agent_v2` when exposed; otherwise the exact exposed tool surface or runtime label with reason, or `inherited/unverified` only when the connector cannot verify the actual dispatch surface
 - model configuration: see intended/actual fields
 - intended model configuration: workflow source-of-truth `Default subagent runtime`
 - actual dispatched model/reasoning: requested default runtime, or `inherited/unverified` with reason if the connector cannot select/report the model or actual dispatch cannot be verified
