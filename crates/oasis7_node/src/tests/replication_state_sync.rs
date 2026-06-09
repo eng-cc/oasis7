@@ -134,9 +134,12 @@ fn pos_engine_snapshot_reflects_synced_replication_progress_after_record() {
 
 #[test]
 fn pos_engine_snapshot_preserves_remote_commit_timestamp_during_gap_sync_progress() {
-    let config =
-        NodeConfig::new("node-a", "world-sync-progress-timestamp", NodeRole::Observer)
-            .expect("config");
+    let config = NodeConfig::new(
+        "node-a",
+        "world-sync-progress-timestamp",
+        NodeRole::Observer,
+    )
+    .expect("config");
     let mut engine = PosNodeEngine::new(&config).expect("engine");
     let remote_committed_at_ms = 7_777_i64;
 
