@@ -245,8 +245,27 @@ impl PosNodeEngine {
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
+        replication: Option<&mut ReplicationRuntime>,
+        execution_hook: Option<&mut dyn NodeExecutionHook>,
+    ) -> Result<(), NodeError> {
+        self.ingest_network_replications_with_progress(
+            endpoint,
+            node_id,
+            world_id,
+            replication,
+            execution_hook,
+            None,
+        )
+    }
+
+    pub(super) fn ingest_network_replications_with_progress(
+        &mut self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
+        mut progress_callback: Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -344,7 +363,16 @@ impl PosNodeEngine {
             }
             if persisted_commit {
                 if let Some((height, block_hash, committed_at_ms)) = executed_commit {
-                    self.record_synced_replication_height(height, block_hash, committed_at_ms)?;
+                    let _ = committed_at_ms;
+                    self.record_synced_replication_height(
+                        height,
+                        block_hash,
+                        crate::runtime_util::now_unix_ms(),
+                    )?;
+                    if let Some(callback) = progress_callback.as_deref_mut() {
+                        let decision = self.idle_pending_decision()?;
+                        callback(self.snapshot_from_decision(&decision));
+                    }
                 }
             }
         }
@@ -397,8 +425,27 @@ impl PosNodeEngine {
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
+        replication: Option<&mut ReplicationRuntime>,
+        execution_hook: Option<&mut dyn NodeExecutionHook>,
+    ) -> Result<(), NodeError> {
+        self.sync_missing_replication_commits_with_progress(
+            endpoint,
+            node_id,
+            world_id,
+            replication,
+            execution_hook,
+            None,
+        )
+    }
+
+    pub(super) fn sync_missing_replication_commits_with_progress(
+        &mut self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
+        mut progress_callback: Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -467,7 +514,16 @@ impl PosNodeEngine {
                 )?;
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
-                self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
+                let _ = committed_at_ms;
+                self.record_synced_replication_height(
+                    next_height,
+                    block_hash,
+                    crate::runtime_util::now_unix_ms(),
+                )?;
+                if let Some(callback) = progress_callback.as_deref_mut() {
+                    let decision = self.idle_pending_decision()?;
+                    callback(self.snapshot_from_decision(&decision));
+                }
                 next_height = checked_replication_successor(
                     next_height,
                     "next_height",

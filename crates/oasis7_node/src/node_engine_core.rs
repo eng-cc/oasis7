@@ -177,11 +177,38 @@ impl PosNodeEngine {
         world_id: &str,
         now_ms: i64,
         gossip: Option<&GossipEndpoint>,
+        replication: Option<&mut ReplicationRuntime>,
+        replication_network: Option<&mut ReplicationNetworkEndpoint>,
+        consensus_network: Option<&mut ConsensusNetworkEndpoint>,
+        queued_actions: Vec<NodeConsensusAction>,
+        execution_hook: Option<&mut dyn NodeExecutionHook>,
+    ) -> Result<NodeEngineTickResult, NodeError> {
+        self.tick_with_progress(
+            node_id,
+            world_id,
+            now_ms,
+            gossip,
+            replication,
+            replication_network,
+            consensus_network,
+            queued_actions,
+            execution_hook,
+            None,
+        )
+    }
+
+    pub(super) fn tick_with_progress(
+        &mut self,
+        node_id: &str,
+        world_id: &str,
+        now_ms: i64,
+        gossip: Option<&GossipEndpoint>,
         mut replication: Option<&mut ReplicationRuntime>,
         replication_network: Option<&mut ReplicationNetworkEndpoint>,
         consensus_network: Option<&mut ConsensusNetworkEndpoint>,
         queued_actions: Vec<NodeConsensusAction>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
+        mut progress_callback: Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
     ) -> Result<NodeEngineTickResult, NodeError> {
         merge_pending_consensus_actions(
             &mut self.pending_consensus_actions,
@@ -207,24 +234,80 @@ impl PosNodeEngine {
             self.ingest_consensus_network_messages(endpoint, world_id, current_slot)?;
         }
         if let Some(endpoint) = replication_network.as_ref() {
-            with_execution_hook(&mut execution_hook, |hook| {
-                self.ingest_network_replications(
-                    endpoint,
-                    node_id,
-                    world_id,
-                    replication.as_deref_mut(),
-                    hook,
-                )
-            })?;
-            with_execution_hook(&mut execution_hook, |hook| {
-                self.sync_missing_replication_commits(
-                    endpoint,
-                    node_id,
-                    world_id,
-                    replication.as_deref_mut(),
-                    hook,
-                )
-            })?;
+            match (&mut execution_hook, &mut progress_callback) {
+                (Some(hook), Some(callback)) => {
+                    self.ingest_network_replications_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        Some(&mut **hook),
+                        Some(&mut **callback),
+                    )?;
+                    self.sync_missing_replication_commits_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        Some(&mut **hook),
+                        Some(&mut **callback),
+                    )?;
+                }
+                (Some(hook), None) => {
+                    self.ingest_network_replications_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        Some(&mut **hook),
+                        None,
+                    )?;
+                    self.sync_missing_replication_commits_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        Some(&mut **hook),
+                        None,
+                    )?;
+                }
+                (None, Some(callback)) => {
+                    self.ingest_network_replications_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        None,
+                        Some(&mut **callback),
+                    )?;
+                    self.sync_missing_replication_commits_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        None,
+                        Some(&mut **callback),
+                    )?;
+                }
+                (None, None) => {
+                    self.ingest_network_replications_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        None,
+                        None,
+                    )?;
+                    self.sync_missing_replication_commits_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        None,
+                        None,
+                    )?;
+                }
+            }
         }
         let hold_for_replication_probe = if let Some(endpoint) = replication_network.as_ref() {
             with_execution_hook(&mut execution_hook, |hook| {
@@ -497,7 +580,7 @@ impl PosNodeEngine {
         self.last_inbound_timing_reject_reason = Some(reason);
     }
 
-    fn idle_pending_decision(&self) -> Result<PosDecision, NodeError> {
+    pub(super) fn idle_pending_decision(&self) -> Result<PosDecision, NodeError> {
         Ok(PosDecision {
             height: self.committed_height,
             slot: self.next_slot,
