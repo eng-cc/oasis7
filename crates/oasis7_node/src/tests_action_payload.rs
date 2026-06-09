@@ -745,9 +745,13 @@ fn submit_consensus_action_payload_rejects_queue_saturation() {
 
 #[test]
 fn pos_engine_proposal_filters_expired_transfer_actions_before_commit() {
-    let config = NodeConfig::new("node-expired-transfer", "world-expired-transfer", NodeRole::Observer)
-        .expect("config")
-        .with_auto_attest_all_validators(false);
+    let config = NodeConfig::new(
+        "node-expired-transfer",
+        "world-expired-transfer",
+        NodeRole::Observer,
+    )
+    .expect("config")
+    .with_auto_attest_all_validators(false);
     let mut engine = PosNodeEngine::new(&config).expect("engine");
 
     let (public_key_hex, _) = token_auth_test_signer(31);
@@ -768,11 +772,7 @@ fn pos_engine_proposal_filters_expired_transfer_actions_before_commit() {
             "valid_until_unix_ms": 900_i64
         }
     });
-    let payload = encode_signed_main_token_runtime_payload(
-        action,
-        from_account_id.as_str(),
-        31,
-    );
+    let payload = encode_signed_main_token_runtime_payload(action, from_account_id.as_str(), 31);
     let queued = NodeConsensusAction::from_payload(7, config.player_id.clone(), payload)
         .expect("queued transfer action");
     let result = engine

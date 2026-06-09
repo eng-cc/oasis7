@@ -41,18 +41,18 @@ pub(super) fn should_drop_transfer_action_before_proposal(
 }
 
 fn decode_pending_runtime_action_json(payload_cbor: &[u8]) -> Result<Option<JsonValue>, String> {
-    let envelope = match serde_cbor::from_slice::<PendingConsensusActionPayloadEnvelope>(payload_cbor)
-    {
-        Ok(envelope) => envelope,
-        Err(_) => PendingConsensusActionPayloadEnvelope {
-            version: 1,
-            auth: None,
-            body: PendingConsensusActionPayloadBody::RuntimeAction {
-                action: serde_cbor::from_slice::<JsonValue>(payload_cbor)
-                    .map_err(|err| format!("legacy runtime action decode failed: {err}"))?,
+    let envelope =
+        match serde_cbor::from_slice::<PendingConsensusActionPayloadEnvelope>(payload_cbor) {
+            Ok(envelope) => envelope,
+            Err(_) => PendingConsensusActionPayloadEnvelope {
+                version: 1,
+                auth: None,
+                body: PendingConsensusActionPayloadBody::RuntimeAction {
+                    action: serde_cbor::from_slice::<JsonValue>(payload_cbor)
+                        .map_err(|err| format!("legacy runtime action decode failed: {err}"))?,
+                },
             },
-        },
-    };
+        };
     match envelope.body {
         PendingConsensusActionPayloadBody::RuntimeAction { action } => Ok(Some(action)),
         PendingConsensusActionPayloadBody::SimulatorAction { .. } => Ok(None),
@@ -70,7 +70,9 @@ struct PendingConsensusActionPayloadEnvelope {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 enum PendingConsensusActionPayloadBody {
-    RuntimeAction { action: JsonValue },
+    RuntimeAction {
+        action: JsonValue,
+    },
     SimulatorAction {
         action: JsonValue,
         #[serde(default)]

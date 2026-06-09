@@ -547,8 +547,7 @@ impl PosNodeEngine {
         if proposer_id != node_id {
             return self.idle_pending_decision();
         }
-        let committed_actions =
-            self.drain_proposable_consensus_actions(now_ms)?;
+        let committed_actions = self.drain_proposable_consensus_actions(now_ms)?;
         let action_root = compute_consensus_action_root(committed_actions.as_slice())?;
         let parent_block_hash = self
             .last_committed_block_hash
