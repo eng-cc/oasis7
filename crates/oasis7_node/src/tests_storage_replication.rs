@@ -5,6 +5,45 @@ mod storage_replication_failover_tests;
 #[path = "tests_storage_replication_recovery.rs"]
 mod storage_replication_recovery_tests;
 
+#[derive(Clone)]
+struct SlowResponseTestNetwork {
+    inner: Arc<TestInMemoryNetwork>,
+    delay: Duration,
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for SlowResponseTestNetwork {
+    fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        self.inner.publish(topic, payload)
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        self.inner.subscribe(topic)
+    }
+
+    fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        thread::sleep(self.delay);
+        self.inner.request(protocol, payload)
+    }
+
+    fn request_with_providers(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        providers: &[String],
+    ) -> Result<Vec<u8>, WorldError> {
+        thread::sleep(self.delay);
+        self.inner.request_with_providers(protocol, payload, providers)
+    }
+
+    fn register_handler(
+        &self,
+        protocol: &str,
+        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        self.inner.register_handler(protocol, handler)
+    }
+}
+
 #[test]
 fn runtime_network_replication_gap_sync_reports_error_after_retries_exhausted() {
     let world_id = "world-network-gap-retry-exhausted";
@@ -529,6 +568,110 @@ fn gap_sync_limits_single_poll_work_to_publish_intermediate_progress() {
             .is_none()
     );
 
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
+fn runtime_snapshot_advances_during_slow_gap_sync_before_poll_finishes() {
+    let world_id = "world-runtime-slow-gap-sync-progress";
+    let dir_a = temp_dir("runtime-slow-gap-sync-a");
+    let dir_b = temp_dir("runtime-slow-gap-sync-b");
+    let validators = vec![
+        PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 60,
+        },
+        PosValidator {
+            validator_id: "node-b".to_string(),
+            stake: 40,
+        },
+    ];
+    let pos_config =
+        signed_pos_config_with_signer_seeds(validators, &[("node-a", 171), ("node-b", 172)]);
+    let network_impl = Arc::new(TestInMemoryNetwork::default());
+    let slow_network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(SlowResponseTestNetwork {
+        inner: Arc::clone(&network_impl),
+        delay: Duration::from_millis(30),
+    });
+
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_auto_attest_all_validators(true)
+        .with_replication(signed_replication_config(dir_a.clone(), 171));
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(signed_replication_config(dir_b.clone(), 172));
+
+    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&slow_network)));
+    runtime_a.start().expect("start a");
+    let reached = wait_until(Instant::now() + Duration::from_secs(8), || {
+        runtime_a.snapshot().consensus.committed_height >= 24
+    });
+    assert!(reached, "sequencer did not reach target height in time");
+    let target_height = runtime_a.snapshot().consensus.committed_height;
+    runtime_a.stop().expect("stop a");
+
+    let request = signed_fetch_commit_request_for_test(world_id, target_height, 171);
+    let payload = serde_json::to_vec(&request).expect("encode commit request");
+    let response_payload = slow_network
+        .request(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            payload.as_slice(),
+        )
+        .expect("fetch commit");
+    let response: super::replication::FetchCommitResponse =
+        serde_json::from_slice(&response_payload).expect("decode commit response");
+    assert!(response.found, "missing high commit");
+    let high_message = response.message.expect("high commit payload");
+
+    let topic = super::network_bridge::default_replication_topic(world_id);
+    network_impl.clear_topic(topic.as_str());
+    network_impl
+        .clear_topic(super::network_bridge::default_consensus_proposal_topic(world_id).as_str());
+    network_impl
+        .clear_topic(super::network_bridge::default_consensus_attestation_topic(world_id).as_str());
+    network_impl
+        .clear_topic(super::network_bridge::default_consensus_commit_topic(world_id).as_str());
+    let high_payload = serde_json::to_vec(&high_message).expect("encode high message");
+    slow_network
+        .publish(topic.as_str(), high_payload.as_slice())
+        .expect("publish high message");
+
+    let mut runtime_b = NodeRuntime::new(config_b)
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&slow_network)))
+        .with_replication_network_consensus_enabled(false);
+    runtime_b.start().expect("start b");
+
+    let intermediate_visible = wait_until(Instant::now() + Duration::from_secs(3), || {
+        let snapshot = runtime_b.snapshot();
+        snapshot.consensus.committed_height > 0 && snapshot.consensus.committed_height < target_height
+    });
+    let intermediate_snapshot = runtime_b.snapshot();
+    assert!(
+        intermediate_visible,
+        "runtime snapshot did not publish intermediate gap-sync progress: {:?}",
+        intermediate_snapshot
+    );
+
+    let synced = wait_until(Instant::now() + Duration::from_secs(8), || {
+        runtime_b.snapshot().consensus.committed_height >= target_height
+    });
+    assert!(synced, "observer did not finish sync in time");
+
+    runtime_b.stop().expect("stop b");
+    runtime_a.stop().ok();
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }

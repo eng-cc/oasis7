@@ -197,6 +197,16 @@ fn with_execution_hook<T>(
     }
 }
 
+fn publish_runtime_progress_snapshot(
+    state: &Arc<Mutex<RuntimeState>>,
+    snapshot: NodeConsensusSnapshot,
+    observed_at_ms: i64,
+) {
+    let mut current = lock_state(state);
+    current.consensus = snapshot;
+    current.last_tick_unix_ms = Some(observed_at_ms);
+}
+
 pub struct NodeRuntime {
     config: NodeConfig,
     replication_network: Option<NodeReplicationNetworkHandle>,
@@ -532,23 +542,43 @@ impl NodeRuntime {
                             let tick_result = if let Some(execution_hook) = execution_hook.as_ref()
                             {
                                 match execution_hook.lock() {
-                                    Ok(mut hook) => engine.tick(
-                                        &node_id,
-                                        &world_id,
-                                        now_ms,
-                                        gossip.as_deref(),
-                                        replication.as_mut(),
-                                        replication_network.as_mut(),
-                                        consensus_network.as_mut(),
-                                        queued_actions,
-                                        Some(hook.as_mut()),
-                                    ),
+                                    Ok(mut hook) => {
+                                        let progress_state = Arc::clone(&state);
+                                        let mut publish_progress =
+                                            |snapshot: NodeConsensusSnapshot| {
+                                                publish_runtime_progress_snapshot(
+                                                    &progress_state,
+                                                    snapshot,
+                                                    now_ms,
+                                                );
+                                            };
+                                        engine.tick_with_progress(
+                                            &node_id,
+                                            &world_id,
+                                            now_ms,
+                                            gossip.as_deref(),
+                                            replication.as_mut(),
+                                            replication_network.as_mut(),
+                                            consensus_network.as_mut(),
+                                            queued_actions,
+                                            Some(hook.as_mut()),
+                                            Some(&mut publish_progress),
+                                        )
+                                    }
                                     Err(_) => Err(NodeError::Execution {
                                         reason: "execution hook lock poisoned".to_string(),
                                     }),
                                 }
                             } else {
-                                engine.tick(
+                                let progress_state = Arc::clone(&state);
+                                let mut publish_progress = |snapshot: NodeConsensusSnapshot| {
+                                    publish_runtime_progress_snapshot(
+                                        &progress_state,
+                                        snapshot,
+                                        now_ms,
+                                    );
+                                };
+                                engine.tick_with_progress(
                                     &node_id,
                                     &world_id,
                                     now_ms,
@@ -558,6 +588,7 @@ impl NodeRuntime {
                                     consensus_network.as_mut(),
                                     queued_actions,
                                     None,
+                                    Some(&mut publish_progress),
                                 )
                             };
                             let maintenance_result = if tick_result.is_ok() {
