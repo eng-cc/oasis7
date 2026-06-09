@@ -46,6 +46,7 @@ const TRANSFER_ERROR_NOT_FOUND: &str = "not_found";
 const TRANSFER_ERROR_INVALID_SIGNATURE: &str = "invalid_signature";
 const TRANSFER_ERROR_ACCOUNT_AUTH_MISMATCH: &str = "account_auth_mismatch";
 const TRANSFER_ERROR_EXPIRED: &str = "expired";
+const TRANSFER_ERROR_UNSUPPORTED_ASSET: &str = "unsupported_asset";
 const TRANSFER_TX_VERSION_V2: u8 = 2;
 const TRANSFER_TX_TYPE_ASSET_TRANSFER: &str = "asset_transfer";
 
@@ -819,6 +820,15 @@ fn preflight_validate_transfer_request(
         }
     }
 
+    if let Some(asset_id) = request.asset_id.as_deref() {
+        if asset_id != "main_token" {
+            return Err((
+                TRANSFER_ERROR_UNSUPPORTED_ASSET.to_string(),
+                format!("transfer asset_id is not supported: {asset_id}"),
+            ));
+        }
+    }
+
     let world = match super::execution_bridge::load_execution_world(execution_world_dir) {
         Ok(world) => world,
         Err(err) => {
@@ -1017,6 +1027,14 @@ pub(super) fn parse_transfer_submit_request(
         .as_deref()
         .map(normalize_transfer_memo)
         .transpose()?;
+
+    if request
+        .asset_id
+        .as_deref()
+        .is_some_and(|value| value != "main_token")
+    {
+        return Err("transfer asset_id must be `main_token` when present".to_string());
+    }
 
     if request.from_account_id == request.to_account_id {
         return Err("transfer from_account_id and to_account_id cannot be the same".to_string());

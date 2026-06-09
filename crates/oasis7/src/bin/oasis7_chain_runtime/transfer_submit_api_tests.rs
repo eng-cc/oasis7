@@ -569,6 +569,32 @@ fn preflight_transfer_rejects_expired_v2_request() {
 }
 
 #[test]
+fn parse_transfer_submit_request_rejects_non_main_token_asset_id() {
+    let _guard = lock_transfer_test_state();
+    let (public_key, private_key) = transfer_test_signer(21);
+    let (to_public_key, _) = transfer_test_signer(22);
+    let mut request = build_signed_transfer_request_with_accounts(
+        main_token_account_id_from_node_public_key(public_key.as_str()),
+        main_token_account_id_from_node_public_key(to_public_key.as_str()),
+        5,
+        3,
+        public_key,
+        private_key.clone(),
+    );
+    request.asset_id = Some("oc_usdc".to_string());
+    request.memo = Some("unsupported-asset".to_string());
+    request.chain_id = Some("oasis7-main".to_string());
+    request.tx_version = Some(2);
+    request.tx_type = Some("asset_transfer".to_string());
+    resign_transfer_request(&mut request, private_key.as_str());
+
+    let body = serialize_transfer_request(&request);
+    let err =
+        parse_transfer_submit_request(body.as_slice()).expect_err("non-main asset should fail");
+    assert!(err.contains("asset_id must be `main_token`"));
+}
+
+#[test]
 fn transfer_submit_handler_returns_invalid_request_for_bad_payload() {
     let _guard = lock_transfer_test_state();
     let runtime = Arc::new(Mutex::new(NodeRuntime::new(

@@ -744,6 +744,74 @@ fn submit_consensus_action_payload_rejects_queue_saturation() {
 }
 
 #[test]
+fn pos_engine_proposal_filters_expired_transfer_actions_before_commit() {
+    let config = NodeConfig::new("node-expired-transfer", "world-expired-transfer", NodeRole::Observer)
+        .expect("config")
+        .with_auto_attest_all_validators(false);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let (public_key_hex, _) = token_auth_test_signer(31);
+    let to_public_key_hex = token_auth_test_signer(32).0;
+    let from_account_id = main_token_account_id_from_public_key(public_key_hex.as_str());
+    let to_account_id = main_token_account_id_from_public_key(to_public_key_hex.as_str());
+    let action = json!({
+        "type": "TransferMainToken",
+        "data": {
+            "from_account_id": from_account_id.clone(),
+            "to_account_id": to_account_id.clone(),
+            "amount": 9_u64,
+            "nonce": 1_u64,
+            "asset_id": "main_token",
+            "chain_id": "oasis7-main",
+            "tx_version": 2_u64,
+            "tx_type": "asset_transfer",
+            "valid_until_unix_ms": 900_i64
+        }
+    });
+    let payload = encode_signed_main_token_runtime_payload(
+        action,
+        from_account_id.as_str(),
+        31,
+    );
+    let queued = NodeConsensusAction::from_payload(7, config.player_id.clone(), payload)
+        .expect("queued transfer action");
+    let result = engine
+        .tick(
+            config.node_id.as_str(),
+            config.world_id.as_str(),
+            1_000,
+            None,
+            None,
+            None,
+            None,
+            vec![queued],
+            None,
+        )
+        .expect("tick should succeed");
+    assert!(
+        result
+            .committed_action_batch
+            .as_ref()
+            .map(|batch| batch.actions.is_empty())
+            .unwrap_or(true),
+        "expired transfer must not reach committed action batch"
+    );
+    assert!(
+        result
+            .consensus_snapshot
+            .pending_proposal
+            .as_ref()
+            .map(|proposal| proposal.action_count == 0)
+            .unwrap_or(true),
+        "expired transfer must not remain inside a pending proposal"
+    );
+    assert!(
+        engine.pending_consensus_actions.is_empty(),
+        "expired transfer should be dropped instead of requeued"
+    );
+}
+
+#[test]
 fn submit_feedback_rejects_when_feedback_p2p_not_configured() {
     let runtime = NodeRuntime::new(
         NodeConfig::new(

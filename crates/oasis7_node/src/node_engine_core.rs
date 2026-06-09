@@ -1,5 +1,7 @@
 use super::*;
 use crate::node_engine_slashing::{build_validator_stake_proof_chain, evidence_hash};
+use serde::Deserialize;
+use serde_json::Value as JsonValue;
 
 const GOSSIP_REVERSE_PATH_SEED_INTERVAL_MS: i64 = 5_000;
 
@@ -547,7 +549,7 @@ impl PosNodeEngine {
             return self.idle_pending_decision();
         }
         let committed_actions =
-            drain_ordered_consensus_actions(&mut self.pending_consensus_actions);
+            self.drain_proposable_consensus_actions(now_ms)?;
         let action_root = compute_consensus_action_root(committed_actions.as_slice())?;
         let parent_block_hash = self
             .last_committed_block_hash
@@ -579,6 +581,21 @@ impl PosNodeEngine {
             now_ms,
         )
         .map_err(node_pos_error)
+    }
+
+    fn drain_proposable_consensus_actions(
+        &mut self,
+        now_ms: i64,
+    ) -> Result<Vec<NodeConsensusAction>, NodeError> {
+        let queued = drain_ordered_consensus_actions(&mut self.pending_consensus_actions);
+        let mut filtered = Vec::with_capacity(queued.len());
+        for action in queued {
+            if should_drop_transfer_action_before_proposal(&action, now_ms)? {
+                continue;
+            }
+            filtered.push(action);
+        }
+        Ok(filtered)
     }
 
     pub(super) fn advance_pending_attestations(
@@ -1075,6 +1092,81 @@ impl PosNodeEngine {
         }
         Ok(())
     }
+}
+
+fn should_drop_transfer_action_before_proposal(
+    action: &NodeConsensusAction,
+    now_ms: i64,
+) -> Result<bool, NodeError> {
+    let Some(action_json) = decode_pending_runtime_action_json(action.payload_cbor.as_slice()).map_err(
+        |err| NodeError::Consensus {
+            reason: format!(
+                "decode pending consensus action failed before proposal action_id={}: {err}",
+                action.action_id
+            ),
+        },
+    )? else {
+        return Ok(false);
+    };
+    let Some("TransferMainToken") = action_json.get("type").and_then(JsonValue::as_str) else {
+        return Ok(false);
+    };
+    let Some(data) = action_json.get("data").and_then(JsonValue::as_object) else {
+        return Ok(false);
+    };
+    if data
+        .get("asset_id")
+        .and_then(JsonValue::as_str)
+        .is_some_and(|value| value != "main_token")
+    {
+        return Ok(true);
+    }
+    if data
+        .get("valid_until_unix_ms")
+        .and_then(JsonValue::as_i64)
+        .is_some_and(|value| value < now_ms)
+    {
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn decode_pending_runtime_action_json(payload_cbor: &[u8]) -> Result<Option<JsonValue>, String> {
+    let envelope = match serde_cbor::from_slice::<PendingConsensusActionPayloadEnvelope>(payload_cbor)
+    {
+        Ok(envelope) => envelope,
+        Err(_) => PendingConsensusActionPayloadEnvelope {
+            version: 1,
+            auth: None,
+            body: PendingConsensusActionPayloadBody::RuntimeAction {
+                action: serde_cbor::from_slice::<JsonValue>(payload_cbor)
+                    .map_err(|err| format!("legacy runtime action decode failed: {err}"))?,
+            },
+        },
+    };
+    match envelope.body {
+        PendingConsensusActionPayloadBody::RuntimeAction { action } => Ok(Some(action)),
+        PendingConsensusActionPayloadBody::SimulatorAction { .. } => Ok(None),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+struct PendingConsensusActionPayloadEnvelope {
+    version: u8,
+    #[serde(default)]
+    auth: Option<JsonValue>,
+    body: PendingConsensusActionPayloadBody,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "type", content = "data", rename_all = "snake_case")]
+enum PendingConsensusActionPayloadBody {
+    RuntimeAction { action: JsonValue },
+    SimulatorAction {
+        action: JsonValue,
+        #[serde(default)]
+        submitter: JsonValue,
+    },
 }
 
 fn execution_error_waits_for_gap_sync(reason: &str) -> bool {
