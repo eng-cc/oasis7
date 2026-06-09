@@ -415,7 +415,11 @@ impl PosNodeEngine {
             "replication_persisted_height",
             "starting replication gap sync",
         )?;
-        while next_height <= self.network_committed_height {
+        let gap_sync_target_height = self.network_committed_height.min(
+            self.replication_persisted_height
+                .saturating_add(REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL),
+        );
+        while next_height <= gap_sync_target_height {
             let mut synced_commit: Option<(
                 replication::GossipReplicationMessage,
                 ReplicationCommitPayload,
@@ -478,8 +482,9 @@ impl PosNodeEngine {
             if not_found {
                 self.last_replication_gap_sync_blocked_height = Some(next_height);
                 self.last_replication_gap_sync_blocked_reason = Some(format!(
-                    "replication gap sync blocked: missing commit height {next_height} while network_committed_height={} replication_persisted_height={} repair_attempt={}",
+                    "replication gap sync blocked: missing commit height {next_height} while network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",
                     self.network_committed_height,
+                    gap_sync_target_height,
                     self.replication_persisted_height,
                     self.last_replication_gap_sync_repair_attempt_summary
                         .as_deref()

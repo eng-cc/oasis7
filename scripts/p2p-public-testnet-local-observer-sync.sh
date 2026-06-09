@@ -262,6 +262,7 @@ stage_remote_seed_tree() {
 import json
 import os
 import shutil
+import hashlib
 import sys
 import tempfile
 import time
@@ -287,15 +288,56 @@ def copy_file(src: str, dst: str) -> None:
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     shutil.copy2(src, dst)
 
+def sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def collect_file_hashes(root: str, relative_paths) -> dict[str, str]:
+    hashes = {}
+    for relative_path in relative_paths:
+        source_path = os.path.join(root, relative_path)
+        if os.path.isfile(source_path):
+            hashes[relative_path] = sha256_file(source_path)
+    return hashes
+
 for attempt in range(1, 6):
     stage_dir = tempfile.mkdtemp(prefix="local-observer-seed.", dir=stage_root)
     try:
+        stable_execution_world_paths = [
+            "snapshot.json",
+            "journal.json",
+            "snapshot.manifest.json",
+            "journal.segments.json",
+        ]
+        module_registry_path = os.path.join(execution_world_dir, "module_registry.json")
+        if os.path.isfile(module_registry_path):
+            stable_execution_world_paths.append("module_registry.json")
+        archive_index_path = os.path.join(execution_world_dir, "tick-consensus.archive.index.json")
+        if os.path.isfile(archive_index_path):
+            stable_execution_world_paths.append("tick-consensus.archive.index.json")
+        archive_path = os.path.join(execution_world_dir, "tick-consensus.archive.json")
+        if os.path.isfile(archive_path):
+            stable_execution_world_paths.append("tick-consensus.archive.json")
+        stable_execution_world_hashes_before = collect_file_hashes(
+            execution_world_dir,
+            stable_execution_world_paths,
+        )
+        stable_simulator_hashes_before = collect_file_hashes(
+            simulator_dir,
+            ["snapshot.json", "journal.json"],
+        )
+        bridge_hash_before = sha256_file(bridge_state_path)
+
         execution_world_stage = os.path.join(stage_dir, "execution-world")
         execution_records_stage = os.path.join(stage_dir, "execution-records")
         storage_stage = os.path.join(stage_dir, "storage")
         replication_stage = os.path.join(stage_dir, "replication-root")
         simulator_stage = os.path.join(stage_dir, "execution-world-simulator-mirror")
         bridge_stage_dir = os.path.join(stage_dir, "chain-runtime")
+        distfs_stage = os.path.join(execution_world_stage, ".distfs-state")
         os.makedirs(execution_world_stage, exist_ok=True)
         os.makedirs(execution_records_stage, exist_ok=True)
         os.makedirs(storage_stage, exist_ok=True)
@@ -311,15 +353,21 @@ for attempt in range(1, 6):
             os.path.join(execution_world_dir, "journal.json"),
             os.path.join(execution_world_stage, "journal.json"),
         )
+        copy_file(
+            os.path.join(execution_world_dir, "snapshot.manifest.json"),
+            os.path.join(execution_world_stage, "snapshot.manifest.json"),
+        )
+        copy_file(
+            os.path.join(execution_world_dir, "journal.segments.json"),
+            os.path.join(execution_world_stage, "journal.segments.json"),
+        )
 
-        module_registry_path = os.path.join(execution_world_dir, "module_registry.json")
         if os.path.isfile(module_registry_path):
             copy_file(
                 module_registry_path,
                 os.path.join(execution_world_stage, "module_registry.json"),
             )
 
-        archive_index_path = os.path.join(execution_world_dir, "tick-consensus.archive.index.json")
         if os.path.isfile(archive_index_path):
             copy_file(
                 archive_index_path,
@@ -363,7 +411,6 @@ for attempt in range(1, 6):
                     os.path.join(execution_world_stage, relative_path),
                 )
 
-        archive_path = os.path.join(execution_world_dir, "tick-consensus.archive.json")
         if os.path.isfile(archive_path):
             copy_file(
                 archive_path,
@@ -376,6 +423,15 @@ for attempt in range(1, 6):
                 modules_dir,
                 os.path.join(execution_world_stage, "modules"),
                 copy_function=shutil.copy2,
+            )
+
+        distfs_root = os.path.join(execution_world_dir, ".distfs-state")
+        if os.path.isdir(distfs_root):
+            shutil.copytree(
+                distfs_root,
+                distfs_stage,
+                dirs_exist_ok=True,
+                copy_function=link_or_copy,
             )
 
         shutil.copytree(
@@ -409,6 +465,24 @@ for attempt in range(1, 6):
             bridge_state_path,
             os.path.join(bridge_stage_dir, os.path.basename(bridge_state_path)),
         )
+
+        stable_execution_world_hashes_after = collect_file_hashes(
+            execution_world_dir,
+            stable_execution_world_paths,
+        )
+        if stable_execution_world_hashes_before != stable_execution_world_hashes_after:
+            raise RuntimeError("execution world changed during remote staging")
+
+        stable_simulator_hashes_after = collect_file_hashes(
+            simulator_dir,
+            ["snapshot.json", "journal.json"],
+        )
+        if stable_simulator_hashes_before != stable_simulator_hashes_after:
+            raise RuntimeError("simulator mirror changed during remote staging")
+
+        bridge_hash_after = sha256_file(bridge_state_path)
+        if bridge_hash_before != bridge_hash_after:
+            raise RuntimeError("execution bridge state changed during remote staging")
 
         print(stage_dir, end="")
         sys.exit(0)
@@ -835,6 +909,22 @@ seed_local_state_from_remote() {
     sshpass_scp_from_remote \
       "$remote_host:$remote_stage_dir/execution-world/tick-consensus.archive.json" \
       "$local_execution_world_dir/tick-consensus.archive.json"
+  fi
+  if sshpass_ssh "$remote_host" test -f "$remote_stage_dir/execution-world/snapshot.manifest.json"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/execution-world/snapshot.manifest.json" \
+      "$local_execution_world_dir/snapshot.manifest.json"
+  fi
+  if sshpass_ssh "$remote_host" test -f "$remote_stage_dir/execution-world/journal.segments.json"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/execution-world/journal.segments.json" \
+      "$local_execution_world_dir/journal.segments.json"
+  fi
+  if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/execution-world/.distfs-state"; then
+    stream_remote_tar_dir_to_local \
+      "$remote_host" \
+      "$remote_stage_dir/execution-world/.distfs-state" \
+      "$local_execution_world_dir"
   fi
   if sshpass_ssh "$remote_host" test -d "$remote_stage_dir/execution-world/modules"; then
     sshpass_scp_from_remote \
