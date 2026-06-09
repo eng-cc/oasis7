@@ -394,7 +394,7 @@ impl PosNodeEngine {
         &mut self,
         height: u64,
         block_hash: String,
-        committed_at_ms: i64,
+        observed_commit_progress_at_ms: i64,
     ) -> Result<(), NodeError> {
         self.replication_persisted_height = self.replication_persisted_height.max(height);
         if height <= self.committed_height {
@@ -404,7 +404,7 @@ impl PosNodeEngine {
             checked_replication_successor(height, "height", "recording synced replication height")?;
         self.committed_height = height;
         self.network_committed_height = self.network_committed_height.max(height);
-        self.last_committed_at_ms = Some(committed_at_ms);
+        self.last_committed_at_ms = Some(observed_commit_progress_at_ms);
         self.next_height = next_synced_height;
         self.last_committed_block_hash = Some(block_hash);
         self.pending = None;

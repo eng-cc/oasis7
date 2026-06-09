@@ -368,10 +368,11 @@ pub(super) fn build_sync_status(
         .consensus
         .last_committed_at_ms
         .map(|last_ms| observed_at_unix_ms.saturating_sub(last_ms).max(0));
-    let stalled = network_height_lag > 0
-        && last_commit_age_ms
-            .map(|age_ms| age_ms > policy.sync_stalled_after_ms)
-            .unwrap_or(false);
+    let stalled = sync_stalled(
+        network_height_lag,
+        last_commit_age_ms,
+        policy.sync_stalled_after_ms,
+    );
     let status = if network_head.conflicting_peer_count > 0 {
         "conflicting"
     } else if network_head.fresh_peer_count == 0 && network_head.required_peer_count > 0 {
@@ -445,11 +446,21 @@ pub(super) fn build_chain_node_observability_status(
         replication_state_gap,
         policy.max_network_height_lag,
     );
+    let last_commit_age_ms = snapshot
+        .consensus
+        .last_committed_at_ms
+        .map(|last_ms| observed_at_unix_ms.saturating_sub(last_ms).max(0));
+    let sync_stalled = sync_stalled(
+        network_height_lag,
+        last_commit_age_ms,
+        policy.sync_stalled_after_ms,
+    );
     let state_sync_fallback_reason = state_sync_fallback_reason(
         snapshot,
         replication_state_gap,
         network_height_lag,
         policy.max_network_height_lag,
+        sync_stalled,
     );
     let recent_replication_error_count = replication.recent_errors.len();
     let transport_stability = classify_transport_stability(replication);
@@ -488,14 +499,7 @@ pub(super) fn build_chain_node_observability_status(
             ),
         );
     }
-    if network_height_lag > 0
-        && snapshot
-            .consensus
-            .last_committed_at_ms
-            .map(|last_ms| observed_at_unix_ms.saturating_sub(last_ms).max(0))
-            .map(|age_ms| age_ms > policy.sync_stalled_after_ms)
-            .unwrap_or(false)
-    {
+    if sync_stalled {
         push_observability_alert(
             &mut alerts,
             "critical",
@@ -857,11 +861,21 @@ pub(super) fn build_chain_status_payload(
         readiness_policy.max_network_height_lag,
     );
     let consensus_participation_held = consensus_participation_hold_reason.is_some();
+    let last_commit_age_ms = snapshot
+        .consensus
+        .last_committed_at_ms
+        .and_then(clamped_elapsed_ms);
+    let sync_stalled = sync_stalled(
+        observability.network_height_lag,
+        last_commit_age_ms,
+        readiness_policy.sync_stalled_after_ms,
+    );
     let state_sync_fallback_reason = state_sync_fallback_reason(
         &snapshot,
         observability.replication_state_gap,
         observability.network_height_lag,
         readiness_policy.max_network_height_lag,
+        sync_stalled,
     );
     let state_sync_trusted_checkpoint_required_height =
         state_sync_trusted_checkpoint_required_height(
@@ -869,6 +883,7 @@ pub(super) fn build_chain_status_payload(
             observability.replication_state_gap,
             observability.network_height_lag,
             readiness_policy.max_network_height_lag,
+            sync_stalled,
         );
     let state_sync_fallback_required = state_sync_fallback_reason.is_some();
     let state_sync_snapshot_available = storage_metrics.checkpoint_count > 0;
@@ -881,10 +896,6 @@ pub(super) fn build_chain_status_payload(
         &snapshot,
         observed_at_unix_ms,
     );
-    let last_commit_age_ms = snapshot
-        .consensus
-        .last_committed_at_ms
-        .and_then(clamped_elapsed_ms);
     let slashable_stake_total = snapshot
         .consensus
         .misbehavior_evidence
@@ -1076,4 +1087,15 @@ pub(super) fn build_chain_status_payload(
         transactions,
         replication,
     }
+}
+
+fn sync_stalled(
+    network_height_lag: u64,
+    last_commit_age_ms: Option<i64>,
+    sync_stalled_after_ms: i64,
+) -> bool {
+    network_height_lag > 0
+        && last_commit_age_ms
+            .map(|age_ms| age_ms > sync_stalled_after_ms)
+            .unwrap_or(false)
 }

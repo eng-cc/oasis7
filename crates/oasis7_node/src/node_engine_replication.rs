@@ -344,7 +344,12 @@ impl PosNodeEngine {
             }
             if persisted_commit {
                 if let Some((height, block_hash, committed_at_ms)) = executed_commit {
-                    self.record_synced_replication_height(height, block_hash, committed_at_ms)?;
+                    let _ = committed_at_ms;
+                    self.record_synced_replication_height(
+                        height,
+                        block_hash,
+                        crate::runtime_util::now_unix_ms(),
+                    )?;
                 }
             }
         }
@@ -471,7 +476,12 @@ impl PosNodeEngine {
                 )?;
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
-                self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
+                let _ = committed_at_ms;
+                self.record_synced_replication_height(
+                    next_height,
+                    block_hash,
+                    crate::runtime_util::now_unix_ms(),
+                )?;
                 next_height = checked_replication_successor(
                     next_height,
                     "next_height",

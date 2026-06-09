@@ -29,10 +29,15 @@ pub(super) fn state_sync_trusted_checkpoint_required_height(
     replication_state_gap: u64,
     network_height_lag: u64,
     max_network_height_lag: u64,
+    sync_stalled: bool,
 ) -> Option<u64> {
     if !snapshot.replication_enabled {
         return None;
     }
+    let gap_sync_blocked = snapshot
+        .consensus
+        .replication_gap_sync_blocked_height
+        .is_some();
     let mut required_height = snapshot.consensus.replication_gap_sync_blocked_height;
     if replication_state_gap > 0 {
         required_height = Some(
@@ -41,7 +46,7 @@ pub(super) fn state_sync_trusted_checkpoint_required_height(
                 .max(snapshot.consensus.committed_height),
         );
     }
-    if network_height_lag > max_network_height_lag {
+    if (gap_sync_blocked || sync_stalled) && network_height_lag > max_network_height_lag {
         required_height = Some(
             required_height
                 .unwrap_or(0)
@@ -56,12 +61,18 @@ pub(super) fn state_sync_fallback_reason(
     replication_state_gap: u64,
     network_height_lag: u64,
     max_network_height_lag: u64,
+    sync_stalled: bool,
 ) -> Option<String> {
+    let gap_sync_blocked = snapshot
+        .consensus
+        .replication_gap_sync_blocked_height
+        .is_some();
     let required_height = state_sync_trusted_checkpoint_required_height(
         snapshot,
         replication_state_gap,
         network_height_lag,
         max_network_height_lag,
+        sync_stalled,
     )?;
     let mut reasons = Vec::new();
     if let Some(height) = snapshot.consensus.replication_gap_sync_blocked_height {
@@ -70,7 +81,7 @@ pub(super) fn state_sync_fallback_reason(
     if replication_state_gap > 0 {
         reasons.push(format!("replication_state_gap={replication_state_gap}"));
     }
-    if network_height_lag > max_network_height_lag {
+    if (gap_sync_blocked || sync_stalled) && network_height_lag > max_network_height_lag {
         reasons.push(format!("network_height_lag={network_height_lag}"));
     }
     Some(format!(
@@ -109,20 +120,42 @@ mod tests {
     fn in_policy_network_lag_does_not_require_state_sync_fallback() {
         let snapshot = replicated_snapshot(10, 12);
         assert_eq!(
-            state_sync_trusted_checkpoint_required_height(&snapshot, 0, 2, 2),
+            state_sync_trusted_checkpoint_required_height(&snapshot, 0, 2, 2, false),
             None
         );
-        assert_eq!(state_sync_fallback_reason(&snapshot, 0, 2, 2), None);
+        assert_eq!(state_sync_fallback_reason(&snapshot, 0, 2, 2, false), None);
     }
 
     #[test]
-    fn over_policy_network_lag_requires_state_sync_fallback() {
+    fn over_policy_network_lag_alone_does_not_require_state_sync_fallback() {
         let snapshot = replicated_snapshot(10, 13);
         assert_eq!(
-            state_sync_trusted_checkpoint_required_height(&snapshot, 0, 3, 2),
+            state_sync_trusted_checkpoint_required_height(&snapshot, 0, 3, 2, false),
+            None
+        );
+        assert_eq!(state_sync_fallback_reason(&snapshot, 0, 3, 2, false), None);
+    }
+
+    #[test]
+    fn replication_state_gap_requires_state_sync_fallback() {
+        let snapshot = replicated_snapshot(10, 13);
+        assert_eq!(
+            state_sync_trusted_checkpoint_required_height(&snapshot, 2, 3, 2, false),
+            Some(10)
+        );
+        assert!(state_sync_fallback_reason(&snapshot, 2, 3, 2, false)
+            .as_deref()
+            .is_some_and(|reason| reason.contains("replication_state_gap=2")));
+    }
+
+    #[test]
+    fn stalled_network_lag_requires_state_sync_fallback() {
+        let snapshot = replicated_snapshot(10, 13);
+        assert_eq!(
+            state_sync_trusted_checkpoint_required_height(&snapshot, 0, 3, 2, true),
             Some(13)
         );
-        assert!(state_sync_fallback_reason(&snapshot, 0, 3, 2)
+        assert!(state_sync_fallback_reason(&snapshot, 0, 3, 2, true)
             .as_deref()
             .is_some_and(|reason| reason.contains("network_height_lag=3")));
     }
