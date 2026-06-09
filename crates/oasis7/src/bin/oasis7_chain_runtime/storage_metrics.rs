@@ -874,8 +874,14 @@ mod tests {
             collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
         assert_eq!(second.ref_count, 5);
         assert_eq!(cache.record_ref_counts.len(), 2);
-        assert_eq!(cache.record_ref_counts.get(&1).map(|entry| entry.ref_count), Some(2));
-        assert_eq!(cache.record_ref_counts.get(&2).map(|entry| entry.ref_count), Some(3));
+        assert_eq!(
+            cache.record_ref_counts.get(&1).map(|entry| entry.ref_count),
+            Some(2)
+        );
+        assert_eq!(
+            cache.record_ref_counts.get(&2).map(|entry| entry.ref_count),
+            Some(3)
+        );
 
         fs::remove_file(
             paths
