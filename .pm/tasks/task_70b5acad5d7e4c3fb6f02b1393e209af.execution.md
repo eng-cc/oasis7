@@ -161,8 +161,8 @@ Example:
 - Task UID: task_70b5acad5d7e4c3fb6f02b1393e209af
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-viewer-local-url-lag-diagnosis-20260608
 - Source Branch: task/viewer-local-url-lag-diagnosis-20260608
-- Source Head: 6a58398e0b78ae55fcc46c33e6f4c7591cfb0426
-- Comparison Ref: origin/main
+- Source Head: 6243d2da3178cff2a0dd53c253ebd69edb389548
+- Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: crates/pixel_world_bridge/Cargo.toml; Cargo.lock; .pm/tasks/task_70b5acad5d7e4c3fb6f02b1393e209af.execution.md
 - Role Selection Basis: changed wasm/web dependency surface plus verification-dependent runtime claim about external Chrome switching to `BrowserWebGpu` while in-app browser remains `Gl`; included `wasm_platform_engineer` for Bevy/WASM feature correctness and `qa_engineer` for validation/release-readiness boundary. Added read-only `runtime_engineer` confirmation only to explain the fresh required-validation false negative in unrelated `oasis7_newapi_bridge_service` tests.
 - Review Roles: wasm_platform_engineer, qa_engineer
