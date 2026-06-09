@@ -245,8 +245,27 @@ impl PosNodeEngine {
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
+        replication: Option<&mut ReplicationRuntime>,
+        execution_hook: Option<&mut dyn NodeExecutionHook>,
+    ) -> Result<(), NodeError> {
+        self.ingest_network_replications_with_progress(
+            endpoint,
+            node_id,
+            world_id,
+            replication,
+            execution_hook,
+            None,
+        )
+    }
+
+    pub(super) fn ingest_network_replications_with_progress(
+        &mut self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
+        mut progress_callback: Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -345,6 +364,10 @@ impl PosNodeEngine {
             if persisted_commit {
                 if let Some((height, block_hash, committed_at_ms)) = executed_commit {
                     self.record_synced_replication_height(height, block_hash, committed_at_ms)?;
+                    if let Some(callback) = progress_callback.as_deref_mut() {
+                        let decision = self.idle_pending_decision()?;
+                        callback(self.snapshot_from_decision(&decision));
+                    }
                 }
             }
         }
@@ -397,8 +420,27 @@ impl PosNodeEngine {
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
+        replication: Option<&mut ReplicationRuntime>,
+        execution_hook: Option<&mut dyn NodeExecutionHook>,
+    ) -> Result<(), NodeError> {
+        self.sync_missing_replication_commits_with_progress(
+            endpoint,
+            node_id,
+            world_id,
+            replication,
+            execution_hook,
+            None,
+        )
+    }
+
+    pub(super) fn sync_missing_replication_commits_with_progress(
+        &mut self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
+        mut progress_callback: Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -415,7 +457,11 @@ impl PosNodeEngine {
             "replication_persisted_height",
             "starting replication gap sync",
         )?;
-        while next_height <= self.network_committed_height {
+        let gap_sync_target_height = self.network_committed_height.min(
+            self.replication_persisted_height
+                .saturating_add(REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL),
+        );
+        while next_height <= gap_sync_target_height {
             let mut synced_commit: Option<(
                 replication::GossipReplicationMessage,
                 ReplicationCommitPayload,
@@ -468,6 +514,10 @@ impl PosNodeEngine {
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
                 self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
+                if let Some(callback) = progress_callback.as_deref_mut() {
+                    let decision = self.idle_pending_decision()?;
+                    callback(self.snapshot_from_decision(&decision));
+                }
                 next_height = checked_replication_successor(
                     next_height,
                     "next_height",
@@ -478,8 +528,9 @@ impl PosNodeEngine {
             if not_found {
                 self.last_replication_gap_sync_blocked_height = Some(next_height);
                 self.last_replication_gap_sync_blocked_reason = Some(format!(
-                    "replication gap sync blocked: missing commit height {next_height} while network_committed_height={} replication_persisted_height={} repair_attempt={}",
+                    "replication gap sync blocked: missing commit height {next_height} while network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",
                     self.network_committed_height,
+                    gap_sync_target_height,
                     self.replication_persisted_height,
                     self.last_replication_gap_sync_repair_attempt_summary
                         .as_deref()

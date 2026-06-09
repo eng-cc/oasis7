@@ -102,6 +102,70 @@ fn pos_engine_snapshot_uses_last_committed_hash_for_pending_decision() {
 }
 
 #[test]
+fn pos_engine_snapshot_reflects_synced_replication_progress_after_record() {
+    let config =
+        NodeConfig::new("node-a", "world-sync-snapshot", NodeRole::Observer).expect("config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    engine
+        .record_synced_replication_height(2, "block-2".to_string(), 8_200)
+        .expect("sync height");
+
+    let snapshot = engine.snapshot_from_decision(&PosDecision {
+        height: engine.committed_height,
+        slot: engine.next_slot,
+        epoch: 0,
+        status: PosConsensusStatus::Pending,
+        block_hash: "ignored-pending".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 0,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    });
+
+    assert_eq!(snapshot.committed_height, 2);
+    assert_eq!(snapshot.latest_height, 2);
+    assert_eq!(snapshot.replication_persisted_height, 2);
+    assert_eq!(snapshot.last_committed_at_ms, Some(8_200));
+    assert_eq!(snapshot.last_block_hash.as_deref(), Some("block-2"));
+}
+
+#[test]
+fn pos_engine_snapshot_preserves_remote_commit_timestamp_during_gap_sync_progress() {
+    let config = NodeConfig::new(
+        "node-a",
+        "world-sync-progress-timestamp",
+        NodeRole::Observer,
+    )
+    .expect("config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let remote_committed_at_ms = 7_777_i64;
+
+    engine
+        .record_synced_replication_height(3, "block-3".to_string(), remote_committed_at_ms)
+        .expect("sync height");
+
+    let snapshot = engine.snapshot_from_decision(&PosDecision {
+        height: engine.committed_height,
+        slot: engine.next_slot,
+        epoch: 0,
+        status: PosConsensusStatus::Pending,
+        block_hash: "ignored-pending".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 0,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    });
+
+    assert_eq!(engine.last_committed_at_ms, Some(remote_committed_at_ms));
+    assert_eq!(snapshot.last_committed_at_ms, Some(remote_committed_at_ms));
+}
+
+#[test]
 fn pos_engine_snapshot_surfaces_pending_and_queue_metrics() {
     let config =
         NodeConfig::new("node-a", "world-pending-metrics", NodeRole::Observer).expect("config");

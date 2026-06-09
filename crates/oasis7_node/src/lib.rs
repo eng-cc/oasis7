@@ -148,6 +148,7 @@ const STORAGE_GATE_NETWORK_WARMUP_HEIGHT: u64 = 32;
 const STORAGE_GATE_FALLBACK_SAMPLES_PER_CHECK: usize = 3;
 const STORAGE_CHALLENGE_SUCCESS_CACHE_MAX_AGE_HEIGHTS: u64 = 2;
 const REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT: usize = 3;
+const REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL: u64 = 64;
 const REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS: usize = 3;
 const REPLICATION_SUCCESSOR_PROBE_COOLDOWN_MS: i64 = 1_000;
 const EXECUTION_BINDING_HISTORY_LIMIT: usize = 256;
@@ -195,6 +196,16 @@ fn with_execution_hook<T>(
         Some(hook) => f(Some(&mut **hook)),
         None => f(None),
     }
+}
+
+fn publish_runtime_progress_snapshot(
+    state: &Arc<Mutex<RuntimeState>>,
+    snapshot: NodeConsensusSnapshot,
+    observed_at_ms: i64,
+) {
+    let mut current = lock_state(state);
+    current.consensus = snapshot;
+    current.last_tick_unix_ms = Some(observed_at_ms);
 }
 
 pub struct NodeRuntime {
@@ -532,23 +543,43 @@ impl NodeRuntime {
                             let tick_result = if let Some(execution_hook) = execution_hook.as_ref()
                             {
                                 match execution_hook.lock() {
-                                    Ok(mut hook) => engine.tick(
-                                        &node_id,
-                                        &world_id,
-                                        now_ms,
-                                        gossip.as_deref(),
-                                        replication.as_mut(),
-                                        replication_network.as_mut(),
-                                        consensus_network.as_mut(),
-                                        queued_actions,
-                                        Some(hook.as_mut()),
-                                    ),
+                                    Ok(mut hook) => {
+                                        let progress_state = Arc::clone(&state);
+                                        let mut publish_progress =
+                                            |snapshot: NodeConsensusSnapshot| {
+                                                publish_runtime_progress_snapshot(
+                                                    &progress_state,
+                                                    snapshot,
+                                                    now_ms,
+                                                );
+                                            };
+                                        engine.tick_with_progress(
+                                            &node_id,
+                                            &world_id,
+                                            now_ms,
+                                            gossip.as_deref(),
+                                            replication.as_mut(),
+                                            replication_network.as_mut(),
+                                            consensus_network.as_mut(),
+                                            queued_actions,
+                                            Some(hook.as_mut()),
+                                            Some(&mut publish_progress),
+                                        )
+                                    }
                                     Err(_) => Err(NodeError::Execution {
                                         reason: "execution hook lock poisoned".to_string(),
                                     }),
                                 }
                             } else {
-                                engine.tick(
+                                let progress_state = Arc::clone(&state);
+                                let mut publish_progress = |snapshot: NodeConsensusSnapshot| {
+                                    publish_runtime_progress_snapshot(
+                                        &progress_state,
+                                        snapshot,
+                                        now_ms,
+                                    );
+                                };
+                                engine.tick_with_progress(
                                     &node_id,
                                     &world_id,
                                     now_ms,
@@ -558,6 +589,7 @@ impl NodeRuntime {
                                     consensus_network.as_mut(),
                                     queued_actions,
                                     None,
+                                    Some(&mut publish_progress),
                                 )
                             };
                             let maintenance_result = if tick_result.is_ok() {

@@ -2,6 +2,8 @@
 mod storage_challenge_gate_tests;
 #[path = "tests_storage_replication_failover.rs"]
 mod storage_replication_failover_tests;
+#[path = "tests_storage_replication_progress.rs"]
+mod storage_replication_progress_tests;
 #[path = "tests_storage_replication_recovery.rs"]
 mod storage_replication_recovery_tests;
 
@@ -408,6 +410,7 @@ fn proposal_ahead_updates_replication_gap_sync_target_height() {
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }
+
 
 #[test]
 fn observer_replication_runtime_starts_without_registering_data_service_handlers() {
