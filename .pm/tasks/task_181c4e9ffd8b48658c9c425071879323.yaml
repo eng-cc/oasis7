@@ -1,0 +1,28 @@
+task_uid: task_181c4e9ffd8b48658c9c425071879323
+title: "viewer immersive mode phase7 command closure"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-viewer-immersive-mode-gap-audit-20260608
+execution_log_path: .pm/tasks/task_181c4e9ffd8b48658c9c425071879323.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - AGENTS.md
+doc_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase7.prd.md
+related_prd: []
+acceptance:
+  - "Entering World Focus immediately lands on a real command/chat interaction path for the current selected agent instead of a summary-only drawer."
+  - "World Focus shows chat composer, send action, latest chat feedback, and message flow inside the immersive shell using the existing viewer command semantics."
+  - "Focused command behavior is covered by targeted `pixel_world_host` tests, including the immediate-open path and the in-focus chat surface."
+handoff_to: []
+updated_at: 2026-06-09T17:39:10+08:00
+last_started_at: 2026-06-09T15:08:15+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/pixel_world_host.test.jsx && npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/main.test.jsx && npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/performance_metrics.test.js && node --check crates/oasis7_viewer/scripts/viewer-performance-probe.mjs && git diff --check && ! rg -n 'pixel_world_renderer=defer' crates/oasis7_viewer/scripts/viewer-performance-probe.mjs scripts/viewer-performance-probe.sh crates/oasis7_viewer/software_safe_src/performance_metrics.js crates/oasis7_viewer/software_safe_src/performance_metrics.test.js output/visual-acceptance/immersive-20260609/real-renderer-rerun-domclick-20260609/url.txt output/visual-acceptance/immersive-20260609/real-renderer-rerun-domclick-20260609/summary.json"
+last_verified_at: 2026-06-09T17:39:06+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-09T17:39:09+08:00

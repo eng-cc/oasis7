@@ -13,6 +13,7 @@ const pixelWorldFocusUiSessionState = {
   focusMode: false,
   commandDrawerOpen: false,
   diagnosticsDrawerOpen: false,
+  maximized: false,
 };
 const FRAGMENT_TERRAIN_PALETTE = {
   silicate_matrix: [126, 144, 99],
@@ -1234,6 +1235,15 @@ function PixelWorldFocusHud(props) {
           <strong>{surface().objective.title}</strong>
           <em>{surface().next_action.label}</em>
         </div>
+        <div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission">
+          <span>{tr(props.locale(), "任务进度", "Mission Progress")}</span>
+          <strong>
+            {surface().objective.progress_percent == null
+              ? tr(props.locale(), "进行中", "In Progress")
+              : `${surface().objective.progress_percent}%`}
+          </strong>
+          <em>{surface().next_action.detail || surface().objective.detail}</em>
+        </div>
         <div
           class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"
           data-blocker-present={surface().blocker.label ? "true" : "false"}
@@ -1248,9 +1258,39 @@ function PixelWorldFocusHud(props) {
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onOpenDiagnostics}>
             {tr(props.locale(), "诊断", "Diagnostics")}
           </button>
+          <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onToggleMaximized}>
+            {props.maximized()
+              ? tr(props.locale(), "退出最大化", "Minimize")
+              : tr(props.locale(), "最大化", "Maximize")}
+          </button>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--quiet" onClick={props.onExit}>
             {tr(props.locale(), "退出", "Exit")}
           </button>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+function PixelWorldFocusCinematicBanner(props) {
+  const surface = () => props.renderState().commercial_surface;
+  return (
+    <Show when={surface()}>
+      <div class="pixel-world-focus-cinematic" data-focus-cinematic="true">
+        <div class="pixel-world-focus-cinematic__eyebrow">
+          {tr(props.locale(), "电影化首屏", "Cinematic Opening")}
+        </div>
+        <div class="pixel-world-focus-cinematic__title">
+          {tr(props.locale(), "工业世界指挥台", "Industrial World Command Board")}
+        </div>
+        <div class="pixel-world-focus-cinematic__body">
+          {surface().objective.detail}
+        </div>
+        <div class="badge-row">
+          <span class="badge badge--accent">{surface().objective.title}</span>
+          <Show when={surface().blocker.label}>
+            <span class="badge badge--warn">{surface().blocker.label}</span>
+          </Show>
         </div>
       </div>
     </Show>
@@ -1287,28 +1327,48 @@ function PixelWorldFocusRail(props) {
             <strong>{routeCount()}</strong>
           </div>
         </Show>
+        <Show when={surface()?.blocker.label}>
+          <div class="pixel-world-focus-rail__item">
+            <span>{tr(props.locale(), "阻塞", "Blocker")}</span>
+            <strong>{surface().blocker.label}</strong>
+          </div>
+        </Show>
       </div>
     </Show>
   );
 }
 
-function PixelWorldFocusFallbackMap(props) {
+function PixelWorldFocusMinimapCard(props) {
   const surface = () => props.renderState().commercial_surface;
   const selected = () => props.renderState().selection;
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
+  const primaryLocation = () => props.renderState().locations[0] || null;
   return (
     <Show when={surface()}>
-      <div class="pixel-world-focus-fallback-map" data-focus-fallback-map="true">
+      <div
+        class="pixel-world-focus-fallback-map"
+        data-focus-fallback-map={props.variant === "fallback" ? "true" : null}
+        data-focus-minimap="true"
+      >
+        <div class="pixel-world-focus-fallback-map__label">
+          {tr(props.locale(), "任务地图", "Mission Map")}
+        </div>
         <div class="pixel-world-focus-fallback-map__grid" />
         <div class="pixel-world-focus-fallback-map__route" data-routes={props.renderState().links.length} />
         <div class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--target">
           <span>{tr(props.locale(), "目标", "Target")}</span>
-          <strong>{surface().objective.title}</strong>
+          <strong>{surface().next_action.label}</strong>
         </div>
         <div class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--agent">
           <span>{tr(props.locale(), "Agent", "Agent")}</span>
           <strong>{activeAgent() || tr(props.locale(), "待分配", "Unassigned")}</strong>
         </div>
+        <Show when={primaryLocation()}>
+          <div class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--target">
+            <span>{tr(props.locale(), "锚点", "Anchor")}</span>
+            <strong>{primaryLocation().label || primaryLocation().id}</strong>
+          </div>
+        </Show>
         <Show when={selected()}>
           <div
             class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--selected"
@@ -1326,6 +1386,140 @@ function PixelWorldFocusFallbackMap(props) {
         </div>
       </div>
     </Show>
+  );
+}
+
+function PixelWorldFocusCommandSurface(props) {
+  const locale = () => props.locale();
+  const agentId = () => core.selectedAgentId();
+  const authSurface = () => core.buildAuthSurfaceModel();
+  const chatCapability = () => authSurface().capabilities.agent_chat;
+  const binding = () => core.selectedAgentBindingInfo();
+  const debugContext = () => core.selectedAgentExecutionDebugContext();
+  const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
+  const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
+  const chatHistory = () =>
+    core.state.chatHistory
+      .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
+      .slice(0, 12);
+
+  return (
+    <div class="pixel-world-focus-command-surface stack">
+      <Show
+        when={agentId()}
+        fallback={<div class="empty">{tr(locale(), "先选中一个行动体，才能在沉浸模式里直接下指令。", "Select an agent to issue direct commands in World Focus.")}</div>}
+      >
+        <div class="badge-row">
+          <span class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</span>
+          <span class="badge">{`agent=${agentId()}`}</span>
+          <Show when={binding()?.playerId}>
+            <span class="badge">{`boundPlayer=${binding().playerId}`}</span>
+          </Show>
+          <span class={chatCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
+            {chatCapability().enabled ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
+          </span>
+        </div>
+        <Show when={debugContext()?.provider_mode === "provider_loopback_http"}>
+          <div class="empty">
+            {tr(
+              locale(),
+              `当前选中的行动体正通过提供方回环桥接运行在 ${
+                debugContext()?.execution_mode || "headless_agent"
+              }；观察器仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用聊天。`,
+              `Selected agent currently runs through the provider-backed loopback bridge in ${
+                debugContext()?.execution_mode || "headless_agent"
+              }; viewer stays in debug_viewer observer-only mode, so chat is intentionally disabled here.`,
+            )}
+          </div>
+        </Show>
+        <Show when={!debugContext()?.provider_mode || debugContext()?.provider_mode !== "provider_loopback_http"}>
+          <Show when={!chatCapability().enabled}>
+            <div class="empty">{chatCapability().reason}</div>
+          </Show>
+        </Show>
+        <div class="panel panel--nested">
+          <div class="panel__header">
+            <div class="stack" style="gap:4px;">
+              <div class="panel__eyebrow">{tr(locale(), "指挥面板", "Command Surface")}</div>
+              <div class="panel__title">{tr(locale(), "行动体聊天", "Agent Chat")}</div>
+              <div class="panel__meta-copy">
+                {tr(
+                  locale(),
+                  "沉浸态保持世界视图在前，但这里可以直接给当前目标发消息并读取反馈。",
+                  "World Focus keeps the world view in front, while this surface sends messages to the current target and reads feedback directly.",
+                )}
+              </div>
+            </div>
+          </div>
+          <div class="panel__body stack">
+            <div class="field">
+              <label for="agent-chat-message">{tr(locale(), "消息", "Message")}</label>
+              <textarea
+                id="agent-chat-message"
+                rows="4"
+                placeholder={tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent")}
+                disabled={!chatCapability().enabled}
+                value={core.state.chatDraft.message}
+                onInput={(event) => {
+                  core.state.chatDraft.message = String(event.currentTarget.value || "");
+                  core.state.chatDraft.dirty = true;
+                }}
+              />
+            </div>
+            <div class="toolbar">
+              <button
+                type="button"
+                data-chat-send="1"
+                disabled={!chatCapability().enabled}
+                onClick={() => core.sendAgentChat(agentId(), core.state.chatDraft.message)}
+              >
+                {tr(locale(), "发送聊天", "Send Chat")}
+              </button>
+            </div>
+            <Show when={chatFeedback()} fallback={<div class="empty">{tr(locale(), "还没有聊天反馈。", "No chat feedback yet.")}</div>}>
+              {(feedback) => (
+                <div class="feedback-card">
+                  <div class="badge-row">
+                    <span class={chatFeedbackDisplay().badgeClass}>{chatFeedbackDisplay().label}</span>
+                    <Show when={chatFeedbackDisplay().code}>
+                      <span class="badge">{`code=${chatFeedbackDisplay().code}`}</span>
+                    </Show>
+                  </div>
+                  <div class="feedback-summary">{chatFeedbackDisplay().summary}</div>
+                  <Show when={chatFeedbackDisplay().detail}>
+                    <div class="feedback-detail">{chatFeedbackDisplay().detail}</div>
+                  </Show>
+                  <pre class="json">{JSON.stringify(feedback(), null, 2)}</pre>
+                </div>
+              )}
+            </Show>
+            <div>
+              <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "消息流", "Message Flow")}</div>
+              <div class="event-list">
+                <Show when={chatHistory().length > 0} fallback={<div class="empty">{tr(locale(), "这个行动体还没有聊天历史。", "No chat history for this agent yet.")}</div>}>
+                  <For each={chatHistory()}>
+                    {(entry) => (
+                      <div class="event-card">
+                        <div class="event-card__title">
+                          <span>
+                            {entry.source === "player"
+                              ? `${tr(locale(), "玩家", "player")} → ${entry.targetAgentId || entry.agentId || "agent"}`
+                              : `${entry.agentId || "agent"} ${tr(locale(), "已发言", "spoke")}`}
+                          </span>
+                          <span>{`tick=${Number(entry.tick || 0)}`}</span>
+                        </div>
+                        <div class="event-card__meta">{`speaker=${entry.speaker || entry.playerId || "-"} · location=${entry.locationId || "-"}`}</div>
+                        <pre class="json">{JSON.stringify(entry, null, 2)}</pre>
+                      </div>
+                    )}
+                  </For>
+                </Show>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Show>
+    </div>
   );
 }
 
@@ -1378,6 +1572,7 @@ export function PixelWorldHost(props) {
   const [focusMode, setFocusMode] = createSignal(pixelWorldFocusUiSessionState.focusMode);
   const [commandDrawerOpen, setCommandDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.commandDrawerOpen);
   const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.diagnosticsDrawerOpen);
+  const [maximized, setMaximized] = createSignal(pixelWorldFocusUiSessionState.maximized);
 
   function setPersistentFocusMode(next) {
     pixelWorldFocusUiSessionState.focusMode = next;
@@ -1394,16 +1589,23 @@ export function PixelWorldHost(props) {
     setDiagnosticsDrawerOpen(next);
   }
 
+  function setPersistentMaximized(next) {
+    pixelWorldFocusUiSessionState.maximized = next;
+    setMaximized(next);
+  }
+
   function enterFocusMode() {
     setPersistentFocusMode(true);
-    setPersistentCommandDrawerOpen(false);
+    setPersistentCommandDrawerOpen(true);
     setPersistentDiagnosticsDrawerOpen(false);
+    setPersistentMaximized(false);
   }
 
   function exitFocusMode() {
     setPersistentFocusMode(false);
     setPersistentCommandDrawerOpen(false);
     setPersistentDiagnosticsDrawerOpen(false);
+    setPersistentMaximized(false);
   }
 
   function openCommandDrawer() {
@@ -1414,6 +1616,10 @@ export function PixelWorldHost(props) {
   function openDiagnosticsDrawer() {
     setPersistentDiagnosticsDrawerOpen(true);
     setPersistentCommandDrawerOpen(false);
+  }
+
+  function toggleMaximized() {
+    setPersistentMaximized(!maximized());
   }
 
   const adapter = createMemo(() => createPixelWorldHostAdapter({
@@ -1564,10 +1770,12 @@ export function PixelWorldHost(props) {
 
   createEffect(() => {
     document.body.classList.toggle("pixel-world-focus-active", focusMode());
+    document.body.classList.toggle("pixel-world-focus-maximized", focusMode() && maximized());
   });
 
   onCleanup(() => {
     document.body.classList.remove("pixel-world-focus-active");
+    document.body.classList.remove("pixel-world-focus-maximized");
     adapter().unmount();
     core.updatePixelWorldRuntimeMeta({
       runtimeStatus: "detached",
@@ -1580,34 +1788,52 @@ export function PixelWorldHost(props) {
 
   return (
     <div
-      class={`pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""}`}
+      class={`pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""} ${focusMode() && maximized() ? "pixel-world-host--focus-maximized" : ""}`}
       data-world-focus={focusMode() ? "true" : "false"}
+      data-world-focus-maximized={focusMode() && maximized() ? "true" : "false"}
     >
-      <div class="pixel-world-host__summary">
-        <div class="pixel-world-host__headline">
-          {tr(locale(), "世界指挥棋盘", "World Command Board")}
+      <Show when={!focusMode() || !maximized()}>
+        <div class="pixel-world-host__summary">
+          <div class="pixel-world-host__headline">
+            {tr(locale(), "世界指挥棋盘", "World Command Board")}
+          </div>
+          <div class="feedback-detail">
+            {renderState().commercial_surface?.objective?.detail}
+          </div>
+          <div class="pixel-world-focus-entry">
+            <button type="button" onClick={enterFocusMode} aria-pressed={focusMode() ? "true" : "false"}>
+              {tr(locale(), "进入沉浸模式", "Enter World Focus")}
+            </button>
+          </div>
         </div>
-        <div class="feedback-detail">
-          {renderState().commercial_surface?.objective?.detail}
-        </div>
-        <div class="pixel-world-focus-entry">
-          <button type="button" onClick={enterFocusMode} aria-pressed={focusMode() ? "true" : "false"}>
-            {tr(locale(), "进入沉浸模式", "Enter World Focus")}
-          </button>
-        </div>
-      </div>
+      </Show>
       <Show when={focusMode()}>
+        <Show when={!maximized()}>
+          <PixelWorldFocusCinematicBanner
+            locale={locale}
+            renderState={renderState}
+          />
+        </Show>
         <PixelWorldFocusHud
           locale={locale}
           renderState={renderState}
           onExit={exitFocusMode}
           onOpenCommand={openCommandDrawer}
           onOpenDiagnostics={openDiagnosticsDrawer}
+          onToggleMaximized={toggleMaximized}
+          maximized={maximized}
         />
-        <PixelWorldFocusRail
-          locale={locale}
-          renderState={renderState}
-        />
+        <Show when={!maximized()}>
+          <PixelWorldFocusRail
+            locale={locale}
+            renderState={renderState}
+          />
+          <PixelWorldFocusMinimapCard
+            locale={locale}
+            renderState={renderState}
+            variant="immersive"
+          />
+        </Show>
       </Show>
       <PixelWorldCommercialHud locale={locale} renderState={renderState} />
       <Show when={rendererStatus() !== "fallback"}>
@@ -1650,8 +1876,8 @@ export function PixelWorldHost(props) {
           </div>
         </div>
       </Show>
-      <Show when={focusMode() && rendererStatus() === "fallback"}>
-        <PixelWorldFocusFallbackMap locale={locale} renderState={renderState} />
+      <Show when={focusMode() && rendererStatus() === "fallback" && !maximized()}>
+        <PixelWorldFocusMinimapCard locale={locale} renderState={renderState} variant="fallback" />
       </Show>
       <Show when={rendererStatus() !== "ready"}>
         <PixelWorldCanvasPlaceholder
@@ -1662,7 +1888,7 @@ export function PixelWorldHost(props) {
           onHover={(selection) => adapter().simulateHover(selection)}
         />
       </Show>
-      <Show when={focusMode() && renderState().commercial_surface}>
+      <Show when={focusMode() && renderState().commercial_surface && !maximized()}>
         <div class="pixel-world-focus-receipt">
           <PixelWorldActionReceipt
             class="pixel-world-action-receipt--focus-compact"
@@ -1679,49 +1905,51 @@ export function PixelWorldHost(props) {
         >
           <summary>{tr(locale(), "命令与目标", "Command and Target")}</summary>
           <div class="pixel-world-focus-drawer__body">
-            <PixelWorldCommercialHud locale={locale} renderState={renderState} />
+            <PixelWorldFocusCommandSurface locale={locale} />
           </div>
         </details>
       </Show>
-      <details class="diagnostic pixel-world-render-diagnostics">
-        <summary>{tr(locale(), "Renderer 诊断", "Renderer Diagnostics")}</summary>
-        <div class="pixel-world-host__toolbar badge-row">
-          <span class="badge badge--accent">{`locations=${visualState().locations.length}`}</span>
-          <span class="badge badge--accent">{`fragments=${visualState().fragmentTerrain.length}`}</span>
-          <span class="badge badge--accent">{`agents=${visualState().agents.length}`}</span>
-          <span class="badge">{`links=${visualState().links.length}`}</span>
-          <span class="badge">{`hotspots=${arrayField(renderState(), "visual_hotspots", "visualHotspots").length}`}</span>
-          <span class="badge">{`derived_positions=${visualState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
-          <span class="badge">{visualState().worldBounds ? "world_bounds=ready" : "world_bounds=missing"}</span>
-          <span class="badge">{`renderer=${rendererStatus()}`}</span>
-          <span class="badge">{`runtime=${runtimeSource()}`}</span>
-          <Show when={cameraState()}>
-            <span class="badge">{`zoom=${cameraState().zoom.toFixed(2)}`}</span>
-          </Show>
-          <Show when={cameraState()}>
-            <span class="badge">{`pan=${cameraState().pan_x_px},${cameraState().pan_y_px}`}</span>
-          </Show>
-          <Show when={hoverSelection()}>
-            <span class="badge">{`hover=${hoverSelection().kind}/${hoverSelection().id}`}</span>
-          </Show>
-          <button type="button" onClick={requestReadyMode}>
-            {tr(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer")}
-          </button>
-          <button type="button" onClick={simulateFatal}>
-            {tr(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal")}
-          </button>
-          <button type="button" onClick={setFallbackMode}>
-            {tr(locale(), "切回 Host Fallback", "Back To Host Fallback")}
-          </button>
-          <div class="feedback-detail">
-            {tr(
-              locale(),
-              "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。",
-              "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer.",
-            )}
+      <Show when={!focusMode() || !maximized()}>
+        <details class="diagnostic pixel-world-render-diagnostics">
+          <summary>{tr(locale(), "Renderer 诊断", "Renderer Diagnostics")}</summary>
+          <div class="pixel-world-host__toolbar badge-row">
+            <span class="badge badge--accent">{`locations=${visualState().locations.length}`}</span>
+            <span class="badge badge--accent">{`fragments=${visualState().fragmentTerrain.length}`}</span>
+            <span class="badge badge--accent">{`agents=${visualState().agents.length}`}</span>
+            <span class="badge">{`links=${visualState().links.length}`}</span>
+            <span class="badge">{`hotspots=${arrayField(renderState(), "visual_hotspots", "visualHotspots").length}`}</span>
+            <span class="badge">{`derived_positions=${visualState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
+            <span class="badge">{visualState().worldBounds ? "world_bounds=ready" : "world_bounds=missing"}</span>
+            <span class="badge">{`renderer=${rendererStatus()}`}</span>
+            <span class="badge">{`runtime=${runtimeSource()}`}</span>
+            <Show when={cameraState()}>
+              <span class="badge">{`zoom=${cameraState().zoom.toFixed(2)}`}</span>
+            </Show>
+            <Show when={cameraState()}>
+              <span class="badge">{`pan=${cameraState().pan_x_px},${cameraState().pan_y_px}`}</span>
+            </Show>
+            <Show when={hoverSelection()}>
+              <span class="badge">{`hover=${hoverSelection().kind}/${hoverSelection().id}`}</span>
+            </Show>
+            <button type="button" onClick={requestReadyMode}>
+              {tr(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer")}
+            </button>
+            <button type="button" onClick={simulateFatal}>
+              {tr(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal")}
+            </button>
+            <button type="button" onClick={setFallbackMode}>
+              {tr(locale(), "切回 Host Fallback", "Back To Host Fallback")}
+            </button>
+            <div class="feedback-detail">
+              {tr(
+                locale(),
+                "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。",
+                "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer.",
+              )}
+            </div>
           </div>
-        </div>
-      </details>
+        </details>
+      </Show>
       <Show when={focusMode()}>
         <details
           class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"

@@ -598,7 +598,12 @@
         left: 16px;
         right: 16px;
         display: grid;
-        grid-template-columns: minmax(140px, 0.8fr) minmax(240px, 1.6fr) minmax(120px, 0.55fr) auto;
+        grid-template-columns:
+          minmax(136px, 0.58fr)
+          minmax(220px, 1.2fr)
+          minmax(142px, 0.56fr)
+          minmax(116px, 0.46fr)
+          max-content;
         gap: 8px;
         align-items: center;
         pointer-events: none;
@@ -803,14 +808,15 @@
         position: absolute;
         z-index: 119;
         left: 16px;
-        right: 16px;
+        right: calc(420px + 32px);
         bottom: 16px;
         display: flex;
-        justify-content: flex-end;
+        justify-content: flex-start;
         pointer-events: none;
       }
       .pixel-world-focus-receipt .pixel-world-action-receipt {
-        width: min(520px, 100%);
+        width: min(520px, calc(100vw - 484px));
+        min-width: 280px;
         background: rgba(8, 18, 24, 0.76);
         backdrop-filter: blur(12px);
         pointer-events: auto;

@@ -674,27 +674,69 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Recover sustainable capability");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Build smelter mk1");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Missing Material");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Mission Progress");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("68%");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Replenish upstream materials, then advance again to confirm the line resumes.");
     expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Objective");
     expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Next Move");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Routes");
+    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Missing Material");
     expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveClass("pixel-world-action-receipt--focus-compact");
     expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
+    expect(document.querySelector('[data-focus-cinematic="true"]')).toHaveTextContent("Industrial World Command Board");
+    expect(document.querySelector('[data-focus-cinematic="true"]')).toHaveTextContent("Stabilize the first production line before expanding.");
+    expect(document.querySelector('[data-focus-cinematic="true"]')).toHaveTextContent("Recover sustainable capability");
     expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent("Renderer Not Attached");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Mission Map");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Factory Anchor");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Build smelter mk1");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agent-0");
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("agents=1");
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("targets=1");
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("routes=1");
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("fragments=2");
 
+    const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
+    expect(commandDrawer.open).toBe(true);
+    expect(commandDrawer).toHaveTextContent("Agent Chat");
+    expect(commandDrawer).toHaveTextContent("Command Surface");
+    expect(commandDrawer).toHaveTextContent("Current Target");
+    expect(commandDrawer).toHaveTextContent("agent=agent-0");
+    expect(commandDrawer).toHaveTextContent("Message");
+    expect(commandDrawer).toHaveTextContent("Send Chat");
+    expect(commandDrawer).toHaveTextContent("No chat feedback yet.");
+    expect(commandDrawer).toHaveTextContent("No chat history for this agent yet.");
+    expect(commandDrawer.querySelector("#agent-chat-message")).not.toBeNull();
+    expect(commandDrawer.querySelector("[data-chat-send='1']")).not.toBeNull();
+
     expect(screen.getByRole("button", { name: "Command" })).toHaveClass("pixel-world-focus-control--primary");
     expect(screen.getByRole("button", { name: "Diagnostics" })).toHaveClass("pixel-world-focus-control--secondary");
+    expect(screen.getByRole("button", { name: "Maximize" })).toHaveClass("pixel-world-focus-control--secondary");
     expect(screen.getByRole("button", { name: "Exit" })).toHaveClass("pixel-world-focus-control--quiet");
 
     screen.getByRole("button", { name: "Command" }).click();
-    const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
     expect(commandDrawer.open).toBe(true);
-    expect(commandDrawer).toHaveTextContent("Player Leverage");
+    expect(commandDrawer).toHaveTextContent("Agent Chat");
+
+    screen.getByRole("button", { name: "Maximize" }).click();
+    expect(host).toHaveAttribute("data-world-focus-maximized", "true");
+    expect(document.body).toHaveClass("pixel-world-focus-maximized");
+    expect(document.querySelector(".pixel-world-host__summary")).toBeNull();
+    expect(document.querySelector(".pixel-world-focus-rail")).toBeNull();
+    expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
+    expect(document.querySelector('[data-focus-minimap="true"]')).toBeNull();
+    expect(document.querySelector(".pixel-world-focus-receipt")).toBeNull();
+    expect(document.querySelector(".pixel-world-render-diagnostics")).toBeNull();
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Minimize");
+    expect(document.querySelector(".pixel-world-focus-drawer--command")?.open).toBe(true);
+
+    screen.getByRole("button", { name: "Minimize" }).click();
+    expect(host).toHaveAttribute("data-world-focus-maximized", "false");
+    expect(document.body).not.toHaveClass("pixel-world-focus-maximized");
+    expect(document.querySelector(".pixel-world-host__summary")).not.toBeNull();
+    expect(document.querySelector('[data-focus-cinematic="true"]')).not.toBeNull();
 
     screen.getByRole("button", { name: "Diagnostics" }).click();
     const diagnosticsDrawer = document.querySelector(".pixel-world-focus-drawer--diagnostics");
@@ -707,7 +749,7 @@ describe("pixel world host", () => {
     expect(host).toHaveAttribute("data-world-focus", "false");
     expect(document.body).not.toHaveClass("pixel-world-focus-active");
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).toBeNull();
-  });
+  }, 15000);
 
   it("keeps empty focus rail collapsed while preserving fallback world summary", async () => {
     await renderPixelWorldHost(

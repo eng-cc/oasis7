@@ -55,3 +55,15 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_d02fe08db044492d9f0bfbcf645a4ccc.yaml
+  - task_uid: task_2e9cddc27f7d40afbad5b1db83b34299
+    title: "viewer performance probe uses real renderer"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "viewer performance probe does not append pixel_world_renderer=defer and measures the real wasm renderer path"
+      - "probe serves the official copied viewer web dist so /pixel-world-bridge assets are available at the loader URL"
+      - "probe fails fast if the pixel world runtime does not reach wasm_bindgen_runtime ready state"
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_2e9cddc27f7d40afbad5b1db83b34299.yaml

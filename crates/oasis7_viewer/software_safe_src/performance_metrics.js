@@ -94,6 +94,20 @@ function compareGate(id, label, actual, threshold, comparator) {
   };
 }
 
+function compareExactGate(id, label, actual, expected) {
+  if (actual == null) {
+    return skipGate(id, label, expected);
+  }
+  return {
+    id,
+    label,
+    actual,
+    threshold: expected,
+    comparator: "===",
+    status: actual === expected ? "pass" : "fail",
+  };
+}
+
 export function normalizeViewerPerfThresholds(overrides = {}) {
   const thresholds = { ...DEFAULT_VIEWER_PERF_THRESHOLDS, ...overrides };
   thresholds.frameBudgetMs = Math.max(1, asNumber(thresholds.frameBudgetMs, 16.7));
@@ -180,6 +194,8 @@ export function summarizeViewerPerformance({
     domNodeCount: Math.floor(asNumber(dom.nodeCount, 0) ?? 0),
     panelCount: Math.floor(asNumber(dom.panelCount, 0) ?? 0),
     interactiveElementCount: Math.floor(asNumber(dom.interactiveElementCount, 0) ?? 0),
+    renderedCanvasCount: Math.floor(asNumber(dom.renderedCanvasCount, 0) ?? 0),
+    fallbackShellCount: Math.floor(asNumber(dom.fallbackShellCount, 0) ?? 0),
   };
 
   const result = {
@@ -215,6 +231,7 @@ export function summarizeViewerPerformance({
 export function evaluateViewerPerformance(summary) {
   const metrics = summary?.metrics || {};
   const thresholds = normalizeViewerPerfThresholds(summary?.thresholds || {});
+  const finalState = summary?.finalState || {};
   const gates = [
     compareGate("frame_samples", "frame sample count", asNumber(metrics.frameSamples), thresholds.minFrameSamples, ">="),
     compareGate("fps_avg", "average FPS", asNumber(metrics.fpsAvg), thresholds.minFps, ">="),
@@ -225,6 +242,10 @@ export function evaluateViewerPerformance(summary) {
     compareGate("dom_content_loaded_ms", "DOMContentLoaded", asNumber(metrics.domContentLoadedMs), thresholds.maxDomContentLoadedMs, "<="),
     compareGate("load_event_ms", "load event", asNumber(metrics.loadEventMs), thresholds.maxLoadEventMs, "<="),
     compareGate("interaction_p95_ms", "interaction p95", asNumber(metrics.interactionP95Ms), thresholds.maxInteractionP95Ms, "<="),
+    compareExactGate("pixel_world_runtime_status", "pixel world runtime status", finalState.pixelWorldRuntimeStatus ?? null, "ready"),
+    compareExactGate("pixel_world_runtime_source", "pixel world runtime source", finalState.pixelWorldRuntimeSource ?? null, "wasm_bindgen_runtime"),
+    compareGate("rendered_canvas_count", "rendered canvas count", asNumber(metrics.renderedCanvasCount), 1, ">="),
+    compareGate("fallback_shell_count", "fallback shell count", asNumber(metrics.fallbackShellCount), 0, "<="),
   ];
   return {
     status: gates.every((gate) => gate.status !== "fail") ? "pass" : "fail",
@@ -234,6 +255,7 @@ export function evaluateViewerPerformance(summary) {
 
 export function buildViewerPerformanceMarkdown(summary) {
   const metrics = summary.metrics || {};
+  const finalState = summary.finalState || {};
   const lines = [
     "# Viewer Performance Probe",
     "",
@@ -253,6 +275,8 @@ export function buildViewerPerformanceMarkdown(summary) {
     `- Load event(ms): \`${metrics.loadEventMs}\``,
     `- Interaction p95(ms): \`${metrics.interactionP95Ms ?? "-"}\``,
     `- DOM nodes: \`${metrics.domNodeCount}\`, interactive elements: \`${metrics.interactiveElementCount}\``,
+    `- Pixel-world runtime: \`${finalState.pixelWorldRuntimeStatus || "-"}\` / \`${finalState.pixelWorldRuntimeSource || "-"}\``,
+    `- Pixel-world renderer DOM: rendered canvas \`${metrics.renderedCanvasCount}\`, fallback shell \`${metrics.fallbackShellCount}\``,
     "",
     "## Gates",
     "| Gate | Actual | Comparator | Threshold | Status |",
