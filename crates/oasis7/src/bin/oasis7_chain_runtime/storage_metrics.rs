@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::UNIX_EPOCH;
 
 use oasis7::runtime::{measure_directory_storage_bytes, LocalCasStore};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
@@ -72,15 +74,42 @@ impl StorageMetricsSnapshot {
     }
 }
 
-pub(super) type SharedStorageMetrics = Arc<Mutex<StorageMetricsSnapshot>>;
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(super) struct ExecutionRefCountCache {
+    record_ref_counts: BTreeMap<u64, CachedRefCount>,
+    checkpoint_ref_counts: BTreeMap<u64, CachedRefCount>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CachedRefCount {
+    file_stamp: FileStamp,
+    ref_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileStamp {
+    len: u64,
+    modified_at_ms: u128,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct SharedStorageMetricsState {
+    snapshot: StorageMetricsSnapshot,
+    execution_ref_count_cache: ExecutionRefCountCache,
+}
+
+pub(super) type SharedStorageMetrics = Arc<Mutex<SharedStorageMetricsState>>;
 
 pub(super) fn init_shared_storage_metrics(profile: StorageProfile) -> SharedStorageMetrics {
-    Arc::new(Mutex::new(StorageMetricsSnapshot::empty(profile)))
+    Arc::new(Mutex::new(SharedStorageMetricsState {
+        snapshot: StorageMetricsSnapshot::empty(profile),
+        execution_ref_count_cache: ExecutionRefCountCache::default(),
+    }))
 }
 
 pub(super) fn snapshot_storage_metrics(metrics: &SharedStorageMetrics) -> StorageMetricsSnapshot {
     match metrics.lock() {
-        Ok(locked) => locked.clone(),
+        Ok(locked) => locked.snapshot.clone(),
         Err(_) => StorageMetricsSnapshot {
             degraded_reason: Some("storage metrics lock poisoned".to_string()),
             ..StorageMetricsSnapshot::empty(StorageProfile::DevLocal)
@@ -94,10 +123,16 @@ pub(super) fn refresh_shared_storage_metrics(
     profile: StorageProfile,
     degraded_reason: Option<String>,
 ) -> Result<StorageMetricsSnapshot, String> {
-    let snapshot = collect_storage_metrics(paths, profile, degraded_reason);
-    if let Ok(mut locked) = metrics.lock() {
-        *locked = snapshot.clone();
-    }
+    let mut locked = metrics
+        .lock()
+        .map_err(|_| "storage metrics lock poisoned".to_string())?;
+    let snapshot = collect_storage_metrics(
+        paths,
+        profile,
+        degraded_reason,
+        &mut locked.execution_ref_count_cache,
+    );
+    locked.snapshot = snapshot.clone();
     persist_storage_metrics_snapshot(
         paths.reward_runtime_storage_metrics_path.as_path(),
         &snapshot,
@@ -109,6 +144,7 @@ pub(super) fn collect_storage_metrics(
     paths: &RuntimePaths,
     profile: StorageProfile,
     degraded_reason: Option<String>,
+    execution_ref_count_cache: &mut ExecutionRefCountCache,
 ) -> StorageMetricsSnapshot {
     let mut snapshot = StorageMetricsSnapshot::empty(profile);
     let mut issues = Vec::new();
@@ -168,7 +204,12 @@ pub(super) fn collect_storage_metrics(
         snapshot.retained_heights.as_slice(),
         checkpoint_heights.as_slice(),
     );
-    match count_execution_refs(paths.execution_records_dir.as_path()) {
+    match count_execution_refs(
+        paths.execution_records_dir.as_path(),
+        snapshot.retained_heights.as_slice(),
+        checkpoint_heights.as_slice(),
+        execution_ref_count_cache,
+    ) {
         Ok(ref_count) => snapshot.ref_count = ref_count,
         Err(err) => issues.push(err),
     }
@@ -318,66 +359,47 @@ fn build_replay_summary(
     }
 }
 
-fn count_execution_refs(execution_records_dir: &Path) -> Result<u64, String> {
-    let mut ref_count: u64 = 0;
-    if execution_records_dir.exists() {
-        for entry in fs::read_dir(execution_records_dir).map_err(|err| {
-            format!(
-                "read execution records dir {} failed: {err}",
-                execution_records_dir.display()
-            )
-        })? {
-            let entry =
-                entry.map_err(|err| format!("read execution record entry failed: {err}"))?;
-            if !entry
-                .file_type()
-                .map_err(|err| format!("read execution record entry type failed: {err}"))?
-                .is_file()
-            {
-                continue;
-            }
-            let path = entry.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
-                continue;
-            }
-            let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
-                continue;
-            };
-            if stem == "latest" {
-                continue;
-            }
-            if stem.len() != 20 || !stem.chars().all(|ch| ch.is_ascii_digit()) {
-                continue;
-            }
-            ref_count = ref_count.saturating_add(count_refs_in_json_file(path.as_path())?);
-        }
+fn count_execution_refs(
+    execution_records_dir: &Path,
+    retained_heights: &[u64],
+    checkpoint_heights: &[u64],
+    cache: &mut ExecutionRefCountCache,
+) -> Result<u64, String> {
+    let retained_set: BTreeSet<u64> = retained_heights.iter().copied().collect();
+    cache
+        .record_ref_counts
+        .retain(|height, _| retained_set.contains(height));
+    for height in retained_heights {
+        let path = execution_records_dir.join(format!("{height:020}.json"));
+        refresh_cached_ref_count(path.as_path(), &mut cache.record_ref_counts, *height)?;
     }
 
-    let checkpoint_root = execution_records_dir.join("checkpoints");
-    if checkpoint_root.exists() {
-        for entry in fs::read_dir(checkpoint_root.as_path()).map_err(|err| {
-            format!(
-                "read checkpoint root {} failed: {err}",
-                checkpoint_root.display()
-            )
-        })? {
-            let entry = entry.map_err(|err| format!("read checkpoint entry failed: {err}"))?;
-            if !entry
-                .file_type()
-                .map_err(|err| format!("read checkpoint entry type failed: {err}"))?
-                .is_dir()
-            {
-                continue;
-            }
-            let manifest_path = entry.path().join("manifest.json");
-            if manifest_path.exists() {
-                ref_count =
-                    ref_count.saturating_add(count_refs_in_json_file(manifest_path.as_path())?);
-            }
-        }
+    let checkpoint_set: BTreeSet<u64> = checkpoint_heights.iter().copied().collect();
+    cache
+        .checkpoint_ref_counts
+        .retain(|height, _| checkpoint_set.contains(height));
+    for height in checkpoint_heights {
+        let manifest_path = execution_records_dir
+            .join("checkpoints")
+            .join(format!("{height:020}"))
+            .join("manifest.json");
+        refresh_cached_ref_count(
+            manifest_path.as_path(),
+            &mut cache.checkpoint_ref_counts,
+            *height,
+        )?;
     }
 
-    Ok(ref_count)
+    Ok(cache
+        .record_ref_counts
+        .values()
+        .map(|entry| entry.ref_count)
+        .sum::<u64>()
+        + cache
+            .checkpoint_ref_counts
+            .values()
+            .map(|entry| entry.ref_count)
+            .sum::<u64>())
 }
 
 fn count_refs_in_json_file(path: &Path) -> Result<u64, String> {
@@ -408,6 +430,46 @@ fn count_ref_like_fields(value: &Value) -> u64 {
             .sum(),
         _ => 0,
     }
+}
+
+fn refresh_cached_ref_count(
+    path: &Path,
+    cache: &mut BTreeMap<u64, CachedRefCount>,
+    height: u64,
+) -> Result<(), String> {
+    let metadata = fs::metadata(path)
+        .map_err(|err| format!("read metadata for {} failed: {err}", path.display()))?;
+    let file_stamp = file_stamp_from_metadata(path, &metadata)?;
+    let should_refresh = cache
+        .get(&height)
+        .map(|cached| cached.file_stamp != file_stamp)
+        .unwrap_or(true);
+    if !should_refresh {
+        return Ok(());
+    }
+    let ref_count = count_refs_in_json_file(path)?;
+    cache.insert(
+        height,
+        CachedRefCount {
+            file_stamp,
+            ref_count,
+        },
+    );
+    Ok(())
+}
+
+fn file_stamp_from_metadata(path: &Path, metadata: &Metadata) -> Result<FileStamp, String> {
+    let modified = metadata
+        .modified()
+        .map_err(|err| format!("read modified time for {} failed: {err}", path.display()))?;
+    let modified_at_ms = modified
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| format!("convert modified time for {} failed: {err}", path.display()))?
+        .as_millis();
+    Ok(FileStamp {
+        len: metadata.len(),
+        modified_at_ms,
+    })
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -512,6 +574,7 @@ mod tests {
     use super::super::RuntimePaths;
     use super::{
         collect_storage_metrics, init_shared_storage_metrics, refresh_shared_storage_metrics,
+        ExecutionRefCountCache,
     };
 
     fn temp_dir(label: &str) -> PathBuf {
@@ -641,7 +704,9 @@ mod tests {
             "9999999999999999999999999999999999999999999999999999999999999999",
         );
 
-        let snapshot = collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None);
+        let mut cache = ExecutionRefCountCache::default();
+        let snapshot =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
         assert_eq!(snapshot.storage_profile, "release_default");
         assert_eq!(
             snapshot.effective_budget.profile,
@@ -709,14 +774,17 @@ mod tests {
             "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         );
 
-        let before_recovery = collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None);
+        let mut cache = ExecutionRefCountCache::default();
+        let before_recovery =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
         assert!(before_recovery.orphan_blob_count > 0);
 
         world
             .save_to_dir(paths.execution_world_dir.as_path())
             .expect("save should sweep injected orphan");
 
-        let recovered = collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None);
+        let recovered =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
         assert_eq!(recovered.orphan_blob_count, 0);
         assert_eq!(recovered.last_gc_result, "success");
         assert!(recovered.pin_count > 0);
@@ -759,6 +827,132 @@ mod tests {
             snapshot.degraded_reason,
             Some("runtime degraded".to_string())
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn collect_storage_metrics_reuses_ref_count_cache_for_unchanged_records() {
+        let root = temp_dir("ref-cache");
+        let paths = RuntimePaths {
+            runtime_root: root.clone(),
+            execution_bridge_state_path: root.join("bridge-state.json"),
+            execution_world_dir: root.join("reward-runtime-execution-world"),
+            execution_records_dir: root.join("reward-runtime-execution-records"),
+            storage_root: root.join("store"),
+            replication_root: root.join("replication"),
+            reward_runtime_state_path: root.join("reward-runtime-state.json"),
+            reward_runtime_distfs_probe_state_path: root
+                .join("reward-runtime-distfs-probe-state.json"),
+            reward_runtime_report_dir: root.join("reward-runtime-report"),
+            reward_runtime_storage_metrics_path: root.join("reward-runtime-storage-metrics.json"),
+        };
+        fs::create_dir_all(paths.execution_records_dir.as_path()).expect("create records dir");
+
+        fs::write(
+            paths
+                .execution_records_dir
+                .join("00000000000000000001.json"),
+            r#"{"latest_state_ref":"cas:a","snapshot_ref":"cas:b"}"#,
+        )
+        .expect("write record 1");
+
+        let mut cache = ExecutionRefCountCache::default();
+        let first =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
+        assert_eq!(first.ref_count, 2);
+        assert_eq!(cache.record_ref_counts.len(), 1);
+
+        fs::write(
+            paths
+                .execution_records_dir
+                .join("00000000000000000002.json"),
+            r#"{"journal_ref":"cas:c","commit_log_ref":"cas:d","nested":{"module_ref":"cas:e"}}"#,
+        )
+        .expect("write record 2");
+
+        let second =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
+        assert_eq!(second.ref_count, 5);
+        assert_eq!(cache.record_ref_counts.len(), 2);
+        assert_eq!(cache.record_ref_counts.get(&1).map(|entry| entry.ref_count), Some(2));
+        assert_eq!(cache.record_ref_counts.get(&2).map(|entry| entry.ref_count), Some(3));
+
+        fs::remove_file(
+            paths
+                .execution_records_dir
+                .join("00000000000000000001.json"),
+        )
+        .expect("remove record 1");
+
+        let third =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
+        assert_eq!(third.ref_count, 3);
+        assert_eq!(cache.record_ref_counts.len(), 1);
+        assert_eq!(
+            cache.record_ref_counts.get(&2).map(|entry| entry.ref_count),
+            Some(3)
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn collect_storage_metrics_refreshes_cached_ref_count_after_in_place_record_update() {
+        let root = temp_dir("ref-cache-in-place-update");
+        let paths = RuntimePaths {
+            runtime_root: root.clone(),
+            execution_bridge_state_path: root.join("bridge-state.json"),
+            execution_world_dir: root.join("reward-runtime-execution-world"),
+            execution_records_dir: root.join("reward-runtime-execution-records"),
+            storage_root: root.join("store"),
+            replication_root: root.join("replication"),
+            reward_runtime_state_path: root.join("reward-runtime-state.json"),
+            reward_runtime_distfs_probe_state_path: root
+                .join("reward-runtime-distfs-probe-state.json"),
+            reward_runtime_report_dir: root.join("reward-runtime-report"),
+            reward_runtime_storage_metrics_path: root.join("reward-runtime-storage-metrics.json"),
+        };
+        fs::create_dir_all(paths.execution_records_dir.as_path()).expect("create records dir");
+
+        let record_path = paths
+            .execution_records_dir
+            .join("00000000000000000032.json");
+        fs::write(
+            record_path.as_path(),
+            r#"{"latest_state_ref":"cas:a","snapshot_ref":"cas:b","checkpoint_ref":"checkpoint:32"}"#,
+        )
+        .expect("write initial record");
+
+        let mut cache = ExecutionRefCountCache::default();
+        let first =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
+        assert_eq!(first.ref_count, 3);
+        assert_eq!(
+            cache
+                .record_ref_counts
+                .get(&32)
+                .map(|entry| entry.ref_count),
+            Some(3)
+        );
+
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        fs::write(
+            record_path.as_path(),
+            r#"{"latest_state_ref":"cas:a","snapshot_ref":"cas:b"}"#,
+        )
+        .expect("rewrite record without checkpoint ref");
+
+        let second =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
+        assert_eq!(second.ref_count, 2);
+        assert_eq!(
+            cache
+                .record_ref_counts
+                .get(&32)
+                .map(|entry| entry.ref_count),
+            Some(2)
+        );
+
         let _ = fs::remove_dir_all(root);
     }
 }

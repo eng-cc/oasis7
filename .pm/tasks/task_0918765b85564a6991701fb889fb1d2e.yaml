@@ -1,0 +1,23 @@
+task_uid: task_0918765b85564a6991701fb889fb1d2e
+title: "inspect local chain runtime process"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-inspect-local-chain-runtime-process
+execution_log_path: .pm/tasks/task_0918765b85564a6991701fb889fb1d2e.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Identify whether the high-CPU oasis7_chain_runtime process belongs to a prior local testnet/playtest/deploy run."
+handoff_to: []
+updated_at: 2026-06-09T22:04:55+08:00
+last_started_at: 2026-06-09T16:25:08+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER CARGO_TARGET_DIR=/tmp/oasis7-chain-runtime-fix-check cargo check -q -p oasis7 --bin oasis7_chain_runtime && env -u RUSTC_WRAPPER CARGO_TARGET_DIR=/tmp/oasis7-chain-runtime-fix-check cargo test -q -p oasis7 --bin oasis7_chain_runtime storage_metrics::tests::"
+last_verified_at: 2026-06-09T22:04:47+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-09T22:04:54+08:00
