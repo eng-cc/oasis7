@@ -1,0 +1,21 @@
+task_uid: task_b60533170d3d442fb493737495268cbd
+title: "viewer immersive phase6 cinematic hud minimap closure"
+owner_role: tpm
+worktree_hint: null
+execution_log_path: .pm/tasks/task_b60533170d3d442fb493737495268cbd.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - AGENTS.md
+doc_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase6.prd.md
+related_prd: []
+acceptance:
+  - "World Focus carries a cinematic opening, task-driven HUD summary, and minimap guidance instead of only the compact prompt/blocker shell."
+  - "Phase6 immersive additions are covered by targeted viewer tests that prove the new focus-shell cinematic/task/minimap behavior."
+handoff_to: []
+updated_at: 2026-06-09T09:35:14+08:00
+last_started_at: 2026-06-09T09:35:14+08:00

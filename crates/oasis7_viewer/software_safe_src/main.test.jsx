@@ -10,7 +10,7 @@ vi.mock("./pixel_world_host.jsx", () => ({
 }));
 
 function viewerUrl() {
-  return "/software_safe.html?test_api=1&connect=0&locale=en";
+  return "/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en";
 }
 
 let activeCleanup = null;

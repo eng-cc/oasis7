@@ -15,6 +15,7 @@ const viewerRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(viewerRoot, "../..");
 const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
 const session = `viewer-performance-probe-${process.pid}`;
+let staticRoot = viewerRoot;
 
 function positiveInteger(value, fallback) {
   const numeric = Number(value);
@@ -129,8 +130,8 @@ function serveFile(request, response) {
     return;
   }
   const normalized = normalize(rawPath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const filePath = resolve(viewerRoot, `.${normalized}`);
-  const relativePath = relative(viewerRoot, filePath);
+  const filePath = resolve(staticRoot, `.${normalized}`);
+  const relativePath = relative(staticRoot, filePath);
   if (!relativePath || relativePath.startsWith("..")) {
     response.writeHead(403);
     response.end("forbidden");
@@ -149,6 +150,36 @@ function serveFile(request, response) {
     response.writeHead(404);
     response.end("not found");
   }
+}
+
+function prepareViewerWebDist(distDir) {
+  const copyScript = resolve(repoRoot, "scripts/copy-viewer-web-dist.sh");
+  mkdirSync(distDir, { recursive: true });
+  const result = spawnSync(copyScript, ["--dist-dir", distDir], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0) {
+    throw new Error([
+      "failed to prepare viewer web dist for performance probe",
+      `command: ${copyScript} --dist-dir ${distDir}`,
+      result.stdout?.trim() ? `stdout:\n${result.stdout.trim()}` : null,
+      result.stderr?.trim() ? `stderr:\n${result.stderr.trim()}` : null,
+    ].filter(Boolean).join("\n"));
+  }
+  const pixelWorldRuntimePath = resolve(distDir, "pixel-world-bridge/pixel_world_bridge.js");
+  try {
+    const stats = statSync(pixelWorldRuntimePath);
+    if (!stats.isFile()) throw new Error("not a file");
+  } catch {
+    throw new Error([
+      "viewer performance probe requires the real pixel world renderer runtime",
+      `missing: ${pixelWorldRuntimePath}`,
+      "run ./scripts/build-viewer-software-safe.sh before the performance probe",
+    ].join("\n"));
+  }
+  return distDir;
 }
 
 function ensureAgentBrowser() {
@@ -213,6 +244,31 @@ function probeScript({ durationMs, agents, locations }) {
       const startedAt = performance.now();
       const api = window.__AW_TEST__;
       if (!api) throw new Error("__AW_TEST__ is unavailable; open viewer with test_api=1");
+      const waitForRendererReady = async () => {
+        const deadline = performance.now() + 20000;
+        let state = api.getState ? api.getState() : null;
+        while (performance.now() < deadline) {
+          state = api.getState ? api.getState() : null;
+          if (
+            state?.pixelWorldRuntimeStatus === "ready" &&
+            state?.pixelWorldRuntimeSource === "wasm_bindgen_runtime"
+          ) {
+            return state;
+          }
+          if (state?.pixelWorldFatal) {
+            throw new Error("pixel world renderer fatal before performance sampling: " + JSON.stringify(state.pixelWorldFatal));
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        throw new Error("pixel world wasm renderer did not reach ready state before performance sampling: " + JSON.stringify({
+          pixelWorldRuntimeStatus: state?.pixelWorldRuntimeStatus ?? null,
+          pixelWorldRuntimeSource: state?.pixelWorldRuntimeSource ?? null,
+          pixelWorldRuntimeModuleUrl: state?.pixelWorldRuntimeModuleUrl ?? null,
+          pixelWorldFatal: state?.pixelWorldFatal ?? null,
+          lastError: state?.lastError ?? null,
+        }));
+      };
+      const rendererReadyState = await waitForRendererReady();
       const model = { agents: {}, locations: {}, agent_prompt_profiles: {}, agent_execution_debug_contexts: {} };
       for (let index = 0; index < ${locations}; index += 1) {
         const locationId = "loc-" + index;
@@ -335,9 +391,12 @@ function probeScript({ durationMs, agents, locations }) {
           nodeCount: document.querySelectorAll("*").length,
           panelCount: document.querySelectorAll(".panel").length,
           interactiveElementCount: document.querySelectorAll("button,a,input,textarea,select,[tabindex]").length,
+          renderedCanvasCount: document.querySelectorAll(".pixel-world-canvas--rendered").length,
+          fallbackShellCount: document.querySelectorAll(".pixel-world-canvas__fallback").length,
         },
         viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
         browser: { userAgent: navigator.userAgent, renderMeta: window.__OASIS7_VIEWER_RENDER_META || {} },
+        rendererReadyState,
         finalState: api.getState ? api.getState() : null,
       });
     })()
@@ -357,22 +416,24 @@ const outDir = resolve(options.outDir || join(repoRoot, "output/playwright/viewe
 const summaryJsonPath = join(outDir, "summary.json");
 const summaryMdPath = join(outDir, "summary.md");
 const screenshotPath = join(outDir, "viewer-performance.png");
+const webDistDir = join(outDir, "web-dist");
 const durationMs = Number.isFinite(options.durationMs) && options.durationMs > 0 ? options.durationMs : profile.durationMs;
 const thresholds = normalizeViewerPerfThresholds({ ...profile.thresholds, ...options.thresholds });
 
 mkdirSync(outDir, { recursive: true });
 ensureAgentBrowser();
+staticRoot = prepareViewerWebDist(webDistDir);
 
 const server = createServer(serveFile);
 
 try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address();
-  const url = `http://127.0.0.1:${address.port}/software_safe.html?test_api=1&connect=0&locale=en&pixel_world_renderer=defer&hosted_bootstrap=0&t=${Date.now()}`;
+  const url = `http://127.0.0.1:${address.port}/software_safe.html?test_api=1&connect=0&locale=en&hosted_bootstrap=0&t=${Date.now()}`;
 
   closeBrowser();
   console.log(`opening viewer performance probe: ${url}`);
-  await runAgentBrowserJson(["open", url], { timeout: 45_000 });
+  await runAgentBrowserJson(["open", url], { timeout: 120_000 });
   await runAgentBrowserJson(["set", "viewport", String(options.viewport[0]), String(options.viewport[1])]);
 
   console.log(`sampling frames for ${durationMs}ms with profile=${options.profile}`);

@@ -20,7 +20,7 @@ describe("viewer performance metrics", () => {
         domInteractiveMs: 200,
       },
       interactionLatencies: [42, 51, 65, 58],
-      dom: { nodeCount: 240, panelCount: 3, interactiveElementCount: 18 },
+      dom: { nodeCount: 240, panelCount: 3, interactiveElementCount: 18, renderedCanvasCount: 1, fallbackShellCount: 0 },
       thresholds: {
         minFrameSamples: 100,
         minFps: 50,
@@ -40,6 +40,8 @@ describe("viewer performance metrics", () => {
     expect(summary.metrics.frameP95Ms).toBe(18);
     expect(summary.metrics.domContentLoadedMs).toBe(240);
     expect(summary.metrics.interactionP95Ms).toBe(65);
+    expect(summary.metrics.renderedCanvasCount).toBe(1);
+    expect(summary.metrics.fallbackShellCount).toBe(0);
   });
 
   it("fails laggy samples against fps, frame, long task, and interaction gates", () => {
@@ -89,6 +91,11 @@ describe("viewer performance metrics", () => {
       frameIntervals: Array.from({ length: 90 }, () => 16),
       domReadiness: { domContentLoadedMs: 180, loadEventMs: 240 },
       interactionLatencies: [30, 35, 40],
+      dom: { renderedCanvasCount: 1, fallbackShellCount: 0 },
+      finalState: {
+        pixelWorldRuntimeStatus: "ready",
+        pixelWorldRuntimeSource: "wasm_bindgen_runtime",
+      },
       thresholds: { minFrameSamples: 90 },
     });
 
@@ -97,6 +104,8 @@ describe("viewer performance metrics", () => {
     expect(markdown).toContain("# Viewer Performance Probe");
     expect(markdown).toContain("| frame_p95_ms |");
     expect(markdown).toContain("DOMContentLoaded(ms)");
+    expect(markdown).toContain("Pixel-world runtime: `ready` / `wasm_bindgen_runtime`");
+    expect(markdown).toContain("rendered canvas `1`, fallback shell `0`");
     expect(markdown).toContain("http://127.0.0.1/viewer");
   });
 

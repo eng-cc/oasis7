@@ -180,6 +180,8 @@ export function summarizeViewerPerformance({
     domNodeCount: Math.floor(asNumber(dom.nodeCount, 0) ?? 0),
     panelCount: Math.floor(asNumber(dom.panelCount, 0) ?? 0),
     interactiveElementCount: Math.floor(asNumber(dom.interactiveElementCount, 0) ?? 0),
+    renderedCanvasCount: Math.floor(asNumber(dom.renderedCanvasCount, 0) ?? 0),
+    fallbackShellCount: Math.floor(asNumber(dom.fallbackShellCount, 0) ?? 0),
   };
 
   const result = {
@@ -234,6 +236,7 @@ export function evaluateViewerPerformance(summary) {
 
 export function buildViewerPerformanceMarkdown(summary) {
   const metrics = summary.metrics || {};
+  const finalState = summary.finalState || {};
   const lines = [
     "# Viewer Performance Probe",
     "",
@@ -253,6 +256,8 @@ export function buildViewerPerformanceMarkdown(summary) {
     `- Load event(ms): \`${metrics.loadEventMs}\``,
     `- Interaction p95(ms): \`${metrics.interactionP95Ms ?? "-"}\``,
     `- DOM nodes: \`${metrics.domNodeCount}\`, interactive elements: \`${metrics.interactiveElementCount}\``,
+    `- Pixel-world runtime: \`${finalState.pixelWorldRuntimeStatus || "-"}\` / \`${finalState.pixelWorldRuntimeSource || "-"}\``,
+    `- Pixel-world renderer DOM: rendered canvas \`${metrics.renderedCanvasCount}\`, fallback shell \`${metrics.fallbackShellCount}\``,
     "",
     "## Gates",
     "| Gate | Actual | Comparator | Threshold | Status |",

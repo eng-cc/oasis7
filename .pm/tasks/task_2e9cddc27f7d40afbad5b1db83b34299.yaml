@@ -1,0 +1,19 @@
+task_uid: task_2e9cddc27f7d40afbad5b1db83b34299
+title: "viewer performance probe uses real renderer"
+owner_role: viewer_engineer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_2e9cddc27f7d40afbad5b1db83b34299.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - crates/oasis7_viewer/scripts/viewer-performance-probe.mjs
+doc_refs:
+  - doc/testing/performance/viewer-current-web-performance-harness-2026-06-02.prd.md
+related_prd: []
+acceptance:
+  - "viewer performance probe does not append pixel_world_renderer=defer and measures the real wasm renderer path"
+  - "probe serves the official copied viewer web dist so /pixel-world-bridge assets are available at the loader URL"
+  - "probe fails fast if the pixel world runtime does not reach wasm_bindgen_runtime ready state"
+handoff_to: []
+updated_at: 2026-06-09T12:48:37+08:00
