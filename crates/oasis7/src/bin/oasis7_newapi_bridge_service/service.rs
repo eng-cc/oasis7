@@ -597,11 +597,14 @@ impl BridgeService {
                     ));
                 };
                 let route_state = state.routes[route_position].status.clone();
-                let duplicate_route_deposit = state
-                    .ledger
-                    .iter()
-                    .any(|entry| entry.route_id == route.route_id);
+                let duplicate_route_deposit = state.ledger.iter().any(|entry| {
+                    entry.route_id == route.route_id && ledger_entry_blocks_route(entry)
+                });
                 let confirmations = compute_confirmations(committed_height, transfer.block_height);
+                let deposit_token_review_reason = evaluate_deposit_token(
+                    route.deposit_token.as_deref(),
+                    transfer.memo.as_deref(),
+                );
                 let pricing_evaluation = evaluate_pricing(
                     route.pricing_version.as_deref(),
                     route.topup_plan_id.as_deref(),
@@ -681,15 +684,15 @@ impl BridgeService {
                         Some(reason.to_string()),
                     ),
                 };
-                if let Some(reason) =
-                    evaluate_deposit_token(route.deposit_token.as_deref(), transfer.memo.as_deref())
-                {
+                if let Some(reason) = deposit_token_review_reason {
                     state_name = BridgeLedgerState::ManualReview;
                     review_reason = Some(reason.to_string());
                 }
 
-                state.routes[route_position].status = DepositRouteStatus::Settled;
-                state.routes[route_position].updated_at_unix_ms = now_unix_ms;
+                if deposit_token_review_reason.is_none() {
+                    state.routes[route_position].status = DepositRouteStatus::Settled;
+                    state.routes[route_position].updated_at_unix_ms = now_unix_ms;
+                }
 
                 let bridge_deposit_id = format!("bridge-deposit-{:06}", state.next_deposit_seq);
                 state.next_deposit_seq = state.next_deposit_seq.saturating_add(1);
@@ -965,6 +968,13 @@ fn ledger_matches_transfer(
             Some(chain_action_id) => chain_action_id == transfer.action_id,
             None => true,
         }
+}
+
+fn ledger_entry_blocks_route(entry: &BridgeLedgerEntry) -> bool {
+    !matches!(
+        entry.review_reason.as_deref(),
+        Some("missing_deposit_token" | "deposit_token_mismatch")
+    )
 }
 
 fn build_deposit_token(route_id: &str) -> String {

@@ -471,18 +471,7 @@ mod tests {
         assert!(!serde_json::to_string(&request)
             .expect("request json")
             .contains("chain_private_key_hex"));
-        let _ = fs::remove_file(path);
-    }
-
-    #[test]
-    fn signed_request_with_memo_uses_v2_context() {
-        let dir = std::env::temp_dir();
-        let path = dir.join(format!(
-            "oasis7-chain-transfer-submit-client-memo-{}.txt",
-            std::process::id()
-        ));
-        fs::write(&path, sample_keys_file()).expect("write keys file");
-        let config = CliConfig {
+        let memo_config = CliConfig {
             command: Command::Sign,
             keys_file: path.clone(),
             persona: "happy_path".to_string(),
@@ -493,37 +482,42 @@ mod tests {
             chain_base_url: None,
             timeout_ms: 5_000,
         };
-        let request = build_signed_transfer_request(&config).expect("signed request");
-        let action = Action::TransferMainToken {
-            from_account_id: request.from_account_id.clone(),
-            to_account_id: request.to_account_id.clone(),
-            amount: request.amount,
-            nonce: request.nonce,
-            asset_id: request.asset_id.clone(),
-            memo: request.memo.clone(),
-            chain_id: request.chain_id.clone(),
-            network_id: request.network_id.clone(),
-            tx_version: request.tx_version,
-            tx_type: request.tx_type.clone(),
-            valid_until_unix_ms: request.valid_until_unix_ms,
+        let memo_request =
+            build_signed_transfer_request(&memo_config).expect("memo signed request");
+        let memo_action = Action::TransferMainToken {
+            from_account_id: memo_request.from_account_id.clone(),
+            to_account_id: memo_request.to_account_id.clone(),
+            amount: memo_request.amount,
+            nonce: memo_request.nonce,
+            asset_id: memo_request.asset_id.clone(),
+            memo: memo_request.memo.clone(),
+            chain_id: memo_request.chain_id.clone(),
+            network_id: memo_request.network_id.clone(),
+            tx_version: memo_request.tx_version,
+            tx_type: memo_request.tx_type.clone(),
+            valid_until_unix_ms: memo_request.valid_until_unix_ms,
             max_fee: None,
             fee_asset_id: None,
             application_payload_hash: None,
-            client_request_id: request.client_request_id.clone(),
+            client_request_id: memo_request.client_request_id.clone(),
         };
-        let proof = MainTokenActionAuthProof {
+        let memo_proof = MainTokenActionAuthProof {
             scheme: MainTokenActionAuthScheme::Ed25519,
-            account_id: request.from_account_id.clone(),
-            public_key: Some(request.public_key.clone()),
-            signature: Some(request.signature.clone()),
+            account_id: memo_request.from_account_id.clone(),
+            public_key: Some(memo_request.public_key.clone()),
+            signature: Some(memo_request.signature.clone()),
             threshold: None,
             participant_signatures: Vec::new(),
         };
-        verify_main_token_runtime_action_auth(&action, &proof).expect("verify signature");
-        assert_eq!(request.memo.as_deref(), Some("bridge:deposit:route-000001"));
-        assert_eq!(request.tx_version, Some(2));
-        assert_eq!(request.tx_type.as_deref(), Some("asset_transfer"));
-        assert!(request.signature.starts_with("octransferauth:v2:"));
+        verify_main_token_runtime_action_auth(&memo_action, &memo_proof)
+            .expect("verify memo signature");
+        assert_eq!(
+            memo_request.memo.as_deref(),
+            Some("bridge:deposit:route-000001")
+        );
+        assert_eq!(memo_request.tx_version, Some(2));
+        assert_eq!(memo_request.tx_type.as_deref(), Some("asset_transfer"));
+        assert!(memo_request.signature.starts_with("octransferauth:v2:"));
         let _ = fs::remove_file(path);
     }
 

@@ -93,6 +93,7 @@ fn reconcile_marks_missing_deposit_token_for_manual_review() {
         Some("bridge:deposit:route-000001")
     );
     assert_eq!(snapshot.ledger[0].observed_deposit_token, None);
+    assert_eq!(snapshot.routes[0].status, DepositRouteStatus::Issued);
     assert!(letai_server.recorded_topup_requests().is_empty());
 }
 
@@ -141,7 +142,87 @@ fn reconcile_marks_deposit_token_mismatch_for_manual_review() {
         snapshot.ledger[0].observed_deposit_token.as_deref(),
         Some("bridge:deposit:wrong-route")
     );
+    assert_eq!(snapshot.routes[0].status, DepositRouteStatus::Issued);
     assert!(letai_server.recorded_topup_requests().is_empty());
+}
+
+#[test]
+fn reconcile_accepts_valid_transfer_after_invalid_deposit_token_attempt() {
+    let chain_server = MockChainServer::spawn();
+    let letai_server = MockLetaiServer::spawn();
+    let test_service = test_service_with_endpoints(
+        "reconcile-token-retry-valid",
+        900,
+        Some(chain_server.base_url.clone()),
+        Some(letai_server.base_url.clone()),
+        1,
+        None,
+    );
+    let deposit_account_id = issue_default_route(&test_service);
+
+    chain_server.set_state(MockChainState {
+        committed_height: 10,
+        txs: vec![MockChainTx {
+            tx_hash: "tx-token-mismatch-first".to_string(),
+            action_id: 19,
+            from_account_id: "oc:pk:sender-1".to_string(),
+            to_account_id: deposit_account_id.clone(),
+            amount: 100,
+            memo: Some("bridge:deposit:wrong-route".to_string()),
+            submitted_at_unix_ms: 5_000,
+            updated_at_unix_ms: 5_100,
+            block_height: Some(10),
+        }],
+    });
+
+    let first = test_service
+        .service
+        .reconcile_once(6_000)
+        .expect("first reconcile");
+    assert_eq!(first.manual_review_count, 1);
+    assert_eq!(first.reconciled_credit_count, 0);
+    let first_snapshot = test_service.service.snapshot();
+    assert_eq!(first_snapshot.routes[0].status, DepositRouteStatus::Issued);
+
+    chain_server.set_state(MockChainState {
+        committed_height: 11,
+        txs: vec![
+            MockChainTx {
+                tx_hash: "tx-token-mismatch-first".to_string(),
+                action_id: 19,
+                from_account_id: "oc:pk:sender-1".to_string(),
+                to_account_id: deposit_account_id.clone(),
+                amount: 100,
+                memo: Some("bridge:deposit:wrong-route".to_string()),
+                submitted_at_unix_ms: 5_000,
+                updated_at_unix_ms: 5_100,
+                block_height: Some(10),
+            },
+            MockChainTx {
+                tx_hash: "tx-token-valid-second".to_string(),
+                action_id: 20,
+                from_account_id: "oc:pk:sender-1".to_string(),
+                to_account_id: deposit_account_id,
+                amount: 100,
+                memo: Some("bridge:deposit:route-000001".to_string()),
+                submitted_at_unix_ms: 5_200,
+                updated_at_unix_ms: 5_300,
+                block_height: Some(11),
+            },
+        ],
+    });
+
+    let second = test_service
+        .service
+        .reconcile_once(7_000)
+        .expect("second reconcile");
+    assert_eq!(second.reconciled_credit_count, 1);
+    let snapshot = test_service.service.snapshot();
+    assert_eq!(snapshot.routes[0].status, DepositRouteStatus::Settled);
+    assert_eq!(snapshot.ledger.len(), 2);
+    assert_eq!(snapshot.ledger[0].state, BridgeLedgerState::ManualReview);
+    assert_eq!(snapshot.ledger[1].state, BridgeLedgerState::Reconciled);
+    assert_eq!(letai_server.recorded_topup_requests().len(), 1);
 }
 
 #[test]
