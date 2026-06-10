@@ -3,12 +3,12 @@ use std::hint::black_box;
 use std::process;
 use std::time::Instant;
 
-use oasis7_wasm_abi::{ModuleCallFailure, ModuleCallRequest, ModuleOutput, ModuleSandbox};
 use oasis7::runtime::{
     Action, ActionEnvelope, DomainEvent, Journal, ModuleAbiContract, ModuleArtifactIdentity,
     ModuleKind, ModuleLimits, ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole,
     ModuleSubscription, ModuleSubscriptionStage, PolicySet, World, WorldEvent, WorldEventBody,
 };
+use oasis7_wasm_abi::{ModuleCallFailure, ModuleCallRequest, ModuleOutput, ModuleSandbox};
 use sha2::{Digest, Sha256};
 
 const MODULE_COUNT: usize = 192;
@@ -201,9 +201,8 @@ fn build_module_registry(manifests: &[ModuleManifest]) -> ModuleRegistry {
 fn identity_hash_artifact_identity(wasm_hash: &str, module_id: &str) -> ModuleArtifactIdentity {
     let source_hash = sha256_hex(format!("test-src:{wasm_hash}").as_bytes());
     let build_manifest_hash = sha256_hex(b"test-build-manifest-v1");
-    let identity_hash = sha256_hex(
-        format!("{module_id}:{source_hash}:{build_manifest_hash}").as_bytes(),
-    );
+    let identity_hash =
+        sha256_hex(format!("{module_id}:{source_hash}:{build_manifest_hash}").as_bytes());
     ModuleArtifactIdentity {
         source_hash,
         build_manifest_hash,
