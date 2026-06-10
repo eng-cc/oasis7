@@ -30,8 +30,8 @@
 - 冻结方向（未实现）:
   - 收款面默认按 `newapi` 接入方维护受控 OC 收款账号池；推荐小池化起步，例如每个接入方 5 个账号
   - 每次充值仍保留独立 route 真值；route 从接入方账号池里选择可用账号，而不是默认每单现生成新地址
-  - 在 bridge 还不能从链上验证唯一归因 token 前，同一个收款账号同一时刻只允许绑定一个活跃 route；账号池只用于轮转/隔离，不用于并发混单
-  - 若后续链上转账支持 `message/memo`，默认只追加短 `deposit_token` 做辅助归因，不把整包加密业务数据塞进链上消息
+  - 新签发 route 返回短 `deposit_token`，用户转账时放入链上 `message/memo`；bridge reconcile 必须精确匹配 token，缺失或不一致进入 `manual_review`
+  - `deposit_token` 只做辅助归因，不把整包加密业务数据塞进链上消息；账号池并发混单仍需另一个 custody/allocator 任务放开
 
 ## 依赖
 - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
@@ -63,7 +63,7 @@
 - 当前 watcher 只扫描 bridge-service 自己发出的 route，不覆盖全链模糊归属场景。
 - 当前 operator review 仍只支持 `mark_resolved|close`；若需要“改额度后重发”或 richer rollback UI，需另开后续任务。
 - 当前仓库还没落地真实收款账号 custody、账号池分配、归集和轮换；文档已冻结方向，但实现仍需单独任务。
-- 当前链上 transfer 还不支持 `message/memo` 真值；若要引入 `deposit_token` 辅助归因，需先改主链 transfer 契约与 explorer 输出。
+- 新签发 NewAPI bridge route 已使用链上 `message/memo` 承载短 `deposit_token`；legacy route 缺少 token 时仍按旧路径接受，便于状态兼容。
 
 ## 活跃补充文档
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`
@@ -71,4 +71,4 @@
 
 ## 后续实现子任务
 - receiving-account-pool-and-provider-routing (PRD-P2P-TBRIDGE-002/003) [todo]: 为每个 `newapi` 接入方补 `provider_id`、收款账号池状态、route 分配与 custody/轮换边界。
-- transfer-message-deposit-token-support (PRD-P2P-TBRIDGE-002/004) [todo]: 若主链转账后续支持 `message/memo`，补 `deposit_token` 签发/校验、explorer 透传与 bridge 解析。
+- transfer-message-deposit-token-support (PRD-P2P-TBRIDGE-002/004) [done-minimal]: 新 route 签发 `deposit_token`，explorer memo 透传到 bridge，reconcile 对新 route 强校验并把缺失/不一致转入 manual review；账号池并发归因仍留待 custody/allocator 后续任务。

@@ -323,6 +323,7 @@ impl BridgeService {
                     "{}{:06}",
                     self.config.deposit_account_prefix, state.next_route_seq
                 );
+                let deposit_token = build_deposit_token(route_id.as_str());
                 state.next_route_seq = state.next_route_seq.saturating_add(1);
                 let expires_at_unix_ms =
                     compute_route_expiry_unix_ms(self.config.route_ttl_seconds, now_unix_ms)?;
@@ -331,6 +332,7 @@ impl BridgeService {
                     bridge_user_id: bridge_user_id.clone(),
                     beneficiary_ref: binding.newapi_user_ref,
                     deposit_account_id,
+                    deposit_token: Some(deposit_token),
                     route_type: ROUTE_TYPE_OPERATOR_ASSIGNED_ACCOUNT.to_string(),
                     pricing_version: pricing_version.clone(),
                     topup_plan_id: topup_plan_id.clone(),
@@ -571,6 +573,7 @@ impl BridgeService {
                     existing.chain_action_id = Some(transfer.action_id);
                     existing.block_height = transfer.block_height;
                     existing.confirmations = confirmations;
+                    existing.observed_deposit_token = transfer.memo.clone();
                     existing.updated_at_unix_ms = now_unix_ms;
                     if existing.state == BridgeLedgerState::PendingConfirmations
                         && confirmations >= existing.required_confirmations
@@ -610,8 +613,8 @@ impl BridgeService {
                     credit_units,
                     bonus_units,
                     total_credit_units,
-                    state_name,
-                    review_reason,
+                    mut state_name,
+                    mut review_reason,
                 ) = match pricing_evaluation {
                     PricingEvaluation::Matched {
                         expected_amount_oc,
@@ -678,6 +681,12 @@ impl BridgeService {
                         Some(reason.to_string()),
                     ),
                 };
+                if let Some(reason) =
+                    evaluate_deposit_token(route.deposit_token.as_deref(), transfer.memo.as_deref())
+                {
+                    state_name = BridgeLedgerState::ManualReview;
+                    review_reason = Some(reason.to_string());
+                }
 
                 state.routes[route_position].status = DepositRouteStatus::Settled;
                 state.routes[route_position].updated_at_unix_ms = now_unix_ms;
@@ -700,6 +709,8 @@ impl BridgeService {
                     from_account_id: transfer.from_account_id.clone(),
                     amount_oc: transfer.amount,
                     expected_amount_oc,
+                    expected_deposit_token: route.deposit_token.clone(),
+                    observed_deposit_token: transfer.memo.clone(),
                     pricing_version: route.pricing_version.clone(),
                     topup_plan_id: route.topup_plan_id.clone(),
                     credit_units,
@@ -809,6 +820,7 @@ fn route_response(route: &DepositRoute, reused_existing_route: bool) -> CreateDe
         bridge_user_id: route.bridge_user_id.clone(),
         beneficiary_ref: route.beneficiary_ref.clone(),
         deposit_account_id: route.deposit_account_id.clone(),
+        deposit_token: route.deposit_token.clone(),
         route_type: route.route_type.clone(),
         route_status: route.status.clone(),
         pricing_version: route.pricing_version.clone(),
@@ -953,6 +965,22 @@ fn ledger_matches_transfer(
             Some(chain_action_id) => chain_action_id == transfer.action_id,
             None => true,
         }
+}
+
+fn build_deposit_token(route_id: &str) -> String {
+    format!("bridge:deposit:{route_id}")
+}
+
+fn evaluate_deposit_token<'a>(
+    expected_deposit_token: Option<&'a str>,
+    observed_deposit_token: Option<&str>,
+) -> Option<&'a str> {
+    let expected = expected_deposit_token?;
+    match observed_deposit_token {
+        Some(observed) if observed == expected => None,
+        Some(_) => Some("deposit_token_mismatch"),
+        None => Some("missing_deposit_token"),
+    }
 }
 
 fn build_idempotency_key(route_id: &str, chain_tx_id: &str, chain_action_id: u64) -> String {

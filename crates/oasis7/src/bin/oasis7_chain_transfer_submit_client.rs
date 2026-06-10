@@ -52,6 +52,7 @@ struct CliConfig {
     to_account_id: String,
     amount: u64,
     nonce: u64,
+    memo: Option<String>,
     chain_base_url: Option<String>,
     timeout_ms: u64,
 }
@@ -71,6 +72,7 @@ impl CliConfig {
         let mut to_account_id = None;
         let mut amount = None;
         let mut nonce = None;
+        let mut memo = None;
         let mut chain_base_url = None;
         let mut timeout_ms = 5_000_u64;
 
@@ -100,6 +102,7 @@ impl CliConfig {
                     continue;
                 }
                 "--chain-base-url" => &mut chain_base_url,
+                "--memo" => &mut memo,
                 "--timeout-ms" => {
                     let raw = args
                         .next()
@@ -129,6 +132,9 @@ impl CliConfig {
                 .ok_or_else(|| "--to-account-id is required".to_string())?,
             amount: amount.ok_or_else(|| "--amount is required".to_string())?,
             nonce: nonce.ok_or_else(|| "--nonce is required".to_string())?,
+            memo: memo
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
             chain_base_url,
             timeout_ms,
         })
@@ -185,24 +191,27 @@ struct ChainTransferSubmitResponse {
 }
 
 fn usage() -> String {
-    "Usage: oasis7_chain_transfer_submit_client <sign|submit> --keys-file <path> --persona <slug> --to-account-id <account> --amount <n> --nonce <n> [--chain-base-url <url>] [--timeout-ms <n>]\n\n\
-Reads the persona private key from a local secret file, signs a TransferMainToken request with the canonical octransferauth:v1 proof, and either prints the submit JSON or posts it to /v1/chain/transfer/submit.\n"
+    "Usage: oasis7_chain_transfer_submit_client <sign|submit> --keys-file <path> --persona <slug> --to-account-id <account> --amount <n> --nonce <n> [--memo <text>] [--chain-base-url <url>] [--timeout-ms <n>]\n\n\
+Reads the persona private key from a local secret file, signs a TransferMainToken request with the canonical octransferauth proof, and either prints the submit JSON or posts it to /v1/chain/transfer/submit.\n"
         .to_string()
 }
 
 fn build_signed_transfer_request(config: &CliConfig) -> Result<ChainTransferSubmitRequest, String> {
     let persona = load_persona(config.keys_file.as_path(), config.persona.as_str())?;
+    let uses_v2_context = config.memo.is_some();
+    let tx_version = uses_v2_context.then_some(2);
+    let tx_type = uses_v2_context.then(|| "asset_transfer".to_string());
     let action = Action::TransferMainToken {
         from_account_id: persona.account_id.clone(),
         to_account_id: config.to_account_id.clone(),
         amount: config.amount,
         nonce: config.nonce,
         asset_id: None,
-        memo: None,
+        memo: config.memo.clone(),
         chain_id: None,
         network_id: None,
-        tx_version: None,
-        tx_type: None,
+        tx_version,
+        tx_type: tx_type.clone(),
         valid_until_unix_ms: None,
         max_fee: None,
         fee_asset_id: None,
@@ -222,11 +231,11 @@ fn build_signed_transfer_request(config: &CliConfig) -> Result<ChainTransferSubm
         amount: config.amount,
         nonce: config.nonce,
         asset_id: None,
-        memo: None,
+        memo: config.memo.clone(),
         chain_id: None,
         network_id: None,
-        tx_version: None,
-        tx_type: None,
+        tx_version,
+        tx_type,
         valid_until_unix_ms: None,
         client_request_id: None,
         public_key: proof
@@ -427,6 +436,7 @@ mod tests {
             to_account_id: "oc:bridge:test-route".to_string(),
             amount: 100,
             nonce: 42,
+            memo: None,
             chain_base_url: None,
             timeout_ms: 5_000,
         };
@@ -461,6 +471,59 @@ mod tests {
         assert!(!serde_json::to_string(&request)
             .expect("request json")
             .contains("chain_private_key_hex"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn signed_request_with_memo_uses_v2_context() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!(
+            "oasis7-chain-transfer-submit-client-memo-{}.txt",
+            std::process::id()
+        ));
+        fs::write(&path, sample_keys_file()).expect("write keys file");
+        let config = CliConfig {
+            command: Command::Sign,
+            keys_file: path.clone(),
+            persona: "happy_path".to_string(),
+            to_account_id: "oc:bridge:test-route".to_string(),
+            amount: 100,
+            nonce: 42,
+            memo: Some("bridge:deposit:route-000001".to_string()),
+            chain_base_url: None,
+            timeout_ms: 5_000,
+        };
+        let request = build_signed_transfer_request(&config).expect("signed request");
+        let action = Action::TransferMainToken {
+            from_account_id: request.from_account_id.clone(),
+            to_account_id: request.to_account_id.clone(),
+            amount: request.amount,
+            nonce: request.nonce,
+            asset_id: request.asset_id.clone(),
+            memo: request.memo.clone(),
+            chain_id: request.chain_id.clone(),
+            network_id: request.network_id.clone(),
+            tx_version: request.tx_version,
+            tx_type: request.tx_type.clone(),
+            valid_until_unix_ms: request.valid_until_unix_ms,
+            max_fee: None,
+            fee_asset_id: None,
+            application_payload_hash: None,
+            client_request_id: request.client_request_id.clone(),
+        };
+        let proof = MainTokenActionAuthProof {
+            scheme: MainTokenActionAuthScheme::Ed25519,
+            account_id: request.from_account_id.clone(),
+            public_key: Some(request.public_key.clone()),
+            signature: Some(request.signature.clone()),
+            threshold: None,
+            participant_signatures: Vec::new(),
+        };
+        verify_main_token_runtime_action_auth(&action, &proof).expect("verify signature");
+        assert_eq!(request.memo.as_deref(), Some("bridge:deposit:route-000001"));
+        assert_eq!(request.tx_version, Some(2));
+        assert_eq!(request.tx_type.as_deref(), Some("asset_transfer"));
+        assert!(request.signature.starts_with("octransferauth:v2:"));
         let _ = fs::remove_file(path);
     }
 
@@ -508,10 +571,13 @@ mod tests {
             "100".to_string(),
             "--nonce".to_string(),
             "1".to_string(),
+            "--memo".to_string(),
+            " bridge:deposit:route-000001 ".to_string(),
             "--timeout-ms".to_string(),
             "0".to_string(),
         ])
         .expect("config");
         assert_eq!(config.timeout_ms, 1);
+        assert_eq!(config.memo.as_deref(), Some("bridge:deposit:route-000001"));
     }
 }

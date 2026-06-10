@@ -147,8 +147,8 @@
   - 约束: 只建立受控 bridge binding，不隐式 topup；`provider_id` 是 route 选择收款账号池的上游真值。
 - `POST /v1/bridge/deposit-route`
   - 输入: `bridge_user_id`, `pricing_version` 或 `topup_plan_id`
-  - 当前代码输出: `route_id`, `deposit_account_id`, `expires_at`
-  - 目标态扩展输出: `route_id`, `provider_id`, `deposit_account_id`, optional `deposit_token`, `expires_at`
+  - 当前代码输出: `route_id`, `deposit_account_id`, `deposit_token`, `expires_at`
+  - 目标态扩展输出: `route_id`, `provider_id`, `deposit_account_id`, `deposit_token`, `expires_at`
   - 约束: 每个活跃 route 必须可唯一映射 beneficiary；目标态里 `deposit_account_id` 默认从 `bridge_user_binding.provider_id` 对应的接入方收款账号池选择，不要求 route 自己拥有独立链地址；但在 bridge 尚不能验证链上唯一归因 token 前，同一个 `deposit_account_id` 同一时刻只允许分配给一个活跃 route。
 - `POST /v1/bridge/reconcile`
   - 输入: 空 body；由 operator 或后台 interval 触发一次 `scan routes -> observe deposits -> ensure user/project/token -> topup -> verify`
@@ -170,8 +170,8 @@
     - `external_user_id` / `external_project_id` / `external_order_id` 必须稳定幂等
 
 ## 6. 编排顺序
-1. 当前代码只生成 route 并返回 `deposit_account_id`；目标态扩展为 route allocator 按 `bridge_user_binding.provider_id` 选择一个 active 收款账号池成员，并可选签发一次性 `deposit_token`。
-2. 在没有 mandatory `deposit_token` 解析能力前，allocator 只允许“一账号一个活跃 route”；只有当链上 token 已 mandatory 且 watcher/explorer 能用它做唯一归因时，才允许同一账号承载多个活跃 route。
+1. 当前代码生成 route 并返回 `deposit_account_id` 与短 `deposit_token`；目标态扩展为 route allocator 按 `bridge_user_binding.provider_id` 选择一个 active 收款账号池成员。
+2. 新 route 的 `deposit_token` 已由 explorer `message/memo` 透传并在 bridge reconcile 强校验；legacy route 缺少 token 时仍保留旧行为。账号池并发混单仍需后续 custody/allocator 任务明确唯一归因和去重策略。
 3. watcher 观察 route 对应链上 confirmed deposit。
 4. pricing engine 把 `OC` 金额折算成 LetAI `quota`。
 5. `users/upsert` 确保 `platform_user_id` 存在，并回写 binding。
@@ -193,7 +193,7 @@
   3. `expires_at` 有效期
   4. `pricing_version` / `topup_plan_id`
   5. `from_account_id`
-  6. optional `deposit_token`（若链上 `message/memo` 可用）
+  6. `deposit_token`（新 route 必填；legacy route 可为空）
 - 为什么不默认全平台单账号:
   - 接入方之间缺少资金隔离。
   - operator 轮换和风控粒度太粗。
@@ -202,8 +202,9 @@
   - 需要完整密钥派生、托管和归集系统。
   - 当前 bridge 更缺 route/ledger/custody 的稳定闭环，而不是地址数量。
 - `message/memo` 边界:
-  - 若未来链上转账支持 `message/memo`，默认只放短 `deposit_token`。
+  - 链上转账 `message/memo` 默认只放短 `deposit_token`。
   - `deposit_token` 只做辅助归因，不替代 bridge state / ledger。
+  - 新 route 观测到缺失或不一致的 memo 必须进入 `manual_review`，不能正常 credit。
   - 不建议把完整加密对账信息直接塞进链上消息体。
   - 只有当 `deposit_token` 变成 mandatory 且 watcher/explorer 已把它纳入唯一归因和去重输入后，才允许同一个收款账号同时承载多个活跃 route。
 
@@ -211,7 +212,7 @@
 1. 先扩展 `model.rs` / `store.rs`，补齐 `provider_id`、收款账号池、LetAI user/project/token/topup/query 字段。
 2. 替换 generic `credit_adapter.rs` 为 LetAI OpenAPI adapter，支持多接口。
 3. 重写 `service.rs` route 分配与 reconcile 编排，从 `Confirmed` 推进到 `Reconciled`。
-4. 若链上准备支持 `message/memo`，补 `deposit_token` 签发/验证与 explorer 读取。
+4. 扩展 `deposit_token` 验证后的账号池 allocator 与 provider receiving account 并发归因策略。
 5. 重写测试桩，覆盖账号池复用、user/project/token/topup/query 的 happy path、retry 和 manual review。
 6. 最后再补 richer operator dashboard / portal。
 
