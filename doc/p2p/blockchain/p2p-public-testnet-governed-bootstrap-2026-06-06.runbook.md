@@ -25,8 +25,8 @@
 
 1. `node-keypair.toml` 是受保护真值，删除它会连带改变派生 signer truth。
 2. libp2p bootstrap peer id 是部署真值，不是可以长期硬编码的常量。
-3. observer 超过低高度阈值后不能再依赖空 world 自举，必须走 verified seed/state-sync bundle。
-4. state-sync artifact 必须是闭包完整的，不能只拷 `world/` 和 `execution-records/`，遗漏 `store/blobs/`。
+3. observer 超过低高度阈值后不能从 genesis 硬 replay；正常路径应由节点自动拉取受验证的高位 replication checkpoint 并补尾。
+4. verified seed/state-sync bundle 只作为自动同步失败时的 break-glass/recovery 或离线加速路径；一旦使用，artifact 必须是闭包完整的，不能只拷 `world/` 和 `execution-records/`，遗漏 `store/blobs/`。
 
 ## 2. Scope and Topology
 固定目标拓扑:
@@ -89,8 +89,8 @@
    - governed bootstrap world
    - observer `REPLICATION_REMOTE_WRITERS_CSV`
 4. libp2p bootstrap peer id 必须在 validator 启动后实时读取，不能沿用旧证据文件中的值。
-5. 当 validator 高度超过低高度阈值后，observer 不得使用空 world 从 genesis replay 追链，必须改走 verified seed/state-sync。
-6. seed/state-sync 产物必须包含 execution restore 所需 blob 闭包，否则 observer 会在 restore snapshot/journal 时落入 `BlobNotFound`。
+5. 当 validator 高度超过低高度阈值后，observer 不得使用空 world 从 genesis replay 追链；正常 attach 必须依赖自动 high-head checkpoint sync 与 tail gap sync。
+6. `seed-from-remote` / state-sync 产物只用于自动同步失败后的 recovery；产物必须包含 execution restore 所需 blob 闭包，否则 observer 会在 restore snapshot/journal 时落入 `BlobNotFound`。
 
 ## 5. Required Inputs
 开始前，操作者必须准备好以下输入：
@@ -126,8 +126,8 @@
 2. Phase B: Build deployment truth
 3. Phase C: Stage and rebuild validators
 4. Phase D: Verify validator pair
-5. Phase E: Build verified observer seed/state-sync bundle
-6. Phase F: Attach observers
+5. Phase E: Optional recovery seed/state-sync bundle
+6. Phase F: Attach observers with automatic high-head sync
 7. Phase G: Final health verification
 8. Phase H: Failure handling and rollback
 
@@ -321,11 +321,11 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 3. empty-world `height 1` execution mismatch
 4. validator 自身 `BlobNotFound`
 
-## 11. Phase E - Build Verified Observer Seed/State-Sync Bundle
+## 11. Phase E - Optional Recovery Seed/State-Sync Bundle
 ### Goal
-不要再让 observer 从空 world 硬追到高链高，而是从 validator 导出闭包完整的 seed artifact。
+正常接入不再要求预先导入 seed。只有自动 high-head checkpoint sync 失败、需要离线加速或需要保留故障现场后手工恢复时，才从 validator 导出闭包完整的 seed artifact。
 
-### Required contents
+### Required contents when this recovery path is used
 observer seed/state-sync bundle 至少要覆盖：
 
 1. `world/`
@@ -349,7 +349,7 @@ observer seed/state-sync bundle 至少要覆盖：
 1. seed bundle 对单个 observer 恢复后，runtime 不报 `BlobNotFound`
 2. seed bundle 可被两个 observer 重复消费
 
-在 observer 启动前，必须对 seed bundle 执行闭包校验：
+只要走这个 recovery path，在 observer 启动前必须对 seed bundle 执行闭包校验：
 
 ```bash
 ./scripts/p2p-verify-state-sync-closure.sh \
@@ -358,7 +358,7 @@ observer seed/state-sync bundle 至少要覆盖：
   --store-dir <seed-store-dir>
 ```
 
-## 12. Phase F - Attach Observers
+## 12. Phase F - Attach Observers with Automatic High-Head Sync
 ### Goal
 把两个 observer 接进 validator 网络。
 
@@ -366,8 +366,8 @@ observer seed/state-sync bundle 至少要覆盖：
 1. observer env 使用当前 deployment truth bootstrap peer ids
 2. observer env 使用当前 validator writer allowlist；fetch requester 不再需要逐个 observer 手动加 allowlist，只要 validators 运行的 runtime 对 `public_testnet` + `allow_observer_nodes=true` 开启开放签名读取策略
 3. observer manifest 指向当前 deployment truth genesis/manifest
-4. observer state 先 reset，再导入 verified seed/state-sync bundle
-5. local observer 使用的 bundle copy 必须把 `runtime_build.sha256` 刷成当前本机 runtime 真值；不要直接复用 validator Linux package hash 去校验本地 macOS debug/release binary
+4. observer state 可先 reset；正常路径不导入 seed bundle，启动后由 runtime 自动拉取受验证的 high-head checkpoint boundary，再执行 tail gap sync
+5. local observer 使用的 runtime/package hash 必须对齐当前本机 runtime 真值；不要直接复用 validator Linux package hash 去校验本地 macOS debug/release binary
 6. detached local observer 启动时不要让 `start-node.sh` 自己作为长期父进程驻留；若需要后台常驻，应直接启动 `logs/last-command.sh` 里展开后的 runtime binary 命令
 
 ### Start order
@@ -389,7 +389,7 @@ curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committ
 4. `committed_height` 和 `last_execution_height` 向 validator 高度收敛
 
 ### Hard stop conditions
-出现以下任一项，observer 接入失败，回到 Phase E：
+出现以下任一项，observer 接入失败；先保留现场排查自动同步原因，确认需要人工恢复时再回到 Phase E：
 
 1. `WrongPeerId`
 2. `fetch requester is not authorized`；这通常表示 validator 仍在旧 runtime、manifest 不是 `public_testnet`、`allow_observer_nodes` 未开启，或 requester 签名无效，而不是需要手动登记每个 observer
@@ -501,14 +501,14 @@ curl -s http://127.0.0.1:19083/v1/chain/status
 ```
 
 ## 16. Open Design Follow-Ups
-这份 runbook 可以让部署更稳，但它也明确暴露出两项仍需代码修复的设计缺口：
+这份 runbook 可以让部署更稳，但它也明确保留两项后续硬化方向：
 
-1. empty-world observer bootstrap 与 validator live execution truth 在 height 1 仍不严格同构
-2. 当前 observer seed/state-sync 导出链路还没有被产品化成“闭包完整的标准 artifact”
+1. 自动 high-head checkpoint sync 已覆盖 observer/light-node 的正常接入；execution-required 节点仍不能跳过历史执行
+2. recovery 用 observer seed/state-sync 导出链路还没有被产品化成“闭包完整的标准 artifact”
 
 所以后续必须补两类自动化：
 
-1. 空 world observer 对 validator truth 的回归测试
+1. 空 world observer 自动 high-head checkpoint sync 对 validator truth 的回归测试
 2. seed/state-sync bundle 完整性回归测试，至少覆盖 restore snapshot/journal 所需 blob 闭包
 
 ## 17. Completion Boundary
@@ -519,5 +519,5 @@ curl -s http://127.0.0.1:19083/v1/chain/status
 1. 当前 runtime/package hash
 2. 当前 validator signer truth
 3. 当前 validator live peer ids
-4. 当前 observer seed bundle 来源与 hash
+4. 自动 high-head sync 状态快照；若使用 recovery path，再记录 observer seed bundle 来源与 hash
 5. 最终四节点状态快照
