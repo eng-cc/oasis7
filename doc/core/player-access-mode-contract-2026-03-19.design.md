@@ -6,7 +6,7 @@
 审计轮次: 8
 
 ## 1. 设计定位
-将玩家访问模式正式收口为 `software_safe / pure_api` 两项：`software_safe` 是唯一正式 Web 入口，`pure_api` 是唯一正式 no-UI 入口。`player_parity / headless_agent / debug_viewer` 继续只是 execution lane；`agent_direct_connect/provider_loopback_http` 继续只是兼容 alias。
+将玩家访问模式正式收口为 `software_safe / pure_api` 两项：`software_safe` 是唯一正式 Web 入口，`pure_api` 是唯一正式 no-UI 入口。`player_parity / headless_agent` 继续只是 execution lane；`agent_direct_connect/provider_loopback_http` 继续只是兼容 alias。
 
 ## 2. 核心设计决策
 - 保留两种玩家访问模式：
@@ -37,7 +37,6 @@
 ## 4. 关键约束
 - `software_safe` 不能代签 `pure_api` 结论。
 - `pure_api` 不能代签 Web / headed UI 结论。
-- `debug_viewer` 只回答观战/解释，不回答玩家入口。
 
 ## 5. 失败与降级语义
 - Web 缺 LLM 或命中 blocker：记为 `software_safe blocked`

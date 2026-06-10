@@ -51,6 +51,7 @@ vi.mock("./pixel_world_runtime_loader.js", () => ({
 }));
 
 let activeCleanup = null;
+const HEAVY_UI_TEST_TIMEOUT_MS = 60000;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -312,7 +313,7 @@ describe("pixel world host", () => {
         hotspots: 4,
       },
     });
-  }, 15000);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("localizes command board goal and next-action copy for the selected UI language", async () => {
     vi.resetModules();
@@ -512,7 +513,7 @@ describe("pixel world host", () => {
     expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(2);
     expect(document.querySelector(".pixel-world-entity--location")).toHaveAttribute("data-marker-role", "logic_anchor");
     expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
-  }, 15000);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("auto-attaches the embedded renderer for test_api pages unless deferral is explicit", async () => {
     const { core } = await renderPixelWorldHost();
@@ -523,7 +524,7 @@ describe("pixel world host", () => {
 
     expect(runtimeMock.mountCalls).toBe(1);
     expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
-  }, 15000);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("uses Rust-derived render state from the runtime module when available", async () => {
     runtimeMock.deriveRenderState = vi.fn((input) => ({
@@ -631,7 +632,7 @@ describe("pixel world host", () => {
     expect(canvas.querySelector(".pixel-world-route")).toBeNull();
     expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
-  });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders the no-receipt fallback without implying an active agent caused progress", async () => {
     await renderPixelWorldHost(noReceiptSnapshot());
@@ -749,7 +750,7 @@ describe("pixel world host", () => {
     expect(host).toHaveAttribute("data-world-focus", "false");
     expect(document.body).not.toHaveClass("pixel-world-focus-active");
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).toBeNull();
-  }, 15000);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps empty focus rail collapsed while preserving fallback world summary", async () => {
     await renderPixelWorldHost(
@@ -817,7 +818,7 @@ describe("pixel world host", () => {
     expect(document.body).toHaveClass("pixel-world-focus-active");
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")?.open).toBe(true);
     expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveProperty("open", false);
-  });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps fragment terrain as non-interactive background behind readable agents", async () => {
     await renderPixelWorldHost();

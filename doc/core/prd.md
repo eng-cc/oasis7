@@ -252,4 +252,4 @@
 | DEC-CORE-005 | 将“阶段收口优先级”纳入 core 主 PRD 统一管理，而不是散落在多个模块 project 的状态说明里 | 仅在各模块 project 中维护各自优先级 | 阶段优先级本质是跨模块发布策略，需要由 `producer_system_designer` 在 core 层统一裁剪与仲裁。 |
 | DEC-CORE-006 | 新一轮先冻结优先级清单，再启动第一优先级专题 | 主项目收口后直接随机挑模块继续推进 | 先统一排序，才能避免重新扩散资源。 |
 | DEC-CORE-007 | readiness 达到 `ready` 后必须再落正式 go/no-go 记录 | 将 readiness board 直接作为最终放行记录 | readiness 与正式裁决是两个层级，必须分开留痕。 |
-| DEC-CORE-008 | 将 `software_safe / pure_api` 定义为玩家访问模式，将 `player_parity / headless_agent / debug_viewer` 定义为 execution lane，并将 `non-3D / 2D 优先` 限定为优先级或交互范围描述 | 继续把这些话术混写在不同专题中 | 玩家入口、观战旁路、阶段优先级与无 UI 回归本质上属于不同抽象层，必须在 core 统一分层。 |
+| DEC-CORE-008 | 将 `software_safe / pure_api` 定义为玩家访问模式，将 `player_parity / headless_agent` 定义为 execution lane，并将 `non-3D / 2D 优先` 限定为优先级或交互范围描述 | 继续把这些话术混写在不同专题中 | 玩家入口、执行方式、阶段优先级与无 UI 回归本质上属于不同抽象层，必须在 core 统一分层。 |

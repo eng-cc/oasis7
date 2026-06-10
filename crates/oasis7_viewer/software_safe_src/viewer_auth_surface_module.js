@@ -1,7 +1,6 @@
 export function createViewerAuthSurfaceModule({
   getSearchParams,
   localeText,
-  selectedAgentInteractionMode,
   state,
   windowRef,
 }) {
@@ -158,19 +157,9 @@ export function createViewerAuthSurfaceModule({
   }
 
   function buildSemanticCapability(actionId) {
-    const observerOnly = selectedAgentInteractionMode() === "observer_only";
     const deploymentHint = authDeploymentHint(state.auth);
     const strongAuthSensitive = isStrongAuthSensitiveAction(actionId);
     const policy = hostedActionPolicy(actionId);
-    if (observerOnly) {
-      return {
-        actionId,
-        enabled: false,
-        code: "observer_only",
-        reason:
-          "selected agent runs through the provider-backed loopback bridge; viewer stays observer-only for prompt/chat on this lane",
-      };
-    }
     if (policy) {
       if (policy.required_auth === "strong_auth") {
         const isLocalPreviewOnly = policy.availability === "trusted_local_preview_only";

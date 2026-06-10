@@ -148,7 +148,7 @@
 - [x] TASK-WORLD_SIMULATOR-137 (PRD-WORLD_SIMULATOR-037) [test_tier_required]: 为 `oasis7` 补齐 chain node 公私钥资产说明，明确 Local Provider real-play 默认仍可能启动 `oasis7_chain_runtime`，并把 node private key 的存储/共享/录屏/日志禁令写成 operator contract。
 - [x] TASK-WORLD_SIMULATOR-138 (PRD-WORLD_SIMULATOR-037) [test_tier_required]: 为 `oasis7-run.sh download` 增加 bundle-first 下载阶段日志、交互式进度条与非 TTY heartbeat，并补 bundle 下载可观测性回归脚本。
 - [x] TASK-WORLD_SIMULATOR-159 (PRD-WORLD_SIMULATOR-037) [test_tier_required]: 修复 `oasis7-run.sh download` 在 bundle 检测失败时仍可能把宿主 `/.` 误拷进缓存的问题；为 `detected_bundle` 增加显式失败保护、归档存在性校验与“无 extracted `run-game.sh`”负向回归。
-- [x] TASK-WORLD_SIMULATOR-160 (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 重构 `oasis7` operator 口径，明确 `headless_agent` / `player_parity` / `debug_viewer` 属于 Local Provider execution lane，`software_safe` 属于玩家访问模式；Viewer 仅用于观战、体验与弱图形观察，并写清当前 Local Provider real-play 下 `agent_chat` / `prompt_control` 的 observer-only 边界。
+- [x] local-provider-operator-lane-boundary-clarification (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 重构 `oasis7` operator 口径，明确 `headless_agent` / `player_parity` 属于 Local Provider execution lane，`software_safe` 属于玩家访问模式；Viewer 仅用于体验与弱图形观察，并写清当前 Local Provider real-play 下 `agent_chat` / `prompt_control` 的能力边界。 Trace: .pm/tasks/task_58ad0f9d550c40028a078b0f88978572.yaml
 - [x] TASK-WORLD_SIMULATOR-161 (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 将 `oasis7` 主入口中的 UI/observer 细节拆到独立 reference，保持主 skill 聚焦 Local Provider 执行闭环，只保留最小 UI 结论与跳转关系。
 - [x] TASK-WORLD_SIMULATOR-283 (PRD-WORLD_SIMULATOR-037/038/040) [test_tier_required]: 对齐 `oasis7` skill / references / helper 与当前仓库 reality，修复仍引用 `world_*` 旧 bridge/launcher/viewer 名称的 operator 文档和 repo-backed helper，补充 `T4` 双轨默认模式与 parity `latency_class B / keep experimental` 的正式锚点，并新增 `resolve-provider-cli` 探针以替代 skill / failure-signatures 中最后两处 provider CLI 旧品牌示例。
 - [x] TASK-WORLD_SIMULATOR-139 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 完成“Viewer Web Software-Safe Mode”PRD / Design / Project 建模，并回写模块主文档、索引与 devlog。
@@ -858,10 +858,10 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_SIMULATOR-162 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 修复标准模式 bootstrap `Loading standard viewer...` overlay 在 wasm 已启动后仍残留并压缩左侧视口的问题，补齐 cleanup 生命周期与最小回归验证。
-- [x] TASK-WORLD_SIMULATOR-148 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 完成 `Local Provider` 双轨模式（`player_parity` / `headless_agent` / `debug_viewer`）专题 PRD / Project 建模，并回写模块主文档、索引与 devlog。
+- [x] local-provider-dual-mode-prd-project-modeling (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 完成 `Local Provider` 双轨模式（`player_parity` / `headless_agent`）专题 PRD / Project 建模，并回写模块主文档、索引与 devlog。 Trace: .pm/tasks/task_58ad0f9d550c40028a078b0f88978572.yaml
 - [x] TASK-WORLD_SIMULATOR-149 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `agent_engineer` 冻结 `player_parity` / `headless_agent` 的 observation/action contract、schema version、模式元数据与禁止泄露真值边界，并形成 supporting spec。
 - [x] TASK-WORLD_SIMULATOR-150 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `runtime_engineer` 为 Local Provider 双轨模式落地 mode/schema/environment/fixture/replay 元数据透传、summary 聚合与 runtime live/headless traceability。
-- [x] TASK-WORLD_SIMULATOR-151 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `viewer_engineer` 为 software-safe / runtime live 补齐 `debug_viewer` 旁路订阅标识、headless lane 元数据展示与 Local Provider observer-only 对照入口。
+- [x] viewer-headless-lane-observability-surface (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `viewer_engineer` 为 software-safe / runtime live 补齐 headless lane 元数据展示与 Local Provider 执行通道可观测性入口。 Trace: .pm/tasks/task_58ad0f9d550c40028a078b0f88978572.yaml
 - [x] TASK-WORLD_SIMULATOR-152 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `agent_engineer` 接通真实 `player_parity` 执行 lane 到 runtime live / `oasis7_game_launcher` / `oasis7_provider_parity_bench` / `oasis7`，并完成 `headless_agent` / `player_parity` 双 smoke 采证。
 - [x] TASK-WORLD_SIMULATOR-153 (PRD-WORLD_SIMULATOR-040) [test_tier_full]: 由 `qa_engineer` / `producer_system_designer` 基于真实 `player_parity` vs `headless_agent` 双样本完成 T4 对照采证，冻结默认模式与阻断结论。
 - [x] TASK-WORLD_SIMULATOR-154 (PRD-WORLD_SIMULATOR-038) [test_tier_full]: 由 `qa_engineer` / `producer_system_designer` 基于真实 builtin/Local Provider `P0-001` 双样本完成 T4 parity 结论，给出 `failed / keep experimental` 放行口径与后续修复项。

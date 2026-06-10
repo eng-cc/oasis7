@@ -780,7 +780,6 @@ function WorldSummaryPanel() {
   const authSurface = () => core.buildAuthSurfaceModel();
   const hostedActionMatrixView = () => core.buildHostedActionMatrixView();
   const hostedRecoveryHint = () => core.buildHostedRecoveryHint(locale());
-  const selectedDebug = () => core.selectedAgentExecutionDebugContext();
   const tierBadgeClass = (status) =>
     status === "active"
       || status === "active_legacy_preview"
@@ -806,7 +805,6 @@ function WorldSummaryPanel() {
       )
       || showRebindNotice();
   const diagnosticsSummaryBadges = () => [
-    `debugViewer=${state.debugViewerMode}:${state.debugViewerStatus}`,
     `auth=${state.auth.available ? state.auth.registrationStatus || "ready" : "missing"}`,
     `events=${state.recentEvents.length}`,
   ];
@@ -1146,27 +1144,14 @@ function WorldSummaryPanel() {
             <Badge>{`controlProfile=${state.controlProfile}`}</Badge>
           </div>
           <PanelSection title={tr(locale(), "执行通道", "Execution Lanes")}>
-            <div class="badge-row">
-              <Badge class="badge badge--accent">debug_viewer</Badge>
-              <Badge>{`status=${state.debugViewerStatus}`}</Badge>
-              <Badge>{`renderMode=${state.renderMode}`}</Badge>
-              <Badge>{`entryReason=${state.viewerReason || "-"}`}</Badge>
-            </div>
-            <EmptyState style="margin-top:-2px;">
-              {tr(
-                locale(),
-                "debug_viewer 是只读订阅通道，只负责消费运行时快照和事件；关闭这个观察器不会停止行动体通道。",
-                "debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer does not stop the agent lane.",
-              )}
-            </EmptyState>
             <Show
-              when={selectedDebug()}
+              when={core.selectedAgentExecutionDebugContext()}
               fallback={
                 <EmptyState>
                   {tr(
                     locale(),
-                    "先选中一个行动体，才能把无头执行通道和当前 debug_viewer 观察通道做对照。",
-                    "Select an agent to compare the headless execution lane against the current debug_viewer observer lane.",
+                    "先选中一个行动体，才能查看当前执行通道元数据。",
+                    "Select an agent to inspect the current execution-lane metadata.",
                   )}
                 </EmptyState>
               }
@@ -1415,7 +1400,6 @@ function InteractionPanel() {
   const mainTokenTransferCapability = () => authSurface().capabilities.main_token_transfer;
   const mainTokenTransferPolicy = () => core.hostedActionPolicy("main_token_transfer");
   const binding = () => core.selectedAgentBindingInfo();
-  const debugContext = () => core.selectedAgentExecutionDebugContext();
   const promptFeedback = () => core.snapshotSemanticFeedback(core.state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
   const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
@@ -1472,31 +1456,16 @@ function InteractionPanel() {
           {chatCapability().enabled ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
         </Badge>
       </div>
-      <Show when={debugContext()?.provider_mode === "provider_loopback_http"}>
-        <EmptyState>
-          {tr(
-            locale(),
-            `当前选中的行动体正通过提供方回环桥接运行在 ${
-              debugContext()?.execution_mode || "headless_agent"
-            }；观察器仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用提示词和聊天。`,
-            `Selected agent currently runs through the provider-backed loopback bridge in ${
-              debugContext()?.execution_mode || "headless_agent"
-            }; viewer stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`,
-          )}
-        </EmptyState>
-      </Show>
-      <Show when={debugContext()?.provider_mode !== "provider_loopback_http"}>
-        <Show
-          when={interactionEnabled()}
-          fallback={<EmptyState>{promptCapability().reason}</EmptyState>}
-        >
-          <div class="badge-row">
-            <Badge class="badge badge--good">{authSurface().currentTier}</Badge>
-            <Badge>{`player=${core.state.auth.playerId}`}</Badge>
-            <Badge>{`source=${authSurface().source}`}</Badge>
-          </div>
-          <EmptyState>{promptCapability().reason}</EmptyState>
-        </Show>
+      <Show
+        when={interactionEnabled()}
+        fallback={<EmptyState>{promptCapability().reason}</EmptyState>}
+      >
+        <div class="badge-row">
+          <Badge class="badge badge--good">{authSurface().currentTier}</Badge>
+          <Badge>{`player=${core.state.auth.playerId}`}</Badge>
+          <Badge>{`source=${authSurface().source}`}</Badge>
+        </div>
+        <EmptyState>{promptCapability().reason}</EmptyState>
       </Show>
       <div class="badge-row">
         <Badge>{`boundPlayer=${binding()?.playerId || "-"}`}</Badge>

@@ -34,7 +34,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: 仓库已经删除 `standard_3d` 相关代码、脚本与活跃文档后，跨模块口径必须同步收敛，否则会继续出现“代码真值是 `software_safe` 单 Web 入口，但文档仍宣称存在 3D 玩家入口”的双真值。
-- Proposed Solution: 将玩家访问模式正式收口为 `viewer / pure_api` 两项；其中 `viewer` 负责唯一 Web / UI 入口，`pure_api` 负责无 UI 正式入口，旧 `software_safe` 只保留为兼容 alias。`player_parity / headless_agent / debug_viewer` 继续只作为 execution lane，`non-3D / 2D 优先` 继续只作为交付优先级或交互范围描述。
+- Proposed Solution: 将玩家访问模式正式收口为 `viewer / pure_api` 两项；其中 `viewer` 负责唯一 Web / UI 入口，`pure_api` 负责无 UI 正式入口，旧 `software_safe` 只保留为兼容 alias。`player_parity / headless_agent` 继续只作为 execution lane，`non-3D / 2D 优先` 继续只作为交付优先级或交互范围描述。
 - Success Criteria:
   - SC-1: `viewer` 是唯一正式 Web / UI 玩家入口；`software_safe` 仅作兼容 alias。
   - SC-2: `pure_api` 保持一等公民 no-UI 正式入口，formal gameplay 继续要求 active LLM access。
@@ -63,7 +63,7 @@
 - Architecture Overview:
   - `viewer`: 唯一正式 Web / UI 玩家入口。
   - `pure_api`: 唯一正式 no-UI 玩家入口。
-  - `player_parity / headless_agent / debug_viewer`: execution lane。
+  - `player_parity / headless_agent`: execution lane。
   - `agent_direct_connect/provider_loopback_http`: 兼容 alias，不是玩家模式。
 - Integration Points:
   - `testing-manual.md`

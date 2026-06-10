@@ -14,7 +14,6 @@
 ## 2. 统一原则
 1. 所有模式共享同一 runtime 权威动作校验，不允许模式专属捷径动作。
 2. `player_parity` 与 `headless_agent` 的区别只在 observation 表达层，不在动作语义层。
-3. `debug_viewer` 只读订阅 runtime 权威输出，不是 Agent 必需输入源。
 4. 所有 benchmark / replay / summary 样本必须记录 `mode`、`observation_schema_version`、`action_schema_version`。
 5. 若 provider 或 adapter 不识别 schema version，必须返回结构化失败，不得静默降级。
 
@@ -31,11 +30,6 @@
 - 允许输入：结构化局部状态、平台/碰撞拓扑摘要、附近敌人/机关状态、任务目标、最近事件、最近失败动作摘要。
 - 禁止输入：绕过 runtime 规则的直接状态修改能力、未来事件、未声明字段。
 - 推荐用途：CI、夜间回归、低配/无图形环境、批量 benchmark。
-
-### 3.3 `debug_viewer`
-- 目标：观战、解释、分诊。
-- 输入来源：runtime 权威事件、trace、summary、mode metadata。
-- 约束：关闭 `debug_viewer` 不影响 Agent 主闭环；开启时也不能反向提供隐藏真值给 Agent。
 
 ## 4. Observation Contract（冻结版）
 
@@ -180,7 +174,6 @@
 
 ## 8. 禁止事项
 - 禁止 `player_parity` 与 `headless_agent` 使用不同动作语义但复用同名动作。
-- 禁止在 `debug_viewer` 中引入反向控制能力并默认接回 Agent 主链路。
 - 禁止未升级 schema version 就偷偷增删 observation/action 字段。
 - 禁止把 headless 增强样本混入 player-parity 验收结果。
 
@@ -195,5 +188,4 @@
 
 ## 10. 后续交接
 - 交给 `runtime_engineer`：实现 `mode metadata`、replay/summary 落盘与统一失败语义
-- 交给 `viewer_engineer`：将 `debug_viewer` 收口为旁路订阅层，并显式展示 `mode/fallback_reason/environment_class`
 - 交给 `qa_engineer`：基于本 contract 设计双模式对照样本与阻断标准

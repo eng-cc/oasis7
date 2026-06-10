@@ -163,7 +163,7 @@
 - [x] TASK-CORE-026 (PRD-CORE-003) [test_tier_required]: 同步 `doc/core/README.md` 目录索引，补齐本轮 core 活跃专题入口。
 - [x] TASK-CORE-027 (PRD-CORE-003) [test_tier_required]: 清理 `doc/README.md` 兼容跳转入口中的重复条目，保持工程总入口导航唯一且可读。
 - [x] TASK-CORE-028 (PRD-CORE-009) [test_tier_required]: 完成“三模式总契约（`standard_3d / software_safe / pure_api`）”专题 PRD / Design / Project 建模，并同步 core 主入口、索引、README 与 devlog。
-- [x] TASK-CORE-029 (PRD-CORE-009) [test_tier_required]: 对齐 `testing-manual`、`world-simulator`、`game` 与 `testing` 下游文档术语，明确 `standard_3d / software_safe / pure_api` 属于玩家访问模式，`player_parity / headless_agent / debug_viewer` 属于 execution lane。
+- [x] player-access-mode-downstream-terminology-alignment (PRD-CORE-009) [test_tier_required]: 对齐 `testing-manual`、`world-simulator`、`game` 与 `testing` 下游文档术语，明确 `standard_3d / software_safe / pure_api` 属于玩家访问模式，`player_parity / headless_agent` 属于 execution lane。 Trace: .pm/tasks/task_58ad0f9d550c40028a078b0f88978572.yaml
 - [x] TASK-CORE-030 (PRD-CORE-008/009) [test_tier_required]: 收口 core 活跃专题标题、Viewer 活跃手册与实际 Viewer 窗口/Web 标题的 `oasis7` 品牌，明确旧 `oasis7*` / `world_*` 仅作 internal compatibility naming。
   - 产物文件:
     - `doc/core/prd.md`
