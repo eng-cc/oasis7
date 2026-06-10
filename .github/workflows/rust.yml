@@ -78,6 +78,7 @@ jobs:
           echo "run_oasis7_net_libp2p_tests=${{ steps.scope.outputs.run_oasis7_net_libp2p_tests }}"
           echo "run_viewer_contract_tests=${{ steps.scope.outputs.run_viewer_contract_tests }}"
           echo "run_viewer_wasm_check=${{ steps.scope.outputs.run_viewer_wasm_check }}"
+          echo "run_viewer_perf_smoke=${{ steps.scope.outputs.run_viewer_perf_smoke }}"
           echo "run_launcher_web_build=${{ steps.scope.outputs.run_launcher_web_build }}"
           echo "needs_node=${{ steps.scope.outputs.needs_node }}"
           echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
@@ -128,6 +129,7 @@ jobs:
           OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS: ${{ steps.scope.outputs.run_oasis7_net_libp2p_tests }}
           OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS: ${{ steps.scope.outputs.run_viewer_contract_tests }}
           OASIS7_CI_RUN_VIEWER_WASM_CHECK: ${{ steps.scope.outputs.run_viewer_wasm_check }}
+          OASIS7_CI_RUN_VIEWER_PERF_SMOKE: ${{ steps.scope.outputs.run_viewer_perf_smoke }}
           OASIS7_CI_RUN_LAUNCHER_WEB_BUILD: ${{ steps.scope.outputs.run_launcher_web_build }}
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh required
 

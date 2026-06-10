@@ -109,6 +109,7 @@
   - planner 先执行：`./scripts/plan-rust-required-scope.sh --event-name <push|pull_request> --base-ref <base> --head-ref <head>`
   - `CI_VERBOSE=1 ./scripts/ci-tests.sh required`
   - 本地显式 `./scripts/ci-tests.sh required` 仍保持基础 required 语义；只有 CI `required-gate` 与 `prepare-task-pr.sh` 推荐命令会根据 planner 输出注入选择性组件环境变量，并在命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时额外拉起 support-crate shard
+  - 当 planner 命中 `crates/oasis7_viewer/**` 时，`required-gate` 现在还会追加一条 `viewer-performance-probe.sh --profile smoke` 的 report-only scoped smoke；当前阶段用于收集 summary 和阈值噪音，不作为 blocking failure
 - 入口 C：`.github/workflows/wasm-determinism-gate.yml`（构建 hash / receipt evidence 独立 gate）
   - GitHub-hosted runner 矩阵：`(m1|m4|m5) x (ubuntu-24.04/linux-x86_64)`
   - planner 先执行：`./scripts/plan-wasm-determinism-scope.sh --event-name <push|pull_request|workflow_dispatch> --base-ref <base> --head-ref <head>`
@@ -122,6 +123,7 @@
 - Web UI agent-browser 闭环（现为手动/agent 流程，不在 CI 默认路径中）。
 - `m4/m5` builtin wasm hash 校验（`scripts/ci-tests.sh` 已移除 `sync-m4/m5 --check`）。
 - runtime builtin wasm bootstrap / default-module / body-action 闭环（已从 required 下放到 `test_tier_full`）。
+- Viewer headed / GPU 真环境性能当前仍不是 blocking required gate；现阶段 only report-only scoped smoke 已接入 `required-gate`
 
 结论：
 - `commit` 是默认本地提交基线，目标是尽快暴露格式/治理/viewer-support 回归，但不承担 `oasis7 --tests` required shard；
@@ -486,6 +488,10 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
 ./scripts/viewer-performance-probe.sh --profile smoke
 ./scripts/viewer-performance-probe.sh --profile release --duration-ms 8000
 ```
+- Runtime 轻量 deterministic perf harness（当前先覆盖稳定内环 module routing）：
+```bash
+./scripts/runtime-module-routing-perf-harness.sh
+```
 - LLM 长稳：
 ```bash
 ./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240
@@ -509,6 +515,8 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
 ```
 - 说明：
   - 详细参数与 profile 组合请以 `./scripts/llm-longrun-stress.sh --help` 为准；
+  - `./scripts/runtime-module-routing-perf-harness.sh` 现在走专用 bin `cargo run -p oasis7 --bin oasis7_runtime_module_routing_perf`，避免继续依赖 ignored test 的重编译路径；它会把稳定内环 module routing 的 event/action 平均耗时写到 `.tmp/runtime_module_routing_perf/<run>/summary.{json,md}`；当前目的是提供日常可回归的轻量 runtime perf 入口，不替代长窗 `runtime_perf.tick.*` 指标；
+  - 当前已记录首个 `release` baseline 数值：`modules=192`、`iterations=80`、`event_avg_ms=5.591`、`action_avg_ms=6.992`；对应一次本地验证 run 的冷 `release` 编译耗时约 `23m 10s`。原始 `summary.json` 属于本地临时产物，应以 task execution log 中登记的验证记录为证据来源；因此当前更适合先作为本地/report-only 基线，而不是立刻升成默认 blocking gate；
   - Viewer 性能 probe 使用当前 `crates/oasis7_viewer` software-safe Web 入口，通过 `agent-browser` 采集 rAF frame timing、Long Task、ready time、DOM 规模与 gate 结果，并输出 `output/playwright/viewer-performance/<run>/summary.{json,md}`；
   - 旧 `viewer-owr4-stress` 属于历史已删除入口，不再作为当前 Viewer 性能门禁真值；
   - `scripts/ci-tests.sh full` 已接入 `./scripts/llm-baseline-fixture-smoke.sh`；
