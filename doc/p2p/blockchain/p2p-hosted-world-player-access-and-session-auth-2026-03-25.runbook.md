@@ -119,7 +119,7 @@ MVP 最小 smoke：
 
 推荐自动化入口：
 1. 本地 required smoke：
-   - `bash ./scripts/hosted-account-staging-smoke.sh --mode local`
+   - `bash ./scripts/hosted-account-staging-smoke.sh --mode local --otp-fetch-command <cmd>`
 2. staging live smoke：
    - `bash ./scripts/hosted-account-staging-smoke.sh --mode staging --login-handle <test-email> --otp-fetch-command <cmd>`
 3. 说明：

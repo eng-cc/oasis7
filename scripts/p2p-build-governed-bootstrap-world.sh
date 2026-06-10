@@ -234,6 +234,7 @@ case "$mode" in
       die "output directory already exists; pass --allow-overwrite: $out_dir"
     fi
 
+    mkdir -p "$repo_root/.tmp"
     tmp_root=$(mktemp -d "$repo_root/.tmp/governed-bootstrap-world-build.XXXXXX")
     trap 'rm -rf "$tmp_root"' EXIT
     tmp_world_dir="$tmp_root/world"
