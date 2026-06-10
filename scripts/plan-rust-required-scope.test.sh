@@ -54,4 +54,11 @@ assert_key_equals "$proto_output" run_launcher_web_build true
 assert_key_equals "$proto_output" needs_trunk true
 assert_reason_contains "$proto_output" "launcher_proto:crates/oasis7_proto/src/lib.rs"
 
+viewer_output="$(plan_for_path crates/oasis7_viewer/src/lib.rs)"
+assert_key_equals "$viewer_output" scope targeted
+assert_key_equals "$viewer_output" run_viewer_contract_tests true
+assert_key_equals "$viewer_output" run_viewer_wasm_check true
+assert_key_equals "$viewer_output" run_viewer_perf_smoke true
+assert_reason_contains "$viewer_output" "viewer:crates/oasis7_viewer/src/lib.rs"
+
 echo "plan-rust-required-scope.test: OK"

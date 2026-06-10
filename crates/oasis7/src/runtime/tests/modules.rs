@@ -52,8 +52,8 @@ include!("modules_permissions.rs");
 include!("modules_permissions_policy_hooks.rs");
 
 #[test]
-#[ignore = "perf harness"]
-fn perf_route_module_subscriptions_with_many_active_manifests() {
+#[ignore = "local perf probe"]
+fn perf_probe_runtime_module_routing_with_many_active_manifests() {
     const MODULE_COUNT: usize = 192;
     const ITERATIONS: usize = 80;
 
@@ -166,9 +166,10 @@ fn perf_route_module_subscriptions_with_many_active_manifests() {
     }
     let action_elapsed = action_started_at.elapsed();
 
-    println!(
-        "perf runtime_route modules={} event_total_ms={:.2} event_avg_ms={:.3} action_total_ms={:.2} action_avg_ms={:.3} event_invoked={} action_invoked={}",
+    eprintln!(
+        "perf_probe_runtime_module_routing_with_many_active_manifests: modules={} iterations={} event_total_ms={:.3} event_avg_ms={:.3} action_total_ms={:.3} action_avg_ms={:.3} event_invoked={} action_invoked={}",
         MODULE_COUNT,
+        ITERATIONS,
         event_elapsed.as_secs_f64() * 1000.0,
         event_elapsed.as_secs_f64() * 1000.0 / ITERATIONS as f64,
         action_elapsed.as_secs_f64() * 1000.0,

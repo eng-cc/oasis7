@@ -134,6 +134,15 @@ run_oasis7_viewer_software_safe_build() {
   run ./scripts/build-viewer-software-safe.sh
 }
 
+run_oasis7_viewer_performance_smoke_report_only() {
+  local status=0
+  run ./scripts/viewer-performance-probe.sh --profile smoke || status=$?
+  if [[ "$status" -ne 0 ]]; then
+    echo "warning: viewer performance smoke failed (report-only)"
+    return 0
+  fi
+}
+
 run_hosted_account_local_smoke() {
   run bash ./scripts/hosted-account-staging-smoke.sh --mode local
 }
@@ -200,6 +209,7 @@ case "$tier" in
     run_required_component "oasis7_net libp2p tests" "${OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS:-false}" run_oasis7_net_libp2p_tests
     run_required_component "viewer software-safe contract" "${OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS:-}" run_oasis7_viewer_software_safe_feedback_contract_tests
     run_required_component "viewer software-safe build" "${OASIS7_CI_RUN_VIEWER_WASM_CHECK:-}" run_oasis7_viewer_software_safe_build
+    run_required_component "viewer performance smoke (report-only)" "${OASIS7_CI_RUN_VIEWER_PERF_SMOKE:-false}" run_oasis7_viewer_performance_smoke_report_only
     run_required_component "hosted account local smoke" "${OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE:-false}" run_hosted_account_local_smoke
     run_required_component "launcher web build" "${OASIS7_CI_RUN_LAUNCHER_WEB_BUILD:-false}" run_oasis7_client_launcher_web_build
     ;;

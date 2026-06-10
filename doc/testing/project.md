@@ -383,6 +383,25 @@
     - `./scripts/viewer-software-safe-step-regression-smoke.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] engineering-code-quality-performance-baselines (PRD-TESTING-002/003) [test_tier_required]: 为 `required-gate` 增补 Viewer changed-path perf smoke scope，并新增本地 report-only runtime module routing micro harness、覆盖缺口矩阵与首个 dev/release baseline，补齐“哪些性能面该补、哪些只保留本地观测”的当前执行依据。 Trace: .pm/tasks/task_35657c5f0a5543dda5d57f51fc4b8841.yaml
+  - 产物文件:
+    - `.github/workflows/rust.yml`
+    - `scripts/ci-tests.sh`
+    - `scripts/plan-rust-required-scope.sh`
+    - `scripts/plan-rust-required-scope.test.sh`
+    - `crates/oasis7/src/runtime/tests/modules.rs`
+    - `crates/oasis7/src/bin/oasis7_runtime_module_routing_perf.rs`
+    - `scripts/runtime-module-routing-perf-harness.sh`
+    - `testing-manual.md`
+    - `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_35657c5f0a5543dda5d57f51fc4b8841.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `git diff --check`
+    - `./scripts/doc-governance-check.sh`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_runtime_module_routing_perf`
+    - `./scripts/plan-rust-required-scope.test.sh`
+    - `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path crates/oasis7_viewer/src/lib.rs | grep -q '^run_viewer_perf_smoke=true$'`
 
 - 当前阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 

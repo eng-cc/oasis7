@@ -18,6 +18,7 @@
 - 想先回答“对应标准角色 subagent 到底怎么设计、如何组合成 review 流程”：先读 `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
 - 想先回答“如何用多个 simulated player personas 补内部玩家视角，但不新增正式 `player` 角色”：先读 `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
 - 想用模型视觉判断替代常规人工视觉 review：先读 `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`，再按 `doc/testing/templates/model-visual-review-card-template.md` 输出评审卡
+- 想快速判断“现有性能测试覆盖到哪、哪些功能面最值得补性能测试、哪些更适合进 scoped gate”：先读 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`
 - 想先回答当前在推进什么、哪些测试治理任务或 QA 阻断仍在影响收口：先读 `doc/testing/project.md`
 - 想直接决定要跑哪套测试或按步骤执行：先读 `testing-manual.md` 与 `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted-world / p2p-shared-network / governance drill / claim-audit 问题分流：先读 `doc/testing/evidence/README.md`
@@ -53,6 +54,7 @@
 - `testing-manual.md`：仓库级系统测试手册，不并入下方模块 PRD 三件套长表。
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`：Web UI 闭环 canonical 操作手册，不并入下方模块 PRD 三件套长表。
 - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`：截图加模型视觉评审 SOP，用于替代 routine 人工视觉 review，不并入下方模块 PRD 三件套长表。
+- `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`：按 surface 汇总现有性能覆盖、当前缺口、建议补测和建议 tier 的速查表。
 - `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`：当前 QA 阻断摘要，适合在判断 provider 双模式收口风险时定向进入。
 
 ## 默认阅读面边界

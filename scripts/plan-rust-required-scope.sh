@@ -21,6 +21,7 @@ run_oasis7_net_tests=0
 run_oasis7_net_libp2p_tests=0
 run_viewer_contract_tests=0
 run_viewer_wasm_check=0
+run_viewer_perf_smoke=0
 run_launcher_web_build=0
 
 usage() {
@@ -64,6 +65,7 @@ mark_full() {
   run_oasis7_net_libp2p_tests=1
   run_viewer_contract_tests=1
   run_viewer_wasm_check=1
+  run_viewer_perf_smoke=1
   run_launcher_web_build=1
   append_reason "$1"
 }
@@ -97,6 +99,7 @@ mark_net() {
 mark_viewer() {
   run_viewer_contract_tests=1
   run_viewer_wasm_check=1
+  run_viewer_perf_smoke=1
   append_reason "$1"
 }
 
@@ -274,6 +277,7 @@ elif [[ \
   "$run_oasis7_net_libp2p_tests" -eq 1 || \
   "$run_viewer_contract_tests" -eq 1 || \
   "$run_viewer_wasm_check" -eq 1 || \
+  "$run_viewer_perf_smoke" -eq 1 || \
   "$run_launcher_web_build" -eq 1 \
   ]]; then
   scope="targeted"
@@ -300,6 +304,7 @@ emit_output() {
     echo "run_oasis7_net_libp2p_tests=$([[ "$run_oasis7_net_libp2p_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_contract_tests=$([[ "$run_viewer_contract_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)"
+    echo "run_viewer_perf_smoke=$([[ "$run_viewer_perf_smoke" -eq 1 ]] && echo true || echo false)"
     echo "run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
     echo "needs_node=$needs_node"
     echo "needs_system_deps=$needs_system_deps"
@@ -324,6 +329,7 @@ run_oasis7_net_tests=$([[ "$run_oasis7_net_tests" -eq 1 ]] && echo true || echo 
 run_oasis7_net_libp2p_tests=$([[ "$run_oasis7_net_libp2p_tests" -eq 1 ]] && echo true || echo false)
 run_viewer_contract_tests=$([[ "$run_viewer_contract_tests" -eq 1 ]] && echo true || echo false)
 run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)
+run_viewer_perf_smoke=$([[ "$run_viewer_perf_smoke" -eq 1 ]] && echo true || echo false)
 run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)
 needs_node=$needs_node
 needs_system_deps=$needs_system_deps
