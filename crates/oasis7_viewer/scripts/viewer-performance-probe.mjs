@@ -13,8 +13,42 @@ import {
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const viewerRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(viewerRoot, "../..");
-const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
+const configuredAgentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
+const agentBrowserNpxPackage = process.env.AGENT_BROWSER_NPX_PACKAGE || "agent-browser";
+const npxBin = process.platform === "win32" ? "npx.cmd" : "npx";
 const session = `viewer-performance-probe-${process.pid}`;
+
+function commandAvailable(command, args = ["--version"]) {
+  const result = spawnSync(command, args, { stdio: "ignore" });
+  return !result.error;
+}
+
+function resolveAgentBrowserInvocation() {
+  if (process.env.AGENT_BROWSER_BIN) {
+    return {
+      command: configuredAgentBrowserBin,
+      prefixArgs: [],
+      label: configuredAgentBrowserBin,
+    };
+  }
+  if (commandAvailable(configuredAgentBrowserBin)) {
+    return {
+      command: configuredAgentBrowserBin,
+      prefixArgs: [],
+      label: configuredAgentBrowserBin,
+    };
+  }
+  if (commandAvailable(npxBin)) {
+    return {
+      command: npxBin,
+      prefixArgs: ["--yes", agentBrowserNpxPackage],
+      label: `${npxBin} --yes ${agentBrowserNpxPackage}`,
+    };
+  }
+  throw new Error(`missing required browser automation command: ${configuredAgentBrowserBin} (or npx fallback)`);
+}
+
+const agentBrowserInvocation = resolveAgentBrowserInvocation();
 
 function positiveInteger(value, fallback) {
   const numeric = Number(value);
@@ -152,14 +186,24 @@ function serveFile(request, response) {
 }
 
 function ensureAgentBrowser() {
-  const result = spawnSync(agentBrowserBin, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  if (result.status !== 0) throw new Error(`missing required browser automation command: ${agentBrowserBin}`);
+  const result = spawnSync(
+    agentBrowserInvocation.command,
+    [...agentBrowserInvocation.prefixArgs, "--version"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  if (result.status !== 0) {
+    throw new Error(`missing required browser automation command: ${agentBrowserInvocation.label}`);
+  }
 }
 
 function runAgentBrowser(args, options = {}) {
   const timeout = options.timeout ?? 30_000;
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(agentBrowserBin, ["--session", session, ...args], { stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(
+      agentBrowserInvocation.command,
+      [...agentBrowserInvocation.prefixArgs, "--session", session, ...args],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
@@ -204,7 +248,11 @@ async function evalJson(source, options = {}) {
 }
 
 function closeBrowser() {
-  spawnSync(agentBrowserBin, ["--session", session, "close"], { stdio: "ignore", timeout: 10_000 });
+  spawnSync(
+    agentBrowserInvocation.command,
+    [...agentBrowserInvocation.prefixArgs, "--session", session, "close"],
+    { stdio: "ignore", timeout: 10_000 },
+  );
 }
 
 function probeScript({ durationMs, agents, locations }) {
