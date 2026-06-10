@@ -63,6 +63,8 @@ pub(super) struct DepositRoute {
     pub(super) bridge_user_id: String,
     pub(super) beneficiary_ref: String,
     pub(super) deposit_account_id: String,
+    #[serde(default)]
+    pub(super) deposit_token: Option<String>,
     pub(super) route_type: String,
     pub(super) pricing_version: Option<String>,
     pub(super) topup_plan_id: Option<String>,
@@ -102,6 +104,10 @@ pub(super) struct BridgeLedgerEntry {
     pub(super) from_account_id: String,
     pub(super) amount_oc: u64,
     pub(super) expected_amount_oc: Option<u64>,
+    #[serde(default)]
+    pub(super) expected_deposit_token: Option<String>,
+    #[serde(default)]
+    pub(super) observed_deposit_token: Option<String>,
     pub(super) pricing_version: Option<String>,
     pub(super) topup_plan_id: Option<String>,
     pub(super) credit_units: u64,
@@ -230,6 +236,7 @@ pub(super) struct CreateDepositRouteResponse {
     pub(super) bridge_user_id: String,
     pub(super) beneficiary_ref: String,
     pub(super) deposit_account_id: String,
+    pub(super) deposit_token: Option<String>,
     pub(super) route_type: String,
     pub(super) route_status: DepositRouteStatus,
     pub(super) pricing_version: Option<String>,

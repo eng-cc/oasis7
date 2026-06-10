@@ -15,6 +15,8 @@ use super::model::{
 use super::service::{BridgePricingRuleConfig, BridgeService, BridgeServiceConfig};
 use super::store::BridgeStateStore;
 use super::{dispatch_request, parse_cli_options};
+#[path = "deposit_token_tests.rs"]
+mod deposit_token_tests;
 #[path = "tests_support.rs"]
 mod tests_support;
 use self::tests_support::{
@@ -241,44 +243,6 @@ fn bind_user_retry_reuses_binding_and_retries_eager_provisioning_after_upsert_fa
 }
 
 #[test]
-fn create_deposit_route_persists_and_reuses_active_route() {
-    let test_service = test_service("route-reuse", 900);
-    let binding = bind_default_user(&test_service);
-
-    let first = test_service
-        .service
-        .create_deposit_route(
-            CreateDepositRouteRequest {
-                bridge_user_id: binding.bridge_user_id.clone(),
-                pricing_version: Some("pv-1".to_string()),
-                topup_plan_id: None,
-            },
-            2_000,
-        )
-        .expect("route");
-    assert!(!first.reused_existing_route);
-    assert_eq!(first.route_status, DepositRouteStatus::Issued);
-    assert_eq!(first.deposit_account_id, "oc:bridge:000001");
-
-    let reused = test_service
-        .service
-        .create_deposit_route(
-            CreateDepositRouteRequest {
-                bridge_user_id: binding.bridge_user_id,
-                pricing_version: Some("pv-2".to_string()),
-                topup_plan_id: None,
-            },
-            2_100,
-        )
-        .expect("reuse route");
-    assert!(reused.reused_existing_route);
-    assert_eq!(reused.route_id, first.route_id);
-
-    let snapshot = test_service.service.snapshot();
-    assert_eq!(snapshot.routes.len(), 1);
-}
-
-#[test]
 fn reconcile_provisions_letai_user_project_token_and_marks_reconciled() {
     let chain_server = MockChainServer::spawn();
     let letai_server = MockLetaiServer::spawn();
@@ -300,6 +264,7 @@ fn reconcile_provisions_letai_user_project_token_and_marks_reconciled() {
             from_account_id: "oc:pk:sender-1".to_string(),
             to_account_id: deposit_account_id,
             amount: 100,
+            memo: Some("bridge:deposit:route-000001".to_string()),
             submitted_at_unix_ms: 5_000,
             updated_at_unix_ms: 5_100,
             block_height: Some(10),
@@ -370,6 +335,7 @@ fn reconcile_marks_underpay_for_manual_review() {
             from_account_id: "oc:pk:sender-1".to_string(),
             to_account_id: deposit_account_id,
             amount: 99,
+            memo: Some("bridge:deposit:route-000001".to_string()),
             submitted_at_unix_ms: 5_000,
             updated_at_unix_ms: 5_100,
             block_height: Some(10),
@@ -413,6 +379,7 @@ fn reconcile_retries_topup_with_stable_external_order_id() {
             from_account_id: "oc:pk:sender-1".to_string(),
             to_account_id: deposit_account_id,
             amount: 100,
+            memo: Some("bridge:deposit:route-000001".to_string()),
             submitted_at_unix_ms: 5_000,
             updated_at_unix_ms: 5_100,
             block_height: Some(10),
@@ -471,6 +438,7 @@ fn reconcile_moves_to_manual_review_when_verification_logs_missing() {
             from_account_id: "oc:pk:sender-1".to_string(),
             to_account_id: deposit_account_id,
             amount: 100,
+            memo: Some("bridge:deposit:route-000001".to_string()),
             submitted_at_unix_ms: 5_000,
             updated_at_unix_ms: 5_100,
             block_height: Some(10),
@@ -520,6 +488,7 @@ fn reconcile_moves_to_manual_review_when_project_binding_missing() {
             from_account_id: "oc:pk:sender-1".to_string(),
             to_account_id: deposit_account_id,
             amount: 100,
+            memo: Some("bridge:deposit:route-000001".to_string()),
             submitted_at_unix_ms: 5_000,
             updated_at_unix_ms: 5_100,
             block_height: Some(10),
@@ -570,6 +539,7 @@ fn reconcile_retries_resolved_rows_after_operator_review() {
             from_account_id: "oc:pk:sender-1".to_string(),
             to_account_id: deposit_account_id,
             amount: 100,
+            memo: Some("bridge:deposit:route-000001".to_string()),
             submitted_at_unix_ms: 5_000,
             updated_at_unix_ms: 5_100,
             block_height: Some(10),
@@ -645,6 +615,7 @@ fn operator_review_can_close_manual_review_row() {
                 from_account_id: "oc:pk:sender-1".to_string(),
                 to_account_id: deposit_account_id.clone(),
                 amount: 100,
+                memo: Some("bridge:deposit:route-000001".to_string()),
                 submitted_at_unix_ms: 5_000,
                 updated_at_unix_ms: 5_100,
                 block_height: Some(10),
@@ -655,6 +626,7 @@ fn operator_review_can_close_manual_review_row() {
                 from_account_id: "oc:pk:sender-1".to_string(),
                 to_account_id: deposit_account_id,
                 amount: 100,
+                memo: Some("bridge:deposit:route-000001".to_string()),
                 submitted_at_unix_ms: 5_200,
                 updated_at_unix_ms: 5_300,
                 block_height: Some(10),
@@ -686,42 +658,6 @@ fn operator_review_can_close_manual_review_row() {
         )
         .expect("apply review");
     assert_eq!(response.state, BridgeLedgerState::Closed);
-}
-
-#[test]
-fn create_deposit_route_expires_old_route_before_reissuing() {
-    let test_service = test_service("route-expire", 1);
-    let binding = bind_default_user(&test_service);
-
-    let first = test_service
-        .service
-        .create_deposit_route(
-            CreateDepositRouteRequest {
-                bridge_user_id: binding.bridge_user_id.clone(),
-                pricing_version: Some("pv-1".to_string()),
-                topup_plan_id: None,
-            },
-            2_000,
-        )
-        .expect("first route");
-    let second = test_service
-        .service
-        .create_deposit_route(
-            CreateDepositRouteRequest {
-                bridge_user_id: binding.bridge_user_id,
-                pricing_version: Some("pv-2".to_string()),
-                topup_plan_id: None,
-            },
-            3_500,
-        )
-        .expect("second route");
-    assert_ne!(second.route_id, first.route_id);
-    assert_eq!(second.deposit_account_id, "oc:bridge:000002");
-
-    let snapshot = test_service.service.snapshot();
-    assert_eq!(snapshot.routes.len(), 2);
-    assert_eq!(snapshot.routes[0].status, DepositRouteStatus::Expired);
-    assert_eq!(snapshot.routes[1].status, DepositRouteStatus::Issued);
 }
 
 #[test]
@@ -778,6 +714,10 @@ fn dispatch_request_handles_bind_and_route_http_contract() {
     assert_eq!(
         route_json.get("route_status").and_then(Value::as_str),
         Some("issued")
+    );
+    assert_eq!(
+        route_json.get("deposit_token").and_then(Value::as_str),
+        Some("bridge:deposit:route-000001")
     );
 
     let reconcile_response = dispatch_request(
@@ -939,6 +879,7 @@ fn reconcile_requires_letai_configuration() {
             from_account_id: "oc:pk:sender-1".to_string(),
             to_account_id: deposit_account_id,
             amount: 100,
+            memo: Some("bridge:deposit:route-000001".to_string()),
             submitted_at_unix_ms: 5_000,
             updated_at_unix_ms: 5_100,
             block_height: Some(10),
@@ -1041,6 +982,7 @@ fn reconcile_recovers_inflight_rows_after_restart() {
             from_account_id: "oc:pk:sender-1".to_string(),
             to_account_id: deposit_account_id,
             amount: 100,
+            memo: Some("bridge:deposit:route-000001".to_string()),
             submitted_at_unix_ms: 5_000,
             updated_at_unix_ms: 5_100,
             block_height: Some(10),

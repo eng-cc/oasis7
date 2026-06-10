@@ -10,6 +10,7 @@ pub(super) struct ObservedChainTransfer {
     pub(super) from_account_id: String,
     pub(super) to_account_id: String,
     pub(super) amount: u64,
+    pub(super) memo: Option<String>,
     pub(super) submitted_at_unix_ms: i64,
     pub(super) updated_at_unix_ms: i64,
     pub(super) block_height: Option<u64>,
@@ -38,6 +39,8 @@ struct ChainExplorerTxItem {
     from_account_id: String,
     to_account_id: String,
     amount: u64,
+    #[serde(default)]
+    memo: Option<String>,
     submitted_at_unix_ms: i64,
     updated_at_unix_ms: i64,
     #[serde(default)]
@@ -135,6 +138,7 @@ impl ChainExplorerClient {
                 from_account_id: item.from_account_id,
                 to_account_id: item.to_account_id,
                 amount: item.amount,
+                memo: item.memo,
                 submitted_at_unix_ms: item.submitted_at_unix_ms,
                 updated_at_unix_ms: item.updated_at_unix_ms,
                 block_height: item.block_height,
