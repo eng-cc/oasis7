@@ -450,6 +450,11 @@ impl PosNodeEngine {
         {
             return Ok(false);
         }
+        if execution_hook.is_some()
+            && checkpoint_height > self.last_execution_height.saturating_add(1)
+        {
+            return Ok(false);
+        }
 
         let checkpoint = match self.sync_replication_height_once(
             endpoint,
@@ -504,6 +509,9 @@ impl PosNodeEngine {
             return Ok(());
         };
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;
+        if let Some(head_height) = endpoint.lookup_world_head_height(world_id)? {
+            self.network_committed_height = self.network_committed_height.max(head_height);
+        }
         if self.network_committed_height <= self.replication_persisted_height {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;

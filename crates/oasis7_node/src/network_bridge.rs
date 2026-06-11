@@ -277,6 +277,27 @@ impl ReplicationNetworkEndpoint {
         Ok(messages)
     }
 
+    pub(crate) fn lookup_world_head_height(
+        &self,
+        world_id: &str,
+    ) -> Result<Option<u64>, NodeError> {
+        let Some(dht) = self.dht.as_ref() else {
+            return Ok(None);
+        };
+        let Some(head) = dht.get_world_head(world_id).map_err(network_err)? else {
+            return Ok(None);
+        };
+        if head.world_id != world_id {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "world head mismatch: expected={} actual={}",
+                    world_id, head.world_id
+                ),
+            });
+        }
+        Ok(Some(head.height))
+    }
+
     pub(crate) fn request_json<Req, Resp>(
         &self,
         protocol: &str,
