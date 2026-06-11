@@ -3,6 +3,7 @@ use super::node_engine_storage_challenge::{
 };
 use super::*;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
+use oasis7_proto::distributed::WorldHeadAnnounce;
 
 impl PosNodeEngine {
     fn clear_replication_gap_sync_blocked_if_unblocked(&mut self) {
@@ -44,6 +45,34 @@ impl PosNodeEngine {
             )?;
         }
         self.clear_replication_gap_sync_blocked_if_unblocked();
+        Ok(())
+    }
+
+    fn validate_world_head_checkpoint_payload(
+        world_id: &str,
+        payload: &ReplicationCommitPayload,
+        expected_head: &WorldHeadAnnounce,
+    ) -> Result<(), NodeError> {
+        let payload_state_root = payload.execution_state_root.as_deref().unwrap_or_default();
+        if expected_head.world_id != world_id
+            || payload.world_id != world_id
+            || expected_head.height != payload.height
+            || expected_head.block_hash != payload.block_hash
+            || expected_head.state_root != payload_state_root
+        {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "world head checkpoint mismatch: world_id={} expected_height={} payload_height={} expected_block_hash={} payload_block_hash={} expected_state_root={} payload_state_root={}",
+                    world_id,
+                    expected_head.height,
+                    payload.height,
+                    expected_head.block_hash,
+                    payload.block_hash,
+                    expected_head.state_root,
+                    payload_state_root
+                ),
+            });
+        }
         Ok(())
     }
 
@@ -441,6 +470,7 @@ impl PosNodeEngine {
         replication_runtime: &mut ReplicationRuntime,
         checkpoint_height: u64,
         blocked_height: u64,
+        expected_checkpoint_head: Option<&WorldHeadAnnounce>,
         execution_hook: &mut Option<&mut dyn NodeExecutionHook>,
         progress_callback: &mut Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
     ) -> Result<bool, NodeError> {
@@ -469,6 +499,13 @@ impl PosNodeEngine {
         let (message, payload) = checkpoint;
         if payload.execution_block_hash.is_none() || payload.execution_state_root.is_none() {
             return Ok(false);
+        }
+        if let Some(expected_head) = expected_checkpoint_head {
+            if Self::validate_world_head_checkpoint_payload(world_id, &payload, expected_head)
+                .is_err()
+            {
+                return Ok(false);
+            }
         }
 
         let (block_hash, committed_at_ms) = with_execution_hook(execution_hook, |hook| {
@@ -509,26 +546,33 @@ impl PosNodeEngine {
             return Ok(());
         };
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;
-        if let Some(head_height) = endpoint.lookup_world_head_height(world_id)? {
-            self.network_committed_height = self.network_committed_height.max(head_height);
-        }
-        if self.network_committed_height <= self.replication_persisted_height {
+        let advertised_world_head = endpoint.lookup_world_head(world_id)?;
+        let advertised_network_height = self.network_committed_height.max(
+            advertised_world_head
+                .as_ref()
+                .map(|head| head.height)
+                .unwrap_or(0),
+        );
+        let expected_checkpoint_head = advertised_world_head
+            .as_ref()
+            .filter(|head| head.height == advertised_network_height);
+        if advertised_network_height <= self.replication_persisted_height {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
             return Ok(());
         }
 
-        let network_lag = self
-            .network_committed_height
-            .saturating_sub(self.replication_persisted_height);
+        let network_lag =
+            advertised_network_height.saturating_sub(self.replication_persisted_height);
         if network_lag > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
             && self.try_sync_high_replication_checkpoint_boundary(
                 endpoint,
                 node_id,
                 world_id,
                 replication_runtime,
-                self.network_committed_height,
+                advertised_network_height,
                 self.replication_persisted_height,
+                expected_checkpoint_head,
                 &mut execution_hook,
                 &mut progress_callback,
             )?
@@ -541,7 +585,7 @@ impl PosNodeEngine {
             "replication_persisted_height",
             "starting replication gap sync",
         )?;
-        let gap_sync_target_height = self.network_committed_height.min(
+        let gap_sync_target_height = advertised_network_height.min(
             self.replication_persisted_height
                 .saturating_add(REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL),
         );
@@ -615,8 +659,9 @@ impl PosNodeEngine {
                     node_id,
                     world_id,
                     replication_runtime,
-                    self.network_committed_height,
+                    advertised_network_height,
                     next_height,
+                    expected_checkpoint_head,
                     &mut execution_hook,
                     &mut progress_callback,
                 )? {
@@ -624,7 +669,8 @@ impl PosNodeEngine {
                 }
                 self.last_replication_gap_sync_blocked_height = Some(next_height);
                 self.last_replication_gap_sync_blocked_reason = Some(format!(
-                    "replication gap sync blocked: missing commit height {next_height} while network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",
+                    "replication gap sync blocked: missing commit height {next_height} while advertised_network_height={} network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",
+                    advertised_network_height,
                     self.network_committed_height,
                     gap_sync_target_height,
                     self.replication_persisted_height,
@@ -650,7 +696,7 @@ impl PosNodeEngine {
                 ),
             });
         }
-        if self.replication_persisted_height >= self.network_committed_height {
+        if self.replication_persisted_height >= advertised_network_height {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
             self.last_replication_gap_sync_repair_attempt_height = None;
