@@ -73,7 +73,7 @@
 - `TASK-GAME-062`
   - [x] 首次进入不再依赖手动 reopen/reload 才可控
   - [x] `software_safe` 不再把明确 `blocked` / `timeout_no_progress` 压扁成伪 timeout，前台会回填正确控制反馈
-  - [x] viewer-side regression、execution log 与相关证据已回写；fresh active-LLM formal re-certification 已交由 `TASK-GAME-065` 复核并形成当前 `hold` 裁决
+  - [x] viewer-side regression、execution log 与相关证据已回写；active-LLM formal re-certification 已交由 `TASK-GAME-065` 复核，该轮曾形成 historical `hold` baseline，当前 fresh formal truth 已由后续样本更新为 `trust gate = pass`、`first capability gate = pass`
 - `TASK-GAME-063`
   - [x] 首个持续能力链已有独立 canonical 包，不再被要求在单个 10 分钟 trust 样本内闭环
   - [x] 建厂/首产出/停机恢复/扩产取舍均有 canonical 状态与前台反馈锚点

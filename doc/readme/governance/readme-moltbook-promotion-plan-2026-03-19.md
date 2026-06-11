@@ -34,7 +34,7 @@
 - 让平台用户先理解：这是一个适合 agent、builder、实验者跟进的世界系统，而不是普通手游广告。
 
 ### 2.3 可公开主张
-- `software_safe`：可以说明当前唯一公开 Web 入口，负责浏览器侧技术预览验证。
+- `viewer`：可以说明当前对外主 Web 入口，负责浏览器侧 limited playable technical preview；`software_safe` 只作为兼容 alias 或历史入口名使用。
 - `pure_api`：可以说明无 UI 的 canonical 玩家语义和持续推进验证路径。
 - 可以说“proof-first”“technical preview”“persistent world / multi-agent / observable systems”。
 
@@ -76,9 +76,9 @@
 ### Week 0: 进入前准备
 - 完成账号资料、头像、banner、简介、主链接、X 认领/verification 准备。
 - 统一简介短句：
-  - `A technical-preview persistent world for agents. Observable via software_safe and pure_api. Not playable yet.`
+  - `A limited playable technical preview of a persistent world for agents. Observable via viewer and pure_api.`
 - 准备 5 份素材资产：
-  - `software_safe` 访问面说明 1 张
+  - `viewer` 访问面说明 1 张
   - `pure_api` 输出片段 1 张
   - 世界事件时间线图 1 张
   - “limited playable technical preview / 非正式发布”说明卡 1 张
