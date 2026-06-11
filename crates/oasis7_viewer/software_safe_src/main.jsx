@@ -57,6 +57,268 @@ function DiagnosticDetails(props) {
   );
 }
 
+function claimField(value, ...names) {
+  if (!value || typeof value !== "object") return null;
+  for (const name of names) {
+    if (value[name] !== undefined && value[name] !== null) {
+      return value[name];
+    }
+  }
+  return null;
+}
+
+function compactValue(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "-";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
+}
+
+function claimMoney(value) {
+  const amount = claimField(value, "amount", "tokens", "balance", "value");
+  const symbol = claimField(value, "symbol", "denom", "currency");
+  if (amount !== null) {
+    return symbol ? `${amount} ${symbol}` : compactValue(amount);
+  }
+  return compactValue(value);
+}
+
+function claimQuoteRows(quote) {
+  if (!quote || typeof quote !== "object") return [];
+  return [
+    ["Slot", claimField(quote, "slot_index", "slot", "slot_id", "slotId", "claim_slot")],
+    ["Reputation tier", claimField(quote, "reputation_tier", "reputationTier", "tier")],
+    ["Owned / cap", [
+      claimField(quote, "owned_claim_count", "owned", "owned_count", "ownedCount"),
+      claimField(quote, "cap", "claim_cap", "claimCap"),
+    ].filter((part) => part !== null && part !== undefined).join(" / ")],
+    ["Total upfront", claimMoney(claimField(quote, "total_upfront_amount", "total_upfront", "totalUpfront", "upfront_total", "upfrontTotal"))],
+    ["Activation fee", claimMoney(claimField(quote, "activation_fee_amount", "activation_fee", "activationFee"))],
+    ["Bond", claimMoney(claimField(quote, "claim_bond_amount", "bond", "locked_bond", "lockedBond"))],
+    ["Upkeep / epoch", claimMoney(claimField(quote, "upkeep_per_epoch", "upkeepPerEpoch", "upkeep"))],
+    ["Eligible balance", claimMoney(claimField(quote, "eligible_claim_balance", "eligible_balance", "eligibleBalance"))],
+    ["Liquid balance", claimMoney(claimField(quote, "transferable_liquid_balance", "liquid_balance", "liquidBalance"))],
+    ["Restricted starter", claimMoney(claimField(quote, "restricted_starter_claim_balance", "restricted_starter_balance", "restrictedStarterBalance"))],
+    ["Auto starter", claimMoney(claimField(quote, "auto_restricted_starter_claim_amount", "auto_starter_amount", "autoStarterAmount"))],
+    ["Cooldown", claimField(quote, "release_cooldown_epochs", "cooldown_epochs", "cooldownEpochs", "cooldown")],
+    ["Grace", claimField(quote, "grace_epochs", "graceEpochs", "grace")],
+    ["Idle warning", claimField(quote, "idle_warning_epochs", "idleWarningEpochs")],
+    ["Forced reclaim", claimField(quote, "forced_idle_reclaim_epochs", "forcedIdleReclaimEpochs")],
+    ["Penalty bps", claimField(quote, "forced_reclaim_penalty_bps", "forcedReclaimPenaltyBps")],
+    ["Reclaim terms", claimField(quote, "reclaim_terms", "reclaimTerms", "reclaim")],
+  ].filter(([, value]) => value !== null && value !== undefined && value !== "");
+}
+
+function claimTarget(claim) {
+  return claimField(claim, "target_agent_id", "targetAgentId", "agent_id", "agentId", "target") || "agent";
+}
+
+function claimStatusText(claim) {
+  const status = claimField(claim, "status", "claim_status", "claimStatus") || "active";
+  const paidThrough = claimField(claim, "upkeep_paid_through_epoch", "upkeepPaidThroughEpoch");
+  const grace = claimField(claim, "grace_remaining_epochs", "graceRemainingEpochs", "grace_remaining", "graceRemaining");
+  const releaseReadyIn = claimField(claim, "release_ready_in_epochs", "releaseReadyInEpochs");
+  const releaseReadyAt = claimField(claim, "release_ready_at_epoch", "releaseReadyAtEpoch");
+  const idleWarningIn = claimField(claim, "idle_warning_in_epochs", "idleWarningInEpochs");
+  const reclaim = claimField(claim, "forced_reclaim_in_epochs", "forcedReclaimInEpochs", "forced_reclaim_epoch", "forcedReclaimEpoch", "forced_reclaim_at", "forcedReclaimAt");
+  return [
+    `status=${status}`,
+    paidThrough !== null ? `upkeep paid through epoch ${paidThrough}` : null,
+    releaseReadyIn !== null ? `release ready in ${releaseReadyIn}` : null,
+    releaseReadyAt !== null ? `release ready at epoch ${releaseReadyAt}` : null,
+    grace !== null ? `grace remaining ${grace}` : null,
+    idleWarningIn !== null ? `idle warning in ${idleWarningIn}` : null,
+    reclaim !== null ? `forced reclaim in ${reclaim}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+function claimOwnedDetail(claim) {
+  const restrictedBond = claimField(claim, "claim_bond_locked_restricted_amount", "lockedBondRestricted");
+  const liquidBond = claimField(claim, "claim_bond_locked_liquid_amount", "lockedBondLiquid");
+  const restrictedSpent = claimField(claim, "upfront_restricted_spent_amount", "upfrontRestrictedSpent");
+  const liquidSpent = claimField(claim, "upfront_liquid_spent_amount", "upfrontLiquidSpent");
+  return [
+    claimField(claim, "idle_warning", "idleWarning"),
+    claimField(claim, "locked_bond_split", "lockedBondSplit"),
+    restrictedBond !== null || liquidBond !== null
+      ? `bond restricted=${compactValue(restrictedBond)} liquid=${compactValue(liquidBond)}`
+      : null,
+    restrictedSpent !== null || liquidSpent !== null
+      ? `upfront restricted=${compactValue(restrictedSpent)} liquid=${compactValue(liquidSpent)}`
+      : null,
+  ].filter(Boolean).join(" · ");
+}
+
+function releaseClaimActionState(actions) {
+  let published = false;
+  let disabledReason = null;
+  const available = (actions || []).some((action) => {
+    const raw = `${action.actionId || ""} ${action.label || ""} ${action.protocolAction || ""}`.toLowerCase();
+    const isRelease = raw.includes("release_agent_claim") || raw.includes("release claim") || raw.includes("release_agent");
+    if (!isRelease) {
+      return false;
+    }
+    published = true;
+    disabledReason = action.disabledReason || disabledReason;
+    return !action.disabledReason;
+  });
+  return { available, published, disabledReason };
+}
+
+function expansionBranchCards(gameplay, locale) {
+  const goal = String(gameplay?.goalKind || "").toLowerCase();
+  if (goal !== "choosefirstexpansiontradeoff" && goal !== "choosemidlooppath") {
+    return [];
+  }
+  const actions = gameplay?.availableActions || [];
+  const branches = [
+    {
+      id: "throughput",
+      title: tr(locale, "产能 / 吞吐", "Capacity / Throughput"),
+      matcher: /\b(alloy|gear|motor|factory|core|smelter|production|throughput|capacity)\b/i,
+    },
+    {
+      id: "resilience",
+      title: tr(locale, "韧性 / 投入保护", "Resilience / Input Protection"),
+      matcher: /\b(sensor|control chip|chip|upstream|stabil|recover|restore|input|material|power|buffer)\b/i,
+    },
+    {
+      id: "logistics",
+      title: tr(locale, "物流 / 触达", "Logistics / Reach"),
+      matcher: /\b(logistics|drone|distribution|route|reach|transport|dispatch)\b/i,
+    },
+  ];
+  return branches.map((branch) => {
+    const matches = actions.filter((action) => branch.matcher.test(`${action.label || ""} ${action.actionId || ""}`));
+    return {
+      ...branch,
+      actions: matches,
+      actionable: matches.some((action) => !action.disabledReason),
+    };
+  });
+}
+
+function ClaimAgentChoiceCard(props) {
+  const locale = () => props.locale ?? uiLocale();
+  const claim = () => props.claim || {};
+  const quote = () => claimField(claim(), "next_claim_quote", "nextClaimQuote", "quote") || {};
+  const blockedReason = () => claimField(quote(), "blocked_reason", "blockedReason");
+  const ownedClaims = () => {
+    const owned = claimField(claim(), "owned_claims", "ownedClaims");
+    return Array.isArray(owned) ? owned : [];
+  };
+  const releaseActionState = () => releaseClaimActionState(props.availableActions || []);
+  return (
+    <PanelSection
+      title={tr(locale(), "Claim-Agent Choice", "Claim-Agent Choice")}
+      eyebrow={tr(locale(), "占用 / 维护 / 释放", "Claim / Maintain / Release")}
+      meta={tr(locale(), "只展示现有 claim 快照与已发布动作；这里不会新增转账或 claim 规则。", "Shows only the current claim snapshot and published actions; this adds no transfer UI or claim rules.")}
+    >
+      <div class="badge-row">
+        <Badge class={blockedReason() ? "badge badge--warn" : "badge badge--good"}>
+          {blockedReason()
+            ? tr(locale(), "暂缓 claim", "Wait before claiming")
+            : tr(locale(), "claim 条件可读", "Claim readable")}
+        </Badge>
+        <Badge>{`owned=${ownedClaims().length}`}</Badge>
+      </div>
+      <div class="feedback-summary">
+        {blockedReason()
+          ? tr(locale(), "下一次 claim 需要先等待、补资金或提升资格；原始原因已收在诊断明细。", "The next claim needs waiting, funding, or eligibility first; the raw reason is kept in diagnostic detail.")
+          : tr(locale(), "当前 quote 没有发布阻塞原因；玩家可以把它当成“可比较但仍需按正式动作执行”的 claim 机会。", "The current quote publishes no blocker reason; treat it as a comparable claim opportunity that still needs a canonical action to execute.")}
+      </div>
+      <div class="summary-grid">
+        <For each={claimQuoteRows(quote())}>
+          {([label, value]) => (
+            <MetricCard label={label} value={compactValue(value)} />
+          )}
+        </For>
+      </div>
+      <Show when={blockedReason()}>
+        <DiagnosticDetails
+          locale={locale()}
+          label={tr(locale(), "Claim 阻塞诊断", "Claim blocker diagnostics")}
+          value={() => ({ blocked_reason: blockedReason(), quote: quote() })}
+        />
+      </Show>
+      <Show when={ownedClaims().length > 0}>
+        <div>
+          <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "已占用 Agent", "Owned Claims")}</div>
+          <div class="event-list">
+            <For each={ownedClaims()}>
+              {(owned) => (
+                <EventCard
+                  title={claimTarget(owned)}
+                  badge={claimField(owned, "release_ready", "releaseReady") || claimField(owned, "release_ready_in_epochs", "releaseReadyInEpochs") === 0 || claimField(owned, "status") === "release_ready" ? "release ready" : claimField(owned, "release_cooldown", "releaseCooldown") ? "cooldown" : "maintain"}
+                  badgeClass={claimField(owned, "release_ready", "releaseReady") || claimField(owned, "release_ready_in_epochs", "releaseReadyInEpochs") === 0 || claimField(owned, "status") === "release_ready" ? "badge badge--accent" : "badge"}
+                  meta={claimStatusText(owned)}
+                >
+                  <div class="feedback-summary">
+                    {releaseActionState().available
+                      ? tr(locale(), "Release 已作为正式可用动作发布；可以从可用动作列表执行。", "Release is published as a canonical available action; execute it from the available actions list.")
+                      : releaseActionState().published
+                        ? tr(locale(), "Release 动作已经发布但当前不可执行；先处理可用动作列表里的阻塞原因。", "Release is published but currently disabled; resolve the blocker shown in the available actions list first.")
+                      : tr(locale(), "维护方式是保持控制权与 upkeep 健康；release 只作为状态指导，直到正式动作发布。", "Maintain by keeping control and upkeep healthy; release stays guidance-only until a canonical action is published.")}
+                  </div>
+                  <Show when={claimOwnedDetail(owned)}>
+                    <div class="feedback-detail">{claimOwnedDetail(owned)}</div>
+                  </Show>
+                </EventCard>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+    </PanelSection>
+  );
+}
+
+function ExpansionTradeoffCards(props) {
+  const locale = () => props.locale ?? uiLocale();
+  const cards = () => expansionBranchCards(props.gameplay, locale());
+  return (
+    <PanelSection
+      title={tr(locale(), "扩张取舍", "Expansion Tradeoffs")}
+      eyebrow={tr(locale(), "从已发布动作派生", "Derived From Published Actions")}
+      meta={props.gameplay?.branchHint || tr(locale(), "当前分支提示尚未发布。", "No branch premise is published yet.")}
+    >
+      <div class="action-grid">
+        <For each={cards()}>
+          {(card) => (
+            <EventCard
+              class="event-card event-card--action"
+              title={card.title}
+              badge={card.actionable ? "actionable" : "not yet actionable"}
+              badgeClass={card.actionable ? "badge badge--good" : "badge badge--warn"}
+              meta={props.gameplay?.goalTitle || tr(locale(), "当前扩张目标", "Current expansion goal")}
+            >
+              <Show
+                when={card.actions.length > 0}
+                fallback={<div class="feedback-summary">{tr(locale(), "当前没有匹配的已发布动作；不要把这个分支当成可执行按钮。", "No matching published action yet; do not treat this branch as an executable button.")}</div>}
+              >
+                <div class="event-list">
+                  <For each={card.actions}>
+                    {(action) => (
+                      <div class="feedback-detail">
+                        {action.disabledReason
+                          ? `${action.label || action.actionId}: ${action.disabledReason}`
+                          : action.label || action.actionId}
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <div class="feedback-detail">
+                {props.gameplay?.nextStepHint || tr(locale(), "选择前先确认对应动作已经正式发布。", "Confirm the matching action is published before committing.")}
+              </div>
+            </EventCard>
+          )}
+        </For>
+      </div>
+    </PanelSection>
+  );
+}
+
 function InlineHelpTip(props) {
   const locale = () => props.locale ?? uiLocale();
   const [isOpen, setIsOpen] = createSignal(false);
@@ -520,6 +782,14 @@ function gameplayActionButtonLabel(action, locale) {
   return tr(locale, "提交玩法动作", "Submit Gameplay Action");
 }
 
+function gameplayActionDetail(action, gameplay, locale) {
+  return action?.playerDetail
+    || action?.disabledReason
+    || gameplay?.economicSurface?.repairAction
+    || gameplay?.narrativeNextStep
+    || tr(locale, "无需打开可视化质检观察器，也可以直接从正式网页入口执行。", "Playable from the formal Web entry without opening the visual QA viewer.");
+}
+
 function renderGameplayAction(action) {
   if (action.executeKind === "agent_chat") {
     core.applySelection({ kind: "agent", id: action.targetAgentId });
@@ -532,6 +802,27 @@ function gameplayProgressLabel(progressPercent, locale) {
   return progressPercent == null
     ? tr(locale, "进度待发布", "Progress Pending")
     : tr(locale, `进度 ${progressPercent}%`, `Progress ${progressPercent}%`);
+}
+
+function chatEntryTitle(entry, locale) {
+  const target = entry.targetAgentId || entry.agentId || "agent";
+  if (entry.source === "player") {
+    return `${tr(locale, "玩家", "Player")} -> ${target}`;
+  }
+  return `${entry.agentId || target} ${tr(locale, "回应", "Reply")}`;
+}
+
+function chatEntryMeta(entry, locale) {
+  const speaker = entry.source === "player"
+    ? entry.playerId || entry.speaker || tr(locale, "玩家", "Player")
+    : entry.speaker || entry.agentId || "agent";
+  const location = entry.locationId || tr(locale, "未知位置", "unknown location");
+  return `${speaker} · ${location}`;
+}
+
+function chatEntryMessage(entry, locale) {
+  const message = String(entry.message || "").trim();
+  return message || tr(locale, "这条消息没有可读正文。", "This message has no readable text.");
 }
 
 function connectionStatusLabel(status, locale) {
@@ -946,6 +1237,16 @@ function WorldSummaryPanel() {
                   />
                 </div>
               </PanelSection>
+              <Show when={gameplay().agentClaim}>
+                <ClaimAgentChoiceCard
+                  locale={locale()}
+                  claim={gameplay().agentClaim}
+                  availableActions={gameplay().availableActions}
+                />
+              </Show>
+              <Show when={expansionBranchCards(gameplay(), locale()).length > 0}>
+                <ExpansionTradeoffCards gameplay={gameplay()} locale={locale()} />
+              </Show>
               <Show when={gameplay().recentFeedback}>
                 {(feedback) => (
                   <EventCard
@@ -988,8 +1289,7 @@ function WorldSummaryPanel() {
                       {action().label || action().actionId || tr(locale(), "当前存在一条更合适的推进动作。", "One action is currently the best next move.")}
                     </div>
                     <div class="feedback-detail">
-                      {gameplay().narrativeNextStep
-                        || tr(locale(), "先执行这一步，再判断是否需要切到聊天、恢复或改道。", "Take this action first, then decide whether to chat, resume, or reprioritize.")}
+                      {gameplayActionDetail(action(), gameplay(), locale())}
                     </div>
                     <div class="toolbar">
                       <button
@@ -1027,8 +1327,7 @@ function WorldSummaryPanel() {
                           }
                         >
                           <div class="feedback-detail">
-                            {action.disabledReason
-                              || tr(locale(), "无需打开可视化质检观察器，也可以直接从正式网页入口执行。", "Playable from the formal Web entry without opening the visual QA viewer.")}
+                            {gameplayActionDetail(action, gameplay(), locale())}
                           </div>
                           <Show
                             when={action.executeKind === "request_snapshot" || action.executeKind === "step" || action.executeKind === "play" || action.executeKind === "gameplay_action"}
@@ -1519,15 +1818,12 @@ function InteractionPanel() {
               <For each={chatHistory()}>
                 {(entry) => (
                   <EventCard
-                    title={
-                      entry.source === "player"
-                        ? `${tr(locale(), "玩家", "player")} → ${entry.targetAgentId || entry.agentId || "agent"}`
-                        : `${entry.agentId || "agent"} ${tr(locale(), "已发言", "spoke")}`
-                    }
+                    title={chatEntryTitle(entry, locale())}
                     badge={`tick=${Number(entry.tick || 0)}`}
-                    meta={`speaker=${entry.speaker || entry.playerId || "-"} · location=${entry.locationId || "-"}`}
+                    meta={chatEntryMeta(entry, locale())}
                   >
-                    <JsonBlock value={entry} />
+                    <div class="feedback-summary">{chatEntryMessage(entry, locale())}</div>
+                    <DiagnosticDetails value={entry} />
                   </EventCard>
                 )}
               </For>

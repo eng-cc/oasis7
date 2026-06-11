@@ -634,6 +634,54 @@ describe("pixel world host", () => {
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("makes the rendered canvas focusable with a read-only accessible world description", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => ({
+      locale: input.locale,
+      worldBounds: { width_cm: 10_000_000, depth_cm: 5_000_000, height_cm: 1_000_000 },
+      locations: [],
+      fragmentTerrain: [],
+      agents: [],
+      links: [],
+      selection: null,
+      goalHighlight: null,
+      blockerHighlight: null,
+      recentEventHotspots: [],
+      visualHotspots: [],
+      commercial_surface: {
+        objective: { title: "Accessible canvas goal", detail: "Readable adjacent HUD", progress_percent: null },
+        next_action: { label: "Inspect world", detail: null, target_agent_id: null, execute_kind: null },
+        active_agent_id: null,
+        player_leverage: { state: "waiting_for_intent", label: "Waiting for Intent", summary: "Waiting", detail: null },
+        action_receipt: {
+          present: false,
+          state: "waiting_for_intent",
+          confidence: "none",
+          title: "No action receipt yet",
+          summary: "No receipt",
+          detail: null,
+          target_agent_id: null,
+          effect_kind: null,
+          delta_logical_time: null,
+          delta_event_seq: null,
+        },
+        blocker: { label: null, detail: null },
+        world_read: { agents: 0, routes: 0, fragments: 0, hotspots: 0 },
+      },
+      presentation: { world_bounds_label: "bounds", marker_truth_note: "truth" },
+    }));
+
+    await renderPixelWorldHost();
+    screen.getByRole("button", { name: "Reattach Embedded Renderer" }).click();
+
+    const canvas = await screen.findByRole("img", { name: "World canvas overview" });
+    expect(canvas).toHaveAttribute("tabindex", "0");
+    expect(canvas).toHaveAttribute("aria-describedby", "pixel-world-canvas-accessible-summary");
+    expect(document.getElementById("pixel-world-canvas-accessible-summary")).toHaveTextContent(/read-only overview/i);
+    expect(document.getElementById("pixel-world-canvas-accessible-summary")).toHaveTextContent(/adjacent HUD/i);
+    canvas.focus();
+    expect(document.activeElement).toBe(canvas);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("renders the no-receipt fallback without implying an active agent caused progress", async () => {
     await renderPixelWorldHost(noReceiptSnapshot());
 
@@ -676,6 +724,8 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Build smelter mk1");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Missing Material");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Mission Progress");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Receipt");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("68%");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Replenish upstream materials, then advance again to confirm the line resumes.");
     expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Objective");
@@ -690,6 +740,7 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-cinematic="true"]')).toHaveTextContent("Stabilize the first production line before expanding.");
     expect(document.querySelector('[data-focus-cinematic="true"]')).toHaveTextContent("Recover sustainable capability");
     expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent("Renderer Not Attached");
+    expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent(/formal gameplay summary/i);
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Mission Map");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Factory Anchor");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Build smelter mk1");
@@ -731,6 +782,7 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-receipt")).toBeNull();
     expect(document.querySelector(".pixel-world-render-diagnostics")).toBeNull();
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Minimize");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-drawer--command")?.open).toBe(true);
 
     screen.getByRole("button", { name: "Minimize" }).click();
@@ -750,6 +802,60 @@ describe("pixel world host", () => {
     expect(host).toHaveAttribute("data-world-focus", "false");
     expect(document.body).not.toHaveClass("pixel-world-focus-active");
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).toBeNull();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("demotes raw focus command feedback and chat history behind diagnostics", async () => {
+    const { core } = await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+    core.applySelection({ kind: "agent", id: "agent-0" });
+    core.state.lastChatFeedback = {
+      id: "feedback-1",
+      kind: "agent_chat",
+      action: "agent_chat",
+      agentId: "agent-0",
+      accepted: true,
+      stage: "accepted",
+      ok: true,
+      reason: null,
+      effect: "Message accepted by agent-0.",
+      response: { message: "Agent acknowledged the recovery plan.", code: "chat_ok" },
+    };
+    core.state.chatHistory = [
+      {
+        id: "chat-1",
+        source: "player",
+        agentId: "agent-0",
+        targetAgentId: "agent-0",
+        playerId: "player-one",
+        speaker: "player-one",
+        locationId: "loc-0",
+        message: "Restore the smelter before expanding.",
+        tick: 44,
+      },
+    ];
+    core.requestRender();
+
+    await waitFor(() => {
+      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+    });
+    screen.getByRole("button", { name: "Enter World Focus" }).click();
+
+    const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
+    expect(commandDrawer).toHaveTextContent("Message accepted by agent-0.");
+    expect(commandDrawer).toHaveTextContent("Restore the smelter before expanding.");
+    expect(commandDrawer).toHaveTextContent("Player -> agent-0");
+    expect(commandDrawer).toHaveTextContent("player-one · loc-0 · tick=44");
+    expect(commandDrawer).toHaveTextContent("Raw diagnostics");
+    expect(commandDrawer).not.toHaveTextContent('"message": "Restore the smelter before expanding."');
+    expect(commandDrawer).not.toHaveTextContent('"code": "chat_ok"');
+
+    commandDrawer.querySelector("summary").click();
+    commandDrawer.querySelectorAll("details.diagnostic summary")[0].click();
+    await waitFor(() => {
+      expect(commandDrawer).toHaveTextContent('"code": "chat_ok"');
+    });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps empty focus rail collapsed while preserving fallback world summary", async () => {

@@ -238,6 +238,241 @@ describe("viewer web ui automation baseline", () => {
     expect(helpButton).toHaveAttribute("aria-describedby", "viewer-stage-scale-tip");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("prefers recovery proof controls over generic gameplay actions when blocked", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          next_step_hint: "Advance one committed step to prove the material recovery before queuing another build.",
+          available_actions: [
+            {
+              action_id: "build_factory_smelter_mk1",
+              target_agent_id: "agent-0",
+              label: "Build smelter mk1",
+              protocol_action: "gameplay_action.submit",
+              disabled_reason: null,
+            },
+            {
+              action_id: "live_control.step",
+              label: "Advance recovery proof",
+              protocol_action: "live_control.step",
+              disabled_reason: null,
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Request snapshot",
+              protocol_action: "world.request_snapshot",
+              disabled_reason: null,
+            },
+          ],
+        },
+      }),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    const recommendedCard = within(stagePanel).getByText("Recommended Action").closest(".callout");
+    expect(recommendedCard).toBeTruthy();
+    expect(within(recommendedCard).getByText("Advance recovery proof")).toBeInTheDocument();
+    expect(within(recommendedCard).getByText(/Advance one committed step to apply or prove recovery/i)).toBeInTheDocument();
+    expect(within(recommendedCard).getByRole("button", { name: "Advance One Step" })).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("uses snapshot refresh as the recommended recovery action when the blocker asks for fresh state", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          next_step_hint: "Refresh the snapshot first, then prove whether the blocker cleared.",
+        },
+      }),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    const recommendedCard = within(stagePanel).getByText("Recommended Action").closest(".callout");
+    expect(recommendedCard).toBeTruthy();
+    expect(within(recommendedCard).getByText("Request snapshot")).toBeInTheDocument();
+    expect(within(recommendedCard).getByRole("button", { name: "Refresh Snapshot" })).toBeInTheDocument();
+    expect(within(recommendedCard).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders claim-agent quote and owned claim guidance without inventing claim controls", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          agent_claim: {
+            next_claim_quote: {
+              slot_index: 2,
+              reputation_tier: "trusted",
+              owned_claim_count: 1,
+              claim_cap: 3,
+              total_upfront_amount: 120,
+              activation_fee_amount: 20,
+              claim_bond_amount: 80,
+              upkeep_per_epoch: 5,
+              eligible_claim_balance: 200,
+              transferable_liquid_balance: 140,
+              restricted_starter_claim_balance: 60,
+              auto_restricted_starter_claim_amount: 25,
+              release_cooldown_epochs: 2,
+              grace_epochs: 1,
+              idle_warning_epochs: 4,
+              forced_idle_reclaim_epochs: 6,
+              forced_reclaim_penalty_bps: 500,
+              blocked_reason: null,
+            },
+            owned_claims: [
+              {
+                target_agent_id: "agent-0",
+                status: "release_ready",
+                upkeep_paid_through_epoch: 17,
+                upfront_restricted_spent_amount: 30,
+                upfront_liquid_spent_amount: 90,
+                claim_bond_locked_restricted_amount: 20,
+                claim_bond_locked_liquid_amount: 60,
+                release_ready_at_epoch: 18,
+                release_ready_in_epochs: 0,
+                grace_remaining_epochs: 1,
+                idle_warning_in_epochs: 2,
+                forced_reclaim_in_epochs: 6,
+              },
+            ],
+          },
+        },
+      }),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(within(stagePanel).getByText("Claim-Agent Choice")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Slot")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("2").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("Owned / cap")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("1 / 3")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Total upfront")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Eligible balance")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Liquid balance")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Restricted starter")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("agent-0")).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/upkeep paid through epoch 17/i)).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/release ready in 0/i)).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/bond restricted=20 liquid=60/i)).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/Maintain by keeping control and upkeep healthy/i)).toBeInTheDocument();
+    expect(within(stagePanel).queryByRole("button", { name: /claim/i })).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("does not describe disabled release claim actions as executable", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          agent_claim: {
+            next_claim_quote: {
+              slot_index: 2,
+              owned_claim_count: 1,
+              claim_cap: 3,
+              blocked_reason: null,
+            },
+            owned_claims: [
+              {
+                target_agent_id: "agent-0",
+                status: "release_ready",
+                release_ready_in_epochs: 0,
+              },
+            ],
+          },
+          available_actions: [
+            {
+              action_id: "release_agent_claim",
+              label: "Release agent claim",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "agent-0",
+              disabled_reason: "cooldown active",
+            },
+          ],
+        },
+      }),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(within(stagePanel).getByText(/Release is published but currently disabled/i)).toBeInTheDocument();
+    expect(within(stagePanel).queryByText(/execute it from the available actions list/i)).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps blocked claim reasons as diagnostics instead of fake claim buttons", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          agent_claim: {
+            next_claim_quote: {
+              slot_index: 3,
+              total_upfront_amount: 180,
+              eligible_claim_balance: 90,
+              transferable_liquid_balance: 90,
+              blocked_reason: "insufficient reputation",
+            },
+            owned_claims: [],
+          },
+        },
+      }),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(within(stagePanel).getByText("Wait before claiming")).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/needs waiting, funding, or eligibility first/i)).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Claim blocker diagnostics")).toBeInTheDocument();
+    expect(within(stagePanel).queryByText("insufficient reputation")).not.toBeInTheDocument();
+    expect(within(stagePanel).queryByRole("button", { name: /claim/i })).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders expansion tradeoff cards from branch hint and published action labels", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          stage_status: "branch_ready",
+          execution_state: "completed",
+          goal_kind: "ChooseFirstExpansionTradeoff",
+          goal_title: "Choose the first expansion tradeoff",
+          branch_hint: "Choose whether the next branch buys throughput, resilience, or reach.",
+          next_step_hint: "Commit to one branch only after checking the matched action.",
+          available_actions: [
+            {
+              action_id: "build_alloy_factory",
+              label: "Build alloy factory core",
+              protocol_action: "gameplay_action.submit",
+              disabled_reason: null,
+            },
+            {
+              action_id: "install_sensor_pack",
+              label: "Install sensor pack",
+              protocol_action: "gameplay_action.submit",
+              disabled_reason: "missing control chip",
+            },
+            {
+              action_id: "launch_logistics_drone",
+              label: "Launch logistics drone",
+              protocol_action: "gameplay_action.submit",
+              disabled_reason: null,
+            },
+          ],
+        },
+      }),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(within(stagePanel).getByText("Expansion Tradeoffs")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("Choose whether the next branch buys throughput, resilience, or reach.").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("Capacity / Throughput")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("Build alloy factory core").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("Resilience / Input Protection")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Install sensor pack: missing control chip")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Logistics / Reach")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("Launch logistics drone").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getAllByText("Commit to one branch only after checking the matched action.").length).toBeGreaterThan(0);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("compresses world scale details into a one-line details-rail summary", async () => {
     const { container } = await renderViewerApp();
 
@@ -292,6 +527,36 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByLabelText("Short-Term Goal Override")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview Prompt" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply Prompt" })).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders chat history as readable messages with raw diagnostics behind disclosure", async () => {
+    await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        core.state.chatHistory = [
+          {
+            id: "chat-test-1",
+            source: "player",
+            agentId: "agent-0",
+            targetAgentId: "agent-0",
+            playerId: "player-one",
+            speaker: "player-one",
+            locationId: null,
+            message: "Please restore the smelter line before expanding.",
+            tick: 42,
+            intentSeq: 7,
+          },
+        ];
+      },
+    });
+
+    const messageFlow = screen.getByText("Message Flow").closest("div");
+    expect(messageFlow).toBeTruthy();
+    expect(screen.getByText("Player -> agent-0")).toBeInTheDocument();
+    expect(screen.getByText("player-one · unknown location")).toBeInTheDocument();
+    expect(screen.getByText("Please restore the smelter line before expanding.")).toBeInTheDocument();
+    expect(screen.getByText("Raw diagnostics")).toBeInTheDocument();
+    expect(screen.queryByText(/"message": "Please restore the smelter line before expanding."/)).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps mounted dom stable across requestRender", async () => {
