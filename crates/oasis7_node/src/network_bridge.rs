@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use oasis7_net::{world_error_is_publish_failure, world_error_is_retryable_connection_gap};
+use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
     classify_network_protocol, DistributedNetwork, NetworkLane, NetworkLaneOperation,
@@ -275,6 +276,27 @@ impl ReplicationNetworkEndpoint {
             }
         }
         Ok(messages)
+    }
+
+    pub(crate) fn lookup_world_head(
+        &self,
+        world_id: &str,
+    ) -> Result<Option<WorldHeadAnnounce>, NodeError> {
+        let Some(dht) = self.dht.as_ref() else {
+            return Ok(None);
+        };
+        let Some(head) = dht.get_world_head(world_id).map_err(network_err)? else {
+            return Ok(None);
+        };
+        if head.world_id != world_id {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "world head mismatch: expected={} actual={}",
+                    world_id, head.world_id
+                ),
+            });
+        }
+        Ok(Some(head))
     }
 
     pub(crate) fn request_json<Req, Resp>(
