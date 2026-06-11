@@ -1,4 +1,5 @@
 use super::*;
+use crate::NodeExecutionCheckpointBlob;
 use oasis7_proto::storage_cold_index::{
     storage_cold_index_dir_name, STORAGE_COLD_INDEX_MANIFEST_FILE,
     STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
@@ -68,6 +69,10 @@ fn cold_entry_content_hash(
         .expect("cold entry")
         .content_hash()
         .to_string()
+}
+
+fn empty_action_root() -> String {
+    crate::compute_consensus_action_root(&[]).expect("empty action root")
 }
 
 #[test]
@@ -652,6 +657,90 @@ fn prune_hot_commit_messages_sweeps_existing_orphan_blobs_after_offload() {
         !legacy_blob_path.exists(),
         "hot-window offload should opportunistically prune legacy orphan blobs"
     );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn prune_hot_commit_messages_keeps_pinned_execution_checkpoint_blobs() {
+    let dir = temp_dir("commit-prune-checkpoint-pins");
+    let world_id = "world-commit-prune-checkpoint-pins";
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_max_hot_commit_messages(1)
+        .expect("hot commit cap");
+    let mut runtime = ReplicationRuntime::new(&config, "node-a").expect("runtime");
+    let checkpoint = NodeExecutionCheckpointBundle {
+        height: 1,
+        execution_block_hash: "exec-block-1".to_string(),
+        execution_state_root: "exec-state-1".to_string(),
+        manifest_json: br#"{"checkpoint":1}"#.to_vec(),
+        blobs: vec![NodeExecutionCheckpointBlob {
+            content_hash: oasis7_distfs::blake3_hex(b"checkpoint-snapshot"),
+            bytes: b"checkpoint-snapshot".to_vec(),
+        }],
+    };
+    let decision_1 = PosDecision {
+        height: 1,
+        slot: 1,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "block-1".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    let descriptor = runtime
+        .build_local_commit_message_with_checkpoint(
+            "node-a",
+            world_id,
+            1_000,
+            &decision_1,
+            Some("exec-block-1"),
+            Some("exec-state-1"),
+            Some(checkpoint),
+        )
+        .expect("build checkpoint commit")
+        .expect("message")
+        .payload;
+    let descriptor = serde_json::from_slice::<ReplicatedCommitPayload>(descriptor.as_slice())
+        .expect("payload")
+        .execution_checkpoint
+        .expect("checkpoint descriptor");
+
+    let decision_2 = PosDecision {
+        height: 2,
+        slot: 2,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "block-2".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    runtime
+        .build_local_commit_message_with_checkpoint(
+            "node-a",
+            world_id,
+            2_000,
+            &decision_2,
+            Some("exec-block-2"),
+            Some("exec-state-2"),
+            None,
+        )
+        .expect("build second commit")
+        .expect("message");
+
+    assert!(runtime
+        .load_execution_checkpoint_bundle(&descriptor)
+        .expect("load checkpoint bundle after prune")
+        .is_some());
 
     let _ = std::fs::remove_dir_all(&dir);
 }

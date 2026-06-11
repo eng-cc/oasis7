@@ -26,6 +26,8 @@ pub(super) struct ReplicationCommitPayload {
     pub(super) execution_block_hash: Option<String>,
     #[serde(default)]
     pub(super) execution_state_root: Option<String>,
+    #[serde(default)]
+    pub(super) execution_checkpoint: Option<NodeExecutionCheckpointDescriptor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,6 +119,54 @@ fn replay_persisted_replication_commits(
     while height <= latest_persisted_height {
         let message = load_validated_persisted_commit(replication, world_id, height)?;
         let payload = parse_validated_persisted_commit_payload(world_id, height, &message)?;
+        if let (Some(hook), Some(descriptor)) = (
+            execution_hook.as_deref_mut(),
+            payload.execution_checkpoint.as_ref(),
+        ) {
+            if descriptor.height == payload.height
+                && payload.height > engine.last_execution_height.saturating_add(1)
+            {
+                let Some(bundle) = replication.load_execution_checkpoint_bundle(descriptor)? else {
+                    return Err(NodeError::Replication {
+                        reason: format!(
+                            "persisted checkpoint bundle missing for height {}",
+                            payload.height
+                        ),
+                    });
+                };
+                let result = hook
+                    .install_checkpoint_bundle(
+                        NodeExecutionCheckpointInstallContext {
+                            world_id: world_id.to_string(),
+                            node_id: payload.node_id.clone(),
+                            height: payload.height,
+                            node_block_hash: payload.block_hash.clone(),
+                            execution_block_hash: descriptor.execution_block_hash.clone(),
+                            execution_state_root: descriptor.execution_state_root.clone(),
+                            committed_at_unix_ms: payload.committed_at_ms,
+                        },
+                        bundle,
+                    )
+                    .map_err(|reason| NodeError::Execution { reason })?;
+                if result.execution_height != payload.height
+                    || Some(result.execution_block_hash.as_str())
+                        != payload.execution_block_hash.as_deref()
+                    || Some(result.execution_state_root.as_str())
+                        != payload.execution_state_root.as_deref()
+                {
+                    return Err(NodeError::Execution {
+                        reason: format!(
+                            "persisted checkpoint install returned mismatched binding at height {}",
+                            payload.height
+                        ),
+                    });
+                }
+                engine.last_execution_height = result.execution_height;
+                engine.last_execution_block_hash = Some(result.execution_block_hash);
+                engine.last_execution_state_root = Some(result.execution_state_root);
+                engine.remember_execution_binding_for_height(payload.height);
+            }
+        }
         with_execution_hook(execution_hook, |hook| {
             engine.apply_synced_replication_commit(world_id, &payload, hook)
         })?;

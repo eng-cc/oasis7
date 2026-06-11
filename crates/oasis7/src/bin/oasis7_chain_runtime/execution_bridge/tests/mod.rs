@@ -25,6 +25,7 @@ use oasis7_wasm_executor::FixedSandbox;
 use sha2::{Digest, Sha256};
 
 mod driver;
+mod driver_checkpoint;
 mod replay;
 mod retention;
 

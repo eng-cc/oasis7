@@ -1,9 +1,11 @@
-use crate::{NodeConsensusAction, NodeError, PosConsensusStatus, PosDecision};
+use crate::{
+    NodeConsensusAction, NodeError, NodeExecutionCheckpointBundle,
+    NodeExecutionCheckpointDescriptor, PosConsensusStatus, PosDecision,
+};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use oasis7_distfs::{
     apply_replication_record, blake3_hex, build_replication_record_with_epoch, BlobStore as _,
     FileReplicationRecord, FileStore as _, LocalCasStore, SingleWriterReplicationGuard,
-    StorageChallengeProbeConfig, StorageChallengeProbeReport,
 };
 use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
@@ -21,6 +23,10 @@ pub(crate) const REPLICATION_FETCH_COMMIT_PROTOCOL: &str =
     "/aw/node/replication/fetch-commit/1.0.0";
 pub(crate) const REPLICATION_FETCH_BLOB_PROTOCOL: &str = "/aw/node/replication/fetch-blob/1.0.0";
 mod commit_retention;
+#[path = "replication_checkpoint.rs"]
+mod replication_checkpoint;
+#[path = "replication_sampling.rs"]
+mod replication_sampling;
 #[path = "replication_support.rs"]
 mod support;
 
@@ -439,6 +445,8 @@ struct ReplicatedCommitPayload {
     committed_at_ms: i64,
     execution_block_hash: Option<String>,
     execution_state_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    execution_checkpoint: Option<NodeExecutionCheckpointDescriptor>,
 }
 
 #[derive(Debug, Serialize)]
@@ -508,6 +516,7 @@ impl ReplicationRuntime {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn build_local_commit_message(
         &mut self,
         node_id: &str,
@@ -516,6 +525,27 @@ impl ReplicationRuntime {
         decision: &PosDecision,
         execution_block_hash: Option<&str>,
         execution_state_root: Option<&str>,
+    ) -> Result<Option<GossipReplicationMessage>, NodeError> {
+        self.build_local_commit_message_with_checkpoint(
+            node_id,
+            world_id,
+            now_ms,
+            decision,
+            execution_block_hash,
+            execution_state_root,
+            None,
+        )
+    }
+
+    pub(crate) fn build_local_commit_message_with_checkpoint(
+        &mut self,
+        node_id: &str,
+        world_id: &str,
+        now_ms: i64,
+        decision: &PosDecision,
+        execution_block_hash: Option<&str>,
+        execution_state_root: Option<&str>,
+        execution_checkpoint: Option<NodeExecutionCheckpointBundle>,
     ) -> Result<Option<GossipReplicationMessage>, NodeError> {
         if !matches!(decision.status, PosConsensusStatus::Committed) {
             return Ok(None);
@@ -528,6 +558,35 @@ impl ReplicationRuntime {
                 reason: "replication execution hash binding requires both block/state".to_string(),
             });
         }
+        if let Some(checkpoint) = execution_checkpoint.as_ref() {
+            if checkpoint.height > decision.height {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "replication execution checkpoint is ahead of commit height {}",
+                        decision.height
+                    ),
+                });
+            }
+            if checkpoint.height == decision.height {
+                match (execution_block_hash, execution_state_root) {
+                    (Some(block_hash), Some(state_root))
+                        if checkpoint.execution_block_hash == block_hash
+                            && checkpoint.execution_state_root == state_root => {}
+                    _ => {
+                        return Err(NodeError::Replication {
+                            reason: format!(
+                                "replication execution checkpoint binding mismatch at height {}",
+                                decision.height
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+        let execution_checkpoint = execution_checkpoint
+            .as_ref()
+            .map(|bundle| self.store_execution_checkpoint_bundle(bundle))
+            .transpose()?;
 
         let payload = ReplicatedCommitPayload {
             world_id: world_id.to_string(),
@@ -541,6 +600,7 @@ impl ReplicationRuntime {
             committed_at_ms: now_ms,
             execution_block_hash: execution_block_hash.map(str::to_string),
             execution_state_root: execution_state_root.map(str::to_string),
+            execution_checkpoint,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(|err| NodeError::Replication {
             reason: format!("serialize local replication payload failed: {}", err),
@@ -945,7 +1005,6 @@ impl ReplicationRuntime {
         load_blob_from_root(self.config.root_dir.as_path(), content_hash)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn store_blob_by_hash(
         &self,
         content_hash: &str,
@@ -992,87 +1051,6 @@ impl ReplicationRuntime {
             request.requester_signature_hex = Some(sign_fetch_blob_request(&request, signer)?);
         }
         Ok(request)
-    }
-
-    pub(crate) fn probe_storage_challenges(
-        &self,
-        world_id: &str,
-        node_id: &str,
-        observed_at_unix_ms: i64,
-    ) -> Result<StorageChallengeProbeReport, NodeError> {
-        let config = StorageChallengeProbeConfig::default();
-        self.store
-            .probe_storage_challenges(world_id, node_id, observed_at_unix_ms, &config)
-            .map_err(distfs_error_to_node_error)
-    }
-
-    pub(crate) fn recent_replicated_content_hashes(
-        &self,
-        world_id: &str,
-        max_samples: usize,
-    ) -> Result<Vec<String>, NodeError> {
-        Ok(self
-            .recent_replicated_content_refs(world_id, max_samples)?
-            .into_iter()
-            .map(|(_, content_hash)| content_hash)
-            .collect())
-    }
-
-    pub(crate) fn recent_replicated_content_refs(
-        &self,
-        world_id: &str,
-        max_samples: usize,
-    ) -> Result<Vec<(u64, String)>, NodeError> {
-        if max_samples == 0 || self.writer_state.last_replicated_height == 0 {
-            return Ok(Vec::new());
-        }
-
-        let mut samples = Vec::with_capacity(max_samples);
-        let mut seen = BTreeSet::new();
-        let mut height = self.writer_state.last_replicated_height;
-        while height > 0 && samples.len() < max_samples {
-            if let Some(message) = self.load_commit_message_by_height(world_id, height)? {
-                let content_hash = message.record.content_hash.trim();
-                if !content_hash.is_empty() && seen.insert(content_hash.to_string()) {
-                    samples.push((height, content_hash.to_string()));
-                }
-            }
-            height -= 1;
-        }
-        Ok(samples)
-    }
-
-    pub(crate) fn replicated_content_refs_from_height(
-        &self,
-        world_id: &str,
-        start_height: u64,
-        max_samples: usize,
-    ) -> Result<Vec<(u64, String)>, NodeError> {
-        if max_samples == 0 || self.writer_state.last_replicated_height == 0 {
-            return Ok(Vec::new());
-        }
-
-        let mut height = start_height.max(1);
-        let latest_height = self.writer_state.last_replicated_height;
-        if height > latest_height {
-            return Ok(Vec::new());
-        }
-
-        let mut samples = Vec::with_capacity(max_samples);
-        let mut seen = BTreeSet::new();
-        while height <= latest_height && samples.len() < max_samples {
-            if let Some(message) = self.load_commit_message_by_height(world_id, height)? {
-                let content_hash = message.record.content_hash.trim();
-                if !content_hash.is_empty() && seen.insert(content_hash.to_string()) {
-                    samples.push((height, content_hash.to_string()));
-                }
-            }
-            height = match height.checked_add(1) {
-                Some(next_height) => next_height,
-                None => break,
-            };
-        }
-        Ok(samples)
     }
 
     fn should_process_remote_message(

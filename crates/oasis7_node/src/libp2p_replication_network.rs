@@ -472,6 +472,7 @@ impl Libp2pReplicationNetwork {
     {
         let cursor = self.request_peer_cursor.fetch_add(1, Ordering::Relaxed);
         let mut last_error = None;
+        let mut attempted_peers = HashSet::new();
 
         for attempt in 0..=REQUEST_CONNECTION_REFRESH_RETRIES {
             let candidate_source = if attempt == 0 {
@@ -500,6 +501,7 @@ impl Libp2pReplicationNetwork {
 
             let mut retryable_connection_gap = false;
             for peer in ordered_peers {
+                attempted_peers.insert(peer);
                 match self.request_via_peer(protocol, payload, peer) {
                     Ok(reply) => {
                         self.mark_peer_request_success(peer);
@@ -518,6 +520,21 @@ impl Libp2pReplicationNetwork {
                         last_error = Some(err);
                     }
                 }
+            }
+
+            let refreshed_has_untried_peer = attempt < REQUEST_CONNECTION_REFRESH_RETRIES
+                && self
+                    .filtered_request_peers(
+                        protocol,
+                        rotated_peers(
+                            refresh_peers().as_slice(),
+                            cursor.saturating_add(attempt + 1),
+                        ),
+                    )
+                    .into_iter()
+                    .any(|peer| !attempted_peers.contains(&peer));
+            if refreshed_has_untried_peer {
+                continue;
             }
 
             if retryable_connection_gap && attempt < REQUEST_CONNECTION_REFRESH_RETRIES {

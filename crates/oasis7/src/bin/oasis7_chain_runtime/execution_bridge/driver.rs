@@ -15,7 +15,8 @@ use oasis7::simulator::{
     WorldKernel, WorldSnapshot as SimulatorSnapshot,
 };
 use oasis7_node::{
-    compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionCommitResult,
+    compute_consensus_action_root, NodeExecutionCheckpointBlob, NodeExecutionCheckpointBundle,
+    NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionCommitResult,
     NodeExecutionHook, NodeSnapshot, EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE,
 };
 use oasis7_proto::storage_profile::StorageProfileConfig;
@@ -24,9 +25,11 @@ use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 use serde::Serialize;
 
 use super::checkpoint::{
-    execution_bridge_record_path, load_execution_bridge_record,
-    maybe_persist_execution_checkpoint_for_record, persist_execution_bridge_record,
-    persist_execution_bridge_record_only, run_execution_bridge_retention_maintenance,
+    execution_bridge_record_path, execution_checkpoint_manifest_rel_path,
+    execution_checkpoint_root_dir, load_execution_bridge_record,
+    load_execution_checkpoint_manifest, maybe_persist_execution_checkpoint_for_record,
+    persist_execution_bridge_record, persist_execution_bridge_record_only,
+    persist_execution_checkpoint_manifest, run_execution_bridge_retention_maintenance,
 };
 use super::external_effect::{
     build_execution_external_effect_materialization,
@@ -641,6 +644,228 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 .last_execution_state_root
                 .clone()
                 .ok_or_else(|| "execution driver missing execution_state_root".to_string())?,
+        })
+    }
+
+    fn export_checkpoint_bundle(
+        &mut self,
+        height: u64,
+    ) -> Result<Option<NodeExecutionCheckpointBundle>, String> {
+        let record_path = execution_bridge_record_path(self.records_dir.as_path(), height);
+        if !record_path.exists() {
+            return Ok(None);
+        }
+        let record = load_execution_bridge_record(record_path.as_path())?;
+        let Some(checkpoint_ref) = record.checkpoint_ref.as_deref() else {
+            return Ok(None);
+        };
+        let manifest_path =
+            execution_checkpoint_root_dir(self.records_dir.as_path()).join(checkpoint_ref);
+        let manifest_json = fs::read(manifest_path.as_path()).map_err(|err| {
+            format!(
+                "read execution checkpoint manifest {} failed: {}",
+                manifest_path.display(),
+                err
+            )
+        })?;
+        let manifest = load_execution_checkpoint_manifest(manifest_path.as_path())?;
+        if manifest.height != height
+            || manifest.execution_block_hash != record.execution_block_hash
+            || manifest.execution_state_root != record.execution_state_root
+        {
+            return Err(format!(
+                "execution checkpoint manifest mismatch at height {}",
+                height
+            ));
+        }
+
+        let mut blobs = Vec::with_capacity(manifest.pinned_refs.len());
+        for content_hash in &manifest.pinned_refs {
+            let bytes = self
+                .execution_store
+                .get_verified(content_hash.as_str())
+                .map_err(|err| {
+                    format!(
+                        "read execution checkpoint blob {} failed at height {}: {:?}",
+                        content_hash, height, err
+                    )
+                })?;
+            blobs.push(NodeExecutionCheckpointBlob {
+                content_hash: content_hash.clone(),
+                bytes,
+            });
+        }
+
+        Ok(Some(NodeExecutionCheckpointBundle {
+            height,
+            execution_block_hash: manifest.execution_block_hash,
+            execution_state_root: manifest.execution_state_root,
+            manifest_json,
+            blobs,
+        }))
+    }
+
+    fn install_checkpoint_bundle(
+        &mut self,
+        context: NodeExecutionCheckpointInstallContext,
+        bundle: NodeExecutionCheckpointBundle,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        if bundle.height != context.height
+            || bundle.execution_block_hash != context.execution_block_hash
+            || bundle.execution_state_root != context.execution_state_root
+        {
+            return Err(format!(
+                "execution checkpoint bundle does not match install context height={}",
+                context.height
+            ));
+        }
+        let manifest =
+            serde_json::from_slice::<super::ExecutionCheckpointManifest>(&bundle.manifest_json)
+                .map_err(|err| {
+                    format!(
+                        "decode execution checkpoint manifest failed at height {}: {}",
+                        context.height, err
+                    )
+                })?;
+        manifest.validate()?;
+        if manifest.world_id != context.world_id
+            || manifest.height != context.height
+            || manifest.execution_block_hash != context.execution_block_hash
+            || manifest.execution_state_root != context.execution_state_root
+        {
+            return Err(format!(
+                "execution checkpoint manifest does not match install context height={}",
+                context.height
+            ));
+        }
+
+        for blob in &bundle.blobs {
+            let actual = blake3_hex(blob.bytes.as_slice());
+            if actual != blob.content_hash {
+                return Err(format!(
+                    "execution checkpoint blob hash mismatch expected={} actual={}",
+                    blob.content_hash, actual
+                ));
+            }
+            self.execution_store
+                .put(blob.content_hash.as_str(), blob.bytes.as_slice())
+                .map_err(|err| {
+                    format!(
+                        "store execution checkpoint blob {} failed: {:?}",
+                        blob.content_hash, err
+                    )
+                })?;
+        }
+        for content_hash in &manifest.pinned_refs {
+            if !self
+                .execution_store
+                .has(content_hash.as_str())
+                .map_err(|err| {
+                    format!(
+                        "check execution checkpoint blob {} failed: {:?}",
+                        content_hash, err
+                    )
+                })?
+            {
+                return Err(format!(
+                    "execution checkpoint missing pinned blob {} at height {}",
+                    content_hash, context.height
+                ));
+            }
+        }
+
+        let snapshot_bytes = self
+            .execution_store
+            .get_verified(manifest.latest_state_ref.as_str())
+            .map_err(|err| {
+                format!(
+                    "load execution checkpoint snapshot {} failed: {:?}",
+                    manifest.latest_state_ref, err
+                )
+            })?;
+        let snapshot = serde_cbor::from_slice::<RuntimeSnapshot>(snapshot_bytes.as_slice())
+            .map_err(|err| {
+                format!(
+                    "decode execution checkpoint snapshot failed at height {}: {}",
+                    context.height, err
+                )
+            })?;
+        let actual_state_root = blake3_hex(snapshot_bytes.as_slice());
+        if actual_state_root != context.execution_state_root {
+            return Err(format!(
+                "execution checkpoint snapshot root mismatch at height {}: expected={} actual={}",
+                context.height, context.execution_state_root, actual_state_root
+            ));
+        }
+        let journal_ref = manifest.journal_ref.as_deref().ok_or_else(|| {
+            format!(
+                "execution checkpoint manifest missing journal_ref at height {}",
+                context.height
+            )
+        })?;
+        let journal_bytes = self
+            .execution_store
+            .get_verified(journal_ref)
+            .map_err(|err| {
+                format!(
+                    "load execution checkpoint journal {} failed: {:?}",
+                    journal_ref, err
+                )
+            })?;
+        let journal =
+            serde_cbor::from_slice::<RuntimeJournal>(journal_bytes.as_slice()).map_err(|err| {
+                format!(
+                    "decode execution checkpoint journal failed at height {}: {}",
+                    context.height, err
+                )
+            })?;
+        let world_policy = self.execution_world.release_security_policy().clone();
+        let mut restored_world =
+            RuntimeWorld::from_snapshot(snapshot.clone(), journal).map_err(|err| {
+                format!(
+                    "rebuild execution checkpoint world failed at height {}: {:?}",
+                    context.height, err
+                )
+            })?;
+        restored_world.set_release_security_policy(world_policy);
+        persist_execution_world(self.world_dir.as_path(), &restored_world)?;
+        self.execution_world = restored_world;
+        persist_execution_checkpoint_manifest(self.records_dir.as_path(), &manifest)?;
+
+        let record = ExecutionBridgeRecord {
+            schema_version: super::EXECUTION_BRIDGE_RECORD_SCHEMA_V2,
+            world_id: context.world_id.clone(),
+            height: context.height,
+            node_block_hash: Some(context.node_block_hash.clone()),
+            execution_block_hash: context.execution_block_hash.clone(),
+            execution_state_root: context.execution_state_root.clone(),
+            journal_len: snapshot.journal_len,
+            latest_state_ref: Some(manifest.latest_state_ref.clone()),
+            snapshot_ref: manifest.snapshot_ref.clone(),
+            journal_ref: manifest.journal_ref.clone(),
+            commit_log_ref: None,
+            checkpoint_ref: Some(execution_checkpoint_manifest_rel_path(context.height)),
+            external_effect_ref: None,
+            simulator_mirror: None,
+            timestamp_ms: context.committed_at_unix_ms,
+        };
+        persist_execution_bridge_record(self.records_dir.as_path(), &record)?;
+
+        self.state.last_applied_committed_height = context.height;
+        self.state.last_execution_block_hash = Some(context.execution_block_hash.clone());
+        self.state.last_execution_state_root = Some(context.execution_state_root.clone());
+        self.state.last_node_block_hash = Some(context.node_block_hash);
+        persist_execution_bridge_state(self.state_path.as_path(), &self.state)?;
+        run_execution_bridge_retention_maintenance(
+            self.records_dir.as_path(),
+            &self.execution_store,
+            self.hot_window_heights,
+        )?;
+
+        Ok(NodeExecutionCommitResult {
+            execution_height: context.height,
+            execution_block_hash: context.execution_block_hash,
+            execution_state_root: context.execution_state_root,
         })
     }
 }
