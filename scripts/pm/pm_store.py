@@ -76,6 +76,7 @@ ROLE_MEMORY_PREFIXES = {
     "liveops_community": "LIVEOPS",
     "producer_system_designer": "PRODUCER",
     "qa_engineer": "QA",
+    "repository_health_engineer": "REPOHEALTH",
     "runtime_engineer": "RUNTIME",
     "shared": "SHARED",
     "tpm": "TPM",

@@ -29,6 +29,7 @@
 - `agent_engineer`
 - `viewer_engineer`
 - `qa_engineer`
+- `repository_health_engineer`
 - `liveops_community`
 
 角色扩容规则：

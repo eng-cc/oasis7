@@ -162,6 +162,23 @@ roles:
       - 一次性执行流水
       - 未稳定复现的瞬时失败
       - 口头测试印象
+  repository_health_engineer:
+    topic_prefix_allowlist:
+      - repository_health.docs_code_alignment.*
+      - repository_health.semantic_clarity.*
+      - repository_health.bug_risk.*
+      - repository_health.technical_debt.*
+      - repository_health.governance_drift.*
+    allowed_promotion_reasons:
+      - policy_boundary
+      - engineering_constraint
+      - failure_signature
+      - stable_pattern
+      - repro_pattern
+    disallowed_examples:
+      - 单次格式偏好
+      - 未复核的个人代码风格意见
+      - 无 owner 或无过期条件的泛泛债务描述
   liveops_community:
     topic_prefix_allowlist:
       - community.messaging_boundary.*

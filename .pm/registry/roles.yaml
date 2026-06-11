@@ -64,6 +64,15 @@ roles:
     committed_path: .pm/roles/qa_engineer/backlog/committed.yaml
     blocked_path: .pm/roles/qa_engineer/backlog/blocked.yaml
     done_path: .pm/roles/qa_engineer/backlog/done.yaml
+  - role_name: repository_health_engineer
+    is_active: true
+    introduced_at: 2026-06-11
+    memory_active_path: .pm/roles/repository_health_engineer/memory/active.yaml
+    memory_superseded_path: .pm/roles/repository_health_engineer/memory/superseded.yaml
+    candidate_path: .pm/roles/repository_health_engineer/backlog/candidate.yaml
+    committed_path: .pm/roles/repository_health_engineer/backlog/committed.yaml
+    blocked_path: .pm/roles/repository_health_engineer/backlog/blocked.yaml
+    done_path: .pm/roles/repository_health_engineer/backlog/done.yaml
   - role_name: runtime_engineer
     is_active: true
     introduced_at: 2026-03-30
