@@ -59,6 +59,17 @@
       }
 
       * { box-sizing: border-box; }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
       html, body {
         margin: 0;
         min-height: 100%;
@@ -630,6 +641,15 @@
         margin-bottom: 0;
       }
       .pixel-world-host--focus > .callout .callout__body {
+        display: block;
+      }
+      .pixel-world-host--focus > .callout .callout__body .feedback-summary {
+        font-size: 11px;
+        line-height: 1.25;
+        max-height: 2.5em;
+        overflow: hidden;
+      }
+      .pixel-world-host--focus > .callout .callout__body .feedback-detail {
         display: none;
       }
       .pixel-world-host--focus > .pixel-world-canvas {
@@ -659,6 +679,7 @@
           minmax(136px, 0.58fr)
           minmax(220px, 1.2fr)
           minmax(142px, 0.56fr)
+          minmax(116px, 0.46fr)
           minmax(116px, 0.46fr)
           max-content;
         gap: 8px;
@@ -720,6 +741,10 @@
       }
       .pixel-world-focus-hud__cell--blocker[data-blocker-present="true"] strong {
         color: var(--bad);
+      }
+      .pixel-world-focus-hud__cell--receipt[data-receipt-confidence="world_delta"] strong,
+      .pixel-world-focus-hud__cell--receipt[data-receipt-confidence="accepted_intent"] strong {
+        color: var(--good);
       }
       .pixel-world-focus-controls {
         display: flex;
@@ -1357,7 +1382,10 @@
           overflow: visible;
         }
         .pixel-world-focus-hud__identity {
-          display: none;
+          grid-column: 1;
+          grid-row: 1;
+          min-height: 30px;
+          padding: 5px 8px;
         }
         .pixel-world-focus-hud__cell {
           min-height: 42px;
@@ -1365,6 +1393,10 @@
         }
         .pixel-world-focus-hud__cell--prompt {
           grid-column: 1;
+          grid-row: 2;
+        }
+        .pixel-world-focus-hud__cell--mission {
+          display: none;
         }
         .pixel-world-focus-hud__cell--blocker {
           grid-column: 1 / -1;
@@ -1375,7 +1407,17 @@
           gap: 8px;
           padding: 5px 8px;
         }
+        .pixel-world-focus-hud__cell--receipt {
+          grid-column: 1 / -1;
+          min-height: 30px;
+          flex-direction: row;
+          justify-content: flex-start;
+          align-items: center;
+          gap: 8px;
+          padding: 5px 8px;
+        }
         .pixel-world-focus-hud__cell--blocker strong,
+        .pixel-world-focus-hud__cell--receipt strong,
         .pixel-world-focus-hud__cell--prompt strong,
         .pixel-world-focus-hud__cell em {
           font-size: 11px;

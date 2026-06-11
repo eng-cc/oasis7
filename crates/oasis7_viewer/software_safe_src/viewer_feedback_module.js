@@ -770,10 +770,39 @@ export function createViewerFeedbackModule({
           return resolvedBlockerKind || null;
       }
     })();
+    const narrativeNextStep = emptyEntityBlocker
+      ? emptyEntityBlocker.nextStepHint
+      : gameplay.next_step_hint || resumeNextStep || null;
+    const recoveryCueText = [
+      resolvedBlockerKind,
+      narrativeNextStep,
+      resumeNextStep,
+      statusReason,
+      recentFeedback?.reason,
+      recentFeedback?.hint,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const isRecoveryChoiceState =
+      Boolean(resolvedBlockerKind)
+      || executionState === "blocked"
+      || (executionState !== "completed" && /\b(blocked|blocker|recover|recovery|repair|restore|replenish|refresh|snapshot|advance|confirm|prove|resume)\b/.test(recoveryCueText));
+    const wantsSnapshotProof = emptyEntityBlocker || /\b(refresh|snapshot|fresh state|world state)\b/.test(recoveryCueText);
+    const wantsAdvanceProof = /\b(advance|step|apply|confirm|prove|verify|check)\b/.test(recoveryCueText);
+    const wantsResumeProof = /\b(resume|recover|restore|replenish|repair)\b/.test(recoveryCueText);
     const recommendedAction = availableActions
       .filter((action) => !action.disabledReason)
       .sort((left, right) => {
         const priority = (action) => {
+          if (isRecoveryChoiceState) {
+            if (action.executeKind === "request_snapshot") return wantsSnapshotProof ? 0 : 2;
+            if (action.executeKind === "step") return wantsAdvanceProof ? 0 : 1;
+            if (action.executeKind === "play") return wantsResumeProof ? 1 : 2;
+            if (action.executeKind === "gameplay_action") return 4;
+            if (action.executeKind === "agent_chat") return 5;
+            return 6;
+          }
           switch (action.executeKind) {
             case "gameplay_action":
               return 0;
@@ -791,6 +820,51 @@ export function createViewerFeedbackModule({
         };
         return priority(left) - priority(right);
       })[0] || null;
+    const recoveryActionDetail = (action, economicSurface) => {
+      if (!action) return null;
+      if (action.disabledReason) return action.disabledReason;
+      if (!isRecoveryChoiceState) {
+        return localeText(
+          locale,
+          "无需打开可视化质检观察器，也可以直接从正式网页入口执行。",
+          "Playable from the formal Web entry without opening the visual QA viewer.",
+        );
+      }
+      if (action.executeKind === "request_snapshot") {
+        return localeText(
+          locale,
+          "刷新快照，先确认 blocker 是否仍存在，再决定是否提交新的玩法动作。",
+          "Refresh the snapshot to confirm whether the blocker is still present before submitting another gameplay action.",
+        );
+      }
+      if (action.executeKind === "step") {
+        return localeText(
+          locale,
+          "推进一个 committed step，用它执行或验证恢复，再回看 blocker 和世界反馈。",
+          "Advance one committed step to apply or prove recovery, then re-check the blocker and world feedback.",
+        );
+      }
+      if (action.executeKind === "play") {
+        return localeText(
+          locale,
+          "在恢复前提已经就绪后恢复实时推进，并观察回执是否重新产生世界变化。",
+          "Resume live play after recovery prerequisites are ready, then watch whether feedback produces world change again.",
+        );
+      }
+      if (economicSurface?.repairAction) {
+        return localeText(
+          locale,
+          `修复路径：${economicSurface.repairAction}`,
+          `Recovery path: ${economicSurface.repairAction}`,
+        );
+      }
+      return narrativeNextStep
+        || localeText(
+          locale,
+          "先完成恢复或证明动作，再继续提交新的玩法动作。",
+          "Finish the recovery or proof action before submitting more gameplay actions.",
+        );
+    };
     const acceptedIntentSummary = intentSummary
       || acceptedIntentId
       || localeText(
@@ -814,9 +888,6 @@ export function createViewerFeedbackModule({
         "Submit one gameplay action first, then read how the system confirms, advances, or blocks it.",
       );
     })();
-    const narrativeNextStep = emptyEntityBlocker
-      ? emptyEntityBlocker.nextStepHint
-      : gameplay.next_step_hint || resumeNextStep || null;
     const narrativeBlockerDetail = resolvedBlockerDetail || statusReason || recentFeedback?.reason || null;
     const economicSurface = buildGameplayEconomicSurface({
       locale,
@@ -828,6 +899,17 @@ export function createViewerFeedbackModule({
       narrativeNextStep,
       lastWorldChange,
     });
+    const enrichedAvailableActions = availableActions.map((action) => ({
+      ...action,
+      playerDetail: recoveryActionDetail(action, economicSurface),
+    }));
+    const enrichedRecommendedAction = recommendedAction
+      ? enrichedAvailableActions.find((action) => action.actionId === recommendedAction.actionId && action.executeKind === recommendedAction.executeKind)
+        || {
+          ...recommendedAction,
+          playerDetail: recoveryActionDetail(recommendedAction, economicSurface),
+        }
+      : null;
 
     return {
       stageId: gameplay.stage_id || null,
@@ -873,8 +955,8 @@ export function createViewerFeedbackModule({
         agents: agents.length,
         locations: locations.length,
       },
-      availableActions,
-      recommendedAction,
+      availableActions: enrichedAvailableActions,
+      recommendedAction: enrichedRecommendedAction,
       recentFeedback,
       agentClaim: clone(gameplay.agent_claim),
       assetGovernanceHandoff: isLocaleZh(locale)

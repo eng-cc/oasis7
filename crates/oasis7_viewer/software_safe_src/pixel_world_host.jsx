@@ -1097,9 +1097,20 @@ function PixelWorldCanvasRenderer(props) {
         ref={canvasRef}
         id={PIXEL_WORLD_RUNTIME_CANVAS_ID}
         class="pixel-world-canvas__surface"
+        tabIndex="0"
+        role="application"
+        aria-label={tr(props.locale(), "交互式世界 Canvas", "Interactive world canvas")}
+        aria-describedby="pixel-world-canvas-accessible-summary"
         width="960"
         height="540"
       />
+      <div id="pixel-world-canvas-accessible-summary" class="sr-only">
+        {tr(
+          props.locale(),
+          "Canvas 显示当前世界；相邻 HUD、焦点栏和命令抽屉提供当前 Agent、阻塞、回执与命令路径。",
+          "The canvas shows the current world; adjacent HUD, focus rail, and command drawer expose the current agent, blocker, receipt, and command path.",
+        )}
+      </div>
       <div class="pixel-world-canvas__overlay">
         <PixelWorldHostVisualLayer
           enabled={false}
@@ -1251,6 +1262,14 @@ function PixelWorldFocusHud(props) {
           <span>{tr(props.locale(), "阻塞", "Blocker")}</span>
           <strong>{surface().blocker.label || tr(props.locale(), "暂无阻塞", "No blocker")}</strong>
         </div>
+        <div
+          class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"
+          data-receipt-confidence={surface().action_receipt.confidence}
+        >
+          <span>{tr(props.locale(), "回执", "Receipt")}</span>
+          <strong>{surface().action_receipt.title}</strong>
+          <em>{surface().action_receipt.confidence}</em>
+        </div>
         <div class="pixel-world-focus-controls" aria-label={tr(props.locale(), "沉浸模式控制", "World focus controls")}>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--primary" onClick={props.onOpenCommand}>
             {tr(props.locale(), "命令", "Command")}
@@ -1389,6 +1408,33 @@ function PixelWorldFocusMinimapCard(props) {
   );
 }
 
+function chatEntryTitle(entry, locale) {
+  if (entry.source === "player") {
+    return `${tr(locale, "玩家", "Player")} -> ${entry.targetAgentId || entry.agentId || "agent"}`;
+  }
+  return `${entry.agentId || "agent"} ${tr(locale, "已发言", "spoke")}`;
+}
+
+function chatEntryMeta(entry, locale) {
+  const speaker = entry.speaker || entry.playerId || tr(locale, "未知发言者", "unknown speaker");
+  const location = entry.locationId || tr(locale, "未知地点", "unknown location");
+  return `${speaker} · ${location} · tick=${Number(entry.tick || 0)}`;
+}
+
+function PixelRawDiagnostics(props) {
+  const locale = () => props.locale();
+  const [open, setOpen] = createSignal(false);
+  const value = () => (typeof props.value === "function" ? props.value() : props.value);
+  return (
+    <details class="diagnostic" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>{tr(locale(), "原始诊断", "Raw diagnostics")}</summary>
+      <Show when={open()}>
+        <pre class="json">{JSON.stringify(value(), null, 2)}</pre>
+      </Show>
+    </details>
+  );
+}
+
 function PixelWorldFocusCommandSurface(props) {
   const locale = () => props.locale();
   const agentId = () => core.selectedAgentId();
@@ -1473,7 +1519,7 @@ function PixelWorldFocusCommandSurface(props) {
                   <Show when={chatFeedbackDisplay().detail}>
                     <div class="feedback-detail">{chatFeedbackDisplay().detail}</div>
                   </Show>
-                  <pre class="json">{JSON.stringify(feedback(), null, 2)}</pre>
+                  <PixelRawDiagnostics locale={locale} value={feedback} />
                 </div>
               )}
             </Show>
@@ -1485,15 +1531,11 @@ function PixelWorldFocusCommandSurface(props) {
                     {(entry) => (
                       <div class="event-card">
                         <div class="event-card__title">
-                          <span>
-                            {entry.source === "player"
-                              ? `${tr(locale(), "玩家", "player")} → ${entry.targetAgentId || entry.agentId || "agent"}`
-                              : `${entry.agentId || "agent"} ${tr(locale(), "已发言", "spoke")}`}
-                          </span>
-                          <span>{`tick=${Number(entry.tick || 0)}`}</span>
+                          <span>{chatEntryTitle(entry, locale())}</span>
                         </div>
-                        <div class="event-card__meta">{`speaker=${entry.speaker || entry.playerId || "-"} · location=${entry.locationId || "-"}`}</div>
-                        <pre class="json">{JSON.stringify(entry, null, 2)}</pre>
+                        <div class="event-card__meta">{chatEntryMeta(entry, locale())}</div>
+                        <div class="feedback-summary">{entry.message || tr(locale(), "没有消息正文。", "No message body.")}</div>
+                        <PixelRawDiagnostics locale={locale} value={entry} />
                       </div>
                     )}
                   </For>
