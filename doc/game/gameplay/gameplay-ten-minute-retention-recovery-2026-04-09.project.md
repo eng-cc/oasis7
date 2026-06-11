@@ -11,7 +11,7 @@
 - [x] TASK-GAMEPLAY-RR-002 (`PRD-GAME-012`) [test_tier_required + test_tier_full]: `viewer_engineer` 已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；fresh active-LLM formal lane 的 floor blocker 与恢复状态由 `TASK-GAMEPLAY-RR-005` 持续跟踪。
 - [x] TASK-GAMEPLAY-RR-003 (`PRD-GAME-012`) [test_tier_required]: `runtime_engineer` 已将 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的可复跑目标包，补齐首座工厂、首个制成品、停机恢复与扩产取舍的 canonical 语义。
 - [x] TASK-GAMEPLAY-RR-004 (`PRD-GAME-012`) [test_tier_required]: `viewer_engineer` 已收口首屏噪音、玩家身份和后果可见化，把玩家身份、当前主目标、主阻塞、立即下一步以及代价/奖励反馈抬到前台主语义。
-- [x] TASK-GAMEPLAY-RR-005 (`PRD-GAME-012`) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在复制 `main` 的 real provider `config.toml` 后完成 `3` 条 active-LLM 10 分钟正式样本；当前 gate 已从 `watch` 收口为 `hold`，因为 formal lane 虽恢复 `software_safe` first-step floor，但仍卡在 `post_onboarding.establish_first_capability / 20%`，且其中 `2` 条样本回退到 `first_session_loop.create_first_world_feedback / 0%` 并伴随 `logicalTime/eventSeq` 冻结。
+- Legacy `TASK-GAMEPLAY-RR-005` (PRD-GAME-012): `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane。历史样本曾将 gate 从 `watch` 收口为 `hold`，卡在 `post_onboarding.establish_first_capability / 20%`；该结论现在只作为 historical baseline 保留。当前 fresh formal truth 已由 issue #160 closeout 更新为 `trust gate = pass`、`first capability gate = pass`，不再把旧 `hold/not_run` 当作当前 blocker。
 
 ## 任务建议标题（给后续 owner 直接开 task 用）
 
@@ -73,7 +73,7 @@
 - `TASK-GAME-062`
   - [x] 首次进入不再依赖手动 reopen/reload 才可控
   - [x] `software_safe` 不再把明确 `blocked` / `timeout_no_progress` 压扁成伪 timeout，前台会回填正确控制反馈
-  - [x] viewer-side regression、execution log 与相关证据已回写；fresh active-LLM formal re-certification 已交由 `TASK-GAME-065` 复核并形成当前 `hold` 裁决
+  - [x] viewer-side regression、execution log 与相关证据已回写；active-LLM formal re-certification 已交由 `TASK-GAME-065` 复核，该轮曾形成 historical `hold` baseline，当前 fresh formal truth 已由后续样本更新为 `trust gate = pass`、`first capability gate = pass`
 - `TASK-GAME-063`
   - [x] 首个持续能力链已有独立 canonical 包，不再被要求在单个 10 分钟 trust 样本内闭环
   - [x] 建厂/首产出/停机恢复/扩产取舍均有 canonical 状态与前台反馈锚点
@@ -81,13 +81,13 @@
   - [x] 首屏主目标不再被无关历史噪音/operator 语义抢焦点
   - [x] 玩家能直接读到代价、阻塞、恢复和奖励
 - `viewer-economic-readability-first-capability-surface`
-  - [ ] 玩家能直接读懂 first capability 的 `投入 / 产出 / 新用途 / 修复动作 / 下一步价值`
-  - [ ] 工业成长反馈不再主要依赖库存/产量上涨
+  - [x] 玩家能直接读懂 first capability 的 `投入 / 产出 / 新用途 / 修复动作 / 下一步价值`
+  - [x] 工业成长反馈不再主要依赖库存/产量上涨
 - `TASK-GAME-065`
   - [x] QA 已区分 active-LLM 正式 lane 与 debug/probe lane
   - [x] `software_safe` formal floor 已在 real-main-config rerun 中恢复
-  - [x] 已完成 `3` 条 active-LLM 10 分钟正式样本与最终 `10-minute trust gate = hold` 裁决回写
-  - [x] 已把“首个持续能力尚未闭环”从 trust verdict 中拆出，改为单独的 capability follow-up 结论
+  - [x] 历史 `10-minute trust gate = hold` 裁决已保留为 baseline，不再作为当前 blocker
+  - [x] fresh formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`；更宽的 release / liveops 边界仍需独立复核
 
 ## 依赖
 
@@ -102,7 +102,7 @@
 
 ## 状态
 
-- 更新日期: 2026-05-07
+- 更新日期: 2026-06-11
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
 - 下一任务: 当前专题的历史 `hold/not_run` baseline 已被 fresh formal evidence 刷新；后续只在出现新回退时再补新的 active-LLM formal rerun，而不是继续把 `#160` 当作当前未解 blocker。

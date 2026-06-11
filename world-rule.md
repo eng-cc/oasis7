@@ -383,8 +383,9 @@ WASM 模块按模拟周期运行：
 
 ## 8.3 经济原则
 
-- 经济完全自由演化
-- 不预设市场结构
+- 市场结构、价格、组织形态与协作关系允许自由演化
+- 当前仍有需要继续细化和审计的硬约束：原生 token、claim、restricted starter funding、upkeep、anti-abuse、审计与治理边界由 runtime / governance 直接约束
+- 不预设最终市场结构，但不把 onboarding 补贴、反滥用和链上审计边界交给完全自由市场处理
 - 允许形成组织、企业、联盟
 
 ---

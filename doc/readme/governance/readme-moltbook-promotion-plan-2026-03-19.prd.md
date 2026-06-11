@@ -70,7 +70,7 @@
 - Edge Cases & Error Handling:
   - Moltbook 平台机制变化快：方案必须标注日期，后续执行前先复核主页 / developers / help 页面。
   - 若无法确认平台是否支持某一内容格式：优先退回“原生短帖 + 评论补充链接”的保守打法。
-  - 若评论把 oasis7 误解为“已经可玩的正式游戏”：统一回到“技术预览（尚不可玩）”主口径。
+  - 若评论把 oasis7 误解为“已经可正式公开游玩的成品游戏”：统一回到 `limited playable technical preview` 主口径，并说明不是 closed beta、public launch 或赛季上线。
   - 若出现对 Moltbook identity / provider / on-chain 的合作追问：除非内部已批准，不得直接承诺，只记录为合作线索并升级。
 - Non-Functional Requirements:
   - NFR-MOLT-1: 方案必须在 10 分钟内可被运营同学读完并执行。

@@ -4,7 +4,7 @@
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-GAME-001 (PRD-GAME-001) [test_tier_required]: 完成 game PRD 改写，建立玩法设计总入口。
-- [x] TASK-GAME-002 (PRD-GAME-001/002) [test_tier_required]: 补齐核心玩法循环（新手/经济/战争）验收矩阵。
+- Legacy `TASK-GAME-002` (PRD-GAME-001/002): 补齐核心玩法循环（新手/经济/协作治理）验收矩阵；战争/政治只保留为历史 runtime primitive 与未来受控重启参考，不作为当前玩家-facing 主循环承诺。
 - [x] TASK-GAME-003 (PRD-GAME-002/003) [test_tier_required]: 建立可玩性问题分级与修复闭环模板。
 - [x] TASK-GAME-004 (PRD-GAME-003) [test_tier_required]: 对接发布前可玩性门禁与回归节奏。
 - [x] TASK-GAME-005 (PRD-GAME-001/002/003) [test_tier_required]: 对齐 strict PRD schema，补齐关键流程/规格矩阵/边界异常/NFR/验证与决策记录。
@@ -159,7 +159,7 @@
 - [x] TASK-GAME-062 (PRD-GAME-012) [test_tier_required + test_tier_full]: `viewer_engineer` 已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；fresh active-LLM formal lane 的 floor blocker 与恢复状态继续由 `TASK-GAME-065` 跟踪。
 - [x] TASK-GAME-063 (PRD-GAME-012) [test_tier_required]: `runtime_engineer` 已把 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的可复跑目标包，补齐首座工厂、首个制成品、停机恢复与扩产取舍的 canonical 语义。
 - [x] TASK-GAME-064 (PRD-GAME-012) [test_tier_required]: `viewer_engineer` 已收口首屏噪音、玩家身份和后果可见化，把玩家身份、当前主目标、主阻塞、立即下一步以及代价/奖励反馈抬到首屏主语义。
-- [x] TASK-GAME-065 (PRD-GAME-012) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在复制 `main` 的 real provider `config.toml` 后完成 `3` 条 active-LLM 10 分钟正式样本；当前结论已从 `watch` 收口为 `hold`，因为 formal lane 虽已恢复 first-step floor，但仍稳定卡在 `post_onboarding.establish_first_capability / 20%`，且其中 `2` 条样本出现回退到 `first_session_loop.create_first_world_feedback / 0%` 并伴随 `logicalTime/eventSeq` 冻结。
+- Legacy `TASK-GAME-065` (PRD-GAME-012) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在复制 `main` 的 real provider `config.toml` 后完成 `3` 条 active-LLM 10 分钟正式样本；该轮曾把结论从 `watch` 收口为 historical `hold` baseline，因为当时 formal lane 虽已恢复 first-step floor，但仍卡在 `post_onboarding.establish_first_capability / 20%`。当前 fresh formal truth 已由后续样本更新为 `trust gate = pass`、`first capability gate = pass`，见本页状态区与对应 evidence。
 - [x] gameplay-early-retention-focus-order (PRD-GAME-012) [test_tier_required]: `producer_system_designer` 已把当前 gameplay scope freeze 正式写回主文档：当前只允许按“`trust gate` 地板恢复 -> `PostOnboarding` capability closure -> 工业状态/停机修复可读 -> 间接控制因果与下一步”推进；在这些 early-retention blocker 清空前，不扩大高风险对抗/治理/元进度在首局中的曝光，也不允许把 debug/probe lane 结果包装成正式留存进展。 Trace: .pm/tasks/task_886e2ef4878645a6a6ab69c588dce57e.yaml
 - [x] agent-claim-slot-1-onboarding-flow (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 已为新账号首个 `slot-1` 认领补齐专用 onboarding 流：当 canonical `owned_claim_count=0` 且 `next_claim_quote.slot_index=1` 时，PostOnboarding HUD 会展示 claim CTA，要求玩家先选中未认领目标，再执行 `Prepare -> Confirm` 显式确认；链路复用 canonical quote / blocker，并通过 `actor_agent_id` 把 claimer actor 与 claim target 正确分离。 Trace: .pm/tasks/task_d02fe08db044492d9f0bfbcf645a4ccc.yaml
 
