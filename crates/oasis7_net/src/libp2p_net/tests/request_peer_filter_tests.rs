@@ -143,3 +143,82 @@ fn filter_request_peers_by_health_keeps_record_exchange_pending_blocked_peer_as_
     let filtered = filter_request_peers_by_health(peers, &healths);
     assert_eq!(filtered, vec![active_peer, soft_blocked_peer]);
 }
+
+#[test]
+fn request_filtering_keeps_unknown_bootstrap_fallback_after_hard_blocked_capable_peer() {
+    let capable_key = Keypair::generate_ed25519();
+    let capable_peer = PeerId::from(capable_key.public());
+    let bootstrap_peer = PeerId::random();
+    let mut discovered = HashMap::new();
+    discovered.insert(
+        capable_peer,
+        sign_peer_record(
+            &PeerRecord {
+                peer_id: capable_peer.to_string(),
+                node_id: "capable-peer".to_string(),
+                world_id: "world-a".to_string(),
+                network_id: "network-a".to_string(),
+                node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+                deployment_mode: PeerDeploymentMode::Hybrid,
+                reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+                direct_addrs: Vec::new(),
+                hole_punch_addrs: Vec::new(),
+                relay_addrs: Vec::new(),
+                discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+                capability_lanes: vec![NetworkLane::BlobState, NetworkLane::Control],
+                source_operator: None,
+                source_asn: None,
+                published_at_ms: 1,
+                ttl_ms: 60_000,
+            },
+            &capable_key,
+        )
+        .expect("capable peer record"),
+    );
+    let healths = HashMap::from([
+        (
+            capable_peer,
+            PeerManagerPeerHealth {
+                peer_id: capable_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![PeerManagerHealthIssue::RelayBudgetExceeded {
+                    relayed_active_peers: 2,
+                    active_peer_count: 2,
+                    limit_per_mille: 500,
+                }],
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("relay_reserved".to_string()),
+                source_operator: None,
+                source_asn: None,
+            },
+        ),
+        (
+            bootstrap_peer,
+            PeerManagerPeerHealth {
+                peer_id: bootstrap_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![
+                    PeerManagerHealthIssue::MissingPeerRecord,
+                    PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
+                        observed_sources: 1,
+                        required_sources: 2,
+                    },
+                ],
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
+            },
+        ),
+    ]);
+
+    let filtered_by_health =
+        filter_request_peers_by_health(vec![capable_peer, bootstrap_peer], &healths);
+    let filtered = filter_request_peers_by_lane(
+        filtered_by_health,
+        "/aw/node/replication/fetch-blob/1.0.0",
+        &discovered,
+    );
+
+    assert_eq!(filtered, vec![bootstrap_peer]);
+}
