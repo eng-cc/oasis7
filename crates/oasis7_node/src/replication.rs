@@ -1170,4 +1170,6 @@ fn commit_height_from_payload(payload: &[u8]) -> Option<u64> {
 }
 
 #[cfg(test)]
+mod checkpoint_tests;
+#[cfg(test)]
 mod tests;

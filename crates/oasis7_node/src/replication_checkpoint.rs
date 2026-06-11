@@ -171,6 +171,9 @@ impl ReplicationRuntime {
                 augmented.payload.as_slice(),
             )
             .map_err(distfs_error_to_node_error)?;
+        self.store
+            .pin(augmented.record.content_hash.as_str())
+            .map_err(distfs_error_to_node_error)?;
         augmented.signature_hex = None;
         if let Some(signer) = &self.signer {
             augmented.public_key_hex = Some(signer.public_key_hex.clone());
