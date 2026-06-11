@@ -176,9 +176,9 @@
 - AC-32: 若团队继续对 merged GitHub PR 做贡献奖励审批，必须把普通 merged PR 的默认真实发放 ceiling 收紧到 `150 OC`；任何 `>150 OC` 的 row 都必须留下 exceptional case note，`1500 OC` 不得作为常规 MR 档位扩散。
 - AC-33: 若 contributor reward row 已进入 planned grant 或 pending distribution，producer 在执行前仍必须按实际增量价值复核；若文档里的原计划金额偏高，必须先下调档位或金额并留下审计说明，而不是按原值直接发放。
 - AC-34: 若小红书内容链路进入第十三篇，必须补齐“谁该拥有游戏的所有权 / 谁该成为受益者”素材包，明确标题、正文、互动问题、关键词与“真正推动游戏往前走的人应逐步进入所有权和受益者讨论，但这不是当前已开放的法律股权、链上投票权事实或自动奖励承诺”的表达边界，并保持人类开发者第一人称、非上线宣称、非金融化口径与非空泛共同体口号。
-- AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `world-rule.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `技术预览（尚不可玩）` 边界不变。
+- AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `world-rule.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `limited playable technical preview` 边界不变：不是 closed beta、public launch 或赛季上线。
 - AC-36: 若小红书内容链路进入第十四篇，必须补齐“项目累计 token 用量”素材包，明确标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG 与事实基线，并把讨论收口到“真实项目里最烧 token 的往往是需求反复、文档补齐、返工验证和上下文切换”，而不是滑向炫账单、融资暗示、模型排行榜吹捧或“AI 已经能全自动取代团队”的夸张宣称。
-- AC-37: 若仓库需要一份“白皮书式项目总览”，必须新增 Explanation 类型文档，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前双模式访问面（`software_safe / pure_api`）与“技术预览、尚不可玩”的现状，同时显式声明该文档不替代 `README.md`、`world-rule.md`、`doc/core/prd.md`、`doc/game/**` 与模块 PRD / project 真值。
+- AC-37: 若仓库需要一份“白皮书式项目总览”，必须新增 Explanation 类型文档，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前双模式访问面（`software_safe / pure_api`）与 `limited playable technical preview` 现状，同时显式声明该文档不替代 `README.md`、`world-rule.md`、`doc/core/prd.md`、`doc/game/**` 与模块 PRD / project 真值。
 - AC-38: 若白皮书式项目总览已经形成正式入口，必须同步更新 `site/index.html`、`site/en/index.html` 与 `site/doc/cn/index.html`、`site/doc/en/index.html`，让站点首页和文档中心至少能表达“两阶段路径”“当前仍是技术预览”的边界，并给出可直接进入该总览的公开入口。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
@@ -250,7 +250,7 @@
 | PRD-README-005 | TASK-README-007 | `test_tier_required` | 对外口径模板、evidence-link 字段与审批链抽样复核 | 版本候选口径模板复用性 |
 | PRD-README-006 | TASK-README-008 | `test_tier_required` | 公告 / changelog 底稿、draft 状态与 FAQ 结构抽样复核 | 对外发布底稿一致性 |
 | PRD-README-007 | TASK-README-009 | `test_tier_required` | 公告模板、source links 与 review status 抽样复核 | 公告底稿模板复用性 |
-| PRD-README-008 | TASK-README-010 | `test_tier_required` | 根 README 状态段含技术预览 / 尚不可玩 / 公告准备态 | 仓库首页状态理解 |
+| PRD-README-008 | TASK-README-010 | `test_tier_required` | 根 README 状态段含 `limited playable technical preview` / 非 closed beta / 非 public launch / 公告准备态 | 仓库首页状态理解 |
 | PRD-README-009 | TASK-README-010 | `test_tier_required` | README 与 site / brief 口径一致 | 公开口径一致性 |
 | PRD-README-010 | TASK-README-014 | `test_tier_required` | Moltbook 推广方案含平台现状、内容支柱、节奏、禁宣称项与回流机制 | 第三方渠道推广口径一致性 |
 | PRD-README-011 | TASK-README-015 | `test_tier_required` | Moltbook 帖文包含首批主贴、评论模板、CTA 与禁宣称抽样复核 | 首批渠道文案执行安全性 |
@@ -288,7 +288,7 @@
 | PRD-README-043 | TASK-README-067 | `test_tier_required` | 小红书博主 / 微信公众号绿洲币激励包明确两类对象的计分维度、固定 `300 / 800 / 1500 OC` 档位、证据字段、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者而不是按流量买量对象 | 两类重点宣传渠道激励的执行性、风控性与口径稳定性 |
 | PRD-README-044 | TASK-README-070 | `test_tier_required` | merged PR reward round scan 脚本支持按时间窗批量扫描、离线 smoke 输入、状态汇总与 ledger-ready row 输出，并与单 PR intake contract 保持一致 | reward review 周期性归集与首轮台账准备效率 |
 | PRD-README-045 | TASK-README-080 | `test_tier_required` | 将第十三篇推荐版从所有权讨论继续收口到“开发者、玩家和认真把项目讲出去的人一起参与把游戏做起来”的主题，并补齐可直接发布的封面 HTML/PNG 与 4 页轮播 HTML/PNG，同时保留非现行法律股权、链上投票权或自动奖励承诺边界 | 第十三篇从“你该被算进去”继续收口到更具体的关系图景，并扩展成可直接发布的单图首屏资产和滑读轮播资产，让“人人都是游戏builder / 一起把游戏做起来”的关系图景先于制度词被看见 |
-| PRD-README-046 | game-positioning-alignment | `test_tier_required` | 根 README、世界规则入口与站点首页中英文首页统一把 `oasis7` 的公开主定位收口为“文明模拟游戏 / civilization simulation game”，同时保留技术预览与尚不可玩边界 | 仓库首读入口、规则入口与公开站点不再把项目分别写成系统、引擎和游戏 |
+| PRD-README-046 | game-positioning-alignment | `test_tier_required` | 根 README、世界规则入口与站点首页中英文首页统一把 `oasis7` 的公开主定位收口为“文明模拟游戏 / civilization simulation game”，同时保留 `limited playable technical preview` 且非 closed beta / public launch 的边界 | 仓库首读入口、规则入口与公开站点不再把项目分别写成系统、引擎和游戏 |
 | PRD-README-047 | xiaohongshu-token-usage-post-pack | `test_tier_required` | 小红书第十四篇素材包明确“项目累计 token 用量”的推荐标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG、事实基线与禁滑坡边界，并把这组真实账单收口为“AI 进入长期项目后会变成研发流程参与成本”的判断 | 小红书内容链路从关系和参与讨论继续推进到真实项目成本结构，让读者看到 AI 成本主要消耗在长期迭代而不是单次生成炫技 |
 | PRD-README-048 | whitepaper-style-overview | `test_tier_required` | 新增一份白皮书式项目总览，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前访问面与技术预览边界，并把它接入根 README 与 readme/governance 导航 | 第一次接触仓库的读者可以先用一份解释型总览建立全貌，再按正式真值源继续下钻 |
 | PRD-README-049 | site-whitepaper-entry-alignment | `test_tier_required` | 站点首页与文档中心同步采用白皮书式总览的公开 framing，补齐“两阶段路径”与“技术预览”边界表达，并新增白皮书总览直达入口 | 第一次进入站点的读者不必先翻仓库目录，也能在公开 landing surface 上看见项目总览、阶段路径与继续下钻的入口 |

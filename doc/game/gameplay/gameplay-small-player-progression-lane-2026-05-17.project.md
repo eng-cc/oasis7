@@ -18,6 +18,7 @@
 | `viewer-small-player-lane-surface-alignment` | `viewer_engineer` | `planned` | 在 headed Web/UI 与 pure API 明确展示当前 lane、首个胜利、专业化价值、区域影响与恢复路径。 |
 | `agent-small-player-specialization-contract` | `agent_engineer` | `planned` | 对齐 specialization / recovery / org-independence 行为合同，避免默认把玩家推向 major-power dependency。 |
 | `qa-control-feeling-and-anti-grind-matrix` | `qa_engineer` | `completed` | 已建立跨专题矩阵，用 `player leverage` / `world_activity_only` / `grind_only` / `silent wait` blocker 联审 lane 是否真的成立，并明确 `grind_only` / `forced dependency` 当前仍为 `watch`。 |
+| `qa-mature-world-small-player-fresh-sample` | `qa_engineer` | `todo` | 在 runtime lane truth、viewer lane surface 与 agent specialization contract 完成后，重新采集 mature-world 小玩家样本；只有 `grind_only` 与 `forced_major_power_dependency` 从 `watch` 收口后，才能把 small-player lane 判为 `pass`。 |
 
 ## 任务建议标题（给后续 owner 直接开 task 用）
 
@@ -29,6 +30,7 @@
 | `viewer-small-player-lane-surface-alignment` | `viewer_engineer` | Make the small-player lane explicit in headed Web and pure API surfaces |
 | `agent-small-player-specialization-contract` | `agent_engineer` | Align specialization and recovery behavior with the small-player lane contract |
 | `qa-control-feeling-and-anti-grind-matrix` | `qa_engineer` | Build a mature-world anti-grind and agency blocker matrix |
+| `qa-mature-world-small-player-fresh-sample` | `qa_engineer` | Re-sample mature-world small-player progression after runtime/viewer/agent truth lands |
 
 ## Handoff Matrix
 

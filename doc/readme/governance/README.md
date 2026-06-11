@@ -31,7 +31,7 @@
 - 适合问题:
   - `oasis7` 到底是什么项目
   - 为什么它既像游戏、又有 runtime / WASM / consensus 这些重系统结构
-  - 当前公开边界和“尚不可玩”的真实含义是什么
+  - 当前 `limited playable technical preview` 的公开边界是什么
   - 第一次接触仓库时，先读哪一层再下钻
 
 ### 1. 治理控制与季度复核

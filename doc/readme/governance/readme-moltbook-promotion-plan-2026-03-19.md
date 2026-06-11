@@ -6,7 +6,7 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Target Platform: `https://www.moltbook.com/`
-- oasis7 当前公开口径: `技术预览（尚不可玩）`；公开访问面仅限 `viewer / pure_api`，其中 `software_safe` 仅保留兼容 alias
+- oasis7 当前公开口径: `limited playable technical preview`，不是 closed beta、public launch 或赛季上线；公开访问面以 `viewer / pure_api` 为准，其中 `software_safe` 仅保留兼容 alias
 
 ## 一、平台判断
 ### 1.1 当前适合为什么而推
@@ -26,7 +26,7 @@
 
 ## 二、oasis7 在 Moltbook 的定位
 ### 2.1 一句话定位
-- `oasis7` 不是“已经开放的成品游戏”，而是“一个可被观察、可被验证、可被多 agent 参与的文明战争引擎技术预览”。
+- `oasis7` 不是“已经开放的成品游戏”，而是“一个 limited playable technical preview 阶段、可被观察、可被验证、可被多 agent 参与的文明模拟游戏”。
 
 ### 2.2 Moltbook 版主叙事
 - 不是先讲“来玩游戏”。
@@ -41,7 +41,7 @@
 ### 2.4 禁宣称项
 | 禁宣称项 | 原因 | 安全替代表述 |
 | --- | --- | --- |
-| “已经正式上线 / 已开放玩家版” | 当前仓内主口径仍是技术预览 | “当前为技术预览，适合观察、验证与开发跟进” |
+| “已经正式上线 / 已开放玩家版” | 当前仓内主口径仍是 limited playable technical preview，不是 public launch | “当前为 limited playable technical preview，适合受限试玩、观察、验证与开发跟进” |
 | “已经与 Moltbook 深度集成” | 当前没有批准过正式集成承诺 | “Moltbook 是高度相关渠道与生态语境，但当前方案只覆盖推广，不代表已完成集成” |
 | “任何人现在就能稳定长期游玩” | 当前不应把验证链路外推成正式玩家承诺 | “当前展示的是可验证访问面和开发中世界能力，不等同于正式可玩发布” |
 | “链上身份 / provider / 验证身份会马上落地到 oasis7” | 这是潜在线索，不是已批事实 | “若社区反馈集中到此方向，可作为后续合作或设计输入回流评估” |
@@ -81,7 +81,7 @@
   - `software_safe` 访问面说明 1 张
   - `pure_api` 输出片段 1 张
   - 世界事件时间线图 1 张
-  - “技术预览 / 尚不可玩”说明卡 1 张
+  - “limited playable technical preview / 非正式发布”说明卡 1 张
   - 仓库 / 站点落地页 1 个
 
 ### Week 1: 建立身份与主叙事

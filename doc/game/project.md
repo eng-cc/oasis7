@@ -4,7 +4,7 @@
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-GAME-001 (PRD-GAME-001) [test_tier_required]: 完成 game PRD 改写，建立玩法设计总入口。
-- [x] TASK-GAME-002 (PRD-GAME-001/002) [test_tier_required]: 补齐核心玩法循环（新手/经济/战争）验收矩阵。
+- Legacy `TASK-GAME-002` (PRD-GAME-001/002): 补齐核心玩法循环（新手/经济/协作治理）验收矩阵；战争/政治只保留为历史 runtime primitive 与未来受控重启参考，不作为当前玩家-facing 主循环承诺。
 - [x] TASK-GAME-003 (PRD-GAME-002/003) [test_tier_required]: 建立可玩性问题分级与修复闭环模板。
 - [x] TASK-GAME-004 (PRD-GAME-003) [test_tier_required]: 对接发布前可玩性门禁与回归节奏。
 - [x] TASK-GAME-005 (PRD-GAME-001/002/003) [test_tier_required]: 对齐 strict PRD schema，补齐关键流程/规格矩阵/边界异常/NFR/验证与决策记录。
