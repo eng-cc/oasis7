@@ -1,4 +1,5 @@
 use super::*;
+use crate::NodeExecutionCheckpointBlob;
 use oasis7_proto::storage_cold_index::{
     storage_cold_index_dir_name, STORAGE_COLD_INDEX_MANIFEST_FILE,
     STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
