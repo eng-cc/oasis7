@@ -79,6 +79,8 @@ use consensus_support::{
 };
 pub use error::NodeError;
 pub use execution_hook::{
+    NodeExecutionCheckpointBlob, NodeExecutionCheckpointBlobRef, NodeExecutionCheckpointBundle,
+    NodeExecutionCheckpointDescriptor, NodeExecutionCheckpointInstallContext,
     NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook,
 };
 use gossip_udp::{

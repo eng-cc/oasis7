@@ -555,6 +555,7 @@ fn non_proposer_committed_decision_does_not_persist_local_replication() {
             1_000,
             &decision,
             Some(&mut replication),
+            None,
         )
         .expect("broadcast local replication");
 
@@ -644,6 +645,7 @@ fn proposer_local_replication_advances_persisted_height_without_network_endpoint
             1_000,
             &decision,
             Some(&mut replication),
+            None,
         )
         .expect("broadcast local replication");
 
@@ -712,6 +714,7 @@ fn storage_validator_core_local_replication_advances_persisted_height() {
             1_000,
             &decision,
             Some(&mut replication),
+            None,
         )
         .expect("broadcast local replication");
 
@@ -771,6 +774,7 @@ fn restart_refresh_seeds_replication_cursor_from_durable_writer_state() {
                 1_000 + height as i64,
                 &decision,
                 Some(&mut replication),
+                None,
             )
             .expect("broadcast local replication");
     }

@@ -216,15 +216,18 @@ impl PosNodeEngine {
         with_execution_hook(&mut execution_hook, |hook| {
             self.apply_committed_execution(node_id, world_id, now_ms, &decision, hook)
         })?;
-        self.broadcast_local_replication(
-            gossip.as_deref(),
-            replication_network.as_deref(),
-            node_id,
-            world_id,
-            now_ms,
-            &decision,
-            replication.as_deref_mut(),
-        )?;
+        with_execution_hook(&mut execution_hook, |hook| {
+            self.broadcast_local_replication(
+                gossip.as_deref(),
+                replication_network.as_deref(),
+                node_id,
+                world_id,
+                now_ms,
+                &decision,
+                replication.as_deref_mut(),
+                hook,
+            )
+        })?;
         if matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > prev_committed_height
         {

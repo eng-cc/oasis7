@@ -563,6 +563,7 @@ fn synced_non_sequencer_commit_does_not_create_binding_without_local_execution()
         committed_at_ms: 8_000,
         execution_block_hash: Some("exec-block-8".to_string()),
         execution_state_root: Some("exec-state-8".to_string()),
+        execution_checkpoint: None,
     };
     let mut hook = GapWaitingExecutionHook;
 

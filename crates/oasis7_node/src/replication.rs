@@ -1,4 +1,8 @@
-use crate::{NodeConsensusAction, NodeError, PosConsensusStatus, PosDecision};
+use crate::{
+    NodeConsensusAction, NodeError, NodeExecutionCheckpointBlob, NodeExecutionCheckpointBlobRef,
+    NodeExecutionCheckpointBundle, NodeExecutionCheckpointDescriptor, PosConsensusStatus,
+    PosDecision,
+};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use oasis7_distfs::{
     apply_replication_record, blake3_hex, build_replication_record_with_epoch, BlobStore as _,
@@ -439,6 +443,8 @@ struct ReplicatedCommitPayload {
     committed_at_ms: i64,
     execution_block_hash: Option<String>,
     execution_state_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    execution_checkpoint: Option<NodeExecutionCheckpointDescriptor>,
 }
 
 #[derive(Debug, Serialize)]
@@ -508,6 +514,7 @@ impl ReplicationRuntime {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn build_local_commit_message(
         &mut self,
         node_id: &str,
@@ -516,6 +523,27 @@ impl ReplicationRuntime {
         decision: &PosDecision,
         execution_block_hash: Option<&str>,
         execution_state_root: Option<&str>,
+    ) -> Result<Option<GossipReplicationMessage>, NodeError> {
+        self.build_local_commit_message_with_checkpoint(
+            node_id,
+            world_id,
+            now_ms,
+            decision,
+            execution_block_hash,
+            execution_state_root,
+            None,
+        )
+    }
+
+    pub(crate) fn build_local_commit_message_with_checkpoint(
+        &mut self,
+        node_id: &str,
+        world_id: &str,
+        now_ms: i64,
+        decision: &PosDecision,
+        execution_block_hash: Option<&str>,
+        execution_state_root: Option<&str>,
+        execution_checkpoint: Option<NodeExecutionCheckpointBundle>,
     ) -> Result<Option<GossipReplicationMessage>, NodeError> {
         if !matches!(decision.status, PosConsensusStatus::Committed) {
             return Ok(None);
@@ -528,6 +556,35 @@ impl ReplicationRuntime {
                 reason: "replication execution hash binding requires both block/state".to_string(),
             });
         }
+        if let Some(checkpoint) = execution_checkpoint.as_ref() {
+            if checkpoint.height > decision.height {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "replication execution checkpoint is ahead of commit height {}",
+                        decision.height
+                    ),
+                });
+            }
+            if checkpoint.height == decision.height {
+                match (execution_block_hash, execution_state_root) {
+                    (Some(block_hash), Some(state_root))
+                        if checkpoint.execution_block_hash == block_hash
+                            && checkpoint.execution_state_root == state_root => {}
+                    _ => {
+                        return Err(NodeError::Replication {
+                            reason: format!(
+                                "replication execution checkpoint binding mismatch at height {}",
+                                decision.height
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+        let execution_checkpoint = execution_checkpoint
+            .as_ref()
+            .map(|bundle| self.store_execution_checkpoint_bundle(bundle))
+            .transpose()?;
 
         let payload = ReplicatedCommitPayload {
             world_id: world_id.to_string(),
@@ -541,6 +598,7 @@ impl ReplicationRuntime {
             committed_at_ms: now_ms,
             execution_block_hash: execution_block_hash.map(str::to_string),
             execution_state_root: execution_state_root.map(str::to_string),
+            execution_checkpoint,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(|err| NodeError::Replication {
             reason: format!("serialize local replication payload failed: {}", err),
@@ -945,7 +1003,6 @@ impl ReplicationRuntime {
         load_blob_from_root(self.config.root_dir.as_path(), content_hash)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn store_blob_by_hash(
         &self,
         content_hash: &str,
@@ -992,6 +1049,101 @@ impl ReplicationRuntime {
             request.requester_signature_hex = Some(sign_fetch_blob_request(&request, signer)?);
         }
         Ok(request)
+    }
+
+    pub(crate) fn store_execution_checkpoint_bundle(
+        &self,
+        bundle: &NodeExecutionCheckpointBundle,
+    ) -> Result<NodeExecutionCheckpointDescriptor, NodeError> {
+        let manifest_ref = blake3_hex(bundle.manifest_json.as_slice());
+        self.store_blob_by_hash(manifest_ref.as_str(), bundle.manifest_json.as_slice())?;
+        let mut blob_refs = Vec::with_capacity(bundle.blobs.len());
+        for blob in &bundle.blobs {
+            let actual = blake3_hex(blob.bytes.as_slice());
+            if actual != blob.content_hash {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "execution checkpoint blob hash mismatch expected={} actual={}",
+                        blob.content_hash, actual
+                    ),
+                });
+            }
+            self.store_blob_by_hash(blob.content_hash.as_str(), blob.bytes.as_slice())?;
+            blob_refs.push(NodeExecutionCheckpointBlobRef {
+                content_hash: blob.content_hash.clone(),
+                size_bytes: blob.bytes.len() as u64,
+            });
+        }
+        let descriptor = NodeExecutionCheckpointDescriptor {
+            height: bundle.height,
+            execution_block_hash: bundle.execution_block_hash.clone(),
+            execution_state_root: bundle.execution_state_root.clone(),
+            manifest_ref,
+            manifest_size_bytes: bundle.manifest_json.len() as u64,
+            blobs: blob_refs,
+        };
+        self.pin_execution_checkpoint_descriptor(&descriptor)?;
+        Ok(descriptor)
+    }
+
+    pub(crate) fn load_execution_checkpoint_bundle(
+        &self,
+        descriptor: &NodeExecutionCheckpointDescriptor,
+    ) -> Result<Option<NodeExecutionCheckpointBundle>, NodeError> {
+        let Some(manifest_json) = self.load_blob_by_hash(descriptor.manifest_ref.as_str())? else {
+            return Ok(None);
+        };
+        if manifest_json.len() as u64 != descriptor.manifest_size_bytes {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "execution checkpoint manifest size mismatch expected={} actual={}",
+                    descriptor.manifest_size_bytes,
+                    manifest_json.len()
+                ),
+            });
+        }
+        let mut blobs = Vec::with_capacity(descriptor.blobs.len());
+        for blob_ref in &descriptor.blobs {
+            let Some(bytes) = self.load_blob_by_hash(blob_ref.content_hash.as_str())? else {
+                return Ok(None);
+            };
+            if bytes.len() as u64 != blob_ref.size_bytes {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "execution checkpoint blob size mismatch hash={} expected={} actual={}",
+                        blob_ref.content_hash,
+                        blob_ref.size_bytes,
+                        bytes.len()
+                    ),
+                });
+            }
+            blobs.push(NodeExecutionCheckpointBlob {
+                content_hash: blob_ref.content_hash.clone(),
+                bytes,
+            });
+        }
+        Ok(Some(NodeExecutionCheckpointBundle {
+            height: descriptor.height,
+            execution_block_hash: descriptor.execution_block_hash.clone(),
+            execution_state_root: descriptor.execution_state_root.clone(),
+            manifest_json,
+            blobs,
+        }))
+    }
+
+    pub(crate) fn pin_execution_checkpoint_descriptor(
+        &self,
+        descriptor: &NodeExecutionCheckpointDescriptor,
+    ) -> Result<(), NodeError> {
+        self.store
+            .pin(descriptor.manifest_ref.as_str())
+            .map_err(distfs_error_to_node_error)?;
+        for blob_ref in &descriptor.blobs {
+            self.store
+                .pin(blob_ref.content_hash.as_str())
+                .map_err(distfs_error_to_node_error)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn probe_storage_challenges(
