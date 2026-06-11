@@ -51,18 +51,173 @@ impl NodeExecutionHook for CheckpointInstallingExecutionHook {
     }
 }
 
+struct CheckpointExportingExecutionHook {
+    bundles: std::collections::BTreeMap<u64, NodeExecutionCheckpointBundle>,
+}
+
+impl NodeExecutionHook for CheckpointExportingExecutionHook {
+    fn on_commit(
+        &mut self,
+        context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        Ok(NodeExecutionCommitResult {
+            execution_height: context.height,
+            execution_block_hash: format!("exec-block-{}", context.height),
+            execution_state_root: format!("exec-state-{}", context.height),
+        })
+    }
+
+    fn export_checkpoint_bundle(
+        &mut self,
+        height: u64,
+    ) -> Result<Option<NodeExecutionCheckpointBundle>, String> {
+        Ok(self.bundles.get(&height).cloned())
+    }
+}
+
 fn test_execution_checkpoint_bundle(
     height: u64,
     execution_block_hash: &str,
     execution_state_root: &str,
 ) -> NodeExecutionCheckpointBundle {
+    let snapshot_bytes =
+        format!("checkpoint-snapshot-{height}-{execution_state_root}").into_bytes();
     NodeExecutionCheckpointBundle {
         height,
         execution_block_hash: execution_block_hash.to_string(),
         execution_state_root: execution_state_root.to_string(),
         manifest_json: br#"{"test":"manifest"}"#.to_vec(),
-        blobs: Vec::new(),
+        blobs: vec![NodeExecutionCheckpointBlob {
+            content_hash: oasis7_distfs::blake3_hex(snapshot_bytes.as_slice()),
+            bytes: snapshot_bytes,
+        }],
     }
+}
+
+#[test]
+fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
+    let world_id = "world-gap-sync-exported-legacy-checkpoint";
+    let dir_a = temp_dir("gap-sync-exported-legacy-checkpoint-a");
+    let dir_b = temp_dir("gap-sync-exported-legacy-checkpoint-b");
+    let (_, public_key_a) = deterministic_keypair_hex(246);
+    let (_, public_key_b) = deterministic_keypair_hex(247);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 246)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 246)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 247)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(replication_config_b.clone());
+
+    let high_height = REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL + 32;
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    for height in 1..=high_height {
+        let decision = PosDecision {
+            height,
+            slot: height,
+            epoch: 0,
+            status: PosConsensusStatus::Committed,
+            block_hash: format!("block-{height}"),
+            action_root: empty_action_root(),
+            committed_actions: Vec::new(),
+            approved_stake: 100,
+            rejected_stake: 0,
+            required_stake: 67,
+            total_stake: 100,
+        };
+        replication_a
+            .build_local_commit_message(
+                "node-a",
+                world_id,
+                6_500 + i64::try_from(height).expect("height fits i64"),
+                &decision,
+                Some(format!("exec-block-{height}").as_str()),
+                Some(format!("exec-state-{height}").as_str()),
+            )
+            .expect("build legacy local message")
+            .expect("message");
+    }
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let mut bundles = std::collections::BTreeMap::new();
+    bundles.insert(
+        high_height,
+        test_execution_checkpoint_bundle(
+            high_height,
+            format!("exec-block-{high_height}").as_str(),
+            format!("exec-state-{high_height}").as_str(),
+        ),
+    );
+    let export_hook: Arc<Mutex<Box<dyn NodeExecutionHook>>> =
+        Arc::new(Mutex::new(Box::new(CheckpointExportingExecutionHook {
+            bundles,
+        })));
+    register_replication_fetch_handlers_with_checkpoint_export(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+        Some(export_hook),
+    )
+    .expect("register fetch handlers");
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
+            .expect("endpoint b");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("runtime b");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("engine b");
+    engine_b.network_committed_height = high_height;
+    let mut install_hook = CheckpointInstallingExecutionHook {
+        installed: Vec::new(),
+    };
+
+    engine_b
+        .sync_missing_replication_commits(
+            &endpoint_b,
+            "node-b",
+            world_id,
+            Some(&mut replication_b),
+            Some(&mut install_hook),
+        )
+        .expect("install exported legacy checkpoint");
+
+    assert_eq!(install_hook.installed, vec![high_height]);
+    assert_eq!(engine_b.committed_height, high_height);
+    assert_eq!(engine_b.replication_persisted_height, high_height);
+    assert_eq!(engine_b.last_execution_height, high_height);
+    assert!(replication_b
+        .load_commit_message_by_height(world_id, 1)
+        .expect("load low height")
+        .is_none());
+
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
 }
 
 #[test]

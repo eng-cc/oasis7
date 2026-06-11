@@ -1,12 +1,13 @@
-use oasis7_distfs::blake3_hex;
+use oasis7_distfs::{blake3_hex, BlobStore as _};
 
 use crate::{
     NodeError, NodeExecutionCheckpointBlob, NodeExecutionCheckpointBlobRef,
     NodeExecutionCheckpointBundle, NodeExecutionCheckpointDescriptor,
 };
 
-use super::support::distfs_error_to_node_error;
+use super::support::{distfs_error_to_node_error, sign_replication_message};
 use super::ReplicationRuntime;
+use super::{GossipReplicationMessage, ReplicatedCommitPayload};
 
 impl ReplicationRuntime {
     pub(crate) fn store_execution_checkpoint_bundle(
@@ -102,5 +103,79 @@ impl ReplicationRuntime {
                 .map_err(distfs_error_to_node_error)?;
         }
         Ok(())
+    }
+
+    pub(crate) fn attach_execution_checkpoint_descriptor_to_message(
+        &self,
+        message: &GossipReplicationMessage,
+        checkpoint: &NodeExecutionCheckpointBundle,
+    ) -> Result<GossipReplicationMessage, NodeError> {
+        let mut payload = serde_json::from_slice::<ReplicatedCommitPayload>(
+            message.payload.as_slice(),
+        )
+        .map_err(|err| NodeError::Replication {
+            reason: format!(
+                "decode replication payload for checkpoint descriptor attach failed: {}",
+                err
+            ),
+        })?;
+        if payload.execution_checkpoint.is_some() {
+            return Ok(message.clone());
+        }
+        if payload.height != checkpoint.height {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "execution checkpoint attach height mismatch payload={} checkpoint={}",
+                    payload.height, checkpoint.height
+                ),
+            });
+        }
+        match (
+            payload.execution_block_hash.as_deref(),
+            payload.execution_state_root.as_deref(),
+        ) {
+            (Some(block_hash), Some(state_root))
+                if block_hash == checkpoint.execution_block_hash
+                    && state_root == checkpoint.execution_state_root => {}
+            _ => {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "execution checkpoint attach binding mismatch at height {}",
+                        payload.height
+                    ),
+                });
+            }
+        }
+        if let Some(signer) = &self.signer {
+            if message.record.writer_id != signer.public_key_hex {
+                return Ok(message.clone());
+            }
+        } else if message.signature_hex.is_some() {
+            return Err(NodeError::Replication {
+                reason: "cannot re-sign augmented replication checkpoint message without signer"
+                    .to_string(),
+            });
+        }
+
+        payload.execution_checkpoint = Some(self.store_execution_checkpoint_bundle(checkpoint)?);
+        let payload_bytes = serde_json::to_vec(&payload).map_err(|err| NodeError::Replication {
+            reason: format!("serialize augmented replication payload failed: {}", err),
+        })?;
+        let mut augmented = message.clone();
+        augmented.payload = payload_bytes;
+        augmented.record.content_hash = blake3_hex(augmented.payload.as_slice());
+        augmented.record.size_bytes = augmented.payload.len() as u64;
+        self.store
+            .put(
+                augmented.record.content_hash.as_str(),
+                augmented.payload.as_slice(),
+            )
+            .map_err(distfs_error_to_node_error)?;
+        augmented.signature_hex = None;
+        if let Some(signer) = &self.signer {
+            augmented.public_key_hex = Some(signer.public_key_hex.clone());
+            augmented.signature_hex = Some(sign_replication_message(&augmented, signer)?);
+        }
+        Ok(augmented)
     }
 }

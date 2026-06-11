@@ -1,5 +1,5 @@
 use super::*;
-use crate::NodeExecutionCheckpointBlob;
+use crate::{NodeExecutionCheckpointBlob, NodeExecutionCheckpointBundle};
 use oasis7_proto::storage_cold_index::{
     storage_cold_index_dir_name, STORAGE_COLD_INDEX_MANIFEST_FILE,
     STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
@@ -743,6 +743,71 @@ fn prune_hot_commit_messages_keeps_pinned_execution_checkpoint_blobs() {
         .is_some());
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn attach_execution_checkpoint_descriptor_preserves_remote_writer_legacy_message() {
+    let dir_a = temp_dir("checkpoint-attach-remote-writer-a");
+    let dir_b = temp_dir("checkpoint-attach-remote-writer-b");
+    let world_id = "world-checkpoint-attach-remote-writer";
+    let (private_a, public_a) = deterministic_keypair_hex(211);
+    let (private_b, public_b) = deterministic_keypair_hex(212);
+    let config_a = NodeReplicationConfig::new(&dir_a)
+        .expect("config a")
+        .with_signing_keypair(private_a, public_a)
+        .expect("signing a");
+    let config_b = NodeReplicationConfig::new(&dir_b)
+        .expect("config b")
+        .with_signing_keypair(private_b, public_b)
+        .expect("signing b");
+    let mut runtime_a = ReplicationRuntime::new(&config_a, "node-a").expect("runtime a");
+    let runtime_b = ReplicationRuntime::new(&config_b, "node-b").expect("runtime b");
+    let decision = PosDecision {
+        height: 1,
+        slot: 1,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "block-1".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    let message = runtime_a
+        .build_local_commit_message(
+            "node-a",
+            world_id,
+            1_000,
+            &decision,
+            Some("exec-block-1"),
+            Some("exec-state-1"),
+        )
+        .expect("build remote writer legacy commit")
+        .expect("message");
+    let checkpoint = NodeExecutionCheckpointBundle {
+        height: 1,
+        execution_block_hash: "exec-block-1".to_string(),
+        execution_state_root: "exec-state-1".to_string(),
+        manifest_json: br#"{"checkpoint":1}"#.to_vec(),
+        blobs: vec![NodeExecutionCheckpointBlob {
+            content_hash: oasis7_distfs::blake3_hex(b"remote-writer-snapshot"),
+            bytes: b"remote-writer-snapshot".to_vec(),
+        }],
+    };
+
+    let augmented = runtime_b
+        .attach_execution_checkpoint_descriptor_to_message(&message, &checkpoint)
+        .expect("attach should preserve remote writer message");
+
+    assert_eq!(augmented, message);
+    let payload = serde_json::from_slice::<ReplicatedCommitPayload>(augmented.payload.as_slice())
+        .expect("payload");
+    assert!(payload.execution_checkpoint.is_none());
+
+    let _ = std::fs::remove_dir_all(&dir_a);
+    let _ = std::fs::remove_dir_all(&dir_b);
 }
 
 #[test]
