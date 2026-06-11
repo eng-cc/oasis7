@@ -5,6 +5,12 @@ description: Use when planning a new game architecture, major game feature, refa
 
 # Game Architect
 
+## Oasis7 Workflow Binding
+
+In oasis7, this skill is a specialist architecture-planning surface, not a second project workflow. TPM must bind any `game-architect` output to the same owner role, `.pm` task, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; architecture conclusions must be owned by the appropriate professional slice.
+
+Architecture documents may supplement `prd.md`, `project.md`, and handoff truth, but they do not replace `.pm` task truth.
+
 ## When to Use
 
 Use this skill when:
@@ -23,7 +29,8 @@ Do not use this skill when:
 1. Bind the work to the existing `.pm` task/worktree and record the route before producing architecture docs.
 2. Use this `SKILL.md` as the entrypoint; read `references/full-guidance.md` for document templates, phase details, paradigm tables, and examples.
 3. Write architecture outputs as supplements to `prd.md`, `project.md`, and `.pm` truth, never as a replacement for them.
-4. Hand implementation back through `repo-owned-workflow-router` and `executing-project-tasks` before code changes.
+4. Always record the route, TODOs, and downstream execution handoff in `.pm/tasks/<TASK-UID>.execution.md`.
+5. Before code changes, hand implementation back to TPM; Implementation must still route through `repo-owned-workflow-router` and `executing-project-tasks`.
 
 ## Supporting Files
 
