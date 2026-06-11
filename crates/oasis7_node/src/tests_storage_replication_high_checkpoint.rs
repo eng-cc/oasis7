@@ -122,6 +122,9 @@ fn observer_gap_sync_bootstraps_from_high_checkpoint_when_low_commits_are_unavai
     assert_eq!(engine_b.committed_height, 3);
     assert_eq!(engine_b.replication_persisted_height, 3);
     assert_eq!(engine_b.next_height, 4);
+    assert_eq!(engine_b.last_execution_height, 0);
+    assert!(engine_b.last_execution_block_hash.is_none());
+    assert!(engine_b.execution_binding_for_height(3).is_none());
     assert_eq!(engine_b.last_replication_gap_sync_blocked_height, None);
 
     let _ = fs::remove_dir_all(&dir_a);

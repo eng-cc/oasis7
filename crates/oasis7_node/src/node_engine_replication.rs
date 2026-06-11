@@ -462,12 +462,9 @@ impl PosNodeEngine {
             GapSyncHeightOutcome::NotFound { .. } => return Ok(false),
         };
         let (message, payload) = checkpoint;
-        let (Some(execution_block_hash), Some(execution_state_root)) = (
-            payload.execution_block_hash.clone(),
-            payload.execution_state_root.clone(),
-        ) else {
+        if payload.execution_block_hash.is_none() || payload.execution_state_root.is_none() {
             return Ok(false);
-        };
+        }
 
         let (block_hash, committed_at_ms) = with_execution_hook(execution_hook, |hook| {
             self.execute_synced_replication_commit(world_id, &payload, hook)
@@ -483,12 +480,6 @@ impl PosNodeEngine {
         self.replication_persisted_height =
             self.replication_persisted_height.max(checkpoint_height);
         self.record_synced_replication_height(checkpoint_height, block_hash, committed_at_ms)?;
-        if self.last_execution_height < checkpoint_height {
-            self.last_execution_height = checkpoint_height;
-            self.last_execution_block_hash = Some(execution_block_hash);
-            self.last_execution_state_root = Some(execution_state_root);
-            self.remember_execution_binding_for_height(checkpoint_height);
-        }
         self.last_replication_gap_sync_blocked_height = None;
         self.last_replication_gap_sync_blocked_reason = None;
         self.last_replication_gap_sync_repair_attempt_height = None;

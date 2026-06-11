@@ -265,6 +265,9 @@ fn gap_sync_uses_high_checkpoint_when_network_lag_exceeds_poll_window() {
 
     assert_eq!(engine_b.committed_height, high_height);
     assert_eq!(engine_b.replication_persisted_height, high_height);
+    assert_eq!(engine_b.last_execution_height, 0);
+    assert!(engine_b.last_execution_block_hash.is_none());
+    assert!(engine_b.execution_binding_for_height(high_height).is_none());
     assert_eq!(
         replication_b
             .latest_persisted_commit_height(world_id)
