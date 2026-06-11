@@ -124,6 +124,10 @@ Example:
 - Blocker / Next Action: run focused verification and prepare PR.
 
 ## 2026-06-08 20:58:44 CST / agent_engineer
+- Action: Historical lint backfill: original entry predates or bypassed the structured action field; see preserved entry text above.
+- Validation Command: Historical lint backfill: no distinct command field was recorded in the original entry.
+- Expected Result: Historical lint backfill: no distinct expected-result field was recorded in the original entry.
+- Actual Result: Historical lint backfill: no distinct actual-result field was recorded in the original entry.
 - 完成内容: Narrow-scope committed-diff review only, per user request.
 - 遗留事项: no merge-blocking finding from this narrow review; this does not include broader repo checks.
 - Review Scope: committed diff for `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and task files only.
@@ -131,6 +135,10 @@ Example:
 - Residual Risk: Low. The authorization bridge remains scoped to workflow-required professional role slices and matching repo-owned workflow slices, preserves fallback attribution, and does not alter model/context recording boundaries.
 - Blocker / Next Action: none from this narrow review.
 
+- Action: Historical lint backfill/schema repair only; original entry did not record a distinct action field.
+- Validation Command: Historical lint backfill/schema repair only; no additional historical validation command is asserted.
+- Expected Result: Historical lint backfill/schema repair only; original expected result was not separately recorded.
+- Actual Result: Historical lint backfill/schema repair only; original observed result was not separately recorded.
 ## 2026-06-08 20:58:44 CST / qa_engineer
 - 完成内容: Narrow-scope QA recheck completed for committed governance wording diff and task verification entries only.
 - 遗留事项: none for this QA scope.

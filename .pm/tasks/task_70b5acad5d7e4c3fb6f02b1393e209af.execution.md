@@ -98,6 +98,13 @@ Example:
 - Blocker / Next Action: 继续运行 recommended required validation 作为技术 readiness 证据；与此同时，若用户允许实际派发本地 role-review subagent slices，则下一步应派发 `wasm_platform_engineer` 与 `qa_engineer` review 并写回 passed evidence packet，然后才能继续 `prepare-task-pr --create`。
 
 ## 2026-06-09 00:14:30 CST / tpm
+- 完成内容: Historical lint backfill: original entry did not use the current structured execution-log field; preserved surrounding entry text.
+- 遗留事项: Historical lint backfill: no separate pending-items field was recorded in the original entry.
+- Action: Historical lint backfill: original entry predates or bypassed the structured action field; see preserved entry text above.
+- Validation Command: Historical lint backfill: no distinct command field was recorded in the original entry.
+- Expected Result: Historical lint backfill: no distinct expected-result field was recorded in the original entry.
+- Actual Result: Historical lint backfill: no distinct actual-result field was recorded in the original entry.
+- Blocker / Next Action: Historical lint backfill: no distinct blocker/next-action field was recorded in the original entry.
 - Review Trigger: pre-PR local role review
 - Review Scope: `crates/pixel_world_bridge/Cargo.toml`; `Cargo.lock`; task evidence in `.pm/tasks/task_70b5acad5d7e4c3fb6f02b1393e209af.execution.md`; validation claim around local/external browser WebGPU behavior
 - Review Roles: wasm_platform_engineer, qa_engineer
@@ -106,13 +113,34 @@ Example:
 - Expected Return Contract: findings | no_findings | residual_risk
 - Formal Sink: `.pm/tasks/task_70b5acad5d7e4c3fb6f02b1393e209af.execution.md`
 
+- 完成内容: Historical lint backfill: original entry did not record a dedicated completed-content field; original entry text remains authoritative.
+- 遗留事项: Historical lint backfill: original entry did not record a dedicated pending-items field; no new historical pending item is asserted.
+- Action: Historical lint backfill/schema repair only; original entry did not record a distinct action field.
+- Validation Command: Historical lint backfill/schema repair only; no additional historical validation command is asserted.
+- Expected Result: Historical lint backfill/schema repair only; original expected result was not separately recorded.
+- Actual Result: Historical lint backfill/schema repair only; original observed result was not separately recorded.
+- Blocker / Next Action: Historical lint backfill/schema repair only; no distinct blocker or next action was recorded in the original entry.
 ## 2026-06-09 00:20:30 CST / wasm_platform_engineer
+- 完成内容: Historical lint backfill: original entry did not use the current structured execution-log field; preserved surrounding entry text.
+- 遗留事项: Historical lint backfill: no separate pending-items field was recorded in the original entry.
+- Action: Historical lint backfill: original entry predates or bypassed the structured action field; see preserved entry text above.
+- Validation Command: Historical lint backfill: no distinct command field was recorded in the original entry.
+- Expected Result: Historical lint backfill: no distinct expected-result field was recorded in the original entry.
+- Actual Result: Historical lint backfill: no distinct actual-result field was recorded in the original entry.
+- Blocker / Next Action: Historical lint backfill: no distinct blocker/next-action field was recorded in the original entry.
 - Review Outcome: no_findings
 - Review Scope: `crates/pixel_world_bridge/Cargo.toml`; `Cargo.lock`; execution evidence tied to source head `6a58398e0b78ae55fcc46c33e6f4c7591cfb0426`
 - Findings: none
 - Residual Risk: 本次 `bevy/webgpu` 改动是最小且正确的 wasm/web 平台修复；剩余风险主要来自浏览器运行环境差异，而不是仓库内 wasm/platform 配置错误。PR 口径应限定为“启用 WebGPU feature 并验证外部 Chrome 生效”，不要把 in-app browser 的 `Gl` 行为写成代码回归。
 
 ## 2026-06-09 00:21:30 CST / qa_engineer
+- 完成内容: Historical lint backfill: original entry did not use the current structured execution-log field; preserved surrounding entry text.
+- 遗留事项: Historical lint backfill: no separate pending-items field was recorded in the original entry.
+- Action: Historical lint backfill: original entry predates or bypassed the structured action field; see preserved entry text above.
+- Validation Command: Historical lint backfill: no distinct command field was recorded in the original entry.
+- Expected Result: Historical lint backfill: no distinct expected-result field was recorded in the original entry.
+- Actual Result: Historical lint backfill: no distinct actual-result field was recorded in the original entry.
+- Blocker / Next Action: Historical lint backfill: no distinct blocker/next-action field was recorded in the original entry.
 - Review Outcome: findings
 - Review Scope: current verification evidence, closeout/commit state, `prepare-task-pr` preflight result, required validation coverage
 - Findings:
@@ -143,6 +171,13 @@ Example:
 - Blocker / Next Action: 当前 PR 流程剩余未收口项为 recommended required validation。local role review 的代码级意见已收口，但由于 QA 明确把“required validation 未完成”列为有效流程 finding，暂不写入 `Pre-PR Local Role Review: passed` 最终 packet；继续等待或单独拆分 `doc-governance-check.sh` 的完成结论。
 
 ## 2026-06-09 10:01:01 CST / runtime_engineer
+- 完成内容: Historical lint backfill: original entry did not use the current structured execution-log field; preserved surrounding entry text.
+- 遗留事项: Historical lint backfill: no separate pending-items field was recorded in the original entry.
+- Action: Historical lint backfill: original entry predates or bypassed the structured action field; see preserved entry text above.
+- Validation Command: Historical lint backfill: no distinct command field was recorded in the original entry.
+- Expected Result: Historical lint backfill: no distinct expected-result field was recorded in the original entry.
+- Actual Result: Historical lint backfill: no distinct actual-result field was recorded in the original entry.
+- Blocker / Next Action: Historical lint backfill: no distinct blocker/next-action field was recorded in the original entry.
 - Review Outcome: no_findings
 - Review Scope: `crates/oasis7/src/bin/oasis7_newapi_bridge_service/tests.rs`; `crates/oasis7/Cargo.toml`; `scripts/newapi-bridge-service/pricing-rules.example.env`; fresh rerun of `cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture`
 - Findings: none
