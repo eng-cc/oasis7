@@ -160,13 +160,14 @@ curl -sS -X POST http://127.0.0.1:5852/v1/bridge/bind \
   - `pricing_version` 或 `topup_plan_id`
 - 期望：
   - 返回唯一 `deposit_account_id`
+  - 返回短 `deposit_token`，用于链上 transfer `memo`
   - `route_status=issued`
 
 ### 6.4 链上入账
-- 让绑定用户向 `deposit_account_id` 转入与 `pricing_version` 对应的 `OC`
+- 让绑定用户向 `deposit_account_id` 转入与 `pricing_version` 对应的 `OC`，并把 `deposit_token` 放入链上 transfer `memo`
 - 期望：
   - chain watcher 观察到 route 对应入账
-  - 不匹配金额、重复 route、过期 route 默认进入 `manual_review`
+  - 不匹配金额、重复 route、过期 route、缺失或不一致的 `deposit_token` 默认进入 `manual_review`
 
 ### 6.5 reconcile
 - 手工触发：
@@ -222,7 +223,7 @@ export TEST_PROVIDER_AUTH_TOKEN=newapi_user_ref:${TEST_NEWAPI_USER_REF}
 - 可通过受信 SSH / tunnel / 本机启动访问 `BRIDGE_BASE_URL`、`PROVIDER_BASE_URL`、`CHAIN_BASE_URL`。
 - bridge-service 已配置 `--chain-base-url`、`--letai-base-url`、`--letai-platform-key`，且测试 lane 的 `--pricing-rule` 包含当前 `PRICING_VERSION`。
 - remote provider bridge 已启用 `OASIS7_PROVIDER_AUTH_ROUTE_FROM_BEARER=true`，且可读取同一份 NewAPI bridge state。
-- 已确认 `oasis7_chain_transfer_submit_client` 可从本地 secret 文件读取当前 persona 的 `chain_private_key_hex`、`chain_public_key_hex`、`oasis_sender_account_id`，并产出 `octransferauth:v1:<signature-hex>`。
+- 已确认 `oasis7_chain_transfer_submit_client` 可从本地 secret 文件读取当前 persona 的 `chain_private_key_hex`、`chain_public_key_hex`、`oasis_sender_account_id`，并在传入 `--memo` 时产出 `octransferauth:v2:<signature-hex>`。
 - 测试 sender 账户有足够 OC，或测试网 faucet/operator 已准备好等价入账路径。
 - 证据采集能按本次 `route_id` / `bridge_deposit_id` / chain action id 定位 ledger row；不得只看全局计数。
 
@@ -293,6 +294,7 @@ ROUTE_RESPONSE="$(
 printf '%s\n' "${ROUTE_RESPONSE}"
 export TEST_DEPOSIT_ROUTE_ID="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r '.route_id')"
 export TEST_DEPOSIT_ACCOUNT_ID="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r '.deposit_account_id')"
+export TEST_DEPOSIT_TOKEN="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r '.deposit_token')"
 export TEST_ROUTE_EXPIRES_AT_UNIX_MS="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r '.expires_at_unix_ms')"
 ```
 
@@ -300,6 +302,7 @@ export TEST_ROUTE_EXPIRES_AT_UNIX_MS="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r 
 - `ok=true`。
 - `route_status=issued`。
 - `deposit_account_id` 非空且只用于本 route。
+- `deposit_token` 非空，形如 `bridge:deposit:<route_id>`；不得包含 raw `token_key`、私钥或完整业务载荷。
 
 #### Step D: 链上签名转账
 
@@ -313,7 +316,8 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_chain_transfer_submit_clie
   --chain-base-url "${CHAIN_BASE_URL}" \
   --to-account-id "${TEST_DEPOSIT_ACCOUNT_ID}" \
   --amount 100 \
-  --nonce 1
+  --nonce 1 \
+  --memo "${TEST_DEPOSIT_TOKEN}"
 ```
 
 约束：
@@ -321,6 +325,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_chain_transfer_submit_clie
 - `--persona` 必须选择本轮正在跑的 test persona。
 - `--amount` 必须替换成当前 `PRICING_VERSION` 对应的 OC 金额；少付/多付 case 用同一命令改金额制造。
 - `--nonce` 必须使用该 sender 在测试 lane 中未用过的 nonce。
+- `--memo` 必须使用 Step C 返回的 `TEST_DEPOSIT_TOKEN`；缺失或不一致应进入 bridge `manual_review`，不得正常 credit。
 - client 从 `--keys-file` 的当前 persona 段读取 `chain_private_key_hex`、`chain_public_key_hex`、`oasis_sender_account_id`，不会把私钥打印到 stdout。
 - 若本 lane 由 faucet/operator 工具托管测试入账，也可以用等价工具把同一 `TEST_OASIS_SENDER_ACCOUNT_ID -> TEST_DEPOSIT_ACCOUNT_ID` 的金额提交到链上，并保留 tx/action id。
 
@@ -332,14 +337,18 @@ transfer submit 字段形状：
   "to_account_id": "<TEST_DEPOSIT_ACCOUNT_ID>",
   "amount": 100,
   "nonce": 1,
+  "memo": "<TEST_DEPOSIT_TOKEN>",
+  "tx_version": 2,
+  "tx_type": "asset_transfer",
   "public_key": "<public-key-hex>",
-  "signature": "octransferauth:v1:<signature-hex>"
+  "signature": "octransferauth:v2:<signature-hex>"
 }
 ```
 
 期望：
 - submit response 返回 `ok=true` 和 `action_id`。
 - `GET /v1/chain/transfer/status?action_id=<action_id>` 或链侧 explorer 证据最终显示 confirmed。
+- explorer 证据中的 `memo` 必须等于 `TEST_DEPOSIT_TOKEN`。
 - 对少付/多付/过期 route，用对应 persona 的金额或等待策略制造失败条件，并保留同样的 tx/action id。
 
 #### Step E: reconcile
@@ -476,7 +485,7 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 每个 persona 跑完后，必须记录到 `.pm/tasks/<TASK-UID>.execution.md`，并为正式 QA closeout 增补一个 sanitized evidence 文件，例如 `doc/testing/evidence/oc-letai-bridge-full-chain-e2e-<date>.md`：
 
 - persona slug，不含私钥。
-- `newapi_user_ref`、`bridge_user_id`、`route_id`、`deposit_account_id`。
+- `newapi_user_ref`、`bridge_user_id`、`route_id`、`deposit_account_id`、`deposit_token`。
 - chain `action_id` / tx id / explorer link，以及实际 `from_account_id`。
 - reconcile response 摘要和本次 route/ledger row 状态。
 - provider smoke response 摘要。

@@ -8,6 +8,6 @@ generate_memories = true
 use_memories = true
 
 [workflow.subagent_runtime]
-model = "gpt-5.4"
+model = "gpt-5.5"
 reasoning_effort = "medium"
-shorthand = "gpt-5.4-medium"
+shorthand = "gpt-5.5-medium"

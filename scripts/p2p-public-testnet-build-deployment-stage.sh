@@ -323,4 +323,24 @@ cp "$bundle_path" "$out_dir/config/doc/testing/evidence/"
   --world-dir "$out_dir/generated-world/world" \
   --merged-public-manifest "$out_dir/generated-world/merged-public-manifest-entries.json" >/dev/null
 
+python3 - "$base_manifest" "$manifest_path" "$bundle_path" "$genesis_path" "$bootstrap_out" <<'PY'
+import json
+import pathlib
+import sys
+
+base_manifest = pathlib.Path(sys.argv[1])
+manifest_path = pathlib.Path(sys.argv[2])
+bundle_path = pathlib.Path(sys.argv[3])
+genesis_path = pathlib.Path(sys.argv[4])
+bootstrap_path = pathlib.Path(sys.argv[5])
+
+payload = json.loads(base_manifest.read_text(encoding="utf-8"))
+payload.setdefault("runtime_refs", {})
+payload["runtime_refs"]["release_candidate_bundle_ref"] = bundle_path.name
+payload["runtime_refs"]["genesis_ref"] = genesis_path.name
+payload["runtime_refs"]["bootstrap_peer_ref"] = bootstrap_path.name
+manifest_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+PY
+cp "$manifest_path" "$out_dir/config/doc/testing/evidence/"
+
 printf '%s\n' "$out_dir"

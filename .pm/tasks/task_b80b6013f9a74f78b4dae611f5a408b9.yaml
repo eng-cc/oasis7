@@ -1,0 +1,27 @@
+task_uid: task_b80b6013f9a74f78b4dae611f5a408b9
+title: "Wire NewAPI bridge deposit token validation"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-newapi-bridge-deposit-token-plan
+execution_log_path: .pm/tasks/task_b80b6013f9a74f78b4dae611f5a408b9.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md
+doc_refs:
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md
+related_prd: []
+acceptance:
+  - "Bridge deposit routes return and persist a deposit_token now that chain transfer memo support exists."
+  - "Bridge reconcile reads explorer memo and sends missing or mismatched deposit_token deposits to manual review while preserving legacy route compatibility."
+  - "Transfer submit client and runbook support the memo-bearing deposit_token operator path with targeted local verification."
+handoff_to: []
+updated_at: 2026-06-10T22:01:21+08:00
+last_started_at: 2026-06-10T17:45:25+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture --test-threads=1 && env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_transfer_submit_client -- --nocapture && env -u RUSTC_WRAPPER cargo fmt --check && git diff --check && ./scripts/doc-governance-check.sh"
+last_verified_at: 2026-06-10T22:01:10+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-10T22:01:19+08:00

@@ -1,19 +1,10 @@
 name: Compile Metrics
 
 on:
-  pull_request:
-    branches: ["main"]
-    paths:
-      - ".cargo/**"
-      - ".github/workflows/compile-metrics.yml"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "crates/**"
-      - "scripts/**"
   workflow_dispatch:
     inputs:
       baseline_ref:
-        description: "Optional baseline git ref or SHA to compare against. Empty uses the PR base on pull_request, otherwise current-only metrics."
+        description: "Optional baseline git ref or SHA to compare against. Empty runs current-only metrics."
         required: false
         default: ""
         type: string
@@ -102,9 +93,6 @@ jobs:
         run: |
           set -euo pipefail
           baseline_ref="${{ inputs.baseline_ref }}"
-          if [[ -z "${baseline_ref}" && "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            baseline_ref="${{ github.event.pull_request.base.sha }}"
-          fi
           echo "baseline_ref=${baseline_ref}" >> "${GITHUB_OUTPUT}"
           echo "baseline_ref=${baseline_ref}"
 
@@ -146,10 +134,10 @@ jobs:
         if: ${{ always() && steps.baseline.outputs.baseline_ref != '' }}
         shell: bash
         env:
-          MAX_PACKAGE_COUNT_REGRESSION_PCT: ${{ github.event_name == 'workflow_dispatch' && inputs.max_package_count_regression_pct || env.COMPILE_METRICS_MAX_PACKAGE_COUNT_REGRESSION_PCT }}
-          MAX_CARGO_CHECK_REGRESSION_PCT: ${{ github.event_name == 'workflow_dispatch' && inputs.max_cargo_check_regression_pct || env.COMPILE_METRICS_MAX_CARGO_CHECK_REGRESSION_PCT }}
-          MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT: ${{ github.event_name == 'workflow_dispatch' && inputs.max_cargo_build_release_regression_pct || env.COMPILE_METRICS_MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT }}
-          MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT: ${{ github.event_name == 'workflow_dispatch' && inputs.max_release_binary_bytes_regression_pct || env.COMPILE_METRICS_MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT }}
+          MAX_PACKAGE_COUNT_REGRESSION_PCT: ${{ inputs.max_package_count_regression_pct }}
+          MAX_CARGO_CHECK_REGRESSION_PCT: ${{ inputs.max_cargo_check_regression_pct }}
+          MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT: ${{ inputs.max_cargo_build_release_regression_pct }}
+          MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT: ${{ inputs.max_release_binary_bytes_regression_pct }}
         run: |
           set -euo pipefail
           cmd=(

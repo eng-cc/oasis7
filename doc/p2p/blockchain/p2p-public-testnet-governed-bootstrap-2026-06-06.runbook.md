@@ -325,10 +325,17 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 
 ## 11. Phase E - Optional Recovery Seed/State-Sync Bundle
 ### Goal
-正常 observer 接入不再要求预先导入 seed。只有自动 high-head checkpoint catch-up 失败、需要离线加速或需要保留故障现场后手工恢复时，才从 validator 导出闭包完整的 seed artifact。
+正常 observer 接入不再要求预先导入 seed。只有自动 high-head checkpoint catch-up 失败、需要离线加速或需要保留故障现场后手工恢复时，才从 validator 导出 state-sync 或闭包完整的 seed artifact。
 
 ### Required contents when this recovery path is used
-observer seed/state-sync bundle 至少要覆盖：
+当前 `scripts/p2p-export-state-sync-bundle.sh` 支持的最小 state-sync bundle 以 trusted checkpoint + snapshot 为核心，至少要包含：
+
+1. checkpoint manifest
+2. validator-set manifest
+3. state-sync bundle manifest
+4. snapshot file / `snapshot_sha256` / `state_root`
+
+若使用完整 seed/restore 路径，observer seed artifact 还必须覆盖：
 
 1. `world/`
 2. `execution-records/`
@@ -340,18 +347,19 @@ observer seed/state-sync bundle 至少要覆盖：
    - replication head metadata
 
 ### Important rule
-如果只复制 `world/` 与 `execution-records/`，但没有复制 restore 需要的 blob 闭包，observer 会在如下阶段失败：
+不要把“最小 snapshot state-sync bundle”和“完整 seed/restore artifact”混成同一个合同。前者可以没有 journal；后者如果只复制 `world/` 与 `execution-records/`，但没有复制 restore 需要的 blob 闭包，observer 会在如下阶段失败：
 
 - `restore snapshot ref ... BlobNotFound`
 - `restore journal ref ... BlobNotFound`
 
-所以导出脚本必须保证 storage closure 完整，不能做“最小猜测拷贝”。
+所以完整 seed/restore 导出必须保证 storage closure 完整，不能做“最小猜测拷贝”。
 
 ### Pass criteria
-1. seed bundle 对单个 observer 恢复后，runtime 不报 `BlobNotFound`
-2. seed bundle 可被两个 observer 重复消费
+1. snapshot state-sync bundle 通过 `p2p-upgrade-preflight.sh --require-state-sync-bundle --verify-state-sync-bundle-semantics`
+2. 若使用完整 seed/restore artifact，对单个 observer 恢复后 runtime 不报 `BlobNotFound`
+3. 若使用完整 seed/restore artifact，可被两个 observer 重复消费
 
-只要走这个 recovery path，在 observer 启动前必须对 seed bundle 执行闭包校验：
+在 observer 启动前，完整 seed/restore artifact 必须执行闭包校验：
 
 ```bash
 ./scripts/p2p-verify-state-sync-closure.sh \
@@ -508,12 +516,12 @@ curl -s http://127.0.0.1:19083/v1/chain/status
 这份 runbook 可以让部署更稳，但它也明确保留两项后续硬化方向：
 
 1. 自动 high-head checkpoint sync 已覆盖 observer/light-node 的正常接入；execution-required 节点仍不能跳过历史执行
-2. recovery 用 observer seed/state-sync 导出链路还没有被产品化成“闭包完整的标准 artifact”
+2. 当前 snapshot-only state-sync bundle 已有脚本支持；完整 seed/restore artifact 的闭包导出仍未产品化成标准 artifact
 
 所以后续必须补两类自动化：
 
 1. 空 world observer 自动 high-head checkpoint sync 对 validator truth 的回归测试
-2. seed/state-sync bundle 完整性回归测试，至少覆盖 restore snapshot/journal 所需 blob 闭包
+2. 完整 seed/restore artifact 的闭包完整性回归测试，至少覆盖 restore snapshot/journal 所需 blob 闭包
 
 ## 17. Completion Boundary
 这份 runbook 的交付物是“标准流程”，不是单次 live 执行记录。

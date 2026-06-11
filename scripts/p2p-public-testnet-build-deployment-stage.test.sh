@@ -29,3 +29,9 @@ jq -e '
 
 jq -e '.runtime_build.sha256 != null and .governance_manifest.sha256 != null' \
   "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
+
+jq -e '
+  .runtime_refs.release_candidate_bundle_ref == "public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+  and .runtime_refs.genesis_ref == "public-testnet-governed-bootstrap-genesis-2026-06-06.json"
+  and .runtime_refs.bootstrap_peer_ref == "public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt"
+' "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" >/dev/null
