@@ -61,7 +61,9 @@ function serveFile(request, response) {
   const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
   const rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/software_safe.html" : requestUrl.pathname);
   const normalized = normalize(rawPath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const filePath = resolve(viewerRoot, `.${normalized}`);
+  const filePath = normalized.startsWith("/pixel-world-bridge/")
+    ? resolve(viewerRoot, "dist", `.${normalized}`)
+    : resolve(viewerRoot, `.${normalized}`);
   if (!relative(viewerRoot, filePath) || relative(viewerRoot, filePath).startsWith("..")) {
     response.writeHead(403);
     response.end("forbidden");
@@ -432,6 +434,15 @@ function actionReceiptProbeScript() {
       };
 
       await waitFor(() => window.__AW_TEST__?.injectSnapshot);
+      if (state().pixelWorldRuntimeStatus !== "ready") {
+        const reattachButton = Array.from(document.querySelectorAll("button"))
+          .find((button) => /Reattach Embedded Renderer|重新挂载/.test(button.textContent));
+        if (!reattachButton) {
+          throw new Error("missing Reattach Embedded Renderer button for action receipt probe");
+        }
+        reattachButton.click();
+        await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
+      }
       window.__AW_TEST__.injectSnapshot(snapshot);
       const receipt = await waitFor(() => {
         const current = receiptOf();

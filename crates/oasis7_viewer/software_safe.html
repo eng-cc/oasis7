@@ -46,6 +46,9 @@
         --font-viewer-body: var(--font-body);
         --font-viewer-display: var(--font-display);
         --font-viewer-mono: var(--font-mono);
+        --shadow-stage: 0 30px 72px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(208, 168, 91, 0.08);
+        --shadow-surface: 0 18px 44px rgba(0, 0, 0, 0.32);
+        --shadow-inset-stage: inset 0 1px 0 rgba(255, 255, 255, 0.055);
         --space-panel-gap: 18px;
         --space-stack-gap: 16px;
         --space-control-gap: 8px;
@@ -105,10 +108,22 @@
       }
       .panel--targets { grid-area: targets; }
       .panel--stage {
+        position: relative;
         grid-area: stage;
-        background: var(--panel-stage);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 18%),
+          var(--panel-stage);
         border-color: var(--border-strong);
-        box-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
+        box-shadow: var(--shadow-stage);
+      }
+      .panel--stage::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, transparent, rgba(208, 168, 91, 0.16), transparent) top / 100% 1px no-repeat,
+          linear-gradient(180deg, rgba(141, 199, 170, 0.08), transparent 22%);
       }
       .panel--details { grid-area: details; }
       body.pixel-world-focus-active {
@@ -430,54 +445,96 @@
       }
       .pixel-world-command-strip {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
+        grid-template-columns: minmax(0, 1.16fr) minmax(0, 1.08fr) minmax(0, 0.92fr);
+        gap: 12px;
+        padding: 3px;
+        border: 1px solid rgba(152, 177, 150, 0.12);
+        border-radius: 8px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+          rgba(4, 8, 7, 0.3);
       }
       .pixel-world-command-cell {
+        position: relative;
         min-height: 112px;
         display: flex;
         flex-direction: column;
         gap: 8px;
-        padding: 12px;
+        padding: 13px 14px 14px;
         border-radius: 8px;
         border: 1px solid rgba(141, 199, 170, 0.2);
-        background: rgba(255, 255, 255, 0.025);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+          rgba(8, 14, 12, 0.72);
+        box-shadow: var(--shadow-inset-stage);
+        overflow: hidden;
+      }
+      .pixel-world-command-cell::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 3px;
+        background: rgba(141, 199, 170, 0.46);
       }
       .pixel-world-command-cell--objective {
-        border-color: rgba(110, 231, 183, 0.28);
+        border-color: rgba(110, 231, 183, 0.4);
+        background:
+          linear-gradient(135deg, rgba(110, 231, 183, 0.12), rgba(255, 255, 255, 0.018) 52%),
+          rgba(8, 17, 13, 0.78);
+      }
+      .pixel-world-command-cell--objective::before {
+        background: rgba(110, 231, 183, 0.82);
       }
       .pixel-world-command-cell--next {
-        border-color: rgba(250, 204, 21, 0.26);
+        border-color: rgba(250, 204, 21, 0.36);
+        background:
+          linear-gradient(135deg, rgba(250, 204, 21, 0.1), rgba(255, 255, 255, 0.016) 56%),
+          rgba(18, 15, 8, 0.76);
+      }
+      .pixel-world-command-cell--next::before {
+        background: rgba(250, 204, 21, 0.76);
       }
       .pixel-world-command-cell--leverage {
-        border-color: rgba(99, 179, 255, 0.3);
+        border-color: rgba(99, 179, 255, 0.26);
+      }
+      .pixel-world-command-cell--leverage::before {
+        background: rgba(99, 179, 255, 0.58);
       }
       .pixel-world-action-receipt {
         display: grid;
-        grid-template-columns: minmax(104px, 128px) minmax(0, 1fr) auto;
-        gap: 12px;
+        grid-template-columns: minmax(108px, 132px) minmax(0, 1fr) auto;
+        gap: 13px;
         align-items: center;
-        padding: 12px 14px;
+        padding: 13px 15px;
         border: 1px solid rgba(99, 179, 255, 0.24);
         border-left: 3px solid rgba(99, 179, 255, 0.72);
         border-radius: 8px;
-        background: rgba(29, 78, 216, 0.1);
+        background:
+          linear-gradient(90deg, rgba(99, 179, 255, 0.13), transparent 46%),
+          rgba(8, 18, 24, 0.62);
+        box-shadow: var(--shadow-inset-stage), 0 12px 32px rgba(0, 0, 0, 0.18);
       }
       .pixel-world-action-receipt[data-receipt-present="false"] {
         border-color: rgba(148, 163, 184, 0.2);
         border-left-color: rgba(148, 163, 184, 0.44);
-        background: rgba(148, 163, 184, 0.06);
+        background:
+          linear-gradient(90deg, rgba(148, 163, 184, 0.07), transparent 46%),
+          rgba(13, 17, 18, 0.5);
       }
       .pixel-world-action-receipt[data-receipt-state="blocked"],
       .pixel-world-action-receipt[data-receipt-state="rejected"] {
         border-color: rgba(251, 146, 60, 0.28);
         border-left-color: rgba(251, 146, 60, 0.82);
-        background: rgba(120, 53, 15, 0.12);
+        background:
+          linear-gradient(90deg, rgba(251, 146, 60, 0.14), transparent 48%),
+          rgba(28, 16, 9, 0.62);
       }
       .pixel-world-action-receipt[data-receipt-state="completed"] {
         border-color: rgba(110, 231, 183, 0.26);
         border-left-color: rgba(110, 231, 183, 0.82);
-        background: rgba(6, 95, 70, 0.12);
+        background:
+          linear-gradient(90deg, rgba(110, 231, 183, 0.13), transparent 48%),
+          rgba(7, 23, 17, 0.6);
       }
       .pixel-world-action-receipt__label,
       .pixel-world-action-receipt__meta {
@@ -611,11 +668,13 @@
       .pixel-world-focus-hud__identity,
       .pixel-world-focus-hud__cell,
       .pixel-world-focus-controls {
-        border: 1px solid rgba(152, 177, 150, 0.14);
-        border-radius: 6px;
-        background: rgba(7, 12, 10, 0.58);
-        backdrop-filter: blur(10px);
-        box-shadow: none;
+        border: 1px solid rgba(152, 177, 150, 0.18);
+        border-radius: 8px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent),
+          rgba(7, 12, 10, 0.68);
+        backdrop-filter: blur(12px);
+        box-shadow: var(--shadow-inset-stage), 0 16px 38px rgba(0, 0, 0, 0.22);
       }
       .pixel-world-focus-hud__identity,
       .pixel-world-focus-hud__cell {
@@ -700,10 +759,11 @@
         flex-direction: column;
         gap: 6px;
         padding: 8px;
-        border: 1px solid rgba(152, 177, 150, 0.12);
-        border-radius: 6px;
-        background: rgba(7, 12, 10, 0.5);
-        backdrop-filter: blur(8px);
+        border: 1px solid rgba(152, 177, 150, 0.16);
+        border-radius: 8px;
+        background: rgba(7, 12, 10, 0.64);
+        backdrop-filter: blur(10px);
+        box-shadow: var(--shadow-inset-stage);
         pointer-events: none;
       }
       .pixel-world-focus-rail__item {
@@ -717,12 +777,13 @@
         z-index: 112;
         inset: 92px 16px 72px 16px;
         overflow: hidden;
-        border: 1px solid rgba(141, 199, 170, 0.18);
+        border: 1px solid rgba(141, 199, 170, 0.26);
         border-radius: 8px;
         background:
-          radial-gradient(circle at 28% 36%, rgba(110, 231, 183, 0.16), transparent 18%),
-          radial-gradient(circle at 70% 62%, rgba(99, 179, 255, 0.13), transparent 22%),
+          linear-gradient(135deg, rgba(110, 231, 183, 0.11), transparent 30%),
+          linear-gradient(315deg, rgba(99, 179, 255, 0.1), transparent 34%),
           rgba(7, 12, 10, 0.22);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
         pointer-events: none;
       }
       .pixel-world-focus-fallback-map__grid {
@@ -753,10 +814,11 @@
         min-width: 124px;
         max-width: min(220px, 36vw);
         padding: 9px 10px;
-        border: 1px solid rgba(152, 177, 150, 0.22);
-        border-radius: 6px;
-        background: rgba(7, 12, 10, 0.72);
-        backdrop-filter: blur(6px);
+        border: 1px solid rgba(152, 177, 150, 0.26);
+        border-radius: 8px;
+        background: rgba(7, 12, 10, 0.78);
+        backdrop-filter: blur(8px);
+        box-shadow: var(--shadow-inset-stage), 0 12px 28px rgba(0, 0, 0, 0.22);
       }
       .pixel-world-focus-fallback-map__node span,
       .pixel-world-focus-fallback-map__meta span {
@@ -855,9 +917,11 @@
         width: min(420px, calc(100vw - 32px));
         max-height: calc(100vh - 124px);
         overflow: auto;
-        border: 1px solid rgba(152, 177, 150, 0.2);
+        border: 1px solid rgba(152, 177, 150, 0.22);
         border-radius: 8px;
-        background: rgba(7, 12, 10, 0.9);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 22%),
+          rgba(7, 12, 10, 0.92);
         backdrop-filter: blur(16px);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
       }
@@ -885,13 +949,14 @@
         display: flex;
         flex-direction: column;
         gap: 14px;
-        padding: 18px;
-        border-radius: 18px;
-        border: 1px solid rgba(208, 168, 91, 0.28);
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid rgba(208, 168, 91, 0.34);
         background:
-          radial-gradient(circle at top left, rgba(208, 168, 91, 0.16), transparent 28%),
+          linear-gradient(135deg, rgba(208, 168, 91, 0.14), transparent 32%),
           linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01)),
           rgba(10, 14, 12, 0.88);
+        box-shadow: var(--shadow-inset-stage), var(--shadow-surface);
       }
       .stage-hero__topline {
         display: flex;
@@ -1052,12 +1117,13 @@
       .pixel-world-canvas {
         position: relative;
         min-height: 280px;
-        border-radius: 18px;
+        border-radius: 8px;
         overflow: hidden;
-        border: 1px solid rgba(141, 199, 170, 0.26);
+        border: 1px solid rgba(141, 199, 170, 0.32);
         background:
-          linear-gradient(180deg, rgba(9, 15, 12, 0.88), rgba(7, 10, 9, 0.96)),
-          radial-gradient(circle at 20% 20%, rgba(141, 199, 170, 0.14), transparent 30%);
+          linear-gradient(180deg, rgba(10, 18, 15, 0.9), rgba(5, 8, 7, 0.98)),
+          linear-gradient(135deg, rgba(141, 199, 170, 0.12), transparent 34%);
+        box-shadow: var(--shadow-inset-stage), 0 18px 44px rgba(0, 0, 0, 0.24);
       }
       .pixel-world-canvas--rendered {
         min-height: auto;
@@ -1074,10 +1140,10 @@
         inset: 0;
         z-index: 0;
         background-image:
-          linear-gradient(rgba(141, 199, 170, 0.08) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(141, 199, 170, 0.08) 1px, transparent 1px);
+          linear-gradient(rgba(141, 199, 170, 0.1) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(141, 199, 170, 0.1) 1px, transparent 1px);
         background-size: 24px 24px;
-        opacity: 0.75;
+        opacity: 0.82;
       }
       .pixel-world-fragment-terrain {
         position: absolute;
@@ -1131,10 +1197,11 @@
         display: inline-flex;
         align-self: flex-start;
         padding: 8px 10px;
-        border-radius: 10px;
+        border-radius: 8px;
         font-size: 12px;
         border: 1px solid var(--border);
         background: rgba(7, 12, 18, 0.82);
+        box-shadow: var(--shadow-inset-stage), 0 10px 24px rgba(0, 0, 0, 0.22);
       }
       .pixel-world-canvas__callout--blocker {
         bottom: 52px;
@@ -1153,10 +1220,11 @@
         right: 12px;
         top: 12px;
         padding: 8px 10px;
-        border-radius: 10px;
+        border-radius: 8px;
         font-size: 12px;
         border: 1px solid rgba(99, 179, 255, 0.34);
         background: rgba(7, 12, 18, 0.82);
+        box-shadow: var(--shadow-inset-stage), 0 10px 24px rgba(0, 0, 0, 0.22);
       }
       .diagnostic {
         border-top: 1px dashed var(--border);
@@ -1207,6 +1275,11 @@
       }
       .diagnostic-surface {
         overflow: hidden;
+        border-color: rgba(152, 177, 150, 0.12);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 22%),
+          rgba(10, 13, 12, 0.72);
+        box-shadow: none;
       }
       .diagnostic-surface summary {
         list-style: none;
@@ -1227,7 +1300,7 @@
         gap: 4px;
       }
       .diagnostic-surface__meta {
-        color: var(--muted);
+        color: rgba(156, 168, 154, 0.78);
         font-size: 12px;
         line-height: 1.5;
       }
