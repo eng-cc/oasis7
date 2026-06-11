@@ -322,6 +322,65 @@ fn filter_request_peers_by_health_excludes_all_blocked_peers() {
 }
 
 #[test]
+fn filter_request_peers_by_health_keeps_record_exchange_pending_blocked_peer_as_fallback() {
+    let active_peer = PeerId::random();
+    let soft_blocked_peer = PeerId::random();
+    let hard_blocked_peer = PeerId::random();
+    let peers = vec![soft_blocked_peer, hard_blocked_peer, active_peer];
+    let healths = HashMap::from([
+        (
+            active_peer,
+            PeerManagerPeerHealth {
+                peer_id: active_peer.to_string(),
+                status: PeerManagerHealthStatus::Active,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
+            },
+        ),
+        (
+            soft_blocked_peer,
+            PeerManagerPeerHealth {
+                peer_id: soft_blocked_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![
+                    PeerManagerHealthIssue::MissingPeerRecord,
+                    PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
+                        observed_sources: 1,
+                        required_sources: 2,
+                    },
+                ],
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
+            },
+        ),
+        (
+            hard_blocked_peer,
+            PeerManagerPeerHealth {
+                peer_id: hard_blocked_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![PeerManagerHealthIssue::RelayBudgetExceeded {
+                    relayed_active_peers: 2,
+                    active_peer_count: 2,
+                    limit_per_mille: 500,
+                }],
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("relay_reserved".to_string()),
+                source_operator: None,
+                source_asn: None,
+            },
+        ),
+    ]);
+
+    let filtered = filter_request_peers_by_health(peers, &healths);
+    assert_eq!(filtered, vec![active_peer, soft_blocked_peer]);
+}
+
+#[test]
 fn peer_requires_active_quarantine_skips_missing_peer_record_block() {
     let active_peer = PeerId::random();
     let suspect_peer = PeerId::random();
@@ -575,8 +634,8 @@ fn admitted_active_transport_paths_excludes_non_active_peers_from_health_recompu
 }
 
 #[test]
-fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_set_but_in_health_map(
-) {
+fn refresh_peer_manager_healths_keeps_missing_record_active_peer_soft_blocked_for_request_fallback()
+{
     let healthy_peer_key = Keypair::generate_ed25519();
     let healthy_peer = PeerId::from(healthy_peer_key.public());
     let unverified_peer = PeerId::random();
@@ -642,8 +701,15 @@ fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_se
         .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)));
     assert!(quarantined.is_empty());
     assert_eq!(admitted, HashSet::from([healthy_peer]));
-    let artifacts = event_block_artifacts.lock().expect("lock block artifacts");
-    assert!(artifacts.contains_key(unverified_peer.to_string().as_str()));
+    let event_healths = event_peer_healths.lock().expect("lock peer healths");
+    let unverified_health = event_healths
+        .get(unverified_peer.to_string().as_str())
+        .expect("unverified peer health");
+    assert_eq!(unverified_health.status, PeerManagerHealthStatus::Blocked);
+    assert!(!super::runtime_loop::peer_requires_active_quarantine(
+        unverified_peer,
+        &healths
+    ));
 }
 
 #[test]
