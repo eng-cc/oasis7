@@ -149,11 +149,20 @@ function claimOwnedDetail(claim) {
   ].filter(Boolean).join(" · ");
 }
 
-function hasReleaseClaimAction(actions) {
-  return (actions || []).some((action) => {
+function releaseClaimActionState(actions) {
+  let published = false;
+  let disabledReason = null;
+  const available = (actions || []).some((action) => {
     const raw = `${action.actionId || ""} ${action.label || ""} ${action.protocolAction || ""}`.toLowerCase();
-    return raw.includes("release_agent_claim") || raw.includes("release claim") || raw.includes("release_agent");
+    const isRelease = raw.includes("release_agent_claim") || raw.includes("release claim") || raw.includes("release_agent");
+    if (!isRelease) {
+      return false;
+    }
+    published = true;
+    disabledReason = action.disabledReason || disabledReason;
+    return !action.disabledReason;
   });
+  return { available, published, disabledReason };
 }
 
 function expansionBranchCards(gameplay, locale) {
@@ -198,7 +207,7 @@ function ClaimAgentChoiceCard(props) {
     const owned = claimField(claim(), "owned_claims", "ownedClaims");
     return Array.isArray(owned) ? owned : [];
   };
-  const releaseActionAvailable = () => hasReleaseClaimAction(props.availableActions || []);
+  const releaseActionState = () => releaseClaimActionState(props.availableActions || []);
   return (
     <PanelSection
       title={tr(locale(), "Claim-Agent Choice", "Claim-Agent Choice")}
@@ -245,8 +254,10 @@ function ClaimAgentChoiceCard(props) {
                   meta={claimStatusText(owned)}
                 >
                   <div class="feedback-summary">
-                    {releaseActionAvailable()
+                    {releaseActionState().available
                       ? tr(locale(), "Release 已作为正式可用动作发布；可以从可用动作列表执行。", "Release is published as a canonical available action; execute it from the available actions list.")
+                      : releaseActionState().published
+                        ? tr(locale(), "Release 动作已经发布但当前不可执行；先处理可用动作列表里的阻塞原因。", "Release is published but currently disabled; resolve the blocker shown in the available actions list first.")
                       : tr(locale(), "维护方式是保持控制权与 upkeep 健康；release 只作为状态指导，直到正式动作发布。", "Maintain by keeping control and upkeep healthy; release stays guidance-only until a canonical action is published.")}
                   </div>
                   <Show when={claimOwnedDetail(owned)}>

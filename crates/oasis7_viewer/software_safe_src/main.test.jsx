@@ -361,6 +361,44 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).queryByRole("button", { name: /claim/i })).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("does not describe disabled release claim actions as executable", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          agent_claim: {
+            next_claim_quote: {
+              slot_index: 2,
+              owned_claim_count: 1,
+              claim_cap: 3,
+              blocked_reason: null,
+            },
+            owned_claims: [
+              {
+                target_agent_id: "agent-0",
+                status: "release_ready",
+                release_ready_in_epochs: 0,
+              },
+            ],
+          },
+          available_actions: [
+            {
+              action_id: "release_agent_claim",
+              label: "Release agent claim",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "agent-0",
+              disabled_reason: "cooldown active",
+            },
+          ],
+        },
+      }),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(within(stagePanel).getByText(/Release is published but currently disabled/i)).toBeInTheDocument();
+    expect(within(stagePanel).queryByText(/execute it from the available actions list/i)).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("keeps blocked claim reasons as diagnostics instead of fake claim buttons", async () => {
     const { container } = await renderViewerApp({
       snapshot: sampleSnapshot({

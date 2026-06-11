@@ -1360,6 +1360,7 @@
         }
         .list, .event-list { max-height: none; }
         .action-grid { grid-template-columns: 1fr; }
+        .summary-grid { grid-template-columns: 1fr; }
         .diagnostic-surface__summary { align-items: flex-start; flex-direction: column; }
         .stage-hero__topline { flex-direction: column; }
         .stage-hero__title { max-width: none; }
@@ -1424,15 +1425,17 @@
           line-height: 1.2;
         }
         .pixel-world-focus-controls {
-          grid-column: 2;
-          grid-row: 1;
-          justify-content: flex-end;
-          flex-wrap: nowrap;
-          align-self: stretch;
+          grid-column: 1 / -1;
+          grid-row: 2;
+          justify-content: flex-start;
+          flex-wrap: wrap;
+          align-self: start;
           padding: 5px;
         }
         .pixel-world-focus-controls button {
+          flex: 1 1 calc(50% - 6px);
           min-height: 30px;
+          min-width: 0;
           padding: 5px 7px;
           font-size: 11px;
         }

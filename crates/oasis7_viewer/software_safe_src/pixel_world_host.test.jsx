@@ -634,7 +634,7 @@ describe("pixel world host", () => {
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("makes the rendered canvas focusable with an accessible world description", async () => {
+  it("makes the rendered canvas focusable with a read-only accessible world description", async () => {
     runtimeMock.deriveRenderState = vi.fn((input) => ({
       locale: input.locale,
       worldBounds: { width_cm: 10_000_000, depth_cm: 5_000_000, height_cm: 1_000_000 },
@@ -673,9 +673,10 @@ describe("pixel world host", () => {
     await renderPixelWorldHost();
     screen.getByRole("button", { name: "Reattach Embedded Renderer" }).click();
 
-    const canvas = await screen.findByRole("application", { name: "Interactive world canvas" });
+    const canvas = await screen.findByRole("img", { name: "World canvas overview" });
     expect(canvas).toHaveAttribute("tabindex", "0");
     expect(canvas).toHaveAttribute("aria-describedby", "pixel-world-canvas-accessible-summary");
+    expect(document.getElementById("pixel-world-canvas-accessible-summary")).toHaveTextContent(/read-only overview/i);
     expect(document.getElementById("pixel-world-canvas-accessible-summary")).toHaveTextContent(/adjacent HUD/i);
     canvas.focus();
     expect(document.activeElement).toBe(canvas);

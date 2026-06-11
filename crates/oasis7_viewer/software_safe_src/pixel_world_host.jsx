@@ -1098,8 +1098,8 @@ function PixelWorldCanvasRenderer(props) {
         id={PIXEL_WORLD_RUNTIME_CANVAS_ID}
         class="pixel-world-canvas__surface"
         tabIndex="0"
-        role="application"
-        aria-label={tr(props.locale(), "交互式世界 Canvas", "Interactive world canvas")}
+        role="img"
+        aria-label={tr(props.locale(), "世界 Canvas 概览", "World canvas overview")}
         aria-describedby="pixel-world-canvas-accessible-summary"
         width="960"
         height="540"
@@ -1107,8 +1107,8 @@ function PixelWorldCanvasRenderer(props) {
       <div id="pixel-world-canvas-accessible-summary" class="sr-only">
         {tr(
           props.locale(),
-          "Canvas 显示当前世界；相邻 HUD、焦点栏和命令抽屉提供当前 Agent、阻塞、回执与命令路径。",
-          "The canvas shows the current world; adjacent HUD, focus rail, and command drawer expose the current agent, blocker, receipt, and command path.",
+          "Canvas 提供当前世界的只读概览；相邻 HUD、焦点栏和命令抽屉提供当前 Agent、阻塞、回执与命令路径。",
+          "The canvas provides a read-only overview of the current world; adjacent HUD, focus rail, and command drawer expose the current agent, blocker, receipt, and command path.",
         )}
       </div>
       <div class="pixel-world-canvas__overlay">
