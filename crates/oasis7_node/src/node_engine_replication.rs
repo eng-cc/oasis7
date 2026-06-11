@@ -433,6 +433,64 @@ impl PosNodeEngine {
         )
     }
 
+    fn try_sync_high_replication_checkpoint_boundary(
+        &mut self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
+        replication_runtime: &mut ReplicationRuntime,
+        checkpoint_height: u64,
+        blocked_height: u64,
+        execution_hook: &mut Option<&mut dyn NodeExecutionHook>,
+        progress_callback: &mut Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
+    ) -> Result<bool, NodeError> {
+        if self.require_execution_on_commit
+            || checkpoint_height <= blocked_height
+            || checkpoint_height <= self.replication_persisted_height
+        {
+            return Ok(false);
+        }
+
+        let checkpoint = match self.sync_replication_height_once(
+            endpoint,
+            node_id,
+            world_id,
+            replication_runtime,
+            checkpoint_height,
+        )? {
+            GapSyncHeightOutcome::Synced { message, payload } => (message, payload),
+            GapSyncHeightOutcome::NotFound { .. } => return Ok(false),
+        };
+        let (message, payload) = checkpoint;
+        if payload.execution_block_hash.is_none() || payload.execution_state_root.is_none() {
+            return Ok(false);
+        }
+
+        let (block_hash, committed_at_ms) = with_execution_hook(execution_hook, |hook| {
+            self.execute_synced_replication_commit(world_id, &payload, hook)
+        })?;
+        self.persist_synced_replication_message(
+            endpoint,
+            node_id,
+            world_id,
+            replication_runtime,
+            &message,
+            checkpoint_height,
+        )?;
+        self.replication_persisted_height =
+            self.replication_persisted_height.max(checkpoint_height);
+        self.record_synced_replication_height(checkpoint_height, block_hash, committed_at_ms)?;
+        self.last_replication_gap_sync_blocked_height = None;
+        self.last_replication_gap_sync_blocked_reason = None;
+        self.last_replication_gap_sync_repair_attempt_height = None;
+        self.last_replication_gap_sync_repair_attempt_summary = None;
+        if let Some(callback) = progress_callback.as_deref_mut() {
+            let decision = self.idle_pending_decision()?;
+            callback(self.snapshot_from_decision(&decision));
+        }
+        Ok(true)
+    }
+
     pub(super) fn sync_missing_replication_commits_with_progress(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -449,6 +507,24 @@ impl PosNodeEngine {
         if self.network_committed_height <= self.replication_persisted_height {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
+            return Ok(());
+        }
+
+        let network_lag = self
+            .network_committed_height
+            .saturating_sub(self.replication_persisted_height);
+        if network_lag > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+            && self.try_sync_high_replication_checkpoint_boundary(
+                endpoint,
+                node_id,
+                world_id,
+                replication_runtime,
+                self.network_committed_height,
+                self.replication_persisted_height,
+                &mut execution_hook,
+                &mut progress_callback,
+            )?
+        {
             return Ok(());
         }
 
@@ -526,6 +602,18 @@ impl PosNodeEngine {
                 continue;
             }
             if not_found {
+                if self.try_sync_high_replication_checkpoint_boundary(
+                    endpoint,
+                    node_id,
+                    world_id,
+                    replication_runtime,
+                    self.network_committed_height,
+                    next_height,
+                    &mut execution_hook,
+                    &mut progress_callback,
+                )? {
+                    break;
+                }
                 self.last_replication_gap_sync_blocked_height = Some(next_height);
                 self.last_replication_gap_sync_blocked_reason = Some(format!(
                     "replication gap sync blocked: missing commit height {next_height} while network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",

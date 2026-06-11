@@ -547,7 +547,7 @@ fn sequencer_commit_binding_rejects_missing_execution_hashes() {
 }
 
 #[test]
-fn synced_non_sequencer_commit_keeps_verified_execution_binding_without_local_materialization() {
+fn synced_non_sequencer_commit_does_not_create_binding_without_local_execution() {
     let config = NodeConfig::new("node-b", "world-synced-exec-binding", NodeRole::Storage)
         .expect("config");
     let mut engine = PosNodeEngine::new(&config).expect("engine");
@@ -571,10 +571,8 @@ fn synced_non_sequencer_commit_keeps_verified_execution_binding_without_local_ma
         .expect("apply synced replication commit");
 
     assert_eq!(engine.last_execution_height, 0);
-    assert_eq!(engine.commit_execution_binding_for_height(8).expect("binding"), (
-        Some("exec-block-8"),
-        Some("exec-state-8"),
-    ));
+    assert_eq!(engine.commit_execution_binding_for_height(8).expect("binding"), (None, None));
+    assert!(engine.execution_binding_for_height(8).is_none());
 }
 
 #[test]
