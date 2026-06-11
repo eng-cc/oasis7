@@ -1,3 +1,6 @@
+version: 1
+role: tpm
+status: committed
 tasks:
   - task_uid: task_2412c3dfe33b4b3594273194870eae8f
     title: "rebuild public_testnet from governed bootstrap artifacts"

@@ -48,6 +48,7 @@ The formal path is:
    - include `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched
    - include `qa_engineer` when the PR claim depends on verification or release readiness
    - include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, or UI-heavy claims are touched
+   - include `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, or known technical-debt boundaries
    - include `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched
 2. Freeze the review target:
    - changed files or path set
