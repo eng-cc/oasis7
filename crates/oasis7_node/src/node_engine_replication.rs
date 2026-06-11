@@ -530,8 +530,8 @@ impl PosNodeEngine {
             }
         }
 
-        let (block_hash, committed_at_ms) =
-            if let Some(checkpoint_descriptor) = payload.execution_checkpoint.clone() {
+        let Some((block_hash, committed_at_ms)) =
+            (if let Some(checkpoint_descriptor) = payload.execution_checkpoint.clone() {
                 let Some(execution_block_hash) = payload.execution_block_hash.clone() else {
                     return Ok(false);
                 };
@@ -552,7 +552,7 @@ impl PosNodeEngine {
                 )?;
                 with_execution_hook(execution_hook, |hook| {
                     let Some(hook) = hook else {
-                        return self.execute_synced_replication_commit(world_id, &payload, None);
+                        return Ok(None);
                     };
                     let result = hook
                         .install_checkpoint_bundle(
@@ -583,7 +583,7 @@ impl PosNodeEngine {
                     self.last_execution_block_hash = Some(result.execution_block_hash);
                     self.last_execution_state_root = Some(result.execution_state_root);
                     self.remember_execution_binding_for_height(payload.height);
-                    Ok((payload.block_hash.clone(), payload.committed_at_ms))
+                    Ok(Some((payload.block_hash.clone(), payload.committed_at_ms)))
                 })?
             } else {
                 if execution_hook.is_some()
@@ -591,10 +591,13 @@ impl PosNodeEngine {
                 {
                     return Ok(false);
                 }
-                with_execution_hook(execution_hook, |hook| {
+                Some(with_execution_hook(execution_hook, |hook| {
                     self.execute_synced_replication_commit(world_id, &payload, hook)
-                })?
-            };
+                })?)
+            })
+        else {
+            return Ok(false);
+        };
         self.persist_synced_replication_message(
             endpoint,
             node_id,

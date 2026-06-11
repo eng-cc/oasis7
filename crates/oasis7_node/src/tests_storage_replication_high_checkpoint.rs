@@ -317,6 +317,123 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
 }
 
 #[test]
+fn observer_gap_sync_does_not_persist_sparse_execution_checkpoint_without_hook() {
+    let world_id = "world-gap-sync-checkpoint-no-hook";
+    let dir_a = temp_dir("gap-sync-checkpoint-no-hook-a");
+    let dir_b = temp_dir("gap-sync-checkpoint-no-hook-b");
+    let (_, public_key_a) = deterministic_keypair_hex(244);
+    let (_, public_key_b) = deterministic_keypair_hex(245);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 244)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 244)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 245)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(replication_config_b.clone());
+
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    for height in 1..=3 {
+        let decision = PosDecision {
+            height,
+            slot: height,
+            epoch: 0,
+            status: PosConsensusStatus::Committed,
+            block_hash: format!("block-{height}"),
+            action_root: empty_action_root(),
+            committed_actions: Vec::new(),
+            approved_stake: 100,
+            rejected_stake: 0,
+            required_stake: 67,
+            total_stake: 100,
+        };
+        let execution_block_hash = format!("exec-block-{height}");
+        let execution_state_root = format!("exec-state-{height}");
+        let checkpoint = (height == 3).then(|| {
+            test_execution_checkpoint_bundle(height, &execution_block_hash, &execution_state_root)
+        });
+        replication_a
+            .build_local_commit_message_with_checkpoint(
+                "node-a",
+                world_id,
+                5_700 + i64::try_from(height).expect("height fits i64"),
+                &decision,
+                Some(execution_block_hash.as_str()),
+                Some(execution_state_root.as_str()),
+                checkpoint,
+            )
+            .expect("build local message")
+            .expect("message");
+    }
+    std::fs::remove_file(dir_a.join("replication_commit_messages/00000000000000000001.json"))
+        .expect("remove low commit 1");
+    std::fs::remove_file(dir_a.join("replication_commit_messages/00000000000000000002.json"))
+        .expect("remove low commit 2");
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register fetch handlers");
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
+            .expect("endpoint b");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("runtime b");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("engine b");
+    engine_b.network_committed_height = 3;
+
+    engine_b
+        .sync_missing_replication_commits(
+            &endpoint_b,
+            "node-b",
+            world_id,
+            Some(&mut replication_b),
+            None,
+        )
+        .expect("no hook sparse checkpoint sync should not error");
+
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert_eq!(engine_b.last_execution_height, 0);
+    assert!(replication_b
+        .load_commit_message_by_height(world_id, 3)
+        .expect("load high checkpoint")
+        .is_none());
+
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
 fn observer_gap_sync_probes_checkpoint_boundary_below_non_checkpoint_head() {
     let world_id = "world-gap-sync-boundary-below-head";
     let dir_a = temp_dir("gap-sync-boundary-below-head-a");
