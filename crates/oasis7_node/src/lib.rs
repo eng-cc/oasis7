@@ -384,11 +384,12 @@ impl NodeRuntime {
             &self.replication_network,
             effective_replication_config.as_ref(),
         ) {
-            if let Err(err) = register_replication_fetch_handlers(
+            if let Err(err) = register_replication_fetch_handlers_with_checkpoint_export(
                 network,
                 replication_config,
                 self.config.world_id.as_str(),
                 &self.config.network_policy,
+                self.execution_hook.clone(),
             ) {
                 self.running.store(false, Ordering::SeqCst);
                 return Err(err);
@@ -760,11 +761,28 @@ impl Drop for NodeRuntime {
     }
 }
 
+#[cfg(test)]
 fn register_replication_fetch_handlers(
     handle: &NodeReplicationNetworkHandle,
     replication: &NodeReplicationConfig,
     world_id: &str,
     network_policy: &NodeNetworkPolicy,
+) -> Result<(), NodeError> {
+    register_replication_fetch_handlers_with_checkpoint_export(
+        handle,
+        replication,
+        world_id,
+        network_policy,
+        None,
+    )
+}
+
+fn register_replication_fetch_handlers_with_checkpoint_export(
+    handle: &NodeReplicationNetworkHandle,
+    replication: &NodeReplicationConfig,
+    world_id: &str,
+    network_policy: &NodeNetworkPolicy,
+    execution_hook: Option<Arc<Mutex<Box<dyn NodeExecutionHook>>>>,
 ) -> Result<(), NodeError> {
     let network = handle.clone_network();
     if network_policy.allows_lane_operation(
@@ -774,6 +792,7 @@ fn register_replication_fetch_handlers(
         let commit_root_dir = replication.root_dir.clone();
         let commit_world_id = world_id.to_string();
         let commit_replication_config = replication.clone();
+        let commit_execution_hook = execution_hook.clone();
         network
             .register_handler(
                 REPLICATION_FETCH_COMMIT_PROTOCOL,
@@ -805,6 +824,39 @@ fn register_replication_fetch_handlers(
                         request.height,
                     )
                     .map_err(network_internal_error)?;
+                    let message = match (message, commit_execution_hook.as_ref()) {
+                        (Some(message), Some(execution_hook)) => {
+                            let checkpoint = execution_hook
+                                .lock()
+                                .map_err(|_| {
+                                    network_internal_error(NodeError::Execution {
+                                        reason: "execution hook lock poisoned".to_string(),
+                                    })
+                                })?
+                                .export_checkpoint_bundle(request.height)
+                                .map_err(|reason| {
+                                    network_internal_error(NodeError::Execution { reason })
+                                })?;
+                            if let Some(checkpoint) = checkpoint {
+                                let runtime = ReplicationRuntime::new(
+                                    &commit_replication_config,
+                                    message.node_id.as_str(),
+                                )
+                                .map_err(network_internal_error)?;
+                                Some(
+                                    runtime
+                                        .attach_execution_checkpoint_descriptor_to_message(
+                                            &message,
+                                            &checkpoint,
+                                        )
+                                        .map_err(network_internal_error)?,
+                                )
+                            } else {
+                                Some(message)
+                            }
+                        }
+                        (message, _) => message,
+                    };
                     let response = FetchCommitResponse {
                         found: message.is_some(),
                         message,
