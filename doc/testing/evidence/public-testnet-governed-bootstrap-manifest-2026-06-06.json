@@ -43,8 +43,11 @@
     "required_gates": [
       "shared_devnet_pass",
       "public_rpc_ready",
+      "explorer_public_ready",
       "faucet_guard_ready",
-      "reset_policy_announced"
+      "reset_policy_announced",
+      "runtime_bootstrap",
+      "claims_boundary_review"
     ]
   },
   "evidence_refs": [

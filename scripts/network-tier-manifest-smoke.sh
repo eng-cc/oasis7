@@ -27,6 +27,24 @@ latest_summary() {
   ls -1dt "$scenario_dir"/public-testnet-* | head -n 1
 }
 
+replace_literal() {
+  local path=$1
+  local needle=$2
+  local replacement=$3
+  python3 - "$path" "$needle" "$replacement" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+needle = sys.argv[2]
+replacement = sys.argv[3]
+text = path.read_text(encoding="utf-8")
+if needle not in text:
+    raise SystemExit(f"needle not found in {path}: {needle!r}")
+path.write_text(text.replace(needle, replacement), encoding="utf-8")
+PY
+}
+
 cat >"$bundle_path" <<'EOF'
 {"bundle":"public-testnet-smoke"}
 EOF
@@ -104,8 +122,11 @@ EOF
   --promote-from shared_devnet \
   --require-gate shared_devnet_pass \
   --require-gate public_rpc_ready \
+  --require-gate explorer_public_ready \
   --require-gate faucet_guard_ready \
   --require-gate reset_policy_announced \
+  --require-gate runtime_bootstrap \
+  --require-gate claims_boundary_review \
   --allowed-claim public_testnet \
   --denied-claim mainnet_live \
   --denied-claim production_oc_settlement \
@@ -131,15 +152,15 @@ runtime_bootstrap	runtime_engineer	pass	RUNTIME_BOOTSTRAP_EVIDENCE	runtime boots
 claims_boundary_review	qa_engineer	pass	CLAIMS_BOUNDARY_EVIDENCE	claims boundary reviewed
 EOF
 
-sed -i "s|SHARED_DEVNET_PASS_EVIDENCE|$shared_devnet_pass_evidence|g" "$ready_lanes_tsv"
-sed -i "s|PUBLIC_RPC_EVIDENCE|$public_rpc_evidence|g" "$ready_lanes_tsv"
-sed -i "s|EXPLORER_EVIDENCE|$explorer_evidence|g" "$ready_lanes_tsv"
-sed -i "s|FAUCET_EVIDENCE|$faucet_evidence|g" "$ready_lanes_tsv"
-sed -i "s|RESET_POLICY_EVIDENCE|$reset_policy_evidence|g" "$ready_lanes_tsv"
-sed -i "s|RUNTIME_BOOTSTRAP_EVIDENCE|$runtime_bootstrap_evidence|g" "$ready_lanes_tsv"
-sed -i "s|CLAIMS_BOUNDARY_EVIDENCE|$claims_boundary_evidence|g" "$ready_lanes_tsv"
+replace_literal "$ready_lanes_tsv" "SHARED_DEVNET_PASS_EVIDENCE" "$shared_devnet_pass_evidence"
+replace_literal "$ready_lanes_tsv" "PUBLIC_RPC_EVIDENCE" "$public_rpc_evidence"
+replace_literal "$ready_lanes_tsv" "EXPLORER_EVIDENCE" "$explorer_evidence"
+replace_literal "$ready_lanes_tsv" "FAUCET_EVIDENCE" "$faucet_evidence"
+replace_literal "$ready_lanes_tsv" "RESET_POLICY_EVIDENCE" "$reset_policy_evidence"
+replace_literal "$ready_lanes_tsv" "RUNTIME_BOOTSTRAP_EVIDENCE" "$runtime_bootstrap_evidence"
+replace_literal "$ready_lanes_tsv" "CLAIMS_BOUNDARY_EVIDENCE" "$claims_boundary_evidence"
 cp "$ready_lanes_tsv" "$runtime_block_lanes_tsv"
-sed -i $'s|runtime_bootstrap\truntime_engineer\tpass\t|runtime_bootstrap\truntime_engineer\tblock\t|' "$runtime_block_lanes_tsv"
+replace_literal "$runtime_block_lanes_tsv" $'runtime_bootstrap\truntime_engineer\tpass\t' $'runtime_bootstrap\truntime_engineer\tblock\t'
 
 ./scripts/network-tier-manifest.sh validate --manifest "$manifest_path" >/dev/null
 ./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-shared-devnet.example.json >/dev/null
@@ -220,7 +241,7 @@ jq -e '.readiness_verdict == "block" and .live_candidate_allowed == false and (.
   "$(latest_summary "$out_dir/runtime-bootstrap-block")/summary.json" >/dev/null
 
 cp "$ready_lanes_tsv" "$template_pass_lanes_tsv"
-sed -i "s|$runtime_bootstrap_evidence|doc/testing/templates/public-testnet-rehearsal-template.md|g" "$template_pass_lanes_tsv"
+replace_literal "$template_pass_lanes_tsv" "$runtime_bootstrap_evidence" "doc/testing/templates/public-testnet-rehearsal-template.md"
 if ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
   --lanes-tsv "$template_pass_lanes_tsv" \

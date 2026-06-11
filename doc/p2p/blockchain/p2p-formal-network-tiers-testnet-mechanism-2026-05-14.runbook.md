@@ -108,27 +108,25 @@
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
-## 7. 当前缺口（2026-05-18）
-- 当前 example manifest 仍是：
+## 7. 当前缺口（2026-06-06）
+- 历史 `specified_skeleton_only` 缺口已不再是唯一事实：仓库现在已有 live-candidate / governed-bootstrap 证据集：
+  - `doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
+  - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
+  - `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
+  - `doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json`
+- 当前仍不能宣称 `ready_for_live_candidate` 的原因已转为：
+  - governed bootstrap manifest 仍是 `status=rehearsal`
+  - seven-lane readiness 仍必须以正式 lanes TSV + `network-tier-public-testnet-readiness.sh` 汇总为准
+  - 只要任一 lane 仍是 `partial` / `block`，或 evidence 仍是 template / placeholder / private-only ref，就不得升级为 `ready_for_live_candidate`
+- 当前 example manifest 仍只能作为 skeleton/template 使用：
   - `network_id=oasis7-public-testnet-example`
   - `chain_id=oasis7-public-testnet-example`
   - `rpc/explorer/faucet = example.invalid`
-- 当前 placeholder evidence 仍明确：
-  - 不证明 public RPC reachability
-  - 不证明 explorer freshness
-  - 不证明 guarded faucet enforcement
-  - 不证明 reset-policy announcement
-  - 不证明 `ready_for_live_candidate`
-- 当前仓库还没有：
-  - live `public_testnet` candidate bundle ref
-  - live `public_testnet` lanes TSV
-  - real public endpoint evidence
-  - claims boundary 审核结论
 
 ## 8. 对外口径边界
 - 现在允许说：
   - `formal public_testnet mechanism is documented`
-  - `current verdict is specified_skeleton_only`
+  - `current governed bootstrap evidence is rehearsal / not ready_for_live_candidate`
   - `shared_devnet is not public_testnet`
 - 现在不允许说：
   - `live public testnet is already online`
@@ -146,5 +144,6 @@
 ## 10. 收口标准
 - 只有当 seven-lane TSV 全部为 `pass`，且 evidence 都不是 template / placeholder / private-only ref，`public_testnet` readiness review 才允许输出 `ready_for_live_candidate`。
 - 在此之前，producer / QA / liveops 必须继续维持：
-  - `specified_skeleton_only`
+  - `not_ready_for_live_candidate`
+  - `rehearsal_or_skeleton_only`
   - `do_not_claim_live_public_testnet`

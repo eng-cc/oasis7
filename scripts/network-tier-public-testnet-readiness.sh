@@ -183,7 +183,7 @@ def is_non_public_endpoint(raw: str) -> bool:
     return not ip.is_global
 
 
-def is_template_ref(raw: str, resolved: pathlib.Path | None = None) -> bool:
+def is_template_ref(raw: str, resolved=None) -> bool:
     lowered = raw.strip().lower()
     if (
         "/templates/" in lowered
