@@ -157,6 +157,7 @@ pub(super) fn recompute_peer_manager_healths(
         let active_path = active_transport_paths.get(&peer_id);
         let mut issues = Vec::new();
         let mut hard_block = false;
+        let mut soft_block = false;
         let discovery_sources = record
             .map(|record| record.record.discovery_sources.clone())
             .unwrap_or_default();
@@ -167,7 +168,11 @@ pub(super) fn recompute_peer_manager_healths(
 
         if record.is_none() {
             issues.push(PeerManagerHealthIssue::MissingPeerRecord);
-            hard_block = true;
+            if active_path.is_some() {
+                soft_block = true;
+            } else {
+                hard_block = true;
+            }
         } else if discovery_sources.len() < policy.min_peer_discovery_sources {
             issues.push(PeerManagerHealthIssue::SingleSourceDiscovery {
                 observed_sources: discovery_sources.len(),
@@ -351,7 +356,7 @@ pub(super) fn recompute_peer_manager_healths(
             }
         }
 
-        let status = if hard_block {
+        let status = if hard_block || soft_block {
             PeerManagerHealthStatus::Blocked
         } else if !issues.is_empty() {
             PeerManagerHealthStatus::Suspect

@@ -215,13 +215,21 @@ pub(super) fn filter_request_peers_by_health(
     ranked
         .iter()
         .filter(|(_, peer_id)| {
-            !matches!(
-                peer_healths.get(peer_id).map(|health| health.status),
-                Some(PeerManagerHealthStatus::Blocked)
-            )
+            !peer_healths
+                .get(peer_id)
+                .is_some_and(peer_health_is_request_blocked)
         })
         .map(|(_, peer_id)| *peer_id)
         .collect()
+}
+
+fn peer_health_is_request_blocked(health: &PeerManagerPeerHealth) -> bool {
+    matches!(health.status, PeerManagerHealthStatus::Blocked)
+        && (health.issues.is_empty()
+            || !health
+                .issues
+                .iter()
+                .all(peer_health_issue_is_record_exchange_pending))
 }
 
 pub(super) fn peer_requires_active_quarantine(
@@ -652,12 +660,12 @@ pub(super) fn handle_command(
             } else {
                 candidate_peers = peers.clone();
             }
+            candidate_peers = filter_request_peers_by_health(candidate_peers, peer_healths_by_id);
             candidate_peers = filter_request_peers_by_lane(
                 candidate_peers,
                 protocol.as_str(),
                 discovered_peer_records,
             );
-            candidate_peers = filter_request_peers_by_health(candidate_peers, peer_healths_by_id);
             if candidate_peers.is_empty() {
                 let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
                     protocol: if using_provider_subset {

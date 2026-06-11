@@ -20,6 +20,7 @@ mod active_set_candidate_tests;
 mod admissible_request_peers_tests;
 mod discovery_peer_record_tests;
 mod peer_record_tests;
+mod request_peer_filter_tests;
 mod subscribe_ack_tests;
 mod transport_path_refresh_tests;
 
@@ -234,91 +235,6 @@ fn push_bounded_vec_keeps_recent_window() {
 
     push_bounded_vec(&mut values, 5, 1);
     assert_eq!(values, vec![5]);
-}
-
-#[test]
-fn filter_request_peers_by_health_prefers_non_suspect_peers() {
-    let peer_a = PeerId::random();
-    let peer_b = PeerId::random();
-    let peer_c = PeerId::random();
-    let peers = vec![peer_a, peer_b, peer_c];
-    let healths = HashMap::from([
-        (
-            peer_a,
-            PeerManagerPeerHealth {
-                peer_id: peer_a.to_string(),
-                status: PeerManagerHealthStatus::Suspect,
-                issues: Vec::new(),
-                discovery_sources: Vec::new(),
-                active_path_kind: Some("relay_reserved".to_string()),
-                source_operator: None,
-                source_asn: None,
-            },
-        ),
-        (
-            peer_b,
-            PeerManagerPeerHealth {
-                peer_id: peer_b.to_string(),
-                status: PeerManagerHealthStatus::Active,
-                issues: Vec::new(),
-                discovery_sources: Vec::new(),
-                active_path_kind: Some("direct".to_string()),
-                source_operator: None,
-                source_asn: None,
-            },
-        ),
-        (
-            peer_c,
-            PeerManagerPeerHealth {
-                peer_id: peer_c.to_string(),
-                status: PeerManagerHealthStatus::Candidate,
-                issues: Vec::new(),
-                discovery_sources: Vec::new(),
-                active_path_kind: None,
-                source_operator: None,
-                source_asn: None,
-            },
-        ),
-    ]);
-
-    let filtered = filter_request_peers_by_health(peers, &healths);
-    assert_eq!(filtered, vec![peer_b, peer_c, peer_a]);
-}
-
-#[test]
-fn filter_request_peers_by_health_excludes_all_blocked_peers() {
-    let peer_a = PeerId::random();
-    let peer_b = PeerId::random();
-    let peers = vec![peer_a, peer_b];
-    let healths = HashMap::from([
-        (
-            peer_a,
-            PeerManagerPeerHealth {
-                peer_id: peer_a.to_string(),
-                status: PeerManagerHealthStatus::Blocked,
-                issues: Vec::new(),
-                discovery_sources: Vec::new(),
-                active_path_kind: None,
-                source_operator: None,
-                source_asn: None,
-            },
-        ),
-        (
-            peer_b,
-            PeerManagerPeerHealth {
-                peer_id: peer_b.to_string(),
-                status: PeerManagerHealthStatus::Blocked,
-                issues: Vec::new(),
-                discovery_sources: Vec::new(),
-                active_path_kind: None,
-                source_operator: None,
-                source_asn: None,
-            },
-        ),
-    ]);
-
-    let filtered = filter_request_peers_by_health(peers, &healths);
-    assert!(filtered.is_empty());
 }
 
 #[test]
@@ -575,8 +491,8 @@ fn admitted_active_transport_paths_excludes_non_active_peers_from_health_recompu
 }
 
 #[test]
-fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_set_but_in_health_map(
-) {
+fn refresh_peer_manager_healths_keeps_missing_record_active_peer_soft_blocked_for_request_fallback()
+{
     let healthy_peer_key = Keypair::generate_ed25519();
     let healthy_peer = PeerId::from(healthy_peer_key.public());
     let unverified_peer = PeerId::random();
@@ -642,8 +558,15 @@ fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_se
         .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)));
     assert!(quarantined.is_empty());
     assert_eq!(admitted, HashSet::from([healthy_peer]));
-    let artifacts = event_block_artifacts.lock().expect("lock block artifacts");
-    assert!(artifacts.contains_key(unverified_peer.to_string().as_str()));
+    let event_healths = event_peer_healths.lock().expect("lock peer healths");
+    let unverified_health = event_healths
+        .get(unverified_peer.to_string().as_str())
+        .expect("unverified peer health");
+    assert_eq!(unverified_health.status, PeerManagerHealthStatus::Blocked);
+    assert!(!super::runtime_loop::peer_requires_active_quarantine(
+        unverified_peer,
+        &healths
+    ));
 }
 
 #[test]
