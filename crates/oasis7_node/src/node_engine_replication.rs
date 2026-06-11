@@ -519,6 +519,24 @@ impl PosNodeEngine {
             return Ok(());
         }
 
+        let network_lag = self
+            .network_committed_height
+            .saturating_sub(self.replication_persisted_height);
+        if network_lag > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+            && self.try_sync_high_replication_checkpoint_boundary(
+                endpoint,
+                node_id,
+                world_id,
+                replication_runtime,
+                self.network_committed_height,
+                self.replication_persisted_height,
+                &mut execution_hook,
+                &mut progress_callback,
+            )?
+        {
+            return Ok(());
+        }
+
         let mut next_height = checked_replication_successor(
             self.replication_persisted_height,
             "replication_persisted_height",
