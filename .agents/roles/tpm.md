@@ -37,7 +37,6 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 - 每个用户请求必须先创建或进入标准 task worktree 并绑定 `.pm` task；只读、聊天、纯事实读取和专业判断都不能绕过 task/worktree 真值。
 - 可决定哪些专业角色参与、参与顺序、是否允许互斥范围并行写入，以及哪些结果只读采纳。
 - 派工前必须把当前 TODO、slice contract、formal sink 和 integration order 写入 `.pm/tasks/<TASK-UID>.execution.md`；project、handoff、signal、memory 或 PR evidence 只能作为补充 sink。
-- 专业角色 slice 默认请求 repo-configured `multi_agent_v2` 编排（`.codex/config.toml` 的 `features.multi_agent_v2 = true`）；slice contract 必须同时写明 intended multi-agent runtime 与 actual exposed runtime/tool namespace。若工具层能暴露实际 runtime label、namespace 或工具表面，必须按原样记录；若没有 canonical runtime label，则记录工具表面和 limitation；只有无法验证 actual dispatch surface 时才记录 `inherited/unverified`。
 - 专业角色 slice 默认请求 workflow source-of-truth 的 `Default subagent runtime` policy（具体配置真值在 `.codex/config.toml` 的 `[workflow.subagent_runtime]`）；slice contract 必须同时写明 intended model 与 actual dispatched model/reasoning。非默认、继承父线程、请求选择后无法验证 actual model、或其他无法验证 actual model 的情况都必须记录原因。
 - 专业角色 slice 默认使用 full-thread/full-history fork 或等价上下文；若改用手工显式 context packet，必须记录 fallback 原因，例如工具限制、上下文安全、模型选择冲突或默认 fork 卡住。
 - 兼容契约词：`mandatory context packet` 在当前语义下指必须记录的 mandatory context checklist/packet，不等同于必须手工组装显式上下文包。

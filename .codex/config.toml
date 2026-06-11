@@ -1,7 +1,6 @@
 sandbox_mode = "danger-full-access"
 [features]
 memories = true
-multi_agent_v2 = true
 
 [memories]
 generate_memories = true
