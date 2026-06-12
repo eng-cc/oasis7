@@ -14,6 +14,7 @@
 - `volume-02-chapter-05-research.md`: 第二卷第五章口味调研，覆盖 `CH-071` 到 `CH-078` 的铅笔条款低规格试运行、分层确认、可暂停 / 可撤回、误认撤回和有限重新协作入口。
 - `volume-03-greenhouse-life-cycle-research.md`: 第三卷温室 / 生活循环路线调研，覆盖低规格温室、生活循环、污染隔离、重复照看、低压力参与和 `CH-079` 到 `CH-118` 的写作约束。
 - `volume-03-followup-route-research.md`: 第三卷 / 后续路线口味调研，覆盖长周期无变化、非排名轮换、延迟回看、不打开第二格和 `CH-119` 到 `CH-158` 的写作约束；已用于后续五章正文试写、focused review 和 route closeout。
+- `volume-04-route-research.md`: 第四卷公共节律路线口味调研，覆盖多入口同页、不排序、维修坞低亮、地球端晚到、剧场不加场和 `CH-159` 到 `CH-198` 的写作约束。
 - `internet-worker-hardship-meme-bank.md`: 互联网打工人苦难案例与梗备用素材库，用于把现实职场痛点转译成绿洲里的温柔反差。
 
 章节正文写作前，应按 `../draft/chapter-writing-sop.md` 的“社会口味调研”环节更新或确认调研结论。调研用于校准当下读者的情感需求、审美警惕、社会语境和互联网行业共同记忆，不直接替代 canon。
