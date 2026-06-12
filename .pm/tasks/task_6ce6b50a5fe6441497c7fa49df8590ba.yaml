@@ -1,0 +1,23 @@
+task_uid: task_6ce6b50a5fe6441497c7fa49df8590ba
+title: "Make hosted login Linux build manual-only"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-hosted-login-linux-trigger-check
+execution_log_path: .pm/tasks/task_6ce6b50a5fe6441497c7fa49df8590ba.execution.md
+status: done
+priority: P3
+source_signal: null
+source_refs:
+  - .github/workflows/hosted-login-linux-build.yml
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Hosted Login Linux Build / hosted-login-linux-x86-64 is manually triggered only through workflow_dispatch while preserving build_profile input."
+handoff_to: []
+updated_at: 2026-06-13T00:14:54+08:00
+last_started_at: 2026-06-04T17:33:41+08:00
+last_claim_type: task_complete
+last_verify_command: "python3 - <<'PY'\nfrom pathlib import Path\nimport yaml\npath = Path('.github/workflows/hosted-login-linux-build.yml')\ndata = yaml.safe_load(path.read_text())\ntrigger = data.get('on') or data.get(True)\nassert isinstance(trigger, dict), trigger\nassert 'workflow_dispatch' in trigger, trigger\nassert 'pull_request' not in trigger, trigger\nassert trigger['workflow_dispatch']['inputs']['build_profile']['default'] == 'release'\nprint('hosted login linux build is workflow_dispatch-only')\nPY"
+last_verified_at: 2026-06-13T00:14:53+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-13T00:14:54+08:00
