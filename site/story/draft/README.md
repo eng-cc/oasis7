@@ -36,4 +36,5 @@
 - `volume-03-followup-chapter-004.md`: 第三卷后续第四章试写 v0.1.1，当前覆盖 `CH-143` 到 `CH-150`；已完成 focused review 最小补丁。
 - `volume-03-followup-chapter-05-positioning.md`: 第三卷后续第五章写前定位，当前覆盖 `CH-151` 到 `CH-158`；用于进入正文前校准无变化记录、轮换夹、延迟回看窗、第二格暂不开启和没有成果词的长周期页边界，不是正文。
 - `volume-03-followup-chapter-005.md`: 第三卷后续第五章试写 v0.1.1，当前覆盖 `CH-151` 到 `CH-158`；已完成 focused review 最小补丁。
+- `volume-04-writing-positioning.md`: 第四卷公共节律路线写前定位 scaffold，当前覆盖 `CH-159` 到 `CH-198`；用于进入正式章级章节卡和正文前校准公共节律页、空白优先级栏、低亮维修灯、晚到接入贴、未加场剧场签和没有主入口的排程页，不是正文。
 - `chapter-writing-sop.md`: 根据第一章试写、调研、复审、五方最终审稿和极小润色经验整理的章节写作 SOP。
