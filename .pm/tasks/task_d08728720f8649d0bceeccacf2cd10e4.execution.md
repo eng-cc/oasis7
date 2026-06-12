@@ -110,3 +110,12 @@ Example:
 - Expected Result: task closeout records `claim-ready.sh`/task-complete verification, moves the task to `done`, and leaves `./scripts/prepare-task-pr.sh` able to find claim-ready and closeout evidence.
 - Actual Result: task-closeout summary reported `final_status: done`, `claim_verification_status: verified`, `claim_type: task_complete`, `pm_lint: ok`, and `next_step: ./scripts/prepare-task-pr.sh`.
 - Blocker / Next Action: commit this evidence-only entry and rerun `./scripts/prepare-task-pr.sh --json`.
+
+## 2026-06-12 09:45:09 CST / tpm
+- 完成内容: GitHub PR created and PR purpose decision recorded.
+- 遗留事项: normal PR required checks, mergeability, PR comments, and review threads must be watched to completion.
+- Action: Ran `./scripts/prepare-task-pr.sh --json`, then attempted `./scripts/prepare-task-pr.sh --create --title "Fix PM workflow health debt"`; the helper pushed the branch but `gh pr create` rejected non-interactive creation without body. Created the PR with equivalent `gh pr create --base main --head task/engineering-project-health-tech-debt --title "Fix PM workflow health debt" --body ...`.
+- Validation Command: `./scripts/prepare-task-pr.sh --json`; `gh pr create --base main --head task/engineering-project-health-tech-debt --title "Fix PM workflow health debt" --body ...`
+- Expected Result: PR exists for the task branch, with normal CI/watch purpose recorded.
+- Actual Result: PR URL: https://github.com/eng-cc/oasis7/pull/415. PR purpose decision: `normal_pr_ci_watch`; this is not a manual packaging/release CI hold.
+- Blocker / Next Action: push this evidence-only update, then watch PR #415 required checks, mergeability, PR comments, and review threads.
