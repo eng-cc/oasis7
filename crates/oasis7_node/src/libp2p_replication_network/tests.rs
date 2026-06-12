@@ -290,6 +290,12 @@ fn filtered_request_peers_excludes_transport_retry_cooldown_peers_across_protoco
         vec![observer_peer, sequencer_peer],
     );
     assert_eq!(cross_protocol_filtered, vec![sequencer_peer]);
+
+    let filtered_only_cooldown = network.filtered_request_peers(
+        "/aw/node/replication/fetch-commit/1.0.0",
+        vec![observer_peer],
+    );
+    assert_eq!(filtered_only_cooldown, vec![observer_peer]);
 }
 
 #[test]
@@ -366,7 +372,7 @@ fn filtered_request_peers_retries_transport_retry_cooldown_peer_after_retry_wind
         "/aw/node/replication/fetch-commit/1.0.0",
         vec![sequencer_peer],
     );
-    assert!(filtered_initial.is_empty());
+    assert_eq!(filtered_initial, vec![sequencer_peer]);
 
     std::thread::sleep(Duration::from_millis(15));
 
@@ -749,14 +755,14 @@ fn libp2p_replication_network_connection_gap_cools_peer_across_protocols() {
         crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
         b"node",
     );
-    assert!(matches!(
-        second,
-        Err(WorldError::NetworkProtocolUnavailable { .. })
-    ));
+    assert_eq!(
+        second.expect("sole connected peer remains a last-resort request target"),
+        b"commit-ok".to_vec()
+    );
     assert_eq!(
         fetch_commit_request_count.load(Ordering::SeqCst),
-        0,
-        "transport cooldown should suppress immediate cross-protocol reuse of the same peer"
+        1,
+        "transport cooldown should not suppress the only connected peer"
     );
 
     std::thread::sleep(Duration::from_millis(300));
@@ -768,7 +774,7 @@ fn libp2p_replication_network_connection_gap_cools_peer_across_protocols() {
         )
         .expect("fetch commit should recover after transport cooldown");
     assert_eq!(third, b"commit-ok".to_vec());
-    assert_eq!(fetch_commit_request_count.load(Ordering::SeqCst), 1);
+    assert_eq!(fetch_commit_request_count.load(Ordering::SeqCst), 2);
 }
 
 #[test]
@@ -913,13 +919,16 @@ fn libp2p_replication_network_connection_gap_on_ping_enters_short_cooldown() {
     let second = dialer.request("/aw/node/replication/ping", b"node");
     assert!(matches!(
         second,
-        Err(WorldError::NetworkProtocolUnavailable { .. })
+        Err(WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotAvailable,
+            ..
+        })
     ));
-    assert_eq!(
-        request_count.load(Ordering::SeqCst),
-        request_count_after_first,
-        "cooldown should suppress an immediate second ping request after a connection gap"
+    assert!(
+        request_count.load(Ordering::SeqCst) > request_count_after_first,
+        "transport cooldown should not suppress the only connected peer"
     );
+    let request_count_after_second = request_count.load(Ordering::SeqCst);
 
     std::thread::sleep(Duration::from_millis(300));
 
@@ -932,7 +941,7 @@ fn libp2p_replication_network_connection_gap_on_ping_enters_short_cooldown() {
         })
     ));
     assert!(
-        request_count.load(Ordering::SeqCst) > request_count_after_first,
+        request_count.load(Ordering::SeqCst) > request_count_after_second,
         "request count should grow again after the short cooldown expires"
     );
 }

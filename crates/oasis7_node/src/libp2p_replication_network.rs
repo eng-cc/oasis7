@@ -321,19 +321,25 @@ impl Libp2pReplicationNetwork {
             })
             .unwrap_or_default();
         let keep_protocol_entry = !protocol_cooldown_peers.is_empty();
+        let mut deferred_transport_peers = Vec::new();
         let mut scored: Vec<(PeerId, u8, usize)> = ordered_peers
             .into_iter()
             .enumerate()
             .filter_map(|(index, peer)| {
-                if protocol_cooldown_peers.contains_key(&peer)
-                    || transport_retry_cooldown_peers.contains_key(&peer)
-                {
+                if protocol_cooldown_peers.contains_key(&peer) {
                     return None;
                 }
                 let score = self.request_peer_score(peer);
+                if transport_retry_cooldown_peers.contains_key(&peer) {
+                    deferred_transport_peers.push((peer, score, index));
+                    return None;
+                }
                 Some((peer, score, index))
             })
             .collect();
+        if scored.is_empty() && !deferred_transport_peers.is_empty() {
+            scored = deferred_transport_peers;
+        }
         scored.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.2.cmp(&right.2)));
         let filtered = scored
             .into_iter()
