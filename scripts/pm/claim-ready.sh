@@ -101,6 +101,37 @@ case "$CLAIM_TYPE" in
     ;;
 esac
 
+if [[ -n "$TASK_UID" && "$CLAIM_LABEL" != "task_complete" ]]; then
+  python3 - "$ROOT_DIR" "$TASK_UID" "$CLAIM_LABEL" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+task_uid = sys.argv[2]
+claim_type = sys.argv[3]
+task_path = root / ".pm" / "tasks" / f"{task_uid}.yaml"
+
+fields: dict[str, str] = {}
+for raw in task_path.read_text(encoding="utf-8").splitlines():
+    if not raw or raw.startswith(" ") or raw.startswith("-"):
+        continue
+    key, sep, value = raw.partition(":")
+    if not sep:
+        continue
+    fields[key.strip()] = value.strip().strip('"')
+
+task_status = fields.get("status", "")
+last_closed_at = fields.get("last_closed_at", "")
+if task_status in {"done", "deferred"} and last_closed_at:
+    raise SystemExit(
+        "claim-ready: closed task claim evidence is immutable for non-completion claims: "
+        f"{task_uid} status={task_status} claim_type={claim_type}"
+    )
+PY
+fi
+
 STDOUT_CAPTURE="$(mktemp)"
 STDERR_CAPTURE="$(mktemp)"
 cleanup() {

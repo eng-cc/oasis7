@@ -645,6 +645,13 @@ def record_task_claim_verification(
     verification_status: str,
 ) -> dict[str, object]:
     task_path, task_fields = find_task_file(root, task_uid)
+    task_status = str(task_fields.get("status") or "")
+    last_closed_at = str(task_fields.get("last_closed_at") or "")
+    if task_status in {"done", "deferred"} and last_closed_at and claim_type != "task_complete":
+        raise ValueError(
+            "closed task claim evidence is immutable for non-completion claims: "
+            f"{task_uid} status={task_status} claim_type={claim_type}"
+        )
     task_fields["last_claim_type"] = claim_type
     task_fields["last_verify_command"] = verify_command
     task_fields["last_verified_at"] = verified_at
