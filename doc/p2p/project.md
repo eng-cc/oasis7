@@ -922,6 +922,7 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] testnet-routing-peer-record-bootstrap (PRD-P2P-001/003) [test_tier_required]: 修复 reset public testnet observer 在 routing 已发现 bootstrap peer、connected snapshot 仍为空时无法启动 peer-record 交换的问题，允许 routing update 直接触发 connected peer-record request，并用回归覆盖空 connected snapshot 的 bootstrap 窗口。 Trace: .pm/tasks/task_f81d3e661b7048d8b2fe6987a544a368.yaml
 
 ## 依赖
 - 模块设计总览：`doc/p2p/design.md`

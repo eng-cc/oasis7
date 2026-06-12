@@ -1,6 +1,76 @@
 use super::*;
 
 #[test]
+fn routing_update_requests_peer_record_before_connected_snapshot_exists() {
+    let keypair = Keypair::generate_ed25519();
+    let local_peer_id = PeerId::from(keypair.public());
+    let peer_id = PeerId::random();
+    let mut swarm = super::super::swarm_behaviour::build_swarm(
+        &keypair,
+        false,
+        true,
+        super::super::wire_bytes::init_shared_wire_byte_counters(),
+    );
+    let mut pending_dht = HashMap::new();
+    let mut pending_discovery_peer_records = HashSet::new();
+    let discovered_peer_records = HashMap::new();
+    let template = PeerRecord {
+        peer_id: local_peer_id.to_string(),
+        node_id: "local-node".to_string(),
+        world_id: "world-a".to_string(),
+        network_id: "network-a".to_string(),
+        node_role: PeerNodeRole::ObserverLight.as_str().to_string(),
+        deployment_mode: PeerDeploymentMode::Hybrid,
+        reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+        direct_addrs: Vec::new(),
+        hole_punch_addrs: Vec::new(),
+        relay_addrs: Vec::new(),
+        discovery_sources: vec![crate::dht::PeerDiscoverySource::StaticBootstrap],
+        capability_lanes: PeerNodeRole::ObserverLight.default_capability_lanes(),
+        source_operator: None,
+        source_asn: None,
+        published_at_ms: 1,
+        ttl_ms: 60_000,
+    };
+    let peers = Vec::new();
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_connected_peer_records = HashSet::new();
+    let mut connected_peer_record_cooldowns = HashMap::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
+    let event_errors = Arc::new(Mutex::new(Vec::new()));
+    let mut lifecycle_event_errors_at_ms = HashMap::new();
+    let mut lifecycle_event_errors_last_prune_at_ms = None;
+
+    super::super::discovery::handle_routing_updated(
+        &mut swarm,
+        &mut pending_dht,
+        &mut pending_discovery_peer_records,
+        &discovered_peer_records,
+        peer_id,
+        "[/ip4/127.0.0.1/tcp/6831]".to_string(),
+        local_peer_id,
+        Some(&template),
+        peers.as_slice(),
+        &mut pending_peer_record_requests,
+        &mut pending_connected_peer_records,
+        &mut connected_peer_record_cooldowns,
+        &traffic_metrics,
+        &event_errors,
+        &mut lifecycle_event_errors_at_ms,
+        &mut lifecycle_event_errors_last_prune_at_ms,
+        16,
+        1_000,
+        0,
+    );
+
+    assert!(
+        pending_connected_peer_records.contains(&peer_id),
+        "routing-only bootstrap peers must be able to start peer-record exchange before the connected peer snapshot is populated"
+    );
+    assert_eq!(pending_peer_record_requests.len(), 1);
+}
+
+#[test]
 fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligible() {
     let mut swarm = super::super::swarm_behaviour::build_swarm(
         &Keypair::generate_ed25519(),
