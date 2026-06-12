@@ -361,6 +361,12 @@ impl ReplicationNetworkEndpoint {
             Ok(_) => Ok(()),
             Err(NodeError::Replication { reason })
                 if (reason.contains("NetworkRequestFailed") && reason.contains("ErrNotFound"))
+                    || (reason.contains("NetworkRequestFailed")
+                        && reason.contains("ErrUnsupported")
+                        && reason.contains(REPLICATION_GET_HEAD_PROTOCOL))
+                    || (reason.contains("NetworkProtocolUnavailable")
+                        && (reason.contains("handler missing")
+                            || reason.contains(REPLICATION_GET_HEAD_PROTOCOL)))
                     || reason.contains(REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
                     || reason.contains(REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX) =>
             {
