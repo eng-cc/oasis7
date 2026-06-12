@@ -100,6 +100,7 @@ pub(super) fn handle_routing_updated(
     local_peer_id: PeerId,
     peer_record_template: Option<&PeerRecord>,
     peers: &[PeerId],
+    bootstrap_peer_ids: &HashSet<PeerId>,
     pending_peer_record_requests: &mut HashMap<
         request_response::OutboundRequestId,
         PendingPeerRecordRequest,
@@ -133,7 +134,7 @@ pub(super) fn handle_routing_updated(
         local_peer_id,
         peer_record_world_id(peer_record_template),
     );
-    if peers.contains(&peer) {
+    if peers.contains(&peer) || bootstrap_peer_ids.contains(&peer) {
         maybe_request_connected_peer_record(
             swarm,
             pending_peer_record_requests,
