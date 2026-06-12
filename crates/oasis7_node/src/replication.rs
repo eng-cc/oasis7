@@ -22,7 +22,8 @@ const DEFAULT_MAX_HOT_COMMIT_MESSAGES: usize = 4096;
 pub(crate) const REPLICATION_FETCH_COMMIT_PROTOCOL: &str =
     "/aw/node/replication/fetch-commit/1.0.0";
 pub(crate) const REPLICATION_FETCH_BLOB_PROTOCOL: &str = "/aw/node/replication/fetch-blob/1.0.0";
-pub(crate) const REPLICATION_GET_HEAD_PROTOCOL: &str = "/aw/node/replication/get-head/1.0.0";
+pub(crate) const REPLICATION_GET_HEAD_PROTOCOL: &str =
+    "/aw/node/replication/fetch-commit/head/1.0.0";
 mod commit_retention;
 #[path = "replication_checkpoint.rs"]
 mod replication_checkpoint;
