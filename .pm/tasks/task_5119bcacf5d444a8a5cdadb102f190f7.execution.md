@@ -170,3 +170,15 @@ Example:
 - Expected Result: Helper verifies branch readiness for PR and allows claim.
 - Actual Result: Passed. `doc-governance-check: OK`; `workflow-lint: OK (task_5119bcacf5d444a8a5cdadb102f190f7, phase=current)`; verification exit code 0; status `verified`; allowed_to_claim `true`; claim message: `Fresh verification passed; the branch can now be claimed ready for PR.`
 - Blocker / Next Action: Commit this evidence and run PR creation preflight.
+
+## 2026-06-12 13:26:39 CST / tpm
+- 完成内容: PR preflight issue fixed by adding module project file to task doc refs.
+- 遗留事项: Re-run task-local workflow lint, commit PM metadata fix, rerun PR creation preflight.
+- Action: Added `site/story/project.md` to `.pm/tasks/task_5119bcacf5d444a8a5cdadb102f190f7.yaml` `doc_refs` after `prepare-task-pr.sh --create` reported `project.md unresolved from task doc_refs/source_refs`.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_5119bcacf5d444a8a5cdadb102f190f7 --phase current`
+- Expected Result: Task-local workflow lint passes after PM metadata fix.
+- Actual Result: Passed: `workflow-lint: OK (task_5119bcacf5d444a8a5cdadb102f190f7, phase=current)`.
+- Validation Command: `git diff --check`
+- Expected Result: Patch formatting check passes.
+- Actual Result: Passed with no output.
+- Blocker / Next Action: Commit metadata fix and rerun PR creation preflight.

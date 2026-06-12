@@ -9,6 +9,7 @@ source_signal: null
 source_refs:
   - site/story/outline/volume-04-route-scaffold.md
 doc_refs:
+  - site/story/project.md
   - site/story/outline/volume-04-route-scaffold.md
   - site/story/chapter-cards/volume-04-route-cards.md
 related_prd: []
