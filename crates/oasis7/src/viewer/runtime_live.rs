@@ -446,7 +446,7 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::AgentChat { request } => match self.handle_agent_chat(request) {
                 Ok(ack) => {
                     send_response(writer, &ViewerResponse::AgentChatAck { ack })?;
-                    if control_plane::runtime_agent_chat_echo_enabled_from_env() {
+                    if self.config.agent_chat_echo_enabled {
                         self.flush_pending_virtual_events(session, writer)?;
                     }
                 }
