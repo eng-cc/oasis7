@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{ErrorKind, Read, Write};
-use std::net::{Shutdown, TcpListener, TcpStream};
+use std::io::ErrorKind;
+use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -535,33 +535,17 @@ fn handle_mock_letai_request(
 }
 
 pub(super) fn assert_http_status_line(status_code: u16, expected_prefix: &str) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind status listener");
-    let addr = listener.local_addr().expect("status listener addr");
-    let expected_prefix = expected_prefix.to_string();
-    let server = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("accept status connection");
-        write_http_response(
-            &mut stream,
-            status_code,
-            "application/json; charset=utf-8",
-            b"{}",
-            false,
-        )
-        .expect("write response");
-        let _ = stream.shutdown(Shutdown::Both);
-    });
-
-    let mut client = TcpStream::connect(addr).expect("connect status listener");
-    client
-        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
-        .expect("write request");
-    client
-        .set_read_timeout(Some(Duration::from_secs(1)))
-        .expect("set timeout");
-    let mut response = String::new();
-    client.read_to_string(&mut response).expect("read response");
-    server.join().expect("join server");
-    assert!(response.starts_with(expected_prefix.as_str()));
+    let mut response = Vec::new();
+    write_http_response(
+        &mut response,
+        status_code,
+        "application/json; charset=utf-8",
+        b"{}",
+        false,
+    )
+    .expect("write response");
+    let response = String::from_utf8(response).expect("response is utf8");
+    assert!(response.starts_with(expected_prefix));
 }
 
 fn respond_json(stream: &mut TcpStream, status_code: u16, payload: &Value) {
