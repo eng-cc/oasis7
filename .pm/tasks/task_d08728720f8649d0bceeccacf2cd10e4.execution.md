@@ -101,3 +101,12 @@ Example:
 - Expected Result: required pre-PR local role review evidence is present and matches current implementation commit.
 - Actual Result: both involved roles returned no_findings and PR can proceed from their perspectives.
 - Blocker / Next Action: commit this evidence-only task log update, run `prepare-task-pr.sh`, create PR, and enter normal PR CI/comment watch.
+
+## 2026-06-12 09:39:49 CST / tpm
+- 完成内容: Added explicit parser-facing closeout evidence for PR preflight.
+- 遗留事项: PR creation and normal CI/comment watch remain pending.
+- Action: Document that `./scripts/pm/task-closeout.sh --role tpm --task-uid task_d08728720f8649d0bceeccacf2cd10e4 --verify-command '<fresh verification command>'` ran successfully and internally persisted `claim-ready.sh`-equivalent task-complete verification evidence.
+- Validation Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_d08728720f8649d0bceeccacf2cd10e4 --verify-command './scripts/pm/workflow-lint.sh --phase current && ./scripts/pm/capture-todo-smoke.sh && ./scripts/pm/new-task-worktree-bootstrap-smoke.sh --json && ./scripts/pm/lint.sh && ./scripts/lint-skills.sh && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-behavior-eval.sh && git diff --check'`
+- Expected Result: task closeout records `claim-ready.sh`/task-complete verification, moves the task to `done`, and leaves `./scripts/prepare-task-pr.sh` able to find claim-ready and closeout evidence.
+- Actual Result: task-closeout summary reported `final_status: done`, `claim_verification_status: verified`, `claim_type: task_complete`, `pm_lint: ok`, and `next_step: ./scripts/prepare-task-pr.sh`.
+- Blocker / Next Action: commit this evidence-only entry and rerun `./scripts/prepare-task-pr.sh --json`.
