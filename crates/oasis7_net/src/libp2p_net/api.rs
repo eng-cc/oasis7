@@ -229,7 +229,7 @@ fn connected_or_active_transport_peers_from_healths(
     active_transport_peers_from_healths(peer_healths, &blocked_peers, &soft_deprioritized_peers)
 }
 
-fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
+pub(super) fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
     let mut peers = peers
         .drain(..)
         .map(|peer| (peer.to_bytes(), peer))

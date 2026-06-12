@@ -159,11 +159,18 @@ pub(super) fn should_backfill_peer_discovery(
     !has_remote_discovered_peer || missing_connected_peer_record
 }
 
+#[cfg(test)]
 pub(super) fn dial_target_is_already_connected(peers: &[PeerId], addr: &Multiaddr) -> bool {
     super::swarm_behaviour::split_peer_id(addr.clone())
         .0
         .map(|peer_id| peers.contains(&peer_id))
         .unwrap_or(false)
+}
+
+fn current_request_peers(peers: &[PeerId], swarm: &Swarm<Behaviour>) -> Vec<PeerId> {
+    let mut current = peers.to_vec();
+    current.extend(swarm.connected_peers().copied());
+    super::api::dedup_sorted_peers(current)
 }
 
 pub(super) fn filter_request_peers_by_lane(
@@ -607,8 +614,10 @@ pub(super) fn handle_command(
             CommandOutcome::Continue
         }
         Some(Command::Dial(addr)) => {
-            if dial_target_is_already_connected(peers.as_slice(), &addr) {
-                return CommandOutcome::Continue;
+            if let (Some(peer_id), _) = super::swarm_behaviour::split_peer_id(addr.clone()) {
+                if peers.contains(&peer_id) || swarm.is_connected(&peer_id) {
+                    return CommandOutcome::Continue;
+                }
             }
             if let Err(err) = super::dial_addr_with_optional_peer_id(swarm, addr) {
                 push_bounded_clone(
@@ -626,7 +635,8 @@ pub(super) fn handle_command(
             providers,
             response,
         }) => {
-            if peers.is_empty() {
+            let connected_request_peers = current_request_peers(peers.as_slice(), swarm);
+            if connected_request_peers.is_empty() {
                 if providers.is_empty() {
                     if let Some(handler) = handlers.get(&protocol) {
                         let _ = response.send(handler(&payload));
@@ -646,7 +656,7 @@ pub(super) fn handle_command(
             if using_provider_subset {
                 for provider in providers {
                     if let Ok(peer_id) = provider.parse::<PeerId>() {
-                        if peers.contains(&peer_id) {
+                        if connected_request_peers.contains(&peer_id) {
                             candidate_peers.push(peer_id);
                         }
                     }
@@ -658,7 +668,7 @@ pub(super) fn handle_command(
                     return CommandOutcome::Continue;
                 }
             } else {
-                candidate_peers = peers.clone();
+                candidate_peers = connected_request_peers;
             }
             candidate_peers = filter_request_peers_by_health(candidate_peers, peer_healths_by_id);
             candidate_peers = filter_request_peers_by_lane(

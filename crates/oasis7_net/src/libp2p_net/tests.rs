@@ -13,7 +13,9 @@ use super::*;
 use futures::channel::oneshot;
 use libp2p::kad::RecordKey;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
+use oasis7_proto::distributed_net::DistributedNetwork as _;
 use oasis7_proto::distributed_net::NetworkLane;
+use std::time::{Duration, Instant};
 
 #[path = "tests/active_set_candidate_tests.rs"]
 mod active_set_candidate_tests;
@@ -52,6 +54,16 @@ fn signed_discovery_peer_record(
         keypair,
     )
     .expect("sign discovery peer record")
+}
+
+fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
+    while Instant::now() < deadline {
+        if condition() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("timed out waiting for condition: {what}");
 }
 
 #[test]
@@ -609,6 +621,82 @@ fn process_discovered_peer_record_dials_candidate_peer() {
     assert!(discovered_peer_records.contains_key(&peer_id));
     assert!(known_transport_paths.contains_key(&peer_id));
     assert!(last_dialed_transport_paths.contains_key(&peer_id));
+}
+
+#[test]
+fn request_uses_swarm_connected_peers_when_snapshot_is_empty() {
+    let deadline = || Instant::now() + Duration::from_secs(10);
+    let listener = Libp2pNetwork::new(Libp2pNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
+        allow_loopback_external_addrs_for_testing: true,
+        peer_manager_policy: PeerManagerPolicy {
+            min_active_discovery_sources: 0,
+            min_peer_discovery_sources: 0,
+            ..PeerManagerPolicy::default()
+        },
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until("listener addr", deadline(), || {
+        !listener.listening_addrs().is_empty()
+    });
+    listener
+        .register_handler(
+            "/aw/test/snapshot-empty-request/1.0.0",
+            Box::new(|payload| {
+                let mut response = payload.to_vec();
+                response.extend_from_slice(b"-ok");
+                Ok(response)
+            }),
+        )
+        .expect("register handler");
+
+    let dial_addr = listener
+        .listening_addrs()
+        .into_iter()
+        .find(|addr| addr.to_string().contains("127.0.0.1"))
+        .expect("listener addr")
+        .with(libp2p::multiaddr::Protocol::P2p(listener.peer_id().into()));
+    let dialer = Libp2pNetwork::new(Libp2pNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
+        bootstrap_peers: vec![dial_addr],
+        allow_loopback_external_addrs_for_testing: true,
+        peer_manager_policy: PeerManagerPolicy {
+            min_active_discovery_sources: 0,
+            min_peer_discovery_sources: 0,
+            ..PeerManagerPolicy::default()
+        },
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until("dialer connected", deadline(), || {
+        dialer.connected_peers().contains(&listener.peer_id())
+    });
+    dialer
+        .connected_peers
+        .lock()
+        .expect("lock connected peers")
+        .clear();
+
+    wait_until("request uses swarm connection", deadline(), || match dialer
+        .request("/aw/test/snapshot-empty-request/1.0.0", b"ping")
+    {
+        Ok(response) => response == b"ping-ok".to_vec(),
+        Err(WorldError::NetworkProtocolUnavailable { .. }) => false,
+        Err(err) => panic!("unexpected request error: {err:?}"),
+    });
+
+    wait_until(
+        "provider request uses swarm connection",
+        deadline(),
+        || match dialer.request_with_providers(
+            "/aw/test/snapshot-empty-request/1.0.0",
+            b"provider-ping",
+            &[listener.peer_id().to_string()],
+        ) {
+            Ok(response) => response == b"provider-ping-ok".to_vec(),
+            Err(WorldError::NetworkProtocolUnavailable { .. }) => false,
+            Err(err) => panic!("unexpected provider request error: {err:?}"),
+        },
+    );
 }
 
 #[test]
