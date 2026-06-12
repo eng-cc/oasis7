@@ -763,6 +763,10 @@ impl PosNodeEngine {
                     &mut execution_hook,
                     &mut progress_callback,
                 )? {
+                    if self.replication_persisted_height > starting_replication_persisted_height {
+                        self.network_committed_height =
+                            self.network_committed_height.max(advertised_network_height);
+                    }
                     return Ok(());
                 }
             }
@@ -804,6 +808,11 @@ impl PosNodeEngine {
                         break;
                     }
                     Err(err) if replication_request_waitable_connection_gap(&err) => {
+                        if self.replication_persisted_height > starting_replication_persisted_height
+                        {
+                            self.network_committed_height =
+                                self.network_committed_height.max(advertised_network_height);
+                        }
                         return Ok(());
                     }
                     Err(err) => {

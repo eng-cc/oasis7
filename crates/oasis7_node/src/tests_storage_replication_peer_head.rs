@@ -5,6 +5,7 @@ struct PeerDirectedHeadTestNetwork {
     inner: Arc<TestInMemoryNetwork>,
     connected_peer_ids: Vec<String>,
     peer_heads: Arc<Mutex<HashMap<String, super::replication::FetchHeadResponse>>>,
+    waitable_fetch_commit_heights: Arc<Mutex<Vec<u64>>>,
     provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
@@ -18,6 +19,9 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerDirec
     }
 
     fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        if self.fetch_commit_height_is_waitable(protocol, payload)? {
+            return Err(waitable_fetch_commit_error(protocol));
+        }
         self.inner.request(protocol, payload)
     }
 
@@ -31,6 +35,9 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerDirec
         payload: &[u8],
         providers: &[String],
     ) -> Result<Vec<u8>, WorldError> {
+        if self.fetch_commit_height_is_waitable(protocol, payload)? {
+            return Err(waitable_fetch_commit_error(protocol));
+        }
         if protocol != REPLICATION_GET_HEAD_PROTOCOL {
             return self.inner.request_with_providers(protocol, payload, providers);
         }
@@ -64,6 +71,33 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerDirec
         handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
     ) -> Result<(), WorldError> {
         self.inner.register_handler(protocol, handler)
+    }
+}
+
+impl PeerDirectedHeadTestNetwork {
+    fn fetch_commit_height_is_waitable(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+    ) -> Result<bool, WorldError> {
+        if protocol != super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL {
+            return Ok(false);
+        }
+        let request = serde_json::from_slice::<super::replication::FetchCommitRequest>(payload)
+            .map_err(|err| WorldError::DistributedValidationFailed {
+                reason: format!("decode fetch commit request failed: {err}"),
+            })?;
+        Ok(self
+            .waitable_fetch_commit_heights
+            .lock()
+            .expect("lock waitable fetch heights")
+            .contains(&request.height))
+    }
+}
+
+fn waitable_fetch_commit_error(protocol: &str) -> WorldError {
+    WorldError::NetworkProtocolUnavailable {
+        protocol: format!("libp2p-replication no connected peers for protocol {protocol}"),
     }
 }
 
@@ -164,6 +198,7 @@ fn observer_gap_sync_continues_peer_world_head_probe_after_peer_without_head() {
         inner: Arc::new(TestInMemoryNetwork::default()),
         connected_peer_ids: vec!["peer-a".to_string(), "peer-b".to_string()],
         peer_heads: Arc::clone(&peer_heads),
+        waitable_fetch_commit_heights: Arc::new(Mutex::new(Vec::new())),
         provider_attempts: Arc::clone(&provider_attempts),
     });
     register_replication_fetch_handlers(
@@ -292,6 +327,7 @@ fn peer_world_head_fallback_retains_high_network_height_after_partial_sync() {
         inner: Arc::new(TestInMemoryNetwork::default()),
         connected_peer_ids: vec!["peer-a".to_string()],
         peer_heads,
+        waitable_fetch_commit_heights: Arc::new(Mutex::new(Vec::new())),
         provider_attempts,
     });
     register_replication_fetch_handlers(
@@ -325,6 +361,128 @@ fn peer_world_head_fallback_retains_high_network_height_after_partial_sync() {
     assert_eq!(engine_b.replication_persisted_height, 1);
     assert_eq!(engine_b.network_committed_height, high_height);
     assert_eq!(engine_b.last_replication_gap_sync_blocked_height, Some(2));
+
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
+fn peer_world_head_fallback_retains_high_network_height_after_waitable_gap() {
+    let world_id = "world-gap-sync-peer-head-retains-high-wait";
+    let dir_a = temp_dir("gap-sync-peer-head-retains-high-wait-a");
+    let dir_b = temp_dir("gap-sync-peer-head-retains-high-wait-b");
+    let (_, public_key_a) = deterministic_keypair_hex(222);
+    let (_, public_key_b) = deterministic_keypair_hex(223);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 222)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 222)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 223)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(replication_config_b.clone());
+
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    let decision = PosDecision {
+        height: 1,
+        slot: 1,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "block-1".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    replication_a
+        .build_local_commit_message(
+            "node-a",
+            world_id,
+            3_200,
+            &decision,
+            Some("exec-block-1"),
+            Some("exec-state-1"),
+        )
+        .expect("build local message")
+        .expect("message");
+
+    let high_height = REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL + 4;
+    let peer_heads = Arc::new(Mutex::new(HashMap::new()));
+    peer_heads.lock().expect("lock peer heads").insert(
+        "peer-a".to_string(),
+        super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: high_height,
+                block_hash: format!("block-{high_height}"),
+                state_root: format!("exec-state-{high_height}"),
+                timestamp_ms: 3_200 + i64::try_from(high_height).expect("height fits i64"),
+            }),
+        },
+    );
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(PeerDirectedHeadTestNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        connected_peer_ids: vec!["peer-a".to_string()],
+        peer_heads,
+        waitable_fetch_commit_heights: Arc::new(Mutex::new(vec![2])),
+        provider_attempts: Arc::new(Mutex::new(Vec::new())),
+    });
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register fetch handlers");
+
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
+            .expect("endpoint b");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("runtime b");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("engine b");
+
+    engine_b
+        .sync_missing_replication_commits(
+            &endpoint_b,
+            "node-b",
+            world_id,
+            Some(&mut replication_b),
+            None,
+        )
+        .expect("partial peer-head sync with waitable gap");
+
+    assert_eq!(engine_b.committed_height, 1);
+    assert_eq!(engine_b.replication_persisted_height, 1);
+    assert_eq!(engine_b.network_committed_height, high_height);
 
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
