@@ -726,6 +726,7 @@ impl PosNodeEngine {
             return Ok(());
         };
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;
+        let starting_replication_persisted_height = self.replication_persisted_height;
         let advertised_world_head = endpoint.lookup_world_head(world_id)?;
         let advertised_network_height = self.network_committed_height.max(
             advertised_world_head
@@ -900,6 +901,10 @@ impl PosNodeEngine {
             self.last_replication_gap_sync_repair_attempt_summary = None;
         } else {
             self.clear_replication_gap_sync_blocked_if_unblocked();
+        }
+        if self.replication_persisted_height > starting_replication_persisted_height {
+            self.network_committed_height =
+                self.network_committed_height.max(advertised_network_height);
         }
         Ok(())
     }
