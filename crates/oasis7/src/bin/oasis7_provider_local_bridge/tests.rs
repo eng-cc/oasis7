@@ -93,6 +93,57 @@ fn handle_decision_surfaces_gateway_failure_as_provider_error() {
 }
 
 #[test]
+fn mock_mode_returns_deterministic_move_without_invoking_provider_cli() {
+    let options = parse_options(["--mode", "mock"].into_iter()).expect("parse mock mode");
+    assert_eq!(options.mode, ProviderMode::Mock);
+    let state = ProviderState::new(options).expect("provider state");
+    let invoker = FakeInvoker {
+        response: Err("mock mode must not invoke provider cli".to_string()),
+    };
+    let response = state.handle_decision(sample_request(), None, &invoker);
+    assert_eq!(
+        response.decision,
+        ProviderDecision::Act {
+            action_ref: "move_agent".to_string(),
+            action: Action::MoveAgent {
+                agent_id: "agent-1".to_string(),
+                to: "loc-2".to_string(),
+            },
+        }
+    );
+    assert!(response.provider_error.is_none());
+    assert_eq!(
+        response.diagnostics.provider_id.as_deref(),
+        Some("provider_local_mock")
+    );
+    assert_eq!(
+        response.trace_payload.provider_id.as_deref(),
+        Some("provider_local_mock")
+    );
+    assert_eq!(response.trace_payload.token_usage, None);
+    assert_eq!(response.trace_payload.cost_cents, None);
+    assert!(response
+        .trace_payload
+        .tool_trace
+        .iter()
+        .any(|entry| entry.contains("deterministic_mock")));
+}
+
+#[test]
+fn mock_mode_health_is_ready_without_gateway_probe() {
+    let options = parse_options(["--mode", "mock"].into_iter()).expect("parse mock mode");
+    let state = ProviderState::new(options).expect("provider state");
+    let info = state.provider_info();
+    assert_eq!(info.provider_id, "provider_local_mock");
+    assert!(info.capabilities.iter().any(|value| value == "mock"));
+    assert!(info.capabilities.iter().any(|value| value == "no_billing"));
+    let health = state.provider_health();
+    assert!(health.ok);
+    assert_eq!(health.status.as_deref(), Some("ready"));
+    assert_eq!(health.last_error, None);
+}
+
+#[test]
 fn build_decision_prompt_embeds_preferred_visible_move_hint() {
     let prompt = build_decision_prompt(&sample_request(), &[]);
     assert!(prompt.contains("Preferred next visible non-current location: loc-2"));

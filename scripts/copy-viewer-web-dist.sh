@@ -88,8 +88,10 @@ while read -r source_rel dist_rel; do
 done < <(viewer_web_dist_contract_pairs)
 
 if [[ -d "$pixel_world_bridge_dir" ]]; then
-  rm -rf "$DIST_DIR/pixel-world-bridge"
-  cp -R "$pixel_world_bridge_dir" "$DIST_DIR/pixel-world-bridge"
+  if [[ "$pixel_world_bridge_dir" != "$DIST_DIR/pixel-world-bridge" ]]; then
+    rm -rf "$DIST_DIR/pixel-world-bridge"
+    cp -R "$pixel_world_bridge_dir" "$DIST_DIR/pixel-world-bridge"
+  fi
 fi
 
 viewer_web_dist_write_manifest "$ROOT_DIR" "$DIST_DIR"

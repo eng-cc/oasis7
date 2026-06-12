@@ -829,6 +829,75 @@ fn runtime_agent_chat_provider_mode_reports_unsupported() {
 }
 
 #[test]
+fn runtime_agent_chat_provider_mode_accepts_echo_playtest_chat() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    assert!(server.llm_sidecar.supports_agent_chat());
+    let gameplay = server
+        .compat_snapshot()
+        .player_gameplay
+        .expect("player gameplay snapshot");
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .any(|action| action.protocol_action == "agent_chat"));
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(34);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello provider echo".to_string(),
+            intent_tick: Some(12),
+            intent_seq: Some(34),
+        },
+        34,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        33,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    let ack = server.handle_agent_chat(request).expect("chat accepted");
+    assert_eq!(ack.agent_id, agent_id);
+    let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
+    assert!(events.iter().any(|event| matches!(
+        &event.kind,
+        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
+            if event_agent_id == &agent_id && message == "[qa-echo] hello provider echo"
+    )));
+    clear_runtime_provider_env();
+}
+
+#[test]
 fn runtime_agent_chat_replay_returns_idempotent_ack() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(

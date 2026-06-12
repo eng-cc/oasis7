@@ -103,6 +103,76 @@ Run the local bridge that exposes world-simulator provider endpoints:
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --provider-agent oasis7_provider_agent
 ```
 
+For no-quota/no-billing local plumbing tests, start the deterministic mock bridge
+instead. It exposes the same loopback HTTP contract, does not call provider CLI
+or an LLM, and must not be used as real LLM/playability evidence:
+
+```bash
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --mode mock
+```
+
+For direct real LLM local runs from an operator-owned LetAI config file, load the
+config into process env without committing secrets:
+
+```bash
+./scripts/with-letai-llm-config.sh -- ./scripts/check-active-llm-provider.sh --pretty
+./scripts/with-letai-llm-config.sh -- ./scripts/run-launcher-stack.sh --agent-decision-source builtin_llm
+```
+
+The default config path is `/Users/scc/Documents/keys/letai.txt`, or override
+with `OASIS7_LETAI_CONFIG_PATH` / `--config`. If the local file only contains a
+documentation `Doc` URL plus `Key`, pass the actual JSON API base with
+`--base-url` or add `base_url = ...` to the local config; the doc URL is not used
+as the model endpoint.
+
+LetAI's remote provider bridge path uses chat completions, not the builtin
+OpenAI Responses preflight. To test the same path locally, first validate the
+token:
+
+```bash
+./scripts/check-letai-chat-completions.sh
+```
+
+If that succeeds, start a local real provider bridge. The game still connects to
+`http://127.0.0.1:5841`; the bridge calls LetAI upstream:
+
+```bash
+./scripts/run-local-letai-provider-bridge.sh
+./scripts/run-launcher-stack.sh --agent-provider-lane local
+```
+
+For the usual local real-LLM gameplay test, use the one-command wrapper instead.
+It sets the local proxy defaults, validates chat-completions, starts the bridge,
+runs a provider contract smoke, and launches the game against `127.0.0.1:5841`:
+
+```bash
+./scripts/run-local-letai-game-test.sh
+```
+
+The wrapper prefers `OASIS7_LETAI_TOKEN_CONFIG_PATH`, then
+`/Users/scc/Documents/keys/letai-token-local.txt`, then
+`/Users/scc/Documents/keys/letai.txt`. A token config must contain a real
+project `token_key`; the platform `Key` from `letai.txt` is only for management
+APIs and dynamic token provisioning.
+
+By default the wrapper also enables `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` so the
+local provider-backed playtest can accept chat input and show chat feedback while
+NPC decisions still run through the real LetAI provider bridge. Disable this
+with `--no-chat-echo` when validating the stricter provider-backed production
+surface where direct agent chat is not yet supported.
+
+Pass extra launcher flags after `--`:
+
+```bash
+./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
+```
+
+For local real-provider runs, the LetAI wrapper can automatically top up quota
+when the upstream returns `insufficient_user_quota`. The local bridge defaults to
+`--auto-topup-usd 0.1`, but the top-up only runs when the environment also
+provides `OASIS7_REMOTE_LLM_PLATFORM_KEY` and
+`OASIS7_REMOTE_LLM_PLATFORM_USER_ID`; otherwise quota errors remain visible.
+
 Expected local provider URL:
 
 - `http://127.0.0.1:5841`
@@ -251,3 +321,4 @@ When using this skill:
 - state which process provides `127.0.0.1:18789` and which provides `127.0.0.1:5841`
 - distinguish runtime agent workspace/profile from repo documentation surfaces
 - distinguish downloaded release bundle from repo-backed bridge/smoke tooling
+- distinguish deterministic `provider_local_mock` evidence from real `provider_local_bridge` LLM evidence

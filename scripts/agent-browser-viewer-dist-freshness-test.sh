@@ -100,4 +100,22 @@ if ! grep -Fq 'npm --prefix' "$tmp_repo/stderr.log"; then
   exit 1
 fi
 
+cat > "$tmp_repo/bin/npm" <<'NPM'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "simulated npm failure" >&2
+exit 42
+NPM
+chmod +x "$tmp_repo/bin/npm"
+
+if failing_resolved_dir="$({ PATH="$tmp_repo/bin:$PATH" resolve_viewer_static_dir_for_web_closure "$tmp_repo" web "$tmp_repo/output/failing"; } 2>"$tmp_repo/failing-stderr.log")"; then
+  echo "expected freshness helper to fail when viewer rebuild fails, got '$failing_resolved_dir'" >&2
+  exit 1
+fi
+if ! grep -Fq "viewer software-safe build failed" "$tmp_repo/failing-stderr.log"; then
+  echo "expected explicit viewer build failure in stderr" >&2
+  cat "$tmp_repo/failing-stderr.log" >&2
+  exit 1
+fi
+
 echo "agent-browser viewer dist freshness tests passed"

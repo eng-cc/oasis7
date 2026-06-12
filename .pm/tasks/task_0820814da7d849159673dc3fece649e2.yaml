@@ -1,0 +1,24 @@
+task_uid: task_0820814da7d849159673dc3fece649e2
+title: "Assess local test bridge service"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-local-test-bridge-service
+execution_log_path: .pm/tasks/task_0820814da7d849159673dc3fece649e2.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Assess whether a local no-quota no-billing bridge service is feasible for local testing"
+handoff_to: []
+updated_at: 2026-06-12T15:40:57+08:00
+last_started_at: 2026-06-10T21:47:23+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -lc '! ./scripts/pm/lint.sh 2>&1 | rg -q task_0820814da7d849159673dc3fece649e2'"
+last_verified_at: 2026-06-12T15:40:55+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-12T15:40:57+08:00

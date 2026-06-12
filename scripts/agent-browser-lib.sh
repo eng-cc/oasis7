@@ -255,19 +255,28 @@ PY
   mkdir -p "$rebuilt_dir"
   if [[ -x "$repo_root/scripts/build-viewer-software-safe.sh" ]]; then
     echo "+ $repo_root/scripts/build-viewer-software-safe.sh" >&2
-    (
+    if ! (
       cd "$repo_root"
       ./scripts/build-viewer-software-safe.sh
-    ) >&2
+    ) >&2; then
+      echo "error: viewer software-safe build failed" >&2
+      return 1
+    fi
   else
     echo "+ npm --prefix $repo_root/crates/oasis7_viewer run build:software-safe" >&2
-    (
+    if ! (
       cd "$repo_root"
       npm --prefix crates/oasis7_viewer run build:software-safe
-    ) >&2
+    ) >&2; then
+      echo "error: viewer software-safe build failed" >&2
+      return 1
+    fi
   fi
   if [[ -x "$repo_root/scripts/copy-viewer-web-dist.sh" ]]; then
-    "$repo_root/scripts/copy-viewer-web-dist.sh" --dist-dir "$rebuilt_dir" >&2
+    if ! "$repo_root/scripts/copy-viewer-web-dist.sh" --dist-dir "$rebuilt_dir" >&2; then
+      echo "error: viewer web dist copy failed" >&2
+      return 1
+    fi
   else
     cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/index.html"
     cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/viewer.html"

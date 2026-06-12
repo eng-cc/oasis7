@@ -13,9 +13,9 @@ use std::time::{Duration, Instant};
 
 use oasis7::observability::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
 use oasis7::simulator::{
-    Action, DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderDecision,
-    ProviderDiagnostics, ProviderErrorEnvelope, ProviderHealth, ProviderInfo, ProviderTokenUsage,
-    ProviderTraceEnvelope, ProviderTranscriptEntry,
+    Action, ActionCatalogEntry, DecisionRequest, DecisionResponse, FeedbackEnvelope,
+    ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope, ProviderHealth, ProviderInfo,
+    ProviderTokenUsage, ProviderTraceEnvelope, ProviderTranscriptEntry,
 };
 use reqwest::blocking::Client;
 use serde::Deserialize;
@@ -26,6 +26,7 @@ const DEFAULT_BIND_ADDR: &str = "127.0.0.1:5841";
 const DEFAULT_PROVIDER_AGENT_ID: &str = "main";
 const DEFAULT_PROVIDER_THINKING: &str = "off";
 const DEFAULT_PROVIDER_ID: &str = "provider_local_bridge";
+const MOCK_PROVIDER_ID: &str = "provider_local_mock";
 const DEFAULT_PROTOCOL_VERSION: &str = "world-simulator-provider-loopback-http-v1";
 const MAX_RECENT_FEEDBACK: usize = 8;
 const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
@@ -69,6 +70,13 @@ struct CliOptions {
     auth_token: Option<String>,
     auth_route_map: BTreeMap<String, String>,
     auth_route_from_bearer: bool,
+    mode: ProviderMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProviderMode {
+    Real,
+    Mock,
 }
 
 impl Default for CliOptions {
@@ -82,6 +90,7 @@ impl Default for CliOptions {
             auth_token: None,
             auth_route_map: BTreeMap::new(),
             auth_route_from_bearer: false,
+            mode: ProviderMode::Real,
         }
     }
 }
@@ -116,16 +125,11 @@ impl ProviderState {
 
     fn provider_info(&self) -> ProviderInfo {
         ProviderInfo {
-            provider_id: DEFAULT_PROVIDER_ID.to_string(),
-            name: Some("Local Provider Bridge".to_string()),
+            provider_id: self.provider_id().to_string(),
+            name: Some(self.provider_name().to_string()),
             version: Some(env!("CARGO_PKG_VERSION").to_string()),
             protocol_version: Some(DEFAULT_PROTOCOL_VERSION.to_string()),
-            capabilities: vec![
-                "decision".to_string(),
-                "feedback".to_string(),
-                "loopback_only".to_string(),
-                format!("agent:{}", self.options.provider_agent_id),
-            ],
+            capabilities: self.provider_capabilities(),
             supported_action_sets: vec![
                 "wait".to_string(),
                 "wait_ticks".to_string(),
@@ -137,8 +141,52 @@ impl ProviderState {
         }
     }
 
+    fn provider_id(&self) -> &'static str {
+        match self.options.mode {
+            ProviderMode::Real => DEFAULT_PROVIDER_ID,
+            ProviderMode::Mock => MOCK_PROVIDER_ID,
+        }
+    }
+
+    fn provider_name(&self) -> &'static str {
+        match self.options.mode {
+            ProviderMode::Real => "Local Provider Bridge",
+            ProviderMode::Mock => "Local Mock Provider Bridge",
+        }
+    }
+
+    fn provider_capabilities(&self) -> Vec<String> {
+        let mut capabilities = vec![
+            "decision".to_string(),
+            "feedback".to_string(),
+            "loopback_only".to_string(),
+        ];
+        match self.options.mode {
+            ProviderMode::Real => {
+                capabilities.push(format!("agent:{}", self.options.provider_agent_id));
+            }
+            ProviderMode::Mock => {
+                capabilities.push("mock".to_string());
+                capabilities.push("deterministic".to_string());
+                capabilities.push("no_billing".to_string());
+                capabilities.push("no_quota".to_string());
+            }
+        }
+        capabilities
+    }
+
     fn provider_health(&self) -> ProviderHealth {
         let active_requests = self.active_requests.load(Ordering::Relaxed);
+        if self.options.mode == ProviderMode::Mock {
+            self.set_last_error(None);
+            return ProviderHealth {
+                ok: true,
+                status: Some("ready".to_string()),
+                uptime_ms: Some(self.started_at.elapsed().as_millis() as u64),
+                last_error: None,
+                queue_depth: Some(active_requests),
+            };
+        }
         match self
             .http
             .get(self.options.gateway_health_url.as_str())
@@ -246,11 +294,20 @@ impl ProviderState {
     ) -> DecisionResponse {
         if let Err(err) = request.validate_contract() {
             self.set_last_error(Some(err.to_string()));
-            return provider_error_response(err.code, err.message, false, None, None);
+            return self.provider_error_response(err.code, err.message, false, None, None);
         }
         if let Some(err) = validate_profile(request.agent_profile.as_deref()) {
             self.set_last_error(Some(err.clone()));
-            return provider_error_response("unsupported_agent_profile", err, false, None, None);
+            return self.provider_error_response(
+                "unsupported_agent_profile",
+                err,
+                false,
+                None,
+                None,
+            );
+        }
+        if self.options.mode == ProviderMode::Mock {
+            return self.handle_mock_decision(request);
         }
 
         self.active_requests.fetch_add(1, Ordering::SeqCst);
@@ -298,13 +355,13 @@ impl ProviderState {
                         decision,
                         provider_error: None,
                         diagnostics: ProviderDiagnostics {
-                            provider_id: Some(DEFAULT_PROVIDER_ID.to_string()),
+                            provider_id: Some(self.provider_id().to_string()),
                             provider_version: output.provider_version.clone(),
                             latency_ms: Some(latency_ms.max(output.duration_ms.unwrap_or(0))),
                             retry_count: 0,
                         },
                         trace_payload: ProviderTraceEnvelope {
-                            provider_id: Some(DEFAULT_PROVIDER_ID.to_string()),
+                            provider_id: Some(self.provider_id().to_string()),
                             input_summary: Some(summarize_text(output.prompt.as_str(), 512)),
                             output_summary: Some(match (&output.route_note, &guardrail_note) {
                                 (Some(route_note), Some(note)) => format!(
@@ -365,13 +422,13 @@ impl ProviderState {
                         decision,
                         provider_error: None,
                         diagnostics: ProviderDiagnostics {
-                            provider_id: Some(DEFAULT_PROVIDER_ID.to_string()),
+                            provider_id: Some(self.provider_id().to_string()),
                             provider_version: output.provider_version.clone(),
                             latency_ms: Some(latency_ms.max(output.duration_ms.unwrap_or(0))),
                             retry_count: 0,
                         },
                         trace_payload: ProviderTraceEnvelope {
-                            provider_id: Some(DEFAULT_PROVIDER_ID.to_string()),
+                            provider_id: Some(self.provider_id().to_string()),
                             input_summary: Some(summarize_text(output.prompt.as_str(), 512)),
                             output_summary: Some(match guardrail_note {
                                 Some(note) => format!(
@@ -413,7 +470,7 @@ impl ProviderState {
             Err(err) => {
                 let detail = format!("provider_gateway_unreachable: {err}");
                 self.set_last_error(Some(detail.clone()));
-                provider_error_response(
+                self.provider_error_response(
                     "provider_gateway_unreachable",
                     detail,
                     true,
@@ -421,6 +478,79 @@ impl ProviderState {
                     Some("decision invocation failed".to_string()),
                 )
             }
+        }
+    }
+
+    fn handle_mock_decision(&self, request: DecisionRequest) -> DecisionResponse {
+        self.set_last_error(None);
+        let decision = deterministic_mock_decision(&request);
+        let action_label = provider_decision_label(&decision);
+        DecisionResponse {
+            decision,
+            provider_error: None,
+            diagnostics: ProviderDiagnostics {
+                provider_id: Some(self.provider_id().to_string()),
+                provider_version: Some(format!("{}-mock", env!("CARGO_PKG_VERSION"))),
+                latency_ms: Some(0),
+                retry_count: 0,
+            },
+            trace_payload: ProviderTraceEnvelope {
+                provider_id: Some(self.provider_id().to_string()),
+                input_summary: Some(format!(
+                    "deterministic_mock request agent={} world_time={}",
+                    request.observation.agent_id, request.observation.world_time
+                )),
+                output_summary: Some(format!(
+                    "deterministic_mock decision={action_label}; no_provider_cli=true; no_billing=true; no_quota=true"
+                )),
+                latency_ms: Some(0),
+                transcript: Vec::new(),
+                tool_trace: vec![
+                    "deterministic_mock=no_provider_cli".to_string(),
+                    "no_billing=true".to_string(),
+                    "no_quota=true".to_string(),
+                ],
+                token_usage: None,
+                cost_cents: None,
+                schema_repair_count: 0,
+            },
+            memory_write_intents: Vec::new(),
+        }
+    }
+
+    fn provider_error_response(
+        &self,
+        code: impl Into<String>,
+        message: impl Into<String>,
+        retryable: bool,
+        latency_ms: Option<u64>,
+        output_summary: Option<String>,
+    ) -> DecisionResponse {
+        DecisionResponse {
+            decision: ProviderDecision::Wait,
+            provider_error: Some(ProviderErrorEnvelope {
+                code: code.into(),
+                message: message.into(),
+                retryable,
+            }),
+            diagnostics: ProviderDiagnostics {
+                provider_id: Some(self.provider_id().to_string()),
+                provider_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                latency_ms,
+                retry_count: 0,
+            },
+            trace_payload: ProviderTraceEnvelope {
+                provider_id: Some(self.provider_id().to_string()),
+                input_summary: None,
+                output_summary,
+                latency_ms,
+                transcript: Vec::new(),
+                tool_trace: Vec::new(),
+                token_usage: None,
+                cost_cents: None,
+                schema_repair_count: 0,
+            },
+            memory_write_intents: Vec::new(),
         }
     }
 
@@ -648,6 +778,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--auth-route-from-bearer" => {
                 options.auth_route_from_bearer = true;
             }
+            "--mode" => {
+                options.mode = parse_provider_mode(required_value(&mut iter, "--mode")?)?;
+            }
+            "--mock" => {
+                options.mode = ProviderMode::Mock;
+            }
             "-h" | "--help" => return Err("help requested".to_string()),
             other => return Err(format!("unknown argument: {other}")),
         }
@@ -684,6 +820,8 @@ fn print_help() {
         "  --auth-token <token>          Optional single bearer token for bridge endpoints\n",
         "  --auth-route-map <path>       Optional JSON file mapping bearer token to route label\n",
         "  --auth-route-from-bearer      Treat request bearer token itself as route label\n",
+        "  --mode <real|mock>            Bridge decision backend (default: real)\n",
+        "  --mock                        Alias for --mode mock; deterministic no-billing local testing\n",
     ));
 }
 
@@ -719,41 +857,6 @@ fn load_auth_route_map(path: &str) -> Result<BTreeMap<String, String>, String> {
     Ok(normalized)
 }
 
-fn provider_error_response(
-    code: impl Into<String>,
-    message: impl Into<String>,
-    retryable: bool,
-    latency_ms: Option<u64>,
-    output_summary: Option<String>,
-) -> DecisionResponse {
-    DecisionResponse {
-        decision: ProviderDecision::Wait,
-        provider_error: Some(ProviderErrorEnvelope {
-            code: code.into(),
-            message: message.into(),
-            retryable,
-        }),
-        diagnostics: ProviderDiagnostics {
-            provider_id: Some(DEFAULT_PROVIDER_ID.to_string()),
-            provider_version: Some(env!("CARGO_PKG_VERSION").to_string()),
-            latency_ms,
-            retry_count: 0,
-        },
-        trace_payload: ProviderTraceEnvelope {
-            provider_id: Some(DEFAULT_PROVIDER_ID.to_string()),
-            input_summary: None,
-            output_summary,
-            latency_ms,
-            transcript: Vec::new(),
-            tool_trace: Vec::new(),
-            token_usage: None,
-            cost_cents: None,
-            schema_repair_count: 0,
-        },
-        memory_write_intents: Vec::new(),
-    }
-}
-
 fn validate_profile(agent_profile: Option<&str>) -> Option<String> {
     let Some(agent_profile) = agent_profile
         .map(str::trim)
@@ -767,6 +870,73 @@ fn validate_profile(agent_profile: Option<&str>) -> Option<String> {
         Some(format!(
             "unsupported agent_profile `{agent_profile}`; expected {DEFAULT_PROVIDER_AGENT_PROFILE}"
         ))
+    }
+}
+
+fn parse_provider_mode(raw: &str) -> Result<ProviderMode, String> {
+    match raw.trim() {
+        "real" | "provider" | "provider_cli" => Ok(ProviderMode::Real),
+        "mock" | "deterministic" | "local_mock" | "local-mock" => Ok(ProviderMode::Mock),
+        other => Err(format!(
+            "unsupported provider bridge mode `{other}`; expected real or mock"
+        )),
+    }
+}
+
+fn deterministic_mock_decision(request: &DecisionRequest) -> ProviderDecision {
+    let agent_id = request.observation.agent_id.clone();
+    if action_catalog_contains(&request.observation.action_catalog, "move_agent") {
+        if let Some(to) =
+            nearest_reachable_non_current_location_id(&request.observation.observation)
+        {
+            return ProviderDecision::Act {
+                action_ref: "move_agent".to_string(),
+                action: Action::MoveAgent { agent_id, to },
+            };
+        }
+    }
+    if action_catalog_contains(&request.observation.action_catalog, "inspect_target") {
+        if let Some(target) = request.observation.observation.interaction_targets.first() {
+            return ProviderDecision::Act {
+                action_ref: "inspect_target".to_string(),
+                action: Action::InspectTarget {
+                    agent_id,
+                    target_kind: target.target_kind.clone(),
+                    target_id: target.target_ref.clone(),
+                },
+            };
+        }
+        if let Some(entity) = request.observation.observation.nearby_entities.first() {
+            return ProviderDecision::Act {
+                action_ref: "inspect_target".to_string(),
+                action: Action::InspectTarget {
+                    agent_id,
+                    target_kind: entity.kind.clone(),
+                    target_id: entity.entity_ref.clone(),
+                },
+            };
+        }
+    }
+    ProviderDecision::Wait
+}
+
+fn action_catalog_contains(action_catalog: &[ActionCatalogEntry], action_ref: &str) -> bool {
+    action_catalog
+        .iter()
+        .any(|entry| entry.action_ref.trim() == action_ref)
+}
+
+fn provider_decision_label(decision: &ProviderDecision) -> &'static str {
+    match decision {
+        ProviderDecision::Wait => "wait",
+        ProviderDecision::WaitTicks { .. } => "wait_ticks",
+        ProviderDecision::Act { action_ref, .. } => match action_ref.as_str() {
+            "move_agent" => "move_agent",
+            "speak_to_nearby" => "speak_to_nearby",
+            "inspect_target" => "inspect_target",
+            "simple_interact" => "simple_interact",
+            _ => "act",
+        },
     }
 }
 

@@ -767,6 +767,9 @@ function goalExecutionBadgeClass(state) {
 }
 
 function gameplayActionButtonLabel(action, locale) {
+  if (action.executeKind === "claim_agent") {
+    return tr(locale, "认领 Agent", "Claim Agent");
+  }
   if (action.executeKind === "request_snapshot") {
     return tr(locale, "刷新快照", "Refresh Snapshot");
   }
@@ -796,6 +799,134 @@ function renderGameplayAction(action) {
     return;
   }
   core.sendGameplayAction(action);
+}
+
+function buildAgentClaimTargets(snapshot, agentClaim) {
+  const agents = snapshot?.model?.agents || {};
+  const ownedTargets = new Set(
+    Array.isArray(agentClaim?.owned_claims)
+      ? agentClaim.owned_claims.map((claim) => String(claim?.target_agent_id || "").trim()).filter(Boolean)
+      : [],
+  );
+  const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
+  const candidates = Object.keys(agents)
+    .filter((agentId) => !ownedTargets.has(agentId))
+    .map((agentId) => ({
+      id: agentId,
+      name: agents[agentId]?.name || agentId,
+      isClaimer: agentId === claimerAgentId,
+    }));
+  const unclaimedNonActor = candidates.filter((candidate) => !candidate.isClaimer);
+  return unclaimedNonActor.length > 0 ? unclaimedNonActor : candidates;
+}
+
+function buildAgentClaimAction(agentClaim, targetAgentId) {
+  const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
+  const target = String(targetAgentId || "").trim();
+  if (!claimerAgentId || !target) {
+    return null;
+  }
+  return {
+    actionId: "claim_agent",
+    action_id: "claim_agent",
+    label: "Claim Agent",
+    protocolAction: "gameplay_action.submit",
+    protocol_action: "gameplay_action.submit",
+    executeKind: "claim_agent",
+    targetAgentId: target,
+    target_agent_id: target,
+    actorAgentId: claimerAgentId,
+    actor_agent_id: claimerAgentId,
+    disabledReason: agentClaim?.next_claim_quote?.blocked_reason || null,
+    disabled_reason: agentClaim?.next_claim_quote?.blocked_reason || null,
+  };
+}
+
+function AgentClaimPanel(props) {
+  const locale = () => props.locale ?? uiLocale();
+  const [selectedTargetId, setSelectedTargetId] = createSignal("");
+  const agentClaim = () => props.gameplay?.agentClaim || null;
+  const quote = () => agentClaim()?.next_claim_quote || null;
+  const targets = () => buildAgentClaimTargets(core.state.snapshot, agentClaim());
+  const selectedTarget = () => {
+    const current = selectedTargetId();
+    if (current && targets().some((target) => target.id === current)) {
+      return current;
+    }
+    return targets()[0]?.id || "";
+  };
+  const claimAction = () => buildAgentClaimAction(agentClaim(), selectedTarget());
+  const disabledReason = () => {
+    if (!agentClaim()) {
+      return tr(locale(), "当前快照没有发布 Agent claim 数据。", "The current snapshot has no Agent claim data.");
+    }
+    if (!selectedTarget()) {
+      return tr(locale(), "当前没有可认领的 Agent。", "There is no claimable agent right now.");
+    }
+    return claimAction()?.disabledReason || null;
+  };
+
+  return (
+    <CalloutCard
+      title={tr(locale(), "认领 Agent", "Agent Claim")}
+      badge={quote() ? `slot=${quote().slot_index}` : "claim"}
+      badgeClass={disabledReason() ? "badge badge--warn" : "badge badge--good"}
+    >
+      <div class="feedback-summary">
+        {agentClaim()?.objective
+          || tr(locale(), "选择一个未被占用的 Agent，并用当前玩家会话提交认领。", "Pick an unclaimed agent and submit the claim with the current player session.")}
+      </div>
+      <div class="feedback-detail">
+        {agentClaim()?.progress_detail
+          || tr(locale(), "首次 slot-1 认领可以使用专用 starter claim 额度补足前置费用。", "The first slot-1 claim can use the dedicated starter claim allowance for upfront costs.")}
+      </div>
+      <div class="badge-row">
+        <Badge>{`claimer=${agentClaim()?.claimer_agent_id || "-"}`}</Badge>
+        <Badge>{`owned=${agentClaim()?.owned_claim_count ?? 0}/${agentClaim()?.claim_cap ?? "-"}`}</Badge>
+        <Badge>{`eligible=${quote()?.eligible_claim_balance ?? agentClaim()?.slot_1_eligible_claim_balance ?? "-"}`}</Badge>
+        <Badge>{`upfront=${quote()?.total_upfront_amount ?? "-"}`}</Badge>
+      </div>
+      <Show when={quote()?.blocked_reason}>
+        <div class="feedback-detail">{quote().blocked_reason}</div>
+      </Show>
+      <div class="control-grid">
+        <div class="field">
+          <label for="agent-claim-target">
+            {tr(locale(), "目标 Agent", "Target Agent")}
+          </label>
+          <select
+            id="agent-claim-target"
+            value={selectedTarget()}
+            onInput={(event) => setSelectedTargetId(event.currentTarget.value)}
+          >
+            <For each={targets()}>
+              {(target) => (
+                <option value={target.id}>
+                  {`${target.name}${target.isClaimer ? ` (${tr(locale(), "当前绑定", "current binding")})` : ""}`}
+                </option>
+              )}
+            </For>
+          </select>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button
+          disabled={Boolean(disabledReason())}
+          onClick={() => {
+            const action = claimAction();
+            if (action) {
+              renderGameplayAction(action);
+            }
+          }}
+        >
+          {tr(locale(), "认领 Agent", "Claim Agent")}
+        </button>
+      </div>
+      <Show when={disabledReason()}>
+        <div class="feedback-detail">{disabledReason()}</div>
+      </Show>
+    </CalloutCard>
+  );
 }
 
 function gameplayProgressLabel(progressPercent, locale) {
@@ -1301,6 +1432,9 @@ function WorldSummaryPanel() {
                     </div>
                   </CalloutCard>
                 )}
+              </Show>
+              <Show when={gameplay().agentClaim}>
+                <AgentClaimPanel gameplay={gameplay()} locale={locale()} />
               </Show>
               <div>
                 <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "可用玩法动作", "Available Gameplay Actions")}</div>

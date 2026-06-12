@@ -76,6 +76,7 @@ use support::{
     RuntimeLiveScript, RuntimeLiveSession, FORMAL_RELEASE_DEFAULT_WORLD_ID,
 };
 
+pub use control_plane::runtime_agent_chat_echo_enabled_from_env;
 pub use support::bootstrap_formal_release_runtime_world as viewer_bootstrap_formal_release_runtime_world;
 
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
@@ -98,8 +99,10 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub decision_mode: ViewerLiveDecisionMode,
     pub play_step_interval: Duration,
     pub chain_poll_interval: Duration,
+    pub auto_play_on_connect: bool,
     pub hosted_public_join_mode: bool,
     pub chain_status_bind: Option<String>,
+    pub agent_chat_echo_enabled: bool,
 }
 
 #[derive(Debug)]
@@ -224,6 +227,10 @@ impl ViewerRuntimeLiveServer {
             .is_some_and(|value| !value.is_empty())
     }
 
+    fn supports_agent_chat(&self) -> bool {
+        self.llm_sidecar.supports_agent_chat() || self.config.agent_chat_echo_enabled
+    }
+
     fn serve_shared_stream(
         shared: Arc<Mutex<Self>>,
         stream: TcpStream,
@@ -234,7 +241,7 @@ impl ViewerRuntimeLiveServer {
         let reader_stream = stream.try_clone()?;
         let mut reader = BufReader::new(reader_stream);
         let mut writer = BufWriter::new(stream);
-        let mut session = RuntimeLiveSession::new();
+        let mut session = RuntimeLiveSession::new_with_playing(false);
 
         loop {
             let mut line = String::new();
@@ -261,7 +268,10 @@ impl ViewerRuntimeLiveServer {
                     server.config.chain_poll_interval,
                 )
             };
-            if chain_link_enabled && session.should_poll_chain(chain_poll_interval) {
+            if chain_link_enabled
+                && session.initial_snapshot_sent
+                && session.should_poll_chain(chain_poll_interval)
+            {
                 if let Err(err) = Self::sync_chain_linked_runtime_minimized_lock(
                     &shared,
                     &mut session,
@@ -293,7 +303,7 @@ impl ViewerRuntimeLiveServer {
         let reader_stream = stream.try_clone()?;
         let mut reader = BufReader::new(reader_stream);
         let mut writer = BufWriter::new(stream);
-        let mut session = RuntimeLiveSession::new();
+        let mut session = RuntimeLiveSession::new_with_playing(false);
 
         loop {
             let mut line = String::new();
@@ -313,6 +323,7 @@ impl ViewerRuntimeLiveServer {
             }
 
             if self.chain_link_enabled()
+                && session.initial_snapshot_sent
                 && session.should_poll_chain(self.config.chain_poll_interval)
             {
                 if let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer) {
@@ -407,6 +418,12 @@ impl ViewerRuntimeLiveServer {
                 if session.subscribed.contains(&ViewerStream::Events) {
                     self.emit_authoritative_batch_snapshot(writer)?;
                     self.emit_authoritative_challenge_snapshot(writer)?;
+                }
+                session.initial_snapshot_sent = true;
+                if self.config.auto_play_on_connect && !session.playing {
+                    session.playing = true;
+                    session.next_play_step_at = None;
+                    session.transient_play_failures = 0;
                 }
             }
             ViewerRequest::PlaybackControl { mode, request_id } => {
@@ -915,7 +932,7 @@ impl ViewerRuntimeLiveServer {
             self.latest_player_gameplay_causality.as_ref(),
             gameplay_gate.is_none(),
             gameplay_gate.as_deref(),
-            self.llm_sidecar.is_llm_mode() && self.llm_sidecar.supports_agent_chat(),
+            self.llm_sidecar.is_llm_mode() && self.supports_agent_chat(),
             primary_agent_claim,
         );
         apply_runtime_snapshot_empty_entities_blocker(

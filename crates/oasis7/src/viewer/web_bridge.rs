@@ -1,6 +1,5 @@
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
@@ -98,19 +97,19 @@ impl ViewerWebBridge {
         let upstream = TcpStream::connect(&self.config.upstream_addr)?;
         upstream.set_nodelay(true)?;
         let upstream_reader = upstream.try_clone()?;
+        upstream_reader.set_nonblocking(true)?;
         let upstream_shutdown = upstream.try_clone()?;
         let mut upstream_writer = BufWriter::new(upstream);
-
-        let (tx_from_upstream, rx_from_upstream) = mpsc::channel::<String>();
-        let upstream_reader_thread = thread::spawn(move || {
-            read_upstream_lines(upstream_reader, tx_from_upstream);
-        });
+        let mut upstream_reader = BufReader::new(upstream_reader);
 
         let session_result = (|| -> Result<(), ViewerWebBridgeError> {
             loop {
                 match websocket.read() {
                     Ok(message) => {
                         if !handle_ws_message(message, &mut upstream_writer, &mut websocket)? {
+                            break;
+                        }
+                        if !drain_upstream_lines(&mut upstream_reader, &mut websocket)? {
                             break;
                         }
                     }
@@ -120,14 +119,8 @@ impl ViewerWebBridge {
                     Err(err) => return Err(err.into()),
                 }
 
-                loop {
-                    match rx_from_upstream.try_recv() {
-                        Ok(line) => {
-                            websocket.send(Message::Text(line))?;
-                        }
-                        Err(mpsc::TryRecvError::Empty) => break,
-                        Err(mpsc::TryRecvError::Disconnected) => return Ok(()),
-                    }
+                if !drain_upstream_lines(&mut upstream_reader, &mut websocket)? {
+                    break;
                 }
             }
             Ok(())
@@ -136,7 +129,6 @@ impl ViewerWebBridge {
         // Ensure the cloned reader side is also released; otherwise upstream may keep the
         // first session alive and block subsequent reconnects.
         let _ = upstream_shutdown.shutdown(Shutdown::Both);
-        let _ = upstream_reader_thread.join();
 
         session_result
     }
@@ -218,23 +210,29 @@ fn is_expected_bridge_disconnect(err: &ViewerWebBridgeError) -> bool {
     }
 }
 
-fn read_upstream_lines(stream: TcpStream, tx: mpsc::Sender<String>) {
-    let mut reader = BufReader::new(stream);
+fn drain_upstream_lines(
+    reader: &mut BufReader<TcpStream>,
+    websocket: &mut tungstenite::WebSocket<TcpStream>,
+) -> Result<bool, ViewerWebBridgeError> {
     let mut line = String::new();
     loop {
         line.clear();
         match reader.read_line(&mut line) {
-            Ok(0) => break,
+            Ok(0) => return Ok(false),
             Ok(_) => {
                 let text = line.trim();
                 if text.is_empty() {
                     continue;
                 }
-                if tx.send(text.to_string()).is_err() {
-                    break;
-                }
+                websocket.send(Message::Text(text.to_string().into()))?;
             }
-            Err(_) => break,
+            Err(err)
+                if err.kind() == io::ErrorKind::WouldBlock
+                    || err.kind() == io::ErrorKind::TimedOut =>
+            {
+                return Ok(true);
+            }
+            Err(err) => return Err(err.into()),
         }
     }
 }
@@ -242,6 +240,7 @@ fn read_upstream_lines(stream: TcpStream, tx: mpsc::Sender<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
     use std::time::Instant;
     use tungstenite::connect;
 

@@ -11,6 +11,9 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--deployment-mode" => {
                 options.deployment_mode = parse_required_value(&mut iter, "--deployment-mode")?;
             }
+            "--allow-trusted-local-playtest" => {
+                options.allow_trusted_local_playtest = true;
+            }
             "--scenario" => {
                 options.scenario = parse_required_value(&mut iter, "--scenario")?;
             }
@@ -37,6 +40,9 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             }
             "--with-llm" => {
                 options.with_llm = true;
+            }
+            "--auto-play" => {
+                options.auto_play = true;
             }
             "--agent-decision-source" => {
                 options.agent_decision_source =
@@ -213,8 +219,11 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
 
     let _ = parse_host_port(options.live_bind.as_str(), "--live-bind")?;
     let _ = parse_host_port(options.web_bind.as_str(), "--web-bind")?;
-    let deployment_mode =
-        DeploymentMode::parse_user_facing(options.deployment_mode.as_str(), "--deployment-mode")?;
+    let deployment_mode = if options.allow_trusted_local_playtest {
+        DeploymentMode::parse(options.deployment_mode.as_str(), "--deployment-mode")?
+    } else {
+        DeploymentMode::parse_user_facing(options.deployment_mode.as_str(), "--deployment-mode")?
+    };
     if !deployment_mode.allows_local_chain_runtime() {
         options.chain_enabled = false;
     }
@@ -397,6 +406,8 @@ Start player stack with one command:\n\
 - print URL and optionally open browser\n\n\
 Options:\n\
   --deployment-mode <mode>    hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
+  --allow-trusted-local-playtest
+                              Allow --deployment-mode trusted_local_only for local test stacks only\n\
   --scenario <name>            optional debug scenario; default uses formal release fixed world\n\
   --live-bind <host:port>      oasis7_viewer_live bind (default: {DEFAULT_LIVE_BIND})\n\
   --web-bind <host:port>       oasis7_viewer_live web bridge bind (default: {DEFAULT_WEB_BIND})\n\
@@ -436,6 +447,7 @@ Options:\n\
                                oasis7_chain_runtime max accepted stale slot lag (default: {DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG})\n\
   --chain-node-validator <v:s> oasis7_chain_runtime validator (repeatable)\n\
   --with-llm                   enable llm mode (default; required for gameplay)\n\
+  --auto-play                  start oasis7_viewer_live gameplay/world progression on connect\n\
   --agent-decision-source <src>\n\
                                agent decision source: builtin_llm|provider_backed\n\
   --agent-provider-backend <id>\n\

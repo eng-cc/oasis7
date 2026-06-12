@@ -758,6 +758,14 @@ fn runtime_live_session_play_step_is_interval_gated() {
 }
 
 #[test]
+fn runtime_live_session_auto_play_initializes_playing() {
+    let mut session = RuntimeLiveSession::new_with_playing(true);
+
+    assert!(session.playing);
+    assert!(session.should_advance_play_step(Duration::from_millis(40)));
+}
+
+#[test]
 fn runtime_simulator_action_mapping_covers_module_artifact_actions() {
     let server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))

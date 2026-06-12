@@ -6,6 +6,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from typing import Optional
 
 
@@ -14,6 +15,7 @@ DEFAULT_TIMEOUT_MS = 15000
 DEFAULT_MAX_OUTPUT_TOKENS = 256
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_USER_AGENT = "oasis7-letai-provider-cli/1.0"
+QUOTA_UNITS_PER_USD = Decimal("500000")
 
 
 def env_required(*names: str) -> str:
@@ -71,7 +73,11 @@ def load_route_config() -> dict:
     route_label = env_optional("OASIS7_REMOTE_LLM_ROUTE_LABEL")
     routes_path = env_optional("OASIS7_REMOTE_LLM_ROUTES_PATH")
     if not routes_path:
-        if route_label and not env_optional("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH"):
+        if (
+            route_label
+            and not env_optional("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH")
+            and not env_optional("OASIS7_REMOTE_LLM_API_KEY", "LETAI_API_KEY")
+        ):
             raise RuntimeError(
                 "OASIS7_REMOTE_LLM_ROUTE_LABEL requires either "
                 "OASIS7_REMOTE_LLM_ROUTES_PATH or OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH"
@@ -240,6 +246,16 @@ def parse_gateway_call(argv: list[str]) -> tuple[str, int, str]:
             # `agent --timeout` comes from the local embedded fallback path, which
             # still passes seconds rather than milliseconds.
             timeout_ms = int(argv[index]) * 1000
+        elif flag == "--expect-final":
+            # `oasis7_provider_local_bridge` includes this gateway CLI flag when
+            # it asks provider-style CLIs for a final answer. LetAI chat
+            # completions already returns a single final payload, so no extra
+            # handling is needed here.
+            pass
+        elif flag == "--json":
+            # The bridge requests JSON output from provider CLIs. This wrapper
+            # always writes the gateway-compatible JSON envelope.
+            pass
         else:
             raise RuntimeError(f"unknown gateway flag: {flag}")
         index += 1
@@ -326,6 +342,109 @@ def make_headers(api_key: str) -> dict[str, str]:
     return headers
 
 
+def quota_from_usd(raw: str) -> int:
+    try:
+        amount = Decimal(raw.strip())
+    except (InvalidOperation, AttributeError) as exc:
+        raise RuntimeError(f"invalid auto topup USD amount: {raw}") from exc
+    if amount <= 0:
+        return 0
+    quota = (amount * QUOTA_UNITS_PER_USD).quantize(Decimal("1"), rounding=ROUND_DOWN)
+    return int(quota)
+
+
+def should_auto_topup(error_detail: str) -> bool:
+    lowered = error_detail.lower()
+    return "insufficient_user_quota" in lowered or "余额" in error_detail
+
+
+def maybe_auto_topup_user(error_detail: str) -> bool:
+    topup_usd = env_optional("OASIS7_REMOTE_LLM_AUTO_TOPUP_USD", "LETAI_AUTO_TOPUP_USD")
+    if not topup_usd or not should_auto_topup(error_detail):
+        return False
+    quota = quota_from_usd(topup_usd)
+    if quota <= 0:
+        return False
+    platform_key = env_optional(
+        "OASIS7_REMOTE_LLM_PLATFORM_KEY",
+        "OASIS7_NEWAPI_BRIDGE_LETAI_PLATFORM_KEY",
+        "LETAI_PLATFORM_KEY",
+    )
+    platform_user_id = env_optional(
+        "OASIS7_REMOTE_LLM_PLATFORM_USER_ID",
+        "LETAI_PLATFORM_USER_ID",
+    )
+    if not platform_key or not platform_user_id:
+        return False
+    base_url = (
+        env_optional(
+            "OASIS7_REMOTE_LLM_PLATFORM_BASE_URL",
+            "OASIS7_NEWAPI_BRIDGE_LETAI_BASE_URL",
+            "LETAI_PLATFORM_BASE_URL",
+        )
+        or "https://api.letai.run"
+    ).strip().rstrip("/")
+    external_order_id = f"oasis7-local-auto-topup-{int(time.time())}"
+    payload = {
+        "external_order_id": external_order_id,
+        "quota": quota,
+        "amount": str(Decimal(topup_usd.strip()).normalize()),
+        "currency": "USD",
+    }
+    request = urllib.request.Request(
+        url=f"{base_url}/api/platform/open/users/{platform_user_id}/topups",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {platform_key}",
+            "Content-Type": "application/json",
+            "User-Agent": env_optional("OASIS7_REMOTE_LLM_USER_AGENT") or DEFAULT_USER_AGENT,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            status_code = response.status
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"auto topup returned HTTP {exc.code}: {redact_detail(detail)}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"auto topup request failed: {exc}") from exc
+    if status_code < 200 or status_code >= 300:
+        raise RuntimeError(f"auto topup returned unexpected HTTP {status_code}")
+    try:
+        decoded = json.loads(body) if body.strip() else {}
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("auto topup returned non-JSON response") from exc
+    if isinstance(decoded, dict) and decoded.get("success") is False:
+        raise RuntimeError(
+            "auto topup returned success=false: "
+            + str(decoded.get("message") or decoded.get("error") or "unknown error")
+        )
+    print(
+        json.dumps(
+            {
+                "event": "auto_topup",
+                "quota": quota,
+                "amount_usd": str(topup_usd),
+                "external_order_id": external_order_id,
+            },
+            ensure_ascii=True,
+        ),
+        file=sys.stderr,
+    )
+    return True
+
+
+def redact_detail(detail: str) -> str:
+    stripped = detail.strip()
+    if len(stripped) > 300:
+        return stripped[:300] + "..."
+    return stripped
+
+
 def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
     route = load_route_config()
     base_url = normalize_base_url(
@@ -395,16 +514,29 @@ def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
     )
     started = time.time()
     try:
-        with urllib.request.urlopen(request, timeout=max(timeout_ms, 1000) / 1000.0) as response:
-            status_code = response.status
-            if use_stream:
-                decoded, content, usage = decode_sse_completion_stream(response)
-            else:
-                payload = response.read().decode("utf-8")
-                decoded, content, usage = decode_completion_payload(payload)
+        status_code, decoded, content, usage = send_completion_request(
+            request,
+            timeout_ms,
+            use_stream,
+        )
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"upstream chat completion returned HTTP {exc.code}: {detail}") from exc
+        if maybe_auto_topup_user(detail):
+            retry_request = urllib.request.Request(
+                url=f"{base_url}/chat/completions",
+                data=json.dumps(body).encode("utf-8"),
+                headers=make_headers(api_key),
+                method="POST",
+            )
+            status_code, decoded, content, usage = send_completion_request(
+                retry_request,
+                timeout_ms,
+                use_stream,
+            )
+        else:
+            raise RuntimeError(
+                f"upstream chat completion returned HTTP {exc.code}: {detail}"
+            ) from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"upstream chat completion request failed: {exc}") from exc
 
@@ -426,6 +558,21 @@ def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
             },
         },
     }
+
+
+def send_completion_request(
+    request: urllib.request.Request,
+    timeout_ms: int,
+    use_stream: bool,
+) -> tuple[int, dict, str, dict]:
+    with urllib.request.urlopen(request, timeout=max(timeout_ms, 1000) / 1000.0) as response:
+        status_code = response.status
+        if use_stream:
+            decoded, content, usage = decode_sse_completion_stream(response)
+        else:
+            payload = response.read().decode("utf-8")
+            decoded, content, usage = decode_completion_payload(payload)
+    return status_code, decoded, content, usage
 
 
 def decode_completion_payload(payload: str) -> tuple[dict, str, dict]:

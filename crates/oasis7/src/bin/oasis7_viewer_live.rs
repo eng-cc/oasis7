@@ -27,6 +27,8 @@ struct CliOptions {
     llm_mode: bool,
     deployment_mode: String,
     chain_status_bind: Option<String>,
+    auto_play: bool,
+    agent_chat_echo: bool,
 }
 
 impl Default for CliOptions {
@@ -38,6 +40,8 @@ impl Default for CliOptions {
             llm_mode: true,
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
             chain_status_bind: None,
+            auto_play: false,
+            agent_chat_echo: oasis7::viewer::runtime_agent_chat_echo_enabled_from_env(),
         }
     }
 }
@@ -74,6 +78,8 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         llm_mode = options.llm_mode,
         deployment_mode = %options.deployment_mode,
         chain_status_bind = ?options.chain_status_bind,
+        auto_play = options.auto_play,
+        agent_chat_echo = options.agent_chat_echo,
         scenario = %options
             .scenario
             .map(|value| value.as_str().to_string())
@@ -100,6 +106,8 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
     let config = base_config
         .with_bind_addr(options.bind_addr)
         .with_hosted_public_join_mode(options.deployment_mode == "hosted_public_join")
+        .with_auto_play_on_connect(options.auto_play)
+        .with_agent_chat_echo_enabled(options.agent_chat_echo)
         .with_decision_mode(if options.llm_mode {
             ViewerLiveDecisionMode::Llm
         } else {
@@ -155,6 +163,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--chain-status-bind" => {
                 options.chain_status_bind =
                     Some(parse_required_value(&mut iter, "--chain-status-bind")?);
+            }
+            "--auto-play" => {
+                options.auto_play = true;
+            }
+            "--agent-chat-echo" => {
+                options.agent_chat_echo = true;
             }
             "--runtime-world" => {
                 return Err(RUNTIME_ALIAS_REMOVAL_HINT.to_string());
@@ -254,6 +268,8 @@ Options:\n\
   --no-llm                  disable llm mode (observer/debug only; gameplay blocked)\n\
   --chain-status-bind <addr> follow committed chain world from oasis7_chain_runtime status bind\n\
   --deployment-mode <mode>  trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
+  --auto-play               advance gameplay/world on each connected session without pressing Play\n\
+  --agent-chat-echo         accept provider-backed local QA chat with an echo event\n\
   -h, --help                show help\n\n\
 Removed:\n\
   --release-config, --runtime-world, all --node-*, --topology, --triad-*, --reward-runtime-*, --no-node, --viewer-no-consensus-gate\n\
@@ -274,6 +290,7 @@ mod tests {
         assert!(options.llm_mode);
         assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
         assert_eq!(options.chain_status_bind, None);
+        assert!(!options.auto_play);
     }
 
     #[test]
@@ -288,6 +305,8 @@ mod tests {
                 "--llm",
                 "--chain-status-bind",
                 "127.0.0.1:7123",
+                "--auto-play",
+                "--agent-chat-echo",
                 "--deployment-mode",
                 "hosted_public_join",
             ]
@@ -303,6 +322,8 @@ mod tests {
         assert!(options.llm_mode);
         assert_eq!(options.deployment_mode, "hosted_public_join");
         assert_eq!(options.chain_status_bind.as_deref(), Some("127.0.0.1:7123"));
+        assert!(options.auto_play);
+        assert!(options.agent_chat_echo);
     }
 
     #[test]
