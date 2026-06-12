@@ -890,6 +890,10 @@
         border: 1px solid rgba(152, 177, 150, 0.14);
         border-radius: 999px;
         background: rgba(7, 12, 10, 0.58);
+        max-width: min(220px, 48vw);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .pixel-world-focus-receipt {
         position: absolute;
@@ -1480,6 +1484,7 @@
         .pixel-world-focus-fallback-map__meta span {
           padding: 4px 6px;
           font-size: 10px;
+          max-width: min(190px, 68vw);
         }
         .pixel-world-focus-receipt {
           left: 10px;
