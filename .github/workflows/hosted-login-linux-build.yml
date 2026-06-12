@@ -28,6 +28,7 @@ on:
       - "crates/oasis7_viewer/software_safe.js"
       - "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html"
       - "crates/oasis7_viewer/viewer.js"
+      - "scripts/build-viewer-software-safe.sh"
       - "scripts/copy-viewer-web-dist.sh"
       - "scripts/viewer-web-dist-contract.sh"
       - "vendor-egui-winit-0.33.3/**"
@@ -112,6 +113,7 @@ jobs:
 
       - name: Stage viewer web dist
         run: |
+          ./scripts/build-viewer-software-safe.sh
           ./scripts/copy-viewer-web-dist.sh --dist-dir output/hosted-login/web
 
       - name: Stage deployable artifact
