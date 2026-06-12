@@ -5,6 +5,7 @@ struct PeerDirectedHeadTestNetwork {
     inner: Arc<TestInMemoryNetwork>,
     connected_peer_ids: Vec<String>,
     peer_heads: Arc<Mutex<HashMap<String, super::replication::FetchHeadResponse>>>,
+    unsupported_head_peers: Vec<String>,
     waitable_fetch_commit_heights: Arc<Mutex<Vec<u64>>>,
     provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
 }
@@ -50,6 +51,17 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerDirec
                 protocol: protocol.to_string(),
             });
         };
+        if self
+            .unsupported_head_peers
+            .iter()
+            .any(|unsupported| unsupported == provider)
+        {
+            return Err(WorldError::NetworkRequestFailed {
+                code: DistributedErrorCode::ErrUnsupported,
+                message: protocol.to_string(),
+                retryable: false,
+            });
+        }
         let response = self
             .peer_heads
             .lock()
@@ -198,6 +210,7 @@ fn observer_gap_sync_continues_peer_world_head_probe_after_peer_without_head() {
         inner: Arc::new(TestInMemoryNetwork::default()),
         connected_peer_ids: vec!["peer-a".to_string(), "peer-b".to_string()],
         peer_heads: Arc::clone(&peer_heads),
+        unsupported_head_peers: vec!["peer-a".to_string()],
         waitable_fetch_commit_heights: Arc::new(Mutex::new(Vec::new())),
         provider_attempts: Arc::clone(&provider_attempts),
     });
@@ -327,6 +340,7 @@ fn peer_world_head_fallback_retains_high_network_height_after_partial_sync() {
         inner: Arc::new(TestInMemoryNetwork::default()),
         connected_peer_ids: vec!["peer-a".to_string()],
         peer_heads,
+        unsupported_head_peers: Vec::new(),
         waitable_fetch_commit_heights: Arc::new(Mutex::new(Vec::new())),
         provider_attempts,
     });
@@ -450,6 +464,7 @@ fn peer_world_head_fallback_retains_high_network_height_after_waitable_gap() {
         inner: Arc::new(TestInMemoryNetwork::default()),
         connected_peer_ids: vec!["peer-a".to_string()],
         peer_heads,
+        unsupported_head_peers: Vec::new(),
         waitable_fetch_commit_heights: Arc::new(Mutex::new(vec![2])),
         provider_attempts: Arc::new(Mutex::new(Vec::new())),
     });
