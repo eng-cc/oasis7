@@ -298,7 +298,10 @@ pub(super) fn deployment_mode_from_options(options: &CliOptions) -> DeploymentMo
 
 pub(super) fn uses_provider_http_transport(options: &CliOptions) -> bool {
     options.agent_decision_source == PROVIDER_BACKED_DECISION_SOURCE
-        && options.agent_provider_backend == LOCAL_BRIDGE_PROVIDER_BACKEND
+        && matches!(
+            options.agent_provider_backend.as_str(),
+            LOCAL_BRIDGE_PROVIDER_BACKEND | LOCAL_MOCK_PROVIDER_BACKEND
+        )
         && options.agent_provider_contract == WORLDSIM_PROVIDER_CONTRACT
         && matches!(
             options.agent_provider_transport.as_str(),

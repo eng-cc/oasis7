@@ -3,13 +3,16 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+DEFAULT_LETAI_CONFIG_PATH="/Users/scc/Documents/keys/letai.txt"
 DEFAULT_TOKEN_CONFIG_PATH="${OASIS7_LETAI_TOKEN_CONFIG_PATH:-/Users/scc/Documents/keys/letai-token-local.txt}"
 if [[ -n "${OASIS7_LETAI_CONFIG_PATH:-}" ]]; then
   CONFIG_PATH="$OASIS7_LETAI_CONFIG_PATH"
+elif [[ -f "$DEFAULT_LETAI_CONFIG_PATH" ]]; then
+  CONFIG_PATH="$DEFAULT_LETAI_CONFIG_PATH"
 elif [[ -f "$DEFAULT_TOKEN_CONFIG_PATH" ]]; then
   CONFIG_PATH="$DEFAULT_TOKEN_CONFIG_PATH"
 else
-  CONFIG_PATH="/Users/scc/Documents/keys/letai.txt"
+  CONFIG_PATH="$DEFAULT_LETAI_CONFIG_PATH"
 fi
 BIND_ADDR="127.0.0.1:5841"
 PROXY_URL="http://127.0.0.1:7897"
@@ -40,8 +43,8 @@ Start a one-command local gameplay stack backed by real LetAI:
 4. start run-launcher-stack.sh pointed at that bridge
 
 Options:
-  --config <path>             LetAI config file (default: $OASIS7_LETAI_TOKEN_CONFIG_PATH,
-                              /Users/scc/Documents/keys/letai-token-local.txt, or letai.txt)
+  --config <path>             LetAI config file (default: $OASIS7_LETAI_CONFIG_PATH,
+                              /Users/scc/Documents/keys/letai.txt, then token-local fallback)
   --model <id>                LetAI model override (default: gpt-5.4 via helper)
   --bind <host:port>          Local provider bind address (default: 127.0.0.1:5841)
   --proxy <url>               HTTP/HTTPS proxy to export if unset (default: http://127.0.0.1:7897)
@@ -190,6 +193,7 @@ if [[ "$CHAT_ECHO" == "1" ]]; then
 else
   unset OASIS7_RUNTIME_AGENT_CHAT_ECHO
 fi
+export OASIS7_LETAI_AUTO_TOPUP_USD="$BRIDGE_AUTO_TOPUP_USD"
 
 RUN_STAMP="$(date +%Y%m%d-%H%M%S)"
 if [[ -z "$OUTPUT_DIR" ]]; then

@@ -100,6 +100,39 @@ if ! grep -Fq 'npm --prefix' "$tmp_repo/stderr.log"; then
   exit 1
 fi
 
+viewer_web_dist_write_manifest "$tmp_repo" "$tmp_repo/crates/oasis7_viewer/dist"
+rm -rf "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge"
+cat > "$tmp_repo/bin/npm" <<'NPM'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" != "--prefix" || "$3" != "run" || "$4" != "build:software-safe" ]]; then
+  echo "unexpected npm args: $*" >&2
+  exit 1
+fi
+mkdir -p crates/oasis7_viewer/dist/pixel-world-bridge
+printf 'export function createPixelWorldBridge() { return "rebuilt"; }\n' \
+  > crates/oasis7_viewer/dist/pixel-world-bridge/pixel_world_bridge.js
+printf 'software safe rebuild missing bridge\n'
+NPM
+chmod +x "$tmp_repo/bin/npm"
+
+resolved_missing_bridge_dir="$({ PATH="$tmp_repo/bin:$PATH" resolve_viewer_static_dir_for_web_closure "$tmp_repo" web "$tmp_repo/output/missing-bridge"; } 2>"$tmp_repo/missing-bridge-stderr.log")"
+expected_missing_bridge_dir="$tmp_repo/output/missing-bridge/web-dist"
+
+if [[ "$resolved_missing_bridge_dir" != "$expected_missing_bridge_dir" ]]; then
+  echo "expected missing pixel bridge to trigger rebuilt dir '$expected_missing_bridge_dir', got '$resolved_missing_bridge_dir'" >&2
+  exit 1
+fi
+if [[ ! -f "$expected_missing_bridge_dir/pixel-world-bridge/pixel_world_bridge.js" ]]; then
+  echo "expected rebuilt missing-bridge dist pixel world runtime" >&2
+  exit 1
+fi
+if ! grep -Fq 'npm --prefix' "$tmp_repo/missing-bridge-stderr.log"; then
+  echo "expected missing pixel bridge to trigger viewer rebuild" >&2
+  cat "$tmp_repo/missing-bridge-stderr.log" >&2
+  exit 1
+fi
+
 cat > "$tmp_repo/bin/npm" <<'NPM'
 #!/usr/bin/env bash
 set -euo pipefail

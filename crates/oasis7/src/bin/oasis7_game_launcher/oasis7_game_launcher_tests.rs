@@ -490,6 +490,28 @@ fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_buil
 }
 
 #[test]
+fn provider_backed_viewer_live_env_preserves_local_mock_backend() {
+    let mut options = CliOptions::default();
+    options.agent_decision_source = PROVIDER_BACKED_DECISION_SOURCE.to_string();
+    options.agent_provider_backend = LOCAL_MOCK_PROVIDER_BACKEND.to_string();
+    options.agent_provider_contract = WORLDSIM_PROVIDER_CONTRACT.to_string();
+    options.agent_provider_transport = LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string();
+    options.agent_provider_url = "http://127.0.0.1:5841".to_string();
+    let mut command = Command::new("echo");
+
+    apply_viewer_live_env_overrides(&mut command, &options, false, false);
+
+    assert_eq!(
+        command_env_value(&command, VIEWER_AGENT_DECISION_SOURCE_ENV),
+        Some(Some(PROVIDER_BACKED_DECISION_SOURCE.to_string()))
+    );
+    assert_eq!(
+        command_env_value(&command, VIEWER_AGENT_PROVIDER_BACKEND_ENV),
+        Some(Some(LOCAL_MOCK_PROVIDER_BACKEND.to_string()))
+    );
+}
+
+#[test]
 fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
     env::set_var("OASIS7_RUNTIME_AGENT_CHAT_ECHO", "1");
     let command = build_oasis7_viewer_live_command(

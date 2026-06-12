@@ -70,7 +70,7 @@ pub(super) fn apply_viewer_live_env_overrides(
         );
         command.env(
             VIEWER_AGENT_PROVIDER_BACKEND_ENV,
-            LOCAL_BRIDGE_PROVIDER_BACKEND,
+            options.agent_provider_backend.as_str(),
         );
         command.env(
             VIEWER_AGENT_PROVIDER_CONTRACT_ENV,

@@ -243,9 +243,8 @@ def parse_gateway_call(argv: list[str]) -> tuple[str, int, str]:
             index += 1
             if index >= len(argv):
                 raise RuntimeError("--timeout requires a value")
-            # `agent --timeout` comes from the local embedded fallback path, which
-            # still passes seconds rather than milliseconds.
-            timeout_ms = int(argv[index]) * 1000
+            # `gateway call agent --timeout` is already passed in milliseconds.
+            timeout_ms = int(argv[index])
         elif flag == "--expect-final":
             # `oasis7_provider_local_bridge` includes this gateway CLI flag when
             # it asks provider-style CLIs for a final answer. LetAI chat
@@ -438,6 +437,71 @@ def maybe_auto_topup_user(error_detail: str) -> bool:
     return True
 
 
+def send_completion_request_after_topup(
+    body: dict,
+    base_url: str,
+    api_key: str,
+    timeout_ms: int,
+    use_stream: bool,
+) -> tuple[int, object, str, dict]:
+    retry_count_raw = (
+        env_optional("OASIS7_REMOTE_LLM_AUTO_TOPUP_RETRY_COUNT", "LETAI_AUTO_TOPUP_RETRY_COUNT")
+        or "3"
+    )
+    retry_delay_raw = (
+        env_optional("OASIS7_REMOTE_LLM_AUTO_TOPUP_RETRY_DELAY_MS", "LETAI_AUTO_TOPUP_RETRY_DELAY_MS")
+        or "1000"
+    )
+    try:
+        retry_count = max(1, int(retry_count_raw))
+    except ValueError as exc:
+        raise RuntimeError(
+            f"invalid auto topup retry count: {retry_count_raw}"
+        ) from exc
+    try:
+        retry_delay_ms = max(0, int(retry_delay_raw))
+    except ValueError as exc:
+        raise RuntimeError(
+            f"invalid auto topup retry delay ms: {retry_delay_raw}"
+        ) from exc
+
+    last_detail = ""
+    for attempt in range(1, retry_count + 1):
+        if attempt > 1 and retry_delay_ms > 0:
+            time.sleep(retry_delay_ms / 1000)
+        retry_request = urllib.request.Request(
+            url=f"{base_url}/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers=make_headers(api_key),
+            method="POST",
+        )
+        try:
+            return send_completion_request(
+                retry_request,
+                timeout_ms,
+                use_stream,
+            )
+        except urllib.error.HTTPError as exc:
+            last_detail = exc.read().decode("utf-8", errors="replace")
+            if not should_auto_topup(last_detail) or attempt >= retry_count:
+                raise RuntimeError(
+                    f"upstream chat completion returned HTTP {exc.code}: {last_detail}"
+                ) from exc
+            print(
+                json.dumps(
+                    {
+                        "event": "auto_topup_retry_wait",
+                        "attempt": attempt + 1,
+                        "retry_count": retry_count,
+                        "delay_ms": retry_delay_ms,
+                    },
+                    ensure_ascii=True,
+                ),
+                file=sys.stderr,
+            )
+    raise RuntimeError(f"upstream chat completion still low quota after topup: {last_detail}")
+
+
 def redact_detail(detail: str) -> str:
     stripped = detail.strip()
     if len(stripped) > 300:
@@ -522,14 +586,10 @@ def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         if maybe_auto_topup_user(detail):
-            retry_request = urllib.request.Request(
-                url=f"{base_url}/chat/completions",
-                data=json.dumps(body).encode("utf-8"),
-                headers=make_headers(api_key),
-                method="POST",
-            )
-            status_code, decoded, content, usage = send_completion_request(
-                retry_request,
+            status_code, decoded, content, usage = send_completion_request_after_topup(
+                body,
+                base_url,
+                api_key,
                 timeout_ms,
                 use_stream,
             )
