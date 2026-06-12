@@ -79,3 +79,25 @@ Example:
 - Expected Result: workflow-lint binds the current task without explicit `--task-uid`; concurrent signal capture cannot create duplicate signal IDs; role cards no longer tell non-owner professional slices to call `workflow-report`; PM/docs/skills/workflow checks remain green.
 - Actual Result: all listed commands passed. `capture-todo-smoke` now covers duplicate explicit ID rejection and 8-way concurrent signal capture uniqueness. `new-task-worktree-bootstrap-smoke` now verifies default `workflow-lint --phase current` binding against a bootstrapped absolute `worktree_hint`. `workflow-behavior-eval` passed with the updated smoke chain. Repository-health post-fix review subagent `019eb968-b2cd-7901-8c8b-9b83e37cca7f` returned no findings for the three P2 fixes and noted that the broader role-card residual risk was removed by the subsequent professional role-card synchronization.
 - Blocker / Next Action: implementation is ready for closeout / pre-PR local role review after final verification.
+
+## 2026-06-12 09:37:52 CST / tpm
+- 完成内容: Pre-PR local role review completed and passed for the committed implementation diff.
+- 遗留事项: GitHub PR creation and normal CI/comment watch remain pending.
+- Pre-PR Local Role Review: passed
+- Task UID: task_d08728720f8649d0bceeccacf2cd10e4
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-project-health-tech-debt
+- Source Branch: task/engineering-project-health-tech-debt
+- Source Head: 80dd99f89c9f284bc1ffecb316d07c3f99e6cba7
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .agents/roles/agent_engineer.md;.agents/roles/blockchain_ops_engineer.md;.agents/roles/game_visual_interaction_designer.md;.agents/roles/gameplay_designer.md;.agents/roles/liveops_community.md;.agents/roles/producer_system_designer.md;.agents/roles/qa_engineer.md;.agents/roles/repository_health_engineer.md;.agents/roles/runtime_engineer.md;.agents/roles/viewer_engineer.md;.agents/roles/wasm_platform_engineer.md;.pm/inbox/signals.jsonl;.pm/tasks/task_d08728720f8649d0bceeccacf2cd10e4.execution.md;.pm/tasks/task_d08728720f8649d0bceeccacf2cd10e4.yaml;doc/engineering/project.md;doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md;doc/engineering/workflow/source-of-truth.md;scripts/pm/capture-todo-smoke.sh;scripts/pm/new-task-worktree-bootstrap-smoke.sh;scripts/pm/promote-signal.sh;scripts/pm/workflow-lint.sh
+- Role Selection Basis: changed paths touched cross-cutting PM/workflow scripts, professional role cards, engineering governance docs, and task evidence; selected `repository_health_engineer` for repository-health/docs-code contract review and `qa_engineer` for verification/regression adequacy; skipped gameplay/visual/runtime/WASM/agent/viewer/blockchain/liveops roles because no domain behavior, UI, runtime, WASM, node ops, agent provider behavior, or external messaging changed.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Evidence: repository_health_engineer subagent `019eb972-5c32-7ad1-a6d6-3bbfad891705` returned no_findings after reviewing role-card semantics, workflow-lint absolute worktree binding, signal ID locking/duplicate guards, regression smoke coverage, and P3 doc drift cleanup; qa_engineer subagent `019eb972-fe33-75d0-b120-ced6886d9e7a` returned no_findings after rerunning syntax, capture-todo smoke, new-task-worktree bootstrap smoke, workflow-lint current, pm lint, lint-skills, doc-governance-check, workflow-behavior-eval, and git diff --check.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no actionable findings; residual risks accepted because signal lock stale-dir cleanup is manual only after hard-kill and concurrency coverage is smoke-level but encloses allocation through append.
+- Residual Risk: Low. PM signal concurrency is covered by smoke rather than high-volume stress, role-card semantics are textual rather than parser-enforced, and stale `.pm/inbox/signals.lock` after a hard-killed process may require manual cleanup.
+- Action: Record passed local role review packet for `prepare-task-pr.sh`.
+- Validation Command: repository_health_engineer/qa_engineer bounded subagent reviews plus fresh verification command from task closeout.
+- Expected Result: required pre-PR local role review evidence is present and matches current implementation commit.
+- Actual Result: both involved roles returned no_findings and PR can proceed from their perspectives.
+- Blocker / Next Action: commit this evidence-only task log update, run `prepare-task-pr.sh`, create PR, and enter normal PR CI/comment watch.
