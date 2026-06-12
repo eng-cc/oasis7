@@ -743,6 +743,48 @@ print(
 PY
 )"
 TASK_CLOSEOUT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" --role qa_engineer --task-uid "$CLOSEOUT_TASK_UID" --verify-command "printf 'closeout verification ok\n'" --json)"
+set +e
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/claim-ready.sh" \
+  --claim-type ready_for_pr \
+  --verify-command "printf 'post closeout readiness ok\n'" \
+  --task-uid "$CLOSEOUT_TASK_UID" \
+  --json >"$TMPDIR/closed-task-ready-claim.json" 2>"$TMPDIR/closed-task-ready-claim.err"
+CLOSED_TASK_READY_CLAIM_STATUS=$?
+set -e
+CLOSED_TASK_READY_CLAIM_STATE_JSON="$(python3 - "$TMPDIR" "$CLOSEOUT_TASK_UID" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+task_uid = sys.argv[2]
+task_path = root / ".pm" / "tasks" / f"{task_uid}.yaml"
+
+fields = {}
+for raw in task_path.read_text(encoding="utf-8").splitlines():
+    if not raw or raw.startswith(" ") or raw.startswith("-"):
+        continue
+    key, sep, value = raw.partition(":")
+    if not sep:
+        continue
+    fields[key.strip()] = value.strip().strip('"')
+
+print(
+    json.dumps(
+        {
+            "last_claim_type": fields.get("last_claim_type"),
+            "last_verify_command": fields.get("last_verify_command"),
+            "last_verified_at": fields.get("last_verified_at"),
+            "last_verification_status": fields.get("last_verification_status"),
+        },
+        ensure_ascii=False,
+    )
+)
+PY
+)"
+CLOSED_TASK_READY_CLAIM_STDERR="$(cat "$TMPDIR/closed-task-ready-claim.err")"
 
 MISSING_ACTUAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --owner-role qa_engineer \
@@ -795,7 +837,7 @@ if ! rg -q "missing Actual Result" "$TMPDIR/task-execution-log-missing-actual.er
   exit 1
 fi
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" "$TASK_CLOSEOUT_MISSING_VERIFY_STATUS" "$TASK_CLOSEOUT_NO_VERIFY_STATE_JSON" "$TASK_CLOSEOUT_BYPASS_STATUS" "$TASK_CLOSEOUT_BYPASS_STATE_JSON" "$APPEND_LOG_JSON" "$ROLE_REPORT_TASK_JSON" "$WORKFLOW_CURRENT_LINT_STDOUT" "$APPEND_CROSS_ROLE_JSON" "$EMPTY_LOG_CURRENT_LINT_STATUS" "$EMPTY_LOG_CURRENT_LINT_STDOUT" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" "$TASK_CLOSEOUT_MISSING_VERIFY_STATUS" "$TASK_CLOSEOUT_NO_VERIFY_STATE_JSON" "$TASK_CLOSEOUT_BYPASS_STATUS" "$TASK_CLOSEOUT_BYPASS_STATE_JSON" "$CLOSED_TASK_READY_CLAIM_STATUS" "$CLOSED_TASK_READY_CLAIM_STATE_JSON" "$CLOSED_TASK_READY_CLAIM_STDERR" "$APPEND_LOG_JSON" "$ROLE_REPORT_TASK_JSON" "$WORKFLOW_CURRENT_LINT_STDOUT" "$APPEND_CROSS_ROLE_JSON" "$EMPTY_LOG_CURRENT_LINT_STATUS" "$EMPTY_LOG_CURRENT_LINT_STDOUT" <<'PY'
 from __future__ import annotations
 
 import json
@@ -823,12 +865,15 @@ missing_verify_status = int(sys.argv[20])
 missing_verify_state = json.loads(sys.argv[21])
 bypass_status = int(sys.argv[22])
 bypass_state = json.loads(sys.argv[23])
-append_log = json.loads(sys.argv[24])
-role_report_task = json.loads(sys.argv[25])
-workflow_current_lint_stdout = sys.argv[26]
-append_cross_role = json.loads(sys.argv[27])
-empty_log_lint_status = int(sys.argv[28])
-empty_log_lint_stdout = sys.argv[29]
+closed_task_ready_claim_status = int(sys.argv[24])
+closed_task_ready_claim_state = json.loads(sys.argv[25])
+closed_task_ready_claim_stderr = sys.argv[26]
+append_log = json.loads(sys.argv[27])
+role_report_task = json.loads(sys.argv[28])
+workflow_current_lint_stdout = sys.argv[29]
+append_cross_role = json.loads(sys.argv[30])
+empty_log_lint_status = int(sys.argv[31])
+empty_log_lint_stdout = sys.argv[32]
 
 if workflow_start["signal_summary"]["pending_count"] != 0:
     raise SystemExit("qa workflow start should not treat rejected signal as pending")
@@ -961,6 +1006,16 @@ if task_closeout["workflow_close"]["task_context"]["task_uid"] != closeout_task_
     raise SystemExit("task closeout helper should return workflow close evidence for the same task")
 if task_closeout["move_task"]["to_status"] != "done":
     raise SystemExit("task closeout helper should report the final move-task status")
+if closed_task_ready_claim_status == 0:
+    raise SystemExit("closed done task should reject later non-completion claim evidence")
+if "closed task claim evidence is immutable" not in closed_task_ready_claim_stderr:
+    raise SystemExit("closed done task claim rejection should explain immutable claim evidence")
+if closed_task_ready_claim_state["last_claim_type"] != "task_complete":
+    raise SystemExit("closed done task should preserve task_complete claim evidence")
+if "post closeout readiness ok" in str(closed_task_ready_claim_state["last_verify_command"]):
+    raise SystemExit("closed done task should not persist post-closeout readiness verification command")
+if "closeout verification ok" not in str(closed_task_ready_claim_state["last_verify_command"]):
+    raise SystemExit("closed done task should preserve closeout verification command")
 
 print(
     json.dumps(
