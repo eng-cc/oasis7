@@ -15,7 +15,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for HeadlessT
     }
 
     fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
-        if protocol == oasis7_proto::distributed::RR_GET_WORLD_HEAD {
+        if protocol == REPLICATION_GET_HEAD_PROTOCOL {
             return Err(WorldError::NetworkProtocolUnavailable {
                 protocol: protocol.to_string(),
             });
@@ -29,7 +29,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for HeadlessT
         payload: &[u8],
         providers: &[String],
     ) -> Result<Vec<u8>, WorldError> {
-        if protocol == oasis7_proto::distributed::RR_GET_WORLD_HEAD {
+        if protocol == REPLICATION_GET_HEAD_PROTOCOL {
             return Err(WorldError::NetworkProtocolUnavailable {
                 protocol: protocol.to_string(),
             });

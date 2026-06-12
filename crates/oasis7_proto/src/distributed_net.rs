@@ -129,7 +129,9 @@ pub fn classify_network_protocol(protocol: &str) -> Option<NetworkLane> {
     if protocol.is_empty() {
         return None;
     }
-    if protocol.starts_with("/aw/node/replication/fetch-commit/") {
+    if protocol.starts_with("/aw/node/replication/fetch-commit/")
+        || protocol.starts_with("/aw/node/replication/get-head/")
+    {
         return Some(NetworkLane::Sync);
     }
     if protocol.starts_with("/aw/node/replication/fetch-blob/") {
@@ -277,6 +279,10 @@ mod tests {
         );
         assert_eq!(
             classify_network_protocol("/aw/node/replication/fetch-commit/1.0.0"),
+            Some(NetworkLane::Sync)
+        );
+        assert_eq!(
+            classify_network_protocol("/aw/node/replication/get-head/1.0.0"),
             Some(NetworkLane::Sync)
         );
         assert_eq!(
