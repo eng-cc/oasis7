@@ -746,7 +746,7 @@ TASK_CLOSEOUT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.
 set +e
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/claim-ready.sh" \
   --claim-type ready_for_pr \
-  --verify-command "printf 'post closeout readiness ok\n'" \
+  --verify-command "touch '$TMPDIR/closed-task-ready-side-effect'" \
   --task-uid "$CLOSEOUT_TASK_UID" \
   --json >"$TMPDIR/closed-task-ready-claim.json" 2>"$TMPDIR/closed-task-ready-claim.err"
 CLOSED_TASK_READY_CLAIM_STATUS=$?
@@ -842,6 +842,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 signal_payload = json.loads(sys.argv[2])
 move_payload = json.loads(sys.argv[3])
@@ -1010,9 +1011,11 @@ if closed_task_ready_claim_status == 0:
     raise SystemExit("closed done task should reject later non-completion claim evidence")
 if "closed task claim evidence is immutable" not in closed_task_ready_claim_stderr:
     raise SystemExit("closed done task claim rejection should explain immutable claim evidence")
+if Path(sys.argv[1], "closed-task-ready-side-effect").exists():
+    raise SystemExit("closed done task should reject non-completion claims before running verification")
 if closed_task_ready_claim_state["last_claim_type"] != "task_complete":
     raise SystemExit("closed done task should preserve task_complete claim evidence")
-if "post closeout readiness ok" in str(closed_task_ready_claim_state["last_verify_command"]):
+if "closed-task-ready-side-effect" in str(closed_task_ready_claim_state["last_verify_command"]):
     raise SystemExit("closed done task should not persist post-closeout readiness verification command")
 if "closeout verification ok" not in str(closed_task_ready_claim_state["last_verify_command"]):
     raise SystemExit("closed done task should preserve closeout verification command")
