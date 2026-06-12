@@ -2,10 +2,9 @@ use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{
     apply_viewer_live_env_overrides, build_game_url, build_oasis7_chain_runtime_args,
@@ -35,6 +34,10 @@ use oasis7::simulator::ProviderExecutionMode;
 use oasis7::simulator::{WorldConfig, WorldModel, WorldSnapshot};
 use oasis7::viewer::{ViewerRequest, ViewerResponse, VIEWER_PROTOCOL_VERSION};
 use oasis7_proto::storage_profile::StorageProfile;
+
+#[path = "viewer_static_dir_tests.rs"]
+mod viewer_static_dir_tests;
+use viewer_static_dir_tests::make_temp_dir;
 
 fn assert_removed_old_brand_viewer_auth_env_absent(text: &str) {
     assert!(!text.contains(removed_old_brand_viewer_auth_bootstrap_object().as_str()));
@@ -1183,92 +1186,4 @@ fn hosted_public_join_disables_viewer_auth_bootstrap_resolution() {
 
     assert!(auth.is_none());
     let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn resolve_viewer_static_dir_with_override_prefers_env_for_default_static_dir() {
-    let override_dir = make_temp_dir("viewer_static_override");
-    let override_raw = override_dir.to_string_lossy().to_string();
-
-    let resolved = resolve_viewer_static_dir_with_override(
-        DEFAULT_VIEWER_STATIC_DIR,
-        Some((override_raw.as_str(), GAME_STATIC_DIR_ENV)),
-    )
-    .expect("resolve should succeed");
-
-    assert_eq!(resolved, override_dir);
-    let _ = fs::remove_dir_all(override_dir);
-}
-
-#[test]
-fn resolve_viewer_static_dir_with_override_keeps_explicit_path_priority() {
-    let explicit_dir = make_temp_dir("viewer_static_explicit");
-    let override_dir = make_temp_dir("viewer_static_override_ignored");
-    let explicit_raw = explicit_dir.to_string_lossy().to_string();
-    let override_raw = override_dir.to_string_lossy().to_string();
-
-    let resolved = resolve_viewer_static_dir_with_override(
-        explicit_raw.as_str(),
-        Some((override_raw.as_str(), GAME_STATIC_DIR_ENV)),
-    )
-    .expect("resolve should succeed");
-
-    assert_eq!(resolved, explicit_dir);
-    let _ = fs::remove_dir_all(explicit_dir);
-    let _ = fs::remove_dir_all(override_dir);
-}
-
-#[test]
-fn resolve_viewer_static_dir_with_override_rejects_missing_env_dir() {
-    let missing_path = make_missing_temp_path("viewer_static_missing_env");
-    let missing_raw = missing_path.to_string_lossy().to_string();
-
-    let err = resolve_viewer_static_dir_with_override(
-        DEFAULT_VIEWER_STATIC_DIR,
-        Some((missing_raw.as_str(), GAME_STATIC_DIR_ENV)),
-    )
-    .expect_err("missing override path should fail");
-
-    assert!(err.contains(GAME_STATIC_DIR_ENV));
-    assert!(err.contains("not found"));
-}
-
-#[test]
-fn viewer_dev_dist_candidates_only_return_oasis7_path() {
-    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let candidates = viewer_dev_dist_candidates();
-
-    assert_eq!(
-        candidates,
-        vec![repo_root.join("oasis7_viewer").join("dist")]
-    );
-}
-
-fn make_temp_dir(label: &str) -> PathBuf {
-    let mut path = env::temp_dir();
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time")
-        .as_nanos();
-    path.push(format!(
-        "oasis7_launcher_test_{label}_{}_{}",
-        std::process::id(),
-        stamp
-    ));
-    fs::create_dir_all(&path).expect("create temp dir");
-    path
-}
-
-fn make_missing_temp_path(label: &str) -> PathBuf {
-    let mut path = env::temp_dir();
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time")
-        .as_nanos();
-    path.push(format!(
-        "oasis7_launcher_missing_{label}_{}_{}",
-        std::process::id(),
-        stamp
-    ));
-    path
 }
