@@ -62,7 +62,7 @@
 - 是否明确本次作为 `tpm` 下的专业 subagent 执行
 - 是否先更新对应模块 `prd.md`
 - 是否补齐 `project.md` 任务与 PRD-ID 映射
-- 是否在开始/收口/阶段评审时执行 `./scripts/pm/workflow-report.sh --phase start|close|review --role producer_system_designer --task-uid <TASK-UID>`
+- 若 `producer_system_designer` 是 task owner，是否在开始/收口/阶段评审时执行 `./scripts/pm/workflow-report.sh --phase start|close|review --role producer_system_designer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 task execution log 局部记录
 - 是否声明 world-first / emergence-first / persistent / auditable / extensible 的影响
 - 是否定义玩家能做/不能做的边界

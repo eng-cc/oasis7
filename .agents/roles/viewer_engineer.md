@@ -50,7 +50,7 @@
 
 ## Checklist
 - 是否更新 `doc/world-simulator/prd.md` 或子专题文档
-- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role viewer_engineer --task-uid <TASK-UID>`
+- 若 `viewer_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role viewer_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 task execution log 局部记录
 - 是否优先走 agent-browser / Web-first 验证
 - 是否提供结构化错误和状态反馈

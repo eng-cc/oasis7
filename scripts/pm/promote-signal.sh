@@ -181,6 +181,31 @@ grep -Fxq "$ROLE_HINT" < <(sed -n 's/^  - role_name: //p' .pm/registry/roles.yam
   exit 2
 }
 
+SIGNAL_LOCK_DIR=".pm/inbox/signals.lock"
+SIGNAL_LOCK_ACQUIRED=0
+release_signal_lock() {
+  if [[ "$SIGNAL_LOCK_ACQUIRED" == "1" ]]; then
+    rmdir "$SIGNAL_LOCK_DIR" 2>/dev/null || true
+    SIGNAL_LOCK_ACQUIRED=0
+  fi
+}
+trap release_signal_lock EXIT
+
+acquire_signal_lock() {
+  local attempts=0
+  while ! mkdir "$SIGNAL_LOCK_DIR" 2>/dev/null; do
+    attempts=$((attempts + 1))
+    if [[ "$attempts" -ge 100 ]]; then
+      echo "promote-signal: timed out waiting for signal inbox lock: $SIGNAL_LOCK_DIR" >&2
+      exit 1
+    fi
+    sleep 0.1
+  done
+  SIGNAL_LOCK_ACQUIRED=1
+}
+
+acquire_signal_lock
+
 if [[ -z "$SIGNAL_ID" ]]; then
   SIGNAL_ID="$(python3 - "$ROOT_DIR" <<'PY'
 from __future__ import annotations
@@ -209,6 +234,26 @@ print(f"SIG-PM-{max_seq + 1:04d}")
 PY
 )"
 fi
+
+python3 - "$ROOT_DIR" "$SIGNAL_ID" <<'PY'
+from __future__ import annotations
+
+import json
+import pathlib
+import sys
+
+signals_path = pathlib.Path(sys.argv[1]) / ".pm/inbox/signals.jsonl"
+signal_id = sys.argv[2]
+if not signals_path.exists():
+    raise SystemExit(0)
+for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
+    line = raw_line.strip()
+    if not line:
+        continue
+    payload = json.loads(line)
+    if payload.get("signal_id") == signal_id:
+        raise SystemExit(f"promote-signal: duplicate signal_id: {signal_id}")
+PY
 
 PROMOTION_STATE="triaged"
 TASK_JSON="null"
@@ -277,8 +322,17 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 signals_path = root / ".pm/inbox/signals.jsonl"
+signal_id = sys.argv[2]
+if signals_path.exists():
+    for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        payload = json.loads(line)
+        if payload.get("signal_id") == signal_id:
+            raise SystemExit(f"promote-signal: duplicate signal_id: {signal_id}")
 payload = {
-    "signal_id": sys.argv[2],
+    "signal_id": signal_id,
     "source_type": sys.argv[3],
     "source_ref": sys.argv[4],
     "role_hint": sys.argv[5],
@@ -291,6 +345,7 @@ payload = {
 with signals_path.open("a", encoding="utf-8") as handle:
     handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 PY
+release_signal_lock
 
 RESULT_JSON="$(python3 - "$SIGNAL_ID" "$PROMOTION_STATE" "$TASK_JSON" <<'PY'
 from __future__ import annotations

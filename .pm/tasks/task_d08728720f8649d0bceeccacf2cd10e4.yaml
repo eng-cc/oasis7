@@ -1,0 +1,26 @@
+task_uid: task_d08728720f8649d0bceeccacf2cd10e4
+title: "Project health optimization and tech debt discovery"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-project-health-tech-debt
+execution_log_path: .pm/tasks/task_d08728720f8649d0bceeccacf2cd10e4.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "Repository health slice identifies actionable project health issues and technical debt candidates."
+  - "TPM records slice contract, evidence, findings, and proposed next actions in the task execution log."
+handoff_to: []
+updated_at: 2026-06-12T09:37:16+08:00
+last_started_at: 2026-06-11T22:29:24+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.sh --phase current && ./scripts/pm/capture-todo-smoke.sh && ./scripts/pm/new-task-worktree-bootstrap-smoke.sh --json && ./scripts/pm/lint.sh && ./scripts/lint-skills.sh && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-behavior-eval.sh && git diff --check"
+last_verified_at: 2026-06-12T09:37:15+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-12T09:37:16+08:00

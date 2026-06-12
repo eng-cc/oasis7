@@ -18,10 +18,10 @@
 - [x] pm-step-evidence-lint-defaulting (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-002) [test_tier_required]: 将 execution surface 的逐步验证纪律继续上收到 `pm lint`，只对 `2026-05-23` 起按当前 execution-log 模板启动的 task 强制每条 entry 补齐 `Action / Validation Command / Expected Result / Actual Result / Blocker / Next Action`，并补一条缺失 `Actual Result` 的 smoke 负例。 Trace: .pm/tasks/task_4c9d1a0350034138bbc49f8b93cf321c.yaml
 - [x] default-workflow-bootstrap (PRD-ENGINEERING-021/031/PRD-ENGINEERING-AWB-009A) [test_tier_required]: 新增 repo-owned `default-workflow-bootstrap` skill，把新 non-trivial task 的 trivial/non-trivial 判定、隔离 task worktree / `.pm` task 真值检查与 formal doc 入口统一前置到 router 之前，并扩展 `workflow-behavior-eval.sh` 覆盖该 surface。 Trace: .pm/tasks/task_aafdb461ebbc4d9bbe882c58e8553e67.yaml
 - [ ] superpowers-further-absorption-followup (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-003/005/010) [test_tier_required]: 补齐 repo-owned review-request surface、把 visual companion follow-up 收紧为可执行 pilot contract，并把 execution step evidence 升级为 `Action / Validation Command / Expected Result / Actual Result` + blocker escalation 的正式约束。 Trace: .pm/tasks/task_e737a3094e824f43a8c4e24e6564ea2a.yaml
-- [ ] workflow-enforcement-audit-followup (PRD-ENGINEERING-AWB-002) [test_tier_required]: 将 fresh verification 结果写入 `.pm/tasks/*.yaml` 真值，并把 `move-task --to-status done` 收紧为必须具备 `task_complete` claim evidence，避免通过低层 `workflow-report --phase close` + `move-task` 绕过 closeout helper。 Trace: .pm/tasks/task_8b863d2d58e240398e9f2f723944ef2d.yaml
+- [x] workflow-enforcement-audit-followup (PRD-ENGINEERING-AWB-002) [test_tier_required]: 将 fresh verification 结果写入 `.pm/tasks/*.yaml` 真值，并把 `move-task --to-status done` 收紧为必须具备 `task_complete` claim evidence，避免通过低层 `workflow-report --phase close` + `move-task` 绕过 closeout helper。 Trace: .pm/tasks/task_8b863d2d58e240398e9f2f723944ef2d.yaml
 
 ## Planned Follow-ups
-- `workflow-enforcement-audit-followup` (`PRD-ENGINEERING-AWB-002`, target `test_tier_required`): 修补审计发现的 `.pm` enforcement 缺口，把 verification evidence 从 helper 输出提升为 task file 真值，并让底层状态迁移直接拒绝无 fresh evidence 的 `done` closeout。当前已启动独立 `.pm` task 与 worktree。
+- `workflow-enforcement-audit-followup` (`PRD-ENGINEERING-AWB-002`, target `test_tier_required`): 已完成并由 `task_8b863d2d58e240398e9f2f723944ef2d` 追踪；`.pm/tasks/*.yaml` 已持久化 verification evidence，底层 `move-task --to-status done` 已拒绝无 `task_complete` claim evidence 的 closeout 绕过路径。
 - `default-workflow-bootstrap` (`PRD-ENGINEERING-021/031/PRD-ENGINEERING-AWB-009A`, target `test_tier_required`): 将 repo-owned bootstrap 从 root workflow 说明提升为独立 skill 与 eval surface，统一新 non-trivial task 的 trivial/non-trivial 判定、task worktree / `.pm` truth 前置与 router handoff。当前已启动独立 `.pm` task 与 worktree。
 - `viewer-visual-companion-pilot-followup` (`PRD-ENGINEERING-AWB-003/PRD-WORLD_SIMULATOR-046`, target `test_tier_required`): 在 Viewer Web 下一轮结构/视觉专题中试点 browser-based visual companion，必须先产出 IA / wireframe / layout compare artifact、明确推荐方向与不选路径，再切实现 task；artifact 与结论至少回写到 `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md`、新的 task execution log 或 handoff 之一，同时保持 `agent-browser` / repo-owned UI regression 仍是正式验证面。启动时需创建独立 `.pm` task 与 worktree。
 - `repo-owned-review-request-followup` (`PRD-ENGINEERING-AWB-010`, target `test_tier_required`): 为 high-risk local diff 引入 bounded repo-owned review-request surface，要求 review packet 固定写明 trigger/scope/question/return contract/formal sink，并把 `findings / no_findings / residual_risk` 与 GitHub PR readiness 明确分开。
@@ -57,6 +57,6 @@
 ## 状态
 - 更新日期: 2026-05-23
 - 当前阶段: active
-- 当前任务: `default-workflow-bootstrap`、`workflow-enforcement-audit-followup`
-- 关键缺口: repo-owned default bootstrap 入口已补到 skill/root workflow/eval surface；剩余未落地项主要是 viewer visual companion pilot 与 multi-harness packaging deferred reopen。
-- 下一步: 先让当前 PR 主链收口 `default-workflow-bootstrap` 与相关 eval/doc 对齐；后续仅在下一轮结构/视觉专题中按 contract 启动 `viewer-visual-companion-pilot-followup`，multi-harness packaging 继续保持 deferred。
+- 当前任务: 无进行中的 workflow enforcement follow-up；保留 `superpowers-further-absorption-followup` 等后续项作为显式未完成范围。
+- 关键缺口: repo-owned default bootstrap 与 workflow enforcement 已收口；剩余未落地项主要是 viewer visual companion pilot 与 multi-harness packaging deferred reopen。
+- 下一步: 后续仅在下一轮结构/视觉专题中按 contract 启动 `viewer-visual-companion-pilot-followup`，multi-harness packaging 继续保持 deferred。
