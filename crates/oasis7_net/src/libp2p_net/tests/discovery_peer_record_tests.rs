@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn routing_update_requests_peer_record_before_connected_snapshot_exists() {
+fn routing_update_defers_bootstrap_peer_record_until_connection_exists() {
     let keypair = Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(keypair.public());
     let peer_id = PeerId::random();
@@ -33,7 +33,6 @@ fn routing_update_requests_peer_record_before_connected_snapshot_exists() {
         ttl_ms: 60_000,
     };
     let peers = Vec::new();
-    let bootstrap_peer_ids = HashSet::from([peer_id]);
     let mut pending_peer_record_requests = HashMap::new();
     let mut pending_connected_peer_records = HashSet::new();
     let mut connected_peer_record_cooldowns = HashMap::new();
@@ -52,7 +51,6 @@ fn routing_update_requests_peer_record_before_connected_snapshot_exists() {
         local_peer_id,
         Some(&template),
         peers.as_slice(),
-        &bootstrap_peer_ids,
         &mut pending_peer_record_requests,
         &mut pending_connected_peer_records,
         &mut connected_peer_record_cooldowns,
@@ -66,10 +64,10 @@ fn routing_update_requests_peer_record_before_connected_snapshot_exists() {
     );
 
     assert!(
-        pending_connected_peer_records.contains(&peer_id),
-        "routing-only bootstrap peers must be able to start peer-record exchange before the connected peer snapshot is populated"
+        pending_connected_peer_records.is_empty(),
+        "routing-only bootstrap peers should not start peer-record exchange while the bootstrap dial is still in progress"
     );
-    assert_eq!(pending_peer_record_requests.len(), 1);
+    assert!(pending_peer_record_requests.is_empty());
 }
 
 #[test]
@@ -87,7 +85,6 @@ fn routing_update_skips_peer_record_for_unconnected_non_bootstrap_peer() {
     let mut pending_discovery_peer_records = HashSet::new();
     let discovered_peer_records = HashMap::new();
     let peers = Vec::new();
-    let bootstrap_peer_ids = HashSet::new();
     let mut pending_peer_record_requests = HashMap::new();
     let mut pending_connected_peer_records = HashSet::new();
     let mut connected_peer_record_cooldowns = HashMap::new();
@@ -106,7 +103,6 @@ fn routing_update_skips_peer_record_for_unconnected_non_bootstrap_peer() {
         local_peer_id,
         None,
         peers.as_slice(),
-        &bootstrap_peer_ids,
         &mut pending_peer_record_requests,
         &mut pending_connected_peer_records,
         &mut connected_peer_record_cooldowns,
