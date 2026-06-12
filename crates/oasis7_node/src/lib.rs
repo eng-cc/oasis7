@@ -130,9 +130,10 @@ use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
 use replica_maintenance_support::maybe_run_runtime_replica_maintenance_poll;
 use replication::{
-    load_blob_from_root, load_commit_message_from_root, FetchBlobRequest, FetchBlobResponse,
-    FetchCommitRequest, FetchCommitResponse, ReplicationRuntime, REPLICATION_FETCH_BLOB_PROTOCOL,
-    REPLICATION_FETCH_COMMIT_PROTOCOL,
+    load_blob_from_root, load_commit_message_from_root, load_latest_commit_message_from_root,
+    FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
+    FetchHeadResponse, ReplicationHeadSummary, ReplicationRuntime, REPLICATION_FETCH_BLOB_PROTOCOL,
+    REPLICATION_FETCH_COMMIT_PROTOCOL, REPLICATION_GET_HEAD_PROTOCOL,
 };
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
@@ -864,6 +865,76 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                     serde_json::to_vec(&response).map_err(|err| {
                         network_internal_error(NodeError::Replication {
                             reason: format!("encode fetch-commit response failed: {}", err),
+                        })
+                    })
+                }),
+            )
+            .map_err(network_replication_error)?;
+    }
+
+    if network_policy.allows_lane_operation(
+        oasis7_proto::distributed_net::NetworkLane::Sync,
+        oasis7_proto::distributed_net::NetworkLaneOperation::Serve,
+    ) {
+        let head_root_dir = replication.root_dir.clone();
+        let head_world_id = world_id.to_string();
+        let max_hot_commit_messages = replication.max_hot_commit_messages();
+        network
+            .register_handler(
+                REPLICATION_GET_HEAD_PROTOCOL,
+                Box::new(move |payload| {
+                    let request =
+                        serde_json::from_slice::<FetchHeadRequest>(payload).map_err(|err| {
+                            network_bad_request(format!(
+                                "decode fetch-head request failed: {}",
+                                err
+                            ))
+                        })?;
+                    if request.world_id != head_world_id {
+                        return Err(network_bad_request(format!(
+                            "fetch-head world mismatch: expected={}, got={}",
+                            head_world_id, request.world_id
+                        )));
+                    }
+                    let Some(message) = load_latest_commit_message_from_root(
+                        head_root_dir.as_path(),
+                        head_world_id.as_str(),
+                        max_hot_commit_messages,
+                    )
+                    .map_err(network_internal_error)?
+                    else {
+                        let response = FetchHeadResponse {
+                            found: false,
+                            head: None,
+                        };
+                        return serde_json::to_vec(&response).map_err(|err| {
+                            network_internal_error(NodeError::Replication {
+                                reason: format!("encode fetch-head response failed: {}", err),
+                            })
+                        });
+                    };
+                    let payload = parse_replication_commit_payload(message.payload.as_slice())
+                        .ok_or_else(|| {
+                            network_internal_error(NodeError::Replication {
+                                reason: format!(
+                                    "decode latest replication commit payload failed world={}",
+                                    head_world_id
+                                ),
+                            })
+                        })?;
+                    let response = FetchHeadResponse {
+                        found: true,
+                        head: Some(ReplicationHeadSummary {
+                            world_id: payload.world_id,
+                            height: payload.height,
+                            block_hash: payload.block_hash,
+                            state_root: payload.execution_state_root.unwrap_or_default(),
+                            timestamp_ms: payload.committed_at_ms,
+                        }),
+                    };
+                    serde_json::to_vec(&response).map_err(|err| {
+                        network_internal_error(NodeError::Replication {
+                            reason: format!("encode fetch-head response failed: {}", err),
                         })
                     })
                 }),

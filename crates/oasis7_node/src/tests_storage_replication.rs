@@ -4,6 +4,8 @@ mod storage_challenge_gate_tests;
 mod storage_replication_failover_tests;
 #[path = "tests_storage_replication_high_checkpoint.rs"]
 mod storage_replication_high_checkpoint_tests;
+#[path = "tests_storage_replication_peer_head.rs"]
+mod storage_replication_peer_head_tests;
 #[path = "tests_storage_replication_progress.rs"]
 mod storage_replication_progress_tests;
 #[path = "tests_storage_replication_recovery.rs"]

@@ -22,9 +22,15 @@ const DEFAULT_MAX_HOT_COMMIT_MESSAGES: usize = 4096;
 pub(crate) const REPLICATION_FETCH_COMMIT_PROTOCOL: &str =
     "/aw/node/replication/fetch-commit/1.0.0";
 pub(crate) const REPLICATION_FETCH_BLOB_PROTOCOL: &str = "/aw/node/replication/fetch-blob/1.0.0";
+pub(crate) const REPLICATION_GET_HEAD_PROTOCOL: &str =
+    "/aw/node/replication/fetch-commit/head/1.0.0";
 mod commit_retention;
 #[path = "replication_checkpoint.rs"]
 mod replication_checkpoint;
+#[path = "replication_fetch.rs"]
+mod replication_fetch;
+#[path = "replication_head.rs"]
+mod replication_head;
 #[path = "replication_sampling.rs"]
 mod replication_sampling;
 #[path = "replication_support.rs"]
@@ -46,6 +52,35 @@ use self::support::{
     write_json_pretty,
 };
 pub(crate) use self::support::{load_blob_from_root, load_commit_message_from_root};
+pub(crate) use replication_fetch::{
+    FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse,
+};
+pub(crate) use replication_head::{FetchHeadRequest, FetchHeadResponse, ReplicationHeadSummary};
+
+pub(crate) fn load_latest_commit_message_from_root(
+    root_dir: &Path,
+    world_id: &str,
+    max_hot_commit_messages: usize,
+) -> Result<Option<GossipReplicationMessage>, NodeError> {
+    let hot_height = build_commit_message_retention_plan(root_dir, max_hot_commit_messages)?
+        .hot_window
+        .latest_height
+        .unwrap_or(0);
+    let cold_height = load_commit_message_cold_index_from_root(root_dir)?
+        .by_height
+        .keys()
+        .next_back()
+        .copied()
+        .unwrap_or(0);
+    let mut candidate = hot_height.max(cold_height);
+    while candidate > 0 {
+        if let Some(message) = load_commit_message_from_root(root_dir, world_id, candidate)? {
+            return Ok(Some(message));
+        }
+        candidate -= 1;
+    }
+    Ok(None)
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeReplicationConfig {
     pub root_dir: PathBuf,
@@ -348,37 +383,6 @@ fn allowlist_fingerprint(allowlist: &BTreeSet<String>) -> String {
             .join("\n")
             .as_bytes(),
     )
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct FetchCommitRequest {
-    pub world_id: String,
-    pub height: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requester_public_key_hex: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requester_signature_hex: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct FetchCommitResponse {
-    pub found: bool,
-    pub message: Option<GossipReplicationMessage>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct FetchBlobRequest {
-    pub content_hash: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requester_public_key_hex: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requester_signature_hex: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct FetchBlobResponse {
-    pub found: bool,
-    pub blob: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

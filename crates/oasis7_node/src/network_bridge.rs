@@ -18,8 +18,8 @@ use crate::gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipMessage, GossipProposalMessage,
 };
 use crate::replication::{
-    FetchCommitRequest, FetchCommitResponse, GossipReplicationMessage,
-    REPLICATION_FETCH_COMMIT_PROTOCOL,
+    FetchCommitRequest, FetchCommitResponse, FetchHeadRequest, FetchHeadResponse,
+    GossipReplicationMessage, REPLICATION_FETCH_COMMIT_PROTOCOL, REPLICATION_GET_HEAD_PROTOCOL,
 };
 use crate::{NodeError, NodeNetworkPolicy};
 
@@ -282,21 +282,92 @@ impl ReplicationNetworkEndpoint {
         &self,
         world_id: &str,
     ) -> Result<Option<WorldHeadAnnounce>, NodeError> {
-        let Some(dht) = self.dht.as_ref() else {
-            return Ok(None);
-        };
-        let Some(head) = dht.get_world_head(world_id).map_err(network_err)? else {
-            return Ok(None);
-        };
-        if head.world_id != world_id {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "world head mismatch: expected={} actual={}",
-                    world_id, head.world_id
-                ),
-            });
+        if let Some(dht) = self.dht.as_ref() {
+            if let Some(head) = dht.get_world_head(world_id).map_err(network_err)? {
+                validate_world_head_world_id(world_id, &head)?;
+                return Ok(Some(head));
+            }
         }
-        Ok(Some(head))
+        self.request_world_head_from_peers(world_id)
+    }
+
+    fn request_world_head_from_peers(
+        &self,
+        world_id: &str,
+    ) -> Result<Option<WorldHeadAnnounce>, NodeError> {
+        let request = FetchHeadRequest {
+            world_id: world_id.to_string(),
+        };
+        let connected_peer_ids = self.network.connected_peer_ids();
+        let mut best_head = None;
+        if connected_peer_ids.is_empty() {
+            self.maybe_update_best_peer_head(
+                world_id,
+                &mut best_head,
+                self.request_json(REPLICATION_GET_HEAD_PROTOCOL, &request),
+            )?;
+        } else {
+            for peer_id in connected_peer_ids {
+                self.maybe_update_best_peer_head(
+                    world_id,
+                    &mut best_head,
+                    self.request_json_with_providers(
+                        REPLICATION_GET_HEAD_PROTOCOL,
+                        &request,
+                        std::slice::from_ref(&peer_id),
+                    ),
+                )?;
+            }
+        }
+        Ok(best_head)
+    }
+
+    fn maybe_update_best_peer_head(
+        &self,
+        world_id: &str,
+        best_head: &mut Option<WorldHeadAnnounce>,
+        response: Result<FetchHeadResponse, NodeError>,
+    ) -> Result<(), NodeError> {
+        match response {
+            Ok(FetchHeadResponse {
+                found: true,
+                head: Some(head),
+            }) => {
+                if head.world_id != world_id {
+                    return Err(NodeError::Replication {
+                        reason: format!(
+                            "replication peer head mismatch: expected={} actual={}",
+                            world_id, head.world_id
+                        ),
+                    });
+                }
+                let candidate = WorldHeadAnnounce {
+                    world_id: head.world_id,
+                    height: head.height,
+                    block_hash: head.block_hash,
+                    state_root: head.state_root,
+                    timestamp_ms: head.timestamp_ms,
+                    signature: String::new(),
+                };
+                if best_head
+                    .as_ref()
+                    .map(|current| candidate.height > current.height)
+                    .unwrap_or(true)
+                {
+                    *best_head = Some(candidate);
+                }
+                Ok(())
+            }
+            Ok(_) => Ok(()),
+            Err(NodeError::Replication { reason })
+                if (reason.contains("NetworkRequestFailed") && reason.contains("ErrNotFound"))
+                    || reason.contains(REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
+                    || reason.contains(REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX) =>
+            {
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
     }
 
     pub(crate) fn request_json<Req, Resp>(
@@ -483,7 +554,6 @@ impl ReplicationNetworkEndpoint {
         );
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn request_json_with_providers<Req, Resp>(
         &self,
         protocol: &str,
@@ -846,6 +916,18 @@ fn network_err(err: WorldError) -> NodeError {
     NodeError::Replication {
         reason: format!("replication network error: {err:?}"),
     }
+}
+
+fn validate_world_head_world_id(world_id: &str, head: &WorldHeadAnnounce) -> Result<(), NodeError> {
+    if head.world_id != world_id {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "world head mismatch: expected={} actual={}",
+                world_id, head.world_id
+            ),
+        });
+    }
+    Ok(())
 }
 
 fn replication_network_error_detail(err: &WorldError) -> &str {
