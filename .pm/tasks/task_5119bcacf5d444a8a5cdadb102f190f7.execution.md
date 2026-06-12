@@ -171,6 +171,18 @@ Example:
 - Actual Result: Passed. `doc-governance-check: OK`; `workflow-lint: OK (task_5119bcacf5d444a8a5cdadb102f190f7, phase=current)`; verification exit code 0; status `verified`; allowed_to_claim `true`; claim message: `Fresh verification passed; the branch can now be claimed ready for PR.`
 - Blocker / Next Action: Commit this evidence and run PR creation preflight.
 
+## 2026-06-12 13:35:20 CST / tpm
+- 完成内容: Addressed PR #418 review thread `PRRT_kwDORHhWec6JBeYv` about completed project entry remaining unchecked.
+- 遗留事项: Push fix, resolve the review thread, then continue check/mergeability watch.
+- Review Comment: `site/story/project.md:5` asked to mark the completed chapter-card task as done because the task YAML records `status: done` and the status text says `CH-159..CH-166` have already been split.
+- Finding Classification: valid P2 project dashboard consistency issue.
+- Fix Applied: Changed `STORY-VOLUME-004-CHAPTER-01-CARDS` from `[ ]` to `[x]`; also changed already-merged `STORY-VOLUME-004-ROUTE` from `[ ]` to `[x]` because PR #417 completed that scaffold and leaving it unchecked would keep the dashboard stale.
+- Action: Applied minimal project status checkbox fix.
+- Validation Command: `git diff --check && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_5119bcacf5d444a8a5cdadb102f190f7 --phase current`
+- Expected Result: Patch formatting, doc governance, and task-local workflow lint pass.
+- Actual Result: Passed. `git diff --check` produced no output; `doc-governance-check: OK`; `workflow-lint: OK (task_5119bcacf5d444a8a5cdadb102f190f7, phase=current)`.
+- Blocker / Next Action: Commit/push fix, resolve thread.
+
 ## 2026-06-12 13:26:39 CST / tpm
 - 完成内容: PR preflight issue fixed by adding module project file to task doc refs.
 - 遗留事项: Re-run task-local workflow lint, commit PM metadata fix, rerun PR creation preflight.

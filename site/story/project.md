@@ -2,12 +2,12 @@
 
 ## 当前任务
 
-- [ ] STORY-VOLUME-004-CHAPTER-01-CARDS: 第四卷第一章正式章级卡。
+- [x] STORY-VOLUME-004-CHAPTER-01-CARDS: 第四卷第一章正式章级卡。
   - Trace: .pm/tasks/task_5119bcacf5d444a8a5cdadb102f190f7.yaml
   - 范围：`TL-159` 到 `TL-166` / `CH-159` 到 `CH-166`。
   - 产物文件：`site/story/chapter-cards/volume-04-chapter-01-cards.md`。
   - 验收命令：`git diff --check && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_5119bcacf5d444a8a5cdadb102f190f7 --phase current`。
-- [ ] STORY-VOLUME-004-ROUTE: 第四卷公共节律路线 scaffold。
+- [x] STORY-VOLUME-004-ROUTE: 第四卷公共节律路线 scaffold。
   - Trace: .pm/tasks/task_89a34f7f4edd400da91a41aee42b280d.yaml
   - 范围：`TL-159` 到 `TL-198` / `CH-159` 到 `CH-198`。
   - 产物文件：`site/story/outline/volume-04-route-scaffold.md`、`site/story/research/volume-04-route-research.md`、`site/story/chapter-cards/volume-04-route-cards.md`、`site/story/draft/volume-04-writing-positioning.md`。
