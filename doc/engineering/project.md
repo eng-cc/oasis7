@@ -202,6 +202,7 @@
 - [x] p0-p1-technical-debt-optimization (PRD-ENGINEERING-001/021) [test_tier_required]: 收口当前审计指出的 P0/P1 技术债首轮优化，覆盖 public_testnet readiness blocker 显式化、hosted player access preview/blocking verdict 接线，以及 Viewer hosted login state 小模块拆分。 Trace: .pm/tasks/task_a669e177b927403a8a95be50e6e2bdf2.yaml
 - [x] readonly-specialist-routing (PRD-ENGINEERING-021) [test_tier_required]: 优化只读/聊天请求的角色分流规则，明确纯客观事实读取可由 TPM 直接处理，但只读专业判断仍必须由对应 bounded 专业角色 slice 给出或验证，且不强制创建 task/worktree，除非后续产生仓库写回。 Trace: .pm/tasks/task_c2fd95f7ea5c4fe6b2f1cde2843ad075.yaml
 - [x] default-subagent-model (PRD-ENGINEERING-021) [test_tier_required]: 将专业角色 subagent slice 的默认模型配置写入 workflow 规则，当前具体值以 workflow source-of-truth 的 `Default subagent runtime` 为准，并要求非默认覆盖必须在 slice contract 记录原因。 Trace: .pm/tasks/task_4a83cec640514c02bb839b020e5594ad.yaml
+- [x] project-health-tech-debt (PRD-ENGINEERING-021/031) [test_tier_required]: 收口 repository health 审计发现的 workflow/PM 技术债，覆盖专业 slice 证据写入口径、绝对 worktree hint 绑定、signal ID 并发安全、workflow changelog 与 self-evolution 项目状态漂移，并补对应 smoke 覆盖。 Trace: .pm/tasks/task_d08728720f8649d0bceeccacf2cd10e4.yaml
 - [ ] required-gate-runtime-support-coverage (PRD-ENGINEERING-021) [test_tier_required]: 让 GitHub `required-gate` 在 planner 命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时实际执行 `oasis7_node`、`oasis7_net` 与 `oasis7_net --features libp2p` support tests，并同步对齐 `prepare-task-pr` 推荐命令与 `testing-manual` 口径。 Trace: .pm/tasks/task_ec27ba7d019549d4b4692bd648a1cf09.yaml
 
 ## File Structure / Affected Paths

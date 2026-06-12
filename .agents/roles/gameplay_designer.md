@@ -64,5 +64,5 @@
 - 是否给出平衡风险、滥用路径、冷启动体验和 progression 风险
 - 是否把规则/版本边界回流给 `producer_system_designer`，把表达问题回流给 `game_visual_interaction_designer`
 - 是否为实现角色提供可执行玩法 brief，为 QA 提供可验证验收点
-- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role gameplay_designer --task-uid <TASK-UID>`
+- 若 `gameplay_designer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role gameplay_designer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 task execution log 局部记录

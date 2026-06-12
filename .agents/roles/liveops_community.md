@@ -50,7 +50,7 @@
 ## Checklist
 - 是否记录玩家/社区/节点侧的核心问题与频次
 - 是否区分“质量缺陷”与“运营/沟通问题”
-- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role liveops_community --task-uid <TASK-UID>`
+- 若 `liveops_community` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role liveops_community --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 task execution log 局部记录
 - 是否把高风险反馈同步给对应角色 owner
 - 高价值社区/事故信号是否已通过 `./scripts/pm/promote-signal.sh` 回流到 `.pm/`，而不是只留在 runbook / task execution log

@@ -274,13 +274,12 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - Replaced the optional/risk-based local supplemental review gate with a required pre-PR local role-subagent review gate.
   - Removed the Copilot review request from the standard PR helper flow.
   - Required `prepare-task-pr.sh --create` to verify passed local role review evidence in the task execution log before creating a PR.
-- **v1.4.17 (2026-06-08)**
-  - Moved the concrete default subagent runtime value into the repo-tracked `.codex/config.toml` `[workflow.subagent_runtime]` block so the model configuration has one canonical source.
-  - Updated the workflow source-of-truth and workflow eval contract to reference the config-backed policy instead of carrying the concrete runtime value in prose.
 - **v1.4.10 (2026-06-03)**
   - Updated the default subagent runtime policy.
   - Consolidated synced guidance, templates, and workflow eval checks to reference the section 5.2 `Default subagent runtime` policy instead of duplicating the concrete model string.
   - Added the `capture-todo.sh` pre-task discovery intake path for loose TODOs and follow-up ideas that should become `reflection` signals before any explicit `.pm` task promotion.
+  - 2026-06-08 amendment: moved the concrete default subagent runtime value into the repo-tracked `.codex/config.toml` `[workflow.subagent_runtime]` block so the model configuration has one canonical source.
+  - 2026-06-08 amendment: updated the workflow source-of-truth and workflow eval contract to reference the config-backed policy instead of carrying the concrete runtime value in prose.
 - **v1.4.9 (2026-06-02)**
   - Clarified that request-type classification cannot happen before task/worktree bootstrap; bootstrap happens first, then read-only/professional routing.
   - Required subagent slice contracts to distinguish intended default model from actual dispatched model, including inherited/unverified connector cases.

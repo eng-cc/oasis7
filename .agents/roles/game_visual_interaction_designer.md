@@ -62,5 +62,5 @@
 - 是否为 UI-heavy 改动提供 visual companion / screenshot / browser smoke 需求或 skip 原因
 - 是否给出移动端、低性能、无 renderer fallback 或可访问性风险
 - 是否把实现 brief 回流给 `viewer_engineer`，把规则/玩家承诺风险回流给对应 owner
-- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role game_visual_interaction_designer --task-uid <TASK-UID>`
+- 若 `game_visual_interaction_designer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role game_visual_interaction_designer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 task execution log 局部记录

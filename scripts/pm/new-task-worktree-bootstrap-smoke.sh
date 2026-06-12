@@ -97,6 +97,20 @@ BOOTSTRAP_JSON="$(
     --json
 )"
 
+SMOKE_TASK_UID="$(BOOTSTRAP_JSON="$BOOTSTRAP_JSON" python3 -c 'import json,os; print(json.loads(os.environ["BOOTSTRAP_JSON"])["pm_task"]["task_uid"])')"
+PM_ROOT_DIR="$WORKTREE_PATH" "$ROOT_DIR/scripts/pm/append-execution-log.sh" \
+  --task-uid "$SMOKE_TASK_UID" \
+  --role producer_system_designer \
+  --completed "new-task-worktree smoke appended structured evidence" \
+  --pending "none" \
+  --action "exercise workflow-lint default task binding from absolute worktree_hint" \
+  --validation-command "workflow-lint --phase current" \
+  --expected-result "workflow-lint binds the bootstrapped task from absolute worktree_hint without --task-uid" \
+  --actual-result "append command wrote a complete execution-log entry before workflow-lint" \
+  --blocker-next-action "none" \
+  --json >/dev/null
+PM_ROOT_DIR="$WORKTREE_PATH" "$ROOT_DIR/scripts/pm/workflow-lint.sh" --phase current >/dev/null
+
 SUMMARY_JSON="$(
   BOOTSTRAP_JSON="$BOOTSTRAP_JSON" python3 - "$ROOT_DIR" "$WORKTREE_PATH" "$SOURCE_STATUS_BEFORE" <<'PY'
 from __future__ import annotations

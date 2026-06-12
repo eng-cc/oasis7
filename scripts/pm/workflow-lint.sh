@@ -69,10 +69,26 @@ tasks = [parse_task(p) for p in sorted((root / ".pm" / "tasks").glob("task_*.yam
 if not tasks:
     raise SystemExit("workflow-lint: no .pm/tasks/*.yaml found")
 
+def worktree_hint_matches(raw_hint: object) -> bool:
+    hint = str(raw_hint or "")
+    if hint in {branch, worktree_name}:
+        return True
+    if not hint:
+        return False
+    hint_path = pathlib.Path(hint).expanduser()
+    candidates = {hint_path.name}
+    if hint_path.is_absolute():
+        try:
+            candidates.add(str(hint_path.resolve()))
+            candidates.add(str(hint_path.resolve().relative_to(root.parent)))
+        except (OSError, ValueError):
+            candidates.add(str(hint_path))
+    return worktree_name in candidates or str(root.resolve()) in candidates
+
 if explicit_uid:
     bound = [t for t in tasks if t.get("task_uid") == explicit_uid]
 else:
-    by_hint = [t for t in tasks if str(t.get("worktree_hint") or "") in {branch, worktree_name}]
+    by_hint = [t for t in tasks if worktree_hint_matches(t.get("worktree_hint"))]
     active = [t for t in by_hint if str(t.get("status") or "") in ACTIVE_STATUSES]
     bound = active or by_hint
 
