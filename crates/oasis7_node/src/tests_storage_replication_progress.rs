@@ -1,6 +1,52 @@
 use super::*;
 
 #[derive(Clone)]
+struct HeadlessTestNetwork {
+    inner: Arc<TestInMemoryNetwork>,
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for HeadlessTestNetwork {
+    fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        self.inner.publish(topic, payload)
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        self.inner.subscribe(topic)
+    }
+
+    fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        if protocol == oasis7_proto::distributed::RR_GET_WORLD_HEAD {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: protocol.to_string(),
+            });
+        }
+        self.inner.request(protocol, payload)
+    }
+
+    fn request_with_providers(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        providers: &[String],
+    ) -> Result<Vec<u8>, WorldError> {
+        if protocol == oasis7_proto::distributed::RR_GET_WORLD_HEAD {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: protocol.to_string(),
+            });
+        }
+        self.inner.request_with_providers(protocol, payload, providers)
+    }
+
+    fn register_handler(
+        &self,
+        protocol: &str,
+        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        self.inner.register_handler(protocol, handler)
+    }
+}
+
+#[derive(Clone)]
 struct SlowResponseTestNetwork {
     inner: Arc<TestInMemoryNetwork>,
     delay: Duration,
@@ -108,7 +154,9 @@ fn gap_sync_limits_single_poll_work_to_publish_intermediate_progress() {
 
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
+    > = Arc::new(HeadlessTestNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+    });
     let handle_a = NodeReplicationNetworkHandle::new(Arc::clone(&network));
     register_replication_fetch_handlers(
         &handle_a,
