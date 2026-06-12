@@ -210,25 +210,3 @@ fn runtime_non_sequencer_followers_do_not_advance_without_sequencer() {
     let _ = fs::remove_dir_all(&dir_b);
     let _ = fs::remove_dir_all(&dir_c);
 }
-
-fn run_test_with_timeout(
-    name: &'static str,
-    timeout: Duration,
-    test: impl FnOnce() + Send + 'static,
-) {
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(test));
-        let _ = tx.send(result);
-    });
-    match rx.recv_timeout(timeout) {
-        Ok(Ok(())) => {}
-        Ok(Err(payload)) => std::panic::resume_unwind(payload),
-        Err(mpsc::RecvTimeoutError::Timeout) => {
-            panic!("{name} exceeded timeout of {timeout:?}");
-        }
-        Err(mpsc::RecvTimeoutError::Disconnected) => {
-            panic!("{name} worker exited without reporting a result");
-        }
-    }
-}
