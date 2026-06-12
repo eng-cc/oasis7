@@ -99,3 +99,74 @@ Example:
 - Expected Result: Current task workflow lint passes after closeout.
 - Actual Result: Passed: `workflow-lint: OK (task_5119bcacf5d444a8a5cdadb102f190f7, phase=current)`.
 - Blocker / Next Action: Commit task-scoped changes and dispatch pre-PR local role review.
+
+## 2026-06-12 13:09:59 CST / tpm
+- 完成内容: Pre-PR local role review requested after commit `534ad6aff2a1040c39a7788e53a2e3ebbaf83b67`.
+- 遗留事项: Await `producer_system_designer` and `repository_health_engineer` review results; address any valid findings and record passed packet.
+- Review Trigger: pre-PR local role review
+- Review Scope: Fourth-volume chapter 1 formal card split and story index/project writeback; `.pm` task truth for `task_5119bcacf5d444a8a5cdadb102f190f7`.
+- Review Roles: `producer_system_designer`, `repository_health_engineer`
+- Review Question: Confirm `site/story/chapter-cards/volume-04-chapter-01-cards.md` is canon-safe, traceable from `CH-159..CH-166` to `TL-159..TL-166`, preserves public-rhythm boundaries, and is properly wired into repo story surfaces without scope drift.
+- Evidence Available: `git diff --check` passed; `./scripts/doc-governance-check.sh` passed; `./scripts/pm/workflow-lint.sh --task-uid task_5119bcacf5d444a8a5cdadb102f190f7 --phase current` passed; commit `534ad6aff2a1040c39a7788e53a2e3ebbaf83b67`.
+- Expected Return Contract: `findings | no_findings | residual_risk`
+- Formal Sink: `.pm/tasks/task_5119bcacf5d444a8a5cdadb102f190f7.execution.md`
+- Action: Dispatch fresh involved-role subagent reviews.
+- Validation Command: `n/a (review dispatch)`
+- Expected Result: Both role reviews return findings/no_findings and residual risk before PR creation.
+- Actual Result: Completed; both role reviews returned no blocking findings.
+- Blocker / Next Action: Record review outcomes and passed evidence packet.
+
+## 2026-06-12 13:21:29 CST / producer_system_designer
+- 完成内容: Pre-PR local role review completed for fourth-volume chapter 1 cards.
+- 遗留事项: Preserve residual risk during writing-positioning and prose drafting.
+- Review Findings: no findings.
+- Review Evidence: Confirmed `CH-159..CH-166` maps to `TL-159..TL-166`; public rhythm binds to `HISTORY-012`; `CH-162` uses `HISTORY-011` only as greenhouse support; forbidden items remain closed, including fourth-volume launch ceremony, public-system maturity, first sprout, seed naming, second bed opening, theater old victory, amendment completion / old relationship repair, resource competition, stable login proof, and priority ranking.
+- Residual Risk: P2; later writing-positioning/prose can drift into schedule-system exposition unless it stays anchored in public rhythm page, blank priority field, shared heat tick, greenhouse page corner, and Earth-side access sticker.
+- Action: Integrated `producer_system_designer` no-findings review.
+- Validation Command: `n/a (role review)`
+- Expected Result: Story/canon review either reports findings or confirms no blocking card issues.
+- Actual Result: No blocking findings.
+- Blocker / Next Action: Integrate repository-health review.
+
+## 2026-06-12 13:21:29 CST / repository_health_engineer
+- 完成内容: Pre-PR local role review completed for task/workflow and repo writeback health.
+- 遗留事项: Repo-wide PM lint existing debt may still affect global closeout output; do not attribute that debt to this diff.
+- Review Findings: no findings.
+- Review Evidence: Confirmed task truth, execution log, commit scope, story index writeback, and `CH-159..CH-166` / `TL-159..TL-166` mapping are coherent; current uncommitted change is only execution-log review evidence.
+- Residual Risk: Non-blocking; repo-wide PM lint existing debt remains unrelated to this diff.
+- Action: Integrated `repository_health_engineer` no-findings review.
+- Validation Command: `n/a (role review)`
+- Expected Result: Repo-health review either reports findings or confirms no blocking PR-path issues.
+- Actual Result: No blocking findings.
+- Blocker / Next Action: Record Pre-PR Local Role Review passed packet.
+
+## 2026-06-12 13:21:29 CST / tpm
+- 完成内容: Pre-PR local role review packet recorded.
+- 遗留事项: Run claim-ready helper, commit review evidence, then run PR preflight/create.
+- Pre-PR Local Role Review: passed
+- Task UID: task_5119bcacf5d444a8a5cdadb102f190f7
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-story-volume-04-chapter-01-cards
+- Source Branch: codex/story-volume-04-chapter-01-cards
+- Source Head: 534ad6aff2a1040c39a7788e53a2e3ebbaf83b67
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/tasks/task_5119bcacf5d444a8a5cdadb102f190f7.execution.md`; `.pm/tasks/task_5119bcacf5d444a8a5cdadb102f190f7.yaml`; `site/story/chapter-cards/README.md`; `site/story/chapter-cards/volume-04-chapter-01-cards.md`; `site/story/project.md`
+- Role Selection Basis: changed paths touch story chapter-card canon and task/workflow evidence; selected `producer_system_designer` for story/canon card review and `repository_health_engineer` for PM/index/writeback coherence.
+- Review Roles: `producer_system_designer`, `repository_health_engineer`
+- Review Evidence: `producer_system_designer`: no findings, P2 residual risk about later writing-positioning/prose drifting into schedule exposition; `repository_health_engineer`: no findings, non-blocking residual risk about existing repo-wide PM lint debt.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no fixes required.
+- Residual Risk: Future writing-positioning and prose must keep public rhythm anchored in object actions, avoid hidden priority ranking/resource competition, and keep TL/CH/timeline surfaces synchronized; existing repo-wide PM lint debt is unrelated to this diff.
+- Action: Recorded passed pre-PR local role review packet.
+- Validation Command: `n/a (review evidence packet)`
+- Expected Result: Execution log contains review outcomes and passed packet required before PR creation.
+- Actual Result: Completed.
+- Blocker / Next Action: Run claim-ready helper and commit review evidence.
+
+## 2026-06-12 13:24:28 CST / tpm
+- 完成内容: Claim-ready evidence recorded for PR readiness.
+- 遗留事项: Commit review/claim evidence and rerun `./scripts/prepare-task-pr.sh --create`.
+- Action: Ran claim-ready helper with fresh combined verification command.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "git diff --check && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_5119bcacf5d444a8a5cdadb102f190f7 --phase current"`
+- Expected Result: Helper verifies branch readiness for PR and allows claim.
+- Actual Result: Passed. `doc-governance-check: OK`; `workflow-lint: OK (task_5119bcacf5d444a8a5cdadb102f190f7, phase=current)`; verification exit code 0; status `verified`; allowed_to_claim `true`; claim message: `Fresh verification passed; the branch can now be claimed ready for PR.`
+- Blocker / Next Action: Commit this evidence and run PR creation preflight.
