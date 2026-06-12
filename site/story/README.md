@@ -2,15 +2,15 @@
 
 本目录用于维护长篇小说《绿洲 2076》（英文名：oasis 2076）的站点侧资料。
 
-世界背景、总纲、人物、调研、审稿意见、第一卷时间线锚点、第一卷四章章节卡和第一卷正文草稿已重建；第二卷 Agent 归零与修宪路线已完成 `CH-037` 到 `CH-078` 的全卷规划、正文试写和卷级 closeout；第三卷温室 / 生活循环路线已完成 `CH-079` 到 `CH-118` 的全卷规划、正文试写和 focused review。
+世界背景、总纲、人物、调研、审稿意见、第一卷时间线锚点、第一卷四章章节卡和第一卷正文草稿已重建；第二卷 Agent 归零与修宪路线已完成 `CH-037` 到 `CH-078` 的全卷规划、正文试写和卷级 closeout；第三卷温室 / 生活循环路线已完成 `CH-079` 到 `CH-118` 的全卷规划、正文试写和 focused review；`CH-118` 后的第三卷 / 后续路线已按 SOP 采纳到 `TL-119` 到 `TL-158` / `CH-119` 到 `CH-158`，并完成五章正文试写、focused review 最小补丁和 route closeout。该路线收在无变化记录、无名轮换夹、半合回看窗、第二格低标签和下一轮暂停页角上。
 
 ## 目录
 
 - `background/`: 世界背景已复审更新。
 - `outline/`: 长篇总纲已重建到第一卷目标层级。
 - `characters/`: 人物注册表已开始重建。
-- `timeline/`: 时间线已开始重建，包含第一卷三十六场、第二卷 `TL-037` 到 `TL-078`，以及第三卷 `TL-079` 到 `TL-118`。
-- `chapter-cards/`: 章节卡已开始重建，第一卷四章已拆完，共三十六场；第二卷五章已完成正文与章级 closeout；第三卷五章已完成章节卡、正文与 focused review。
+- `timeline/`: 时间线已开始重建，包含第一卷三十六场、第二卷 `TL-037` 到 `TL-078`，第三卷 `TL-079` 到 `TL-118`，以及第三卷后续 `TL-119` 到 `TL-158`。
+- `chapter-cards/`: 章节卡已开始重建，第一卷四章已拆完，共三十六场；第二卷五章已完成正文与章级 closeout；第三卷五章已完成章节卡、正文与 focused review；第三卷后续五章已拆为正式章级卡。
 - `research/`: 调研笔记已开始重建。
 - `reviews/`: 审稿意见已开始重建。
 - `draft/`: 正文草稿和章节写作 SOP 已开始重建。
@@ -21,6 +21,7 @@
 - 新增人物、背景、时间线或正文前，应先明确其是否进入正式故事真值。
 - 每次新增正文前，先补齐对应的大纲、时间线或角色动机，避免后期失控。
 - 从章节卡进入正文时，先按 `draft/chapter-writing-sop.md` 执行社会口味调研、写前定位、正文试写、审稿、最小补丁和复审。
+- 第三卷 / 后续路线 scaffold 入口：`outline/volume-03-followup-route-scaffold.md`、`chapter-cards/volume-03-followup-route-cards.md`、`draft/volume-03-followup-writing-positioning.md`；正式章级卡已拆至 `chapter-cards/volume-03-followup-chapter-01-cards.md` 到 `chapter-cards/volume-03-followup-chapter-05-cards.md`，五章写前定位与正文索引见 `draft/README.md`。
 
 ## 多方审稿 subagent 配置
 

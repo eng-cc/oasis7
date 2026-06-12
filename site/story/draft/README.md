@@ -26,4 +26,14 @@
 - `volume-03-chapter-004.md`: 第三卷第四章试写 v0.1，当前覆盖 `CH-103` 到 `CH-110`。
 - `volume-03-chapter-005-positioning.md`: 第三卷第五章写前定位，当前覆盖 `CH-111` 到 `CH-118`；用于进入正文前校准未命名种子、低规格苗床、霉斑样本并存、不做开放日、低水量本轮完成和一格可继续照看边界，不是正文。
 - `volume-03-chapter-005.md`: 第三卷第五章试写 v0.1，当前覆盖 `CH-111` 到 `CH-118`。
+- `volume-03-followup-chapter-01-positioning.md`: 第三卷后续第一章写前定位，当前覆盖 `CH-119` 到 `CH-126`；用于进入正文前校准第一夜没有变化、夜间无变化记录条、空白生长曲线页、未发送提醒和可撤回夜间巡检口令，不是正文。
+- `volume-03-followup-chapter-001.md`: 第三卷后续第一章试写 v0.1.1，当前覆盖 `CH-119` 到 `CH-126`；已完成 focused review 最小补丁。
+- `volume-03-followup-chapter-02-positioning.md`: 第三卷后续第二章写前定位，当前覆盖 `CH-127` 到 `CH-134`；用于进入正文前校准轮换夹不写人名、动作 / 窗口 / 可撤回三栏、空轮换位和不生成照看名单边界，不是正文。
+- `volume-03-followup-chapter-002.md`: 第三卷后续第二章试写 v0.1.1，当前覆盖 `CH-127` 到 `CH-134`；已完成 focused review 最小补丁。
+- `volume-03-followup-chapter-03-positioning.md`: 第三卷后续第三章写前定位，当前覆盖 `CH-135` 到 `CH-142`；用于进入正文前校准延迟回看窗、半合窗缝、无补做按钮、空留言纸边和不生成补签到 / 迟到羞耻边界，不是正文。
+- `volume-03-followup-chapter-003.md`: 第三卷后续第三章试写 v0.1.1，当前覆盖 `CH-135` 到 `CH-142`；已完成 focused review 最小补丁。
+- `volume-03-followup-chapter-04-positioning.md`: 第三卷后续第四章写前定位，当前覆盖 `CH-143` 到 `CH-150`；用于进入正文前校准第二格仍不开、暂不开启标签、低温保温罩边扣、低功率窗口窄条和不生成扩张姿态边界，不是正文。
+- `volume-03-followup-chapter-004.md`: 第三卷后续第四章试写 v0.1.1，当前覆盖 `CH-143` 到 `CH-150`；已完成 focused review 最小补丁。
+- `volume-03-followup-chapter-05-positioning.md`: 第三卷后续第五章写前定位，当前覆盖 `CH-151` 到 `CH-158`；用于进入正文前校准无变化记录、轮换夹、延迟回看窗、第二格暂不开启和没有成果词的长周期页边界，不是正文。
+- `volume-03-followup-chapter-005.md`: 第三卷后续第五章试写 v0.1.1，当前覆盖 `CH-151` 到 `CH-158`；已完成 focused review 最小补丁。
 - `chapter-writing-sop.md`: 根据第一章试写、调研、复审、五方最终审稿和极小润色经验整理的章节写作 SOP。
