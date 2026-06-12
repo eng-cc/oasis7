@@ -1,0 +1,26 @@
+task_uid: task_5119bcacf5d444a8a5cdadb102f190f7
+title: "Split fourth volume chapter 1 cards"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-story-volume-04-chapter-01-cards
+execution_log_path: .pm/tasks/task_5119bcacf5d444a8a5cdadb102f190f7.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/outline/volume-04-route-scaffold.md
+doc_refs:
+  - site/story/project.md
+  - site/story/outline/volume-04-route-scaffold.md
+  - site/story/chapter-cards/volume-04-route-cards.md
+related_prd: []
+acceptance:
+  - "Create formal chapter-level cards for fourth volume chapter 1, covering CH-159 through CH-166 / TL-159 through TL-166, preserving public-rhythm boundaries and updating story indexes/task evidence."
+handoff_to: []
+updated_at: 2026-06-12T13:06:44+08:00
+last_started_at: 2026-06-12T12:55:45+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_5119bcacf5d444a8a5cdadb102f190f7 --phase current"
+last_verified_at: 2026-06-12T13:06:35+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-12T13:06:42+08:00
