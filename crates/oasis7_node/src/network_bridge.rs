@@ -3,8 +3,14 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use oasis7_net::{world_error_is_publish_failure, world_error_is_retryable_connection_gap};
-use oasis7_proto::distributed::WorldHeadAnnounce;
+use oasis7_net::{
+    world_error_is_missing_handler, world_error_is_publish_failure,
+    world_error_is_retryable_connection_gap,
+};
+use oasis7_proto::distributed::{
+    DistributedErrorCode, ErrorResponse, GetWorldHeadRequest, GetWorldHeadResponse,
+    WorldHeadAnnounce, RR_GET_WORLD_HEAD,
+};
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
     classify_network_protocol, DistributedNetwork, NetworkLane, NetworkLaneOperation,
@@ -282,21 +288,38 @@ impl ReplicationNetworkEndpoint {
         &self,
         world_id: &str,
     ) -> Result<Option<WorldHeadAnnounce>, NodeError> {
-        let Some(dht) = self.dht.as_ref() else {
-            return Ok(None);
-        };
-        let Some(head) = dht.get_world_head(world_id).map_err(network_err)? else {
-            return Ok(None);
-        };
-        if head.world_id != world_id {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "world head mismatch: expected={} actual={}",
-                    world_id, head.world_id
-                ),
-            });
+        if let Some(dht) = self.dht.as_ref() {
+            if let Some(head) = dht.get_world_head(world_id).map_err(network_err)? {
+                validate_world_head_world_id(world_id, &head)?;
+                return Ok(Some(head));
+            }
         }
-        Ok(Some(head))
+        self.request_world_head_from_peers(world_id)
+    }
+
+    fn request_world_head_from_peers(
+        &self,
+        world_id: &str,
+    ) -> Result<Option<WorldHeadAnnounce>, NodeError> {
+        let request = GetWorldHeadRequest {
+            world_id: world_id.to_string(),
+        };
+        let response: GetWorldHeadResponse = match self.request_cbor(RR_GET_WORLD_HEAD, &request) {
+            Ok(response) => response,
+            Err(err)
+                if world_error_is_missing_handler(&err)
+                    || world_error_is_retryable_connection_gap(&err) =>
+            {
+                return Ok(None);
+            }
+            Err(WorldError::NetworkRequestFailed {
+                code: DistributedErrorCode::ErrNotFound,
+                ..
+            }) => return Ok(None),
+            Err(err) => return Err(network_err(err)),
+        };
+        validate_world_head_world_id(world_id, &response.head)?;
+        Ok(Some(response.head))
     }
 
     pub(crate) fn request_json<Req, Resp>(
@@ -326,6 +349,32 @@ impl ReplicationNetworkEndpoint {
         serde_json::from_slice::<Resp>(&response_bytes).map_err(|err| NodeError::Replication {
             reason: format!("decode replication response {} failed: {}", protocol, err),
         })
+    }
+
+    fn request_cbor<Req, Resp>(&self, protocol: &str, request: &Req) -> Result<Resp, WorldError>
+    where
+        Req: Serialize,
+        Resp: DeserializeOwned,
+    {
+        if let Some(lane) = classify_network_protocol(protocol) {
+            validate_lane_access(
+                &self.network_policy,
+                lane,
+                NetworkLaneOperation::Request,
+                protocol,
+            )
+            .map_err(world_error_from_node_error)?;
+        }
+        let payload = serde_cbor::to_vec(request)?;
+        let response_bytes = self.network.request(protocol, payload.as_slice())?;
+        if let Ok(error) = serde_cbor::from_slice::<ErrorResponse>(&response_bytes) {
+            return Err(WorldError::NetworkRequestFailed {
+                code: error.code,
+                message: error.message,
+                retryable: error.retryable,
+            });
+        }
+        serde_cbor::from_slice::<Resp>(&response_bytes).map_err(WorldError::from)
     }
 
     pub(crate) fn request_fetch_commit_for_gap_sync(
@@ -845,6 +894,24 @@ fn network_err(err: WorldError) -> NodeError {
     }
     NodeError::Replication {
         reason: format!("replication network error: {err:?}"),
+    }
+}
+
+fn validate_world_head_world_id(world_id: &str, head: &WorldHeadAnnounce) -> Result<(), NodeError> {
+    if head.world_id != world_id {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "world head mismatch: expected={} actual={}",
+                world_id, head.world_id
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn world_error_from_node_error(err: NodeError) -> WorldError {
+    WorldError::NetworkProtocolUnavailable {
+        protocol: err.to_string(),
     }
 }
 

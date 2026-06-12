@@ -46,6 +46,31 @@ use self::support::{
     write_json_pretty,
 };
 pub(crate) use self::support::{load_blob_from_root, load_commit_message_from_root};
+
+pub(crate) fn load_latest_commit_message_from_root(
+    root_dir: &Path,
+    world_id: &str,
+    max_hot_commit_messages: usize,
+) -> Result<Option<GossipReplicationMessage>, NodeError> {
+    let hot_height = build_commit_message_retention_plan(root_dir, max_hot_commit_messages)?
+        .hot_window
+        .latest_height
+        .unwrap_or(0);
+    let cold_height = load_commit_message_cold_index_from_root(root_dir)?
+        .by_height
+        .keys()
+        .next_back()
+        .copied()
+        .unwrap_or(0);
+    let mut candidate = hot_height.max(cold_height);
+    while candidate > 0 {
+        if let Some(message) = load_commit_message_from_root(root_dir, world_id, candidate)? {
+            return Ok(Some(message));
+        }
+        candidate -= 1;
+    }
+    Ok(None)
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeReplicationConfig {
     pub root_dir: PathBuf,

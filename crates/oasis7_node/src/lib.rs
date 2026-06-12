@@ -35,7 +35,10 @@ use oasis7_net::{
     run_replica_maintenance_poll, ReplicaMaintenancePolicy, ReplicaMaintenancePollingPolicy,
     ReplicaMaintenancePollingState, ReplicaTransferExecutor, ReplicaTransferTask,
 };
-use oasis7_proto::distributed::DistributedErrorCode;
+use oasis7_proto::distributed::{
+    DistributedErrorCode, ErrorResponse, GetWorldHeadRequest, GetWorldHeadResponse,
+    WorldHeadAnnounce, RR_GET_WORLD_HEAD,
+};
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::world_error::WorldError as ProtoWorldError;
 use serde::Deserialize;
@@ -130,9 +133,9 @@ use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
 use replica_maintenance_support::maybe_run_runtime_replica_maintenance_poll;
 use replication::{
-    load_blob_from_root, load_commit_message_from_root, FetchBlobRequest, FetchBlobResponse,
-    FetchCommitRequest, FetchCommitResponse, ReplicationRuntime, REPLICATION_FETCH_BLOB_PROTOCOL,
-    REPLICATION_FETCH_COMMIT_PROTOCOL,
+    load_blob_from_root, load_commit_message_from_root, load_latest_commit_message_from_root,
+    FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse,
+    ReplicationRuntime, REPLICATION_FETCH_BLOB_PROTOCOL, REPLICATION_FETCH_COMMIT_PROTOCOL,
 };
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
@@ -872,6 +875,71 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
     }
 
     if network_policy.allows_lane_operation(
+        oasis7_proto::distributed_net::NetworkLane::Control,
+        oasis7_proto::distributed_net::NetworkLaneOperation::Serve,
+    ) {
+        let head_root_dir = replication.root_dir.clone();
+        let head_world_id = world_id.to_string();
+        let max_hot_commit_messages = replication.max_hot_commit_messages();
+        network
+            .register_handler(
+                RR_GET_WORLD_HEAD,
+                Box::new(move |payload| {
+                    let request =
+                        serde_cbor::from_slice::<GetWorldHeadRequest>(payload).map_err(|err| {
+                            network_bad_request(format!(
+                                "decode get-world-head request failed: {}",
+                                err
+                            ))
+                        })?;
+                    if request.world_id != head_world_id {
+                        return Err(network_bad_request(format!(
+                            "get-world-head world mismatch: expected={}, got={}",
+                            head_world_id, request.world_id
+                        )));
+                    }
+                    let Some(message) = load_latest_commit_message_from_root(
+                        head_root_dir.as_path(),
+                        head_world_id.as_str(),
+                        max_hot_commit_messages,
+                    )
+                    .map_err(network_internal_error)?
+                    else {
+                        return Ok(encode_network_error_response(ErrorResponse::from_code(
+                            DistributedErrorCode::ErrNotFound,
+                            format!("world head not found for {}", head_world_id),
+                        ))?);
+                    };
+                    let payload = parse_replication_commit_payload(message.payload.as_slice())
+                        .ok_or_else(|| {
+                            network_internal_error(NodeError::Replication {
+                                reason: format!(
+                                    "decode latest replication commit payload failed world={}",
+                                    head_world_id
+                                ),
+                            })
+                        })?;
+                    let response = GetWorldHeadResponse {
+                        head: WorldHeadAnnounce {
+                            world_id: payload.world_id,
+                            height: payload.height,
+                            block_hash: payload.block_hash,
+                            state_root: payload.execution_state_root.unwrap_or_default(),
+                            timestamp_ms: payload.committed_at_ms,
+                            signature: message.signature_hex.unwrap_or_default(),
+                        },
+                    };
+                    serde_cbor::to_vec(&response).map_err(|err| {
+                        network_internal_error(NodeError::Replication {
+                            reason: format!("encode get-world-head response failed: {}", err),
+                        })
+                    })
+                }),
+            )
+            .map_err(network_replication_error)?;
+    }
+
+    if network_policy.allows_lane_operation(
         oasis7_proto::distributed_net::NetworkLane::BlobState,
         oasis7_proto::distributed_net::NetworkLaneOperation::Serve,
     ) {
@@ -911,6 +979,14 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
     }
 
     Ok(())
+}
+
+fn encode_network_error_response(response: ErrorResponse) -> Result<Vec<u8>, ProtoWorldError> {
+    serde_cbor::to_vec(&response).map_err(|err| {
+        network_internal_error(NodeError::Replication {
+            reason: format!("encode network error response failed: {}", err),
+        })
+    })
 }
 
 fn network_bad_request(message: impl Into<String>) -> ProtoWorldError {
