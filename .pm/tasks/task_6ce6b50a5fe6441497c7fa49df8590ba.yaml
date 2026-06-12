@@ -8,7 +8,8 @@ priority: P3
 source_signal: null
 source_refs:
   - .github/workflows/hosted-login-linux-build.yml
-doc_refs: []
+doc_refs:
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Hosted Login Linux Build / hosted-login-linux-x86-64 is manually triggered only through workflow_dispatch while preserving build_profile input."
