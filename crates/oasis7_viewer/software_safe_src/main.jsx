@@ -823,7 +823,8 @@ function buildAgentClaimTargets(snapshot, agentClaim) {
 function buildAgentClaimAction(agentClaim, targetAgentId) {
   const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
   const target = String(targetAgentId || "").trim();
-  if (!claimerAgentId || !target) {
+  const blockedReason = String(agentClaim?.next_claim_quote?.blocked_reason || "").trim();
+  if (!claimerAgentId || !target || blockedReason) {
     return null;
   }
   return {
@@ -837,9 +838,17 @@ function buildAgentClaimAction(agentClaim, targetAgentId) {
     target_agent_id: target,
     actorAgentId: claimerAgentId,
     actor_agent_id: claimerAgentId,
-    disabledReason: agentClaim?.next_claim_quote?.blocked_reason || null,
-    disabled_reason: agentClaim?.next_claim_quote?.blocked_reason || null,
+    disabledReason: null,
+    disabled_reason: null,
   };
+}
+
+function hasExecutableAgentClaim(snapshot, agentClaim) {
+  if (!agentClaim || String(agentClaim?.next_claim_quote?.blocked_reason || "").trim()) {
+    return false;
+  }
+  const targets = buildAgentClaimTargets(snapshot, agentClaim);
+  return targets.length > 0 && Boolean(buildAgentClaimAction(agentClaim, targets[0]?.id));
 }
 
 function AgentClaimPanel(props) {
@@ -886,9 +895,6 @@ function AgentClaimPanel(props) {
         <Badge>{`eligible=${quote()?.eligible_claim_balance ?? agentClaim()?.slot_1_eligible_claim_balance ?? "-"}`}</Badge>
         <Badge>{`upfront=${quote()?.total_upfront_amount ?? "-"}`}</Badge>
       </div>
-      <Show when={quote()?.blocked_reason}>
-        <div class="feedback-detail">{quote().blocked_reason}</div>
-      </Show>
       <div class="control-grid">
         <div class="field">
           <label for="agent-claim-target">
@@ -922,9 +928,6 @@ function AgentClaimPanel(props) {
           {tr(locale(), "认领 Agent", "Claim Agent")}
         </button>
       </div>
-      <Show when={disabledReason()}>
-        <div class="feedback-detail">{disabledReason()}</div>
-      </Show>
     </CalloutCard>
   );
 }
@@ -1433,7 +1436,7 @@ function WorldSummaryPanel() {
                   </CalloutCard>
                 )}
               </Show>
-              <Show when={gameplay().agentClaim}>
+              <Show when={hasExecutableAgentClaim(core.state.snapshot, gameplay().agentClaim)}>
                 <AgentClaimPanel gameplay={gameplay()} locale={locale()} />
               </Show>
               <div>
