@@ -205,7 +205,7 @@ resolve_viewer_static_dir_for_web_closure() {
 
   source_metadata_json=$(viewer_web_dist_source_metadata_json "$repo_root")
 
-  if [[ -f "$dist_index" ]] && python3 - "$source_metadata_json" "$dist_dir" "$(viewer_web_dist_manifest_name)" <<'PY'
+  if [[ -f "$dist_index" ]] && python3 - "$source_metadata_json" "$dist_dir" "$(viewer_web_dist_manifest_name)" "$(viewer_web_dist_required_files)" <<'PY'
 from __future__ import annotations
 
 import json
@@ -215,6 +215,7 @@ from pathlib import Path
 current = json.loads(sys.argv[1])
 dist_dir = Path(sys.argv[2]).resolve()
 manifest_name = sys.argv[3]
+required_raw = sys.argv[4]
 manifest_path = dist_dir / manifest_name
 
 if not manifest_path.is_file():
@@ -233,6 +234,10 @@ for rel, metadata in dist_files.items():
     if not candidate.is_file():
         raise SystemExit(1)
     if candidate.stat().st_size != metadata.get("size"):
+        raise SystemExit(1)
+
+for rel in [line.strip() for line in required_raw.splitlines() if line.strip()]:
+    if not (dist_dir / rel).is_file():
         raise SystemExit(1)
 PY
   then
@@ -255,19 +260,28 @@ PY
   mkdir -p "$rebuilt_dir"
   if [[ -x "$repo_root/scripts/build-viewer-software-safe.sh" ]]; then
     echo "+ $repo_root/scripts/build-viewer-software-safe.sh" >&2
-    (
+    if ! (
       cd "$repo_root"
       ./scripts/build-viewer-software-safe.sh
-    ) >&2
+    ) >&2; then
+      echo "error: viewer software-safe build failed" >&2
+      return 1
+    fi
   else
     echo "+ npm --prefix $repo_root/crates/oasis7_viewer run build:software-safe" >&2
-    (
+    if ! (
       cd "$repo_root"
       npm --prefix crates/oasis7_viewer run build:software-safe
-    ) >&2
+    ) >&2; then
+      echo "error: viewer software-safe build failed" >&2
+      return 1
+    fi
   fi
   if [[ -x "$repo_root/scripts/copy-viewer-web-dist.sh" ]]; then
-    "$repo_root/scripts/copy-viewer-web-dist.sh" --dist-dir "$rebuilt_dir" >&2
+    if ! "$repo_root/scripts/copy-viewer-web-dist.sh" --dist-dir "$rebuilt_dir" >&2; then
+      echo "error: viewer web dist copy failed" >&2
+      return 1
+    fi
   else
     cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/index.html"
     cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/viewer.html"

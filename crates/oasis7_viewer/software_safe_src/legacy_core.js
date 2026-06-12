@@ -144,6 +144,7 @@ export const state = createMutable({
 
 let socket = null;
 let reconnectTimer = null;
+let initialSnapshotRequested = false;
 let hostedSessionRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
@@ -2138,6 +2139,7 @@ function normalizeGameplayActionRequest(action) {
     protocol_action: action.protocol_action || action.protocolAction || null,
     action_id: action.action_id || action.actionId || null,
     target_agent_id: action.target_agent_id || action.targetAgentId || null,
+    actor_agent_id: action.actor_agent_id || action.actorAgentId || null,
     disabled_reason: action.disabled_reason || action.disabledReason || null,
   };
   return normalized;
@@ -2203,6 +2205,7 @@ function sendGameplayAction(actionOrId) {
 
   const actionId = String(action.action_id || "").trim();
   const targetAgentId = String(action.target_agent_id || "").trim();
+  const actorAgentId = String(action.actor_agent_id || "").trim();
   if (!actionId || !targetAgentId) {
     return { ok: false, reason: "gameplay_action.submit requires action_id and target_agent_id" };
   }
@@ -2226,7 +2229,10 @@ function sendGameplayAction(actionOrId) {
       feedback.stage = "registering";
       feedback.effect = "registering player session";
       render();
-      await ensureRegisteredPlayerSession(targetAgentId);
+      const registrationAgentId = gameplayActionRequiresActorAgent(actionId)
+        ? actorAgentId || state.auth.boundAgentId || targetAgentId
+        : targetAgentId;
+      await ensureRegisteredPlayerSession(registrationAgentId);
       feedback.stage = "signing";
       feedback.effect = "building auth proof";
       render();
@@ -2237,7 +2243,7 @@ function sendGameplayAction(actionOrId) {
         public_key: state.auth.publicKey,
       };
       if (gameplayActionRequiresActorAgent(actionId)) {
-        request.actor_agent_id = state.auth.boundAgentId || targetAgentId;
+        request.actor_agent_id = actorAgentId || state.auth.boundAgentId || registrationAgentId;
       }
       request.auth = await buildGameplayActionAuthProof(request, state.auth);
       feedback.stage = "sent";
@@ -2566,6 +2572,11 @@ function handleViewerMessage(message) {
       state.server = message.server || null;
       state.worldId = message.world_id || null;
       state.controlProfile = message.control_profile || "playback";
+      if (!initialSnapshotRequested) {
+        initialSnapshotRequested = true;
+        sendJson({ type: "subscribe", streams: ["snapshot", "events", "metrics"], event_kinds: [] });
+        sendJson({ type: "request_snapshot" });
+      }
       void ensureHostedPlayerAuthAvailable().then(() => {
         syncHostedPlayerSessionOnConnect();
         render();
@@ -2631,9 +2642,8 @@ function attachSocket(ws) {
   ws.addEventListener("open", () => {
     state.connectionStatus = "connected";
     state.lastError = null;
+    initialSnapshotRequested = false;
     sendJson({ type: "hello", client: "viewer", version: 1 });
-    sendJson({ type: "subscribe", streams: ["snapshot", "events", "metrics"], event_kinds: [] });
-    sendJson({ type: "request_snapshot" });
     syncHostedSessionRefreshLoop();
     render();
   });

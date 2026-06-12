@@ -59,6 +59,25 @@ fn provider_settings_from_env_accepts_remote_https_transport() {
 }
 
 #[test]
+fn provider_settings_from_env_accepts_local_mock_backend() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    std::env::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_mock");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    let settings = super::control_plane::runtime_provider_settings_from_env()
+        .expect("settings parse")
+        .expect("provider settings");
+    assert_eq!(settings.provider_transport, "loopback_http");
+    assert_eq!(settings.base_url, "http://127.0.0.1:5841");
+    assert_eq!(settings.agent_profile, "oasis7_p0_low_freq_npc");
+    clear_runtime_provider_env();
+}
+
+#[test]
 fn provider_settings_from_env_rejects_removed_old_brand_prefix() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();

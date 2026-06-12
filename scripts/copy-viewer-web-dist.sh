@@ -61,10 +61,12 @@ software_safe_html="$VIEWER_ROOT/software_safe.html"
 viewer_js="$VIEWER_ROOT/viewer.js"
 compat_js="$VIEWER_ROOT/software_safe.js"
 pixel_world_bridge_dir="$VIEWER_ROOT/dist/pixel-world-bridge"
+pixel_world_bridge_js="$pixel_world_bridge_dir/pixel_world_bridge.js"
 
 require_file "$software_safe_html"
 require_file "$viewer_js"
 require_file "$compat_js"
+require_file "$pixel_world_bridge_js"
 while read -r source_rel _; do
   require_file "$VIEWER_ROOT/$source_rel"
 done < <(viewer_web_dist_contract_pairs)
@@ -88,8 +90,10 @@ while read -r source_rel dist_rel; do
 done < <(viewer_web_dist_contract_pairs)
 
 if [[ -d "$pixel_world_bridge_dir" ]]; then
-  rm -rf "$DIST_DIR/pixel-world-bridge"
-  cp -R "$pixel_world_bridge_dir" "$DIST_DIR/pixel-world-bridge"
+  if [[ "$pixel_world_bridge_dir" != "$DIST_DIR/pixel-world-bridge" ]]; then
+    rm -rf "$DIST_DIR/pixel-world-bridge"
+    cp -R "$pixel_world_bridge_dir" "$DIST_DIR/pixel-world-bridge"
+  fi
 fi
 
 viewer_web_dist_write_manifest "$ROOT_DIR" "$DIST_DIR"

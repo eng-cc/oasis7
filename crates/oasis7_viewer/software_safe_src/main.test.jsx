@@ -94,6 +94,58 @@ function sampleSnapshot(overrides = {}) {
   };
 }
 
+function sampleAgentClaimSnapshot() {
+  const base = sampleSnapshot();
+  return sampleSnapshot({
+    model: {
+      ...base.model,
+      agents: {
+        ...base.model.agents,
+        "agent-claim-target": {
+          id: "agent-claim-target",
+          name: "Claim Target",
+          location_id: "loc-0",
+          resources: {},
+        },
+      },
+    },
+    player_gameplay: {
+      ...base.player_gameplay,
+      agent_claim: {
+        claimer_agent_id: "agent-0",
+        current_epoch: 0,
+        reputation_tier: 0,
+        claim_cap: 1,
+        owned_claim_count: 0,
+        liquid_main_token_balance: 0,
+        restricted_starter_claim_balance: 0,
+        slot_1_auto_restricted_starter_claim_amount: 325,
+        slot_1_eligible_claim_balance: 325,
+        next_claim_quote: {
+          slot_index: 1,
+          reputation_tier: 0,
+          claim_cap: 1,
+          owned_claim_count: 0,
+          activation_fee_amount: 100,
+          claim_bond_amount: 200,
+          upkeep_per_epoch: 25,
+          total_upfront_amount: 325,
+          transferable_liquid_balance: 0,
+          restricted_starter_claim_balance: 0,
+          auto_restricted_starter_claim_amount: 325,
+          eligible_claim_balance: 325,
+          release_cooldown_epochs: 2,
+          grace_epochs: 4,
+          idle_warning_epochs: 8,
+          forced_idle_reclaim_epochs: 10,
+          forced_reclaim_penalty_bps: 2000,
+        },
+        owned_claims: [],
+      },
+    },
+  });
+}
+
 function sampleHostedPublicJoinAccess(overrides = {}) {
   return {
     deployment_mode: "hosted_public_join",
@@ -592,6 +644,20 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getAllByText("Accepted Intent").length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText("Next Step").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Actions Not Exposed On This Page")).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("surfaces the first agent claim entry from gameplay snapshot", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleAgentClaimSnapshot(),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(stagePanel).toBeTruthy();
+    expect(within(stagePanel).getByText("Agent Claim")).toBeInTheDocument();
+    expect(within(stagePanel).getByLabelText("Target Agent")).toHaveValue("agent-claim-target");
+    expect(within(stagePanel).getByRole("button", { name: "Claim Agent" })).toBeInTheDocument();
+    expect(within(stagePanel).getByText("claimer=agent-0")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("eligible=325")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("forces goal execution blocked when the empty-entity guard trips", async () => {

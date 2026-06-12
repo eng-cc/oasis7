@@ -79,6 +79,7 @@ const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
 const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
+const LOCAL_MOCK_PROVIDER_BACKEND: &str = "provider_local_mock";
 const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
@@ -149,6 +150,7 @@ struct ViewerAuthBootstrap {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {
     deployment_mode: String,
+    allow_trusted_local_playtest: bool,
     scenario: String,
     live_bind: String,
     web_bind: String,
@@ -156,6 +158,7 @@ struct CliOptions {
     viewer_port: u16,
     viewer_static_dir: String,
     with_llm: bool,
+    auto_play: bool,
     agent_decision_source: String,
     agent_provider_backend: String,
     agent_provider_contract: String,
@@ -190,6 +193,7 @@ impl Default for CliOptions {
     fn default() -> Self {
         Self {
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
+            allow_trusted_local_playtest: false,
             scenario: DEFAULT_SCENARIO.to_string(),
             live_bind: DEFAULT_LIVE_BIND.to_string(),
             web_bind: DEFAULT_WEB_BIND.to_string(),
@@ -197,6 +201,7 @@ impl Default for CliOptions {
             viewer_port: DEFAULT_VIEWER_PORT,
             viewer_static_dir: DEFAULT_VIEWER_STATIC_DIR.to_string(),
             with_llm: true,
+            auto_play: false,
             agent_decision_source: PROVIDER_BACKED_DECISION_SOURCE.to_string(),
             agent_provider_backend: LOCAL_BRIDGE_PROVIDER_BACKEND.to_string(),
             agent_provider_contract: WORLDSIM_PROVIDER_CONTRACT.to_string(),
@@ -985,14 +990,19 @@ fn canonical_agent_decision_source(raw: &str) -> &'static str {
 fn validate_agent_provider_backend(raw: &str) -> Result<(), String> {
     match raw.trim() {
         LOCAL_BRIDGE_PROVIDER_BACKEND
+        | LOCAL_MOCK_PROVIDER_BACKEND
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
-        _ => Err("--agent-provider-backend must be provider_local_bridge".to_string()),
+        _ => Err(
+            "--agent-provider-backend must be provider_local_bridge or provider_local_mock"
+                .to_string(),
+        ),
     }
 }
 
 fn canonical_agent_provider_backend(raw: &str) -> &'static str {
     match raw.trim() {
+        LOCAL_MOCK_PROVIDER_BACKEND => LOCAL_MOCK_PROVIDER_BACKEND,
         LOCAL_BRIDGE_PROVIDER_BACKEND
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => LOCAL_BRIDGE_PROVIDER_BACKEND,

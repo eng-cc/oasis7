@@ -12,6 +12,19 @@ favicon.ico favicon.ico
 EOF
 }
 
+viewer_web_dist_required_files() {
+  cat <<'EOF'
+index.html
+viewer.html
+software_safe.html
+viewer.js
+software_safe.js
+software_safe_first_agent_claim_evidence.html
+favicon.ico
+pixel-world-bridge/pixel_world_bridge.js
+EOF
+}
+
 viewer_web_dist_manifest_name() {
   printf '%s\n' '.oasis7-viewer-dist-manifest.json'
 }

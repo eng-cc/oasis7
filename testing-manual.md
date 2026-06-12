@@ -385,7 +385,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 模式总口径（`PRD-CORE-009`）：
   - `viewer` / `pure_api` 是当前正式玩家访问模式，分别对应默认 Web 入口和纯接口正式入口；`software_safe` 仅保留为 `viewer` 的兼容 alias。
   - `pure_api` 的正式游玩与 headed Web/UI 一样，默认要求 active LLM access；禁用 LLM 后只能做 blocked/observer-debug 诊断，不再计入正式可玩性证据。
-  - `player_parity` / `headless_agent` 是 agent provider 的 execution lane；当前 Local Provider provider-backed 主口径必须写成 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`，远程托管 bridge 则必须显式写成 `agent_provider_transport=remote_https`，`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias，这些字段都不构成额外玩家访问模式。
+  - `player_parity` / `headless_agent` 是 agent provider 的 execution lane；当前 Local Provider provider-backed 主口径必须写成 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`，远程托管 bridge 则必须显式写成 `agent_provider_transport=remote_https`，`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias，这些字段都不构成额外玩家访问模式。仅做本地 plumbing / UI 闭环时可使用 `provider_local_mock` deterministic loopback bridge；它不调用 LLM、不计费、不限额，但不能替代真实 LLM / parity / release playability evidence。
   - repo-owned `remote_https` 参考装配当前采用 `oasis7_provider_local_bridge` + `scripts/provider-remote-https/letai_provider_cli.py` + `nginx` HTTPS 反代；操作步骤见 `doc/world-runtime/runtime/provider-remote-https-bridge-operator-runbook.md`。
   - 任何 QA / release / playability 结论都应先标明玩家访问模式，再补充 execution lane；不得把 `headless_agent` 直接当成“第三种入口”。
 - `oasis7_viewer_live` / Viewer 页面：默认使用 `agent-browser` 驱动页面与采集证据；当 `renderMode=viewer`（或兼容 alias `software_safe`）且带 viewer auth bootstrap 时，允许继续验证选中 Agent 的最小 `prompt/chat` 闭环。
@@ -456,6 +456,11 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 sna
 ```
   - active-LLM 预检：
     `run-launcher-stack.sh` 现在会在启动 launcher 前先跑一次 active LLM provider probe，复用同一套 `config.toml` / `OASIS7_LLM_*` 配置，并同时验证 Responses hello 文本响应与 required tool-call 合约；若 provider/model/auth/base URL 当前不可用，或模型能回文本但不能稳定返回 tool call，会直接 fail-fast，不再等到首个 `step` 才暴露。需要故意保留“stack 可启动但 formal lane 在首步 blocked”的负向验证时，显式加 `--skip-llm-provider-preflight`。
+    若本地只验证 provider-backed plumbing，可先启动 `oasis7_provider_local_bridge --mode mock`，再用 `run-launcher-stack.sh --agent-provider-lane local-mock` 指向 deterministic `provider_local_mock`。
+    若本地需要 builtin LLM 直连验证，`scripts/with-letai-llm-config.sh` 只适用于已经包含 chat-completions/Responses-compatible `token_key` / `api_key` 的配置；不要把只有 `Doc` 和平台管理 `Key` 的文件直接当 inference token 使用。platform-only 配置应先通过 `scripts/ensure-letai-local-token-config.sh` 或 `scripts/run-local-letai-game-test.sh` 规范化成临时 project token config；不得把 raw key、生成的 `letai-local-token.env`、或其它 token config 写入日志、仓库文件或 public evidence。
+    LetAI remote provider bridge 参考装配走 `/chat/completions`，与 builtin LLM 的 Responses preflight 不是同一协议；本地复现云上 provider path 时先跑 `scripts/check-letai-chat-completions.sh` 验证 token，再用 `scripts/run-local-letai-provider-bridge.sh` 启动 `127.0.0.1:5841` 的真实 provider bridge。
+    常规本地真实 LLM 游戏测试可直接跑 `scripts/run-local-letai-game-test.sh`；它默认优先读取 `OASIS7_LETAI_TOKEN_CONFIG_PATH` 或 `/Users/scc/Documents/keys/letai-token-local.txt`，再回退到 `/Users/scc/Documents/keys/letai.txt`，设置本地代理默认值，验证 LetAI chat-completions，后台启动 `127.0.0.1:5841` bridge，跑一次 provider contract smoke，再启动 `run-launcher-stack.sh` 指向该 bridge；额外 launcher 参数放在 `--` 之后。该 wrapper 默认启用 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1`，用于本地 provider-backed playtest 中放行聊天输入与反馈展示；真实 NPC decision 仍走 LetAI provider bridge。若要验证严格 provider-backed 生产面（direct agent chat 未支持），传 `--no-chat-echo`。
+    本地真实 provider bridge 默认在上游返回 `insufficient_user_quota` 且同时存在 `OASIS7_REMOTE_LLM_PLATFORM_KEY` / `OASIS7_REMOTE_LLM_PLATFORM_USER_ID` 时按 `$0.1`（`quota=50000`）自动充值；这是 paid real-provider 行为。充值触发按 chat request 发生，随后使用有限次数延迟重试来等待 LetAI 余额更新可见，而不是全局每次运行只充值一次；没有这些管理面字段时不会自动充值，仍应把 quota error 作为失败证据。
 
 ### S7：场景矩阵回归套件（L1 + L4）
 ```bash

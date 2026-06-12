@@ -22,8 +22,14 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg("--chain-status-bind")
             .arg(options.chain_status_bind.as_str());
     }
+    if options.auto_play {
+        command.arg("--auto-play");
+    }
     if options.with_llm {
         command.arg("--llm");
+        if oasis7::viewer::runtime_agent_chat_echo_enabled_from_env() {
+            command.arg("--agent-chat-echo");
+        }
         apply_viewer_live_env_overrides(
             &mut command,
             options,
@@ -64,7 +70,7 @@ pub(super) fn apply_viewer_live_env_overrides(
         );
         command.env(
             VIEWER_AGENT_PROVIDER_BACKEND_ENV,
-            LOCAL_BRIDGE_PROVIDER_BACKEND,
+            options.agent_provider_backend.as_str(),
         );
         command.env(
             VIEWER_AGENT_PROVIDER_CONTRACT_ENV,

@@ -38,6 +38,7 @@ const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
 const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
+const LOCAL_MOCK_PROVIDER_BACKEND: &str = "provider_local_mock";
 const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
@@ -212,6 +213,7 @@ impl RuntimeLlmSidecar {
 
     pub(in crate::viewer::runtime_live) fn supports_agent_chat(&self) -> bool {
         !env_requests_provider_backend()
+            || super::control_plane::runtime_agent_chat_echo_enabled_from_env()
     }
 
     pub(in crate::viewer::runtime_live) fn refresh_provider_check_snapshot(&mut self) {

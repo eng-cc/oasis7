@@ -2,10 +2,9 @@ use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{
     apply_viewer_live_env_overrides, build_game_url, build_oasis7_chain_runtime_args,
@@ -20,20 +19,25 @@ use super::{
     DEFAULT_AGENT_PROVIDER_PROFILE, DEFAULT_AGENT_PROVIDER_URL, DEFAULT_CHAIN_NODE_ID,
     DEFAULT_CHAIN_STATUS_BIND, DEFAULT_DEPLOYMENT_MODE, DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS,
     DEFAULT_LIVE_BIND, DEFAULT_SCENARIO, DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV,
-    LLM_TIMEOUT_MS_ENV, LOCAL_BRIDGE_PROVIDER_BACKEND, LOOPBACK_HTTP_PROVIDER_TRANSPORT,
-    PROVIDER_BACKED_DECISION_SOURCE, VIEWER_AGENT_DECISION_SOURCE_ENV,
-    VIEWER_AGENT_EXECUTION_LANE_ENV, VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
-    VIEWER_AGENT_PROVIDER_BACKEND_ENV, VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
-    VIEWER_AGENT_PROVIDER_CONTRACT_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV,
-    VIEWER_AGENT_PROVIDER_PROFILE_ENV, VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
-    VIEWER_AGENT_PROVIDER_URL_ENV, VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV,
-    VIEWER_AUTH_PUBLIC_KEY_ENV, VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
+    LLM_TIMEOUT_MS_ENV, LOCAL_BRIDGE_PROVIDER_BACKEND, LOCAL_MOCK_PROVIDER_BACKEND,
+    LOOPBACK_HTTP_PROVIDER_TRANSPORT, PROVIDER_BACKED_DECISION_SOURCE,
+    VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_EXECUTION_LANE_ENV,
+    VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV, VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+    VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV, VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+    VIEWER_AGENT_PROVIDER_MODE_ENV, VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+    VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, VIEWER_AGENT_PROVIDER_URL_ENV,
+    VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
+    VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
 };
 use oasis7::launcher_bootstrap_peers::DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS;
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7::simulator::{WorldConfig, WorldModel, WorldSnapshot};
 use oasis7::viewer::{ViewerRequest, ViewerResponse, VIEWER_PROTOCOL_VERSION};
 use oasis7_proto::storage_profile::StorageProfile;
+
+#[path = "viewer_static_dir_tests.rs"]
+mod viewer_static_dir_tests;
+use viewer_static_dir_tests::make_temp_dir;
 
 fn assert_removed_old_brand_viewer_auth_env_absent(text: &str) {
     assert!(!text.contains(removed_old_brand_viewer_auth_bootstrap_object().as_str()));
@@ -176,6 +180,7 @@ fn parse_options_accepts_overrides() {
             "--chain-node-validator",
             "chain-a:55",
             "--with-llm",
+            "--auto-play",
             "--agent-decision-source",
             "provider_backed",
             "--agent-provider-backend",
@@ -207,6 +212,7 @@ fn parse_options_accepts_overrides() {
     assert_eq!(options.viewer_host, "0.0.0.0");
     assert_eq!(options.viewer_port, 4777);
     assert_eq!(options.viewer_static_dir, "dist");
+    assert!(options.auto_play);
     assert_eq!(options.chain_status_bind, "127.0.0.1:6331");
     assert_eq!(options.chain_node_id, "chain-a");
     assert_eq!(options.chain_network_tier_manifest, "");
@@ -292,6 +298,38 @@ fn parse_options_accepts_remote_https_provider_transport() {
 
     assert_eq!(options.agent_provider_transport, "remote_https");
     assert_eq!(options.agent_provider_url, "https://provider.example");
+}
+
+#[test]
+fn parse_options_accepts_local_mock_provider_backend() {
+    let options = parse_options(
+        [
+            "--with-llm",
+            "--agent-decision-source",
+            "provider_backed",
+            "--agent-provider-backend",
+            "provider_local_mock",
+            "--agent-provider-contract",
+            "worldsim_provider_v1",
+            "--agent-provider-transport",
+            "loopback_http",
+            "--agent-provider-url",
+            "http://127.0.0.1:5841",
+            "--agent-provider-connect-timeout-ms",
+            "3000",
+            "--agent-provider-profile",
+            "oasis7_p0_low_freq_npc",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+
+    assert_eq!(options.agent_provider_backend, LOCAL_MOCK_PROVIDER_BACKEND);
+    assert_eq!(
+        options.agent_provider_transport,
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT
+    );
+    assert_eq!(options.agent_provider_url, DEFAULT_AGENT_PROVIDER_URL);
 }
 
 #[test]
@@ -455,6 +493,57 @@ fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_buil
 }
 
 #[test]
+fn provider_backed_viewer_live_env_preserves_local_mock_backend() {
+    let mut options = CliOptions::default();
+    options.agent_decision_source = PROVIDER_BACKED_DECISION_SOURCE.to_string();
+    options.agent_provider_backend = LOCAL_MOCK_PROVIDER_BACKEND.to_string();
+    options.agent_provider_contract = WORLDSIM_PROVIDER_CONTRACT.to_string();
+    options.agent_provider_transport = LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string();
+    options.agent_provider_url = "http://127.0.0.1:5841".to_string();
+    let mut command = Command::new("echo");
+
+    apply_viewer_live_env_overrides(&mut command, &options, false, false);
+
+    assert_eq!(
+        command_env_value(&command, VIEWER_AGENT_DECISION_SOURCE_ENV),
+        Some(Some(PROVIDER_BACKED_DECISION_SOURCE.to_string()))
+    );
+    assert_eq!(
+        command_env_value(&command, VIEWER_AGENT_PROVIDER_BACKEND_ENV),
+        Some(Some(LOCAL_MOCK_PROVIDER_BACKEND.to_string()))
+    );
+}
+
+#[test]
+fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
+    env::set_var("OASIS7_RUNTIME_AGENT_CHAT_ECHO", "1");
+    let command = build_oasis7_viewer_live_command(
+        Path::new("/bin/echo"),
+        &CliOptions::default(),
+        false,
+        false,
+    );
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    assert!(args.iter().any(|arg| arg == "--agent-chat-echo"));
+    env::remove_var("OASIS7_RUNTIME_AGENT_CHAT_ECHO");
+}
+
+#[test]
+fn build_viewer_live_command_wires_auto_play_flag() {
+    let mut options = CliOptions::default();
+    options.auto_play = true;
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    assert!(args.iter().any(|arg| arg == "--auto-play"));
+}
+
+#[test]
 fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
     let mut options = CliOptions::default();
     options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
@@ -493,6 +582,30 @@ fn parse_options_rejects_unknown_deployment_mode() {
     let err = parse_options(["--deployment-mode", "invalid"].into_iter())
         .expect_err("invalid deployment mode should fail");
     assert!(err.contains("hosted_public_join"));
+}
+
+#[test]
+fn parse_options_rejects_trusted_local_playtest_without_explicit_allow() {
+    let err = parse_options(["--deployment-mode", "trusted_local_only"].into_iter())
+        .expect_err("trusted local playtest should require an explicit local flag");
+    assert!(err.contains("trusted_local_only"));
+    assert!(err.contains("hosted_public_join"));
+}
+
+#[test]
+fn parse_options_accepts_trusted_local_playtest_with_explicit_allow() {
+    let options = parse_options(
+        [
+            "--deployment-mode",
+            "trusted_local_only",
+            "--allow-trusted-local-playtest",
+        ]
+        .into_iter(),
+    )
+    .expect("explicit local playtest flag should allow trusted local mode");
+    assert_eq!(options.deployment_mode, "trusted_local_only");
+    assert!(options.allow_trusted_local_playtest);
+    assert!(options.chain_enabled);
 }
 
 #[test]
@@ -1073,92 +1186,4 @@ fn hosted_public_join_disables_viewer_auth_bootstrap_resolution() {
 
     assert!(auth.is_none());
     let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn resolve_viewer_static_dir_with_override_prefers_env_for_default_static_dir() {
-    let override_dir = make_temp_dir("viewer_static_override");
-    let override_raw = override_dir.to_string_lossy().to_string();
-
-    let resolved = resolve_viewer_static_dir_with_override(
-        DEFAULT_VIEWER_STATIC_DIR,
-        Some((override_raw.as_str(), GAME_STATIC_DIR_ENV)),
-    )
-    .expect("resolve should succeed");
-
-    assert_eq!(resolved, override_dir);
-    let _ = fs::remove_dir_all(override_dir);
-}
-
-#[test]
-fn resolve_viewer_static_dir_with_override_keeps_explicit_path_priority() {
-    let explicit_dir = make_temp_dir("viewer_static_explicit");
-    let override_dir = make_temp_dir("viewer_static_override_ignored");
-    let explicit_raw = explicit_dir.to_string_lossy().to_string();
-    let override_raw = override_dir.to_string_lossy().to_string();
-
-    let resolved = resolve_viewer_static_dir_with_override(
-        explicit_raw.as_str(),
-        Some((override_raw.as_str(), GAME_STATIC_DIR_ENV)),
-    )
-    .expect("resolve should succeed");
-
-    assert_eq!(resolved, explicit_dir);
-    let _ = fs::remove_dir_all(explicit_dir);
-    let _ = fs::remove_dir_all(override_dir);
-}
-
-#[test]
-fn resolve_viewer_static_dir_with_override_rejects_missing_env_dir() {
-    let missing_path = make_missing_temp_path("viewer_static_missing_env");
-    let missing_raw = missing_path.to_string_lossy().to_string();
-
-    let err = resolve_viewer_static_dir_with_override(
-        DEFAULT_VIEWER_STATIC_DIR,
-        Some((missing_raw.as_str(), GAME_STATIC_DIR_ENV)),
-    )
-    .expect_err("missing override path should fail");
-
-    assert!(err.contains(GAME_STATIC_DIR_ENV));
-    assert!(err.contains("not found"));
-}
-
-#[test]
-fn viewer_dev_dist_candidates_only_return_oasis7_path() {
-    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let candidates = viewer_dev_dist_candidates();
-
-    assert_eq!(
-        candidates,
-        vec![repo_root.join("oasis7_viewer").join("dist")]
-    );
-}
-
-fn make_temp_dir(label: &str) -> PathBuf {
-    let mut path = env::temp_dir();
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time")
-        .as_nanos();
-    path.push(format!(
-        "oasis7_launcher_test_{label}_{}_{}",
-        std::process::id(),
-        stamp
-    ));
-    fs::create_dir_all(&path).expect("create temp dir");
-    path
-}
-
-fn make_missing_temp_path(label: &str) -> PathBuf {
-    let mut path = env::temp_dir();
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time")
-        .as_nanos();
-    path.push(format!(
-        "oasis7_launcher_missing_{label}_{}_{}",
-        std::process::id(),
-        stamp
-    ));
-    path
 }

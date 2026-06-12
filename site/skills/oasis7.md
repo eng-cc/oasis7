@@ -103,6 +103,84 @@ Run the local bridge that exposes world-simulator provider endpoints:
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --provider-agent oasis7_provider_agent
 ```
 
+For no-quota/no-billing local plumbing tests, start the deterministic mock bridge
+instead. It exposes the same loopback HTTP contract, does not call provider CLI
+or an LLM, and must not be used as real LLM/playability evidence:
+
+```bash
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --mode mock
+```
+
+For direct builtin-LLM local runs, `with-letai-llm-config.sh` only works with a
+config that already contains a chat-completions/Responses-compatible
+`token_key` / `api_key`. Do not point this direct wrapper at a platform-only
+`Key` file and expect inference to work:
+
+```bash
+./scripts/with-letai-llm-config.sh -- ./scripts/check-active-llm-provider.sh --pretty
+./scripts/with-letai-llm-config.sh -- ./scripts/run-launcher-stack.sh --agent-decision-source builtin_llm
+```
+
+If the local file only contains a documentation `Doc` URL plus a management
+platform `Key`, use `run-local-letai-game-test.sh` or
+`ensure-letai-local-token-config.sh` so the platform key is normalized into a
+temporary project token config first. The doc URL is not used as the model
+endpoint, and generated `letai-local-token.env` files are secrets.
+
+LetAI's remote provider bridge path uses chat completions, not the builtin
+OpenAI Responses preflight. To test the same path locally, first validate the
+token:
+
+```bash
+./scripts/check-letai-chat-completions.sh
+```
+
+If that succeeds, start a local real provider bridge in another terminal or in
+the background. The game still connects to `http://127.0.0.1:5841`; the bridge
+process runs in the foreground and calls LetAI upstream:
+
+```bash
+./scripts/run-local-letai-provider-bridge.sh
+# In another terminal, or after backgrounding the bridge:
+./scripts/run-launcher-stack.sh --agent-provider-lane local
+```
+
+For the usual local real-LLM gameplay test, use the one-command wrapper instead.
+It sets the local proxy defaults, validates chat-completions, starts the bridge,
+runs a provider contract smoke, and launches the game against `127.0.0.1:5841`:
+
+```bash
+./scripts/run-local-letai-game-test.sh
+```
+
+The wrapper prefers `OASIS7_LETAI_TOKEN_CONFIG_PATH`, then
+`/Users/scc/Documents/keys/letai-token-local.txt`, then
+`/Users/scc/Documents/keys/letai.txt`. A token config must contain a real
+project `token_key`; the platform `Key` from `letai.txt` is only for management
+APIs and dynamic token provisioning.
+
+By default the wrapper also enables `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` so the
+local provider-backed playtest can accept chat input and show chat feedback while
+NPC decisions still run through the real LetAI provider bridge. Disable this
+with `--no-chat-echo` when validating the stricter provider-backed production
+surface where direct agent chat is not yet supported.
+
+Pass extra launcher flags after `--`:
+
+```bash
+./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
+```
+
+For local real-provider runs, the LetAI wrapper can automatically top up quota
+when the upstream returns `insufficient_user_quota`. The local bridge defaults to
+`--auto-topup-usd 0.1`. This is paid real-provider behavior: the CLI may top up
+once per quota-failed chat request, then use bounded delayed retries so LetAI's
+balance update can become visible. The top-up only runs when the environment
+also provides `OASIS7_REMOTE_LLM_PLATFORM_KEY` and
+`OASIS7_REMOTE_LLM_PLATFORM_USER_ID`; otherwise quota errors remain visible.
+Do not attach generated token config files such as `letai-local-token.env` to
+public evidence or logs.
+
 Expected local provider URL:
 
 - `http://127.0.0.1:5841`
@@ -251,3 +329,4 @@ When using this skill:
 - state which process provides `127.0.0.1:18789` and which provides `127.0.0.1:5841`
 - distinguish runtime agent workspace/profile from repo documentation surfaces
 - distinguish downloaded release bundle from repo-backed bridge/smoke tooling
+- distinguish deterministic `provider_local_mock` evidence from real `provider_local_bridge` LLM evidence

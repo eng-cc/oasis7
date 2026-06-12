@@ -37,7 +37,7 @@ struct ResolvedAgentChatIntent {
     intent_seq: u64,
 }
 
-pub(super) fn runtime_agent_chat_echo_enabled_from_env() -> bool {
+pub fn runtime_agent_chat_echo_enabled_from_env() -> bool {
     std::env::var(RUNTIME_AGENT_CHAT_ECHO_ENV)
         .ok()
         .map(|value| {
@@ -406,7 +406,7 @@ impl ViewerRuntimeLiveServer {
                 agent_id: Some(agent_id),
             });
         }
-        if !self.llm_sidecar.supports_agent_chat() {
+        if !self.supports_agent_chat() {
             return Err(AgentChatError {
                 code: "agent_provider_chat_unsupported".to_string(),
                 message:
@@ -483,7 +483,7 @@ impl ViewerRuntimeLiveServer {
             player_id.as_str(),
             public_key.as_deref(),
         )?;
-        let chat_echo_enabled = runtime_agent_chat_echo_enabled_from_env();
+        let chat_echo_enabled = self.config.agent_chat_echo_enabled;
         match self.llm_sidecar.push_chat_message(
             &self.world,
             &self.snapshot_config,
@@ -493,7 +493,10 @@ impl ViewerRuntimeLiveServer {
             Ok(()) => {
                 self.llm_sidecar.request_decision();
             }
-            Err(error) if chat_echo_enabled && error.code == "llm_init_failed" => {}
+            Err(error)
+                if chat_echo_enabled
+                    && (error.code == "llm_init_failed"
+                        || error.code == "agent_provider_chat_unsupported") => {}
             Err(error) => return Err(error),
         }
         self.enqueue_agent_chat_echo_event_if_enabled(agent_id.as_str(), message.as_str());
@@ -839,7 +842,7 @@ impl ViewerRuntimeLiveServer {
     }
 
     fn enqueue_agent_chat_echo_event_if_enabled(&mut self, agent_id: &str, message: &str) {
-        if !runtime_agent_chat_echo_enabled_from_env() {
+        if !self.config.agent_chat_echo_enabled {
             return;
         }
         let Some(agent) = self.world.state().agents.get(agent_id) else {

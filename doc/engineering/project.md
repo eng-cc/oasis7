@@ -204,6 +204,7 @@
 - [x] default-subagent-model (PRD-ENGINEERING-021) [test_tier_required]: 将专业角色 subagent slice 的默认模型配置写入 workflow 规则，当前具体值以 workflow source-of-truth 的 `Default subagent runtime` 为准，并要求非默认覆盖必须在 slice contract 记录原因。 Trace: .pm/tasks/task_4a83cec640514c02bb839b020e5594ad.yaml
 - [x] project-health-tech-debt (PRD-ENGINEERING-021/031) [test_tier_required]: 收口 repository health 审计发现的 workflow/PM 技术债，覆盖专业 slice 证据写入口径、绝对 worktree hint 绑定、signal ID 并发安全、workflow changelog 与 self-evolution 项目状态漂移，并补对应 smoke 覆盖。 Trace: .pm/tasks/task_d08728720f8649d0bceeccacf2cd10e4.yaml
 - [x] historical-task-lint-claim-hardening (PRD-ENGINEERING-021) [test_tier_required]: 修复历史 task lint 回弹根因，禁止 closed `done/deferred` task 的完成 claim evidence 被后续非完成 claim 覆盖，并用 PM smoke 覆盖 closeout 后 `ready_for_pr` 拒绝场景；同时只修复三处当前 lint 失败的历史 task evidence。 Trace: .pm/tasks/task_94a136dd2cc7472da1790c2ddd75bb28.yaml
+- [x] local-letai-playtest-bridge (PRD-ENGINEERING-021) [test_tier_required]: 为本地真实 LLM 试玩链路收口 trusted-local 启动脚本、LetAI 配置规范化、quota/topup 诊断、viewer dist contract 与本地 runbook，支持开发者用单命令启动可试玩本地栈。 Trace: .pm/tasks/task_0820814da7d849159673dc3fece649e2.yaml
 - [ ] required-gate-runtime-support-coverage (PRD-ENGINEERING-021) [test_tier_required]: 让 GitHub `required-gate` 在 planner 命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时实际执行 `oasis7_node`、`oasis7_net` 与 `oasis7_net --features libp2p` support tests，并同步对齐 `prepare-task-pr` 推荐命令与 `testing-manual` 口径。 Trace: .pm/tasks/task_ec27ba7d019549d4b4692bd648a1cf09.yaml
 
 ## File Structure / Affected Paths

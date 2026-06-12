@@ -35,7 +35,7 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
     .unwrap_or_else(|| LOCAL_BRIDGE_PROVIDER_BACKEND.to_string());
     let Some(_) = canonical_agent_provider_backend(backend.as_str()) else {
         return Err(format!(
-            "unsupported agent provider backend `{backend}`; expected provider_local_bridge"
+            "unsupported agent provider backend `{backend}`; expected provider_local_bridge or provider_local_mock"
         ));
     };
     let contract = named_env_var_any(&[
@@ -187,6 +187,7 @@ fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {
 
 fn canonical_agent_provider_backend(raw: &str) -> Option<&'static str> {
     match raw.trim() {
+        LOCAL_MOCK_PROVIDER_BACKEND => Some(LOCAL_MOCK_PROVIDER_BACKEND),
         LOCAL_BRIDGE_PROVIDER_BACKEND
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(LOCAL_BRIDGE_PROVIDER_BACKEND),

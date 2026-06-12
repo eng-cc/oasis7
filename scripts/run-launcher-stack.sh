@@ -12,9 +12,12 @@ VIEWER_PORT="4173"
 LIVE_BIND_ADDR="127.0.0.1:5023"
 WEB_BRIDGE_ADDR="127.0.0.1:5011"
 ENABLE_LLM="1"
+AUTO_PLAY="${OASIS7_RUNTIME_AUTO_PLAY:-0}"
 SCENARIO="llm_bootstrap"
 VIEWER_STATIC_DIR="web"
 CHAIN_ENABLED="1"
+DEPLOYMENT_MODE="${OASIS7_DEPLOYMENT_MODE:-hosted_public_join}"
+ALLOW_TRUSTED_LOCAL_PLAYTEST="${OASIS7_ALLOW_TRUSTED_LOCAL_PLAYTEST:-0}"
 CHAIN_NODE_ID=""
 CHAIN_STATUS_BIND_ADDR=""
 BUNDLE_DIR=""
@@ -37,6 +40,7 @@ AGENT_PROVIDER_PROFILE="${OASIS7_AGENT_PROVIDER_PROFILE:-oasis7_p0_low_freq_npc}
 AGENT_EXECUTION_LANE="${OASIS7_AGENT_EXECUTION_LANE:-headless_agent}"
 AGENT_PROVIDER_PROD_URL="${OASIS7_AGENT_PROVIDER_PROD_URL:-https://t2t.oasis7.tech}"
 AGENT_PROVIDER_TEST_URL="${OASIS7_AGENT_PROVIDER_TEST_URL:-}"
+PRINT_AGENT_PROVIDER_CONFIG="0"
 
 usage() {
   cat <<'USAGE'
@@ -59,6 +63,9 @@ Options:
   --viewer-port <port>     Viewer HTTP port (default: 4173)
   --live-bind <addr:port>  oasis7_game_launcher live TCP bind (default: 127.0.0.1:5023)
   --web-bind <addr:port>   WebSocket bridge bind (default: 127.0.0.1:5011)
+  --deployment-mode <mode> hosted_public_join (default) or trusted_local_only with --allow-trusted-local-playtest
+  --allow-trusted-local-playtest
+                           Allow trusted_local_only for local-only playtest stacks
   --viewer-static-dir <p>  Override viewer static dir; source mode defaults to fresh `web`, bundle mode only uses this as an advanced override
   --allow-stale-bundle    Skip workspace freshness guard for --bundle-dir (advanced / explicit override)
   --chain-enable           Enable chain runtime (default)
@@ -74,7 +81,7 @@ Options:
   --agent-decision-source <s>
                            provider_backed (default) or builtin_llm
   --agent-provider-lane <lane>
-                           local (default), test, or prod
+                           local (default), local-mock, test, or prod
   --agent-provider-url <u> Provider bridge URL override for provider_backed mode
   --agent-provider-auth-token <t>
                            Optional provider bridge bearer token, e.g. newapi_user_ref:<user>
@@ -84,6 +91,9 @@ Options:
                            headless_agent (default) or player_parity
   --with-llm               Enable LLM mode (default: enabled; required for gameplay)
   --no-llm                 Negative-path only; this launcher stack now fails fast without LLM
+  --auto-play              Start gameplay/world progression on viewer connection
+  --print-agent-provider-config
+                           Print resolved provider config as JSON and exit
   -h, --help               Show this help
 USAGE
 }
@@ -119,6 +129,14 @@ while [[ $# -gt 0 ]]; do
       WEB_BRIDGE_ADDR="${2:-}"
       shift 2
       ;;
+    --deployment-mode)
+      DEPLOYMENT_MODE="${2:-}"
+      shift 2
+      ;;
+    --allow-trusted-local-playtest)
+      ALLOW_TRUSTED_LOCAL_PLAYTEST="1"
+      shift
+      ;;
     --viewer-static-dir)
       VIEWER_STATIC_DIR="${2:-}"
       VIEWER_STATIC_DIR_EXPLICIT="1"
@@ -146,6 +164,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-llm-provider-preflight)
       SKIP_LLM_PROVIDER_PREFLIGHT="1"
+      shift
+      ;;
+    --print-agent-provider-config)
+      PRINT_AGENT_PROVIDER_CONFIG="1"
       shift
       ;;
     --agent-decision-source)
@@ -196,6 +218,10 @@ while [[ $# -gt 0 ]]; do
       ENABLE_LLM="0"
       shift
       ;;
+    --auto-play)
+      AUTO_PLAY="1"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -208,7 +234,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$VIEWER_HOST" || -z "$VIEWER_PORT" || -z "$LIVE_BIND_ADDR" || -z "$WEB_BRIDGE_ADDR" || -z "$VIEWER_STATIC_DIR" ]]; then
+if [[ -z "$VIEWER_HOST" || -z "$VIEWER_PORT" || -z "$LIVE_BIND_ADDR" || -z "$WEB_BRIDGE_ADDR" || -z "$VIEWER_STATIC_DIR" || -z "$DEPLOYMENT_MODE" ]]; then
   echo "error: empty argument is not allowed" >&2
   exit 1
 fi
@@ -278,6 +304,14 @@ resolve_agent_provider_lane_defaults() {
       AGENT_PROVIDER_TRANSPORT="${AGENT_PROVIDER_TRANSPORT:-loopback_http}"
       AGENT_PROVIDER_URL="${AGENT_PROVIDER_URL:-http://127.0.0.1:5841}"
       ;;
+    local-mock|mock)
+      AGENT_PROVIDER_LANE="local-mock"
+      if [[ -z "${OASIS7_AGENT_PROVIDER_BACKEND:-}" || "$AGENT_PROVIDER_BACKEND" == "provider_local_bridge" ]]; then
+        AGENT_PROVIDER_BACKEND="provider_local_mock"
+      fi
+      AGENT_PROVIDER_TRANSPORT="${AGENT_PROVIDER_TRANSPORT:-loopback_http}"
+      AGENT_PROVIDER_URL="${AGENT_PROVIDER_URL:-http://127.0.0.1:5841}"
+      ;;
     test)
       AGENT_PROVIDER_TRANSPORT="${AGENT_PROVIDER_TRANSPORT:-remote_https}"
       AGENT_PROVIDER_URL="${AGENT_PROVIDER_URL:-$AGENT_PROVIDER_TEST_URL}"
@@ -292,13 +326,36 @@ resolve_agent_provider_lane_defaults() {
       AGENT_PROVIDER_URL="${AGENT_PROVIDER_URL:-$AGENT_PROVIDER_PROD_URL}"
       ;;
     *)
-      echo "error: --agent-provider-lane must be one of local, test, prod; got $AGENT_PROVIDER_LANE" >&2
+      echo "error: --agent-provider-lane must be one of local, local-mock, test, prod; got $AGENT_PROVIDER_LANE" >&2
       exit 1
       ;;
   esac
 }
 
 resolve_agent_provider_lane_defaults
+
+if [[ "$PRINT_AGENT_PROVIDER_CONFIG" == "1" ]]; then
+  python3 - <<PY
+import json
+
+payload = {
+    "deployment_mode": "$DEPLOYMENT_MODE",
+    "allow_trusted_local_playtest": "$ALLOW_TRUSTED_LOCAL_PLAYTEST",
+    "auto_play": "$AUTO_PLAY",
+    "agent_decision_source": "$AGENT_DECISION_SOURCE",
+    "agent_provider_lane": "$AGENT_PROVIDER_LANE",
+    "agent_provider_backend": "$AGENT_PROVIDER_BACKEND",
+    "agent_provider_contract": "$AGENT_PROVIDER_CONTRACT",
+    "agent_provider_transport": "$AGENT_PROVIDER_TRANSPORT",
+    "agent_provider_url": "$AGENT_PROVIDER_URL",
+    "agent_provider_connect_timeout_ms": "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS",
+    "agent_provider_profile": "$AGENT_PROVIDER_PROFILE",
+    "agent_execution_lane": "$AGENT_EXECUTION_LANE",
+}
+print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+PY
+  exit 0
+fi
 
 if [[ -n "$CHAIN_STATUS_BIND_ADDR" ]]; then
   if [[ "$CHAIN_STATUS_BIND_ADDR" != *:* ]]; then
@@ -593,6 +650,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 WORLD_ARGS=(
+  --deployment-mode "$DEPLOYMENT_MODE"
   --scenario "$SCENARIO"
   --live-bind "$LIVE_BIND_ADDR"
   --web-bind "$WEB_BRIDGE_ADDR"
@@ -600,6 +658,9 @@ WORLD_ARGS=(
   --viewer-port "$VIEWER_PORT"
   --no-open-browser
 )
+if [[ "$ALLOW_TRUSTED_LOCAL_PLAYTEST" == "1" ]]; then
+  WORLD_ARGS+=(--allow-trusted-local-playtest)
+fi
 if [[ -n "$RESOLVED_VIEWER_STATIC_DIR" ]]; then
   WORLD_ARGS+=(--viewer-static-dir "$RESOLVED_VIEWER_STATIC_DIR")
 fi
@@ -613,6 +674,9 @@ else
   WORLD_ARGS+=(--chain-disable)
 fi
 WORLD_ARGS+=(--with-llm)
+if [[ "$AUTO_PLAY" == "1" ]]; then
+  WORLD_ARGS+=(--auto-play)
+fi
 WORLD_ARGS+=(
   --agent-decision-source "$AGENT_DECISION_SOURCE"
 )
@@ -708,6 +772,7 @@ INFO
   echo "VIEWER_HOST=$VIEWER_HOST"
   echo "VIEWER_PORT=$VIEWER_PORT"
   echo "CHAIN_ENABLED=$CHAIN_ENABLED"
+  echo "DEPLOYMENT_MODE=$DEPLOYMENT_MODE"
   echo "CHAIN_NODE_ID=$CHAIN_NODE_ID"
   echo "CHAIN_STATUS_BIND_ADDR=$CHAIN_STATUS_BIND_ADDR"
   echo "LAUNCH_MODE=$LAUNCH_MODE"
@@ -764,6 +829,7 @@ SOFTWARE_SAFE_VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mo
   echo "VIEWER_HOST=$VIEWER_HOST"
   echo "VIEWER_PORT=$VIEWER_PORT"
   echo "CHAIN_ENABLED=$CHAIN_ENABLED"
+  echo "DEPLOYMENT_MODE=$DEPLOYMENT_MODE"
   echo "CHAIN_NODE_ID=$CHAIN_NODE_ID"
   echo "CHAIN_STATUS_BIND_ADDR=$CHAIN_STATUS_BIND_ADDR"
   echo "LAUNCH_MODE=$LAUNCH_MODE"

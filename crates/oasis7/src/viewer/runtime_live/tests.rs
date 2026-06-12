@@ -524,7 +524,7 @@ fn runtime_live_run_accepts_probe_while_viewer_session_is_open() {
 fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    std::env::remove_var(RUNTIME_AGENT_CHAT_ECHO_ENV);
     std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
     std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
     std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
@@ -538,7 +538,8 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
         let server = ViewerRuntimeLiveServer::new(
             ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
                 .with_bind_addr(server_addr)
-                .with_decision_mode(ViewerLiveDecisionMode::Llm),
+                .with_decision_mode(ViewerLiveDecisionMode::Llm)
+                .with_agent_chat_echo_enabled(true),
         )
         .expect("create server");
         server.run().expect("run server");
@@ -754,6 +755,14 @@ fn runtime_live_session_play_step_is_interval_gated() {
     assert!(session.should_advance_play_step(Duration::from_millis(40)));
     assert!(!session.should_advance_play_step(Duration::from_millis(40)));
     std::thread::sleep(Duration::from_millis(50));
+    assert!(session.should_advance_play_step(Duration::from_millis(40)));
+}
+
+#[test]
+fn runtime_live_session_auto_play_initializes_playing() {
+    let mut session = RuntimeLiveSession::new_with_playing(true);
+
+    assert!(session.playing);
     assert!(session.should_advance_play_step(Duration::from_millis(40)));
 }
 

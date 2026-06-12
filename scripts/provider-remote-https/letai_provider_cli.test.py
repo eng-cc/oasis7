@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import importlib.util
+import io
 import json
 import os
 import tempfile
 import threading
 import unittest
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -211,6 +213,72 @@ class LetaiProviderCliNewapiStateTests(unittest.TestCase):
                     cli.load_newapi_bridge_state_route("newapi_user_ref:user-2")
         finally:
             os.unlink(state_path)
+
+    def test_topup_retry_waits_for_quota_visibility_window(self):
+        calls = []
+
+        def fake_send_completion_request(request, timeout_ms, use_stream):
+            calls.append(request.full_url)
+            if len(calls) < 3:
+                raise urllib.error.HTTPError(
+                    request.full_url,
+                    403,
+                    "Forbidden",
+                    {},
+                    io.BytesIO(b'{"error":{"code":"insufficient_user_quota"}}'),
+                )
+            return (
+                200,
+                {"choices": [{"message": {"content": "{\"decision\":\"wait\"}"}}]},
+                "{\"decision\":\"wait\"}",
+                {"total_tokens": 5},
+            )
+
+        previous_send = cli.send_completion_request
+        previous_sleep = cli.time.sleep
+        cli.send_completion_request = fake_send_completion_request
+        cli.time.sleep = lambda _seconds: None
+        try:
+            with EnvPatch(
+                OASIS7_REMOTE_LLM_AUTO_TOPUP_RETRY_COUNT="3",
+                OASIS7_REMOTE_LLM_AUTO_TOPUP_RETRY_DELAY_MS="25",
+            ):
+                status_code, _decoded, content, usage = cli.send_completion_request_after_topup(
+                    {"model": "mock-model", "messages": []},
+                    "https://api.example.test/v1",
+                    "token-key",
+                    5000,
+                    False,
+                )
+        finally:
+            cli.send_completion_request = previous_send
+            cli.time.sleep = previous_sleep
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(content, "{\"decision\":\"wait\"}")
+        self.assertEqual(usage["total_tokens"], 5)
+        self.assertEqual(len(calls), 3)
+
+    def test_gateway_call_timeout_is_already_milliseconds(self):
+        params = json.dumps({"message": "choose", "agentId": "agent-1"})
+
+        prompt, timeout_ms, agent_id = cli.parse_gateway_call(
+            [
+                "gateway",
+                "call",
+                "agent",
+                "--params",
+                params,
+                "--timeout",
+                "17000",
+                "--expect-final",
+                "--json",
+            ]
+        )
+
+        self.assertEqual(prompt, "choose")
+        self.assertEqual(timeout_ms, 17000)
+        self.assertEqual(agent_id, "agent-1")
 
 
 if __name__ == "__main__":

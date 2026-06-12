@@ -1,6 +1,5 @@
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
@@ -8,6 +7,8 @@ use tracing::Level;
 use tungstenite::error::ProtocolError;
 use tungstenite::handshake::HandshakeError;
 use tungstenite::protocol::Message;
+#[cfg(test)]
+use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{accept, Error as WsError};
 
 use crate::observability::emit_stderr_or_event;
@@ -98,19 +99,24 @@ impl ViewerWebBridge {
         let upstream = TcpStream::connect(&self.config.upstream_addr)?;
         upstream.set_nodelay(true)?;
         let upstream_reader = upstream.try_clone()?;
+        upstream_reader.set_nonblocking(true)?;
         let upstream_shutdown = upstream.try_clone()?;
         let mut upstream_writer = BufWriter::new(upstream);
-
-        let (tx_from_upstream, rx_from_upstream) = mpsc::channel::<String>();
-        let upstream_reader_thread = thread::spawn(move || {
-            read_upstream_lines(upstream_reader, tx_from_upstream);
-        });
+        let mut upstream_reader = BufReader::new(upstream_reader);
+        let mut upstream_line = String::new();
 
         let session_result = (|| -> Result<(), ViewerWebBridgeError> {
             loop {
                 match websocket.read() {
                     Ok(message) => {
                         if !handle_ws_message(message, &mut upstream_writer, &mut websocket)? {
+                            break;
+                        }
+                        if !drain_upstream_lines(
+                            &mut upstream_reader,
+                            &mut upstream_line,
+                            &mut websocket,
+                        )? {
                             break;
                         }
                     }
@@ -120,14 +126,9 @@ impl ViewerWebBridge {
                     Err(err) => return Err(err.into()),
                 }
 
-                loop {
-                    match rx_from_upstream.try_recv() {
-                        Ok(line) => {
-                            websocket.send(Message::Text(line))?;
-                        }
-                        Err(mpsc::TryRecvError::Empty) => break,
-                        Err(mpsc::TryRecvError::Disconnected) => return Ok(()),
-                    }
+                if !drain_upstream_lines(&mut upstream_reader, &mut upstream_line, &mut websocket)?
+                {
+                    break;
                 }
             }
             Ok(())
@@ -136,7 +137,6 @@ impl ViewerWebBridge {
         // Ensure the cloned reader side is also released; otherwise upstream may keep the
         // first session alive and block subsequent reconnects.
         let _ = upstream_shutdown.shutdown(Shutdown::Both);
-        let _ = upstream_reader_thread.join();
 
         session_result
     }
@@ -218,23 +218,30 @@ fn is_expected_bridge_disconnect(err: &ViewerWebBridgeError) -> bool {
     }
 }
 
-fn read_upstream_lines(stream: TcpStream, tx: mpsc::Sender<String>) {
-    let mut reader = BufReader::new(stream);
-    let mut line = String::new();
+fn drain_upstream_lines(
+    reader: &mut BufReader<TcpStream>,
+    line: &mut String,
+    websocket: &mut tungstenite::WebSocket<TcpStream>,
+) -> Result<bool, ViewerWebBridgeError> {
     loop {
-        line.clear();
-        match reader.read_line(&mut line) {
-            Ok(0) => break,
+        match reader.read_line(line) {
+            Ok(0) => return Ok(false),
             Ok(_) => {
                 let text = line.trim();
                 if text.is_empty() {
+                    line.clear();
                     continue;
                 }
-                if tx.send(text.to_string()).is_err() {
-                    break;
-                }
+                websocket.send(Message::Text(text.to_string().into()))?;
+                line.clear();
             }
-            Err(_) => break,
+            Err(err)
+                if err.kind() == io::ErrorKind::WouldBlock
+                    || err.kind() == io::ErrorKind::TimedOut =>
+            {
+                return Ok(true);
+            }
+            Err(err) => return Err(err.into()),
         }
     }
 }
@@ -242,6 +249,7 @@ fn read_upstream_lines(stream: TcpStream, tx: mpsc::Sender<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
     use std::time::Instant;
     use tungstenite::connect;
 
@@ -435,6 +443,61 @@ mod tests {
         release_first_tx.send(()).expect("release first client");
         first_client.join().expect("join first client");
         second_client.join().expect("join second client");
+        upstream_thread.join().expect("join upstream thread");
+    }
+
+    #[test]
+    fn bridge_preserves_split_upstream_lines() {
+        let upstream_listener = TcpListener::bind("127.0.0.1:0").expect("bind upstream");
+        let upstream_addr = upstream_listener.local_addr().expect("upstream addr");
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind ws listener");
+        let ws_addr = listener.local_addr().expect("ws addr");
+        let (release_upstream_tx, release_upstream_rx) = mpsc::channel::<()>();
+
+        let upstream_thread = thread::spawn(move || {
+            let mut stream = accept_with_timeout(&upstream_listener, Duration::from_secs(2))
+                .expect("accept upstream session");
+            stream
+                .write_all(br#"{"kind":"split""#)
+                .expect("write part one");
+            thread::sleep(Duration::from_millis(60));
+            stream.write_all(br#","ok":true}"#).expect("write part two");
+            stream.write_all(b"\n").expect("write newline");
+            release_upstream_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("release upstream");
+        });
+
+        let client_thread = thread::spawn(move || {
+            let url = format!("ws://{ws_addr}");
+            let (mut client, _) = connect(url.as_str()).expect("connect ws client");
+            match client.get_mut() {
+                MaybeTlsStream::Plain(stream) => stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .expect("set client read timeout"),
+                _ => panic!("test uses a plain ws:// client"),
+            }
+            client
+                .send(Message::Text("hello-upstream".to_string().into()))
+                .expect("send ws payload");
+            match client.read().expect("read split upstream line") {
+                Message::Text(text) => assert_eq!(text.as_str(), r#"{"kind":"split","ok":true}"#),
+                other => panic!("expected text message, got {other:?}"),
+            }
+            release_upstream_tx.send(()).expect("release upstream");
+            client.close(None).expect("close ws client");
+        });
+
+        let bridge = ViewerWebBridge::new(ViewerWebBridgeConfig::new(
+            "127.0.0.1:0",
+            upstream_addr.to_string(),
+        ));
+        let stream = accept_with_timeout(&listener, Duration::from_secs(2))
+            .expect("accept websocket stream");
+        if let Err(err) = bridge.serve_stream(stream) {
+            assert!(is_expected_bridge_disconnect(&err), "{err:?}");
+        }
+        client_thread.join().expect("join client thread");
         upstream_thread.join().expect("join upstream thread");
     }
 

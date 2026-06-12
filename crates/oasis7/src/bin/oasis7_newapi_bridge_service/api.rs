@@ -88,8 +88,8 @@ pub(super) fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest, S
     Ok(HttpRequest { method, path, body })
 }
 
-pub(super) fn write_http_response(
-    stream: &mut TcpStream,
+pub(super) fn write_http_response<W: Write>(
+    stream: &mut W,
     status_code: u16,
     content_type: &str,
     body: &[u8],

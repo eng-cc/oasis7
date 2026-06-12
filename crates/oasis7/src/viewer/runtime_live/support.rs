@@ -15,8 +15,10 @@ impl ViewerRuntimeLiveServerConfig {
             decision_mode: ViewerLiveDecisionMode::Script,
             play_step_interval: Duration::from_millis(800),
             chain_poll_interval: Duration::from_millis(200),
+            auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
         }
     }
 
@@ -28,8 +30,10 @@ impl ViewerRuntimeLiveServerConfig {
             decision_mode: ViewerLiveDecisionMode::Script,
             play_step_interval: Duration::from_millis(800),
             chain_poll_interval: Duration::from_millis(200),
+            auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
         }
     }
 
@@ -77,6 +81,11 @@ impl ViewerRuntimeLiveServerConfig {
         self
     }
 
+    pub fn with_auto_play_on_connect(mut self, enabled: bool) -> Self {
+        self.auto_play_on_connect = enabled;
+        self
+    }
+
     pub fn with_hosted_public_join_mode(mut self, enabled: bool) -> Self {
         self.hosted_public_join_mode = enabled;
         self
@@ -84,6 +93,11 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn with_chain_status_bind(mut self, addr: impl Into<String>) -> Self {
         self.chain_status_bind = Some(addr.into());
+        self
+    }
+
+    pub fn with_agent_chat_echo_enabled(mut self, enabled: bool) -> Self {
+        self.agent_chat_echo_enabled = enabled;
         self
     }
 }
@@ -188,18 +202,25 @@ pub(super) struct RuntimeLiveSession {
     pub(super) next_chain_poll_at: Option<Instant>,
     pub(super) metrics: RunnerMetrics,
     pub(super) transient_play_failures: u8,
+    pub(super) initial_snapshot_sent: bool,
 }
 
 impl RuntimeLiveSession {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
+        Self::new_with_playing(false)
+    }
+
+    pub(super) fn new_with_playing(playing: bool) -> Self {
         Self {
             subscribed: HashSet::new(),
             event_filters: None,
-            playing: false,
+            playing,
             next_play_step_at: None,
             next_chain_poll_at: None,
             metrics: RunnerMetrics::default(),
             transient_play_failures: 0,
+            initial_snapshot_sent: false,
         }
     }
 

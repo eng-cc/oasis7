@@ -13,73 +13,79 @@ fn replication_network_handle_rejects_empty_topic() {
 
 #[test]
 fn runtime_network_replication_respects_topic_isolation() {
-    let dir_a = temp_dir("network-topic-a");
-    let dir_b = temp_dir("network-topic-b");
-    let validators = vec![
-        PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 60,
+    run_test_with_timeout(
+        "runtime_network_replication_respects_topic_isolation",
+        Duration::from_secs(10),
+        || {
+            let dir_a = temp_dir("network-topic-a");
+            let dir_b = temp_dir("network-topic-b");
+            let validators = vec![
+                PosValidator {
+                    validator_id: "node-a".to_string(),
+                    stake: 60,
+                },
+                PosValidator {
+                    validator_id: "node-b".to_string(),
+                    stake: 40,
+                },
+            ];
+            let pos_config =
+                signed_pos_config_with_signer_seeds(validators, &[("node-a", 81), ("node-b", 82)]);
+            let network: Arc<
+                dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+            > = Arc::new(TestInMemoryNetwork::default());
+
+            let config_a = NodeConfig::new("node-a", "world-topic-repl", NodeRole::Sequencer)
+                .expect("config a")
+                .with_tick_interval(Duration::from_millis(10))
+                .expect("tick a")
+                .with_pos_config(pos_config.clone())
+                .expect("pos config a")
+                .with_auto_attest_all_validators(true)
+                .with_replication(signed_replication_config(dir_a.clone(), 81));
+            let config_b = NodeConfig::new("node-b", "world-topic-repl", NodeRole::Observer)
+                .expect("config b")
+                .with_tick_interval(Duration::from_millis(10))
+                .expect("tick b")
+                .with_pos_config(pos_config)
+                .expect("pos config b")
+                .with_allow_local_proposals(false)
+                .with_replication(signed_replication_config(dir_b.clone(), 82));
+
+            let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
+                .with_replication_network(
+                    NodeReplicationNetworkHandle::new(Arc::clone(&network))
+                        .with_topic("aw.world-topic-repl.replication.a")
+                        .expect("topic a"),
+                )
+                .with_replication_network_consensus_enabled(false);
+            let mut runtime_b = NodeRuntime::new(config_b)
+                .with_replication_network(
+                    NodeReplicationNetworkHandle::new(Arc::clone(&network))
+                        .with_topic("aw.world-topic-repl.replication.b")
+                        .expect("topic b"),
+                )
+                .with_replication_network_consensus_enabled(false);
+            runtime_a.start().expect("start a");
+            runtime_b.start().expect("start b");
+            thread::sleep(Duration::from_millis(220));
+            let snapshot_b = runtime_b.snapshot();
+
+            runtime_a.stop().expect("stop a");
+            runtime_b.stop().expect("stop b");
+
+            assert_eq!(
+                snapshot_b.consensus.known_peer_heads, 0,
+                "topic-isolated observer should not learn peer heads: committed_height={} network_committed_height={} last_error={:?}",
+                snapshot_b.consensus.committed_height,
+                snapshot_b.consensus.network_committed_height,
+                snapshot_b.last_error
+            );
+
+            let _ = fs::remove_dir_all(&dir_a);
+            let _ = fs::remove_dir_all(&dir_b);
         },
-        PosValidator {
-            validator_id: "node-b".to_string(),
-            stake: 40,
-        },
-    ];
-    let pos_config =
-        signed_pos_config_with_signer_seeds(validators, &[("node-a", 81), ("node-b", 82)]);
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
-
-    let config_a = NodeConfig::new("node-a", "world-topic-repl", NodeRole::Sequencer)
-        .expect("config a")
-        .with_tick_interval(Duration::from_millis(10))
-        .expect("tick a")
-        .with_pos_config(pos_config.clone())
-        .expect("pos config a")
-        .with_auto_attest_all_validators(true)
-        .with_replication(signed_replication_config(dir_a.clone(), 81));
-    let config_b = NodeConfig::new("node-b", "world-topic-repl", NodeRole::Observer)
-        .expect("config b")
-        .with_tick_interval(Duration::from_millis(10))
-        .expect("tick b")
-        .with_pos_config(pos_config)
-        .expect("pos config b")
-        .with_allow_local_proposals(false)
-        .with_replication(signed_replication_config(dir_b.clone(), 82));
-
-    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
-        .with_replication_network(
-            NodeReplicationNetworkHandle::new(Arc::clone(&network))
-                .with_topic("aw.world-topic-repl.replication.a")
-                .expect("topic a"),
-        )
-        .with_replication_network_consensus_enabled(false);
-    let mut runtime_b = NodeRuntime::new(config_b)
-        .with_replication_network(
-            NodeReplicationNetworkHandle::new(Arc::clone(&network))
-                .with_topic("aw.world-topic-repl.replication.b")
-                .expect("topic b"),
-        )
-        .with_replication_network_consensus_enabled(false);
-    runtime_a.start().expect("start a");
-    runtime_b.start().expect("start b");
-    thread::sleep(Duration::from_millis(220));
-    let snapshot_b = runtime_b.snapshot();
-
-    runtime_a.stop().expect("stop a");
-    runtime_b.stop().expect("stop b");
-
-    assert_eq!(
-        snapshot_b.consensus.known_peer_heads, 0,
-        "topic-isolated observer should not learn peer heads: committed_height={} network_committed_height={} last_error={:?}",
-        snapshot_b.consensus.committed_height,
-        snapshot_b.consensus.network_committed_height,
-        snapshot_b.last_error
     );
-
-    let _ = fs::remove_dir_all(&dir_a);
-    let _ = fs::remove_dir_all(&dir_b);
 }
 
 #[test]
