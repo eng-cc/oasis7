@@ -742,7 +742,10 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent("Renderer Not Attached");
     expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent(/formal gameplay summary/i);
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Mission Map");
-    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Factory Anchor");
+    expect(document.querySelector('[data-focus-minimap="true"]')).not.toHaveTextContent("ref: Factory Anchor");
+    expect(document.querySelector(".pixel-world-focus-fallback-map__reference-marker")).toBeNull();
+    expect(document.querySelector('[data-focus-minimap="true"] .sr-only')).toHaveTextContent("Reference: Factory Anchor");
+    expect(document.querySelector(".pixel-world-focus-fallback-map__node--target")).not.toHaveTextContent("Anchor");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Build smelter mk1");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agent-0");
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("agents=1");

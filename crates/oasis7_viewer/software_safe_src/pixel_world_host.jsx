@@ -1372,6 +1372,11 @@ function PixelWorldFocusMinimapCard(props) {
         <div class="pixel-world-focus-fallback-map__label">
           {tr(props.locale(), "任务地图", "Mission Map")}
         </div>
+        <Show when={primaryLocation()}>
+          <span class="sr-only">
+            {`${tr(props.locale(), "参照", "Reference")}: ${primaryLocation().label || primaryLocation().id}`}
+          </span>
+        </Show>
         <div class="pixel-world-focus-fallback-map__grid" />
         <div class="pixel-world-focus-fallback-map__route" data-routes={props.renderState().links.length} />
         <div class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--target">
@@ -1382,12 +1387,6 @@ function PixelWorldFocusMinimapCard(props) {
           <span>{tr(props.locale(), "Agent", "Agent")}</span>
           <strong>{activeAgent() || tr(props.locale(), "待分配", "Unassigned")}</strong>
         </div>
-        <Show when={primaryLocation()}>
-          <div class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--target">
-            <span>{tr(props.locale(), "锚点", "Anchor")}</span>
-            <strong>{primaryLocation().label || primaryLocation().id}</strong>
-          </div>
-        </Show>
         <Show when={selected()}>
           <div
             class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--selected"
