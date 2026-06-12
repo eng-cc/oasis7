@@ -2,6 +2,11 @@
 
 ## 当前任务
 
+- [ ] STORY-VOLUME-004-CHAPTER-01-CARDS: 第四卷第一章正式章级卡。
+  - Trace: .pm/tasks/task_5119bcacf5d444a8a5cdadb102f190f7.yaml
+  - 范围：`TL-159` 到 `TL-166` / `CH-159` 到 `CH-166`。
+  - 产物文件：`site/story/chapter-cards/volume-04-chapter-01-cards.md`。
+  - 验收命令：`git diff --check && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_5119bcacf5d444a8a5cdadb102f190f7 --phase current`。
 - [ ] STORY-VOLUME-004-ROUTE: 第四卷公共节律路线 scaffold。
   - Trace: .pm/tasks/task_89a34f7f4edd400da91a41aee42b280d.yaml
   - 范围：`TL-159` 到 `TL-198` / `CH-159` 到 `CH-198`。
@@ -16,5 +21,5 @@
 ## 状态
 
 - 更新日期：2026-06-12
-- 当前状态：第四卷公共节律路线已进入 repo-tracked scaffold；第三卷后续路线已完成五章正文、focused review 最小补丁和 route closeout。
-- 当前边界：第四卷 scaffold 从公共节律页、空白优先级栏、低亮维修灯、晚到接入贴、未加场剧场签和没有主入口的排程页推进；不是系统成熟、资源竞争、优先级排名、剧场复刻、温室升级、第二卷旧账补完或第五卷启动。
+- 当前状态：第四卷公共节律路线已进入正式章级卡拆分；第一章 `CH-159` 到 `CH-166` 已从总章节卡草案拆为正式章节卡。
+- 当前边界：第四卷第一章收在公共节律页、空白优先级栏、共享散热小刻度、温室页角、低带宽窄窗、地球端接入贴和未排序窗口夹上；不是系统成熟、资源竞争、优先级排名、第四卷发布会、温室升级或稳定上线证明。
