@@ -183,6 +183,11 @@ grep -Fxq "$ROLE_HINT" < <(sed -n 's/^  - role_name: //p' .pm/registry/roles.yam
 
 SIGNAL_LOCK_DIR=".pm/inbox/signals.lock"
 SIGNAL_LOCK_ACQUIRED=0
+SIGNAL_LOCK_WAIT_SECONDS="${PM_SIGNAL_LOCK_WAIT_SECONDS:-300}"
+if [[ ! "$SIGNAL_LOCK_WAIT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "promote-signal: PM_SIGNAL_LOCK_WAIT_SECONDS must be a positive integer: $SIGNAL_LOCK_WAIT_SECONDS" >&2
+  exit 2
+fi
 release_signal_lock() {
   if [[ "$SIGNAL_LOCK_ACQUIRED" == "1" ]]; then
     rmdir "$SIGNAL_LOCK_DIR" 2>/dev/null || true
@@ -193,9 +198,10 @@ trap release_signal_lock EXIT
 
 acquire_signal_lock() {
   local attempts=0
+  local max_attempts=$((SIGNAL_LOCK_WAIT_SECONDS * 10))
   while ! mkdir "$SIGNAL_LOCK_DIR" 2>/dev/null; do
     attempts=$((attempts + 1))
-    if [[ "$attempts" -ge 100 ]]; then
+    if [[ "$attempts" -ge "$max_attempts" ]]; then
       echo "promote-signal: timed out waiting for signal inbox lock: $SIGNAL_LOCK_DIR" >&2
       exit 1
     fi

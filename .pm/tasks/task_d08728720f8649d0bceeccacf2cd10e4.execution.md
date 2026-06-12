@@ -119,3 +119,12 @@ Example:
 - Expected Result: PR exists for the task branch, with normal CI/watch purpose recorded.
 - Actual Result: PR URL: https://github.com/eng-cc/oasis7/pull/415. PR purpose decision: `normal_pr_ci_watch`; this is not a manual packaging/release CI hold.
 - Blocker / Next Action: push this evidence-only update, then watch PR #415 required checks, mergeability, PR comments, and review threads.
+
+## 2026-06-12 09:59:26 CST / tpm
+- 完成内容: Addressed PR #415 Codex review thread on signal lock wait budget.
+- 遗留事项: Push fix, resolve the review thread, then re-check required checks/mergeability/comments.
+- Action: Increased `promote-signal.sh` lock wait budget from 10 seconds to configurable `PM_SIGNAL_LOCK_WAIT_SECONDS` defaulting to 300 seconds, while preserving a timeout for stale locks and adding positive-integer validation.
+- Validation Command: `bash -n scripts/pm/promote-signal.sh && ./scripts/pm/capture-todo-smoke.sh && ./scripts/pm/lint.sh && git diff --check`; `PM_SIGNAL_LOCK_WAIT_SECONDS=abc ./scripts/pm/capture-todo.sh --source-ref scripts/pm/promote-signal.sh --summary invalid-lock-timeout --json`
+- Expected Result: queued concurrent captures have enough wait budget for normal serialized progress; invalid timeout configuration fails clearly; PM lint and whitespace remain clean.
+- Actual Result: positive path passed (`capture-todo-smoke: OK`, `pm-lint: OK`, `git diff --check` clean); invalid timeout exited with `promote-signal: PM_SIGNAL_LOCK_WAIT_SECONDS must be a positive integer: abc`.
+- Blocker / Next Action: commit/push the review fix and resolve thread `PRRT_kwDORHhWec6I_YgK`.
