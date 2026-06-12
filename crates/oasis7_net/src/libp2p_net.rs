@@ -173,6 +173,10 @@ impl Libp2pNetwork {
         let bootstrap_redial_tx = command_tx.clone();
         let bootstrap_peers = config.bootstrap_peers.clone();
         let bootstrap_redial_peers = bootstrap_peers.clone();
+        let bootstrap_peer_ids: HashSet<PeerId> = bootstrap_peers
+            .iter()
+            .filter_map(|addr| swarm_behaviour::split_peer_id(addr.clone()).0)
+            .collect();
         let peer_record_template = config.peer_record.clone();
         let enable_rendezvous = config.enable_rendezvous
             || peer_record_template
@@ -622,6 +626,7 @@ impl Libp2pNetwork {
                                                 local_peer_id,
                                                 peer_record_template.as_ref(),
                                                 peers.as_slice(),
+                                                &bootstrap_peer_ids,
                                                 &mut pending_peer_record_requests,
                                                 &mut pending_connected_peer_records,
                                                 &mut connected_peer_record_cooldowns,

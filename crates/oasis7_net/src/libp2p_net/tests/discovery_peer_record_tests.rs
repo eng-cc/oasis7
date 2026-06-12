@@ -33,6 +33,7 @@ fn routing_update_requests_peer_record_before_connected_snapshot_exists() {
         ttl_ms: 60_000,
     };
     let peers = Vec::new();
+    let bootstrap_peer_ids = HashSet::from([peer_id]);
     let mut pending_peer_record_requests = HashMap::new();
     let mut pending_connected_peer_records = HashSet::new();
     let mut connected_peer_record_cooldowns = HashMap::new();
@@ -51,6 +52,7 @@ fn routing_update_requests_peer_record_before_connected_snapshot_exists() {
         local_peer_id,
         Some(&template),
         peers.as_slice(),
+        &bootstrap_peer_ids,
         &mut pending_peer_record_requests,
         &mut pending_connected_peer_records,
         &mut connected_peer_record_cooldowns,
@@ -68,6 +70,57 @@ fn routing_update_requests_peer_record_before_connected_snapshot_exists() {
         "routing-only bootstrap peers must be able to start peer-record exchange before the connected peer snapshot is populated"
     );
     assert_eq!(pending_peer_record_requests.len(), 1);
+}
+
+#[test]
+fn routing_update_skips_peer_record_for_unconnected_non_bootstrap_peer() {
+    let keypair = Keypair::generate_ed25519();
+    let local_peer_id = PeerId::from(keypair.public());
+    let peer_id = PeerId::random();
+    let mut swarm = super::super::swarm_behaviour::build_swarm(
+        &keypair,
+        false,
+        true,
+        super::super::wire_bytes::init_shared_wire_byte_counters(),
+    );
+    let mut pending_dht = HashMap::new();
+    let mut pending_discovery_peer_records = HashSet::new();
+    let discovered_peer_records = HashMap::new();
+    let peers = Vec::new();
+    let bootstrap_peer_ids = HashSet::new();
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_connected_peer_records = HashSet::new();
+    let mut connected_peer_record_cooldowns = HashMap::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
+    let event_errors = Arc::new(Mutex::new(Vec::new()));
+    let mut lifecycle_event_errors_at_ms = HashMap::new();
+    let mut lifecycle_event_errors_last_prune_at_ms = None;
+
+    super::super::discovery::handle_routing_updated(
+        &mut swarm,
+        &mut pending_dht,
+        &mut pending_discovery_peer_records,
+        &discovered_peer_records,
+        peer_id,
+        "[/ip4/127.0.0.1/tcp/6831]".to_string(),
+        local_peer_id,
+        None,
+        peers.as_slice(),
+        &bootstrap_peer_ids,
+        &mut pending_peer_record_requests,
+        &mut pending_connected_peer_records,
+        &mut connected_peer_record_cooldowns,
+        &traffic_metrics,
+        &event_errors,
+        &mut lifecycle_event_errors_at_ms,
+        &mut lifecycle_event_errors_last_prune_at_ms,
+        16,
+        1_000,
+        0,
+    );
+
+    assert!(pending_connected_peer_records.is_empty());
+    assert!(pending_peer_record_requests.is_empty());
 }
 
 #[test]

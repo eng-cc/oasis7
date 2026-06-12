@@ -99,7 +99,8 @@ pub(super) fn handle_routing_updated(
     addresses_debug: String,
     local_peer_id: PeerId,
     peer_record_template: Option<&PeerRecord>,
-    _peers: &[PeerId],
+    peers: &[PeerId],
+    bootstrap_peer_ids: &HashSet<PeerId>,
     pending_peer_record_requests: &mut HashMap<
         request_response::OutboundRequestId,
         PendingPeerRecordRequest,
@@ -133,15 +134,17 @@ pub(super) fn handle_routing_updated(
         local_peer_id,
         peer_record_world_id(peer_record_template),
     );
-    maybe_request_connected_peer_record(
-        swarm,
-        pending_peer_record_requests,
-        pending_connected_peer_records,
-        connected_peer_record_cooldowns,
-        event_traffic_metrics,
-        peer,
-        local_peer_id,
-    );
+    if peers.contains(&peer) || bootstrap_peer_ids.contains(&peer) {
+        maybe_request_connected_peer_record(
+            swarm,
+            pending_peer_record_requests,
+            pending_connected_peer_records,
+            connected_peer_record_cooldowns,
+            event_traffic_metrics,
+            peer,
+            local_peer_id,
+        );
+    }
 }
 
 fn peer_record_request_in_cooldown(
