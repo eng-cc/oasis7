@@ -553,11 +553,14 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for TestInMem
     }
 
     fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
-        let handlers = self.handlers.lock().expect("lock handlers");
-        let Some(handler) = handlers.get(protocol) else {
-            return Err(WorldError::NetworkProtocolUnavailable {
-                protocol: protocol.to_string(),
-            });
+        let handler = {
+            let handlers = self.handlers.lock().expect("lock handlers");
+            let Some(handler) = handlers.get(protocol) else {
+                return Err(WorldError::NetworkProtocolUnavailable {
+                    protocol: protocol.to_string(),
+                });
+            };
+            Arc::clone(handler)
         };
         handler(payload)
     }
