@@ -505,7 +505,7 @@ impl PosNodeEngine {
         )
     }
 
-    fn try_sync_high_replication_checkpoint_boundary(
+    pub(super) fn try_sync_high_replication_checkpoint_boundary(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
@@ -523,7 +523,7 @@ impl PosNodeEngine {
         {
             return Ok(false);
         }
-        let checkpoint = match self.sync_replication_height_once(
+        let checkpoint = match self.sync_replication_height_once_for_high_checkpoint_probe(
             endpoint,
             node_id,
             world_id,
