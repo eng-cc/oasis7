@@ -245,6 +245,28 @@ Example:
 - Finding Disposition Evidence: P3 finding addressed by replacing fixed `doc/p2p/node/README.md` density snapshot with stable high-density guidance and command-based current-count guidance; project Trace scoped to doc/evidence cleanup and explicitly avoids runtime/live public-testnet claims; fresh checks passed: stale density rg no matches, deleted shared_devnet id rg over doc/scripts/crates no matches, doc-governance-check OK, pm-lint OK, workflow-lint OK, git diff --check OK.
 - Residual Risk: Hidden non-repo consumers of deleted generated evidence are not validated; future p2p/testing evidence-routing drift remains possible; no runtime behavior, live public-testnet correctness, or QA CI gate-placement claim is made.
 
+## 2026-06-13 13:58:30 CST / tpm
+- 完成内容: Rebased PR branch onto `origin/main` to resolve GitHub `mergeStateStatus=DIRTY`. The only content conflict was `doc/p2p/project.md`; resolution kept both main's `testnet-high-state-peer-retry` Trace and this branch's `p2p-evidence-doc-cleanup` Trace.
+- 遗留事项: Commit this post-rebase evidence-only packet, force-push with lease, then resume PR #433 CI/comment/mergeability watch.
+- Action: Record post-rebase current-head pre-PR local role review passed packet.
+- Validation Command: git rebase origin/main; conflict marker rg in doc/p2p/project.md; git diff --check; ./scripts/doc-governance-check.sh; ./scripts/pm/workflow-lint.sh --phase pr-ready --allow-unbound; prepare-task-pr preflight.
+- Expected Result: Rebase completes, conflict is resolved without dropping either project Trace, current task workflow-lint passes, and latest packet references current source head.
+- Actual Result: Rebase completed. Conflict markers absent. `git diff --check`: OK. `doc-governance-check`: OK. `workflow-lint`: OK. Repo-wide `pm-lint` currently fails on unrelated main task logs (`task_20ab...`, `task_96c...`) outside this PR scope.
+- Blocker / Next Action: Commit packet and rerun prepare-task-pr.
+- Pre-PR Local Role Review: passed
+- Task UID: task_1f333657aba5468aa74bd2435fcbbbcf
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-p2p-cleanup-audit
+- Source Branch: task/p2p-cleanup-audit
+- Source Head: c21bbc6876d707a9d2d2d2b5102ae7ed22e88da3
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.execution.md; .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml; doc/p2p/README.md; doc/p2p/node/README.md; doc/p2p/prd.index.md; doc/p2p/project.md; doc/testing/evidence/README.md; doc/testing/evidence/generated-shared-network-gates/shared_devnet-20260523-{190913,191104,195028,220434,223934,232451,234114,234212} deleted generated snapshot files
+- Role Selection Basis: changed paths touched p2p/testing documentation, generated evidence cleanup, task truth, project Trace, and verification evidence; repository_health_engineer included for doc/evidence alignment and technical-debt cleanup; qa_engineer included for testing evidence routing and evidence deletion safety; runtime/wasm/viewer/gameplay/liveops skipped because no runtime code, UI, gameplay, external messaging, or player promise changed.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Evidence: repository_health_engineer and qa_engineer completed pre-rebase review with no remaining findings after addressed P3; repository_health trace-only re-review covered the `doc/p2p/project.md` Trace. Post-rebase conflict resolution only retained both adjacent project Trace lines and did not alter cleanup semantics.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: P3 stale density snapshot fixed in `doc/p2p/node/README.md`; `doc/p2p/project.md` Trace reviewed and scoped; post-rebase project conflict resolved by preserving both main and task Trace lines; post-rebase checks passed: conflict marker rg no matches, doc-governance-check OK, workflow-lint OK, git diff --check OK.
+- Residual Risk: Hidden non-repo consumers of deleted generated evidence are not validated; future p2p/testing evidence-routing drift remains possible; no runtime behavior, live public-testnet correctness, or QA CI gate-placement claim is made.
+
 ## 2026-06-13 13:52:00 CST / tpm
 - 完成内容: PR branch pushed and GitHub PR created after prepare-task-pr script push succeeded but gh create needed an explicit body in non-interactive mode.
 - 遗留事项: Watch PR #433 required checks, comments/review threads, and mergeability; fix any failures or blockers; merge and clean up when gates pass.
