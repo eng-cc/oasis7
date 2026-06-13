@@ -136,8 +136,8 @@ Example:
 - Task UID: task_deab30d82bd54824b5be64fac1b2c961
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-p2p-cleanup-audit
 - Source Branch: task/engineering-p2p-cleanup-audit
-- Source Head: 56d7305ffb2cf3547cced4a2f8ce56baf5b68812
-- Comparison Ref: main
+- Source Head: a603fb5657b6e2d18bfee6bf44b050fed099201b
+- Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/tasks/task_deab30d82bd54824b5be64fac1b2c961.execution.md`, `.pm/tasks/task_deab30d82bd54824b5be64fac1b2c961.yaml`, `doc/p2p/**`, `doc/testing/evidence/**`, `doc/testing/templates/**`, `scripts/network-tier-*`, `scripts/shared-devnet-*`, `testing-manual.md`
 - Role Selection Basis: p2p/shared-network cleanup touched repository governance, QA evidence gates, runtime/network-tier scripts, and operator/public-testnet claim boundaries, so `repository_health_engineer`, `qa_engineer`, `runtime_engineer`, and `liveops_community` reviewed.
 - Review Roles: repository_health_engineer, qa_engineer, runtime_engineer, liveops_community
