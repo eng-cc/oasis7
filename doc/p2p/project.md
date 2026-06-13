@@ -924,6 +924,7 @@
     - `git diff --check`
 - [x] testnet-routing-peer-record-bootstrap (PRD-P2P-001/003) [test_tier_required]: 修复 reset public testnet observer 在 routing 已发现 bootstrap peer、connected snapshot 仍为空时无法启动 peer-record 交换的问题，允许 routing update 直接触发 connected peer-record request，并用回归覆盖空 connected snapshot 的 bootstrap 窗口。 Trace: .pm/tasks/task_f81d3e661b7048d8b2fe6987a544a368.yaml
 - [x] testnet-auto-high-state-sync (PRD-P2P-001/003) [test_tier_required]: 修复新 public testnet observer 在低位 commit 历史不可用且 advertised head 非 checkpoint 高度时无法自动发现仍被保留的高位 execution checkpoint 的问题；observer gap sync 现在覆盖 release_default retained checkpoint window，并在 fetch-commit transient timeout/unavailable 时继续探测更低候选。 Trace: .pm/tasks/task_761375d25bc24fe59147a853e8c8acb0.yaml
+- [x] testnet-high-state-peer-retry (PRD-P2P-001/003) [test_tier_required]: 修复 cold observer 只连到 storage/full-storage peer 时无法获得 checkpoint descriptor 的问题；fetch-commit provider 现在可为 legacy sequencer commit 动态附加 retained execution checkpoint descriptor，并以 provider 自身 authorized replication writer 身份重签增强 message，支持 observer 无 seed/state-sync 自动安装高状态 checkpoint。 Trace: .pm/tasks/task_96c772c830e043f9b1e40b03e6f73d38.yaml
 
 ## 依赖
 - 模块设计总览：`doc/p2p/design.md`

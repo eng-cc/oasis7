@@ -94,13 +94,31 @@ fn test_execution_checkpoint_bundle(
     }
 }
 
+fn committed_decision(height: u64, approved_stake: u64, required_stake: u64) -> PosDecision {
+    PosDecision {
+        height,
+        slot: height,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: format!("block-{height}"),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake,
+        rejected_stake: 0,
+        required_stake,
+        total_stake: 100,
+    }
+}
+
 #[test]
 fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
     let world_id = "world-gap-sync-exported-legacy-checkpoint";
     let dir_a = temp_dir("gap-sync-exported-legacy-checkpoint-a");
     let dir_b = temp_dir("gap-sync-exported-legacy-checkpoint-b");
+    let dir_c = temp_dir("gap-sync-exported-legacy-checkpoint-c");
     let (_, public_key_a) = deterministic_keypair_hex(246);
     let (_, public_key_b) = deterministic_keypair_hex(247);
+    let (_, public_key_c) = deterministic_keypair_hex(248);
     let pos_config = signed_pos_config_with_signer_seeds(
         vec![PosValidator {
             validator_id: "node-a".to_string(),
@@ -111,13 +129,18 @@ fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
     let replication_config_a = signed_replication_config(dir_a.clone(), 246)
         .with_remote_writer_allowlist(vec![public_key_b.clone()])
         .expect("allowlist a")
-        .with_fetch_requester_allowlist(vec![public_key_b])
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
         .expect("fetch allowlist a");
     let replication_config_b = signed_replication_config(dir_b.clone(), 247)
-        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .with_remote_writer_allowlist(vec![public_key_c.clone()])
         .expect("allowlist b")
-        .with_fetch_requester_allowlist(vec![public_key_a])
+        .with_fetch_requester_allowlist(vec![public_key_c.clone()])
         .expect("fetch allowlist b");
+    let replication_config_c = signed_replication_config(dir_c.clone(), 248)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist c")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist c");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
         .with_pos_config(pos_config.clone())
@@ -133,21 +156,11 @@ fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
     let mut replication_a =
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
+    let mut replication_c =
+        ReplicationRuntime::new(&replication_config_c, "node-c").expect("runtime c");
     for height in 1..=high_height {
-        let decision = PosDecision {
-            height,
-            slot: height,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: format!("block-{height}"),
-            action_root: empty_action_root(),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
-        replication_a
+        let decision = committed_decision(height, 100, 67);
+        let message = replication_a
             .build_local_commit_message(
                 "node-a",
                 world_id,
@@ -158,6 +171,9 @@ fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
             )
             .expect("build legacy local message")
             .expect("message");
+        replication_c
+            .apply_remote_message("node-c", world_id, &message)
+            .expect("storage provider applies sequencer commit");
     }
 
     let network: Arc<
@@ -178,7 +194,8 @@ fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
         })));
     register_replication_fetch_handlers_with_checkpoint_export(
         &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
-        &replication_config_a,
+        &replication_config_c,
+        "node-c",
         world_id,
         &config_a.network_policy,
         Some(export_hook),
@@ -218,6 +235,7 @@ fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
 
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
+    let _ = fs::remove_dir_all(&dir_c);
 }
 
 #[test]
@@ -259,19 +277,7 @@ fn observer_gap_sync_discovers_high_checkpoint_from_world_head() {
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
     for height in 1..=3 {
-        let decision = PosDecision {
-            height,
-            slot: height,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: format!("block-{height}"),
-            action_root: empty_action_root(),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
+        let decision = committed_decision(height, 100, 67);
         replication_a
             .build_local_commit_message(
                 "node-a",
@@ -388,19 +394,7 @@ fn observer_gap_sync_discovers_high_checkpoint_from_peer_world_head_request() {
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
     for height in 1..=3 {
-        let decision = PosDecision {
-            height,
-            slot: height,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: format!("block-{height}"),
-            action_root: empty_action_root(),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
+        let decision = committed_decision(height, 100, 67);
         replication_a
             .build_local_commit_message(
                 "node-a",
@@ -504,19 +498,7 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
     for height in 1..=3 {
-        let decision = PosDecision {
-            height,
-            slot: height,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: format!("block-{height}"),
-            action_root: empty_action_root(),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
+        let decision = committed_decision(height, 100, 67);
         let execution_block_hash = format!("exec-block-{height}");
         let execution_state_root = format!("exec-state-{height}");
         let checkpoint = (height == 3).then(|| {
@@ -626,19 +608,7 @@ fn observer_gap_sync_does_not_persist_sparse_execution_checkpoint_without_hook()
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
     for height in 1..=3 {
-        let decision = PosDecision {
-            height,
-            slot: height,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: format!("block-{height}"),
-            action_root: empty_action_root(),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
+        let decision = committed_decision(height, 100, 67);
         let execution_block_hash = format!("exec-block-{height}");
         let execution_state_root = format!("exec-state-{height}");
         let checkpoint = (height == 3).then(|| {
@@ -743,19 +713,7 @@ fn observer_gap_sync_probes_checkpoint_boundary_below_non_checkpoint_head() {
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
     for height in 1..=70 {
-        let decision = PosDecision {
-            height,
-            slot: height,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: format!("block-{height}"),
-            action_root: empty_action_root(),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
+        let decision = committed_decision(height, 100, 67);
         let execution_block_hash = format!("exec-block-{height}");
         let execution_state_root = format!("exec-state-{height}");
         let checkpoint = (height == 64).then(|| {
@@ -867,19 +825,7 @@ fn observer_gap_sync_rejects_mismatched_world_head_checkpoint() {
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
     for height in 1..=3 {
-        let decision = PosDecision {
-            height,
-            slot: height,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: format!("block-{height}"),
-            action_root: empty_action_root(),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
+        let decision = committed_decision(height, 100, 67);
         replication_a
             .build_local_commit_message(
                 "node-a",
@@ -992,19 +938,7 @@ fn high_checkpoint_gap_sync_does_not_skip_execution_history() {
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
     for height in 1..=3 {
-        let decision = PosDecision {
-            height,
-            slot: height,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: format!("block-{height}"),
-            action_root: empty_action_root(),
-            committed_actions: Vec::new(),
-            approved_stake: 100,
-            rejected_stake: 0,
-            required_stake: 67,
-            total_stake: 100,
-        };
+        let decision = committed_decision(height, 100, 67);
         replication_a
             .build_local_commit_message(
                 "node-a",
@@ -1112,19 +1046,7 @@ fn observer_gap_sync_bootstraps_from_high_checkpoint_when_low_commits_are_unavai
     for height in 1..=3 {
         let execution_block_hash = format!("execution-block-{height}");
         let execution_state_root = format!("execution-state-{height}");
-        let decision = PosDecision {
-            height,
-            slot: height,
-            epoch: 0,
-            status: PosConsensusStatus::Committed,
-            block_hash: format!("block-{height}"),
-            action_root: empty_action_root(),
-            committed_actions: Vec::new(),
-            approved_stake: 60,
-            rejected_stake: 0,
-            required_stake: 40,
-            total_stake: 100,
-        };
+        let decision = committed_decision(height, 60, 40);
         replication_a
             .build_local_commit_message(
                 "node-a",

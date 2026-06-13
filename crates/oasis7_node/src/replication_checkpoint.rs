@@ -1,4 +1,6 @@
-use oasis7_distfs::{blake3_hex, BlobStore as _};
+use oasis7_distfs::{
+    apply_replication_record, blake3_hex, build_replication_record_with_epoch, BlobStore as _,
+};
 
 use crate::{
     NodeError, NodeExecutionCheckpointBlob, NodeExecutionCheckpointBlobRef,
@@ -106,7 +108,8 @@ impl ReplicationRuntime {
     }
 
     pub(crate) fn attach_execution_checkpoint_descriptor_to_message(
-        &self,
+        &mut self,
+        local_node_id: &str,
         message: &GossipReplicationMessage,
         checkpoint: &NodeExecutionCheckpointBundle,
     ) -> Result<GossipReplicationMessage, NodeError> {
@@ -146,11 +149,7 @@ impl ReplicationRuntime {
                 });
             }
         }
-        if let Some(signer) = &self.signer {
-            if message.record.writer_id != signer.public_key_hex {
-                return Ok(message.clone());
-            }
-        } else if message.signature_hex.is_some() {
+        if self.signer.is_none() && message.signature_hex.is_some() {
             return Err(NodeError::Replication {
                 reason: "cannot re-sign augmented replication checkpoint message without signer"
                     .to_string(),
@@ -163,8 +162,41 @@ impl ReplicationRuntime {
         })?;
         let mut augmented = message.clone();
         augmented.payload = payload_bytes;
-        augmented.record.content_hash = blake3_hex(augmented.payload.as_slice());
-        augmented.record.size_bytes = augmented.payload.len() as u64;
+        if let Some(signer) = &self.signer {
+            if message.record.writer_id != signer.public_key_hex {
+                let writer_id = signer.public_key_hex.clone();
+                let (writer_epoch, sequence) = self.next_local_record_position(&writer_id)?;
+                let path = format!("consensus/commits/{:020}.json", payload.height);
+                augmented.record = build_replication_record_with_epoch(
+                    message.world_id.as_str(),
+                    writer_id.as_str(),
+                    writer_epoch,
+                    sequence,
+                    path.as_str(),
+                    augmented.payload.as_slice(),
+                    message.record.updated_at_ms,
+                )
+                .map_err(distfs_error_to_node_error)?;
+                apply_replication_record(
+                    &self.store,
+                    &mut self.guard,
+                    &augmented.record,
+                    augmented.payload.as_slice(),
+                )
+                .map_err(distfs_error_to_node_error)?;
+                self.writer_state.writer_epoch = augmented.record.writer_epoch;
+                self.writer_state.last_sequence = augmented.record.sequence;
+                self.writer_state.last_replicated_height =
+                    self.writer_state.last_replicated_height.max(payload.height);
+                self.persist_state(local_node_id)?;
+            } else {
+                augmented.record.content_hash = blake3_hex(augmented.payload.as_slice());
+                augmented.record.size_bytes = augmented.payload.len() as u64;
+            }
+        } else {
+            augmented.record.content_hash = blake3_hex(augmented.payload.as_slice());
+            augmented.record.size_bytes = augmented.payload.len() as u64;
+        }
         self.store
             .put(
                 augmented.record.content_hash.as_str(),

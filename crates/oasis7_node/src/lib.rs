@@ -388,6 +388,7 @@ impl NodeRuntime {
             if let Err(err) = register_replication_fetch_handlers_with_checkpoint_export(
                 network,
                 replication_config,
+                self.config.node_id.as_str(),
                 self.config.world_id.as_str(),
                 &self.config.network_policy,
                 self.execution_hook.clone(),
@@ -772,6 +773,7 @@ fn register_replication_fetch_handlers(
     register_replication_fetch_handlers_with_checkpoint_export(
         handle,
         replication,
+        "replication-fetch-handler",
         world_id,
         network_policy,
         None,
@@ -781,6 +783,7 @@ fn register_replication_fetch_handlers(
 fn register_replication_fetch_handlers_with_checkpoint_export(
     handle: &NodeReplicationNetworkHandle,
     replication: &NodeReplicationConfig,
+    node_id: &str,
     world_id: &str,
     network_policy: &NodeNetworkPolicy,
     execution_hook: Option<Arc<Mutex<Box<dyn NodeExecutionHook>>>>,
@@ -791,6 +794,7 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
         oasis7_proto::distributed_net::NetworkLaneOperation::Serve,
     ) {
         let commit_root_dir = replication.root_dir.clone();
+        let commit_node_id = node_id.to_string();
         let commit_world_id = world_id.to_string();
         let commit_replication_config = replication.clone();
         let commit_execution_hook = execution_hook.clone();
@@ -839,14 +843,15 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                                     network_internal_error(NodeError::Execution { reason })
                                 })?;
                             if let Some(checkpoint) = checkpoint {
-                                let runtime = ReplicationRuntime::new(
+                                let mut runtime = ReplicationRuntime::new(
                                     &commit_replication_config,
-                                    message.node_id.as_str(),
+                                    commit_node_id.as_str(),
                                 )
                                 .map_err(network_internal_error)?;
                                 Some(
                                     runtime
                                         .attach_execution_checkpoint_descriptor_to_message(
+                                            commit_node_id.as_str(),
                                             &message,
                                             &checkpoint,
                                         )
