@@ -53,6 +53,7 @@ pub struct ReplicationNetworkDebugSnapshot {
 }
 
 const REQUEST_CONNECTED_PEER_WAIT_RETRIES: usize = 12;
+const REQUEST_PROVIDER_CONNECTED_PEER_WAIT_RETRIES: usize = 80;
 const REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS: u64 = 150;
 const REQUEST_CONNECTION_REFRESH_RETRIES: usize = 12;
 const PROTOCOL_RETRY_COOLDOWN_AFTER_MS: u64 = 5_000;
@@ -125,6 +126,7 @@ impl Default for Libp2pReplicationNetworkConfig {
 pub struct Libp2pReplicationNetwork {
     inner: Libp2pNetwork,
     allow_local_handler_fallback_when_no_peers: bool,
+    bootstrap_addrs_by_peer_id: HashMap<PeerId, Multiaddr>,
     handlers: Arc<Mutex<HashMap<String, Handler>>>,
     request_peer_cursor: Arc<AtomicUsize>,
     protocol_retry_cooldown_after: Duration,
@@ -139,6 +141,8 @@ pub struct Libp2pReplicationNetwork {
 
 impl Libp2pReplicationNetwork {
     pub fn new(config: Libp2pReplicationNetworkConfig) -> Self {
+        let bootstrap_addrs_by_peer_id =
+            bootstrap_peer_addrs_by_peer_id(config.bootstrap_peers.as_slice());
         let inner = Libp2pNetwork::new(Libp2pNetworkConfig {
             keypair: config.keypair,
             peer_record: config.peer_record,
@@ -160,6 +164,7 @@ impl Libp2pReplicationNetwork {
             inner,
             allow_local_handler_fallback_when_no_peers: config
                 .allow_local_handler_fallback_when_no_peers,
+            bootstrap_addrs_by_peer_id,
             handlers: Arc::new(Mutex::new(HashMap::new())),
             request_peer_cursor: Arc::new(AtomicUsize::new(0)),
             protocol_retry_cooldown_after: config.protocol_retry_cooldown_after,
@@ -484,10 +489,28 @@ impl Libp2pReplicationNetwork {
         ordered_provider_peers
     }
 
+    fn dial_bootstrap_provider_peers(&self, providers: &[String]) {
+        let connected_peers: HashSet<PeerId> = self.connected_peers_sorted().into_iter().collect();
+        for provider in providers {
+            let Ok(peer_id) = provider.parse::<PeerId>() else {
+                continue;
+            };
+            if connected_peers.contains(&peer_id) {
+                continue;
+            }
+            let Some(addr) = self.bootstrap_addrs_by_peer_id.get(&peer_id) else {
+                continue;
+            };
+            let _ = self.inner.dial(addr.clone());
+        }
+    }
+
     fn wait_for_connected_provider_peers(&self, providers: &[String]) -> Vec<PeerId> {
-        for attempt in 0..=REQUEST_CONNECTED_PEER_WAIT_RETRIES {
+        for attempt in 0..=REQUEST_PROVIDER_CONNECTED_PEER_WAIT_RETRIES {
+            self.dial_bootstrap_provider_peers(providers);
             let ordered_provider_peers = self.collect_connected_provider_peers(providers);
-            if !ordered_provider_peers.is_empty() || attempt == REQUEST_CONNECTED_PEER_WAIT_RETRIES
+            if !ordered_provider_peers.is_empty()
+                || attempt == REQUEST_PROVIDER_CONNECTED_PEER_WAIT_RETRIES
             {
                 return ordered_provider_peers;
             }
@@ -632,6 +655,21 @@ impl Libp2pReplicationNetwork {
     }
 }
 
+fn bootstrap_peer_addrs_by_peer_id(addrs: &[Multiaddr]) -> HashMap<PeerId, Multiaddr> {
+    let mut by_peer_id = HashMap::new();
+    for addr in addrs {
+        let addr_text = addr.to_string();
+        let Some((_, peer_id_raw)) = addr_text.rsplit_once("/p2p/") else {
+            continue;
+        };
+        let Ok(peer_id) = peer_id_raw.parse::<PeerId>() else {
+            continue;
+        };
+        by_peer_id.entry(peer_id).or_insert_with(|| addr.clone());
+    }
+    by_peer_id
+}
+
 pub fn derive_libp2p_identity_keypair(private_key_hex: &str) -> Result<Keypair, NodeError> {
     let private_key_bytes = hex::decode(private_key_hex).map_err(|_| NodeError::InvalidConfig {
         reason: "node.private_key must be valid hex for libp2p identity derivation".to_string(),
@@ -686,6 +724,24 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
             .into_iter()
             .map(|peer_id| peer_id.to_string())
             .collect::<Vec<_>>();
+        peers.sort();
+        peers.dedup();
+        peers
+    }
+
+    fn known_peer_ids(&self) -> Vec<String> {
+        let mut peers = self.connected_peer_ids();
+        peers.extend(
+            self.inner
+                .debug_peer_healths()
+                .into_iter()
+                .map(|health| health.peer_id),
+        );
+        peers.extend(
+            self.bootstrap_addrs_by_peer_id
+                .keys()
+                .map(PeerId::to_string),
+        );
         peers.sort();
         peers.dedup();
         peers
@@ -1053,6 +1109,9 @@ fn connected_or_active_transport_peers(
     }
     active_transport_peers_from_healths(healths)
 }
+
+#[cfg(test)]
+mod bootstrap_provider_tests;
 
 #[cfg(test)]
 mod peer_selection_tests;
