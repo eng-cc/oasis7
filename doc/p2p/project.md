@@ -926,6 +926,7 @@
 - [x] testnet-auto-high-state-sync (PRD-P2P-001/003) [test_tier_required]: 修复新 public testnet observer 在低位 commit 历史不可用且 advertised head 非 checkpoint 高度时无法自动发现仍被保留的高位 execution checkpoint 的问题；observer gap sync 现在覆盖 release_default retained checkpoint window，并在 fetch-commit transient timeout/unavailable 时继续探测更低候选。 Trace: .pm/tasks/task_761375d25bc24fe59147a853e8c8acb0.yaml
 - [x] testnet-high-state-peer-retry (PRD-P2P-001/003) [test_tier_required]: 修复 cold observer 只连到 storage/full-storage peer 时无法获得 checkpoint descriptor 的问题；fetch-commit provider 现在可为 legacy sequencer commit 动态附加 retained execution checkpoint descriptor，并以 provider 自身 authorized replication writer 身份重签增强 message，支持 observer 无 seed/state-sync 自动安装高状态 checkpoint。 Trace: .pm/tasks/task_96c772c830e043f9b1e40b03e6f73d38.yaml
 - [x] p2p-evidence-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 清理无外部引用的 generated shared-network gate 中间快照，移除 p2p landing/index/node 入口中的易漂移固定密度快照，并刷新 testing evidence 的 p2p 首读入口到 public-testnet/current-version 证据链；不宣称 runtime/live public-testnet 行为变化。 Trace: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml
+- [x] p2p-peer-head-readiness-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 删除无外部引用、未作为当前权威 runtime/operator truth 入口维护的 peer-head readiness 历史叙事 design 文档；现行 readiness/operator 真值仍以 status payload、public-testnet runbook、preflight 脚本与本 project 追踪为准，不宣称 runtime/live public-testnet 行为变化。 Trace: .pm/tasks/task_56f67be67a5a43c09027cb224f1416ad.yaml
 
 ## 依赖
 - 模块设计总览：`doc/p2p/design.md`
