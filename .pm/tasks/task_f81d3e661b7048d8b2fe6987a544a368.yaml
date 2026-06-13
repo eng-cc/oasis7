@@ -1,7 +1,7 @@
 task_uid: task_f81d3e661b7048d8b2fe6987a544a368
 title: "Redeploy Windows testnet node"
 owner_role: tpm
-worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-windows-testnet-node-redeploy
+worktree_hint: /Users/scc/ccwork/worktrees/closed-task-f81d3e661b7048d8b2fe6987a544a368-oasis7-p2p-windows-testnet-node-redeploy
 execution_log_path: .pm/tasks/task_f81d3e661b7048d8b2fe6987a544a368.execution.md
 status: done
 priority: P2
