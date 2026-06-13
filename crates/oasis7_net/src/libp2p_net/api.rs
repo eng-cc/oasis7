@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures::channel::oneshot;
 use libp2p::{Multiaddr, PeerId};
@@ -22,6 +23,8 @@ use super::{
     Libp2pTrafficMetricsSnapshot, PeerManagerBlockArtifact, PeerManagerHealthIssue,
     PeerManagerHealthStatus, PeerManagerPeerHealth,
 };
+
+const LIBP2P_COMMAND_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl Libp2pNetwork {
     pub fn peer_id(&self) -> PeerId {
@@ -85,11 +88,7 @@ impl Libp2pNetwork {
             peer,
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "request_to_peer")
     }
 
     pub fn debug_peer_healths(&self) -> Vec<PeerManagerPeerHealth> {
@@ -247,11 +246,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
             payload: payload.to_vec(),
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "publish")
     }
 
     fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
@@ -260,11 +255,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
             topic: topic.to_string(),
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })??;
+        block_on_command_response(receiver, "subscribe")?;
         Ok(NetworkSubscription::new(
             topic.to_string(),
             Arc::clone(&self.inbox),
@@ -288,11 +279,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
             providers: providers.to_vec(),
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "request")
     }
 
     fn register_handler(
@@ -306,11 +293,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
             handler: Arc::from(handler),
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "register_handler")
     }
 }
 
@@ -324,11 +307,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
         let key = dht_provider_key(world_id, content_hash);
         let (sender, receiver) = oneshot::channel();
         self.enqueue_command(Command::PublishProvider(key, sender))?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "publish_provider")
     }
 
     fn get_providers(
@@ -339,11 +318,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
         let key = dht_provider_key(world_id, content_hash);
         let (sender, receiver) = oneshot::channel();
         self.enqueue_command(Command::GetProviders(key, sender))?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "get_providers")
     }
 
     fn put_world_head(&self, world_id: &str, head: &WorldHeadAnnounce) -> Result<(), WorldError> {
@@ -355,22 +330,14 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
             payload,
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "put_world_head")
     }
 
     fn get_world_head(&self, world_id: &str) -> Result<Option<WorldHeadAnnounce>, WorldError> {
         let key = dht_world_head_key(world_id);
         let (sender, receiver) = oneshot::channel();
         self.enqueue_command(Command::GetWorldHead(key, sender))?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "get_world_head")
     }
 
     fn put_membership_directory(
@@ -386,11 +353,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
             payload,
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "put_membership_directory")
     }
 
     fn get_membership_directory(
@@ -403,11 +366,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
             key,
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "get_membership_directory")
     }
 
     fn put_peer_record(&self, world_id: &str, record: &SignedPeerRecord) -> Result<(), WorldError> {
@@ -419,11 +378,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
             payload,
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
+        block_on_command_response(receiver, "put_peer_record")
     }
 
     fn get_peer_record(
@@ -437,10 +392,70 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
             key,
             response: sender,
         })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
+        block_on_command_response(receiver, "get_peer_record")
+    }
+}
+
+fn block_on_command_response<T>(
+    receiver: oneshot::Receiver<Result<T, WorldError>>,
+    operation: &str,
+) -> Result<T, WorldError> {
+    block_on_command_response_with_timeout(receiver, operation, LIBP2P_COMMAND_RESPONSE_TIMEOUT)
+}
+
+fn block_on_command_response_with_timeout<T>(
+    receiver: oneshot::Receiver<Result<T, WorldError>>,
+    operation: &str,
+    timeout: Duration,
+) -> Result<T, WorldError> {
+    match futures::executor::block_on(async_std::future::timeout(timeout, receiver)) {
+        Ok(Ok(result)) => result,
+        Ok(Err(_closed)) => Err(WorldError::NetworkProtocolUnavailable {
+            protocol: format!("libp2p command {operation} response channel closed"),
+        }),
+        Err(_elapsed) => Err(WorldError::NetworkProtocolUnavailable {
+            protocol: format!(
+                "libp2p command {operation} timed out after {}ms",
+                timeout.as_millis()
+            ),
+        }),
+    }
+}
+
+#[cfg(test)]
+mod command_response_tests {
+    use super::*;
+
+    #[test]
+    fn command_response_wait_times_out_when_runtime_does_not_reply() {
+        let (_sender, receiver) = oneshot::channel::<Result<(), WorldError>>();
+
+        let err =
+            block_on_command_response_with_timeout(receiver, "request", Duration::from_millis(1))
+                .expect_err("missing runtime response should time out");
+
+        match err {
+            WorldError::NetworkProtocolUnavailable { protocol } => {
+                assert!(protocol.contains("libp2p command request timed out"));
             }
-        })?
+            other => panic!("expected NetworkProtocolUnavailable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn command_response_wait_reports_closed_channel() {
+        let (sender, receiver) = oneshot::channel::<Result<(), WorldError>>();
+        drop(sender);
+
+        let err =
+            block_on_command_response_with_timeout(receiver, "request", Duration::from_millis(100))
+                .expect_err("closed runtime response should fail");
+
+        match err {
+            WorldError::NetworkProtocolUnavailable { protocol } => {
+                assert!(protocol.contains("libp2p command request response channel closed"));
+            }
+            other => panic!("expected NetworkProtocolUnavailable, got {other:?}"),
+        }
     }
 }
