@@ -9,7 +9,8 @@ source_signal: null
 source_refs:
   - AGENTS.md
   - doc/engineering/workflow/source-of-truth.md
-doc_refs: []
+doc_refs:
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Repository health slice identifies code or documentation cleanup candidates with evidence and owner suggestions"
