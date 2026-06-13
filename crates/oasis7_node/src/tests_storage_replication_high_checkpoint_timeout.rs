@@ -1,4 +1,8 @@
 use super::*;
+use oasis7_proto::distributed::WorldHeadAnnounce;
+use oasis7_proto::distributed_dht::{
+    DistributedDht, MembershipDirectorySnapshot, ProviderRecord, SignedPeerRecord,
+};
 
 struct CheckpointInstallingExecutionHook {
     installed: Vec<u64>,
@@ -41,6 +45,65 @@ struct TimeoutThenCheckpointNetwork {
     blobs: Mutex<BTreeMap<String, Vec<u8>>>,
     attempts: Mutex<Vec<u64>>,
     advertised_height: u64,
+}
+
+#[derive(Default)]
+struct TimeoutWorldHeadDht;
+
+impl DistributedDht<WorldError> for TimeoutWorldHeadDht {
+    fn publish_provider(
+        &self,
+        _world_id: &str,
+        _content_hash: &str,
+        _provider_id: &str,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_providers(
+        &self,
+        _world_id: &str,
+        _content_hash: &str,
+    ) -> Result<Vec<ProviderRecord>, WorldError> {
+        Ok(Vec::new())
+    }
+
+    fn put_world_head(&self, _world_id: &str, _head: &WorldHeadAnnounce) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_world_head(&self, _world_id: &str) -> Result<Option<WorldHeadAnnounce>, WorldError> {
+        Err(WorldError::NetworkProtocolUnavailable {
+            protocol: "request failed: Timeout".to_string(),
+        })
+    }
+
+    fn put_membership_directory(
+        &self,
+        _world_id: &str,
+        _snapshot: &MembershipDirectorySnapshot,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_membership_directory(
+        &self,
+        _world_id: &str,
+    ) -> Result<Option<MembershipDirectorySnapshot>, WorldError> {
+        Ok(None)
+    }
+
+    fn put_peer_record(&self, _world_id: &str, _record: &SignedPeerRecord) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_peer_record(
+        &self,
+        _world_id: &str,
+        _peer_id: &str,
+    ) -> Result<Option<SignedPeerRecord>, WorldError> {
+        Ok(None)
+    }
 }
 
 impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for TimeoutThenCheckpointNetwork {
@@ -330,6 +393,134 @@ fn observer_gap_sync_continues_checkpoint_candidates_after_protocol_omitted_time
     assert!(
         attempts.starts_with(&[advertised_height, checkpoint_height]),
         "expected advertised height timeout before checkpoint candidate, got {attempts:?}"
+    );
+
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
+fn observer_gap_sync_uses_network_height_when_dht_head_lookup_times_out() {
+    let world_id = "world-gap-sync-dht-timeout-then-checkpoint";
+    let dir_a = temp_dir("gap-sync-dht-timeout-then-checkpoint-a");
+    let dir_b = temp_dir("gap-sync-dht-timeout-then-checkpoint-b");
+    let (_, public_key_a) = deterministic_keypair_hex(254);
+    let (_, public_key_b) = deterministic_keypair_hex(255);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 254)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 254)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 255)
+        .with_remote_writer_allowlist(vec![public_key_a])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a);
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(replication_config_b.clone());
+
+    let checkpoint_height = REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
+    let advertised_height = checkpoint_height + 2;
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    let execution_block_hash = format!("exec-block-{checkpoint_height}");
+    let execution_state_root = format!("exec-state-{checkpoint_height}");
+    let checkpoint_bundle = test_execution_checkpoint_bundle(
+        checkpoint_height,
+        execution_block_hash.as_str(),
+        execution_state_root.as_str(),
+    );
+    let message = replication_a
+        .build_local_commit_message_with_checkpoint(
+            "node-a",
+            world_id,
+            7_500,
+            &committed_decision(checkpoint_height, 100, 67),
+            Some(execution_block_hash.as_str()),
+            Some(execution_state_root.as_str()),
+            Some(checkpoint_bundle.clone()),
+        )
+        .expect("build checkpoint message")
+        .expect("checkpoint message");
+
+    let network_impl = Arc::new(TimeoutThenCheckpointNetwork {
+        advertised_height,
+        ..Default::default()
+    });
+    network_impl
+        .messages
+        .lock()
+        .expect("lock messages")
+        .insert(checkpoint_height, message.clone());
+    let mut blobs = network_impl.blobs.lock().expect("lock blobs");
+    blobs.insert(message.record.content_hash.clone(), message.payload.clone());
+    blobs.insert(
+        oasis7_distfs::blake3_hex(message.payload.as_slice()),
+        message.payload.clone(),
+    );
+    blobs.insert(
+        oasis7_distfs::blake3_hex(checkpoint_bundle.manifest_json.as_slice()),
+        checkpoint_bundle.manifest_json.clone(),
+    );
+    for blob in &checkpoint_bundle.blobs {
+        blobs.insert(blob.content_hash.clone(), blob.bytes.clone());
+    }
+    drop(blobs);
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = network_impl.clone();
+    let dht: Arc<dyn DistributedDht<WorldError> + Send + Sync> =
+        Arc::new(TimeoutWorldHeadDht);
+    let endpoint_b = ReplicationNetworkEndpoint::new(
+        &NodeReplicationNetworkHandle::new(network).with_dht(dht),
+        world_id,
+        false,
+        &config_b.network_policy,
+    )
+    .expect("endpoint b");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("runtime b");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("engine b");
+    engine_b.network_committed_height = advertised_height;
+    let mut install_hook = CheckpointInstallingExecutionHook {
+        installed: Vec::new(),
+    };
+
+    engine_b
+        .sync_missing_replication_commits(
+            &endpoint_b,
+            "node-b",
+            world_id,
+            Some(&mut replication_b),
+            Some(&mut install_hook),
+        )
+        .expect("network-height high checkpoint sync after dht timeout");
+
+    assert_eq!(install_hook.installed, vec![checkpoint_height]);
+    assert_eq!(engine_b.committed_height, checkpoint_height);
+    assert_eq!(engine_b.replication_persisted_height, checkpoint_height);
+    let attempts = network_impl.attempts.lock().expect("lock attempts").clone();
+    assert!(
+        attempts.starts_with(&[advertised_height, checkpoint_height]),
+        "expected network height probe before checkpoint candidate after dht timeout, got {attempts:?}"
     );
 
     let _ = fs::remove_dir_all(&dir_a);

@@ -283,9 +283,14 @@ impl ReplicationNetworkEndpoint {
         world_id: &str,
     ) -> Result<Option<WorldHeadAnnounce>, NodeError> {
         if let Some(dht) = self.dht.as_ref() {
-            if let Some(head) = dht.get_world_head(world_id).map_err(network_err)? {
-                validate_world_head_world_id(world_id, &head)?;
-                return Ok(Some(head));
+            match dht.get_world_head(world_id).map_err(network_err) {
+                Ok(Some(head)) => {
+                    validate_world_head_world_id(world_id, &head)?;
+                    return Ok(Some(head));
+                }
+                Ok(None) => {}
+                Err(err) if world_head_lookup_can_fallback(&err) => {}
+                Err(err) => return Err(err),
             }
         }
         self.request_world_head_from_peers(world_id)
@@ -922,6 +927,14 @@ fn network_err(err: WorldError) -> NodeError {
     NodeError::Replication {
         reason: format!("replication network error: {err:?}"),
     }
+}
+
+fn world_head_lookup_can_fallback(err: &NodeError) -> bool {
+    let NodeError::Replication { reason } = err else {
+        return false;
+    };
+    reason.starts_with(REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
+        || reason.starts_with(REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
 }
 
 fn validate_world_head_world_id(world_id: &str, head: &WorldHeadAnnounce) -> Result<(), NodeError> {
