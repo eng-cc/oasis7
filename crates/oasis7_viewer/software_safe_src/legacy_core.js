@@ -1,146 +1,41 @@
 import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
-import { createMutable } from "solid-js/store";
-import {
-  createInitialHostedLoginState,
-  resetHostedLoginChallenge as resetHostedLoginChallengeState,
-} from "./viewer_hosted_login_state_module.js";
+import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
+import {
+  DEFAULT_WS_ADDR,
+  HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE,
+  HOSTED_ACCOUNT_LOGIN_START_ROUTE,
+  HOSTED_PLAYER_SESSION_ADMISSION_ROUTE,
+  HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS,
+  HOSTED_PLAYER_SESSION_REFRESH_ROUTE,
+  HOSTED_PLAYER_SESSION_RELEASE_ROUTE,
+  HOSTED_PLAYER_SESSION_STORAGE_PREFIX,
+  HOSTED_STRONG_AUTH_GRANT_ROUTE,
+  MAX_DECISION_TRACES,
+  MAX_EVENTS,
+  PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX,
+  RENDER_META_GLOBAL_NAME,
+  SOFTWARE_RENDERER_MARKERS,
+  SOFTWARE_SAFE_RENDER_MODE_ALIAS,
+  TEST_API_GLOBAL_NAME,
+  UI_LOCALE_STORAGE_PREFIX,
+  VIEWER_AUTH_BOOTSTRAP_OBJECT,
+  VIEWER_AUTH_PRIVATE_KEY,
+  VIEWER_AUTH_PUBLIC_KEY,
+  VIEWER_PLAYER_ID_KEY,
+  VIEWER_RENDER_MODE,
+} from "./software_safe_constants.js";
+import { createSoftwareSafeState } from "./software_safe_state.js";
+import {
+  buildAuthEnvelope,
+  generateEphemeralEd25519Keypair,
+  signAuthPayload,
+} from "./viewer_auth_crypto.js";
 
-const TEST_API_GLOBAL_NAME = "__AW_TEST__";
-const RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
-const VIEWER_RENDER_MODE = "viewer";
-const SOFTWARE_SAFE_RENDER_MODE_ALIAS = "software_safe";
-const VIEWER_AUTH_BOOTSTRAP_OBJECT = "__OASIS7_VIEWER_AUTH_ENV";
-const VIEWER_PLAYER_ID_KEY = "OASIS7_VIEWER_PLAYER_ID";
-const VIEWER_AUTH_PUBLIC_KEY = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
-const VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
-const VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
-const HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
-const UI_LOCALE_STORAGE_PREFIX = "oasis7.viewer.locale.v1";
-const PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.viewer.prompt_overrides_visible.v1";
-const HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admission";
-const HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
-const HOSTED_PLAYER_SESSION_ISSUE_ROUTE = "/api/public/player-session/issue";
-const HOSTED_PLAYER_SESSION_RELEASE_ROUTE = "/api/public/player-session/release";
-const HOSTED_ACCOUNT_LOGIN_START_ROUTE = "/api/public/hosted-account/login/start";
-const HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE = "/api/public/hosted-account/login/complete";
-const HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
-const HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 30000;
-const DEFAULT_WS_ADDR = "ws://127.0.0.1:5011";
-const MAX_EVENTS = 24;
-const MAX_DECISION_TRACES = 12;
-const SOFTWARE_RENDERER_MARKERS = [
-  "swiftshader",
-  "llvmpipe",
-  "software rasterizer",
-  "basic render driver",
-  "softpipe",
-  "lavapipe",
-];
-const ED25519_PKCS8_PREFIX = new Uint8Array([
-  0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
-  0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
-]);
-const textEncoder = new TextEncoder();
-
-export const state = createMutable({
-  uiLocale: "en",
-  promptOverridesVisible: false,
-  connectionStatus: "connecting",
-  logicalTime: 0,
-  eventSeq: 0,
-  tick: 0,
-  selectedKind: null,
-  selectedId: null,
-  errorCount: 0,
-  lastError: null,
-  eventCount: 0,
-  traceCount: 0,
-  cameraMode: "viewer",
-  cameraRadius: 0,
-  cameraOrthoScale: 0,
-  renderMode: VIEWER_RENDER_MODE,
-  rendererClass: "none",
-  viewerReason: null,
-  renderer: null,
-  vendor: null,
-  webglVersion: null,
-  pixelWorldRuntimeStatus: "detached",
-  pixelWorldRuntimeSource: "detached",
-  pixelWorldRuntimeModuleUrl: null,
-  pixelWorldCamera: null,
-  pixelWorldFatal: null,
-  controlProfile: "playback",
-  worldId: null,
-  server: null,
-  wsUrl: null,
-  lastControlFeedback: null,
-  lastPromptFeedback: null,
-  lastChatFeedback: null,
-  lastGameplayActionFeedback: null,
-  snapshot: null,
-  metrics: null,
-  hostedAccess: null,
-  hostedAdmission: null,
-  recentEvents: [],
-  recentDecisionTraces: [],
-  chatHistory: [],
-  selectedObject: null,
-  auth: {
-    available: false,
-    hostedAccountId: null,
-    playerId: null,
-    loginChannel: null,
-    maskedLoginHint: null,
-    deviceSessionId: null,
-    publicKey: null,
-    privateKey: null,
-    releaseToken: null,
-    error: null,
-    revokeReason: null,
-    revokedBy: null,
-    source: "guest_only",
-    registrationStatus: "guest",
-    sessionEpoch: null,
-    issuedAtUnixMs: null,
-    recoveryErrorCode: null,
-    recoveryErrorMessage: null,
-    issueInFlight: false,
-    syncInFlight: false,
-    runtimeStatus: "guest",
-    boundAgentId: null,
-    pendingRequestedAgentId: null,
-    pendingForceRebind: false,
-    rebindNotice: null,
-  },
-  hostedLogin: createInitialHostedLoginState(),
-  promptDraft: {
-    agentId: null,
-    currentVersion: 0,
-    rollbackTargetVersion: 0,
-    updatedBy: "",
-    updatedAtTick: 0,
-    systemPrompt: "",
-    shortTermGoal: "",
-    longTermGoal: "",
-    dirty: false,
-  },
-  chatDraft: {
-    agentId: null,
-    message: "",
-    dirty: false,
-  },
-  strongAuth: {
-    approvalCode: "",
-    lastGrantActionId: null,
-    lastGrantExpiresAtUnixMs: null,
-    lastGrantError: null,
-  },
-  selectedSearch: "",
-});
+export const state = createSoftwareSafeState();
 
 let socket = null;
 let reconnectTimer = null;
@@ -151,7 +46,6 @@ let authNonceCounter = 0;
 let semanticSendLoop = null;
 const pendingControlFeedback = new Map();
 const pendingSemanticCommands = [];
-const authKeyCache = new Map();
 let pendingSessionRegisterWaiter = null;
 
 const elements = {};
@@ -1029,176 +923,6 @@ function handleControlCompletionAck(ack) {
   }
   state.lastControlFeedback = feedback;
   pendingControlFeedback.delete(feedback.requestId);
-}
-
-function cborHeader(majorType, length) {
-  if (!Number.isInteger(length) || length < 0) {
-    throw new Error(`invalid CBOR length: ${length}`);
-  }
-  if (length < 24) {
-    return Uint8Array.of((majorType << 5) | length);
-  }
-  if (length < 0x100) {
-    return Uint8Array.of((majorType << 5) | 24, length);
-  }
-  if (length < 0x10000) {
-    return Uint8Array.of((majorType << 5) | 25, (length >> 8) & 0xff, length & 0xff);
-  }
-  if (length <= 0xffffffff) {
-    return Uint8Array.of(
-      (majorType << 5) | 26,
-      (length >>> 24) & 0xff,
-      (length >>> 16) & 0xff,
-      (length >>> 8) & 0xff,
-      length & 0xff,
-    );
-  }
-  if (length <= Number.MAX_SAFE_INTEGER) {
-    const value = BigInt(length);
-    return Uint8Array.of(
-      (majorType << 5) | 27,
-      Number((value >> 56n) & 0xffn),
-      Number((value >> 48n) & 0xffn),
-      Number((value >> 40n) & 0xffn),
-      Number((value >> 32n) & 0xffn),
-      Number((value >> 24n) & 0xffn),
-      Number((value >> 16n) & 0xffn),
-      Number((value >> 8n) & 0xffn),
-      Number(value & 0xffn),
-    );
-  }
-  throw new Error("CBOR length exceeds Number.MAX_SAFE_INTEGER");
-}
-
-function concatBytes(...parts) {
-  const totalLength = parts.reduce((sum, bytes) => sum + bytes.length, 0);
-  const out = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const bytes of parts) {
-    out.set(bytes, offset);
-    offset += bytes.length;
-  }
-  return out;
-}
-
-function cborEncode(value) {
-  if (value === null) {
-    return Uint8Array.of(0xf6);
-  }
-  if (value === false) {
-    return Uint8Array.of(0xf4);
-  }
-  if (value === true) {
-    return Uint8Array.of(0xf5);
-  }
-  if (typeof value === "number") {
-    if (!Number.isInteger(value) || value < 0) {
-      throw new Error(`unsupported CBOR number: ${value}`);
-    }
-    return cborHeader(0, value);
-  }
-  if (typeof value === "string") {
-    const bytes = textEncoder.encode(value);
-    return concatBytes(cborHeader(3, bytes.length), bytes);
-  }
-  if (Array.isArray(value)) {
-    return concatBytes(cborHeader(4, value.length), ...value.map((entry) => cborEncode(entry)));
-  }
-  if (value instanceof Uint8Array) {
-    return concatBytes(cborHeader(2, value.length), value);
-  }
-  if (typeof value === "object") {
-    const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined);
-    const encoded = [cborHeader(5, entries.length)];
-    for (const [key, entryValue] of entries) {
-      encoded.push(cborEncode(String(key)));
-      encoded.push(cborEncode(entryValue));
-    }
-    return concatBytes(...encoded);
-  }
-  throw new Error(`unsupported CBOR type: ${typeof value}`);
-}
-
-function hexToBytes(raw) {
-  const value = String(raw || "").trim().toLowerCase();
-  if (!value || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) {
-    throw new Error("invalid hex payload");
-  }
-  const bytes = new Uint8Array(value.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-function bytesToHex(bytes) {
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-}
-
-function bytesStartWith(bytes, prefix) {
-  if (bytes.length < prefix.length) {
-    return false;
-  }
-  for (let index = 0; index < prefix.length; index += 1) {
-    if (bytes[index] !== prefix[index]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-async function importEd25519SigningKey(privateKeyHex) {
-  if (!window.crypto?.subtle) {
-    throw new Error("Web Crypto subtle API is unavailable");
-  }
-  if (!authKeyCache.has(privateKeyHex)) {
-    const rawPrivateKey = hexToBytes(privateKeyHex);
-    if (rawPrivateKey.length !== 32) {
-      throw new Error(`viewer auth private key length mismatch: expected 32 bytes, got ${rawPrivateKey.length}`);
-    }
-    const pkcs8 = concatBytes(ED25519_PKCS8_PREFIX, rawPrivateKey);
-    authKeyCache.set(
-      privateKeyHex,
-      window.crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"]),
-    );
-  }
-  return authKeyCache.get(privateKeyHex);
-}
-
-async function signAuthPayload(signingPayloadBytes, auth) {
-  const key = await importEd25519SigningKey(auth.privateKey);
-  const signature = await window.crypto.subtle.sign({ name: "Ed25519" }, key, signingPayloadBytes);
-  return `${VIEWER_AUTH_SIGNATURE_PREFIX}${bytesToHex(new Uint8Array(signature))}`;
-}
-
-async function generateEphemeralEd25519Keypair() {
-  if (!window.crypto?.subtle) {
-    throw new Error("Web Crypto subtle API is unavailable");
-  }
-  const keyPair = await window.crypto.subtle.generateKey(
-    { name: "Ed25519" },
-    true,
-    ["sign", "verify"],
-  );
-  const pkcs8 = new Uint8Array(await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
-  if (!bytesStartWith(pkcs8, ED25519_PKCS8_PREFIX) || pkcs8.length !== ED25519_PKCS8_PREFIX.length + 32) {
-    throw new Error("unexpected Ed25519 pkcs8 encoding from Web Crypto");
-  }
-  const rawPublicKey = new Uint8Array(await window.crypto.subtle.exportKey("raw", keyPair.publicKey));
-  if (rawPublicKey.length !== 32) {
-    throw new Error(`unexpected Ed25519 public key length: ${rawPublicKey.length}`);
-  }
-  return {
-    publicKey: bytesToHex(rawPublicKey),
-    privateKey: bytesToHex(pkcs8.slice(ED25519_PKCS8_PREFIX.length)),
-  };
-}
-
-function buildAuthEnvelope(payload) {
-  return cborEncode({
-    version: 1,
-    payload,
-  });
 }
 
 async function buildAgentChatAuthProof(request, auth) {

@@ -93,9 +93,10 @@
 - `legacy_core.js` 仍保留大量 render/bootstrap 组装逻辑，若一次性过拆，最容易引入 UI contract 漂移或测试夹具失效。
 - canonical `viewer.js` 与 compat `software_safe.js` 若被其他脚本再次反向复制，会让 freshness / bundle manifest 重新失真。
 - `dist/pixel-world-bridge/` 属于 finalize 生成的 Viewer dist runtime；若 finalize flow 没有成为唯一写入口，后续很容易再次出现“bundle 已更新但 runtime 目录还是旧的”分叉。
+- 2026-06-13 rebaseline: `legacy_core.js` 已拆出 constants/routes、初始 state shape 与 auth/CBOR crypto helper，但仍保留 control / semantic command / DOM rendering / bootstrap 组装逻辑；当前风险是“部分 facade split 已完成但剩余实现仍集中”，后续拆分必须继续保留 `state`、`initializeSoftwareSafeCore()`、`__AW_TEST__` 与现有测试入口合同。
 
 ## 6. Acceptance Criteria
-- AC-1: `legacy_core.js` 不再包含全部主入口实现，而是退化为 facade / export assembly；主实现已下沉到多个职责模块。
+- AC-1: `legacy_core.js` 不再包含全部主入口实现，而是退化为 facade / export assembly；主实现已下沉到多个职责模块。2026-06-13 状态：constants/routes、初始 state shape 与 auth/CBOR crypto helper 已下沉，`legacy_core.js` 仍保留 control / semantic command / DOM rendering / bootstrap 组装，AC-1 按部分完成并继续追踪剩余 viewer 工程债处理。
 - AC-2: `viewer.js` 成为仓库内 canonical Viewer Web bundle 名称；`software_safe.js` 仅作为显式 compat alias。
 - AC-3: `software_safe.html`、dist rebuild helper、bundle 打包脚本和 browser regression helper 均按同一 canonical/compat 关系工作，不再依赖“先有 `software_safe.js` 再复制成 `viewer.js`”。
 - AC-4: `dist/pixel-world-bridge/` generated runtime 继续可用，且其来源明确绑定到 finalize flow，而不是被当成手工维护源码；浏览器 served-dist 路径仍保持 `./pixel-world-bridge/`。
