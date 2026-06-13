@@ -11,6 +11,7 @@ source_refs:
 doc_refs:
   - doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.prd.md
   - doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.project.md
+  - doc/world-simulator/project.md
 related_prd: []
 acceptance:
   - "legacy_core.js is either reduced to a documented facade with responsibilities moved into focused modules, or the PRD/project status is explicitly rebaselined with remaining debt tracked."
