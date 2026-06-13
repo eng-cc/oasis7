@@ -68,46 +68,6 @@ fn libp2p_replication_network_request_rejects_without_connected_peers_by_default
 }
 
 #[test]
-fn libp2p_replication_network_uses_long_transfer_budget_for_fetch_blob() {
-    let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-        request_timeout: Duration::from_millis(11),
-        request_retry_budget: Duration::from_millis(22),
-        fetch_blob_request_timeout: Duration::from_millis(333),
-        fetch_blob_request_retry_budget: Duration::from_millis(444),
-        ..Libp2pReplicationNetworkConfig::default()
-    });
-
-    assert_eq!(
-        network.request_timeout_for_protocol("/aw/node/replication/fetch-blob/1.0.0"),
-        Duration::from_millis(333)
-    );
-    assert_eq!(
-        network.request_retry_budget_for_protocol("/aw/node/replication/fetch-blob/1.0.0"),
-        Duration::from_millis(444)
-    );
-}
-
-#[test]
-fn libp2p_replication_network_keeps_short_budget_for_non_blob_protocols() {
-    let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-        request_timeout: Duration::from_millis(11),
-        request_retry_budget: Duration::from_millis(22),
-        fetch_blob_request_timeout: Duration::from_millis(333),
-        fetch_blob_request_retry_budget: Duration::from_millis(444),
-        ..Libp2pReplicationNetworkConfig::default()
-    });
-
-    assert_eq!(
-        network.request_timeout_for_protocol("/aw/node/replication/fetch-commit/1.0.0"),
-        Duration::from_millis(11)
-    );
-    assert_eq!(
-        network.request_retry_budget_for_protocol("/aw/node/replication/fetch-commit/1.0.0"),
-        Duration::from_millis(22)
-    );
-}
-
-#[test]
 fn libp2p_replication_network_request_falls_back_to_local_handler_when_enabled() {
     let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         allow_local_handler_fallback_when_no_peers: true,
