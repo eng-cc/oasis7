@@ -37,7 +37,7 @@
 - `crates/oasis7_viewer/src/i18n.rs`
 - `crates/oasis7_viewer/src/timeline_controls.rs`
 - `crates/oasis7_viewer/src/web_test_api.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `testing-manual.md`
 
 ## 状态

@@ -18,7 +18,7 @@
 - `crates/oasis7_viewer/src/scene_helpers.rs`
 - `crates/oasis7_viewer/src/world_overlay.rs`
 - `crates/oasis7_viewer/src/egui_right_panel.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 
 ## 状态
 - 当前阶段：已完成

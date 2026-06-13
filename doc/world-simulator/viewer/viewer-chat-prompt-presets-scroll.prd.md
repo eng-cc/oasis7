@@ -11,7 +11,7 @@
 
 ## 2. User Experience & Functionality
 - `crates/oasis7_viewer/src/egui_right_panel_chat.rs` 的预设 Prompt 展开区域布局。
-- `doc/world-simulator/viewer/viewer-manual.md` 的交互说明补充。
+- `doc/world-simulator/viewer/viewer-manual.manual.md` 的交互说明补充。
 - 不改动 Prompt 语义、apply 逻辑、消息发送逻辑。
 
 ## 3. AI System Requirements (If Applicable)

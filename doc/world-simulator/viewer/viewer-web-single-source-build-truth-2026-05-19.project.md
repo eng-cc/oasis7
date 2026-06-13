@@ -17,7 +17,7 @@
   - `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`
   - `crates/oasis7_viewer/viewer.js`
   - `crates/oasis7_viewer/software_safe.js`
-  - `crates/oasis7_viewer/pixel-world-bridge/**`
+  - `crates/oasis7_viewer/dist/pixel-world-bridge/**`
   - `scripts/run-viewer-web.sh`
   - `scripts/agent-browser-lib.sh`
   - `scripts/build-game-launcher-bundle.sh`
@@ -30,7 +30,7 @@
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.{prd,design}.md`：提供 viewer canonical/compat 命名约束。
-- `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`：作为 generated bundle 与 `pixel-world-bridge/` runtime 的唯一写入口。
+- `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`：作为 generated bundle 与 `dist/pixel-world-bridge/` runtime 的唯一写入口；该 runtime 目录是生成产物 / dist 输入，不是手写源码目录。
 - `scripts/{run-viewer-web.sh,agent-browser-lib.sh,build-game-launcher-bundle.sh,bundle-freshness-lib.sh}`：需要同步消费 canonical `viewer.js`。
 
 ## 状态

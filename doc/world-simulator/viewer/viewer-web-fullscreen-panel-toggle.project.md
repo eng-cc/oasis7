@@ -19,7 +19,7 @@
 - `crates/oasis7_viewer/src/i18n.rs`
 - `crates/oasis7_viewer/src/panel_layout.rs`
 - `crates/oasis7_viewer/src/egui_right_panel_tests.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `doc/devlog/README.md`
 
 ## 状态

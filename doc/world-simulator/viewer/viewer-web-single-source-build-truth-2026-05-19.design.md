@@ -8,7 +8,7 @@
 ## 设计概览
 - 保留 `legacy_core.js` 作为稳定 facade import path，但将主要实现拆到 `software_safe_src/` 新子模块。
 - `vite` / finalize 流改为产出 canonical `viewer.js`，并由 finalize 同步生成 compat `software_safe.js`。
-- `pixel-world-bridge/` 继续由 finalize flow 统一生成；dist / bundle / freshness helper 全部基于 canonical 产物复制 compat alias，而不是反向复制。
+- `dist/pixel-world-bridge/` 继续由 finalize flow 统一生成；dist / bundle / freshness helper 全部基于 canonical 产物复制 compat alias，而不是反向复制。浏览器运行时仍以 served-dist 相对路径 `./pixel-world-bridge/` 加载。
 
 ## 模块拆分
 - `legacy_core.js`
@@ -21,7 +21,7 @@
 - Canonical:
   - `software_safe.html` 源码页面文件
   - `viewer.js` 生成 bundle
-  - `pixel-world-bridge/*` 生成 runtime
+  - `dist/pixel-world-bridge/*` 生成 runtime
 - Compat alias:
   - `software_safe.js`
   - dist / bundle 中复制出的 `software_safe.html`
@@ -32,7 +32,7 @@
 - `finalize-software-safe-build.mjs`
   - 复制 canonical bundle 到 `viewer.js`
   - 生成 compat `software_safe.js`
-  - 继续生成 `pixel-world-bridge/*`
+  - 继续生成 `dist/pixel-world-bridge/*`
 - `run-viewer-web.sh` / `agent-browser-lib.sh` / `build-game-launcher-bundle.sh`
   - 改成先复制 canonical `viewer.js`，再复制 compat alias
 - `bundle-freshness-lib.sh`

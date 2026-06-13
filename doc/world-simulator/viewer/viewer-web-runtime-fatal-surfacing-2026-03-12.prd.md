@@ -15,7 +15,7 @@
 ### In Scope
 - 文件：`crates/oasis7_viewer/src/web_test_api.rs`
 - 文件：`scripts/run-game-test-ab.sh`
-- 文件：`doc/world-simulator/viewer/viewer-manual.md`
+- 文件：`doc/world-simulator/viewer/viewer-manual.manual.md`
 - 文件：`testing-manual.md`
 - 当 Web Viewer 遇到浏览器端致命错误时：
   - `window.__AW_TEST__.getState()` 必须给出 `connectionStatus="error"` 与非空 `lastError`。
@@ -46,7 +46,7 @@
   - 立即递增 `errorCount`，避免 wasm panic 后快照停在旧值
 - `run-game-test-ab.sh` 的连接等待逻辑：
   - 一旦 `lastError` 非空，直接返回 fatal 分支并输出错误原因。
-- `viewer-manual.md`：
+- `viewer-manual.manual.md`：
   - Web 闭环命令统一使用 `agent-browser --headed open`。
   - 示例 URL 显式带上 `test_api=1`。
   - 说明 SwiftShader / `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` 为环境/图形门禁失败，不进入玩法结论。

@@ -17,7 +17,7 @@
 - `doc/world-simulator/viewer/viewer-web-runtime-fatal-surfacing-2026-03-12.prd.md`
 - `crates/oasis7_viewer/src/web_test_api.rs`
 - `scripts/run-game-test-ab.sh`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `testing-manual.md`
 
 ## 状态

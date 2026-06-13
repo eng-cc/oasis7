@@ -11,13 +11,13 @@
 
 ## 1. Executive Summary
 - 当前 `crates/oasis7_viewer/software_safe_src/legacy_core.js` 同时承载状态、auth、反馈、控制发送、DOM 渲染与 bootstrap，多职责耦合导致主入口继续演进时改动半径过大。
-- 当前 viewer Web 产物流在文档上宣称 `viewer.js` 为 canonical 发布名，但仓库实际只跟踪 `software_safe.js` 生成 bundle，再由脚本复制成 `viewer.js`，`pixel-world-bridge/` 生成目录也缺少同一条明确的 canonical 生成链。
+- 当前 viewer Web 产物流在文档上宣称 `viewer.js` 为 canonical 发布名，但仓库实际只跟踪 `software_safe.js` 生成 bundle，再由脚本复制成 `viewer.js`，`dist/pixel-world-bridge/` 生成目录也缺少同一条明确的 canonical 生成链。
 - 本专题要同时解决两类工程债：把 `legacy_core.js` 下沉成多模块实现；把 Web 生成产物收口为明确的单一真值流程，避免继续由 compat 名称承担 canonical 语义。
 
 ## 目标
 - 将 `software_safe_src` 主入口实现从单个 `legacy_core.js` god module 拆成职责明确的子模块，同时保留现有对外 API 与测试入口。
 - 将 Viewer Web 生成 bundle 的 canonical 真值收口到 `viewer.js`，把 `software_safe.js` 降级为兼容 alias，而不是反过来。
-- 将 `pixel-world-bridge/` 生成目录纳入与主 bundle 同一条显式 finalize 流，统一表达“哪些文件是源码真值，哪些文件是 generated artifacts，哪些文件只是 compat alias”。
+- 将 `dist/pixel-world-bridge/` 生成目录纳入与主 bundle 同一条显式 finalize 流，统一表达“哪些文件是源码真值，哪些文件是 generated artifacts，哪些文件只是 compat alias”。
 
 ## 范围
 - 范围内：
@@ -25,7 +25,7 @@
   - `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`
   - `crates/oasis7_viewer/software_safe.js`
   - `crates/oasis7_viewer/viewer.js`
-  - `crates/oasis7_viewer/pixel-world-bridge/**`
+  - `crates/oasis7_viewer/dist/pixel-world-bridge/**`
   - 直接消费上述文件的 Viewer Web dist / bundle / regression scripts
 - 范围外：
   - runtime 协议、world DTO、Prompt / Chat / hosted access 业务语义变更
@@ -58,7 +58,7 @@
 - `viewer.js` 必须成为仓库内 canonical Viewer Web bundle 名称。
 - `software_safe.js` 只允许作为 compat alias，且其实现必须显式指向 `viewer.js`，不能再承载独立 bundle 真值。
 - `software_safe.html` 可以继续作为源码页面文件，但引用脚本时必须对齐 canonical bundle 真值，而不是继续把 compat bundle 当唯一入口。
-- `pixel-world-bridge/` 下的 JS / wasm bindgen 产物必须继续由 finalize 脚本生成，但其 canonical 生成边界要与 `viewer.js` 同步写死在同一条 build flow 中。
+- `dist/pixel-world-bridge/` 下的 JS / wasm bindgen 产物必须继续由 finalize 脚本生成，但其 canonical 生成边界要与 `viewer.js` 同步写死在同一条 build flow 中；该目录是生成产物 / dist 输入，不是手写源码目录。
 
 ### 4.3 Script and Bundle Contract
 - 所有 Web dist / bundle / rebuild helper 必须按 canonical -> compat 的方向复制：
@@ -75,7 +75,7 @@
 - 生成产物：
   - `crates/oasis7_viewer/viewer.js`
   - `crates/oasis7_viewer/software_safe.js`
-  - `crates/oasis7_viewer/pixel-world-bridge/*`
+  - `crates/oasis7_viewer/dist/pixel-world-bridge/*`
 - 相关脚本：
   - `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`
   - `scripts/run-viewer-web.sh`
@@ -92,13 +92,13 @@
 ## 风险
 - `legacy_core.js` 仍保留大量 render/bootstrap 组装逻辑，若一次性过拆，最容易引入 UI contract 漂移或测试夹具失效。
 - canonical `viewer.js` 与 compat `software_safe.js` 若被其他脚本再次反向复制，会让 freshness / bundle manifest 重新失真。
-- `pixel-world-bridge/` 属于 checked-in generated runtime；若 finalize flow 没有成为唯一写入口，后续很容易再次出现“bundle 已更新但 runtime 目录还是旧的”分叉。
+- `dist/pixel-world-bridge/` 属于 finalize 生成的 Viewer dist runtime；若 finalize flow 没有成为唯一写入口，后续很容易再次出现“bundle 已更新但 runtime 目录还是旧的”分叉。
 
 ## 6. Acceptance Criteria
 - AC-1: `legacy_core.js` 不再包含全部主入口实现，而是退化为 facade / export assembly；主实现已下沉到多个职责模块。
 - AC-2: `viewer.js` 成为仓库内 canonical Viewer Web bundle 名称；`software_safe.js` 仅作为显式 compat alias。
 - AC-3: `software_safe.html`、dist rebuild helper、bundle 打包脚本和 browser regression helper 均按同一 canonical/compat 关系工作，不再依赖“先有 `software_safe.js` 再复制成 `viewer.js`”。
-- AC-4: `pixel-world-bridge/` generated runtime 继续可用，但其来源明确绑定到 finalize flow，而不是被当成手工维护源码。
+- AC-4: `dist/pixel-world-bridge/` generated runtime 继续可用，且其来源明确绑定到 finalize flow，而不是被当成手工维护源码；浏览器 served-dist 路径仍保持 `./pixel-world-bridge/`。
 - AC-5: 现有 `npm --prefix crates/oasis7_viewer run test:ui`、`npm --prefix crates/oasis7_viewer run build:software-safe` 与相关 repo-owned Node/browser helper 回归通过。
 
 ## 7. Validation & Decision Record
