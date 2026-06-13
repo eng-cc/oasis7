@@ -9,7 +9,7 @@ source_signal: null
 source_refs:
   - AGENTS.md
 doc_refs:
-  - doc/world-simulator/viewer/project.md
+  - doc/testing/project.md
 related_prd: []
 acceptance:
   - "Run scripts/run-local-letai-game-test.sh for local playtest when environment permits"
