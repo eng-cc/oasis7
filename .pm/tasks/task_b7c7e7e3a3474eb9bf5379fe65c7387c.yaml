@@ -10,6 +10,7 @@ source_refs:
   - AGENTS.md
 doc_refs:
   - doc/testing/prd.md
+  - doc/testing/project.md
 related_prd: []
 acceptance:
   - "Summarize current local game playtest launch flows with canonical commands and when to use each"
