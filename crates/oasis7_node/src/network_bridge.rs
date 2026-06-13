@@ -595,6 +595,10 @@ impl ReplicationNetworkEndpoint {
         })
     }
 
+    pub(crate) fn connected_peer_ids(&self) -> Vec<String> {
+        self.network.connected_peer_ids()
+    }
+
     pub(crate) fn lookup_provider_ids_for_content_hash(
         &self,
         world_id: &str,
