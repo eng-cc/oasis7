@@ -1,4 +1,5 @@
 # world-simulator PRD Project（审计轮次: 7；任务拆解含 PRD-ID 映射）
+- [x] viewer-layout-spacing-polish (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 优化 `software_safe` Viewer 首屏布局层级、移动端快捷入口、fallback diagnostic 顺序与沉浸模式移动端间距，并补充对应视觉 smoke 和截图证据。 Trace: .pm/tasks/task_0c3cddc969d24f48b0575be3d7aa87f7.yaml
 - [x] viewer-pixel-world-semantic-positioning (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 为 pixel-world host DTO 增加 agent 缺失坐标时的 `location_derived` 确定性语义定位、关系线恢复与 fallback DOM world-coordinate placement，保持 wasm-only renderer 合同不变。 Trace: .pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.yaml
 - [x] viewer-anchor-reference-render-boundary (PRD-WORLD_SIMULATOR-039/046) [test_tier_required]: 将 `software_safe` Focus minimap 中突兀的 Anchor 可见 DOM 浮层移除，保留 screen-reader/fallback reference 文本，并让可见空间参照回到 renderer/world marker 语义边界。 Trace: .pm/tasks/task_6ce7f0ddb880400fab57c70624669ea3.yaml
 - [x] viewer-pixel-world-action-receipt-surface (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 基于现有 gameplay summary / accepted intent / recent feedback / world change，为 pixel-world `commercial_surface` 增加显式行动回执，区分玩家造成的结果反馈与环境噪音。 Trace: .pm/tasks/task_cc47f34ea897420cb20a44c7a77c5424.yaml

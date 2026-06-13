@@ -52,6 +52,8 @@
         --space-panel-gap: 18px;
         --space-stack-gap: 16px;
         --space-control-gap: 8px;
+        --space-section-tight: 10px;
+        --space-section-nudge: 8px;
         --radius-tool: 12px;
         --radius-stage: 18px;
         --radius-panel: 20px;
@@ -820,6 +822,21 @@
         background-size: 42px 42px;
         mask-image: linear-gradient(180deg, transparent, #000 10%, #000 86%, transparent);
       }
+      .pixel-world-focus-fallback-map__label {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 2;
+        padding: 4px 7px;
+        border: 1px solid rgba(152, 177, 150, 0.16);
+        border-radius: 6px;
+        background: rgba(7, 12, 10, 0.58);
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 800;
+        line-height: 1.1;
+        text-transform: uppercase;
+      }
       .pixel-world-focus-fallback-map__route {
         position: absolute;
         left: 29%;
@@ -974,6 +991,44 @@
       .pixel-world-focus-drawer:not([open]) {
         display: none;
       }
+      .stack--compact {
+        gap: 4px;
+      }
+      .stack--hero {
+        gap: var(--space-section-tight);
+      }
+      .flow-top {
+        margin-top: var(--space-section-tight);
+      }
+      .flow-top--tight {
+        margin-top: var(--space-section-nudge);
+      }
+      .flow-lift--tight {
+        margin-top: -2px;
+      }
+      .panel__title--spaced {
+        margin-bottom: var(--space-section-tight);
+      }
+      .panel__title--danger {
+        color: var(--bad);
+      }
+      .badge-row--spaced {
+        margin-top: var(--space-section-tight);
+      }
+      .badge-row--tight {
+        margin-top: var(--space-section-nudge);
+      }
+      .toolbar--spaced {
+        margin-top: var(--space-section-tight);
+      }
+      .field--inline-flex {
+        margin: 0;
+        min-width: 180px;
+        flex: 1;
+      }
+      .empty--danger {
+        color: var(--bad);
+      }
       .stage-hero {
         display: flex;
         flex-direction: column;
@@ -1079,6 +1134,9 @@
         color: #d4ddcf;
         font-size: 14px;
         line-height: 1.6;
+      }
+      .stage-hero__mobile-shortcuts {
+        display: none;
       }
       .hero-focus-grid {
         display: grid;
@@ -1266,7 +1324,14 @@
         user-select: none;
       }
       .pixel-world-render-diagnostics .pixel-world-host__toolbar {
-        margin-top: 10px;
+        margin-top: var(--space-section-tight);
+      }
+      .pixel-world-render-fallback {
+        border-top-color: rgba(223, 182, 107, 0.28);
+        padding-top: var(--space-section-tight);
+      }
+      .pixel-world-render-fallback summary {
+        color: rgba(223, 182, 107, 0.9);
       }
       .entry-menu {
         position: relative;
@@ -1375,7 +1440,55 @@
           width: min(100%, 420px);
         }
         .hero-focus-grid { grid-template-columns: 1fr; }
-        .hero-focus-card { min-height: 0; }
+        .stage-hero {
+          gap: 10px;
+          padding: 14px;
+        }
+        .stage-hero__topline {
+          gap: 10px;
+        }
+        .entry-menu__panel {
+          left: 0;
+          right: auto;
+          width: min(320px, calc(100vw - 70px));
+        }
+        .stage-hero__title {
+          font-size: 26px;
+          line-height: 1.08;
+        }
+        .stage-hero__lede {
+          display: -webkit-box;
+          max-width: none;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          line-height: 1.45;
+        }
+        .stage-hero__mobile-shortcuts {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .stage-hero__mobile-shortcuts .mobile-rail__link {
+          min-height: 34px;
+          border-radius: 8px;
+        }
+        .hero-focus-grid {
+          gap: 8px;
+        }
+        .hero-focus-card {
+          min-height: 0;
+          gap: 6px;
+          padding: 10px;
+          border-radius: 8px;
+        }
+        .hero-focus-card__value--body {
+          font-size: 14px;
+          line-height: 1.35;
+        }
+        .hero-focus-card__detail {
+          line-height: 1.35;
+        }
         .pixel-world-command-strip { grid-template-columns: 1fr; }
         .pixel-world-focus-hud {
           grid-template-columns: minmax(0, 1fr) auto;
@@ -1397,7 +1510,7 @@
           padding: 7px 8px;
         }
         .pixel-world-focus-hud__cell--prompt {
-          grid-column: 1;
+          grid-column: 1 / -1;
           grid-row: 2;
         }
         .pixel-world-focus-hud__cell--mission {
@@ -1405,6 +1518,7 @@
         }
         .pixel-world-focus-hud__cell--blocker {
           grid-column: 1 / -1;
+          grid-row: 3;
           min-height: 30px;
           flex-direction: row;
           justify-content: flex-start;
@@ -1414,6 +1528,7 @@
         }
         .pixel-world-focus-hud__cell--receipt {
           grid-column: 1 / -1;
+          grid-row: 4;
           min-height: 30px;
           flex-direction: row;
           justify-content: flex-start;
@@ -1429,18 +1544,20 @@
           line-height: 1.2;
         }
         .pixel-world-focus-controls {
-          grid-column: 1 / -1;
-          grid-row: 2;
+          grid-column: 2;
+          grid-row: 1;
           justify-content: flex-start;
           flex-wrap: wrap;
           align-self: start;
-          padding: 5px;
+          gap: 4px;
+          padding: 4px;
+          width: min(156px, 40vw);
         }
         .pixel-world-focus-controls button {
-          flex: 1 1 calc(50% - 6px);
-          min-height: 30px;
+          flex: 1 1 calc(50% - 4px);
+          min-height: 28px;
           min-width: 0;
-          padding: 5px 7px;
+          padding: 4px 6px;
           font-size: 11px;
         }
         .pixel-world-focus-rail {
@@ -1452,8 +1569,13 @@
           overflow: hidden;
         }
         .pixel-world-focus-fallback-map {
-          inset: 120px 10px 62px 10px;
+          inset: 242px 10px 98px 10px;
           border-radius: 6px;
+        }
+        .pixel-world-focus-fallback-map__label {
+          top: 12px;
+          left: 10px;
+          padding: 5px 7px;
         }
         .pixel-world-focus-fallback-map__node {
           min-width: 92px;
@@ -1465,15 +1587,15 @@
         }
         .pixel-world-focus-fallback-map__node--target {
           left: 7%;
-          top: 22%;
+          top: 12%;
         }
         .pixel-world-focus-fallback-map__node--agent {
           right: 7%;
-          top: 48%;
+          top: 42%;
         }
         .pixel-world-focus-fallback-map__node--selected {
           right: 8px;
-          bottom: 40px;
+          bottom: 48px;
         }
         .pixel-world-focus-fallback-map__meta {
           left: 8px;

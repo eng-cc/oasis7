@@ -12,6 +12,7 @@ const outDir = resolve(repoRoot, "output/playwright/pixel-world-fragment-visual"
 const screenshotPath = join(outDir, "fragment-fallback-visual.png");
 const actionReceiptScreenshotPath = join(outDir, "action-receipt-visual.png");
 const mobileActionReceiptScreenshotPath = join(outDir, "mobile-action-receipt-visual.png");
+const mobileFocusOverlayScreenshotPath = join(outDir, "mobile-focus-overlay-visual.png");
 const summaryPath = join(outDir, "summary.json");
 const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
 const session = `pixel-world-fragment-visual-${process.pid}`;
@@ -558,6 +559,89 @@ function mobileActionReceiptProbeScript() {
   `;
 }
 
+function mobileFocusOverlayProbeScript() {
+  return String.raw`
+    (async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const waitFor = async (predicate, timeoutMs = 12000) => {
+        const deadline = Date.now() + timeoutMs;
+        let lastError = null;
+        while (Date.now() < deadline) {
+          try {
+            const value = predicate();
+            if (value) {
+              return value;
+            }
+          } catch (error) {
+            lastError = error;
+          }
+          await sleep(100);
+        }
+        throw lastError || new Error("timed out waiting for mobile focus overlay visual probe condition");
+      };
+      const state = () => window.__AW_TEST__?.getState?.() || {};
+      const rectOf = (element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          right: Math.round(rect.right),
+          bottom: Math.round(rect.bottom),
+        };
+      };
+
+      await waitFor(() => state().pixelWorldRuntimeStatus === "fallback");
+      const focusButton = Array.from(document.querySelectorAll("button"))
+        .find((button) => /Enter World Focus|进入沉浸模式/.test(button.textContent || ""));
+      if (!focusButton) {
+        throw new Error("missing Enter World Focus button for mobile focus overlay probe");
+      }
+      focusButton.click();
+      await waitFor(() => document.body.classList.contains("pixel-world-focus-active"));
+      const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
+      commandDrawer?.removeAttribute("open");
+      await sleep(180);
+
+      const viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+      const hud = rectOf(document.querySelector(".pixel-world-focus-hud"));
+      const controls = rectOf(document.querySelector(".pixel-world-focus-controls"));
+      const prompt = rectOf(document.querySelector(".pixel-world-focus-hud__cell--prompt"));
+      const blocker = rectOf(document.querySelector(".pixel-world-focus-hud__cell--blocker"));
+      const receiptCell = rectOf(document.querySelector(".pixel-world-focus-hud__cell--receipt"));
+      const map = rectOf(document.querySelector('[data-focus-fallback-map="true"]'));
+      const receipt = rectOf(document.querySelector(".pixel-world-focus-receipt"));
+      const horizontalOverflowPx = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+
+      return JSON.stringify({
+        runtimeStatus: state().pixelWorldRuntimeStatus,
+        focusActive: document.body.classList.contains("pixel-world-focus-active"),
+        viewport,
+        horizontalOverflowPx,
+        hud,
+        controls,
+        prompt,
+        blocker,
+        receiptCell,
+        map,
+        receipt,
+        gaps: {
+          hudToMap: map.y - hud.bottom,
+          mapToReceipt: receipt.y - map.bottom,
+          controlsToPrompt: prompt.y - controls.bottom,
+          blockerToReceiptCell: receiptCell.y - blocker.bottom,
+        },
+      });
+    })()
+  `;
+}
+
 ensureAgentBrowser();
 
 const server = createServer(serveFile);
@@ -631,15 +715,30 @@ try {
   assert(summary.mobileActionReceipt.agentRect?.width > 0, "mobile action receipt scenario lost the readable agent marker", summary.mobileActionReceipt);
   await runAgentBrowser(["screenshot", mobileActionReceiptScreenshotPath], { timeout: 20_000 });
 
+  console.log("probing mobile focus overlay safe areas");
+  summary.mobileFocusOverlay = await evalJson(mobileFocusOverlayProbeScript());
+  assert(summary.mobileFocusOverlay.runtimeStatus === "fallback", "mobile focus overlay did not stay on the host fallback surface", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.focusActive === true, "mobile focus overlay did not enter focus mode", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.horizontalOverflowPx <= 2, "mobile focus overlay has horizontal overflow", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.gaps.hudToMap >= 8, "mobile focus fallback map starts too close to the HUD stack", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.gaps.mapToReceipt >= 10, "mobile focus fallback map starts too close to the receipt band", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.gaps.controlsToPrompt >= 4, "mobile focus controls overlap the prompt cell", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.gaps.blockerToReceiptCell >= 0, "mobile focus blocker and receipt cells overlap", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.map.right <= summary.mobileFocusOverlay.viewport.clientWidth + 2, "mobile focus fallback map extends beyond the viewport", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.receipt.right <= summary.mobileFocusOverlay.viewport.clientWidth + 2, "mobile focus receipt extends beyond the viewport", summary.mobileFocusOverlay);
+  await runAgentBrowser(["screenshot", mobileFocusOverlayScreenshotPath], { timeout: 20_000 });
+
   summary.url = url;
   summary.screenshot = screenshotPath;
   summary.actionReceiptScreenshot = actionReceiptScreenshotPath;
   summary.mobileActionReceiptScreenshot = mobileActionReceiptScreenshotPath;
+  summary.mobileFocusOverlayScreenshot = mobileFocusOverlayScreenshotPath;
   writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   console.log(`pixel-world fragment visual smoke passed: ${summaryPath}`);
   console.log(`screenshot: ${screenshotPath}`);
   console.log(`action receipt screenshot: ${actionReceiptScreenshotPath}`);
   console.log(`mobile action receipt screenshot: ${mobileActionReceiptScreenshotPath}`);
+  console.log(`mobile focus overlay screenshot: ${mobileFocusOverlayScreenshotPath}`);
 } finally {
   closeBrowser();
   await new Promise((resolveClose) => server.close(resolveClose));

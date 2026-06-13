@@ -63,6 +63,10 @@ function numericInlineStyle(element, property) {
   return value;
 }
 
+function elementPrecedes(first, second) {
+  return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
 function sampleSnapshot() {
   return {
     time: 12,
@@ -741,6 +745,7 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-cinematic="true"]')).toHaveTextContent("Recover sustainable capability");
     expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent("Renderer Not Attached");
     expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent(/formal gameplay summary/i);
+    expect(elementPrecedes(document.querySelector(".pixel-world-canvas"), document.querySelector('[data-renderer-state="fallback"]'))).toBe(true);
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Mission Map");
     expect(document.querySelector('[data-focus-minimap="true"]')).not.toHaveTextContent("ref: Factory Anchor");
     expect(document.querySelector(".pixel-world-focus-fallback-map__reference-marker")).toBeNull();
@@ -752,6 +757,12 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("targets=1");
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("routes=1");
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("fragments=2");
+    expect(document.querySelector(".pixel-world-focus-controls")).toHaveAttribute("aria-label", "World focus controls");
+    expect(document.querySelector(".pixel-world-focus-controls")).toContainElement(screen.getByRole("button", { name: "Command" }));
+    expect(document.querySelector(".pixel-world-focus-hud__cell--prompt")).toHaveTextContent("Current Prompt");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-blocker-present", "true");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
+    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveClass("pixel-world-focus-fallback-map");
 
     const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
     expect(commandDrawer.open).toBe(true);
