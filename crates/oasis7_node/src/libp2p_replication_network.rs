@@ -61,8 +61,8 @@ const REQUEST_PEER_TRANSPORT_PENALTY: u8 = 20;
 const REQUEST_PEER_PROTOCOL_PENALTY: u8 = 30;
 const REQUEST_PEER_GENERIC_PENALTY: u8 = 10;
 const REQUEST_PEER_SUCCESS_RECOVERY: u8 = 5;
-const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 3_000;
-const REQUEST_RETRY_BUDGET_MS: u64 = 8_000;
+const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 12_000;
+const REQUEST_RETRY_BUDGET_MS: u64 = 20_000;
 
 #[derive(Debug, Clone)]
 struct RequestPeerScore {
@@ -293,10 +293,11 @@ impl Libp2pReplicationNetwork {
         protocol: &str,
         payload: &[u8],
         peer: PeerId,
+        timeout: Duration,
     ) -> Result<Vec<u8>, WorldError> {
         let response = self
             .inner
-            .request_to_peer_with_timeout(protocol, payload, peer, self.request_timeout)
+            .request_to_peer_with_timeout(protocol, payload, peer, timeout)
             .map_err(|err| WorldError::NetworkProtocolUnavailable {
                 protocol: format!("libp2p-replication outbound request failed: {err:?}"),
             })?;
@@ -526,7 +527,17 @@ impl Libp2pReplicationNetwork {
             let mut retryable_connection_gap = false;
             for peer in ordered_peers {
                 attempted_peers.insert(peer);
-                match self.request_via_peer(protocol, payload, peer) {
+                let elapsed = started_at.elapsed();
+                if elapsed >= self.request_retry_budget {
+                    return Err(replication_request_budget_exhausted(
+                        protocol,
+                        self.request_retry_budget,
+                        last_error,
+                    ));
+                }
+                let remaining_budget = self.request_retry_budget.saturating_sub(elapsed);
+                let request_timeout = self.request_timeout.min(remaining_budget);
+                match self.request_via_peer(protocol, payload, peer, request_timeout) {
                     Ok(reply) => {
                         self.mark_peer_request_success(peer);
                         return Ok(reply);
