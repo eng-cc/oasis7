@@ -154,7 +154,7 @@
       body.pixel-world-focus-active #app,
       body.pixel-world-focus-active .shell,
       body.pixel-world-focus-active .panel--stage,
-      body.pixel-world-focus-active .panel--stage .panel__body {
+      body.pixel-world-focus-active .panel--stage > .panel__body {
         display: block;
         position: static;
         width: 100vw;
@@ -176,7 +176,7 @@
         border-color: rgba(152, 177, 150, 0.14);
         box-shadow: none;
       }
-      .panel--stage .panel__body {
+      .panel--stage > .panel__body {
         padding: 20px;
       }
       .panel__header {
