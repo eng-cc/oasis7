@@ -81,6 +81,16 @@ impl Libp2pNetwork {
         payload: &[u8],
         peer: PeerId,
     ) -> Result<Vec<u8>, WorldError> {
+        self.request_to_peer_with_timeout(protocol, payload, peer, LIBP2P_COMMAND_RESPONSE_TIMEOUT)
+    }
+
+    pub fn request_to_peer_with_timeout(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        peer: PeerId,
+        timeout: Duration,
+    ) -> Result<Vec<u8>, WorldError> {
         let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::RequestToPeer {
             protocol: protocol.to_string(),
@@ -88,7 +98,7 @@ impl Libp2pNetwork {
             peer,
             response: sender,
         })?;
-        block_on_command_response(receiver, "request_to_peer")
+        block_on_command_response_with_timeout(receiver, "request_to_peer", timeout)
     }
 
     pub fn debug_peer_healths(&self) -> Vec<PeerManagerPeerHealth> {
