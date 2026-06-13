@@ -1,0 +1,25 @@
+task_uid: task_8c585fc8ac964a3bbc197946f843e2ba
+title: "Locate current world tick display"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-viewer-locate-current-world-tick-display
+execution_log_path: .pm/tasks/task_8c585fc8ac964a3bbc197946f843e2ba.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/testing/project.md
+related_prd: []
+acceptance:
+  - "Run scripts/run-local-letai-game-test.sh for local playtest when environment permits"
+  - "Identify where the current world tick is displayed or confirm it is not visible in the launched UI"
+handoff_to: []
+updated_at: 2026-06-14T00:10:07+08:00
+last_started_at: 2026-06-13T22:08:03+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui && git diff --check"
+last_verified_at: 2026-06-14T00:10:03+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-14T00:10:07+08:00

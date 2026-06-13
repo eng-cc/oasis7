@@ -709,6 +709,16 @@
         gap: 2px;
         min-width: 0;
       }
+      .pixel-world-focus-hud__identity { grid-column: 1; grid-row: 1; }
+      .pixel-world-focus-hud__cell--prompt { grid-column: 2; grid-row: 1; }
+      .pixel-world-focus-hud__cell--mission { grid-column: 3; grid-row: 1; }
+      .pixel-world-focus-hud__cell--tick {
+        grid-column: 1;
+        grid-row: 2;
+        min-height: 34px;
+      }
+      .pixel-world-focus-hud__cell--blocker { grid-column: 4; grid-row: 1; }
+      .pixel-world-focus-hud__cell--receipt { grid-column: 5; grid-row: 1; }
       .pixel-world-focus-hud__eyebrow,
       .pixel-world-focus-hud__cell span,
       .pixel-world-focus-rail__label,
@@ -749,6 +759,8 @@
         color: var(--good);
       }
       .pixel-world-focus-controls {
+        grid-column: 6;
+        grid-row: 1 / span 2;
         display: flex;
         gap: 8px;
         align-items: center;
@@ -1518,7 +1530,7 @@
         .pixel-world-focus-hud__cell--mission {
           display: none;
         }
-        .pixel-world-focus-hud__cell--blocker {
+        .pixel-world-focus-hud__cell--tick {
           grid-column: 1 / -1;
           grid-row: 3;
           min-height: 30px;
@@ -1528,7 +1540,7 @@
           gap: 8px;
           padding: 5px 8px;
         }
-        .pixel-world-focus-hud__cell--receipt {
+        .pixel-world-focus-hud__cell--blocker {
           grid-column: 1 / -1;
           grid-row: 4;
           min-height: 30px;
@@ -1538,8 +1550,19 @@
           gap: 8px;
           padding: 5px 8px;
         }
+        .pixel-world-focus-hud__cell--receipt {
+          grid-column: 1 / -1;
+          grid-row: 5;
+          min-height: 30px;
+          flex-direction: row;
+          justify-content: flex-start;
+          align-items: center;
+          gap: 8px;
+          padding: 5px 8px;
+        }
         .pixel-world-focus-hud__cell--blocker strong,
         .pixel-world-focus-hud__cell--receipt strong,
+        .pixel-world-focus-hud__cell--tick strong,
         .pixel-world-focus-hud__cell--prompt strong,
         .pixel-world-focus-hud__cell em {
           font-size: 11px;
