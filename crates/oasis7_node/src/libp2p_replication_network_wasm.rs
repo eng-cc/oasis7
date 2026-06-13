@@ -8,6 +8,8 @@ use oasis7_proto::distributed_net::{DistributedNetwork, NetworkSubscription};
 use oasis7_proto::world_error::WorldError;
 
 const PROTOCOL_RETRY_COOLDOWN_AFTER_MS: u64 = 5_000;
+const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 3_000;
+const REQUEST_RETRY_BUDGET_MS: u64 = 8_000;
 
 // wasm32 target intentionally does not ship a full-node networking stack.
 // This stub exists only to keep API shape stable for compile-time compatibility.
@@ -25,6 +27,8 @@ pub struct Libp2pReplicationNetworkConfig {
     pub peer_manager_policy: PeerManagerPolicy,
     pub allow_local_handler_fallback_when_no_peers: bool,
     pub protocol_retry_cooldown_after: Duration,
+    pub request_timeout: Duration,
+    pub request_retry_budget: Duration,
 }
 
 impl Default for Libp2pReplicationNetworkConfig {
@@ -42,6 +46,8 @@ impl Default for Libp2pReplicationNetworkConfig {
             peer_manager_policy: PeerManagerPolicy::default(),
             allow_local_handler_fallback_when_no_peers: false,
             protocol_retry_cooldown_after: Duration::from_millis(PROTOCOL_RETRY_COOLDOWN_AFTER_MS),
+            request_timeout: Duration::from_millis(REQUEST_TO_PEER_TIMEOUT_MS),
+            request_retry_budget: Duration::from_millis(REQUEST_RETRY_BUDGET_MS),
         }
     }
 }

@@ -61,6 +61,8 @@ const REQUEST_PEER_TRANSPORT_PENALTY: u8 = 20;
 const REQUEST_PEER_PROTOCOL_PENALTY: u8 = 30;
 const REQUEST_PEER_GENERIC_PENALTY: u8 = 10;
 const REQUEST_PEER_SUCCESS_RECOVERY: u8 = 5;
+const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 3_000;
+const REQUEST_RETRY_BUDGET_MS: u64 = 8_000;
 
 #[derive(Debug, Clone)]
 struct RequestPeerScore {
@@ -82,6 +84,8 @@ pub struct Libp2pReplicationNetworkConfig {
     pub peer_manager_policy: PeerManagerPolicy,
     pub allow_local_handler_fallback_when_no_peers: bool,
     pub protocol_retry_cooldown_after: Duration,
+    pub request_timeout: Duration,
+    pub request_retry_budget: Duration,
 }
 
 impl Default for Libp2pReplicationNetworkConfig {
@@ -100,6 +104,8 @@ impl Default for Libp2pReplicationNetworkConfig {
             peer_manager_policy: inner_defaults.peer_manager_policy,
             allow_local_handler_fallback_when_no_peers: false,
             protocol_retry_cooldown_after: Duration::from_millis(PROTOCOL_RETRY_COOLDOWN_AFTER_MS),
+            request_timeout: Duration::from_millis(REQUEST_TO_PEER_TIMEOUT_MS),
+            request_retry_budget: Duration::from_millis(REQUEST_RETRY_BUDGET_MS),
         }
     }
 }
@@ -111,6 +117,8 @@ pub struct Libp2pReplicationNetwork {
     handlers: Arc<Mutex<HashMap<String, Handler>>>,
     request_peer_cursor: Arc<AtomicUsize>,
     protocol_retry_cooldown_after: Duration,
+    request_timeout: Duration,
+    request_retry_budget: Duration,
     protocol_retry_cooldown_peers: Arc<Mutex<HashMap<String, HashMap<PeerId, Instant>>>>,
     transport_retry_cooldown_peers: Arc<Mutex<HashMap<PeerId, Instant>>>,
     request_peer_scores: Arc<Mutex<HashMap<PeerId, RequestPeerScore>>>,
@@ -139,6 +147,8 @@ impl Libp2pReplicationNetwork {
             handlers: Arc::new(Mutex::new(HashMap::new())),
             request_peer_cursor: Arc::new(AtomicUsize::new(0)),
             protocol_retry_cooldown_after: config.protocol_retry_cooldown_after,
+            request_timeout: config.request_timeout,
+            request_retry_budget: config.request_retry_budget,
             protocol_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
             transport_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
             request_peer_scores: Arc::new(Mutex::new(HashMap::new())),
@@ -286,7 +296,7 @@ impl Libp2pReplicationNetwork {
     ) -> Result<Vec<u8>, WorldError> {
         let response = self
             .inner
-            .request_to_peer(protocol, payload, peer)
+            .request_to_peer_with_timeout(protocol, payload, peer, self.request_timeout)
             .map_err(|err| WorldError::NetworkProtocolUnavailable {
                 protocol: format!("libp2p-replication outbound request failed: {err:?}"),
             })?;
@@ -477,10 +487,18 @@ impl Libp2pReplicationNetwork {
         G: Fn() -> WorldError,
     {
         let cursor = self.request_peer_cursor.fetch_add(1, Ordering::Relaxed);
+        let started_at = Instant::now();
         let mut last_error = None;
         let mut attempted_peers = HashSet::new();
 
         for attempt in 0..=REQUEST_CONNECTION_REFRESH_RETRIES {
+            if started_at.elapsed() >= self.request_retry_budget {
+                return Err(replication_request_budget_exhausted(
+                    protocol,
+                    self.request_retry_budget,
+                    last_error,
+                ));
+            }
             let candidate_source = if attempt == 0 {
                 initial_peers.clone()
             } else {
@@ -524,6 +542,13 @@ impl Libp2pReplicationNetwork {
                         retryable_connection_gap |=
                             peer_error_indicates_retryable_connection_gap(&err);
                         last_error = Some(err);
+                        if started_at.elapsed() >= self.request_retry_budget {
+                            return Err(replication_request_budget_exhausted(
+                                protocol,
+                                self.request_retry_budget,
+                                last_error,
+                            ));
+                        }
                     }
                 }
             }
@@ -844,6 +869,21 @@ fn peer_error_indicates_fetch_commit_not_found_retry_cooldown(
 
 fn peer_error_indicates_retryable_connection_gap(err: &WorldError) -> bool {
     world_error_is_retryable_connection_gap(err)
+}
+
+fn replication_request_budget_exhausted(
+    protocol: &str,
+    budget: Duration,
+    last_error: Option<WorldError>,
+) -> WorldError {
+    WorldError::NetworkProtocolUnavailable {
+        protocol: format!(
+            "libp2p-replication request budget exhausted protocol={} budget_ms={} last_error={:?}",
+            protocol,
+            budget.as_millis(),
+            last_error
+        ),
+    }
 }
 
 fn rotated_peers(peers: &[PeerId], cursor: usize) -> Vec<PeerId> {
