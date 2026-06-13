@@ -24,7 +24,7 @@
         <span>oasis7 docs</span>
       </a>
       <nav class="nav" data-menu data-section-nav>
-        <a href="#quickstart">Quick Start</a>
+        <a href="#quickstart">Local Real Test</a>
         <a href="#web-loop">Web Loop</a>
         <a href="#troubleshooting">Troubleshooting</a>
       </nav>
@@ -56,10 +56,16 @@
       </section>
 
       <section id="quickstart" class="section" data-reveal>
-        <h2>Quick Start</h2>
+        <h2>Local Real LLM Game Test</h2>
+        <pre><code>./scripts/run-local-letai-game-test.sh
+./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready</code></pre>
+        <p>Use this wrapper for local real LetAI provider-backed gameplay. It handles token config, chat probe, provider bridge, provider contract smoke, and launcher/runtime/viewer startup; the emitted <code>GAME_URL</code> is the manual play and agent-browser evidence entry.</p>
+        <p>Do not treat bare <code>run-viewer-web.sh</code> as the local real provider-backed gameplay startup path; it belongs to the Viewer/debug loop below.</p>
+
+        <h2>Lower-Level Viewer Debug Quick Start</h2>
         <h3>1) Start the live server</h3>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
-        <p>Formal gameplay requires a reachable LLM provider. If you switch to <code>--no-llm</code>, the route is observer/debug only.</p>
+        <p>This route is Viewer/debug only. If you switch to <code>--no-llm</code>, it remains observer/debug only.</p>
 
         <h3>2) Start the web viewer</h3>
         <pre><code>env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173</code></pre>
@@ -101,7 +107,7 @@ agent-browser close</code></pre>
       <section id="troubleshooting" class="section" data-reveal>
         <h2>Troubleshooting</h2>
         <ul>
-          <li>Blank page: verify that <code>run-viewer-web.sh</code> finished building and is serving the target port.</li>
+          <li>Blank page: for the real local test, first verify that <code>run-local-letai-game-test.sh</code> emitted a <code>GAME_URL</code>; for Viewer/debug, verify that <code>run-viewer-web.sh</code> finished building and is serving the target port.</li>
           <li>Connection failure: verify <code>oasis7_viewer_live</code> is running and the <code>ws</code> parameter matches <code>--web-bind</code>.</li>
           <li>No formal gameplay: check the LLM provider setup; explicit <code>--no-llm</code> is observer/debug only.</li>
           <li><code>agent-browser</code> failure: verify the local CLI and browser dependencies first.</li>

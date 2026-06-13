@@ -14,6 +14,7 @@
 - 想在 rebase 时先看 `.pm/**` 冲突哪些能自动修、哪些必须手工处理：`scripts/pm/rebase-conflict-helper.sh` + `.pm/README.md`
 - 想盘点哪些 task worktree 已可回收、哪些 worktree 仍有重型 `target` / `node_modules` 缓存：`scripts/worktree-gc-report.sh --footprint`
 - 想在不启动完整 runtime 栈的前提下先快查 Web/UI automation 链路：`scripts/viewer-software-safe-step-regression-smoke.sh`
+- 想启动本地真实 LetAI bridge + runtime/game 测试链路：`scripts/run-local-letai-game-test.sh`
 - 想预热隔离 harness 或理解 worktree 栈约束：`doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
 - 想让多个 worktree 复用 Rust 开发态编译缓存：默认用 `scripts/cargo-dev.sh`
 
@@ -35,6 +36,7 @@
 - 维护 worktree 级隔离 harness，让 agent / QA 能并行起栈并读取稳定状态文件。
 - 维护标准化 task worktree bootstrap 与 GitHub PR 收口入口，让每个新需求按统一 branch/path 命名落到独立 worktree，并可选直接检查模块文档、预热 harness、标准化通过 PR 合入 `main`。
 - 维护 repo-family 共享的 cargo 开发态缓存入口，减少多 worktree 并行时的重复编译。
+- 维护本地真实 LetAI provider bridge + runtime/game 测试入口，避免把底层 launcher/bootstrap 脚本误当作人工试玩主入口。
 - 汇总 precommit、wasm 与治理专题文档。
 - 承接脚本稳定性趋势、文档门禁与运行约束收口。
 
@@ -64,6 +66,7 @@
 - `scripts/pm/rebase-conflict-helper.sh` 为 `.pm` rebase 冲突辅助入口；默认只读分类 `.pm/**` 未合并路径，只允许在 active rebase 中用 `--resolve-signals` 自动修 `.pm/inbox/signals.jsonl` 的 signal-id 碰撞。若冲突命中 `.pm/registry/tasks.yaml` 或 role backlog 这类 git-ignored 本地视图，应保留 `main` 删除，再执行 `./scripts/pm/sync-views.sh`。
 - `scripts/worktree-gc-report.sh` 为 worktree 生命周期盘点入口；默认只读汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，不自动删除任何 worktree/branch；加 `--footprint` 时会额外统计每个 worktree 的 `target` 与 `crates/oasis7_viewer/node_modules` 体量，用于优先清理高成本缓存。
 - `scripts/viewer-software-safe-step-regression-smoke.sh` 为轻量 Web/UI automation smoke；通过临时 fixture 页面复用真 `agent-browser` 和 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime/build 的前提下先验证浏览器自动化链路与 summary/state 产物契约。
+- `scripts/run-local-letai-game-test.sh` 为本地真实 LetAI provider bridge + runtime/game 测试主入口；它负责 token config 规范化、LetAI chat probe、provider bridge、provider contract smoke 与 launcher stack 串联。直接跑 `run-launcher-stack.sh` 只适合作为底层 bootstrap、wrapper 内部调用或定向回归，不应再作为本地真实 LLM 游戏测试的人工入口。
 - `scripts/land-task-worktree.sh` 仅保留给用户显式要求的 local-only / fallback 场景，不再是默认最终合流入口。
 - `scripts/cargo-dev.sh` 是本地开发态 `cargo check/test/run/build` 的默认 shared target 入口；`scripts/cargo-dev-lib.sh` 是本地 smoke / playtest / prewarm / regression / drill / longrun 脚本复用同一 target 的 shell helper。要求 deterministic wasm / release / CI canonical 验收链路继续走原始 cargo 入口，保持对应 `CARGO_TARGET_DIR` 边界。
 - 若默认高频脚本入口变化，需同步回写本目录“从这里开始”，避免 README 退化回纯专题目录页。

@@ -454,12 +454,17 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
 cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
 ./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --with-llm
 ```
-  - active-LLM 预检：
-    `run-launcher-stack.sh` 现在会在启动 launcher 前先跑一次 active LLM provider probe，复用同一套 `config.toml` / `OASIS7_LLM_*` 配置，并同时验证 Responses hello 文本响应与 required tool-call 合约；若 provider/model/auth/base URL 当前不可用，或模型能回文本但不能稳定返回 tool call，会直接 fail-fast，不再等到首个 `step` 才暴露。需要故意保留“stack 可启动但 formal lane 在首步 blocked”的负向验证时，显式加 `--skip-llm-provider-preflight`。
+  - 本地真实 LetAI bridge + runtime/game：
+```bash
+./scripts/run-local-letai-game-test.sh
+./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
+```
+    常规本地真实 LLM 游戏测试统一从 `scripts/run-local-letai-game-test.sh` 启动；它默认优先读取 `OASIS7_LETAI_CONFIG_PATH`，再使用 `/Users/scc/Documents/keys/letai.txt`，最后回退到 `OASIS7_LETAI_TOKEN_CONFIG_PATH` 或 `/Users/scc/Documents/keys/letai-token-local.txt`，设置本地代理默认值，验证 LetAI chat-completions，后台启动 `127.0.0.1:5841` bridge，跑一次 provider contract smoke，再启动 `run-launcher-stack.sh` 指向该 bridge；额外 launcher 参数放在 `--` 之后。该 wrapper 默认启用 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1`，用于本地 provider-backed playtest 中放行聊天输入与反馈展示；真实 NPC decision 仍走 LetAI provider bridge。若要验证严格 provider-backed 生产面（direct agent chat 未支持），传 `--no-chat-echo`。
+  - active-LLM / provider 预检：
+    `run-launcher-stack.sh` 仍是底层 launcher/runtime bootstrap。它会在启动 launcher 前先跑一次 active LLM provider probe，复用同一套 `config.toml` / `OASIS7_LLM_*` 配置，并同时验证 Responses hello 文本响应与 required tool-call 合约；若 provider/model/auth/base URL 当前不可用，或模型能回文本但不能稳定返回 tool call，会直接 fail-fast，不再等到首个 `step` 才暴露。需要故意保留“stack 可启动但 formal lane 在首步 blocked”的负向验证时，显式加 `--skip-llm-provider-preflight`。
     若本地只验证 provider-backed plumbing，可先启动 `oasis7_provider_local_bridge --mode mock`，再用 `run-launcher-stack.sh --agent-provider-lane local-mock` 指向 deterministic `provider_local_mock`。
     若本地需要 builtin LLM 直连验证，`scripts/with-letai-llm-config.sh` 只适用于已经包含 chat-completions/Responses-compatible `token_key` / `api_key` 的配置；不要把只有 `Doc` 和平台管理 `Key` 的文件直接当 inference token 使用。platform-only 配置应先通过 `scripts/ensure-letai-local-token-config.sh` 或 `scripts/run-local-letai-game-test.sh` 规范化成临时 project token config；不得把 raw key、生成的 `letai-local-token.env`、或其它 token config 写入日志、仓库文件或 public evidence。
     LetAI remote provider bridge 参考装配走 `/chat/completions`，与 builtin LLM 的 Responses preflight 不是同一协议；本地复现云上 provider path 时先跑 `scripts/check-letai-chat-completions.sh` 验证 token，再用 `scripts/run-local-letai-provider-bridge.sh` 启动 `127.0.0.1:5841` 的真实 provider bridge。
-    常规本地真实 LLM 游戏测试可直接跑 `scripts/run-local-letai-game-test.sh`；它默认优先读取 `OASIS7_LETAI_TOKEN_CONFIG_PATH` 或 `/Users/scc/Documents/keys/letai-token-local.txt`，再回退到 `/Users/scc/Documents/keys/letai.txt`，设置本地代理默认值，验证 LetAI chat-completions，后台启动 `127.0.0.1:5841` bridge，跑一次 provider contract smoke，再启动 `run-launcher-stack.sh` 指向该 bridge；额外 launcher 参数放在 `--` 之后。该 wrapper 默认启用 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1`，用于本地 provider-backed playtest 中放行聊天输入与反馈展示；真实 NPC decision 仍走 LetAI provider bridge。若要验证严格 provider-backed 生产面（direct agent chat 未支持），传 `--no-chat-echo`。
     本地真实 provider bridge 默认在上游返回 `insufficient_user_quota` 且同时存在 `OASIS7_REMOTE_LLM_PLATFORM_KEY` / `OASIS7_REMOTE_LLM_PLATFORM_USER_ID` 时按 `$0.1`（`quota=50000`）自动充值；这是 paid real-provider 行为。充值触发按 chat request 发生，随后使用有限次数延迟重试来等待 LetAI 余额更新可见，而不是全局每次运行只充值一次；没有这些管理面字段时不会自动充值，仍应把 quota error 作为失败证据。
 
 ### S7：场景矩阵回归套件（L1 + L4）

@@ -48,6 +48,12 @@ Usage: ./scripts/run-launcher-stack.sh [options]
 
 Start a stable web playability test stack with safe defaults.
 
+For local real LetAI bridge-backed gameplay, prefer:
+- ./scripts/run-local-letai-game-test.sh
+
+This script is the lower-level launcher/runtime bootstrap used by wrappers and
+targeted regressions.
+
 Preferred producer/release path:
 - ./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local
 - ./scripts/run-launcher-stack.sh --bundle-dir output/release/game-launcher-local

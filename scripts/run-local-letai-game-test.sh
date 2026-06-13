@@ -36,11 +36,15 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/run-local-letai-game-test.sh [options] [-- launcher args...]
 
-Start a one-command local gameplay stack backed by real LetAI:
+Start the canonical local real LetAI gameplay test stack:
 1. load the operator-owned LetAI config
 2. optionally validate chat-completions
 3. start the local provider bridge on 127.0.0.1:5841
 4. start run-launcher-stack.sh pointed at that bridge
+
+Use this wrapper instead of manually stitching together the provider bridge and
+run-launcher-stack.sh when validating local provider-backed gameplay or
+agent_chat behavior.
 
 Options:
   --config <path>             LetAI config file (default: $OASIS7_LETAI_CONFIG_PATH,
