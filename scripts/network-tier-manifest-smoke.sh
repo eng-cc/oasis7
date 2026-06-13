@@ -14,6 +14,7 @@ skeleton_lanes_tsv="$tmpdir/public-testnet-skeleton-lanes.tsv"
 ready_lanes_tsv="$tmpdir/public-testnet-ready-lanes.tsv"
 runtime_block_lanes_tsv="$tmpdir/public-testnet-runtime-block-lanes.tsv"
 template_pass_lanes_tsv="$tmpdir/public-testnet-template-pass-lanes.tsv"
+old_skeleton_pass_lanes_tsv="$tmpdir/public-testnet-old-skeleton-pass-lanes.tsv"
 shared_devnet_pass_evidence="$tmpdir/shared-devnet-pass-evidence.md"
 public_rpc_evidence="$tmpdir/public-rpc-ready.md"
 explorer_evidence="$tmpdir/explorer-public-ready.md"
@@ -21,6 +22,7 @@ faucet_evidence="$tmpdir/faucet-guard-ready.md"
 reset_policy_evidence="$tmpdir/reset-policy-announced.md"
 runtime_bootstrap_evidence="$tmpdir/runtime-bootstrap-ready.md"
 claims_boundary_evidence="$tmpdir/claims-boundary-review.md"
+old_skeleton_evidence="$tmpdir/public-testnet-skeleton-example.md"
 
 latest_summary() {
   local scenario_dir=$1
@@ -97,6 +99,12 @@ cat >"$claims_boundary_evidence" <<'EOF'
 - allowed: `public_testnet`
 - denied: `mainnet_live`
 - note: smoke-only claims boundary lane evidence
+EOF
+
+cat >"$old_skeleton_evidence" <<'EOF'
+# old public testnet skeleton placeholder
+
+- verdict: specified_skeleton_only
 EOF
 
 ./scripts/network-tier-manifest.sh create \
@@ -250,6 +258,17 @@ if ./scripts/network-tier-public-testnet-readiness.sh \
   exit 1
 fi
 grep -q "pass evidence cannot use placeholder/template ref" "$tmpdir/template-pass.stderr"
+
+cp "$ready_lanes_tsv" "$old_skeleton_pass_lanes_tsv"
+replace_literal "$old_skeleton_pass_lanes_tsv" "$public_rpc_evidence" "$old_skeleton_evidence"
+if ./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest "$manifest_path" \
+  --lanes-tsv "$old_skeleton_pass_lanes_tsv" \
+  --out-dir "$out_dir/old-skeleton-pass-rejected" >"$tmpdir/old-skeleton-pass.stdout" 2>"$tmpdir/old-skeleton-pass.stderr"; then
+  echo "expected old skeleton pass evidence to be rejected" >&2
+  exit 1
+fi
+grep -q "pass evidence cannot use placeholder/template ref" "$tmpdir/old-skeleton-pass.stderr"
 
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \

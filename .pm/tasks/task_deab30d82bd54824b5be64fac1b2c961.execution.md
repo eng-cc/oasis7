@@ -166,3 +166,12 @@ Example:
 - Expected Result: Branch is pushed and GitHub PR exists with task-local role review and verification evidence.
 - Actual Result: Branch `task/engineering-p2p-cleanup-audit` pushed to `origin`; PR URL: https://github.com/eng-cc/oasis7/pull/449; `PR.md` and GitHub PR body include `task_uid: task_deab30d82bd54824b5be64fac1b2c961`.
 - Blocker / Next Action: Commit and push this PR evidence, then inspect PR status/checks/comments/review threads.
+
+## 2026-06-13 21:18:03 CST / tpm
+- 完成内容: Addressed PR #449 Codex review comment on stale public-testnet skeleton placeholder rejection.
+- 遗留事项: Push review fix, reply to the review comment, and continue required-check / mergeability watch.
+- Action: Updated `scripts/network-tier-public-testnet-readiness.sh` so `is_placeholder_ref()` still treats the legacy `public-testnet-skeleton-example.md` basename as placeholder evidence. Added a regression in `scripts/network-tier-manifest-smoke.sh` that creates a copied old-basename skeleton file, marks a lane `pass`, and expects readiness to reject it.
+- Validation Command: `./scripts/network-tier-manifest-smoke.sh`; `bash -n scripts/network-tier-manifest-smoke.sh scripts/network-tier-public-testnet-readiness.sh`; `git diff --check`; `./scripts/doc-governance-check.sh`; `./scripts/pm/workflow-lint.sh --task-uid task_deab30d82bd54824b5be64fac1b2c961 --phase post-pr`.
+- Expected Result: Old and new public-testnet skeleton placeholder refs cannot be promoted as pass evidence; script syntax, whitespace, doc governance, and post-PR workflow evidence remain clean.
+- Actual Result: `network-tier-manifest smoke passed`; `bash -n` passed; `git diff --check` passed; `doc-governance-check: OK`; `workflow-lint: OK (task_deab30d82bd54824b5be64fac1b2c961, phase=post-pr)`.
+- Blocker / Next Action: Commit and push review fix, then re-check PR #449 comments/checks/mergeability.

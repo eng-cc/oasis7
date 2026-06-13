@@ -9,6 +9,7 @@
 
 - `./scripts/shared-devnet-blocker-packet-smoke.sh`
 - `./scripts/network-tier-manifest-smoke.sh`
+- `bash -n scripts/network-tier-manifest-smoke.sh scripts/network-tier-public-testnet-readiness.sh`
 - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json --lanes-tsv doc/testing/templates/public-testnet-readiness-lanes.example.tsv --out-dir .tmp/task_deab30d8_pr_readiness`
 - `./scripts/shared-network-track-gate-smoke.sh`
 - `./scripts/doc-governance-check.sh`
