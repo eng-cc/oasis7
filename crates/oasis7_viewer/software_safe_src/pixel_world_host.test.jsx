@@ -311,6 +311,7 @@ describe("pixel world host", () => {
         delta_event_seq: 2,
       },
       world_read: {
+        tick: 12,
         agents: 1,
         routes: 1,
         fragments: 2,
@@ -318,6 +319,14 @@ describe("pixel world host", () => {
       },
     });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("surfaces the current snapshot tick in the persistent world readout", async () => {
+    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+
+    const readout = document.querySelector(".pixel-world-readout");
+    expect(readout).toHaveTextContent("tick=12");
+    expect(readout.querySelector('[data-world-tick="12"]')).toHaveTextContent("tick=12");
+  });
 
   it("localizes command board goal and next-action copy for the selected UI language", async () => {
     vi.resetModules();
@@ -626,6 +635,8 @@ describe("pixel world host", () => {
     });
     expect(screen.getByText("Rust next move")).toBeInTheDocument();
     expect(screen.getByText("Rust leverage summary")).toBeInTheDocument();
+    expect(document.querySelector(".pixel-world-readout")).toHaveTextContent("tick=12");
+    expect(document.querySelector(".pixel-world-readout [data-world-tick='12']")).toHaveTextContent("tick=12");
     await waitFor(() => {
       expect(document.querySelector(".pixel-world-canvas--rendered")).toBeInTheDocument();
     });
@@ -728,6 +739,8 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Build smelter mk1");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Missing Material");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Mission Progress");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("World Tick");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("tick=12");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Receipt");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("68%");
@@ -760,6 +773,7 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-controls")).toHaveAttribute("aria-label", "World focus controls");
     expect(document.querySelector(".pixel-world-focus-controls")).toContainElement(screen.getByRole("button", { name: "Command" }));
     expect(document.querySelector(".pixel-world-focus-hud__cell--prompt")).toHaveTextContent("Current Prompt");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--tick")).toHaveAttribute("data-world-tick", "12");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-blocker-present", "true");
     expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveClass("pixel-world-focus-fallback-map");

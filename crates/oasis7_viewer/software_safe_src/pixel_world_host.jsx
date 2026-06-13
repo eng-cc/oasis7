@@ -85,6 +85,17 @@ function safeNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function snapshotTick(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+  const tick = Number(fieldValue(snapshot, "time", "time", null));
+  if (!Number.isFinite(tick)) {
+    return null;
+  }
+  return Math.max(0, Math.floor(tick));
+}
+
 function worldCenterPosition(worldBounds) {
   if (!worldBounds) {
     return null;
@@ -611,6 +622,7 @@ function buildActionReceipt({ locale, gameplay, activeAgentId }) {
 function buildCommercialSurface({
   locale,
   gameplay,
+  worldTick,
   agents,
   links,
   fragmentTerrain,
@@ -672,6 +684,7 @@ function buildCommercialSurface({
       detail: gameplay?.narrativeBlockerDetail || gameplay?.blockerDetail || null,
     },
     world_read: {
+      tick: worldTick,
       agents: agents.length,
       routes: links.length,
       fragments: fragmentTerrain.length,
@@ -809,6 +822,29 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
   let runtimeModuleUrl = null;
   let deriveRenderState = null;
 
+  function withWorldTickReadout(renderState, renderInput) {
+    if (!renderState || !renderInput) {
+      return renderState;
+    }
+    const worldTick = snapshotTick(renderInput.snapshot);
+    if (worldTick === null) {
+      return renderState;
+    }
+    return {
+      ...renderState,
+      world_tick: renderState.world_tick ?? worldTick,
+      commercial_surface: renderState.commercial_surface
+        ? {
+          ...renderState.commercial_surface,
+          world_read: {
+            ...(renderState.commercial_surface.world_read || {}),
+            tick: renderState.commercial_surface.world_read?.tick ?? worldTick,
+          },
+        }
+        : renderState.commercial_surface,
+    };
+  }
+
   function deriveRenderStateOrFallback(renderInput, fallbackRenderState) {
     if (!deriveRenderState || !renderInput) {
       return fallbackRenderState;
@@ -819,7 +855,7 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
         onFatal?.(nextRenderState.fatal);
         return fallbackRenderState;
       }
-      return nextRenderState || fallbackRenderState;
+      return withWorldTickReadout(nextRenderState, renderInput) || fallbackRenderState;
     } catch (error) {
       onFatal?.({
         code: "pixel_world_rust_render_state_failed",
@@ -936,6 +972,7 @@ export function buildPixelWorldRenderStateFromInput(input) {
   const gameplay = input.gameplay;
   const worldScaleSurface = core.buildWorldScaleSurface(locale);
   const snapshot = input.snapshot;
+  const worldTick = snapshotTick(snapshot);
   const selected = input.selected;
   const space = snapshot?.config?.space || null;
 
@@ -1041,6 +1078,7 @@ export function buildPixelWorldRenderStateFromInput(input) {
   const commercialSurface = buildCommercialSurface({
     locale,
     gameplay,
+    worldTick,
     agents,
     links,
     fragmentTerrain,
@@ -1050,6 +1088,7 @@ export function buildPixelWorldRenderStateFromInput(input) {
 
   return {
     locale,
+    world_tick: worldTick,
     world_bounds: worldBounds,
     locations,
     fragment_terrain: fragmentTerrain,
@@ -1216,6 +1255,9 @@ function PixelWorldCommercialHud(props) {
         surface={surface}
       />
       <div class="pixel-world-readout badge-row">
+        <Show when={surface().world_read.tick !== null && surface().world_read.tick !== undefined}>
+          <span class="badge badge--accent" data-world-tick={String(surface().world_read.tick)}>{`tick=${surface().world_read.tick}`}</span>
+        </Show>
         <span class="badge badge--accent">{`agents=${surface().world_read.agents}`}</span>
         <span class="badge">{`routes=${surface().world_read.routes}`}</span>
         <span class="badge">{`fragments=${surface().world_read.fragments}`}</span>
@@ -1255,6 +1297,13 @@ function PixelWorldFocusHud(props) {
           </strong>
           <em>{surface().next_action.detail || surface().objective.detail}</em>
         </div>
+        <Show when={surface().world_read.tick !== null && surface().world_read.tick !== undefined}>
+          <div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick" data-world-tick={String(surface().world_read.tick)}>
+            <span>{tr(props.locale(), "世界 Tick", "World Tick")}</span>
+            <strong>{surface().world_read.tick}</strong>
+            <em>{`tick=${surface().world_read.tick}`}</em>
+          </div>
+        </Show>
         <div
           class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"
           data-blocker-present={surface().blocker.label ? "true" : "false"}
@@ -1939,6 +1988,9 @@ export function PixelWorldHost(props) {
             <span class="badge badge--accent">{`locations=${visualState().locations.length}`}</span>
             <span class="badge badge--accent">{`fragments=${visualState().fragmentTerrain.length}`}</span>
             <span class="badge badge--accent">{`agents=${visualState().agents.length}`}</span>
+            <Show when={renderState().world_tick !== null && renderState().world_tick !== undefined}>
+              <span class="badge badge--accent" data-world-tick={String(renderState().world_tick)}>{`tick=${renderState().world_tick}`}</span>
+            </Show>
             <span class="badge">{`links=${visualState().links.length}`}</span>
             <span class="badge">{`hotspots=${arrayField(renderState(), "visual_hotspots", "visualHotspots").length}`}</span>
             <span class="badge">{`derived_positions=${visualState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
@@ -1982,6 +2034,9 @@ export function PixelWorldHost(props) {
           <summary>{tr(locale(), "沉浸诊断", "Focus Diagnostics")}</summary>
           <div class="pixel-world-focus-drawer__body">
             <div class="badge-row">
+              <Show when={renderState().world_tick !== null && renderState().world_tick !== undefined}>
+                <span class="badge badge--accent" data-world-tick={String(renderState().world_tick)}>{`tick=${renderState().world_tick}`}</span>
+              </Show>
               <span class="badge">{`renderer=${rendererStatus()}`}</span>
               <span class="badge">{`runtime=${runtimeSource()}`}</span>
               <span class="badge">{`derived_positions=${renderState().agents.filter((agent) => agent.position_source === "location_derived").length}`}</span>
