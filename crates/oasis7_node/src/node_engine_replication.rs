@@ -6,8 +6,9 @@ use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
 impl PosNodeEngine {
-    // Mirrors release_default.execution_checkpoint_keep. The inclusive range probes the
-    // latest aligned boundary plus eight older retained-window boundaries.
+    // Mirrors release_default.execution_checkpoint_keep. Probe the advertised head first, then
+    // the older retained-window boundaries. The newest aligned boundary can still be in-flight
+    // or unretained on live testnet nodes, so retained-window probing starts one interval back.
     const HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS: u64 = 8;
 
     pub(super) fn high_replication_checkpoint_candidates(
@@ -23,11 +24,17 @@ impl PosNodeEngine {
         push_candidate(advertised_network_height);
         for interval in [64_u64, 32_u64] {
             let aligned = advertised_network_height - (advertised_network_height % interval);
-            for lookback in 0..=Self::HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS {
+            let first_lookback = if aligned.saturating_sub(interval) > blocked_height
+                && aligned != advertised_network_height
+            {
+                1
+            } else {
+                0
+            };
+            for lookback in first_lookback..=Self::HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS {
                 push_candidate(aligned.saturating_sub(interval.saturating_mul(lookback)));
             }
         }
-        candidates.sort_unstable_by(|a, b| b.cmp(a));
         candidates
     }
 
