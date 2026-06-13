@@ -412,7 +412,7 @@
     - `git diff --check`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] web-ui-automation-light-smoke (PRD-SCRIPTS-002) [test_tier_required]: 新增 `scripts/viewer-software-safe-step-regression-smoke.sh`，用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime 栈的前提下验证最小 Web/UI automation 链路与 summary/state 产物契约。 Trace: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml
+	- [x] web-ui-automation-light-smoke (PRD-SCRIPTS-002) [test_tier_required]: 新增 `scripts/viewer-software-safe-step-regression-smoke.sh`，用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime 栈的前提下验证最小 Web/UI automation 链路与 summary/state 产物契约。 Trace: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml
   - 产物文件:
     - `scripts/viewer-software-safe-step-regression-smoke.sh`
     - `doc/scripts/prd.md`
@@ -427,8 +427,23 @@
   - 验收命令 (`test_tier_required`):
     - `bash -n scripts/viewer-software-safe-step-regression-smoke.sh scripts/viewer-software-safe-step-regression.sh`
     - `./scripts/viewer-software-safe-step-regression-smoke.sh`
-    - `./scripts/doc-governance-check.sh`
-    - `git diff --check`
+	    - `./scripts/doc-governance-check.sh`
+	    - `git diff --check`
+	- [x] local-letai-test-entry-cleanup (PRD-SCRIPTS-001/002) [test_tier_required]: 明确本地真实 LetAI bridge + runtime/game 测试主入口为 `scripts/run-local-letai-game-test.sh`，并清理当前 docs/site/script help 中容易误导为真实试玩入口的底层 launcher / Viewer debug 引用。 Trace: .pm/tasks/task_919f4b730ea04b80865b60ae49efff82.yaml
+	  - 产物文件:
+	    - `doc/scripts/README.md`
+	    - `testing-manual.md`
+	    - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
+	    - `doc/world-simulator/viewer/viewer-manual.manual.md`
+	    - `scripts/run-local-letai-game-test.sh`
+	    - `scripts/run-launcher-stack.sh`
+	    - `scripts/run-game-test-ab.sh`
+	    - `site/skills/oasis7.md`
+	  - 验收命令 (`test_tier_required`):
+	    - `./scripts/doc-governance-check.sh`
+	    - `git diff --check`
+	    - `bash -n scripts/run-local-letai-game-test.sh scripts/run-launcher-stack.sh scripts/run-game-test-ab.sh`
+	    - `./scripts/pm/lint.sh`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`

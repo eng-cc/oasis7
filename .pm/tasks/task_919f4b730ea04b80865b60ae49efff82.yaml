@@ -8,7 +8,8 @@ priority: P2
 source_signal: null
 source_refs:
   - AGENTS.md
-doc_refs: []
+doc_refs:
+  - doc/scripts/project.md
 related_prd: []
 acceptance:
   - "Docs and script help distinguish local real LetAI bridge runtime test flow from lower-level launcher/bootstrap flows."
