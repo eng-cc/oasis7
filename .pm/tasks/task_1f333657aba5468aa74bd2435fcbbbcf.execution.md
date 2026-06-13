@@ -244,3 +244,12 @@ Example:
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: P3 finding addressed by replacing fixed `doc/p2p/node/README.md` density snapshot with stable high-density guidance and command-based current-count guidance; project Trace scoped to doc/evidence cleanup and explicitly avoids runtime/live public-testnet claims; fresh checks passed: stale density rg no matches, deleted shared_devnet id rg over doc/scripts/crates no matches, doc-governance-check OK, pm-lint OK, workflow-lint OK, git diff --check OK.
 - Residual Risk: Hidden non-repo consumers of deleted generated evidence are not validated; future p2p/testing evidence-routing drift remains possible; no runtime behavior, live public-testnet correctness, or QA CI gate-placement claim is made.
+
+## 2026-06-13 13:52:00 CST / tpm
+- 完成内容: PR branch pushed and GitHub PR created after prepare-task-pr script push succeeded but gh create needed an explicit body in non-interactive mode.
+- 遗留事项: Watch PR #433 required checks, comments/review threads, and mergeability; fix any failures or blockers; merge and clean up when gates pass.
+- Action: Create GitHub PR for p2p cleanup branch.
+- Validation Command: ./scripts/prepare-task-pr.sh --create --title 'Clean up stale p2p evidence docs'; gh pr create --base main --head task/p2p-cleanup-audit --title 'Clean up stale p2p evidence docs' --body <explicit body>
+- Expected Result: Branch is pushed and PR is opened.
+- Actual Result: prepare-task-pr pushed branch origin/task/p2p-cleanup-audit but gh create failed without explicit body; direct gh pr create succeeded: https://github.com/eng-cc/oasis7/pull/433.
+- Blocker / Next Action: Continue normal_pr_ci_watch for PR #433; this is not a manual packaging CI hold.
