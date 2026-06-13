@@ -849,14 +849,23 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                         if let Some(payload) =
                             parse_replication_commit_payload(message.payload.as_slice())
                         {
-                            commit_handle
-                                .publish_checkpoint_descriptor_providers_from_root(
-                                    &commit_network_policy,
-                                    commit_root_dir.as_path(),
-                                    commit_world_id.as_str(),
-                                    payload.execution_checkpoint.as_ref(),
-                                )
-                                .map_err(network_internal_error)?;
+                            if let Some(descriptor) = payload.execution_checkpoint {
+                                let publish_handle = commit_handle.clone();
+                                let publish_network_policy = commit_network_policy.clone();
+                                let publish_root_dir = commit_root_dir.clone();
+                                let publish_world_id = commit_world_id.clone();
+                                let _ = thread::Builder::new()
+                                    .name("replication-fetch-commit-provider-publish".to_string())
+                                    .spawn(move || {
+                                        let _ = publish_handle
+                                            .publish_checkpoint_descriptor_providers_from_root(
+                                                &publish_network_policy,
+                                                publish_root_dir.as_path(),
+                                                publish_world_id.as_str(),
+                                                Some(&descriptor),
+                                            );
+                                    });
+                            }
                         }
                     }
                     let response = FetchCommitResponse {

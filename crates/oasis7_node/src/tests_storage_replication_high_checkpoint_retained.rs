@@ -197,6 +197,190 @@ fn full_storage_publishes_execution_checkpoint_blob_providers() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[derive(Clone, Default)]
+struct BlockingCheckpointProviderDht {
+    entered_publish: Arc<(Mutex<bool>, Condvar)>,
+    release_publish: Arc<(Mutex<bool>, Condvar)>,
+}
+
+impl BlockingCheckpointProviderDht {
+    fn wait_until_publish_entered(&self, timeout: Duration) -> bool {
+        let deadline = std::time::Instant::now() + timeout;
+        let (lock, cvar) = &*self.entered_publish;
+        let mut entered = lock.lock().expect("lock entered_publish");
+        while !*entered {
+            let Some(remaining) = deadline.checked_duration_since(std::time::Instant::now())
+            else {
+                return false;
+            };
+            let (next_entered, _) = cvar
+                .wait_timeout(entered, remaining)
+                .expect("wait entered_publish");
+            entered = next_entered;
+        }
+        true
+    }
+
+    fn release(&self) {
+        let (lock, cvar) = &*self.release_publish;
+        *lock.lock().expect("lock release_publish") = true;
+        cvar.notify_all();
+    }
+}
+
+impl proto_dht::DistributedDht<WorldError> for BlockingCheckpointProviderDht {
+    fn publish_provider(
+        &self,
+        _world_id: &str,
+        _content_hash: &str,
+        _provider_id: &str,
+    ) -> Result<(), WorldError> {
+        let (entered_lock, entered_cvar) = &*self.entered_publish;
+        *entered_lock.lock().expect("lock entered_publish") = true;
+        entered_cvar.notify_all();
+
+        let (release_lock, release_cvar) = &*self.release_publish;
+        let mut released = release_lock.lock().expect("lock release_publish");
+        while !*released {
+            released = release_cvar
+                .wait(released)
+                .expect("wait release_publish");
+        }
+        Ok(())
+    }
+
+    fn get_providers(
+        &self,
+        _world_id: &str,
+        _content_hash: &str,
+    ) -> Result<Vec<ProviderRecord>, WorldError> {
+        Ok(Vec::new())
+    }
+
+    fn put_world_head(&self, _world_id: &str, _head: &WorldHeadAnnounce) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_world_head(&self, _world_id: &str) -> Result<Option<WorldHeadAnnounce>, WorldError> {
+        Ok(None)
+    }
+
+    fn put_membership_directory(
+        &self,
+        _world_id: &str,
+        _snapshot: &MembershipDirectorySnapshot,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_membership_directory(
+        &self,
+        _world_id: &str,
+    ) -> Result<Option<MembershipDirectorySnapshot>, WorldError> {
+        Ok(None)
+    }
+
+    fn put_peer_record(&self, _world_id: &str, _record: &SignedPeerRecord) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_peer_record(
+        &self,
+        _world_id: &str,
+        _peer_id: &str,
+    ) -> Result<Option<SignedPeerRecord>, WorldError> {
+        Ok(None)
+    }
+}
+
+#[test]
+fn fetch_commit_handler_does_not_block_on_checkpoint_provider_publish() {
+    let world_id = "world-fetch-commit-provider-publish-nonblocking";
+    let dir = temp_dir("fetch-commit-provider-publish-nonblocking");
+    let (_, public_key) = deterministic_keypair_hex(253);
+    let replication_config = signed_replication_config(dir.clone(), 253)
+        .with_fetch_requester_allowlist(vec![public_key])
+        .expect("fetch allowlist");
+    let config = NodeConfig::new("node-storage", world_id, NodeRole::Storage)
+        .expect("config")
+        .with_replication(replication_config.clone());
+    let mut replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-storage")
+            .expect("runtime");
+    let height = 64;
+    let decision = PosDecision {
+        height,
+        slot: height,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "block-64".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    replication
+        .build_local_commit_message_with_checkpoint(
+            "node-storage",
+            world_id,
+            7_064,
+            &decision,
+            Some("exec-block-64"),
+            Some("exec-state-64"),
+            Some(test_execution_checkpoint_bundle(
+                height,
+                "exec-block-64",
+                "exec-state-64",
+            )),
+        )
+        .expect("build checkpoint message")
+        .expect("message");
+
+    let network_impl = Arc::new(TestInMemoryNetwork::default());
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = network_impl.clone();
+    let dht = Arc::new(BlockingCheckpointProviderDht::default());
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht.clone())
+        .with_local_provider_id("storage-provider");
+    register_replication_fetch_handlers_with_checkpoint_export(
+        &handle,
+        &replication_config,
+        "node-storage",
+        world_id,
+        &config.network_policy,
+        None,
+    )
+    .expect("register fetch handlers");
+
+    let request = replication
+        .build_fetch_commit_request(world_id, height)
+        .expect("fetch request");
+    let payload = serde_json::to_vec(&request).expect("encode request");
+    let started_at = std::time::Instant::now();
+    let response = network
+        .request(REPLICATION_FETCH_COMMIT_PROTOCOL, payload.as_slice())
+        .expect("fetch response");
+
+    assert!(
+        started_at.elapsed() < Duration::from_millis(200),
+        "fetch-commit handler should return before checkpoint provider publish completes"
+    );
+    let decoded: FetchCommitResponse = serde_json::from_slice(response.as_slice())
+        .expect("decode fetch response");
+    assert!(decoded.found);
+    assert!(
+        dht.wait_until_publish_entered(Duration::from_secs(1)),
+        "checkpoint provider publish should still be scheduled in the background"
+    );
+    dht.release();
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head() {
     let world_id = "world-gap-sync-retained-window-below-head";
