@@ -927,6 +927,7 @@
 - [x] testnet-high-state-peer-retry (PRD-P2P-001/003) [test_tier_required]: 修复 cold observer 只连到 storage/full-storage peer 时无法获得 checkpoint descriptor 的问题；fetch-commit provider 现在可为 legacy sequencer commit 动态附加 retained execution checkpoint descriptor，并以 provider 自身 authorized replication writer 身份重签增强 message，支持 observer 无 seed/state-sync 自动安装高状态 checkpoint。 Trace: .pm/tasks/task_96c772c830e043f9b1e40b03e6f73d38.yaml
 - [x] p2p-evidence-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 清理无外部引用的 generated shared-network gate 中间快照，移除 p2p landing/index/node 入口中的易漂移固定密度快照，并刷新 testing evidence 的 p2p 首读入口到 public-testnet/current-version 证据链；不宣称 runtime/live public-testnet 行为变化。 Trace: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml
 - [x] p2p-peer-head-readiness-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 删除无外部引用、未作为当前权威 runtime/operator truth 入口维护的 peer-head readiness 历史叙事 design 文档；现行 readiness/operator 真值仍以 status payload、public-testnet runbook、preflight 脚本与本 project 追踪为准，不宣称 runtime/live public-testnet 行为变化。 Trace: .pm/tasks/task_56f67be67a5a43c09027cb224f1416ad.yaml
+- [x] p2p-stale-evidence-reference-cleanup (PRD-P2P-001/003/028) [test_tier_required]: 删除已被 2026-05-23 shared-devnet 证据、2026-04-07 mixed-topology baseline 和 template-scoped public-testnet skeleton 取代的 stale evidence/docs 引用；保留 2026-05 public-testnet live-candidate 证据为 archived historical snapshots，不宣称 runtime/live public-testnet 行为变化。 Trace: .pm/tasks/task_deab30d82bd54824b5be64fac1b2c961.yaml
 
 ## 依赖
 - 模块设计总览：`doc/p2p/design.md`

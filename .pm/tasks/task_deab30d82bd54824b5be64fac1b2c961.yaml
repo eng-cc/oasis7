@@ -9,17 +9,18 @@ source_signal: null
 source_refs:
   - AGENTS.md
   - doc/engineering/workflow/source-of-truth.md
-doc_refs: []
+doc_refs:
+  - doc/p2p/project.md
 related_prd: []
 acceptance:
   - "Repository health slice audits p2p-related code and docs for deletion candidates"
   - "Findings are written to the task execution log with evidence and owner guidance"
 handoff_to: []
-updated_at: 2026-06-13T20:35:34+08:00
+updated_at: 2026-06-13T21:04:41+08:00
 last_started_at: 2026-06-13T16:33:25+08:00
 last_claim_type: task_complete
 last_verify_command: "./scripts/pm/workflow-lint.sh --task-uid task_deab30d82bd54824b5be64fac1b2c961 --phase current && ./scripts/doc-governance-check.sh && git diff --check"
-last_verified_at: 2026-06-13T20:35:32+08:00
+last_verified_at: 2026-06-13T21:04:41+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
-last_closed_at: 2026-06-13T20:35:34+08:00
+last_closed_at: 2026-06-13T21:04:41+08:00

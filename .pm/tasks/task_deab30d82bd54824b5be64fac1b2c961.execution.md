@@ -130,8 +130,23 @@ Example:
 - Actual Result: `qa_engineer` returned no findings and PR-ready from QA/evidence-gate perspective; remaining initial agents timed out and were shut down before completion.
 - Blocker / Next Action: Re-dispatch narrow review slices for `repository_health_engineer`, `runtime_engineer`, and `liveops_community`.
 
-## 2026-06-13 21:09:12 CST / tpm
-- 完成内容: Pre-PR Local Role Review: passed.
+## 2026-06-13 21:05:41 CST / tpm
+- 完成内容: Pre-PR local role review, PR-ready claim, and closeout evidence recorded.
+- Pre-PR Local Role Review: passed
+- Task UID: task_deab30d82bd54824b5be64fac1b2c961
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-p2p-cleanup-audit
+- Source Branch: task/engineering-p2p-cleanup-audit
+- Source Head: 56d7305ffb2cf3547cced4a2f8ce56baf5b68812
+- Comparison Ref: main
+- Reviewed Changed Paths: `.pm/tasks/task_deab30d82bd54824b5be64fac1b2c961.execution.md`, `.pm/tasks/task_deab30d82bd54824b5be64fac1b2c961.yaml`, `doc/p2p/**`, `doc/testing/evidence/**`, `doc/testing/templates/**`, `scripts/network-tier-*`, `scripts/shared-devnet-*`, `testing-manual.md`
+- Role Selection Basis: p2p/shared-network cleanup touched repository governance, QA evidence gates, runtime/network-tier scripts, and operator/public-testnet claim boundaries, so `repository_health_engineer`, `qa_engineer`, `runtime_engineer`, and `liveops_community` reviewed.
+- Review Roles: repository_health_engineer, qa_engineer, runtime_engineer, liveops_community
+- Review Evidence: role packets from `qa_engineer`, `repository_health_engineer`, `runtime_engineer`, and `liveops_community`; fresh runtime re-check of `main...HEAD`/`origin/main...HEAD`; passed blocker-packet, network-tier, public-testnet readiness, shared-network gate, doc-governance, task-local workflow-lint, and whitespace checks.
+- Finding Disposition Evidence: QA/repository-health/liveops returned no blocking findings; runtime withdrew its initial P1 as a stale/false-positive after canonical diff-range re-check showed no Rust runtime path changes.
+- Review Findings Disposition: no_findings
+- Residual Risk: repo-wide `./scripts/pm/lint.sh` still fails on unrelated historical task-log structure debt outside this task; liveops noted minor discovery-efficiency residual risk around archive successor listing, not a PR blocker.
+  - `claim-ready.sh`: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --task-uid task_deab30d82bd54824b5be64fac1b2c961 --verify-command './scripts/shared-devnet-blocker-packet-smoke.sh && ./scripts/network-tier-manifest-smoke.sh && ./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json --lanes-tsv doc/testing/templates/public-testnet-readiness-lanes.example.tsv --out-dir .tmp/task_deab30d8_pr_readiness && ./scripts/shared-network-track-gate-smoke.sh && ./scripts/doc-governance-check.sh && git diff --check'`; result verified at `2026-06-13T21:04:15+08:00`, exit code 0, branch ready for PR.
+  - `task-closeout.sh`: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_deab30d82bd54824b5be64fac1b2c961 --verify-command './scripts/pm/workflow-lint.sh --task-uid task_deab30d82bd54824b5be64fac1b2c961 --phase current && ./scripts/doc-governance-check.sh && git diff --check' --no-lint`; result verified at `2026-06-13T21:04:41+08:00`, final status `done`, `pm_lint` skipped because repo-wide lint has unrelated historical task-log debt.
   - `qa_engineer`: no findings; PR-ready from QA/evidence-gate perspective. Confirmed deleted paths have no live refs, generated summaries are still partial, skeleton template still blocks, blocker-packet smoke is fixed, and 2026-05-21/2026-05-22 lane snapshots are archived.
   - `repository_health_engineer`: no findings for commit `7d865126d5ee75920e3fa00115f25c3ac2069f93` vs `main`; PR-ready. Confirmed old evidence paths only remain in audit/history context, live docs/scripts/templates now point to 2026-05-23 evidence, 2026-04-07 baseline, and template-scoped skeleton.
   - `runtime_engineer`: prior P1 was withdrawn as stale/false-positive after re-checking the canonical PR range `main...HEAD` / `origin/main...HEAD`; no runtime findings for the actual docs/scripts/templates-only diff; PR-ready from runtime scope.
@@ -141,4 +156,4 @@ Example:
 - Validation Command: `multi_agent_v1.wait_agent` / `send_input` review packets; `git diff --name-status main...HEAD | rg 'crates/oasis7_(net|node)|crates/oasis7' || true`; `git diff --stat main...HEAD -- crates/oasis7_net/src/libp2p_net/api.rs crates/oasis7_node/src/libp2p_replication_network.rs`.
 - Expected Result: All involved roles return no blocking findings, or any findings are resolved before PR creation.
 - Actual Result: All involved roles are no-findings / PR-ready after runtime false-positive withdrawal; runtime Rust path checks returned no output for the actual PR range.
-- Blocker / Next Action: Run PR preparation, amend the review packet into the commit, push branch, create PR, then enter PR checks/comments/merge watch.
+- Blocker / Next Action: Commit the evidence-only PR readiness packet, push branch, create PR, then enter PR checks/comments/merge watch.
