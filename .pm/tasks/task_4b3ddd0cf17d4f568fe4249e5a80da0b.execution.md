@@ -145,7 +145,7 @@ Example:
 - Task UID: task_4b3ddd0cf17d4f568fe4249e5a80da0b
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-world-runtime-local-letai-provider-timeout
 - Source Branch: task/world-runtime-local-letai-provider-timeout
-- Source Head: 3333422c4012add89a0e59234f1fadfb425ed117
+- Source Head: 76c6d71e1069b0190905eb0f29131120dbc1540c
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/tasks/task_4b3ddd0cf17d4f568fe4249e5a80da0b.yaml`; `.pm/tasks/task_4b3ddd0cf17d4f568fe4249e5a80da0b.execution.md`; `.pm/roles/tpm/backlog/committed.yaml`; `scripts/run-local-letai-game-test.sh`; `scripts/check-letai-chat-completions.sh`; `scripts/provider-remote-https/letai_provider_cli.py`; `scripts/provider-remote-https/letai_provider_cli.test.py`; `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`; `crates/oasis7/src/bin/oasis7_provider_local_bridge/agent_decision.rs`; `crates/oasis7/src/bin/oasis7_provider_local_bridge/support.rs`; `crates/oasis7/src/bin/oasis7_provider_local_bridge/tests.rs`; `crates/oasis7/src/viewer/runtime_live.rs`; `crates/oasis7/src/viewer/runtime_live/tests/background_play.rs`.
 - Role Selection Basis: runtime/provider bridge and LetAI CLI changes require `runtime_engineer`; player-facing blocked-control hint requires `viewer_engineer`; verification claim and live wrapper evidence require `qa_engineer`; shared scripts/CLI/env semantics and workflow truth require `repository_health_engineer`. `game_visual_interaction_designer` skipped because no visual direction, interaction feel, or screen-flow layout changed; `liveops_community` skipped because no external messaging, incident response, player promise, or channel runbook changed.
