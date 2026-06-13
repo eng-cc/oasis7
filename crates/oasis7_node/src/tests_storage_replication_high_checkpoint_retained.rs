@@ -102,9 +102,13 @@ fn high_replication_checkpoint_probe_continues_after_fetch_commit_timeout() {
 }
 
 #[test]
-fn high_replication_checkpoint_probe_does_not_continue_after_blob_or_execution_errors() {
+fn high_replication_checkpoint_probe_continues_after_missing_checkpoint_blob() {
     let blob_err = NodeError::Replication {
         reason: "execution checkpoint blob not found hash=missing-blob".to_string(),
+    };
+    let commit_blob_err = NodeError::Replication {
+        reason: "gap sync height 16640 blob not found for hash missing-commit-payload"
+            .to_string(),
     };
     let execution_err = NodeError::Execution {
         reason: "execution checkpoint install returned mismatched binding at height 16640"
@@ -116,8 +120,11 @@ fn high_replication_checkpoint_probe_does_not_continue_after_blob_or_execution_e
                 .to_string(),
     };
 
-    assert!(!PosNodeEngine::high_replication_checkpoint_probe_can_continue(
+    assert!(PosNodeEngine::high_replication_checkpoint_probe_can_continue(
         &blob_err
+    ));
+    assert!(PosNodeEngine::high_replication_checkpoint_probe_can_continue(
+        &commit_blob_err
     ));
     assert!(!PosNodeEngine::high_replication_checkpoint_probe_can_continue(
         &execution_err
@@ -125,6 +132,69 @@ fn high_replication_checkpoint_probe_does_not_continue_after_blob_or_execution_e
     assert!(!PosNodeEngine::high_replication_checkpoint_probe_can_continue(
         &protocol_omitted_blob_timeout
     ));
+}
+
+#[test]
+fn full_storage_publishes_execution_checkpoint_blob_providers() {
+    let world_id = "world-checkpoint-provider-publish";
+    let dir = temp_dir("checkpoint-provider-publish");
+    let (_, public_key) = deterministic_keypair_hex(252);
+    let config = NodeConfig::new("node-storage", world_id, NodeRole::Storage)
+        .expect("config")
+        .with_replication(
+            signed_replication_config(dir.clone(), 252)
+                .with_fetch_requester_allowlist(vec![public_key])
+                .expect("fetch allowlist"),
+        );
+    let replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-storage")
+            .expect("runtime");
+    let bundle = test_execution_checkpoint_bundle(64, "exec-block-64", "exec-state-64");
+    let manifest_hash = oasis7_distfs::blake3_hex(bundle.manifest_json.as_slice());
+    let blob_hash = bundle
+        .blobs
+        .first()
+        .expect("checkpoint blob")
+        .content_hash
+        .clone();
+    let descriptor = replication
+        .store_execution_checkpoint_bundle(&bundle)
+        .expect("store checkpoint");
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let dht = Arc::new(TestReplicaMaintenanceDht::new(
+        "remote-provider",
+        "storage-provider",
+    ));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht.clone())
+        .with_local_provider_id("storage-provider");
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+
+    PosNodeEngine::publish_execution_checkpoint_descriptor_providers(
+        &endpoint,
+        world_id,
+        &replication,
+        &descriptor,
+    )
+    .expect("publish checkpoint providers");
+
+    let published = dht.published_records();
+    for hash in [manifest_hash, blob_hash] {
+        assert!(
+            published.iter().any(
+                |(published_world, published_hash, provider)| published_world == world_id
+                    && published_hash == &hash
+                    && provider == "storage-provider"
+            ),
+            "expected checkpoint content hash={hash} to be published, published={published:?}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -231,7 +301,7 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
         dht.seed_provider(hash, "node-a-provider");
     }
     let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network))
-        .with_dht(dht)
+        .with_dht(dht.clone())
         .with_local_provider_id("node-b-provider");
     let endpoint_b =
         ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
@@ -271,7 +341,6 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
             .any(|provider| provider == "node-a-provider")),
         "expected retained checkpoint sync to route blob fetches through DHT providers, attempts={provider_attempts:?}"
     );
-
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }

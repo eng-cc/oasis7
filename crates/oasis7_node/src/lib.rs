@@ -798,6 +798,8 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
         let commit_world_id = world_id.to_string();
         let commit_replication_config = replication.clone();
         let commit_execution_hook = execution_hook.clone();
+        let commit_handle = handle.clone();
+        let commit_network_policy = network_policy.clone();
         network
             .register_handler(
                 REPLICATION_FETCH_COMMIT_PROTOCOL,
@@ -863,6 +865,20 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                         }
                         (message, _) => message,
                     };
+                    if let Some(message) = message.as_ref() {
+                        if let Some(payload) =
+                            parse_replication_commit_payload(message.payload.as_slice())
+                        {
+                            commit_handle
+                                .publish_checkpoint_descriptor_providers_from_root(
+                                    &commit_network_policy,
+                                    commit_root_dir.as_path(),
+                                    commit_world_id.as_str(),
+                                    payload.execution_checkpoint.as_ref(),
+                                )
+                                .map_err(network_internal_error)?;
+                        }
+                    }
                     let response = FetchCommitResponse {
                         found: message.is_some(),
                         message,

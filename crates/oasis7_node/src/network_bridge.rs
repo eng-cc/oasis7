@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -18,10 +19,11 @@ use crate::gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipMessage, GossipProposalMessage,
 };
 use crate::replication::{
-    FetchCommitRequest, FetchCommitResponse, FetchHeadRequest, FetchHeadResponse,
-    GossipReplicationMessage, REPLICATION_FETCH_COMMIT_PROTOCOL, REPLICATION_GET_HEAD_PROTOCOL,
+    load_blob_from_root, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
+    FetchHeadResponse, GossipReplicationMessage, REPLICATION_FETCH_COMMIT_PROTOCOL,
+    REPLICATION_GET_HEAD_PROTOCOL,
 };
-use crate::{NodeError, NodeNetworkPolicy};
+use crate::{NodeError, NodeExecutionCheckpointDescriptor, NodeNetworkPolicy};
 
 pub(crate) const DEFAULT_REPLICATION_TOPIC_PREFIX: &str = "aw";
 pub(crate) const DEFAULT_CONSENSUS_PROPOSAL_TOPIC_SUFFIX: &str = "consensus.proposal";
@@ -177,6 +179,80 @@ impl NodeReplicationNetworkHandle {
 
     pub fn clone_network(&self) -> Arc<dyn DistributedNetwork<WorldError> + Send + Sync> {
         Arc::clone(&self.network)
+    }
+
+    pub(crate) fn publish_local_content_provider(
+        &self,
+        network_policy: &NodeNetworkPolicy,
+        world_id: &str,
+        content_hash: &str,
+    ) -> Result<(), NodeError> {
+        let Some(dht) = self.dht.as_ref() else {
+            return Ok(());
+        };
+        let Some(local_provider_id) = self.local_provider_id.as_deref() else {
+            return Ok(());
+        };
+        if !network_policy
+            .allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Serve)
+        {
+            return Ok(());
+        }
+        dht.publish_provider(world_id, content_hash, local_provider_id)
+            .map_err(network_err)
+    }
+
+    pub(crate) fn publish_checkpoint_descriptor_providers_from_root(
+        &self,
+        network_policy: &NodeNetworkPolicy,
+        root_dir: &Path,
+        world_id: &str,
+        descriptor: Option<&NodeExecutionCheckpointDescriptor>,
+    ) -> Result<(), NodeError> {
+        let Some(descriptor) = descriptor else {
+            return Ok(());
+        };
+        self.publish_checkpoint_blob_provider_from_root(
+            network_policy,
+            root_dir,
+            world_id,
+            descriptor.manifest_ref.as_str(),
+            descriptor.manifest_size_bytes,
+        )?;
+        for blob_ref in &descriptor.blobs {
+            self.publish_checkpoint_blob_provider_from_root(
+                network_policy,
+                root_dir,
+                world_id,
+                blob_ref.content_hash.as_str(),
+                blob_ref.size_bytes,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn publish_checkpoint_blob_provider_from_root(
+        &self,
+        network_policy: &NodeNetworkPolicy,
+        root_dir: &Path,
+        world_id: &str,
+        content_hash: &str,
+        expected_size_bytes: u64,
+    ) -> Result<(), NodeError> {
+        let Some(bytes) = load_blob_from_root(root_dir, content_hash)? else {
+            return Ok(());
+        };
+        if bytes.len() as u64 != expected_size_bytes {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "checkpoint provider publish local blob size mismatch hash={} expected={} actual={}",
+                    content_hash,
+                    expected_size_bytes,
+                    bytes.len()
+                ),
+            });
+        }
+        self.publish_local_content_provider(network_policy, world_id, content_hash)
     }
 
     fn resolved_topic(&self, world_id: &str) -> String {
@@ -638,20 +714,13 @@ impl ReplicationNetworkEndpoint {
         world_id: &str,
         content_hash: &str,
     ) -> Result<(), NodeError> {
-        let Some(dht) = self.dht.as_ref() else {
-            return Ok(());
+        let handle = NodeReplicationNetworkHandle {
+            network: Arc::clone(&self.network),
+            dht: self.dht.clone(),
+            local_provider_id: self.local_provider_id.clone(),
+            topic: Some(self.topic.clone()),
         };
-        let Some(local_provider_id) = self.local_provider_id.as_deref() else {
-            return Ok(());
-        };
-        if !self
-            .network_policy
-            .allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Serve)
-        {
-            return Ok(());
-        }
-        dht.publish_provider(world_id, content_hash, local_provider_id)
-            .map_err(network_err)
+        handle.publish_local_content_provider(&self.network_policy, world_id, content_hash)
     }
 
     fn cached_fetch_commit_success_response(

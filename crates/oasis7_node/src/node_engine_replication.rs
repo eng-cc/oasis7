@@ -45,7 +45,42 @@ impl PosNodeEngine {
         let fetch_commit_route_error = reason.contains(REPLICATION_FETCH_COMMIT_PROTOCOL)
             && (reason.contains("NetworkProtocolUnavailable")
                 || reason.contains("request failed: Timeout"));
-        fetch_commit_route_error
+        let checkpoint_blob_missing = reason.contains("execution checkpoint blob not found hash=")
+            || (reason.contains("gap sync height ")
+                && reason.contains(" blob not found for hash "));
+        fetch_commit_route_error || checkpoint_blob_missing
+    }
+
+    pub(super) fn publish_execution_checkpoint_descriptor_providers(
+        endpoint: &ReplicationNetworkEndpoint,
+        world_id: &str,
+        replication_runtime: &ReplicationRuntime,
+        descriptor: &NodeExecutionCheckpointDescriptor,
+    ) -> Result<(), NodeError> {
+        let publish_if_present = |content_hash: &str, expected_size_bytes: u64| {
+            let Some(bytes) = replication_runtime.load_blob_by_hash(content_hash)? else {
+                return Ok(());
+            };
+            if bytes.len() as u64 != expected_size_bytes {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "execution checkpoint provider publish local blob size mismatch hash={} expected={} actual={}",
+                        content_hash,
+                        expected_size_bytes,
+                        bytes.len()
+                    ),
+                });
+            }
+            endpoint.publish_local_content_provider(world_id, content_hash)
+        };
+        publish_if_present(
+            descriptor.manifest_ref.as_str(),
+            descriptor.manifest_size_bytes,
+        )?;
+        for blob_ref in &descriptor.blobs {
+            publish_if_present(blob_ref.content_hash.as_str(), blob_ref.size_bytes)?;
+        }
+        Ok(())
     }
 
     fn clear_replication_gap_sync_blocked_if_unblocked(&mut self) {
@@ -171,6 +206,17 @@ impl PosNodeEngine {
             execution_checkpoint,
         )? {
             if let Some(endpoint) = network_endpoint {
+                if let Some(payload) = parse_replication_commit_payload(message.payload.as_slice())
+                {
+                    if let Some(descriptor) = payload.execution_checkpoint.as_ref() {
+                        Self::publish_execution_checkpoint_descriptor_providers(
+                            endpoint,
+                            world_id,
+                            replication,
+                            descriptor,
+                        )?;
+                    }
+                }
                 endpoint.publish_local_content_provider(
                     world_id,
                     message.record.content_hash.as_str(),
@@ -427,6 +473,18 @@ impl PosNodeEngine {
                         world_id,
                         message.record.content_hash.as_str(),
                     )?;
+                    if let Some(full_payload) =
+                        parse_replication_commit_payload(message.payload.as_slice())
+                    {
+                        if let Some(descriptor) = full_payload.execution_checkpoint.as_ref() {
+                            Self::publish_execution_checkpoint_descriptor_providers(
+                                endpoint,
+                                world_id,
+                                replication_runtime,
+                                descriptor,
+                            )?;
+                        }
+                    }
                     if let Some(payload) = payload_view {
                         self.advance_contiguous_replication_persisted_height(
                             replication_runtime,
@@ -666,6 +724,12 @@ impl PosNodeEngine {
             )?;
         }
         replication_runtime.pin_execution_checkpoint_descriptor(descriptor)?;
+        Self::publish_execution_checkpoint_descriptor_providers(
+            endpoint,
+            world_id,
+            replication_runtime,
+            descriptor,
+        )?;
         replication_runtime
             .load_execution_checkpoint_bundle(descriptor)?
             .ok_or_else(|| NodeError::Replication {
