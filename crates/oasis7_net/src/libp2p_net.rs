@@ -188,6 +188,7 @@ impl Libp2pNetwork {
                 &keypair_clone,
                 enable_rendezvous,
                 config_clone.enable_autonat,
+                config_clone.request_response_timeout,
                 Arc::clone(&event_wire_byte_counters),
             );
             let mut subscriptions = HashSet::new();

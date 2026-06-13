@@ -21,6 +21,10 @@ pub(crate) struct FetchCommitResponse {
 pub(crate) struct FetchBlobRequest {
     pub content_hash: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requester_public_key_hex: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requester_signature_hex: Option<String>,
@@ -29,6 +33,10 @@ pub(crate) struct FetchBlobRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct FetchBlobResponse {
     pub found: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range_offset_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range_complete: Option<bool>,
     #[serde(
         default,
         deserialize_with = "deserialize_optional_hex_or_bytes",
@@ -77,6 +85,8 @@ mod tests {
     fn fetch_blob_response_serializes_blob_as_compact_hex_string() {
         let response = FetchBlobResponse {
             found: true,
+            range_offset_bytes: None,
+            range_complete: None,
             blob: Some(vec![0, 1, 2, 254, 255]),
         };
 

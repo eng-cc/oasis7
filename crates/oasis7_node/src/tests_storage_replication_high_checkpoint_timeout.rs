@@ -218,6 +218,8 @@ impl TimeoutThenCheckpointNetwork {
             .cloned();
         serde_json::to_vec(&replication::FetchBlobResponse {
             found: blob.is_some(),
+            range_offset_bytes: None,
+            range_complete: None,
             blob,
         })
         .map_err(|err| WorldError::DistributedValidationFailed {

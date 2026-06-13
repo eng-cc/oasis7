@@ -44,6 +44,7 @@ fn process_discovered_peer_record_retries_failed_candidate_dial_on_rediscovery()
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let peer_key = Keypair::generate_ed25519();
@@ -81,6 +82,7 @@ fn process_discovered_peer_record_retries_failed_candidate_dial_on_rediscovery()
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::wire_bytes::init_shared_wire_byte_counters(),
     );
 
@@ -108,6 +110,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
         &keypair,
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let (sender, receiver) = std::sync::mpsc::channel();
@@ -208,6 +211,7 @@ fn refresh_peer_discovery_respects_republish_and_query_budgets() {
         &keypair,
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let mut subscriptions = HashSet::new();
@@ -357,6 +361,7 @@ fn refresh_peer_discovery_skips_backfill_when_connected_peers_are_already_known(
         &keypair,
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let mut subscriptions = HashSet::new();

@@ -1045,6 +1045,8 @@ impl ReplicationRuntime {
     ) -> Result<FetchBlobRequest, NodeError> {
         let mut request = FetchBlobRequest {
             content_hash: content_hash.to_string(),
+            offset_bytes: None,
+            limit_bytes: None,
             requester_public_key_hex: self
                 .signer
                 .as_ref()

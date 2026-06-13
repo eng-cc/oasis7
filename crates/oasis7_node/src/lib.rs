@@ -972,8 +972,23 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                     let blob =
                         load_blob_from_root(blob_root_dir.as_path(), request.content_hash.as_str())
                             .map_err(network_internal_error)?;
+                    let (blob, range_complete) = match blob {
+                        Some(bytes) => {
+                            let (slice, range_complete) = slice_fetch_blob_response(
+                                bytes,
+                                request.offset_bytes,
+                                request.limit_bytes,
+                            );
+                            (Some(slice), range_complete)
+                        }
+                        None => (None, None),
+                    };
+                    let range_offset_bytes =
+                        request.offset_bytes.filter(|_| range_complete.is_some());
                     let response = FetchBlobResponse {
                         found: blob.is_some(),
+                        range_offset_bytes,
+                        range_complete,
                         blob,
                     };
                     serde_json::to_vec(&response).map_err(|err| {
@@ -987,6 +1002,26 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
     }
 
     Ok(())
+}
+
+fn slice_fetch_blob_response(
+    bytes: Vec<u8>,
+    offset_bytes: Option<u64>,
+    limit_bytes: Option<u64>,
+) -> (Vec<u8>, Option<bool>) {
+    let Some(offset_bytes) = offset_bytes else {
+        return (bytes, None);
+    };
+    let offset = usize::try_from(offset_bytes).unwrap_or(usize::MAX);
+    if offset >= bytes.len() {
+        return (Vec::new(), Some(true));
+    }
+    let limit = limit_bytes
+        .and_then(|value| usize::try_from(value).ok())
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| bytes.len().saturating_sub(offset));
+    let end = offset.saturating_add(limit).min(bytes.len());
+    (bytes[offset..end].to_vec(), Some(end >= bytes.len()))
 }
 
 fn network_bad_request(message: impl Into<String>) -> ProtoWorldError {

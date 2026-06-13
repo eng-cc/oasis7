@@ -75,6 +75,8 @@ fn build_storage_challenge_blob_cache_fixture(
                     .expect("lock request count") += 1;
                 let response = super::replication::FetchBlobResponse {
                     found: request.content_hash == expected_hash,
+            range_offset_bytes: None,
+            range_complete: None,
                     blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
                 };
                 serde_json::to_vec(&response).map_err(|err| {

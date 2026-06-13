@@ -113,6 +113,8 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
                         })?;
                 serde_json::to_vec(&super::replication::FetchBlobResponse {
                     found: request.content_hash == expected_hash,
+            range_offset_bytes: None,
+            range_complete: None,
                     blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
                 })
                 .map_err(|err| WorldError::DistributedValidationFailed {
@@ -263,6 +265,8 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
                         })?;
                 serde_json::to_vec(&super::replication::FetchBlobResponse {
                     found: request.content_hash == expected_hash,
+            range_offset_bytes: None,
+            range_complete: None,
                     blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
                 })
                 .map_err(|err| WorldError::DistributedValidationFailed {

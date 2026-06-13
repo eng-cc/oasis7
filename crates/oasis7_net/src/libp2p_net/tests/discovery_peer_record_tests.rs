@@ -9,6 +9,7 @@ fn routing_update_defers_bootstrap_peer_record_until_connection_exists() {
         &keypair,
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let mut pending_dht = HashMap::new();
@@ -79,6 +80,7 @@ fn routing_update_skips_peer_record_for_unconnected_non_bootstrap_peer() {
         &keypair,
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let mut pending_dht = HashMap::new();
@@ -125,6 +127,7 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let peer_key = Keypair::generate_ed25519();
@@ -210,6 +213,7 @@ fn process_discovered_peer_record_keeps_dht_only_suspect_peer_non_dialable() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let peer_key = Keypair::generate_ed25519();
@@ -248,6 +252,7 @@ fn maybe_queue_discovery_peer_record_skips_peer_with_cached_record() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let local_peer_id = PeerId::random();
@@ -296,6 +301,7 @@ fn maybe_request_cached_peer_record_does_not_use_target_peer_as_proxy() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let local_peer_id = PeerId::random();
@@ -327,6 +333,7 @@ fn maybe_request_connected_peer_record_respects_short_cooldown() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let local_peer_id = PeerId::random();
@@ -384,6 +391,7 @@ fn maybe_request_cached_peer_record_respects_short_cooldown() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let local_peer_id = PeerId::random();
@@ -445,6 +453,7 @@ fn maybe_request_cached_discovery_peers_respects_short_cooldown() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let local_peer_id = PeerId::random();
@@ -502,6 +511,7 @@ fn start_peer_discovery_query_respects_pending_query_and_cooldown() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let template = super::signed_discovery_peer_record(
@@ -568,6 +578,7 @@ fn clear_disconnected_peer_state_removes_peer_record_cooldowns() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let local_peer_id = PeerId::random();
@@ -736,6 +747,7 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let target_peer_id = PeerId::random();
@@ -816,6 +828,7 @@ fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let target_peer_id = PeerId::random();

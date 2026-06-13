@@ -63,6 +63,9 @@ const REQUEST_PEER_GENERIC_PENALTY: u8 = 10;
 const REQUEST_PEER_SUCCESS_RECOVERY: u8 = 5;
 const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 12_000;
 const REQUEST_RETRY_BUDGET_MS: u64 = 20_000;
+const FETCH_BLOB_REQUEST_TO_PEER_TIMEOUT_MS: u64 = 30_000;
+const FETCH_BLOB_REQUEST_RETRY_BUDGET_MS: u64 = 180_000;
+const REPLICATION_FETCH_BLOB_PROTOCOL_MARKER: &str = "/fetch-blob/";
 
 #[derive(Debug, Clone)]
 struct RequestPeerScore {
@@ -86,6 +89,8 @@ pub struct Libp2pReplicationNetworkConfig {
     pub protocol_retry_cooldown_after: Duration,
     pub request_timeout: Duration,
     pub request_retry_budget: Duration,
+    pub fetch_blob_request_timeout: Duration,
+    pub fetch_blob_request_retry_budget: Duration,
 }
 
 impl Default for Libp2pReplicationNetworkConfig {
@@ -106,6 +111,12 @@ impl Default for Libp2pReplicationNetworkConfig {
             protocol_retry_cooldown_after: Duration::from_millis(PROTOCOL_RETRY_COOLDOWN_AFTER_MS),
             request_timeout: Duration::from_millis(REQUEST_TO_PEER_TIMEOUT_MS),
             request_retry_budget: Duration::from_millis(REQUEST_RETRY_BUDGET_MS),
+            fetch_blob_request_timeout: Duration::from_millis(
+                FETCH_BLOB_REQUEST_TO_PEER_TIMEOUT_MS,
+            ),
+            fetch_blob_request_retry_budget: Duration::from_millis(
+                FETCH_BLOB_REQUEST_RETRY_BUDGET_MS,
+            ),
         }
     }
 }
@@ -119,6 +130,8 @@ pub struct Libp2pReplicationNetwork {
     protocol_retry_cooldown_after: Duration,
     request_timeout: Duration,
     request_retry_budget: Duration,
+    fetch_blob_request_timeout: Duration,
+    fetch_blob_request_retry_budget: Duration,
     protocol_retry_cooldown_peers: Arc<Mutex<HashMap<String, HashMap<PeerId, Instant>>>>,
     transport_retry_cooldown_peers: Arc<Mutex<HashMap<PeerId, Instant>>>,
     request_peer_scores: Arc<Mutex<HashMap<PeerId, RequestPeerScore>>>,
@@ -137,6 +150,9 @@ impl Libp2pReplicationNetwork {
             discovery_query_cooldown_ms: config.discovery_query_cooldown_ms,
             enable_autonat: config.enable_autonat,
             peer_manager_policy: config.peer_manager_policy,
+            request_response_timeout: config
+                .request_retry_budget
+                .max(config.fetch_blob_request_timeout),
             ..Libp2pNetworkConfig::default()
         });
 
@@ -149,6 +165,8 @@ impl Libp2pReplicationNetwork {
             protocol_retry_cooldown_after: config.protocol_retry_cooldown_after,
             request_timeout: config.request_timeout,
             request_retry_budget: config.request_retry_budget,
+            fetch_blob_request_timeout: config.fetch_blob_request_timeout,
+            fetch_blob_request_retry_budget: config.fetch_blob_request_retry_budget,
             protocol_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
             transport_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
             request_peer_scores: Arc::new(Mutex::new(HashMap::new())),
@@ -491,12 +509,14 @@ impl Libp2pReplicationNetwork {
         let started_at = Instant::now();
         let mut last_error = None;
         let mut attempted_peers = HashSet::new();
+        let request_timeout = self.request_timeout_for_protocol(protocol);
+        let request_retry_budget = self.request_retry_budget_for_protocol(protocol);
 
         for attempt in 0..=REQUEST_CONNECTION_REFRESH_RETRIES {
-            if started_at.elapsed() >= self.request_retry_budget {
+            if started_at.elapsed() >= request_retry_budget {
                 return Err(replication_request_budget_exhausted(
                     protocol,
-                    self.request_retry_budget,
+                    request_retry_budget,
                     last_error,
                 ));
             }
@@ -528,16 +548,16 @@ impl Libp2pReplicationNetwork {
             for peer in ordered_peers {
                 attempted_peers.insert(peer);
                 let elapsed = started_at.elapsed();
-                if elapsed >= self.request_retry_budget {
+                if elapsed >= request_retry_budget {
                     return Err(replication_request_budget_exhausted(
                         protocol,
-                        self.request_retry_budget,
+                        request_retry_budget,
                         last_error,
                     ));
                 }
-                let remaining_budget = self.request_retry_budget.saturating_sub(elapsed);
-                let request_timeout = self.request_timeout.min(remaining_budget);
-                match self.request_via_peer(protocol, payload, peer, request_timeout) {
+                let remaining_budget = request_retry_budget.saturating_sub(elapsed);
+                let peer_request_timeout = request_timeout.min(remaining_budget);
+                match self.request_via_peer(protocol, payload, peer, peer_request_timeout) {
                     Ok(reply) => {
                         self.mark_peer_request_success(peer);
                         return Ok(reply);
@@ -553,10 +573,10 @@ impl Libp2pReplicationNetwork {
                         retryable_connection_gap |=
                             peer_error_indicates_retryable_connection_gap(&err);
                         last_error = Some(err);
-                        if started_at.elapsed() >= self.request_retry_budget {
+                        if started_at.elapsed() >= request_retry_budget {
                             return Err(replication_request_budget_exhausted(
                                 protocol,
-                                self.request_retry_budget,
+                                request_retry_budget,
                                 last_error,
                             ));
                         }
@@ -590,6 +610,20 @@ impl Libp2pReplicationNetwork {
         }
 
         Err(last_error.unwrap_or_else(no_connected_error))
+    }
+
+    fn request_timeout_for_protocol(&self, protocol: &str) -> Duration {
+        if protocol.contains(REPLICATION_FETCH_BLOB_PROTOCOL_MARKER) {
+            return self.fetch_blob_request_timeout;
+        }
+        self.request_timeout
+    }
+
+    fn request_retry_budget_for_protocol(&self, protocol: &str) -> Duration {
+        if protocol.contains(REPLICATION_FETCH_BLOB_PROTOCOL_MARKER) {
+            return self.fetch_blob_request_retry_budget;
+        }
+        self.request_retry_budget
     }
 }
 

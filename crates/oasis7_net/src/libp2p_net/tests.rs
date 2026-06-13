@@ -100,6 +100,7 @@ fn build_swarm_supports_more_than_default_max_provider_records() {
         &keypair,
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::wire_bytes::init_shared_wire_byte_counters(),
     );
 
@@ -590,6 +591,7 @@ fn process_discovered_peer_record_dials_candidate_peer() {
         &Keypair::generate_ed25519(),
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let peer_key = Keypair::generate_ed25519();

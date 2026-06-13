@@ -335,6 +335,8 @@ fn authorize_fetch_blob_request_rejects_requester_outside_allowlist() {
     };
     let mut request = FetchBlobRequest {
         content_hash: "hash-1".to_string(),
+        offset_bytes: None,
+        limit_bytes: None,
         requester_public_key_hex: Some(requester_public_hex),
         requester_signature_hex: None,
     };
