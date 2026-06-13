@@ -1,0 +1,28 @@
+task_uid: task_761375d25bc24fe59147a853e8c8acb0
+title: "Implement automatic high-state testnet sync"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-windows-testnet-node-redeploy
+execution_log_path: .pm/tasks/task_761375d25bc24fe59147a853e8c8acb0.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md
+  - crates/oasis7_node/src/node_engine_replication.rs
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/p2p/project.md
+related_prd: []
+acceptance:
+  - "New observer can bootstrap from retained high execution checkpoint when low commit history is unavailable."
+  - "Design notes and execution log distinguish checkpoint discovery, commit replay, and deployment expectations."
+  - "Regression tests cover non-checkpoint head / retained checkpoint discovery."
+handoff_to: []
+updated_at: 2026-06-13T11:09:40+08:00
+last_started_at: 2026-06-13T10:39:02+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo fmt --check && ./scripts/check-rust-file-size.sh && git diff --check && env -u RUSTC_WRAPPER cargo test -p oasis7_node storage_replication_high_checkpoint_retained_tests -- --nocapture && env -u RUSTC_WRAPPER cargo test -p oasis7_node storage_replication_high_checkpoint_tests -- --nocapture && env -u RUSTC_WRAPPER cargo test -p oasis7_node storage_replication_progress_tests -- --nocapture && ./scripts/doc-governance-check.sh"
+last_verified_at: 2026-06-13T11:09:39+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-13T11:09:40+08:00

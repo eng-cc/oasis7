@@ -94,6 +94,17 @@
 6. 自动 high-head checkpoint catch-up 只覆盖 observer/light-node 边界；execution-required 节点不能用它跳过历史执行，也不能把它当作完整 snapshot state-sync。
 7. `seed-from-remote` / state-sync 产物只用于自动 checkpoint catch-up 失败后的 recovery；产物必须包含 execution restore 所需 blob 闭包，否则 observer 会在 restore snapshot/journal 时落入 `BlobNotFound`。
 
+### 4.1 Runtime high-state sync contract
+`public_testnet` observer 的标准 attach 设计是不要求操作者预先提供 seed/state-sync 目录。新 observer 在发现远端链头远高于本地高度时，必须先尝试从 P2P replication 网络拉取一个受验证的高位 execution checkpoint，再从该 checkpoint 后继续 tail gap sync。
+
+运行时实现必须满足以下约束：
+
+1. 候选 checkpoint 不能只看 advertised head 或最近一个对齐边界；必须覆盖 storage profile 保留窗口内的多个 checkpoint 边界。
+2. `release_default` 当前按 64 高度间隔保留 8 个 execution checkpoint，因此 observer gap sync 至少要回看 8 个 64-height checkpoint windows。
+3. checkpoint commit payload 的 `execution_block_hash`、`execution_state_root` 与 checkpoint descriptor 必须完全匹配，blob 内容必须按 content hash 和 size 校验后才能安装。
+4. 如果 advertised head 不是 checkpoint 高度，observer 可以安装 head 之前最近仍被保留且可验证的 checkpoint；安装后再由正常 gap sync 追尾。
+5. 若保留窗口内没有可获取的 checkpoint，状态接口应继续报告 `state_sync_fallback_required=true`，此时才进入 break-glass seed/state-sync recovery。
+
 ## 5. Required Inputs
 开始前，操作者必须准备好以下输入：
 
