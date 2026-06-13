@@ -292,7 +292,7 @@
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer`
   - `env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown`
 - Web 闭环（agent-browser）：
-  - 使用 repo-owned Viewer/debug Web 闭环或现行 `run-local-letai-game-test.sh` + agent-browser 复测新手流程（隐藏态 -> 展开面板 -> 选择目标 -> 隐藏态复查）。
+  - 使用 `oasis7_viewer_live + run-viewer-web.sh + agent-browser` 复测新手流程（隐藏态 -> 展开面板 -> 选择目标 -> 隐藏态复查）。
   - 控制台记录：`output/playwright/viewer/console-2026-02-23T13-41-21-606Z.log`（`Errors: 0`）。
   - 截图产物：
     - `output/playwright/viewer/phase10/step0-hidden-initial.png`

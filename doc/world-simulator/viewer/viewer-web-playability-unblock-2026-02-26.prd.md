@@ -14,7 +14,7 @@
 - `crates/oasis7_viewer/src/web_test_api.rs`
 - `crates/oasis7_viewer/src/headless.rs`
 - `crates/oasis7_viewer/src/app_bootstrap.rs`
-- `scripts/run-launcher-stack.sh`
+- `scripts/run-game-test.sh`
 - 相关单元测试（viewer 侧）
 
 不在范围内：
@@ -39,7 +39,7 @@
 ## 5. Risks & Roadmap
 1. M1: 修复 Web Test API 参数契约和 panic 问题。
 2. M2: 落地 Web Player 自动 `Play`，验证 `tick` 可推进。
-3. M3: 修复现行 launcher stack WS 就绪探针误报。
+3. M3: 修复 `run-game-test.sh` WS 就绪探针误报。
 4. M4: 回归测试、文档与 devlog 回写。
 
 ### Technical Risks

@@ -103,7 +103,7 @@ rg -n "审计轮次:[[:space:]]*[1-9][0-9]*" doc/*/prd*.md doc/*/**/*.prd*.md
 | I-010 | viewer 行数收口文档声称“全部 <=1200”，但当前多个 viewer 源文件已超限。 | `doc/world-simulator/viewer/*` | medium |
 | I-011 | p2p 分布式文档仍含旧路径 `distributed_membership_sync/logic.rs`，phase7 验收主要锚定“旧路径删除”，缺少现状正向锚点。 | `doc/p2p/distributed/*` | medium |
 | I-012 | site 中 4 处 gameplay top-level design 外链指向不存在的 `.md`（应为 `.prd.md`），产生 404。 | `site/index.html`、`site/en/index.html`、`site/doc/cn/index.html`、`site/doc/en/index.html` | high |
-| I-013 | 已收口：`game-test` 文档当前要求走脚本入口并禁止手工拼接 viewer live / viewer web 参数。 | `doc/playability_test_result/game-test.prd.md` | resolved |
+| I-013 | `game-test` 文档启动链路仍写 `oasis7_viewer_live + run-viewer-web.sh`，与现有 `oasis7_game_launcher` 流程不一致。 | `doc/playability_test_result/game-test.prd.md` | high |
 | I-014 | 资源/计费口径在文档间不一致（`Compound/Hardware`、`Token Gas` 与实现 `Electricity/Data` 计费不一致）。 | `doc/readme/governance/*`、`doc/game/gameplay/*` | medium |
 | I-015 | `release.md` 类型文档未纳入 `prd.index` 树，可追溯性不足。 | `doc/p2p/*/*.release.md` | medium |
 | I-016 | `site/doc/*/viewer-manual.html` 外链仍指向历史 `.md` 路径（缺少 `/viewer/` 目录与 `.prd.md` 后缀），导致 GitHub 404。 | `site/doc/cn/viewer-manual.html`、`site/doc/en/viewer-manual.html` | high |
@@ -133,7 +133,7 @@ rg -n "审计轮次:[[:space:]]*[1-9][0-9]*" doc/*/prd*.md doc/*/**/*.prd*.md
 | A-007 | world-simulator launcher 文档收口：旧 desktop/unified 口径标记历史或归档，web-console 状态机回写到现状枚举 | world-simulator 维护者 | 2026-03-09 | done |
 | A-008 | viewer 行数约束文档与现状对齐：更新“超限清单”并补持续审计命令 | world-simulator/viewer 维护者 | 2026-03-09 | done |
 | A-009 | p2p 分布式文档对齐：修复旧路径引用，phase7 增加“当前四 crate 正向验收锚点”，并处理 `release.md` 可达性 | p2p 维护者 | 2026-03-09 | done |
-| A-010 | 修复站点 404 链接与 game-test 启动链路描述，保证文档步骤与现行 launcher/test 脚本一致 | site + playability 维护者 | 2026-03-07 | done |
+| A-010 | 修复站点 404 链接与 game-test 启动链路描述，保证文档步骤与 `scripts/run-game-test*.sh` 一致 | site + playability 维护者 | 2026-03-07 | done |
 | A-011 | 对齐资源/计费语义：`readme-resource-model-layering` 与 `gameplay-engineering-architecture` 统一为当前 runtime 实现口径 | readme + game 维护者 | 2026-03-09 | done |
 | A-012 | 归档候选批次化执行：为 `R-001~R-009` 输出“保留文档 + 替代链 + 索引回写 + redirect”清单，并实施首批迁移（见 `doc/core/reviews/round-001-archive-migration-plan.md`） | core + 各模块维护者 | 2026-03-12 | done |
 | A-013 | 对已完成本轮审读的文档回写 `审计轮次: 1`（缺省=0 保留），并以 `S_round001` 清单作为统计分母；执行要求为“单文档审计完成即同提交回写（与是否整改解耦）” | 各模块维护者 | 2026-03-12 | done |

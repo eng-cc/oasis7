@@ -8,7 +8,7 @@
 ## 1. Executive Summary
 - 修复 Viewer 右侧 Agent Chat 输入框无法稳定输入中文（IME 组合输入）的问题。
 - 保持现有英文输入、快捷键、控制台与 WebSocket 链路行为不回退。
-- 保持现有 Viewer/debug Web 闭环流程可用；本地真实 provider-backed gameplay 不从裸 `run-viewer-web.sh` 启动。
+- 保持现有 `oasis7_viewer_live + run-viewer-web.sh` Web 闭环流程可用。
 
 ## 2. User Experience & Functionality
 
