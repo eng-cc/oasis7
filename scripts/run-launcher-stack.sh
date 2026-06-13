@@ -46,25 +46,27 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/run-launcher-stack.sh [options]
 
-Start a stable web playability test stack with safe defaults.
+Start the lower-level launcher/runtime bootstrap used by wrappers and targeted
+regressions.
 
-For local real LetAI bridge-backed gameplay, prefer:
-- ./scripts/run-local-letai-game-test.sh
+Operator-facing playtest entries:
+- Local real LetAI provider-backed playtest:
+  ./scripts/run-local-letai-game-test.sh
+- Producer / release manual playtest:
+  ./scripts/run-producer-playtest.sh --open-headed
 
-This script is the lower-level launcher/runtime bootstrap used by wrappers and
-targeted regressions.
-
-Preferred producer/release path:
+Advanced bundle bootstrap:
 - ./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local
 - ./scripts/run-launcher-stack.sh --bundle-dir output/release/game-launcher-local
 - stale or manifest-less bundles fail fast unless `--allow-stale-bundle` is passed
 
-Development fallback:
+Development / debugging fallback:
 - source oasis7_game_launcher via cargo run with the same runtime defaults
 
 Options:
   --scenario <name>        Launcher scenario (default: llm_bootstrap)
-  --bundle-dir <path>      Use packaged bundle <path>/run-game.sh (recommended for producer/release playtests)
+  --bundle-dir <path>      Use packaged bundle <path>/run-game.sh (advanced / wrapper path;
+                           producer manual play should prefer run-producer-playtest.sh)
   --viewer-host <host>     Viewer HTTP host (default: 127.0.0.1)
   --viewer-port <port>     Viewer HTTP port (default: 4173)
   --live-bind <addr:port>  oasis7_game_launcher live TCP bind (default: 127.0.0.1:5023)

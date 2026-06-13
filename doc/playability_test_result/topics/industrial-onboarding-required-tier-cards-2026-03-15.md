@@ -17,7 +17,8 @@
 ## 执行约束
 - 自动化前置未通过时，不进入玩法结论；先按失败签名阻断。
 - 手动回归默认沿用当前 worktree 隔离入口：`./scripts/worktree-harness.sh up`。
-- 需要真实产品包时，改用：`./scripts/run-launcher-stack.sh --bundle-dir <bundle-dir> --skip-llm-provider-preflight`。
+- 需要真实产品包 / 制作人式人工验收时，改用：`./scripts/run-producer-playtest.sh --open-headed`。
+- 只有底层排障或专项回归需要直接控制 bundle bootstrap 时，才使用：`./scripts/run-launcher-stack.sh --bundle-dir <bundle-dir> --with-llm`。
 - Viewer Web 若长期停在 `connecting`，必须先按 `testing-manual.md` S6 图形/环境门禁处理，再决定是否继续填写卡片。
 - 每次执行至少回写 1 张正式卡片；若本轮三张都执行，允许写 3 张独立卡片，或 1 张汇总卡片并在“关键操作链路 / 问题摘要”中覆盖三条链路。
 

@@ -32,7 +32,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: 当前 `testing-manual.md` 与 `scripts/run-launcher-stack.sh` 都把 `oasis7_game_launcher` 说成默认 Web 闭环入口，但没有明确区分“源码直接运行”与“打包后 bundle 产物运行”。这会让制作人试玩、发布前人工验收和开发回归混用同一口径，导致操作者更容易直接走 `cargo run`，偏离真实交付物体验，也放大静态资源、执行目录与本地状态混杂带来的误判。
-- Proposed Solution: 将启动器试玩入口明确收敛为“双模”策略：`bundle-first` 作为制作人试玩、发布前人工验收和对外交付样张的默认入口；`scripts/run-launcher-stack.sh` 保留，但降级为开发回归 bootstrap，并新增 `--bundle-dir` 以直接消费打包产物。进一步提供 `scripts/run-producer-playtest.sh` 作为制作人一键入口，自动准备 bundle 后再进入 bundle 模式启动。
+- Proposed Solution: 将启动器试玩入口明确收敛为 operator-facing `2 + 1` 口径：本地真实 LetAI provider-backed 试玩使用 `scripts/run-local-letai-game-test.sh`；制作人试玩、发布前人工验收和对外交付样张默认使用 bundle-first 的 `scripts/run-producer-playtest.sh --open-headed`；QA / subagent evidence 使用 worktree harness 与 A/B 哨兵。`scripts/run-launcher-stack.sh` 保留，但降级为底层 bootstrap / 高级排障入口，并通过 `--bundle-dir` 继续消费打包产物。
 - Success Criteria:
   - SC-1: 手册、启动器人工测试清单和脚本帮助文本都明确区分 `bundle` 验收入口与源码回归入口。
   - SC-2: `scripts/run-launcher-stack.sh` 支持 `--bundle-dir <bundle>`，可直接通过 `<bundle>/run-game.sh` 启动游戏。
@@ -48,33 +48,36 @@
 - User Personas:
   - `producer_system_designer`：需要以真实交付物口径亲自试玩，而不是落回源码态调试链路。
   - `qa_engineer`：需要一条稳定、可审计的 bundle 验收入口，避免把开发态结果误当发布结论。
-  - `viewer_engineer`：需要保留源码态快速回归入口，便于调试协议、静态资源与 Viewer Web 问题。
+  - `viewer_engineer`：需要保留源码态快速回归入口，便于调试协议、静态资源与 Viewer Web 问题，但不希望它继续出现在普通试玩菜单里。
 - User Scenarios & Frequency:
-  - 每次制作人试玩、发布前人工验收、对外样张抽检时执行 bundle-first 入口。
-  - 每次脚本开发调试、端口/协议问题排查时，允许继续使用源码态 bootstrap。
+  - 每次本地真实 provider-backed 试玩时执行 LetAI wrapper 入口。
+  - 每次制作人试玩、发布前人工验收、对外样张抽检时执行 bundle-first producer 入口。
+  - 每次脚本开发调试、端口/协议问题排查时，允许继续使用底层 launcher bootstrap，但该入口不作为普通试玩路径。
 - User Stories:
   - PRD-TESTING-LAUNCHER-BUNDLE-001: As a `producer_system_designer`, I want manual playtests to start from packaged launcher artifacts, so that my verdict reflects the real product handoff.
   - PRD-TESTING-LAUNCHER-BUNDLE-002: As a `qa_engineer`, I want the existing `run-launcher-stack.sh` bootstrap to consume a bundle via one flag, so that automation and manual validation share one script surface.
 - Critical User Flows:
   1. Flow-LBFP-001: `run-producer-playtest.sh --open-headed -> 自动准备/复用 bundle -> run-launcher-stack.sh --bundle-dir -> 自动打开 headed agent-browser（默认 `--use-angle=gl,--ignore-gpu-blocklist`） -> 人工游玩 -> 脚本退出时自动关闭该浏览器会话 -> 记录人工结论`
   2. Flow-LBFP-002: `run-launcher-stack.sh --bundle-dir <bundle> -> freshness manifest 校验 -> 输出 URL/日志 -> run-game-test-ab.sh 采样并校验 renderer 不是 software path`
-  3. Flow-LBFP-003: `run-launcher-stack.sh (源码模式) -> 开发者快速复现 -> 不作为发布结论`
+  3. Flow-LBFP-003: `run-local-letai-game-test.sh -> 规范化 LetAI token config -> 启动本地 provider bridge -> run-launcher-stack.sh 指向该 bridge -> 本地真实 provider-backed 试玩`
+  4. Flow-LBFP-004: `run-launcher-stack.sh (源码模式) -> 开发者快速复现 -> 不作为发布结论，不进入普通试玩菜单`
 
 ## 3. Scope & Acceptance
 - In Scope:
   - `scripts/run-launcher-stack.sh` 增加 bundle 入口并保留源码 fallback。
   - `scripts/run-producer-playtest.sh` 提供制作人一键入口。
-  - `scripts/run-game-test-ab.sh`、`testing-manual.md`、启动器人工测试清单同步 bundle-first 口径。
+  - `scripts/run-game-test-ab.sh`、`testing-manual.md`、启动器人工测试清单同步 bundle-first 与 `2 + 1` 试玩入口口径。
   - `doc/testing/project.md`、`doc/testing/prd.index.md`、`doc/testing/README.md`、`doc/devlog/README.md` 回写追溯。
 - Out of Scope:
   - 不移除 `run-launcher-stack.sh` 源码模式。
   - 不改造 `oasis7_game_launcher` / `oasis7_web_launcher` 参数协议。
   - 不新建独立的第三套 bundle 专用自动化脚本。
+  - 不新增统一 wrapper；当前先瘦文档与 operator-facing 菜单。
 - Acceptance Criteria:
   - AC-1: `./scripts/run-launcher-stack.sh --help` 明确 `--bundle-dir` 的定位与 bundle-first 推荐口径。
   - AC-2: 传入 `--bundle-dir` 时，脚本使用 `<bundle>/run-game.sh` 而不是 `cargo run` 拉起游戏。
-  - AC-3: `testing-manual.md` 明确“制作人试玩 / 发布前人工验收默认走 bundle-first；源码模式仅用于开发回归”。
-  - AC-4: `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md` 将 bundle-first 写为执行说明的一部分。
+  - AC-3: `testing-manual.md` 明确“本地真实 LetAI 试玩 / 制作人 bundle-first 试玩 / QA evidence”是普通操作者需要理解的 `2 + 1` 入口；源码模式仅用于开发回归。
+  - AC-4: `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md` 将 `2 + 1` 入口和底层脚本降级写为执行说明的一部分。
   - AC-5: headed 默认浏览器参数与 software renderer 阻断规则在脚本帮助、主手册和人工清单中保持一致。
   - AC-6: bundle 构建脚本会写 freshness manifest；复用旧 bundle 时，`run-launcher-stack.sh` 默认阻断 stale bundle，`run-producer-playtest.sh` 默认自动重建 stale bundle。
 
@@ -132,3 +135,4 @@
 | DEC-LBFP-006 | `run-producer-playtest.sh --open-headed` 退出时自动关闭自己拉起的浏览器会话 | 保留 `agent-browser` 会话常驻，要求人工手动关窗 | 制作人单命令试玩默认应无残窗副作用，脚本应负责自己创建资源的收尾。 |
 | DEC-LBFP-007 | headed 浏览器默认固定 `--use-angle=gl,--ignore-gpu-blocklist`，并把 headed 命中 software renderer 视为环境阻断 | 仅把 `--headed` 当作充分条件 | 当前环境已验证默认 headed 仍可能回退 SwiftShader，必须把硬件路径策略写进入口。 |
 | DEC-LBFP-008 | bundle 复用必须带 freshness manifest 守卫；producer 入口自动重建，底层 bootstrap 默认阻断 | 继续无条件复用本地 bundle | 已实际复现旧 Viewer Web 产物与新 runtime 二进制协议漂移，必须把 bundle freshness 做成默认机制。 |
+| DEC-LBFP-009 | 普通本地试玩菜单收敛为 `run-local-letai-game-test.sh`、`run-producer-playtest.sh --open-headed` 和 QA evidence 入口；底层脚本保留但降级 | 删除/合并 `run-launcher-stack.sh`、`worktree-harness.sh` 或 `run-game-test-ab.sh` | 现有自动化和 L4A/L4B 依赖这些脚本的职责分层，先瘦 operator-facing 口径可降低认知负担且不破坏回归链。 |
