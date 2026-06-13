@@ -6,6 +6,8 @@ mod storage_replication_failover_tests;
 mod storage_replication_high_checkpoint_tests;
 #[path = "tests_storage_replication_high_checkpoint_retained.rs"]
 mod storage_replication_high_checkpoint_retained_tests;
+#[path = "tests_storage_replication_high_checkpoint_timeout.rs"]
+mod storage_replication_high_checkpoint_timeout_tests;
 #[path = "tests_storage_replication_peer_head.rs"]
 mod storage_replication_peer_head_tests;
 #[path = "tests_storage_replication_progress.rs"]
