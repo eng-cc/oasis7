@@ -545,7 +545,7 @@ impl ReplicationNetworkEndpoint {
             }
         };
         if !response.found {
-            let mut peer_ids = self.network.connected_peer_ids();
+            let mut peer_ids = self.network.known_peer_ids();
             peer_ids.sort();
             peer_ids.dedup();
             peer_ids.retain(|peer_id| !peer_id.trim().is_empty());
