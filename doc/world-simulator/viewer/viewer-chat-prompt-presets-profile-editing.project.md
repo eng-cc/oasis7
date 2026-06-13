@@ -16,7 +16,7 @@
 ## 依赖
 - `crates/oasis7_viewer/src/egui_right_panel_chat.rs`
 - `crates/oasis7_viewer/src/main.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `doc/world-simulator/viewer/viewer-chat-prompt-presets-profile-editing.prd.md`
 
 ## 状态

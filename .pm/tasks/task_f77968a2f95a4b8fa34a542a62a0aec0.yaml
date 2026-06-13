@@ -1,0 +1,20 @@
+task_uid: task_f77968a2f95a4b8fa34a542a62a0aec0
+title: "Finish viewer legacy_core facade split cleanup"
+owner_role: viewer_engineer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_f77968a2f95a4b8fa34a542a62a0aec0.execution.md
+status: candidate
+priority: P2
+source_signal: SIG-PM-0065
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.prd.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.prd.md
+  - doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.project.md
+related_prd: []
+acceptance:
+  - "legacy_core.js is either reduced to a documented facade with responsibilities moved into focused modules, or the PRD/project status is explicitly rebaselined with remaining debt tracked."
+  - "Relevant viewer UI tests and build pass after the split/rebaseline."
+handoff_to:
+  - qa_engineer
+updated_at: 2026-06-13T13:14:04+08:00

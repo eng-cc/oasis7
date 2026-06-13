@@ -23,7 +23,7 @@
 - `crates/oasis7/src/simulator/runner.rs`
 - `crates/oasis7/src/runtime/state.rs`
 - `crates/oasis7/src/runtime/world/domain.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 
 ## 状态
 - 最近更新：2026-03-06（ROUND-005 I5-001 字段补齐）

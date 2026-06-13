@@ -39,7 +39,7 @@
 - `crates/oasis7/src/viewer/live.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
 - `crates/oasis7_viewer/src/main.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `AGENTS.md`
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md`

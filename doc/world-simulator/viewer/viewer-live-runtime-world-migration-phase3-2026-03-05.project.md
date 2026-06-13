@@ -18,7 +18,7 @@
 - `crates/oasis7/src/viewer/runtime_live/control_plane.rs`
 - `crates/oasis7/src/viewer/runtime_live.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 
 ## 状态
 - 最近更新：2026-03-06（ROUND-005 I5-001 字段补齐）

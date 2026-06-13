@@ -38,7 +38,7 @@
 - `crates/oasis7/tests/viewer_offline_integration.rs`
 - `site/index.html`
 - `site/en/index.html`
-- `testing-manual.md` / `doc/world-simulator/viewer/viewer-manual.md`（如需）
+- `testing-manual.md` / `doc/world-simulator/viewer/viewer-manual.manual.md`（如需）
 
 ## 状态
 - 最近更新：2026-03-06（ROUND-005 I5-001 字段补齐）

@@ -16,7 +16,7 @@
 - `window.__AW_TEST__.reportFatalError(message, source)`
 - `window.__AW_TEST__.getState()`
 - `scripts/run-game-test-ab.sh`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `testing-manual.md`
 
 ## 4. 约束与边界

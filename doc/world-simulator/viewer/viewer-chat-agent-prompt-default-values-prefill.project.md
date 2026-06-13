@@ -14,7 +14,7 @@
 
 ## 依赖
 - `crates/oasis7_viewer/src/egui_right_panel_chat.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.prd.md`
 
 ## 状态

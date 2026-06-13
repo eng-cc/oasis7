@@ -13,7 +13,7 @@
 
 ## 依赖
 - `crates/oasis7_viewer/src/egui_right_panel_chat.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `site/doc/cn/viewer-manual.html`
 - `site/doc/en/viewer-manual.html`
 

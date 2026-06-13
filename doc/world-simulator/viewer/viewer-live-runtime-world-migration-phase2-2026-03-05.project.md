@@ -20,7 +20,7 @@
 - `crates/oasis7/src/viewer/auth.rs`
 - `crates/oasis7/src/viewer/protocol.rs`
 - `crates/oasis7/src/bin/oasis7_llm_agent_demo/runtime_bridge.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 
 ## 状态
 - 最近更新：2026-03-06（ROUND-005 I5-001 字段补齐）

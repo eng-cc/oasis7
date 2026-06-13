@@ -19,7 +19,7 @@
 - `crates/oasis7_viewer/src/camera_controls.rs`
 - `crates/oasis7_viewer/src/selection_linking.rs`
 - `crates/oasis7_viewer/src/egui_right_panel_tests.rs`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 
 ## 状态
 - 当前阶段：DCR1-DCR5 已全部完成。

@@ -60,7 +60,7 @@
   - `crates/oasis7/src/viewer/runtime_live/control_plane.rs`
   - `crates/oasis7/src/viewer/runtime_live.rs`
   - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
-  - `doc/world-simulator/viewer/viewer-manual.md`
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`
 - Edge Cases & Error Handling:
   - 模块动作字段不兼容：拒绝并返回 `ActionRejected::RuleDenied`。
   - legacy CLI 分支参数：不再触发 simulator server 启动。

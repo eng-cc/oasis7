@@ -80,7 +80,7 @@
   - `crates/oasis7/src/viewer/auth.rs`
   - `crates/oasis7/src/viewer/protocol.rs`
   - `crates/oasis7/src/bin/oasis7_llm_agent_demo/runtime_bridge.rs`
-  - `doc/world-simulator/viewer/viewer-manual.md`
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`
 - Edge Cases & Error Handling:
   - 缺失 auth proof：返回 `auth_proof_required`。
   - 签名校验失败：返回 `auth_signature_invalid` / `auth_claim_mismatch`。
