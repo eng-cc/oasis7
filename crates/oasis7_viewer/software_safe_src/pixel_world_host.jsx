@@ -1468,7 +1468,7 @@ function PixelWorldFocusCommandSurface(props) {
         </Show>
         <div class="panel panel--nested">
           <div class="panel__header">
-            <div class="stack" style="gap:4px;">
+            <div class="stack stack--compact">
               <div class="panel__eyebrow">{tr(locale(), "指挥面板", "Command Surface")}</div>
               <div class="panel__title">{tr(locale(), "行动体聊天", "Agent Chat")}</div>
               <div class="panel__meta-copy">
@@ -1523,7 +1523,7 @@ function PixelWorldFocusCommandSurface(props) {
               )}
             </Show>
             <div>
-              <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "消息流", "Message Flow")}</div>
+              <div class="panel__title panel__title--spaced">{tr(locale(), "消息流", "Message Flow")}</div>
               <div class="event-list">
                 <Show when={chatHistory().length > 0} fallback={<div class="empty">{tr(locale(), "这个行动体还没有聊天历史。", "No chat history for this agent yet.")}</div>}>
                   <For each={chatHistory()}>
@@ -1882,25 +1882,6 @@ export function PixelWorldHost(props) {
           }}
         />
       </Show>
-      <Show when={rendererStatus() === "fallback"}>
-        <div class="callout callout--warn" data-renderer-state="fallback">
-          <div class="callout__header">
-            <div class="callout__title">{tr(locale(), "Renderer 未接管", "Renderer Not Attached")}</div>
-          </div>
-          <div class="callout__body">
-            <div class="feedback-summary">
-              {tr(
-                locale(),
-                "嵌入式 renderer 未接管；页面先使用 host fallback，正式玩法摘要、目标和明细主链继续可用。",
-                "The embedded renderer is not attached; the page is using host fallback first. Formal gameplay summary, targets, and details remain available.",
-              )}
-            </div>
-            <Show when={rendererFatal()}>
-              <div class="feedback-detail">{`${rendererFatal().code}: ${rendererFatal().message}`}</div>
-            </Show>
-          </div>
-        </div>
-      </Show>
       <Show when={focusMode() && rendererStatus() === "fallback" && !maximized()}>
         <PixelWorldFocusMinimapCard locale={locale} renderState={renderState} variant="fallback" />
       </Show>
@@ -1912,6 +1893,23 @@ export function PixelWorldHost(props) {
           onSelect={(selection) => adapter().simulateSelect(selection)}
           onHover={(selection) => adapter().simulateHover(selection)}
         />
+      </Show>
+      <Show when={rendererStatus() === "fallback"}>
+        <details class="diagnostic pixel-world-render-fallback" data-renderer-state="fallback">
+          <summary>{tr(locale(), "Renderer 未接管", "Renderer Not Attached")}</summary>
+          <div class="stack flow-top">
+            <div class="feedback-summary">
+              {tr(
+                locale(),
+                "页面先使用 host fallback；正式玩法摘要、目标和指挥主链继续可用。",
+                "The page is using host fallback first; formal gameplay summary, target, and command flows remain available.",
+              )}
+            </div>
+            <Show when={rendererFatal()}>
+              <div class="feedback-detail">{`${rendererFatal().code}: ${rendererFatal().message}`}</div>
+            </Show>
+          </div>
+        </details>
       </Show>
       <Show when={focusMode() && renderState().commercial_surface && !maximized()}>
         <div class="pixel-world-focus-receipt">
@@ -1991,7 +1989,7 @@ export function PixelWorldHost(props) {
                 <span class="badge badge--warn">{rendererFatal().code}</span>
               </Show>
             </div>
-            <div class="toolbar" style="margin-top:10px;">
+            <div class="toolbar toolbar--spaced">
               <button type="button" onClick={requestReadyMode}>
                 {tr(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer")}
               </button>
@@ -2008,7 +2006,7 @@ export function PixelWorldHost(props) {
       >
         <summary>{tr(locale(), "展开 Render DTO", "Expand Render DTO")}</summary>
         <Show when={renderDtoOpen()}>
-          <div class="stack" style="margin-top:10px;">
+          <div class="stack flow-top">
             <pre class="json">{JSON.stringify(renderState(), null, 2)}</pre>
           </div>
         </Show>

@@ -31,7 +31,7 @@ function Badge(props) {
 }
 
 function EmptyState(props) {
-  return <div class="empty" style={props.style}>{props.children}</div>;
+  return <div class={`empty ${props.class ?? ""}`} style={props.style}>{props.children}</div>;
 }
 
 function JsonBlock(props) {
@@ -45,7 +45,7 @@ function DiagnosticDetails(props) {
   return (
     <details class="diagnostic" onToggle={(event) => setIsOpen(event.currentTarget.open)}>
       <summary>{props.label ?? tr(locale(), "原始诊断", "Raw diagnostics")}</summary>
-      <div class="stack" style="margin-top:10px;">
+      <div class="stack flow-top">
         <Show when={props.note}>
           <div class="feedback-detail">{props.note}</div>
         </Show>
@@ -243,7 +243,7 @@ function ClaimAgentChoiceCard(props) {
       </Show>
       <Show when={ownedClaims().length > 0}>
         <div>
-          <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "已占用 Agent", "Owned Claims")}</div>
+          <div class="panel__title panel__title--spaced">{tr(locale(), "已占用 Agent", "Owned Claims")}</div>
           <div class="event-list">
             <For each={ownedClaims()}>
               {(owned) => (
@@ -394,10 +394,10 @@ function MetricCard(props) {
       <div class="metric__label">{props.label}</div>
       <div class="metric__value">{props.value}</div>
       <Show when={props.detail}>
-        <div class="feedback-detail" style="margin-top:8px;">{props.detail}</div>
+        <div class="feedback-detail flow-top--tight">{props.detail}</div>
       </Show>
       <Show when={props.children}>
-        <div class="badge-row" style="margin-top:8px;">
+        <div class="badge-row badge-row--tight">
           {props.children}
         </div>
       </Show>
@@ -426,7 +426,7 @@ function PanelSection(props) {
   return (
     <div class={`panel panel--nested ${props.class ?? ""}`}>
       <div class="panel__header">
-        <div class="stack" style="gap:4px;">
+        <div class="stack stack--compact">
           <Show when={props.eyebrow}>
             <div class="panel__eyebrow">{props.eyebrow}</div>
           </Show>
@@ -690,7 +690,7 @@ function ViewerEntryMenu() {
       <summary class="entry-menu__toggle">{tr(locale(), "入口", "Entry")}</summary>
       <div class="entry-menu__panel stack">
         <div>
-          <div class="panel__title" style="margin-bottom:10px;">
+          <div class="panel__title panel__title--spaced">
             {tr(locale(), "语言与观察器入口", "Language and Viewer Entry")}
           </div>
           <div class="feedback-detail">
@@ -1007,7 +1007,7 @@ function WorldStageHero() {
   return (
     <div class="stage-hero">
       <div class="stage-hero__topline">
-        <div class="stack" style="gap:10px;">
+        <div class="stack stack--hero">
           <div class="stage-hero__eyebrow-row">
             <div class="stage-hero__eyebrow">{tr(locale(), "工业世界指挥桌", "Industrial World Command Desk")}</div>
             <InlineHelpTip
@@ -1062,6 +1062,10 @@ function WorldStageHero() {
           <div class="hero-focus-card__label">{tr(locale(), "下一步", "Next Step")}</div>
           <div class="hero-focus-card__value hero-focus-card__value--body">{nextStepCopy()}</div>
         </div>
+      </div>
+      <div class="stage-hero__mobile-shortcuts" aria-label={tr(locale(), "移动端快速入口", "Mobile quick actions")}>
+        <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "选择目标", "Select Target")}</a>
+        <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "进入指挥", "Command")}</a>
       </div>
       <Show when={core.state.connectionStatus !== "connected"}>
         <CalloutCard
@@ -1133,7 +1137,7 @@ function TargetsPanel() {
         />
       </div>
       <div>
-        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "行动体", "Agents")}</div>
+        <div class="panel__title panel__title--spaced">{tr(locale(), "行动体", "Agents")}</div>
         <div class="list">
           <Show
             when={lists().agents.length > 0}
@@ -1159,7 +1163,7 @@ function TargetsPanel() {
         </div>
       </div>
       <div>
-        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "地点", "Locations")}</div>
+        <div class="panel__title panel__title--spaced">{tr(locale(), "地点", "Locations")}</div>
         <div class="list">
           <Show
             when={lists().locations.length > 0}
@@ -1312,7 +1316,7 @@ function WorldSummaryPanel() {
                   <div class="feedback-detail">{gameplay().progressDetail}</div>
                 </Show>
                 <Show when={gameplay().blockerKind || gameplay().narrativeBlockerDetail}>
-                  <div class="badge-row" style="margin-top:10px;">
+                  <div class="badge-row badge-row--spaced">
                     <Badge class="badge badge--warn">
                       {gameplay().blockerLabel || gameplay().blockerKind || tr(locale(), "当前阻塞", "Current Blocker")}
                     </Badge>
@@ -1324,7 +1328,7 @@ function WorldSummaryPanel() {
                 <Show when={gameplay().blockerSupplementalDetail}>
                   <div class="feedback-detail">{gameplay().blockerSupplementalDetail}</div>
                 </Show>
-                <div class="badge-row" style="margin-top:10px;">
+                <div class="badge-row badge-row--spaced">
                   <Badge class="badge badge--accent">{tr(locale(), "下一步", "Next Step")}</Badge>
                 </div>
                 <div class="feedback-summary">
@@ -1440,7 +1444,7 @@ function WorldSummaryPanel() {
                 <AgentClaimPanel gameplay={gameplay()} locale={locale()} />
               </Show>
               <div>
-                <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "可用玩法动作", "Available Gameplay Actions")}</div>
+                <div class="panel__title panel__title--spaced">{tr(locale(), "可用玩法动作", "Available Gameplay Actions")}</div>
                 <div class="action-grid">
                   <Show
                     when={gameplay().availableActions.length > 0}
@@ -1606,7 +1610,7 @@ function WorldSummaryPanel() {
                     <Badge>{`agentProfile=${debug().agent_profile || "-"}`}</Badge>
                     <Badge>{`providerFallback=${debug().fallback_reason || "-"}`}</Badge>
                   </div>
-                  <EmptyState style="margin-top:-2px;">
+                  <EmptyState class="flow-lift--tight">
                     {tr(
                       locale(),
                       "上面的通道徽标表示 phase-1 期望执行契约；下面的提供方检查徽标表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。",
@@ -1803,7 +1807,7 @@ function WorldSummaryPanel() {
             </MetricCard>
           </div>
           <div>
-            <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "最近事件", "Recent Events")}</div>
+            <div class="panel__title panel__title--spaced">{tr(locale(), "最近事件", "Recent Events")}</div>
             <div class="event-list">
               <Show when={state.recentEvents.length > 0} fallback={<EmptyState>{tr(locale(), "等待实时事件…", "Waiting for live events…")}</EmptyState>}>
                 <For each={state.recentEvents}>
@@ -1949,7 +1953,7 @@ function InteractionPanel() {
           {(feedback) => <FeedbackCard feedback={feedback()} display={chatFeedbackDisplay()} />}
         </Show>
         <div>
-          <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "消息流", "Message Flow")}</div>
+          <div class="panel__title panel__title--spaced">{tr(locale(), "消息流", "Message Flow")}</div>
           <div class="event-list">
             <Show when={chatHistory().length > 0} fallback={<EmptyState>{tr(locale(), "这个行动体还没有聊天历史。", "No chat history for this agent yet.")}</EmptyState>}>
               <For each={chatHistory()}>
@@ -2075,7 +2079,7 @@ function InteractionPanel() {
             </button>
           </div>
           <div class="toolbar">
-            <div class="field" style="margin:0; min-width:180px; flex:1;">
+            <div class="field field--inline-flex">
               <label for="prompt-rollback-version">{tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version")}</label>
               <input
                 id="prompt-rollback-version"
@@ -2114,7 +2118,7 @@ function InteractionPanel() {
             </EmptyState>
           </Show>
           <Show when={core.state.strongAuth.lastGrantError}>
-            <EmptyState style="color:var(--bad);">{core.state.strongAuth.lastGrantError}</EmptyState>
+            <EmptyState class="empty--danger">{core.state.strongAuth.lastGrantError}</EmptyState>
           </Show>
         </PanelSection>
       </Show>
@@ -2222,7 +2226,7 @@ function DetailsPanel() {
         )}
       </Show>
       <div>
-        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "世界规模", "World Scale")}</div>
+        <div class="panel__title panel__title--spaced">{tr(locale(), "世界规模", "World Scale")}</div>
         <div class="badge-row">
           <Badge>{`agents=${snapshotCounts().agents}`}</Badge>
           <Badge>{`locations=${snapshotCounts().locations}`}</Badge>
@@ -2230,7 +2234,7 @@ function DetailsPanel() {
           <Badge>{`debugContexts=${snapshotCounts().executionDebugContexts}`}</Badge>
           <Badge>{tr(locale(), "snapshot.config.space", "snapshot.config.space")}</Badge>
         </div>
-        <div class="feedback-detail" style="margin-top:10px;">{worldMetaSummary()}</div>
+        <div class="feedback-detail flow-top">{worldMetaSummary()}</div>
         <Show when={hasSnapshotDiagnostics()}>
           <DiagnosticDetails
             locale={locale()}
@@ -2246,7 +2250,7 @@ function DetailsPanel() {
       </div>
       <Show when={core.state.lastError}>
         <div>
-          <div class="panel__title" style="margin-bottom:10px; color: var(--bad);">{tr(locale(), "最近错误", "Last Error")}</div>
+          <div class="panel__title panel__title--spaced panel__title--danger">{tr(locale(), "最近错误", "Last Error")}</div>
           <pre class="json">{core.state.lastError}</pre>
         </div>
       </Show>
