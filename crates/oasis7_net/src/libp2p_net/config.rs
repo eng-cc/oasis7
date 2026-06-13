@@ -1,5 +1,6 @@
 use libp2p::identity::Keypair;
 use libp2p::Multiaddr;
+use std::time::Duration;
 
 use oasis7_proto::distributed_dht::PeerRecord;
 
@@ -12,6 +13,7 @@ const DEFAULT_MAX_LISTENING_ADDRS: usize = 128;
 const DEFAULT_BOOTSTRAP_REDIAL_INTERVAL_MS: i64 = 1_000;
 const DEFAULT_DISCOVERY_QUERY_INTERVAL_MS: i64 = 15_000;
 const DEFAULT_DISCOVERY_QUERY_COOLDOWN_MS: i64 = 60_000;
+const DEFAULT_REQUEST_RESPONSE_TIMEOUT_MS: u64 = 30_000;
 
 #[derive(Debug, Clone)]
 pub struct Libp2pNetworkConfig {
@@ -31,6 +33,7 @@ pub struct Libp2pNetworkConfig {
     pub max_error_messages: usize,
     pub max_listening_addrs: usize,
     pub peer_manager_policy: PeerManagerPolicy,
+    pub request_response_timeout: Duration,
 }
 
 impl Default for Libp2pNetworkConfig {
@@ -52,6 +55,7 @@ impl Default for Libp2pNetworkConfig {
             max_error_messages: DEFAULT_MAX_ERROR_MESSAGES,
             max_listening_addrs: DEFAULT_MAX_LISTENING_ADDRS,
             peer_manager_policy: PeerManagerPolicy::default(),
+            request_response_timeout: Duration::from_millis(DEFAULT_REQUEST_RESPONSE_TIMEOUT_MS),
         }
     }
 }

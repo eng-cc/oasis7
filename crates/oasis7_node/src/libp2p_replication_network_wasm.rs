@@ -10,6 +10,8 @@ use oasis7_proto::world_error::WorldError;
 const PROTOCOL_RETRY_COOLDOWN_AFTER_MS: u64 = 5_000;
 const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 12_000;
 const REQUEST_RETRY_BUDGET_MS: u64 = 20_000;
+const FETCH_BLOB_REQUEST_TO_PEER_TIMEOUT_MS: u64 = 30_000;
+const FETCH_BLOB_REQUEST_RETRY_BUDGET_MS: u64 = 180_000;
 
 // wasm32 target intentionally does not ship a full-node networking stack.
 // This stub exists only to keep API shape stable for compile-time compatibility.
@@ -29,6 +31,8 @@ pub struct Libp2pReplicationNetworkConfig {
     pub protocol_retry_cooldown_after: Duration,
     pub request_timeout: Duration,
     pub request_retry_budget: Duration,
+    pub fetch_blob_request_timeout: Duration,
+    pub fetch_blob_request_retry_budget: Duration,
 }
 
 impl Default for Libp2pReplicationNetworkConfig {
@@ -48,6 +52,12 @@ impl Default for Libp2pReplicationNetworkConfig {
             protocol_retry_cooldown_after: Duration::from_millis(PROTOCOL_RETRY_COOLDOWN_AFTER_MS),
             request_timeout: Duration::from_millis(REQUEST_TO_PEER_TIMEOUT_MS),
             request_retry_budget: Duration::from_millis(REQUEST_RETRY_BUDGET_MS),
+            fetch_blob_request_timeout: Duration::from_millis(
+                FETCH_BLOB_REQUEST_TO_PEER_TIMEOUT_MS,
+            ),
+            fetch_blob_request_retry_budget: Duration::from_millis(
+                FETCH_BLOB_REQUEST_RETRY_BUDGET_MS,
+            ),
         }
     }
 }

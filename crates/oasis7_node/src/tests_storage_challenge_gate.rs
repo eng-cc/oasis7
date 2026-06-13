@@ -92,6 +92,8 @@ fn runtime_replication_storage_challenge_gate_blocks_on_network_blob_mismatch() 
                         })?;
                 let response = super::replication::FetchBlobResponse {
                     found: true,
+            range_offset_bytes: None,
+            range_complete: None,
                     blob: Some(format!("bad-{}", request.content_hash).into_bytes()),
                 };
                 serde_json::to_vec(&response).map_err(|err| {
@@ -173,6 +175,8 @@ fn runtime_replication_storage_challenge_gate_allows_when_network_matches_reach_
                 let Some(local_blob) = maybe_local else {
                     let response = super::replication::FetchBlobResponse {
                         found: false,
+            range_offset_bytes: None,
+            range_complete: None,
                         blob: None,
                     };
                     return serde_json::to_vec(&response).map_err(|err| {
@@ -198,6 +202,8 @@ fn runtime_replication_storage_challenge_gate_allows_when_network_matches_reach_
                 drop(matched_hashes);
                 let response = super::replication::FetchBlobResponse {
                     found: true,
+            range_offset_bytes: None,
+            range_complete: None,
                     blob: Some(if should_match {
                         local_blob
                     } else {
@@ -313,6 +319,8 @@ fn runtime_replication_storage_challenge_gate_falls_back_to_older_samples_during
                 let blob = remote_blobs.get(request.content_hash.as_str()).cloned();
                 let response = super::replication::FetchBlobResponse {
                     found: blob.is_some(),
+            range_offset_bytes: None,
+            range_complete: None,
                     blob,
                 };
                 serde_json::to_vec(&response).map_err(|err| {
@@ -469,6 +477,8 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_during_warmup(
                 let blob = remote_blobs.get(request.content_hash.as_str()).cloned();
                 let response = super::replication::FetchBlobResponse {
                     found: blob.is_some(),
+            range_offset_bytes: None,
+            range_complete: None,
                     blob,
                 };
                 serde_json::to_vec(&response).map_err(|err| {
@@ -710,6 +720,8 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_without_peer_h
                 let blob = remote_blobs.get(request.content_hash.as_str()).cloned();
                 let response = super::replication::FetchBlobResponse {
                     found: blob.is_some(),
+            range_offset_bytes: None,
+            range_complete: None,
                     blob,
                 };
                 serde_json::to_vec(&response).map_err(|err| {

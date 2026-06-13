@@ -1,5 +1,7 @@
 use super::*;
 
+const REPLICATION_FETCH_BLOB_CHUNK_BYTES: usize = 2 * 1024 * 1024;
+
 impl PosNodeEngine {
     pub(super) fn maybe_hold_proposal_for_replication_successor_probe(
         &mut self,
@@ -171,6 +173,66 @@ mod tests {
 }
 
 pub(super) fn request_fetch_blob_with_route_fallback(
+    endpoint: &ReplicationNetworkEndpoint,
+    world_id: &str,
+    content_hash: &str,
+    request: &FetchBlobRequest,
+    provider_ids: Option<&[String]>,
+) -> Result<FetchBlobResponse, NodeError> {
+    let mut offset = 0usize;
+    let mut assembled = Vec::new();
+
+    loop {
+        let mut chunk_request = request.clone();
+        chunk_request.offset_bytes = Some(offset as u64);
+        chunk_request.limit_bytes = Some(REPLICATION_FETCH_BLOB_CHUNK_BYTES as u64);
+        let response = request_fetch_blob_chunk_with_route_fallback(
+            endpoint,
+            world_id,
+            content_hash,
+            &chunk_request,
+            provider_ids,
+        )?;
+        if !response.found {
+            return Ok(response);
+        }
+        let range_aware = response.range_offset_bytes == Some(offset as u64);
+        let Some(chunk) = response.blob else {
+            return Ok(response);
+        };
+        if !range_aware {
+            return Ok(FetchBlobResponse {
+                found: true,
+                range_offset_bytes: response.range_offset_bytes,
+                range_complete: response.range_complete,
+                blob: Some(chunk),
+            });
+        }
+        if chunk.is_empty() {
+            return Ok(FetchBlobResponse {
+                found: true,
+                range_offset_bytes: None,
+                range_complete: None,
+                blob: Some(assembled),
+            });
+        }
+        let is_final_chunk = response
+            .range_complete
+            .unwrap_or(chunk.len() < REPLICATION_FETCH_BLOB_CHUNK_BYTES);
+        offset = offset.saturating_add(chunk.len());
+        assembled.extend_from_slice(chunk.as_slice());
+        if is_final_chunk {
+            return Ok(FetchBlobResponse {
+                found: true,
+                range_offset_bytes: None,
+                range_complete: None,
+                blob: Some(assembled),
+            });
+        }
+    }
+}
+
+fn request_fetch_blob_chunk_with_route_fallback(
     endpoint: &ReplicationNetworkEndpoint,
     world_id: &str,
     content_hash: &str,

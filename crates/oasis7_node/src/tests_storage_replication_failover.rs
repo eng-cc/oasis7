@@ -30,6 +30,8 @@ impl FailoverFetchCommitNetwork {
         })?;
         let response = super::replication::FetchBlobResponse {
             found: blob.is_some(),
+            range_offset_bytes: None,
+            range_complete: None,
             blob,
         };
         serde_json::to_vec(&response).map_err(|err| WorldError::DistributedValidationFailed {

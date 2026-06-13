@@ -169,6 +169,8 @@ fn signed_fetch_blob_request_for_test(
     let signing_key = SigningKey::from_bytes(&signing_key_bytes);
     let mut request = super::replication::FetchBlobRequest {
         content_hash: content_hash.to_string(),
+        offset_bytes: None,
+        limit_bytes: None,
         requester_public_key_hex: Some(public_hex),
         requester_signature_hex: None,
     };
@@ -630,6 +632,8 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for ProviderA
         })?;
         let response = super::replication::FetchBlobResponse {
             found: blob.is_some(),
+            range_offset_bytes: None,
+            range_complete: None,
             blob,
         };
         serde_json::to_vec(&response).map_err(|err| WorldError::DistributedValidationFailed {
@@ -693,6 +697,8 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for ProviderF
         })?;
         let response = super::replication::FetchBlobResponse {
             found: blob.is_some(),
+            range_offset_bytes: None,
+            range_complete: None,
             blob,
         };
         serde_json::to_vec(&response).map_err(|err| WorldError::DistributedValidationFailed {
@@ -742,6 +748,8 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
                 .push(providers.to_vec());
             let response = super::replication::FetchBlobResponse {
                 found: false,
+            range_offset_bytes: None,
+            range_complete: None,
                 blob: None,
             };
             return serde_json::to_vec(&response).map_err(|err| {
@@ -764,6 +772,8 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
         })?;
         let response = super::replication::FetchBlobResponse {
             found: blob.is_some(),
+            range_offset_bytes: None,
+            range_complete: None,
             blob,
         };
         serde_json::to_vec(&response).map_err(|err| WorldError::DistributedValidationFailed {

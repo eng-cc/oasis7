@@ -236,10 +236,10 @@ fn successor_probe_at_genesis_syncs_height_one_before_local_proposal() {
                         .map_err(|err| WorldError::DistributedValidationFailed {
                             reason: format!("decode fetch blob request failed: {err}"),
                         })?;
-                serde_json::to_vec(&super::replication::FetchBlobResponse {
-                    found: request.content_hash == expected_hash,
-                    blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
-                })
+                serde_json::to_vec(&test_fetch_blob_response(
+                    request.content_hash == expected_hash,
+                    (request.content_hash == expected_hash).then(|| expected_blob.clone()),
+                ))
                 .map_err(|err| WorldError::DistributedValidationFailed {
                     reason: format!("encode fetch blob response failed: {err}"),
                 })
@@ -322,11 +322,10 @@ fn runtime_network_replication_gap_sync_fetch_commit_success_cache_reuses_valida
                             .map_err(|err| WorldError::DistributedValidationFailed {
                                 reason: format!("decode fetch blob request failed: {err}"),
                             })?;
-                    serde_json::to_vec(&super::replication::FetchBlobResponse {
-                        found: request.content_hash == expected_hash,
-                        blob: (request.content_hash == expected_hash)
-                            .then(|| expected_blob.clone()),
-                    })
+                    serde_json::to_vec(&test_fetch_blob_response(
+                        request.content_hash == expected_hash,
+                        (request.content_hash == expected_hash).then(|| expected_blob.clone()),
+                    ))
                     .map_err(|err| WorldError::DistributedValidationFailed {
                         reason: format!("encode fetch blob response failed: {err}"),
                     })
@@ -412,10 +411,10 @@ fn successor_probe_cooldown_suppresses_same_height_not_found_retry() {
                         .map_err(|err| WorldError::DistributedValidationFailed {
                             reason: format!("decode fetch blob request failed: {err}"),
                         })?;
-                serde_json::to_vec(&super::replication::FetchBlobResponse {
-                    found: request.content_hash == expected_hash,
-                    blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
-                })
+                serde_json::to_vec(&test_fetch_blob_response(
+                    request.content_hash == expected_hash,
+                    (request.content_hash == expected_hash).then(|| expected_blob.clone()),
+                ))
                 .map_err(|err| WorldError::DistributedValidationFailed {
                     reason: format!("encode fetch blob response failed: {err}"),
                 })
@@ -547,10 +546,10 @@ fn successor_probe_cooldown_preserves_waitable_hold_decision() {
                         .map_err(|err| WorldError::DistributedValidationFailed {
                             reason: format!("decode fetch blob request failed: {err}"),
                         })?;
-                serde_json::to_vec(&super::replication::FetchBlobResponse {
-                    found: request.content_hash == expected_hash,
-                    blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
-                })
+                serde_json::to_vec(&test_fetch_blob_response(
+                    request.content_hash == expected_hash,
+                    (request.content_hash == expected_hash).then(|| expected_blob.clone()),
+                ))
                 .map_err(|err| WorldError::DistributedValidationFailed {
                     reason: format!("encode fetch blob response failed: {err}"),
                 })
@@ -667,11 +666,10 @@ fn runtime_network_replication_gap_sync_fetch_commit_success_cache_skips_invalid
                             .map_err(|err| WorldError::DistributedValidationFailed {
                                 reason: format!("decode fetch blob request failed: {err}"),
                             })?;
-                    serde_json::to_vec(&super::replication::FetchBlobResponse {
-                        found: request.content_hash == expected_hash,
-                        blob: (request.content_hash == expected_hash)
-                            .then(|| expected_blob.clone()),
-                    })
+                    serde_json::to_vec(&test_fetch_blob_response(
+                        request.content_hash == expected_hash,
+                        (request.content_hash == expected_hash).then(|| expected_blob.clone()),
+                    ))
                     .map_err(|err| WorldError::DistributedValidationFailed {
                         reason: format!("encode fetch blob response failed: {err}"),
                     })
@@ -751,10 +749,10 @@ fn runtime_network_replication_gap_sync_fetch_commit_success_cache_expires() {
                         .map_err(|err| WorldError::DistributedValidationFailed {
                             reason: format!("decode fetch blob request failed: {err}"),
                         })?;
-                serde_json::to_vec(&super::replication::FetchBlobResponse {
-                    found: request.content_hash == expected_hash,
-                    blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
-                })
+                serde_json::to_vec(&test_fetch_blob_response(
+                    request.content_hash == expected_hash,
+                    (request.content_hash == expected_hash).then(|| expected_blob.clone()),
+                ))
                 .map_err(|err| WorldError::DistributedValidationFailed {
                     reason: format!("encode fetch blob response failed: {err}"),
                 })
@@ -1158,10 +1156,8 @@ fn runtime_network_replication_gap_sync_fetches_missing_commits() {
                         .map_err(|err| WorldError::DistributedValidationFailed {
                             reason: format!("decode fetch blob request failed: {err}"),
                         })?;
-                let response = super::replication::FetchBlobResponse {
-                    found: blob_map.contains_key(request.content_hash.as_str()),
-                    blob: blob_map.get(request.content_hash.as_str()).cloned(),
-                };
+                let blob = blob_map.get(request.content_hash.as_str()).cloned();
+                let response = test_fetch_blob_response(blob.is_some(), blob);
                 serde_json::to_vec(&response).map_err(|err| {
                     WorldError::DistributedValidationFailed {
                         reason: format!("encode fetch blob response failed: {err}"),

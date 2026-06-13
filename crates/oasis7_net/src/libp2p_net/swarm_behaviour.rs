@@ -105,6 +105,7 @@ pub(super) fn build_swarm(
     keypair: &Keypair,
     enable_rendezvous: bool,
     enable_autonat: bool,
+    request_response_timeout: std::time::Duration,
     wire_byte_counters: SharedLibp2pWireByteCounters,
 ) -> Swarm<Behaviour> {
     let swarm_config = libp2p::swarm::Config::with_async_std_executor()
@@ -121,8 +122,10 @@ pub(super) fn build_swarm(
         StreamProtocol::new(RR_PROTOCOL_PREFIX),
         ProtocolSupport::Full,
     )];
-    let request_response =
-        request_response::cbor::Behaviour::new(protocols, request_response::Config::default());
+    let request_response = request_response::cbor::Behaviour::new(
+        protocols,
+        request_response::Config::default().with_request_timeout(request_response_timeout),
+    );
 
     let mut store_config = MemoryStoreConfig::default();
     store_config.max_provided_keys = KAD_MAX_PROVIDED_KEYS;

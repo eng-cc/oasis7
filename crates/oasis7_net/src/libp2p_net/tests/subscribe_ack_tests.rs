@@ -18,6 +18,7 @@ fn handle_command_subscribe_acknowledges_success() {
         &keypair,
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let event_published = Arc::new(Mutex::new(Vec::new()));
@@ -144,12 +145,14 @@ fn handle_command_request_uses_swarm_connections_when_runtime_peers_are_empty() 
         &listener_keypair,
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     let mut dialer = super::super::swarm_behaviour::build_swarm(
         &dialer_keypair,
         false,
         true,
+        std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
     async_std::task::block_on(async {
