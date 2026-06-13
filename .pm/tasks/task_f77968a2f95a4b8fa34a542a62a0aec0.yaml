@@ -1,7 +1,7 @@
 task_uid: task_f77968a2f95a4b8fa34a542a62a0aec0
 title: "Finish viewer legacy_core facade split cleanup"
 owner_role: viewer_engineer
-worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-visual-cleanup-audit
+worktree_hint: null
 execution_log_path: .pm/tasks/task_f77968a2f95a4b8fa34a542a62a0aec0.execution.md
 status: done
 priority: P2

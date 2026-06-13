@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(request.amount, 7);
         assert_eq!(request.nonce, 3);
         assert_eq!(request.public_key, public_key);
-        assert!(request.signature.starts_with("octransferauth:v1:"));
+        assert!(request.signature.starts_with("octransferauth:v2:"));
         std::env::remove_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY");
         std::env::remove_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY");
     }
@@ -411,7 +411,7 @@ mod tests {
             assert!(request_text.contains("\"amount\":7"));
             assert!(request_text.contains("\"nonce\":9"));
             assert!(request_text.contains(&format!("\"public_key\":\"{public_key_for_server}\"")));
-            assert!(request_text.contains("\"signature\":\"octransferauth:v1:"));
+            assert!(request_text.contains("\"signature\":\"octransferauth:v2:"));
 
             write_http_json_response(
                 &mut stream,
