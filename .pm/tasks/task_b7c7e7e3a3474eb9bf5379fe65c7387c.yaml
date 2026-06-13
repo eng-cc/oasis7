@@ -1,0 +1,24 @@
+task_uid: task_b7c7e7e3a3474eb9bf5379fe65c7387c
+title: "Inventory local playtest launch flows"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-testing-local-playtest-flow-inventory
+execution_log_path: .pm/tasks/task_b7c7e7e3a3474eb9bf5379fe65c7387c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/testing/prd.md
+related_prd: []
+acceptance:
+  - "Summarize current local game playtest launch flows with canonical commands and when to use each"
+handoff_to: []
+updated_at: 2026-06-13T16:27:38+08:00
+last_started_at: 2026-06-13T15:14:08+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && bash -n scripts/run-launcher-stack.sh scripts/run-game-test-ab.sh scripts/run-producer-playtest.sh scripts/run-local-letai-game-test.sh && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_b7c7e7e3a3474eb9bf5379fe65c7387c --phase current"
+last_verified_at: 2026-06-13T16:27:37+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-13T16:27:37+08:00

@@ -20,7 +20,12 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/run-producer-playtest.sh [options] [run-launcher-stack options...]
 
-Prepare a bundle-first Web stack for producer manual play.
+Prepare the bundle-first Web stack for producer / release manual play.
+
+Operator-facing local playtest menu:
+- Local real LetAI provider-backed gameplay: ./scripts/run-local-letai-game-test.sh
+- Producer / release manual play: ./scripts/run-producer-playtest.sh --open-headed
+- QA / subagent evidence: ./scripts/worktree-harness.sh up, then optional run-game-test-ab.sh --url
 
 Default behavior:
 - reuse the current worktree-local producer bundle if it already exists and is fresh
@@ -42,9 +47,9 @@ Options:
   -h, --help               Show this help
 
 Examples:
+  ./scripts/run-producer-playtest.sh --open-headed
   ./scripts/run-producer-playtest.sh
   ./scripts/run-producer-playtest.sh --profile dev
-  ./scripts/run-producer-playtest.sh --open-headed
   ./scripts/run-producer-playtest.sh --bundle-dir output/release/game-launcher-local
   ./scripts/run-producer-playtest.sh --no-llm   # negative-path only; launcher boot is expected to fail
 USAGE

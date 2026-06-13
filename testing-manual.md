@@ -437,29 +437,37 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
   - 结果说明：
     当前脚本已覆盖 `player_gameplay`、正式 `gameplay_action` 推进、`reconnect-sync --with-snapshot` 恢复，以及 `FirstSessionLoop -> PostOnboarding -> establish_first_capability|stabilize_first_line_after_output|choose_midloop_path` 的 required/full 收口路径。
     `parity_verified` 当前以 `doc/testing/evidence/pure-api-shared-player-gameplay-parity-2026-04-28.md` 为准；旧 `doc/testing/evidence/pure-api-parity-validation-2026-03-19.md` 只保留历史输入，不再作为 no-LLM 正式可玩性的现行依据。
-- 快速入口：
-```bash
-./scripts/run-producer-playtest.sh
-./scripts/run-producer-playtest.sh --open-headed
-./scripts/worktree-harness.sh up
-./scripts/worktree-harness.sh status --json
-./scripts/worktree-harness.sh down
-./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local
-./scripts/check-active-llm-provider.sh --pretty
-./scripts/run-launcher-stack.sh --bundle-dir output/release/game-launcher-local --with-llm
-./scripts/run-game-test-ab.sh --bundle-dir output/release/game-launcher-local --with-llm
-./scripts/viewer-post-onboarding-qa.sh --bundle-dir output/release/game-launcher-local --with-llm
-./scripts/viewer-post-onboarding-headless-smoke.sh --bundle-dir output/release/game-launcher-local --with-llm
-./scripts/viewer-software-safe-chat-regression.sh --bundle-dir output/release/game-launcher-local
-cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
-./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --with-llm
-```
+- 本地试玩入口瘦身口径：普通操作者只需要按意图记住 `2 + 1` 个入口；底层脚本仍保留给 wrapper、排障和专项回归使用。
   - 本地真实 LetAI bridge + runtime/game：
 ```bash
 ./scripts/run-local-letai-game-test.sh
 ./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
 ```
     常规本地真实 LLM 游戏测试统一从 `scripts/run-local-letai-game-test.sh` 启动；它默认优先读取 `OASIS7_LETAI_CONFIG_PATH`，再使用 `/Users/scc/Documents/keys/letai.txt`，最后回退到 `OASIS7_LETAI_TOKEN_CONFIG_PATH` 或 `/Users/scc/Documents/keys/letai-token-local.txt`，设置本地代理默认值，验证 LetAI chat-completions，后台启动 `127.0.0.1:5841` bridge，跑一次 provider contract smoke，再启动 `run-launcher-stack.sh` 指向该 bridge；额外 launcher 参数放在 `--` 之后。该 wrapper 默认启用 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1`，用于本地 provider-backed playtest 中放行聊天输入与反馈展示；真实 NPC decision 仍走 LetAI provider bridge。若要验证严格 provider-backed 生产面（direct agent chat 未支持），传 `--no-chat-echo`。
+  - 制作人 / 发布前人工验收：
+```bash
+./scripts/run-producer-playtest.sh --open-headed
+```
+    这是 bundle-first 人工试玩入口。脚本会自动准备或复用 fresh bundle，再打开 headed browser；若只想起栈并手动复制 URL，可省略 `--open-headed`。
+  - QA / subagent evidence：
+```bash
+./scripts/worktree-harness.sh up
+./scripts/worktree-harness.sh status --json
+./scripts/worktree-harness.sh url
+./scripts/run-game-test-ab.sh --url "$GAME_URL"
+```
+    `worktree-harness.sh` 是当前 worktree 的隔离 L4A synthetic 栈入口；`run-game-test-ab.sh` 是 TTFC / 控制命中率 / 无进展窗口哨兵，不替代真人试玩或制作人验收。
+  - 高级 / 底层入口（仅用于 wrapper、排障或专项回归，不作为普通试玩菜单）：
+```bash
+./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local
+./scripts/check-active-llm-provider.sh --pretty
+./scripts/run-launcher-stack.sh --bundle-dir output/release/game-launcher-local --with-llm
+./scripts/viewer-post-onboarding-qa.sh --bundle-dir output/release/game-launcher-local --with-llm
+./scripts/viewer-post-onboarding-headless-smoke.sh --bundle-dir output/release/game-launcher-local --with-llm
+./scripts/viewer-software-safe-chat-regression.sh --bundle-dir output/release/game-launcher-local
+cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
+./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --with-llm
+```
   - active-LLM / provider 预检：
     `run-launcher-stack.sh` 仍是底层 launcher/runtime bootstrap。它会在启动 launcher 前先跑一次 active LLM provider probe，复用同一套 `config.toml` / `OASIS7_LLM_*` 配置，并同时验证 Responses hello 文本响应与 required tool-call 合约；若 provider/model/auth/base URL 当前不可用，或模型能回文本但不能稳定返回 tool call，会直接 fail-fast，不再等到首个 `step` 才暴露。需要故意保留“stack 可启动但 formal lane 在首步 blocked”的负向验证时，显式加 `--skip-llm-provider-preflight`。
     若本地只验证 provider-backed plumbing，可先启动 `oasis7_provider_local_bridge --mode mock`，再用 `run-launcher-stack.sh --agent-provider-lane local-mock` 指向 deterministic `provider_local_mock`。

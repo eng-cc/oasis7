@@ -9,7 +9,7 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/run-game-test-ab.sh [options] [run-launcher-stack options...]
 
-Run a stable A/B playability loop and emit quantitative metrics:
+Run a stable QA A/B playability sentinel and emit quantitative metrics:
 - A phase: play -> observe -> pause
 - B phase: step-chain control probes (no seek)
 - Outputs TTFC / effective control hit-rate / max no-progress window
@@ -17,6 +17,8 @@ Run a stable A/B playability loop and emit quantitative metrics:
 Important guardrail:
 - This script is for automated regression probing only.
 - It does NOT replace manual long-play sessions or real-player card filling.
+- For producer / release manual play, use:
+  ./scripts/run-producer-playtest.sh --open-headed
 - For local real LetAI bridge + gameplay startup, run
   ./scripts/run-local-letai-game-test.sh first, then pass its GAME_URL via --url
   when you want A/B metrics against that live stack.
@@ -34,11 +36,12 @@ Options:
                             SwiftShader/software rendering
   -h, --help                Show this help
 
-If --url is omitted, the script starts:
+If --url is omitted, the script starts the lower-level bootstrap for a
+regression-only stack:
   ./scripts/run-launcher-stack.sh [remaining args...]
 
-Preferred producer/release example:
-  ./scripts/run-game-test-ab.sh --bundle-dir output/release/game-launcher-local --no-llm
+Preferred QA bundle smoke example:
+  ./scripts/run-game-test-ab.sh --bundle-dir output/release/game-launcher-local --with-llm
 
 Artifacts:
   <out-dir>/<run-id>/agent-browser.log
