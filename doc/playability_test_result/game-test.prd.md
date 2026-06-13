@@ -14,14 +14,14 @@
 统一使用脚本启动，不要手工拼接 `oasis7_viewer_live` 与 `run-viewer-web.sh` 参数：
 
 ```bash
-./scripts/run-game-test.sh
+./scripts/worktree-harness.sh up
 ```
 
 脚本会自动完成：
 - 启动 `oasis7_game_launcher`（默认托管游戏进程、Web 静态服务与 WebSocket bridge）
 - 按当前控制面参数启动内置 Web viewer 服务（不再单独启动 `run-viewer-web.sh` 进程）
 - 端口与主页就绪检查
-- 输出可直接用于 `agent-browser` 的 URL（包含 `test_api=1`）
+- 可通过 `./scripts/worktree-harness.sh url` 输出用于 `agent-browser` 的 URL（包含 `test_api=1`）
 - `Ctrl+C` 时自动清理 launcher 托管进程
 
 ## `agent-browser` 进入游戏

@@ -7,14 +7,18 @@ REAL_GIT="$(command -v git)"
 
 TMPDIR="$(mktemp -d)"
 cleanup() {
-  "$REAL_GIT" -C "$ROOT_DIR" worktree remove -f "$TMPDIR/smoke-worktree" >/dev/null 2>&1 || true
-  "$REAL_GIT" -C "$ROOT_DIR" branch -D temp/prepare-pr-role-review-test >/dev/null 2>&1 || true
+  "$REAL_GIT" -C "$ROOT_DIR" worktree remove -f "${SMOKE_WORKTREE:-$TMPDIR/smoke-worktree}" >/dev/null 2>&1 || true
+  if [[ -n "${SMOKE_WORKTREE_CANONICAL:-}" ]]; then
+    "$REAL_GIT" -C "$ROOT_DIR" worktree remove -f "$SMOKE_WORKTREE_CANONICAL" >/dev/null 2>&1 || true
+  fi
+  "$REAL_GIT" -C "$ROOT_DIR" worktree prune >/dev/null 2>&1 || true
+  "$REAL_GIT" -C "$ROOT_DIR" branch -D "${SMOKE_BRANCH:-temp/prepare-pr-role-review-test}" >/dev/null 2>&1 || true
   rm -rf "$TMPDIR"
 }
 trap cleanup EXIT
 
 SMOKE_WORKTREE="$TMPDIR/smoke-worktree"
-SMOKE_BRANCH="temp/prepare-pr-role-review-test"
+SMOKE_BRANCH="temp/prepare-pr-role-review-test-$$"
 TASK_UID="task_11111111111111111111111111111111"
 
 "$REAL_GIT" -C "$ROOT_DIR" worktree add "$SMOKE_WORKTREE" -b "$SMOKE_BRANCH" refs/remotes/origin/main >/dev/null
@@ -74,6 +78,7 @@ EOF
 chmod +x "$TMPDIR/bin/gh"
 
 write_task_binding() {
+  mkdir -p "$SMOKE_WORKTREE/.pm/tasks"
   cat > "$SMOKE_WORKTREE/.pm/tasks/$TASK_UID.yaml" <<EOF
 task_uid: $TASK_UID
 title: "prepare task pr role review fixture"
@@ -84,12 +89,28 @@ status: committed
 priority: P3
 source_signal: null
 source_refs: []
-doc_refs: []
+doc_refs:
+  - doc/engineering/project.md
 related_prd: []
 acceptance: []
 handoff_to: []
 updated_at: 2026-06-03T00:00:00+08:00
 last_started_at: 2026-06-03T00:00:00+08:00
+last_claim_type: ready_for_pr
+last_verified_at: 2026-06-03T00:02:00+08:00
+last_verification_status: verified
+last_closed_at: 2026-06-03T00:03:00+08:00
+EOF
+}
+
+write_project_trace() {
+  mkdir -p "$SMOKE_WORKTREE/doc/engineering"
+  if [[ ! -f "$SMOKE_WORKTREE/doc/engineering/project.md" ]]; then
+    printf '# Engineering Project Fixture\n' > "$SMOKE_WORKTREE/doc/engineering/project.md"
+  fi
+  cat >> "$SMOKE_WORKTREE/doc/engineering/project.md" <<EOF
+
+- [x] PREPARE-TASK-PR-SMOKE [test_tier_required]: fixture task for prepare-task-pr workflow preflight. Trace: .pm/tasks/$TASK_UID.yaml
 EOF
 }
 
@@ -111,6 +132,8 @@ write_role_review_packet() {
 - Validation Command: fixture.
 - Expected Result: fixture.
 - Actual Result: fixture.
+- claim-ready evidence: ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command fixture --task-uid $TASK_UID
+- task-closeout evidence: ./scripts/pm/task-closeout.sh --role tpm --task-uid $TASK_UID --verify-command fixture
 - Pre-PR Local Role Review: passed
 - Task UID: $TASK_UID
 - Source Worktree: $SMOKE_WORKTREE_CANONICAL
@@ -145,6 +168,8 @@ write_shadowed_role_review_packet() {
 - Validation Command: fixture.
 - Expected Result: fixture.
 - Actual Result: fixture.
+- claim-ready evidence: ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command fixture --task-uid $TASK_UID
+- task-closeout evidence: ./scripts/pm/task-closeout.sh --role tpm --task-uid $TASK_UID --verify-command fixture
 - Review Findings Disposition: addressed.
 - Residual Risk: earlier non-packet risk.
 - Blocker / Next Action: none.
@@ -156,6 +181,8 @@ write_shadowed_role_review_packet() {
 - Validation Command: fixture.
 - Expected Result: fixture.
 - Actual Result: fixture.
+- claim-ready evidence: ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command fixture --task-uid $TASK_UID
+- task-closeout evidence: ./scripts/pm/task-closeout.sh --role tpm --task-uid $TASK_UID --verify-command fixture
 - Pre-PR Local Role Review: passed
 - Task UID: $TASK_UID
 - Source Worktree: $SMOKE_WORKTREE_CANONICAL
@@ -190,6 +217,8 @@ write_prefix_mismatch_role_review_packet() {
 - Validation Command: fixture.
 - Expected Result: fixture.
 - Actual Result: fixture.
+- claim-ready evidence: ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command fixture --task-uid $TASK_UID
+- task-closeout evidence: ./scripts/pm/task-closeout.sh --role tpm --task-uid $TASK_UID --verify-command fixture
 - Pre-PR Local Role Review: passed
 - Task UID: $TASK_UID
 - Source Worktree: $SMOKE_WORKTREE_CANONICAL-old
@@ -208,7 +237,7 @@ EOF
 }
 
 commit_fixture_evidence() {
-  "$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" ".pm/tasks/$TASK_UID.execution.md"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" ".pm/tasks/$TASK_UID.execution.md" "doc/engineering/project.md"
   "$REAL_GIT" -C "$SMOKE_WORKTREE" \
     -c user.name="oasis7 smoke" \
     -c user.email="smoke@example.invalid" \
@@ -223,6 +252,7 @@ run_prepare() {
   : > "$gh_log"
   : > "$git_log"
   PATH="$TMPDIR/bin:$PATH" \
+    PM_ROOT_DIR="$SMOKE_WORKTREE_CANONICAL" \
     TEST_GH_LOG="$gh_log" \
     TEST_GIT_LOG="$git_log" \
     "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "$@"
@@ -256,6 +286,7 @@ if "missing passed pre-PR local role review evidence" not in stderr:
 PY
 
 write_task_binding
+write_project_trace
 write_role_review_packet "0000000000000000000000000000000000000000" "no_findings"
 commit_fixture_evidence
 
@@ -282,9 +313,10 @@ if gh_lines:
 if any("push" in line for line in git_lines):
     raise SystemExit(f"expected no push before stale-review failure, got: {git_lines}")
 if "Source Head ancestor" not in stderr:
-    raise SystemExit(f"expected stale Source Head marker in error, got: {stderr}")
+    raise SystemExit(f"expected stale Source Head marker in error, got: {stderr}\ngit log: {git_lines}")
 PY
 
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 write_prefix_mismatch_role_review_packet "$SOURCE_HEAD"
 commit_fixture_evidence
 
@@ -314,6 +346,7 @@ if not expected.issubset(missing):
     raise SystemExit(f"expected exact field mismatch markers {expected}, got: {missing}")
 PY
 
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 write_role_review_packet "$SOURCE_HEAD" "no_findings"
 commit_fixture_evidence
 
@@ -321,9 +354,12 @@ success_log="$TMPDIR/gh-success.log"
 success_git_log="$TMPDIR/git-success.log"
 success_out="$TMPDIR/success.out"
 success_err="$TMPDIR/success.err"
-run_prepare "$success_log" "$success_git_log" --create >"$success_out" 2>"$success_err"
+if ! run_prepare "$success_log" "$success_git_log" --create >"$success_out" 2>"$success_err"; then
+  cat "$success_err" >&2
+  exit 1
+fi
 
-python3 - "$success_log" "$success_git_log" "$success_out" "$success_err" <<'PY'
+python3 - "$success_log" "$success_git_log" "$success_out" "$success_err" "$SMOKE_BRANCH" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -333,12 +369,13 @@ gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stdout = Path(sys.argv[3]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
+branch = sys.argv[5]
 
-if gh_lines != ["pr create --base main --head temp/prepare-pr-role-review-test --fill"]:
+if gh_lines != [f"pr create --base main --head {branch} --fill"]:
     raise SystemExit(f"expected only gh pr create and no reviewer API calls, got: {gh_lines}")
 if not any(
-    line.endswith("push -u origin temp/prepare-pr-role-review-test")
-    or line.endswith("push origin temp/prepare-pr-role-review-test")
+    line.endswith(f"push -u origin {branch}")
+    or line.endswith(f"push origin {branch}")
     for line in git_lines
 ):
     raise SystemExit(f"expected push attempt after valid review packet, got: {git_lines}")
@@ -356,7 +393,7 @@ behind_out="$TMPDIR/behind.out"
 behind_err="$TMPDIR/behind.err"
 TEST_REV_LIST_COUNTS="1 2" run_prepare "$behind_log" "$behind_git_log" --create >"$behind_out" 2>"$behind_err"
 
-python3 - "$behind_log" "$behind_git_log" "$behind_out" "$behind_err" <<'PY'
+python3 - "$behind_log" "$behind_git_log" "$behind_out" "$behind_err" "$SMOKE_BRANCH" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -366,12 +403,13 @@ gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stdout = Path(sys.argv[3]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
+branch = sys.argv[5]
 
-if gh_lines != ["pr create --base main --head temp/prepare-pr-role-review-test --fill"]:
+if gh_lines != [f"pr create --base main --head {branch} --fill"]:
     raise SystemExit(f"expected gh pr create on behind-but-allowed path, got: {gh_lines}")
 if not any(
-    line.endswith("push -u origin temp/prepare-pr-role-review-test")
-    or line.endswith("push origin temp/prepare-pr-role-review-test")
+    line.endswith(f"push -u origin {branch}")
+    or line.endswith(f"push origin {branch}")
     for line in git_lines
 ):
     raise SystemExit(f"expected push attempt on behind-but-allowed path, got: {git_lines}")
@@ -383,6 +421,7 @@ if stderr:
     raise SystemExit(f"did not expect stderr on behind-but-allowed path: {stderr}")
 PY
 
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 write_role_review_packet "$SOURCE_HEAD" "addressed"
 commit_fixture_evidence
 
@@ -392,7 +431,7 @@ addressed_out="$TMPDIR/addressed.out"
 addressed_err="$TMPDIR/addressed.err"
 run_prepare "$addressed_log" "$addressed_git_log" --create >"$addressed_out" 2>"$addressed_err"
 
-python3 - "$addressed_log" "$addressed_out" "$addressed_err" <<'PY'
+python3 - "$addressed_log" "$addressed_out" "$addressed_err" "$SMOKE_BRANCH" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -401,8 +440,9 @@ from pathlib import Path
 gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 stdout = Path(sys.argv[2]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
+branch = sys.argv[4]
 
-if gh_lines != ["pr create --base main --head temp/prepare-pr-role-review-test --fill"]:
+if gh_lines != [f"pr create --base main --head {branch} --fill"]:
     raise SystemExit(f"expected only gh pr create after addressed findings, got: {gh_lines}")
 if "- findings disposition: addressed" not in stdout:
     raise SystemExit("expected addressed disposition in output")
@@ -410,6 +450,7 @@ if stderr:
     raise SystemExit(f"did not expect stderr on addressed path: {stderr}")
 PY
 
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 write_shadowed_role_review_packet "$SOURCE_HEAD"
 commit_fixture_evidence
 
@@ -434,7 +475,8 @@ if review["residual_risk"] != "final fixture residual risk":
 PY
 
 json_out="$TMPDIR/preflight.json"
-run_prepare "$TMPDIR/gh-json.log" "$TMPDIR/git-json.log" --json >"$json_out"
+json_err="$TMPDIR/preflight.err"
+run_prepare "$TMPDIR/gh-json.log" "$TMPDIR/git-json.log" --json >"$json_out" 2>"$json_err"
 
 python3 - "$json_out" <<'PY'
 from __future__ import annotations
@@ -452,5 +494,10 @@ if payload["review_request_command"] is not None:
 if review["findings_disposition"] != "no_findings":
     raise SystemExit(f"expected no_findings disposition, got: {review}")
 PY
+
+if [[ -s "$json_err" ]]; then
+  cat "$json_err" >&2
+  exit 1
+fi
 
 echo "prepare-task-pr.test: OK"

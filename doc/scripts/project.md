@@ -70,7 +70,7 @@
   - 产物文件:
     - `scripts/worktree-harness.sh`
     - `scripts/worktree-harness-lib.sh`
-    - `scripts/run-game-test.sh`
+    - `scripts/run-launcher-stack.sh`
     - `scripts/run-producer-playtest.sh`
     - `doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
     - `doc/scripts/governance/worktree-isolated-harness-2026-03-27.design.md`
@@ -82,9 +82,9 @@
     - `testing-manual.md`
     - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
-    - `bash -n scripts/worktree-harness.sh scripts/worktree-harness-lib.sh scripts/run-game-test.sh scripts/run-producer-playtest.sh`
+    - `bash -n scripts/worktree-harness.sh scripts/worktree-harness-lib.sh scripts/run-launcher-stack.sh scripts/run-producer-playtest.sh`
     - `./scripts/worktree-harness.sh --help`
-    - `./scripts/run-game-test.sh --help`
+    - `./scripts/run-launcher-stack.sh --help`
     - `./scripts/run-producer-playtest.sh --help`
     - `./scripts/worktree-harness.sh up --smoke-timeout 30`
     - `./scripts/worktree-harness.sh status --json`

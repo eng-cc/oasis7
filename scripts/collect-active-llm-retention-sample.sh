@@ -8,10 +8,10 @@ source "$repo_root/scripts/agent-browser-lib.sh"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/collect-active-llm-retention-sample.sh [options] [run-game-test options...]
+Usage: ./scripts/collect-active-llm-retention-sample.sh [options] [run-launcher-stack options...]
 
 Collect one active-LLM formal retention sample through the Web Viewer:
-1. bootstrap or reuse a run-game-test stack
+1. bootstrap or reuse a launcher stack
 2. advance through the software_safe first-session floor
 3. confirm PostOnboarding entry
 4. run a longer live-play window and capture state samples
@@ -137,7 +137,7 @@ out_dir="$out_root/$run_id"
 mkdir -p "$out_dir"
 
 ab_log="$out_dir/agent-browser.log"
-run_log="$out_dir/run-game-test.log"
+run_log="$out_dir/launcher-stack.log"
 summary_json_path="$out_dir/retention-sample-summary.json"
 summary_md_path="$out_dir/retention-sample-summary.md"
 browser_env_path="$out_dir/browser-env.json"

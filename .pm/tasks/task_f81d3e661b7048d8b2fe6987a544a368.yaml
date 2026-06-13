@@ -14,11 +14,11 @@ related_prd: []
 acceptance:
   - "Windows testnet node is redeployed to the merged main testnet package or documented blocker is recorded."
 handoff_to: []
-updated_at: 2026-06-12T14:00:01+08:00
+updated_at: 2026-06-12T23:20:01+08:00
 last_started_at: 2026-06-11T14:59:17+08:00
-last_claim_type: ready_for_pr
+last_claim_type: task_complete
 last_verify_command: "env -u RUSTC_WRAPPER cargo fmt --check && git diff --check && ./scripts/check-rust-file-size.sh && env -u RUSTC_WRAPPER cargo test -p oasis7_net libp2p_net::tests -- --nocapture && env -u RUSTC_WRAPPER cargo test -p oasis7_node libp2p_replication_network::peer_selection_tests -- --nocapture && env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_network_replication_gap_sync_fetches_missing_commits -- --nocapture"
 last_verified_at: 2026-06-12T14:00:01+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
-last_closed_at: 2026-06-11T18:28:00+08:00
+last_closed_at: 2026-06-12T23:20:01+08:00

@@ -22,9 +22,17 @@ check_file() {
       http:*|https:*|mailto:*|tel:*)
         continue
         ;;
-    esac
+      esac
     local target
-    target="$(realpath -m "$(dirname "$md_file")/$clean")"
+    target="$(python3 - "$(dirname "$md_file")/$clean" <<'PY'
+from __future__ import annotations
+
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).resolve(strict=False))
+PY
+)"
     if [[ ! -e "$target" ]]; then
       echo "error: broken README reference in $md_file: $ref -> $target" >&2
       fail_count=$((fail_count + 1))

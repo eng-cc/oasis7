@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | commit baseline / required 套件 | `scripts/ci-tests.sh` | `scripts/pre-commit.sh` | 无 | 日常本地提交默认走 `./scripts/ci-tests.sh commit`（由 `scripts/pre-commit.sh` 调用）；需要补跑较重 runtime/simulator shard 或进入 PR/CI required gate 时，再显式执行 `./scripts/ci-tests.sh required`。 |
 | 站点文档治理 | `scripts/doc-governance-check.sh` | `scripts/site-manual-sync-check.sh` | 无 | 先检查文档治理，再做站点专项。 |
-| 本地游戏验证 | `scripts/worktree-harness.sh` | `scripts/run-game-test.sh` | 无 | worktree harness 负责隔离端口、bundle、日志与浏览器 session；`run-game-test.sh` 降为底层 bootstrap。 |
+| 本地游戏验证 | `scripts/worktree-harness.sh` | `scripts/run-launcher-stack.sh` | 无 | worktree harness 负责隔离端口、bundle、日志与浏览器 session；`run-launcher-stack.sh` 是底层 bootstrap。 |
 | Viewer Web 验证 | `scripts/run-viewer-web.sh` | `scripts/viewer-primary-web-entry-regression.sh` / `scripts/viewer-software-safe-step-regression.sh` / `scripts/viewer-software-safe-chat-regression.sh` | 无 | 当前仓库只保留 software-safe Web 链路。 |
 
 ### 2. 发布 / 打包主入口

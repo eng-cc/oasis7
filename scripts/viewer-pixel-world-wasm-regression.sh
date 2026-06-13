@@ -7,7 +7,7 @@ source "$repo_root/scripts/agent-browser-lib.sh"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/viewer-pixel-world-wasm-regression.sh [options] [run-game-test options...]
+Usage: ./scripts/viewer-pixel-world-wasm-regression.sh [options] [run-launcher-stack options...]
 
 Verify that the embedded pixel-world surface prefers the real wasm runtime:
 - page load + `__AW_TEST__` availability
@@ -201,7 +201,7 @@ trap cleanup EXIT
 
 game_url="$provided_url"
 if [[ -z "$game_url" ]]; then
-  run_log="$out_dir/run-game-test.log"
+  run_log="$out_dir/launcher-stack.log"
   ./scripts/run-launcher-stack.sh --skip-llm-provider-preflight "${run_game_test_args[@]}" >"$run_log" 2>&1 &
   launcher_pid=$!
   deadline=$((SECONDS + startup_timeout_secs))

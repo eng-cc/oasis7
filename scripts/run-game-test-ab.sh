@@ -7,7 +7,7 @@ source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/run-game-test-ab.sh [options] [run-game-test options...]
+Usage: ./scripts/run-game-test-ab.sh [options] [run-launcher-stack options...]
 
 Run a stable A/B playability loop and emit quantitative metrics:
 - A phase: play -> observe -> pause
@@ -116,7 +116,7 @@ OUT_DIR="$OUT_ROOT/$RUN_ID"
 mkdir -p "$OUT_DIR"
 
 AB_LOG="$OUT_DIR/agent-browser.log"
-RUN_GAME_TEST_LOG="$OUT_DIR/run-game-test.log"
+RUN_GAME_TEST_LOG="$OUT_DIR/launcher-stack.log"
 CONSOLE_WARNING_LOG="$OUT_DIR/console_warning_dump.log"
 CONSOLE_ALL_LOG="$OUT_DIR/console_all_messages.log"
 AB_METRICS_JSON="$OUT_DIR/ab_metrics.json"
@@ -439,7 +439,7 @@ if [[ -z "$GAME_URL" ]]; then
 
   for ((i = 0; i < STARTUP_TIMEOUT_SECS; i++)); do
     if ! kill -0 "$STACK_PID" >/dev/null 2>&1; then
-      echo "error: run-game-test stack exited unexpectedly" >&2
+      echo "error: launcher stack exited unexpectedly" >&2
       tail -n 120 "$RUN_GAME_TEST_LOG" >&2 || true
       exit 1
     fi

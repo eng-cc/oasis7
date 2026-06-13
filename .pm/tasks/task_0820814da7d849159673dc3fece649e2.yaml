@@ -15,11 +15,11 @@ related_prd: []
 acceptance:
   - "Assess whether a local no-quota no-billing bridge service is feasible for local testing"
 handoff_to: []
-updated_at: 2026-06-12T17:43:04+08:00
+updated_at: 2026-06-12T17:43:05+08:00
 last_started_at: 2026-06-10T21:47:23+08:00
-last_claim_type: ready_for_pr
+last_claim_type: task_complete
 last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/main.test.jsx && ./scripts/build-viewer-software-safe.sh && python3 -m py_compile scripts/provider-remote-https/letai_provider_cli.py scripts/provider-remote-https/letai_provider_cli.test.py && bash scripts/provider-remote-https/letai-provider-cli.test.sh && bash -n scripts/check-letai-chat-completions.sh scripts/run-local-letai-game-test.sh scripts/agent-browser-lib.sh scripts/copy-viewer-web-dist.sh scripts/viewer-web-dist-contract.sh scripts/agent-browser-viewer-dist-freshness-test.sh && bash scripts/agent-browser-viewer-dist-freshness-test.sh && bash scripts/local-letai-provider-bridge.test.sh && bash scripts/with-letai-llm-config.test.sh && ./scripts/run-launcher-stack-local-mock-lane.test.sh && ./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_game_launcher provider_backed_viewer_live_env_preserves_local_mock_backend -- --nocapture && ./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_game_launcher build_viewer_live_command_wires_auto_play_flag -- --nocapture && env -u RUSTC_WRAPPER cargo fmt --all --check && ./scripts/doc-governance-check.sh && git diff --check"
 last_verified_at: 2026-06-12T17:43:04+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
-last_closed_at: 2026-06-12T15:40:57+08:00
+last_closed_at: 2026-06-12T17:43:05+08:00
