@@ -142,7 +142,8 @@ impl PosNodeEngine {
         ) -> Result<GapSyncFetchCommitResponse, NodeError>,
     ) -> Result<GapSyncHeightOutcome, NodeError> {
         let request = replication_runtime.build_fetch_commit_request(world_id, height)?;
-        let fetch_commit = fetch_commit(endpoint, &request)?;
+        let fetch_commit = fetch_commit(endpoint, &request)
+            .map_err(|err| Self::annotate_fetch_commit_gap_sync_error(height, err))?;
         if !fetch_commit.response.found {
             return Ok(GapSyncHeightOutcome::NotFound {
                 repair_summary: fetch_commit.repair_summary,
@@ -262,6 +263,26 @@ impl PosNodeEngine {
             },
         );
         Ok(GapSyncHeightOutcome::Synced { message, payload })
+    }
+
+    fn annotate_fetch_commit_gap_sync_error(height: u64, err: NodeError) -> NodeError {
+        let NodeError::Replication { reason } = err else {
+            return err;
+        };
+        if reason.contains(REPLICATION_FETCH_COMMIT_PROTOCOL) {
+            return NodeError::Replication { reason };
+        }
+        if reason.contains("replication network availability gap")
+            && (reason.contains("NetworkProtocolUnavailable")
+                || reason.contains("request failed: Timeout"))
+        {
+            return NodeError::Replication {
+                reason: format!(
+                    "{reason}; gap sync height {height} fetch-commit {REPLICATION_FETCH_COMMIT_PROTOCOL}"
+                ),
+            };
+        }
+        NodeError::Replication { reason }
     }
 
     pub(super) fn persist_synced_replication_message(

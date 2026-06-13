@@ -35,9 +35,10 @@ impl PosNodeEngine {
         let NodeError::Replication { reason } = err else {
             return false;
         };
-        reason.contains(REPLICATION_FETCH_COMMIT_PROTOCOL)
+        let fetch_commit_route_error = reason.contains(REPLICATION_FETCH_COMMIT_PROTOCOL)
             && (reason.contains("NetworkProtocolUnavailable")
-                || reason.contains("request failed: Timeout"))
+                || reason.contains("request failed: Timeout"));
+        fetch_commit_route_error
     }
 
     fn clear_replication_gap_sync_blocked_if_unblocked(&mut self) {

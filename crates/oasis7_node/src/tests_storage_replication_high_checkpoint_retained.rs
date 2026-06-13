@@ -87,12 +87,20 @@ fn high_replication_checkpoint_probe_does_not_continue_after_blob_or_execution_e
         reason: "execution checkpoint install returned mismatched binding at height 16640"
             .to_string(),
     };
+    let protocol_omitted_blob_timeout = NodeError::Replication {
+        reason:
+            "replication network availability gap: libp2p-replication outbound request failed: NetworkProtocolUnavailable { protocol: \"request failed: Timeout\" }"
+                .to_string(),
+    };
 
     assert!(!PosNodeEngine::high_replication_checkpoint_probe_can_continue(
         &blob_err
     ));
     assert!(!PosNodeEngine::high_replication_checkpoint_probe_can_continue(
         &execution_err
+    ));
+    assert!(!PosNodeEngine::high_replication_checkpoint_probe_can_continue(
+        &protocol_omitted_blob_timeout
     ));
 }
 
