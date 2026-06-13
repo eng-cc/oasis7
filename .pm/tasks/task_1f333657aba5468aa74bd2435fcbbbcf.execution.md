@@ -275,3 +275,12 @@ Example:
 - Expected Result: Branch is pushed and PR is opened.
 - Actual Result: prepare-task-pr pushed branch origin/task/p2p-cleanup-audit but gh create failed without explicit body; direct gh pr create succeeded: https://github.com/eng-cc/oasis7/pull/433.
 - Blocker / Next Action: Continue normal_pr_ci_watch for PR #433; this is not a manual packaging CI hold.
+
+## 2026-06-13 14:04:26 CST / tpm
+- 完成内容: Resolved PR #433 mergeStateStatus=DIRTY by rebasing task branch onto origin/main. Conflict in doc/p2p/project.md was resolved by preserving both main's testnet-high-state-peer-retry Trace and this task's p2p-evidence-doc-cleanup Trace. Force-pushed updated branch.
+- 遗留事项: Continue PR #433 normal_pr_ci_watch: required-gate and plan-wasm-determinism-scope are in progress; reviewDecision=REVIEW_REQUIRED is informational under repo policy unless other blockers appear.
+- Action: Rebase PR branch, resolve conflict, push, and inspect PR status.
+- Validation Command: git rebase origin/main; rg conflict markers; git diff --check; ./scripts/doc-governance-check.sh; ./scripts/pm/workflow-lint.sh --phase pr-ready --allow-unbound; ./scripts/prepare-task-pr.sh --json; git push --force-with-lease origin task/p2p-cleanup-audit; gh pr view 433 --json mergeStateStatus,statusCheckRollup,reviewDecision,comments,reviews
+- Expected Result: Branch rebases cleanly after conflict resolution, preflight passes, PR head updates, and required checks are visible.
+- Actual Result: Rebase completed after resolving doc/p2p/project.md conflict. Post-rebase preflight passed. Force push updated PR head to 34d7313ef357ee59277ab04ba5b42ce73c6b158f. PR now reports mergeStateStatus=BLOCKED due to review requirement while required-gate and plan-wasm-determinism-scope are IN_PROGRESS; comments/reviews are empty.
+- Blocker / Next Action: Wait for required checks; if they pass and no comments/requested changes appear, proceed under normal review-required policy path.
