@@ -9,7 +9,8 @@ source_signal: null
 source_refs:
   - AGENTS.md
   - crates/oasis7_viewer
-doc_refs: []
+doc_refs:
+  - doc/world-simulator/project.md
 related_prd: []
 acceptance:
   - "Game visual interaction designer review identifies layout, spacing, hierarchy, and interaction polish opportunities with evidence."
