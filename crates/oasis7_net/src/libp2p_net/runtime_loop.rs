@@ -36,6 +36,28 @@ pub(super) struct PendingResponse {
     pub response: CommandResponseSender<Vec<u8>>,
 }
 
+pub(super) fn fail_pending_request(
+    pending_response: PendingResponse,
+    peer: PeerId,
+    error: request_response::OutboundFailure,
+    event_errors: &Arc<Mutex<Vec<String>>>,
+    max_error_messages: usize,
+) {
+    let protocol = pending_response.protocol;
+    let message = format!("request failed: {error:?} protocol={protocol} peer={peer}");
+    push_bounded_clone(
+        event_errors,
+        message.clone(),
+        max_error_messages,
+        "lock errors",
+    );
+    let _ = pending_response
+        .response
+        .send(Err(WorldError::NetworkProtocolUnavailable {
+            protocol: message,
+        }));
+}
+
 pub(super) struct CommandContext<'a> {
     pub event_published: &'a Arc<Mutex<Vec<NetworkMessage>>>,
     pub event_errors: &'a Arc<Mutex<Vec<String>>>,

@@ -83,7 +83,8 @@ use runtime_loop::{
     filter_request_peers_by_health, filter_request_peers_by_lane,
 };
 use runtime_loop::{
-    handle_command, Command, CommandContext, CommandOutcome, CommandStateRefs, PendingResponse,
+    fail_pending_request, handle_command, Command, CommandContext, CommandOutcome,
+    CommandStateRefs, PendingResponse,
 };
 use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
 use swarm_reachability_events::{
@@ -451,7 +452,7 @@ impl Libp2pNetwork {
                                                 }
                                             }
                                         }
-                                        request_response::Event::OutboundFailure { request_id, error, .. } => {
+                                        request_response::Event::OutboundFailure { request_id, peer, error, .. } => {
                                             if let Some(kind) = pending_peer_record_requests.remove(&request_id) {
                                                 clear_pending_peer_record_request(
                                                     &kind,
@@ -466,17 +467,15 @@ impl Libp2pNetwork {
                                                     "lock errors",
                                                 );
                                             } else if let Some(sender) = pending.remove(&request_id) {
-                                                let _ = sender.response.send(Err(WorldError::NetworkProtocolUnavailable { protocol: format!("request failed: {error:?}") }));
+                                                fail_pending_request(sender, peer, error, &event_errors, max_error_messages);
                                             }
                                         }
                                         request_response::Event::InboundFailure { peer, error, .. } => {
-                                            let stderr_message = format!(
-                                                "libp2p inbound failure from {peer:?}: {error:?}"
-                                            );
-                                            utils::emit_stderr_or_event(
-                                                tracing::Level::WARN,
-                                                stderr_message.as_str(),
-                                                "libp2p inbound failure",
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!("libp2p inbound failure from {peer:?}: {error:?}"),
+                                                max_error_messages,
+                                                "lock errors",
                                             );
                                         }
                                         request_response::Event::ResponseSent { .. } => {}
