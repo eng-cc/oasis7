@@ -71,18 +71,20 @@ bundle_archive="$tmp_root/darwin-arm64-bundle.tar.gz"
   --runner-label "darwin-arm64" \
   --source-summary-root "$source_root"
 
-local_root="$tmp_root/local/m1"
-write_summary "$local_root/linux-x86_64.json" "m1" "linux-x86_64" "linux-x86_64" "linux-x86_64"
+for module_set in m1 m4 m5; do
+  local_root="$tmp_root/local/$module_set"
+  write_summary "$local_root/linux-x86_64.json" "$module_set" "linux-x86_64" "linux-x86_64" "linux-x86_64"
 
-staged_dir="$tmp_root/staged"
-./scripts/stage-wasm-summary-imports.sh \
-  --module-set m1 \
-  --local-summary-dir "$local_root" \
-  --out-dir "$staged_dir" \
-  --external-summary-bundle "$bundle_archive"
+  staged_dir="$tmp_root/staged/$module_set"
+  ./scripts/stage-wasm-summary-imports.sh \
+    --module-set "$module_set" \
+    --local-summary-dir "$local_root" \
+    --out-dir "$staged_dir" \
+    --external-summary-bundle "$bundle_archive"
 
-test -f "$staged_dir/linux-x86_64.json"
-test -f "$staged_dir/darwin-arm64.json"
+  test -f "$staged_dir/linux-x86_64.json"
+  test -f "$staged_dir/darwin-arm64.json"
+done
 
 bad_source_root="$tmp_root/bad-source"
 for module_set in m1 m4 m5; do
@@ -94,16 +96,19 @@ bad_bundle_dir="$tmp_root/bad-bundle"
   --runner-label "darwin-arm64" \
   --source-summary-root "$bad_source_root"
 
-if ./scripts/stage-wasm-summary-imports.sh \
-  --module-set m1 \
-  --local-summary-dir "$local_root" \
-  --out-dir "$tmp_root/bad-staged" \
-  --external-summary-bundle "$bad_bundle_dir" \
-  >"$tmp_root/bad-stage.stdout" 2>"$tmp_root/bad-stage.stderr"; then
-  echo "error: expected host_platform mismatch to fail staging" >&2
-  exit 1
-fi
+for module_set in m1 m4 m5; do
+  local_root="$tmp_root/local/$module_set"
+  if ./scripts/stage-wasm-summary-imports.sh \
+    --module-set "$module_set" \
+    --local-summary-dir "$local_root" \
+    --out-dir "$tmp_root/bad-staged/$module_set" \
+    --external-summary-bundle "$bad_bundle_dir" \
+    >"$tmp_root/bad-stage-$module_set.stdout" 2>"$tmp_root/bad-stage-$module_set.stderr"; then
+    echo "error: expected host_platform mismatch to fail staging for $module_set" >&2
+    exit 1
+  fi
 
-rg -n "host_platform mismatch" "$tmp_root/bad-stage.stderr" >/dev/null
+  rg -n "host_platform mismatch" "$tmp_root/bad-stage-$module_set.stderr" >/dev/null
+done
 
 echo "wasm summary bundle smoke: OK"

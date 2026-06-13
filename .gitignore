@@ -36,8 +36,10 @@ config.toml
 .distfs/
 __pycache__/
 *.py[cod]
+# Local generated builtin wasm artifacts; tracked release truth lives in manifests/DistFS blobs.
 crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules/*.wasm
 crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules/*.wasm
+crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules/*.wasm
 artifacts/owr4_baseline/
 artifacts/robot_voxel_pipeline/
 # egui_kittest snapshot artifacts
