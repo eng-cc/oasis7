@@ -290,7 +290,7 @@ fn libp2p_replication_network_request_waits_for_delayed_bootstrap_connection() {
 }
 
 #[test]
-fn filtered_request_peers_excludes_protocol_retry_cooldown_peers_without_fallback() {
+fn filtered_request_peers_uses_protocol_retry_cooldown_peers_as_last_resort() {
     let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
     let observer_peer = PeerId::random();
     let sequencer_peer = PeerId::random();
@@ -309,7 +309,7 @@ fn filtered_request_peers_excludes_protocol_retry_cooldown_peers_without_fallbac
         "/aw/node/replication/fetch-commit/1.0.0",
         vec![observer_peer],
     );
-    assert!(filtered_only_cooldown.is_empty());
+    assert_eq!(filtered_only_cooldown, vec![observer_peer]);
 }
 
 #[test]
@@ -388,7 +388,7 @@ fn filtered_request_peers_retries_protocol_retry_cooldown_peer_after_retry_windo
         "/aw/node/replication/fetch-commit/1.0.0",
         vec![sequencer_peer],
     );
-    assert!(filtered_initial.is_empty());
+    assert_eq!(filtered_initial, vec![sequencer_peer]);
 
     std::thread::sleep(Duration::from_millis(15));
 
@@ -818,7 +818,7 @@ fn libp2p_replication_network_connection_gap_cools_peer_across_protocols() {
 }
 
 #[test]
-fn libp2p_replication_network_fetch_commit_not_found_enters_short_cooldown() {
+fn libp2p_replication_network_fetch_commit_not_found_keeps_single_peer_as_last_resort() {
     let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
         peer_record: Some(test_peer_record("listener-fetch-commit-not-found")),
@@ -870,6 +870,13 @@ fn libp2p_replication_network_fetch_commit_not_found_enters_short_cooldown() {
         })
     ));
     assert_eq!(request_count.load(Ordering::SeqCst), 1);
+    let cooldown_snapshot = dialer.debug_snapshot();
+    assert!(
+        cooldown_snapshot
+            .protocol_retry_cooldown_peers
+            .contains_key(crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL),
+        "not-found should still mark the peer for protocol cooldown"
+    );
 
     let second = dialer.request(
         crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
@@ -877,12 +884,15 @@ fn libp2p_replication_network_fetch_commit_not_found_enters_short_cooldown() {
     );
     assert!(matches!(
         second,
-        Err(WorldError::NetworkProtocolUnavailable { .. })
+        Err(WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotFound,
+            ..
+        })
     ));
     assert_eq!(
         request_count.load(Ordering::SeqCst),
-        1,
-        "cooldown should suppress an immediate second fetch-commit request"
+        2,
+        "single cooled-down provider should remain available as a last resort"
     );
 
     std::thread::sleep(Duration::from_millis(300));
@@ -898,7 +908,7 @@ fn libp2p_replication_network_fetch_commit_not_found_enters_short_cooldown() {
             ..
         })
     ));
-    assert_eq!(request_count.load(Ordering::SeqCst), 2);
+    assert_eq!(request_count.load(Ordering::SeqCst), 3);
 }
 
 #[test]
