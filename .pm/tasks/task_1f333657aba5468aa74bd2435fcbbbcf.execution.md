@@ -179,3 +179,25 @@ Example:
 - Expected Result: No stale density string matches; doc governance, PM lint, and whitespace checks pass; deleted snapshot ids have no doc/scripts/crates consumer references.
 - Actual Result: All checks passed: stale density rg no matches; doc-governance-check OK; pm-lint OK; git diff --check OK; deleted snapshot id rg over doc/scripts/crates no matches. A broader rg including .pm intentionally matches execution-log review command evidence, not a consumer reference.
 - Blocker / Next Action: Repository_health re-review pending; QA review already reported no_findings for cleanup core with residual risk limited to hidden non-repo consumers and no runtime/live correctness claim.
+
+## 2026-06-13 13:38:30 CST / tpm
+- 完成内容: Integrated pre-PR local role reviews. repository_health_engineer initial P3 finding was addressed in `doc/p2p/node/README.md` and re-reviewed as no_findings; qa_engineer reported no_findings for the cleanup core.
+- 遗留事项: Continue to `prepare-task-pr.sh --create` after this review packet is committed as evidence-only follow-up to reviewed source head.
+- Action: Record final pre-PR local role review passed packet.
+- Validation Command: repository_health_engineer re-review; qa_engineer review; stale p2p density rg no matches; deleted shared_devnet id rg over doc/scripts/crates no matches; doc-governance-check OK; pm-lint OK; git diff --check OK.
+- Expected Result: Required pre-PR local role review packet includes source worktree, branch, reviewed source head, comparison ref, reviewed paths, roles, evidence, finding disposition, and residual risk.
+- Actual Result: Review roles completed. repository_health_engineer: no_findings after P3 fix. qa_engineer: no_findings for cleanup core. Residual risks are limited to hidden non-repo consumers, future evidence-routing drift, and no runtime/live public-testnet/QA-gate correctness claim.
+- Blocker / Next Action: Commit this evidence-only packet, then run prepare-task-pr.
+- Pre-PR Local Role Review: passed
+- Task UID: task_1f333657aba5468aa74bd2435fcbbbcf
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-p2p-cleanup-audit
+- Source Branch: task/p2p-cleanup-audit
+- Source Head: a8f26e32b1f555b623d34f5eb324d01b6ebb602a
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.execution.md; .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml; doc/p2p/README.md; doc/p2p/node/README.md; doc/p2p/prd.index.md; doc/testing/evidence/README.md; doc/testing/evidence/generated-shared-network-gates/shared_devnet-20260523-{190913,191104,195028,220434,223934,232451,234114,234212} deleted generated snapshot files
+- Role Selection Basis: changed paths touched p2p/testing documentation, generated evidence cleanup, task truth, and verification evidence; repository_health_engineer included for doc/code/evidence alignment and technical-debt cleanup; qa_engineer included for testing evidence routing and evidence deletion safety; runtime/wasm/viewer/gameplay/liveops skipped because no runtime code, UI, gameplay, external messaging, or player promise changed.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Evidence: repository_health_engineer 2026-06-13 13:26:57 CST found one P3 stale `doc/p2p/node/README.md` density snapshot; TPM fixed it; repository_health_engineer 2026-06-13 13:35:09 CST re-review returned no_findings and PR can proceed. qa_engineer 2026-06-13 13:28:28 CST returned no_findings for cleanup core and confirmed verification is sufficient for a docs/evidence cleanup PR.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: P3 finding addressed by replacing fixed `doc/p2p/node/README.md` density snapshot with stable high-density guidance and command-based current-count guidance; fresh checks passed: stale density rg no matches, deleted shared_devnet id rg over doc/scripts/crates no matches, doc-governance-check OK, pm-lint OK, git diff --check OK.
+- Residual Risk: Hidden non-repo consumers of deleted generated evidence are not validated; future p2p/testing evidence-routing drift remains possible; no runtime behavior, live public-testnet correctness, or QA CI gate-placement claim is made.
