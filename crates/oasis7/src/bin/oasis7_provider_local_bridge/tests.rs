@@ -28,6 +28,14 @@ fn newapi_bridge_state_env_guard() -> MutexGuard<'static, ()> {
         .expect("newapi bridge state env test guard")
 }
 
+fn timeout_env_guard() -> MutexGuard<'static, ()> {
+    static GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+    GUARD
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("timeout env test guard")
+}
+
 #[test]
 fn parse_model_decision_accepts_code_fence_and_maps_move_agent() {
     let request = sample_request();
@@ -151,6 +159,22 @@ fn build_decision_prompt_embeds_preferred_visible_move_hint() {
 }
 
 #[test]
+fn timeout_seconds_from_budget_uses_local_bridge_floor() {
+    let _guard = timeout_env_guard();
+    std::env::remove_var("OASIS7_PROVIDER_LOCAL_BRIDGE_MIN_TIMEOUT_MS");
+    assert_eq!(timeout_seconds_from_budget(3_000), 15);
+    assert_eq!(timeout_seconds_from_budget(60_000), 60);
+}
+
+#[test]
+fn timeout_seconds_from_budget_allows_env_override_floor() {
+    let _guard = timeout_env_guard();
+    std::env::set_var("OASIS7_PROVIDER_LOCAL_BRIDGE_MIN_TIMEOUT_MS", "7000");
+    assert_eq!(timeout_seconds_from_budget(3_000), 7);
+    std::env::remove_var("OASIS7_PROVIDER_LOCAL_BRIDGE_MIN_TIMEOUT_MS");
+}
+
+#[test]
 fn build_session_key_uses_provider_config_ref_to_avoid_cross_talk() {
     let mut request = sample_request();
     request.provider_config_ref = Some("provider://loopback-http/parity/run-a/agent-0".to_string());
@@ -197,6 +221,9 @@ fn local_session_id_from_session_key_hashes_invalid_chars() {
 fn should_fallback_to_local_agent_matches_gateway_timeout() {
     assert!(should_fallback_to_local_agent(
         "provider-cli gateway call agent exited with status 1: stderr=Gateway call failed: Error: gateway timeout after 17000ms stdout="
+    ));
+    assert!(should_fallback_to_local_agent(
+        "provider gateway call agent exited with status exit status: 1: stderr=The read operation timed out stdout="
     ));
     assert!(!should_fallback_to_local_agent("provider agent not found"));
 }

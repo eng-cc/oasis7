@@ -666,7 +666,7 @@ fn invoke_local_agent(
         .arg("--thinking")
         .arg(invocation.thinking.as_str())
         .arg("--timeout")
-        .arg(invocation.timeout_seconds.to_string())
+        .arg(invocation.timeout_seconds.saturating_mul(1000).to_string())
         .arg("--json")
         .envs(route_label_env(invocation.route_label.as_deref()))
         .env(

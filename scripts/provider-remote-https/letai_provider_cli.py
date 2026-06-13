@@ -2,6 +2,7 @@
 
 import json
 import os
+import socket
 import sys
 import time
 import urllib.error
@@ -16,6 +17,8 @@ DEFAULT_MAX_OUTPUT_TOKENS = 256
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_USER_AGENT = "oasis7-letai-provider-cli/1.0"
 QUOTA_UNITS_PER_USD = Decimal("500000")
+DEFAULT_COMPLETION_RETRY_COUNT = 2
+DEFAULT_COMPLETION_RETRY_DELAY_MS = 1000
 
 
 def env_required(*names: str) -> str:
@@ -291,6 +294,12 @@ def parse_local_agent(argv: list[str]) -> tuple[str, int, str]:
             if index >= len(argv):
                 raise RuntimeError("--agent requires a value")
             agent_id = argv[index].strip() or agent_id
+        elif flag in {"--session-id", "--thinking"}:
+            index += 1
+            if index >= len(argv):
+                raise RuntimeError(f"{flag} requires a value")
+        elif flag in {"--local", "--json"}:
+            pass
         else:
             raise RuntimeError(f"unknown agent flag: {flag}")
         index += 1
@@ -502,6 +511,72 @@ def send_completion_request_after_topup(
     raise RuntimeError(f"upstream chat completion still low quota after topup: {last_detail}")
 
 
+def is_retryable_completion_error(exc: BaseException) -> bool:
+    detail = str(exc).lower()
+    return (
+        "did not contain assistant content" in detail
+        or "read operation timed out" in detail
+        or "operation timed out" in detail
+        or "remote end closed connection without response" in detail
+        or "connection reset" in detail
+        or isinstance(exc, (TimeoutError, socket.timeout))
+    )
+
+
+def send_completion_request_with_retries(
+    body: dict,
+    base_url: str,
+    api_key: str,
+    timeout_ms: int,
+    use_stream: bool,
+) -> tuple[int, dict, str, dict]:
+    retry_count = route_or_env_int(
+        {},
+        "unused",
+        DEFAULT_COMPLETION_RETRY_COUNT,
+        "OASIS7_REMOTE_LLM_RETRY_COUNT",
+        "LETAI_RETRY_COUNT",
+    )
+    retry_delay_ms = route_or_env_int(
+        {},
+        "unused",
+        DEFAULT_COMPLETION_RETRY_DELAY_MS,
+        "OASIS7_REMOTE_LLM_RETRY_DELAY_MS",
+        "LETAI_RETRY_DELAY_MS",
+    )
+    retry_count = max(1, retry_count)
+    retry_delay_ms = max(0, retry_delay_ms)
+    for attempt in range(1, retry_count + 1):
+        request = urllib.request.Request(
+            url=f"{base_url}/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers=make_headers(api_key),
+            method="POST",
+        )
+        try:
+            return send_completion_request(request, timeout_ms, use_stream)
+        except urllib.error.HTTPError:
+            raise
+        except Exception as exc:
+            if attempt >= retry_count or not is_retryable_completion_error(exc):
+                raise
+            print(
+                json.dumps(
+                    {
+                        "event": "chat_completion_retry",
+                        "attempt": attempt + 1,
+                        "retry_count": retry_count,
+                        "reason": redact_detail(str(exc)),
+                    },
+                    ensure_ascii=True,
+                ),
+                file=sys.stderr,
+            )
+            if retry_delay_ms > 0:
+                time.sleep(retry_delay_ms / 1000)
+    raise RuntimeError("unreachable chat completion retry state")
+
+
 def redact_detail(detail: str) -> str:
     stripped = detail.strip()
     if len(stripped) > 300:
@@ -570,18 +645,10 @@ def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
     if use_json_object:
         body["response_format"] = {"type": "json_object"}
 
-    request = urllib.request.Request(
-        url=f"{base_url}/chat/completions",
-        data=json.dumps(body).encode("utf-8"),
-        headers=make_headers(api_key),
-        method="POST",
-    )
     started = time.time()
     try:
-        status_code, decoded, content, usage = send_completion_request(
-            request,
-            timeout_ms,
-            use_stream,
+        status_code, decoded, content, usage = send_completion_request_with_retries(
+            body, base_url, api_key, timeout_ms, use_stream
         )
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")

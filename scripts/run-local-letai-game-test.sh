@@ -26,6 +26,8 @@ AUTO_PLAY="${OASIS7_LOCAL_LETAI_AUTO_PLAY:-1}"
 DEPLOYMENT_MODE="${OASIS7_LOCAL_LETAI_DEPLOYMENT_MODE:-trusted_local_only}"
 BRIDGE_SMOKE_ATTEMPTS="2"
 BRIDGE_AUTO_TOPUP_USD="${OASIS7_LETAI_AUTO_TOPUP_USD:-0.1}"
+CHAT_PROBE_TIMEOUT_MS="${OASIS7_LETAI_CHAT_PROBE_TIMEOUT_MS:-60000}"
+AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS:-60000}"
 MODEL=""
 OUTPUT_DIR=""
 BRIDGE_PID=""
@@ -65,6 +67,10 @@ Options:
   --skip-chat-probe           Skip the upfront LetAI chat-completions probe
   --skip-bridge-smoke         Skip provider bridge contract smoke before launcher startup
   --bridge-smoke-attempts <n> Retry provider bridge smoke up to <n> times (default: 2)
+  --chat-probe-timeout-ms <ms>
+                              LetAI chat probe timeout (default: 60000)
+  --agent-provider-connect-timeout-ms <ms>
+                              Runtime provider decision timeout (default: 60000)
   --output-dir <path>         Launcher output dir; bridge log goes there too
   -h, --help                  Show help
 
@@ -152,6 +158,14 @@ while [[ $# -gt 0 ]]; do
       BRIDGE_SMOKE_ATTEMPTS="${2:-}"
       shift 2
       ;;
+    --chat-probe-timeout-ms)
+      CHAT_PROBE_TIMEOUT_MS="${2:-}"
+      shift 2
+      ;;
+    --agent-provider-connect-timeout-ms)
+      AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${2:-}"
+      shift 2
+      ;;
     --output-dir)
       OUTPUT_DIR="${2:-}"
       shift 2
@@ -173,12 +187,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$CONFIG_PATH" || -z "$BIND_ADDR" || -z "$BRIDGE_AUTO_TOPUP_USD" || -z "$BRIDGE_SMOKE_ATTEMPTS" || -z "$DEPLOYMENT_MODE" ]]; then
-  echo "error: empty --config, --bind, --deployment-mode, --auto-topup-usd, or --bridge-smoke-attempts is not allowed" >&2
+if [[ -z "$CONFIG_PATH" || -z "$BIND_ADDR" || -z "$BRIDGE_AUTO_TOPUP_USD" || -z "$BRIDGE_SMOKE_ATTEMPTS" || -z "$DEPLOYMENT_MODE" || -z "$CHAT_PROBE_TIMEOUT_MS" || -z "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" ]]; then
+  echo "error: empty --config, --bind, --deployment-mode, --auto-topup-usd, --bridge-smoke-attempts, --chat-probe-timeout-ms, or --agent-provider-connect-timeout-ms is not allowed" >&2
   exit 2
 fi
 if ! [[ "$BRIDGE_SMOKE_ATTEMPTS" =~ ^[0-9]+$ ]] || [[ "$BRIDGE_SMOKE_ATTEMPTS" -lt 1 ]]; then
   echo "error: --bridge-smoke-attempts must be a positive integer" >&2
+  exit 2
+fi
+if ! [[ "$CHAT_PROBE_TIMEOUT_MS" =~ ^[0-9]+$ ]] || [[ "$CHAT_PROBE_TIMEOUT_MS" -lt 1000 ]]; then
+  echo "error: --chat-probe-timeout-ms must be an integer >= 1000" >&2
+  exit 2
+fi
+if ! [[ "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" =~ ^[0-9]+$ ]] || [[ "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" -lt 1000 ]]; then
+  echo "error: --agent-provider-connect-timeout-ms must be an integer >= 1000" >&2
   exit 2
 fi
 
@@ -229,11 +251,15 @@ echo "bridge=http://$BIND_ADDR"
 echo "chat_echo=$([[ "$CHAT_ECHO" == "1" ]] && echo enabled || echo disabled)"
 echo "auto_play=$([[ "$AUTO_PLAY" == "1" ]] && echo enabled || echo disabled)"
 echo "deployment_mode=$DEPLOYMENT_MODE"
+echo "chat_probe_timeout_ms=$CHAT_PROBE_TIMEOUT_MS"
+echo "agent_provider_connect_timeout_ms=$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
 echo "output_dir=$OUTPUT_DIR"
+export OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS="$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
 
 if [[ "$SKIP_CHAT_PROBE" != "1" ]]; then
   "$ROOT_DIR/scripts/check-letai-chat-completions.sh" \
     --config "$EFFECTIVE_CONFIG_PATH" \
+    --timeout-ms "$CHAT_PROBE_TIMEOUT_MS" \
     ${BRIDGE_ARGS[@]+"${BRIDGE_ARGS[@]}"}
 fi
 

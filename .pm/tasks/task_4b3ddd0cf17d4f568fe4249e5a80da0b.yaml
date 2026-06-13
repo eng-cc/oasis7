@@ -1,0 +1,29 @@
+task_uid: task_4b3ddd0cf17d4f568fe4249e5a80da0b
+title: "diagnose local LetAI provider timeout"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-world-runtime-local-letai-provider-timeout
+execution_log_path: .pm/tasks/task_4b3ddd0cf17d4f568fe4249e5a80da0b.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - testing-manual.md
+  - scripts/run-local-letai-game-test.sh
+doc_refs:
+  - doc/world-runtime/project.md
+related_prd: []
+acceptance:
+  - "Reproduce run-local-letai-game-test provider gateway timeout or collect latest run evidence."
+  - "Identify whether the blocker is local bridge/agent orchestration, LetAI upstream timeout, token/config, or runtime surfacing."
+  - "Apply minimal fix or provide operator-ready mitigation with verification evidence."
+handoff_to:
+  - runtime_engineer
+  - viewer_engineer
+updated_at: 2026-06-13T23:48:50+08:00
+last_started_at: 2026-06-13T22:01:28+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/check-letai-chat-completions.sh scripts/run-local-letai-game-test.sh scripts/run-local-letai-provider-bridge.sh && python3 scripts/provider-remote-https/letai_provider_cli.test.py && env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_provider_local_bridge timeout -- --nocapture && env -u RUSTC_WRAPPER cargo test -p oasis7 provider_gateway_timeout_gets_local_letai_recovery_hint -- --nocapture && ./scripts/local-letai-provider-bridge.test.sh && ./scripts/pm/workflow-lint.sh --task-uid task_4b3ddd0cf17d4f568fe4249e5a80da0b --phase current && git diff --check"
+last_verified_at: 2026-06-13T23:48:49+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-13T23:48:50+08:00
