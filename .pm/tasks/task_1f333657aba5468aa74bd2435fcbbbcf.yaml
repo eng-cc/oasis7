@@ -10,6 +10,7 @@ source_refs:
   - AGENTS.md
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/p2p/project.md
 related_prd: []
 acceptance:
   - "Repository health review identifies stale or cleanup-worthy p2p code or docs with evidence."

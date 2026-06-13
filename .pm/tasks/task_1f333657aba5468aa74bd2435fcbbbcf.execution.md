@@ -201,3 +201,12 @@ Example:
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: P3 finding addressed by replacing fixed `doc/p2p/node/README.md` density snapshot with stable high-density guidance and command-based current-count guidance; fresh checks passed: stale density rg no matches, deleted shared_devnet id rg over doc/scripts/crates no matches, doc-governance-check OK, pm-lint OK, git diff --check OK.
 - Residual Risk: Hidden non-repo consumers of deleted generated evidence are not validated; future p2p/testing evidence-routing drift remains possible; no runtime behavior, live public-testnet correctness, or QA CI gate-placement claim is made.
+
+## 2026-06-13 13:39:41 CST / tpm
+- 完成内容: Task closeout completed before PR preparation. Closeout moved task from committed to done and verified task_complete with doc governance.
+- 遗留事项: Rerun workflow-lint and prepare-task-pr after adding required doc_ref and closeout evidence.
+- Action: Record closeout command/result evidence required by PR preflight.
+- Validation Command: ./scripts/pm/task-closeout.sh --role tpm --task-uid task_1f333657aba5468aa74bd2435fcbbbcf --verify-command './scripts/doc-governance-check.sh'
+- Expected Result: Task closeout succeeds, status becomes done, claim verification status is verified, pm_lint is ok, and next step is prepare-task-pr.
+- Actual Result: task closeout summary: previous_status=committed; final_status=done; claim_verification_status=verified; claim_type=task_complete; verify_command=./scripts/doc-governance-check.sh; pm_lint=ok; next_step=./scripts/prepare-task-pr.sh.
+- Blocker / Next Action: Continue PR preflight after workflow-lint passes.
