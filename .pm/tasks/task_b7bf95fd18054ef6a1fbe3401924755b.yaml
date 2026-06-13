@@ -11,6 +11,7 @@ source_refs:
   - doc/engineering/workflow/source-of-truth.md
 doc_refs:
   - crates/oasis7_viewer
+  - doc/world-simulator/project.md
 related_prd: []
 acceptance:
   - "Repository health review identifies actionable visualization-related code or documentation cleanup opportunities, with owner/risk/verification notes."
