@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@solidjs/testing-library";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const runtimeMock = vi.hoisted(() => ({
@@ -258,6 +259,15 @@ afterEach(() => {
 });
 
 describe("pixel world host", () => {
+  it("keeps world focus stage resets scoped away from nested command panels", () => {
+    const html = readFileSync("software_safe.html", "utf8");
+
+    expect(html).toContain("body.pixel-world-focus-active .panel--stage > .panel__body");
+    expect(html).toContain(".panel--stage > .panel__body");
+    expect(html).not.toContain("body.pixel-world-focus-active .panel--stage .panel__body");
+    expect(html).not.toContain(".panel--stage .panel__body {");
+  });
+
   it("builds richer visual DTO layers from the existing snapshot contract", async () => {
     vi.resetModules();
     window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");

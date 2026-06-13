@@ -97,6 +97,7 @@
     - `git diff --check`
 - [x] TASK-GAME-029 (PRD-GAME-009) [test_tier_required + test_tier_full]: `runtime_engineer` 已收口 five-node no-LLM soak、replay/rollback drill 与 longrun release gate 的候选版本证据，形成封闭 Beta 准入所需的 runtime 最小硬证据包。
 - [x] TASK-GAME-030 (PRD-GAME-009) [test_tier_required]: `viewer_engineer` 已完成同候选 headed Web/UI rerun、`AgentNotFound` 历史噪音降级与首屏人工复核，`PostOnboarding` 主目标/进度/下一步建议现在可作为封闭 Beta 候选级首屏入口。
+- [x] immersive-command-panel-spacing (PRD-GAME-012) [test_tier_required]: `viewer_engineer` 已收窄沉浸模式 stage fullscreen reset 的 CSS 选择器，避免命令抽屉内嵌 panel body 被错误清空间距；真实 local LetAI 试玩路径已验证命令面板外层和聊天模块保留 `gap/padding`。 Trace: .pm/tasks/task_b5440afc520648ffa963803c93da43f2.yaml
 - [x] TASK-GAME-031 (PRD-GAME-009) [test_tier_required + test_tier_full]: `qa_engineer` 已建立统一 `closed_beta_candidate` release gate，串联 headed Web/UI、pure API、no-UI smoke、longrun/recovery 与 trend baseline；最近 7 天 trend baseline 刷新后，当前统一 gate 正式结论为 `pass`。
 - [x] TASK-GAME-032 (PRD-GAME-009) [test_tier_required]: `liveops_community` 收口封闭 Beta 候选 runbook、招募/反馈/事故回流模板与禁语清单；在 `producer_system_designer` 放行前继续保持 `technical preview` 口径。
   - 产物文件:
