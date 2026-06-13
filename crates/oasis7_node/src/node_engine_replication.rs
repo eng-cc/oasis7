@@ -691,14 +691,33 @@ impl PosNodeEngine {
             return Ok(());
         }
         let request = replication_runtime.build_fetch_blob_request(content_hash)?;
+        let mut provider_lookup_failure = None;
+        let provider_lookup = match endpoint
+            .lookup_provider_ids_for_content_hash(world_id, content_hash)
+        {
+            Ok(provider_ids) => provider_ids,
+            Err(err) => {
+                provider_lookup_failure = Some(format!(
+                    "provider lookup failed for execution checkpoint blob hash={content_hash}: {err:?}"
+                ));
+                None
+            }
+        };
         let response = request_fetch_blob_with_route_fallback(
             endpoint,
             world_id,
             content_hash,
             &request,
-            None,
+            provider_lookup.as_deref(),
         )?;
         if !response.found {
+            if let Some(provider_lookup_failure) = provider_lookup_failure {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "execution checkpoint blob not found hash={content_hash}; {provider_lookup_failure}"
+                    ),
+                });
+            }
             return Err(NodeError::Replication {
                 reason: format!("execution checkpoint blob not found hash={content_hash}"),
             });
