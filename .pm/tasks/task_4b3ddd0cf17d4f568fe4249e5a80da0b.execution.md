@@ -158,3 +158,12 @@ Example:
 - Expected Result: all required role reviews return findings or no_findings and any valid findings are resolved before PR creation.
 - Actual Result: all four reviews returned `no_findings`; residual risks recorded.
 - Blocker / Next Action: run task closeout and commit.
+
+## 2026-06-13 23:54:06 CST / tpm
+- 完成内容: Recorded project Trace and closeout evidence for PR preflight. task-closeout.sh invoked claim-ready internally and marked task_complete verified/done.
+- 遗留事项: Repo-wide pm lint still has unrelated historical execution-log formatting debt outside this task; task-local workflow-lint passes.
+- Action: Append explicit claim-ready.sh and task-closeout.sh command/result evidence required by prepare-task-pr preflight.
+- Validation Command: ./scripts/pm/task-closeout.sh --role tpm --task-uid task_4b3ddd0cf17d4f568fe4249e5a80da0b --verify-command '<fresh local LetAI provider verification gate>'; internally invokes ./scripts/pm/claim-ready.sh --claim-type task_complete --verify-command '<fresh local LetAI provider verification gate>' --task-uid task_4b3ddd0cf17d4f568fe4249e5a80da0b
+- Expected Result: Task records claim-ready/task-closeout evidence, last_verification_status=verified, last_closed_at present, and prepare-task-pr preflight can distinguish task-local readiness from unrelated repo-wide pm lint debt.
+- Actual Result: task YAML now has status=done, last_claim_type=task_complete, last_verification_status=verified, last_verification_exit_code=0, and last_closed_at=2026-06-13T23:48:50+08:00. task-closeout.sh returned nonzero only after post-closeout repo-wide pm lint reported unrelated historical task log debt; task-local workflow-lint subsequently passed after this task log was normalized.
+- Blocker / Next Action: Rerun task-local workflow-lint and prepare-task-pr after committing this Trace/evidence update.
