@@ -68,6 +68,29 @@ fn high_replication_checkpoint_candidates_cover_release_default_retained_window(
 }
 
 #[test]
+fn high_replication_checkpoint_candidates_prefer_release_retained_boundaries() {
+    let candidates = PosNodeEngine::high_replication_checkpoint_candidates(16_715, 64);
+
+    assert_eq!(
+        &candidates[..4],
+        &[16_715, 16_640, 16_576, 16_512],
+        "release_default 64-height retained checkpoint boundaries should be probed before 32-height fallback boundaries"
+    );
+    let retained_index = candidates
+        .iter()
+        .position(|height| *height == 16_640)
+        .expect("retained boundary candidate");
+    let fallback_index = candidates
+        .iter()
+        .position(|height| *height == 16_672)
+        .expect("32-height fallback boundary candidate");
+    assert!(
+        retained_index < fallback_index,
+        "retained boundary should be preferred over nearer 32-height fallback boundary; candidates={candidates:?}"
+    );
+}
+
+#[test]
 fn high_replication_checkpoint_probe_continues_after_fetch_commit_timeout() {
     let err = NodeError::Replication {
         reason:
