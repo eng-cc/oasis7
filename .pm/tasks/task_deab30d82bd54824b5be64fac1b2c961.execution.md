@@ -157,3 +157,12 @@ Example:
 - Expected Result: All involved roles return no blocking findings, or any findings are resolved before PR creation.
 - Actual Result: All involved roles are no-findings / PR-ready after runtime false-positive withdrawal; runtime Rust path checks returned no output for the actual PR range.
 - Blocker / Next Action: Commit the evidence-only PR readiness packet, push branch, create PR, then enter PR checks/comments/merge watch.
+
+## 2026-06-13 21:10:11 CST / tpm
+- 完成内容: PR evidence recorded for PR #449.
+- 遗留事项: Continue PR required-check, mergeability, comments, and review-thread watch; merge only after checks/comments are clean under repo policy.
+- Action: Ran `./scripts/prepare-task-pr.sh --create --title "Clean up stale p2p evidence references"`; branch push succeeded, but `gh pr create` failed because non-interactive GitHub CLI required an explicit body. Created the PR with explicit `gh pr create --base main --head task/engineering-p2p-cleanup-audit --title "Clean up stale p2p evidence references" --body ...`; added local `PR.md` evidence with task UID and synced the GitHub body with `gh pr edit 449 --body-file PR.md`.
+- Validation Command: `./scripts/prepare-task-pr.sh --title "Clean up stale p2p evidence references"`; `gh pr list --head task/engineering-p2p-cleanup-audit --json number,url,title,state --limit 5`; `gh pr create --base main --head task/engineering-p2p-cleanup-audit --title "Clean up stale p2p evidence references" --body ...`; `gh pr edit 449 --body-file PR.md`.
+- Expected Result: Branch is pushed and GitHub PR exists with task-local role review and verification evidence.
+- Actual Result: Branch `task/engineering-p2p-cleanup-audit` pushed to `origin`; PR URL: https://github.com/eng-cc/oasis7/pull/449; `PR.md` and GitHub PR body include `task_uid: task_deab30d82bd54824b5be64fac1b2c961`.
+- Blocker / Next Action: Commit and push this PR evidence, then inspect PR status/checks/comments/review threads.
