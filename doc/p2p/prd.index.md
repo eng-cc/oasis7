@@ -2,7 +2,7 @@
 
 审计轮次: 13
 
-更新时间：2026-05-18
+更新时间：2026-06-13
 
 ## 入口
 - 模块 PRD：`doc/p2p/prd.md`
@@ -16,30 +16,18 @@
 - 想先看主链安全、hosted world 接入、托管身份/托管密钥或 mixed-topology reachability：优先从 `blockchain/` 与 `network/` 子域进入
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-10）
-- `doc/p2p/`：269 份文件
-- `doc/p2p/node/`：68 份文件
-- `doc/p2p/distfs/`：66 份文件
-- `doc/p2p/blockchain/`：62 份文件
-- `doc/p2p/observer/`：15 份文件
-- `doc/p2p/token/`：14 份文件
-- `doc/p2p/network/`：12 份文件
-- `doc/p2p/distributed/`：12 份文件
-- `doc/p2p/viewer-live/`：9 份文件
-- `doc/p2p/consensus/`：6 份文件
-
 ## 热点子域导航
-| 子域 | 文件数 | 适合回答的问题 |
-| --- | --- | --- |
-| `node/` | 68 | 节点奖励、身份、复制、PoS 时间基线与执行验证 |
-| `distfs/` | 66 | DistFS 生产加固、路径索引、自愈与 runtime/bridge 集成 |
-| `blockchain/` | 62 | 主链安全、mainnet readiness、signer custody、hosted world 接入 |
-| `observer/` | 15 | 观察者同步模式、指标与可观测性 |
-| `token/` | 14 | 创世分配、签名授权、治理分发与流通边界 |
-| `network/` | 12 | reachability、mobile light client、runtime bridge 与 mixed-topology |
-| `distributed/` | 12 | 分布式 runtime / consensus / hard split 路线 |
-| `viewer-live/` | 9 | viewer-live 发行、开关与观察服务边界 |
-| `consensus/` | 6 | 共识实现与内建 wasm 身份口径 |
+| 子域 | 适合回答的问题 |
+| --- | --- |
+| `node/` | 节点奖励、身份、复制、PoS 时间基线与执行验证 |
+| `distfs/` | DistFS 生产加固、路径索引、自愈与 runtime/bridge 集成 |
+| `blockchain/` | 主链安全、mainnet readiness、signer custody、hosted world 接入 |
+| `observer/` | 观察者同步模式、指标与可观测性 |
+| `token/` | 创世分配、签名授权、治理分发与流通边界 |
+| `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |
+| `distributed/` | 分布式 runtime / consensus / hard split 路线 |
+| `viewer-live/` | viewer-live 发行、开关与观察服务边界 |
+| `consensus/` | 共识实现与内建 wasm 身份口径 |
 
 ## 活跃补充文档
 - `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`：项目级 test/prod 环境分层、hosted-login 云上清单与 `testnet/mainnet` claim boundary。
