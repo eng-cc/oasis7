@@ -6,6 +6,7 @@ CONFIG_ARGS=()
 MESSAGE='Return only JSON: {"decision":"wait"}'
 PRINT_CONFIG="0"
 MODEL_OVERRIDDEN="0"
+TIMEOUT_MS="${OASIS7_LETAI_CHAT_PROBE_TIMEOUT_MS:-15000}"
 
 usage() {
   cat <<'USAGE'
@@ -19,6 +20,7 @@ Options:
   --model <id>        Model override
   --base-url <url>    LetAI chat API base URL override
   --message <text>    Probe prompt
+  --timeout-ms <ms>   Probe timeout in milliseconds (default: $OASIS7_LETAI_CHAT_PROBE_TIMEOUT_MS or 15000)
   --print-config      Print sanitized resolved config and exit
   -h, --help          Show help
 USAGE
@@ -45,6 +47,14 @@ while [[ $# -gt 0 ]]; do
       MESSAGE="$2"
       shift 2
       ;;
+    --timeout-ms)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "error: --timeout-ms requires a value" >&2
+        exit 2
+      fi
+      TIMEOUT_MS="$2"
+      shift 2
+      ;;
     --print-config)
       PRINT_CONFIG="1"
       shift
@@ -60,6 +70,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if ! [[ "$TIMEOUT_MS" =~ ^[0-9]+$ ]] || [[ "$TIMEOUT_MS" -lt 1000 ]]; then
+  echo "error: --timeout-ms must be an integer >= 1000" >&2
+  exit 2
+fi
 
 if [[ "$MODEL_OVERRIDDEN" == "0" ]]; then
   DEFAULT_MODEL_ARGS=(--model "${OASIS7_LETAI_CHAT_MODEL:-gpt-5.4}")
@@ -83,10 +98,11 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 set +e
 if [[ "${#CONFIG_ARGS[@]}" -gt 0 ]]; then
-  "$ROOT_DIR/scripts/with-letai-llm-config.sh" "${CONFIG_ARGS[@]}" -- bash -s -- "$MESSAGE" "$tmp_dir" <<'BASH'
+  "$ROOT_DIR/scripts/with-letai-llm-config.sh" "${CONFIG_ARGS[@]}" -- bash -s -- "$MESSAGE" "$tmp_dir" "$TIMEOUT_MS" <<'BASH'
 set -euo pipefail
 message="$1"
 tmp_dir="$2"
+timeout_ms="$3"
 export OASIS7_REMOTE_LLM_BASE_URL="$OASIS7_LLM_BASE_URL"
 export OASIS7_REMOTE_LLM_API_KEY="$OASIS7_LLM_API_KEY"
 export OASIS7_REMOTE_LLM_MODEL="$OASIS7_LLM_MODEL"
@@ -98,15 +114,16 @@ python3 scripts/provider-remote-https/letai_provider_cli.py \
   agent \
   --agent local-smoke \
   --message "$message" \
-  --timeout 15000 \
+  --timeout "$timeout_ms" \
   >"$tmp_dir/response.json" \
   2>"$tmp_dir/error.txt"
 BASH
 else
-  "$ROOT_DIR/scripts/with-letai-llm-config.sh" -- bash -s -- "$MESSAGE" "$tmp_dir" <<'BASH'
+  "$ROOT_DIR/scripts/with-letai-llm-config.sh" -- bash -s -- "$MESSAGE" "$tmp_dir" "$TIMEOUT_MS" <<'BASH'
 set -euo pipefail
 message="$1"
 tmp_dir="$2"
+timeout_ms="$3"
 export OASIS7_REMOTE_LLM_BASE_URL="$OASIS7_LLM_BASE_URL"
 export OASIS7_REMOTE_LLM_API_KEY="$OASIS7_LLM_API_KEY"
 export OASIS7_REMOTE_LLM_MODEL="$OASIS7_LLM_MODEL"
@@ -118,7 +135,7 @@ python3 scripts/provider-remote-https/letai_provider_cli.py \
   agent \
   --agent local-smoke \
   --message "$message" \
-  --timeout 15000 \
+  --timeout "$timeout_ms" \
   >"$tmp_dir/response.json" \
   2>"$tmp_dir/error.txt"
 BASH

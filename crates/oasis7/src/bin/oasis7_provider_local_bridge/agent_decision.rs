@@ -194,8 +194,21 @@ fn profile_guidance(
     }
 }
 
+const DEFAULT_MIN_PROVIDER_TIMEOUT_MS: u64 = 15_000;
+
+fn minimum_provider_timeout_ms() -> u64 {
+    std::env::var("OASIS7_PROVIDER_LOCAL_BRIDGE_MIN_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_MIN_PROVIDER_TIMEOUT_MS)
+}
+
 pub(super) fn timeout_seconds_from_budget(timeout_budget_ms: u64) -> u64 {
-    ((timeout_budget_ms.max(1000) + 999) / 1000).max(1)
+    let timeout_budget_ms = timeout_budget_ms
+        .max(1000)
+        .max(minimum_provider_timeout_ms());
+    ((timeout_budget_ms + 999) / 1000).max(1)
 }
 
 pub(super) fn build_gateway_agent_params(

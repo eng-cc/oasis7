@@ -88,6 +88,8 @@ const MAX_AUTHORITATIVE_CHALLENGE_HISTORY: usize = 512;
 const MAX_AUTHORITATIVE_STABLE_CHECKPOINTS: usize = 64;
 const LLM_GAMEPLAY_REQUIRED_HINT: &str =
     "enable --llm and configure a reachable LLM provider before retrying gameplay controls";
+const LLM_PROVIDER_GATEWAY_TIMEOUT_HINT: &str =
+    "local LLM provider gateway timed out; inspect output/local-letai-game-test/*/local-letai-provider-bridge.log, confirm proxy/upstream LetAI reachability, then rerun scripts/run-local-letai-game-test.sh or its chat probe/bridge smoke before retrying gameplay controls";
 const RUNTIME_CONTROL_REQUIRED_HINT: &str =
     "inspect the reported runtime failure, repair the broken world/module state, then retry the control";
 
@@ -1025,6 +1027,19 @@ impl ViewerRuntimeLiveServer {
         (code.to_string(), reason)
     }
 
+    fn llm_gameplay_hint_for_reason(reason: &str) -> String {
+        let normalized = reason.to_ascii_lowercase();
+        if normalized.contains("provider_gateway_unreachable")
+            || normalized.contains("read operation timed out")
+            || normalized.contains("operation timed out")
+            || normalized.contains("timed out")
+        {
+            LLM_PROVIDER_GATEWAY_TIMEOUT_HINT.to_string()
+        } else {
+            LLM_GAMEPLAY_REQUIRED_HINT.to_string()
+        }
+    }
+
     fn block_gameplay_control(
         &mut self,
         session: &mut RuntimeLiveSession,
@@ -1040,6 +1055,7 @@ impl ViewerRuntimeLiveServer {
         let (error_code, error_message) = self.gameplay_control_error(reason.clone());
         session.playing = false;
         session.next_play_step_at = None;
+        let hint = Self::llm_gameplay_hint_for_reason(&reason);
         self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
             action,
             "blocked",
@@ -1047,7 +1063,7 @@ impl ViewerRuntimeLiveServer {
             Some("advance the live world".to_string()),
             None,
             Some(reason),
-            Some(LLM_GAMEPLAY_REQUIRED_HINT.to_string()),
+            Some(hint),
             delta_logical_time,
             delta_event_seq,
         ));

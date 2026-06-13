@@ -1,7 +1,10 @@
 use super::*;
 
 pub(super) fn should_fallback_to_local_agent(error: &str) -> bool {
-    error.to_ascii_lowercase().contains("gateway timeout")
+    let normalized = error.to_ascii_lowercase();
+    normalized.contains("gateway timeout")
+        || normalized.contains("read operation timed out")
+        || normalized.contains("operation timed out")
 }
 
 pub(super) fn local_session_id_from_session_key(session_key: &str) -> String {

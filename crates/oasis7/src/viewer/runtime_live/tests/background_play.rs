@@ -94,3 +94,23 @@ fn runtime_background_play_stops_after_retry_budget_exhausted() {
         BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET,
     );
 }
+
+#[test]
+fn provider_gateway_timeout_gets_local_letai_recovery_hint() {
+    let hint = ViewerRuntimeLiveServer::llm_gameplay_hint_for_reason(
+        "provider_gateway_unreachable: provider gateway call agent exited with status exit status: 1: stderr=The read operation timed out stdout=",
+    );
+
+    assert!(
+        hint.contains("local-letai-provider-bridge.log"),
+        "timeout hint should point at the local LetAI bridge log"
+    );
+    assert!(
+        hint.contains("scripts/run-local-letai-game-test.sh"),
+        "timeout hint should point at the canonical local LetAI wrapper"
+    );
+    assert!(
+        hint.contains("proxy/upstream LetAI reachability"),
+        "timeout hint should explain the likely operator checks"
+    );
+}

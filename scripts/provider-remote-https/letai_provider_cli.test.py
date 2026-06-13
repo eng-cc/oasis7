@@ -259,6 +259,52 @@ class LetaiProviderCliNewapiStateTests(unittest.TestCase):
         self.assertEqual(usage["total_tokens"], 5)
         self.assertEqual(len(calls), 3)
 
+    def test_completion_retry_recovers_from_empty_sse_content(self):
+        calls = []
+
+        def fake_send_completion_request(request, timeout_ms, use_stream):
+            calls.append(request.full_url)
+            if len(calls) == 1:
+                raise RuntimeError("upstream SSE response did not contain assistant content")
+            return (
+                200,
+                {"choices": [{"message": {"content": "{\"decision\":\"wait\"}"}}]},
+                "{\"decision\":\"wait\"}",
+                {"total_tokens": 5},
+            )
+
+        previous_send = cli.send_completion_request
+        previous_sleep = cli.time.sleep
+        cli.send_completion_request = fake_send_completion_request
+        cli.time.sleep = lambda _seconds: None
+        try:
+            with EnvPatch(
+                OASIS7_REMOTE_LLM_RETRY_COUNT="2",
+                OASIS7_REMOTE_LLM_RETRY_DELAY_MS="25",
+            ):
+                status_code, _decoded, content, usage = cli.send_completion_request_with_retries(
+                    {"model": "mock-model", "messages": []},
+                    "https://api.example.test/v1",
+                    "token-key",
+                    5000,
+                    True,
+                )
+        finally:
+            cli.send_completion_request = previous_send
+            cli.time.sleep = previous_sleep
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(content, "{\"decision\":\"wait\"}")
+        self.assertEqual(usage["total_tokens"], 5)
+        self.assertEqual(len(calls), 2)
+
+    def test_completion_retry_classifies_remote_close_as_retryable(self):
+        self.assertTrue(
+            cli.is_retryable_completion_error(
+                RuntimeError("Remote end closed connection without response")
+            )
+        )
+
     def test_gateway_call_timeout_is_already_milliseconds(self):
         params = json.dumps({"message": "choose", "agentId": "agent-1"})
 
@@ -279,6 +325,29 @@ class LetaiProviderCliNewapiStateTests(unittest.TestCase):
         self.assertEqual(prompt, "choose")
         self.assertEqual(timeout_ms, 17000)
         self.assertEqual(agent_id, "agent-1")
+
+    def test_local_agent_accepts_bridge_compatibility_flags(self):
+        prompt, timeout_ms, agent_id = cli.parse_local_agent(
+            [
+                "agent",
+                "--agent",
+                "letai-local",
+                "--message",
+                "choose",
+                "--local",
+                "--session-id",
+                "ws-abc123",
+                "--thinking",
+                "off",
+                "--timeout",
+                "17000",
+                "--json",
+            ]
+        )
+
+        self.assertEqual(prompt, "choose")
+        self.assertEqual(timeout_ms, 17000)
+        self.assertEqual(agent_id, "letai-local")
 
 
 if __name__ == "__main__":

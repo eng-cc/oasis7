@@ -13,6 +13,8 @@ pub(super) const VIEWER_AGENT_PROVIDER_URL_ENV: &str = "OASIS7_AGENT_PROVIDER_UR
 pub(super) const VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV: &str = "OASIS7_AGENT_PROVIDER_AUTH_TOKEN";
 pub(super) const VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV: &str =
     "OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS";
+pub(super) const VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV: &str =
+    "OASIS7_AGENT_PROVIDER_DECISION_TIMEOUT_MS";
 pub(super) const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
 pub(super) const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 pub(super) const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
@@ -51,6 +53,7 @@ pub(super) fn clear_runtime_provider_env() {
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_BACKEND"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_CONTRACT"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_TRANSPORT"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_DECISION_TIMEOUT_MS"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_MODE"),
         removed_old_brand_runtime_live_env("RUNTIME_AGENT_CHAT_ECHO"),
     ];
@@ -59,6 +62,7 @@ pub(super) fn clear_runtime_provider_env() {
         VIEWER_AGENT_PROVIDER_BACKEND_ENV,
         VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
         VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
         RUNTIME_AGENT_CHAT_ECHO_ENV,
     ] {

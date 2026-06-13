@@ -11,10 +11,11 @@ pub(super) fn runtime_provider_check_now_unix_ms() -> u64 {
 
 pub(super) fn runtime_provider_check_cache_key(settings: &ProviderDecisionSettings) -> String {
     format!(
-        "{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}",
         settings.provider_transport,
         settings.base_url,
         settings.connect_timeout_ms,
+        settings.decision_timeout_ms,
         settings.agent_profile,
         settings.auth_token.as_deref().unwrap_or("")
     )
