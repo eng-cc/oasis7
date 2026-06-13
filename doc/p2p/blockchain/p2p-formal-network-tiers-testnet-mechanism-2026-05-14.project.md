@@ -93,7 +93,7 @@
 - `doc/testing/templates/public-testnet-rehearsal-template.md`
 - `doc/testing/templates/public-testnet-exit-review-template.md`
 - `doc/testing/templates/public-testnet-readiness-lanes.example.tsv`
-- `doc/testing/evidence/public-testnet-skeleton-example.md`
+- `doc/testing/templates/public-testnet-skeleton-evidence.example.md`
 - `doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`
 - `doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md`
 - `doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md`

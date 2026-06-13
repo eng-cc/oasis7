@@ -839,7 +839,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `doc/testing/evidence/shared-network-shared-devnet-dry-run-2026-03-24.md`
   - `doc/testing/evidence/shared-network-shared-devnet-promotion-record-2026-03-24.md`
   - `doc/testing/evidence/shared-network-shared-devnet-incident-2026-03-24.md`
-  - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md`
+  - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
 - 当前 runtime 入口：
 ```bash
 ./scripts/release-candidate-bundle.sh create \
@@ -873,9 +873,9 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   --window-id shared-devnet-20260324-06 \
   --candidate-bundle output/release-candidates/shared-devnet-20260324-05.json \
   --candidate-gate-summary output/shared-network/shared-devnet-20260324-06/gate/shared_devnet-20260324-175501/summary.md \
-  --access-out doc/testing/evidence/shared-network-shared-devnet-shared-access-draft-2026-03-24.md \
-  --mixed-topology-out doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md \
-  --rollback-out doc/testing/evidence/shared-network-shared-devnet-rollback-target-draft-2026-03-24.md
+  --access-out doc/testing/evidence/shared-network-shared-devnet-shared-access-2026-05-23.md \
+  --mixed-topology-out doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md \
+  --rollback-out doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md
 ./scripts/shared-devnet-blocker-packet-smoke.sh
 ./scripts/release-candidate-bundle-smoke.sh
 ./scripts/shared-network-track-gate.sh \
@@ -986,7 +986,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `shared_access=partial`
   - `rollback_target_ready=partial`
   - `mixed_topology_baseline=partial`
-  - 当前 formal lane evidence: `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md`
+  - 当前 formal lane evidence: `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
   - `mixed_topology_baseline` 在当前语义下仍未升到 shared-window `pass`
   - 因此 shared-devnet 剩余 blocker 现收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline`
 - `--dry-run` 用于门禁编排冒烟，不执行真实命令。
@@ -1035,7 +1035,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - 其中 `shared_devnet_pass` 只指 formal `shared_devnet` overall gate `pass`：`./scripts/shared-network-track-gate.sh --track shared_devnet` 的 required lanes 必须全部 `pass`；局部 lane 已有进展但整体仍为 `partial` 时，不得把这条 lane 记为满足。
   - 按仓库当前已冻结 evidence，`shared_devnet` 最近固定结论仍是 `gate_result=partial`、`promotion_recommendation=hold_promotion`，因此 `shared_devnet_pass` 目前仍未满足；即便 live `public_testnet` 已有 RPC/explorer/faucet/reset/claims evidence，aggregate readiness 仍应保持 `block`。
   - 示例 lane scaffold: `doc/testing/templates/public-testnet-readiness-lanes.example.tsv`
-  - 示例 placeholder evidence: `doc/testing/evidence/public-testnet-skeleton-example.md`
+  - 示例 placeholder evidence: `doc/testing/templates/public-testnet-skeleton-evidence.example.md`
   - 当前 live lane evidence: `doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`、`doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md`、`doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md`、`doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv`
   - companion checklist/runbook: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
 - 当前边界：

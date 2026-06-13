@@ -176,7 +176,7 @@
   - liveops promotion/freeze/rollback/run window/public claims runbook
   - first `shared_devnet` dry-run candidate / gate / promotion / incident 产物
 - 当前 `mixed_topology_baseline` 已有正式 `partial` evidence：
-  - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md`
+  - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
 - shared-network 总 verdict 当前是 `partial`，不是 `pass`。
 - shared-devnet 剩余 blocker 当前收敛到：
   - `shared_access`

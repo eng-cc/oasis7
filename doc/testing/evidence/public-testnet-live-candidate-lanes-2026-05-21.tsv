@@ -1,4 +1,5 @@
 # lane_id	owner	status	evidence_path	note
+# archived historical lane snapshot; prefer 2026-06-06 governed bootstrap evidence for current public-testnet entry
 shared_devnet_pass	qa_engineer	partial	doc/testing/evidence/shared-network-shared-devnet-follow-up-promotion-record-2026-03-24.md	formal shared_devnet overall gate is still partial and promotion remains on hold
 public_rpc_ready	runtime_engineer	pass	doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md	public status endpoint is reachable from the control host and matches the live manifest refs
 explorer_public_ready	liveops_community	pass	doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md	public explorer overview is reachable from the control host and matches the live manifest refs

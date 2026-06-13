@@ -30,7 +30,7 @@
 
 ## 执行命令
 - shared-devnet window:
-  - `./scripts/shared-devnet-rehearsal.sh --window-id shared-devnet-live-reset-20260523-longrun-fix2 --candidate-bundle doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json --release-gate-mode skip --web-mode evidence --headless-mode evidence --pure-api-mode evidence --governance-mode evidence --shared-access-pass --fallback-class bootstrap_restore_ready --mixed-topology-baseline-evidence-ref doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md --longrun-mode execute --s9-duration-secs 300 --s10-duration-secs 300 --s9-base-port 7410 --s10-base-port 7610 --out-dir .tmp/shared-devnet-live-reset-20260523-01`
+  - `./scripts/shared-devnet-rehearsal.sh --window-id shared-devnet-live-reset-20260523-longrun-fix2 --candidate-bundle doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json --release-gate-mode skip --web-mode evidence --headless-mode evidence --pure-api-mode evidence --governance-mode evidence --shared-access-pass --fallback-class bootstrap_restore_ready --mixed-topology-baseline-evidence-ref doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md --longrun-mode execute --s9-duration-secs 300 --s10-duration-secs 300 --s9-base-port 7410 --s10-base-port 7610 --out-dir .tmp/shared-devnet-live-reset-20260523-01`
 
 ## 修正前提
 - 为让 S9 chaos restart 不再把未完整落盘的 reward-runtime 状态直接原样拉起，`scripts/p2p-longrun-soak.sh` 的 `restart` chaos 已改为优先发送 `SIGINT`，等待 runtime 走正常停机路径，再做必要的 fallback kill。

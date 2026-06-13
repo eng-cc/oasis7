@@ -56,7 +56,7 @@
     ]
   },
   "evidence_refs": [
-    "doc/testing/evidence/public-testnet-skeleton-example.md",
+    "doc/testing/templates/public-testnet-skeleton-evidence.example.md",
     "doc/testing/evidence/network-tier-signer-truth-binding-2026-06-05.md",
     "doc/testing/evidence/public-testnet-governance-public-signers-2026-06-05.json",
     "doc/testing/evidence/public-testnet-liveops-public-signers-2026-06-05.json",

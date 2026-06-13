@@ -156,7 +156,7 @@ def is_placeholder_ref(raw: str) -> bool:
         or "example.invalid" in lowered
         or "public-testnet-example" in lowered
         or "public-testnet-smoke" in lowered
-        or lowered.endswith("public-testnet-skeleton-example.md")
+        or lowered.endswith("public-testnet-skeleton-evidence.example.md")
         or lowered.endswith("public-testnet-rehearsal-template.md")
         or lowered.endswith("public-testnet-exit-review-template.md")
     )

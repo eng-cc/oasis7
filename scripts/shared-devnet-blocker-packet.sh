@@ -62,14 +62,14 @@ Examples:
     --window-id shared-devnet-20260324-06 \
     --candidate-bundle output/release-candidates/shared-devnet-20260324-05.json \
     --candidate-gate-summary output/shared-network/shared-devnet-20260324-06/gate/shared_devnet-20260324-175501/summary.md \
-    --access-out doc/testing/evidence/shared-network-shared-devnet-shared-access-draft-2026-03-24.md \
-    --mixed-topology-out doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md \
-    --rollback-out doc/testing/evidence/shared-network-shared-devnet-rollback-target-draft-2026-03-24.md \
+    --access-out doc/testing/evidence/shared-network-shared-devnet-shared-access-2026-05-23.md \
+    --mixed-topology-out doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md \
+    --rollback-out doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md \
     --viewer-url https://example.invalid/viewer \
     --live-addr devnet.example.invalid:443 \
     --operator-contact-ref doc/ops/handoff.md \
     --independent-operator-ref doc/ops/oncall.md \
-    --mixed-topology-baseline-ref doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md \
+    --mixed-topology-baseline-ref doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md \
     --fallback-candidate-bundle output/release-candidates/shared-devnet-20260324-05.json \
     --fallback-class bootstrap_restore_ready \
     --fallback-gate-summary output/shared-network/shared-devnet-20260324-06/gate/shared_devnet-20260324-175501/summary.md \
@@ -155,7 +155,7 @@ access_validated_by="<qa operator / runtime operator>"
 access_validated_at="<YYYY-MM-DD HH:MM:SS TZ>"
 access_lane_result="partial"
 access_reason="shared access input is still draft; convert to pass only after independent operator access is verified"
-mixed_topology_baseline_ref="doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md"
+mixed_topology_baseline_ref="doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md"
 mixed_topology_validated_by="<qa owner / runtime owner>"
 mixed_topology_validated_at="<YYYY-MM-DD HH:MM:SS TZ>"
 mixed_topology_lane_result="partial"
@@ -414,11 +414,19 @@ cat >"$access_out" <<EOF
   - \`${live_addr:-<host:port>}\`
 - \`operator_contact_ref\`:
 EOF
-write_ref_block "$access_out" "${operator_contact_refs[@]}"
+if ((${#operator_contact_refs[@]})); then
+  write_ref_block "$access_out" "${operator_contact_refs[@]}"
+else
+  write_ref_block "$access_out"
+fi
 cat >>"$access_out" <<EOF
 - \`independent_operator_ref\`:
 EOF
-write_ref_block "$access_out" "${independent_operator_refs[@]}"
+if ((${#independent_operator_refs[@]})); then
+  write_ref_block "$access_out" "${independent_operator_refs[@]}"
+else
+  write_ref_block "$access_out"
+fi
 cat >>"$access_out" <<EOF
 
 ## Access Validation
@@ -438,7 +446,11 @@ cat >>"$access_out" <<EOF
   - \`$candidate_gate_summary\`
 - \`evidence_ref\`:
 EOF
-write_ref_block "$access_out" "${access_evidence_refs[@]}"
+if ((${#access_evidence_refs[@]})); then
+  write_ref_block "$access_out" "${access_evidence_refs[@]}"
+else
+  write_ref_block "$access_out"
+fi
 cat >>"$access_out" <<EOF
 
 ## Verdict
@@ -479,11 +491,19 @@ cat >"$mixed_topology_out" <<EOF
   - \`${mixed_topology_baseline_ref:-<doc/testing/evidence/p2p-mixed-topology-validation-matrix-YYYY-MM-DD.md>}\`
 - \`same_window_shared_evidence_ref\`:
 EOF
-write_ref_block "$mixed_topology_out" "${mixed_topology_shared_evidence_refs[@]}"
+if ((${#mixed_topology_shared_evidence_refs[@]})); then
+  write_ref_block "$mixed_topology_out" "${mixed_topology_shared_evidence_refs[@]}"
+else
+  write_ref_block "$mixed_topology_out"
+fi
 cat >>"$mixed_topology_out" <<EOF
 - \`proxy_drill_ref\`:
 EOF
-write_ref_block "$mixed_topology_out" "${mixed_topology_proxy_refs[@]}"
+if ((${#mixed_topology_proxy_refs[@]})); then
+  write_ref_block "$mixed_topology_out" "${mixed_topology_proxy_refs[@]}"
+else
+  write_ref_block "$mixed_topology_out"
+fi
 cat >>"$mixed_topology_out" <<EOF
 
 ## Validation
@@ -549,7 +569,11 @@ cat >"$rollback_out" <<EOF
 ## Rollback Readiness
 - \`restore_steps_ref\`:
 EOF
-write_ref_block "$rollback_out" "${restore_steps_refs[@]}"
+if ((${#restore_steps_refs[@]})); then
+  write_ref_block "$rollback_out" "${restore_steps_refs[@]}"
+else
+  write_ref_block "$rollback_out"
+fi
 cat >>"$rollback_out" <<EOF
 - \`validated_by\`:
   - \`$rollback_validated_by\`

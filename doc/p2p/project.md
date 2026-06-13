@@ -531,7 +531,7 @@
     - `scripts/network-tier-manifest-smoke.sh`
     - `doc/testing/templates/public-testnet-rehearsal-template.md`
     - `doc/testing/templates/public-testnet-readiness-lanes.example.tsv`
-    - `doc/testing/evidence/public-testnet-skeleton-example.md`
+    - `doc/testing/templates/public-testnet-skeleton-evidence.example.md`
     - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
     - `doc/p2p/project.md`
     - `.pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.execution.md`

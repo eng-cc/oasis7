@@ -130,14 +130,14 @@ EOF
   --allowed-claim public_testnet \
   --denied-claim mainnet_live \
   --denied-claim production_oc_settlement \
-  --evidence-ref doc/testing/evidence/public-testnet-skeleton-example.md >/dev/null
+  --evidence-ref doc/testing/templates/public-testnet-skeleton-evidence.example.md >/dev/null
 
 cat >"$skeleton_lanes_tsv" <<'EOF'
 shared_devnet_pass	qa_engineer	pass	doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-03-24.md	shared devnet source
-public_rpc_ready	runtime_engineer	partial	doc/testing/evidence/public-testnet-skeleton-example.md	placeholder rpc evidence
-explorer_public_ready	runtime_engineer	partial	doc/testing/evidence/public-testnet-skeleton-example.md	placeholder explorer evidence
-faucet_guard_ready	liveops_community	partial	doc/testing/evidence/public-testnet-skeleton-example.md	placeholder faucet evidence
-reset_policy_announced	liveops_community	partial	doc/testing/evidence/public-testnet-skeleton-example.md	placeholder reset evidence
+public_rpc_ready	runtime_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder rpc evidence
+explorer_public_ready	runtime_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder explorer evidence
+faucet_guard_ready	liveops_community	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder faucet evidence
+reset_policy_announced	liveops_community	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder reset evidence
 runtime_bootstrap	runtime_engineer	partial	doc/testing/templates/public-testnet-rehearsal-template.md	template bootstrap evidence
 claims_boundary_review	qa_engineer	partial	doc/testing/templates/public-testnet-exit-review-template.md	template claims evidence
 EOF

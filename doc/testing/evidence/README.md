@@ -61,6 +61,8 @@
   - 新增 `/v1/chain/status` metrics contract 有没有真实三节点证据
   - mixed-topology、shared devnet、observer gap sync 或 blob root cause 在哪组 evidence
   - shared-network ECS triad 与 shared-devnet 相关留痕怎么进入
+- 归档边界:
+  - `public-testnet-live-candidate-lanes-2026-05-21.tsv` 与 2026-05-22 live-candidate bundle / manifest / bootstrap-peers / lanes 文件保留为 public-testnet 演进链证据；当前默认首读入口应优先使用 2026-06-06 governed bootstrap 证据和本节列出的 live-candidate 说明文档。
 
 ### 4. Governance drill 与 live world finality
 - 首读入口:
