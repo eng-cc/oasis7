@@ -98,7 +98,8 @@ impl Libp2pNetwork {
             peer,
             response: sender,
         })?;
-        block_on_command_response_with_timeout(receiver, "request_to_peer", timeout)
+        let operation = format!("request_to_peer protocol={protocol} peer={peer}");
+        block_on_command_response_with_timeout(receiver, operation.as_str(), timeout)
     }
 
     pub fn debug_peer_healths(&self) -> Vec<PeerManagerPeerHealth> {
@@ -289,7 +290,15 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
             providers: providers.to_vec(),
             response: sender,
         })?;
-        block_on_command_response(receiver, "request")
+        let operation = if providers.is_empty() {
+            format!("request protocol={protocol}")
+        } else {
+            format!(
+                "request protocol={protocol} providers={}",
+                providers.join(",")
+            )
+        };
+        block_on_command_response(receiver, operation.as_str())
     }
 
     fn register_handler(
@@ -440,13 +449,19 @@ mod command_response_tests {
     fn command_response_wait_times_out_when_runtime_does_not_reply() {
         let (_sender, receiver) = mpsc::channel::<Result<(), WorldError>>();
 
-        let err =
-            block_on_command_response_with_timeout(receiver, "request", Duration::from_millis(1))
-                .expect_err("missing runtime response should time out");
+        let err = block_on_command_response_with_timeout(
+            receiver,
+            "request_to_peer protocol=/aw/node/replication/fetch-commit/1.0.0 peer=12D3KooWTest",
+            Duration::from_millis(1),
+        )
+        .expect_err("missing runtime response should time out");
 
         match err {
             WorldError::NetworkProtocolUnavailable { protocol } => {
-                assert!(protocol.contains("libp2p command request timed out"));
+                assert!(protocol.contains("libp2p command request_to_peer"));
+                assert!(protocol.contains("/aw/node/replication/fetch-commit/1.0.0"));
+                assert!(protocol.contains("peer=12D3KooWTest"));
+                assert!(protocol.contains("timed out"));
             }
             other => panic!("expected NetworkProtocolUnavailable, got {other:?}"),
         }

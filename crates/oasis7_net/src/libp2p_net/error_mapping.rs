@@ -193,6 +193,22 @@ mod tests {
     }
 
     #[test]
+    fn network_protocol_unavailable_request_failure_with_context_stays_retryable() {
+        let err = WorldError::NetworkProtocolUnavailable {
+            protocol: "request failed: Timeout protocol=/aw/node/replication/fetch-blob/1.0.0 peer=12D3KooWTest".to_string(),
+        };
+        assert_eq!(
+            classify_world_error_availability(&err),
+            Libp2pAvailabilityClass::RetryableGap
+        );
+        assert!(world_error_is_retryable_connection_gap(&err));
+
+        let response = error_response_from_world_error(&err);
+        assert_eq!(response.code, DistributedErrorCode::ErrNotAvailable);
+        assert!(response.retryable);
+    }
+
+    #[test]
     fn network_protocol_unavailable_no_admissible_peers_maps_to_not_available() {
         let response = error_response_from_world_error(&WorldError::NetworkProtocolUnavailable {
             protocol:
