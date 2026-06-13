@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::channel::oneshot;
 use libp2p::{Multiaddr, PeerId};
 use oasis7_proto::distributed_dht::DistributedDht as ProtoDistributedDht;
 use oasis7_proto::distributed_net::DistributedNetwork as ProtoDistributedNetwork;
@@ -81,7 +81,7 @@ impl Libp2pNetwork {
         payload: &[u8],
         peer: PeerId,
     ) -> Result<Vec<u8>, WorldError> {
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::RequestToPeer {
             protocol: protocol.to_string(),
             payload: payload.to_vec(),
@@ -240,7 +240,7 @@ pub(super) fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
 
 impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
     fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::Publish {
             topic: topic.to_string(),
             payload: payload.to_vec(),
@@ -250,7 +250,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
     }
 
     fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::Subscribe {
             topic: topic.to_string(),
             response: sender,
@@ -272,7 +272,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
         payload: &[u8],
         providers: &[String],
     ) -> Result<Vec<u8>, WorldError> {
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::Request {
             protocol: protocol.to_string(),
             payload: payload.to_vec(),
@@ -287,7 +287,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
         protocol: &str,
         handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
     ) -> Result<(), WorldError> {
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::RegisterHandler {
             protocol: protocol.to_string(),
             handler: Arc::from(handler),
@@ -305,7 +305,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
         _provider_id: &str,
     ) -> Result<(), WorldError> {
         let key = dht_provider_key(world_id, content_hash);
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::PublishProvider(key, sender))?;
         block_on_command_response(receiver, "publish_provider")
     }
@@ -316,7 +316,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
         content_hash: &str,
     ) -> Result<Vec<ProviderRecord>, WorldError> {
         let key = dht_provider_key(world_id, content_hash);
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::GetProviders(key, sender))?;
         block_on_command_response(receiver, "get_providers")
     }
@@ -324,7 +324,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
     fn put_world_head(&self, world_id: &str, head: &WorldHeadAnnounce) -> Result<(), WorldError> {
         let key = dht_world_head_key(world_id);
         let payload = to_canonical_cbor(head)?;
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::PutWorldHead {
             key,
             payload,
@@ -335,7 +335,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
 
     fn get_world_head(&self, world_id: &str) -> Result<Option<WorldHeadAnnounce>, WorldError> {
         let key = dht_world_head_key(world_id);
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::GetWorldHead(key, sender))?;
         block_on_command_response(receiver, "get_world_head")
     }
@@ -347,7 +347,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
     ) -> Result<(), WorldError> {
         let key = dht_membership_key(world_id);
         let payload = to_canonical_cbor(snapshot)?;
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::PutMembershipDirectory {
             key,
             payload,
@@ -361,7 +361,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
         world_id: &str,
     ) -> Result<Option<MembershipDirectorySnapshot>, WorldError> {
         let key = dht_membership_key(world_id);
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::GetMembershipDirectory {
             key,
             response: sender,
@@ -372,7 +372,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
     fn put_peer_record(&self, world_id: &str, record: &SignedPeerRecord) -> Result<(), WorldError> {
         let key = dht_peer_record_key(world_id, record.record.peer_id.as_str());
         let payload = to_canonical_cbor(record)?;
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::PutPeerRecord {
             key,
             payload,
@@ -387,7 +387,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
         peer_id: &str,
     ) -> Result<Option<SignedPeerRecord>, WorldError> {
         let key = dht_peer_record_key(world_id, peer_id);
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::GetPeerRecord {
             key,
             response: sender,
@@ -397,23 +397,23 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
 }
 
 fn block_on_command_response<T>(
-    receiver: oneshot::Receiver<Result<T, WorldError>>,
+    receiver: mpsc::Receiver<Result<T, WorldError>>,
     operation: &str,
 ) -> Result<T, WorldError> {
     block_on_command_response_with_timeout(receiver, operation, LIBP2P_COMMAND_RESPONSE_TIMEOUT)
 }
 
 fn block_on_command_response_with_timeout<T>(
-    receiver: oneshot::Receiver<Result<T, WorldError>>,
+    receiver: mpsc::Receiver<Result<T, WorldError>>,
     operation: &str,
     timeout: Duration,
 ) -> Result<T, WorldError> {
-    match futures::executor::block_on(async_std::future::timeout(timeout, receiver)) {
-        Ok(Ok(result)) => result,
-        Ok(Err(_closed)) => Err(WorldError::NetworkProtocolUnavailable {
+    match receiver.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Disconnected) => Err(WorldError::NetworkProtocolUnavailable {
             protocol: format!("libp2p command {operation} response channel closed"),
         }),
-        Err(_elapsed) => Err(WorldError::NetworkProtocolUnavailable {
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(WorldError::NetworkProtocolUnavailable {
             protocol: format!(
                 "libp2p command {operation} timed out after {}ms",
                 timeout.as_millis()
@@ -428,7 +428,7 @@ mod command_response_tests {
 
     #[test]
     fn command_response_wait_times_out_when_runtime_does_not_reply() {
-        let (_sender, receiver) = oneshot::channel::<Result<(), WorldError>>();
+        let (_sender, receiver) = mpsc::channel::<Result<(), WorldError>>();
 
         let err =
             block_on_command_response_with_timeout(receiver, "request", Duration::from_millis(1))
@@ -444,7 +444,7 @@ mod command_response_tests {
 
     #[test]
     fn command_response_wait_reports_closed_channel() {
-        let (sender, receiver) = oneshot::channel::<Result<(), WorldError>>();
+        let (sender, receiver) = mpsc::channel::<Result<(), WorldError>>();
         drop(sender);
 
         let err =

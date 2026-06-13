@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::channel::oneshot;
 use libp2p::gossipsub::{IdentTopic, TopicHash};
 use libp2p::kad::{self, Quorum, RecordKey};
 use libp2p::request_response;
@@ -19,12 +18,12 @@ use super::{
     classify_network_protocol, classify_network_topic, maybe_discover_rendezvous_namespace,
     maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers, now_ms,
     publish_configured_peer_record, publish_discovery_provider, push_bounded_clone,
-    put_record_query, should_republish, start_peer_discovery_query, Behaviour, Handler, Keypair,
-    Libp2pReachabilitySnapshot, MembershipDirectorySnapshot, NetworkMessage, NetworkRequest,
-    PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
-    PeerManagerPeerHealth, PeerManagerPolicy, PeerRecord, PendingDhtQuery,
-    PendingPeerRecordRequest, ProviderRecord, SignedPeerRecord, TransportPath, WorldError,
-    WorldHeadAnnounce, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+    put_record_query, should_republish, start_peer_discovery_query, Behaviour,
+    CommandResponseSender, Handler, Keypair, Libp2pReachabilitySnapshot,
+    MembershipDirectorySnapshot, NetworkMessage, NetworkRequest, PeerManagerBlockArtifact,
+    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
+    PeerRecord, PendingDhtQuery, PendingPeerRecordRequest, ProviderRecord, SignedPeerRecord,
+    TransportPath, WorldError, WorldHeadAnnounce, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
 };
 
 pub(super) enum CommandOutcome {
@@ -34,7 +33,7 @@ pub(super) enum CommandOutcome {
 
 pub(super) struct PendingResponse {
     pub protocol: String,
-    pub response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
+    pub response: CommandResponseSender<Vec<u8>>,
 }
 
 pub(super) struct CommandContext<'a> {
@@ -57,61 +56,55 @@ pub(super) enum Command {
     Publish {
         topic: String,
         payload: Vec<u8>,
-        response: oneshot::Sender<Result<(), WorldError>>,
+        response: CommandResponseSender<()>,
     },
     Subscribe {
         topic: String,
-        response: oneshot::Sender<Result<(), WorldError>>,
+        response: CommandResponseSender<()>,
     },
     Dial(Multiaddr),
     Request {
         protocol: String,
         payload: Vec<u8>,
         providers: Vec<String>,
-        response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
+        response: CommandResponseSender<Vec<u8>>,
     },
     RequestToPeer {
         protocol: String,
         payload: Vec<u8>,
         peer: PeerId,
-        response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
+        response: CommandResponseSender<Vec<u8>>,
     },
     RegisterHandler {
         protocol: String,
         handler: Handler,
-        response: oneshot::Sender<Result<(), WorldError>>,
+        response: CommandResponseSender<()>,
     },
-    PublishProvider(String, oneshot::Sender<Result<(), WorldError>>),
-    GetProviders(
-        String,
-        oneshot::Sender<Result<Vec<ProviderRecord>, WorldError>>,
-    ),
+    PublishProvider(String, CommandResponseSender<()>),
+    GetProviders(String, CommandResponseSender<Vec<ProviderRecord>>),
     PutWorldHead {
         key: String,
         payload: Vec<u8>,
-        response: oneshot::Sender<Result<(), WorldError>>,
+        response: CommandResponseSender<()>,
     },
-    GetWorldHead(
-        String,
-        oneshot::Sender<Result<Option<WorldHeadAnnounce>, WorldError>>,
-    ),
+    GetWorldHead(String, CommandResponseSender<Option<WorldHeadAnnounce>>),
     PutMembershipDirectory {
         key: String,
         payload: Vec<u8>,
-        response: oneshot::Sender<Result<(), WorldError>>,
+        response: CommandResponseSender<()>,
     },
     GetMembershipDirectory {
         key: String,
-        response: oneshot::Sender<Result<Option<MembershipDirectorySnapshot>, WorldError>>,
+        response: CommandResponseSender<Option<MembershipDirectorySnapshot>>,
     },
     PutPeerRecord {
         key: String,
         payload: Vec<u8>,
-        response: oneshot::Sender<Result<(), WorldError>>,
+        response: CommandResponseSender<()>,
     },
     GetPeerRecord {
         key: String,
-        response: oneshot::Sender<Result<Option<SignedPeerRecord>, WorldError>>,
+        response: CommandResponseSender<Option<SignedPeerRecord>>,
     },
     RefreshPeerDiscovery,
     RepublishProviders,

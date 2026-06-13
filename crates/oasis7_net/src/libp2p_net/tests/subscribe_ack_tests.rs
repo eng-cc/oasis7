@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use futures::channel::oneshot;
 use futures::{FutureExt, StreamExt};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
@@ -45,7 +44,7 @@ fn handle_command_subscribe_acknowledges_success() {
     let rendezvous_cookies = HashMap::new();
     let mut peer_record_last_published_at_ms = None;
     let mut peer_discovery_query_last_started_at_ms = None;
-    let (sender, receiver) = oneshot::channel();
+    let (sender, receiver) = std::sync::mpsc::channel();
 
     let outcome = handle_command(
         &mut swarm,
@@ -92,8 +91,9 @@ fn handle_command_subscribe_acknowledges_success() {
     );
 
     assert!(matches!(outcome, CommandOutcome::Continue));
-    futures::executor::block_on(receiver)
-        .expect("oneshot")
+    receiver
+        .recv()
+        .expect("command response")
         .expect("subscribe ack");
     assert!(subscriptions.contains("aw.handle-command"));
     assert_eq!(topic_map.len(), 1);
@@ -186,7 +186,7 @@ fn handle_command_request_uses_swarm_connections_when_runtime_peers_are_empty() 
     let rendezvous_cookies = HashMap::new();
     let mut peer_record_last_published_at_ms = None;
     let mut peer_discovery_query_last_started_at_ms = None;
-    let (sender, mut receiver) = oneshot::channel();
+    let (sender, receiver) = std::sync::mpsc::channel();
 
     let outcome = handle_command(
         &mut dialer,
@@ -241,5 +241,8 @@ fn handle_command_request_uses_swarm_connections_when_runtime_peers_are_empty() 
         1,
         "request should be sent through swarm connection"
     );
-    assert!(receiver.try_recv().expect("response channel").is_none());
+    assert!(matches!(
+        receiver.try_recv(),
+        Err(std::sync::mpsc::TryRecvError::Empty)
+    ));
 }
