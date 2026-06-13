@@ -115,6 +115,8 @@ fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
     };
     reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
         || reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
+        || (reason.contains("ErrUnsupported")
+            && reason.contains(super::replication::REPLICATION_FETCH_BLOB_PROTOCOL))
 }
 
 pub(super) fn replication_request_waitable_connection_gap(err: &NodeError) -> bool {
@@ -156,6 +158,16 @@ mod tests {
                 "{}simulated provider route unavailable",
                 crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX
             ),
+        };
+        assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_treats_fetch_blob_unsupported_as_retryable() {
+        let err = NodeError::Replication {
+            reason: "replication network error: NetworkRequestFailed { code: ErrUnsupported, message: \"/aw/node/replication/fetch-blob/1.0.0\", retryable: false }"
+                .to_string(),
         };
         assert!(should_fallback_provider_aware_replication_request(&err));
         assert!(!replication_request_waitable_connection_gap(&err));
@@ -241,10 +253,15 @@ fn request_fetch_blob_chunk_with_route_fallback(
 ) -> Result<FetchBlobResponse, NodeError> {
     let mut last_not_found: Option<FetchBlobResponse> = None;
     let mut last_retryable_error: Option<NodeError> = None;
+    let mut attempted_provider_ids = std::collections::BTreeSet::new();
 
     if let Some(provider_ids) = provider_ids {
         for provider_id in provider_ids {
-            let provider_route = [provider_id.clone()];
+            let provider_id = provider_id.trim();
+            if provider_id.is_empty() || !attempted_provider_ids.insert(provider_id.to_string()) {
+                continue;
+            }
+            let provider_route = [provider_id.to_string()];
             match endpoint.request_json_with_providers::<FetchBlobRequest, FetchBlobResponse>(
                 REPLICATION_FETCH_BLOB_PROTOCOL,
                 request,
@@ -264,7 +281,8 @@ fn request_fetch_blob_chunk_with_route_fallback(
         }
     }
 
-    for _ in 0..REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
+    let mut generic_attempts = 0usize;
+    if generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
         match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
             REPLICATION_FETCH_BLOB_PROTOCOL,
             request,
@@ -280,6 +298,53 @@ fn request_fetch_blob_chunk_with_route_fallback(
             }
             Err(err) => return Err(err),
         }
+        generic_attempts += 1;
+    }
+
+    let mut connected_peer_ids = endpoint.connected_peer_ids();
+    connected_peer_ids.sort();
+    connected_peer_ids.dedup();
+    for peer_id in connected_peer_ids {
+        let peer_id = peer_id.trim();
+        if peer_id.is_empty() || !attempted_provider_ids.insert(peer_id.to_string()) {
+            continue;
+        }
+        let provider_route = [peer_id.to_string()];
+        match endpoint.request_json_with_providers::<FetchBlobRequest, FetchBlobResponse>(
+            REPLICATION_FETCH_BLOB_PROTOCOL,
+            request,
+            provider_route.as_slice(),
+        ) {
+            Ok(response) => {
+                if response.found {
+                    return Ok(response);
+                }
+                last_not_found = Some(response);
+            }
+            Err(err) if should_fallback_provider_aware_replication_request(&err) => {
+                last_retryable_error = Some(err);
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    while generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
+        match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
+            REPLICATION_FETCH_BLOB_PROTOCOL,
+            request,
+        ) {
+            Ok(response) => {
+                if response.found {
+                    return Ok(response);
+                }
+                last_not_found = Some(response);
+            }
+            Err(err) if should_fallback_provider_aware_replication_request(&err) => {
+                last_retryable_error = Some(err);
+            }
+            Err(err) => return Err(err),
+        }
+        generic_attempts += 1;
     }
 
     if let Some(response) = last_not_found {
