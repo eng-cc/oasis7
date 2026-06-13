@@ -63,6 +63,7 @@ mod pos_state_store;
 mod pos_validation;
 mod replica_maintenance_support;
 mod replication;
+mod replication_fetch_handler_support;
 mod replication_probe_gate;
 mod replication_state_reconcile;
 mod runtime_util;
@@ -134,6 +135,9 @@ use replication::{
     FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
     FetchHeadResponse, ReplicationHeadSummary, ReplicationRuntime, REPLICATION_FETCH_BLOB_PROTOCOL,
     REPLICATION_FETCH_COMMIT_PROTOCOL, REPLICATION_GET_HEAD_PROTOCOL,
+};
+use replication_fetch_handler_support::{
+    attach_checkpoint_for_fetch_commit_if_boundary, should_export_checkpoint_for_fetch_commit,
 };
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
@@ -831,40 +835,16 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                         request.height,
                     )
                     .map_err(network_internal_error)?;
-                    let message = match (message, commit_execution_hook.as_ref()) {
-                        (Some(message), Some(execution_hook)) => {
-                            let checkpoint = execution_hook
-                                .lock()
-                                .map_err(|_| {
-                                    network_internal_error(NodeError::Execution {
-                                        reason: "execution hook lock poisoned".to_string(),
-                                    })
-                                })?
-                                .export_checkpoint_bundle(request.height)
-                                .map_err(|reason| {
-                                    network_internal_error(NodeError::Execution { reason })
-                                })?;
-                            if let Some(checkpoint) = checkpoint {
-                                let mut runtime = ReplicationRuntime::new(
-                                    &commit_replication_config,
-                                    commit_node_id.as_str(),
-                                )
-                                .map_err(network_internal_error)?;
-                                Some(
-                                    runtime
-                                        .attach_execution_checkpoint_descriptor_to_message(
-                                            commit_node_id.as_str(),
-                                            &message,
-                                            &checkpoint,
-                                        )
-                                        .map_err(network_internal_error)?,
-                                )
-                            } else {
-                                Some(message)
-                            }
-                        }
-                        (message, _) => message,
-                    };
+                    let message = attach_checkpoint_for_fetch_commit_if_boundary(
+                        message,
+                        commit_execution_hook.as_ref(),
+                        commit_root_dir.as_path(),
+                        commit_world_id.as_str(),
+                        commit_node_id.as_str(),
+                        &commit_replication_config,
+                        request.height,
+                    )
+                    .map_err(network_internal_error)?;
                     if let Some(message) = message.as_ref() {
                         if let Some(payload) =
                             parse_replication_commit_payload(message.payload.as_slice())
