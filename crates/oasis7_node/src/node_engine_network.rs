@@ -129,6 +129,24 @@ impl PosNodeEngine {
         )
     }
 
+    pub(super) fn sync_replication_height_once_for_high_checkpoint_probe(
+        &self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
+        replication_runtime: &mut ReplicationRuntime,
+        height: u64,
+    ) -> Result<GapSyncHeightOutcome, NodeError> {
+        self.sync_replication_height_once_with_fetch(
+            endpoint,
+            node_id,
+            world_id,
+            replication_runtime,
+            height,
+            |endpoint, request| endpoint.request_fetch_commit_for_gap_sync_single_probe(request),
+        )
+    }
+
     fn sync_replication_height_once_with_fetch(
         &self,
         endpoint: &ReplicationNetworkEndpoint,
