@@ -16,8 +16,8 @@
 
 ## 执行约束
 - 自动化前置未通过时，不进入玩法结论；先按失败签名阻断。
-- 手动回归默认沿用产品入口：`./scripts/run-game-test.sh --no-llm`。
-- 需要真实产品包时，改用：`./scripts/run-game-test.sh --bundle-dir <bundle-dir> --no-llm`。
+- 手动回归默认沿用当前 worktree 隔离入口：`./scripts/worktree-harness.sh up`。
+- 需要真实产品包时，改用：`./scripts/run-launcher-stack.sh --bundle-dir <bundle-dir> --skip-llm-provider-preflight`。
 - Viewer Web 若长期停在 `connecting`，必须先按 `testing-manual.md` S6 图形/环境门禁处理，再决定是否继续填写卡片。
 - 每次执行至少回写 1 张正式卡片；若本轮三张都执行，允许写 3 张独立卡片，或 1 张汇总卡片并在“关键操作链路 / 问题摘要”中覆盖三条链路。
 
@@ -32,7 +32,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_viewer sync_agent_chatter_bubbles_form
 ```
 
 ## 启动与取证
-1. 启动产品链路：`./scripts/run-game-test.sh --no-llm`
+1. 启动产品链路：`./scripts/worktree-harness.sh up`
 2. 记录脚本输出的 Viewer URL，并用 `agent-browser` 打开。
 3. 至少采集以下证据之一：
    - `agent-browser` 截图

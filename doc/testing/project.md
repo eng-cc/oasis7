@@ -267,14 +267,14 @@
     - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
 - [x] release-gate-web-soak-hardening (PRD-TESTING-002/003) [test_tier_required]: 修复 `Release Packages` run `26276289822` 的多层假阴性：移除 `viewer-software-safe-step-regression.sh` 对未使用 `rg` 的硬依赖；补齐 `release-gate-web-strict -> viewer-software-safe-step-regression -> run-game-test` 的 `--scenario` 参数 contract；恢复 software-safe step 回归在“无自然推进”时主动发 canonical `step` 并接受 `completed_advanced` + 正向 world delta 的正式判据；同时让 `p2p-longrun-soak.sh` 在 restart/pause chaos 后等待节点恢复到健康态再恢复采样，并把实际恢复窗口计入 `chaos_exempt_secs`，避免把预期瞬态记成 `last_error_samples` / `http_failure_samples`。 Trace: .pm/tasks/task_1aef6daff1ef4e81bbc3a6a34531a828.yaml
   - 产物文件:
-    - `scripts/run-game-test.sh`
+    - `scripts/run-launcher-stack.sh`
     - `scripts/viewer-software-safe-step-regression.sh`
     - `scripts/p2p-longrun-soak.sh`
     - `doc/testing/prd.md`
     - `doc/testing/project.md`
     - `.pm/tasks/task_1aef6daff1ef4e81bbc3a6a34531a828.execution.md`
   - 验收命令 (`test_tier_required`):
-    - `bash -n scripts/viewer-software-safe-step-regression.sh scripts/run-game-test.sh scripts/p2p-longrun-soak.sh`
+    - `bash -n scripts/viewer-software-safe-step-regression.sh scripts/run-launcher-stack.sh scripts/p2p-longrun-soak.sh`
     - `./scripts/viewer-software-safe-step-regression.sh --help >/dev/null`
     - `! rg -n "\\brg\\b" scripts/viewer-software-safe-step-regression.sh`
     - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime`

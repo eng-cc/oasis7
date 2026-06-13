@@ -425,8 +425,10 @@ PY
 }
 
 ensure_branch_exists "$SOURCE_BRANCH"
-SOURCE_HEAD="$(git rev-parse "refs/heads/$SOURCE_BRANCH^{commit}")"
-CURRENT_HEAD="$(git rev-parse HEAD^{commit})"
+SOURCE_COMMIT_REF="refs/heads/${SOURCE_BRANCH}^{commit}"
+SOURCE_HEAD="$(git rev-parse "$SOURCE_COMMIT_REF")"
+CURRENT_HEAD_COMMIT_REF="HEAD^{commit}"
+CURRENT_HEAD="$(git rev-parse "$CURRENT_HEAD_COMMIT_REF")"
 
 SOURCE_WORKTREE="$(branch_checkout_path "$SOURCE_BRANCH" 2>/dev/null || true)"
 if [[ -z "$SOURCE_WORKTREE" && "$CURRENT_HEAD" == "$SOURCE_HEAD" ]]; then
@@ -434,26 +436,6 @@ if [[ -z "$SOURCE_WORKTREE" && "$CURRENT_HEAD" == "$SOURCE_HEAD" ]]; then
 fi
 [[ -n "$SOURCE_WORKTREE" ]] || die "source branch is not checked out in any worktree: $SOURCE_BRANCH"
 ensure_clean_worktree "$SOURCE_WORKTREE" "source"
-WORKFLOW_LINT_OUTPUT=""
-if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --phase pr-ready --allow-unbound 2>&1)"; then
-  if [[ "$WORKFLOW_LINT_OUTPUT" == *"unknown arg: --phase"* ]]; then
-    WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --allow-unbound 2>&1)" || {
-      cat >&2 <<EOF
-error: workflow-lint preflight failed.
-$WORKFLOW_LINT_OUTPUT
-fix: apply the suggested repair command(s) above, then rerun ./scripts/prepare-task-pr.sh.
-EOF
-      exit 1
-    }
-  else
-  cat >&2 <<EOF
-error: workflow-lint preflight failed.
-$WORKFLOW_LINT_OUTPUT
-fix: apply the suggested repair command(s) above, then rerun ./scripts/prepare-task-pr.sh.
-EOF
-  exit 1
-  fi
-fi
 
 if [[ "$CREATE_PR" == "1" ]]; then
   git fetch --quiet "$REMOTE_NAME" "$BASE_BRANCH"
@@ -474,7 +456,8 @@ if [[ -z "$COMPARISON_REF" ]]; then
 fi
 [[ -n "$COMPARISON_REF" ]] || die "neither local nor remote base ref exists for $BASE_BRANCH"
 
-COMPARISON_HEAD="$(git rev-parse "$COMPARISON_REF^{commit}")"
+COMPARISON_COMMIT_REF="${COMPARISON_REF}^{commit}"
+COMPARISON_HEAD="$(git rev-parse "$COMPARISON_COMMIT_REF")"
 BASE_WORKTREE=""
 if [[ -n "$LOCAL_BASE_REF" ]]; then
   BASE_WORKTREE="$(branch_checkout_path "$BASE_BRANCH" 2>/dev/null || true)"
@@ -543,6 +526,31 @@ LOCAL_ROLE_REVIEW_ROLES="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_roles
 LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "findings_disposition")"
 LOCAL_ROLE_REVIEW_RESIDUAL_RISK="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "residual_risk")"
 
+if [[ "$CREATE_PR" == "1" && "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
+  die "missing passed pre-PR local role review evidence for $SOURCE_BRANCH at $SOURCE_HEAD ($LOCAL_ROLE_REVIEW_REASON; log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-unknown}; missing: ${LOCAL_ROLE_REVIEW_MISSING_MARKERS:-unknown})"
+fi
+
+WORKFLOW_LINT_OUTPUT=""
+if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --phase pr-ready --allow-unbound 2>&1)"; then
+  if [[ "$WORKFLOW_LINT_OUTPUT" == *"unknown arg: --phase"* ]]; then
+    WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --allow-unbound 2>&1)" || {
+      cat >&2 <<EOF
+error: workflow-lint preflight failed.
+$WORKFLOW_LINT_OUTPUT
+fix: apply the suggested repair command(s) above, then rerun ./scripts/prepare-task-pr.sh.
+EOF
+      exit 1
+    }
+  else
+  cat >&2 <<EOF
+error: workflow-lint preflight failed.
+$WORKFLOW_LINT_OUTPUT
+fix: apply the suggested repair command(s) above, then rerun ./scripts/prepare-task-pr.sh.
+EOF
+  exit 1
+  fi
+fi
+
 UPSTREAM_REF="$(git rev-parse --abbrev-ref --symbolic-full-name "$SOURCE_BRANCH@{upstream}" 2>/dev/null || true)"
 LOCAL_ONLY_COUNT="$AHEAD_COUNT"
 REMOTE_ONLY_COUNT=0
@@ -574,9 +582,6 @@ CLEANUP_CMD_2="git -C $CANONICAL_REPO_ROOT branch -D $SOURCE_BRANCH"
 PR_URL=""
 if [[ "$CREATE_PR" == "1" ]]; then
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
-  if [[ "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
-    die "missing passed pre-PR local role review evidence for $SOURCE_BRANCH at $SOURCE_HEAD ($LOCAL_ROLE_REVIEW_REASON; log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-unknown}; missing: ${LOCAL_ROLE_REVIEW_MISSING_MARKERS:-unknown})"
-  fi
   if [[ -z "$REMOTE_SOURCE_REF" ]]; then
     git -C "$SOURCE_WORKTREE" push -u "$REMOTE_NAME" "$SOURCE_BRANCH"
   elif [[ "$LOCAL_ONLY_COUNT" != "0" || "$REMOTE_ONLY_COUNT" != "0" ]]; then

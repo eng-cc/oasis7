@@ -6,7 +6,7 @@ cd "$repo_root"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/viewer-post-onboarding-headless-smoke.sh [options] [run-game-test options...]
+Usage: ./scripts/viewer-post-onboarding-headless-smoke.sh [options] [run-launcher-stack options...]
 
 Validate the #46 PostOnboarding handoff prerequisites in no-UI mode by speaking the
 Viewer live TCP protocol directly.
@@ -135,7 +135,7 @@ run_id="post-onboarding-headless-${stamp}"
 out_dir="$out_root/$run_id"
 mkdir -p "$out_dir"
 
-run_log="$out_dir/run-game-test.log"
+run_log="$out_dir/launcher-stack.log"
 summary_json_path="$out_dir/post-onboarding-headless-summary.json"
 summary_md_path="$out_dir/post-onboarding-headless-summary.md"
 transcript_path="$out_dir/viewer-protocol-transcript.jsonl"

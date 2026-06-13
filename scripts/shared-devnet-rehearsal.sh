@@ -19,7 +19,7 @@ Usage:
     [--governance-mode <skip|execute|evidence>] \
     [--longrun-mode <skip|dry-run|execute|evidence>] \
     [shared access / rollback / governance flags...] \
-    [-- <run-game-test passthrough>]
+    [-- <run-launcher-stack passthrough>]
 
 Purpose:
   Orchestrate one shared-devnet rehearsal window around the same candidate truth:

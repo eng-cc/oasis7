@@ -8,7 +8,7 @@ source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/viewer-software-safe-chat-regression.sh [options] [run-game-test options...]
+Usage: ./scripts/viewer-software-safe-chat-regression.sh [options] [run-launcher-stack options...]
 
 Run a Web-first QA regression for the canonical Viewer prompt/chat flow.
 The script forces `render_mode=viewer` and still accepts the `software_safe` compatibility alias, then verifies:
@@ -39,7 +39,7 @@ If --url is omitted, the script starts:
   ./scripts/run-launcher-stack.sh [remaining args...]
 
 Artifacts:
-  <out-dir>/<run-id>/run-game-test.log
+  <out-dir>/<run-id>/launcher-stack.log
   <out-dir>/<run-id>/agent-browser.log
   <out-dir>/<run-id>/browser_env.json
   <out-dir>/<run-id>/initial_state.json
@@ -337,7 +337,7 @@ out_dir="$OUT_ROOT/$run_id"
 mkdir -p "$out_dir"
 
 ab_log="$out_dir/agent-browser.log"
-run_game_test_log="$out_dir/run-game-test.log"
+run_game_test_log="$out_dir/launcher-stack.log"
 browser_env_json="$out_dir/browser_env.json"
 initial_state_json="$out_dir/initial_state.json"
 after_apply_state_json="$out_dir/after_apply_state.json"
@@ -391,7 +391,7 @@ if [[ -z "$GAME_URL" ]]; then
 
   for ((i = 0; i < STARTUP_TIMEOUT_SECS; i++)); do
     if ! kill -0 "$stack_pid" >/dev/null 2>&1; then
-      echo "error: run-game-test stack exited unexpectedly" >&2
+      echo "error: launcher stack exited unexpectedly" >&2
       tail -n 120 "$run_game_test_log" >&2 || true
       exit 1
     fi

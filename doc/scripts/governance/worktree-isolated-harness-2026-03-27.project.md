@@ -38,7 +38,7 @@
 | `browser_session` | 当前 worktree 的 agent-browser session name |
 
 ## 依赖
-- `scripts/run-game-test.sh`
+- `scripts/run-launcher-stack.sh`
 - `scripts/run-producer-playtest.sh`
 - `testing-manual.md`
 - `doc/scripts/project.md`

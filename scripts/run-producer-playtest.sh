@@ -18,7 +18,7 @@ STACK_ARGS=()
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/run-producer-playtest.sh [options] [run-game-test options...]
+Usage: ./scripts/run-producer-playtest.sh [options] [run-launcher-stack options...]
 
 Prepare a bundle-first Web stack for producer manual play.
 

@@ -7,7 +7,7 @@ source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/oasis7-pure-api-parity-smoke.sh [options] [run-game-test options...]
+Usage: ./scripts/oasis7-pure-api-parity-smoke.sh [options] [run-launcher-stack options...]
 
 Validate the pure API gameplay path against the live TCP protocol using
 `oasis7_pure_api_client`.
@@ -25,7 +25,7 @@ Default flow:
 Options:
   --tier <required|full>      Validation tier (default: required)
   --live-addr <host:port>     Reuse an existing live TCP endpoint instead of bootstrapping
-  --bundle-dir <path>         Pass through to run-game-test for fresh bundle validation
+  --bundle-dir <path>         Pass through to run-launcher-stack for fresh bundle validation
   --out-dir <path>            Artifact root (default: output/playwright/playability)
   --startup-timeout <secs>    Wait timeout for stack startup / TCP listener (default: 240)
   --step-a <count>            Steps to settle the first factory build (default: 2)
@@ -175,7 +175,7 @@ run_id="pure-api-${tier}-${stamp}"
 out_dir="$out_root/$run_id"
 mkdir -p "$out_dir"
 
-run_log="$out_dir/run-game-test.log"
+run_log="$out_dir/launcher-stack.log"
 summary_json_path="$out_dir/pure-api-summary.json"
 summary_md_path="$out_dir/pure-api-summary.md"
 initial_snapshot_path="$out_dir/snapshot-initial.json"

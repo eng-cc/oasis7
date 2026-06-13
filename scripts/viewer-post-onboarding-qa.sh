@@ -8,7 +8,7 @@ source "$repo_root/scripts/agent-browser-lib.sh"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/viewer-post-onboarding-qa.sh [options] [run-game-test options...]
+Usage: ./scripts/viewer-post-onboarding-qa.sh [options] [run-launcher-stack options...]
 
 Validate the #46 PostOnboarding handoff in a real Web session.
 
@@ -108,7 +108,7 @@ out_dir="$out_root/$run_id"
 mkdir -p "$out_dir"
 
 ab_log="$out_dir/agent-browser.log"
-run_log="$out_dir/run-game-test.log"
+run_log="$out_dir/launcher-stack.log"
 summary_json_path="$out_dir/post-onboarding-summary.json"
 summary_md_path="$out_dir/post-onboarding-summary.md"
 browser_env_path="$out_dir/browser-env.json"
