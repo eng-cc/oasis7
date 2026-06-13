@@ -453,7 +453,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
 ```bash
 ./scripts/worktree-harness.sh up
 ./scripts/worktree-harness.sh status --json
-./scripts/worktree-harness.sh url
+GAME_URL="$(./scripts/worktree-harness.sh url)"
 ./scripts/run-game-test-ab.sh --url "$GAME_URL"
 ```
     `worktree-harness.sh` 是当前 worktree 的隔离 L4A synthetic 栈入口；`run-game-test-ab.sh` 是 TTFC / 控制命中率 / 无进展窗口哨兵，不替代真人试玩或制作人验收。

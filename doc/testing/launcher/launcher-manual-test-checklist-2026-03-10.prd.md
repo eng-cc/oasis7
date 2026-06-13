@@ -126,7 +126,7 @@
 - 细粒度执行结果：`pass_with_data` / `pass_empty_expected` / `fail_wrong_data` / `fail_not_found_unexpected` / `blocked_env`
 - 优先级：`P0 必测` / `P1 应测` / `P2 选测`
 - 证据最小集：至少包含 1 份截图或录屏，必要时附 launcher 日志、配置快照、错误文案。
-- 本地试玩入口按 `2 + 1` 口径执行：本地真实 LetAI provider-backed 试玩默认执行 `./scripts/run-local-letai-game-test.sh`；制作人试玩 / 发布前人工验收默认执行 `./scripts/run-producer-playtest.sh --open-headed`（脚本退出时会自动关闭该浏览器会话；默认会用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件 WebGL 路径，若 renderer 仍为 `SwiftShader` / software renderer 则按环境阻断处理；若本地 bundle 缺少 freshness manifest 或已落后于当前工作区源码，则该入口会先自动重建）；QA / subagent evidence 使用 `./scripts/worktree-harness.sh up` 与必要的 `./scripts/run-game-test-ab.sh --url "$GAME_URL"`，不作为普通人工试玩入口。
+- 本地试玩入口按 `2 + 1` 口径执行：本地真实 LetAI provider-backed 试玩默认执行 `./scripts/run-local-letai-game-test.sh`；制作人试玩 / 发布前人工验收默认执行 `./scripts/run-producer-playtest.sh --open-headed`（脚本退出时会自动关闭该浏览器会话；默认会用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件 WebGL 路径，若 renderer 仍为 `SwiftShader` / software renderer 则按环境阻断处理；若本地 bundle 缺少 freshness manifest 或已落后于当前工作区源码，则该入口会先自动重建）；QA / subagent evidence 使用 `./scripts/worktree-harness.sh up`，再用 `GAME_URL="$(./scripts/worktree-harness.sh url)"` 捕获 URL 后按需执行 `./scripts/run-game-test-ab.sh --url "$GAME_URL"`，不作为普通人工试玩入口。
 - `scripts/build-game-launcher-bundle.sh`、`<bundle>/run-game.sh`、`./scripts/run-launcher-stack.sh --bundle-dir <bundle>` 只保留给手动控制 bundle、底层排障或专项回归；未传 `--bundle-dir` 的源码模式仅用于开发回归和问题复现。
 - `Explorer / Transfer` 默认控制链路：优先使用 GUI Agent 或等价稳定接口驱动动作，再由 Web 页面与原始返回做双证据核验。
 - 建议记录字段：`Case ID`、执行环境、构建版本、执行人、结果、证据路径、缺陷 ID、备注。
