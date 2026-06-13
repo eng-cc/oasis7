@@ -64,6 +64,8 @@ const REQUEST_PEER_GENERIC_PENALTY: u8 = 10;
 const REQUEST_PEER_SUCCESS_RECOVERY: u8 = 5;
 const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 12_000;
 const REQUEST_RETRY_BUDGET_MS: u64 = 20_000;
+const FETCH_COMMIT_REQUEST_TO_PEER_TIMEOUT_MS: u64 = 30_000;
+const FETCH_COMMIT_REQUEST_RETRY_BUDGET_MS: u64 = 120_000;
 const FETCH_BLOB_REQUEST_TO_PEER_TIMEOUT_MS: u64 = 30_000;
 const FETCH_BLOB_REQUEST_RETRY_BUDGET_MS: u64 = 180_000;
 const REPLICATION_FETCH_BLOB_PROTOCOL_MARKER: &str = "/fetch-blob/";
@@ -641,6 +643,9 @@ impl Libp2pReplicationNetwork {
     }
 
     fn request_timeout_for_protocol(&self, protocol: &str) -> Duration {
+        if protocol == REPLICATION_FETCH_COMMIT_PROTOCOL {
+            return Duration::from_millis(FETCH_COMMIT_REQUEST_TO_PEER_TIMEOUT_MS);
+        }
         if protocol.contains(REPLICATION_FETCH_BLOB_PROTOCOL_MARKER) {
             return self.fetch_blob_request_timeout;
         }
@@ -648,6 +653,9 @@ impl Libp2pReplicationNetwork {
     }
 
     fn request_retry_budget_for_protocol(&self, protocol: &str) -> Duration {
+        if protocol == REPLICATION_FETCH_COMMIT_PROTOCOL {
+            return Duration::from_millis(FETCH_COMMIT_REQUEST_RETRY_BUDGET_MS);
+        }
         if protocol.contains(REPLICATION_FETCH_BLOB_PROTOCOL_MARKER) {
             return self.fetch_blob_request_retry_budget;
         }
@@ -1115,6 +1123,9 @@ mod bootstrap_provider_tests;
 
 #[cfg(test)]
 mod peer_selection_tests;
+
+#[cfg(test)]
+mod protocol_budget_tests;
 
 #[cfg(test)]
 mod tests;
