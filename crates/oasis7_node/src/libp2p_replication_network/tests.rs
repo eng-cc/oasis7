@@ -947,6 +947,58 @@ fn libp2p_replication_network_connection_gap_on_ping_enters_short_cooldown() {
 }
 
 #[test]
+fn libp2p_replication_network_caps_peer_request_by_remaining_budget() {
+    let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
+        peer_record: Some(test_peer_record("listener-slow-handler")),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    let listen_deadline = Instant::now() + Duration::from_secs(10);
+    wait_until("listener bind", listen_deadline, || {
+        !listener.listening_addrs().is_empty()
+    });
+
+    listener
+        .register_handler(
+            "/aw/node/replication/slow",
+            Box::new(|_payload| {
+                std::thread::sleep(Duration::from_millis(1_500));
+                Ok(b"late".to_vec())
+            }),
+        )
+        .expect("register listener handler");
+
+    let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
+        bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
+        request_timeout: Duration::from_secs(5),
+        request_retry_budget: Duration::from_millis(250),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    let connect_deadline = Instant::now() + Duration::from_secs(10);
+    wait_until("dialer connection", connect_deadline, || {
+        !dialer.connected_peers().is_empty()
+    });
+
+    let started_at = Instant::now();
+    let result = dialer.request("/aw/node/replication/slow", b"node");
+    let elapsed = started_at.elapsed();
+    match result {
+        Err(WorldError::NetworkProtocolUnavailable { protocol }) => {
+            assert!(
+                protocol.contains("request budget exhausted") && protocol.contains("budget_ms=250"),
+                "unexpected protocol error: {protocol}"
+            );
+        }
+        other => panic!("expected request budget exhaustion, got {other:?}"),
+    }
+    assert!(
+        elapsed < Duration::from_millis(1_000),
+        "request should be capped by the retry budget, elapsed={elapsed:?}"
+    );
+}
+
+#[test]
 fn retryable_connection_gap_detection_matches_request_to_peer_disconnects() {
     let err = WorldError::NetworkProtocolUnavailable {
         protocol: "libp2p-replication outbound request failed: NetworkProtocolUnavailable { protocol: \"peer 12D3KooW... is not connected for protocol /aw/node/replication/fetch-commit/1.0.0\" }".to_string(),

@@ -8,8 +8,8 @@ use oasis7_proto::distributed_net::{DistributedNetwork, NetworkSubscription};
 use oasis7_proto::world_error::WorldError;
 
 const PROTOCOL_RETRY_COOLDOWN_AFTER_MS: u64 = 5_000;
-const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 3_000;
-const REQUEST_RETRY_BUDGET_MS: u64 = 8_000;
+const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 12_000;
+const REQUEST_RETRY_BUDGET_MS: u64 = 20_000;
 
 // wasm32 target intentionally does not ship a full-node networking stack.
 // This stub exists only to keep API shape stable for compile-time compatibility.
