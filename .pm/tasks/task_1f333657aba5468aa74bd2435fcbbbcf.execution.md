@@ -210,3 +210,37 @@ Example:
 - Expected Result: Task closeout succeeds, status becomes done, claim verification status is verified, pm_lint is ok, and next step is prepare-task-pr.
 - Actual Result: task closeout summary: previous_status=committed; final_status=done; claim_verification_status=verified; claim_type=task_complete; verify_command=./scripts/doc-governance-check.sh; pm_lint=ok; next_step=./scripts/prepare-task-pr.sh.
 - Blocker / Next Action: Continue PR preflight after workflow-lint passes.
+
+## 2026-06-13 13:45:56 CST / repository_health_engineer
+- 完成内容: Completed narrow repository-health re-review of the added `doc/p2p/project.md` Trace line for `task_1f333657aba5468aa74bd2435fcbbbcf`. Result: no_findings.
+- 遗留事项: None from repository-health for this Trace-only review. Residual risk remains unchanged from the earlier cleanup review: no runtime behavior, live public-testnet correctness, QA CI gate placement, or hidden non-repo consumer validation is claimed here.
+- Action: Verify the added project Trace is scoped, accurate, and safe for final PR packet.
+- Validation Command: git status --short && git rev-parse HEAD && git diff HEAD^..HEAD -- doc/p2p/project.md .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.execution.md; rg -n "p2p-evidence-doc-cleanup|task_1f333657aba5468aa74bd2435fcbbbcf|runtime/live public-testnet|generated shared-network" doc/p2p/project.md .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.execution.md; ./scripts/pm/lint.sh; git diff --check
+- Expected Result: The Trace is limited to the p2p evidence/doc cleanup, links to the task yaml, does not expand claims beyond documentation/evidence cleanup, and PM/whitespace checks pass.
+- Actual Result: HEAD=`f2af7f71fefce36c93c6cdd5f8e6df4e9ed8ea8a`. `doc/p2p/project.md` adds one completed line for `p2p-evidence-doc-cleanup (PRD-P2P-001/003) [test_tier_required]` with Trace to `.pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml`; wording accurately covers unreferenced generated shared-network gate cleanup, p2p landing/index/node volatile density snapshot cleanup, testing evidence p2p first-read refresh, and explicitly says it does not claim runtime/live public-testnet behavior changes. `pm-lint: OK`; `git diff --check`: OK.
+- Findings: no_findings
+- Residual Risk: Same as prior repository-health review; this Trace-only check does not validate runtime behavior, live public-testnet correctness, QA gate placement, or hidden non-repo consumers.
+- PR Can Proceed From Repository-Health Perspective: yes.
+- Blocker / Next Action: Repository-health has no remaining blocker for the final PR packet.
+
+## 2026-06-13 13:47:30 CST / tpm
+- 完成内容: Integrated all pre-PR local role reviews against current reviewed source head `f2af7f71fefce36c93c6cdd5f8e6df4e9ed8ea8a`. repository_health_engineer and qa_engineer have no remaining findings.
+- 遗留事项: Commit this evidence-only final packet, then run `prepare-task-pr.sh --create`.
+- Action: Record final current-head pre-PR local role review passed packet.
+- Validation Command: prepare-task-pr previous run identified only stale Source Head because project Trace was added after the earlier packet; repository_health trace-only re-review returned no_findings; PM lint and whitespace checks passed.
+- Expected Result: Latest packet references current reviewed source head and includes all reviewed paths, role evidence, disposition, and residual risk.
+- Actual Result: Current-head packet recorded with repository_health_engineer and qa_engineer evidence; findings disposition is addressed.
+- Blocker / Next Action: Commit evidence-only packet; rerun prepare-task-pr.
+- Pre-PR Local Role Review: passed
+- Task UID: task_1f333657aba5468aa74bd2435fcbbbcf
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-p2p-cleanup-audit
+- Source Branch: task/p2p-cleanup-audit
+- Source Head: f2af7f71fefce36c93c6cdd5f8e6df4e9ed8ea8a
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.execution.md; .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml; doc/p2p/README.md; doc/p2p/node/README.md; doc/p2p/prd.index.md; doc/p2p/project.md; doc/testing/evidence/README.md; doc/testing/evidence/generated-shared-network-gates/shared_devnet-20260523-{190913,191104,195028,220434,223934,232451,234114,234212} deleted generated snapshot files
+- Role Selection Basis: changed paths touched p2p/testing documentation, generated evidence cleanup, task truth, project Trace, and verification evidence; repository_health_engineer included for doc/evidence alignment and technical-debt cleanup; qa_engineer included for testing evidence routing and evidence deletion safety; runtime/wasm/viewer/gameplay/liveops skipped because no runtime code, UI, gameplay, external messaging, or player promise changed.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Evidence: repository_health_engineer 2026-06-13 13:26:57 CST found one P3 stale `doc/p2p/node/README.md` density snapshot; TPM fixed it; repository_health_engineer 2026-06-13 13:35:09 CST returned no_findings; repository_health_engineer 2026-06-13 13:45:56 CST returned no_findings for the added `doc/p2p/project.md` Trace; qa_engineer 2026-06-13 13:28:28 CST returned no_findings for cleanup core and confirmed verification is sufficient for a docs/evidence cleanup PR.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: P3 finding addressed by replacing fixed `doc/p2p/node/README.md` density snapshot with stable high-density guidance and command-based current-count guidance; project Trace scoped to doc/evidence cleanup and explicitly avoids runtime/live public-testnet claims; fresh checks passed: stale density rg no matches, deleted shared_devnet id rg over doc/scripts/crates no matches, doc-governance-check OK, pm-lint OK, workflow-lint OK, git diff --check OK.
+- Residual Risk: Hidden non-repo consumers of deleted generated evidence are not validated; future p2p/testing evidence-routing drift remains possible; no runtime behavior, live public-testnet correctness, or QA CI gate-placement claim is made.
