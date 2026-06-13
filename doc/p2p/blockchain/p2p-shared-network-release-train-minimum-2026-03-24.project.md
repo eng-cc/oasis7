@@ -73,9 +73,9 @@
 - `doc/testing/templates/shared-network-mixed-topology-gate-template.md`
 - `doc/testing/templates/shared-network-shared-access-check-template.md`
 - `doc/testing/templates/shared-network-rollback-target-template.md`
-- `doc/testing/evidence/shared-network-shared-devnet-shared-access-draft-2026-03-24.md`
-- `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md`
-- `doc/testing/evidence/shared-network-shared-devnet-rollback-target-draft-2026-03-24.md`
+- `doc/testing/evidence/shared-network-shared-devnet-shared-access-2026-05-23.md`
+- `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
+- `doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md`
 - `doc/testing/evidence/shared-network-shared-devnet-follow-up-window-2026-03-24.md`
 - `doc/testing/evidence/shared-network-shared-devnet-follow-up-promotion-record-2026-03-24.md`
 - `doc/testing/evidence/shared-network-shared-devnet-follow-up-incident-2026-03-24.md`

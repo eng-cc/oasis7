@@ -1,9 +1,9 @@
-# Public Testnet Skeleton Example Evidence
+# Public Testnet Skeleton Evidence Example
 
-审计轮次: 1
+审计轮次: example
 
 ## Purpose
-- This file exists so the repo-owned `network_tier_manifest` example can point to a real evidence path.
+- This template exists so repo-owned `network_tier_manifest` examples can point to a template-scoped evidence placeholder.
 - It is intentionally a `skeleton` placeholder, not live `public_testnet` proof.
 
 ## Current Verdict

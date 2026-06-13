@@ -14,6 +14,7 @@ skeleton_lanes_tsv="$tmpdir/public-testnet-skeleton-lanes.tsv"
 ready_lanes_tsv="$tmpdir/public-testnet-ready-lanes.tsv"
 runtime_block_lanes_tsv="$tmpdir/public-testnet-runtime-block-lanes.tsv"
 template_pass_lanes_tsv="$tmpdir/public-testnet-template-pass-lanes.tsv"
+old_skeleton_pass_lanes_tsv="$tmpdir/public-testnet-old-skeleton-pass-lanes.tsv"
 shared_devnet_pass_evidence="$tmpdir/shared-devnet-pass-evidence.md"
 public_rpc_evidence="$tmpdir/public-rpc-ready.md"
 explorer_evidence="$tmpdir/explorer-public-ready.md"
@@ -21,6 +22,7 @@ faucet_evidence="$tmpdir/faucet-guard-ready.md"
 reset_policy_evidence="$tmpdir/reset-policy-announced.md"
 runtime_bootstrap_evidence="$tmpdir/runtime-bootstrap-ready.md"
 claims_boundary_evidence="$tmpdir/claims-boundary-review.md"
+old_skeleton_evidence="$tmpdir/public-testnet-skeleton-example.md"
 
 latest_summary() {
   local scenario_dir=$1
@@ -99,6 +101,12 @@ cat >"$claims_boundary_evidence" <<'EOF'
 - note: smoke-only claims boundary lane evidence
 EOF
 
+cat >"$old_skeleton_evidence" <<'EOF'
+# old public testnet skeleton placeholder
+
+- verdict: specified_skeleton_only
+EOF
+
 ./scripts/network-tier-manifest.sh create \
   --manifest "$manifest_path" \
   --tier public_testnet \
@@ -130,14 +138,14 @@ EOF
   --allowed-claim public_testnet \
   --denied-claim mainnet_live \
   --denied-claim production_oc_settlement \
-  --evidence-ref doc/testing/evidence/public-testnet-skeleton-example.md >/dev/null
+  --evidence-ref doc/testing/templates/public-testnet-skeleton-evidence.example.md >/dev/null
 
 cat >"$skeleton_lanes_tsv" <<'EOF'
 shared_devnet_pass	qa_engineer	pass	doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-03-24.md	shared devnet source
-public_rpc_ready	runtime_engineer	partial	doc/testing/evidence/public-testnet-skeleton-example.md	placeholder rpc evidence
-explorer_public_ready	runtime_engineer	partial	doc/testing/evidence/public-testnet-skeleton-example.md	placeholder explorer evidence
-faucet_guard_ready	liveops_community	partial	doc/testing/evidence/public-testnet-skeleton-example.md	placeholder faucet evidence
-reset_policy_announced	liveops_community	partial	doc/testing/evidence/public-testnet-skeleton-example.md	placeholder reset evidence
+public_rpc_ready	runtime_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder rpc evidence
+explorer_public_ready	runtime_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder explorer evidence
+faucet_guard_ready	liveops_community	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder faucet evidence
+reset_policy_announced	liveops_community	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder reset evidence
 runtime_bootstrap	runtime_engineer	partial	doc/testing/templates/public-testnet-rehearsal-template.md	template bootstrap evidence
 claims_boundary_review	qa_engineer	partial	doc/testing/templates/public-testnet-exit-review-template.md	template claims evidence
 EOF
@@ -250,6 +258,17 @@ if ./scripts/network-tier-public-testnet-readiness.sh \
   exit 1
 fi
 grep -q "pass evidence cannot use placeholder/template ref" "$tmpdir/template-pass.stderr"
+
+cp "$ready_lanes_tsv" "$old_skeleton_pass_lanes_tsv"
+replace_literal "$old_skeleton_pass_lanes_tsv" "$public_rpc_evidence" "$old_skeleton_evidence"
+if ./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest "$manifest_path" \
+  --lanes-tsv "$old_skeleton_pass_lanes_tsv" \
+  --out-dir "$out_dir/old-skeleton-pass-rejected" >"$tmpdir/old-skeleton-pass.stdout" 2>"$tmpdir/old-skeleton-pass.stderr"; then
+  echo "expected old skeleton pass evidence to be rejected" >&2
+  exit 1
+fi
+grep -q "pass evidence cannot use placeholder/template ref" "$tmpdir/old-skeleton-pass.stderr"
 
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \

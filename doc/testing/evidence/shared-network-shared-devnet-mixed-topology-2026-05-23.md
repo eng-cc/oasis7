@@ -20,15 +20,12 @@
 
 ## Mixed-Topology Inputs
 - `baseline_evidence_ref`:
-  - `doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md`
   - `doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md`
-  - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md`
 - `same_window_shared_evidence_ref`:
   - `doc/testing/evidence/shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md`
   - `doc/testing/evidence/shared-network-shared-devnet-shared-access-2026-05-23.md`
   - `doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-05-23.md`
 - `proxy_drill_ref`:
-  - `doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md`
   - `doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md`
 
 ## Validation

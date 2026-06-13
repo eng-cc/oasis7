@@ -55,8 +55,8 @@
       "lane_id": "mixed_topology_baseline",
       "owner": "qa_engineer",
       "status": "partial",
-      "evidence_path": "doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md",
-      "resolved_evidence_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md",
+      "evidence_path": "doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md",
+      "resolved_evidence_path": "/home/scc/worktrees/oasis7-p2p-public-testnet-claims-boundary-review/doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md",
       "note": "only audited partial mixed-topology baseline exists; no current same-window uplift decision is pinned"
     },
     {
