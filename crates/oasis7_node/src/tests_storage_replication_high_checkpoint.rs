@@ -94,6 +94,14 @@ fn test_execution_checkpoint_bundle(
     }
 }
 
+#[test]
+fn fetch_commit_exports_checkpoints_only_for_head_or_checkpoint_boundaries() {
+    assert!(!should_export_checkpoint_for_fetch_commit(65, 16_715));
+    assert!(should_export_checkpoint_for_fetch_commit(16_715, 16_715));
+    assert!(should_export_checkpoint_for_fetch_commit(16_704, 16_715));
+    assert!(should_export_checkpoint_for_fetch_commit(16_672, 16_715));
+}
+
 fn committed_decision(height: u64, approved_stake: u64, required_stake: u64) -> PosDecision {
     PosDecision {
         height,
