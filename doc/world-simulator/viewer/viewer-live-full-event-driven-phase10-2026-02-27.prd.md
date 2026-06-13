@@ -154,7 +154,7 @@
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs（`#[cfg(test)]`）`
 - `crates/oasis7/tests/viewer_live_integration.rs`
-- `scripts/run-game-test.sh`
+- `scripts/run-launcher-stack.sh`
 - `scripts/p2p-longrun-soak.sh`
 - `scripts/viewer-owr4-stress.sh`
 - `scripts/viewer-primary-web-entry-regression.sh`
@@ -193,7 +193,7 @@
   - 移除 `--tick-ms` CLI 参数与 `CliOptions.tick_ms`。
   - reward runtime 轮询改为复用 `--node-tick-ms`（仅 poll/fallback 语义；PoS 节拍由 `--pos-slot-duration-ms/--pos-ticks-per-slot` 锚定）。
 - viewer live 外围脚本已全部移除 `--tick-ms` 参数链路：
-  - `run-game-test` / `p2p-longrun-soak` / `viewer-primary-web-entry-regression` /
+  - `run-launcher-stack` / `p2p-longrun-soak` / `viewer-primary-web-entry-regression` /
     `viewer-software-safe-step-regression` / `viewer-software-safe-chat-regression`。
 - 活跃手册和静态站 viewer manual 示例已同步更新为无 `--tick-ms` 版本。
 - 修复事件驱动链路下的 live server 退出阻塞：

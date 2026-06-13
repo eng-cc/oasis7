@@ -16,7 +16,7 @@
 - `runSteps(payload)`
 - `sendControl(action, payload)`
 - wasm + Player 自动 `Play`
-- `scripts/run-game-test.sh` WS 探针
+- `scripts/run-launcher-stack.sh` WS 探针
 
 ## 4. 约束与边界
 - 不重构 viewer live 协议，也不改核心世界规则。

@@ -21,8 +21,19 @@
   - `scripts/viewer-software-safe-step-regression.sh`
   - `scripts/viewer-software-safe-chat-regression.sh`
 - 边界说明：本手册只适用于 `viewer` Viewer Web 页面（兼容 `software_safe` alias），不适用于 `oasis7_web_launcher` / launcher Web 控制面；后者默认先走 GUI Agent。
+- 本地真实 LetAI provider-backed 游戏试玩不从裸 `run-viewer-web.sh` 开始；统一使用 `./scripts/run-local-letai-game-test.sh` 启动 bridge + runtime/game 栈。
 
-## 快速开始
+## 本地真实 LLM 游戏测试
+```bash
+./scripts/run-local-letai-game-test.sh
+./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
+```
+
+- 该入口负责 LetAI token config 规范化、chat probe、`127.0.0.1:5841` provider bridge、provider contract smoke 与 launcher/runtime/viewer 启动。
+- 需要手工试玩或验证 `agent_chat` 时，以脚本输出的 `GAME_URL` 为准。
+- 下方 `oasis7_viewer_live` + `run-viewer-web.sh` 流程只用于 Viewer/debug 或定向 Web 回归，不代表本地真实 provider-backed gameplay 栈。
+
+## 底层 Viewer Debug 快速开始
 
 ### 1）启动 live server
 ```bash
@@ -63,7 +74,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 
 ## Web 闭环
 
-### 标准人工闭环
+### 底层 Viewer Debug 人工闭环
 终端 A：
 ```bash
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011

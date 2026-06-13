@@ -15,7 +15,7 @@
 
 ## 依赖
 - doc/testing/launcher/launcher-chain-script-migration-2026-02-28.prd.md
-- `scripts/run-game-test.sh`
+- `scripts/run-launcher-stack.sh`
 - `scripts/viewer-release-qa-loop.sh`
 - `scripts/s10-five-node-game-soak.sh`
 - `scripts/p2p-longrun-soak.sh`

@@ -16,7 +16,7 @@
 
 ## 依赖
 - `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md`
-- `scripts/run-game-test.sh`
+- `scripts/run-launcher-stack.sh`
 - `scripts/run-game-test-ab.sh`
 - `scripts/run-producer-playtest.sh`
 - `scripts/build-game-launcher-bundle.sh`

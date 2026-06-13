@@ -135,9 +135,10 @@ token:
 ./scripts/check-letai-chat-completions.sh
 ```
 
-If that succeeds, start a local real provider bridge in another terminal or in
-the background. The game still connects to `http://127.0.0.1:5841`; the bridge
-process runs in the foreground and calls LetAI upstream:
+If that succeeds and you are doing low-level bridge plumbing, start a local real
+provider bridge in another terminal or in the background. The game still
+connects to `http://127.0.0.1:5841`; the bridge process runs in the foreground
+and calls LetAI upstream:
 
 ```bash
 ./scripts/run-local-letai-provider-bridge.sh
@@ -153,11 +154,11 @@ runs a provider contract smoke, and launches the game against `127.0.0.1:5841`:
 ./scripts/run-local-letai-game-test.sh
 ```
 
-The wrapper prefers `OASIS7_LETAI_TOKEN_CONFIG_PATH`, then
-`/Users/scc/Documents/keys/letai-token-local.txt`, then
-`/Users/scc/Documents/keys/letai.txt`. A token config must contain a real
-project `token_key`; the platform `Key` from `letai.txt` is only for management
-APIs and dynamic token provisioning.
+The wrapper prefers `OASIS7_LETAI_CONFIG_PATH`, then
+`/Users/scc/Documents/keys/letai.txt`, then `OASIS7_LETAI_TOKEN_CONFIG_PATH` or
+`/Users/scc/Documents/keys/letai-token-local.txt`. A generated token config must
+contain a real project `token_key`; the platform `Key` from `letai.txt` is only
+for management APIs and dynamic token provisioning.
 
 By default the wrapper also enables `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` so the
 local provider-backed playtest can accept chat input and show chat feedback while
@@ -192,9 +193,12 @@ curl -sS http://127.0.0.1:5841/v1/provider/info | jq .
 curl -sS http://127.0.0.1:5841/v1/provider/health | jq .
 ```
 
-### 5. Launch a real gameplay run
+### 5. Advanced manual launcher path
 
-You can launch from either the source tree or a downloaded release bundle.
+For normal local real LetAI gameplay, use `./scripts/run-local-letai-game-test.sh`
+above. The commands below are lower-level manual launcher paths for operators
+who have already started and verified the local provider bridge and need to
+debug source or bundle launcher wiring directly.
 
 Repo source path:
 

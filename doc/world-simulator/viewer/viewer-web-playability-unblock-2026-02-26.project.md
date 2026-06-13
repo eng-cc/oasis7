@@ -16,7 +16,7 @@
 - `crates/oasis7_viewer/src/web_test_api.rs`
 - `crates/oasis7_viewer/src/headless.rs`
 - `crates/oasis7_viewer/src/app_bootstrap.rs`
-- `scripts/run-game-test.sh`
+- `scripts/run-launcher-stack.sh`
 
 ## 状态
 - 当前阶段：已完成（T0~T4）

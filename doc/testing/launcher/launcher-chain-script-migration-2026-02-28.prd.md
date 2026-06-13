@@ -31,7 +31,7 @@
   - PRD-TESTING-LAUNCHER-SCRIPT-003: As a 发布负责人, I want manual/docs aligned to the new launch entrypoints, so that release checks remain operable.
   - PRD-TESTING-LAUNCHER-SCRIPT-004: As a 发布负责人, I want QA 脚本与 launcher 对静态资源目录拥有一致覆盖规则, so that 协议与前端构建不会错配。
 - Critical User Flows:
-  1. Flow-LAUNCH-001: `执行 run-game-test/当时的 viewer-release-qa-loop -> oasis7_game_launcher 启动 -> 输出兼容日志`
+  1. Flow-LAUNCH-001: `执行 run-launcher-stack/当时的 viewer-release-qa-loop -> oasis7_game_launcher 启动 -> 输出兼容日志`
   2. Flow-LAUNCH-002: `执行长跑脚本 -> 命中旧参数链路 -> 显式阻断并输出迁移提示`
   3. Flow-LAUNCH-003: `查阅 testing-manual -> 按新口径选择 oasis7_game_launcher 或 oasis7_chain_runtime`
   4. Flow-LAUNCH-004: `执行当时的 viewer-release-qa-loop -> 传入/继承 viewer-static-dir -> oasis7_game_launcher 显式锁定静态目录 -> 避免陈旧 dist 触发协议解码错误`

@@ -33,7 +33,7 @@
   - 保持 `site/assets/app.js` 依赖的锚点与标记可用：`#matrix`、`#scenarios`、`#demo`、`#proof`、`#roadmap`、`#architecture`、`#contribute`。
   - 保持 `data-reveal`、`data-counter-target`、`data-menu*`、`data-lang*`、`data-proof-*` 不变。
 - 截图生成链路
-  - 采用 Web 闭环（S6）作为默认：`oasis7_viewer_live` + `run-viewer-web.sh` + agent-browser。
+  - 采用当前 Viewer/debug Web 闭环（S6）作为默认：repo-owned Viewer regression 脚本或 `oasis7_viewer_live` + `run-viewer-web.sh` + agent-browser；本地真实 provider-backed gameplay 另走 `run-local-letai-game-test.sh`。
   - 参考文档：`testing-manual.md`（S6 及补充约定）。
 
 ## 里程碑

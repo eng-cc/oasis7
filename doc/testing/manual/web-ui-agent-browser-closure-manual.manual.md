@@ -11,6 +11,7 @@
 - 适用于 `oasis7_viewer_live` + `software_safe` Viewer Web 页面闭环。
 - 不适用于 `oasis7_web_launcher` / launcher Web 控制面产品动作；后者默认先走 GUI Agent，再用页面校验状态与字段。
 - 本手册只覆盖当前仍存在的 Web 链路，不再覆盖历史 3D/native/visual-QA 工具。
+- 若目标是本地真实 LetAI provider-backed 游戏试玩或复现 `agent_chat`，先使用 `./scripts/run-local-letai-game-test.sh` 启动完整 bridge + runtime/game 栈；下方 live server + `run-viewer-web.sh` 步骤只作为 Viewer/debug 闭环。
 
 ## 前置条件
 - 已安装 `agent-browser`
@@ -18,7 +19,17 @@
 - 已安装 `python3`
 - 建议先执行一次 `agent-browser close-all`
 
-## 标准闭环
+## 本地真实 LLM 游戏测试入口
+```bash
+./scripts/run-local-letai-game-test.sh
+./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
+```
+
+- 该入口会统一处理 LetAI token config、chat probe、`127.0.0.1:5841` provider bridge、provider contract smoke 与 launcher/runtime/viewer 启动。
+- 需要对已经启动的页面做 agent-browser 留证时，优先复用脚本输出的 `GAME_URL`，再执行本手册的采样步骤。
+- 不要把单独的 `run-viewer-web.sh` 当作本地真实 provider-backed gameplay 启动方式；它不负责 provider bridge 或 launcher bootstrap。
+
+## 底层 Viewer Debug 闭环
 
 ### 1. 启动 live server
 ```bash

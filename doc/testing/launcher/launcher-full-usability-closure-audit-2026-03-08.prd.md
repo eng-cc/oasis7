@@ -32,7 +32,7 @@
 - Critical User Flows:
   1. Flow-REVIEW-001: `启动 oasis7_game_launcher -> ready 探针通过 -> Web 主页可访问 -> Viewer 状态可读`
   2. Flow-REVIEW-002: `执行 agent-browser 语义动作 -> 采集 snapshot/console/screenshot/state -> 形成闭环证据`
-  3. Flow-REVIEW-003: `执行 run-game-test/历史 viewer-release-qa-loop -> 验证迁移后脚本参数与产物路径`
+  3. Flow-REVIEW-003: `执行 run-launcher-stack/历史 viewer-release-qa-loop -> 验证迁移后脚本参数与产物路径`
   4. Flow-REVIEW-004: `执行 longrun 旧入口脚本 -> 命中阻断文案 -> 输出迁移方向`
   5. Flow-REVIEW-005: `汇总结果 -> 给出可用性 verdict（pass/conditional/fail）`
 - Functional Specification Matrix:

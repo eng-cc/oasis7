@@ -28,4 +28,4 @@
 - 当前任务: `none`
 - owner: `viewer_engineer`
 - 联审: `runtime_engineer`
-- 备注: `T0~T5` 已完成；`oasis7_web_launcher` 已新增 stale execution world 结构化状态、GUI Agent `recover_chain` 动作与 fresh node id 恢复建议；现在 `oasis7_web_launcher` / `oasis7_client_launcher` / `oasis7_game_launcher` 默认链配置与 `scripts/run-game-test.sh` 一样，都会优先使用 fresh `chain_node_id`，减少默认入口复用脏 execution world 的概率。
+- 备注: `T0~T5` 已完成；`oasis7_web_launcher` 已新增 stale execution world 结构化状态、GUI Agent `recover_chain` 动作与 fresh node id 恢复建议；现在 `oasis7_web_launcher` / `oasis7_client_launcher` / `oasis7_game_launcher` 默认链配置与现行 `scripts/run-launcher-stack.sh` 一样，都会优先使用 fresh `chain_node_id`，减少默认入口复用脏 execution world 的概率。

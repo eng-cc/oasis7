@@ -17,6 +17,9 @@ Run a stable A/B playability loop and emit quantitative metrics:
 Important guardrail:
 - This script is for automated regression probing only.
 - It does NOT replace manual long-play sessions or real-player card filling.
+- For local real LetAI bridge + gameplay startup, run
+  ./scripts/run-local-letai-game-test.sh first, then pass its GAME_URL via --url
+  when you want A/B metrics against that live stack.
 
 Options:
   --url <url>               Use an existing viewer URL; skip stack bootstrap
