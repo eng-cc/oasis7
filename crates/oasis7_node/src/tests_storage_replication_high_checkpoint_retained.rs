@@ -142,6 +142,7 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
     let mut replication_a =
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
+    let mut provider_hashes = Vec::<String>::new();
     for height in [64_u64, 300_u64] {
         let decision = PosDecision {
             height,
@@ -161,7 +162,16 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
         let checkpoint = (height == 64).then(|| {
             test_execution_checkpoint_bundle(height, &execution_block_hash, &execution_state_root)
         });
-        replication_a
+        if let Some(bundle) = checkpoint.as_ref() {
+            provider_hashes.push(oasis7_distfs::blake3_hex(bundle.manifest_json.as_slice()));
+            provider_hashes.extend(
+                bundle
+                    .blobs
+                    .iter()
+                    .map(|blob| blob.content_hash.clone()),
+            );
+        }
+        let message = replication_a
             .build_local_commit_message_with_checkpoint(
                 "node-a",
                 world_id,
@@ -173,11 +183,16 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
             )
             .expect("build local message")
             .expect("message");
+        provider_hashes.push(message.record.content_hash);
     }
 
+    let network_impl = Arc::new(ProviderAwareTestNetwork::new(
+        dir_a.clone(),
+        "node-a-provider",
+    ));
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
+    > = network_impl.clone();
     register_replication_fetch_handlers(
         &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
         &replication_config_a,
@@ -185,7 +200,16 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
         &config_a.network_policy,
     )
     .expect("register fetch handlers");
-    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let dht = Arc::new(TestReplicaMaintenanceDht::new(
+        "node-a-provider",
+        "node-b-provider",
+    ));
+    for hash in &provider_hashes {
+        dht.seed_provider(hash, "node-a-provider");
+    }
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht)
+        .with_local_provider_id("node-b-provider");
     let endpoint_b =
         ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
             .expect("endpoint b");
@@ -217,6 +241,13 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
         Some(("exec-block-64", "exec-state-64"))
     );
     assert_eq!(engine_b.last_replication_gap_sync_blocked_height, None);
+    let provider_attempts = network_impl.provider_attempts();
+    assert!(
+        provider_attempts.iter().any(|providers| providers
+            .iter()
+            .any(|provider| provider == "node-a-provider")),
+        "expected retained checkpoint sync to route blob fetches through DHT providers, attempts={provider_attempts:?}"
+    );
 
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
