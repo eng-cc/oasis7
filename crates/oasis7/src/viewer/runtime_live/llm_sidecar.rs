@@ -53,6 +53,8 @@ const VIEWER_AGENT_PROVIDER_URL_ENV: &str = "OASIS7_AGENT_PROVIDER_URL";
 const VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV: &str = "OASIS7_AGENT_PROVIDER_AUTH_TOKEN";
 const VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV: &str =
     "OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS";
+const VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV: &str =
+    "OASIS7_AGENT_PROVIDER_DECISION_TIMEOUT_MS";
 const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
 const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
@@ -84,6 +86,7 @@ pub(in crate::viewer::runtime_live) struct ProviderDecisionSettings {
     pub(in crate::viewer::runtime_live) base_url: String,
     pub(in crate::viewer::runtime_live) auth_token: Option<String>,
     pub(in crate::viewer::runtime_live) connect_timeout_ms: u64,
+    pub(in crate::viewer::runtime_live) decision_timeout_ms: u64,
     pub(in crate::viewer::runtime_live) agent_profile: String,
     pub(in crate::viewer::runtime_live) execution_mode: ProviderExecutionMode,
     pub(in crate::viewer::runtime_live) fallback_reason: Option<String>,
@@ -831,6 +834,7 @@ impl RuntimeLlmSidecar {
                     ))
                     .with_agent_profile(settings.agent_profile.clone())
                     .with_execution_mode(settings.execution_mode)
+                    .with_timeout_budget_ms(settings.decision_timeout_ms)
                     .with_environment_class("runtime_live")
                     .with_memory_summary(provider_phase1_memory_summary());
                     let behavior =

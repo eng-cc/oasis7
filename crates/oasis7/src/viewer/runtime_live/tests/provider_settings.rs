@@ -19,6 +19,7 @@ fn provider_settings_from_env_parses_profile_and_timeout() {
     std::env::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
     std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
     std::env::set_var(VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV, "4200");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV, "6100");
     std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
     std::env::set_var(VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV, "secret-token");
@@ -29,6 +30,7 @@ fn provider_settings_from_env_parses_profile_and_timeout() {
     assert_eq!(settings.provider_transport, "loopback_http");
     assert_eq!(settings.base_url, "http://127.0.0.1:5841");
     assert_eq!(settings.connect_timeout_ms, 4200);
+    assert_eq!(settings.decision_timeout_ms, 6100);
     assert_eq!(settings.agent_profile, "oasis7_p0_low_freq_npc");
     assert_eq!(settings.execution_mode, ProviderExecutionMode::PlayerParity);
     assert_eq!(settings.auth_token.as_deref(), Some("secret-token"));
@@ -74,6 +76,7 @@ fn provider_settings_from_env_accepts_local_mock_backend() {
     assert_eq!(settings.provider_transport, "loopback_http");
     assert_eq!(settings.base_url, "http://127.0.0.1:5841");
     assert_eq!(settings.agent_profile, "oasis7_p0_low_freq_npc");
+    assert_eq!(settings.decision_timeout_ms, settings.connect_timeout_ms);
     clear_runtime_provider_env();
 }
 

@@ -56,6 +56,7 @@ pub(super) fn apply_viewer_live_env_overrides(
         VIEWER_AGENT_PROVIDER_URL_ENV,
         VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
         VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+        VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV,
         VIEWER_AGENT_PROVIDER_PROFILE_ENV,
         VIEWER_AGENT_EXECUTION_LANE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
@@ -92,6 +93,10 @@ pub(super) fn apply_viewer_live_env_overrides(
         }
         command.env(
             VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+            options.agent_provider_connect_timeout_ms.to_string(),
+        );
+        command.env(
+            VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV,
             options.agent_provider_connect_timeout_ms.to_string(),
         );
         command.env(

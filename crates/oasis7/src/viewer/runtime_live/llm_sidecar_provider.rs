@@ -84,6 +84,24 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
             "{VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV} must be greater than zero"
         ));
     }
+    let decision_timeout_ms =
+        named_env_var_any(&[VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV])
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .map(|value| {
+                value.parse::<u64>().map_err(|err| {
+                    format!(
+                        "invalid {VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV} value `{value}`: {err}"
+                    )
+                })
+            })
+            .transpose()?
+            .unwrap_or(connect_timeout_ms);
+    if decision_timeout_ms == 0 {
+        return Err(format!(
+            "{VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV} must be greater than zero"
+        ));
+    }
 
     let agent_profile = named_env_var_any(&[VIEWER_AGENT_PROVIDER_PROFILE_ENV])
         .unwrap_or_else(|| DEFAULT_PROVIDER_AGENT_PROFILE.to_string());
@@ -119,6 +137,7 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
         base_url: base_url.to_string(),
         auth_token,
         connect_timeout_ms,
+        decision_timeout_ms,
         agent_profile: agent_profile.to_string(),
         execution_mode,
         fallback_reason: provider_mode_fallback_reason(decision_source),

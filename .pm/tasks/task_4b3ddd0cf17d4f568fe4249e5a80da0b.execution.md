@@ -176,3 +176,26 @@ Example:
 - Expected Result: PR is created and task enters normal_pr_ci_watch, not manual packaging CI hold.
 - Actual Result: PR created: https://github.com/eng-cc/oasis7/pull/453. Purpose decision: normal_pr_ci_watch. Continue watching required checks, mergeability, comments, and review threads; REVIEW_REQUIRED/BEHIND are informational unless GitHub merge path rejects.
 - Blocker / Next Action: Commit and push this PR purpose record, then inspect PR checks/comments/mergeability.
+
+## 2026-06-14 00:34:00 CST / tpm
+- 完成内容: Addressed actionable PR review thread `PRRT_kwDORHhWec6JVkls` from Codex review on PR #453.
+- 遗留事项: Push review fix, resolve the GitHub thread after push, rerun PR checks, then continue merge watch.
+- Action: Verify and fix review finding "Propagate the 60s budget into decision requests".
+  - Comment classification: valid correctness bug / regression risk. The prior wrapper exported `OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS=60000`, but provider-backed runtime requests still used `DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS=3000` because `ProviderBackedAgentBehavior::with_timeout_budget_ms` was not called for runtime-live provider-backed agents.
+  - Patch: added `OASIS7_AGENT_PROVIDER_DECISION_TIMEOUT_MS`; runtime provider settings parse it with default equal to connect timeout; provider-backed runtime-live behavior now calls `.with_timeout_budget_ms(settings.decision_timeout_ms)`; launcher provider-backed env overrides set the decision timeout env to the same value as `--agent-provider-connect-timeout-ms`; local LetAI wrapper exports the same value and uses it for bridge smoke `--timeout-ms`.
+  - Evidence path: `scripts/run-local-letai-game-test.sh`, `crates/oasis7/src/bin/oasis7_game_launcher/viewer_live_command.rs`, `crates/oasis7/src/viewer/runtime_live/llm_sidecar_provider.rs`, `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`, and focused tests.
+- Validation Command: `bash -n scripts/run-local-letai-game-test.sh`
+- Expected Result: local LetAI wrapper syntax remains valid.
+- Actual Result: passed.
+- Validation Command: `env -u RUSTC_WRAPPER cargo fmt --all -- --check`
+- Actual Result: passed after formatting.
+- Validation Command: `git diff --check`
+- Actual Result: passed.
+- Validation Command: `env -u RUSTC_WRAPPER cargo test -p oasis7 provider_settings_from_env_parses_profile_and_timeout -- --nocapture`
+- Actual Result: passed; 1 matching provider settings test passed and asserts explicit decision timeout parsing.
+- Validation Command: `env -u RUSTC_WRAPPER cargo test -p oasis7 provider_backed_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout -- --nocapture`
+- Actual Result: passed; 1 matching launcher env override test passed and asserts `OASIS7_AGENT_PROVIDER_DECISION_TIMEOUT_MS` is set from provider connect timeout.
+- Validation Command: `./scripts/run-local-letai-game-test.sh --bind 127.0.0.1:5852 --output-dir output/local-letai-game-test/codex-review-fix-20260614-0028 -- --viewer-port 4194 --web-bind 127.0.0.1:5032 --live-bind 127.0.0.1:5042 --chain-status-bind 127.0.0.1:5142 --json-ready`
+- Expected Result: wrapper reaches stack ready with 60000 ms provider budget path and no provider gateway timeout.
+- Actual Result: passed to ready evidence: token generation ok, chat probe ok, provider bridge smoke `decision_successes=1` with `elapsed_ms=8712`, launcher command included `--agent-provider-connect-timeout-ms 60000`, and Game test stack reached ready with URL `http://127.0.0.1:4194/?ws=ws://127.0.0.1:5032&test_api=1&locale=zh`. Verification processes were manually stopped after ready evidence.
+- Blocker / Next Action: Commit/push review fix, resolve thread, and re-check CI/comments/mergeability.

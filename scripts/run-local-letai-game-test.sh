@@ -255,6 +255,7 @@ echo "chat_probe_timeout_ms=$CHAT_PROBE_TIMEOUT_MS"
 echo "agent_provider_connect_timeout_ms=$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
 echo "output_dir=$OUTPUT_DIR"
 export OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS="$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
+export OASIS7_AGENT_PROVIDER_DECISION_TIMEOUT_MS="$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
 
 if [[ "$SKIP_CHAT_PROBE" != "1" ]]; then
   "$ROOT_DIR/scripts/check-letai-chat-completions.sh" \
@@ -294,7 +295,7 @@ if [[ "$SKIP_BRIDGE_SMOKE" != "1" ]]; then
   for attempt in $(seq 1 "$BRIDGE_SMOKE_ATTEMPTS"); do
     if "$ROOT_DIR/scripts/provider-remote-https/provider-bridge-contract-smoke.sh" \
       --base-url "http://$BIND_ADDR" \
-      --timeout-ms 60000 \
+      --timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" \
       --decision-count 1 \
       --min-successes 1; then
       smoke_status=0
@@ -306,7 +307,7 @@ if [[ "$SKIP_BRIDGE_SMOKE" != "1" ]]; then
   if [[ "$smoke_status" -ne 0 ]]; then
     "$ROOT_DIR/scripts/provider-remote-https/provider-bridge-contract-smoke.sh" \
       --base-url "http://$BIND_ADDR" \
-      --timeout-ms 60000 \
+      --timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" \
       --decision-count 1 \
       --min-successes 0 >&2 || true
     exit 1
