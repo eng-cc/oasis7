@@ -103,7 +103,8 @@
 2. `release_default` 当前按 64 高度间隔保留 8 个 execution checkpoint，因此 observer gap sync 至少要回看 8 个 64-height checkpoint windows。
 3. checkpoint commit payload 的 `execution_block_hash`、`execution_state_root` 与 checkpoint descriptor 必须完全匹配，blob 内容必须按 content hash 和 size 校验后才能安装。
 4. 如果 advertised head 不是 checkpoint 高度，observer 可以安装 head 之前最近仍被保留且可验证的 checkpoint；安装后再由正常 gap sync 追尾。
-5. 若保留窗口内没有可获取的 checkpoint，状态接口应继续报告 `state_sync_fallback_required=true`，此时才进入 break-glass seed/state-sync recovery。
+5. storage/full-storage provider 即使不是原始 sequencer writer，也必须能在 fetch-commit 响应中为本地 retained execution checkpoint 动态附加 checkpoint descriptor，并以自身 authorized replication writer 身份重新签发增强 commit message；否则只连到 storage peer 的冷 observer 无法获得可安装的高状态入口。
+6. 若保留窗口内没有可获取的 checkpoint，状态接口应继续报告 `state_sync_fallback_required=true`，此时才进入 break-glass seed/state-sync recovery。
 
 ## 5. Required Inputs
 开始前，操作者必须准备好以下输入：
@@ -223,7 +224,7 @@ ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status | jq -r .r
 2. 用新的 signer truth 生成 deployment-only validator registry。
 3. 用新的 registry 重建 deployment-only governed bootstrap world。
 4. 读取 validator 实际 `local_peer_id`，更新 observer 的 `REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV`。
-5. 更新 observer 的 `REPLICATION_REMOTE_WRITERS_CSV`，对齐 validator 当前 allowlist。
+5. 更新 observer 的 `REPLICATION_REMOTE_WRITERS_CSV`，对齐当前 deployment truth 中所有 authorized replication writers；除 validator signer 外，必须包含会提供 retained execution checkpoint 的 storage/full-storage provider signer。
 
 ### Pass criteria
 1. deployment-only registry 与 host 当前 signer truth 一致
@@ -385,7 +386,7 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 
 ### Required prep
 1. observer env 使用当前 deployment truth bootstrap peer ids
-2. observer env 使用当前 validator writer allowlist；fetch requester 不再需要逐个 observer 手动加 allowlist，只要 validators 运行的 runtime 对 `public_testnet` + `allow_observer_nodes=true` 开启开放签名读取策略
+2. observer env 使用当前 deployment truth writer allowlist；除 validator signer 外，必须包含会提供 retained execution checkpoint 的 storage/full-storage provider signer。fetch requester 不再需要逐个 observer 手动加 allowlist，只要 providers 运行的 runtime 对 `public_testnet` + `allow_observer_nodes=true` 开启开放签名读取策略
 3. observer manifest 指向当前 deployment truth genesis/manifest
 4. observer env 的 `WORLD_ID`、governed registry/manifest、bootstrap peers、remote writer allowlist、node identity、listen/status ports 必须全部来自当前 deployment truth
 5. systemd service unit 必须是当前 testnet observer unit；不得让旧 devnet/triad observer service 继续占用状态端口或被误当作 public testnet 节点

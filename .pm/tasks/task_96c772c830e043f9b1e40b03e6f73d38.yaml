@@ -1,0 +1,25 @@
+task_uid: task_96c772c830e043f9b1e40b03e6f73d38
+title: "Repair testnet high-state peer retry sync"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-testnet-high-state-peer-retry
+execution_log_path: .pm/tasks/task_96c772c830e043f9b1e40b03e6f73d38.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/project.md
+doc_refs:
+  - doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md
+related_prd: []
+acceptance:
+  - "Cold observer can auto-install a retained high checkpoint when an initially unavailable peer later exposes replication protocols."
+  - "Regression tests cover retry cooldown/protocol availability behavior for high checkpoint sync."
+handoff_to: []
+updated_at: 2026-06-13T12:47:24+08:00
+last_started_at: 2026-06-13T12:12:01+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo fmt --check && ./scripts/check-rust-file-size.sh && git diff --check && env -u RUSTC_WRAPPER cargo test -p oasis7_node replication::checkpoint_tests -- --nocapture && env -u RUSTC_WRAPPER cargo test -p oasis7_node storage_replication_high_checkpoint -- --nocapture && ./scripts/doc-governance-check.sh"
+last_verified_at: 2026-06-13T12:47:19+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-13T12:47:24+08:00
