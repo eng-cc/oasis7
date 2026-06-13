@@ -51,19 +51,19 @@
 - `distributed/`：分布式运行时专题。
 - `network/`：网络桥接专题。
 
-## 热点子域导航（2026-04-10 快照）
-- `node/`（68）：节点身份、奖励、复制、PoS 时间基线与执行验证；当前已补 `node/README.md` 作为热点子域入口。
-- `distfs/`（66）：DistFS 生产加固、路径索引、自愈与 bridge 集成。
-- `blockchain/`（62）：主链安全、readiness、signer custody、hosted world 接入与 release train。
-- `observer/`（15）：观察者同步模式、指标与可观测性。
-- `token/`（14）：创世分配、签名授权、治理分发与流通边界。
-- `network/`（12）：reachability、mobile light client、runtime bridge 与 mixed-topology 约束。
-- `distributed/`（12）：分布式 runtime / consensus / hard split 路线。
-- `viewer-live/`（9）：viewer-live 发行、开关与观察服务边界。
-- `consensus/`（6）：共识实现与内建 wasm 身份口径。
+## 热点子域导航
+- `node/`：节点身份、奖励、复制、PoS 时间基线与执行验证；当前已补 `node/README.md` 作为热点子域入口。
+- `distfs/`：DistFS 生产加固、路径索引、自愈与 bridge 集成。
+- `blockchain/`：主链安全、readiness、signer custody、hosted world 接入与 release train。
+- `observer/`：观察者同步模式、指标与可观测性。
+- `token/`：创世分配、签名授权、治理分发与流通边界。
+- `network/`：reachability、mobile light client、runtime bridge 与 mixed-topology 约束。
+- `distributed/`：分布式 runtime / consensus / hard split 路线。
+- `viewer-live/`：viewer-live 发行、开关与观察服务边界。
+- `consensus/`：共识实现与内建 wasm 身份口径。
 
 ## 高密度提示
-- `doc/p2p/` 当前共有 269 份文件；这一层入口不再尝试把热点专题直接摊平展示。
+- `doc/p2p/` 的文件数会随专题推进变化；需要当前数量时，以 `find doc/p2p -type f | wc -l` 或 `git ls-files 'doc/p2p/**'` 为准。
 - 需要完整活跃专题清单时，进入 `doc/p2p/prd.index.md`；进入 `node/` 时，优先先读 `doc/p2p/node/README.md` 再继续下钻；需要 runbook / release 补充材料时，再按具体专题路径进入。
 
 ## 共享约定

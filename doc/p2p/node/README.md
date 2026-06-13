@@ -1,6 +1,6 @@
 # `p2p/node` 热点子域入口
 
-更新时间: 2026-04-24
+更新时间: 2026-06-13
 
 ## 从这里开始
 - 想确认节点奖励、贡献分、资产与结算口径：先读 `node-contribution-points.prd.md`、`node-redeemable-power-asset.prd.md` 或 `node-reward-settlement-native-transaction.prd.md`
@@ -16,11 +16,9 @@
 - `../README.md` 是 `p2p` 模块级 landing page，负责跨 `blockchain / distfs / node / observer / token / network / distributed / consensus / viewer-live` 分流。
 - `../prd.index.md` 是 `p2p` 模块完整文件级索引，适合已知主题后按文件名查找。
 
-## 密度快照
-- 治理前快照（2026-04-17）:
-  - `doc/p2p/node/`: 68 份 Markdown
-  - `doc/p2p/`: 269 份 Markdown
-- 当前子域属于 `p2p` 模块最高密度热点路径；本页的目标是压缩首读路径，而不是在本批直接减少文件数。
+## 高密度提示
+- 当前子域属于 `p2p` 模块最高密度热点路径之一；本页的目标是压缩首读路径，而不是按文件数维护专题清单。
+- 需要当前文件数量时，以 `find doc/p2p/node -type f | wc -l` 或 `git ls-files 'doc/p2p/node/**'` 为准。
 
 ## 首读主题簇
 

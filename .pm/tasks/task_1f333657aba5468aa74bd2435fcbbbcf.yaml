@@ -1,0 +1,25 @@
+task_uid: task_1f333657aba5468aa74bd2435fcbbbcf
+title: "Audit p2p cleanup opportunities"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-cleanup-audit
+execution_log_path: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/p2p/project.md
+related_prd: []
+acceptance:
+  - "Repository health review identifies stale or cleanup-worthy p2p code or docs with evidence."
+handoff_to: []
+updated_at: 2026-06-13T13:21:29+08:00
+last_started_at: 2026-06-13T12:54:27+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/doc-governance-check.sh
+last_verified_at: 2026-06-13T13:21:25+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-13T13:21:28+08:00
