@@ -34,7 +34,7 @@
 - `scripts/{run-viewer-web.sh,agent-browser-lib.sh,build-game-launcher-bundle.sh,bundle-freshness-lib.sh}`：需要同步消费 canonical `viewer.js`。
 
 ## 状态
-- 更新日期: 2026-05-19
-- 当前状态: local_verification_passed
-- 当前任务: `viewer-web-regression-recheck`
-- 说明: 本专题已在本地完成模块拆分、canonical bundle flow 收口与回归验证；仍待 task closeout / commit / PR 流程。
+- 更新日期: 2026-06-13
+- 当前状态: partial_facade_split_rebaselined
+- 当前任务: `task_f77968a2f95a4b8fa34a542a62a0aec0`
+- 说明: 2026-06-13 复核发现 `legacy_core.js` 仍不是最终 facade；本轮先拆出 constants/routes、初始 state shape 与 auth/CBOR crypto helper 到独立模块，并删除 3 张未被当前 docs/scripts 引用的旧可视化证据图。剩余 control / semantic command / DOM rendering / bootstrap 组装仍留在 `legacy_core.js`，继续作为 viewer owner 债务追踪，不能再把 `viewer-web-legacy-core-module-split` 理解为完全 facade 化已完成。

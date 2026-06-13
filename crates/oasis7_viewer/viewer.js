@@ -2035,167 +2035,6 @@ function createViewerHostedAuthStateModule({
     resolveViewerAuthState: resolveViewerAuthState2
   };
 }
-const $RAW = /* @__PURE__ */ Symbol("store-raw"), $NODE = /* @__PURE__ */ Symbol("store-node"), $HAS = /* @__PURE__ */ Symbol("store-has"), $SELF = /* @__PURE__ */ Symbol("store-self");
-function isWrappable(obj) {
-  let proto;
-  return obj != null && typeof obj === "object" && (obj[$PROXY] || !(proto = Object.getPrototypeOf(obj)) || proto === Object.prototype || Array.isArray(obj));
-}
-function unwrap(item, set = /* @__PURE__ */ new Set()) {
-  let result, unwrapped, v, prop;
-  if (result = item != null && item[$RAW]) return result;
-  if (!isWrappable(item) || set.has(item)) return item;
-  if (Array.isArray(item)) {
-    if (Object.isFrozen(item)) item = item.slice(0);
-    else set.add(item);
-    for (let i = 0, l = item.length; i < l; i++) {
-      v = item[i];
-      if ((unwrapped = unwrap(v, set)) !== v) item[i] = unwrapped;
-    }
-  } else {
-    if (Object.isFrozen(item)) item = Object.assign({}, item);
-    else set.add(item);
-    const keys = Object.keys(item), desc = Object.getOwnPropertyDescriptors(item);
-    for (let i = 0, l = keys.length; i < l; i++) {
-      prop = keys[i];
-      if (desc[prop].get) continue;
-      v = item[prop];
-      if ((unwrapped = unwrap(v, set)) !== v) item[prop] = unwrapped;
-    }
-  }
-  return item;
-}
-function getNodes(target, symbol) {
-  let nodes = target[symbol];
-  if (!nodes) Object.defineProperty(target, symbol, {
-    value: nodes = /* @__PURE__ */ Object.create(null)
-  });
-  return nodes;
-}
-function getNode(nodes, property, value) {
-  if (nodes[property]) return nodes[property];
-  const [s, set] = createSignal(value, {
-    equals: false,
-    internal: true
-  });
-  s.$ = set;
-  return nodes[property] = s;
-}
-function trackSelf(target) {
-  getListener() && getNode(getNodes(target, $NODE), $SELF)();
-}
-function ownKeys(target) {
-  trackSelf(target);
-  return Reflect.ownKeys(target);
-}
-function setProperty(state2, property, value, deleting = false) {
-  if (!deleting && state2[property] === value) return;
-  const prev = state2[property], len = state2.length;
-  if (value === void 0) {
-    delete state2[property];
-    if (state2[$HAS] && state2[$HAS][property] && prev !== void 0) state2[$HAS][property].$();
-  } else {
-    state2[property] = value;
-    if (state2[$HAS] && state2[$HAS][property] && prev === void 0) state2[$HAS][property].$();
-  }
-  let nodes = getNodes(state2, $NODE), node;
-  if (node = getNode(nodes, property, prev)) node.$(() => value);
-  if (Array.isArray(state2) && state2.length !== len) {
-    for (let i = state2.length; i < len; i++) (node = nodes[i]) && node.$();
-    (node = getNode(nodes, "length", len)) && node.$(state2.length);
-  }
-  (node = nodes[$SELF]) && node.$();
-}
-function proxyDescriptor(target, property) {
-  const desc = Reflect.getOwnPropertyDescriptor(target, property);
-  if (!desc || desc.get || desc.set || !desc.configurable || property === $PROXY || property === $NODE) return desc;
-  delete desc.value;
-  delete desc.writable;
-  desc.get = () => target[$PROXY][property];
-  desc.set = (v) => target[$PROXY][property] = v;
-  return desc;
-}
-const proxyTraps = {
-  get(target, property, receiver) {
-    if (property === $RAW) return target;
-    if (property === $PROXY) return receiver;
-    if (property === $TRACK) {
-      trackSelf(target);
-      return receiver;
-    }
-    const nodes = getNodes(target, $NODE);
-    const tracked = nodes[property];
-    let value = tracked ? tracked() : target[property];
-    if (property === $NODE || property === $HAS || property === "__proto__") return value;
-    if (!tracked) {
-      const desc = Object.getOwnPropertyDescriptor(target, property);
-      const isFunction = typeof value === "function";
-      if (getListener() && (!isFunction || target.hasOwnProperty(property)) && !(desc && desc.get)) value = getNode(nodes, property, value)();
-      else if (value != null && isFunction && value === Array.prototype[property]) {
-        return (...args) => batch(() => Array.prototype[property].apply(receiver, args));
-      }
-    }
-    return isWrappable(value) ? wrap(value) : value;
-  },
-  has(target, property) {
-    if (property === $RAW || property === $PROXY || property === $TRACK || property === $NODE || property === $HAS || property === "__proto__") return true;
-    getListener() && getNode(getNodes(target, $HAS), property)();
-    return property in target;
-  },
-  set(target, property, value) {
-    batch(() => setProperty(target, property, unwrap(value)));
-    return true;
-  },
-  deleteProperty(target, property) {
-    batch(() => setProperty(target, property, void 0, true));
-    return true;
-  },
-  ownKeys,
-  getOwnPropertyDescriptor: proxyDescriptor
-};
-function wrap(value) {
-  let p = value[$PROXY];
-  if (!p) {
-    Object.defineProperty(value, $PROXY, {
-      value: p = new Proxy(value, proxyTraps)
-    });
-    const keys = Object.keys(value), desc = Object.getOwnPropertyDescriptors(value);
-    const proto = Object.getPrototypeOf(value);
-    const isClass = proto !== null && value !== null && typeof value === "object" && !Array.isArray(value) && proto !== Object.prototype;
-    if (isClass) {
-      let curProto = proto;
-      while (curProto != null) {
-        const descriptors = Object.getOwnPropertyDescriptors(curProto);
-        keys.push(...Object.keys(descriptors));
-        Object.assign(desc, descriptors);
-        curProto = Object.getPrototypeOf(curProto);
-      }
-    }
-    for (let i = 0, l = keys.length; i < l; i++) {
-      const prop = keys[i];
-      if (isClass && prop === "constructor") continue;
-      if (desc[prop].get) {
-        const get = desc[prop].get.bind(p);
-        Object.defineProperty(value, prop, {
-          get,
-          configurable: true
-        });
-      }
-      if (desc[prop].set) {
-        const og = desc[prop].set, set = (v) => batch(() => og.call(p, v));
-        Object.defineProperty(value, prop, {
-          set,
-          configurable: true
-        });
-      }
-    }
-  }
-  return p;
-}
-function createMutable(state2, options) {
-  const unwrappedStore = unwrap(state2 || {});
-  const wrappedStore = wrap(unwrappedStore);
-  return wrappedStore;
-}
 function createInitialHostedLoginState() {
   return {
     channel: "email",
@@ -2518,6 +2357,264 @@ const SOFTWARE_RENDERER_MARKERS = [
   "softpipe",
   "lavapipe"
 ];
+const $RAW = /* @__PURE__ */ Symbol("store-raw"), $NODE = /* @__PURE__ */ Symbol("store-node"), $HAS = /* @__PURE__ */ Symbol("store-has"), $SELF = /* @__PURE__ */ Symbol("store-self");
+function isWrappable(obj) {
+  let proto;
+  return obj != null && typeof obj === "object" && (obj[$PROXY] || !(proto = Object.getPrototypeOf(obj)) || proto === Object.prototype || Array.isArray(obj));
+}
+function unwrap(item, set = /* @__PURE__ */ new Set()) {
+  let result, unwrapped, v, prop;
+  if (result = item != null && item[$RAW]) return result;
+  if (!isWrappable(item) || set.has(item)) return item;
+  if (Array.isArray(item)) {
+    if (Object.isFrozen(item)) item = item.slice(0);
+    else set.add(item);
+    for (let i = 0, l = item.length; i < l; i++) {
+      v = item[i];
+      if ((unwrapped = unwrap(v, set)) !== v) item[i] = unwrapped;
+    }
+  } else {
+    if (Object.isFrozen(item)) item = Object.assign({}, item);
+    else set.add(item);
+    const keys = Object.keys(item), desc = Object.getOwnPropertyDescriptors(item);
+    for (let i = 0, l = keys.length; i < l; i++) {
+      prop = keys[i];
+      if (desc[prop].get) continue;
+      v = item[prop];
+      if ((unwrapped = unwrap(v, set)) !== v) item[prop] = unwrapped;
+    }
+  }
+  return item;
+}
+function getNodes(target, symbol) {
+  let nodes = target[symbol];
+  if (!nodes) Object.defineProperty(target, symbol, {
+    value: nodes = /* @__PURE__ */ Object.create(null)
+  });
+  return nodes;
+}
+function getNode(nodes, property, value) {
+  if (nodes[property]) return nodes[property];
+  const [s, set] = createSignal(value, {
+    equals: false,
+    internal: true
+  });
+  s.$ = set;
+  return nodes[property] = s;
+}
+function trackSelf(target) {
+  getListener() && getNode(getNodes(target, $NODE), $SELF)();
+}
+function ownKeys(target) {
+  trackSelf(target);
+  return Reflect.ownKeys(target);
+}
+function setProperty(state2, property, value, deleting = false) {
+  if (!deleting && state2[property] === value) return;
+  const prev = state2[property], len = state2.length;
+  if (value === void 0) {
+    delete state2[property];
+    if (state2[$HAS] && state2[$HAS][property] && prev !== void 0) state2[$HAS][property].$();
+  } else {
+    state2[property] = value;
+    if (state2[$HAS] && state2[$HAS][property] && prev === void 0) state2[$HAS][property].$();
+  }
+  let nodes = getNodes(state2, $NODE), node;
+  if (node = getNode(nodes, property, prev)) node.$(() => value);
+  if (Array.isArray(state2) && state2.length !== len) {
+    for (let i = state2.length; i < len; i++) (node = nodes[i]) && node.$();
+    (node = getNode(nodes, "length", len)) && node.$(state2.length);
+  }
+  (node = nodes[$SELF]) && node.$();
+}
+function proxyDescriptor(target, property) {
+  const desc = Reflect.getOwnPropertyDescriptor(target, property);
+  if (!desc || desc.get || desc.set || !desc.configurable || property === $PROXY || property === $NODE) return desc;
+  delete desc.value;
+  delete desc.writable;
+  desc.get = () => target[$PROXY][property];
+  desc.set = (v) => target[$PROXY][property] = v;
+  return desc;
+}
+const proxyTraps = {
+  get(target, property, receiver) {
+    if (property === $RAW) return target;
+    if (property === $PROXY) return receiver;
+    if (property === $TRACK) {
+      trackSelf(target);
+      return receiver;
+    }
+    const nodes = getNodes(target, $NODE);
+    const tracked = nodes[property];
+    let value = tracked ? tracked() : target[property];
+    if (property === $NODE || property === $HAS || property === "__proto__") return value;
+    if (!tracked) {
+      const desc = Object.getOwnPropertyDescriptor(target, property);
+      const isFunction = typeof value === "function";
+      if (getListener() && (!isFunction || target.hasOwnProperty(property)) && !(desc && desc.get)) value = getNode(nodes, property, value)();
+      else if (value != null && isFunction && value === Array.prototype[property]) {
+        return (...args) => batch(() => Array.prototype[property].apply(receiver, args));
+      }
+    }
+    return isWrappable(value) ? wrap(value) : value;
+  },
+  has(target, property) {
+    if (property === $RAW || property === $PROXY || property === $TRACK || property === $NODE || property === $HAS || property === "__proto__") return true;
+    getListener() && getNode(getNodes(target, $HAS), property)();
+    return property in target;
+  },
+  set(target, property, value) {
+    batch(() => setProperty(target, property, unwrap(value)));
+    return true;
+  },
+  deleteProperty(target, property) {
+    batch(() => setProperty(target, property, void 0, true));
+    return true;
+  },
+  ownKeys,
+  getOwnPropertyDescriptor: proxyDescriptor
+};
+function wrap(value) {
+  let p = value[$PROXY];
+  if (!p) {
+    Object.defineProperty(value, $PROXY, {
+      value: p = new Proxy(value, proxyTraps)
+    });
+    const keys = Object.keys(value), desc = Object.getOwnPropertyDescriptors(value);
+    const proto = Object.getPrototypeOf(value);
+    const isClass = proto !== null && value !== null && typeof value === "object" && !Array.isArray(value) && proto !== Object.prototype;
+    if (isClass) {
+      let curProto = proto;
+      while (curProto != null) {
+        const descriptors = Object.getOwnPropertyDescriptors(curProto);
+        keys.push(...Object.keys(descriptors));
+        Object.assign(desc, descriptors);
+        curProto = Object.getPrototypeOf(curProto);
+      }
+    }
+    for (let i = 0, l = keys.length; i < l; i++) {
+      const prop = keys[i];
+      if (isClass && prop === "constructor") continue;
+      if (desc[prop].get) {
+        const get = desc[prop].get.bind(p);
+        Object.defineProperty(value, prop, {
+          get,
+          configurable: true
+        });
+      }
+      if (desc[prop].set) {
+        const og = desc[prop].set, set = (v) => batch(() => og.call(p, v));
+        Object.defineProperty(value, prop, {
+          set,
+          configurable: true
+        });
+      }
+    }
+  }
+  return p;
+}
+function createMutable(state2, options) {
+  const unwrappedStore = unwrap(state2 || {});
+  const wrappedStore = wrap(unwrappedStore);
+  return wrappedStore;
+}
+function createSoftwareSafeState() {
+  return createMutable({
+    uiLocale: "en",
+    promptOverridesVisible: false,
+    connectionStatus: "connecting",
+    logicalTime: 0,
+    eventSeq: 0,
+    tick: 0,
+    selectedKind: null,
+    selectedId: null,
+    errorCount: 0,
+    lastError: null,
+    eventCount: 0,
+    traceCount: 0,
+    cameraMode: "viewer",
+    cameraRadius: 0,
+    cameraOrthoScale: 0,
+    renderMode: VIEWER_RENDER_MODE,
+    rendererClass: "none",
+    viewerReason: null,
+    renderer: null,
+    vendor: null,
+    webglVersion: null,
+    pixelWorldRuntimeStatus: "detached",
+    pixelWorldRuntimeSource: "detached",
+    pixelWorldRuntimeModuleUrl: null,
+    pixelWorldCamera: null,
+    pixelWorldFatal: null,
+    controlProfile: "playback",
+    worldId: null,
+    server: null,
+    wsUrl: null,
+    lastControlFeedback: null,
+    lastPromptFeedback: null,
+    lastChatFeedback: null,
+    lastGameplayActionFeedback: null,
+    snapshot: null,
+    metrics: null,
+    hostedAccess: null,
+    hostedAdmission: null,
+    recentEvents: [],
+    recentDecisionTraces: [],
+    chatHistory: [],
+    selectedObject: null,
+    auth: {
+      available: false,
+      hostedAccountId: null,
+      playerId: null,
+      loginChannel: null,
+      maskedLoginHint: null,
+      deviceSessionId: null,
+      publicKey: null,
+      privateKey: null,
+      releaseToken: null,
+      error: null,
+      revokeReason: null,
+      revokedBy: null,
+      source: "guest_only",
+      registrationStatus: "guest",
+      sessionEpoch: null,
+      issuedAtUnixMs: null,
+      recoveryErrorCode: null,
+      recoveryErrorMessage: null,
+      issueInFlight: false,
+      syncInFlight: false,
+      runtimeStatus: "guest",
+      boundAgentId: null,
+      pendingRequestedAgentId: null,
+      pendingForceRebind: false,
+      rebindNotice: null
+    },
+    hostedLogin: createInitialHostedLoginState(),
+    promptDraft: {
+      agentId: null,
+      currentVersion: 0,
+      rollbackTargetVersion: 0,
+      updatedBy: "",
+      updatedAtTick: 0,
+      systemPrompt: "",
+      shortTermGoal: "",
+      longTermGoal: "",
+      dirty: false
+    },
+    chatDraft: {
+      agentId: null,
+      message: "",
+      dirty: false
+    },
+    strongAuth: {
+      approvalCode: "",
+      lastGrantActionId: null,
+      lastGrantExpiresAtUnixMs: null,
+      lastGrantError: null
+    },
+    selectedSearch: ""
+  });
+}
 const ED25519_PKCS8_PREFIX = new Uint8Array([
   48,
   46,
@@ -2537,101 +2634,168 @@ const ED25519_PKCS8_PREFIX = new Uint8Array([
   32
 ]);
 const textEncoder = new TextEncoder();
-const state = createMutable({
-  uiLocale: "en",
-  promptOverridesVisible: false,
-  connectionStatus: "connecting",
-  logicalTime: 0,
-  eventSeq: 0,
-  tick: 0,
-  selectedKind: null,
-  selectedId: null,
-  errorCount: 0,
-  lastError: null,
-  eventCount: 0,
-  traceCount: 0,
-  cameraMode: "viewer",
-  cameraRadius: 0,
-  cameraOrthoScale: 0,
-  renderMode: VIEWER_RENDER_MODE,
-  rendererClass: "none",
-  viewerReason: null,
-  renderer: null,
-  vendor: null,
-  webglVersion: null,
-  pixelWorldRuntimeStatus: "detached",
-  pixelWorldRuntimeSource: "detached",
-  pixelWorldRuntimeModuleUrl: null,
-  pixelWorldCamera: null,
-  pixelWorldFatal: null,
-  controlProfile: "playback",
-  worldId: null,
-  server: null,
-  wsUrl: null,
-  lastControlFeedback: null,
-  lastPromptFeedback: null,
-  lastChatFeedback: null,
-  lastGameplayActionFeedback: null,
-  snapshot: null,
-  metrics: null,
-  hostedAccess: null,
-  hostedAdmission: null,
-  recentEvents: [],
-  recentDecisionTraces: [],
-  chatHistory: [],
-  selectedObject: null,
-  auth: {
-    available: false,
-    hostedAccountId: null,
-    playerId: null,
-    loginChannel: null,
-    maskedLoginHint: null,
-    deviceSessionId: null,
-    publicKey: null,
-    privateKey: null,
-    releaseToken: null,
-    error: null,
-    revokeReason: null,
-    revokedBy: null,
-    source: "guest_only",
-    registrationStatus: "guest",
-    sessionEpoch: null,
-    issuedAtUnixMs: null,
-    recoveryErrorCode: null,
-    recoveryErrorMessage: null,
-    issueInFlight: false,
-    syncInFlight: false,
-    runtimeStatus: "guest",
-    boundAgentId: null,
-    pendingRequestedAgentId: null,
-    pendingForceRebind: false,
-    rebindNotice: null
-  },
-  hostedLogin: createInitialHostedLoginState(),
-  promptDraft: {
-    agentId: null,
-    currentVersion: 0,
-    rollbackTargetVersion: 0,
-    updatedBy: "",
-    updatedAtTick: 0,
-    systemPrompt: "",
-    shortTermGoal: "",
-    longTermGoal: "",
-    dirty: false
-  },
-  chatDraft: {
-    agentId: null,
-    message: "",
-    dirty: false
-  },
-  strongAuth: {
-    approvalCode: "",
-    lastGrantActionId: null,
-    lastGrantExpiresAtUnixMs: null,
-    lastGrantError: null
-  },
-  selectedSearch: ""
-});
+const authKeyCache = /* @__PURE__ */ new Map();
+function cborHeader(majorType, length) {
+  if (!Number.isInteger(length) || length < 0) {
+    throw new Error(`invalid CBOR length: ${length}`);
+  }
+  if (length < 24) {
+    return Uint8Array.of(majorType << 5 | length);
+  }
+  if (length < 256) {
+    return Uint8Array.of(majorType << 5 | 24, length);
+  }
+  if (length < 65536) {
+    return Uint8Array.of(majorType << 5 | 25, length >> 8 & 255, length & 255);
+  }
+  if (length <= 4294967295) {
+    return Uint8Array.of(
+      majorType << 5 | 26,
+      length >>> 24 & 255,
+      length >>> 16 & 255,
+      length >>> 8 & 255,
+      length & 255
+    );
+  }
+  if (length <= Number.MAX_SAFE_INTEGER) {
+    const value = BigInt(length);
+    return Uint8Array.of(
+      majorType << 5 | 27,
+      Number(value >> 56n & 0xffn),
+      Number(value >> 48n & 0xffn),
+      Number(value >> 40n & 0xffn),
+      Number(value >> 32n & 0xffn),
+      Number(value >> 24n & 0xffn),
+      Number(value >> 16n & 0xffn),
+      Number(value >> 8n & 0xffn),
+      Number(value & 0xffn)
+    );
+  }
+  throw new Error("CBOR length exceeds Number.MAX_SAFE_INTEGER");
+}
+function concatBytes(...parts) {
+  const totalLength = parts.reduce((sum, bytes) => sum + bytes.length, 0);
+  const out = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const bytes of parts) {
+    out.set(bytes, offset);
+    offset += bytes.length;
+  }
+  return out;
+}
+function cborEncode(value) {
+  if (value === null) {
+    return Uint8Array.of(246);
+  }
+  if (value === false) {
+    return Uint8Array.of(244);
+  }
+  if (value === true) {
+    return Uint8Array.of(245);
+  }
+  if (typeof value === "number") {
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`unsupported CBOR number: ${value}`);
+    }
+    return cborHeader(0, value);
+  }
+  if (typeof value === "string") {
+    const bytes = textEncoder.encode(value);
+    return concatBytes(cborHeader(3, bytes.length), bytes);
+  }
+  if (Array.isArray(value)) {
+    return concatBytes(cborHeader(4, value.length), ...value.map((entry) => cborEncode(entry)));
+  }
+  if (value instanceof Uint8Array) {
+    return concatBytes(cborHeader(2, value.length), value);
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== void 0);
+    const encoded = [cborHeader(5, entries.length)];
+    for (const [key, entryValue] of entries) {
+      encoded.push(cborEncode(String(key)));
+      encoded.push(cborEncode(entryValue));
+    }
+    return concatBytes(...encoded);
+  }
+  throw new Error(`unsupported CBOR type: ${typeof value}`);
+}
+function hexToBytes(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (!value || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) {
+    throw new Error("invalid hex payload");
+  }
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
+}
+function bytesToHex(bytes) {
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+function bytesStartWith(bytes, prefix) {
+  if (bytes.length < prefix.length) {
+    return false;
+  }
+  for (let index = 0; index < prefix.length; index += 1) {
+    if (bytes[index] !== prefix[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+async function importEd25519SigningKey(privateKeyHex) {
+  if (!window.crypto?.subtle) {
+    throw new Error("Web Crypto subtle API is unavailable");
+  }
+  if (!authKeyCache.has(privateKeyHex)) {
+    const rawPrivateKey = hexToBytes(privateKeyHex);
+    if (rawPrivateKey.length !== 32) {
+      throw new Error(`viewer auth private key length mismatch: expected 32 bytes, got ${rawPrivateKey.length}`);
+    }
+    const pkcs8 = concatBytes(ED25519_PKCS8_PREFIX, rawPrivateKey);
+    authKeyCache.set(
+      privateKeyHex,
+      window.crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"])
+    );
+  }
+  return authKeyCache.get(privateKeyHex);
+}
+async function signAuthPayload(signingPayloadBytes, auth) {
+  const key = await importEd25519SigningKey(auth.privateKey);
+  const signature = await window.crypto.subtle.sign({ name: "Ed25519" }, key, signingPayloadBytes);
+  return `${VIEWER_AUTH_SIGNATURE_PREFIX}${bytesToHex(new Uint8Array(signature))}`;
+}
+async function generateEphemeralEd25519Keypair() {
+  if (!window.crypto?.subtle) {
+    throw new Error("Web Crypto subtle API is unavailable");
+  }
+  const keyPair = await window.crypto.subtle.generateKey(
+    { name: "Ed25519" },
+    true,
+    ["sign", "verify"]
+  );
+  const pkcs8 = new Uint8Array(await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
+  if (!bytesStartWith(pkcs8, ED25519_PKCS8_PREFIX) || pkcs8.length !== ED25519_PKCS8_PREFIX.length + 32) {
+    throw new Error("unexpected Ed25519 pkcs8 encoding from Web Crypto");
+  }
+  const rawPublicKey = new Uint8Array(await window.crypto.subtle.exportKey("raw", keyPair.publicKey));
+  if (rawPublicKey.length !== 32) {
+    throw new Error(`unexpected Ed25519 public key length: ${rawPublicKey.length}`);
+  }
+  return {
+    publicKey: bytesToHex(rawPublicKey),
+    privateKey: bytesToHex(pkcs8.slice(ED25519_PKCS8_PREFIX.length))
+  };
+}
+function buildAuthEnvelope(payload) {
+  return cborEncode({
+    version: 1,
+    payload
+  });
+}
+const state = createSoftwareSafeState();
 let socket = null;
 let reconnectTimer = null;
 let initialSnapshotRequested = false;
@@ -2641,7 +2805,6 @@ let authNonceCounter = 0;
 let semanticSendLoop = null;
 const pendingControlFeedback = /* @__PURE__ */ new Map();
 const pendingSemanticCommands = [];
-const authKeyCache = /* @__PURE__ */ new Map();
 let pendingSessionRegisterWaiter = null;
 let renderHook = () => {
 };
@@ -3413,166 +3576,6 @@ function handleControlCompletionAck(ack) {
   }
   state.lastControlFeedback = feedback;
   pendingControlFeedback.delete(feedback.requestId);
-}
-function cborHeader(majorType, length) {
-  if (!Number.isInteger(length) || length < 0) {
-    throw new Error(`invalid CBOR length: ${length}`);
-  }
-  if (length < 24) {
-    return Uint8Array.of(majorType << 5 | length);
-  }
-  if (length < 256) {
-    return Uint8Array.of(majorType << 5 | 24, length);
-  }
-  if (length < 65536) {
-    return Uint8Array.of(majorType << 5 | 25, length >> 8 & 255, length & 255);
-  }
-  if (length <= 4294967295) {
-    return Uint8Array.of(
-      majorType << 5 | 26,
-      length >>> 24 & 255,
-      length >>> 16 & 255,
-      length >>> 8 & 255,
-      length & 255
-    );
-  }
-  if (length <= Number.MAX_SAFE_INTEGER) {
-    const value = BigInt(length);
-    return Uint8Array.of(
-      majorType << 5 | 27,
-      Number(value >> 56n & 0xffn),
-      Number(value >> 48n & 0xffn),
-      Number(value >> 40n & 0xffn),
-      Number(value >> 32n & 0xffn),
-      Number(value >> 24n & 0xffn),
-      Number(value >> 16n & 0xffn),
-      Number(value >> 8n & 0xffn),
-      Number(value & 0xffn)
-    );
-  }
-  throw new Error("CBOR length exceeds Number.MAX_SAFE_INTEGER");
-}
-function concatBytes(...parts) {
-  const totalLength = parts.reduce((sum, bytes) => sum + bytes.length, 0);
-  const out = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const bytes of parts) {
-    out.set(bytes, offset);
-    offset += bytes.length;
-  }
-  return out;
-}
-function cborEncode(value) {
-  if (value === null) {
-    return Uint8Array.of(246);
-  }
-  if (value === false) {
-    return Uint8Array.of(244);
-  }
-  if (value === true) {
-    return Uint8Array.of(245);
-  }
-  if (typeof value === "number") {
-    if (!Number.isInteger(value) || value < 0) {
-      throw new Error(`unsupported CBOR number: ${value}`);
-    }
-    return cborHeader(0, value);
-  }
-  if (typeof value === "string") {
-    const bytes = textEncoder.encode(value);
-    return concatBytes(cborHeader(3, bytes.length), bytes);
-  }
-  if (Array.isArray(value)) {
-    return concatBytes(cborHeader(4, value.length), ...value.map((entry) => cborEncode(entry)));
-  }
-  if (value instanceof Uint8Array) {
-    return concatBytes(cborHeader(2, value.length), value);
-  }
-  if (typeof value === "object") {
-    const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== void 0);
-    const encoded = [cborHeader(5, entries.length)];
-    for (const [key, entryValue] of entries) {
-      encoded.push(cborEncode(String(key)));
-      encoded.push(cborEncode(entryValue));
-    }
-    return concatBytes(...encoded);
-  }
-  throw new Error(`unsupported CBOR type: ${typeof value}`);
-}
-function hexToBytes(raw) {
-  const value = String(raw || "").trim().toLowerCase();
-  if (!value || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) {
-    throw new Error("invalid hex payload");
-  }
-  const bytes = new Uint8Array(value.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
-  }
-  return bytes;
-}
-function bytesToHex(bytes) {
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-}
-function bytesStartWith(bytes, prefix) {
-  if (bytes.length < prefix.length) {
-    return false;
-  }
-  for (let index = 0; index < prefix.length; index += 1) {
-    if (bytes[index] !== prefix[index]) {
-      return false;
-    }
-  }
-  return true;
-}
-async function importEd25519SigningKey(privateKeyHex) {
-  if (!window.crypto?.subtle) {
-    throw new Error("Web Crypto subtle API is unavailable");
-  }
-  if (!authKeyCache.has(privateKeyHex)) {
-    const rawPrivateKey = hexToBytes(privateKeyHex);
-    if (rawPrivateKey.length !== 32) {
-      throw new Error(`viewer auth private key length mismatch: expected 32 bytes, got ${rawPrivateKey.length}`);
-    }
-    const pkcs8 = concatBytes(ED25519_PKCS8_PREFIX, rawPrivateKey);
-    authKeyCache.set(
-      privateKeyHex,
-      window.crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"])
-    );
-  }
-  return authKeyCache.get(privateKeyHex);
-}
-async function signAuthPayload(signingPayloadBytes, auth) {
-  const key = await importEd25519SigningKey(auth.privateKey);
-  const signature = await window.crypto.subtle.sign({ name: "Ed25519" }, key, signingPayloadBytes);
-  return `${VIEWER_AUTH_SIGNATURE_PREFIX}${bytesToHex(new Uint8Array(signature))}`;
-}
-async function generateEphemeralEd25519Keypair() {
-  if (!window.crypto?.subtle) {
-    throw new Error("Web Crypto subtle API is unavailable");
-  }
-  const keyPair = await window.crypto.subtle.generateKey(
-    { name: "Ed25519" },
-    true,
-    ["sign", "verify"]
-  );
-  const pkcs8 = new Uint8Array(await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
-  if (!bytesStartWith(pkcs8, ED25519_PKCS8_PREFIX) || pkcs8.length !== ED25519_PKCS8_PREFIX.length + 32) {
-    throw new Error("unexpected Ed25519 pkcs8 encoding from Web Crypto");
-  }
-  const rawPublicKey = new Uint8Array(await window.crypto.subtle.exportKey("raw", keyPair.publicKey));
-  if (rawPublicKey.length !== 32) {
-    throw new Error(`unexpected Ed25519 public key length: ${rawPublicKey.length}`);
-  }
-  return {
-    publicKey: bytesToHex(rawPublicKey),
-    privateKey: bytesToHex(pkcs8.slice(ED25519_PKCS8_PREFIX.length))
-  };
-}
-function buildAuthEnvelope(payload) {
-  return cborEncode({
-    version: 1,
-    payload
-  });
 }
 async function buildAgentChatAuthProof(request, auth) {
   const nonce = nextAuthNonce();
