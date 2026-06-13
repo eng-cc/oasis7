@@ -111,6 +111,8 @@ const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
 const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_peers";
 const LIFECYCLE_EVENT_ERROR_COOLDOWN_MS: i64 = 5_000;
 
+type CommandResponseSender<T> = std::sync::mpsc::Sender<Result<T, WorldError>>;
+
 #[derive(Clone)]
 pub struct Libp2pNetwork {
     peer_id: PeerId,

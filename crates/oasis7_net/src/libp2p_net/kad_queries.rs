@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use futures::channel::oneshot;
 use libp2p::kad;
 use libp2p::PeerId;
 
@@ -11,37 +10,38 @@ use oasis7_proto::distributed_dht::{
 };
 
 use super::peer_record::decode_peer_record;
+use super::CommandResponseSender;
 
 pub(super) enum PendingDhtQuery {
     PublishProvider {
-        response: Option<oneshot::Sender<Result<(), WorldError>>>,
+        response: Option<CommandResponseSender<()>>,
     },
     GetProviders {
-        response: Option<oneshot::Sender<Result<Vec<ProviderRecord>, WorldError>>>,
+        response: Option<CommandResponseSender<Vec<ProviderRecord>>>,
         providers: HashSet<PeerId>,
         error: Option<WorldError>,
     },
     PutWorldHead {
-        response: Option<oneshot::Sender<Result<(), WorldError>>>,
+        response: Option<CommandResponseSender<()>>,
     },
     GetWorldHead {
-        response: Option<oneshot::Sender<Result<Option<WorldHeadAnnounce>, WorldError>>>,
+        response: Option<CommandResponseSender<Option<WorldHeadAnnounce>>>,
         head: Option<WorldHeadAnnounce>,
         error: Option<WorldError>,
     },
     PutMembershipDirectory {
-        response: Option<oneshot::Sender<Result<(), WorldError>>>,
+        response: Option<CommandResponseSender<()>>,
     },
     GetMembershipDirectory {
-        response: Option<oneshot::Sender<Result<Option<MembershipDirectorySnapshot>, WorldError>>>,
+        response: Option<CommandResponseSender<Option<MembershipDirectorySnapshot>>>,
         snapshot: Option<MembershipDirectorySnapshot>,
         error: Option<WorldError>,
     },
     PutPeerRecord {
-        response: Option<oneshot::Sender<Result<(), WorldError>>>,
+        response: Option<CommandResponseSender<()>>,
     },
     GetPeerRecord {
-        response: Option<oneshot::Sender<Result<Option<SignedPeerRecord>, WorldError>>>,
+        response: Option<CommandResponseSender<Option<SignedPeerRecord>>>,
         record: Option<SignedPeerRecord>,
         error: Option<WorldError>,
     },

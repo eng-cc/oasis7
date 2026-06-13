@@ -10,7 +10,6 @@ use super::transport_paths::{
 };
 use super::utils::push_bounded_vec;
 use super::*;
-use futures::channel::oneshot;
 use libp2p::kad::RecordKey;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::distributed_net::DistributedNetwork as _;
@@ -68,7 +67,7 @@ fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool
 
 #[test]
 fn dht_get_providers_collects_results() {
-    let (sender, receiver) = oneshot::channel();
+    let (sender, receiver) = std::sync::mpsc::channel();
     let mut pending = PendingDhtQuery::GetProviders {
         response: Some(sender),
         providers: HashSet::new(),
@@ -83,8 +82,9 @@ fn dht_get_providers_collects_results() {
     let result =
         kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { key, providers }));
     handle_dht_progress(&mut pending, result, true);
-    let records = futures::executor::block_on(receiver)
-        .expect("oneshot")
+    let records = receiver
+        .recv()
+        .expect("command response")
         .expect("get providers");
     let actual: HashSet<String> = records
         .into_iter()
@@ -132,7 +132,7 @@ fn dht_get_world_head_decodes_record() {
         expires: None,
     };
     let peer_record = kad::PeerRecord { peer: None, record };
-    let (sender, receiver) = oneshot::channel();
+    let (sender, receiver) = std::sync::mpsc::channel();
     let mut pending = PendingDhtQuery::GetWorldHead {
         response: Some(sender),
         head: None,
@@ -140,8 +140,9 @@ fn dht_get_world_head_decodes_record() {
     };
     let result = kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(peer_record)));
     handle_dht_progress(&mut pending, result, true);
-    let loaded = futures::executor::block_on(receiver)
-        .expect("oneshot")
+    let loaded = receiver
+        .recv()
+        .expect("command response")
         .expect("get head");
     assert_eq!(loaded, Some(head));
 }
@@ -167,7 +168,7 @@ fn dht_get_membership_directory_decodes_record() {
         expires: None,
     };
     let peer_record = kad::PeerRecord { peer: None, record };
-    let (sender, receiver) = oneshot::channel();
+    let (sender, receiver) = std::sync::mpsc::channel();
     let mut pending = PendingDhtQuery::GetMembershipDirectory {
         response: Some(sender),
         snapshot: None,
@@ -176,8 +177,9 @@ fn dht_get_membership_directory_decodes_record() {
     let result = kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(peer_record)));
     handle_dht_progress(&mut pending, result, true);
 
-    let loaded = futures::executor::block_on(receiver)
-        .expect("oneshot")
+    let loaded = receiver
+        .recv()
+        .expect("command response")
         .expect("get membership");
     assert_eq!(loaded, Some(snapshot));
 }
@@ -216,7 +218,7 @@ fn dht_get_peer_record_decodes_and_verifies_record() {
         expires: None,
     };
     let peer_record = kad::PeerRecord { peer: None, record };
-    let (sender, receiver) = oneshot::channel();
+    let (sender, receiver) = std::sync::mpsc::channel();
     let mut pending = PendingDhtQuery::GetPeerRecord {
         response: Some(sender),
         record: None,
@@ -225,8 +227,9 @@ fn dht_get_peer_record_decodes_and_verifies_record() {
     let result = kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(peer_record)));
     handle_dht_progress(&mut pending, result, true);
 
-    let loaded = futures::executor::block_on(receiver)
-        .expect("oneshot")
+    let loaded = receiver
+        .recv()
+        .expect("command response")
         .expect("get peer record");
     assert_eq!(loaded, Some(signed));
 }
@@ -703,7 +706,7 @@ fn request_uses_swarm_connected_peers_when_snapshot_is_empty() {
 fn try_send_command_reports_queue_disconnect() {
     let (sender, receiver) = mpsc::channel(1);
     drop(receiver);
-    let (response, _response_rx) = oneshot::channel();
+    let (response, _response_rx) = std::sync::mpsc::channel();
     let err = try_send_command(
         &sender,
         Command::Subscribe {

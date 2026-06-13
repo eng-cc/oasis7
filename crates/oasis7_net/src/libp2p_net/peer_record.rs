@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use futures::channel::oneshot;
 use libp2p::identity::Keypair;
 use libp2p::kad::{self, Quorum, RecordKey};
 use libp2p::multiaddr::Protocol;
@@ -17,7 +16,7 @@ use super::kad_queries::PendingDhtQuery;
 use super::reachability::{
     is_loopback_direct_addr, is_public_direct_addr, snapshot_clone, Libp2pReachabilitySnapshot,
 };
-use super::Behaviour;
+use super::{Behaviour, CommandResponseSender};
 
 pub(super) fn publish_configured_peer_record(
     swarm: &mut Swarm<Behaviour>,
@@ -27,7 +26,7 @@ pub(super) fn publish_configured_peer_record(
     listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
     reachability: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
     allow_loopback_external_addrs_for_testing: bool,
-    response: Option<oneshot::Sender<Result<(), WorldError>>>,
+    response: Option<CommandResponseSender<()>>,
 ) -> Result<SignedPeerRecord, WorldError> {
     let signed = build_configured_peer_record(
         keypair,

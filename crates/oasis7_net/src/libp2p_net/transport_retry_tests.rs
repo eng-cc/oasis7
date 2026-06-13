@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use futures::channel::oneshot;
 use libp2p::identity::Keypair;
 use libp2p::PeerId;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerRecord};
@@ -111,7 +110,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
         true,
         super::wire_bytes::init_shared_wire_byte_counters(),
     );
-    let (sender, receiver) = oneshot::channel();
+    let (sender, receiver) = std::sync::mpsc::channel();
     let mut subscriptions = HashSet::new();
     let mut topic_map = HashMap::new();
     let mut topic_inbox_limits = HashMap::new();
@@ -185,7 +184,8 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
     );
     assert!(matches!(outcome, super::CommandOutcome::Continue));
 
-    let err = futures::executor::block_on(receiver)
+    let err = receiver
+        .recv()
         .expect("request response")
         .expect_err("provider subset mismatch must fail");
     assert!(matches!(
