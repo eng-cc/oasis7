@@ -444,6 +444,26 @@
     - `git diff --check`
     - `bash -n scripts/run-local-letai-game-test.sh scripts/run-launcher-stack.sh scripts/run-game-test-ab.sh`
     - `./scripts/pm/lint.sh`
+- [x] local-letai-rust-bridge-probe (PRD-SCRIPTS-001/002) [test_tier_required]: 将本地 LetAI game-test 默认 probe 合并到 Rust provider bridge 链路，保留 Python chat-completions probe 作为 legacy diagnostics，并补齐安全诊断、重试、route JSON、platform topup parity 与 operator docs。 Trace: .pm/tasks/task_940ae89662ba4ecf8e6b21cba458e6e1.yaml
+  - 产物文件:
+    - `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`
+    - `crates/oasis7/src/bin/oasis7_provider_local_bridge/tests.rs`
+    - `scripts/run-local-letai-game-test.sh`
+    - `scripts/run-local-letai-provider-bridge.sh`
+    - `scripts/check-letai-chat-completions.sh`
+    - `scripts/provider-remote-https/letai_provider_cli.py`
+    - `scripts/local-letai-provider-bridge.test.sh`
+    - `doc/scripts/README.md`
+    - `testing-manual.md`
+    - `site/skills/oasis7.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo fmt --check`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_provider_local_bridge`
+    - `bash -n scripts/run-local-letai-provider-bridge.sh scripts/run-local-letai-game-test.sh scripts/check-letai-chat-completions.sh`
+    - `./scripts/local-letai-provider-bridge.test.sh`
+    - `./scripts/provider-remote-https/letai-provider-cli.test.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`

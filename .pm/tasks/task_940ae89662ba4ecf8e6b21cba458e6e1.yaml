@@ -9,7 +9,7 @@ source_signal: null
 source_refs:
   - testing-manual.md
 doc_refs:
-  - project.md
+  - doc/scripts/project.md
   - doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md
 related_prd: []
 acceptance:
