@@ -19,6 +19,7 @@
 - [x] TASK-P2P-014 (PRD-P2P-010) [test_tier_required]: 移除 `oasis7_viewer_live --release-config/--node-*` 控制面参数，收敛为纯观察服务并完成文档/示例/测试闭环。
 - [x] TASK-P2P-015 (PRD-P2P-011) [test_tier_required]: 删除 `oasis7_viewer_live` legacy 参数兼容层（含 `--runtime-world`）与未接入生产入口的旧 CLI 解析代码，统一单一入口并完成文档/测试收口。
 - [x] TASK-P2P-016 (PRD-P2P-012) [test_tier_required]: 替换历史文档中 `oasis7_viewer_live` 已删除源码路径引用，统一到当前源码布局并完成门禁收口。
+- [x] p2p-prd-review-checklist-historical-snapshot (PRD-P2P-001) [test_tier_required]: 将 `doc/engineering/prd-review/checklists/active-p2p.md` 明确为 2026-03 历史审计快照，保留历史审计路径兼容性并指向当前 p2p README / PRD index / project 真值。 Trace: .pm/tasks/task_6a585b77aab9437ea4489e5df2b408ab.yaml
 
 ### TASK-P2P-002 执行拆解（PRD-P2P-001/002）
 - [x] TASK-P2P-002-A [test_tier_required]: 在 `doc/p2p/prd.md` 补齐网络/共识/DistFS 三线联合验收清单（基线命令、门禁命令、阻断条件、证据产物）。
