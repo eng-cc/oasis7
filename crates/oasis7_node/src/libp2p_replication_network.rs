@@ -145,6 +145,7 @@ impl Libp2pReplicationNetwork {
     pub fn new(config: Libp2pReplicationNetworkConfig) -> Self {
         let bootstrap_addrs_by_peer_id =
             bootstrap_peer_addrs_by_peer_id(config.bootstrap_peers.as_slice());
+        let request_response_timeout = request_response_timeout_for_config(&config);
         let inner = Libp2pNetwork::new(Libp2pNetworkConfig {
             keypair: config.keypair,
             peer_record: config.peer_record,
@@ -156,9 +157,7 @@ impl Libp2pReplicationNetwork {
             discovery_query_cooldown_ms: config.discovery_query_cooldown_ms,
             enable_autonat: config.enable_autonat,
             peer_manager_policy: config.peer_manager_policy,
-            request_response_timeout: config
-                .request_retry_budget
-                .max(config.fetch_blob_request_timeout),
+            request_response_timeout,
             ..Libp2pNetworkConfig::default()
         });
 
@@ -661,6 +660,13 @@ impl Libp2pReplicationNetwork {
         }
         self.request_retry_budget
     }
+}
+
+fn request_response_timeout_for_config(config: &Libp2pReplicationNetworkConfig) -> Duration {
+    config
+        .request_retry_budget
+        .max(config.fetch_blob_request_retry_budget)
+        .max(Duration::from_millis(FETCH_COMMIT_REQUEST_RETRY_BUDGET_MS))
 }
 
 fn bootstrap_peer_addrs_by_peer_id(addrs: &[Multiaddr]) -> HashMap<PeerId, Multiaddr> {
