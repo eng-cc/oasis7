@@ -38,6 +38,100 @@ abs_path() {
   python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$1"
 }
 
+parse_node_id() {
+  local start_script=$1
+  python3 - "$start_script" <<'PY'
+from __future__ import annotations
+
+import shlex
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    raise SystemExit(0)
+
+try:
+    tokens = shlex.split(path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+
+for index, token in enumerate(tokens):
+    if token == "--node-id" and index + 1 < len(tokens):
+        print(tokens[index + 1])
+        break
+PY
+}
+
+migrate_legacy_replication_root() {
+  local root=$1
+  local node_id=$2
+  [[ -n "$node_id" ]] || return 0
+
+  local legacy_root="$root/output/node-distfs/$node_id"
+  local replication_root="$root/data/replication-root"
+  [[ -d "$legacy_root" ]] || return 0
+  [[ -d "$replication_root" ]] || mkdir -p "$replication_root"
+
+  python3 - "$legacy_root" "$replication_root" "$node_id" <<'PY'
+from __future__ import annotations
+
+import shutil
+import sys
+from pathlib import Path
+
+legacy_root = Path(sys.argv[1])
+replication_root = Path(sys.argv[2])
+node_id = sys.argv[3]
+
+copied_commits = 0
+copied_blobs = 0
+copied_metadata = 0
+
+def copy_missing_tree(src_dir: Path, dst_dir: Path, pattern: str) -> int:
+    copied = 0
+    if not src_dir.is_dir():
+        return copied
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    for src in src_dir.glob(pattern):
+        if not src.is_file():
+            continue
+        dst = dst_dir / src.name
+        if dst.exists():
+            continue
+        shutil.copy2(src, dst)
+        copied += 1
+    return copied
+
+copied_commits += copy_missing_tree(
+    legacy_root / "replication_commit_messages",
+    replication_root / "replication_commit_messages",
+    "*.json",
+)
+copied_blobs += copy_missing_tree(
+    legacy_root / "store" / "blobs",
+    replication_root / "store" / "blobs",
+    "*.blob",
+)
+
+for name in [
+    "replication_commit_messages_cold_index.json",
+    "replication_remote_guards.json",
+    f"replication_writer_state_{node_id}.json",
+]:
+    src = legacy_root / name
+    dst = replication_root / name
+    if src.is_file() and not dst.exists():
+        shutil.copy2(src, dst)
+        copied_metadata += 1
+
+print(
+    "legacy_replication_migration="
+    f"node_id={node_id} commits={copied_commits} blobs={copied_blobs} metadata={copied_metadata}"
+)
+PY
+}
+
 node_root=""
 bundle_tar=""
 package_version=""
@@ -104,6 +198,7 @@ fi
 node_root=$(abs_path "$node_root")
 bundle_tar=$(abs_path "$bundle_tar")
 artifact_ref=${artifact_ref:-"oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime"}
+node_id=$(parse_node_id "$node_root/bin/start-node.sh")
 
 release_dir="$node_root/releases/$package_version"
 tmp_dir="$node_root/releases/.${package_version}.tmp.$$"
@@ -207,6 +302,8 @@ if [[ -L "$current_path" || -e "$current_path" ]]; then
   fi
 fi
 ln -s "$release_dir" "$current_path"
+
+migrate_legacy_replication_root "$node_root" "$node_id"
 
 if [[ "$restart_service" -eq 1 ]]; then
   systemctl daemon-reload

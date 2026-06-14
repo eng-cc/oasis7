@@ -197,6 +197,96 @@ fn full_storage_publishes_execution_checkpoint_blob_providers() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn fetch_commit_handler_publishes_commit_payload_provider_to_dht() {
+    let world_id = "world-fetch-commit-provider-publish";
+    let dir = temp_dir("fetch-commit-provider-publish");
+    let (_, public_key) = deterministic_keypair_hex(197);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 197)],
+    );
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(
+            signed_replication_config(dir.clone(), 197)
+                .with_fetch_requester_allowlist(vec![public_key])
+                .expect("fetch allowlist"),
+        );
+    let mut replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-a")
+            .expect("runtime");
+    let decision = PosDecision {
+        height: 1,
+        slot: 1,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "block-1".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    let message = replication
+        .build_local_commit_message(
+            "node-a",
+            world_id,
+            7_000,
+            &decision,
+            Some("exec-block-1"),
+            Some("exec-state-1"),
+        )
+        .expect("build local message")
+        .expect("message");
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let dht = Arc::new(TestReplicaMaintenanceDht::new("remote-provider", "peer-seq"));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht.clone())
+        .with_local_provider_id("peer-seq");
+    register_replication_fetch_handlers(
+        &handle,
+        config.replication.as_ref().expect("replication"),
+        world_id,
+        &config.network_policy,
+    )
+    .expect("register fetch handlers");
+
+    let request = signed_fetch_commit_request_for_test(world_id, 1, 197);
+    let response_payload = network
+        .request(
+            REPLICATION_FETCH_COMMIT_PROTOCOL,
+            serde_json::to_vec(&request).expect("encode request").as_slice(),
+        )
+        .expect("fetch commit");
+    let response: super::replication::FetchCommitResponse =
+        serde_json::from_slice(&response_payload).expect("decode response");
+
+    assert!(response.found, "fetch-commit should serve local commit");
+    let published = wait_until(Instant::now() + Duration::from_secs(2), || {
+        dht.published_records().iter().any(
+            |(published_world, content_hash, provider_id)| published_world == world_id
+                && content_hash == &message.record.content_hash
+                && provider_id == "peer-seq",
+        )
+    });
+    assert!(
+        published,
+        "expected fetch-commit handler to publish provider for {}, got {:?}",
+        message.record.content_hash,
+        dht.published_records()
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
 #[derive(Clone, Default)]
 struct BlockingCheckpointProviderDht {
     entered_publish: Arc<(Mutex<bool>, Condvar)>,
