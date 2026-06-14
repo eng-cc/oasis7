@@ -102,7 +102,7 @@
 | `doc/engineering/prd-review/checklists/active-site.md` | `legacy_misc` | `待判定` | 待判定 | 待判定 | 待判定 | done | done | `keep` | `producer_system_designer` | `done` | ROUND-006 已完成最终收口 |
 | `doc/engineering/prd-review/checklists/active-testing.md` | `legacy_misc` | `待判定` | 待判定 | 待判定 | 待判定 | done | done | `keep` | `producer_system_designer` | `done` | ROUND-006 已完成最终收口 |
 | `doc/engineering/prd-review/checklists/active-world-runtime.md` | `legacy_misc` | `待判定` | 待判定 | 待判定 | 待判定 | done | done | `keep` | `producer_system_designer` | `done` | ROUND-006 已完成最终收口 |
-| `doc/engineering/prd-review/checklists/active-world-simulator.md` | `legacy_misc` | `待判定` | 待判定 | 待判定 | 待判定 | done | done | `keep` | `producer_system_designer` | `done` | ROUND-006 已完成最终收口 |
+| `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md` | `legacy_misc` | `待判定` | 待判定 | 待判定 | 待判定 | done | done | `keep` | `producer_system_designer` | `done` | ROUND-006 已完成最终收口 |
 | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md` | `prd` | `prd` | 待判定 | 待判定 | 待判定 | done | done | `keep` | `producer_system_designer` | `done` | ROUND-006 已完成最终收口 |
 | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md` | `project` | `project` | 待判定 | no | 待判定 | done | done | `keep` | `producer_system_designer` | `done` | ROUND-006 已完成最终收口 |
 | `doc/engineering/prd.index.md` | `index_entry` | `index_entry` | no | no | n/a | done | done | `backfill` | `producer_system_designer` | `done` | B6-001/B6-002 已登记标准专题 project 入口 |

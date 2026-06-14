@@ -18,6 +18,7 @@
 - [x] viewer-manual-sync-contract-refresh-followup (PRD-ENGINEERING-025) [test_tier_required]: 刷新 `scripts/site-manual-sync-check.sh` 的 source/manual 与 HTML mirror 校验契约，使其重新匹配当前 `render_mode=viewer&test_api=1` 基线，避免镜像同步门禁继续盯过时命令字符串。 Trace: .pm/tasks/task_03cd617323c840d29a36b5bfa91792ed.yaml
 - [x] doc-surface-slimming-followup (PRD-ENGINEERING-025) [test_tier_required]: 执行 near-limit active project docs aftercare，先压缩 `doc/readme/project.md`、`doc/scripts/project.md`、`doc/site/project.md`、`doc/world-runtime/project.md` 与 `doc/world-simulator/project.md` 的状态区，避免主项目页继续接管完成历史归档职责。 Trace: .pm/tasks/task_732e8ae00c634232ad5ec570b53f5e5b.yaml
 - [x] devlog-summary-retire-followup (PRD-ENGINEERING-026) [test_tier_required]: 将 `doc/devlog/README.md` 升级为 compact archive summary，删除 57 份 `doc/devlog/2026-*.md` 日文件，并收敛具体日文件引用到 summary 入口。 Trace: .pm/tasks/task_eebbcc11039940dcbc99c540a15ece03.yaml
+- [x] simulation-cleanup-governance-aftercare (PRD-ENGINEERING-021/025) [test_tier_required]: 将 world-simulator 旧全量审读清单从 active reading truth 降格为 historical snapshot，并把仿真模拟 demo/bin 退役候选转成 replacement-evidence follow-up signals；当前不直接删除 active simulator code/docs。 Trace: .pm/tasks/task_41b18b1a7fef4d7b95e5d51aac64974f.yaml
 
 ## 2026-04-24 季度复核快照
 - `bash ./scripts/doc-inventory-report.sh` 当前快照：

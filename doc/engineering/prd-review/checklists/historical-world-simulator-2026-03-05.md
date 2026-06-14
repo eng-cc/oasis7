@@ -1,4 +1,11 @@
-# world-simulator 模块 PRD 已读清单（Active）
+# world-simulator 模块 PRD 已读清单（Historical Snapshot）
+
+> Status: historical audit snapshot, not current active reading truth.
+> Captured at audit round 4 on 2026-03-05 with 285 checked documents.
+> Current navigation and active module truth live in `doc/world-simulator/README.md`,
+> `doc/world-simulator/prd.index.md`, and the relevant topic/project files.
+> Keep this file as historical evidence for the 2026-03-03 full-system PRD audit;
+> do not use it as the current world-simulator document inventory.
 
 审计轮次: 4
 

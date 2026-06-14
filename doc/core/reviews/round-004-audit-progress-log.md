@@ -229,7 +229,7 @@
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-site.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-testing.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-world-runtime.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-world-simulator.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd.index.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
