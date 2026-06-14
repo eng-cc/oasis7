@@ -87,7 +87,7 @@
 | `doc/engineering/prd-review/checklists/active-site.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/engineering/prd-review/checklists/active-testing.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/engineering/prd-review/checklists/active-world-runtime.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
-| `doc/engineering/prd-review/checklists/active-world-simulator.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
+| `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/engineering/prd.index.md` | `index` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 导航/索引文档，未发现越权承载需求/设计/项目权威内容 |

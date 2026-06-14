@@ -13,7 +13,7 @@
 - [x] TASK-ENGINEERING-024 (PRD-ENGINEERING-012/013/014) [test_tier_required]: 建立周度增量审读节奏（新增/变更 PRD 自动入清单）。
 
 ## 已读清单（逐篇）
-- Active 模块清单：
+- 模块审读清单：
   - `doc/engineering/prd-review/checklists/active-core.md`
   - `doc/engineering/prd-review/checklists/active-engineering.md`
   - `doc/engineering/prd-review/checklists/active-game.md`
@@ -25,7 +25,7 @@
   - `doc/engineering/prd-review/checklists/active-site.md`
   - `doc/engineering/prd-review/checklists/active-testing.md`
   - `doc/engineering/prd-review/checklists/active-world-runtime.md`
-  - `doc/engineering/prd-review/checklists/active-world-simulator.md`
+  - `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`（historical snapshot; current world-simulator truth is routed through `doc/world-simulator/README.md` and `doc/world-simulator/prd.index.md`）
   - `doc/engineering/prd-review/checklists/active-root-legacy.md`
 ## 依赖
 - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.design.md`
