@@ -10,6 +10,7 @@ source_refs:
   - AGENTS.md
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Repository health audit identifies simulation-related code and documentation that can be deleted or confirms no safe deletions, with evidence and risk notes."
