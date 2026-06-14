@@ -674,6 +674,245 @@
     applyTab("minimal");
   };
 
+  const escapeHtml = (value) =>
+    String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
+  const renderInlineMarkdown = (value) => {
+    let html = escapeHtml(value);
+    const codeTokens = [];
+    html = html.replace(/`([^`]+)`/g, (_match, code) => {
+      const token = `@@CODE${codeTokens.length}@@`;
+      codeTokens.push(`<code>${code}</code>`);
+      return token;
+    });
+    html = html.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_match, label, href) => {
+      const url = String(href || "").trim();
+      if (!url || /^(?:javascript|data):/i.test(url)) {
+        return label;
+      }
+      return `<a href="${url}">${label}</a>`;
+    });
+    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    codeTokens.forEach((tokenHtml, index) => {
+      html = html.replaceAll(`@@CODE${index}@@`, tokenHtml);
+    });
+    return html;
+  };
+
+  const renderMarkdown = (markdown) => {
+    const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+    const html = [];
+    let paragraph = [];
+    let listType = "";
+    let inBlockquote = false;
+    let inFence = false;
+    let fenceLines = [];
+
+    const closeParagraph = () => {
+      if (!paragraph.length) {
+        return;
+      }
+      html.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+      paragraph = [];
+    };
+
+    const closeList = () => {
+      if (!listType) {
+        return;
+      }
+      html.push(`</${listType}>`);
+      listType = "";
+    };
+
+    const closeBlockquote = () => {
+      if (!inBlockquote) {
+        return;
+      }
+      closeParagraph();
+      closeList();
+      html.push("</blockquote>");
+      inBlockquote = false;
+    };
+
+    const openList = (nextType) => {
+      if (listType === nextType) {
+        return;
+      }
+      closeList();
+      html.push(`<${nextType}>`);
+      listType = nextType;
+    };
+
+    lines.forEach((line) => {
+      if (line.trim().startsWith("```")) {
+        closeParagraph();
+        closeList();
+        closeBlockquote();
+        if (inFence) {
+          html.push(`<pre><code>${escapeHtml(fenceLines.join("\n"))}</code></pre>`);
+          fenceLines = [];
+          inFence = false;
+        } else {
+          inFence = true;
+        }
+        return;
+      }
+
+      if (inFence) {
+        fenceLines.push(line);
+        return;
+      }
+
+      const trimmed = line.trim();
+      if (!trimmed) {
+        closeParagraph();
+        closeList();
+        closeBlockquote();
+        return;
+      }
+
+      const blockquoteMatch = trimmed.match(/^>\s?(.*)$/);
+      if (blockquoteMatch) {
+        closeParagraph();
+        closeList();
+        if (!inBlockquote) {
+          html.push("<blockquote>");
+          inBlockquote = true;
+        }
+        paragraph.push(blockquoteMatch[1]);
+        return;
+      }
+
+      closeBlockquote();
+
+      const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+      if (headingMatch) {
+        closeParagraph();
+        closeList();
+        const level = headingMatch[1].length;
+        html.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+        return;
+      }
+
+      const unorderedMatch = trimmed.match(/^[-*]\s+(.+)$/);
+      if (unorderedMatch) {
+        closeParagraph();
+        openList("ul");
+        html.push(`<li>${renderInlineMarkdown(unorderedMatch[1])}</li>`);
+        return;
+      }
+
+      const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+      if (orderedMatch) {
+        closeParagraph();
+        openList("ol");
+        html.push(`<li>${renderInlineMarkdown(orderedMatch[1])}</li>`);
+        return;
+      }
+
+      closeList();
+      paragraph.push(trimmed);
+    });
+
+    if (inFence) {
+      html.push(`<pre><code>${escapeHtml(fenceLines.join("\n"))}</code></pre>`);
+    }
+    closeParagraph();
+    closeList();
+    closeBlockquote();
+    return html.join("\n");
+  };
+
+  const bindStoryReader = () => {
+    const reader = document.querySelector("[data-story-reader]");
+    if (!reader || typeof window.fetch !== "function") {
+      return;
+    }
+
+    const buttons = Array.from(reader.querySelectorAll("[data-story-src]"));
+    const status = reader.querySelector("[data-story-status]");
+    const content = reader.querySelector("[data-story-content]");
+    const panel = reader.querySelector(".reader-panel");
+    if (!buttons.length || !status || !content || !panel) {
+      return;
+    }
+
+    const cache = new Map();
+    let requestId = 0;
+
+    const setStatus = (message, state) => {
+      status.textContent = message;
+      reader.setAttribute("data-reader-state", state);
+      panel.setAttribute("aria-busy", state === "loading" ? "true" : "false");
+    };
+
+    const setActiveButton = (activeButton) => {
+      buttons.forEach((button) => {
+        const isActive = button === activeButton;
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    };
+
+    const loadChapter = async (button) => {
+      const src = String(button.getAttribute("data-story-src") || "").trim();
+      if (!src) {
+        return;
+      }
+
+      const currentRequest = requestId + 1;
+      requestId = currentRequest;
+      setActiveButton(button);
+      setStatus(`正在加载：${button.textContent.trim()}`, "loading");
+
+      try {
+        const markdown = cache.has(src)
+          ? cache.get(src)
+          : await window.fetch(src).then((response) => {
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+              }
+              return response.text();
+            });
+
+        if (!cache.has(src)) {
+          cache.set(src, markdown);
+        }
+        if (currentRequest !== requestId) {
+          return;
+        }
+
+        content.innerHTML = renderMarkdown(markdown);
+        setStatus(`已加载：${button.textContent.trim()}`, "ready");
+      } catch (error) {
+        if (currentRequest !== requestId) {
+          return;
+        }
+        const localHint = window.location.protocol === "file:"
+          ? "请通过 GitHub Pages 或本地静态服务器打开页面；浏览器通常会拦截 file:// 下的章节加载。"
+          : "请确认当前静态站点服务仍在运行，或打开正文索引查看原始 markdown。";
+        content.innerHTML = "";
+        setStatus(`加载失败：${button.textContent.trim()}。${localHint}`, "error");
+      }
+    };
+
+    buttons.forEach((button) => {
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", () => loadChapter(button));
+    });
+
+    const defaultSrc = String(reader.getAttribute("data-story-default") || "").trim();
+    const initialButton =
+      buttons.find((button) => button.getAttribute("data-story-src") === defaultSrc) || buttons[0];
+    loadChapter(initialButton);
+  };
+
   const bindLatestReleaseMeta = () => {
     const tagNodes = Array.from(document.querySelectorAll("[data-release-tag]"));
     const dateNodes = Array.from(document.querySelectorAll("[data-release-date]"));
@@ -1082,5 +1321,6 @@
   bindTimelineFilters();
   bindStoryPathHighlight();
   bindProofSwitcher();
+  bindStoryReader();
   bindLatestReleaseMeta();
 })();
