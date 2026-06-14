@@ -104,7 +104,7 @@ summary_json_path = pathlib.Path(sys.argv[3]).resolve()
 summary_md_path = pathlib.Path(sys.argv[4]).resolve()
 run_dir = pathlib.Path(sys.argv[5]).resolve()
 
-required_lanes = [
+active_required_lanes = [
     "public_rpc_ready",
     "explorer_public_ready",
     "faucet_guard_ready",
@@ -112,6 +112,7 @@ required_lanes = [
     "runtime_bootstrap",
     "claims_boundary_review",
 ]
+required_lanes = list(active_required_lanes)
 status_rank = {"pass": 0, "partial": 1, "block": 2}
 
 data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -207,6 +208,23 @@ def escape_markdown_cell(raw: str) -> str:
 lanes = []
 missing_required_lanes = list(required_lanes)
 manifest_blockers = []
+manifest_required_gates = list(data["promotion_policy"]["required_gates"])
+missing_manifest_required_gates = [
+    lane_id for lane_id in active_required_lanes if lane_id not in manifest_required_gates
+]
+unsupported_manifest_required_gates = [
+    lane_id for lane_id in manifest_required_gates if lane_id not in active_required_lanes
+]
+if missing_manifest_required_gates:
+    manifest_blockers.append(
+        "manifest_missing_active_required_gates:"
+        + ",".join(missing_manifest_required_gates)
+    )
+if unsupported_manifest_required_gates:
+    manifest_blockers.append(
+        "manifest_declares_unsupported_required_gates:"
+        + ",".join(unsupported_manifest_required_gates)
+    )
 lanes_tsv_path = None
 blocking_lanes = []
 partial_lanes = []
@@ -344,6 +362,7 @@ summary = {
     "explorer_ref": endpoint_policy["explorer_ref"],
     "faucet_ref": endpoint_policy["faucet_ref"],
     "required_lanes": required_lanes,
+    "manifest_required_gates": manifest_required_gates,
     "missing_required_lanes": missing_required_lanes,
     "lanes_tsv_path": str(lanes_tsv_path) if lanes_tsv_path else None,
     "lane_count": len(lanes),

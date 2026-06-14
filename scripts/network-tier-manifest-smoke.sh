@@ -8,6 +8,7 @@ tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
 manifest_path="$tmpdir/public-testnet-smoke.json"
+legacy_gate_manifest_path="$tmpdir/public-testnet-legacy-gate-smoke.json"
 out_dir="$tmpdir/readiness"
 bundle_path="$tmpdir/public-testnet-smoke-bundle.json"
 skeleton_lanes_tsv="$tmpdir/public-testnet-skeleton-lanes.tsv"
@@ -277,5 +278,23 @@ EOF
   --out-dir "$out_dir/legacy-extra-lane-ignored" >/dev/null
 jq -e '.readiness_verdict == "ready_for_live_candidate" and .live_candidate_allowed == true and (.ignored_lanes | any(.lane_id == "shared_devnet_pass")) and (.partial_lanes | length) == 0' \
   "$(latest_summary "$out_dir/legacy-extra-lane-ignored")/summary.json" >/dev/null
+
+cp "$manifest_path" "$legacy_gate_manifest_path"
+python3 - <<'PY' "$legacy_gate_manifest_path"
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+data["promotion_policy"]["required_gates"].insert(0, "shared_devnet_pass")
+path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+
+./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest "$legacy_gate_manifest_path" \
+  --lanes-tsv "$ready_lanes_tsv" \
+  --out-dir "$out_dir/legacy-manifest-gate-block" >/dev/null
+jq -e '.readiness_verdict == "block" and .live_candidate_allowed == false and (.manifest_blockers | any(. == "manifest_declares_unsupported_required_gates:shared_devnet_pass"))' \
+  "$(latest_summary "$out_dir/legacy-manifest-gate-block")/summary.json" >/dev/null
 
 echo "network-tier-manifest smoke passed"
