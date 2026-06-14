@@ -1,7 +1,7 @@
 task_uid: task_682c81bb99e74c0da0f1560ec1a2af40
 title: "audit removable visualization code and Rust deps"
 owner_role: tpm
-worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-visual-cleanup-audit
+worktree_hint: null
 execution_log_path: .pm/tasks/task_682c81bb99e74c0da0f1560ec1a2af40.execution.md
 status: done
 priority: P2
