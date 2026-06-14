@@ -190,3 +190,22 @@ Example:
 - Expected Result: GitHub PR is created for `task/engineering-simulation-cleanup-audit` against `main`.
 - Actual Result: created PR #469 at https://github.com/eng-cc/oasis7/pull/469. Initial `./scripts/prepare-task-pr.sh --create --title ...` had already pushed the branch but failed at `gh pr create` because `gh` required an explicit body when title was provided; manual `gh pr create --title ... --body ...` succeeded.
 - Blocker / Next Action: push PR evidence commit, then watch required checks, mergeability, comments, and review threads.
+
+## 2026-06-14 15:02:14 CST / tpm
+- 完成内容: Investigated and fixed PR required-gate failure for PR #469.
+- 遗留事项: GitHub required checks must rerun after pushing the format-only fix; PR comments/review threads and mergeability still need final watch before merge.
+- Action: Inspect failing required-gate job, apply rustfmt ordering for the test-only `Action` import, and rerun local gates before pushing.
+- Failure Evidence: `gh pr checks 469 --watch --interval 30` reported `required-gate` failed; `gh run view 27491268990 --job 81256757099 --log` showed `env -u RUSTC_WRAPPER cargo fmt --all -- --check` failed on `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs` import ordering.
+- Validation Command: `env -u RUSTC_WRAPPER cargo fmt --all -- --check`
+- Expected Result: rustfmt check passes after applying the required import ordering.
+- Actual Result: passed.
+- Validation Command: `git diff --check`
+- Expected Result: no whitespace/diff hygiene issues.
+- Actual Result: passed.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_ef969e0f0f5b4b9f8fdb7349e7a015dc --phase post-pr`
+- Expected Result: post-PR workflow evidence remains valid after recording PR evidence.
+- Actual Result: passed; `workflow-lint: OK (task_ef969e0f0f5b4b9f8fdb7349e7a015dc, phase=post-pr)` with `evidence: PR.md`.
+- Validation Command: `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_provider_local_bridge`
+- Expected Result: provider local bridge binary check still succeeds after the format-only fix.
+- Actual Result: passed; output retained only existing unrelated `oasis7_node` warnings.
+- Blocker / Next Action: commit and push the format/evidence fix, then watch PR #469 checks again.
