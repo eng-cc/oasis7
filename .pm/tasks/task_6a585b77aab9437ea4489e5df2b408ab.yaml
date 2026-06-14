@@ -9,7 +9,8 @@ source_signal: null
 source_refs:
   - AGENTS.md
   - doc/engineering/workflow/source-of-truth.md
-doc_refs: []
+doc_refs:
+  - doc/p2p/project.md
 related_prd: []
 acceptance:
   - "Repository health review identifies p2p-related code or docs that appear removable, with evidence and risk notes."
