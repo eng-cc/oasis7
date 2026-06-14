@@ -152,10 +152,32 @@ import sys
 from pathlib import Path
 
 message = Path(sys.argv[1]).read_text(errors="replace").strip()
+events = []
+plain_lines = []
+for line in message.splitlines():
+    stripped = line.strip()
+    if not stripped:
+        continue
+    if stripped.startswith("{") and stripped.endswith("}"):
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            plain_lines.append(stripped)
+        else:
+            if isinstance(event, dict) and event.get("event"):
+                events.append(event)
+            else:
+                plain_lines.append(stripped)
+    else:
+        plain_lines.append(stripped)
+
+plain_error = "\n".join(plain_lines).strip() or message
 print(json.dumps({
     "ok": False,
     "exit_status": int(sys.argv[2]),
-    "error": message[:500],
+    "error": plain_error[:1200],
+    "error_truncated": len(plain_error) > 1200,
+    "stderr_events": events[-8:],
 }, ensure_ascii=False, sort_keys=True))
 PY
   exit "$status"

@@ -18,7 +18,7 @@ BIND_ADDR="127.0.0.1:5841"
 PROXY_URL="http://127.0.0.1:7897"
 SOCKS_PROXY_URL="socks5://127.0.0.1:7897"
 USE_DEFAULT_PROXY="1"
-SKIP_CHAT_PROBE="0"
+CHAT_PROBE_BACKEND="${OASIS7_LETAI_CHAT_PROBE_BACKEND:-rust-bridge}"
 SKIP_BRIDGE_SMOKE="0"
 ENSURE_TOKEN_CONFIG="1"
 CHAT_ECHO="1"
@@ -27,6 +27,8 @@ DEPLOYMENT_MODE="${OASIS7_LOCAL_LETAI_DEPLOYMENT_MODE:-trusted_local_only}"
 BRIDGE_SMOKE_ATTEMPTS="2"
 BRIDGE_AUTO_TOPUP_USD="${OASIS7_LETAI_AUTO_TOPUP_USD:-0.1}"
 CHAT_PROBE_TIMEOUT_MS="${OASIS7_LETAI_CHAT_PROBE_TIMEOUT_MS:-60000}"
+CHAT_PROBE_ATTEMPTS="${OASIS7_LETAI_CHAT_PROBE_ATTEMPTS:-3}"
+CHAT_PROBE_RETRY_DELAY_MS="${OASIS7_LETAI_CHAT_PROBE_RETRY_DELAY_MS:-2000}"
 AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS:-60000}"
 MODEL=""
 OUTPUT_DIR=""
@@ -40,8 +42,8 @@ Usage: ./scripts/run-local-letai-game-test.sh [options] [-- launcher args...]
 
 Start the canonical local real LetAI gameplay test stack:
 1. load the operator-owned LetAI config
-2. optionally validate chat-completions
-3. start the local provider bridge on 127.0.0.1:5841
+2. start the local provider bridge on 127.0.0.1:5841
+3. validate chat-completions through the Rust provider bridge smoke path
 4. start run-launcher-stack.sh pointed at that bridge
 
 Use this wrapper instead of manually stitching together the provider bridge and
@@ -64,11 +66,15 @@ Options:
   --no-auto-play              Require manual Play before gameplay/world progression
   --deployment-mode <mode>    Launcher deployment mode (default: trusted_local_only)
   --hosted-public-join        Use hosted_public_join instead of the local trusted playtest chain
-  --skip-chat-probe           Skip the upfront LetAI chat-completions probe
+  --chat-probe-backend <name> rust-bridge|legacy-cli|none (default: rust-bridge)
+  --skip-chat-probe           Alias for --chat-probe-backend none
   --skip-bridge-smoke         Skip provider bridge contract smoke before launcher startup
   --bridge-smoke-attempts <n> Retry provider bridge smoke up to <n> times (default: 2)
   --chat-probe-timeout-ms <ms>
                               LetAI chat probe timeout (default: 60000)
+  --chat-probe-attempts <n>    Retry the full chat probe up to <n> times (default: 3)
+  --chat-probe-retry-delay-ms <ms>
+                              Delay between chat probe attempts (default: 2000)
   --agent-provider-connect-timeout-ms <ms>
                               Runtime provider decision timeout (default: 60000)
   --output-dir <path>         Launcher output dir; bridge log goes there too
@@ -146,8 +152,12 @@ while [[ $# -gt 0 ]]; do
       DEPLOYMENT_MODE="hosted_public_join"
       shift
       ;;
+    --chat-probe-backend)
+      CHAT_PROBE_BACKEND="${2:-}"
+      shift 2
+      ;;
     --skip-chat-probe)
-      SKIP_CHAT_PROBE="1"
+      CHAT_PROBE_BACKEND="none"
       shift
       ;;
     --skip-bridge-smoke)
@@ -160,6 +170,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --chat-probe-timeout-ms)
       CHAT_PROBE_TIMEOUT_MS="${2:-}"
+      shift 2
+      ;;
+    --chat-probe-attempts)
+      CHAT_PROBE_ATTEMPTS="${2:-}"
+      shift 2
+      ;;
+    --chat-probe-retry-delay-ms)
+      CHAT_PROBE_RETRY_DELAY_MS="${2:-}"
       shift 2
       ;;
     --agent-provider-connect-timeout-ms)
@@ -187,16 +205,31 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$CONFIG_PATH" || -z "$BIND_ADDR" || -z "$BRIDGE_AUTO_TOPUP_USD" || -z "$BRIDGE_SMOKE_ATTEMPTS" || -z "$DEPLOYMENT_MODE" || -z "$CHAT_PROBE_TIMEOUT_MS" || -z "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" ]]; then
-  echo "error: empty --config, --bind, --deployment-mode, --auto-topup-usd, --bridge-smoke-attempts, --chat-probe-timeout-ms, or --agent-provider-connect-timeout-ms is not allowed" >&2
+if [[ -z "$CONFIG_PATH" || -z "$BIND_ADDR" || -z "$BRIDGE_AUTO_TOPUP_USD" || -z "$BRIDGE_SMOKE_ATTEMPTS" || -z "$DEPLOYMENT_MODE" || -z "$CHAT_PROBE_BACKEND" || -z "$CHAT_PROBE_TIMEOUT_MS" || -z "$CHAT_PROBE_ATTEMPTS" || -z "$CHAT_PROBE_RETRY_DELAY_MS" || -z "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" ]]; then
+  echo "error: empty --config, --bind, --deployment-mode, --auto-topup-usd, --bridge-smoke-attempts, --chat-probe-backend, --chat-probe-timeout-ms, --chat-probe-attempts, --chat-probe-retry-delay-ms, or --agent-provider-connect-timeout-ms is not allowed" >&2
   exit 2
 fi
+case "$CHAT_PROBE_BACKEND" in
+  rust-bridge|legacy-cli|none) ;;
+  *)
+    echo "error: --chat-probe-backend must be rust-bridge, legacy-cli, or none" >&2
+    exit 2
+    ;;
+esac
 if ! [[ "$BRIDGE_SMOKE_ATTEMPTS" =~ ^[0-9]+$ ]] || [[ "$BRIDGE_SMOKE_ATTEMPTS" -lt 1 ]]; then
   echo "error: --bridge-smoke-attempts must be a positive integer" >&2
   exit 2
 fi
 if ! [[ "$CHAT_PROBE_TIMEOUT_MS" =~ ^[0-9]+$ ]] || [[ "$CHAT_PROBE_TIMEOUT_MS" -lt 1000 ]]; then
   echo "error: --chat-probe-timeout-ms must be an integer >= 1000" >&2
+  exit 2
+fi
+if ! [[ "$CHAT_PROBE_ATTEMPTS" =~ ^[0-9]+$ ]] || [[ "$CHAT_PROBE_ATTEMPTS" -lt 1 ]]; then
+  echo "error: --chat-probe-attempts must be a positive integer" >&2
+  exit 2
+fi
+if ! [[ "$CHAT_PROBE_RETRY_DELAY_MS" =~ ^[0-9]+$ ]]; then
+  echo "error: --chat-probe-retry-delay-ms must be an integer >= 0" >&2
   exit 2
 fi
 if ! [[ "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" =~ ^[0-9]+$ ]] || [[ "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" -lt 1000 ]]; then
@@ -251,17 +284,37 @@ echo "bridge=http://$BIND_ADDR"
 echo "chat_echo=$([[ "$CHAT_ECHO" == "1" ]] && echo enabled || echo disabled)"
 echo "auto_play=$([[ "$AUTO_PLAY" == "1" ]] && echo enabled || echo disabled)"
 echo "deployment_mode=$DEPLOYMENT_MODE"
+echo "chat_probe_backend=$CHAT_PROBE_BACKEND"
 echo "chat_probe_timeout_ms=$CHAT_PROBE_TIMEOUT_MS"
+echo "chat_probe_attempts=$CHAT_PROBE_ATTEMPTS"
+echo "chat_probe_retry_delay_ms=$CHAT_PROBE_RETRY_DELAY_MS"
 echo "agent_provider_connect_timeout_ms=$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
 echo "output_dir=$OUTPUT_DIR"
 export OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS="$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
 export OASIS7_AGENT_PROVIDER_DECISION_TIMEOUT_MS="$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
 
-if [[ "$SKIP_CHAT_PROBE" != "1" ]]; then
-  "$ROOT_DIR/scripts/check-letai-chat-completions.sh" \
-    --config "$EFFECTIVE_CONFIG_PATH" \
-    --timeout-ms "$CHAT_PROBE_TIMEOUT_MS" \
-    ${BRIDGE_ARGS[@]+"${BRIDGE_ARGS[@]}"}
+if [[ "$CHAT_PROBE_BACKEND" == "legacy-cli" ]]; then
+  chat_probe_status=1
+  for attempt in $(seq 1 "$CHAT_PROBE_ATTEMPTS"); do
+    set +e
+    "$ROOT_DIR/scripts/check-letai-chat-completions.sh" \
+      --config "$EFFECTIVE_CONFIG_PATH" \
+      --timeout-ms "$CHAT_PROBE_TIMEOUT_MS" \
+      ${BRIDGE_ARGS[@]+"${BRIDGE_ARGS[@]}"}
+    chat_probe_status=$?
+    set -e
+    if [[ "$chat_probe_status" -eq 0 ]]; then
+      chat_probe_status=0
+      break
+    fi
+    echo "LetAI chat probe attempt $attempt/$CHAT_PROBE_ATTEMPTS failed" >&2
+    if [[ "$attempt" -lt "$CHAT_PROBE_ATTEMPTS" && "$CHAT_PROBE_RETRY_DELAY_MS" -gt 0 ]]; then
+      sleep "$(((CHAT_PROBE_RETRY_DELAY_MS + 999) / 1000))"
+    fi
+  done
+  if [[ "$chat_probe_status" -ne 0 ]]; then
+    exit "$chat_probe_status"
+  fi
 fi
 
 "$ROOT_DIR/scripts/run-local-letai-provider-bridge.sh" \
@@ -312,6 +365,8 @@ if [[ "$SKIP_BRIDGE_SMOKE" != "1" ]]; then
       --min-successes 0 >&2 || true
     exit 1
   fi
+elif [[ "$CHAT_PROBE_BACKEND" == "rust-bridge" ]]; then
+  echo "warning: --skip-bridge-smoke also skips the default Rust bridge chat probe" >&2
 fi
 
 set +e

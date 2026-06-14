@@ -2,10 +2,12 @@
 
 import json
 import os
+import hashlib
 import socket
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from typing import Optional
@@ -19,6 +21,14 @@ DEFAULT_USER_AGENT = "oasis7-letai-provider-cli/1.0"
 QUOTA_UNITS_PER_USD = Decimal("500000")
 DEFAULT_COMPLETION_RETRY_COUNT = 2
 DEFAULT_COMPLETION_RETRY_DELAY_MS = 1000
+SSE_DIAGNOSTIC_SAMPLE_LIMIT = 5
+SSE_DIAGNOSTIC_TEXT_SAMPLE_LIMIT = 80
+
+
+class CompletionDecodeError(RuntimeError):
+    def __init__(self, message: str, diagnostics: dict):
+        super().__init__(message)
+        self.diagnostics = diagnostics
 
 
 def env_required(*names: str) -> str:
@@ -62,6 +72,83 @@ def env_bool(default: bool, *names: str) -> bool:
     if not raw:
         return default
     return raw.lower() in {"1", "true", "yes", "on"}
+
+
+def log_event(event: str, **fields) -> None:
+    payload = {"event": event}
+    payload.update(fields)
+    print(json.dumps(payload, ensure_ascii=True, sort_keys=True), file=sys.stderr)
+
+
+def safe_url_summary(url: str) -> dict:
+    parsed = urllib.parse.urlparse(url)
+    return {
+        "scheme": parsed.scheme,
+        "host": parsed.hostname or "",
+        "port": parsed.port,
+        "path": parsed.path,
+    }
+
+
+def response_header_summary(headers) -> dict:
+    summary = {}
+    for key in (
+        "content-type",
+        "x-request-id",
+        "x-trace-id",
+        "cf-ray",
+        "server",
+    ):
+        value = headers.get(key) or headers.get(key.title())
+        if value:
+            summary[key] = str(value)[:120]
+    return summary
+
+
+def sample_text(value: str) -> str:
+    if len(value) <= SSE_DIAGNOSTIC_TEXT_SAMPLE_LIMIT:
+        return value
+    return value[:SSE_DIAGNOSTIC_TEXT_SAMPLE_LIMIT] + "..."
+
+
+def text_digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()[:16]
+
+
+def summarize_sse_choice(choice: dict) -> dict:
+    summary = {
+        "keys": sorted(str(key) for key in choice.keys()),
+        "finish_reason": choice.get("finish_reason"),
+    }
+    delta = choice.get("delta")
+    if isinstance(delta, dict):
+        delta_summary = {
+            "keys": sorted(str(key) for key in delta.keys()),
+            "content_present": isinstance(delta.get("content"), str),
+            "content_len": len(delta.get("content") or "")
+            if isinstance(delta.get("content"), str)
+            else None,
+        }
+        if isinstance(delta.get("role"), str):
+            delta_summary["role"] = delta["role"]
+        summary["delta"] = delta_summary
+    message = choice.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        summary["message"] = {
+            "keys": sorted(str(key) for key in message.keys()),
+            "content_present": isinstance(content, str),
+            "content_len": len(content) if isinstance(content, str) else None,
+        }
+    return summary
+
+
+def format_decode_error(message: str, diagnostics: dict) -> str:
+    return (
+        message
+        + "; diagnostics="
+        + json.dumps(diagnostics, ensure_ascii=True, sort_keys=True)
+    )
 
 
 def normalize_base_url(raw: str) -> str:
@@ -560,16 +647,15 @@ def send_completion_request_with_retries(
         except Exception as exc:
             if attempt >= retry_count or not is_retryable_completion_error(exc):
                 raise
+            retry_payload = {
+                "attempt": attempt + 1,
+                "retry_count": retry_count,
+                "reason": redact_detail(str(exc)),
+            }
+            if isinstance(exc, CompletionDecodeError):
+                retry_payload["diagnostics"] = exc.diagnostics
             print(
-                json.dumps(
-                    {
-                        "event": "chat_completion_retry",
-                        "attempt": attempt + 1,
-                        "retry_count": retry_count,
-                        "reason": redact_detail(str(exc)),
-                    },
-                    ensure_ascii=True,
-                ),
+                json.dumps({"event": "chat_completion_retry", **retry_payload}, ensure_ascii=True),
                 file=sys.stderr,
             )
             if retry_delay_ms > 0:
@@ -646,6 +732,18 @@ def request_completion(prompt: str, timeout_ms: int, agent_id: str) -> dict:
         body["response_format"] = {"type": "json_object"}
 
     started = time.time()
+    log_event(
+        "chat_completion_request",
+        target=safe_url_summary(f"{base_url}/chat/completions"),
+        model=model,
+        stream=use_stream,
+        timeout_ms=timeout_ms,
+        max_output_tokens=max_output_tokens,
+        temperature=temperature,
+        response_format_json_object=use_json_object,
+        prompt_len=len(prompt),
+        agent_id=agent_id,
+    )
     try:
         status_code, decoded, content, usage = send_completion_request_with_retries(
             body, base_url, api_key, timeout_ms, use_stream
@@ -694,48 +792,146 @@ def send_completion_request(
 ) -> tuple[int, dict, str, dict]:
     with urllib.request.urlopen(request, timeout=max(timeout_ms, 1000) / 1000.0) as response:
         status_code = response.status
+        headers = response.headers
         if use_stream:
-            decoded, content, usage = decode_sse_completion_stream(response)
+            decoded, content, usage = decode_sse_completion_stream(
+                response,
+                status_code=status_code,
+                headers=headers,
+            )
         else:
             payload = response.read().decode("utf-8")
-            decoded, content, usage = decode_completion_payload(payload)
+            decoded, content, usage = decode_completion_payload(
+                payload,
+                status_code=status_code,
+                headers=headers,
+            )
     return status_code, decoded, content, usage
 
 
-def decode_completion_payload(payload: str) -> tuple[dict, str, dict]:
+def decode_completion_payload(
+    payload: str,
+    status_code: Optional[int] = None,
+    headers=None,
+) -> tuple[dict, str, dict]:
     stripped = payload.strip()
     if not stripped:
-        raise RuntimeError("upstream response body was empty")
+        diagnostics = {
+            "status_code": status_code,
+            "headers": response_header_summary(headers or {}),
+            "body_len": len(payload),
+        }
+        raise CompletionDecodeError(
+            format_decode_error("upstream response body was empty", diagnostics),
+            diagnostics,
+        )
     if any(
         line.strip().startswith("data:")
         for line in payload.splitlines()
         if line.strip()
     ):
-        return decode_sse_completion_payload(stripped)
+        return decode_sse_completion_payload(
+            stripped,
+            status_code=status_code,
+            headers=headers,
+        )
     decoded = json.loads(payload)
     choices = decoded.get("choices")
     if not isinstance(choices, list) or not choices:
-        raise RuntimeError("upstream response missing choices[0]")
+        diagnostics = {
+            "status_code": status_code,
+            "headers": response_header_summary(headers or {}),
+            "top_level_keys": sorted(str(key) for key in decoded.keys()),
+            "choices_type": type(choices).__name__,
+            "choices_len": len(choices) if isinstance(choices, list) else None,
+        }
+        raise CompletionDecodeError(
+            format_decode_error("upstream response missing choices[0]", diagnostics),
+            diagnostics,
+        )
     content = content_from_choice(choices[0])
     if not content:
-        raise RuntimeError("upstream response missing choices[0].message.content")
+        diagnostics = {
+            "status_code": status_code,
+            "headers": response_header_summary(headers or {}),
+            "top_level_keys": sorted(str(key) for key in decoded.keys()),
+            "choices_len": len(choices),
+            "choice_sample": summarize_sse_choice(choices[0])
+            if isinstance(choices[0], dict)
+            else {"type": type(choices[0]).__name__},
+        }
+        raise CompletionDecodeError(
+            format_decode_error(
+                "upstream response missing choices[0].message.content",
+                diagnostics,
+            ),
+            diagnostics,
+        )
     usage = decoded.get("usage") or {}
     return decoded, content, usage
 
 
-def decode_sse_completion_stream(response) -> tuple[dict, str, dict]:
+def decode_sse_completion_stream(
+    response,
+    status_code: Optional[int] = None,
+    headers=None,
+) -> tuple[dict, str, dict]:
     text_parts: list[str] = []
     usage: dict = {}
     last_chunk: dict = {}
+    line_count = 0
+    data_event_count = 0
+    done_count = 0
+    chunk_samples: list[dict] = []
+    parse_errors: list[dict] = []
     for raw_line in response:
+        line_count += 1
         line = raw_line.decode("utf-8", errors="replace").strip()
         if not line or not line.startswith("data:"):
             continue
         data = line[5:].strip()
-        if not data or data == "[DONE]":
+        if not data:
             continue
-        chunk = json.loads(data)
+        data_event_count += 1
+        if data == "[DONE]":
+            done_count += 1
+            continue
+        try:
+            chunk = json.loads(data)
+        except json.JSONDecodeError as exc:
+            if len(parse_errors) < SSE_DIAGNOSTIC_SAMPLE_LIMIT:
+                parse_errors.append(
+                    {
+                        "error": str(exc),
+                        "data_len": len(data),
+                        "data_sha256_16": text_digest(data),
+                    }
+                )
+            continue
         last_chunk = chunk
+        if len(chunk_samples) < SSE_DIAGNOSTIC_SAMPLE_LIMIT:
+            sample = {
+                "top_level_keys": sorted(str(key) for key in chunk.keys()),
+                "model": chunk.get("model"),
+                "object": chunk.get("object"),
+                "usage_present": isinstance(chunk.get("usage"), dict),
+            }
+            choices = chunk.get("choices")
+            if isinstance(choices, list):
+                sample["choices_len"] = len(choices)
+                if choices and isinstance(choices[0], dict):
+                    sample["choice0"] = summarize_sse_choice(choices[0])
+            else:
+                sample["choices_type"] = type(choices).__name__
+            if isinstance(chunk.get("error"), dict):
+                error = chunk["error"]
+                sample["error"] = {
+                    "keys": sorted(str(key) for key in error.keys()),
+                    "code": error.get("code"),
+                    "type": error.get("type"),
+                    "message": sample_text(str(error.get("message") or "")),
+                }
+            chunk_samples.append(sample)
         choices = chunk.get("choices")
         if isinstance(choices, list):
             for choice in choices:
@@ -753,14 +949,63 @@ def decode_sse_completion_stream(response) -> tuple[dict, str, dict]:
         if isinstance(chunk.get("usage"), dict):
             usage = chunk["usage"]
     content = "".join(text_parts).strip()
+    if parse_errors:
+        diagnostics = {
+            "status_code": status_code,
+            "headers": response_header_summary(headers or {}),
+            "line_count": line_count,
+            "data_event_count": data_event_count,
+            "done_count": done_count,
+            "parse_error_count": len(parse_errors),
+            "parse_error_samples": parse_errors,
+            "chunk_samples": chunk_samples,
+            "usage_present": bool(usage),
+            "content_len": len(content),
+            "last_chunk_keys": sorted(str(key) for key in last_chunk.keys())
+            if isinstance(last_chunk, dict)
+            else [],
+        }
+        raise CompletionDecodeError(
+            format_decode_error(
+                "upstream SSE response contained malformed data events",
+                diagnostics,
+            ),
+            diagnostics,
+        )
     if not content:
-        raise RuntimeError("upstream SSE response did not contain assistant content")
+        diagnostics = {
+            "status_code": status_code,
+            "headers": response_header_summary(headers or {}),
+            "line_count": line_count,
+            "data_event_count": data_event_count,
+            "done_count": done_count,
+            "parse_error_count": len(parse_errors),
+            "parse_error_samples": parse_errors,
+            "chunk_samples": chunk_samples,
+            "usage_present": bool(usage),
+            "last_chunk_keys": sorted(str(key) for key in last_chunk.keys())
+            if isinstance(last_chunk, dict)
+            else [],
+        }
+        raise CompletionDecodeError(
+            format_decode_error(
+                "upstream SSE response did not contain assistant content",
+                diagnostics,
+            ),
+            diagnostics,
+        )
     return last_chunk, content, usage
 
 
-def decode_sse_completion_payload(payload: str) -> tuple[dict, str, dict]:
+def decode_sse_completion_payload(
+    payload: str,
+    status_code: Optional[int] = None,
+    headers=None,
+) -> tuple[dict, str, dict]:
     return decode_sse_completion_stream(
-        [f"{line}\n".encode("utf-8") for line in payload.splitlines()]
+        [f"{line}\n".encode("utf-8") for line in payload.splitlines()],
+        status_code=status_code,
+        headers=headers,
     )
 
 

@@ -21,6 +21,7 @@ use oasis7::simulator::{
 };
 use reqwest::blocking::Client;
 use serde::Deserialize;
+use serde_json::json;
 use serde_json::Value;
 use tracing::{error, info, Level};
 
@@ -45,10 +46,55 @@ fn default_provider_cli_bin() -> String {
 
 #[path = "oasis7_provider_local_bridge/auth_support.rs"]
 mod auth_support;
+#[allow(dead_code)]
+#[path = "oasis7_newapi_bridge_service/credit_adapter.rs"]
+mod credit_adapter;
 #[path = "oasis7_provider_local_bridge/http_bridge_support.rs"]
 mod http_bridge_support;
+#[path = "oasis7_provider_local_bridge/letai_direct.rs"]
+mod letai_direct;
 #[path = "oasis7_provider_local_bridge/support.rs"]
 mod support;
+#[cfg(test)]
+mod api {
+    use std::io::Write;
+
+    pub(super) fn write_http_response<W: Write>(
+        stream: &mut W,
+        status_code: u16,
+        content_type: &str,
+        body: &[u8],
+        head_only: bool,
+    ) -> Result<(), String> {
+        let status_text = match status_code {
+            200 => "OK",
+            201 => "Created",
+            400 => "Bad Request",
+            404 => "Not Found",
+            405 => "Method Not Allowed",
+            409 => "Conflict",
+            500 => "Internal Server Error",
+            502 => "Bad Gateway",
+            503 => "Service Unavailable",
+            _ => "Error",
+        };
+        let headers = format!(
+            "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream
+            .write_all(headers.as_bytes())
+            .map_err(|err| format!("write response header failed: {err}"))?;
+        if !head_only {
+            stream
+                .write_all(body)
+                .map_err(|err| format!("write response body failed: {err}"))?;
+        }
+        stream
+            .flush()
+            .map_err(|err| format!("flush response failed: {err}"))
+    }
+}
 #[cfg(test)]
 #[path = "oasis7_provider_local_bridge/tests.rs"]
 mod tests;
@@ -64,6 +110,13 @@ use self::agent_decision::{
     timeout_seconds_from_budget,
 };
 use self::http_bridge_support::handle_connection;
+use self::letai_direct::invoke_rust_direct_letai;
+#[cfg(test)]
+use self::letai_direct::{
+    decode_letai_completion_payload, decode_letai_sse_reader, error_diagnostics_json,
+    load_letai_chat_config, maybe_auto_topup_letai_user, quota_from_usd,
+    should_auto_topup_letai_error, LetaiChatConfig,
+};
 use self::support::{
     agent_output_from_json, local_session_id_from_session_key, should_fallback_to_local_agent,
 };
@@ -79,12 +132,19 @@ struct CliOptions {
     auth_route_map: BTreeMap<String, String>,
     auth_route_from_bearer: bool,
     mode: ProviderMode,
+    provider_backend: ProviderBackend,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProviderMode {
     Real,
     Mock,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProviderBackend {
+    RustDirectLetai,
+    LegacyCli,
 }
 
 impl Default for CliOptions {
@@ -99,6 +159,7 @@ impl Default for CliOptions {
             auth_route_map: BTreeMap::new(),
             auth_route_from_bearer: false,
             mode: ProviderMode::Real,
+            provider_backend: ProviderBackend::RustDirectLetai,
         }
     }
 }
@@ -598,6 +659,9 @@ trait AgentInvoker: Send + Sync {
 #[derive(Debug, Clone, Default)]
 struct ProviderCliInvoker;
 
+#[derive(Debug, Clone, Default)]
+struct RustDirectLetaiInvoker;
+
 impl AgentInvoker for ProviderCliInvoker {
     fn invoke(&self, invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
         match invoke_gateway_agent(invocation.clone()) {
@@ -610,6 +674,12 @@ impl AgentInvoker for ProviderCliInvoker {
     }
 }
 
+impl AgentInvoker for RustDirectLetaiInvoker {
+    fn invoke(&self, invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
+        invoke_rust_direct_letai(invocation)
+    }
+}
+
 fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
     let params = build_gateway_agent_params(&invocation)
         .map_err(|err| format!("serialize gateway call params failed: {err}"))?;
@@ -617,6 +687,7 @@ fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOu
         .timeout_seconds
         .saturating_mul(1000)
         .saturating_add(2000);
+    let started = Instant::now();
     let output = Command::new(invocation.provider_cli_bin.as_str())
         .arg("gateway")
         .arg("call")
@@ -635,16 +706,15 @@ fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOu
         .output()
         .map_err(|err| format!("spawn provider gateway call agent failed: {err}"))?;
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(output.stderr.as_slice())
-            .trim()
-            .to_string();
-        let stdout = String::from_utf8_lossy(output.stdout.as_slice())
-            .trim()
-            .to_string();
-        return Err(format!(
-            "provider gateway call agent exited with status {}: stderr={} stdout={}",
-            output.status, stderr, stdout,
-        ));
+        let summary = provider_cli_failure_summary(
+            "gateway_call_agent",
+            &output,
+            started.elapsed(),
+            invocation.route_label.as_deref().is_some(),
+            rpc_timeout_ms,
+        );
+        error!(target: "oasis7_provider_local_bridge", %summary, "provider cli invocation failed");
+        return Err(format!("provider gateway call agent failed: {summary}"));
     }
     let payload = String::from_utf8(output.stdout)
         .map_err(|err| format!("provider gateway call agent stdout was not utf8: {err}"))?;
@@ -656,6 +726,8 @@ fn invoke_local_agent(
     gateway_error: &str,
 ) -> Result<AgentInvocationOutput, String> {
     let session_id = local_session_id_from_session_key(invocation.session_key.as_str());
+    let timeout_ms = invocation.timeout_seconds.saturating_mul(1000);
+    let started = Instant::now();
     let output = Command::new(invocation.provider_cli_bin.as_str())
         .arg("agent")
         .arg("--agent")
@@ -668,7 +740,7 @@ fn invoke_local_agent(
         .arg("--thinking")
         .arg(invocation.thinking.as_str())
         .arg("--timeout")
-        .arg(invocation.timeout_seconds.saturating_mul(1000).to_string())
+        .arg(timeout_ms.to_string())
         .arg("--json")
         .envs(route_label_env(invocation.route_label.as_deref()))
         .env(
@@ -678,15 +750,18 @@ fn invoke_local_agent(
         .output()
         .map_err(|err| format!("spawn provider local agent failed: {err}"))?;
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(output.stderr.as_slice())
-            .trim()
-            .to_string();
-        let stdout = String::from_utf8_lossy(output.stdout.as_slice())
-            .trim()
-            .to_string();
+        let summary = provider_cli_failure_summary(
+            "local_agent_fallback",
+            &output,
+            started.elapsed(),
+            invocation.route_label.as_deref().is_some(),
+            timeout_ms,
+        );
+        error!(target: "oasis7_provider_local_bridge", %summary, "provider cli fallback failed");
         return Err(format!(
-            "provider gateway fallback failed after `{}`; local agent exited with status {}: stderr={} stdout={}",
-            gateway_error, output.status, stderr, stdout,
+            "provider gateway fallback failed after `{}`; local agent failed: {}",
+            summarize_text(gateway_error, 240),
+            summary,
         ));
     }
     let payload = String::from_utf8(output.stdout)
@@ -699,6 +774,69 @@ fn invoke_local_agent(
             summarize_text(gateway_error, 240)
         )),
     )
+}
+
+fn provider_cli_failure_summary(
+    mode: &str,
+    output: &std::process::Output,
+    elapsed: Duration,
+    route_label_present: bool,
+    timeout_ms: u64,
+) -> String {
+    let stderr = String::from_utf8_lossy(output.stderr.as_slice());
+    let stdout = String::from_utf8_lossy(output.stdout.as_slice());
+    json!({
+        "mode": mode,
+        "status": output.status.to_string(),
+        "elapsed_ms": elapsed.as_millis(),
+        "timeout_ms": timeout_ms,
+        "route_label_present": route_label_present,
+        "stderr": text_diagnostic_summary(stderr.as_ref(), true),
+        "stdout": text_diagnostic_summary(stdout.as_ref(), false),
+        "stderr_events": stderr_json_events(stderr.as_ref(), 8),
+    })
+    .to_string()
+}
+
+fn text_diagnostic_summary(text: &str, include_tail: bool) -> Value {
+    let trimmed = text.trim();
+    let mut summary = json!({
+        "len": trimmed.len(),
+        "sha256_16": short_sha256(trimmed),
+        "truncated": trimmed.len() > 320,
+    });
+    if include_tail {
+        summary["tail"] = Value::String(summarize_text(trimmed, 320));
+    }
+    summary
+}
+
+fn stderr_json_events(text: &str, max_events: usize) -> Vec<Value> {
+    let mut events = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
+            continue;
+        };
+        if value.get("event").is_some() {
+            events.push(value);
+        }
+    }
+    if events.len() > max_events {
+        events.split_off(events.len() - max_events)
+    } else {
+        events
+    }
+}
+
+fn short_sha256(text: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(text.as_bytes());
+    let digest = hasher.finalize();
+    hex::encode(&digest[..8])
 }
 
 fn main() {
@@ -727,13 +865,17 @@ fn main() {
         bind_addr = %options.bind_addr,
         provider_agent_id = %options.provider_agent_id,
         gateway_health_url = %options.gateway_health_url,
+        provider_backend = ?options.provider_backend,
         "provider local bridge listening"
     );
     println!(
         "oasis7_provider_local_bridge listening on http://{} (agent={}, gateway_health={})",
         options.bind_addr, options.provider_agent_id, options.gateway_health_url
     );
-    let invoker: Arc<dyn AgentInvoker> = Arc::new(ProviderCliInvoker);
+    let invoker: Arc<dyn AgentInvoker> = match options.provider_backend {
+        ProviderBackend::RustDirectLetai => Arc::new(RustDirectLetaiInvoker),
+        ProviderBackend::LegacyCli => Arc::new(ProviderCliInvoker),
+    };
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         let state = state.clone();
@@ -763,6 +905,11 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--provider-cli-bin" => {
                 options.provider_cli_bin =
                     required_value(&mut iter, "--provider-cli-bin")?.to_string();
+                options.provider_backend = ProviderBackend::LegacyCli;
+            }
+            "--provider-backend" => {
+                options.provider_backend =
+                    parse_provider_backend(required_value(&mut iter, "--provider-backend")?)?;
             }
             "--provider-agent" => {
                 options.provider_agent_id =
@@ -821,7 +968,9 @@ fn print_help() {
     eprintln!(concat!(
         "Usage: oasis7_provider_local_bridge [options]\n\n",
         "  --bind <host:port>            Loopback bind address (default: 127.0.0.1:5841)\n",
-        "  --provider-cli-bin <path>     provider CLI path (default: resolved runtime CLI)\n",
+        "  --provider-backend <rust-direct-letai|legacy-cli>\n",
+        "                                provider upstream backend (default: rust-direct-letai)\n",
+        "  --provider-cli-bin <path>     legacy provider CLI path; implies --provider-backend legacy-cli\n",
         "  --provider-agent <id>         provider agent id (default: main)\n",
         "  --provider-thinking <level>   provider thinking level (default: off)\n",
         "  --gateway-health-url <url>    provider gateway health URL\n",
@@ -887,6 +1036,18 @@ fn parse_provider_mode(raw: &str) -> Result<ProviderMode, String> {
         "mock" | "deterministic" | "local_mock" | "local-mock" => Ok(ProviderMode::Mock),
         other => Err(format!(
             "unsupported provider bridge mode `{other}`; expected real or mock"
+        )),
+    }
+}
+
+fn parse_provider_backend(raw: &str) -> Result<ProviderBackend, String> {
+    match raw.trim() {
+        "rust-direct-letai" | "rust_direct_letai" | "direct-letai" | "direct" | "rust" => {
+            Ok(ProviderBackend::RustDirectLetai)
+        }
+        "legacy-cli" | "legacy_cli" | "cli" | "provider-cli" => Ok(ProviderBackend::LegacyCli),
+        other => Err(format!(
+            "unsupported provider backend `{other}`; expected rust-direct-letai or legacy-cli"
         )),
     }
 }

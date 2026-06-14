@@ -6,6 +6,7 @@ CONFIG_ARGS=()
 BIND_ADDR="127.0.0.1:5841"
 PROVIDER_AGENT="letai-local"
 PROVIDER_THINKING="off"
+PROVIDER_BACKEND="rust-direct-letai"
 AUTH_TOKEN=""
 PRINT_CONFIG="0"
 MODEL_OVERRIDDEN="0"
@@ -14,9 +15,9 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/run-local-letai-provider-bridge.sh [options]
 
-Start the local provider bridge against LetAI's chat-completions API path via
-scripts/provider-remote-https/letai_provider_cli.py. Secrets are passed through
-environment variables, not command-line arguments.
+Start the local provider bridge against LetAI's chat-completions API path.
+By default the bridge uses the Rust direct LetAI adapter; the legacy Python
+provider CLI remains available for targeted compatibility diagnostics.
 
 Options:
   --config <path>             LetAI config file for with-letai-llm-config.sh
@@ -25,6 +26,7 @@ Options:
   --bind <host:port>          Local provider bind address (default: 127.0.0.1:5841)
   --provider-agent <id>       Provider agent id (default: letai-local)
   --provider-thinking <level> Provider thinking level (default: off)
+  --provider-backend <name>   rust-direct-letai|legacy-cli (default: rust-direct-letai)
   --auth-token <token>        Optional local bridge bearer token
   --auto-topup-usd <amount>   Auto top up on insufficient quota (default: 0.1)
   --print-config              Print sanitized resolved config and exit
@@ -68,6 +70,10 @@ while [[ $# -gt 0 ]]; do
       export OASIS7_LETAI_AUTO_TOPUP_USD="${2:-}"
       shift 2
       ;;
+    --provider-backend)
+      PROVIDER_BACKEND="${2:-}"
+      shift 2
+      ;;
     --print-config)
       PRINT_CONFIG="1"
       shift
@@ -105,6 +111,13 @@ if [[ -z "$PROVIDER_THINKING" ]]; then
   echo "error: --provider-thinking cannot be empty" >&2
   exit 2
 fi
+case "$PROVIDER_BACKEND" in
+  rust-direct-letai|legacy-cli) ;;
+  *)
+    echo "error: --provider-backend must be rust-direct-letai or legacy-cli" >&2
+    exit 2
+    ;;
+esac
 
 if [[ "$PRINT_CONFIG" == "1" ]]; then
   if [[ "${#CONFIG_ARGS[@]}" -gt 0 ]]; then
@@ -113,7 +126,10 @@ if [[ "$PRINT_CONFIG" == "1" ]]; then
     "$ROOT_DIR/scripts/with-letai-llm-config.sh" --print-config
   fi
   printf 'bridge_bind=%s\n' "$BIND_ADDR"
-  printf 'provider_cli=%s\n' "$ROOT_DIR/scripts/provider-remote-https/letai_provider_cli.py"
+  printf 'provider_backend=%s\n' "$PROVIDER_BACKEND"
+  if [[ "$PROVIDER_BACKEND" == "legacy-cli" ]]; then
+    printf 'provider_cli=%s\n' "$ROOT_DIR/scripts/provider-remote-https/letai_provider_cli.py"
+  fi
   printf 'auth_token_present=%s\n' "$([[ -n "$AUTH_TOKEN" ]] && echo true || echo false)"
   exit 0
 fi
@@ -121,6 +137,7 @@ fi
 export OASIS7_LOCAL_LETAI_PROVIDER_BIND="$BIND_ADDR"
 export OASIS7_LOCAL_LETAI_PROVIDER_AGENT="$PROVIDER_AGENT"
 export OASIS7_LOCAL_LETAI_PROVIDER_THINKING="$PROVIDER_THINKING"
+export OASIS7_LOCAL_LETAI_PROVIDER_BACKEND="$PROVIDER_BACKEND"
 export OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN="$AUTH_TOKEN"
 export OASIS7_LOCAL_LETAI_PROVIDER_CLI="$ROOT_DIR/scripts/provider-remote-https/letai_provider_cli.py"
 
@@ -134,15 +151,22 @@ export OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKENS="${OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKEN
 export OASIS7_REMOTE_LLM_TEMPERATURE="${OASIS7_REMOTE_LLM_TEMPERATURE:-0}"
 export OASIS7_REMOTE_LLM_STREAM="${OASIS7_REMOTE_LLM_STREAM:-true}"
 export OASIS7_REMOTE_LLM_AUTO_TOPUP_USD="${OASIS7_REMOTE_LLM_AUTO_TOPUP_USD:-${OASIS7_LETAI_AUTO_TOPUP_USD:-0.1}}"
+export OASIS7_REMOTE_LLM_PLATFORM_KEY="${OASIS7_REMOTE_LLM_PLATFORM_KEY:-}"
+export OASIS7_REMOTE_LLM_PLATFORM_USER_ID="${OASIS7_REMOTE_LLM_PLATFORM_USER_ID:-}"
+export OASIS7_REMOTE_LLM_PLATFORM_BASE_URL="${OASIS7_REMOTE_LLM_PLATFORM_BASE_URL:-${LETAI_PLATFORM_BASE_URL:-https://api.letai.run}}"
 
 cmd=(
   env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge --
   --bind "$OASIS7_LOCAL_LETAI_PROVIDER_BIND"
-  --provider-cli-bin "$OASIS7_LOCAL_LETAI_PROVIDER_CLI"
+  --provider-backend "$OASIS7_LOCAL_LETAI_PROVIDER_BACKEND"
   --provider-agent "$OASIS7_LOCAL_LETAI_PROVIDER_AGENT"
   --provider-thinking "$OASIS7_LOCAL_LETAI_PROVIDER_THINKING"
   --gateway-health-url "${OASIS7_LLM_BASE_URL%/}/models"
 )
+
+if [[ "$OASIS7_LOCAL_LETAI_PROVIDER_BACKEND" == "legacy-cli" ]]; then
+  cmd+=(--provider-cli-bin "$OASIS7_LOCAL_LETAI_PROVIDER_CLI")
+fi
 
 if [[ -n "$OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN" ]]; then
   cmd+=(--auth-token "$OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN")
@@ -161,15 +185,22 @@ export OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKENS="${OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKEN
 export OASIS7_REMOTE_LLM_TEMPERATURE="${OASIS7_REMOTE_LLM_TEMPERATURE:-0}"
 export OASIS7_REMOTE_LLM_STREAM="${OASIS7_REMOTE_LLM_STREAM:-true}"
 export OASIS7_REMOTE_LLM_AUTO_TOPUP_USD="${OASIS7_REMOTE_LLM_AUTO_TOPUP_USD:-${OASIS7_LETAI_AUTO_TOPUP_USD:-0.1}}"
+export OASIS7_REMOTE_LLM_PLATFORM_KEY="${OASIS7_REMOTE_LLM_PLATFORM_KEY:-}"
+export OASIS7_REMOTE_LLM_PLATFORM_USER_ID="${OASIS7_REMOTE_LLM_PLATFORM_USER_ID:-}"
+export OASIS7_REMOTE_LLM_PLATFORM_BASE_URL="${OASIS7_REMOTE_LLM_PLATFORM_BASE_URL:-${LETAI_PLATFORM_BASE_URL:-https://api.letai.run}}"
 
 cmd=(
   env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge --
   --bind "$OASIS7_LOCAL_LETAI_PROVIDER_BIND"
-  --provider-cli-bin "$OASIS7_LOCAL_LETAI_PROVIDER_CLI"
+  --provider-backend "$OASIS7_LOCAL_LETAI_PROVIDER_BACKEND"
   --provider-agent "$OASIS7_LOCAL_LETAI_PROVIDER_AGENT"
   --provider-thinking "$OASIS7_LOCAL_LETAI_PROVIDER_THINKING"
   --gateway-health-url "${OASIS7_LLM_BASE_URL%/}/models"
 )
+
+if [[ "$OASIS7_LOCAL_LETAI_PROVIDER_BACKEND" == "legacy-cli" ]]; then
+  cmd+=(--provider-cli-bin "$OASIS7_LOCAL_LETAI_PROVIDER_CLI")
+fi
 
 if [[ -n "$OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN" ]]; then
   cmd+=(--auth-token "$OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN")
