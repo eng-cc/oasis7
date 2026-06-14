@@ -105,7 +105,6 @@ summary_md_path = pathlib.Path(sys.argv[4]).resolve()
 run_dir = pathlib.Path(sys.argv[5]).resolve()
 
 required_lanes = [
-    "shared_devnet_pass",
     "public_rpc_ready",
     "explorer_public_ready",
     "faucet_guard_ready",
@@ -292,8 +291,15 @@ elif not lanes:
     gate_result = "block"
     manifest_blockers.append("lanes_tsv_required_for_non_skeleton_review")
 else:
-    blocking_lanes = [item for item in lanes if item["status"] == "block"]
-    partial_lanes = [item for item in lanes if item["status"] == "partial"]
+    required_lane_set = set(required_lanes)
+    required_lane_items = [
+        item for item in lanes if item["lane_id"] in required_lane_set
+    ]
+    ignored_lanes = [
+        item for item in lanes if item["lane_id"] not in required_lane_set
+    ]
+    blocking_lanes = [item for item in required_lane_items if item["status"] == "block"]
+    partial_lanes = [item for item in required_lane_items if item["status"] == "partial"]
     if data["status"] == "specified_skeleton_only":
         manifest_blockers.append(
             "manifest_status_specified_skeleton_only_requires_rehearsal_or_live"
@@ -301,7 +307,10 @@ else:
     if missing_required_lanes or manifest_blockers:
         gate_result = "block"
     else:
-        worst_rank = max((status_rank[item["status"]] for item in lanes), default=2)
+        worst_rank = max(
+            (status_rank[item["status"]] for item in required_lane_items),
+            default=2,
+        )
         if worst_rank == 2:
             gate_result = "block"
         elif worst_rank == 1:
@@ -341,6 +350,7 @@ summary = {
     "lanes": lanes,
     "blocking_lanes": blocking_lanes,
     "partial_lanes": partial_lanes,
+    "ignored_lanes": ignored_lanes if lanes else [],
     "manifest_blockers": manifest_blockers,
     "gate_result": gate_result,
     "readiness_verdict": readiness_verdict,

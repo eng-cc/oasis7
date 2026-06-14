@@ -14,7 +14,6 @@
   - denied: `mainnet_live`, `production_oc_settlement`
 
 ## Required gates
-- [ ] `shared_devnet_pass`
 - [ ] `public_rpc_ready`
 - [ ] `explorer_public_ready`
 - [ ] `faucet_guard_ready`

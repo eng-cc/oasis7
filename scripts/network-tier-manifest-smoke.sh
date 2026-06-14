@@ -15,7 +15,7 @@ ready_lanes_tsv="$tmpdir/public-testnet-ready-lanes.tsv"
 runtime_block_lanes_tsv="$tmpdir/public-testnet-runtime-block-lanes.tsv"
 template_pass_lanes_tsv="$tmpdir/public-testnet-template-pass-lanes.tsv"
 old_skeleton_pass_lanes_tsv="$tmpdir/public-testnet-old-skeleton-pass-lanes.tsv"
-shared_devnet_pass_evidence="$tmpdir/shared-devnet-pass-evidence.md"
+legacy_extra_lane_tsv="$tmpdir/public-testnet-legacy-extra-lane.tsv"
 public_rpc_evidence="$tmpdir/public-rpc-ready.md"
 explorer_evidence="$tmpdir/explorer-public-ready.md"
 faucet_evidence="$tmpdir/faucet-guard-ready.md"
@@ -49,13 +49,6 @@ PY
 
 cat >"$bundle_path" <<'EOF'
 {"bundle":"public-testnet-smoke"}
-EOF
-
-cat >"$shared_devnet_pass_evidence" <<'EOF'
-# shared_devnet pass evidence
-
-- gate_result: `pass`
-- note: smoke-only shared source lane evidence
 EOF
 
 cat >"$public_rpc_evidence" <<'EOF'
@@ -127,8 +120,7 @@ EOF
   --faucet-mode guarded_testnet_faucet \
   --reset-policy resettable \
   --value-semantics testnet \
-  --promote-from shared_devnet \
-  --require-gate shared_devnet_pass \
+  --promote-from governed_bootstrap_rehearsal \
   --require-gate public_rpc_ready \
   --require-gate explorer_public_ready \
   --require-gate faucet_guard_ready \
@@ -141,7 +133,6 @@ EOF
   --evidence-ref doc/testing/templates/public-testnet-skeleton-evidence.example.md >/dev/null
 
 cat >"$skeleton_lanes_tsv" <<'EOF'
-shared_devnet_pass	qa_engineer	pass	doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-03-24.md	shared devnet source
 public_rpc_ready	runtime_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder rpc evidence
 explorer_public_ready	runtime_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder explorer evidence
 faucet_guard_ready	liveops_community	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder faucet evidence
@@ -151,7 +142,6 @@ claims_boundary_review	qa_engineer	partial	doc/testing/templates/public-testnet-
 EOF
 
 cat >"$ready_lanes_tsv" <<'EOF'
-shared_devnet_pass	qa_engineer	pass	SHARED_DEVNET_PASS_EVIDENCE	shared devnet source
 public_rpc_ready	runtime_engineer	pass	PUBLIC_RPC_EVIDENCE	public rpc ready
 explorer_public_ready	runtime_engineer	pass	EXPLORER_EVIDENCE	explorer ready
 faucet_guard_ready	liveops_community	pass	FAUCET_EVIDENCE	faucet guard ready
@@ -160,7 +150,6 @@ runtime_bootstrap	runtime_engineer	pass	RUNTIME_BOOTSTRAP_EVIDENCE	runtime boots
 claims_boundary_review	qa_engineer	pass	CLAIMS_BOUNDARY_EVIDENCE	claims boundary reviewed
 EOF
 
-replace_literal "$ready_lanes_tsv" "SHARED_DEVNET_PASS_EVIDENCE" "$shared_devnet_pass_evidence"
 replace_literal "$ready_lanes_tsv" "PUBLIC_RPC_EVIDENCE" "$public_rpc_evidence"
 replace_literal "$ready_lanes_tsv" "EXPLORER_EVIDENCE" "$explorer_evidence"
 replace_literal "$ready_lanes_tsv" "FAUCET_EVIDENCE" "$faucet_evidence"
@@ -179,13 +168,13 @@ replace_literal "$runtime_block_lanes_tsv" $'runtime_bootstrap\truntime_engineer
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest doc/testing/templates/network-tier-public-testnet.example.json \
   --out-dir "$out_dir/example-skeleton" >/dev/null
-jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 7' \
+jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 6' \
   "$(latest_summary "$out_dir/example-skeleton")/summary.json" >/dev/null
 
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
   --out-dir "$out_dir/smoke-skeleton" >/dev/null
-jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 7' \
+jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 6' \
   "$(latest_summary "$out_dir/smoke-skeleton")/summary.json" >/dev/null
 
 python3 - <<'PY' "$manifest_path"
@@ -204,7 +193,7 @@ PY
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
   --out-dir "$out_dir/no-lanes-block" >/dev/null
-jq -e '.readiness_verdict == "block" and (.missing_required_lanes | length) == 7' \
+jq -e '.readiness_verdict == "block" and (.missing_required_lanes | length) == 6' \
   "$(latest_summary "$out_dir/no-lanes-block")/summary.json" >/dev/null
 
 ./scripts/network-tier-public-testnet-readiness.sh \
@@ -276,5 +265,17 @@ grep -q "pass evidence cannot use placeholder/template ref" "$tmpdir/old-skeleto
   --out-dir "$out_dir/ready-lanes" >/dev/null
 jq -e '.readiness_verdict == "ready_for_live_candidate" and .live_candidate_allowed == true' \
   "$(latest_summary "$out_dir/ready-lanes")/summary.json" >/dev/null
+
+cp "$ready_lanes_tsv" "$legacy_extra_lane_tsv"
+cat >>"$legacy_extra_lane_tsv" <<'EOF'
+shared_devnet_pass	qa_engineer	partial	doc/testing/evidence/shared-network-shared-devnet-follow-up-promotion-record-2026-03-24.md	legacy lane retained for historical trace only
+EOF
+
+./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest "$manifest_path" \
+  --lanes-tsv "$legacy_extra_lane_tsv" \
+  --out-dir "$out_dir/legacy-extra-lane-ignored" >/dev/null
+jq -e '.readiness_verdict == "ready_for_live_candidate" and .live_candidate_allowed == true and (.ignored_lanes | any(.lane_id == "shared_devnet_pass")) and (.partial_lanes | length) == 0' \
+  "$(latest_summary "$out_dir/legacy-extra-lane-ignored")/summary.json" >/dev/null
 
 echo "network-tier-manifest smoke passed"
