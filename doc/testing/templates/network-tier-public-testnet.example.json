@@ -43,10 +43,9 @@
   },
   "promotion_policy": {
     "promote_from": [
-      "shared_devnet"
+      "governed_bootstrap_rehearsal"
     ],
     "required_gates": [
-      "shared_devnet_pass",
       "public_rpc_ready",
       "explorer_public_ready",
       "faucet_guard_ready",

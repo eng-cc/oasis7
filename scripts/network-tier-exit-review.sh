@@ -68,10 +68,12 @@ summary = {
 
 if tier == "public_testnet":
     required = {
-        "shared_devnet_pass",
         "public_rpc_ready",
+        "explorer_public_ready",
         "faucet_guard_ready",
         "reset_policy_announced",
+        "runtime_bootstrap",
+        "claims_boundary_review",
     }
     summary["exit_review_readiness"] = "ready_for_rehearsal_review" if required.issubset(set(gates)) else "missing_required_public_testnet_gates"
 elif tier == "mainnet":
