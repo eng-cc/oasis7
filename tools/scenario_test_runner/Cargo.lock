@@ -3213,7 +3213,6 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "oasis7_proto",
- "oasis7_wasm_build",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -3278,15 +3277,6 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "oasis7_wasm_build"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "sha2",
 ]
 
 [[package]]
