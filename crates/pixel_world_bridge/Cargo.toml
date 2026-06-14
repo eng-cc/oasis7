@@ -6,7 +6,6 @@ edition = "2021"
 [features]
 default = ["webgl2_runtime"]
 webgl2_runtime = ["bevy/webgl2"]
-webgpu_runtime = ["bevy/webgpu"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

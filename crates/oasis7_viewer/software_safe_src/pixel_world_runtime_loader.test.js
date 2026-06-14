@@ -58,11 +58,11 @@ describe("pixel world runtime loader", () => {
     }));
   });
 
-  it("selects the webgpu backend when navigator.gpu is available", () => {
+  it("selects the webgl2 backend when navigator.gpu is available", () => {
     __resetPixelWorldRuntimeModuleForTest();
     expect(resolveBackendModuleUrlForTest({
       gpu: {},
-    })).toContain("/webgpu/pixel_world_bridge.js");
+    })).toContain("/webgl2/pixel_world_bridge.js");
   });
 
   it("selects the webgl2 backend when navigator.gpu is unavailable", () => {
