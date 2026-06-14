@@ -179,10 +179,6 @@ await buildPixelWorldRuntimeVariant({
   featureName: "webgl2_runtime",
   backendDirName: "webgl2",
 });
-await buildPixelWorldRuntimeVariant({
-  featureName: "webgpu_runtime",
-  backendDirName: "webgpu",
-});
 await copyFile(pixelWorldRuntimeSelectorSourcePath, pixelWorldRuntimeModulePath);
 await rm(tempOutDir, { recursive: true, force: true });
 

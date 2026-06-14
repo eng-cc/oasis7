@@ -202,7 +202,11 @@ trap cleanup EXIT
 game_url="$provided_url"
 if [[ -z "$game_url" ]]; then
   run_log="$out_dir/launcher-stack.log"
-  ./scripts/run-launcher-stack.sh --skip-llm-provider-preflight "${run_game_test_args[@]}" >"$run_log" 2>&1 &
+  launcher_cmd=(./scripts/run-launcher-stack.sh --skip-llm-provider-preflight)
+  if [[ ${#run_game_test_args[@]} -gt 0 ]]; then
+    launcher_cmd+=("${run_game_test_args[@]}")
+  fi
+  "${launcher_cmd[@]}" >"$run_log" 2>&1 &
   launcher_pid=$!
   deadline=$((SECONDS + startup_timeout_secs))
   while (( SECONDS < deadline )); do
@@ -216,7 +220,7 @@ if not path.exists():
 text = path.read_text(encoding="utf-8", errors="ignore")
 matches = re.findall(r"(http://[^\s]+)", text)
 for candidate in reversed(matches):
-    candidate = candidate.rstrip(')"\'')
+    candidate = candidate.rstrip(chr(41) + chr(34) + chr(39))
     if "test_api=1" in candidate and "ws=" in candidate:
         print(candidate)
         raise SystemExit(0)
@@ -293,17 +297,25 @@ import pathlib
 import sys
 
 summary = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+ok = "true" if summary.get("ok") else "false"
+run_id = summary.get("runId")
+game_url = summary.get("gameUrl")
+render_mode = summary.get("renderMode")
+runtime_status = summary.get("pixelWorldRuntimeStatus")
+runtime_source = summary.get("pixelWorldRuntimeSource")
+runtime_module_url = summary.get("pixelWorldRuntimeModuleUrl") or "(null)"
+last_error = summary.get("lastError") or "(null)"
 lines = [
     "# viewer pixel world wasm regression",
     "",
-    f"- ok: {'true' if summary['ok'] else 'false'}",
-    f"- runId: `{summary['runId']}`",
-    f"- gameUrl: `{summary['gameUrl']}`",
-    f"- renderMode: `{summary['renderMode']}`",
-    f"- pixelWorldRuntimeStatus: `{summary['pixelWorldRuntimeStatus']}`",
-    f"- pixelWorldRuntimeSource: `{summary['pixelWorldRuntimeSource']}`",
-    f"- pixelWorldRuntimeModuleUrl: `{summary['pixelWorldRuntimeModuleUrl'] or '(null)'}`",
-    f"- lastError: `{summary['lastError'] or '(null)'}`",
+    f"- ok: {ok}",
+    f"- runId: `{run_id}`",
+    f"- gameUrl: `{game_url}`",
+    f"- renderMode: `{render_mode}`",
+    f"- pixelWorldRuntimeStatus: `{runtime_status}`",
+    f"- pixelWorldRuntimeSource: `{runtime_source}`",
+    f"- pixelWorldRuntimeModuleUrl: `{runtime_module_url}`",
+    f"- lastError: `{last_error}`",
 ]
 pathlib.Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY

@@ -1,13 +1,8 @@
 let runtimeModulePromise = null;
 let runtimeModule = null;
 
-function browserSupportsWebGpu(nav = globalThis.navigator) {
-  return typeof nav !== "undefined" && !!nav?.gpu;
-}
-
-function resolveBackendModuleUrl(nav = globalThis.navigator) {
-  const backendDir = browserSupportsWebGpu(nav) ? "webgpu" : "webgl2";
-  return new URL(`${backendDir}/pixel_world_bridge.js`, import.meta.url).href;
+function resolveBackendModuleUrl() {
+  return new URL("webgl2/pixel_world_bridge.js", import.meta.url).href;
 }
 
 async function loadRuntimeModule() {
@@ -38,8 +33,8 @@ export default async function initPixelWorldBridgeSelector() {
   await loadRuntimeModule();
 }
 
-export function resolveBackendModuleUrlForTest(nav) {
-  return resolveBackendModuleUrl(nav);
+export function resolveBackendModuleUrlForTest() {
+  return resolveBackendModuleUrl();
 }
 
 export function __resetPixelWorldRuntimeModuleForTest() {

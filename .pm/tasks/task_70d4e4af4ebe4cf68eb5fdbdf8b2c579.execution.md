@@ -1,0 +1,282 @@
+# task_70d4e4af4ebe4cf68eb5fdbdf8b2c579 Execution Log
+
+- task_uid: task_70d4e4af4ebe4cf68eb5fdbdf8b2c579
+- title: Audit visual code and Rust dependency pruning
+- owner_role: tpm
+- worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-visual-code-dependency-prune-audit
+
+<!-- Append entries using:
+Example:
+  ## YYYY-MM-DD HH:MM:SS CST / role_name
+  - 完成内容: ...
+  - 遗留事项: ...
+  - Action: ...
+  - Validation Command: ...
+  - Expected Result: ...
+  - Actual Result: ...
+  - Blocker / Next Action: ...
+-->
+
+## 2026-06-14 13:37:55 CST / tpm
+- 完成内容: WORKFLOW BOOTSTRAP DECIDED
+  - Repository State Impact: read-only professional repository-health audit requested; repository state changes limited to required task/worktree truth and execution-log writeback.
+  - Isolation Decision: created dedicated canonical worktree `/Users/scc/ccwork/worktrees/oasis7-engineering-visual-code-dependency-prune-audit` from `origin/main` on branch `task/engineering-visual-code-dependency-prune-audit`.
+  - Task Truth: owner role `tpm`; `.pm` task `task_70d4e4af4ebe4cf68eb5fdbdf8b2c579`; execution log `.pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.execution.md`.
+  - Formal docs: `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, `doc/engineering/prd.md`, `doc/engineering/project.md`.
+- 完成内容: WORKFLOW ROUTE DECIDED
+  - Current phase: read-only professional/domain judgment after bootstrap.
+  - Selected workflow surface: `repo-owned-workflow-router` route 0, bounded `repository_health_engineer` slice.
+  - Skipped workflow skills: `bounded-brainstorming` (scope is concrete); `tdd-test-writer` (no behavior change yet); `executing-project-tasks` (no implementation requested yet); `verification-before-completion` and closeout (audit not complete).
+- 完成内容: Subagent Slice Plan
+  - role: `repository_health_engineer`
+  - slice type: bounded read-only repository health audit
+  - intended model configuration: workflow source-of-truth default subagent runtime; no override requested
+  - actual dispatched model/reasoning: inherited/unverified until subagent tool reports otherwise
+  - context delivery mode: full-thread/full-history fork when supported, plus explicit context checklist below
+  - mandatory context checklist/packet:
+    - identity and authority: `AGENTS.md`, `.agents/roles/repository_health_engineer.md`
+    - workflow governance: `doc/engineering/workflow/source-of-truth.md`, `.agents/skills/default-workflow-bootstrap/SKILL.md`, `.agents/skills/repo-owned-workflow-router/SKILL.md`
+    - task truth: `.pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.yaml`, this execution log, canonical worktree and branch above
+    - user intent: "让工程治理的同事看看可视化相关部分有没有可以删除的代码或rust依赖"
+    - scoped repo context: visualization/viewer/render/UI-related crates, manifests, feature flags, scripts, docs, and dependency references; include Rust dependency graph evidence where practical
+    - collaboration boundary: TPM integrates and reports; `repository_health_engineer` owns repository-health findings only and must request viewer/runtime/QA follow-up for domain correctness or release-readiness claims
+  - write scope: read-only inspection plus execution-log finding writeback only; do not delete code or edit manifests in this slice
+  - return contract: prioritized deletion/pruning candidates with evidence paths, dependency evidence, risk, confidence, proposed owner, and suggested next action; explicitly list no-findings and residual risks
+  - formal sink / writeback surface: append slice findings to this execution log
+  - integration owner: `tpm`
+  - integration order: dispatch slice, integrate findings, summarize to user, propose next task/implementation path if deletion candidates are credible
+- Validation Command: `./scripts/new-task-worktree.sh engineering visual-code-dependency-prune-audit --base origin/main --pm-owner-role tpm ... --json`
+- Expected Result: dedicated worktree and committed `.pm` task exist before professional slice dispatch.
+- Actual Result: worktree and task were created; cargo shared `target` linked.
+- 遗留事项: none for bootstrap; professional audit still pending at this point.
+- Action: dispatch the bounded `repository_health_engineer` read-only audit.
+- Blocker / Next Action: dispatch `repository_health_engineer` bounded read-only audit.
+
+## 2026-06-14 13:47:23 CST / repository_health_engineer
+- 完成内容: Bounded read-only repository-health audit completed for visualization/viewer/render/UI-related code and Rust dependencies.
+  - Actual dispatched model/reasoning: inherited/unverified in this execution environment.
+  - Attribution boundary: findings below are repository-health / debt triage findings only; they are not viewer-domain correctness, runtime correctness, QA release-readiness, or product-direction signoff.
+  - Scope inspected: root workspace manifest, `crates/pixel_world_bridge`, `crates/oasis7_viewer`, `crates/oasis7_client_launcher`, `crates/oasis7_launcher_ui`, viewer/release/build scripts, active viewer/testing docs, and historical removed `standard_3d` references.
+- Finding: no must-fix deletion candidate found.
+  - Category: no-action / residual risk.
+  - Severity/Risk: P3 if left alone; the current repo already documents that old `standard_3d` code/scripts/active docs were removed and that current player surfaces are `viewer` / `pure_api` with `software_safe` as compat alias.
+  - Evidence:
+    - `doc/world-simulator/prd.md:271-278` defines `viewer` as the low-fidelity primary Web entry and says `software_safe` is compatibility/historical naming; `doc/world-simulator/prd.md:497` says old 3D / visual-QA Viewer surface code, scripts, and active docs are removed.
+    - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md:15-32` and `:75-80` intentionally keep `viewer.html` / `viewer.js` as canonical and `software_safe.html` / `software_safe.js` as compat.
+    - `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.prd.md:57-68` requires generated pixel-world runtime to continue from the finalize flow.
+  - Confidence: high for "not directly deletable without changing current contracts".
+  - Proposed owner: TPM integrates; no immediate implementation owner unless user wants a cleanup task.
+  - Action: do not delete `software_safe` alias, generated runtime flow, or `pixel_world_bridge` based on this audit alone.
+  - Validation needed if challenged: `rg -n "software_safe|standard_3d|pixel-world-bridge" doc/world-simulator/prd.md doc/world-simulator/viewer testing-manual.md scripts crates/oasis7_viewer` plus current viewer build/test chain.
+- Candidate: evaluate pruning one of the two pixel-world wasm backend variants, especially the WebGPU package path.
+  - Category: Rust dependency / generated artifact / release bundle cost.
+  - Severity/Risk: P2 safe-to-investigate, not must-fix.
+  - Evidence:
+    - `crates/pixel_world_bridge/Cargo.toml:6-15` defines default `webgl2_runtime`, optional `webgpu_runtime`, and direct `bevy` dependency with `2d` + `web`.
+    - `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs:134-164` builds one backend variant per feature; `:178-185` always builds both `webgl2_runtime` and `webgpu_runtime`; `:186` writes the selector as the served runtime module.
+    - `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js:4-10` selects `webgpu` whenever `navigator.gpu` exists and otherwise `webgl2`; `pixel_world_runtime_loader.test.js:61-70` locks both routing branches.
+    - `scripts/bundle-freshness-lib.sh` records both `webgl2` and `webgpu` runtime artifacts in the bundle manifest; release freshness therefore treats both as current bundle truth.
+    - `cargo tree -p pixel_world_bridge --no-default-features --features webgpu_runtime --target wasm32-unknown-unknown --depth 2` and the same command with `webgl2_runtime` both show `bevy` as the only Rust rendering stack owner for this crate.
+  - Confidence: medium. The duplicated backend build is real, but whether WebGPU is obsolete is a viewer/runtime compatibility decision outside repository-health ownership.
+  - Proposed owner: `viewer_engineer` primary; `qa_engineer` for browser/device matrix and release validation; `repository_health_engineer` can review manifest/doc cleanup after owner decision.
+  - Proposed action: if viewer owner confirms WebGL2 is sufficient, remove `webgpu_runtime`, stop building `backendDirName: "webgpu"`, simplify selector/tests/manifest paths, and update bundle freshness docs. If WebGPU is still desired, keep both and optionally add an explicit cost/benefit note so future audits do not re-litigate it.
+  - Validation needed: `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_runtime_loader`, `npm --prefix crates/oasis7_viewer run build:software-safe`, `./scripts/copy-viewer-web-dist.test.sh`, `./scripts/agent-browser-viewer-dist-freshness-test.sh`, `./scripts/validate-release-platform-entrypoints.sh` on a bundle, plus headed viewer smoke in at least one browser environment where `navigator.gpu` exists.
+- Candidate: continue splitting `legacy_core.js` and retire deleted chunks after stable module extraction.
+  - Category: dead-code risk / module-size debt / visual UI code maintainability.
+  - Severity/Risk: P2 safe-to-investigate; not a direct deletion candidate today.
+  - Evidence:
+    - `wc -l` shows `crates/oasis7_viewer/software_safe_src/legacy_core.js` is 3241 lines, larger than the other viewer source modules.
+    - `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.prd.md:13-18` identifies `legacy_core.js` as a god-module debt target; `:96-103` rebaselines AC-1 as partially complete, with control / semantic command / DOM rendering / bootstrap still inside `legacy_core.js`.
+    - `crates/oasis7_viewer/software_safe_src/main.jsx:4` and `:2314`, `pixel_world_host.jsx:3`, and tests still import `legacy_core.js`, so deleting it now would break active UI/test contracts.
+  - Confidence: high for debt existence; low for immediate deletion safety.
+  - Proposed owner: `viewer_engineer`, with `qa_engineer` for UI contract regression.
+  - Proposed action: create a focused follow-up to extract one remaining responsibility at a time (control send loop, semantic commands, DOM rendering, bootstrap assembly), then delete only proven-unused helpers after import/test references are gone.
+  - Validation needed: `npm --prefix crates/oasis7_viewer run test:ui`, `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`, `npm --prefix crates/oasis7_viewer run build:software-safe`, and S6 headed screenshot/model visual review for visible surface changes.
+- Candidate: audit whether `scripts/run-viewer-web.sh` can move from active-compatible tool to deprecated/remove path.
+  - Category: script surface / operator-doc cleanup.
+  - Severity/Risk: P3 safe-to-investigate.
+  - Evidence:
+    - `testing-manual.md:54-60` says `oasis7_game_launcher` is the Web startup entry and `run-viewer-web.sh` is retained only for compatibility/troubleshooting.
+    - `scripts/run-viewer-web.sh:58-65` still performs a real viewer build, dist copy, and Python static server.
+    - `testing-manual.md:1162` and several current viewer/script governance docs still list it as a validation surface, so deleting it without doc/script cleanup would break operator expectations.
+  - Confidence: medium. The script is lower-priority than the launcher path, but still intentionally retained.
+  - Proposed owner: `qa_engineer` + `viewer_engineer`, with `repository_health_engineer` for docs/script-contract cleanup.
+  - Proposed action: either mark it explicitly deprecated with a replacement command and removal date, or keep it as a small compatibility shim. Do not delete in this audit.
+  - Validation needed if removed: `rg -n "run-viewer-web.sh" testing-manual.md doc scripts .github`, update docs/contracts, run `bash -n` on affected scripts, run viewer build/dist smoke through the replacement path.
+- Candidate: launcher Rust GUI stack (`eframe` / patched `egui-winit`) is a large visual-adjacent dependency but not a credible deletion candidate under current release contracts.
+  - Category: Rust dependency / launcher surface.
+  - Severity/Risk: P2 to investigate only if product wants to remove native/web launcher GUI, otherwise no action.
+  - Evidence:
+    - `crates/oasis7_client_launcher/Cargo.toml:14-24` directly depends on `eframe` for native and wasm launcher UI; root `Cargo.toml:21-27` keeps an `egui-winit` patch specifically for the launcher visual stack.
+    - `cargo tree -p oasis7_client_launcher -i eframe`, `-i egui-winit`, and `-i winit` show those dependencies enter through `oasis7_client_launcher`.
+    - `.github/workflows/release-packages.yml`, `.github/workflows/mainnet-packages.yml`, `.github/workflows/testnet-packages.yml`, `scripts/build-game-launcher-bundle.sh`, and `scripts/validate-release-platform-entrypoints.sh` still build/package `web-launcher` and native `oasis7_client_launcher` entrypoints.
+  - Confidence: high that dependency is active; high that direct deletion is unsafe.
+  - Proposed owner: `producer_system_designer` for product surface decision, `viewer_engineer`/launcher owner for implementation, `qa_engineer` for release matrix.
+  - Proposed action: no deletion now. If desired, open a separate launcher-surface simplification task to decide whether the web/native client launcher remains a release artifact; only after that remove `eframe`, `egui-winit` patch, launcher workflows, and package entrypoints.
+  - Validation needed if pruned: package workflows/build bundle validation, `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher --bin oasis7_client_launcher`, wasm `trunk build` replacement decision, and release entrypoint validation.
+- Commands run / evidence collection:
+  - `rg` searches for `debug_viewer`, `standard_3d`, `software_safe`, `pixel_world_bridge`, `webgpu_runtime`, `webgl2_runtime`, `eframe`, `egui`, `run-viewer-web.sh`, `viewer-pixel-world-*`.
+  - `cargo tree -p pixel_world_bridge --depth 2`; `cargo tree -p pixel_world_bridge --no-default-features --features webgpu_runtime --target wasm32-unknown-unknown --depth 2`; same with `webgl2_runtime`.
+  - `cargo tree -p oasis7_client_launcher --depth 2`; `cargo tree -p oasis7_client_launcher --target wasm32-unknown-unknown --depth 2`; inverse trees for `eframe`, `egui-winit`, `winit`, and `bevy`.
+  - Manifest/source/doc inspection with `nl -ba` / `sed`; `wc -l` for viewer source concentration.
+- 遗留事项: no must-delete item; implementation requires viewer/QA confirmation before pruning any candidate.
+- Action: route the WebGPU backend candidate to viewer/QA slices if the user asks to execute cleanup.
+- Validation Command: repository-health read-only audit used `rg`, `cargo tree`, manifest inspection, and doc/script inspection listed above.
+- Expected Result: deletion candidates are classified with owner/risk/evidence and no direct deletion occurs in the audit slice.
+- Actual Result: audit found no direct must-delete item and identified WebGPU backend pruning as the highest-value bounded candidate.
+- Blocker / Next Action: no blocker for TPM integration. Any actual deletion/pruning should route to a new implementation slice with `viewer_engineer`/`qa_engineer` (and possibly producer decision for launcher surface) before code changes.
+
+## 2026-06-14 14:17:59 CST / tpm
+- 完成内容: User requested "做"; routed the completed read-only audit into implementation of the highest-value concrete pruning candidate.
+  - Selected candidate: evaluate and, if bounded role review supports it, remove the `pixel_world_bridge` WebGPU package/build path while keeping WebGL2 as the single pixel-world wasm runtime.
+  - Rationale: engineering audit found no must-delete item; WebGPU backend is the only concrete Rust dependency/artifact duplication candidate with a bounded manifest/build/test surface. `legacy_core.js` is a refactor debt, `run-viewer-web.sh` is a deprecation policy task, and launcher `eframe` removal needs product decision.
+  - Selected workflow surface: `executing-project-tasks` with bounded `viewer_engineer` implementation/boundary slice and `qa_engineer` verification-scope slice.
+- 完成内容: Subagent Slice Plan
+  - role: `viewer_engineer`
+  - slice type: bounded implementation-boundary review for pixel-world backend pruning
+  - intended model configuration: workflow source-of-truth default subagent runtime; no override requested
+  - actual dispatched model/reasoning: inherited/unverified until subagent tool reports otherwise
+  - context delivery mode: full-thread/full-history fork when supported, plus explicit context checklist
+  - mandatory context checklist/packet: `AGENTS.md`, `.agents/roles/viewer_engineer.md`, `doc/engineering/workflow/source-of-truth.md`, this task yaml/log, repository-health findings above, `crates/pixel_world_bridge/Cargo.toml`, `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js`, `scripts/bundle-freshness-lib.sh`, `scripts/viewer-web-dist-contract.sh`
+  - write scope: may edit only the pixel-world backend selection/build/manifest/test/docs surfaces listed above; do not touch unrelated viewer UI behavior
+  - return contract: confirm whether WebGPU pruning is acceptable under viewer contracts; if acceptable, list changed paths and required verification; if not, explain blocker and recommend fallback cleanup
+  - formal sink / writeback surface: append role finding/implementation evidence to this execution log
+  - integration owner: `tpm`
+  - integration order: run in parallel with QA scope slice; TPM integrates patch and verification after both return
+- 完成内容: Subagent Slice Plan
+  - role: `qa_engineer`
+  - slice type: bounded verification-scope review for pixel-world WebGPU pruning
+  - intended model configuration: workflow source-of-truth default subagent runtime; no override requested
+  - actual dispatched model/reasoning: inherited/unverified until subagent tool reports otherwise
+  - context delivery mode: full-thread/full-history fork when supported, plus explicit context checklist
+  - mandatory context checklist/packet: `AGENTS.md`, `.agents/roles/qa_engineer.md`, `testing-manual.md`, this task yaml/log, repository-health findings above, candidate affected files and current test scripts
+  - write scope: read-only plus execution-log finding writeback unless a tiny test expectation update is required and non-overlapping
+  - return contract: minimal sufficient validation commands and release-risk notes for removing WebGPU backend package path; identify blockers that require keeping both backends
+  - formal sink / writeback surface: append role finding/verification plan to this execution log
+  - integration owner: `tpm`
+  - integration order: QA plan gates completion claim after implementation
+- Validation Command: `git status --short --branch`
+- Expected Result: task worktree is active and only task-truth files are dirty before implementation.
+- Actual Result: on `task/engineering-visual-code-dependency-prune-audit`; dirty files are `.pm` task truth only.
+- 遗留事项: implementation and QA verification still pending.
+- Action: dispatch viewer and QA slices, then integrate the smallest accepted pruning patch.
+- Blocker / Next Action: dispatch viewer and QA slices, then implement the smallest accepted pruning patch.
+
+## 2026-06-14 14:29:01 CST / viewer_engineer
+- 完成内容: Bounded viewer implementation slice completed for pruning the `pixel_world_bridge` WebGPU backend package/build path while keeping WebGL2 as the single runtime backend.
+  - Actual dispatched model/reasoning: inherited/unverified in this execution environment.
+  - Attribution boundary: this is viewer contract / implementation judgment only; it is not QA release signoff or full browser-matrix approval.
+  - Viewer contract conclusion: WebGPU pruning is acceptable under the current viewer contracts inspected in this slice. Current docs and scripts require the generated `dist/pixel-world-bridge/` runtime and served `./pixel-world-bridge/` module contract to remain available; they do not require a second WebGPU backend variant. The previous WebGPU path was selected only by `navigator.gpu` in the selector and duplicated the build/manifest output.
+  - Changed paths:
+    - `Cargo.lock`
+    - `crates/pixel_world_bridge/Cargo.toml`
+    - `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`
+    - `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js`
+    - `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js`
+    - `scripts/bundle-freshness-lib.sh`
+  - Implementation:
+    - Removed `webgpu_runtime = ["bevy/webgpu"]` from `pixel_world_bridge`.
+    - Stopped finalize from building the `webgpu` backend directory.
+    - Simplified the runtime selector to always load `webgl2/pixel_world_bridge.js`.
+    - Updated loader tests so browsers with `navigator.gpu` still route to WebGL2.
+    - Removed WebGPU-specific bundle manifest hash fields.
+    - Kept the served top-level `pixel-world-bridge/pixel_world_bridge.js` selector contract intact.
+  - Residual risk: QA still needs to decide whether the browser/device matrix accepts WebGL2-only pixel-world runtime. No release-readiness claim is made by this slice.
+- 遗留事项: QA release/browser-matrix signoff remains outside this viewer slice.
+- Action: patched the bounded pixel-world backend selection/build/manifest/test surface.
+- Validation Command: `rg -n "webgpu_runtime|bevy/webgpu|pixelWorldWebgpu|/webgpu/|webgpu" crates/pixel_world_bridge crates/oasis7_viewer scripts doc/world-simulator/viewer testing-manual.md Cargo.toml Cargo.lock`
+- Expected Result: no remaining WebGPU backend package/build/manifest/doc references in scoped surfaces.
+- Actual Result: command exited with status 1 and no matches.
+- Validation Command: `env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown`
+- Expected Result: `pixel_world_bridge` still checks for the wasm target with WebGL2 default runtime.
+- Actual Result: passed after waiting for the shared Cargo package/build cache lock; `Finished dev profile`.
+- Validation Command: `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_runtime_loader`
+- Expected Result: runtime loader tests pass with WebGL2-only selector behavior.
+- Actual Result: passed; 1 test file, 5 tests.
+- Validation Command: `npm --prefix crates/oasis7_viewer run build:software-safe`
+- Expected Result: software-safe build and finalize succeed while generating only the WebGL2 backend runtime under `dist/pixel-world-bridge/`.
+- Actual Result: passed; finalize completed and generated top-level selector plus `webgl2/` runtime files.
+- Validation Command: `./scripts/copy-viewer-web-dist.test.sh`
+- Expected Result: viewer web dist copy contract still passes with the top-level pixel-world bridge module present.
+- Actual Result: passed; `copy-viewer-web-dist.test: OK`.
+- Validation Command: `./scripts/agent-browser-viewer-dist-freshness-test.sh`
+- Expected Result: dist freshness helper remains aligned after removing WebGPU manifest fields.
+- Actual Result: passed; `agent-browser viewer dist freshness tests passed`.
+- Validation Command: `git diff --check`
+- Expected Result: no whitespace errors.
+- Actual Result: passed with no output.
+- Blocker / Next Action: no viewer implementation blocker. TPM should integrate with the QA verification-scope slice before any completion or release-readiness claim.
+
+## 2026-06-14 14:23:16 CST / qa_engineer
+- 完成内容: Bounded QA verification-scope review completed for pruning the `pixel_world_bridge` WebGPU backend package/build path while keeping WebGL2 as the single pixel-world wasm runtime.
+  - Actual dispatched model/reasoning: inherited/unverified in this execution environment.
+  - Attribution boundary: QA owns verification plan, browser/release risk notes, and blocker classification only; this is not viewer implementation ownership and does not decide the product/runtime value of WebGPU.
+  - Scope inspected: `AGENTS.md`, `.agents/roles/qa_engineer.md`, `testing-manual.md`, task yaml/log, repository-health findings, `crates/pixel_world_bridge/Cargo.toml`, `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js`, `scripts/bundle-freshness-lib.sh`, `scripts/viewer-web-dist-contract.sh`, `scripts/copy-viewer-web-dist.test.sh`, `scripts/agent-browser-viewer-dist-freshness-test.sh`, and `scripts/viewer-pixel-world-wasm-regression.sh`.
+- 遗留事项:
+  - Cross-browser/device matrix remains residual release risk, especially environments where WebGL2 is disabled while WebGPU exists.
+  - Release bundle validation is needed only if this task claims release-bundle readiness.
+- Action: Gate local implementation claim on cargo wasm check, Vitest runtime loader, software-safe build, dist copy/freshness checks, and viewer pixel-world wasm regression; keep selector/test/build/freshness surfaces internally consistent.
+- Validation Command: Read-only QA inspection of `testing-manual.md`, affected manifests/scripts/tests, and existing viewer regression entrypoints.
+- Expected Result: QA classifies blocker conditions and provides the minimal validation command set for the WebGPU pruning patch.
+- Actual Result: QA did not block the pruning attempt, provided the required validation set, and noted cross-browser residual risk.
+- Blocker / Next Action: Await `viewer_engineer` implementation/boundary decision. QA recommends the above command set as the gate before TPM claims the WebGPU prune complete.
+
+## 2026-06-14 14:47:15 CST / tpm
+- 完成内容: Integrated `viewer_engineer` WebGPU backend pruning patch and `qa_engineer` verification scope.
+  - Implementation scope: removed the `pixel_world_bridge` WebGPU feature/build/artifact/freshness manifest path; kept WebGL2 as the single generated backend and preserved the served top-level `pixel-world-bridge/pixel_world_bridge.js` selector contract.
+  - Additional validation-surface fix: repaired `scripts/viewer-pixel-world-wasm-regression.sh` for macOS Bash 3.2 compatibility so the QA-required wasm regression can run. Changes avoid the parsed single-quote pattern in embedded Python, avoid empty-array expansion under `set -u`, and keep summary output semantics unchanged.
+  - Generated artifact check: `crates/oasis7_viewer/dist/pixel-world-bridge` contains only the top-level selector and `webgl2/` bindgen/runtime files; no stale `webgpu/` directory remains.
+- Validation Command: `env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown`
+- Expected Result: `pixel_world_bridge` checks for wasm target with WebGL2 default runtime.
+- Actual Result: passed; `Finished dev profile`.
+- Validation Command: `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_runtime_loader`
+- Expected Result: loader tests pass and lock single-backend behavior.
+- Actual Result: passed; 1 test file, 5 tests.
+- Validation Command: `npm --prefix crates/oasis7_viewer run build:software-safe`
+- Expected Result: software-safe build/finalize succeeds and generates WebGL2-only pixel-world runtime.
+- Actual Result: passed; finalized `crates/oasis7_viewer/viewer.js`.
+- Validation Command: `./scripts/copy-viewer-web-dist.test.sh`
+- Expected Result: viewer web dist copy contract still passes with top-level pixel-world bridge module.
+- Actual Result: passed; `copy-viewer-web-dist.test: OK`.
+- Validation Command: `./scripts/agent-browser-viewer-dist-freshness-test.sh`
+- Expected Result: dist freshness helper remains aligned with single-backend contract.
+- Actual Result: passed; `agent-browser viewer dist freshness tests passed`.
+- Validation Command: `bash -n scripts/viewer-pixel-world-wasm-regression.sh`
+- Expected Result: QA-required regression script parses under local Bash.
+- Actual Result: passed after compatibility fix.
+- Validation Command: `bash scripts/viewer-pixel-world-wasm-regression.sh --headless --startup-timeout 420`
+- Expected Result: headed/browser automation reaches viewer-compatible render mode with pixel-world wasm runtime ready and no last error.
+- Actual Result: passed:
+  - runId: `viewer-pixel-world-wasm-20260614-144620`
+  - renderMode: `viewer`
+  - pixelWorldRuntimeStatus: `ready`
+  - pixelWorldRuntimeSource: `wasm_bindgen_runtime`
+  - pixelWorldRuntimeModuleUrl: `http://127.0.0.1:4173/pixel-world-bridge/pixel_world_bridge.js`
+  - lastError: `(null)`
+- Validation Command: `rg -n "webgpu_runtime|bevy/webgpu|pixelWorldWebgpu|/webgpu/|webgpu" crates/pixel_world_bridge crates/oasis7_viewer scripts doc/world-simulator/viewer testing-manual.md Cargo.toml Cargo.lock`
+- Expected Result: no remaining scoped WebGPU backend references.
+- Actual Result: passed; `rg` exited 1 with no matches.
+- 遗留事项: final repo-owned closeout checks and PR-prep review remain.
+- Action: run `./scripts/pm/lint.sh`, `./scripts/doc-governance-check.sh`, and `git diff --check`; then continue into closeout/PR workflow if clean or record blockers.
+- Blocker / Next Action: run final repo-owned checks and closeout/PR preparation if clean.
+
+## 2026-06-14 14:57:00 CST / tpm
+- 完成内容: Completion verification pass executed before task closeout.
+  - Implementation verification remained green after execution-log format fixes.
+  - Task-local workflow lint is clean.
+  - Repo-wide PM lint still fails on unrelated historical task execution logs, but no longer reports this task UID.
+- 遗留事项: repo-wide `.pm` lint debt remains outside this task; release bundle validation was not claimed.
+- Action: proceed to `task-closeout.sh` with a task-local verification command, then collect pre-PR local role review.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_70d4e4af4ebe4cf68eb5fdbdf8b2c579 --phase current`
+- Expected Result: current task workflow evidence passes task-local lint.
+- Actual Result: passed; `workflow-lint: OK`.
+- Validation Command: `./scripts/doc-governance-check.sh`
+- Expected Result: documentation governance passes.
+- Actual Result: passed; `doc-governance-check: OK`.
+- Validation Command: `git diff --check`
+- Expected Result: no whitespace errors.
+- Actual Result: passed with no output.
+- Validation Command: `./scripts/pm/lint.sh`
+- Expected Result: repo-wide PM lint may expose unrelated historical debt; this task should not be reported.
+- Actual Result: failed on unrelated historical task execution logs; `rg task_70d4e4af4ebe4cf68eb5fdbdf8b2c579 /tmp/oasis7-pm-lint-visual-prune.out` returned no matches after task-log format fixes.
+- Blocker / Next Action: no task-local verification blocker; run task closeout.
