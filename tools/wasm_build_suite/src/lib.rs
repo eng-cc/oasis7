@@ -6,6 +6,7 @@ mod env_prefix_tests;
 pub use build_timing::BuildTimingSnapshot;
 
 use build_util::{canonical_or_original, elapsed_ms, normalize_artifact_name, now_unix_ms};
+#[cfg(test)]
 use oasis7_wasm_build::DEFAULT_WASM_TARGET;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -13,7 +14,6 @@ use std::env;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;

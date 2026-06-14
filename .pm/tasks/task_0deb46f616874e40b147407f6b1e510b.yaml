@@ -1,0 +1,27 @@
+task_uid: task_0deb46f616874e40b147407f6b1e510b
+title: "Audit wasm code and Rust dependency pruning opportunities"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-wasm-prune-audit
+execution_log_path: .pm/tasks/task_0deb46f616874e40b147407f6b1e510b.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Inventory wasm-related Rust crates, feature edges, and dependencies."
+  - "Identify code or Rust dependency pruning candidates with evidence and risk notes."
+handoff_to:
+  - repository_health_engineer
+  - wasm_platform_engineer
+updated_at: 2026-06-14T14:34:59+08:00
+last_started_at: 2026-06-14T13:36:38+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -lc 'env -u RUSTC_WRAPPER cargo check -p oasis7_distfs && env -u RUSTC_WRAPPER cargo check -p oasis7_distfs --features sync-builtin-wasm-identity --bin sync_builtin_wasm_identity && env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_build_suite/Cargo.toml --lib && env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --features sync-builtin-wasm-identity --bin sync_builtin_wasm_identity && ./scripts/pm/workflow-lint.sh --task-uid task_0deb46f616874e40b147407f6b1e510b --phase current && ./scripts/doc-governance-check.sh && git diff --check'"
+last_verified_at: 2026-06-14T14:34:57+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-14T14:34:59+08:00

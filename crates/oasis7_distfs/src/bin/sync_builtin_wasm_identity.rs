@@ -74,7 +74,7 @@ struct BuildReceipt {
 }
 
 fn usage() -> &'static str {
-    "Usage: cargo run -p oasis7_distfs --bin sync_builtin_wasm_identity -- \\
+    "Usage: cargo run -p oasis7_distfs --features sync-builtin-wasm-identity --bin sync_builtin_wasm_identity -- \\
   --module-ids-path <path> \\
   --module-manifest-map-path <path> \\
   --hash-manifest-path <path> \\
