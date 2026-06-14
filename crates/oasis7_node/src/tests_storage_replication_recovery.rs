@@ -323,6 +323,52 @@ fn restart_refresh_falls_back_to_durable_writer_when_committed_message_is_missin
 }
 
 #[test]
+fn sequencer_refresh_uses_local_execution_baseline_when_replication_root_is_empty() {
+    let dir = temp_dir("sequencer-refresh-local-execution-baseline");
+    let world_id = "world-sequencer-local-execution-baseline";
+    let validators = vec![PosValidator {
+        validator_id: "node-a".to_string(),
+        stake: 100,
+    }];
+    let pos_config = signed_pos_config_with_signer_seeds(validators, &[("node-a", 169)]);
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 169));
+    let replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-a")
+            .expect("replication runtime");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = 16716;
+    engine.network_committed_height = 16716;
+    engine.next_height = 16717;
+    engine.last_committed_block_hash = Some("block-16716".to_string());
+    engine.last_execution_height = 16716;
+    engine.last_execution_block_hash = Some("exec-block-16716".to_string());
+    engine.last_execution_state_root = Some("exec-state-16716".to_string());
+    engine.last_replication_gap_sync_blocked_height = Some(1);
+    engine.last_replication_gap_sync_blocked_reason =
+        Some("stale empty replication root gap".to_string());
+
+    engine
+        .refresh_replication_persisted_height(&replication, world_id)
+        .expect("refresh from local execution baseline");
+
+    assert_eq!(engine.replication_persisted_height, 16716);
+    assert_eq!(engine.last_replication_gap_sync_blocked_height, None);
+    assert_eq!(engine.last_replication_gap_sync_blocked_reason, None);
+    assert_eq!(
+        replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted commit height"),
+        0
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn restart_reconcile_rolls_back_unreplicated_committed_head() {
     let dir = temp_dir("restart-reconcile-unreplicated-head");
     let world_id = "world-reconcile-unreplicated-head";
