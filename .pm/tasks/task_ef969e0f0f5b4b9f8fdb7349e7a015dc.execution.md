@@ -155,8 +155,8 @@ Example:
 - Task UID: task_ef969e0f0f5b4b9f8fdb7349e7a015dc
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-simulation-cleanup-audit
 - Source Branch: task/engineering-simulation-cleanup-audit
-- Source Head: 4eae648f685d4dc18270b3a2f39562bb77dc4f1d
-- Comparison Ref: origin/main
+- Source Head: 4f8f031c010f24f3f28e06b308f3af8f2d656c48
+- Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/tasks/task_ef969e0f0f5b4b9f8fdb7349e7a015dc.execution.md`; `.pm/tasks/task_ef969e0f0f5b4b9f8fdb7349e7a015dc.yaml`; `crates/oasis7/Cargo.toml`; `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`; `doc/engineering/project.md` trace evidence
 - Role Selection Basis: changed paths touch repository-health/task evidence, Cargo feature governance, and a Rust test-vs-normal-build import cleanup; include `repository_health_engineer` for cleanup/manifest governance and `qa_engineer` because PR readiness depends on local verification. Gameplay, viewer visual interaction, liveops, runtime implementation, wasm, blockchain, and agent roles skipped because no domain behavior, UI, external messaging, runtime semantics, wasm behavior, blockchain ops, or agent behavior changed.
 - Review Roles: repository_health_engineer, qa_engineer
