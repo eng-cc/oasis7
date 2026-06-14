@@ -846,17 +846,24 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                     )
                     .map_err(network_internal_error)?;
                     if let Some(message) = message.as_ref() {
+                        let payload_content_hash = message.record.content_hash.clone();
                         if let Some(payload) =
                             parse_replication_commit_payload(message.payload.as_slice())
                         {
-                            if let Some(descriptor) = payload.execution_checkpoint {
-                                let publish_handle = commit_handle.clone();
-                                let publish_network_policy = commit_network_policy.clone();
-                                let publish_root_dir = commit_root_dir.clone();
-                                let publish_world_id = commit_world_id.clone();
-                                let _ = thread::Builder::new()
-                                    .name("replication-fetch-commit-provider-publish".to_string())
-                                    .spawn(move || {
+                            let descriptor = payload.execution_checkpoint;
+                            let publish_handle = commit_handle.clone();
+                            let publish_network_policy = commit_network_policy.clone();
+                            let publish_root_dir = commit_root_dir.clone();
+                            let publish_world_id = commit_world_id.clone();
+                            let _ = thread::Builder::new()
+                                .name("replication-fetch-commit-provider-publish".to_string())
+                                .spawn(move || {
+                                    let _ = publish_handle.publish_local_content_provider(
+                                        &publish_network_policy,
+                                        publish_world_id.as_str(),
+                                        payload_content_hash.as_str(),
+                                    );
+                                    if let Some(descriptor) = descriptor {
                                         let _ = publish_handle
                                             .publish_checkpoint_descriptor_providers_from_root(
                                                 &publish_network_policy,
@@ -864,8 +871,8 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                                                 publish_world_id.as_str(),
                                                 Some(&descriptor),
                                             );
-                                    });
-                            }
+                                    }
+                                });
                         }
                     }
                     let response = FetchCommitResponse {
