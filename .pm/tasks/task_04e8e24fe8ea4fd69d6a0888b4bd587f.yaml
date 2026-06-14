@@ -8,7 +8,8 @@ priority: P2
 source_signal: null
 source_refs:
   - site/story/index.html
-doc_refs: []
+doc_refs:
+  - site/story/project.md
 related_prd: []
 acceptance:
   - "Determine whether site/story/index.html is stale against canonical story/site sources and update it if required"
