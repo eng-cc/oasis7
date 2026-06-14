@@ -29,7 +29,7 @@
 ./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
 ```
 
-- 该入口负责 LetAI token config 规范化、chat probe、`127.0.0.1:5841` provider bridge、provider contract smoke 与 launcher/runtime/viewer 启动。
+- 该入口负责 LetAI token config 规范化、默认 Rust direct `127.0.0.1:5841` provider bridge、Rust bridge chat probe/provider contract smoke 与 launcher/runtime/viewer 启动。
 - 需要手工试玩或验证 `agent_chat` 时，以脚本输出的 `GAME_URL` 为准。
 - 下方 `oasis7_viewer_live` + `run-viewer-web.sh` 流程只用于 Viewer/debug 或定向 Web 回归，不代表本地真实 provider-backed gameplay 栈。
 

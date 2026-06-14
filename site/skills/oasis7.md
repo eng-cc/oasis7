@@ -127,28 +127,28 @@ platform `Key`, use `run-local-letai-game-test.sh` or
 temporary project token config first. The doc URL is not used as the model
 endpoint, and generated `letai-local-token.env` files are secrets.
 
-LetAI's remote provider bridge path uses chat completions, not the builtin
-OpenAI Responses preflight. To test the same path locally, first validate the
-token:
-
-```bash
-./scripts/check-letai-chat-completions.sh
-```
-
-If that succeeds and you are doing low-level bridge plumbing, start a local real
-provider bridge in another terminal or in the background. The game still
-connects to `http://127.0.0.1:5841`; the bridge process runs in the foreground
-and calls LetAI upstream:
+LetAI's provider bridge path uses chat completions, not the builtin OpenAI
+Responses preflight. For low-level bridge plumbing, start a local real provider
+bridge in another terminal or in the background, then validate it with the
+provider contract smoke. The game still connects to `http://127.0.0.1:5841`;
+the bridge process runs in the foreground and calls LetAI upstream through the
+default Rust direct adapter:
 
 ```bash
 ./scripts/run-local-letai-provider-bridge.sh
 # In another terminal, or after backgrounding the bridge:
+./scripts/provider-remote-https/provider-bridge-contract-smoke.sh --base-url http://127.0.0.1:5841
 ./scripts/run-launcher-stack.sh --agent-provider-lane local
 ```
 
+`./scripts/check-letai-chat-completions.sh` remains available for legacy Python
+adapter compatibility diagnostics or token-only comparison, but it is not the
+normal local gameplay preflight.
+
 For the usual local real-LLM gameplay test, use the one-command wrapper instead.
-It sets the local proxy defaults, validates chat-completions, starts the bridge,
-runs a provider contract smoke, and launches the game against `127.0.0.1:5841`:
+It sets the local proxy defaults, starts the Rust direct LetAI provider bridge,
+runs the provider contract smoke as the default Rust bridge chat probe, and
+launches the game against `127.0.0.1:5841`:
 
 ```bash
 ./scripts/run-local-letai-game-test.sh
@@ -173,11 +173,11 @@ Pass extra launcher flags after `--`:
 ```
 
 For local real-provider runs, the LetAI wrapper can automatically top up quota
-when the upstream returns `insufficient_user_quota`. The local bridge defaults to
-`--auto-topup-usd 0.1`. This is paid real-provider behavior: the CLI may top up
-once per quota-failed chat request, then use bounded delayed retries so LetAI's
-balance update can become visible. The top-up only runs when the environment
-also provides `OASIS7_REMOTE_LLM_PLATFORM_KEY` and
+when the upstream returns `insufficient_user_quota`. The local Rust bridge
+defaults to `--auto-topup-usd 0.1`. This is paid real-provider behavior: the
+bridge may top up once per quota-failed chat request, then use bounded delayed
+retries so LetAI's balance update can become visible. The top-up only runs when
+the environment also provides `OASIS7_REMOTE_LLM_PLATFORM_KEY` and
 `OASIS7_REMOTE_LLM_PLATFORM_USER_ID`; otherwise quota errors remain visible.
 Do not attach generated token config files such as `letai-local-token.env` to
 public evidence or logs.

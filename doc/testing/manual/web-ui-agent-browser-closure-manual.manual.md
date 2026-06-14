@@ -25,7 +25,7 @@
 ./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
 ```
 
-- 该入口会统一处理 LetAI token config、chat probe、`127.0.0.1:5841` provider bridge、provider contract smoke 与 launcher/runtime/viewer 启动。
+- 该入口会统一处理 LetAI token config、默认 Rust direct `127.0.0.1:5841` provider bridge、Rust bridge chat probe/provider contract smoke 与 launcher/runtime/viewer 启动。
 - 需要对已经启动的页面做 agent-browser 留证时，优先复用脚本输出的 `GAME_URL`，再执行本手册的采样步骤。
 - 不要把单独的 `run-viewer-web.sh` 当作本地真实 provider-backed gameplay 启动方式；它不负责 provider bridge 或 launcher bootstrap。
 

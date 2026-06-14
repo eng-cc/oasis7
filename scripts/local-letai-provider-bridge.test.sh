@@ -12,6 +12,8 @@ config_path="$tmp_dir/letai.txt"
 cat >"$config_path" <<'EOF'
 Doc: https://docs.example.test/not-an-api-endpoint
 Key: test-secret-key
+platform_key = platform-secret-key
+platform_user_id = platform-user-1
 EOF
 
 check_config="$tmp_dir/check-config.txt"
@@ -31,7 +33,17 @@ bridge_config="$tmp_dir/bridge-config.txt"
   --print-config \
   >"$bridge_config"
 
-python3 - "$check_config" "$bridge_config" <<'PY'
+legacy_bridge_config="$tmp_dir/legacy-bridge-config.txt"
+./scripts/run-local-letai-provider-bridge.sh \
+  --config "$config_path" \
+  --model test-model \
+  --base-url https://api.example.test/v1 \
+  --bind 127.0.0.1:5999 \
+  --provider-backend legacy-cli \
+  --print-config \
+  >"$legacy_bridge_config"
+
+python3 - "$check_config" "$bridge_config" "$legacy_bridge_config" <<'PY'
 from __future__ import annotations
 
 import json
@@ -40,16 +52,26 @@ from pathlib import Path
 
 check_text = Path(sys.argv[1]).read_text()
 bridge_text = Path(sys.argv[2]).read_text()
+legacy_bridge_text = Path(sys.argv[3]).read_text()
 
 payload = json.loads(check_text)
 assert payload["base_url"] == "https://api.example.test/v1"
 assert payload["model"] == "test-model"
 assert payload["api_key_present"] is True
 assert payload["api_key_len"] == len("test-secret-key")
+assert payload["platform_key_present"] is True
+assert payload["platform_user_id_present"] is True
 assert "test-secret-key" not in check_text
 assert "test-secret-key" not in bridge_text
+assert "platform-secret-key" not in check_text
+assert "platform-secret-key" not in bridge_text
+assert "platform-secret-key" not in legacy_bridge_text
 assert "bridge_bind=127.0.0.1:5999" in bridge_text
+assert "provider_backend=rust-direct-letai" in bridge_text
+assert "provider_cli=" not in bridge_text
 assert "auth_token_present=false" in bridge_text
+assert "provider_backend=legacy-cli" in legacy_bridge_text
+assert "provider_cli=" in legacy_bridge_text
 PY
 
 echo "local letai provider scripts config smoke passed"

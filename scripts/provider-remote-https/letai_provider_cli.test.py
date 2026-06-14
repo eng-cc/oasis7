@@ -298,6 +298,109 @@ class LetaiProviderCliNewapiStateTests(unittest.TestCase):
         self.assertEqual(usage["total_tokens"], 5)
         self.assertEqual(len(calls), 2)
 
+    def test_empty_sse_content_error_includes_safe_diagnostics(self):
+        payload = "\n".join(
+            [
+                'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","model":"mock-model","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}',
+                'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","model":"mock-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"total_tokens":7}}',
+                "data: [DONE]",
+            ]
+        )
+
+        with self.assertRaises(cli.CompletionDecodeError) as ctx:
+            cli.decode_sse_completion_payload(
+                payload,
+                status_code=200,
+                headers={"Content-Type": "text/event-stream", "X-Request-Id": "req-123"},
+            )
+
+        message = str(ctx.exception)
+        diagnostics = ctx.exception.diagnostics
+        self.assertIn("upstream SSE response did not contain assistant content", message)
+        self.assertIn("diagnostics=", message)
+        self.assertEqual(diagnostics["status_code"], 200)
+        self.assertEqual(diagnostics["headers"]["content-type"], "text/event-stream")
+        self.assertEqual(diagnostics["headers"]["x-request-id"], "req-123")
+        self.assertEqual(diagnostics["data_event_count"], 3)
+        self.assertEqual(diagnostics["done_count"], 1)
+        self.assertEqual(diagnostics["chunk_samples"][0]["choices_len"], 1)
+        self.assertEqual(
+            diagnostics["chunk_samples"][0]["choice0"]["delta"]["role"],
+            "assistant",
+        )
+        self.assertEqual(
+            diagnostics["chunk_samples"][1]["choice0"]["finish_reason"],
+            "stop",
+        )
+        self.assertNotIn("Bearer", message)
+
+    def test_retry_event_preserves_decode_diagnostics(self):
+        calls = []
+        stderr = io.StringIO()
+
+        def fake_send_completion_request(request, timeout_ms, use_stream):
+            calls.append(request.full_url)
+            if len(calls) == 1:
+                raise cli.CompletionDecodeError(
+                    "upstream SSE response did not contain assistant content; diagnostics={}",
+                    {"data_event_count": 2, "chunk_samples": [{"choices_len": 1}]},
+                )
+            return (
+                200,
+                {"choices": [{"message": {"content": "{\"decision\":\"wait\"}"}}]},
+                "{\"decision\":\"wait\"}",
+                {"total_tokens": 5},
+            )
+
+        previous_send = cli.send_completion_request
+        previous_sleep = cli.time.sleep
+        previous_stderr = cli.sys.stderr
+        cli.send_completion_request = fake_send_completion_request
+        cli.time.sleep = lambda _seconds: None
+        cli.sys.stderr = stderr
+        try:
+            with EnvPatch(
+                OASIS7_REMOTE_LLM_RETRY_COUNT="2",
+                OASIS7_REMOTE_LLM_RETRY_DELAY_MS="25",
+            ):
+                cli.send_completion_request_with_retries(
+                    {"model": "mock-model", "messages": []},
+                    "https://api.example.test/v1",
+                    "token-key",
+                    5000,
+                    True,
+                )
+        finally:
+            cli.send_completion_request = previous_send
+            cli.time.sleep = previous_sleep
+            cli.sys.stderr = previous_stderr
+
+        events = [json.loads(line) for line in stderr.getvalue().splitlines()]
+        self.assertEqual(events[0]["event"], "chat_completion_retry")
+        self.assertEqual(events[0]["diagnostics"]["data_event_count"], 2)
+        self.assertEqual(events[0]["diagnostics"]["chunk_samples"][0]["choices_len"], 1)
+
+    def test_malformed_sse_data_diagnostic_uses_hash_not_raw_data(self):
+        payload = "\n".join(
+            [
+                "data: this-is-not-json-with-sensitive-looking-token-secret",
+                "data: [DONE]",
+            ]
+        )
+
+        with self.assertRaises(cli.CompletionDecodeError) as ctx:
+            cli.decode_sse_completion_payload(payload, status_code=200)
+
+        diagnostics = ctx.exception.diagnostics
+        self.assertEqual(diagnostics["parse_error_count"], 1)
+        sample = diagnostics["parse_error_samples"][0]
+        self.assertEqual(
+            sample["data_len"],
+            len("this-is-not-json-with-sensitive-looking-token-secret"),
+        )
+        self.assertIn("data_sha256_16", sample)
+        self.assertNotIn("sensitive-looking-token-secret", str(ctx.exception))
+
     def test_completion_retry_classifies_remote_close_as_retryable(self):
         self.assertTrue(
             cli.is_retryable_completion_error(
