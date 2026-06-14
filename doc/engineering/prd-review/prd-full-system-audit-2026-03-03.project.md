@@ -13,7 +13,7 @@
 - [x] TASK-ENGINEERING-024 (PRD-ENGINEERING-012/013/014) [test_tier_required]: 建立周度增量审读节奏（新增/变更 PRD 自动入清单）。
 
 ## 已读清单（逐篇）
-- 模块审读清单：
+- 模块审读清单（文件名沿用 `active-*` 以兼容 2026-03 审计与 review 引用；清单不是当前模块活跃入口或最新专题索引）：
   - `doc/engineering/prd-review/checklists/active-core.md`
   - `doc/engineering/prd-review/checklists/active-engineering.md`
   - `doc/engineering/prd-review/checklists/active-game.md`
