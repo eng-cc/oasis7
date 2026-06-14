@@ -258,6 +258,28 @@ Example:
 - Actual Result: passed; `rg` exited 1 with no matches.
 - 遗留事项: final repo-owned closeout checks and PR-prep review remain.
 - Action: run `./scripts/pm/lint.sh`, `./scripts/doc-governance-check.sh`, and `git diff --check`; then continue into closeout/PR workflow if clean or record blockers.
+
+## 2026-06-14 15:05:46 CST / game_visual_interaction_designer
+- 完成内容: Pre-PR local role review completed for visible-output risk from removing the WebGPU pixel-world backend and forcing the WebGL2 runtime path.
+  - Review scope: visual/interaction acceptance only; this is not viewer implementation ownership, QA release signoff, runtime correctness, or release bundle validation.
+  - Commit under review: `3155d57543c4ee2ff4c4865c70d6754ac5b6b215` against `origin/main`.
+  - Changed visual-output path inspected: pixel-world runtime selector now always resolves `webgl2/pixel_world_bridge.js`; finalize now generates only the WebGL2 backend directory; loader tests lock `navigator.gpu` browsers to the WebGL2 module path.
+- Review Result: no_findings.
+  - Severity: none.
+  - Rationale: the visible contract is still "pixel-world wasm runtime reaches ready and the viewer shows the pixel-world surface"; the evidence shows the top-level served module remains `pixel-world-bridge/pixel_world_bridge.js`, the runtime status reached `ready`, source stayed `wasm_bindgen_runtime`, and `lastError` stayed null. The available final screenshot artifact also shows a nonblank pixel-world surface with readable grid, entity markers, selected-agent callout, goal badge, and surrounding diagnostics rather than an empty canvas or fallback error shell.
+  - Evidence:
+    - `output/playwright/viewer-pixel-world-wasm/viewer-pixel-world-wasm-20260614-144620/pixel-world-wasm-summary.md`: `ok: true`, `renderMode: viewer`, `pixelWorldRuntimeStatus: ready`, `pixelWorldRuntimeSource: wasm_bindgen_runtime`, module URL at top-level `pixel-world-bridge/pixel_world_bridge.js`, `lastError: (null)`.
+    - `output/playwright/viewer-pixel-world-wasm/viewer-pixel-world-wasm-20260614-144620/final.png`: screenshot inspected during review; visible pixel-world grid, markers, selected-agent state, and objective badge are present.
+    - Diff inspection of `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js` and `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js`: browsers with `navigator.gpu` are intentionally routed to the same WebGL2 runtime path, avoiding a missing `webgpu/` directory visual failure.
+- Residual Risk:
+  - P2 visual/screenshot residual risk: available evidence is a single headless desktop artifact, not a multi-browser or mobile screenshot review. For PR readiness this is acceptable because the change removes an alternate package route without changing host layout, canvas HUD, marker styling, or player feedback components; however, manual headed/external-browser screenshot review is still recommended before any release-readiness claim.
+  - P2 environment residual risk: environments with WebGL2 disabled or broken but WebGPU available would now fail or fallback where they previously might have used the WebGPU backend. This is a browser/device compatibility risk, not a visible-output finding in the tested path.
+  - P3 release-bundle residual risk: no release bundle validation was claimed in this review; release packaging should not be described as visually validated until bundle entrypoint validation and a bundle-served screenshot/smoke pass run.
+- Action: no visual/interaction blocker for PR readiness based on the provided evidence; keep residual risks in the PR/testing notes.
+- Validation Command: review-only inspection of the diff, task-log evidence, `pixel-world-wasm-summary.md`, `final_state.json`, and `final.png`.
+- Expected Result: identify whether forcing WebGL2 creates a player-visible blank/error/fallback regression that should block PR readiness.
+- Actual Result: no blocking visible-output regression found in the tested path; residual risks are documented above.
+- Blocker / Next Action: none from `game_visual_interaction_designer`; TPM should continue normal closeout/PR flow and avoid claiming release-bundle visual signoff until release bundle validation is run.
 - Blocker / Next Action: run final repo-owned checks and closeout/PR preparation if clean.
 
 ## 2026-06-14 14:57:00 CST / tpm
@@ -280,3 +302,143 @@ Example:
 - Expected Result: repo-wide PM lint may expose unrelated historical debt; this task should not be reported.
 - Actual Result: failed on unrelated historical task execution logs; `rg task_70d4e4af4ebe4cf68eb5fdbdf8b2c579 /tmp/oasis7-pm-lint-visual-prune.out` returned no matches after task-log format fixes.
 - Blocker / Next Action: no task-local verification blocker; run task closeout.
+
+## 2026-06-14 15:00:46 CST / tpm
+- Review Trigger: pre-PR local role review
+- Review Scope: committed diff `3155d57543c4ee2ff4c4865c70d6754ac5b6b215` against `origin/main`; changed paths are `.pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.*`, `Cargo.lock`, `crates/pixel_world_bridge/Cargo.toml`, `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js`, `scripts/bundle-freshness-lib.sh`, and `scripts/viewer-pixel-world-wasm-regression.sh`.
+- Review Roles: `viewer_engineer`, `qa_engineer`, `repository_health_engineer`, `game_visual_interaction_designer`
+- Review Question: confirm this diff safely removes the duplicate WebGPU pixel-world backend path while preserving current viewer/runtime contract, testability, repository-health evidence, and visible pixel-world output risk boundaries.
+- Evidence Available: cargo wasm check, Vitest runtime loader, software-safe build, dist copy/freshness checks, headless pixel-world wasm browser regression, doc governance, git diff check, task-local workflow lint.
+- Expected Return Contract: findings | no_findings | residual_risk
+- Formal Sink: `.pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.execution.md`
+
+## 2026-06-14 15:06:02 CST / qa_engineer
+- Review Trigger: pre-PR local role review
+- Review Scope: committed diff `3155d57543c4ee2ff4c4865c70d6754ac5b6b215` against `origin/main`, focused on local PR readiness for removing the `pixel_world_bridge` WebGPU backend path and on the Bash 3.2 compatibility changes in `scripts/viewer-pixel-world-wasm-regression.sh`.
+- Review Question: confirm whether available verification evidence is sufficient for local PR readiness; focus on missing tests, browser regression adequacy, release-bundle risk, and Bash 3.2 script safety.
+- Result: no_findings
+- Findings:
+  - no_findings: no P0/P1/P2 QA blocker found for local PR readiness.
+- Severity / Merge Risk:
+  - P2 release-bundle residual risk only if the PR claims release-bundle readiness. The task log explicitly does not claim release-bundle validation, so absence of `./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local` and `./scripts/validate-release-platform-entrypoints.sh --bundle-dir output/release/game-launcher-local` is not a local PR blocker.
+  - P3 browser-matrix residual risk remains for environments where WebGL2 is disabled or broken while WebGPU would have been available. The selector now intentionally routes both `navigator.gpu` and non-`navigator.gpu` browsers to WebGL2, and the headless pixel-world wasm regression proves the current local viewer path reaches `pixelWorldRuntimeStatus=ready` with `pixelWorldRuntimeSource=wasm_bindgen_runtime`.
+- Verification Evidence Reviewed:
+  - Task-log evidence: `env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown`, `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_runtime_loader`, `npm --prefix crates/oasis7_viewer run build:software-safe`, `./scripts/copy-viewer-web-dist.test.sh`, `./scripts/agent-browser-viewer-dist-freshness-test.sh`, `bash -n scripts/viewer-pixel-world-wasm-regression.sh`, `bash scripts/viewer-pixel-world-wasm-regression.sh --headless --startup-timeout 420`, scoped `rg` for WebGPU backend references, `./scripts/doc-governance-check.sh`, `git diff --check`, and task-local workflow lint.
+  - Fresh spot checks run during this review: `bash -n scripts/viewer-pixel-world-wasm-regression.sh` passed; `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_runtime_loader` passed with 1 file / 5 tests; `./scripts/copy-viewer-web-dist.test.sh` passed; `./scripts/agent-browser-viewer-dist-freshness-test.sh` passed; `git diff --check` passed; scoped `rg` for `webgpu_runtime|bevy/webgpu|pixelWorldWebgpu|web/pixel-world-bridge/webgpu|/webgpu/|webgpu` returned no remaining backend references except the intentional loader test names when searching the whole worktree.
+- Bash 3.2 Safety Assessment:
+  - Safe for local PR readiness. The change from direct empty-array expansion to constructing `launcher_cmd` preserves optional argument forwarding while avoiding `set -u` empty-array behavior on older Bash.
+  - Safe for local PR readiness. Replacing the embedded Python `rstrip(')"\'')` quoting pattern with `rstrip(chr(41) + chr(34) + chr(39))` preserves the same trimmed characters while avoiding shell/parser fragility.
+  - Safe for local PR readiness. The markdown summary change uses `.get()` and precomputed values but preserves the same pass/fail assertions before summary generation; it does not weaken the runtime checks.
+- Residual Risk:
+  - Local PR readiness: acceptable. Evidence covers manifest feature removal, selector routing, generated runtime build, freshness/copy contracts, and a browser-driven wasm-ready regression.
+  - Release readiness: not claimed. Run bundle build and release entrypoint validation before claiming release-bundle safety.
+  - Browser/device matrix: not fully exhausted. A headed or external-browser S6 smoke remains recommended before broad release messaging, especially on WebGPU-capable devices where WebGL2 is constrained.
+- Finding Disposition Evidence: no valid QA findings requiring code changes.
+
+## 2026-06-14 15:05:38 CST / repository_health_engineer
+- Review Result: no_findings
+- Severity: none blocking.
+- Scope Reviewed: committed diff `3155d57543c4ee2ff4c4865c70d6754ac5b6b215` against `origin/main`, plus the current execution-log evidence appended after the reviewed commit.
+- Repository-health conclusion:
+  - The cleanup is coherent and task-scoped. `crates/pixel_world_bridge/Cargo.toml`, `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js`, and `scripts/bundle-freshness-lib.sh` all converge on a single WebGL2 pixel-world backend while preserving the top-level `pixel-world-bridge/pixel_world_bridge.js` selector/module contract.
+  - `Cargo.lock` is aligned with the manifest change. The direct `wasm-bindgen-futures` entry removed from the affected package stanza is consistent with dropping the `bevy/webgpu` feature; `wasm-bindgen-futures` still appears elsewhere through Bevy/dev-test paths, so this patch is not overclaiming a repo-wide dependency removal.
+  - Scoped stale WebGPU backend references are cleared. The only remaining full-repo matches found during this review were a historical PRD note about platform warnings and the updated runtime-loader tests covering `navigator.gpu` presence while routing to WebGL2.
+  - The task evidence is adequate for repository-health PR readiness: implementation slices, QA verification scope, cargo wasm check, Vitest runtime-loader test, software-safe build, dist copy/freshness checks, headless pixel-world wasm regression, doc governance, diff check, and task-local workflow lint are recorded.
+  - `scripts/viewer-pixel-world-wasm-regression.sh` compatibility fixes are acceptable debt cleanup in this task because they unblock the QA-required regression command and preserve the script's verification semantics. The changes are limited to Bash 3.2-safe argument handling, Python string trimming, and summary generation robustness.
+  - No unrelated cleanup was observed in the reviewed code paths; the larger `legacy_core.js`, `run-viewer-web.sh`, and launcher GUI dependency candidates remain out of scope as intended.
+- Residual Risk:
+  - This review is repository-health scoped and does not replace QA release signoff or a full browser/device matrix. The known residual risk remains environments where WebGL2 is disabled or broken while WebGPU would have been available.
+  - Release bundle validation was explicitly not claimed in the task evidence; run the bundle validation path before claiming release-bundle readiness.
+  - The branch is behind `origin/main` by two commits in local status; this is not a finding by itself, but TPM should re-check mergeability and required checks on the PR path.
+- Validation Command: `rg -n "webgpu_runtime|bevy/webgpu|pixelWorldWebgpu|pixel_world_webgpu|web/pixel-world-bridge/webgpu|pixel-world-bridge/webgpu|/webgpu/pixel_world_bridge|WebGPU|webgpu|navigator\\.gpu" . --glob '!target/**' --glob '!node_modules/**' --glob '!crates/oasis7_viewer/dist/**' --glob '!crates/oasis7_viewer/out/**'`
+- Expected Result: no stale scoped WebGPU backend/package/build/manifest references remain; historical documentation or tests may still mention WebGPU/navigator.gpu if semantically valid.
+- Actual Result: only `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase6.prd.md` historical warning text and the updated `pixel_world_runtime_loader.test.js` navigator.gpu coverage matched.
+- Validation Command: `cargo tree -p pixel_world_bridge --target wasm32-unknown-unknown --depth 2`
+- Expected Result: `pixel_world_bridge` dependency tree resolves with the current default WebGL2 runtime feature.
+- Actual Result: command completed successfully.
+- Validation Command: `cargo tree -p pixel_world_bridge --target wasm32-unknown-unknown -i wasm-bindgen-futures`
+- Expected Result: remaining `wasm-bindgen-futures` paths, if any, are explainable outside the removed direct WebGPU feature path.
+- Actual Result: command completed successfully; remaining paths are through Bevy/dev-test dependencies, not a stale `webgpu_runtime` feature declaration.
+- Validation Command: `git diff --check && bash -n scripts/viewer-pixel-world-wasm-regression.sh && ./scripts/pm/workflow-lint.sh --task-uid task_70d4e4af4ebe4cf68eb5fdbdf8b2c579 --phase current`
+- Expected Result: whitespace, script syntax, and task-local workflow evidence are clean.
+- Actual Result: passed; `workflow-lint: OK`.
+- Blocker / Next Action: no repository-health blocker. TPM may integrate this role review with the other pre-PR reviews; do not treat this as QA release signoff.
+
+## 2026-06-14 15:05:36 CST / viewer_engineer
+- Review Trigger: pre-PR local role review
+- Review Target: commit `3155d57543c4ee2ff4c4865c70d6754ac5b6b215` against `origin/main`.
+- Review Scope: `Cargo.lock`, `crates/pixel_world_bridge/Cargo.toml`, `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js`, `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js`, `scripts/bundle-freshness-lib.sh`, and `scripts/viewer-pixel-world-wasm-regression.sh`; `.pm` task files inspected only as workflow evidence.
+- Review Question: confirm the diff safely removes the duplicate WebGPU pixel-world backend path while preserving the current viewer/runtime contract, build/finalize behavior, selector behavior in `navigator.gpu` browsers, and the top-level `pixel-world-bridge/pixel_world_bridge.js` served contract.
+- Review Result: no_findings
+- Findings:
+  - no_findings / P0-P2: No viewer-contract blocker found.
+- Evidence:
+  - `crates/pixel_world_bridge/Cargo.toml` removes only the optional `webgpu_runtime = ["bevy/webgpu"]` feature while keeping `default = ["webgl2_runtime"]` and the WebGL2 Bevy/web runtime path intact.
+  - `crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs` still removes and recreates `dist/pixel-world-bridge/`, still builds `pixel_world_bridge` with `webgl2_runtime`, and still copies the top-level selector to `dist/pixel-world-bridge/pixel_world_bridge.js`; it only stops emitting `webgpu/`.
+  - `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js` preserves the top-level module contract and now resolves to `webgl2/pixel_world_bridge.js` regardless of `navigator.gpu`; this prevents browsers with `navigator.gpu` from routing to a removed `webgpu/` directory.
+  - `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js` explicitly covers the `navigator.gpu` case and expects WebGL2, so the selector contract is locked by a targeted test.
+  - `scripts/bundle-freshness-lib.sh` removes only the WebGPU asset hashes while retaining top-level selector and WebGL2 runtime/bindgen hashes.
+  - Scoped grep at the reviewed commit found no remaining `webgpu_runtime`, `bevy/webgpu`, `pixelWorldWebgpu`, `/webgpu/`, or scoped `webgpu` backend references in the affected viewer/pixel-world/script/doc surfaces.
+- Fresh Review Validation:
+  - `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_runtime_loader` passed; 1 test file, 5 tests.
+  - `bash -n scripts/viewer-pixel-world-wasm-regression.sh && git diff --check` passed with no output.
+- Residual Risk:
+  - Browser/device matrix risk remains for environments where WebGL2 is unavailable or disabled while WebGPU would have worked; this is a QA/release coverage risk, not a viewer-contract blocker for this diff.
+  - The worktree branch is currently behind `origin/main`; if later main changes touch the same viewer/runtime surfaces, re-run the targeted selector/build checks after sync.
+- Attribution Boundary: This review is limited to `viewer_engineer` contract/build/selector/testability judgment. It is not GitHub PR approval, release bundle signoff, or replacement for QA/browser-matrix validation.
+
+## 2026-06-14 15:08:03 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_70d4e4af4ebe4cf68eb5fdbdf8b2c579
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-visual-code-dependency-prune-audit
+- Source Branch: task/engineering-visual-code-dependency-prune-audit
+- Source Head: 3155d57543c4ee2ff4c4865c70d6754ac5b6b215
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.execution.md; .pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.yaml; Cargo.lock; crates/pixel_world_bridge/Cargo.toml; crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs; crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js; crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js; scripts/bundle-freshness-lib.sh; scripts/viewer-pixel-world-wasm-regression.sh
+- Role Selection Basis: changed paths touch viewer runtime selection/build scripts, pixel-world Rust manifest, browser regression scripts, task evidence, and visual output risk; included `viewer_engineer`, `qa_engineer`, `repository_health_engineer`, and `game_visual_interaction_designer`; skipped gameplay/runtime/wasm/blockchain/liveops roles because no gameplay rules, runtime state semantics, wasm ABI, blockchain ops, or external messaging changed.
+- Review Roles: viewer_engineer, qa_engineer, repository_health_engineer, game_visual_interaction_designer
+- Review Evidence: viewer_engineer no_findings at 2026-06-14 15:05:36 CST; qa_engineer no_findings at 2026-06-14 15:06:02 CST; repository_health_engineer no_findings at 2026-06-14 15:05:38 CST; game_visual_interaction_designer no_findings at 2026-06-14 15:05:46 CST.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no code changes required after pre-PR role review; evidence-only execution-log writeback occurred after reviewed commit.
+- Residual Risk: not a release-bundle signoff; cross-browser/device matrix remains residual risk, especially WebGL2-disabled but WebGPU-available environments; branch was behind `origin/main` locally and PR path must re-check mergeability/checks.
+
+## 2026-06-14 15:20:00 CST / tpm
+- Claim Ready Evidence: ready_for_pr
+- Context: `./scripts/prepare-task-pr.sh --create` required a `claim-ready` execution-log entry after task closeout. The canonical `claim-ready.sh` metadata write was attempted after task closeout and failed because closed-task non-completion claim evidence is immutable.
+- Claim Ready Command Attempted: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --task-uid task_70d4e4af4ebe4cf68eb5fdbdf8b2c579 --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_70d4e4af4ebe4cf68eb5fdbdf8b2c579 --phase current && ./scripts/doc-governance-check.sh && git diff --check" --json`
+- Claim Ready Attempt Result: failed as expected for closed-task immutability; `claim-ready: closed task claim evidence is immutable for non-completion claims`.
+- Fresh Verification Command: `./scripts/pm/workflow-lint.sh --task-uid task_70d4e4af4ebe4cf68eb5fdbdf8b2c579 --phase current && ./scripts/doc-governance-check.sh && git diff --check`
+- Expected Result: task-local workflow evidence passes, doc governance passes, and no whitespace errors are present.
+- Actual Result: passed; `workflow-lint: OK (task_70d4e4af4ebe4cf68eb5fdbdf8b2c579, phase=current)` and `doc-governance-check: OK`; `git diff --check` produced no output.
+- Attribution Boundary: this manual ready evidence records the immutable-closed-task fallback path for PR preflight only; it does not replace the earlier `task_complete` closeout claim or the specialist role review findings.
+
+## 2026-06-14 15:32:00 CST / repository_health_engineer
+- Review Trigger: pre-PR local role review follow-up for post-review project trace writeback.
+- Review Scope: current HEAD `78355f49f0efaa99a20d8f088060f3fb37ab7661`, limited to the post-review `doc/engineering/project.md` entry `visual-code-dependency-prune-audit ... Trace: .pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.yaml`.
+- Review Question: confirm whether the module project trace writeback is acceptable repository-health/project-governance evidence for PR readiness.
+- Review Result: no_findings
+- Findings:
+  - no_findings: no repository-health blocker found for PR readiness.
+- Evidence Checked:
+  - Current HEAD `78355f49f0efaa99a20d8f088060f3fb37ab7661`.
+  - Diff from reviewed implementation commit `3155d57543c4ee2ff4c4865c70d6754ac5b6b215`.
+  - Exact added line in `doc/engineering/project.md`.
+  - Matching task trace path in `.pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.yaml`.
+- Conclusion: the project entry uses the established completed-task format, includes expected engineering PRD IDs, marks `[test_tier_required]`, summarizes the scoped WebGPU/WebGL2 cleanup without expanding the contract, and traces to the canonical `.pm` task.
+- Residual Risk: none specific to this project-trace writeback; release bundle and broader browser/device matrix risks remain previously recorded implementation-scope residual risks.
+- Attribution Boundary: repository-health review only covers the post-review `doc/engineering/project.md` trace entry for project governance/readiness; it does not re-review code, runtime behavior, QA sufficiency, or visual acceptance.
+
+## 2026-06-14 15:34:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_70d4e4af4ebe4cf68eb5fdbdf8b2c579
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-visual-code-dependency-prune-audit
+- Source Branch: task/engineering-visual-code-dependency-prune-audit
+- Source Head: 78355f49f0efaa99a20d8f088060f3fb37ab7661
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.execution.md; .pm/tasks/task_70d4e4af4ebe4cf68eb5fdbdf8b2c579.yaml; Cargo.lock; crates/pixel_world_bridge/Cargo.toml; crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs; crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_selector.js; crates/oasis7_viewer/software_safe_src/pixel_world_runtime_loader.test.js; doc/engineering/project.md; scripts/bundle-freshness-lib.sh; scripts/viewer-pixel-world-wasm-regression.sh
+- Role Selection Basis: original changed paths touch viewer runtime selection/build scripts, pixel-world Rust manifest, browser regression scripts, task evidence, and visual output risk; included `viewer_engineer`, `qa_engineer`, `repository_health_engineer`, and `game_visual_interaction_designer`. Post-review non-evidence change was limited to `doc/engineering/project.md` task trace writeback, so a bounded repository_health follow-up slice reviewed that project-governance surface.
+- Review Roles: viewer_engineer, qa_engineer, repository_health_engineer, game_visual_interaction_designer
+- Review Evidence: viewer_engineer no_findings at 2026-06-14 15:05:36 CST; qa_engineer no_findings at 2026-06-14 15:06:02 CST; repository_health_engineer no_findings at 2026-06-14 15:05:38 CST; game_visual_interaction_designer no_findings at 2026-06-14 15:05:46 CST; repository_health_engineer follow-up no_findings at 2026-06-14 15:32:00 CST for `doc/engineering/project.md` trace writeback.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no code changes required after original pre-PR role review; post-review `doc/engineering/project.md` trace writeback was reviewed by repository_health_engineer and found acceptable for PR readiness; subsequent writeback is evidence-only execution-log update.
+- Residual Risk: not a release-bundle signoff; cross-browser/device matrix remains residual risk, especially WebGL2-disabled but WebGPU-available environments; branch was behind `origin/main` locally and PR path must re-check mergeability/checks.
