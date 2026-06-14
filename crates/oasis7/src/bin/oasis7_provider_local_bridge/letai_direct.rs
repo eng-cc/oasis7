@@ -31,6 +31,8 @@ pub(super) struct LetaiChatConfig {
     pub(super) temperature: f64,
     pub(super) stream: bool,
     pub(super) response_format_json_object: bool,
+    pub(super) user_agent: String,
+    pub(super) extra_headers: Vec<(String, String)>,
     pub(super) retry_count: u64,
     pub(super) retry_delay_ms: u64,
     pub(super) auto_topup_usd: Option<String>,
@@ -128,6 +130,13 @@ pub(super) fn load_letai_chat_config(route_label: Option<&str>) -> Result<LetaiC
                 "LETAI_RESPONSE_FORMAT_JSON_OBJECT",
             ],
         ),
+        user_agent: route_or_env_optional(
+            &route,
+            "user_agent",
+            &["OASIS7_REMOTE_LLM_USER_AGENT", "LETAI_USER_AGENT"],
+        )
+        .unwrap_or_else(|| DEFAULT_LETAI_USER_AGENT.to_string()),
+        extra_headers: load_extra_headers(&route)?,
         retry_count: route_or_env_u64(
             &route,
             "retry_count",
@@ -294,7 +303,11 @@ fn send_letai_chat_completion(
         .post(url.as_str())
         .bearer_auth(config.api_key.as_str())
         .header("Content-Type", "application/json")
-        .header("User-Agent", DEFAULT_LETAI_USER_AGENT)
+        .header("User-Agent", config.user_agent.as_str());
+    for (name, value) in &config.extra_headers {
+        response = response.header(name.as_str(), value.as_str());
+    }
+    let mut response = response
         .json(&body)
         .send()
         .map_err(|err| format!("upstream chat completion request failed: {err}"))?;
@@ -463,6 +476,24 @@ pub(super) fn decode_letai_sse_reader<R: Read>(
         last_chunk = chunk;
     }
     let content = text_parts.join("").trim().to_string();
+    if !parse_errors.is_empty() {
+        return Err(format!(
+            "upstream SSE response contained malformed data events; diagnostics={}",
+            json!({
+                "status_code": status_code,
+                "headers": response_header_summary(headers),
+                "line_count": line_count,
+                "data_event_count": data_event_count,
+                "done_count": done_count,
+                "parse_error_count": parse_errors.len(),
+                "parse_error_samples": parse_errors,
+                "chunk_samples": chunk_samples,
+                "usage_present": usage.is_object(),
+                "content_len": content.len(),
+                "last_chunk_keys": value_keys(&last_chunk),
+            })
+        ));
+    }
     if content.is_empty() {
         return Err(format!(
             "upstream SSE response did not contain assistant content; diagnostics={}",
@@ -686,6 +717,35 @@ fn route_or_env_bool(route: &Value, route_key: &str, default: bool, env_names: &
         return false;
     }
     env_bool(default, env_names)
+}
+
+fn load_extra_headers(route: &Value) -> Result<Vec<(String, String)>, String> {
+    let Some(raw) = route_string(route, "extra_headers_json").or_else(|| {
+        env_optional(&[
+            "OASIS7_REMOTE_LLM_EXTRA_HEADERS_JSON",
+            "LETAI_EXTRA_HEADERS_JSON",
+        ])
+    }) else {
+        return Ok(Vec::new());
+    };
+    let decoded = serde_json::from_str::<Value>(raw.as_str())
+        .map_err(|err| format!("OASIS7_REMOTE_LLM_EXTRA_HEADERS_JSON must be valid JSON: {err}"))?;
+    let Some(object) = decoded.as_object() else {
+        return Err("OASIS7_REMOTE_LLM_EXTRA_HEADERS_JSON must be a JSON object".to_string());
+    };
+    let mut headers = Vec::new();
+    for (name, value) in object {
+        reqwest::header::HeaderName::from_bytes(name.as_bytes())
+            .map_err(|err| format!("invalid extra header name `{name}`: {err}"))?;
+        let value = value
+            .as_str()
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| value.to_string());
+        reqwest::header::HeaderValue::from_str(value.as_str())
+            .map_err(|err| format!("invalid extra header value for `{name}`: {err}"))?;
+        headers.push((name.to_string(), value));
+    }
+    Ok(headers)
 }
 
 fn env_optional(names: &[&str]) -> Option<String> {

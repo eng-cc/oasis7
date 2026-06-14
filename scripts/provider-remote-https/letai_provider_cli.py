@@ -949,6 +949,29 @@ def decode_sse_completion_stream(
         if isinstance(chunk.get("usage"), dict):
             usage = chunk["usage"]
     content = "".join(text_parts).strip()
+    if parse_errors:
+        diagnostics = {
+            "status_code": status_code,
+            "headers": response_header_summary(headers or {}),
+            "line_count": line_count,
+            "data_event_count": data_event_count,
+            "done_count": done_count,
+            "parse_error_count": len(parse_errors),
+            "parse_error_samples": parse_errors,
+            "chunk_samples": chunk_samples,
+            "usage_present": bool(usage),
+            "content_len": len(content),
+            "last_chunk_keys": sorted(str(key) for key in last_chunk.keys())
+            if isinstance(last_chunk, dict)
+            else [],
+        }
+        raise CompletionDecodeError(
+            format_decode_error(
+                "upstream SSE response contained malformed data events",
+                diagnostics,
+            ),
+            diagnostics,
+        )
     if not content:
         diagnostics = {
             "status_code": status_code,

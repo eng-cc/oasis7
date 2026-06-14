@@ -40,11 +40,7 @@ fn timeout_env_guard() -> MutexGuard<'static, ()> {
 }
 
 fn letai_env_guard() -> MutexGuard<'static, ()> {
-    static GUARD: OnceLock<Mutex<()>> = OnceLock::new();
-    GUARD
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .expect("letai env test guard")
+    newapi_bridge_state_env_guard()
 }
 
 #[test]
@@ -402,17 +398,32 @@ fn load_letai_chat_config_accepts_system_prompt_env() {
     std::env::set_var("OASIS7_REMOTE_LLM_BASE_URL", "https://api.example/v1/");
     std::env::set_var("OASIS7_REMOTE_LLM_SYSTEM_PROMPT", "system rules");
     std::env::set_var("OASIS7_REMOTE_LLM_STREAM", "true");
+    std::env::set_var("OASIS7_REMOTE_LLM_USER_AGENT", "custom-agent/1.0");
+    std::env::set_var(
+        "OASIS7_REMOTE_LLM_EXTRA_HEADERS_JSON",
+        r#"{"X-Gateway":"gateway-1","X-Number":7}"#,
+    );
     let config = load_letai_chat_config(None).expect("config");
     assert_eq!(config.base_url, "https://api.example/v1");
     assert_eq!(config.api_key, "key-123");
     assert_eq!(config.model, "model-123");
     assert_eq!(config.system_prompt.as_deref(), Some("system rules"));
     assert!(config.stream);
+    assert_eq!(config.user_agent, "custom-agent/1.0");
+    assert_eq!(
+        config.extra_headers,
+        vec![
+            ("X-Gateway".to_string(), "gateway-1".to_string()),
+            ("X-Number".to_string(), "7".to_string())
+        ]
+    );
     std::env::remove_var("OASIS7_REMOTE_LLM_API_KEY");
     std::env::remove_var("OASIS7_REMOTE_LLM_MODEL");
     std::env::remove_var("OASIS7_REMOTE_LLM_BASE_URL");
     std::env::remove_var("OASIS7_REMOTE_LLM_SYSTEM_PROMPT");
     std::env::remove_var("OASIS7_REMOTE_LLM_STREAM");
+    std::env::remove_var("OASIS7_REMOTE_LLM_USER_AGENT");
+    std::env::remove_var("OASIS7_REMOTE_LLM_EXTRA_HEADERS_JSON");
 }
 
 #[test]
@@ -525,6 +536,21 @@ fn decode_letai_sse_reader_reports_empty_content_diagnostics() {
 }
 
 #[test]
+fn decode_letai_sse_reader_rejects_malformed_data_after_content() {
+    let headers = reqwest::header::HeaderMap::new();
+    let payload = concat!(
+        "data: {\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"content\":\"{\\\"decision\\\":\\\"wait\\\"}\"}}]}\n\n",
+        "data: not-json-with-secret-token\n\n",
+        "data: [DONE]\n\n",
+    );
+    let err = decode_letai_sse_reader(payload.as_bytes(), Some(200), &headers)
+        .expect_err("malformed SSE should fail");
+    assert!(err.contains("malformed data events"));
+    assert!(err.contains("parse_error_count"));
+    assert!(!err.contains("secret-token"));
+}
+
+#[test]
 fn error_diagnostics_json_extracts_structured_diagnostics() {
     let diagnostics = error_diagnostics_json(
         r#"upstream SSE response did not contain assistant content; diagnostics={"data_event_count":1,"chunk_samples":[{"choices_len":1}]}"#,
@@ -588,6 +614,8 @@ fn maybe_auto_topup_letai_user_posts_platform_topup() {
         temperature: 0.0,
         stream: true,
         response_format_json_object: false,
+        user_agent: "test-agent".to_string(),
+        extra_headers: Vec::new(),
         retry_count: 2,
         retry_delay_ms: 0,
         auto_topup_usd: Some("0.1".to_string()),

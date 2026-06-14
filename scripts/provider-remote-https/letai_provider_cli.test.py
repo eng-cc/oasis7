@@ -401,6 +401,24 @@ class LetaiProviderCliNewapiStateTests(unittest.TestCase):
         self.assertIn("data_sha256_16", sample)
         self.assertNotIn("sensitive-looking-token-secret", str(ctx.exception))
 
+    def test_malformed_sse_after_content_is_rejected(self):
+        payload = "\n".join(
+            [
+                'data: {"model":"mock-model","choices":[{"delta":{"content":"{\\"decision\\":\\"wait\\"}"}}]}',
+                "data: not-json-with-sensitive-looking-token-secret",
+                "data: [DONE]",
+            ]
+        )
+
+        with self.assertRaises(cli.CompletionDecodeError) as ctx:
+            cli.decode_sse_completion_payload(payload, status_code=200)
+
+        diagnostics = ctx.exception.diagnostics
+        self.assertIn("malformed data events", str(ctx.exception))
+        self.assertEqual(diagnostics["parse_error_count"], 1)
+        self.assertGreater(diagnostics["content_len"], 0)
+        self.assertNotIn("sensitive-looking-token-secret", str(ctx.exception))
+
     def test_completion_retry_classifies_remote_close_as_retryable(self):
         self.assertTrue(
             cli.is_retryable_completion_error(
