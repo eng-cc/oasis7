@@ -1065,6 +1065,9 @@ impl PosNodeEngine {
                     break;
                 }
             }
+            if self.replication_persisted_height == 0 {
+                self.refresh_replication_persisted_height_from_local_execution_baseline();
+            }
         }
         let observed_latest_height =
             replication_runtime.latest_persisted_commit_height(world_id)?;
@@ -1074,5 +1077,19 @@ impl PosNodeEngine {
             observed_latest_height,
         )?;
         Ok(())
+    }
+
+    fn refresh_replication_persisted_height_from_local_execution_baseline(&mut self) {
+        if !self.require_execution_on_commit
+            || self.committed_height == 0
+            || self.last_execution_height < self.committed_height
+            || self.last_committed_block_hash.is_none()
+            || self.last_execution_block_hash.is_none()
+            || self.last_execution_state_root.is_none()
+        {
+            return;
+        }
+        self.replication_persisted_height = self.committed_height;
+        self.clear_replication_gap_sync_blocked_if_unblocked();
     }
 }
