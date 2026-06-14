@@ -46,6 +46,5 @@ getrandom = { version = "0.2", features = ["js"] }
 default = ["wasmtime"]
 wasmtime = ["oasis7_wasm_executor/wasmtime"]
 viewer_live_integration = []
-self_tests = []
 test_tier_required = []
 test_tier_full = ["test_tier_required"]

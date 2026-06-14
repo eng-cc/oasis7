@@ -13,10 +13,12 @@ use std::time::{Duration, Instant};
 
 use oasis7::observability::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
 use oasis7::simulator::{
-    Action, DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderDecision,
-    ProviderDiagnostics, ProviderErrorEnvelope, ProviderHealth, ProviderInfo, ProviderTokenUsage,
-    ProviderTraceEnvelope, ProviderTranscriptEntry,
+    DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderDecision, ProviderDiagnostics,
+    ProviderErrorEnvelope, ProviderHealth, ProviderInfo, ProviderTokenUsage, ProviderTraceEnvelope,
+    ProviderTranscriptEntry,
 };
+#[cfg(test)]
+use oasis7::simulator::Action;
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_json::Value;
