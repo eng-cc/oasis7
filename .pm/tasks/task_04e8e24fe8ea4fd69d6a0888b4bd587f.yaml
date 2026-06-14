@@ -1,0 +1,23 @@
+task_uid: task_04e8e24fe8ea4fd69d6a0888b4bd587f
+title: "Assess site background story page freshness"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-story-background-refresh-assessment
+execution_log_path: .pm/tasks/task_04e8e24fe8ea4fd69d6a0888b4bd587f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/index.html
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Determine whether site/story/index.html is stale against canonical story/site sources and update it if required"
+handoff_to: []
+updated_at: 2026-06-14T23:22:21+08:00
+last_started_at: 2026-06-14T22:06:53+08:00
+last_claim_type: task_complete
+last_verify_command: "set -e\npython3 - <<'PY'\nfrom pathlib import Path\nfrom html.parser import HTMLParser\nroot = Path(\"site/story\")\nhtml = root / \"index.html\"\nclass P(HTMLParser):\n    def __init__(self):\n        super().__init__(); self.refs=[]; self.story=[]\n    def handle_starttag(self, tag, attrs):\n        d=dict(attrs)\n        for k in (\"href\",\"src\"):\n            if k in d and d[k] and not d[k].startswith((\"#\",\"http\",\"mailto:\")):\n                self.refs.append(d[k])\n        if \"data-story-src\" in d:\n            self.story.append(d[\"data-story-src\"])\nparser=P(); parser.feed(html.read_text())\nmissing=[ref for ref in parser.refs if not (html.parent/ref).resolve().exists()]\nmissing_story=[ref for ref in parser.story if not (html.parent/ref).resolve().exists()]\nassert not missing, missing\nassert not missing_story, missing_story\nfor path in [root/\"draft\"/f\"volume-01-chapter-00{i}.md\" for i in range(1,5)]:\n    text = path.read_text()\n    assert \"阅读版 v1.0-rc\" in text, path\n    assert \"不等同最终出版定稿\" in text, path\nhtml_text = html.read_text()\nassert \"data-story-default\" in html_text and \"draft/volume-01-chapter-001.md\" in html_text\nassert \"releases/volume-01-reading-version.md\" in html_text\nprint(\"release label sync refs ok\")\nPY\ngit diff --check -- site/story/index.html site/story/README.md site/story/draft/README.md site/story/draft/volume-01-chapter-001.md site/story/draft/volume-01-chapter-002.md site/story/draft/volume-01-chapter-003.md site/story/draft/volume-01-chapter-004.md site/story/releases/volume-01-reading-version.md site/assets/styles.css\n./scripts/doc-governance-check.sh\npython3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py\nbash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh\n./scripts/pm/workflow-lint.sh --task-uid task_04e8e24fe8ea4fd69d6a0888b4bd587f --phase current"
+last_verified_at: 2026-06-14T23:22:19+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-14T23:22:20+08:00
