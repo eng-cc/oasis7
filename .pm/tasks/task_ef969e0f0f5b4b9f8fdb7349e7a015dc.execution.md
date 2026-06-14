@@ -179,3 +179,14 @@ Example:
 - Expected Result: ready_for_pr claim-ready evidence is persisted, or the helper reports why the closed task claim cannot be overwritten.
 - Actual Result: helper exited with `claim-ready: closed task claim evidence is immutable for non-completion claims: task_ef969e0f0f5b4b9f8fdb7349e7a015dc status=done claim_type=ready_for_pr`. Equivalent fresh verification evidence already exists in the closeout and pre-PR review entries: task-local workflow lint passed, `git diff --check` passed, provider bridge check passed, and full feature tests check passed.
 - Blocker / Next Action: rerun PR preflight with claim-ready evidence text present and closed-task immutability documented.
+
+## 2026-06-14 14:58:00 CST / tpm
+- 完成内容: PR evidence recorded.
+- 遗留事项: GitHub required checks, PR comments/review threads, mergeability, merge, and post-merge cleanup remain.
+- Action: Created GitHub PR and selected normal PR CI/watch path.
+- PR URL: https://github.com/eng-cc/oasis7/pull/469
+- PR Purpose Decision: normal_pr_ci_watch
+- Validation Command: `gh pr create --base main --head task/engineering-simulation-cleanup-audit --title "Clean simulation audit leftovers" --body <task summary and verification>`
+- Expected Result: GitHub PR is created for `task/engineering-simulation-cleanup-audit` against `main`.
+- Actual Result: created PR #469 at https://github.com/eng-cc/oasis7/pull/469. Initial `./scripts/prepare-task-pr.sh --create --title ...` had already pushed the branch but failed at `gh pr create` because `gh` required an explicit body when title was provided; manual `gh pr create --title ... --body ...` succeeded.
+- Blocker / Next Action: push PR evidence commit, then watch required checks, mergeability, comments, and review threads.
