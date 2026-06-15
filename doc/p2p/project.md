@@ -38,34 +38,17 @@
 - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
-- `doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.prd.md`
-- `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
-- `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
-- `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
-- `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
-- `crates/oasis7/src/bin/oasis7_viewer_live.rs`
-- `oasis7_viewer_live.release.example.toml`
-- `crates/oasis7_client_launcher/src/launcher_core.rs`
-- `crates/oasis7_client_launcher/src/main.rs`
-- `scripts/p2p-longrun-soak.sh`
-- `scripts/s10-five-node-game-soak.sh`
-- `world-rule.md`
-- `doc/world-simulator/viewer/viewer-manual.md`
-- `site/doc/cn/viewer-manual.html`
-- `site/doc/en/viewer-manual.html`
-- `testing-manual.md`
-- `.agents/skills/prd/check.md`
+- `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
+- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
+- `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
 
 ## 状态
-- 更新日期: 2026-05-23
 - 当前状态: active（ROUND-027）
-- 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
 - 当前活跃子线: hosted world / hosted account、public testnet、bridge/newapi、network tier 和主链代币口径都已有独立 topic `*.project.md`；本页状态区不再逐条复述各子线最近完成项。
-- 当前判断: 继续把非全公网 P2P substrate、reachability/role policy 和 claims boundary 作为主线真值；若切到 faucet、hosted world、bridge 或 mint-ready 细项，统一从对应 topic project / evidence 进入。
+- Next: 保持 p2p 主项目页作为模块级 active verdict 与 trace hub；新增长流水应进入对应 topic project 或 `.pm/tasks/*.execution.md`，本页只保留近期一跳 Trace。
 - 最新补充（2026-05-31 / mainstream sync recovery parity）: 平滑升级不再只依赖 systemd active。`scripts/p2p-upgrade-preflight.sh` 会检查 status 端点的 replication cursor、peer-head freshness、gap-sync blocked 和 policy lag，并用 trusted checkpoint / state-sync bundle 门槛保护落后节点恢复。当前代码支持 snapshot-only state-sync bundle 作为最小恢复输入：`--require-state-sync-bundle` 要求 bundle manifest、bundle dir、snapshot path/sha256 与 state_root；journal 仅在 manifest 提供 `journal_path` 时参与校验，不再作为最小 bundle 的必需字段。完整 seed/restore artifact 的 snapshot/journal/blob closure 仍属于更严格的 operator 恢复路径。Trace: `.pm/tasks/task_9051849e0c92424bb7f0ca972a7935cc.yaml`。
 - 最新补充（2026-06-01 / mainstream sync recovery parity execution guardrails）: testnet 演练后继续补齐恢复执行层：restore script 执行前会 re-check 必需工具链、snapshot/journal/chunk sha256 与 chunks root，捕获 `systemctl show/status` 服务状态快照，备份 source/backup sha256 与 `path/type/size/mode/uid/gid` metadata manifest 并自动比对；生成 restore command plan 前会拒绝 shell-unsafe service name、data/backup/bundle 路径及 snapshot/journal/chunk 相对路径。fake execution drill 覆盖成功恢复、snapshot 篡改、chunk 篡改、restore 失败自动 rollback；真实 ECS/testnet 状态仍未被替换。
-- 最近完成的 hosted/login/bridge/mainnet-grade/testnet/faucet 收口统一回看对应 topic project、测试 evidence 与 `.pm/tasks/*.execution.md`；本页只保留当前 round 判断和下一步。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 说明: 本文档状态区只保留 active verdict、next step 和模块级判断；更早完成态继续以任务清单、topic project、evidence 与 execution log 为准。
