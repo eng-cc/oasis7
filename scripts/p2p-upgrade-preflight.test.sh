@@ -16,6 +16,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
+replace_token() {
+  local token=$1
+  local value=$2
+  local path=$3
+  TOKEN="$token" VALUE="$value" perl -0pi -e 's/\Q$ENV{TOKEN}\E/$ENV{VALUE}/g' "$path"
+}
+
 cat >"$TMP_DIR/pass.json" <<'JSON'
 {
   "node_id": "node-pass",
@@ -33,6 +40,35 @@ cat >"$TMP_DIR/pass.json" <<'JSON'
     "replication_gap_sync_blocked_height": null,
     "replication_gap_sync_blocked_reason": null,
     "replication_gap_sync_repair_attempt_summary": null,
+    "known_peer_heads": 1,
+    "network_head": {"fresh_peer_count": 1}
+  }
+}
+JSON
+
+cat >"$TMP_DIR/degraded.json" <<'JSON'
+{
+  "node_id": "node-degraded",
+  "running": true,
+  "last_error": null,
+  "readiness": {
+    "status": "not_ready",
+    "failed_gates": ["storage_challenge_network_degraded"],
+    "policy": {"max_network_height_lag": 1}
+  },
+  "sync": {"network_height_lag": 0},
+  "observability": {
+    "storage_challenge_network_degraded": true
+  },
+  "consensus": {
+    "committed_height": 10,
+    "network_committed_height": 10,
+    "replication_persisted_height": 10,
+    "replication_gap_sync_blocked_height": null,
+    "replication_gap_sync_blocked_reason": null,
+    "replication_gap_sync_repair_attempt_summary": null,
+    "storage_challenge_network_degraded_height": 10,
+    "storage_challenge_network_degraded_reason": "storage challenge network degraded",
     "known_peer_heads": 1,
     "network_head": {"fresh_peer_count": 1}
   }
@@ -338,11 +374,11 @@ CHUNKS_JSON="$(jq -n -S -c \
     {"path": "chunks/checkpoint-30.part1", "sha256": $chunk1}
   ] | sort_by(.path)')"
 CHUNKS_ROOT="sha256:$(printf '%s' "$CHUNKS_JSON" | sha256sum | awk '{print $1}')"
-sed -i "s/__STATE_ROOT__/$STATE_ROOT/g" "$TMP_DIR/state-sync-bundle.json"
-sed -i "s/__SNAPSHOT_SHA256__/$SNAPSHOT_SHA256/g" "$TMP_DIR/state-sync-bundle.json"
-sed -i "s/__JOURNAL_SHA256__/$JOURNAL_SHA256/g" "$TMP_DIR/state-sync-bundle.json"
-sed -i "s/__CHUNK0_SHA256__/$CHUNK0_SHA256/g" "$TMP_DIR/state-sync-bundle.json"
-sed -i "s/__CHUNK1_SHA256__/$CHUNK1_SHA256/g" "$TMP_DIR/state-sync-bundle.json"
+replace_token "__STATE_ROOT__" "$STATE_ROOT" "$TMP_DIR/state-sync-bundle.json"
+replace_token "__SNAPSHOT_SHA256__" "$SNAPSHOT_SHA256" "$TMP_DIR/state-sync-bundle.json"
+replace_token "__JOURNAL_SHA256__" "$JOURNAL_SHA256" "$TMP_DIR/state-sync-bundle.json"
+replace_token "__CHUNK0_SHA256__" "$CHUNK0_SHA256" "$TMP_DIR/state-sync-bundle.json"
+replace_token "__CHUNK1_SHA256__" "$CHUNK1_SHA256" "$TMP_DIR/state-sync-bundle.json"
 
 VALIDATOR_SET_JSON="$(jq -S -c '
   [.validators[]
@@ -361,8 +397,8 @@ for checkpoint_manifest in \
   "$TMP_DIR/tampered-signature-checkpoint.json" \
   "$TMP_DIR/mismatched-validator-set-checkpoint.json" \
   "$TMP_DIR/unknown-validator-checkpoint.json"; do
-  sed -i "s/__VALIDATOR_SET_HASH__/$VALIDATOR_SET_HASH/g" "$checkpoint_manifest"
-  sed -i "s/__VALIDATOR_SET_STAKE_ROOT__/$VALIDATOR_SET_STAKE_ROOT/g" "$checkpoint_manifest"
+  replace_token "__VALIDATOR_SET_HASH__" "$VALIDATOR_SET_HASH" "$checkpoint_manifest"
+  replace_token "__VALIDATOR_SET_STAKE_ROOT__" "$VALIDATOR_SET_STAKE_ROOT" "$checkpoint_manifest"
 done
 
 for checkpoint_manifest in \
@@ -381,7 +417,7 @@ for checkpoint_manifest in \
     stake_root: (.stake_root // .validator_stake_root // null)
   }' "$checkpoint_manifest")"
   CHECKPOINT_PAYLOAD_SHA256="$(printf '%s' "$CHECKPOINT_PAYLOAD_JSON" | sha256sum | awk '{print $1}')"
-  sed -i "s/__CHECKPOINT_PAYLOAD_SHA256__/$CHECKPOINT_PAYLOAD_SHA256/g" "$checkpoint_manifest"
+  replace_token "__CHECKPOINT_PAYLOAD_SHA256__" "$CHECKPOINT_PAYLOAD_SHA256" "$checkpoint_manifest"
 done
 
 openssl genpkey -algorithm Ed25519 -out "$TMP_DIR/trusted-v1.key.pem" >/dev/null 2>&1
@@ -395,8 +431,8 @@ VERIFIED_CHECKPOINT_PAYLOAD_JSON="$(jq -S -c '{
 printf '%s' "$VERIFIED_CHECKPOINT_PAYLOAD_JSON" >"$TMP_DIR/verified-checkpoint.payload"
 openssl pkeyutl -sign -rawin -inkey "$TMP_DIR/trusted-v1.key.pem" -in "$TMP_DIR/verified-checkpoint.payload" -out "$TMP_DIR/verified-checkpoint.sig" >/dev/null 2>&1
 CHECKPOINT_SIGNATURE_HEX="$(xxd -p -c 256 "$TMP_DIR/verified-checkpoint.sig")"
-sed -i "s/__CHECKPOINT_SIGNATURE_HEX__/$CHECKPOINT_SIGNATURE_HEX/g" "$TMP_DIR/verified-checkpoint.json"
-sed -i "s/__CHECKPOINT_SIGNATURE_HEX__/deadbeef/g" "$TMP_DIR/tampered-signature-checkpoint.json"
+replace_token "__CHECKPOINT_SIGNATURE_HEX__" "$CHECKPOINT_SIGNATURE_HEX" "$TMP_DIR/verified-checkpoint.json"
+replace_token "__CHECKPOINT_SIGNATURE_HEX__" "deadbeef" "$TMP_DIR/tampered-signature-checkpoint.json"
 
 PORT="$(python3 - <<'PY'
 import socket
@@ -442,6 +478,13 @@ SH
 chmod +x "$FAKE_CURL_DIR/curl"
 PATH="$FAKE_CURL_DIR:$PATH" "$SCRIPT" --status-url "http://fake/pass.json" >"$TMP_DIR/pass-status-url-timeout.out"
 grep -q '^PASS ' "$TMP_DIR/pass-status-url-timeout.out"
+
+if "$SCRIPT" --status-url "http://127.0.0.1:$PORT/degraded.json" >"$TMP_DIR/degraded.out"; then
+  echo "expected storage-challenge degraded preflight to exit non-zero" >&2
+  exit 1
+fi
+grep -q 'readiness_not_ready' "$TMP_DIR/degraded.out"
+grep -q 'storage_challenge_network_degraded' "$TMP_DIR/degraded.out"
 
 if "$SCRIPT" --status-url "http://127.0.0.1:$PORT/fail.json" >"$TMP_DIR/fail.out"; then
   echo "expected failing preflight to exit non-zero" >&2

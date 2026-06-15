@@ -129,6 +129,8 @@ impl PosNodeEngine {
             last_replication_successor_probe_height: None,
             last_replication_successor_probe_at_ms: None,
             last_replication_successor_probe_hold: None,
+            storage_challenge_network_degraded_height: None,
+            storage_challenge_network_degraded_reason: None,
             storage_challenge_fallback_height: 1,
             recent_storage_challenge_successes: BTreeMap::new(),
             pending: None,
@@ -667,6 +669,11 @@ impl PosNodeEngine {
                 .last_replication_gap_sync_repair_attempt_height,
             replication_gap_sync_repair_attempt_summary: self
                 .last_replication_gap_sync_repair_attempt_summary
+                .clone(),
+            storage_challenge_network_degraded_height: self
+                .storage_challenge_network_degraded_height,
+            storage_challenge_network_degraded_reason: self
+                .storage_challenge_network_degraded_reason
                 .clone(),
             known_peer_heads: peer_heads.len(),
             peer_heads,

@@ -263,6 +263,7 @@ impl PosNodeEngine {
         let primary_samples = replication
             .recent_replicated_content_refs(world_id, STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK)?;
         if primary_samples.is_empty() {
+            self.clear_storage_challenge_network_degraded();
             return Ok(());
         }
 
@@ -305,6 +306,7 @@ impl PosNodeEngine {
             required_matches = required_matches.min(1);
         }
         if successful_matches >= required_matches {
+            self.clear_storage_challenge_network_degraded();
             return Ok(());
         }
 
@@ -320,6 +322,7 @@ impl PosNodeEngine {
                     successful_matches = successful_matches.saturating_add(1);
                     if successful_matches >= required_matches {
                         self.storage_challenge_fallback_height = height.saturating_add(1);
+                        self.clear_storage_challenge_network_degraded();
                         return Ok(());
                     }
                     continue;
@@ -339,18 +342,20 @@ impl PosNodeEngine {
                         failure_reasons.push(reason);
                     }
                     StorageChallengeSampleOutcome::HardFailure { reason } => {
+                        hard_failure = true;
                         failure_reasons.push(reason);
                         break;
                     }
                 }
                 if successful_matches >= required_matches {
                     self.storage_challenge_fallback_height = height.saturating_add(1);
+                    self.clear_storage_challenge_network_degraded();
                     return Ok(());
                 }
             }
         }
 
-        if successful_matches < required_matches {
+        if hard_failure && successful_matches < required_matches {
             return Err(NodeError::Consensus {
                 reason: format!(
                     "storage challenge gate network threshold unmet: total_samples={} attempted_probes={} required_matches={} successful_matches={} reasons={:?}",
@@ -361,6 +366,15 @@ impl PosNodeEngine {
                     failure_reasons
                 ),
             });
+        }
+        if successful_matches < required_matches {
+            self.mark_storage_challenge_network_degraded(
+                required_matches,
+                successful_matches,
+                failure_reasons,
+            );
+        } else {
+            self.clear_storage_challenge_network_degraded();
         }
         Ok(())
     }

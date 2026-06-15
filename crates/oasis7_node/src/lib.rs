@@ -141,6 +141,7 @@ use replication_fetch_handler_support::{
 };
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
+    request_fetch_blob_with_storage_challenge_routes,
 };
 use replication_state_reconcile::{
     parse_replication_commit_payload, parse_replication_commit_payload_view,
@@ -1099,6 +1100,8 @@ struct PosNodeEngine {
     last_replication_successor_probe_height: Option<u64>,
     last_replication_successor_probe_at_ms: Option<i64>,
     last_replication_successor_probe_hold: Option<bool>,
+    storage_challenge_network_degraded_height: Option<u64>,
+    storage_challenge_network_degraded_reason: Option<String>,
     storage_challenge_fallback_height: u64,
     recent_storage_challenge_successes: BTreeMap<String, u64>,
     pending: Option<PendingProposal>,

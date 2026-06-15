@@ -161,6 +161,7 @@ pub(super) struct ChainNodeObservabilityStatus {
     pub(super) replication_persisted_height: u64,
     pub(super) replication_state_gap: u64,
     pub(super) replication_gap_sync_blocked_height: Option<u64>,
+    pub(super) storage_challenge_network_degraded: bool,
     pub(super) recent_replication_error_count: usize,
     pub(super) storage_degraded: bool,
     pub(super) reward_runtime_degraded: bool,
@@ -209,6 +210,8 @@ pub(super) struct ChainConsensusStatus {
     pub(super) replication_gap_sync_blocked_reason: Option<String>,
     pub(super) replication_gap_sync_repair_attempt_height: Option<u64>,
     pub(super) replication_gap_sync_repair_attempt_summary: Option<String>,
+    pub(super) storage_challenge_network_degraded_height: Option<u64>,
+    pub(super) storage_challenge_network_degraded_reason: Option<String>,
     pub(super) state_sync_fallback_required: bool,
     pub(super) state_sync_snapshot_available: bool,
     pub(super) state_sync_trusted_checkpoint_required_height: Option<u64>,
@@ -331,7 +334,7 @@ pub(super) fn build_chain_p2p_status(
     }
 }
 
-fn build_readiness_status(
+pub(super) fn build_readiness_status(
     observability: &ChainNodeObservabilityStatus,
     policy: ChainReadinessPolicyStatus,
 ) -> ChainReadinessStatus {
@@ -457,6 +460,10 @@ pub(super) fn build_chain_node_observability_status(
     let reachability_policy_ok = reachability_policy_ok(snapshot, p2p, active_peer_count, policy);
     let storage_degraded = storage_metrics.degraded_reason.is_some()
         || matches!(storage_metrics.last_gc_result.as_str(), "failed");
+    let storage_challenge_network_degraded = snapshot
+        .consensus
+        .storage_challenge_network_degraded_height
+        .is_some();
     let reward_runtime_degraded = reward_runtime_metrics.enabled
         && (!reward_runtime_metrics.metrics_available
             || !reward_runtime_metrics.invariant_ok
@@ -620,6 +627,21 @@ pub(super) fn build_chain_node_observability_status(
             reason,
         );
     }
+    if let Some(height) = snapshot.consensus.storage_challenge_network_degraded_height {
+        let reason = snapshot
+            .consensus
+            .storage_challenge_network_degraded_reason
+            .clone()
+            .unwrap_or_else(|| {
+                format!("storage challenge network degraded at committed height {height}")
+            });
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "storage_challenge_network_degraded",
+            reason,
+        );
+    }
     if snapshot.replication_enabled && replication_state_gap > 0 {
         push_observability_alert(
             &mut alerts,
@@ -764,6 +786,7 @@ pub(super) fn build_chain_node_observability_status(
     let status = observability_status_for_alerts(alerts.as_slice());
     let ready = status != "critical"
         && (!snapshot.replication_enabled || network_head_available)
+        && !storage_challenge_network_degraded
         && network_head.decision == "ready"
         && transport_stability.stable
         && reachability_policy_ok
@@ -796,6 +819,7 @@ pub(super) fn build_chain_node_observability_status(
         replication_persisted_height: snapshot.consensus.replication_persisted_height,
         replication_state_gap,
         replication_gap_sync_blocked_height: snapshot.consensus.replication_gap_sync_blocked_height,
+        storage_challenge_network_degraded,
         recent_replication_error_count,
         storage_degraded,
         reward_runtime_degraded,
@@ -984,6 +1008,13 @@ pub(super) fn build_chain_status_payload(
             replication_gap_sync_repair_attempt_summary: snapshot
                 .consensus
                 .replication_gap_sync_repair_attempt_summary
+                .clone(),
+            storage_challenge_network_degraded_height: snapshot
+                .consensus
+                .storage_challenge_network_degraded_height,
+            storage_challenge_network_degraded_reason: snapshot
+                .consensus
+                .storage_challenge_network_degraded_reason
                 .clone(),
             state_sync_fallback_required,
             state_sync_snapshot_available,

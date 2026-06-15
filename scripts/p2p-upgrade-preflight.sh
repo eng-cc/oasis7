@@ -904,7 +904,11 @@ for ((status_index = 0; status_index < status_count; status_index++)); do
         known_peer_heads: n(.consensus.known_peer_heads),
         fresh_peer_count: n(.consensus.network_head.fresh_peer_count),
         allowed_lag: n(.readiness.policy.max_network_height_lag),
-        lag: n(.sync.network_height_lag)
+        lag: n(.sync.network_height_lag),
+        readiness_status: (.readiness.status // null),
+        storage_challenge_network_degraded_height: (.consensus.storage_challenge_network_degraded_height // null),
+        storage_challenge_network_degraded_reason: (.consensus.storage_challenge_network_degraded_reason // null),
+        storage_challenge_network_degraded: (.observability.storage_challenge_network_degraded // false)
       }
     | .checkpoint_required_height = (
         if .fallback_required_height != null then
@@ -944,6 +948,8 @@ for ((status_index = 0; status_index < status_count; status_index++)); do
         + (if (.fallback_required and .trusted_checkpoint_usable and .require_state_sync_bundle and (.state_sync_bundle_ready | not)) then ["state_sync_bundle_required"] else [] end)
         + (if (.network_committed_height > .replication_persisted_height and .known_peer_heads == 0 and (.trusted_checkpoint_usable | not)) then ["peer_head_unavailable_for_repair"] else [] end)
         + (if (.lag > .allowed_lag and (.trusted_checkpoint_usable | not)) then ["network_height_lag_exceeds_policy"] else [] end)
+        + (if (.readiness_status != "ready") then ["readiness_not_ready"] else [] end)
+        + (if (.storage_challenge_network_degraded_height != null or .storage_challenge_network_degraded) then ["storage_challenge_network_degraded"] else [] end)
       )
     | .warnings = (
         []
