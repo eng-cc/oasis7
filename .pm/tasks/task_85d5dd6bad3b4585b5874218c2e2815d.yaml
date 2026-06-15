@@ -10,6 +10,7 @@ source_refs:
   - AGENTS.md
   - doc/engineering/workflow/source-of-truth.md
 doc_refs:
+  - doc/p2p/project.md
   - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
 related_prd: []
 acceptance:
