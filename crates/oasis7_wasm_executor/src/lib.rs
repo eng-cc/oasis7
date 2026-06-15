@@ -142,35 +142,34 @@ impl EpochWatchdogController {
     fn new(engine: wasmtime::Engine) -> Self {
         let (command_tx, command_rx) = mpsc::channel::<WatchdogCommand>();
         let join_handle = std::thread::spawn(move || {
-            let mut armed: Option<(u64, std::time::Instant)> = None;
+            let mut armed: BTreeMap<u64, std::time::Instant> = BTreeMap::new();
             loop {
-                match armed {
-                    Some((ticket, deadline)) => {
+                match armed.values().min().copied() {
+                    Some(deadline) => {
                         let timeout = deadline.saturating_duration_since(std::time::Instant::now());
                         match command_rx.recv_timeout(timeout) {
                             Ok(command) => match command {
                                 WatchdogCommand::Arm { ticket, timeout } => {
-                                    armed = Some((ticket, std::time::Instant::now() + timeout));
+                                    armed.insert(ticket, std::time::Instant::now() + timeout);
                                 }
                                 WatchdogCommand::Disarm {
                                     ticket: disarm_ticket,
                                 } => {
-                                    if disarm_ticket == ticket {
-                                        armed = None;
-                                    }
+                                    armed.remove(&disarm_ticket);
                                 }
                                 WatchdogCommand::Shutdown => break,
                             },
                             Err(mpsc::RecvTimeoutError::Timeout) => {
                                 engine.increment_epoch();
-                                armed = None;
+                                let now = std::time::Instant::now();
+                                armed.retain(|_, deadline| *deadline > now);
                             }
                             Err(mpsc::RecvTimeoutError::Disconnected) => break,
                         }
                     }
                     None => match command_rx.recv() {
                         Ok(WatchdogCommand::Arm { ticket, timeout }) => {
-                            armed = Some((ticket, std::time::Instant::now() + timeout));
+                            armed.insert(ticket, std::time::Instant::now() + timeout);
                         }
                         Ok(WatchdogCommand::Disarm { .. }) => {}
                         Ok(WatchdogCommand::Shutdown) | Err(_) => break,

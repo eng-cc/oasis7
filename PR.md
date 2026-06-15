@@ -8,6 +8,7 @@
 
 - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_store artifact_paths_reject_path_shaped_wasm_hashes`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime wasm_executor_rejects_wasm_hash_bytes_mismatch_before_cache_hit`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime wasm_executor_epoch_watchdog_preempts_infinite_loop`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router router_metrics_track_prepared_regex_compile_count`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 prepared_subscription_cache_key_tracks_manifest_identity`
 - `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_build_suite/Cargo.toml minimal_template_rejects_path_shaped_module_id`
