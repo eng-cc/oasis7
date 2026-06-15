@@ -135,6 +135,8 @@ def fmt_bool(value):
 def fmt_num(value):
     if value is None:
         return "n/a"
+    if isinstance(value, str):
+        return value
     return f"{int(value):,}"
 
 
@@ -166,6 +168,60 @@ if traffic_summary_path:
         traffic_summary_missing = True
 
 observability = status.get("observability") or {}
+p2p = status.get("p2p") or {}
+path_observability = observability.get("path_observability") or {}
+if not path_observability and p2p:
+    path_observability = {
+        "selected_path_kind": p2p.get("active_transport_kind"),
+        "selected_path_age_ms": None,
+        "active_direct_path_count": p2p.get("active_direct_path_count"),
+        "active_hole_punch_path_count": p2p.get("active_hole_punch_path_count"),
+        "active_relay_path_count": p2p.get("active_relay_path_count"),
+        "transition_count": p2p.get("transport_transition_count"),
+        "transitions": p2p.get("transport_transitions") or {},
+        "last_transition": p2p.get("last_transport_transition"),
+    }
+selected_path_kind = path_observability.get("selected_path_kind") or "not_reported"
+selected_path_age_ms = path_observability.get("selected_path_age_ms")
+active_path_mix = {
+    "direct": path_observability.get("active_direct_path_count"),
+    "hole_punched": path_observability.get("active_hole_punch_path_count"),
+    "relay_reserved": path_observability.get("active_relay_path_count"),
+}
+active_path_mix = {
+    key: ("not_reported" if value is None else value)
+    for key, value in active_path_mix.items()
+}
+path_transition_counters = path_observability.get("transitions") or {}
+if not path_transition_counters:
+    path_transition_counters = {
+        "direct_to_hole_punched": "not_reported",
+        "direct_to_relay_reserved": "not_reported",
+        "hole_punched_to_direct": "not_reported",
+        "hole_punched_to_relay_reserved": "not_reported",
+        "relay_reserved_to_direct": "not_reported",
+        "relay_reserved_to_hole_punched": "not_reported",
+    }
+last_path_transition = path_observability.get("last_transition") or {}
+if last_path_transition:
+    recent_fallback_reason = "path_transition"
+elif selected_path_kind == "relay_reserved":
+    recent_fallback_reason = "relay_reserved"
+elif selected_path_kind == "not_reported":
+    recent_fallback_reason = "not_reported"
+else:
+    recent_fallback_reason = "unknown"
+direct_addr_count = len(p2p.get("confirmed_external_direct_addrs") or [])
+if selected_path_kind == "direct" and direct_addr_count > 0:
+    reachability_confidence = "observed_direct"
+elif selected_path_kind == "hole_punched":
+    reachability_confidence = "punched_recently"
+elif selected_path_kind == "relay_reserved" or p2p.get("relay_available") is True:
+    reachability_confidence = "relay_reserved"
+elif selected_path_kind == "not_reported":
+    reachability_confidence = "not_reported"
+else:
+    reachability_confidence = "unknown"
 consensus = status.get("consensus") or {}
 storage = status.get("storage") or {}
 reward_runtime = status.get("reward_runtime") or {}
@@ -203,7 +259,23 @@ summary = {
         "recent_replication_error_count": observability.get("recent_replication_error_count"),
         "storage_degraded": observability.get("storage_degraded"),
         "reward_runtime_degraded": observability.get("reward_runtime_degraded"),
+        "path_observability": path_observability,
         "alerts": alerts,
+    },
+    "p2p_reachability": {
+        "available": bool(p2p),
+        "detected_reachability": p2p.get("detected_reachability"),
+        "deployment_mode": p2p.get("deployment_mode"),
+        "node_role_claim": p2p.get("node_role_claim"),
+        "relay_available": p2p.get("relay_available"),
+        "probe_stable": p2p.get("probe_stable"),
+        "path_observability": path_observability,
+        "selected_path_kind": selected_path_kind,
+        "selected_path_age_ms": "not_reported" if selected_path_age_ms is None else selected_path_age_ms,
+        "path_transition_counters": path_transition_counters,
+        "active_path_mix": active_path_mix,
+        "recent_fallback_reason": recent_fallback_reason,
+        "reachability_confidence": reachability_confidence,
     },
     "consensus": {
         "committed_height": consensus.get("committed_height"),
@@ -271,6 +343,40 @@ lines.extend(
         f"- reward_runtime_degraded: `{fmt_bool(observability.get('reward_runtime_degraded'))}`",
     ]
 )
+
+lines.extend(
+    [
+        "",
+        "## P2P Path Observability",
+        f"- detected_reachability: `{p2p.get('detected_reachability')}`",
+        f"- deployment_mode: `{p2p.get('deployment_mode')}`",
+        f"- node_role_claim: `{p2p.get('node_role_claim')}`",
+        f"- selected_path_kind: `{selected_path_kind}`",
+        f"- selected_path_age_ms: `{fmt_num(selected_path_age_ms) if selected_path_age_ms is not None else 'not_reported'}`",
+        f"- active_path_counts: `direct={active_path_mix.get('direct')} hole_punched={active_path_mix.get('hole_punched')} relay={active_path_mix.get('relay_reserved')}`",
+        f"- transition_count: `{fmt_num(path_observability.get('transition_count'))}`",
+        f"- recent_fallback_reason: `{recent_fallback_reason}`",
+        f"- reachability_confidence: `{reachability_confidence}`",
+        f"- relay_available: `{fmt_bool(p2p.get('relay_available'))}`",
+        f"- probe_stable: `{fmt_bool(p2p.get('probe_stable'))}`",
+    ]
+)
+transitions = path_transition_counters
+if transitions:
+    lines.append(
+        "- transition_counters: "
+        f"`direct_to_hole_punched={fmt_num(transitions.get('direct_to_hole_punched'))} "
+        f"direct_to_relay_reserved={fmt_num(transitions.get('direct_to_relay_reserved'))} "
+        f"hole_punched_to_direct={fmt_num(transitions.get('hole_punched_to_direct'))} "
+        f"hole_punched_to_relay_reserved={fmt_num(transitions.get('hole_punched_to_relay_reserved'))} "
+        f"relay_reserved_to_direct={fmt_num(transitions.get('relay_reserved_to_direct'))} "
+        f"relay_reserved_to_hole_punched={fmt_num(transitions.get('relay_reserved_to_hole_punched'))}`"
+    )
+last_transition = path_observability.get("last_transition") or {}
+if last_transition:
+    lines.append(
+        f"- last_transition: `from={last_transition.get('from_kind')} to={last_transition.get('to_kind')} age_ms={fmt_num(last_transition.get('age_ms'))}`"
+    )
 
 if alerts:
     lines.extend(["", "## Active Alerts"])

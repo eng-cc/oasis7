@@ -581,6 +581,13 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
 - 目标语义：
   - `exact`：直接运行当前仓库已经存在的 deterministic cargo tests，验证 private/validator_hidden/relay_only 边界、bootstrap poisoning、relay exhaustion 和 path failover。
   - `proxy`：运行当前可用的 triad/triad_distributed longrun 命令，给 mixed-topology recovery 留下可执行 full-tier drill；它不等价于 dedicated sentry/NAT lab。
+- Path behavior taxonomy（2026-06-15 更新）：
+  - `evidence_class`: `exact / proxy / manual_lab / real_env / unsupported`。`exact` 是 deterministic repo test；`proxy` 是当前可执行近似 longrun；`manual_lab` 需要专门 NAT/sentry lab；`real_env` 必须是同窗口真实网络证据；`unsupported` 表示该 topology 当前明确不承诺。
+  - `path_expectation`: `must_direct / may_direct_must_recover / must_relay / must_not_publish_public_direct / manual_lab_required / unsupported`。该字段描述粗粒度 claim，不要求所有 NAT pair 都 direct-connect；case-specific route sequence 留在 `expected_route`。
+  - `reachability_pair`: `public_direct / home_nat / cgnat / relay_only / validator_hidden / cloud_public / mixed_validator_observer`。
+  - `degradation_class`: `none / sentry_loss / relay_exhaustion / degraded_latency_loss / restart_pause_disconnect / bootstrap_poisoning`。
+  - `claim_boundary`: `required_exact / full_proxy / physical_nat_pending / shared_window_partial / public_testnet_blocked_or_ready`。
+  - 这些字段属于 QA evidence taxonomy；canonical reachability/path label 必须来自 runtime peer reachability contract 或现有 `TransportPath` projection，matrix 脚本不得反向定义 runtime truth。
 - 当前 full-tier 基线（2026-04-07 latest）：
   - latest full summary: `.tmp/p2p_mixed_topology_validation/20260407-120951-full/summary.json`
   - `required_exact_ready=true`
@@ -686,6 +693,11 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - `evidence_contract.claim_readiness.shared_network_pass_blockers`
   - `claim_status`
   - `failure_signatures`
+  - `cases[*].evidence_class`
+  - `cases[*].path_expectation`
+  - `cases[*].reachability_pair`
+  - `cases[*].degradation_class`
+  - `cases[*].claim_boundary`
   - `analysis.cloud_pair_service_healthy`
   - `analysis.cloud_pair_chain_visible`
   - `analysis.cloud_pair_progress_signal_present`
@@ -706,6 +718,12 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - `nodes.<label>.wasm.top_hotspot`
   - `nodes.<label>.modules.consensus.height_lag`
   - `nodes.<label>.modules.replication.recent_error_count`
+  - `nodes.<label>.modules.p2p_reachability.selected_path_kind`
+  - `nodes.<label>.modules.p2p_reachability.selected_path_age_ms`
+  - `nodes.<label>.modules.p2p_reachability.path_transition_counters`
+  - `nodes.<label>.modules.p2p_reachability.active_path_mix`
+  - `nodes.<label>.modules.p2p_reachability.recent_fallback_reason`
+  - `nodes.<label>.modules.p2p_reachability.reachability_confidence`
   - `nodes.<label>.modules.transactions.pending_count`
   - `nodes.<label>.modules.traffic_control_plane.control_plane_wire_ratio`
   - `nodes.<label>.optimization_candidates[*].key`
@@ -714,6 +732,8 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - 2026-04-07 latest full run 已证明 matrix 能真实执行到 proxy soak，但当前 proxy drill 仍会因为 `consensus_hash_divergence / committed_height_not_monotonic / known_peer_heads_zero_samples / http_failure_samples` 失败；在这些签名被修平前，`P2PARCH-6` 仍不能宣称 `full_proxy_ready=true`。
   - 2026-04-08 latest real-env triad reconfirm 已证明 same-window 三节点样本可重复采集，而且本机 observer 已不再是主 blocker；当前真实 residual 已收敛到 ECS sequencer 的 `execution driver received stale height`。在把带该修复的 runtime 二进制重新部署到远端前，这条 lane 仍不能升级为 `pass`。
   - complete observability monitor 只解决当前 triad 的 repo-owned 资源/状态/流量/WASM 统一监控，不等价于已经补齐 Prometheus/OTel/长期告警平台。
+  - reachability/path observability 只能消费 `/v1/chain/status.observability` 的 bounded projection；字段缺失时应输出 `not_reported` 或等价状态，不允许 report helper 自行重建 peer path truth。
+  - `relay_reserved`、`proxy` case pass、或 control-plane byte split 都不能单独支撑 `public reachable` / physical NAT / public_testnet readiness claim；这类 claim 必须回到 matrix taxonomy、same-window evidence 与 producer/QA pass-uplift decision。
 
 ### S9C：P2P 用户模式自动选择验证（P2PARCH-8/P2PARCH-9）
 - 当前状态（2026-04-07）：

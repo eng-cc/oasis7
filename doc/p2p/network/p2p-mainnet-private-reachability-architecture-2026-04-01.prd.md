@@ -14,6 +14,9 @@
   - SC-4: 安全边界明确冻结 `validator core / sentry / relay / full-storage / observer-light` 的角色和密钥边界，禁止 relay/browser/operator public plane 持有长期共识 signer。
   - SC-5: 文档明确给出 anti-eclipse、anti-spam、peer diversity、relay budget 与 shared-network 验证要求，后续实现可直接据此拆任务和测门禁。
   - SC-6: 用户层默认只暴露 `2~3` 个简单模式，并由系统根据公网/NAT/打洞结果自动选择默认值；普通用户不必先理解 `validator_core/sentry/relay` 等正式角色。
+  - SC-7: 后续 reachability 改造必须收敛到单一 `peer reachability contract`，由 signed peer record 与 runtime path observation 共同归一化出 `peer identity + role/deployment policy + ranked transport paths + publish/claim boundary`；`SignedPeerRecord`、`TransportPath`、network-tier manifest、status payload 与 mixed-topology matrix 不得各自重新定义 reachability class。
+  - SC-8: mixed-topology 验证必须使用显式 path-behavior taxonomy，至少区分 `exact / proxy / manual_lab / real_env / unsupported` evidence class、`must_direct / may_direct_must_recover / must_relay / must_not_publish_public_direct / manual_lab_required / unsupported` expectation，以及 `public_direct / home_nat / cgnat / relay_only / sentry_loss / relay_exhaustion / degraded_latency_loss` 等 NAT/degradation labels。
+  - SC-9: reachability/status observability 必须挂接到现有 `/v1/chain/status.observability` 或 triad summary，不新增第二套 net health truth；字段必须保持 bounded cardinality，并明确 byte/status scope，禁止把当前 wire/control-plane 统计解释成 NIC-level transport overhead 真值。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -47,6 +50,7 @@
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | Peer identity 与 record | `peer_id/node_identity_key/chain_id/role_mask/reachability_class/public_addrs/relay_addrs/capability_lanes/source_operator/source_asn/ttl/signature` | 节点发布带有效期的签名 peer record，并显式声明可服务的 traffic lanes 与 diversity 元数据 | `draft -> published -> refreshed -> expired/revoked` | record 必须链内域分离签名，过期或域不匹配即拒绝；未声明某 lane 的 peer 不应被优先选为该 lane provider | 只有节点身份持有者可发布；consensus signer 不直接暴露 |
+| Peer reachability contract | `peer_id/deployment_mode/node_role/reachability_class/capability_lanes/ranked_paths/publish_policy/source_evidence/claim_boundary` | 从 signed peer record、transport path observation 与 network-tier policy 归一化出单一 reachability view，供 selection/status/matrix 投影 | `unresolved -> normalized -> selected -> stale/quarantined` | path label、rank 与 claim boundary 必须来自同一 contract；matrix/status 只能投影，不得重新定义 canonical reachability | 本地 peer manager 强制执行；远端声明不可覆盖本地 role/publish policy |
 | Reachability service | `observed_addr/autonat_status/hole_punch_status/relay_reservation/path_quality` | 探测 direct、尝试打洞、预留 relay、维护路径排序 | `unknown -> direct/private/relay_only -> degraded/recovered` | direct 优先于 punched，punched 优先于 relay；不能打洞时自动降级 relay | 节点本地决策；relay 只提供转发，不授予签名权限 |
 | Discovery fabric | `bootnodes/dht_namespace/rendezvous_topic/peer_record_cache/source_diversity` | 从 bootnode、DHT、rendezvous 与静态 allowlist 聚合候选 peer | `seeded -> converging -> healthy/degraded` | 至少保留两类独立 discovery source；单源集中不得视为 healthy | bootnode/relay 可公开；validator core 可只做 consumer |
 | Transport abstraction | `transport_id/directness/security/mux/qos_class/max_streams` | 在 direct、hole-punched、relay 路径上复用统一流接口 | `dialing -> established -> draining -> closed` | QUIC 为主、TCP/Noise 为回退；UDP 只可作为加速，不得成为唯一真值链路 | transport key 可轮换；长期 signer 不进入 transport session |
@@ -68,6 +72,9 @@
   - AC-11: `doc/p2p/prd.md`、`doc/p2p/project.md`、`doc/p2p/prd.index.md` 与 `doc/p2p/README.md` 必须接入本专题，形成模块级追踪链。
   - AC-12: 本专题必须明确用户层默认只暴露 `2~3` 个简单模式，且默认行为是全自动检测与推荐，不要求普通用户手动理解 `deployment_mode/node_role`。
   - AC-13: 本专题必须明确高风险职责边界：系统可以全自动给出默认值，但当结果会让节点承担 `public entry / relay / sentry` 等外部暴露职责时，必须有显式确认或等价的风险同意机制。
+  - AC-14: 本专题必须补齐 `peer reachability contract normalization` 的字段语义、输入/输出边界和非目标：不引入 iroh 依赖、不替换 libp2p `Multiaddr`、不把 relay/DNS/Pkarr 默认带入 oasis7。
+  - AC-15: 本专题和 `testing-manual.md` 必须冻结 path-behavior matrix taxonomy，且把 `proxy != physical NAT/CGNAT proof` 写成 gate 约束；任何 public_testnet / shared_devnet claim 都必须说明 evidence class 与 claim boundary。
+  - AC-16: 本专题必须说明 status observability enhancement 只暴露 bounded operator summary，例如 selected path kind/age、path transition counters、relay/direct/hole-punched mix、recent fallback reason 和 reachability confidence；若字段尚未由 runtime 实现，project 文档必须以待办 workstream 标注。
 - Non-Goals:
   - 不在本专题内绑定单一网络库实现，不把 “libp2p / 自研 / 混合” 之一提前冻结成唯一方案。
   - 不把当前目标降级成“能连起来就行”的家宽补丁；本专题讨论的是公共主链级目标态。
@@ -156,3 +163,6 @@
 | DEC-P2P-PRA-005 | 把 anti-eclipse / diversity / relay budget 写成框架层硬约束 | 先实现连通，后续再补安全策略 | 公共主链级 P2P 不能把“安全拓扑”推迟到上线后再补。 |
 | DEC-P2P-PRA-006 | 用户层只暴露 `2~3` 个简单模式，默认全自动探测，底层继续保留正式角色语义 | 让所有用户直接选择 `deployment_mode/node_role`，或彻底取消内部正式角色 | 普通用户不应先学基础设施术语，但系统内部仍需要精确职责语义来守住安全边界。 |
 | DEC-P2P-PRA-007 | 允许将 `P2PARCH-5` 作为 runtime substrate milestone 单独关闭，并把 mixed-topology required/full 与 release-gate claim 继续保留在 `P2PARCH-6/7` | 持续把 QA evidence gate 绑定在 `P2PARCH-5`，导致 runtime 已完成但任务状态长期失真 | runtime 实现闭环与 public-chain-grade claims evidence 是不同层级；前者应按实现真值关闭，后者继续由 QA/release gate 任务阻断。 |
+| DEC-P2P-PRA-008 | 采用 oasis7 内部 `peer reachability contract` 作为 signed peer record、transport path、status 与 matrix 之间的唯一归一化边界 | 直接引入 iroh、替换 libp2p substrate，或让各 surface 各自定义 reachability | iroh 的可借鉴点是 identity-first/path-state/evidence 边界；oasis7 仍以现有 libp2p、role policy、network-tier truth 为底座。 |
+| DEC-P2P-PRA-009 | path behavior matrix 只拥有 evidence/claim taxonomy，不拥有 runtime reachability truth | 让 matrix 脚本反向定义 direct/hole-punch/relay 语义 | QA gate 应防止 overclaim；canonical path label/rank 必须来自 runtime contract。 |
+| DEC-P2P-PRA-010 | status observability 只扩展现有 `/v1/chain/status.observability` / triad summary 的 bounded operator view | 新建第二套 net-report/health endpoint 或导出 unbounded per-peer metrics labels | operator 需要诊断路径选择和退化原因，但网络健康真值必须保持单源、低基数、可回归。 |

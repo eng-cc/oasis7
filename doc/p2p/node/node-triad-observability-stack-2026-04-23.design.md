@@ -54,9 +54,30 @@
      - `consensus/observability/replication/storage/reward_runtime/transactions/p2p_reachability`: 直接解析 runtime `/v1/chain/status` 顶层字段。
      - `wasm_executor_router`: 结合 raw `wasm` 字段与 `oasis7-node-wasm-metrics-monitor.sh` 的窗口摘要。
      - `traffic_control_plane`: 结合 traffic window 中的 payload/wire/control-plane 指标。
+     - `p2p_reachability`: 消费 `/v1/chain/status.observability` 中由 runtime 投影的 bounded reachability/path summary；若字段未上报，输出 `not_reported`，不得在 summary helper 内重新推导 canonical path truth。
    - optimization candidates：
      - 允许跨模块拼接信号，例如 `runtime_cpu_hot + control_plane_wire_share_high` -> `libp2p_control_plane_churn`
      - 候选必须附 `evidence` 与 `suggested_optimizations`，避免只给口头判断。
+
+## Reachability Path Summary Extension
+本扩展对齐 `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md` 的 `PeerReachabilityContract`。triad observability 只消费 status projection，不拥有 reachability contract。
+
+建议 summary shape：
+
+| 字段 | 说明 | 边界 |
+| --- | --- | --- |
+| `selected_path_kind` | 当前 selected path kind，例如 `direct / hole_punched / relay / unknown` | 由 runtime status 提供；report 不重新判定 |
+| `selected_path_age_ms` | 当前 selected path 在窗口内保持时长 | 可为 node-level summary；不要求 per-peer time series |
+| `path_transition_counters` | `direct_to_relay / relay_to_direct / direct_to_hole_punched / hole_punched_to_relay` | bounded counter；不携带 raw peer IDs |
+| `active_path_mix` | active direct/hole-punched/relay counts | 可用于判断 relay 依赖，但不是 public reachability claim |
+| `recent_fallback_reason` | bounded enum，例如 `direct_failed / relay_reserved / path_stale / policy_override / unknown` | 禁止自由文本无限扩张 |
+| `reachability_confidence` | `observed_direct / relay_reserved / punched_recently / proxy_only / manual_lab_required / not_reported` | 只用于 operator diagnosis；release claim 回到 matrix gate |
+
+实现约束：
+- summary helper 不读取 libp2p internals 或重新解析 peer records；它只消费 status JSON。
+- 不新增独立 net-report endpoint；如果未来需要更丰富诊断，先扩展 `/v1/chain/status.observability`。
+- 不导出 unbounded peer-id labels；peer 细节只允许 bounded debug artifact 或 top-N snapshot。
+- byte split 必须保留现有 traffic scope 说明，不能声明 NIC-level overhead。
 
 ## 输出目录约定
 - `<out-dir>/<run-id>/snapshot/`

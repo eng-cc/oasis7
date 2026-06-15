@@ -81,6 +81,64 @@ fn build_configured_peer_record_excludes_loopback_direct_addrs_by_default() {
 }
 
 #[test]
+fn peer_reachability_contract_normalizes_record_identity_policy_and_ranked_paths() {
+    let keypair = Keypair::generate_ed25519();
+    let peer_id = PeerId::from(keypair.public());
+    let relay_peer = PeerId::random();
+    let signed = sign_peer_record(
+        &PeerRecord {
+            peer_id: peer_id.to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Hybrid,
+            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+            direct_addrs: vec!["/ip4/127.0.0.1/udp/4103/quic-v1".to_string()],
+            hole_punch_addrs: vec!["/ip4/10.0.0.7/tcp/4104".to_string()],
+            relay_addrs: vec![format!(
+                "/dns4/relay.example/tcp/443/p2p/{relay_peer}/p2p-circuit"
+            )],
+            discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            capability_lanes: vec![NetworkLane::BlobState, NetworkLane::Control],
+            source_operator: None,
+            source_asn: None,
+            published_at_ms: 0,
+            ttl_ms: 60_000,
+        },
+        &keypair,
+    )
+    .expect("sign peer record");
+
+    let contract = PeerReachabilityContract::from_signed_peer_record(&signed).expect("contract");
+
+    assert_eq!(contract.peer_id, peer_id);
+    assert_eq!(contract.node_role, PeerNodeRole::FullStorage);
+    assert_eq!(contract.deployment_mode, PeerDeploymentMode::Hybrid);
+    assert_eq!(
+        contract.reachability_class,
+        crate::dht::PeerReachabilityClass::Hybrid
+    );
+    assert!(contract.capability_lanes.contains(&NetworkLane::Control));
+    assert!(contract.capability_lanes.contains(&NetworkLane::BlobState));
+    assert_eq!(contract.publish_source.direct_path_count, 1);
+    assert_eq!(contract.publish_source.hole_punch_path_count, 1);
+    assert_eq!(contract.publish_source.relay_path_count, 1);
+    assert_eq!(
+        contract
+            .ranked_paths
+            .iter()
+            .map(|path| path.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            TransportPathKind::Direct,
+            TransportPathKind::HolePunched,
+            TransportPathKind::RelayReserved
+        ]
+    );
+}
+
+#[test]
 fn build_configured_peer_record_keeps_private_validator_without_direct_addrs() {
     let keypair = Keypair::generate_ed25519();
     let reachability = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));

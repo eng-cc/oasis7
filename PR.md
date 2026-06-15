@@ -39,3 +39,9 @@ Summary:
 - Make provider-backed web config fail closed for invalid provider subfields, transport URL policy, invalid DNS hostnames, and invalid agent_decision_source.
 - Redact provider auth tokens from state responses while preserving child-process forwarding.
 - Clarify trusted_local_only as an internal local-playtest escape hatch and share HTTP base URL parser coverage.
+
+## Add reachability path evidence and observability
+
+- PR URL: https://github.com/eng-cc/oasis7/pull/484
+- Task UID: task_43a21163092541809de36036403d7c97
+- Branch: task/engineering-iroh-implementation-lessons

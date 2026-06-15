@@ -7,6 +7,7 @@
 - hosted world / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] iroh-inspired-reachability-evidence-observability (PRD-P2P-024/025/030) [test_tier_required]: 落地 peer reachability contract、path behavior matrix taxonomy 与 bounded status/triad observability 三项，不引入 iroh 依赖、不替换 libp2p。 Trace: .pm/tasks/task_43a21163092541809de36036403d7c97.yaml
 - [x] module-project-log-slimming (PRD-ENGINEERING-030) [test_tier_required]: 压缩 p2p 主项目页历史流水为当前/最近任务索引与历史追溯入口，保留模块判断、状态和一跳 task trace。 Trace: .pm/tasks/task_49ef9270afc646d98d4a8386c0888eab.yaml
 - [x] p2p-network-runtime-hardening (PRD-P2P-001/003) [test_tier_required]: 收口 libp2p gossip publish 静默失败与 node replication fallback 分类分叉。 Trace: .pm/tasks/task_4d597c77a31b4411864f998159d8d5ec.yaml
 - [x] subscribe-ack-udp-gossip-hardening (PRD-P2P-001/003) [test_tier_required]: 收口 `libp2p subscribe` dead-subscription 假成功与 UDP gossip datagram 语义歧义。 Trace: .pm/tasks/task_b518025590ae4e998726066eb862e17c.yaml

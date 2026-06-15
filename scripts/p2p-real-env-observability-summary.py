@@ -573,6 +573,19 @@ def summarize_traffic_control_plane(traffic_node: dict) -> dict:
 
 def summarize_p2p_reachability(raw_status: dict) -> dict:
     p2p = raw_status.get("p2p") or {}
+    observability = raw_status.get("observability") or {}
+    path_observability = observability.get("path_observability") or {}
+    if not path_observability and p2p:
+        path_observability = {
+            "selected_path_kind": p2p.get("active_transport_kind"),
+            "selected_path_age_ms": None,
+            "active_direct_path_count": p2p.get("active_direct_path_count"),
+            "active_hole_punch_path_count": p2p.get("active_hole_punch_path_count"),
+            "active_relay_path_count": p2p.get("active_relay_path_count"),
+            "transition_count": p2p.get("transport_transition_count"),
+            "transitions": p2p.get("transport_transitions") or {},
+            "last_transition": p2p.get("last_transport_transition"),
+        }
     direct_addr_count = len(p2p.get("confirmed_external_direct_addrs") or [])
     alerts = []
     if p2p.get("probe_stable") is False:
@@ -583,6 +596,46 @@ def summarize_p2p_reachability(raw_status: dict) -> dict:
     if effective_mode == "relay_only" and p2p.get("relay_available") is not True:
         alerts.append("relay_path_unavailable")
     alerts = unique_sorted(alerts)
+    selected_path_kind = path_observability.get("selected_path_kind") or "not_reported"
+    selected_path_age_ms = path_observability.get("selected_path_age_ms")
+    active_path_mix = {
+        "direct": path_observability.get("active_direct_path_count"),
+        "hole_punched": path_observability.get("active_hole_punch_path_count"),
+        "relay_reserved": path_observability.get("active_relay_path_count"),
+    }
+    active_path_mix = {
+        key: ("not_reported" if value is None else value)
+        for key, value in active_path_mix.items()
+    }
+    path_transition_counters = path_observability.get("transitions") or {}
+    if not path_transition_counters:
+        path_transition_counters = {
+            "direct_to_hole_punched": "not_reported",
+            "direct_to_relay_reserved": "not_reported",
+            "hole_punched_to_direct": "not_reported",
+            "hole_punched_to_relay_reserved": "not_reported",
+            "relay_reserved_to_direct": "not_reported",
+            "relay_reserved_to_hole_punched": "not_reported",
+        }
+    last_transition = path_observability.get("last_transition") or {}
+    if last_transition:
+        recent_fallback_reason = "path_transition"
+    elif selected_path_kind == "relay_reserved":
+        recent_fallback_reason = "relay_reserved"
+    elif selected_path_kind == "not_reported":
+        recent_fallback_reason = "not_reported"
+    else:
+        recent_fallback_reason = "unknown"
+    if selected_path_kind == "direct" and direct_addr_count > 0:
+        reachability_confidence = "observed_direct"
+    elif selected_path_kind == "hole_punched":
+        reachability_confidence = "punched_recently"
+    elif selected_path_kind == "relay_reserved" or p2p.get("relay_available") is True:
+        reachability_confidence = "relay_reserved"
+    elif selected_path_kind == "not_reported":
+        reachability_confidence = "not_reported"
+    else:
+        reachability_confidence = "unknown"
     return {
         "status": determine_module_status(alerts),
         "alerts": alerts,
@@ -596,6 +649,12 @@ def summarize_p2p_reachability(raw_status: dict) -> dict:
         "relay_available": p2p.get("relay_available"),
         "probe_stable": p2p.get("probe_stable"),
         "direct_addr_count": direct_addr_count,
+        "selected_path_kind": selected_path_kind,
+        "selected_path_age_ms": "not_reported" if selected_path_age_ms is None else selected_path_age_ms,
+        "path_transition_counters": path_transition_counters,
+        "active_path_mix": active_path_mix,
+        "recent_fallback_reason": recent_fallback_reason,
+        "reachability_confidence": reachability_confidence,
     }
 
 
