@@ -11,6 +11,7 @@
 - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router router_metrics_track_prepared_regex_compile_count`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 prepared_subscription_cache_key_tracks_manifest_identity`
 - `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_build_suite/Cargo.toml minimal_template_rejects_path_shaped_module_id`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime observability`
 - `./scripts/pm/workflow-lint.sh --task-uid task_61ae4b646e994b3e91bff3141f7ef818 --phase pr-ready`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
