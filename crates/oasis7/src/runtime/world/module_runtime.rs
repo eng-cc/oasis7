@@ -30,6 +30,63 @@ fn count_exceeds_limit(count: usize, limit: u32) -> bool {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::{
+        ModuleAbiContract, ModuleRole, ModuleSubscription, ModuleSubscriptionStage,
+    };
+
+    fn manifest_with_subscription(wasm_hash: &str, event_kind: &str) -> ModuleManifest {
+        ModuleManifest {
+            module_id: "m.cache".to_string(),
+            name: "Cache".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Reducer,
+            role: ModuleRole::Domain,
+            wasm_hash: wasm_hash.to_string(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["reduce".to_string()],
+            subscriptions: vec![ModuleSubscription {
+                event_kinds: vec![event_kind.to_string()],
+                action_kinds: Vec::new(),
+                stage: Some(ModuleSubscriptionStage::PostEvent),
+                filters: None,
+            }],
+            required_caps: Vec::new(),
+            artifact_identity: None,
+            limits: ModuleLimits::unbounded(),
+        }
+    }
+
+    #[test]
+    fn prepared_subscription_cache_key_tracks_manifest_identity() {
+        let base = manifest_with_subscription("hash-a", "world.tick");
+        let changed_hash = manifest_with_subscription("hash-b", "world.tick");
+        let changed_subscription = manifest_with_subscription("hash-a", "world.event");
+
+        let base_key = prepared_subscription_cache_key(&base).expect("base key");
+        assert_ne!(
+            base_key,
+            prepared_subscription_cache_key(&changed_hash).expect("hash key")
+        );
+        assert_ne!(
+            base_key,
+            prepared_subscription_cache_key(&changed_subscription).expect("subscription key")
+        );
+    }
+}
+
+fn prepared_subscription_cache_key(manifest: &ModuleManifest) -> Result<String, WorldError> {
+    let record_key = ModuleRegistry::record_key(&manifest.module_id, &manifest.version);
+    let subscription_hash = hash_json(&manifest.subscriptions)?;
+    Ok(format!(
+        "{record_key}|wasm={}|subs={subscription_hash}",
+        manifest.wasm_hash
+    ))
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct ActiveModuleInvocation {
     pub(super) instance_id: String,
@@ -42,6 +99,12 @@ impl World {
     // ---------------------------------------------------------------------
     // Module artifact and limits
     // ---------------------------------------------------------------------
+
+    fn remove_prepared_subscription_cache_entries(&mut self, module_id: &str, version: &str) {
+        let prefix = format!("{}|", ModuleRegistry::record_key(module_id, version));
+        self.prepared_subscription_cache
+            .retain(|key, _| !key.starts_with(&prefix));
+    }
 
     pub fn register_module_artifact(
         &mut self,
@@ -118,7 +181,7 @@ impl World {
         &mut self,
         manifest: &ModuleManifest,
     ) -> Result<Arc<[PreparedSubscription]>, WorldError> {
-        let key = ModuleRegistry::record_key(&manifest.module_id, &manifest.version);
+        let key = prepared_subscription_cache_key(manifest)?;
         if let Some(prepared) = self.prepared_subscription_cache.get(&key) {
             return Ok(prepared.clone());
         }
@@ -511,7 +574,7 @@ impl World {
                 registered_by,
             } => {
                 let key = ModuleRegistry::record_key(&module.module_id, &module.version);
-                self.prepared_subscription_cache.remove(&key);
+                self.remove_prepared_subscription_cache_entries(&module.module_id, &module.version);
                 self.module_registry.records.insert(
                     key,
                     super::super::ModuleRecord {
@@ -531,7 +594,7 @@ impl World {
                 ..
             } => {
                 let key = ModuleRegistry::record_key(module_id, to_version);
-                self.prepared_subscription_cache.remove(&key);
+                self.remove_prepared_subscription_cache_entries(module_id, to_version);
                 self.module_registry.records.insert(
                     key,
                     super::super::ModuleRecord {

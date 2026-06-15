@@ -244,7 +244,7 @@ impl Clone for WasmExecutor {
             metrics: Arc::clone(&self.metrics),
             compiled_cache: Arc::clone(&self.compiled_cache),
             compiled_disk_cache: self.compiled_disk_cache.clone(),
-            watchdog: Arc::new(EpochWatchdogController::new(engine.clone())),
+            watchdog: Arc::clone(&self.watchdog),
             engine,
         }
     }
@@ -377,6 +377,22 @@ impl WasmExecutor {
         wasm_hash: &str,
         wasm_bytes: &[u8],
     ) -> Result<CompileModuleOutcome, ModuleCallFailure> {
+        let actual_hash = sha256_hex(wasm_bytes);
+        if actual_hash != wasm_hash {
+            return Err(self.failure(
+                &ModuleCallRequest {
+                    module_id: wasm_hash.to_string(),
+                    wasm_hash: wasm_hash.to_string(),
+                    trace_id: "compile".to_string(),
+                    entrypoint: "call".to_string(),
+                    input: Vec::new(),
+                    limits: ModuleLimits::default(),
+                    wasm_bytes: Arc::<[u8]>::from([]),
+                },
+                ModuleCallErrorCode::Trap,
+                format!("wasm hash mismatch expected {wasm_hash} found {actual_hash}"),
+            ));
+        }
         let mut cache = self.compiled_cache.lock().expect("compiled cache poisoned");
         if let Some(module) = cache.get(wasm_hash) {
             return Ok(CompileModuleOutcome {
@@ -928,6 +944,17 @@ struct CompileModuleOutcome {
 
 fn elapsed_ms(started: Instant) -> u64 {
     started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)
+}
+
+#[cfg(feature = "wasmtime")]
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
 }
 
 #[cfg(feature = "wasmtime")]
