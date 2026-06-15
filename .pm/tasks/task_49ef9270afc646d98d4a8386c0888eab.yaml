@@ -22,8 +22,8 @@ handoff_to: []
 updated_at: 2026-06-15T22:02:15+08:00
 last_started_at: 2026-06-15T20:59:52+08:00
 last_claim_type: task_complete
-last_verify_command: "bash -lc 'set -euo pipefail; bash scripts/doc-inventory-report.sh >/tmp/oasis7-doc-inventory-closeout.txt; ./scripts/doc-governance-check.sh; git diff --check; ./scripts/pm/lint.sh 2>&1 | rg '\\''task_49ef9270afc646d98d4a8386c0888eab'\\'' >/tmp/oasis7-current-task-pm-lint-probe.txt || true'"
-last_verified_at: 2026-06-15T22:01:53+08:00
+last_verify_command: "bash scripts/doc-inventory-report.sh >/tmp/oasis7-doc-inventory-ready-pr-4.txt && ./scripts/doc-governance-check.sh && git diff --check && if ./scripts/pm/lint.sh 2>&1 | rg 'task_49ef9270afc646d98d4a8386c0888eab' >/tmp/oasis7-ready-pr-current-task-lint-4.txt; then cat /tmp/oasis7-ready-pr-current-task-lint-4.txt; exit 1; fi"
+last_verified_at: 2026-06-15T22:56:27+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
-last_closed_at: 2026-06-15T22:02:09+08:00
+last_closed_at: 2026-06-15T22:56:28+08:00
