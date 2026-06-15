@@ -849,6 +849,64 @@ pub(super) fn handle_peer_record_response(
     }
 }
 
+pub(super) fn handle_peer_record_outbound_failure(
+    swarm: &mut Swarm<Behaviour>,
+    kind: PendingPeerRecordRequest,
+    pending_peer_record_requests: &mut HashMap<
+        request_response::OutboundRequestId,
+        PendingPeerRecordRequest,
+    >,
+    pending_connected_peer_records: &mut HashSet<PeerId>,
+    connected_peer_record_cooldowns: &mut HashMap<PeerId, i64>,
+    pending_cached_peer_records: &mut HashSet<PeerId>,
+    cached_peer_record_cooldowns: &mut HashMap<PeerId, i64>,
+    pending_cached_discovery_peers: &mut HashSet<PeerId>,
+    cached_discovery_peer_cooldowns: &mut HashMap<PeerId, i64>,
+    connected_peers: &[PeerId],
+    traffic_metrics: &SharedLibp2pTrafficMetrics,
+    local_peer_id: PeerId,
+) {
+    clear_pending_peer_record_request(
+        &kind,
+        pending_connected_peer_records,
+        pending_cached_peer_records,
+        pending_cached_discovery_peers,
+    );
+    match kind {
+        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id } => {
+            connected_peer_record_cooldowns.remove(&peer_id);
+        }
+        PendingPeerRecordRequest::CachedPeerRecord {
+            peer_id,
+            tried_proxies,
+            ..
+        } => {
+            cached_peer_record_cooldowns.remove(&peer_id);
+            if let Some(next_ask_peer) = select_cached_peer_record_proxy(
+                connected_peers,
+                peer_id,
+                local_peer_id,
+                tried_proxies.as_slice(),
+            ) {
+                let _ = request_cached_peer_record_via(
+                    swarm,
+                    pending_peer_record_requests,
+                    pending_cached_peer_records,
+                    cached_peer_record_cooldowns,
+                    traffic_metrics,
+                    next_ask_peer,
+                    peer_id,
+                    local_peer_id,
+                    tried_proxies,
+                );
+            }
+        }
+        PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } => {
+            cached_discovery_peer_cooldowns.remove(&peer_id);
+        }
+    }
+}
+
 pub(super) fn clear_pending_peer_record_request(
     kind: &PendingPeerRecordRequest,
     pending_connected_peer_records: &mut HashSet<PeerId>,

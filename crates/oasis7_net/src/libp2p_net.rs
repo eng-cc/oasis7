@@ -35,7 +35,7 @@ use constructor_support::{
     schedule_periodic_discovery_refresh, schedule_periodic_republish,
 };
 use discovery::{
-    clear_pending_peer_record_request, handle_peer_record_response, handle_rendezvous_discovered,
+    handle_peer_record_outbound_failure, handle_peer_record_response, handle_rendezvous_discovered,
     handle_request_response_request, handle_routing_updated, maybe_discover_rendezvous_namespace,
     maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
     maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
@@ -111,9 +111,7 @@ const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
 const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
 const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_peers";
 const LIFECYCLE_EVENT_ERROR_COOLDOWN_MS: i64 = 5_000;
-
 type CommandResponseSender<T> = std::sync::mpsc::Sender<Result<T, WorldError>>;
-
 #[derive(Clone)]
 pub struct Libp2pNetwork {
     peer_id: PeerId,
@@ -130,9 +128,7 @@ pub struct Libp2pNetwork {
     traffic_metrics: SharedLibp2pTrafficMetrics,
     wire_byte_counters: SharedLibp2pWireByteCounters,
 }
-
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
-
 impl Libp2pNetwork {
     pub fn new(config: Libp2pNetworkConfig) -> Self {
         let keypair = config
@@ -157,7 +153,6 @@ impl Libp2pNetwork {
         let max_published_messages = config.max_published_messages.max(1);
         let max_error_messages = config.max_error_messages.max(1);
         let max_listening_addrs = config.max_listening_addrs.max(1);
-
         let event_inbox = Arc::clone(&inbox);
         let event_published = Arc::clone(&published);
         let event_listening_addrs = Arc::clone(&listening_addrs);
@@ -182,7 +177,6 @@ impl Libp2pNetwork {
                 .as_ref()
                 .map(peer_record_enables_rendezvous)
                 .unwrap_or(false);
-
         std::thread::spawn(move || {
             let mut swarm = build_swarm(
                 &keypair_clone,
@@ -246,7 +240,6 @@ impl Libp2pNetwork {
                     push_bounded_clone(&event_errors, msg, max_error_messages, "lock errors");
                 }
             }
-
             schedule_periodic_republish(republish_tx, republish_interval_ms);
             if peer_record_template.is_some() {
                 schedule_periodic_discovery_refresh(discovery_tx, discovery_query_interval_ms);
@@ -256,7 +249,6 @@ impl Libp2pNetwork {
                 bootstrap_redial_peers,
                 bootstrap_redial_interval_ms,
             );
-
             async_std::task::block_on(async move {
                 let mut command_rx = command_rx;
                 let command_ctx = CommandContext {
@@ -455,11 +447,19 @@ impl Libp2pNetwork {
                                         }
                                         request_response::Event::OutboundFailure { request_id, peer, error, .. } => {
                                             if let Some(kind) = pending_peer_record_requests.remove(&request_id) {
-                                                clear_pending_peer_record_request(
-                                                    &kind,
+                                                handle_peer_record_outbound_failure(
+                                                    &mut swarm,
+                                                    kind,
+                                                    &mut pending_peer_record_requests,
                                                     &mut pending_connected_peer_records,
+                                                    &mut connected_peer_record_cooldowns,
                                                     &mut pending_cached_peer_records,
+                                                    &mut cached_peer_record_cooldowns,
                                                     &mut pending_cached_discovery_peers,
+                                                    &mut cached_discovery_peer_cooldowns,
+                                                    peers.as_slice(),
+                                                    &event_traffic_metrics,
+                                                    local_peer_id,
                                                 );
                                                 push_bounded_clone(
                                                     &event_errors,
@@ -1189,7 +1189,6 @@ impl Drop for Libp2pNetwork {
         let _ = self.enqueue_command(Command::Shutdown);
     }
 }
-
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

@@ -348,7 +348,7 @@ jq -s \
             elif any(.[]; .status == "failed") then
               "full_failed"
             elif ((map(select(.coverage == "proxy" and .status == "ok")) | length) == (map(select(.coverage == "proxy")) | length)) then
-              if (($dedicated_lab_refs[0] | length) > 0) then
+              if (($dedicated_lab_refs[0] | length) > 0 and $dedicated_lab_refs_ready == 1) then
                 "full_proxy_executed_plus_dedicated_refs"
               else
                 "full_proxy_executed"

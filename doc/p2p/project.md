@@ -19,6 +19,7 @@
 - [x] p2p-evidence-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 清理无外部引用的 generated shared-network gate 中间快照并刷新 p2p 首读证据链。 Trace: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml
 - [x] p2p-peer-head-readiness-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 删除已失去当前权威入口职责的 peer-head readiness 历史叙事 design 文档。 Trace: .pm/tasks/task_56f67be67a5a43c09027cb224f1416ad.yaml
 - [x] p2p-stale-evidence-reference-cleanup (PRD-P2P-001/003/028) [test_tier_required]: 删除被新 evidence/docs 取代的 stale evidence 引用。 Trace: .pm/tasks/task_deab30d82bd54824b5be64fac1b2c961.yaml
+- [x] p2p-rust-governance-review (PRD-P2P-001/004) [test_tier_required]: 完成 p2p 相关 Rust 工程治理 review 并落地四项 P2 优化，覆盖 peer-record retry/cooldown、gap-sync peer route sweep cap、node replication network error classifier、blocked terminology alignment。 Trace: .pm/tasks/task_85d5dd6bad3b4585b5874218c2e2815d.yaml
 
 ### 历史压缩索引
 - PoS 时间锚定、viewer-live 旧入口删除、legacy path cleanup、early p2p schema/acceptance 历史：回看 `doc/p2p/prd.index.md` 与 `.pm/tasks/*.execution.md`。

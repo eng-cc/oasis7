@@ -18,7 +18,8 @@ fn test_peer_health(
 }
 
 #[test]
-fn admissible_request_peers_prefers_non_blocked_connected_peer_without_health_snapshot_clone() {
+fn admissible_request_peers_prefers_non_hard_blocked_connected_peer_without_health_snapshot_clone()
+{
     let network = Libp2pNetwork::new(Libp2pNetworkConfig::default());
     let blocked_peer = PeerId::random();
     let active_peer = PeerId::random();
