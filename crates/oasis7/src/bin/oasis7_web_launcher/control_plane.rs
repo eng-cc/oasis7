@@ -22,6 +22,8 @@ const GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 mod chain_requests;
 #[path = "control_plane/chain_status_probe.rs"]
 mod chain_status_probe;
+#[path = "control_plane/provider_config.rs"]
+mod provider_config;
 #[path = "control_plane/support.rs"]
 mod support;
 #[cfg(test)]
@@ -29,6 +31,10 @@ mod support;
 mod tests;
 use self::chain_requests::{submit_chain_feedback_remote, submit_chain_transfer_remote};
 pub(super) use self::chain_status_probe::{query_chain_status_endpoint, ChainIdentitySnapshot};
+#[cfg(test)]
+pub(super) use self::provider_config::build_launcher_args;
+pub(super) use self::provider_config::build_launcher_args_with_launcher_bin;
+use self::provider_config::*;
 #[cfg(test)]
 use self::support::resolve_viewer_static_env_override;
 use self::support::{
@@ -716,7 +722,7 @@ pub(super) fn snapshot_from_state(
         chain_recovery: state.chain_recovery.clone(),
         hosted_access: hosted_player_access_contract(deployment_mode_from_config(&state.config)),
         game_url,
-        config: state.config.clone(),
+        config: state.config.redacted_for_state_response(),
         logs: state.logs.iter().cloned().collect(),
         updated_at_unix_ms: state.updated_at_unix_ms,
     }
@@ -779,6 +785,7 @@ pub(super) fn validate_game_config_with_launcher_bin(
             "llm must stay enabled because no-LLM is no longer a playable entry path".to_string(),
         );
     }
+    collect_agent_provider_config_issues(config, &mut issues);
 
     let viewer_static_dir = config.viewer_static_dir.trim();
     if viewer_static_dir.is_empty() {
@@ -915,70 +922,6 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     }
 
     issues
-}
-
-#[cfg(test)]
-pub(super) fn build_launcher_args(config: &LauncherConfig) -> Result<Vec<String>, String> {
-    let launcher_bin = resolve_launcher_bin_from_config(config, config.launcher_bin.as_str());
-    build_launcher_args_with_launcher_bin(config, launcher_bin.as_str())
-}
-
-pub(super) fn build_launcher_args_with_launcher_bin(
-    config: &LauncherConfig,
-    launcher_bin: &str,
-) -> Result<Vec<String>, String> {
-    parse_host_port(config.live_bind.as_str(), "live bind")?;
-    parse_host_port(config.web_bind.as_str(), "web bind")?;
-    let viewer_port = parse_port(config.viewer_port.as_str(), "viewer port")?;
-    if config.viewer_host.trim().is_empty() {
-        return Err("viewer host cannot be empty".to_string());
-    }
-    if config.viewer_static_dir.trim().is_empty() {
-        return Err("viewer static dir cannot be empty".to_string());
-    }
-    let viewer_static_dir =
-        resolve_viewer_static_dir_for_launcher(config.viewer_static_dir.trim(), launcher_bin)
-            .ok_or_else(|| {
-                format!(
-                    "viewer static directory does not exist or is not a directory: {}",
-                    config.viewer_static_dir.trim()
-                )
-            })?;
-
-    let mut args = vec![
-        "--deployment-mode".to_string(),
-        DeploymentMode::parse_user_facing(config.deployment_mode.as_str(), "deployment_mode")?
-            .as_str()
-            .to_string(),
-        "--live-bind".to_string(),
-        config.live_bind.trim().to_string(),
-        "--web-bind".to_string(),
-        config.web_bind.trim().to_string(),
-        "--viewer-host".to_string(),
-        config.viewer_host.trim().to_string(),
-        "--viewer-port".to_string(),
-        viewer_port.to_string(),
-        "--viewer-static-dir".to_string(),
-        viewer_static_dir.to_string_lossy().to_string(),
-    ];
-
-    if config.llm_enabled {
-        args.push("--with-llm".to_string());
-    } else {
-        args.push("--no-llm".to_string());
-    }
-    if !config.auto_open_browser {
-        args.push("--no-open-browser".to_string());
-    }
-    args.push("--chain-disable".to_string());
-    if !config.scenario.trim().is_empty() {
-        args.splice(
-            2..2,
-            ["--scenario".to_string(), config.scenario.trim().to_string()],
-        );
-    }
-
-    Ok(args)
 }
 
 pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<String>, String> {

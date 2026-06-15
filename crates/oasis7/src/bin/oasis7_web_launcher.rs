@@ -76,6 +76,31 @@ const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: u64 = 12_000;
 const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: u64 = 10;
 const DEFAULT_CHAIN_POS_PROPOSAL_TICK_PHASE: u64 = 9;
 const DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG: u64 = 256;
+const LAUNCHER_AGENT_PROVIDER_FIELD_IDS: &[&str] = &[
+    "agent_decision_source",
+    "agent_provider_backend",
+    "agent_provider_contract",
+    "agent_provider_transport",
+    "agent_provider_url",
+    "agent_provider_auth_token",
+    "provider_auto_discover",
+    "agent_provider_connect_timeout_ms",
+    "agent_execution_lane",
+    "agent_provider_profile",
+];
+const AGENT_DECISION_SOURCE_BUILTIN_LLM: &str = "builtin_llm";
+const AGENT_DECISION_SOURCE_PROVIDER_BACKED: &str = "provider_backed";
+const AGENT_PROVIDER_BACKEND_LOCAL_BRIDGE: &str = "provider_local_bridge";
+const AGENT_PROVIDER_CONTRACT_WORLDSIM_V1: &str = "worldsim_provider_v1";
+const AGENT_PROVIDER_TRANSPORT_LOOPBACK_HTTP: &str = "loopback_http";
+const AGENT_PROVIDER_TRANSPORT_REMOTE_HTTPS: &str = "remote_https";
+const AGENT_PROVIDER_MODE_PROVIDER_LOOPBACK_HTTP_ALIAS: &str = "provider_loopback_http";
+const AGENT_PROVIDER_MODE_DIRECT_CONNECT_ALIAS: &str = "agent_direct_connect";
+const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
+const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: &str = "15000";
+const DEFAULT_AGENT_PROVIDER_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const AGENT_EXECUTION_LANE_PLAYER_PARITY: &str = "player_parity";
+const AGENT_EXECUTION_LANE_HEADLESS_AGENT: &str = "headless_agent";
 const MAX_LOG_LINES: usize = 2000;
 const GRACEFUL_STOP_TIMEOUT_MS: u64 = 4000;
 const STOP_POLL_INTERVAL_MS: u64 = 80;
@@ -105,6 +130,17 @@ struct LauncherConfig {
     viewer_port: String,
     viewer_static_dir: String,
     llm_enabled: bool,
+    #[serde(alias = "agent_provider_mode")]
+    agent_decision_source: String,
+    agent_provider_backend: String,
+    agent_provider_contract: String,
+    agent_provider_transport: String,
+    agent_provider_url: String,
+    agent_provider_auth_token: String,
+    provider_auto_discover: bool,
+    agent_provider_connect_timeout_ms: String,
+    agent_execution_lane: String,
+    agent_provider_profile: String,
     chain_enabled: bool,
     chain_status_bind: String,
     chain_node_id: String,
@@ -142,6 +178,17 @@ impl Default for LauncherConfig {
                 .to_string_lossy()
                 .to_string(),
             llm_enabled: true,
+            agent_decision_source: AGENT_DECISION_SOURCE_PROVIDER_BACKED.to_string(),
+            agent_provider_backend: AGENT_PROVIDER_BACKEND_LOCAL_BRIDGE.to_string(),
+            agent_provider_contract: AGENT_PROVIDER_CONTRACT_WORLDSIM_V1.to_string(),
+            agent_provider_transport: AGENT_PROVIDER_TRANSPORT_LOOPBACK_HTTP.to_string(),
+            agent_provider_url: DEFAULT_AGENT_PROVIDER_URL.to_string(),
+            agent_provider_auth_token: String::new(),
+            provider_auto_discover: true,
+            agent_provider_connect_timeout_ms: DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS
+                .to_string(),
+            agent_execution_lane: AGENT_EXECUTION_LANE_HEADLESS_AGENT.to_string(),
+            agent_provider_profile: DEFAULT_AGENT_PROVIDER_PROFILE.to_string(),
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
             chain_node_id: default_chain_node_id(),
@@ -165,6 +212,14 @@ impl Default for LauncherConfig {
             launcher_bin: String::new(),
             chain_runtime_bin: String::new(),
         }
+    }
+}
+
+impl LauncherConfig {
+    fn redacted_for_state_response(&self) -> Self {
+        let mut config = self.clone();
+        config.agent_provider_auth_token.clear();
+        config
     }
 }
 
@@ -989,3 +1044,6 @@ fn public_snapshot_from_state(
 #[cfg(test)]
 #[path = "oasis7_web_launcher/oasis7_web_launcher_tests.rs"]
 mod oasis7_web_launcher_tests;
+#[cfg(test)]
+#[path = "oasis7_web_launcher/provider_contract_tests.rs"]
+mod provider_contract_tests;

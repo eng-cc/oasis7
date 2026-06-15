@@ -410,7 +410,7 @@ Start player stack with one command:\n\
 Options:\n\
   --deployment-mode <mode>    hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
   --allow-trusted-local-playtest
-                              Allow --deployment-mode trusted_local_only for local test stacks only\n\
+                              Internal-only: allow --deployment-mode trusted_local_only for local playtest stacks\n\
   --scenario <name>            optional debug scenario; default uses formal release fixed world\n\
   --live-bind <host:port>      oasis7_viewer_live bind (default: {DEFAULT_LIVE_BIND})\n\
   --web-bind <host:port>       oasis7_viewer_live web bridge bind (default: {DEFAULT_WEB_BIND})\n\

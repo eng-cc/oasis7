@@ -183,6 +183,28 @@ fn parse_http_base_url_defaults_https_to_port_443() {
 }
 
 #[test]
+fn parse_http_base_url_defaults_http_to_port_80() {
+    let (host, port) =
+        parse_http_base_url("http://provider.example/path", "provider base url").expect("http url");
+    assert_eq!(host, "provider.example");
+    assert_eq!(port, 80);
+}
+
+#[test]
+fn parse_http_base_url_accepts_bracketed_ipv6_with_explicit_port() {
+    let (host, port) =
+        parse_http_base_url("https://[::1]:9443/status", "provider base url").expect("ipv6 url");
+    assert_eq!(host, "::1");
+    assert_eq!(port, 9443);
+}
+
+#[test]
+fn parse_http_base_url_rejects_unbracketed_ipv6() {
+    let err = parse_http_base_url("http://::1:8080", "provider base url").expect_err("should fail");
+    assert!(err.contains("wrapped in []"));
+}
+
+#[test]
 fn hosted_public_join_transfer_barrier_tracks_deployment_mode() {
     assert!(hosted_public_join_transfer_blocked(&LaunchConfig {
         deployment_mode: "hosted_public_join".to_string(),

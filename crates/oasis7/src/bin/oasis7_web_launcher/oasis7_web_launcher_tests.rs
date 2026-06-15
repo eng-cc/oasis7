@@ -326,14 +326,20 @@ fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_on() {
     assert!(!args.contains(&"--chain-enable".to_string()));
 }
 
-#[test]
-fn build_chain_runtime_args_includes_chain_overrides_when_on() {
-    let config = LauncherConfig {
+fn internal_local_playtest_chain_config() -> LauncherConfig {
+    LauncherConfig {
         deployment_mode: "trusted_local_only".to_string(),
         viewer_static_dir: ".".to_string(),
         chain_enabled: true,
         chain_status_bind: "127.0.0.1:6121".to_string(),
         chain_node_id: "chain-a".to_string(),
+        ..LauncherConfig::default()
+    }
+}
+
+#[test]
+fn build_chain_runtime_args_includes_chain_overrides_for_internal_local_playtest() {
+    let config = LauncherConfig {
         chain_storage_profile: "soak_forensics".to_string(),
         chain_world_id: "live-chain-a".to_string(),
         chain_node_role: "storage".to_string(),
@@ -349,7 +355,7 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
         chain_pos_slot_clock_genesis_unix_ms: "1700000000000".to_string(),
         chain_pos_max_past_slot_lag: "32".to_string(),
         chain_node_validators: "chain-a:55,chain-b:45".to_string(),
-        ..LauncherConfig::default()
+        ..internal_local_playtest_chain_config()
     };
     let args = build_chain_runtime_args(&config).expect("args");
     assert!(args.contains(&"--status-bind".to_string()));
@@ -392,11 +398,6 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
 #[test]
 fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
     let config = LauncherConfig {
-        deployment_mode: "trusted_local_only".to_string(),
-        viewer_static_dir: ".".to_string(),
-        chain_enabled: true,
-        chain_status_bind: "127.0.0.1:6121".to_string(),
-        chain_node_id: "chain-a".to_string(),
         chain_network_tier_manifest: "/tmp/public-testnet.json".to_string(),
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
@@ -407,7 +408,7 @@ fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
         chain_pos_adaptive_tick_scheduler_enabled: true,
         chain_pos_slot_clock_genesis_unix_ms: "1700000000000".to_string(),
         chain_pos_max_past_slot_lag: "32".to_string(),
-        ..LauncherConfig::default()
+        ..internal_local_playtest_chain_config()
     };
     let args = build_chain_runtime_args(&config).expect("args");
     assert!(args.contains(&"--network-tier-manifest".to_string()));
@@ -420,15 +421,10 @@ fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
 #[test]
 fn build_chain_runtime_args_resolves_public_testnet_tier_manifest() {
     let config = LauncherConfig {
-        deployment_mode: "trusted_local_only".to_string(),
-        viewer_static_dir: ".".to_string(),
-        chain_enabled: true,
-        chain_status_bind: "127.0.0.1:6121".to_string(),
-        chain_node_id: "chain-a".to_string(),
         chain_network_tier: "public_testnet".to_string(),
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
-        ..LauncherConfig::default()
+        ..internal_local_playtest_chain_config()
     };
     let args = build_chain_runtime_args(&config).expect("args");
     let expected_manifest = repo_root_dir()
@@ -467,14 +463,10 @@ fn viewer_dev_dist_candidates_only_return_oasis7_path() {
 fn build_chain_runtime_args_supports_all_storage_profiles() {
     for expected in ["dev_local", "release_default", "soak_forensics"] {
         let config = LauncherConfig {
-            deployment_mode: "trusted_local_only".to_string(),
-            viewer_static_dir: ".".to_string(),
-            chain_enabled: true,
-            chain_status_bind: "127.0.0.1:6121".to_string(),
             chain_node_id: format!("chain-{expected}"),
             chain_storage_profile: expected.to_string(),
             chain_world_id: "live-chain-a".to_string(),
-            ..LauncherConfig::default()
+            ..internal_local_playtest_chain_config()
         };
         let args = build_chain_runtime_args(&config).expect("args");
         assert!(args.contains(&"--storage-profile".to_string()));
@@ -1002,6 +994,28 @@ fn finalize_chain_start_outcome_reports_stale_execution_world() {
     assert_eq!(
         encoded["chain_recovery"]["fresh_node_id"],
         serde_json::json!("viewer-live-node-fresh-1")
+    );
+}
+
+#[test]
+fn state_snapshot_redacts_agent_provider_auth_token() {
+    let config = LauncherConfig {
+        agent_provider_auth_token: "secret-token".to_string(),
+        ..LauncherConfig::default()
+    };
+    let state = ServiceState::new(
+        "launcher".to_string(),
+        "chain".to_string(),
+        PathBuf::from("."),
+        config,
+    );
+
+    let snapshot = snapshot_from_state(&state, Some("127.0.0.1"));
+    let encoded = serde_json::to_value(&snapshot).expect("serialize snapshot");
+
+    assert_eq!(
+        encoded["config"]["agent_provider_auth_token"],
+        serde_json::json!("")
     );
 }
 

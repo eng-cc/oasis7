@@ -12,6 +12,7 @@
 - [x] viewer-pixel-world-action-receipt-surface (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 为 pixel-world `commercial_surface` 增加玩家行动回执。 Trace: .pm/tasks/task_cc47f34ea897420cb20a44c7a77c5424.yaml
 - [x] viewer-pixel-world-commercial-rendering-loop (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 将 pixel-world 主舞台收口为商业化游戏棋盘并默认折叠 renderer diagnostics。 Trace: .pm/tasks/task_b399bf37eff94c44a300c55f5db739d3.yaml
 - [x] launcher-open-game-page-url-fix (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 对齐 launcher 打开游戏页按钮与控制面 `game_url` 的 `render_mode=software_safe`。 Trace: .pm/tasks/task_241f25085f754d868313462b879e4d01.yaml
+- [x] launcher-rust-governance-provider-contract (PRD-WORLD_SIMULATOR-037/040/043) [test_tier_required]: 收口 launcher Rust governance review 的四项优化：web launcher agent-provider schema/config/args contract、provider-backed validation/transport policy、`trusted_local_only` internal local-playtest wording、shared HTTP base URL parser coverage。 Trace: .pm/tasks/task_169255fb26a2410a9c9edfaa839fc466.yaml
 
 ### 历史压缩索引
 - 初始 world-simulator PRD/schema/acceptance、launcher 转账、Web 控制台、shared UI schema、Web wasm 与 native/web control plane 历史：回看 `doc/world-simulator/prd.index.md`、相关 topic project 与 `.pm/tasks/*.execution.md`。
