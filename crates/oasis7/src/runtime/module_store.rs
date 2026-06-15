@@ -63,6 +63,9 @@ fn map_store_error(error: ModuleStoreError) -> WorldError {
         ModuleStoreError::VersionMismatch { expected, found } => {
             WorldError::ModuleStoreVersionMismatch { expected, found }
         }
+        ModuleStoreError::InvalidArtifactKey(key) => WorldError::ModuleChangeInvalid {
+            reason: format!("invalid module artifact key: {key}"),
+        },
         ModuleStoreError::Io(message) => WorldError::Io(message),
         ModuleStoreError::Serde(message) => WorldError::Serde(message),
     }

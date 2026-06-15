@@ -68,6 +68,7 @@ const MODULES_DIR: &str = "modules";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModuleStoreError {
     VersionMismatch { expected: u64, found: u64 },
+    InvalidArtifactKey(String),
     Io(String),
     Serde(String),
 }
@@ -128,6 +129,7 @@ impl ModuleStore {
         wasm_hash: &str,
         bytes: &[u8],
     ) -> Result<PathBuf, ModuleStoreError> {
+        validate_artifact_key(wasm_hash)?;
         self.ensure_dirs()?;
         let path = self.modules_dir.join(format!("{wasm_hash}.wasm"));
         write_bytes_atomic(&path, bytes)?;
@@ -135,11 +137,13 @@ impl ModuleStore {
     }
 
     pub fn read_artifact(&self, wasm_hash: &str) -> Result<Vec<u8>, ModuleStoreError> {
+        validate_artifact_key(wasm_hash)?;
         let path = self.modules_dir.join(format!("{wasm_hash}.wasm"));
         Ok(fs::read(path)?)
     }
 
     pub fn write_meta(&self, manifest: &ModuleManifest) -> Result<PathBuf, ModuleStoreError> {
+        validate_artifact_key(&manifest.wasm_hash)?;
         self.ensure_dirs()?;
         let path = self
             .modules_dir
@@ -149,6 +153,7 @@ impl ModuleStore {
     }
 
     pub fn read_meta(&self, wasm_hash: &str) -> Result<ModuleManifest, ModuleStoreError> {
+        validate_artifact_key(wasm_hash)?;
         let path = self.modules_dir.join(format!("{wasm_hash}.meta.json"));
         read_json_from_path(&path)
     }
@@ -195,18 +200,46 @@ fn now_unix() -> i64 {
         .unwrap_or(0)
 }
 
+fn validate_artifact_key(value: &str) -> Result<(), ModuleStoreError> {
+    let trimmed = value.trim();
+    let valid = !trimmed.is_empty()
+        && trimmed == value
+        && trimmed != "."
+        && trimmed != ".."
+        && trimmed
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'));
+    if valid {
+        Ok(())
+    } else {
+        Err(ModuleStoreError::InvalidArtifactKey(value.to_string()))
+    }
+}
+
 fn write_json_atomic<T: Serialize>(value: &T, path: &Path) -> Result<(), ModuleStoreError> {
-    let tmp = path.with_extension("tmp");
+    let tmp = unique_tmp_path(path);
     write_json_to_path(value, &tmp)?;
     fs::rename(tmp, path)?;
     Ok(())
 }
 
 fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), ModuleStoreError> {
-    let tmp = path.with_extension("tmp");
+    let tmp = unique_tmp_path(path);
     fs::write(&tmp, bytes)?;
     fs::rename(tmp, path)?;
     Ok(())
+}
+
+fn unique_tmp_path(path: &Path) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("module-store");
+    path.with_file_name(format!("{file_name}.{}.{}.tmp", std::process::id(), nonce))
 }
 
 fn write_json_to_path<T: Serialize>(value: &T, path: &Path) -> Result<(), ModuleStoreError> {
@@ -289,6 +322,33 @@ mod tests {
 
         store.save_registry(&registry).expect("save registry");
         assert_eq!(store.load_registry().expect("load registry"), registry);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn artifact_paths_reject_path_shaped_wasm_hashes() {
+        let dir = temp_dir("oasis7-wasm-store-path-safe");
+        let store = ModuleStore::new(&dir);
+
+        assert!(matches!(
+            store.write_artifact("../escape", &[1, 2, 3]),
+            Err(ModuleStoreError::InvalidArtifactKey(_))
+        ));
+        assert!(matches!(
+            store.read_artifact("../escape"),
+            Err(ModuleStoreError::InvalidArtifactKey(_))
+        ));
+
+        let manifest = sample_manifest("abc/def");
+        assert!(matches!(
+            store.write_meta(&manifest),
+            Err(ModuleStoreError::InvalidArtifactKey(_))
+        ));
+        assert!(matches!(
+            store.read_meta("abc/def"),
+            Err(ModuleStoreError::InvalidArtifactKey(_))
+        ));
 
         let _ = fs::remove_dir_all(dir);
     }

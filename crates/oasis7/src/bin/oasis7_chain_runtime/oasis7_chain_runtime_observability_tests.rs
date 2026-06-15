@@ -79,6 +79,7 @@ pub(super) fn sample_wasm_status() -> super::wasm_status::ChainWasmStatus {
             regex_compile_ms_total: 1,
             prepare_ms_buckets: BTreeMap::from([("le_0005_ms".to_string(), 2)]),
             match_ms_buckets: BTreeMap::from([("le_0005_ms".to_string(), 8)]),
+            ..oasis7_wasm_router::WasmRouterMetricsSnapshot::empty()
         },
     }
 }

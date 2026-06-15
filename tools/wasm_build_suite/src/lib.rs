@@ -545,6 +545,12 @@ fn validate_request(request: &BuildRequest) -> Result<(), BuildError> {
             "module_id is empty".to_string(),
         ));
     }
+    if !is_path_safe_module_id(&request.module_id) {
+        return Err(BuildError::InvalidArgument(format!(
+            "module_id must be path-safe, got {}",
+            request.module_id
+        )));
+    }
     if request.target.trim().is_empty() {
         return Err(BuildError::InvalidArgument("target is empty".to_string()));
     }
@@ -560,6 +566,17 @@ fn validate_request(request: &BuildRequest) -> Result<(), BuildError> {
         ));
     }
     Ok(())
+}
+
+fn is_path_safe_module_id(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && trimmed == value
+        && trimmed != "."
+        && trimmed != ".."
+        && trimmed
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn read_cargo_metadata(manifest_path: &Path) -> Result<CargoMetadata, BuildError> {

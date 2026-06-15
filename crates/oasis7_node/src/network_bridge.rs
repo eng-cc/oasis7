@@ -18,6 +18,13 @@ use serde::Serialize;
 use crate::gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipMessage, GossipProposalMessage,
 };
+pub(crate) use crate::network_error_classification::{
+    replication_network_error_is_availability_gap, replication_network_error_is_not_found,
+    replication_network_error_is_protocol_unavailable,
+    replication_network_error_is_route_unavailable, replication_network_error_is_timeout_protocol,
+    replication_network_error_is_unsupported_protocol, replication_network_error_kind_label,
+    replication_network_error_mentions_protocol,
+};
 use crate::replication::{
     load_blob_from_root, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
     FetchHeadResponse, GossipReplicationMessage, REPLICATION_FETCH_COMMIT_PROTOCOL,
@@ -38,7 +45,7 @@ pub(crate) const REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX: &str =
 const FETCH_COMMIT_GENERIC_ROUTE_ATTEMPTS: usize = 4;
 const GAP_SYNC_FETCH_COMMIT_REQUEST_TIMEOUT_MS: u64 = 1_500;
 const GAP_SYNC_FETCH_COMMIT_RETRY_BUDGET_MS: u64 = 3_000;
-const GAP_SYNC_FETCH_COMMIT_MAX_PROVIDER_ROUTES_PER_POLL: usize = 2;
+const GAP_SYNC_FETCH_COMMIT_MAX_PROVIDER_ROUTES_PER_POLL: usize = 8;
 const GAP_SYNC_FETCH_HEAD_REQUEST_TIMEOUT_MS: u64 = 1_500;
 const GAP_SYNC_FETCH_HEAD_RETRY_BUDGET_MS: u64 = 3_000;
 const GAP_SYNC_FETCH_HEAD_MAX_PROVIDER_ROUTES_PER_POLL: usize = 2;
@@ -456,19 +463,7 @@ impl ReplicationNetworkEndpoint {
                 Ok(())
             }
             Ok(_) => Ok(()),
-            Err(NodeError::Replication { reason })
-                if (reason.contains("NetworkRequestFailed") && reason.contains("ErrNotFound"))
-                    || (reason.contains("NetworkRequestFailed")
-                        && reason.contains("ErrUnsupported")
-                        && reason.contains(REPLICATION_GET_HEAD_PROTOCOL))
-                    || (reason.contains("NetworkProtocolUnavailable")
-                        && (reason.contains("handler missing")
-                            || reason.contains(REPLICATION_GET_HEAD_PROTOCOL)))
-                    || reason.contains(REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
-                    || reason.contains(REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX) =>
-            {
-                Ok(())
-            }
+            Err(err) if world_head_lookup_can_fallback(&err) => Ok(()),
             Err(err) => Err(err),
         }
     }
@@ -496,7 +491,7 @@ impl ReplicationNetworkEndpoint {
         let response_bytes = self
             .network
             .request(protocol, payload.as_slice())
-            .map_err(network_err)?;
+            .map_err(|err| network_err_for_protocol(protocol, err))?;
         serde_json::from_slice::<Resp>(&response_bytes).map_err(|err| NodeError::Replication {
             reason: format!("decode replication response {} failed: {}", protocol, err),
         })
@@ -727,7 +722,7 @@ impl ReplicationNetworkEndpoint {
         let response_bytes = self
             .network
             .request_with_providers(protocol, payload.as_slice(), providers)
-            .map_err(network_err)?;
+            .map_err(|err| network_err_for_protocol(protocol, err))?;
         serde_json::from_slice::<Resp>(&response_bytes).map_err(|err| NodeError::Replication {
             reason: format!("decode replication response {} failed: {}", protocol, err),
         })
@@ -1084,6 +1079,14 @@ fn decode_consensus_message(payload: &[u8]) -> Option<GossipMessage> {
 }
 
 fn network_err(err: WorldError) -> NodeError {
+    network_err_with_request_protocol(None, err)
+}
+
+fn network_err_for_protocol(protocol: &str, err: WorldError) -> NodeError {
+    network_err_with_request_protocol(Some(protocol), err)
+}
+
+fn network_err_with_request_protocol(protocol: Option<&str>, err: WorldError) -> NodeError {
     if world_error_is_retryable_connection_gap(&err) {
         return NodeError::Replication {
             reason: format!(
@@ -1095,6 +1098,17 @@ fn network_err(err: WorldError) -> NodeError {
     if world_error_is_publish_failure(&err) {
         return NodeError::Replication {
             reason: format!("replication network error: {err:?}"),
+        };
+    }
+    if let WorldError::NetworkRequestFailed { code, message, .. } = &err {
+        let protocol = protocol.unwrap_or(message);
+        return NodeError::Replication {
+            reason: format!(
+                "replication network request failed: kind={} protocol={} detail={}",
+                replication_network_error_kind_label(*code),
+                protocol,
+                message
+            ),
         };
     }
     if let WorldError::NetworkProtocolUnavailable { .. } = &err {
@@ -1111,11 +1125,11 @@ fn network_err(err: WorldError) -> NodeError {
 }
 
 fn world_head_lookup_can_fallback(err: &NodeError) -> bool {
-    let NodeError::Replication { reason } = err else {
-        return false;
-    };
-    reason.starts_with(REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
-        || reason.starts_with(REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
+    replication_network_error_is_availability_gap(err)
+        || replication_network_error_is_route_unavailable(err)
+        || replication_network_error_is_not_found(err)
+        || replication_network_error_is_unsupported_protocol(err, REPLICATION_GET_HEAD_PROTOCOL)
+        || replication_network_error_is_protocol_unavailable(err, REPLICATION_GET_HEAD_PROTOCOL)
 }
 
 fn validate_world_head_world_id(world_id: &str, head: &WorldHeadAnnounce) -> Result<(), NodeError> {
