@@ -191,6 +191,17 @@ fn web_launcher_rejects_provider_url_that_violates_transport_policy() {
                 ..LauncherConfig::default()
             },
         ),
+        (
+            "remote_https_bad_hostname",
+            LauncherConfig {
+                viewer_static_dir: ".".to_string(),
+                agent_decision_source: "provider_backed".to_string(),
+                agent_provider_transport: "remote_https".to_string(),
+                agent_provider_url: "https://bad host:5841".to_string(),
+                provider_auto_discover: false,
+                ..LauncherConfig::default()
+            },
+        ),
     ] {
         let issues = validate_game_config(&config);
         assert!(

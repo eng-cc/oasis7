@@ -215,6 +215,14 @@ impl Default for LauncherConfig {
     }
 }
 
+impl LauncherConfig {
+    fn redacted_for_state_response(&self) -> Self {
+        let mut config = self.clone();
+        config.agent_provider_auth_token.clear();
+        config
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {
     listen_bind: String,

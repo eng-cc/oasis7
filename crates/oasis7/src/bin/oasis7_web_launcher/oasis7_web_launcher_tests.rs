@@ -998,6 +998,28 @@ fn finalize_chain_start_outcome_reports_stale_execution_world() {
 }
 
 #[test]
+fn state_snapshot_redacts_agent_provider_auth_token() {
+    let config = LauncherConfig {
+        agent_provider_auth_token: "secret-token".to_string(),
+        ..LauncherConfig::default()
+    };
+    let state = ServiceState::new(
+        "launcher".to_string(),
+        "chain".to_string(),
+        PathBuf::from("."),
+        config,
+    );
+
+    let snapshot = snapshot_from_state(&state, Some("127.0.0.1"));
+    let encoded = serde_json::to_value(&snapshot).expect("serialize snapshot");
+
+    assert_eq!(
+        encoded["config"]["agent_provider_auth_token"],
+        serde_json::json!("")
+    );
+}
+
+#[test]
 fn gui_agent_capabilities_include_recover_chain_action() {
     let capabilities = gui_agent_capabilities_response();
     let encoded = serde_json::to_value(&capabilities).expect("serialize capabilities");

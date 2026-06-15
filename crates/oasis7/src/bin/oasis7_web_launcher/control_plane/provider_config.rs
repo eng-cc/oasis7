@@ -259,7 +259,7 @@ fn is_public_remote_https_host(host: &str) -> bool {
         return false;
     }
     let Ok(ip) = normalized.parse::<std::net::IpAddr>() else {
-        return true;
+        return is_valid_dns_hostname(normalized);
     };
     match ip {
         std::net::IpAddr::V4(ipv4) => {
@@ -267,6 +267,20 @@ fn is_public_remote_https_host(host: &str) -> bool {
         }
         std::net::IpAddr::V6(ipv6) => !ipv6.is_loopback() && !ipv6.is_unicast_link_local(),
     }
+}
+
+fn is_valid_dns_hostname(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
 }
 
 pub(super) fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {

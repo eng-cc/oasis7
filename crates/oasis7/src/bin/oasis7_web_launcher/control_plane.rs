@@ -722,7 +722,7 @@ pub(super) fn snapshot_from_state(
         chain_recovery: state.chain_recovery.clone(),
         hosted_access: hosted_player_access_contract(deployment_mode_from_config(&state.config)),
         game_url,
-        config: state.config.clone(),
+        config: state.config.redacted_for_state_response(),
         logs: state.logs.iter().cloned().collect(),
         updated_at_unix_ms: state.updated_at_unix_ms,
     }
