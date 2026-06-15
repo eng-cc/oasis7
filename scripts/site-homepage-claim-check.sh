@@ -39,7 +39,7 @@ check_required_patterns() {
 ZH_PATTERNS=(
   "class=\"skip-link\""
   "data-homepage-claim=\"preview-status\""
-  "状态：技术预览（还不能玩）"
+  "状态：limited playable technical preview"
   "data-homepage-claim=\"default-web-entry\""
   "默认网页验证入口：viewer"
   "data-homepage-claim=\"future-platform-boundary\""
@@ -55,7 +55,7 @@ ZH_PATTERNS=(
 EN_PATTERNS=(
   "class=\"skip-link\""
   "data-homepage-claim=\"preview-status\""
-  "Status: technical preview, not playable yet"
+  "Status: limited playable technical preview"
   "data-homepage-claim=\"default-web-entry\""
   "Default web verification entry: viewer"
   "data-homepage-claim=\"future-platform-boundary\""

@@ -10,37 +10,40 @@ if [[ ! -d "${SITE_ROOT}" ]]; then
   exit 1
 fi
 
-fail_count=0
+python3 - "${SITE_ROOT}" <<'PY'
+from __future__ import annotations
 
-while IFS= read -r html_file; do
-  while IFS= read -r attr; do
-    ref="${attr#*=}"
-    ref="${ref#\"}"
-    ref="${ref%\"}"
+import os
+import re
+import sys
+from pathlib import Path
 
-    case "${ref}" in
-      ""|\#*|http:*|https:*|mailto:*|javascript:*|tel:*)
-        continue
-        ;;
-    esac
+site_root = Path(sys.argv[1])
+attr_re = re.compile(r'(href|src)="([^"]+)"')
+skip_prefixes = ("#", "http:", "https:", "mailto:", "javascript:", "tel:")
+failures: list[tuple[Path, str, Path]] = []
 
-    clean="${ref%%\#*}"
-    clean="${clean%%\?*}"
-    if [[ -z "${clean}" ]]; then
-      continue
-    fi
+for html_file in sorted(site_root.rglob("*.html")):
+    text = html_file.read_text(encoding="utf-8")
+    for _attr, ref in attr_re.findall(text):
+        if not ref or ref.startswith(skip_prefixes):
+            continue
+        clean = ref.split("#", 1)[0].split("?", 1)[0]
+        if not clean:
+            continue
+        target = Path(os.path.normpath(os.path.abspath(html_file.parent / clean)))
+        if not target.exists():
+            failures.append((html_file, ref, target))
 
-    target="$(realpath -m "$(dirname "${html_file}")/${clean}")"
-    if [[ ! -e "${target}" ]]; then
-      echo "error: broken local reference in ${html_file}: ${ref} -> ${target}" >&2
-      fail_count=$((fail_count + 1))
-    fi
-  done < <(grep -Eo '(href|src)="[^"]+"' "${html_file}" || true)
-done < <(find "${SITE_ROOT}" -type f -name '*.html' | sort)
+for html_file, ref, target in failures:
+    print(f"error: broken local reference in {html_file}: {ref} -> {target}", file=sys.stderr)
 
-if [[ "${fail_count}" -gt 0 ]]; then
-  echo "error: site link check failed with ${fail_count} broken local reference(s)" >&2
-  exit 1
-fi
+if failures:
+    print(
+        f"error: site link check failed with {len(failures)} broken local reference(s)",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
 
-echo "ok: site local href/src references are valid"
+print("ok: site local href/src references are valid")
+PY
