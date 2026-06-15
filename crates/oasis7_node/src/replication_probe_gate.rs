@@ -115,31 +115,33 @@ pub(super) fn should_fallback_provider_aware_replication_request(err: &NodeError
     let NodeError::Replication { reason } = err else {
         return false;
     };
-    reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
-        || reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
+    crate::network_bridge::replication_network_error_is_availability_gap(err)
+        || crate::network_bridge::replication_network_error_is_route_unavailable(err)
         || reason.starts_with("blob fetch routes exhausted without response")
-        || (reason.contains("ErrUnsupported")
-            && reason.contains(super::replication::REPLICATION_FETCH_BLOB_PROTOCOL))
+        || crate::network_bridge::replication_network_error_is_unsupported_protocol(
+            err,
+            super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
+        )
 }
 
 pub(super) fn replication_request_waitable_connection_gap(err: &NodeError) -> bool {
-    let NodeError::Replication { reason } = err else {
-        return false;
-    };
-    reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
-        || (reason.contains(super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL)
-            && (reason
-                .starts_with(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
-                || reason.contains("request budget exhausted")))
+    crate::network_bridge::replication_network_error_is_availability_gap(err)
+        || crate::network_bridge::replication_network_error_is_timeout_protocol(
+            err,
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        )
 }
 
 fn replication_successor_probe_fetch_commit_unavailable(err: &NodeError) -> bool {
-    let NodeError::Replication { reason } = err else {
-        return false;
-    };
-    reason.contains(super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL)
-        && (reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
-            || reason.contains("ErrUnsupported"))
+    (crate::network_bridge::replication_network_error_is_route_unavailable(err)
+        && crate::network_bridge::replication_network_error_mentions_protocol(
+            err,
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        ))
+        || crate::network_bridge::replication_network_error_is_unsupported_protocol(
+            err,
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        )
 }
 
 #[cfg(test)]
@@ -181,12 +183,40 @@ mod tests {
     }
 
     #[test]
+    fn provider_aware_fallback_treats_fetch_blob_unsupported_as_retryable_without_debug_text() {
+        let err = NodeError::Replication {
+            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-blob/1.0.0 detail=remote peer declined request"
+                .to_string(),
+        };
+
+        assert!(
+            should_fallback_provider_aware_replication_request(&err),
+            "classification should use structured kind/protocol data, not the WorldError Debug text spelling"
+        );
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
     fn successor_probe_treats_fetch_commit_unsupported_as_unavailable() {
         let err = NodeError::Replication {
             reason: "replication network error: NetworkRequestFailed { code: ErrUnsupported, message: \"/aw/node/replication/fetch-commit/1.0.0\", retryable: false }"
                 .to_string(),
         };
         assert!(replication_successor_probe_fetch_commit_unavailable(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn successor_probe_treats_fetch_commit_unsupported_as_unavailable_without_debug_text() {
+        let err = NodeError::Replication {
+            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-commit/1.0.0 detail=remote peer declined request"
+                .to_string(),
+        };
+
+        assert!(
+            replication_successor_probe_fetch_commit_unavailable(&err),
+            "classification should survive display wording changes as long as kind/protocol are preserved"
+        );
         assert!(!replication_request_waitable_connection_gap(&err));
     }
 }

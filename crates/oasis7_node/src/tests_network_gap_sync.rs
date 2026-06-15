@@ -1026,6 +1026,70 @@ fn gap_sync_fetch_commit_tries_connected_peers_after_generic_unsupported() {
 }
 
 #[test]
+fn gap_sync_fetch_commit_caps_peer_route_sweep_after_generic_not_found() {
+    const MAX_EXPECTED_PEER_ROUTE_ATTEMPTS: usize = 8;
+
+    let dir_remote = temp_dir("gap-sync-fetch-commit-peer-route-cap-remote");
+    let dir_local = temp_dir("gap-sync-fetch-commit-peer-route-cap-local");
+    let world_id = "world-gap-sync-fetch-commit-peer-route-cap";
+    let generic_attempts = Arc::new(Mutex::new(0usize));
+    let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let peer_responses = Arc::new(Mutex::new(HashMap::new()));
+    let connected_peer_ids = (0..64)
+        .map(|index| format!("peer-{index:02}"))
+        .collect::<Vec<_>>();
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(PeerDirectedFetchCommitTestNetwork {
+        generic_response: super::replication::FetchCommitResponse {
+            found: false,
+            message: None,
+        },
+        generic_unsupported: false,
+        peer_responses,
+        connected_peer_ids,
+        generic_attempts: Arc::clone(&generic_attempts),
+        provider_attempts: Arc::clone(&provider_attempts),
+    });
+    let (_, _, endpoint, _) = build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        146,
+        147,
+        Arc::clone(&network),
+    );
+    let request = signed_fetch_commit_request_for_test(world_id, 1, 147);
+
+    let response = endpoint
+        .request_fetch_commit_for_gap_sync(&request)
+        .expect("bounded peer sweep should return not-found instead of exhausting every peer");
+    assert!(
+        !response.response.found,
+        "test fixture intentionally has no peer with the requested commit"
+    );
+
+    let attempts = provider_attempts
+        .lock()
+        .expect("lock provider attempts")
+        .clone();
+    assert!(
+        attempts.len() <= MAX_EXPECTED_PEER_ROUTE_ATTEMPTS,
+        "gap-sync peer-directed fallback must be bounded; attempted {} peer routes: {:?}",
+        attempts.len(),
+        attempts
+    );
+    assert_eq!(
+        *generic_attempts.lock().expect("lock generic attempts"),
+        4,
+        "bounded peer sweep should still preserve the existing generic retry budget"
+    );
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
 fn runtime_network_replication_gap_sync_fetches_missing_commits() {
     let world_id = "world-network-gap";
     let dir_a = temp_dir("network-gap-a");

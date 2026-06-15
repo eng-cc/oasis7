@@ -35,7 +35,7 @@ use constructor_support::{
     schedule_periodic_discovery_refresh, schedule_periodic_republish,
 };
 use discovery::{
-    clear_pending_peer_record_request, handle_peer_record_response, handle_rendezvous_discovered,
+    handle_peer_record_outbound_failure, handle_peer_record_response, handle_rendezvous_discovered,
     handle_request_response_request, handle_routing_updated, maybe_discover_rendezvous_namespace,
     maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
     maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
@@ -455,11 +455,19 @@ impl Libp2pNetwork {
                                         }
                                         request_response::Event::OutboundFailure { request_id, peer, error, .. } => {
                                             if let Some(kind) = pending_peer_record_requests.remove(&request_id) {
-                                                clear_pending_peer_record_request(
-                                                    &kind,
+                                                handle_peer_record_outbound_failure(
+                                                    &mut swarm,
+                                                    kind,
+                                                    &mut pending_peer_record_requests,
                                                     &mut pending_connected_peer_records,
+                                                    &mut connected_peer_record_cooldowns,
                                                     &mut pending_cached_peer_records,
+                                                    &mut cached_peer_record_cooldowns,
                                                     &mut pending_cached_discovery_peers,
+                                                    &mut cached_discovery_peer_cooldowns,
+                                                    peers.as_slice(),
+                                                    &event_traffic_metrics,
+                                                    local_peer_id,
                                                 );
                                                 push_bounded_clone(
                                                     &event_errors,

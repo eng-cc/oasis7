@@ -239,13 +239,13 @@ pub(super) fn filter_request_peers_by_health(
         .filter(|(_, peer_id)| {
             !peer_healths
                 .get(peer_id)
-                .is_some_and(peer_health_is_request_blocked)
+                .is_some_and(peer_health_is_hard_request_blocked)
         })
         .map(|(_, peer_id)| *peer_id)
         .collect()
 }
 
-fn peer_health_is_request_blocked(health: &PeerManagerPeerHealth) -> bool {
+fn peer_health_is_hard_request_blocked(health: &PeerManagerPeerHealth) -> bool {
     matches!(health.status, PeerManagerHealthStatus::Blocked)
         && (health.issues.is_empty()
             || !health
