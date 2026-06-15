@@ -1,6 +1,8 @@
 use super::*;
 
 const REPLICATION_FETCH_BLOB_CHUNK_BYTES: usize = 2 * 1024 * 1024;
+const STORAGE_CHALLENGE_FETCH_BLOB_REQUEST_TIMEOUT_MS: u64 = 2_000;
+const STORAGE_CHALLENGE_FETCH_BLOB_RETRY_BUDGET_MS: u64 = 3_000;
 
 impl PosNodeEngine {
     pub(super) fn maybe_hold_proposal_for_replication_successor_probe(
@@ -305,11 +307,14 @@ fn request_fetch_blob_chunk_with_route_fallback(
                 continue;
             }
             let provider_route = [provider_id.to_string()];
-            match endpoint.request_json_with_providers::<FetchBlobRequest, FetchBlobResponse>(
-                REPLICATION_FETCH_BLOB_PROTOCOL,
-                request,
-                provider_route.as_slice(),
-            ) {
+            match endpoint
+                .request_json_with_providers_budget::<FetchBlobRequest, FetchBlobResponse>(
+                    REPLICATION_FETCH_BLOB_PROTOCOL,
+                    request,
+                    provider_route.as_slice(),
+                    STORAGE_CHALLENGE_FETCH_BLOB_REQUEST_TIMEOUT_MS,
+                    STORAGE_CHALLENGE_FETCH_BLOB_RETRY_BUDGET_MS,
+                ) {
                 Ok(response) => {
                     if response.found {
                         return Ok(response);

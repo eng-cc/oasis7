@@ -45,10 +45,12 @@ impl PosNodeEngine {
     pub(super) fn clear_storage_challenge_network_degraded(&mut self) {
         self.storage_challenge_network_degraded_height = None;
         self.storage_challenge_network_degraded_reason = None;
+        self.storage_challenge_network_next_probe_after_ms = None;
     }
 
     pub(super) fn mark_storage_challenge_network_degraded(
         &mut self,
+        now_ms: i64,
         required_matches: usize,
         successful_matches: usize,
         failure_reasons: Vec<String>,
@@ -62,6 +64,15 @@ impl PosNodeEngine {
             "storage challenge network degraded: required_matches={} successful_matches={} latest_reason={}",
             required_matches, successful_matches, latest_reason
         ));
+        self.storage_challenge_network_last_probe_at_ms = Some(now_ms);
+        self.storage_challenge_network_next_probe_after_ms =
+            Some(now_ms.saturating_add(STORAGE_CHALLENGE_NETWORK_RETRY_COOLDOWN_MS));
+    }
+
+    pub(super) fn storage_challenge_network_probe_in_cooldown(&self, now_ms: i64) -> bool {
+        self.storage_challenge_network_next_probe_after_ms
+            .map(|next_probe_after_ms| now_ms < next_probe_after_ms)
+            .unwrap_or(false)
     }
 }
 

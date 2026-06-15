@@ -260,6 +260,9 @@ impl PosNodeEngine {
             return Ok(());
         }
         self.prune_storage_challenge_success_cache();
+        if self.storage_challenge_network_probe_in_cooldown(now_ms) {
+            return Ok(());
+        }
         let primary_samples = replication
             .recent_replicated_content_refs(world_id, STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK)?;
         if primary_samples.is_empty() {
@@ -291,10 +294,12 @@ impl PosNodeEngine {
                 }
                 StorageChallengeSampleOutcome::Unavailable { reason } => {
                     failure_reasons.push(reason);
+                    break;
                 }
                 StorageChallengeSampleOutcome::HardFailure { reason } => {
                     hard_failure = true;
                     failure_reasons.push(reason);
+                    break;
                 }
             }
         }
@@ -310,7 +315,7 @@ impl PosNodeEngine {
             return Ok(());
         }
 
-        if !hard_failure {
+        if !hard_failure && failure_reasons.is_empty() {
             let fallback_samples = replication.replicated_content_refs_from_height(
                 world_id,
                 self.storage_challenge_fallback_height,
@@ -340,6 +345,7 @@ impl PosNodeEngine {
                     }
                     StorageChallengeSampleOutcome::Unavailable { reason } => {
                         failure_reasons.push(reason);
+                        break;
                     }
                     StorageChallengeSampleOutcome::HardFailure { reason } => {
                         hard_failure = true;
@@ -369,6 +375,7 @@ impl PosNodeEngine {
         }
         if successful_matches < required_matches {
             self.mark_storage_challenge_network_degraded(
+                now_ms,
                 required_matches,
                 successful_matches,
                 failure_reasons,

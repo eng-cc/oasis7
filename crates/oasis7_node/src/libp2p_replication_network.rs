@@ -527,8 +527,33 @@ impl Libp2pReplicationNetwork {
         protocol: &str,
         payload: &[u8],
         initial_peers: Vec<PeerId>,
+        refresh_peers: F,
+        no_connected_error: G,
+    ) -> Result<Vec<u8>, WorldError>
+    where
+        F: FnMut() -> Vec<PeerId>,
+        G: Fn() -> WorldError,
+    {
+        self.request_over_refreshed_peers_with_budget(
+            protocol,
+            payload,
+            initial_peers,
+            refresh_peers,
+            no_connected_error,
+            self.request_timeout_for_protocol(protocol),
+            self.request_retry_budget_for_protocol(protocol),
+        )
+    }
+
+    fn request_over_refreshed_peers_with_budget<F, G>(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        initial_peers: Vec<PeerId>,
         mut refresh_peers: F,
         no_connected_error: G,
+        request_timeout: Duration,
+        request_retry_budget: Duration,
     ) -> Result<Vec<u8>, WorldError>
     where
         F: FnMut() -> Vec<PeerId>,
@@ -538,8 +563,6 @@ impl Libp2pReplicationNetwork {
         let started_at = Instant::now();
         let mut last_error = None;
         let mut attempted_peers = HashSet::new();
-        let request_timeout = self.request_timeout_for_protocol(protocol);
-        let request_retry_budget = self.request_retry_budget_for_protocol(protocol);
 
         for attempt in 0..=REQUEST_CONNECTION_REFRESH_RETRIES {
             if started_at.elapsed() >= request_retry_budget {
@@ -790,6 +813,42 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
                     "libp2p-replication no connected providers for protocol {protocol}"
                 ),
             },
+        )
+    }
+
+    fn request_with_providers_budget(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        providers: &[String],
+        request_timeout_ms: u64,
+        retry_budget_ms: u64,
+    ) -> Result<Vec<u8>, WorldError> {
+        if providers.is_empty() {
+            return self.request(protocol, payload);
+        }
+
+        let ordered_provider_peers = self.wait_for_connected_provider_peers(providers);
+        if ordered_provider_peers.is_empty() {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: format!(
+                    "libp2p-replication no connected providers for protocol {protocol}"
+                ),
+            });
+        }
+
+        self.request_over_refreshed_peers_with_budget(
+            protocol,
+            payload,
+            ordered_provider_peers,
+            || self.collect_connected_provider_peers(providers),
+            || WorldError::NetworkProtocolUnavailable {
+                protocol: format!(
+                    "libp2p-replication no connected providers for protocol {protocol}"
+                ),
+            },
+            Duration::from_millis(request_timeout_ms),
+            Duration::from_millis(retry_budget_ms),
         )
     }
 

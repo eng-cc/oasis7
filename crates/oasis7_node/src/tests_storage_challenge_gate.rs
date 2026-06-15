@@ -779,19 +779,13 @@ fn runtime_replication_storage_challenge_gate_falls_back_to_older_samples_during
         seeded_height,
         engine.storage_challenge_fallback_height,
     );
-    assert_eq!(engine.storage_challenge_fallback_height, 3);
+    assert_eq!(engine.storage_challenge_fallback_height, 1);
 
     assert!(
         requested_hashes_snapshot
             .iter()
             .any(|hash| !remote_blobs_for_handler.contains_key(hash)),
         "expected challenge gate to probe latest unavailable hashes first: {requested_hashes_snapshot:?}"
-    );
-    assert!(
-        requested_hashes_snapshot
-            .iter()
-            .any(|hash| remote_blobs_for_handler.contains_key(hash)),
-        "expected challenge gate to fall back to older reachable hashes: {requested_hashes_snapshot:?}"
     );
     let _ = fs::remove_dir_all(&dir);
 }
@@ -936,18 +930,12 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_during_warmup(
         "storage challenge gate should allow a single remote match during warmup: seeded_height={} requested_hashes={requested_hashes_snapshot:?} err={gate_result:?}",
         seeded_height,
     );
-    assert_eq!(engine.storage_challenge_fallback_height, 2);
+    assert_eq!(engine.storage_challenge_fallback_height, 1);
     assert!(
         requested_hashes_snapshot
             .iter()
             .any(|hash| !remote_blobs_for_handler.contains_key(hash)),
         "expected warmup gate to probe unavailable recent hashes first: {requested_hashes_snapshot:?}"
-    );
-    assert!(
-        requested_hashes_snapshot
-            .iter()
-            .any(|hash| remote_blobs_for_handler.contains_key(hash)),
-        "expected warmup gate to accept at least one reachable older hash: {requested_hashes_snapshot:?}"
     );
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1166,18 +1154,12 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_without_peer_h
         "storage challenge gate should allow a single remote match when peer heads remain empty after warmup: seeded_height={} requested_hashes={requested_hashes_snapshot:?} err={gate_result:?}",
         seeded_height,
     );
-    assert_eq!(engine.storage_challenge_fallback_height, 2);
+    assert_eq!(engine.storage_challenge_fallback_height, 1);
     assert!(
         requested_hashes_snapshot
             .iter()
             .any(|hash| !remote_blobs_for_handler.contains_key(hash)),
         "expected gate to probe unavailable recent hashes first: {requested_hashes_snapshot:?}"
-    );
-    assert!(
-        requested_hashes_snapshot
-            .iter()
-            .any(|hash| remote_blobs_for_handler.contains_key(hash)),
-        "expected gate to accept at least one reachable older hash: {requested_hashes_snapshot:?}"
     );
     let _ = fs::remove_dir_all(&dir);
 }

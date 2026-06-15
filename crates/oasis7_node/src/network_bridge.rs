@@ -671,6 +671,44 @@ impl ReplicationNetworkEndpoint {
         })
     }
 
+    pub(crate) fn request_json_with_providers_budget<Req, Resp>(
+        &self,
+        protocol: &str,
+        request: &Req,
+        providers: &[String],
+        request_timeout_ms: u64,
+        retry_budget_ms: u64,
+    ) -> Result<Resp, NodeError>
+    where
+        Req: Serialize,
+        Resp: DeserializeOwned,
+    {
+        if let Some(lane) = classify_network_protocol(protocol) {
+            validate_lane_access(
+                &self.network_policy,
+                lane,
+                NetworkLaneOperation::Request,
+                protocol,
+            )?;
+        }
+        let payload = serde_json::to_vec(request).map_err(|err| NodeError::Replication {
+            reason: format!("serialize replication request {} failed: {}", protocol, err),
+        })?;
+        let response_bytes = self
+            .network
+            .request_with_providers_budget(
+                protocol,
+                payload.as_slice(),
+                providers,
+                request_timeout_ms,
+                retry_budget_ms,
+            )
+            .map_err(network_err)?;
+        serde_json::from_slice::<Resp>(&response_bytes).map_err(|err| NodeError::Replication {
+            reason: format!("decode replication response {} failed: {}", protocol, err),
+        })
+    }
+
     pub(crate) fn connected_peer_ids(&self) -> Vec<String> {
         self.network.connected_peer_ids()
     }

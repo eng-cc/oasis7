@@ -131,6 +131,8 @@ impl PosNodeEngine {
             last_replication_successor_probe_hold: None,
             storage_challenge_network_degraded_height: None,
             storage_challenge_network_degraded_reason: None,
+            storage_challenge_network_last_probe_at_ms: None,
+            storage_challenge_network_next_probe_after_ms: None,
             storage_challenge_fallback_height: 1,
             recent_storage_challenge_successes: BTreeMap::new(),
             pending: None,
@@ -675,6 +677,10 @@ impl PosNodeEngine {
             storage_challenge_network_degraded_reason: self
                 .storage_challenge_network_degraded_reason
                 .clone(),
+            storage_challenge_network_last_probe_at_ms: self
+                .storage_challenge_network_last_probe_at_ms,
+            storage_challenge_network_next_probe_after_ms: self
+                .storage_challenge_network_next_probe_after_ms,
             known_peer_heads: peer_heads.len(),
             peer_heads,
             inbound_rejected_proposal_future_slot: self.inbound_rejected_proposal_future_slot,
