@@ -227,3 +227,12 @@ Example:
 - Expected Result: Task closeout records fresh verification and completes the task before PR preparation.
 - Actual Result: Verification portion passed and task YAML closeout fields were written. The helper exited 1 afterward because `pm-lint` reported many pre-existing unrelated execution-log format issues in older tasks such as `task_0deb46f616874e40b147407f6b1e510b`, `task_20abeb9162c540fca74779ee7b243421`, `task_70d4e4af4ebe4cf68eb5fdbdf8b2c579`, and `task_96c772c830e043f9b1e40b03e6f73d38`. No task-local PM lint finding was reported for `task_8d92c7fdfbc742e3866ef1162faedd66`.
 - Blocker / Next Action: Proceed to commit and PR; do not expand this diff into unrelated historical PM lint cleanup.
+
+## 2026-06-15 15:31:07 CST / tpm
+- 完成内容: Created GitHub PR for manual testnet packaging and redeploy.
+- 遗留事项: Trigger `Testnet Packages` workflow, verify package artifacts, then run public-testnet upgrade/redeploy checks.
+- Action: First attempted `./scripts/prepare-task-pr.sh --create --title "Fix storage challenge network degradation handling"`; the script's `gh pr create` invocation failed in non-interactive mode because no PR body/fill flag was supplied. Fallback used direct `gh pr create --base main --head task/p2p-testnet-node-health-check --title "Fix storage challenge network degradation handling" --body ...`.
+- Validation Command: `gh pr create --base main --head task/p2p-testnet-node-health-check --title "Fix storage challenge network degradation handling" --body <manual-packaging-ci-hold body>`.
+- Expected Result: PR exists for exact branch/SHA and is explicitly treated as manual packaging CI plus deploy hold, not normal auto-merge.
+- Actual Result: Created PR #478: https://github.com/eng-cc/oasis7/pull/478. PR purpose decision: `manual_packaging_ci_hold`; do not auto-merge until package/deploy verification is complete.
+- Blocker / Next Action: Trigger `testnet-packages.yml` with `build_profile=release`, `package_scope=linux_only`, and `ref_or_sha=1dd3e145cc2b2f2e427246a122916ed9283ade10`; watch workflow and verify artifacts before live node restart.
