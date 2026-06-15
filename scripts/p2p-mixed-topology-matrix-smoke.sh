@@ -34,7 +34,9 @@ jq -e '
   and any(.cases[]; .case_id == "bootstrap_poisoning_dedupe")
   and any(.cases[]; .case_id == "relay_budget_detection")
   and any(.cases[]; .case_id == "path_failover_selection")
-  and all(.cases[]; has("reachability_pair") and has("degradation_class") and has("path_expectation") and has("expected_route") and has("supported_status") and has("claim_boundary"))
+  and all(.cases[]; has("reachability_pair") and has("degradation_class") and has("path_expectation") and has("expected_route") and has("supported_status") and has("claim_boundary") and has("execution_class"))
+  and all(.cases[]; .evidence_class == .coverage)
+  and any(.cases[]; .case_id == "cgnat_relay_path_ranking" and .evidence_class == "exact" and .execution_class == "substrate_exact")
   and any(.cases[]; .case_id == "cgnat_relay_path_ranking" and .path_expectation == "may_direct_must_recover" and .expected_route == "prefer_direct_then_hole_punch_then_relay" and .degradation_class == "none" and .claim_boundary == "exact_path_ranking_not_physical_cgnat_truth")
 ' "$required_summary" >/dev/null
 
@@ -59,6 +61,7 @@ jq -e '
   and (.external_evidence.shared_window_evidence_refs | length) == 2
   and (.external_evidence.dedicated_lab_evidence_refs | length) == 1
   and .external_evidence.pass_uplift_decision_ref == "DEC-P2P-MIXED-DRYRUN"
+  and .evidence_contract.executable_boundary.stronger_full_tier_truth_ready == false
   and (.evidence_contract.claim_readiness.shared_network_pass_blockers | index("execute_full_tier_live_run")) != null
   and any(.cases[]; .case_id == "sentry_loss_proxy_longrun" and (.command | contains("--no-prewarm") | not))
   and any(.cases[]; .case_id == "mixed_topology_release_proxy" and (.command | contains("--no-prewarm") | not))

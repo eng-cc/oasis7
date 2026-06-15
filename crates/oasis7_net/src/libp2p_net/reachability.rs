@@ -133,7 +133,8 @@ pub(super) fn snapshot_clone(
 pub(super) fn note_relay_reservation_accepted(shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>) {
     let mut snapshot = shared.lock().expect("lock reachability snapshot");
     snapshot.relay_reservation_active = true;
-    note_selected_transport_kind(&mut snapshot, Some(LiveTransportKind::RelayReserved));
+    let preferred = preferred_transport_kind(&snapshot);
+    note_selected_transport_kind(&mut snapshot, preferred);
 }
 
 pub(super) fn sync_relay_reservation_from_listening_addrs(
@@ -439,6 +440,29 @@ mod tests {
         let transition = snapshot.last_transport_transition.expect("last transition");
         assert_eq!(transition.from_kind, Some(LiveTransportKind::Direct));
         assert_eq!(transition.to_kind, Some(LiveTransportKind::RelayReserved));
+    }
+
+    #[test]
+    fn relay_reservation_does_not_override_active_hole_punched_selection() {
+        let shared = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
+        let mut active = HashMap::new();
+        active.insert(PeerId::random(), path(TransportPathKind::HolePunched));
+
+        refresh_active_transport_snapshot(&shared, &active);
+        note_relay_reservation_accepted(&shared);
+        let snapshot = snapshot_clone(&shared);
+
+        assert!(snapshot.relay_reservation_active);
+        assert_eq!(
+            snapshot.active_transport_kind,
+            Some(LiveTransportKind::HolePunched)
+        );
+        assert_eq!(
+            snapshot
+                .transport_transition_counters
+                .hole_punched_to_relay_reserved,
+            0
+        );
     }
 
     #[test]

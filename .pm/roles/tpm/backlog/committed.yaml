@@ -88,3 +88,13 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_81577d7e86df4cd0b7bbb1c4d08ad019.yaml
+  - task_uid: task_a9ab9b9760c24e1fac5a31a157404408
+    title: "Draft loop engineering XiaoHongShu content"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "Search loop engineering references and draft a XiaoHongShu post grounded in oasis7 workflow practice."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_a9ab9b9760c24e1fac5a31a157404408.yaml

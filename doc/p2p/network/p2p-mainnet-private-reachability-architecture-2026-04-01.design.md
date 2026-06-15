@@ -56,26 +56,26 @@
 本节是 2026-06-15 iroh-inspired follow-up 的设计落点。借鉴点只限于 identity-first address boundary、显式 selected path 与 reachability evidence；不引入 iroh 依赖，不替换 libp2p，也不采用 iroh relay/DNS/Pkarr 默认。
 
 ### Contract 目标
-`PeerReachabilityContract` 是 oasis7 内部归一化视图，负责把 signed peer record、runtime-observed transport path、deployment/role policy 与 network-tier publish policy 合并成单一可投影真值：
+`PeerReachabilityContract` 是 oasis7 内部归一化视图。本阶段实现范围是 signed peer record 的 identity-first record normalization：把远端声明的 identity、role/deployment/reachability、capability lanes 与 ranked transport paths 收到一个内部 contract 中，避免 path ranking/dedupe 逻辑散落。目标态再逐步把 runtime-observed selected path、local deployment/role policy 与 network-tier publish policy 作为显式输入接入同一投影边界。
 
 | 字段 | 来源 | 用途 |
 | --- | --- | --- |
 | `peer_id` | signed peer record / libp2p identity | 稳定身份，不随地址漂移 |
-| `deployment_mode` | peer record + local policy | 判定 `public/hybrid/private/relay_only/validator_hidden` 公开面 |
-| `node_role` | peer record + local role admission | 判定 validator/sentry/relay/full-storage/observer 权限 |
-| `reachability_class` | peer record declaration + local observation | 表达当前可达性分类；远端声明不可覆盖本地探测 |
-| `capability_lanes` | peer record + role defaults | request peer selection 与 lane serve/request gate |
-| `ranked_paths` | `TransportPath` normalization | `direct -> hole-punched -> relay` 或 policy override 后的候选路径 |
-| `publish_policy` | deployment/network-tier manifest | 决定哪些地址可公开、哪些只能作为 allowlist hint |
-| `selected_path` | runtime path selector | 当前正在使用的 path kind/flavor 与 selected-at 时间 |
+| `deployment_mode` | peer record；目标态叠加 local policy | 判定 `public/hybrid/private/relay_only/validator_hidden` 公开面 |
+| `node_role` | peer record；目标态叠加 local role admission | 判定 validator/sentry/relay/full-storage/observer 权限 |
+| `reachability_class` | peer record declaration；目标态叠加 local observation | 表达当前可达性分类；远端声明不可覆盖本地探测 |
+| `capability_lanes` | peer record effective lanes | request peer selection 与 lane serve/request gate |
+| `ranked_paths` | `TransportPath` normalization | 当前首版实现的 canonical path ranking/dedupe；`direct -> hole-punched -> relay` |
+| `publish_policy` | 目标态：deployment/network-tier manifest | 决定哪些地址可公开、哪些只能作为 allowlist hint；本阶段不改变 publish policy |
+| `selected_path` | 目标态：runtime path selector/status projection | 当前正在使用的 path kind/flavor 与 selected-at 时间；本阶段由 status projection 输出 |
 | `claim_boundary` | matrix/status projection | 指出该 peer/path 能支持的 claim 类型，例如 `exact`, `proxy`, `manual_lab_required` |
 
 ### 真值链
 1. `SignedPeerRecord` 继续是远端声明与签名真值。
 2. `TransportPath` 继续是 libp2p path materialization 与排序真值。
-3. `PeerReachabilityContract` 归一化二者，并套用本地 deployment/role/network-tier policy。
-4. request peer selection、debug/status projection、mixed-topology matrix summary 只能消费该 contract 的投影，不得重新定义 direct/hole-punched/relay 标签。
-5. 若现有字段不足以表达 selected path age、transition reason 或 publish boundary，先在 contract 内部补 summary，再选择性投影到 status；不要先新增第二套 status truth。
+3. 本阶段 `PeerReachabilityContract` 归一化 signed peer record 与 ranked `TransportPath`，不改变 wire schema、publish policy 或 network-tier admission。
+4. request peer selection 可先消费 `ranked_paths` 投影；debug/status/matrix 继续消费现有 runtime/status truth，但不得重新定义 direct/hole-punched/relay 标签。
+5. 目标态若需要 local policy、selected path age、transition reason 或 publish boundary，先扩展 contract 输入/投影，再选择性投影到 status；不要先新增第二套 status truth。
 
 ### 非目标与防重复真值
 - 不把 libp2p `Multiaddr` 替换成 iroh address 类型。

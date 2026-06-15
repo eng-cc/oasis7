@@ -1,5 +1,5 @@
 task_uid: task_43a21163092541809de36036403d7c97
-title: "Research iroh implementation lessons for oasis7"
+title: "Implement iroh-inspired reachability evidence and observability"
 owner_role: tpm
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-iroh-implementation-lessons
 execution_log_path: .pm/tasks/task_43a21163092541809de36036403d7c97.execution.md
@@ -8,10 +8,22 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/engineering/project.md
-doc_refs: []
-related_prd: []
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md
+  - doc/p2p/node/node-triad-observability-stack-2026-04-23.prd.md
+  - doc/p2p/node/node-triad-observability-stack-2026-04-23.design.md
+  - testing-manual.md
+related_prd:
+  - PRD-P2P-024
+  - PRD-P2P-025
+  - PRD-TESTING-002
+  - PRD-TESTING-003
 acceptance:
   - "Summarize implementation patterns from n0-computer/iroh that are useful for oasis7, with evidence and applicability boundaries"
+  - "Land design truth for peer reachability contract normalization, path behavior matrix taxonomy, and bounded reachability/status observability without introducing an iroh dependency or replacing libp2p."
+  - "Implement the matrix taxonomy fields and anti-overclaim claim boundaries for required/full mixed-topology evidence."
+  - "Implement bounded selected-path/status observability and internal signed-peer-record reachability normalization with targeted tests."
 handoff_to: []
 updated_at: 2026-06-15T22:43:03+08:00
 last_started_at: 2026-06-15T21:44:50+08:00

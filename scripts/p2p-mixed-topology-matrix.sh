@@ -113,14 +113,21 @@ write_json_array() {
 
 shared_window_refs_json="$run_dir/shared_window_refs.json"
 dedicated_lab_refs_json="$run_dir/dedicated_lab_refs.json"
+dedicated_lab_refs_ready=1
 if ((${#shared_window_refs[@]})); then
   write_json_array "$shared_window_refs_json" "${shared_window_refs[@]}"
 else
   write_json_array "$shared_window_refs_json"
 fi
 if ((${#dedicated_lab_refs[@]})); then
+  for dedicated_lab_ref in "${dedicated_lab_refs[@]}"; do
+    if [[ -z "$dedicated_lab_ref" || ! -f "$dedicated_lab_ref" ]]; then
+      dedicated_lab_refs_ready=0
+    fi
+  done
   write_json_array "$dedicated_lab_refs_json" "${dedicated_lab_refs[@]}"
 else
+  dedicated_lab_refs_ready=0
   write_json_array "$dedicated_lab_refs_json"
 fi
 
@@ -151,7 +158,7 @@ echo "- tier: $tier"
 echo "- dry_run: $dry_run"
 echo "- output: $run_dir"
 
-while IFS='|' read -r case_id min_tier coverage evidence_class scenario reachability_pair degradation_class path_expectation expected_route supported_status claim_boundary description note command_template; do
+while IFS='|' read -r case_id min_tier evidence_class execution_class scenario reachability_pair degradation_class path_expectation expected_route supported_status claim_boundary description note command_template; do
   [[ -z "$case_id" ]] && continue
   if ! select_case "$min_tier"; then
     continue
@@ -185,8 +192,9 @@ while IFS='|' read -r case_id min_tier coverage evidence_class scenario reachabi
   jq -n \
     --arg case_id "$case_id" \
     --arg min_tier "$min_tier" \
-    --arg coverage "$coverage" \
+    --arg coverage "$evidence_class" \
     --arg evidence_class "$evidence_class" \
+    --arg execution_class "$execution_class" \
     --arg scenario "$scenario" \
     --arg reachability_pair "$reachability_pair" \
     --arg degradation_class "$degradation_class" \
@@ -208,6 +216,7 @@ while IFS='|' read -r case_id min_tier coverage evidence_class scenario reachabi
       min_tier: $min_tier,
       coverage: $coverage,
       evidence_class: $evidence_class,
+      execution_class: $execution_class,
       scenario: $scenario,
       reachability_pair: $reachability_pair,
       degradation_class: $degradation_class,
@@ -236,6 +245,7 @@ jq -s \
   --arg summary_md "$summary_md" \
   --arg pass_uplift_decision_ref "$pass_uplift_decision_ref" \
   --argjson dry_run "$dry_run" \
+  --argjson dedicated_lab_refs_ready "$dedicated_lab_refs_ready" \
   --slurpfile shared_window_refs "$shared_window_refs_json" \
   --slurpfile dedicated_lab_refs "$dedicated_lab_refs_json" \
   '{
@@ -313,7 +323,14 @@ jq -s \
           and ((map(select(.coverage == "proxy")) | length) > 0)
           and ((map(select(.coverage == "proxy" and .status == "ok")) | length) == (map(select(.coverage == "proxy")) | length))
         ),
-        stronger_full_tier_truth_ready: (($dedicated_lab_refs[0] | length) > 0)
+        stronger_full_tier_truth_ready: (
+          ($tier == "full")
+          and ($dry_run == 0)
+          and ($dedicated_lab_refs_ready == 1)
+          and ((map(select(.status == "failed")) | length) == 0)
+          and ((map(select(.coverage == "proxy")) | length) > 0)
+          and ((map(select(.coverage == "proxy" and .status == "ok")) | length) == (map(select(.coverage == "proxy")) | length))
+        )
       },
       claim_readiness: {
         mixed_topology_full_tier_status: (
@@ -355,6 +372,7 @@ jq -s \
           + (if $dry_run == 1 then ["execute_full_tier_live_run"] else [] end)
           + (if any(.[]; .status == "failed") then ["fix_failed_matrix_cases"] else [] end)
           + (if (($dedicated_lab_refs[0] | length) == 0) then ["dedicated_sentry_or_nat_lab_evidence_ref"] else [] end)
+          + (if (($dedicated_lab_refs[0] | length) > 0 and $dedicated_lab_refs_ready != 1) then ["dedicated_sentry_or_nat_lab_evidence_ref_must_exist"] else [] end)
         ),
         shared_network_pass_blockers: (
           []
