@@ -9,7 +9,10 @@ source_signal: null
 source_refs:
   - AGENTS.md
   - doc/engineering/workflow/source-of-truth.md
-doc_refs: []
+doc_refs:
+  - doc/world-simulator/project.md
+  - doc/readme/project.md
+  - doc/p2p/project.md
 related_prd: []
 acceptance:
   - "Identify low-risk documentation slimming options and governance boundaries"
