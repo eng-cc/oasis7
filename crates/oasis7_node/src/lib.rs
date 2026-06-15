@@ -142,6 +142,7 @@ use replication_fetch_handler_support::{
 };
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
+    request_fetch_blob_with_storage_challenge_routes,
 };
 use replication_state_reconcile::{
     parse_replication_commit_payload, parse_replication_commit_payload_view,
@@ -154,6 +155,7 @@ const STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK: usize = 3;
 const STORAGE_GATE_NETWORK_MIN_MATCHES_CAP: usize = 2;
 const STORAGE_GATE_NETWORK_WARMUP_HEIGHT: u64 = 32;
 const STORAGE_GATE_FALLBACK_SAMPLES_PER_CHECK: usize = 3;
+const STORAGE_CHALLENGE_NETWORK_RETRY_COOLDOWN_MS: i64 = 30_000;
 const STORAGE_CHALLENGE_SUCCESS_CACHE_MAX_AGE_HEIGHTS: u64 = 2;
 const REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT: usize = 3;
 const REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL: u64 = 64;
@@ -1100,6 +1102,10 @@ struct PosNodeEngine {
     last_replication_successor_probe_height: Option<u64>,
     last_replication_successor_probe_at_ms: Option<i64>,
     last_replication_successor_probe_hold: Option<bool>,
+    storage_challenge_network_degraded_height: Option<u64>,
+    storage_challenge_network_degraded_reason: Option<String>,
+    storage_challenge_network_last_probe_at_ms: Option<i64>,
+    storage_challenge_network_next_probe_after_ms: Option<i64>,
     storage_challenge_fallback_height: u64,
     recent_storage_challenge_successes: BTreeMap<String, u64>,
     pending: Option<PendingProposal>,

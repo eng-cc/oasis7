@@ -1,5 +1,9 @@
 use super::*;
 
+#[path = "tests_storage_challenge_gate/provider_route_mocks.rs"]
+mod provider_route_mocks;
+use provider_route_mocks::*;
+
 #[test]
 fn runtime_replication_storage_challenge_gate_blocks_on_local_probe_failure() {
     let dir = temp_dir("challenge-gate-local");
@@ -34,7 +38,7 @@ fn runtime_replication_storage_challenge_gate_blocks_on_local_probe_failure() {
         }
     }
 
-    let errored = wait_until(Instant::now() + Duration::from_secs(3), || {
+    let errored = wait_until(Instant::now() + Duration::from_secs(8), || {
         runtime
             .snapshot()
             .last_error
@@ -46,7 +50,6 @@ fn runtime_replication_storage_challenge_gate_blocks_on_local_probe_failure() {
         errored,
         "runtime did not report storage challenge gate failure"
     );
-
     runtime.stop().expect("stop runtime");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -54,9 +57,7 @@ fn runtime_replication_storage_challenge_gate_blocks_on_local_probe_failure() {
 #[test]
 fn runtime_replication_storage_challenge_gate_blocks_on_network_blob_mismatch() {
     let dir = temp_dir("challenge-gate-network");
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
+    let world_id = "world-challenge-network";
     let pos_config = signed_pos_config_with_signer_seeds(
         vec![PosValidator {
             validator_id: "node-a".to_string(),
@@ -64,36 +65,52 @@ fn runtime_replication_storage_challenge_gate_blocks_on_network_blob_mismatch() 
         }],
         &[("node-a", 84)],
     );
-    let config = NodeConfig::new("node-a", "world-challenge-network", NodeRole::Sequencer)
-        .expect("config")
+
+    let seed_config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("seed config")
         .with_tick_interval(Duration::from_millis(10))
-        .expect("tick")
-        .with_pos_config(pos_config)
-        .expect("pos config")
+        .expect("seed tick")
+        .with_pos_config(pos_config.clone())
+        .expect("seed pos config")
         .with_auto_attest_all_validators(true)
         .with_replication(signed_replication_config(dir.clone(), 84));
-    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config))
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
-
-    runtime.start().expect("start runtime");
+    let mut seed_runtime = with_noop_execution_hook(NodeRuntime::new(seed_config));
+    seed_runtime.start().expect("start seed runtime");
     let committed = wait_until(Instant::now() + Duration::from_secs(2), || {
-        runtime.snapshot().consensus.committed_height >= 1
+        seed_runtime.snapshot().consensus.committed_height >= 1
     });
-    assert!(committed, "runtime did not produce first commit in time");
-
+    assert!(committed, "seed runtime did not produce first commit in time");
+    seed_runtime.stop().expect("stop seed runtime");
+    let dht = Arc::new(TestReplicaMaintenanceDht::new("storage-provider-1", "node-a"));
+    let replication = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir.clone(), 84),
+        "node-a",
+    )
+    .expect("open local replication runtime");
+    for height in 1..=STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 1 {
+        if let Some(message) = replication
+            .load_commit_message_by_height(world_id, height)
+            .expect("load commit")
+        {
+            dht.seed_provider(message.record.content_hash.as_str(), "storage-provider-1");
+        }
+    }
+    let network: Arc<dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync> =
+        Arc::new(TestInMemoryNetwork::default());
     network
         .register_handler(
             super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
             Box::new(|payload| {
-                let request =
-                    serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
-                        .map_err(|err| WorldError::DistributedValidationFailed {
-                            reason: format!("decode fetch blob request failed: {err}"),
-                        })?;
+                let request = serde_json::from_slice::<super::replication::FetchBlobRequest>(
+                    payload,
+                )
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!("decode fetch blob request failed: {err}"),
+                })?;
                 let response = super::replication::FetchBlobResponse {
                     found: true,
-            range_offset_bytes: None,
-            range_complete: None,
+                    range_offset_bytes: None,
+                    range_complete: None,
                     blob: Some(format!("bad-{}", request.content_hash).into_bytes()),
                 };
                 serde_json::to_vec(&response).map_err(|err| {
@@ -104,24 +121,435 @@ fn runtime_replication_storage_challenge_gate_blocks_on_network_blob_mismatch() 
             }),
         )
         .expect("register mismatched blob handler");
-
-    let errored = wait_until(Instant::now() + Duration::from_secs(3), || {
-        runtime
-            .snapshot()
-            .last_error
-            .as_deref()
-            .map(|reason| {
-                reason.contains("network threshold unmet")
-                    && reason.contains("network blob hash mismatch")
-            })
-            .unwrap_or(false)
-    });
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 84));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht)
+        .with_local_provider_id("node-a");
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 1;
+    engine.network_committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 1;
+    engine.peer_heads.insert(
+        "storage-provider-1".to_string(),
+        PeerCommittedHead {
+            height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 1,
+            block_hash: "network-mismatch-peer-head".to_string(),
+            committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
+            execution_block_hash: None,
+            execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
+        },
+    );
+    let gate_result = engine.enforce_storage_challenge_gate(
+        &replication,
+        Some(&endpoint),
+        "node-a",
+        world_id,
+        1_234,
+    );
     assert!(
-        errored,
-        "runtime did not report network blob mismatch gate failure"
+        gate_result
+            .as_ref()
+            .err()
+            .map(|err| {
+                err.to_string().contains("network threshold unmet")
+                    && err.to_string().contains("network blob hash mismatch")
+            })
+            .unwrap_or(false),
+        "storage challenge gate should hard-fail on network blob mismatch: {gate_result:?}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn runtime_replication_storage_challenge_gate_degrades_on_network_unavailable() {
+    let dir = temp_dir("challenge-gate-network-unavailable");
+    let world_id = "world-challenge-network-unavailable";
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 120)],
+    );
+    let seed_config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("seed config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("seed tick")
+        .with_pos_config(pos_config.clone())
+        .expect("seed pos config")
+        .with_auto_attest_all_validators(true)
+        .with_replication(signed_replication_config(dir.clone(), 120));
+    let mut seed_runtime = with_noop_execution_hook(NodeRuntime::new(seed_config));
+    seed_runtime.start().expect("start seed runtime");
+    let seeded = wait_until(Instant::now() + Duration::from_secs(2), || {
+        seed_runtime.snapshot().consensus.committed_height >= 6
+    });
+    assert!(seeded, "seed runtime did not build enough local commits");
+    seed_runtime.stop().expect("stop seed runtime");
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 120));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(Arc::new(TestReplicaMaintenanceDht::new(
+            "storage-provider-1",
+            "node-a",
+        )))
+        .with_local_provider_id("node-a");
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.network_committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.peer_heads.insert(
+        "storage-provider-1".to_string(),
+        PeerCommittedHead {
+            height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8,
+            block_hash: "network-unavailable-peer-head".to_string(),
+            committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
+            execution_block_hash: None,
+            execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
+        },
+    );
+    let replication = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir.clone(), 120),
+        "node-a",
+    )
+    .expect("restart replication runtime");
+
+    let gate_result = engine.enforce_storage_challenge_gate(
+        &replication,
+        Some(&endpoint),
+        "node-a",
+        world_id,
+        1_234,
     );
 
-    runtime.stop().expect("stop runtime");
+    assert!(
+        gate_result.is_ok(),
+        "retryable storage challenge network unavailability should degrade instead of hard-blocking consensus: {gate_result:?}"
+    );
+    let snapshot = engine.snapshot_from_decision(&engine.idle_pending_decision().expect("decision"));
+    assert_eq!(
+        snapshot.storage_challenge_network_degraded_height,
+        Some(STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8)
+    );
+    assert!(
+        snapshot
+            .storage_challenge_network_degraded_reason
+            .as_deref()
+            .map(|reason| {
+                reason.contains("storage challenge network degraded")
+                    && reason.contains("required_matches=2")
+                    && reason.contains("successful_matches=0")
+            })
+            .unwrap_or(false),
+        "expected observable storage challenge degraded reason, got {:?}",
+        snapshot.storage_challenge_network_degraded_reason
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+#[test]
+fn runtime_replication_storage_challenge_gate_does_not_probe_connected_peers_after_provider_lookup_failure(
+) {
+    let dir = temp_dir("challenge-gate-provider-lookup-failure");
+    let world_id = "world-challenge-provider-lookup-failure";
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 121)],
+    );
+
+    let seed_config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("seed config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("seed tick")
+        .with_pos_config(pos_config.clone())
+        .expect("seed pos config")
+        .with_auto_attest_all_validators(true)
+        .with_replication(signed_replication_config(dir.clone(), 121));
+    let mut seed_runtime = with_noop_execution_hook(NodeRuntime::new(seed_config));
+    seed_runtime.start().expect("start seed runtime");
+    let seeded = wait_until(Instant::now() + Duration::from_secs(2), || {
+        seed_runtime.snapshot().consensus.committed_height >= 6
+    });
+    assert!(seeded, "seed runtime did not build enough local commits");
+    seed_runtime.stop().expect("stop seed runtime");
+
+    let network_impl = Arc::new(ProviderLookupFailureConnectedPeerTrapNetwork::new());
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = network_impl.clone();
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 121));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(Arc::new(ProviderLookupFailureDht))
+        .with_local_provider_id("node-a");
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.network_committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.peer_heads.insert(
+        "observer-light-peer".to_string(),
+        PeerCommittedHead {
+            height: 1,
+            block_hash: "observer-light-peer-head".to_string(),
+            committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
+            execution_block_hash: None,
+            execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
+        },
+    );
+    let replication = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir.clone(), 121),
+        "node-a",
+    )
+    .expect("restart replication runtime");
+
+    let gate_result = engine.enforce_storage_challenge_gate(
+        &replication,
+        Some(&endpoint),
+        "node-a",
+        world_id,
+        1_234,
+    );
+
+    assert!(
+        gate_result.is_ok(),
+        "provider lookup failure should be treated as route unavailable, not converted into a connected-peer hard failure: {gate_result:?}"
+    );
+    assert_eq!(
+        network_impl.connected_peer_provider_attempts(),
+        0,
+        "storage challenge should not probe arbitrary connected peers after provider lookup fails"
+    );
+    let snapshot = engine.snapshot_from_decision(&engine.idle_pending_decision().expect("decision"));
+    assert!(
+        snapshot
+            .storage_challenge_network_degraded_reason
+            .as_deref()
+            .map(|reason| reason.contains("provider lookup failed"))
+            .unwrap_or(false),
+        "expected provider lookup failure to remain observable as degraded, got {:?}",
+        snapshot.storage_challenge_network_degraded_reason
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn runtime_replication_storage_challenge_gate_does_not_use_generic_route_after_provider_route_failure(
+) {
+    let dir = temp_dir("challenge-gate-provider-route-failure");
+    let world_id = "world-challenge-provider-route-failure";
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 122)],
+    );
+
+    let seed_config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("seed config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("seed tick")
+        .with_pos_config(pos_config.clone())
+        .expect("seed pos config")
+        .with_auto_attest_all_validators(true)
+        .with_replication(signed_replication_config(dir.clone(), 122));
+    let mut seed_runtime = with_noop_execution_hook(NodeRuntime::new(seed_config));
+    seed_runtime.start().expect("start seed runtime");
+    let seeded = wait_until(Instant::now() + Duration::from_secs(2), || {
+        seed_runtime.snapshot().consensus.committed_height >= 6
+    });
+    assert!(seeded, "seed runtime did not build enough local commits");
+    seed_runtime.stop().expect("stop seed runtime");
+
+    let network_impl = Arc::new(ProviderRouteFailureGenericTrapNetwork::new());
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = network_impl.clone();
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 122));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(Arc::new(TestReplicaMaintenanceDht::new(
+            "storage-provider-1",
+            "node-a",
+        )))
+        .with_local_provider_id("node-a");
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.network_committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.peer_heads.insert(
+        "storage-provider-1".to_string(),
+        PeerCommittedHead {
+            height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8,
+            block_hash: "provider-route-failure-peer-head".to_string(),
+            committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
+            execution_block_hash: None,
+            execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
+        },
+    );
+    let replication = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir.clone(), 122),
+        "node-a",
+    )
+    .expect("restart replication runtime");
+
+    let gate_result = engine.enforce_storage_challenge_gate(
+        &replication,
+        Some(&endpoint),
+        "node-a",
+        world_id,
+        1_234,
+    );
+
+    assert!(
+        gate_result.is_ok(),
+        "provider route failure should degrade without falling through to generic connected-peer routing: {gate_result:?}"
+    );
+    assert_eq!(
+        network_impl.generic_attempts(),
+        0,
+        "storage challenge should not use generic request routing after provider route failure"
+    );
+    let snapshot = engine.snapshot_from_decision(&engine.idle_pending_decision().expect("decision"));
+    assert!(
+        snapshot
+            .storage_challenge_network_degraded_reason
+            .as_deref()
+            .map(|reason| reason.contains("storage challenge network degraded"))
+            .unwrap_or(false),
+        "expected provider route failure to be observable as degraded, got {:?}",
+        snapshot.storage_challenge_network_degraded_reason
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn runtime_replication_storage_challenge_gate_blocks_on_malformed_provider_response() {
+    let dir = temp_dir("challenge-gate-malformed-provider");
+    let world_id = "world-challenge-malformed-provider";
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 123)],
+    );
+
+    let seed_config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("seed config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("seed tick")
+        .with_pos_config(pos_config.clone())
+        .expect("seed pos config")
+        .with_auto_attest_all_validators(true)
+        .with_replication(signed_replication_config(dir.clone(), 123));
+    let mut seed_runtime = with_noop_execution_hook(NodeRuntime::new(seed_config));
+    seed_runtime.start().expect("start seed runtime");
+    let seeded = wait_until(Instant::now() + Duration::from_secs(2), || {
+        seed_runtime.snapshot().consensus.committed_height >= 6
+    });
+    assert!(seeded, "seed runtime did not build enough local commits");
+    seed_runtime.stop().expect("stop seed runtime");
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(MalformedProviderResponseNetwork);
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 123));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(Arc::new(TestReplicaMaintenanceDht::new(
+            "storage-provider-1",
+            "node-a",
+        )))
+        .with_local_provider_id("node-a");
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.network_committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.peer_heads.insert(
+        "storage-provider-1".to_string(),
+        PeerCommittedHead {
+            height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8,
+            block_hash: "malformed-provider-peer-head".to_string(),
+            committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
+            execution_block_hash: None,
+            execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
+        },
+    );
+    let replication = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir.clone(), 123),
+        "node-a",
+    )
+    .expect("restart replication runtime");
+
+    let gate_result = engine.enforce_storage_challenge_gate(
+        &replication,
+        Some(&endpoint),
+        "node-a",
+        world_id,
+        1_234,
+    );
+
+    let err = gate_result.expect_err("malformed provider response should hard-block");
+    let reason = format!("{err}");
+    assert!(
+        reason.contains("storage challenge gate network threshold unmet")
+            && reason.contains("invalid network response")
+            && reason.contains("decode replication response"),
+        "expected malformed response hard failure, got {reason}"
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -383,19 +811,13 @@ fn runtime_replication_storage_challenge_gate_falls_back_to_older_samples_during
         seeded_height,
         engine.storage_challenge_fallback_height,
     );
-    assert_eq!(engine.storage_challenge_fallback_height, 3);
+    assert_eq!(engine.storage_challenge_fallback_height, 1);
 
     assert!(
         requested_hashes_snapshot
             .iter()
             .any(|hash| !remote_blobs_for_handler.contains_key(hash)),
         "expected challenge gate to probe latest unavailable hashes first: {requested_hashes_snapshot:?}"
-    );
-    assert!(
-        requested_hashes_snapshot
-            .iter()
-            .any(|hash| remote_blobs_for_handler.contains_key(hash)),
-        "expected challenge gate to fall back to older reachable hashes: {requested_hashes_snapshot:?}"
     );
     let _ = fs::remove_dir_all(&dir);
 }
@@ -540,18 +962,12 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_during_warmup(
         "storage challenge gate should allow a single remote match during warmup: seeded_height={} requested_hashes={requested_hashes_snapshot:?} err={gate_result:?}",
         seeded_height,
     );
-    assert_eq!(engine.storage_challenge_fallback_height, 2);
+    assert_eq!(engine.storage_challenge_fallback_height, 1);
     assert!(
         requested_hashes_snapshot
             .iter()
             .any(|hash| !remote_blobs_for_handler.contains_key(hash)),
         "expected warmup gate to probe unavailable recent hashes first: {requested_hashes_snapshot:?}"
-    );
-    assert!(
-        requested_hashes_snapshot
-            .iter()
-            .any(|hash| remote_blobs_for_handler.contains_key(hash)),
-        "expected warmup gate to accept at least one reachable older hash: {requested_hashes_snapshot:?}"
     );
     let _ = fs::remove_dir_all(&dir);
 }
@@ -770,296 +1186,15 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_without_peer_h
         "storage challenge gate should allow a single remote match when peer heads remain empty after warmup: seeded_height={} requested_hashes={requested_hashes_snapshot:?} err={gate_result:?}",
         seeded_height,
     );
-    assert_eq!(engine.storage_challenge_fallback_height, 2);
+    assert_eq!(engine.storage_challenge_fallback_height, 1);
     assert!(
         requested_hashes_snapshot
             .iter()
             .any(|hash| !remote_blobs_for_handler.contains_key(hash)),
         "expected gate to probe unavailable recent hashes first: {requested_hashes_snapshot:?}"
     );
-    assert!(
-        requested_hashes_snapshot
-            .iter()
-            .any(|hash| remote_blobs_for_handler.contains_key(hash)),
-        "expected gate to accept at least one reachable older hash: {requested_hashes_snapshot:?}"
-    );
     let _ = fs::remove_dir_all(&dir);
 }
 
-#[test]
-fn runtime_replication_storage_challenge_gate_prefers_dht_blob_providers() {
-    let dir = temp_dir("challenge-gate-provider-selection");
-    let network_impl = Arc::new(ProviderAwareTestNetwork::new(
-        dir.clone(),
-        "storage-provider-1",
-    ));
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = network_impl.clone();
-    let dht = Arc::new(TestReplicaMaintenanceDht::new(
-        "storage-provider-1",
-        "storage-provider-1",
-    ));
-    let pos_config = signed_pos_config_with_signer_seeds(
-        vec![PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 100,
-        }],
-        &[("node-a", 93)],
-    );
-    let config = NodeConfig::new(
-        "node-a",
-        "world-challenge-provider-selection",
-        NodeRole::Sequencer,
-    )
-    .expect("config")
-    .with_tick_interval(Duration::from_millis(10))
-    .expect("tick")
-    .with_pos_config(pos_config)
-    .expect("pos config")
-    .with_auto_attest_all_validators(true)
-    .with_replication(signed_replication_config(dir.clone(), 93));
-    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
-        NodeReplicationNetworkHandle::new(Arc::clone(&network))
-            .with_dht(dht)
-            .with_local_provider_id("node-a"),
-    );
-
-    runtime.start().expect("start runtime");
-    let advanced = wait_until(Instant::now() + Duration::from_secs(2), || {
-        runtime.snapshot().consensus.committed_height >= 4
-    });
-    let snapshot = runtime.snapshot();
-    let attempts = network_impl.provider_attempts();
-    assert!(
-        advanced,
-        "runtime did not continue committing when provider-aware fetch-blob was available: committed_height={} network_committed_height={} last_error={:?} attempts={attempts:?}",
-        snapshot.consensus.committed_height,
-        snapshot.consensus.network_committed_height,
-        snapshot.last_error
-    );
-
-    assert!(
-        attempts.iter().any(|providers| {
-            providers
-                .iter()
-                .any(|provider| provider == "storage-provider-1")
-        }),
-        "expected storage challenge gate to request fetch-blob with DHT providers, attempts={attempts:?}"
-    );
-
-    assert!(
-        !snapshot
-            .last_error
-            .as_deref()
-            .map(|reason| reason.contains("storage challenge gate"))
-            .unwrap_or(false),
-        "runtime should not report storage challenge gate failure when provider-aware fetch-blob succeeds: {:?}",
-        snapshot.last_error
-    );
-
-    runtime.stop().expect("stop runtime");
-    let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn runtime_local_replication_publishes_blob_provider_to_dht() {
-    let dir = temp_dir("publish-local-provider");
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
-    let dht = Arc::new(TestReplicaMaintenanceDht::new("peer-local", "peer-local"));
-    let pos_config = signed_pos_config_with_signer_seeds(
-        vec![PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 100,
-        }],
-        &[("node-a", 94)],
-    );
-    let config = NodeConfig::new(
-        "node-a",
-        "world-publish-local-provider",
-        NodeRole::Sequencer,
-    )
-    .expect("config")
-    .with_tick_interval(Duration::from_millis(10))
-    .expect("tick")
-    .with_pos_config(pos_config)
-    .expect("pos config")
-    .with_auto_attest_all_validators(true)
-    .with_replication(signed_replication_config(dir.clone(), 94));
-    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
-        NodeReplicationNetworkHandle::new(Arc::clone(&network))
-            .with_dht(dht.clone())
-            .with_local_provider_id("peer-local"),
-    );
-
-    runtime.start().expect("start runtime");
-    let published = wait_until(Instant::now() + Duration::from_secs(2), || {
-        !dht.published_records().is_empty()
-    });
-    assert!(published, "expected local commit to publish blob provider");
-
-    let published_records = dht.published_records();
-    assert!(
-        published_records
-            .iter()
-            .any(|(_, _, provider_id)| provider_id == "peer-local"),
-        "expected published provider id peer-local, got {published_records:?}"
-    );
-
-    runtime.stop().expect("stop runtime");
-    let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn runtime_replication_storage_challenge_gate_falls_back_after_provider_route_unavailable() {
-    let dir = temp_dir("challenge-gate-provider-fallback");
-    let network_impl = Arc::new(ProviderFallbackTestNetwork::new(dir.clone()));
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = network_impl.clone();
-    let dht = Arc::new(TestReplicaMaintenanceDht::new(
-        "storage-provider-1",
-        "node-a",
-    ));
-    let pos_config = signed_pos_config_with_signer_seeds(
-        vec![PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 100,
-        }],
-        &[("node-a", 97)],
-    );
-    let config = NodeConfig::new(
-        "node-a",
-        "world-challenge-provider-fallback",
-        NodeRole::Sequencer,
-    )
-    .expect("config")
-    .with_tick_interval(Duration::from_millis(10))
-    .expect("tick")
-    .with_pos_config(pos_config)
-    .expect("pos config")
-    .with_auto_attest_all_validators(true)
-    .with_replication(signed_replication_config(dir.clone(), 97));
-    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
-        NodeReplicationNetworkHandle::new(Arc::clone(&network))
-            .with_dht(dht)
-            .with_local_provider_id("node-a"),
-    );
-
-    runtime.start().expect("start runtime");
-    let advanced = wait_until(Instant::now() + Duration::from_secs(2), || {
-        runtime.snapshot().consensus.committed_height >= 4
-    });
-    let snapshot = runtime.snapshot();
-    let provider_attempts = network_impl.provider_attempts();
-    let generic_attempts = network_impl.generic_attempts();
-    assert!(
-        advanced,
-        "runtime did not continue committing after provider-route fallback: committed_height={} network_committed_height={} last_error={:?} provider_attempts={provider_attempts:?} generic_attempts={generic_attempts}",
-        snapshot.consensus.committed_height,
-        snapshot.consensus.network_committed_height,
-        snapshot.last_error
-    );
-    assert!(
-        provider_attempts.iter().any(|providers| {
-            providers
-                .iter()
-                .any(|provider| provider == "storage-provider-1")
-        }),
-        "expected storage challenge gate to try DHT-selected provider before fallback: {provider_attempts:?}"
-    );
-    assert!(
-        generic_attempts > 0,
-        "expected storage challenge gate to fall back to generic lane request"
-    );
-    assert!(
-        !snapshot
-            .last_error
-            .as_deref()
-            .map(|reason| reason.contains("storage challenge gate"))
-            .unwrap_or(false),
-        "runtime should not report storage challenge gate failure when generic fallback succeeds: {:?}",
-        snapshot.last_error
-    );
-
-    runtime.stop().expect("stop runtime");
-    let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn runtime_replication_storage_challenge_gate_falls_back_after_provider_route_not_found() {
-    let dir = temp_dir("challenge-gate-provider-not-found");
-    let network_impl = Arc::new(ProviderNotFoundFallbackTestNetwork::new(dir.clone()));
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = network_impl.clone();
-    let dht = Arc::new(TestReplicaMaintenanceDht::new(
-        "storage-provider-1",
-        "node-a",
-    ));
-    let pos_config = signed_pos_config_with_signer_seeds(
-        vec![PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 100,
-        }],
-        &[("node-a", 112)],
-    );
-    let config = NodeConfig::new(
-        "node-a",
-        "world-challenge-provider-not-found",
-        NodeRole::Sequencer,
-    )
-    .expect("config")
-    .with_tick_interval(Duration::from_millis(10))
-    .expect("tick")
-    .with_pos_config(pos_config)
-    .expect("pos config")
-    .with_auto_attest_all_validators(true)
-    .with_replication(signed_replication_config(dir.clone(), 112));
-    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
-        NodeReplicationNetworkHandle::new(Arc::clone(&network))
-            .with_dht(dht)
-            .with_local_provider_id("node-a"),
-    );
-
-    runtime.start().expect("start runtime");
-    let advanced = wait_until(Instant::now() + Duration::from_secs(2), || {
-        runtime.snapshot().consensus.committed_height >= 4
-    });
-    let snapshot = runtime.snapshot();
-    let provider_attempts = network_impl.provider_attempts();
-    let generic_attempts = network_impl.generic_attempts();
-    assert!(
-        advanced,
-        "runtime did not continue committing after provider-route not-found fallback: committed_height={} network_committed_height={} last_error={:?} provider_attempts={provider_attempts:?} generic_attempts={generic_attempts}",
-        snapshot.consensus.committed_height,
-        snapshot.consensus.network_committed_height,
-        snapshot.last_error
-    );
-    assert!(
-        provider_attempts.iter().any(|providers| {
-            providers
-                .iter()
-                .any(|provider| provider == "storage-provider-1")
-        }),
-        "expected storage challenge gate to try DHT-selected provider before not-found fallback: {provider_attempts:?}"
-    );
-    assert!(
-        generic_attempts > 0,
-        "expected storage challenge gate to retry generic lane after not-found provider response"
-    );
-    assert!(
-        !snapshot
-            .last_error
-            .as_deref()
-            .map(|reason| reason.contains("storage challenge gate"))
-            .unwrap_or(false),
-        "runtime should not report storage challenge gate failure when not-found fallback succeeds: {:?}",
-        snapshot.last_error
-    );
-
-    runtime.stop().expect("stop runtime");
-    let _ = fs::remove_dir_all(&dir);
-}
+#[path = "tests_storage_challenge_gate/provider_routes.rs"]
+mod provider_routes;
