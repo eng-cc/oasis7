@@ -549,6 +549,10 @@ jq -e '
   >"$TMP_DIR/fallback.out"
 grep -q '^PASS ' "$TMP_DIR/fallback.out"
 grep -q 'trusted_checkpoint_state_sync_fallback_required' "$TMP_DIR/fallback.out"
+if grep -q 'readiness_not_ready' "$TMP_DIR/fallback.out"; then
+  echo "expected trusted-checkpoint recovery preflight to exempt readiness_not_ready" >&2
+  exit 1
+fi
 test -f "$TMP_DIR/recovery-plans/node-gap-with-snapshot.recovery-plan.json"
 jq -e --arg snapshot_sha "$SNAPSHOT_SHA256" --arg journal_sha "$JOURNAL_SHA256" --arg state_root "$STATE_ROOT" --arg chunks_root "$CHUNKS_ROOT" '
   .dry_run_only == true
@@ -645,6 +649,10 @@ eval "$CHUNKS_ROOT_COMMAND"
   --recovery-plan-dir "$TMP_DIR/recovery-plans-lag" \
   >"$TMP_DIR/recovery-plans-lag.out"
 grep -q '^PASS ' "$TMP_DIR/recovery-plans-lag.out"
+if grep -q 'readiness_not_ready' "$TMP_DIR/recovery-plans-lag.out"; then
+  echo "expected trusted-checkpoint recovery plan to exempt readiness_not_ready" >&2
+  exit 1
+fi
 test -f "$TMP_DIR/recovery-plans-lag/node-gap-with-snapshot.recovery-plan.json"
 jq -e '
   .dry_run_only == true

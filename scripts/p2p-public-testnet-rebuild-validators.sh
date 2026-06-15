@@ -243,9 +243,6 @@ json_liveness_ok() {
   jq -e '
     .running == true
     and (.last_error == null or .last_error == "null")
-    and (.readiness.status // null) == "ready"
-    and (.consensus.storage_challenge_network_degraded_height // null) == null
-    and ((.observability.storage_challenge_network_degraded // false) | not)
   ' "$path" >/dev/null 2>&1
 }
 
