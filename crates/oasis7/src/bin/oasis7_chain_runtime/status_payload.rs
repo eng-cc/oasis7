@@ -27,6 +27,9 @@ pub(crate) use status_payload_observability::{
     build_liveness_status, classify_transport_stability, observability_status_for_alerts,
     observability_summary_for_alerts, push_observability_alert, reachability_policy_ok,
 };
+use status_payload_observability::{
+    build_path_observability_status, ChainP2pPathObservabilityStatus,
+};
 use status_payload_state_sync::{
     consensus_participation_hold_reason, state_sync_fallback_reason,
     state_sync_trusted_checkpoint_required_height,
@@ -192,35 +195,6 @@ pub(super) struct ChainNodeObservabilityStatus {
     pub(super) storage_degraded: bool,
     pub(super) reward_runtime_degraded: bool,
     pub(super) alerts: Vec<ChainNodeObservabilityAlert>,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainP2pPathObservabilityStatus {
-    pub(super) selected_path_kind: Option<String>,
-    pub(super) selected_path_age_ms: Option<i64>,
-    pub(super) active_direct_path_count: usize,
-    pub(super) active_hole_punch_path_count: usize,
-    pub(super) active_relay_path_count: usize,
-    pub(super) transition_count: u64,
-    pub(super) transitions: ChainP2pPathTransitionCountersStatus,
-    pub(super) last_transition: Option<ChainP2pPathTransitionStatus>,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainP2pPathTransitionCountersStatus {
-    pub(super) direct_to_hole_punched: u64,
-    pub(super) direct_to_relay_reserved: u64,
-    pub(super) hole_punched_to_direct: u64,
-    pub(super) hole_punched_to_relay_reserved: u64,
-    pub(super) relay_reserved_to_direct: u64,
-    pub(super) relay_reserved_to_hole_punched: u64,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainP2pPathTransitionStatus {
-    pub(super) from_kind: Option<String>,
-    pub(super) to_kind: Option<String>,
-    pub(super) age_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -918,46 +892,6 @@ pub(super) fn build_chain_node_observability_status(
         storage_degraded,
         reward_runtime_degraded,
         alerts,
-    }
-}
-
-fn build_path_observability_status(
-    p2p: &ChainP2pStatus,
-    observed_at_unix_ms: i64,
-) -> ChainP2pPathObservabilityStatus {
-    let selected_path_age_ms = p2p
-        .active_transport_kind_since_unix_ms
-        .and_then(|since_ms| observed_at_unix_ms.checked_sub(since_ms))
-        .map(|age_ms| age_ms.max(0));
-    ChainP2pPathObservabilityStatus {
-        selected_path_kind: p2p.active_transport_kind.clone(),
-        selected_path_age_ms,
-        active_direct_path_count: p2p.active_direct_path_count,
-        active_hole_punch_path_count: p2p.active_hole_punch_path_count,
-        active_relay_path_count: p2p.active_relay_path_count,
-        transition_count: p2p.transport_transition_count,
-        transitions: ChainP2pPathTransitionCountersStatus {
-            direct_to_hole_punched: p2p.transport_transitions.direct_to_hole_punched,
-            direct_to_relay_reserved: p2p.transport_transitions.direct_to_relay_reserved,
-            hole_punched_to_direct: p2p.transport_transitions.hole_punched_to_direct,
-            hole_punched_to_relay_reserved: p2p
-                .transport_transitions
-                .hole_punched_to_relay_reserved,
-            relay_reserved_to_direct: p2p.transport_transitions.relay_reserved_to_direct,
-            relay_reserved_to_hole_punched: p2p
-                .transport_transitions
-                .relay_reserved_to_hole_punched,
-        },
-        last_transition: p2p.last_transport_transition.as_ref().map(|transition| {
-            ChainP2pPathTransitionStatus {
-                from_kind: transition.from_kind.clone(),
-                to_kind: transition.to_kind.clone(),
-                age_ms: transition
-                    .at_unix_ms
-                    .and_then(|at_ms| observed_at_unix_ms.checked_sub(at_ms))
-                    .map(|age_ms| age_ms.max(0)),
-            }
-        }),
     }
 }
 
