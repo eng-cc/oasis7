@@ -3,6 +3,16 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] pages-homepage-claim-gate-refresh (PRD-SITE-003/004) [test_tier_required]: 对齐 Pages 质量门禁与当前中英首页 `limited playable technical preview` 口径，并把 site local link check 从 GNU `realpath -m` 改为跨平台批量路径校验，恢复本地与 CI 的 Pages gate 验证链路。 Trace: .pm/tasks/task_8f70a068b4864e41971de595fd3dff31.yaml
+  - 产物文件:
+    - `scripts/site-homepage-claim-check.sh`
+    - `scripts/site-link-check.sh`
+    - `.pm/tasks/task_8f70a068b4864e41971de595fd3dff31.yaml`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/site-link-check.sh && ./scripts/site-homepage-claim-check.sh && ./scripts/site-manual-sync-check.sh && ./scripts/site-download-check.sh`
+    - `git diff --check`
+    - `./scripts/doc-governance-check.sh`
+    - `./scripts/pm/workflow-lint.sh --task-uid task_8f70a068b4864e41971de595fd3dff31 --phase current`
 - [x] html-roadshow-deck (PRD-SITE-001/003/012) [test_tier_required]: 在公开站点新增 HTML 路演 deck，使用适配静态 Pages 的演示库承载固定 slide 叙事，不把首页改成 PPT，也不引入必需的 SPA 构建链；同时从 docs hub 暴露清晰入口，并保留回到首页/文档中心的导航。 Trace: .pm/tasks/task_edb2d067d4774fddaa528bf7046326b5.yaml
   - 产物文件:
     - `doc/site/prd.md`
