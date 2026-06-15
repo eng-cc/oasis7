@@ -78,6 +78,17 @@ fn invalid_cbor_output_wasm() -> Vec<u8> {
     wat::parse_str(wat).expect("compile invalid cbor wat")
 }
 
+#[cfg(feature = "wasmtime")]
+fn sha256_hex_for_test(bytes: &[u8]) -> String {
+    let digest = <sha2::Sha256 as sha2::Digest>::digest(bytes);
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
+}
+
 #[test]
 fn fixed_sandbox_succeed_returns_cloned_output() {
     let output = ModuleOutput {
@@ -323,9 +334,10 @@ fn wasm_executor_epoch_watchdog_preempts_infinite_loop() {
                i64.const 0))"#,
     )
     .expect("compile test wat");
+    let wasm_hash = sha256_hex_for_test(&wasm);
     let request = ModuleCallRequest {
         module_id: "m.loop".to_string(),
-        wasm_hash: "hash-loop".to_string(),
+        wasm_hash,
         trace_id: "trace-loop".to_string(),
         entrypoint: "call".to_string(),
         input: Vec::new(),
@@ -357,9 +369,10 @@ fn wasm_executor_metrics_track_compile_call_and_failure_paths() {
     let metrics = init_shared_wasm_executor_metrics();
     let mut executor = test_executor_with_metrics(WasmExecutorConfig::default(), metrics.clone());
     let wasm = trivial_success_wasm();
+    let wasm_hash = sha256_hex_for_test(&wasm);
     let request = ModuleCallRequest {
         module_id: "m.metrics".to_string(),
-        wasm_hash: "hash-metrics".to_string(),
+        wasm_hash,
         trace_id: "trace-metrics".to_string(),
         entrypoint: "call".to_string(),
         input: Vec::new(),
@@ -412,9 +425,11 @@ fn wasm_executor_metrics_track_compile_call_and_failure_paths() {
 fn wasm_executor_metrics_track_decode_timing_for_invalid_output() {
     let metrics = init_shared_wasm_executor_metrics();
     let mut executor = test_executor_with_metrics(WasmExecutorConfig::default(), metrics.clone());
+    let wasm = invalid_cbor_output_wasm();
+    let wasm_hash = sha256_hex_for_test(&wasm);
     let request = ModuleCallRequest {
         module_id: "m.invalid-output".to_string(),
-        wasm_hash: "hash-invalid-output".to_string(),
+        wasm_hash,
         trace_id: "trace-invalid-output".to_string(),
         entrypoint: "call".to_string(),
         input: Vec::new(),
@@ -426,7 +441,7 @@ fn wasm_executor_metrics_track_decode_timing_for_invalid_output() {
             max_effects: 0,
             max_emits: 0,
         },
-        wasm_bytes: Arc::<[u8]>::from(invalid_cbor_output_wasm()),
+        wasm_bytes: Arc::<[u8]>::from(wasm),
     };
 
     let failure = executor
@@ -459,12 +474,18 @@ fn wasm_executor_compiled_cache_evicts_old_entries() {
         ..WasmExecutorConfig::default()
     });
     let wasm_a = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-    let wasm_b = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+    let wasm_b = trivial_success_wasm();
+    let wasm_a_hash = sha256_hex_for_test(&wasm_a);
+    let wasm_b_hash = sha256_hex_for_test(&wasm_b);
 
-    executor.compile_module_cached("hash-a", &wasm_a).unwrap();
+    executor
+        .compile_module_cached(wasm_a_hash.as_str(), &wasm_a)
+        .unwrap();
     assert_eq!(executor.compiled_cache_len(), 1);
 
-    executor.compile_module_cached("hash-b", &wasm_b).unwrap();
+    executor
+        .compile_module_cached(wasm_b_hash.as_str(), &wasm_b)
+        .unwrap();
     assert_eq!(executor.compiled_cache_len(), 1);
 }
 
@@ -476,11 +497,16 @@ fn wasm_executor_compiled_cache_zero_capacity_stays_empty() {
         ..WasmExecutorConfig::default()
     });
     let wasm = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+    let wasm_hash = sha256_hex_for_test(&wasm);
 
-    executor.compile_module_cached("hash-a", &wasm).unwrap();
+    executor
+        .compile_module_cached(wasm_hash.as_str(), &wasm)
+        .unwrap();
     assert_eq!(executor.compiled_cache_len(), 0);
 
-    executor.compile_module_cached("hash-b", &wasm).unwrap();
+    executor
+        .compile_module_cached(wasm_hash.as_str(), &wasm)
+        .unwrap();
     assert_eq!(executor.compiled_cache_len(), 0);
 }
 
@@ -505,14 +531,41 @@ fn wasm_executor_disk_cache_hits_when_memory_cache_disabled() {
         ..WasmExecutorConfig::default()
     });
     let wasm = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-    let invalid_wasm = [0x01, 0x02, 0x03];
+    let wasm_hash = sha256_hex_for_test(&wasm);
 
     executor
-        .compile_module_cached("hash-disk-hit", &wasm)
+        .compile_module_cached(wasm_hash.as_str(), &wasm)
         .unwrap();
     executor
-        .compile_module_cached("hash-disk-hit", &invalid_wasm)
+        .compile_module_cached(wasm_hash.as_str(), &wasm)
         .expect("load compiled module from disk cache");
+
+    let _ = fs::remove_dir_all(cache_dir);
+}
+
+#[cfg(feature = "wasmtime")]
+#[test]
+fn wasm_executor_rejects_wasm_hash_bytes_mismatch_before_cache_hit() {
+    let cache_dir = unique_temp_cache_dir("hash-mismatch");
+    let executor = test_executor(WasmExecutorConfig {
+        compiled_cache_dir: Some(cache_dir.clone()),
+        ..WasmExecutorConfig::default()
+    });
+    let wasm = trivial_success_wasm();
+    let wasm_hash = sha256_hex_for_test(&wasm);
+    executor
+        .compile_module_cached(wasm_hash.as_str(), &wasm)
+        .expect("populate compiled cache");
+
+    let err = executor
+        .compile_module_cached(wasm_hash.as_str(), &[0x01, 0x02, 0x03])
+        .expect_err("mismatched bytes must not hit compiled cache");
+    assert_eq!(err.code, ModuleCallErrorCode::Trap);
+    assert!(
+        err.detail.contains("wasm hash mismatch"),
+        "unexpected error detail: {}",
+        err.detail
+    );
 
     let _ = fs::remove_dir_all(cache_dir);
 }
@@ -527,12 +580,14 @@ fn wasm_executor_disk_cache_persists_serialized_compiled_artifact() {
         ..WasmExecutorConfig::default()
     });
     let wasm = trivial_success_wasm();
-    let wasm_hash = "hash-disk-serialized";
+    let wasm_hash = sha256_hex_for_test(&wasm);
 
-    executor.compile_module_cached(wasm_hash, &wasm).unwrap();
+    executor
+        .compile_module_cached(wasm_hash.as_str(), &wasm)
+        .unwrap();
 
     let cache_file = executor
-        .compiled_disk_cache_path_for_test(wasm_hash)
+        .compiled_disk_cache_path_for_test(wasm_hash.as_str())
         .expect("cache path");
     let cached_bytes = fs::read(&cache_file).expect("read serialized cache");
     assert_ne!(cached_bytes, wasm);
@@ -554,16 +609,18 @@ fn wasm_executor_disk_cache_recovers_from_corruption() {
         ..WasmExecutorConfig::default()
     });
     let wasm = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-    let wasm_hash = "hash-disk-corrupt";
+    let wasm_hash = sha256_hex_for_test(&wasm);
 
-    executor.compile_module_cached(wasm_hash, &wasm).unwrap();
+    executor
+        .compile_module_cached(wasm_hash.as_str(), &wasm)
+        .unwrap();
     let cache_file = executor
-        .compiled_disk_cache_path_for_test(wasm_hash)
+        .compiled_disk_cache_path_for_test(wasm_hash.as_str())
         .expect("cache path");
     fs::write(&cache_file, b"corrupt-bytes").expect("write corrupt cache");
 
     executor
-        .compile_module_cached(wasm_hash, &wasm)
+        .compile_module_cached(wasm_hash.as_str(), &wasm)
         .expect("recompile after corrupt cache");
 
     let repaired = fs::read(&cache_file).expect("read repaired cache");
@@ -581,10 +638,11 @@ fn perf_probe_executor_call_and_watchdog_overhead() {
         ..WasmExecutorConfig::default()
     });
     let wasm = trivial_success_wasm();
+    let wasm_hash = sha256_hex_for_test(&wasm);
     let expected_output_bytes = trivial_output_bytes().len() as u64;
     let request = ModuleCallRequest {
         module_id: "m.perf".to_string(),
-        wasm_hash: "hash-perf".to_string(),
+        wasm_hash,
         trace_id: "trace-perf".to_string(),
         entrypoint: "call".to_string(),
         input: Vec::new(),

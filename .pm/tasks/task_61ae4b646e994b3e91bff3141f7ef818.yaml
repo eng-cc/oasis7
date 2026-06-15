@@ -1,0 +1,25 @@
+task_uid: task_61ae4b646e994b3e91bff3141f7ef818
+title: "Review wasm Rust code for optimization opportunities"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-wasm-rust-governance-review
+execution_log_path: .pm/tasks/task_61ae4b646e994b3e91bff3141f7ef818.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/world-runtime/project.md
+related_prd: []
+acceptance:
+  - "Bounded wasm/repository-health review records scoped evidence and optimization opportunities in the task execution log."
+handoff_to: []
+updated_at: 2026-06-15T22:56:14+08:00
+last_started_at: 2026-06-15T21:01:44+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime wasm_executor_rejects_wasm_hash_bytes_mismatch_before_cache_hit"
+last_verified_at: 2026-06-15T22:56:05+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-15T22:56:13+08:00

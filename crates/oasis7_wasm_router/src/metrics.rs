@@ -27,6 +27,7 @@ pub struct WasmRouterMetricsSnapshot {
     pub match_ms_total: u64,
     pub parse_fallbacks: u64,
     pub prepared_hits: u64,
+    pub regex_compile_calls_total: u64,
     pub regex_compile_ms_total: u64,
     pub prepare_ms_buckets: BTreeMap<String, u64>,
     pub match_ms_buckets: BTreeMap<String, u64>,
@@ -44,6 +45,7 @@ impl WasmRouterMetricsSnapshot {
             match_ms_total: 0,
             parse_fallbacks: 0,
             prepared_hits: 0,
+            regex_compile_calls_total: 0,
             regex_compile_ms_total: 0,
             prepare_ms_buckets: empty_bucket_map(),
             match_ms_buckets: empty_bucket_map(),
@@ -100,6 +102,7 @@ pub fn observe_wasm_router_regex_compile(regex_compile_ms: u64) {
     locked.regex_compile_ms_total = locked
         .regex_compile_ms_total
         .saturating_add(regex_compile_ms);
+    locked.regex_compile_calls_total = locked.regex_compile_calls_total.saturating_add(1);
 }
 
 fn global_wasm_router_metrics() -> SharedWasmRouterMetrics {

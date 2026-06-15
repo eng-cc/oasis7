@@ -38,15 +38,15 @@ fn parsed_subscription_filters(
     Ok(Arc::new(parsed))
 }
 
-fn cached_regex(pattern: &str) -> Option<Arc<regex::Regex>> {
+fn cached_regex(pattern: &str) -> Result<Arc<regex::Regex>, regex::Error> {
     if let Some(cached) = lock_recover(regex_cache()).get_cloned(pattern) {
-        return Some(cached);
+        return Ok(cached);
     }
     let compile_started = Instant::now();
-    let compiled = Arc::new(regex::Regex::new(pattern).ok()?);
+    let compiled = Arc::new(regex::Regex::new(pattern)?);
     metrics::observe_wasm_router_regex_compile(elapsed_ms(compile_started));
     lock_recover(regex_cache()).insert(pattern.to_string(), compiled.clone());
-    Some(compiled)
+    Ok(compiled)
 }
 
 #[derive(Debug, Clone)]
@@ -89,7 +89,7 @@ enum PreparedMatchOperator {
     Gte(f64),
     Lt(f64),
     Lte(f64),
-    Re(regex::Regex),
+    Re(Arc<regex::Regex>),
 }
 
 pub fn prepare_subscriptions(
@@ -183,7 +183,7 @@ fn prepare_rule(rule: &MatchRule, module_id: &str) -> Result<PreparedMatchRule, 
     } else if let Some(threshold) = rule.lte {
         PreparedMatchOperator::Lte(threshold)
     } else if let Some(pattern) = &rule.re {
-        PreparedMatchOperator::Re(regex::Regex::new(pattern).map_err(|err| {
+        PreparedMatchOperator::Re(cached_regex(pattern).map_err(|err| {
             format!("module {module_id} subscription filter regex invalid: {err}")
         })?)
     } else {
@@ -857,6 +857,35 @@ mod tests {
         assert!(
             latest.regex_compile_ms_total >= baseline.regex_compile_ms_total,
             "regex compile counter should be monotonic"
+        );
+    }
+
+    #[test]
+    fn router_metrics_track_prepared_regex_compile_count() {
+        let baseline = snapshot_global_wasm_router_metrics();
+        let unique = format!(
+            "^prepared-metrics-{}$",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("unix epoch")
+                .as_nanos()
+        );
+        let subscription = event_subscription(
+            &["world.tick"],
+            Some(json!({
+                "event": [
+                    { "path": "/status", "re": unique }
+                ]
+            })),
+        );
+
+        let _ = prepare_subscriptions(&[subscription], "m.prepared.metrics")
+            .expect("prepare regex subscription");
+
+        let latest = snapshot_global_wasm_router_metrics();
+        assert!(
+            latest.regex_compile_calls_total >= baseline.regex_compile_calls_total + 1,
+            "prepared regex compilation should be counted"
         );
     }
 }

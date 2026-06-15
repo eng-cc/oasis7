@@ -79,6 +79,25 @@ fn minimal_template_dry_run_resolves_paths() {
 }
 
 #[test]
+fn minimal_template_rejects_path_shaped_module_id() {
+    let out_dir = unique_temp_dir("wasm-build-suite-path-safe");
+    let request = BuildRequest {
+        module_id: "../escape".to_string(),
+        manifest_path: template_manifest_path(),
+        out_dir,
+        target: DEFAULT_TARGET.to_string(),
+        profile: "dev".to_string(),
+        dry_run: true,
+    };
+
+    let err = run_build(&request).expect_err("path-shaped module_id must be rejected");
+    assert!(
+        err.to_string().contains("module_id"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
 fn minimal_template_real_build_writes_wasm_and_metadata() {
     if !has_target_installed(DEFAULT_TARGET) {
         eprintln!(
