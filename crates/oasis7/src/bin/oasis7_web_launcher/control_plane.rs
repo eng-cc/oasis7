@@ -31,6 +31,9 @@ mod support;
 mod tests;
 use self::chain_requests::{submit_chain_feedback_remote, submit_chain_transfer_remote};
 pub(super) use self::chain_status_probe::{query_chain_status_endpoint, ChainIdentitySnapshot};
+#[cfg(test)]
+pub(super) use self::provider_config::build_launcher_args;
+pub(super) use self::provider_config::build_launcher_args_with_launcher_bin;
 use self::provider_config::*;
 #[cfg(test)]
 use self::support::resolve_viewer_static_env_override;

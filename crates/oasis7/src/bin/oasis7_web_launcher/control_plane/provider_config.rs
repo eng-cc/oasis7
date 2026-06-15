@@ -2,12 +2,14 @@ use super::support::{resolve_launcher_bin_from_config, resolve_viewer_static_dir
 use super::*;
 
 #[cfg(test)]
-pub(super) fn build_launcher_args(config: &LauncherConfig) -> Result<Vec<String>, String> {
+pub(in super::super) fn build_launcher_args(
+    config: &LauncherConfig,
+) -> Result<Vec<String>, String> {
     let launcher_bin = resolve_launcher_bin_from_config(config, config.launcher_bin.as_str());
     build_launcher_args_with_launcher_bin(config, launcher_bin.as_str())
 }
 
-pub(super) fn build_launcher_args_with_launcher_bin(
+pub(in super::super) fn build_launcher_args_with_launcher_bin(
     config: &LauncherConfig,
     launcher_bin: &str,
 ) -> Result<Vec<String>, String> {
