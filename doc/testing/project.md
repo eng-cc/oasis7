@@ -192,6 +192,20 @@
     - `./scripts/check-script-executable-bits.sh`
     - `git ls-files --stage scripts/check-script-executable-bits.sh scripts/release-gate-web-strict.sh`
     - `rg -n "check-script-executable-bits|release-script-executable-mode-gate|AC-9C" scripts/ci-tests.sh testing-manual.md doc/testing/prd.md doc/testing/project.md`
+- [x] p2p-path-behavior-matrix-taxonomy-doc-freeze (PRD-TESTING-002/003) [test_tier_required]: 在 `testing-manual.md` 冻结 P2P mixed-topology path behavior taxonomy，明确 `evidence_class/path_expectation/reachability_pair/degradation_class/claim_boundary` 字段、`proxy != physical NAT/CGNAT proof` 边界，以及 reachability/status observability 只能消费 bounded status projection。 Trace: .pm/tasks/task_43a21163092541809de36036403d7c97.yaml
+  - 产物文件:
+    - `testing-manual.md`
+    - `doc/testing/project.md`
+    - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.*`
+    - `doc/p2p/node/node-triad-observability-stack-2026-04-23.*`
+  - 后续实现入口:
+    - `scripts/p2p-mixed-topology-matrix.sh` 应输出 taxonomy fields。
+    - `scripts/p2p-mixed-topology-matrix-smoke.sh` 应验证 required tier 只含 `evidence_class=exact`。
+    - `scripts/p2p-real-env-observability-monitor.sh` / summary helper 应从 status truth 消费 reachability path summary，缺字段时输出 `not_reported`。
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "evidence_class|path_expectation|reachability_pair|degradation_class|claim_boundary|physical NAT|not_reported|selected_path_kind" testing-manual.md doc/testing/project.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-TESTING-057 (PRD-TESTING-WEB-001/002/003) [test_tier_required]: 为 `renderMode=software_safe` 补专用 prompt/chat 回归方案与 `viewer-software-safe-chat-regression.sh`，覆盖 apply/rollback/chat ack、消息流采样以及 `agent_spoke` 缺失签名。
   - 产物文件:
     - `scripts/viewer-software-safe-chat-regression.sh`

@@ -5,8 +5,8 @@ use super::peer_record::sign_peer_record;
 use super::runtime_loop::{peer_requires_active_quarantine, refresh_peer_manager_healths};
 use super::transport_paths::{
     active_transport_path_from_endpoint, peer_record_transport_paths,
-    select_preferred_transport_path, sync_known_transport_paths, TransportMuxer, TransportPathKind,
-    TransportSecurity, TransportSessionFlavor,
+    select_preferred_transport_path, sync_known_transport_paths, PeerReachabilityContract,
+    TransportMuxer, TransportPathKind, TransportSecurity, TransportSessionFlavor,
 };
 use super::utils::push_bounded_vec;
 use super::*;

@@ -5,7 +5,10 @@ use libp2p::swarm::{ConnectionId, Swarm};
 use libp2p::{Multiaddr, PeerId};
 
 use crate::error::WorldError;
-use oasis7_proto::distributed_dht::SignedPeerRecord;
+use oasis7_proto::distributed_dht::{
+    PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass, SignedPeerRecord,
+};
+use oasis7_proto::distributed_net::NetworkLane;
 
 use super::swarm_behaviour::{
     dial_addr_with_optional_peer_id, ensure_peer_id, split_peer_id, Behaviour,
@@ -67,6 +70,73 @@ pub(super) struct TransportPath {
     pub(super) muxer: TransportMuxer,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct PeerReachabilityContract {
+    pub(super) peer_id: PeerId,
+    pub(super) node_role: PeerNodeRole,
+    pub(super) deployment_mode: PeerDeploymentMode,
+    pub(super) reachability_class: PeerReachabilityClass,
+    pub(super) capability_lanes: Vec<NetworkLane>,
+    pub(super) ranked_paths: Vec<TransportPath>,
+    pub(super) publish_source: PeerReachabilityPublishSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct PeerReachabilityPublishSource {
+    pub(super) direct_path_count: usize,
+    pub(super) hole_punch_path_count: usize,
+    pub(super) relay_path_count: usize,
+}
+
+impl PeerReachabilityContract {
+    pub(super) fn from_signed_peer_record(record: &SignedPeerRecord) -> Result<Self, WorldError> {
+        let peer_id = parse_record_peer_id(record)?;
+        let node_role = record.record.parsed_node_role().map_err(|err| {
+            WorldError::NetworkProtocolUnavailable {
+                protocol: format!("peer record node_role must be valid: {err}"),
+            }
+        })?;
+        let mut ranked_paths = Vec::new();
+        let mut seen = HashSet::new();
+        extend_paths(
+            &mut ranked_paths,
+            &mut seen,
+            peer_id,
+            record.record.direct_addrs.iter(),
+            TransportPathKind::Direct,
+        );
+        extend_paths(
+            &mut ranked_paths,
+            &mut seen,
+            peer_id,
+            record.record.hole_punch_addrs.iter(),
+            TransportPathKind::HolePunched,
+        );
+        extend_paths(
+            &mut ranked_paths,
+            &mut seen,
+            peer_id,
+            record.record.relay_addrs.iter(),
+            TransportPathKind::RelayReserved,
+        );
+        ranked_paths.sort_unstable_by_key(TransportPath::preference_rank);
+
+        Ok(Self {
+            peer_id,
+            node_role,
+            deployment_mode: record.record.deployment_mode,
+            reachability_class: record.record.reachability_class,
+            capability_lanes: record.record.effective_capability_lanes(),
+            publish_source: PeerReachabilityPublishSource {
+                direct_path_count: record.record.direct_addrs.len(),
+                hole_punch_path_count: record.record.hole_punch_addrs.len(),
+                relay_path_count: record.record.relay_addrs.len(),
+            },
+            ranked_paths,
+        })
+    }
+}
+
 impl TransportPath {
     pub(super) fn label(&self) -> String {
         self.addr.to_string()
@@ -88,38 +158,17 @@ impl TransportPath {
 pub(super) fn peer_record_transport_paths(
     record: &SignedPeerRecord,
 ) -> Result<Vec<TransportPath>, WorldError> {
-    let peer_id = record.record.peer_id.parse::<PeerId>().map_err(|_| {
-        WorldError::NetworkProtocolUnavailable {
+    Ok(PeerReachabilityContract::from_signed_peer_record(record)?.ranked_paths)
+}
+
+fn parse_record_peer_id(record: &SignedPeerRecord) -> Result<PeerId, WorldError> {
+    record
+        .record
+        .peer_id
+        .parse::<PeerId>()
+        .map_err(|_| WorldError::NetworkProtocolUnavailable {
             protocol: "peer record peer_id must be valid".to_string(),
-        }
-    })?;
-    let mut paths = Vec::new();
-    let mut seen = HashSet::new();
-
-    extend_paths(
-        &mut paths,
-        &mut seen,
-        peer_id,
-        record.record.direct_addrs.iter(),
-        TransportPathKind::Direct,
-    );
-    extend_paths(
-        &mut paths,
-        &mut seen,
-        peer_id,
-        record.record.hole_punch_addrs.iter(),
-        TransportPathKind::HolePunched,
-    );
-    extend_paths(
-        &mut paths,
-        &mut seen,
-        peer_id,
-        record.record.relay_addrs.iter(),
-        TransportPathKind::RelayReserved,
-    );
-    paths.sort_unstable_by_key(TransportPath::preference_rank);
-
-    Ok(paths)
+        })
 }
 
 pub(super) fn sync_known_transport_paths(

@@ -907,6 +907,9 @@ mod observability_slashing_tests;
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_state_sync_tests.rs"]
 mod observability_state_sync_tests;
 #[cfg(test)]
+#[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_storage_challenge_tests.rs"]
+mod observability_storage_challenge_tests;
+#[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_tests.rs"]
 mod observability_tests;
 #[cfg(test)]

@@ -1,11 +1,81 @@
 use std::collections::BTreeSet;
 
 use oasis7_node::NodeSnapshot;
+use serde::Serialize;
 
 use super::{
     ChainLivenessStatus, ChainNodeObservabilityAlert, ChainP2pStatus, ChainReadinessPolicyStatus,
     ChainReplicationTransportStability, TRANSPORT_STABILITY_MIN_SCORE,
 };
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ChainP2pPathObservabilityStatus {
+    pub(crate) selected_path_kind: Option<String>,
+    pub(crate) selected_path_age_ms: Option<i64>,
+    pub(crate) active_direct_path_count: usize,
+    pub(crate) active_hole_punch_path_count: usize,
+    pub(crate) active_relay_path_count: usize,
+    pub(crate) transition_count: u64,
+    pub(crate) transitions: ChainP2pPathTransitionCountersStatus,
+    pub(crate) last_transition: Option<ChainP2pPathTransitionStatus>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ChainP2pPathTransitionCountersStatus {
+    pub(crate) direct_to_hole_punched: u64,
+    pub(crate) direct_to_relay_reserved: u64,
+    pub(crate) hole_punched_to_direct: u64,
+    pub(crate) hole_punched_to_relay_reserved: u64,
+    pub(crate) relay_reserved_to_direct: u64,
+    pub(crate) relay_reserved_to_hole_punched: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ChainP2pPathTransitionStatus {
+    pub(crate) from_kind: Option<String>,
+    pub(crate) to_kind: Option<String>,
+    pub(crate) age_ms: Option<i64>,
+}
+
+pub(crate) fn build_path_observability_status(
+    p2p: &ChainP2pStatus,
+    observed_at_unix_ms: i64,
+) -> ChainP2pPathObservabilityStatus {
+    let selected_path_age_ms = p2p
+        .active_transport_kind_since_unix_ms
+        .and_then(|since_ms| observed_at_unix_ms.checked_sub(since_ms))
+        .map(|age_ms| age_ms.max(0));
+    ChainP2pPathObservabilityStatus {
+        selected_path_kind: p2p.active_transport_kind.clone(),
+        selected_path_age_ms,
+        active_direct_path_count: p2p.active_direct_path_count,
+        active_hole_punch_path_count: p2p.active_hole_punch_path_count,
+        active_relay_path_count: p2p.active_relay_path_count,
+        transition_count: p2p.transport_transition_count,
+        transitions: ChainP2pPathTransitionCountersStatus {
+            direct_to_hole_punched: p2p.transport_transitions.direct_to_hole_punched,
+            direct_to_relay_reserved: p2p.transport_transitions.direct_to_relay_reserved,
+            hole_punched_to_direct: p2p.transport_transitions.hole_punched_to_direct,
+            hole_punched_to_relay_reserved: p2p
+                .transport_transitions
+                .hole_punched_to_relay_reserved,
+            relay_reserved_to_direct: p2p.transport_transitions.relay_reserved_to_direct,
+            relay_reserved_to_hole_punched: p2p
+                .transport_transitions
+                .relay_reserved_to_hole_punched,
+        },
+        last_transition: p2p.last_transport_transition.as_ref().map(|transition| {
+            ChainP2pPathTransitionStatus {
+                from_kind: transition.from_kind.clone(),
+                to_kind: transition.to_kind.clone(),
+                age_ms: transition
+                    .at_unix_ms
+                    .and_then(|at_ms| observed_at_unix_ms.checked_sub(at_ms))
+                    .map(|age_ms| age_ms.max(0)),
+            }
+        }),
+    }
+}
 
 pub(crate) fn push_observability_alert(
     alerts: &mut Vec<ChainNodeObservabilityAlert>,
