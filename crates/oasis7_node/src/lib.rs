@@ -50,6 +50,7 @@ mod libp2p_replication_network;
 #[cfg(target_arch = "wasm32")]
 mod libp2p_replication_network_wasm;
 mod network_bridge;
+mod network_error_classification;
 mod node_engine_core;
 mod node_engine_network;
 mod node_engine_replication;
