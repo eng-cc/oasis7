@@ -18,6 +18,33 @@ pub struct LauncherUiField {
     pub native_visible: bool,
 }
 
+pub const LAUNCHER_AGENT_PROVIDER_FIELD_IDS: &[&str] = &[
+    "agent_decision_source",
+    "agent_provider_backend",
+    "agent_provider_contract",
+    "agent_provider_transport",
+    "agent_provider_url",
+    "agent_provider_auth_token",
+    "provider_auto_discover",
+    "agent_provider_connect_timeout_ms",
+    "agent_execution_lane",
+    "agent_provider_profile",
+];
+
+pub const AGENT_DECISION_SOURCE_BUILTIN_LLM: &str = "builtin_llm";
+pub const AGENT_DECISION_SOURCE_PROVIDER_BACKED: &str = "provider_backed";
+pub const AGENT_PROVIDER_BACKEND_LOCAL_BRIDGE: &str = "provider_local_bridge";
+pub const AGENT_PROVIDER_CONTRACT_WORLDSIM_V1: &str = "worldsim_provider_v1";
+pub const AGENT_PROVIDER_TRANSPORT_LOOPBACK_HTTP: &str = "loopback_http";
+pub const AGENT_PROVIDER_TRANSPORT_REMOTE_HTTPS: &str = "remote_https";
+pub const AGENT_PROVIDER_MODE_PROVIDER_LOOPBACK_HTTP_ALIAS: &str = "provider_loopback_http";
+pub const AGENT_PROVIDER_MODE_DIRECT_CONNECT_ALIAS: &str = "agent_direct_connect";
+pub const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
+pub const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: &str = "15000";
+pub const DEFAULT_AGENT_PROVIDER_PROFILE: &str = "oasis7_p0_low_freq_npc";
+pub const AGENT_EXECUTION_LANE_PLAYER_PARITY: &str = "player_parity";
+pub const AGENT_EXECUTION_LANE_HEADLESS_AGENT: &str = "headless_agent";
+
 const LAUNCHER_UI_FIELDS: &[LauncherUiField] = &[
     LauncherUiField {
         id: "deployment_mode",
@@ -418,5 +445,17 @@ mod tests {
         assert!(ids.contains("chain_storage_profile"));
         assert!(ids.contains("chain_replication_bootstrap_peers"));
         assert!(ids.contains("viewer_static_dir"));
+    }
+
+    #[test]
+    fn web_fields_expose_agent_provider_contract_fields() {
+        let ids: std::collections::BTreeSet<&str> =
+            launcher_ui_fields_for_web().map(|field| field.id).collect();
+        for field_id in LAUNCHER_AGENT_PROVIDER_FIELD_IDS {
+            assert!(
+                ids.contains(field_id),
+                "web schema must expose agent provider field `{field_id}`"
+            );
+        }
     }
 }

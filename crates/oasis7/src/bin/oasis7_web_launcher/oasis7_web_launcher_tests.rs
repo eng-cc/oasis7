@@ -16,7 +16,7 @@ use super::{
     validate_game_config, validate_game_config_with_launcher_bin, ChainP2pStatusSnapshot,
     ChainRecoverySnapshot, ChainRuntimeStatus, CliOptions, LauncherConfig, ProcessState,
     ServiceState, DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND, DEFAULT_LISTEN_BIND,
-    DEFAULT_SCENARIO,
+    DEFAULT_SCENARIO, LAUNCHER_AGENT_PROVIDER_FIELD_IDS,
 };
 use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_csv;
 use oasis7_proto::storage_profile::StorageProfile;
@@ -179,6 +179,238 @@ fn parse_options_forces_chain_disable_for_hosted_public_join() {
     assert!(!options.initial_config.chain_enabled);
 }
 
+fn arg_value(args: &[String], flag: &str) -> Option<String> {
+    args.windows(2)
+        .find(|window| window[0] == flag)
+        .map(|window| window[1].clone())
+}
+
+#[test]
+fn web_launcher_config_deserializes_agent_provider_fields() {
+    let config: LauncherConfig = serde_json::from_value(serde_json::json!({
+        "agent_decision_source": "agent_direct_connect",
+        "agent_provider_backend": "provider_local_bridge",
+        "agent_provider_contract": "worldsim_provider_v1",
+        "agent_provider_transport": "remote_https",
+        "agent_provider_url": "https://provider.example",
+        "agent_provider_auth_token": "secret-token",
+        "provider_auto_discover": false,
+        "agent_provider_connect_timeout_ms": "2500",
+        "agent_execution_lane": "headless",
+        "agent_provider_profile": "custom-profile"
+    }))
+    .expect("agent provider fields deserialize");
+
+    assert_eq!(config.agent_decision_source, "agent_direct_connect");
+    assert_eq!(config.agent_provider_backend, "provider_local_bridge");
+    assert_eq!(config.agent_provider_contract, "worldsim_provider_v1");
+    assert_eq!(config.agent_provider_transport, "remote_https");
+    assert_eq!(config.agent_provider_url, "https://provider.example");
+    assert_eq!(config.agent_provider_auth_token, "secret-token");
+    assert!(!config.provider_auto_discover);
+    assert_eq!(config.agent_provider_connect_timeout_ms, "2500");
+    assert_eq!(config.agent_execution_lane, "headless");
+    assert_eq!(config.agent_provider_profile, "custom-profile");
+}
+
+#[test]
+fn web_launcher_args_forward_agent_provider_fields() {
+    let config = LauncherConfig {
+        viewer_static_dir: ".".to_string(),
+        agent_decision_source: "agent_direct_connect".to_string(),
+        agent_provider_transport: "remote_https".to_string(),
+        agent_provider_url: "https://provider.example".to_string(),
+        agent_provider_auth_token: "secret-token".to_string(),
+        provider_auto_discover: false,
+        agent_provider_connect_timeout_ms: "2500".to_string(),
+        agent_execution_lane: "headless".to_string(),
+        agent_provider_profile: "custom-profile".to_string(),
+        ..LauncherConfig::default()
+    };
+    let args = build_launcher_args(&config).expect("args");
+
+    assert_eq!(
+        arg_value(&args, "--agent-decision-source").as_deref(),
+        Some("provider_backed")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-provider-backend").as_deref(),
+        Some("provider_local_bridge")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-provider-contract").as_deref(),
+        Some("worldsim_provider_v1")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-provider-transport").as_deref(),
+        Some("remote_https")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-provider-url").as_deref(),
+        Some("https://provider.example")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-provider-auth-token").as_deref(),
+        Some("secret-token")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-provider-connect-timeout-ms").as_deref(),
+        Some("2500")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-execution-lane").as_deref(),
+        Some("headless_agent")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-provider-profile").as_deref(),
+        Some("custom-profile")
+    );
+}
+
+#[test]
+fn web_launcher_rejects_invalid_provider_backed_subfields() {
+    for (field, config) in [
+        (
+            "backend",
+            LauncherConfig {
+                viewer_static_dir: ".".to_string(),
+                agent_decision_source: "provider_backed".to_string(),
+                agent_provider_backend: "remote_provider".to_string(),
+                ..LauncherConfig::default()
+            },
+        ),
+        (
+            "contract",
+            LauncherConfig {
+                viewer_static_dir: ".".to_string(),
+                agent_decision_source: "provider_backed".to_string(),
+                agent_provider_contract: "worldsim_provider_v2".to_string(),
+                ..LauncherConfig::default()
+            },
+        ),
+        (
+            "transport",
+            LauncherConfig {
+                viewer_static_dir: ".".to_string(),
+                agent_decision_source: "provider_backed".to_string(),
+                agent_provider_transport: "websocket".to_string(),
+                ..LauncherConfig::default()
+            },
+        ),
+    ] {
+        let issues = validate_game_config(&config);
+        assert!(
+            issues.iter().any(|issue| issue
+                == "agent provider mode must use a supported backend/contract/transport"),
+            "{field} should be rejected before launch: {issues:?}"
+        );
+        assert!(
+            build_launcher_args(&config).is_err(),
+            "{field} should not silently fall back to default provider args"
+        );
+    }
+}
+
+#[test]
+fn web_launcher_rejects_invalid_agent_decision_source_without_fallback() {
+    let config = LauncherConfig {
+        viewer_static_dir: ".".to_string(),
+        agent_decision_source: "unsupported_decision_source".to_string(),
+        ..LauncherConfig::default()
+    };
+
+    let issues = validate_game_config(&config);
+    assert!(
+        issues
+            .iter()
+            .any(|issue| issue == "agent decision source must be builtin_llm or provider_backed"),
+        "invalid decision source should be rejected before launch: {issues:?}"
+    );
+    assert!(
+        build_launcher_args(&config).is_err(),
+        "invalid decision source should not silently fall back to builtin_llm"
+    );
+}
+
+#[test]
+fn web_launcher_rejects_provider_url_that_violates_transport_policy() {
+    for (case, config) in [
+        (
+            "loopback_http_non_loopback",
+            LauncherConfig {
+                viewer_static_dir: ".".to_string(),
+                agent_decision_source: "provider_backed".to_string(),
+                agent_provider_transport: "loopback_http".to_string(),
+                agent_provider_url: "http://192.168.0.5:5841".to_string(),
+                provider_auto_discover: false,
+                ..LauncherConfig::default()
+            },
+        ),
+        (
+            "remote_https_loopback",
+            LauncherConfig {
+                viewer_static_dir: ".".to_string(),
+                agent_decision_source: "provider_backed".to_string(),
+                agent_provider_transport: "remote_https".to_string(),
+                agent_provider_url: "https://127.0.0.1:5841".to_string(),
+                provider_auto_discover: false,
+                ..LauncherConfig::default()
+            },
+        ),
+        (
+            "remote_https_http",
+            LauncherConfig {
+                viewer_static_dir: ".".to_string(),
+                agent_decision_source: "provider_backed".to_string(),
+                agent_provider_transport: "remote_https".to_string(),
+                agent_provider_url: "http://provider.example:5841".to_string(),
+                provider_auto_discover: false,
+                ..LauncherConfig::default()
+            },
+        ),
+    ] {
+        let issues = validate_game_config(&config);
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue == "agent provider URL is invalid for the selected transport"),
+            "{case} should reject provider URL before launch: {issues:?}"
+        );
+        assert!(
+            build_launcher_args(&config).is_err(),
+            "{case} should not forward an invalid provider URL"
+        );
+    }
+}
+
+#[test]
+fn web_schema_agent_provider_fields_have_config_and_arg_contract() {
+    let ids: std::collections::BTreeSet<&str> = oasis7_launcher_ui::launcher_ui_fields_for_web()
+        .map(|field| field.id)
+        .collect();
+    for field_id in LAUNCHER_AGENT_PROVIDER_FIELD_IDS {
+        assert!(ids.contains(field_id), "web schema missing `{field_id}`");
+    }
+
+    let config = LauncherConfig {
+        viewer_static_dir: ".".to_string(),
+        ..LauncherConfig::default()
+    };
+    let args = build_launcher_args(&config).expect("default args");
+    assert_eq!(
+        arg_value(&args, "--agent-decision-source").as_deref(),
+        Some("provider_backed")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-provider-url").as_deref(),
+        Some("http://127.0.0.1:5841")
+    );
+    assert_eq!(
+        arg_value(&args, "--agent-execution-lane").as_deref(),
+        Some("headless_agent")
+    );
+}
+
 #[test]
 fn parse_options_collects_repeat_validators() {
     let options = parse_options(
@@ -326,14 +558,20 @@ fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_on() {
     assert!(!args.contains(&"--chain-enable".to_string()));
 }
 
-#[test]
-fn build_chain_runtime_args_includes_chain_overrides_when_on() {
-    let config = LauncherConfig {
+fn internal_local_playtest_chain_config() -> LauncherConfig {
+    LauncherConfig {
         deployment_mode: "trusted_local_only".to_string(),
         viewer_static_dir: ".".to_string(),
         chain_enabled: true,
         chain_status_bind: "127.0.0.1:6121".to_string(),
         chain_node_id: "chain-a".to_string(),
+        ..LauncherConfig::default()
+    }
+}
+
+#[test]
+fn build_chain_runtime_args_includes_chain_overrides_for_internal_local_playtest() {
+    let config = LauncherConfig {
         chain_storage_profile: "soak_forensics".to_string(),
         chain_world_id: "live-chain-a".to_string(),
         chain_node_role: "storage".to_string(),
@@ -349,7 +587,7 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
         chain_pos_slot_clock_genesis_unix_ms: "1700000000000".to_string(),
         chain_pos_max_past_slot_lag: "32".to_string(),
         chain_node_validators: "chain-a:55,chain-b:45".to_string(),
-        ..LauncherConfig::default()
+        ..internal_local_playtest_chain_config()
     };
     let args = build_chain_runtime_args(&config).expect("args");
     assert!(args.contains(&"--status-bind".to_string()));
@@ -392,11 +630,6 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
 #[test]
 fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
     let config = LauncherConfig {
-        deployment_mode: "trusted_local_only".to_string(),
-        viewer_static_dir: ".".to_string(),
-        chain_enabled: true,
-        chain_status_bind: "127.0.0.1:6121".to_string(),
-        chain_node_id: "chain-a".to_string(),
         chain_network_tier_manifest: "/tmp/public-testnet.json".to_string(),
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
@@ -407,7 +640,7 @@ fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
         chain_pos_adaptive_tick_scheduler_enabled: true,
         chain_pos_slot_clock_genesis_unix_ms: "1700000000000".to_string(),
         chain_pos_max_past_slot_lag: "32".to_string(),
-        ..LauncherConfig::default()
+        ..internal_local_playtest_chain_config()
     };
     let args = build_chain_runtime_args(&config).expect("args");
     assert!(args.contains(&"--network-tier-manifest".to_string()));
@@ -420,15 +653,10 @@ fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
 #[test]
 fn build_chain_runtime_args_resolves_public_testnet_tier_manifest() {
     let config = LauncherConfig {
-        deployment_mode: "trusted_local_only".to_string(),
-        viewer_static_dir: ".".to_string(),
-        chain_enabled: true,
-        chain_status_bind: "127.0.0.1:6121".to_string(),
-        chain_node_id: "chain-a".to_string(),
         chain_network_tier: "public_testnet".to_string(),
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
-        ..LauncherConfig::default()
+        ..internal_local_playtest_chain_config()
     };
     let args = build_chain_runtime_args(&config).expect("args");
     let expected_manifest = repo_root_dir()
@@ -467,14 +695,10 @@ fn viewer_dev_dist_candidates_only_return_oasis7_path() {
 fn build_chain_runtime_args_supports_all_storage_profiles() {
     for expected in ["dev_local", "release_default", "soak_forensics"] {
         let config = LauncherConfig {
-            deployment_mode: "trusted_local_only".to_string(),
-            viewer_static_dir: ".".to_string(),
-            chain_enabled: true,
-            chain_status_bind: "127.0.0.1:6121".to_string(),
             chain_node_id: format!("chain-{expected}"),
             chain_storage_profile: expected.to_string(),
             chain_world_id: "live-chain-a".to_string(),
-            ..LauncherConfig::default()
+            ..internal_local_playtest_chain_config()
         };
         let args = build_chain_runtime_args(&config).expect("args");
         assert!(args.contains(&"--storage-profile".to_string()));

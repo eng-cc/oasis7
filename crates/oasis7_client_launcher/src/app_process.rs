@@ -1032,7 +1032,7 @@ fn http_request(
     path: &str,
     body: Option<&[u8]>,
 ) -> Result<(u16, Vec<u8>), String> {
-    let (host, port) = parse_http_base_url(base_url)?;
+    let (host, port) = parse_http_base_url(base_url, OASIS7_CLIENT_LAUNCHER_CONTROL_URL_ENV)?;
     let connect_host = normalize_host_for_connect(host.as_str());
     let socket_host = host_for_url(connect_host.as_str());
     let mut stream = TcpStream::connect(format!("{socket_host}:{port}"))
@@ -1093,26 +1093,4 @@ fn parse_http_response(bytes: &[u8]) -> Result<(u16, Vec<u8>), String> {
     };
 
     Ok((status_code, body))
-}
-
-fn parse_http_base_url(base_url: &str) -> Result<(String, u16), String> {
-    let mut raw = base_url.trim();
-    if let Some(stripped) = raw.strip_prefix("http://") {
-        raw = stripped;
-    }
-    raw = raw.trim_end_matches('/');
-    let authority = raw
-        .split('/')
-        .next()
-        .ok_or_else(|| format!("invalid control plane URL: {base_url}"))?
-        .trim();
-    if authority.is_empty() {
-        return Err(format!("invalid control plane URL: {base_url}"));
-    }
-
-    if authority.starts_with('[') || authority.contains(':') {
-        parse_host_port(authority, OASIS7_CLIENT_LAUNCHER_CONTROL_URL_ENV)
-    } else {
-        Ok((authority.to_string(), 80))
-    }
 }
