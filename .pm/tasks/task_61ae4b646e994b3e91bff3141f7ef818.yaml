@@ -10,6 +10,7 @@ source_refs:
   - AGENTS.md
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/world-runtime/project.md
 related_prd: []
 acceptance:
   - "Bounded wasm/repository-health review records scoped evidence and optimization opportunities in the task execution log."
