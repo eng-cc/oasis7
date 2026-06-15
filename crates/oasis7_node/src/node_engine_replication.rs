@@ -42,9 +42,14 @@ impl PosNodeEngine {
         let NodeError::Replication { reason } = err else {
             return false;
         };
-        let fetch_commit_route_error = reason.contains(REPLICATION_FETCH_COMMIT_PROTOCOL)
-            && (reason.contains("NetworkProtocolUnavailable")
-                || reason.contains("request failed: Timeout"));
+        let fetch_commit_route_error =
+            crate::network_bridge::replication_network_error_is_protocol_unavailable(
+                err,
+                REPLICATION_FETCH_COMMIT_PROTOCOL,
+            ) || crate::network_bridge::replication_network_error_is_timeout_protocol(
+                err,
+                REPLICATION_FETCH_COMMIT_PROTOCOL,
+            );
         let checkpoint_blob_missing = reason.contains("execution checkpoint blob not found hash=")
             || (reason.contains("gap sync height ")
                 && reason.contains(" blob not found for hash "));

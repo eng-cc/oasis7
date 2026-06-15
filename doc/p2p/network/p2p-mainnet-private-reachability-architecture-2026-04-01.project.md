@@ -53,7 +53,7 @@
   - `P2PARCH-4` 已落 peer capability substrate：peer record 现在可显式声明 `capability_lanes`，未声明时按 canonical `node_role` 自动回填默认 lane capability，保证 discovery/selection 面能平滑兼容旧 record；其中 `observer_light` 不再默认宣称 `sync/blob_state` 服务能力。
   - `P2PARCH-4` 已落 role-aware binding：runtime 会拒绝 `observer_light` 直接 publish consensus lane、服务 `sync/blob_state` data lane、或通过 `feedback_p2p` 订阅/发布 `blob_state` topic，以及 `relay` 请求或服务 data lane 这类明显越权的 lane 操作；replication fetch handler 注册也会受 `node_role_claim` gate 约束。
   - `P2PARCH-4` 已落 request peer subset：`fetch-commit/fetch-blob` 这类 req/resp 现在会优先筛选声明具备对应 lane capability 的 peer record，再发起 outbound request，避免继续对所有已连接 peer 一视同仁。
-  - `P2PARCH-5` 已落首个 peer-manager substrate：`oasis7_net` 现在会基于已发现 peer record 与 active transport path 计算本地 peer health snapshot，并对 `single-source active set`、IPv4 `/24`、relay-domain 与 relay budget 超限发出 `suspect` 信号；request peer 选择会优先选择 `active/candidate`、把 `suspect` 压到最后并直接排除 `blocked` peer。
+  - `P2PARCH-5` 已落首个 peer-manager substrate：`oasis7_net` 现在会基于已发现 peer record 与 active transport path 计算本地 peer health snapshot，并对 `single-source active set`、IPv4 `/24`、relay-domain 与 relay budget 超限发出 `suspect` 信号；request peer 选择会优先选择 `active/candidate`、把 `suspect` 压到最后并直接排除 hard-`blocked` peer，record-exchange-pending soft-`blocked` peer 只作为 bootstrap fallback。
   - `P2PARCH-5` 已把 discovery ingress 接上首轮 enforcement：`RoutingUpdated` / rendezvous registration 不再绕过 signed peer record 校验直接拨号；`suspect/blocked` peer 也不会提前占用 discovery dial dedupe，使后续 record 升级后仍可重新进入拨号决策。
   - `P2PARCH-5` 已把 quarantine 接到 active connection：已连接的 `suspect` 与已验证 hard-`blocked` peer 现在会被主动断连，且 `ConnectionClosed` / `OutgoingConnectionError` 不再对这些 peer 继续 failover 或 retry；同轮 health 统计会先剔除未准入 active peer，避免坏连接瞬时污染其他健康 peer。
   - `P2PARCH-5` 已把 `source_operator/source_asn` 接进 runtime 默认 peer record、peer manager 健康快照与调试面；active peer set 现在会对 operator/ASN 与 `/24`、relay-domain 一样执行正式多样性阈值，并把 `>25%` 记为 `suspect`、`>=50%` 升级为 hard-`blocked`。
@@ -146,7 +146,7 @@
 - 本轮已交付:
   - `PeerManagerPolicy` / `PeerManagerPeerHealth` / `PeerManagerHealthIssue` substrate：冻结 `candidate/active/suspect/blocked` health 状态与本地 fail signatures
   - `oasis7_net` libp2p worker 接线：基于 `discovery_sources + active transport path` 计算 peer health snapshot，并把 `single-source active set`、IPv4 `/24`、relay-domain 与 relay budget 超限标成 `suspect`
-  - request peer 健康优先级：req/resp 在 lane 过滤后会进一步优先选择 `active/candidate` peer，把 `suspect` 压到最后，并直接排除 `blocked`
+  - request peer 健康优先级：req/resp 在 lane 过滤后会进一步优先选择 `active/candidate` peer，把 `suspect` 压到最后，并直接排除 hard-`blocked`；record-exchange-pending soft-`blocked` 只在没有更健康候选时保留为 bootstrap fallback
   - discovery ingress enforcement：`RoutingUpdated` / rendezvous registration 不再对未校验地址做 speculative dial；只有 validated peer record 进入 `process_discovered_peer_record` 后，才会按 health 决定是否拨号
   - discovery dial dedupe 修正：`suspect/blocked` peer 不再提前写入 `dialed_discovery_addrs`，避免同地址在 record 升级为健康后失去首拨机会
   - active-set quarantine enforcement：已连接的 `suspect` 与已验证 hard-`blocked` peer 会被主动断连，并在 `ConnectionClosed` / `OutgoingConnectionError` 上抑制 failover / retry，避免 transport 状态机把 quarantined peer 立即拉回 active set

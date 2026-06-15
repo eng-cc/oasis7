@@ -102,6 +102,19 @@ fn high_replication_checkpoint_probe_continues_after_fetch_commit_timeout() {
 }
 
 #[test]
+fn high_replication_checkpoint_probe_continues_after_fetch_commit_route_unavailable() {
+    let err = NodeError::Replication {
+        reason:
+            "replication network route unavailable: /aw/node/replication/fetch-commit/1.0.0"
+                .to_string(),
+    };
+
+    assert!(PosNodeEngine::high_replication_checkpoint_probe_can_continue(
+        &err
+    ));
+}
+
+#[test]
 fn high_replication_checkpoint_probe_continues_after_missing_checkpoint_blob() {
     let blob_err = NodeError::Replication {
         reason: "execution checkpoint blob not found hash=missing-blob".to_string(),

@@ -823,6 +823,112 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
 }
 
 #[test]
+fn cached_peer_record_outbound_failure_retries_via_another_connected_peer() {
+    let mut swarm = super::super::swarm_behaviour::build_swarm(
+        &Keypair::generate_ed25519(),
+        false,
+        true,
+        std::time::Duration::from_secs(30),
+        super::super::wire_bytes::init_shared_wire_byte_counters(),
+    );
+    let target_peer_id = PeerId::random();
+    let first_proxy = PeerId::random();
+    let fallback_proxy = PeerId::random();
+    let local_peer_id = PeerId::random();
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_connected_peer_records = HashSet::new();
+    let mut connected_peer_record_cooldowns = HashMap::new();
+    let mut pending_cached_peer_records = HashSet::from([target_peer_id]);
+    let mut cached_peer_record_cooldowns = HashMap::from([(target_peer_id, i64::MAX)]);
+    let mut pending_cached_discovery_peers = HashSet::new();
+    let mut cached_discovery_peer_cooldowns = HashMap::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
+
+    super::super::discovery::handle_peer_record_outbound_failure(
+        &mut swarm,
+        super::super::discovery::PendingPeerRecordRequest::CachedPeerRecord {
+            ask_peer: first_proxy,
+            peer_id: target_peer_id,
+            tried_proxies: vec![first_proxy],
+        },
+        &mut pending_peer_record_requests,
+        &mut pending_connected_peer_records,
+        &mut connected_peer_record_cooldowns,
+        &mut pending_cached_peer_records,
+        &mut cached_peer_record_cooldowns,
+        &mut pending_cached_discovery_peers,
+        &mut cached_discovery_peer_cooldowns,
+        &[first_proxy, fallback_proxy],
+        &traffic_metrics,
+        local_peer_id,
+    );
+
+    assert_eq!(pending_peer_record_requests.len(), 1);
+    assert!(pending_cached_peer_records.contains(&target_peer_id));
+    assert!(cached_peer_record_cooldowns.contains_key(&target_peer_id));
+    let retried = pending_peer_record_requests
+        .values()
+        .next()
+        .expect("retried cached peer record request");
+    assert!(matches!(
+        retried,
+        super::super::discovery::PendingPeerRecordRequest::CachedPeerRecord {
+            ask_peer,
+            peer_id,
+            tried_proxies
+        } if *ask_peer == fallback_proxy
+            && *peer_id == target_peer_id
+            && *tried_proxies == vec![first_proxy, fallback_proxy]
+    ));
+}
+
+#[test]
+fn cached_peer_record_outbound_failure_clears_cooldown_when_proxy_sweep_is_exhausted() {
+    let mut swarm = super::super::swarm_behaviour::build_swarm(
+        &Keypair::generate_ed25519(),
+        false,
+        true,
+        std::time::Duration::from_secs(30),
+        super::super::wire_bytes::init_shared_wire_byte_counters(),
+    );
+    let target_peer_id = PeerId::random();
+    let first_proxy = PeerId::random();
+    let fallback_proxy = PeerId::random();
+    let local_peer_id = PeerId::random();
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_connected_peer_records = HashSet::new();
+    let mut connected_peer_record_cooldowns = HashMap::new();
+    let mut pending_cached_peer_records = HashSet::from([target_peer_id]);
+    let mut cached_peer_record_cooldowns = HashMap::from([(target_peer_id, i64::MAX)]);
+    let mut pending_cached_discovery_peers = HashSet::new();
+    let mut cached_discovery_peer_cooldowns = HashMap::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
+
+    super::super::discovery::handle_peer_record_outbound_failure(
+        &mut swarm,
+        super::super::discovery::PendingPeerRecordRequest::CachedPeerRecord {
+            ask_peer: fallback_proxy,
+            peer_id: target_peer_id,
+            tried_proxies: vec![first_proxy, fallback_proxy],
+        },
+        &mut pending_peer_record_requests,
+        &mut pending_connected_peer_records,
+        &mut connected_peer_record_cooldowns,
+        &mut pending_cached_peer_records,
+        &mut cached_peer_record_cooldowns,
+        &mut pending_cached_discovery_peers,
+        &mut cached_discovery_peer_cooldowns,
+        &[first_proxy, fallback_proxy],
+        &traffic_metrics,
+        local_peer_id,
+    );
+
+    assert!(pending_peer_record_requests.is_empty());
+    assert!(!pending_cached_peer_records.contains(&target_peer_id));
+    assert!(!cached_peer_record_cooldowns.contains_key(&target_peer_id));
+}
+
+#[test]
 fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
     let mut swarm = super::super::swarm_behaviour::build_swarm(
         &Keypair::generate_ed25519(),

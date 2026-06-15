@@ -133,7 +133,7 @@ impl Libp2pNetwork {
     }
 }
 
-fn peer_health_is_request_blocked(health: &PeerManagerPeerHealth) -> bool {
+fn peer_health_is_hard_request_blocked(health: &PeerManagerPeerHealth) -> bool {
     matches!(health.status, PeerManagerHealthStatus::Blocked)
         && !health.issues.is_empty()
         && !health
@@ -167,32 +167,32 @@ fn peer_health_issue_is_record_exchange_pending(issue: &PeerManagerHealthIssue) 
 fn blocked_and_soft_deprioritized_peers(
     peer_healths: &HashMap<String, PeerManagerPeerHealth>,
 ) -> (HashSet<PeerId>, HashSet<PeerId>) {
-    let mut blocked_peers = HashSet::new();
+    let mut hard_blocked_peers = HashSet::new();
     let mut soft_deprioritized_peers = HashSet::new();
     for health in peer_healths.values() {
         let Ok(peer_id) = health.peer_id.parse::<PeerId>() else {
             continue;
         };
-        if peer_health_is_request_blocked(health) {
-            blocked_peers.insert(peer_id);
+        if peer_health_is_hard_request_blocked(health) {
+            hard_blocked_peers.insert(peer_id);
         }
         if peer_health_is_soft_deprioritized(health) {
             soft_deprioritized_peers.insert(peer_id);
         }
     }
-    (blocked_peers, soft_deprioritized_peers)
+    (hard_blocked_peers, soft_deprioritized_peers)
 }
 
 fn request_candidate_peers_from_healths(
     peers: Vec<PeerId>,
-    blocked_peers: &HashSet<PeerId>,
+    hard_blocked_peers: &HashSet<PeerId>,
     soft_deprioritized_peers: &HashSet<PeerId>,
 ) -> Vec<PeerId> {
     let preferred = peers
         .iter()
         .copied()
         .filter(|peer_id| {
-            !blocked_peers.contains(peer_id) && !soft_deprioritized_peers.contains(peer_id)
+            !hard_blocked_peers.contains(peer_id) && !soft_deprioritized_peers.contains(peer_id)
         })
         .collect::<Vec<_>>();
     if !preferred.is_empty() {
@@ -200,13 +200,13 @@ fn request_candidate_peers_from_healths(
     }
     peers
         .into_iter()
-        .filter(|peer_id| !blocked_peers.contains(peer_id))
+        .filter(|peer_id| !hard_blocked_peers.contains(peer_id))
         .collect()
 }
 
 fn active_transport_peers_from_healths(
     peer_healths: &HashMap<String, PeerManagerPeerHealth>,
-    blocked_peers: &HashSet<PeerId>,
+    hard_blocked_peers: &HashSet<PeerId>,
     soft_deprioritized_peers: &HashSet<PeerId>,
 ) -> Vec<PeerId> {
     let peers = peer_healths
@@ -215,7 +215,7 @@ fn active_transport_peers_from_healths(
         .filter_map(|health| health.peer_id.parse::<PeerId>().ok())
         .collect();
     let peers = dedup_sorted_peers(peers);
-    request_candidate_peers_from_healths(peers, blocked_peers, soft_deprioritized_peers)
+    request_candidate_peers_from_healths(peers, hard_blocked_peers, soft_deprioritized_peers)
 }
 
 fn connected_or_active_transport_peers_from_healths(
@@ -223,11 +223,11 @@ fn connected_or_active_transport_peers_from_healths(
     peer_healths: &HashMap<String, PeerManagerPeerHealth>,
 ) -> Vec<PeerId> {
     let connected_peers = dedup_sorted_peers(connected_peers);
-    let (blocked_peers, soft_deprioritized_peers) =
+    let (hard_blocked_peers, soft_deprioritized_peers) =
         blocked_and_soft_deprioritized_peers(peer_healths);
     let admissible_connected_peers = request_candidate_peers_from_healths(
         connected_peers.clone(),
-        &blocked_peers,
+        &hard_blocked_peers,
         &soft_deprioritized_peers,
     );
     if !admissible_connected_peers.is_empty() {
@@ -236,7 +236,11 @@ fn connected_or_active_transport_peers_from_healths(
     if !connected_peers.is_empty() {
         return Vec::new();
     }
-    active_transport_peers_from_healths(peer_healths, &blocked_peers, &soft_deprioritized_peers)
+    active_transport_peers_from_healths(
+        peer_healths,
+        &hard_blocked_peers,
+        &soft_deprioritized_peers,
+    )
 }
 
 pub(super) fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
