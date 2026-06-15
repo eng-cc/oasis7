@@ -1036,3 +1036,6 @@ fn public_snapshot_from_state(
 #[cfg(test)]
 #[path = "oasis7_web_launcher/oasis7_web_launcher_tests.rs"]
 mod oasis7_web_launcher_tests;
+#[cfg(test)]
+#[path = "oasis7_web_launcher/provider_contract_tests.rs"]
+mod provider_contract_tests;
