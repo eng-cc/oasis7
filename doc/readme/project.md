@@ -6,6 +6,7 @@
 - 当前无未完成主项目任务；后续若继续扩展主站白皮书页内容、站点内中英专题页、奖励台账或渠道运营素材，应新开独立 task 并回写对应 topic project。
 
 ### 最近完成（保留一跳 Trace）
+- [x] module-project-log-slimming (PRD-ENGINEERING-030) [test_tier_required]: 压缩 readme 主项目页历史流水为当前/最近任务索引与历史追溯入口，保留模块状态和一跳 task trace。 Trace: .pm/tasks/task_49ef9270afc646d98d4a8386c0888eab.yaml
 - [x] game-positioning-alignment (PRD-README-046) [test_tier_required]: 对齐根 README、world-rule 与站点首页中英首页公开定位，收口为“文明模拟游戏”。 Trace: .pm/tasks/task_774fd50ebd6d4c53bc94592dbe8554cc.yaml
 - [x] xiaohongshu-token-usage-post-pack (PRD-README-047) [test_tier_required]: 补齐“项目累计 token 用量”素材包与单图封面。 Trace: .pm/tasks/task_79a3b9140bb54e73984e9893485614e7.yaml
 - [x] whitepaper-style-overview (PRD-README-048) [test_tier_required]: 新增白皮书式项目总览并接入根 README 与 readme/governance 导航。 Trace: .pm/tasks/task_5963ea33d3854bef802154b2996bea89.yaml
