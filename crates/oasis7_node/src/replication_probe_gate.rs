@@ -1,6 +1,8 @@
 use super::*;
 
 const REPLICATION_FETCH_BLOB_CHUNK_BYTES: usize = 2 * 1024 * 1024;
+const STORAGE_CHALLENGE_FETCH_BLOB_REQUEST_TIMEOUT_MS: u64 = 2_000;
+const STORAGE_CHALLENGE_FETCH_BLOB_RETRY_BUDGET_MS: u64 = 3_000;
 
 impl PosNodeEngine {
     pub(super) fn maybe_hold_proposal_for_replication_successor_probe(
@@ -109,12 +111,13 @@ impl PosNodeEngine {
     }
 }
 
-fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
+pub(super) fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
     let NodeError::Replication { reason } = err else {
         return false;
     };
     reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
         || reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
+        || reason.starts_with("blob fetch routes exhausted without response")
         || (reason.contains("ErrUnsupported")
             && reason.contains(super::replication::REPLICATION_FETCH_BLOB_PROTOCOL))
 }
@@ -124,6 +127,10 @@ pub(super) fn replication_request_waitable_connection_gap(err: &NodeError) -> bo
         return false;
     };
     reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
+        || (reason.contains(super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL)
+            && (reason
+                .starts_with(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
+                || reason.contains("request budget exhausted")))
 }
 
 fn replication_successor_probe_fetch_commit_unavailable(err: &NodeError) -> bool {
@@ -191,6 +198,44 @@ pub(super) fn request_fetch_blob_with_route_fallback(
     request: &FetchBlobRequest,
     provider_ids: Option<&[String]>,
 ) -> Result<FetchBlobResponse, NodeError> {
+    request_fetch_blob_with_route_fallback_policy(
+        endpoint,
+        world_id,
+        content_hash,
+        request,
+        provider_ids,
+        true,
+        true,
+    )
+}
+
+pub(super) fn request_fetch_blob_with_storage_challenge_routes(
+    endpoint: &ReplicationNetworkEndpoint,
+    world_id: &str,
+    content_hash: &str,
+    request: &FetchBlobRequest,
+    provider_ids: Option<&[String]>,
+) -> Result<FetchBlobResponse, NodeError> {
+    request_fetch_blob_with_route_fallback_policy(
+        endpoint,
+        world_id,
+        content_hash,
+        request,
+        provider_ids,
+        false,
+        false,
+    )
+}
+
+fn request_fetch_blob_with_route_fallback_policy(
+    endpoint: &ReplicationNetworkEndpoint,
+    world_id: &str,
+    content_hash: &str,
+    request: &FetchBlobRequest,
+    provider_ids: Option<&[String]>,
+    allow_generic_route: bool,
+    allow_connected_peer_fallback: bool,
+) -> Result<FetchBlobResponse, NodeError> {
     let mut offset = 0usize;
     let mut assembled = Vec::new();
 
@@ -204,6 +249,8 @@ pub(super) fn request_fetch_blob_with_route_fallback(
             content_hash,
             &chunk_request,
             provider_ids,
+            allow_generic_route,
+            allow_connected_peer_fallback,
         )?;
         if !response.found {
             return Ok(response);
@@ -250,6 +297,8 @@ fn request_fetch_blob_chunk_with_route_fallback(
     content_hash: &str,
     request: &FetchBlobRequest,
     provider_ids: Option<&[String]>,
+    allow_generic_route: bool,
+    allow_connected_peer_fallback: bool,
 ) -> Result<FetchBlobResponse, NodeError> {
     let mut last_not_found: Option<FetchBlobResponse> = None;
     let mut last_retryable_error: Option<NodeError> = None;
@@ -262,6 +311,58 @@ fn request_fetch_blob_chunk_with_route_fallback(
                 continue;
             }
             let provider_route = [provider_id.to_string()];
+            match endpoint
+                .request_json_with_providers_budget::<FetchBlobRequest, FetchBlobResponse>(
+                    REPLICATION_FETCH_BLOB_PROTOCOL,
+                    request,
+                    provider_route.as_slice(),
+                    STORAGE_CHALLENGE_FETCH_BLOB_REQUEST_TIMEOUT_MS,
+                    STORAGE_CHALLENGE_FETCH_BLOB_RETRY_BUDGET_MS,
+                ) {
+                Ok(response) => {
+                    if response.found {
+                        return Ok(response);
+                    }
+                    last_not_found = Some(response);
+                }
+                Err(err) if should_fallback_provider_aware_replication_request(&err) => {
+                    last_retryable_error = Some(err);
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
+    let mut generic_attempts = 0usize;
+    if allow_generic_route && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
+        match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
+            REPLICATION_FETCH_BLOB_PROTOCOL,
+            request,
+        ) {
+            Ok(response) => {
+                if response.found {
+                    return Ok(response);
+                }
+                last_not_found = Some(response);
+            }
+            Err(err) if should_fallback_provider_aware_replication_request(&err) => {
+                last_retryable_error = Some(err);
+            }
+            Err(err) => return Err(err),
+        }
+        generic_attempts += 1;
+    }
+
+    if allow_connected_peer_fallback {
+        let mut connected_peer_ids = endpoint.connected_peer_ids();
+        connected_peer_ids.sort();
+        connected_peer_ids.dedup();
+        for peer_id in connected_peer_ids {
+            let peer_id = peer_id.trim();
+            if peer_id.is_empty() || !attempted_provider_ids.insert(peer_id.to_string()) {
+                continue;
+            }
+            let provider_route = [peer_id.to_string()];
             match endpoint.request_json_with_providers::<FetchBlobRequest, FetchBlobResponse>(
                 REPLICATION_FETCH_BLOB_PROTOCOL,
                 request,
@@ -281,54 +382,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         }
     }
 
-    let mut generic_attempts = 0usize;
-    if generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
-        match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
-            REPLICATION_FETCH_BLOB_PROTOCOL,
-            request,
-        ) {
-            Ok(response) => {
-                if response.found {
-                    return Ok(response);
-                }
-                last_not_found = Some(response);
-            }
-            Err(err) if should_fallback_provider_aware_replication_request(&err) => {
-                last_retryable_error = Some(err);
-            }
-            Err(err) => return Err(err),
-        }
-        generic_attempts += 1;
-    }
-
-    let mut connected_peer_ids = endpoint.connected_peer_ids();
-    connected_peer_ids.sort();
-    connected_peer_ids.dedup();
-    for peer_id in connected_peer_ids {
-        let peer_id = peer_id.trim();
-        if peer_id.is_empty() || !attempted_provider_ids.insert(peer_id.to_string()) {
-            continue;
-        }
-        let provider_route = [peer_id.to_string()];
-        match endpoint.request_json_with_providers::<FetchBlobRequest, FetchBlobResponse>(
-            REPLICATION_FETCH_BLOB_PROTOCOL,
-            request,
-            provider_route.as_slice(),
-        ) {
-            Ok(response) => {
-                if response.found {
-                    return Ok(response);
-                }
-                last_not_found = Some(response);
-            }
-            Err(err) if should_fallback_provider_aware_replication_request(&err) => {
-                last_retryable_error = Some(err);
-            }
-            Err(err) => return Err(err),
-        }
-    }
-
-    while generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
+    while allow_generic_route && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
         match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
             REPLICATION_FETCH_BLOB_PROTOCOL,
             request,

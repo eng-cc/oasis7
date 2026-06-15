@@ -326,7 +326,10 @@ impl PosNodeEngine {
                 ),
             });
         }
-        endpoint.publish_local_content_provider(world_id, message.record.content_hash.as_str())?;
+        endpoint.publish_local_content_provider_best_effort(
+            world_id,
+            message.record.content_hash.as_str(),
+        );
         Ok(())
     }
 
