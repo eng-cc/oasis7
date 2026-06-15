@@ -36,6 +36,12 @@ pub(crate) const REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX: &str =
 pub(crate) const REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX: &str =
     "replication network route unavailable: ";
 const FETCH_COMMIT_GENERIC_ROUTE_ATTEMPTS: usize = 4;
+const GAP_SYNC_FETCH_COMMIT_REQUEST_TIMEOUT_MS: u64 = 1_500;
+const GAP_SYNC_FETCH_COMMIT_RETRY_BUDGET_MS: u64 = 3_000;
+const GAP_SYNC_FETCH_COMMIT_MAX_PROVIDER_ROUTES_PER_POLL: usize = 2;
+const GAP_SYNC_FETCH_HEAD_REQUEST_TIMEOUT_MS: u64 = 1_500;
+const GAP_SYNC_FETCH_HEAD_RETRY_BUDGET_MS: u64 = 3_000;
+const GAP_SYNC_FETCH_HEAD_MAX_PROVIDER_ROUTES_PER_POLL: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FetchCommitSuccessCacheKey {
@@ -385,17 +391,27 @@ impl ReplicationNetworkEndpoint {
             self.maybe_update_best_peer_head(
                 world_id,
                 &mut best_head,
-                self.request_json(REPLICATION_GET_HEAD_PROTOCOL, &request),
+                self.request_json_budget(
+                    REPLICATION_GET_HEAD_PROTOCOL,
+                    &request,
+                    GAP_SYNC_FETCH_HEAD_REQUEST_TIMEOUT_MS,
+                    GAP_SYNC_FETCH_HEAD_RETRY_BUDGET_MS,
+                ),
             )?;
         } else {
-            for peer_id in connected_peer_ids {
+            for peer_id in connected_peer_ids
+                .into_iter()
+                .take(GAP_SYNC_FETCH_HEAD_MAX_PROVIDER_ROUTES_PER_POLL)
+            {
                 self.maybe_update_best_peer_head(
                     world_id,
                     &mut best_head,
-                    self.request_json_with_providers(
+                    self.request_json_with_providers_budget(
                         REPLICATION_GET_HEAD_PROTOCOL,
                         &request,
                         std::slice::from_ref(&peer_id),
+                        GAP_SYNC_FETCH_HEAD_REQUEST_TIMEOUT_MS,
+                        GAP_SYNC_FETCH_HEAD_RETRY_BUDGET_MS,
                     ),
                 )?;
             }
@@ -527,10 +543,13 @@ impl ReplicationNetworkEndpoint {
         }
         let mut last_err = None;
         let mut route_events = Vec::new();
-        let mut response = match self.request_json::<FetchCommitRequest, FetchCommitResponse>(
-            REPLICATION_FETCH_COMMIT_PROTOCOL,
-            request,
-        ) {
+        let mut response = match self
+            .request_json_budget::<FetchCommitRequest, FetchCommitResponse>(
+                REPLICATION_FETCH_COMMIT_PROTOCOL,
+                request,
+                GAP_SYNC_FETCH_COMMIT_REQUEST_TIMEOUT_MS,
+                GAP_SYNC_FETCH_COMMIT_RETRY_BUDGET_MS,
+            ) {
             Ok(response) => {
                 route_events.push(format!("generic:found={}", response.found));
                 response
@@ -549,13 +568,17 @@ impl ReplicationNetworkEndpoint {
             peer_ids.sort();
             peer_ids.dedup();
             peer_ids.retain(|peer_id| !peer_id.trim().is_empty());
+            peer_ids.truncate(GAP_SYNC_FETCH_COMMIT_MAX_PROVIDER_ROUTES_PER_POLL);
             for peer_id in peer_ids {
                 let provider_route = [peer_id.clone()];
-                match self.request_json_with_providers::<FetchCommitRequest, FetchCommitResponse>(
-                    REPLICATION_FETCH_COMMIT_PROTOCOL,
-                    request,
-                    provider_route.as_slice(),
-                ) {
+                match self
+                    .request_json_with_providers_budget::<FetchCommitRequest, FetchCommitResponse>(
+                        REPLICATION_FETCH_COMMIT_PROTOCOL,
+                        request,
+                        provider_route.as_slice(),
+                        GAP_SYNC_FETCH_COMMIT_REQUEST_TIMEOUT_MS,
+                        GAP_SYNC_FETCH_COMMIT_RETRY_BUDGET_MS,
+                    ) {
                     Ok(candidate) => {
                         route_events.push(format!("peer:{}:found={}", peer_id, candidate.found));
                         if candidate.found {
@@ -582,9 +605,11 @@ impl ReplicationNetworkEndpoint {
                 if response.found {
                     break;
                 }
-                match self.request_json::<FetchCommitRequest, FetchCommitResponse>(
+                match self.request_json_budget::<FetchCommitRequest, FetchCommitResponse>(
                     REPLICATION_FETCH_COMMIT_PROTOCOL,
                     request,
+                    GAP_SYNC_FETCH_COMMIT_REQUEST_TIMEOUT_MS,
+                    GAP_SYNC_FETCH_COMMIT_RETRY_BUDGET_MS,
                 ) {
                     Ok(candidate) => {
                         route_events.push(format!("generic_retry:found={}", candidate.found));
@@ -606,6 +631,43 @@ impl ReplicationNetworkEndpoint {
             });
         }
         Err(last_err.expect("gap-sync fetch-commit last_err should exist"))
+    }
+
+    pub(crate) fn request_json_budget<Req, Resp>(
+        &self,
+        protocol: &str,
+        request: &Req,
+        request_timeout_ms: u64,
+        retry_budget_ms: u64,
+    ) -> Result<Resp, NodeError>
+    where
+        Req: Serialize,
+        Resp: DeserializeOwned,
+    {
+        if let Some(lane) = classify_network_protocol(protocol) {
+            validate_lane_access(
+                &self.network_policy,
+                lane,
+                NetworkLaneOperation::Request,
+                protocol,
+            )?;
+        }
+        let payload = serde_json::to_vec(request).map_err(|err| NodeError::Replication {
+            reason: format!("serialize replication request {} failed: {}", protocol, err),
+        })?;
+        let response_bytes = self
+            .network
+            .request_with_providers_budget(
+                protocol,
+                payload.as_slice(),
+                &[],
+                request_timeout_ms,
+                retry_budget_ms,
+            )
+            .map_err(network_err)?;
+        serde_json::from_slice::<Resp>(&response_bytes).map_err(|err| NodeError::Replication {
+            reason: format!("decode replication response {} failed: {}", protocol, err),
+        })
     }
 
     pub(crate) fn remember_validated_fetch_commit_success(

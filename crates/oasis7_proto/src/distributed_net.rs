@@ -184,6 +184,9 @@ pub trait DistributedNetwork<E> {
         _request_timeout_ms: u64,
         _retry_budget_ms: u64,
     ) -> Result<Vec<u8>, E> {
+        if providers.is_empty() {
+            return self.request(protocol, payload);
+        }
         self.request_with_providers(protocol, payload, providers)
     }
     fn register_handler(
