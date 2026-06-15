@@ -9,6 +9,7 @@ source_signal: null
 source_refs:
   - AGENTS.md
 doc_refs:
+  - doc/readme/project.md
   - doc/engineering/workflow/source-of-truth.md
 related_prd: []
 acceptance:
