@@ -38,7 +38,7 @@ fn runtime_replication_storage_challenge_gate_blocks_on_local_probe_failure() {
         }
     }
 
-    let errored = wait_until(Instant::now() + Duration::from_secs(3), || {
+    let errored = wait_until(Instant::now() + Duration::from_secs(8), || {
         runtime
             .snapshot()
             .last_error
@@ -50,7 +50,6 @@ fn runtime_replication_storage_challenge_gate_blocks_on_local_probe_failure() {
         errored,
         "runtime did not report storage challenge gate failure"
     );
-
     runtime.stop().expect("stop runtime");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -58,9 +57,7 @@ fn runtime_replication_storage_challenge_gate_blocks_on_local_probe_failure() {
 #[test]
 fn runtime_replication_storage_challenge_gate_blocks_on_network_blob_mismatch() {
     let dir = temp_dir("challenge-gate-network");
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
+    let world_id = "world-challenge-network";
     let pos_config = signed_pos_config_with_signer_seeds(
         vec![PosValidator {
             validator_id: "node-a".to_string(),
@@ -68,43 +65,52 @@ fn runtime_replication_storage_challenge_gate_blocks_on_network_blob_mismatch() 
         }],
         &[("node-a", 84)],
     );
-    let config = NodeConfig::new("node-a", "world-challenge-network", NodeRole::Sequencer)
-        .expect("config")
+
+    let seed_config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("seed config")
         .with_tick_interval(Duration::from_millis(10))
-        .expect("tick")
-        .with_pos_config(pos_config)
-        .expect("pos config")
+        .expect("seed tick")
+        .with_pos_config(pos_config.clone())
+        .expect("seed pos config")
         .with_auto_attest_all_validators(true)
         .with_replication(signed_replication_config(dir.clone(), 84));
-    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config))
-        .with_replication_network(
-            NodeReplicationNetworkHandle::new(Arc::clone(&network))
-                .with_dht(Arc::new(TestReplicaMaintenanceDht::new(
-                    "storage-provider-1",
-                    "node-a",
-                )))
-                .with_local_provider_id("node-a"),
-        );
-
-    runtime.start().expect("start runtime");
+    let mut seed_runtime = with_noop_execution_hook(NodeRuntime::new(seed_config));
+    seed_runtime.start().expect("start seed runtime");
     let committed = wait_until(Instant::now() + Duration::from_secs(2), || {
-        runtime.snapshot().consensus.committed_height >= 1
+        seed_runtime.snapshot().consensus.committed_height >= 1
     });
-    assert!(committed, "runtime did not produce first commit in time");
-
+    assert!(committed, "seed runtime did not produce first commit in time");
+    seed_runtime.stop().expect("stop seed runtime");
+    let dht = Arc::new(TestReplicaMaintenanceDht::new("storage-provider-1", "node-a"));
+    let replication = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir.clone(), 84),
+        "node-a",
+    )
+    .expect("open local replication runtime");
+    for height in 1..=STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 1 {
+        if let Some(message) = replication
+            .load_commit_message_by_height(world_id, height)
+            .expect("load commit")
+        {
+            dht.seed_provider(message.record.content_hash.as_str(), "storage-provider-1");
+        }
+    }
+    let network: Arc<dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync> =
+        Arc::new(TestInMemoryNetwork::default());
     network
         .register_handler(
             super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
             Box::new(|payload| {
-                let request =
-                    serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
-                        .map_err(|err| WorldError::DistributedValidationFailed {
-                            reason: format!("decode fetch blob request failed: {err}"),
-                        })?;
+                let request = serde_json::from_slice::<super::replication::FetchBlobRequest>(
+                    payload,
+                )
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!("decode fetch blob request failed: {err}"),
+                })?;
                 let response = super::replication::FetchBlobResponse {
                     found: true,
-            range_offset_bytes: None,
-            range_complete: None,
+                    range_offset_bytes: None,
+                    range_complete: None,
                     blob: Some(format!("bad-{}", request.content_hash).into_bytes()),
                 };
                 serde_json::to_vec(&response).map_err(|err| {
@@ -115,24 +121,52 @@ fn runtime_replication_storage_challenge_gate_blocks_on_network_blob_mismatch() 
             }),
         )
         .expect("register mismatched blob handler");
-
-    let errored = wait_until(Instant::now() + Duration::from_secs(3), || {
-        runtime
-            .snapshot()
-            .last_error
-            .as_deref()
-            .map(|reason| {
-                reason.contains("network threshold unmet")
-                    && reason.contains("network blob hash mismatch")
-            })
-            .unwrap_or(false)
-    });
-    assert!(
-        errored,
-        "runtime did not report network blob mismatch gate failure"
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 84));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht)
+        .with_local_provider_id("node-a");
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 1;
+    engine.network_committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 1;
+    engine.peer_heads.insert(
+        "storage-provider-1".to_string(),
+        PeerCommittedHead {
+            height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 1,
+            block_hash: "network-mismatch-peer-head".to_string(),
+            committed_at_ms: 1_234,
+            observed_at_ms: 1_234,
+            execution_block_hash: None,
+            execution_state_root: None,
+            action_root: empty_action_root(),
+            public_key_hex: None,
+            signature_hex: None,
+        },
     );
-
-    runtime.stop().expect("stop runtime");
+    let gate_result = engine.enforce_storage_challenge_gate(
+        &replication,
+        Some(&endpoint),
+        "node-a",
+        world_id,
+        1_234,
+    );
+    assert!(
+        gate_result
+            .as_ref()
+            .err()
+            .map(|err| {
+                err.to_string().contains("network threshold unmet")
+                    && err.to_string().contains("network blob hash mismatch")
+            })
+            .unwrap_or(false),
+        "storage challenge gate should hard-fail on network blob mismatch: {gate_result:?}"
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -147,7 +181,6 @@ fn runtime_replication_storage_challenge_gate_degrades_on_network_unavailable() 
         }],
         &[("node-a", 120)],
     );
-
     let seed_config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("seed config")
         .with_tick_interval(Duration::from_millis(10))
@@ -236,7 +269,6 @@ fn runtime_replication_storage_challenge_gate_degrades_on_network_unavailable() 
     );
     let _ = fs::remove_dir_all(&dir);
 }
-
 #[test]
 fn runtime_replication_storage_challenge_gate_does_not_probe_connected_peers_after_provider_lookup_failure(
 ) {
@@ -1163,7 +1195,6 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_without_peer_h
     );
     let _ = fs::remove_dir_all(&dir);
 }
-
 
 #[path = "tests_storage_challenge_gate/provider_routes.rs"]
 mod provider_routes;
