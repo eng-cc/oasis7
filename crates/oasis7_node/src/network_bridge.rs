@@ -761,6 +761,14 @@ impl ReplicationNetworkEndpoint {
         handle.publish_local_content_provider(&self.network_policy, world_id, content_hash)
     }
 
+    pub(crate) fn publish_local_content_provider_best_effort(
+        &self,
+        world_id: &str,
+        content_hash: &str,
+    ) {
+        let _ = self.publish_local_content_provider(world_id, content_hash);
+    }
+
     fn cached_fetch_commit_success_response(
         &self,
         request: &FetchCommitRequest,

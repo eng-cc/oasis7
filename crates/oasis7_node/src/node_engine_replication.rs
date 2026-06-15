@@ -71,7 +71,8 @@ impl PosNodeEngine {
                     ),
                 });
             }
-            endpoint.publish_local_content_provider(world_id, content_hash)
+            endpoint.publish_local_content_provider_best_effort(world_id, content_hash);
+            Ok(())
         };
         publish_if_present(
             descriptor.manifest_ref.as_str(),
@@ -217,10 +218,10 @@ impl PosNodeEngine {
                         )?;
                     }
                 }
-                endpoint.publish_local_content_provider(
+                endpoint.publish_local_content_provider_best_effort(
                     world_id,
                     message.record.content_hash.as_str(),
-                )?;
+                );
                 endpoint.publish_replication(&message)?;
             } else if let Some(endpoint) = gossip_endpoint {
                 endpoint.broadcast_replication(&message)?;
@@ -490,10 +491,10 @@ impl PosNodeEngine {
             match replication_runtime.apply_remote_message(node_id, world_id, &message) {
                 Ok(()) => {
                     persisted_commit = true;
-                    endpoint.publish_local_content_provider(
+                    endpoint.publish_local_content_provider_best_effort(
                         world_id,
                         message.record.content_hash.as_str(),
-                    )?;
+                    );
                     if let Some(full_payload) =
                         parse_replication_commit_payload(message.payload.as_slice())
                     {
