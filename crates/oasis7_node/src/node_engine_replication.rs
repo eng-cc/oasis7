@@ -71,7 +71,8 @@ impl PosNodeEngine {
                     ),
                 });
             }
-            endpoint.publish_local_content_provider(world_id, content_hash)
+            endpoint.publish_local_content_provider_best_effort(world_id, content_hash);
+            Ok(())
         };
         publish_if_present(
             descriptor.manifest_ref.as_str(),
@@ -217,10 +218,10 @@ impl PosNodeEngine {
                         )?;
                     }
                 }
-                endpoint.publish_local_content_provider(
+                endpoint.publish_local_content_provider_best_effort(
                     world_id,
                     message.record.content_hash.as_str(),
-                )?;
+                );
                 endpoint.publish_replication(&message)?;
             } else if let Some(endpoint) = gossip_endpoint {
                 endpoint.broadcast_replication(&message)?;
@@ -260,9 +261,13 @@ impl PosNodeEngine {
             return Ok(());
         }
         self.prune_storage_challenge_success_cache();
+        if self.storage_challenge_network_probe_in_cooldown(now_ms) {
+            return Ok(());
+        }
         let primary_samples = replication
             .recent_replicated_content_refs(world_id, STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK)?;
         if primary_samples.is_empty() {
+            self.clear_storage_challenge_network_degraded();
             return Ok(());
         }
 
@@ -290,10 +295,12 @@ impl PosNodeEngine {
                 }
                 StorageChallengeSampleOutcome::Unavailable { reason } => {
                     failure_reasons.push(reason);
+                    break;
                 }
                 StorageChallengeSampleOutcome::HardFailure { reason } => {
                     hard_failure = true;
                     failure_reasons.push(reason);
+                    break;
                 }
             }
         }
@@ -305,10 +312,11 @@ impl PosNodeEngine {
             required_matches = required_matches.min(1);
         }
         if successful_matches >= required_matches {
+            self.clear_storage_challenge_network_degraded();
             return Ok(());
         }
 
-        if !hard_failure {
+        if !hard_failure && failure_reasons.is_empty() {
             let fallback_samples = replication.replicated_content_refs_from_height(
                 world_id,
                 self.storage_challenge_fallback_height,
@@ -320,6 +328,7 @@ impl PosNodeEngine {
                     successful_matches = successful_matches.saturating_add(1);
                     if successful_matches >= required_matches {
                         self.storage_challenge_fallback_height = height.saturating_add(1);
+                        self.clear_storage_challenge_network_degraded();
                         return Ok(());
                     }
                     continue;
@@ -337,20 +346,23 @@ impl PosNodeEngine {
                     }
                     StorageChallengeSampleOutcome::Unavailable { reason } => {
                         failure_reasons.push(reason);
+                        break;
                     }
                     StorageChallengeSampleOutcome::HardFailure { reason } => {
+                        hard_failure = true;
                         failure_reasons.push(reason);
                         break;
                     }
                 }
                 if successful_matches >= required_matches {
                     self.storage_challenge_fallback_height = height.saturating_add(1);
+                    self.clear_storage_challenge_network_degraded();
                     return Ok(());
                 }
             }
         }
 
-        if successful_matches < required_matches {
+        if hard_failure && successful_matches < required_matches {
             return Err(NodeError::Consensus {
                 reason: format!(
                     "storage challenge gate network threshold unmet: total_samples={} attempted_probes={} required_matches={} successful_matches={} reasons={:?}",
@@ -361,6 +373,16 @@ impl PosNodeEngine {
                     failure_reasons
                 ),
             });
+        }
+        if successful_matches < required_matches {
+            self.mark_storage_challenge_network_degraded(
+                now_ms,
+                required_matches,
+                successful_matches,
+                failure_reasons,
+            );
+        } else {
+            self.clear_storage_challenge_network_degraded();
         }
         Ok(())
     }
@@ -469,10 +491,10 @@ impl PosNodeEngine {
             match replication_runtime.apply_remote_message(node_id, world_id, &message) {
                 Ok(()) => {
                     persisted_commit = true;
-                    endpoint.publish_local_content_provider(
+                    endpoint.publish_local_content_provider_best_effort(
                         world_id,
                         message.record.content_hash.as_str(),
-                    )?;
+                    );
                     if let Some(full_payload) =
                         parse_replication_commit_payload(message.payload.as_slice())
                     {

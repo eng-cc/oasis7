@@ -1,0 +1,37 @@
+task_uid: task_8d92c7fdfbc742e3866ef1162faedd66
+title: "Check testnet node health"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-testnet-node-health-check
+execution_log_path: .pm/tasks/task_8d92c7fdfbc742e3866ef1162faedd66.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - scripts/p2p-real-env-observability-monitor.sh
+  - crates/oasis7_node/src/node_engine_replication.rs
+  - crates/oasis7_node/src/node_engine_storage_challenge.rs
+  - crates/oasis7_node/src/replication_probe_gate.rs
+  - crates/oasis7/src/bin/oasis7_chain_runtime/status_payload.rs
+  - .github/workflows/testnet-packages.yml
+  - scripts/p2p-public-testnet-package-node-upgrade.sh
+  - scripts/p2p-upgrade-preflight.sh
+doc_refs:
+  - doc/p2p/project.md
+related_prd: []
+acceptance:
+  - "Collect current testnet node health evidence without mutating node state."
+  - "Report per-node health status with timestamps and source commands."
+  - "Identify and fix the storage challenge gate root cause so retryable provider/DHT/fetch route unavailability degrades readiness instead of hard-blocking consensus."
+  - "Preserve deterministic hard failures for local blob corruption, malformed provider responses, and verified network blob mismatches."
+  - "Expose storage challenge network degradation in node status/readiness so operators can see not-ready state without treating it as liveness failure."
+  - "Align public-testnet preflight/rebuild/upgrade checks with the new readiness/degraded signal before PR packaging and redeploy."
+handoff_to: []
+updated_at: 2026-06-15T15:19:45+08:00
+last_started_at: 2026-06-15T11:56:29+08:00
+last_claim_type: task_complete
+last_verify_command: "cargo fmt -p oasis7_node -p oasis7 -- --check && git diff --check && ./scripts/cargo-dev.sh test -p oasis7_node storage_challenge_gate -- --nocapture && ./scripts/cargo-dev.sh test -p oasis7_node fetch_blob -- --nocapture"
+last_verified_at: 2026-06-15T15:19:44+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-15T15:19:45+08:00

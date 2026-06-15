@@ -16,13 +16,12 @@ use oasis7_proto::distributed_dht::{
     DistributedDht, MembershipDirectorySnapshot, PeerDiscoverySource, PeerRecord, ProviderRecord,
     SignedPeerRecord,
 };
-use oasis7_proto::distributed_net::{
-    DistributedNetwork as ProtoDistributedNetwork, NetworkSubscription,
-};
 use oasis7_proto::world_error::WorldError;
 
 use crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL;
 use crate::NodeError;
+
+mod net_impl;
 
 #[cfg(test)]
 use oasis7_net::{PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth};
@@ -527,8 +526,33 @@ impl Libp2pReplicationNetwork {
         protocol: &str,
         payload: &[u8],
         initial_peers: Vec<PeerId>,
+        refresh_peers: F,
+        no_connected_error: G,
+    ) -> Result<Vec<u8>, WorldError>
+    where
+        F: FnMut() -> Vec<PeerId>,
+        G: Fn() -> WorldError,
+    {
+        self.request_over_refreshed_peers_with_budget(
+            protocol,
+            payload,
+            initial_peers,
+            refresh_peers,
+            no_connected_error,
+            self.request_timeout_for_protocol(protocol),
+            self.request_retry_budget_for_protocol(protocol),
+        )
+    }
+
+    fn request_over_refreshed_peers_with_budget<F, G>(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        initial_peers: Vec<PeerId>,
         mut refresh_peers: F,
         no_connected_error: G,
+        request_timeout: Duration,
+        request_retry_budget: Duration,
     ) -> Result<Vec<u8>, WorldError>
     where
         F: FnMut() -> Vec<PeerId>,
@@ -538,8 +562,6 @@ impl Libp2pReplicationNetwork {
         let started_at = Instant::now();
         let mut last_error = None;
         let mut attempted_peers = HashSet::new();
-        let request_timeout = self.request_timeout_for_protocol(protocol);
-        let request_retry_budget = self.request_retry_budget_for_protocol(protocol);
 
         for attempt in 0..=REQUEST_CONNECTION_REFRESH_RETRIES {
             if started_at.elapsed() >= request_retry_budget {
@@ -691,128 +713,6 @@ pub fn derive_libp2p_identity_keypair(private_key_hex: &str) -> Result<Keypair, 
     Keypair::ed25519_from_bytes(private_key_bytes).map_err(|err| NodeError::InvalidConfig {
         reason: format!("failed to derive libp2p identity keypair: {err}"),
     })
-}
-
-impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
-    fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
-        self.inner.publish(topic, payload)
-    }
-
-    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
-        self.inner.subscribe(topic)
-    }
-
-    fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
-        let peers = self.wait_for_connected_peers();
-
-        if peers.is_empty() {
-            if self.allow_local_handler_fallback_when_no_peers {
-                return self.call_local_handler(protocol, payload);
-            }
-            if !self.inner.connected_peers().is_empty() {
-                return Err(WorldError::NetworkProtocolUnavailable {
-                    protocol: format!(
-                        "libp2p-replication no admissible connected peers for protocol {protocol}"
-                    ),
-                });
-            }
-            return Err(WorldError::NetworkProtocolUnavailable {
-                protocol: format!("libp2p-replication no connected peers for protocol {protocol}"),
-            });
-        }
-
-        self.request_over_refreshed_peers(
-            protocol,
-            payload,
-            peers,
-            || self.connected_peers_sorted(),
-            || WorldError::NetworkProtocolUnavailable {
-                protocol: format!("libp2p-replication no connected peers for protocol {protocol}"),
-            },
-        )
-    }
-
-    fn connected_peer_ids(&self) -> Vec<String> {
-        let mut peers = self
-            .connected_peers()
-            .into_iter()
-            .map(|peer_id| peer_id.to_string())
-            .collect::<Vec<_>>();
-        peers.sort();
-        peers.dedup();
-        peers
-    }
-
-    fn known_peer_ids(&self) -> Vec<String> {
-        let mut peers = self.connected_peer_ids();
-        peers.extend(
-            self.inner
-                .debug_peer_healths()
-                .into_iter()
-                .map(|health| health.peer_id),
-        );
-        peers.extend(
-            self.bootstrap_addrs_by_peer_id
-                .keys()
-                .map(PeerId::to_string),
-        );
-        peers.sort();
-        peers.dedup();
-        peers
-    }
-
-    fn request_with_providers(
-        &self,
-        protocol: &str,
-        payload: &[u8],
-        providers: &[String],
-    ) -> Result<Vec<u8>, WorldError> {
-        if providers.is_empty() {
-            return self.request(protocol, payload);
-        }
-
-        let ordered_provider_peers = self.wait_for_connected_provider_peers(providers);
-        if ordered_provider_peers.is_empty() {
-            return Err(WorldError::NetworkProtocolUnavailable {
-                protocol: format!(
-                    "libp2p-replication no connected providers for protocol {protocol}"
-                ),
-            });
-        }
-
-        self.request_over_refreshed_peers(
-            protocol,
-            payload,
-            ordered_provider_peers,
-            || self.collect_connected_provider_peers(providers),
-            || WorldError::NetworkProtocolUnavailable {
-                protocol: format!(
-                    "libp2p-replication no connected providers for protocol {protocol}"
-                ),
-            },
-        )
-    }
-
-    fn register_handler(
-        &self,
-        protocol: &str,
-        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
-    ) -> Result<(), WorldError> {
-        let handler: Handler = Arc::from(handler);
-        self.inner.register_handler(
-            protocol,
-            Box::new({
-                let handler = Arc::clone(&handler);
-                move |payload| handler(payload)
-            }),
-        )?;
-
-        self.handlers
-            .lock()
-            .expect("lock libp2p replication handlers")
-            .insert(protocol.to_string(), handler);
-        Ok(())
-    }
 }
 
 impl DistributedDht<WorldError> for Libp2pReplicationNetwork {

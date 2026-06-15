@@ -1,4 +1,5 @@
 use super::*;
+use crate::replication_probe_gate::should_fallback_provider_aware_replication_request;
 
 impl PosNodeEngine {
     pub(super) fn is_storage_challenge_success_cache_height_valid(
@@ -40,6 +41,39 @@ impl PosNodeEngine {
         self.recent_storage_challenge_successes
             .insert(content_hash.to_string(), self.committed_height);
     }
+
+    pub(super) fn clear_storage_challenge_network_degraded(&mut self) {
+        self.storage_challenge_network_degraded_height = None;
+        self.storage_challenge_network_degraded_reason = None;
+        self.storage_challenge_network_next_probe_after_ms = None;
+    }
+
+    pub(super) fn mark_storage_challenge_network_degraded(
+        &mut self,
+        now_ms: i64,
+        required_matches: usize,
+        successful_matches: usize,
+        failure_reasons: Vec<String>,
+    ) {
+        let latest_reason = failure_reasons
+            .last()
+            .cloned()
+            .unwrap_or_else(|| "storage challenge network unavailable".to_string());
+        self.storage_challenge_network_degraded_height = Some(self.committed_height);
+        self.storage_challenge_network_degraded_reason = Some(format!(
+            "storage challenge network degraded: required_matches={} successful_matches={} latest_reason={}",
+            required_matches, successful_matches, latest_reason
+        ));
+        self.storage_challenge_network_last_probe_at_ms = Some(now_ms);
+        self.storage_challenge_network_next_probe_after_ms =
+            Some(now_ms.saturating_add(STORAGE_CHALLENGE_NETWORK_RETRY_COOLDOWN_MS));
+    }
+
+    pub(super) fn storage_challenge_network_probe_in_cooldown(&self, now_ms: i64) -> bool {
+        self.storage_challenge_network_next_probe_after_ms
+            .map(|next_probe_after_ms| now_ms < next_probe_after_ms)
+            .unwrap_or(false)
+    }
 }
 
 pub(super) enum StorageChallengeSampleOutcome {
@@ -66,19 +100,19 @@ pub(super) fn evaluate_storage_challenge_sample(
         }
     };
     let fetch_blob_request = replication.build_fetch_blob_request(content_hash)?;
-    let mut provider_lookup_failure = None;
     let provider_lookup =
         match endpoint.lookup_provider_ids_for_content_hash(world_id, content_hash) {
             Ok(provider_ids) => provider_ids,
             Err(err) => {
-                provider_lookup_failure = Some(format!(
-                    "storage challenge gate provider lookup failed for hash {}: {:?}",
-                    content_hash, err
-                ));
-                None
+                return Ok(StorageChallengeSampleOutcome::Unavailable {
+                    reason: format!(
+                        "storage challenge gate provider lookup failed for hash {}: {:?}",
+                        content_hash, err
+                    ),
+                });
             }
         };
-    let response = match request_fetch_blob_with_route_fallback(
+    let response = match request_fetch_blob_with_storage_challenge_routes(
         endpoint,
         world_id,
         content_hash,
@@ -86,19 +120,20 @@ pub(super) fn evaluate_storage_challenge_sample(
         provider_lookup.as_deref(),
     ) {
         Ok(response) => response,
-        Err(err) => {
-            let reason = if let Some(provider_lookup_failure) = provider_lookup_failure {
-                format!(
-                    "{}; storage challenge gate network request failed for hash {}: {:?}",
-                    provider_lookup_failure, content_hash, err
-                )
-            } else {
-                format!(
-                    "storage challenge gate network request failed for hash {}: {:?}",
-                    content_hash, err
-                )
-            };
+        Err(err) if should_fallback_provider_aware_replication_request(&err) => {
+            let reason = format!(
+                "storage challenge gate network request failed for hash {}: {:?}",
+                content_hash, err
+            );
             return Ok(StorageChallengeSampleOutcome::Unavailable { reason });
+        }
+        Err(err) => {
+            return Ok(StorageChallengeSampleOutcome::HardFailure {
+                reason: format!(
+                    "storage challenge gate invalid network response for hash {}: {:?}",
+                    content_hash, err
+                ),
+            });
         }
     };
     if !response.found {

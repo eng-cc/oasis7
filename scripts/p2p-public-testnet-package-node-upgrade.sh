@@ -12,7 +12,9 @@ Usage:
     --run-id <github-actions-run-id> \
     [--artifact-ref <ref>] \
     [--systemd-service <name>] \
-    [--restart-service]
+    [--restart-service] \
+    [--post-restart-status-url <url>] \
+    [--post-restart-timeout-secs <secs>]
 
 Description:
   Upgrade an installed public testnet Linux node from a CI package bundle.
@@ -140,6 +142,8 @@ run_id=""
 artifact_ref=""
 systemd_service=""
 restart_service=0
+post_restart_status_url=""
+post_restart_timeout_secs=60
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -175,6 +179,14 @@ while [[ $# -gt 0 ]]; do
       restart_service=1
       shift
       ;;
+    --post-restart-status-url)
+      post_restart_status_url=${2:-}
+      shift 2
+      ;;
+    --post-restart-timeout-secs)
+      post_restart_timeout_secs=${2:-}
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -193,6 +205,12 @@ require_non_empty "--run-id" "$run_id"
 [[ -f "$bundle_tar" ]] || die "missing bundle tar: $bundle_tar"
 if [[ "$restart_service" -eq 1 ]]; then
   require_non_empty "--systemd-service" "$systemd_service"
+fi
+if [[ -n "$post_restart_status_url" && "$restart_service" -ne 1 ]]; then
+  die "--post-restart-status-url requires --restart-service"
+fi
+if [[ ! "$post_restart_timeout_secs" =~ ^[0-9]+$ || "$post_restart_timeout_secs" -le 0 ]]; then
+  die "--post-restart-timeout-secs must be a positive integer"
 fi
 
 node_root=$(abs_path "$node_root")
@@ -311,6 +329,39 @@ if [[ "$restart_service" -eq 1 ]]; then
   sleep 3
   systemctl is-active --quiet "$systemd_service"
   systemctl --no-pager --full status "$systemd_service" | sed -n '1,18p'
+  if [[ -n "$post_restart_status_url" ]]; then
+    deadline=$((SECONDS + post_restart_timeout_secs))
+    last_status=""
+    while (( SECONDS < deadline )); do
+      if status_json="$(curl -fsS --max-time 5 "$post_restart_status_url" 2>/dev/null)"; then
+        last_status="$status_json"
+        if jq -e '
+          .running == true
+          and (.last_error == null or .last_error == "null")
+          and (.readiness.status // null) == "ready"
+          and (.consensus.storage_challenge_network_degraded_height // null) == null
+          and ((.observability.storage_challenge_network_degraded // false) | not)
+        ' >/dev/null <<<"$status_json"; then
+          echo "post_restart_readiness=ready"
+          break
+        fi
+      fi
+      sleep 3
+    done
+    if [[ -z "$last_status" ]] || ! jq -e '
+      .running == true
+      and (.last_error == null or .last_error == "null")
+      and (.readiness.status // null) == "ready"
+      and (.consensus.storage_challenge_network_degraded_height // null) == null
+      and ((.observability.storage_challenge_network_degraded // false) | not)
+    ' >/dev/null <<<"$last_status"; then
+      echo "error: post-restart status did not become ready before timeout" >&2
+      if [[ -n "$last_status" ]]; then
+        jq -S '{running,last_error,readiness,consensus:{committed_height:.consensus.committed_height,storage_challenge_network_degraded_height:.consensus.storage_challenge_network_degraded_height,storage_challenge_network_degraded_reason:.consensus.storage_challenge_network_degraded_reason},observability:{storage_challenge_network_degraded:.observability.storage_challenge_network_degraded}}' <<<"$last_status" >&2 || true
+      fi
+      exit 1
+    fi
+  fi
 fi
 
 echo "upgraded $node_root to $package_version"
