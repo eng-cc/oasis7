@@ -15,6 +15,7 @@
   - SC-4: 输出必须机器可读，并附带 Markdown 摘要，方便 operator、QA、producer 共用同一份真值。
   - SC-5: 汇总逻辑具备 fixture 测试，不依赖真实 ECS 才能验证 summary contract。
   - SC-6: summary 必须直接输出模块级 `optimization_candidates`，避免 operator 还要手工二次阅读原始 status/traffic 数据才能判断优化方向。
+  - SC-7: `p2p_reachability` 模块必须能消费现有 `/v1/chain/status.observability` 的 bounded path summary，至少预留 selected path kind/age、path transition counters、active direct/hole-punched/relay mix、recent fallback reason 与 reachability confidence；这些字段是 operator summary，不是第二套网络健康真值。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -40,6 +41,7 @@
 | triad 完整监控总控 | `snapshot/host/traffic/wasm/report` 路径 | 一次执行串起全部子脚本 | `run -> artifacts_ready` | 默认同一 run dir 聚合 | 仅 operator 运行 |
 | merged summary | `overall.status`、per-node `alerts`、`modules.*`、`optimization_candidates` | 读取 snapshot/host/traffic/wasm/raw-status 并输出统一 JSON/MD | `inputs_ready -> merged` | snapshot claim 先定底线，resource alerts 与 module alerts 再叠加 | producer/QA/runtime 共用 |
 | 模块级拆分 | `host_runtime/consensus/observability/replication/storage/reward_runtime/transactions/wasm/traffic_control_plane/p2p_reachability` | 从 raw `status.json` 提取模块摘要 | `status_ready -> module_breakdown` | 每模块按独立阈值输出 `status/alerts` | operator/runtime 诊断共用 |
+| reachability path summary | `selected_path_kind/selected_path_age_ms/path_transition_counters/active_path_mix/recent_fallback_reason/reachability_confidence` | 从现有 status observability 消费 bounded path projection 并写入 `p2p_reachability` 模块 | `observed -> summarized -> alerted` | 只允许 bounded enums/counts/window summary；不导出 raw peer-id metric labels，不把 wire bytes 解释成 NIC-level overhead | operator/runtime/QA 共用；release claim 仍回到 mixed-topology gate |
 | optimization candidates | `severity/module/key/summary/evidence/suggested_optimizations` | 汇总热点信号并输出优化建议 | `module_breakdown -> optimization_candidates` | 结合 CPU/traffic/replication/consensus/WASM 等交叉信号 | runtime/producer 共用 |
 | fixture 回归 | host fixture / observability fixture / raw status fixture | shell test 调 summary helper | `fixture -> pass/fail` | assert JSON contract 关键字段 | CI / 本地回归可读 |
 - Acceptance Criteria:
@@ -51,6 +53,8 @@
   - AC-6: 监控体系必须保留 repo-owned artifacts，不依赖 Prometheus/OTel/外部 TSDB。
   - AC-7: `testing-manual.md` 必须给出 canonical 命令与产物路径。
   - AC-8: fixture 回归至少覆盖 host summary、merged summary 与 raw status module breakdown 三层。
+  - AC-9: reachability/path summary 若由 runtime 实现，merged summary 必须从 status truth 消费字段，而不是在 report helper 中重新推导 path truth；若 runtime 字段缺失，summary 必须显式标为 `not_reported` 或等价 bounded 状态。
+  - AC-10: triad observability 不能单独把 `relay_reserved`、`proxy_success` 或 `control_plane_bytes` 升级为 public-chain-grade reachability claim；这些 claim 必须引用 mixed-topology matrix、same-window evidence 与 pass-uplift decision。
 - Non-Goals:
   - 不在本阶段引入 Prometheus、Grafana、OpenTelemetry exporter。
   - 不在本阶段接入告警推送平台或长期时序库存储。

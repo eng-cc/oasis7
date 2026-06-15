@@ -399,6 +399,26 @@
     - `rg -n "validator_hidden|relay_only|signed peer record|AutoNAT|hole punch|relay reservation|gossip plane|blob-state plane|anti-eclipse|tree broadcast|committee direct" doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] iroh-inspired-reachability-doc-truth-alignment (PRD-P2P-024/PRD-P2P-025) [test_tier_required]: 将 iroh-inspired follow-up 的三项设计真值落盘：peer reachability contract normalization、path behavior matrix taxonomy、reachability/status observability operator summary；明确不引入 iroh 依赖、不替换 libp2p、不新增第二套 net health truth。 Trace: .pm/tasks/task_43a21163092541809de36036403d7c97.yaml
+  - 产物文件:
+    - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+    - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md`
+    - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md`
+    - `doc/p2p/node/node-triad-observability-stack-2026-04-23.prd.md`
+    - `doc/p2p/node/node-triad-observability-stack-2026-04-23.design.md`
+    - `doc/p2p/node/node-triad-observability-stack-2026-04-23.project.md`
+    - `testing-manual.md`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `doc/testing/project.md`
+  - 后续实现拆分:
+    - `qa_engineer`: matrix taxonomy fields in `scripts/p2p-mixed-topology-matrix.sh` / smoke。
+    - `runtime_engineer`: bounded status projection in `/v1/chain/status.observability` and triad summary consumption。
+    - `runtime_engineer`: internal peer reachability contract normalization in `oasis7_net` without replacing libp2p `Multiaddr`。
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PeerReachabilityContract|path behavior matrix|evidence_class|selected_path_kind|no-iroh|不引入 iroh|不替换 libp2p|not_reported" doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md doc/p2p/node/node-triad-observability-stack-2026-04-23.prd.md doc/p2p/node/node-triad-observability-stack-2026-04-23.design.md doc/p2p/node/node-triad-observability-stack-2026-04-23.project.md testing-manual.md doc/p2p/prd.md doc/p2p/project.md doc/testing/project.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-P2P-044 (PRD-P2P-001) [test_tier_required]: 修复 2026-04-03 p2p required CI 回归，拆分 `libp2p_net` 运行时 command loop / peer-manager runtime helpers 以恢复 Rust 文件体量门禁，并按当前 toolchain 回写 workspace rustfmt 输出，避免 `check-rust-file-size` 解锁后继续卡在 `cargo fmt --all --check`。
   - 产物文件:
     - `crates/oasis7_net/src/libp2p_net.rs`

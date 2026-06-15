@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
@@ -34,9 +35,40 @@ pub enum LiveTransportKind {
     RelayReserved,
 }
 
+impl LiveTransportKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Direct => "direct",
+            Self::HolePunched => "hole_punched",
+            Self::RelayReserved => "relay_reserved",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveTransportTransition {
+    pub from_kind: Option<LiveTransportKind>,
+    pub to_kind: Option<LiveTransportKind>,
+    pub at_unix_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LiveTransportTransitionCounters {
+    pub direct_to_hole_punched: u64,
+    pub direct_to_relay_reserved: u64,
+    pub hole_punched_to_direct: u64,
+    pub hole_punched_to_relay_reserved: u64,
+    pub relay_reserved_to_direct: u64,
+    pub relay_reserved_to_hole_punched: u64,
+    pub selected_kind_change_count: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Libp2pReachabilitySnapshot {
     pub active_transport_kind: Option<LiveTransportKind>,
+    pub active_transport_kind_since_unix_ms: Option<i64>,
+    pub last_transport_transition: Option<LiveTransportTransition>,
+    pub transport_transition_counters: LiveTransportTransitionCounters,
     pub active_direct_path_count: usize,
     pub active_hole_punch_path_count: usize,
     pub active_relay_path_count: usize,
@@ -52,6 +84,9 @@ impl Default for Libp2pReachabilitySnapshot {
     fn default() -> Self {
         Self {
             active_transport_kind: None,
+            active_transport_kind_since_unix_ms: None,
+            last_transport_transition: None,
+            transport_transition_counters: LiveTransportTransitionCounters::default(),
             active_direct_path_count: 0,
             active_hole_punch_path_count: 0,
             active_relay_path_count: 0,
@@ -98,9 +133,7 @@ pub(super) fn snapshot_clone(
 pub(super) fn note_relay_reservation_accepted(shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>) {
     let mut snapshot = shared.lock().expect("lock reachability snapshot");
     snapshot.relay_reservation_active = true;
-    if snapshot.active_transport_kind.is_none() {
-        snapshot.active_transport_kind = Some(LiveTransportKind::RelayReserved);
-    }
+    note_selected_transport_kind(&mut snapshot, Some(LiveTransportKind::RelayReserved));
 }
 
 pub(super) fn sync_relay_reservation_from_listening_addrs(
@@ -109,7 +142,8 @@ pub(super) fn sync_relay_reservation_from_listening_addrs(
 ) {
     let mut snapshot = shared.lock().expect("lock reachability snapshot");
     snapshot.relay_reservation_active = listening_addrs.iter().any(is_relay_addr);
-    snapshot.active_transport_kind = preferred_transport_kind(&snapshot);
+    let preferred = preferred_transport_kind(&snapshot);
+    note_selected_transport_kind(&mut snapshot, preferred);
 }
 
 pub(super) fn note_hole_punch_result(
@@ -119,7 +153,7 @@ pub(super) fn note_hole_punch_result(
     let mut snapshot = shared.lock().expect("lock reachability snapshot");
     if success {
         snapshot.hole_punch_state = LiveHolePunchState::Viable;
-        snapshot.active_transport_kind = Some(LiveTransportKind::HolePunched);
+        note_selected_transport_kind(&mut snapshot, Some(LiveTransportKind::HolePunched));
     }
 }
 
@@ -186,7 +220,8 @@ pub(super) fn refresh_active_transport_snapshot(
             }
         }
     }
-    snapshot.active_transport_kind = preferred_transport_kind(&snapshot);
+    let preferred = preferred_transport_kind(&snapshot);
+    note_selected_transport_kind(&mut snapshot, preferred);
 }
 
 pub(super) fn is_relay_addr(addr: &Multiaddr) -> bool {
@@ -249,6 +284,70 @@ fn recompute_public_port_reachability(snapshot: &mut Libp2pReachabilitySnapshot)
     };
 }
 
+fn note_selected_transport_kind(
+    snapshot: &mut Libp2pReachabilitySnapshot,
+    next_kind: Option<LiveTransportKind>,
+) {
+    let previous_kind = snapshot.active_transport_kind;
+    if previous_kind == next_kind {
+        return;
+    }
+
+    let now_ms = now_unix_ms();
+    if let (Some(previous), Some(next)) = (previous_kind, next_kind) {
+        note_transport_transition_count(
+            &mut snapshot.transport_transition_counters,
+            previous,
+            next,
+        );
+    }
+    snapshot.last_transport_transition = Some(LiveTransportTransition {
+        from_kind: previous_kind,
+        to_kind: next_kind,
+        at_unix_ms: now_ms,
+    });
+    snapshot.active_transport_kind = next_kind;
+    snapshot.active_transport_kind_since_unix_ms = next_kind.map(|_| now_ms);
+}
+
+fn note_transport_transition_count(
+    counters: &mut LiveTransportTransitionCounters,
+    previous: LiveTransportKind,
+    next: LiveTransportKind,
+) {
+    counters.selected_kind_change_count = counters.selected_kind_change_count.saturating_add(1);
+    match (previous, next) {
+        (LiveTransportKind::Direct, LiveTransportKind::HolePunched) => {
+            counters.direct_to_hole_punched = counters.direct_to_hole_punched.saturating_add(1);
+        }
+        (LiveTransportKind::Direct, LiveTransportKind::RelayReserved) => {
+            counters.direct_to_relay_reserved = counters.direct_to_relay_reserved.saturating_add(1);
+        }
+        (LiveTransportKind::HolePunched, LiveTransportKind::Direct) => {
+            counters.hole_punched_to_direct = counters.hole_punched_to_direct.saturating_add(1);
+        }
+        (LiveTransportKind::HolePunched, LiveTransportKind::RelayReserved) => {
+            counters.hole_punched_to_relay_reserved =
+                counters.hole_punched_to_relay_reserved.saturating_add(1);
+        }
+        (LiveTransportKind::RelayReserved, LiveTransportKind::Direct) => {
+            counters.relay_reserved_to_direct = counters.relay_reserved_to_direct.saturating_add(1);
+        }
+        (LiveTransportKind::RelayReserved, LiveTransportKind::HolePunched) => {
+            counters.relay_reserved_to_hole_punched =
+                counters.relay_reserved_to_hole_punched.saturating_add(1);
+        }
+        _ => {}
+    }
+}
+
+fn now_unix_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or(0)
+}
+
 fn preferred_transport_kind(snapshot: &Libp2pReachabilitySnapshot) -> Option<LiveTransportKind> {
     if snapshot.active_hole_punch_path_count > 0 {
         Some(LiveTransportKind::HolePunched)
@@ -295,6 +394,51 @@ mod tests {
         assert_eq!(snapshot.active_direct_path_count, 1);
         assert_eq!(snapshot.active_hole_punch_path_count, 1);
         assert_eq!(snapshot.active_relay_path_count, 1);
+    }
+
+    #[test]
+    fn refresh_active_transport_snapshot_tracks_bounded_selected_path_transitions() {
+        let shared = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
+        let mut active = HashMap::new();
+        active.insert(PeerId::random(), path(TransportPathKind::Direct));
+
+        refresh_active_transport_snapshot(&shared, &active);
+        let initial = snapshot_clone(&shared);
+        assert_eq!(
+            initial.active_transport_kind,
+            Some(LiveTransportKind::Direct)
+        );
+        assert_eq!(
+            initial
+                .transport_transition_counters
+                .selected_kind_change_count,
+            0
+        );
+
+        active.clear();
+        active.insert(PeerId::random(), path(TransportPathKind::RelayReserved));
+        refresh_active_transport_snapshot(&shared, &active);
+        let snapshot = snapshot_clone(&shared);
+
+        assert_eq!(
+            snapshot.active_transport_kind,
+            Some(LiveTransportKind::RelayReserved)
+        );
+        assert_eq!(
+            snapshot
+                .transport_transition_counters
+                .selected_kind_change_count,
+            1
+        );
+        assert_eq!(
+            snapshot
+                .transport_transition_counters
+                .direct_to_relay_reserved,
+            1
+        );
+        let transition = snapshot.last_transport_transition.expect("last transition");
+        assert_eq!(transition.from_kind, Some(LiveTransportKind::Direct));
+        assert_eq!(transition.to_kind, Some(LiveTransportKind::RelayReserved));
     }
 
     #[test]

@@ -47,11 +47,36 @@ pub(super) struct ChainP2pStatus {
     pub(super) public_port_reachability: String,
     pub(super) observed_public_addr: Option<String>,
     pub(super) confirmed_external_direct_addrs: Vec<String>,
+    pub(super) active_transport_kind: Option<String>,
+    pub(super) active_transport_kind_since_unix_ms: Option<i64>,
+    pub(super) active_direct_path_count: usize,
+    pub(super) active_hole_punch_path_count: usize,
+    pub(super) active_relay_path_count: usize,
+    pub(super) transport_transition_count: u64,
+    pub(super) transport_transitions: ChainP2pTransportTransitionCounters,
+    pub(super) last_transport_transition: Option<ChainP2pTransportTransition>,
     pub(super) relay_available: bool,
     pub(super) probe_stable: bool,
     pub(super) deployment_mode: String,
     pub(super) node_role_claim: String,
     pub(super) rationale: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub(super) struct ChainP2pTransportTransitionCounters {
+    pub(super) direct_to_hole_punched: u64,
+    pub(super) direct_to_relay_reserved: u64,
+    pub(super) hole_punched_to_direct: u64,
+    pub(super) hole_punched_to_relay_reserved: u64,
+    pub(super) relay_reserved_to_direct: u64,
+    pub(super) relay_reserved_to_hole_punched: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct ChainP2pTransportTransition {
+    pub(super) from_kind: Option<String>,
+    pub(super) to_kind: Option<String>,
+    pub(super) at_unix_ms: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -138,6 +163,7 @@ pub(super) struct ChainNodeObservabilityStatus {
     pub(super) status: String,
     pub(super) summary: String,
     pub(super) ready: bool,
+    pub(super) path_observability: ChainP2pPathObservabilityStatus,
     pub(super) connected_peer_count: usize,
     pub(super) active_peer_count: usize,
     pub(super) candidate_peer_count: usize,
@@ -165,6 +191,35 @@ pub(super) struct ChainNodeObservabilityStatus {
     pub(super) storage_degraded: bool,
     pub(super) reward_runtime_degraded: bool,
     pub(super) alerts: Vec<ChainNodeObservabilityAlert>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainP2pPathObservabilityStatus {
+    pub(super) selected_path_kind: Option<String>,
+    pub(super) selected_path_age_ms: Option<i64>,
+    pub(super) active_direct_path_count: usize,
+    pub(super) active_hole_punch_path_count: usize,
+    pub(super) active_relay_path_count: usize,
+    pub(super) transition_count: u64,
+    pub(super) transitions: ChainP2pPathTransitionCountersStatus,
+    pub(super) last_transition: Option<ChainP2pPathTransitionStatus>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainP2pPathTransitionCountersStatus {
+    pub(super) direct_to_hole_punched: u64,
+    pub(super) direct_to_relay_reserved: u64,
+    pub(super) hole_punched_to_direct: u64,
+    pub(super) hole_punched_to_relay_reserved: u64,
+    pub(super) relay_reserved_to_direct: u64,
+    pub(super) relay_reserved_to_hole_punched: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainP2pPathTransitionStatus {
+    pub(super) from_kind: Option<String>,
+    pub(super) to_kind: Option<String>,
+    pub(super) age_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -323,6 +378,43 @@ pub(super) fn build_chain_p2p_status(
         public_port_reachability: p2p_detection.public_port_reachability.to_string(),
         observed_public_addr: live_snapshot.observed_public_addr.clone(),
         confirmed_external_direct_addrs: live_snapshot.confirmed_external_direct_addrs.clone(),
+        active_transport_kind: live_snapshot
+            .active_transport_kind
+            .map(|kind| kind.as_str().to_string()),
+        active_transport_kind_since_unix_ms: live_snapshot.active_transport_kind_since_unix_ms,
+        active_direct_path_count: live_snapshot.active_direct_path_count,
+        active_hole_punch_path_count: live_snapshot.active_hole_punch_path_count,
+        active_relay_path_count: live_snapshot.active_relay_path_count,
+        transport_transition_count: live_snapshot
+            .transport_transition_counters
+            .selected_kind_change_count,
+        transport_transitions: ChainP2pTransportTransitionCounters {
+            direct_to_hole_punched: live_snapshot
+                .transport_transition_counters
+                .direct_to_hole_punched,
+            direct_to_relay_reserved: live_snapshot
+                .transport_transition_counters
+                .direct_to_relay_reserved,
+            hole_punched_to_direct: live_snapshot
+                .transport_transition_counters
+                .hole_punched_to_direct,
+            hole_punched_to_relay_reserved: live_snapshot
+                .transport_transition_counters
+                .hole_punched_to_relay_reserved,
+            relay_reserved_to_direct: live_snapshot
+                .transport_transition_counters
+                .relay_reserved_to_direct,
+            relay_reserved_to_hole_punched: live_snapshot
+                .transport_transition_counters
+                .relay_reserved_to_hole_punched,
+        },
+        last_transport_transition: live_snapshot.last_transport_transition.as_ref().map(
+            |transition| ChainP2pTransportTransition {
+                from_kind: transition.from_kind.map(|kind| kind.as_str().to_string()),
+                to_kind: transition.to_kind.map(|kind| kind.as_str().to_string()),
+                at_unix_ms: Some(transition.at_unix_ms),
+            },
+        ),
         relay_available: p2p_detection.relay_available,
         probe_stable: p2p_detection.probe_stable,
         deployment_mode: effective_p2p_policy.deployment_mode.as_str().to_string(),
@@ -455,6 +547,7 @@ pub(super) fn build_chain_node_observability_status(
     let transport_stability = classify_transport_stability(replication);
     let blocking_replication_error_count = transport_stability.blocking_error_count;
     let reachability_policy_ok = reachability_policy_ok(snapshot, p2p, active_peer_count, policy);
+    let path_observability = build_path_observability_status(p2p, observed_at_unix_ms);
     let storage_degraded = storage_metrics.degraded_reason.is_some()
         || matches!(storage_metrics.last_gc_result.as_str(), "failed");
     let reward_runtime_degraded = reward_runtime_metrics.enabled
@@ -773,6 +866,7 @@ pub(super) fn build_chain_node_observability_status(
         status,
         summary: observability_summary_for_alerts(alerts.as_slice()),
         ready,
+        path_observability,
         connected_peer_count,
         active_peer_count,
         candidate_peer_count,
@@ -800,6 +894,46 @@ pub(super) fn build_chain_node_observability_status(
         storage_degraded,
         reward_runtime_degraded,
         alerts,
+    }
+}
+
+fn build_path_observability_status(
+    p2p: &ChainP2pStatus,
+    observed_at_unix_ms: i64,
+) -> ChainP2pPathObservabilityStatus {
+    let selected_path_age_ms = p2p
+        .active_transport_kind_since_unix_ms
+        .and_then(|since_ms| observed_at_unix_ms.checked_sub(since_ms))
+        .map(|age_ms| age_ms.max(0));
+    ChainP2pPathObservabilityStatus {
+        selected_path_kind: p2p.active_transport_kind.clone(),
+        selected_path_age_ms,
+        active_direct_path_count: p2p.active_direct_path_count,
+        active_hole_punch_path_count: p2p.active_hole_punch_path_count,
+        active_relay_path_count: p2p.active_relay_path_count,
+        transition_count: p2p.transport_transition_count,
+        transitions: ChainP2pPathTransitionCountersStatus {
+            direct_to_hole_punched: p2p.transport_transitions.direct_to_hole_punched,
+            direct_to_relay_reserved: p2p.transport_transitions.direct_to_relay_reserved,
+            hole_punched_to_direct: p2p.transport_transitions.hole_punched_to_direct,
+            hole_punched_to_relay_reserved: p2p
+                .transport_transitions
+                .hole_punched_to_relay_reserved,
+            relay_reserved_to_direct: p2p.transport_transitions.relay_reserved_to_direct,
+            relay_reserved_to_hole_punched: p2p
+                .transport_transitions
+                .relay_reserved_to_hole_punched,
+        },
+        last_transition: p2p.last_transport_transition.as_ref().map(|transition| {
+            ChainP2pPathTransitionStatus {
+                from_kind: transition.from_kind.clone(),
+                to_kind: transition.to_kind.clone(),
+                age_ms: transition
+                    .at_unix_ms
+                    .and_then(|at_ms| observed_at_unix_ms.checked_sub(at_ms))
+                    .map(|age_ms| age_ms.max(0)),
+            }
+        }),
     }
 }
 

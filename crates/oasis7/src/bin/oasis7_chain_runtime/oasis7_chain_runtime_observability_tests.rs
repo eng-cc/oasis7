@@ -1,7 +1,8 @@
 use super::*;
 use oasis7::runtime::ReleaseSecurityPolicy;
 use oasis7_node::{
-    Libp2pReachabilitySnapshot, LiveAutoNatStatus, LivePublicPortReachability, NodeAutoNatStatus,
+    Libp2pReachabilitySnapshot, LiveAutoNatStatus, LivePublicPortReachability, LiveTransportKind,
+    LiveTransportTransition, LiveTransportTransitionCounters, NodeAutoNatStatus,
     NodeConsensusSnapshot, NodeFinalityLatencySnapshot, NodeHolePunchViability, NodeNetworkPolicy,
     NodePeerCommittedHead, NodePendingConsensusActionsSnapshot, NodePendingProposalSnapshot,
     NodePublicPortReachability, NodeReachabilityAutoDetection, NodeRole, NodeSnapshot,
@@ -25,6 +26,15 @@ fn sample_observability_p2p_status() -> super::status_payload::ChainP2pStatus {
         public_port_reachability: "reachable".to_string(),
         observed_public_addr: Some("/ip4/203.0.113.10/tcp/4001".to_string()),
         confirmed_external_direct_addrs: vec!["/ip4/203.0.113.10/tcp/4001".to_string()],
+        active_transport_kind: Some("direct".to_string()),
+        active_transport_kind_since_unix_ms: Some(1_700_000_000_000),
+        active_direct_path_count: 1,
+        active_hole_punch_path_count: 0,
+        active_relay_path_count: 0,
+        transport_transition_count: 0,
+        transport_transitions: super::status_payload::ChainP2pTransportTransitionCounters::default(
+        ),
+        last_transport_transition: None,
         relay_available: false,
         probe_stable: true,
         deployment_mode: "private".to_string(),
@@ -271,6 +281,21 @@ fn assert_chain_status_payload_consensus_health_metrics() {
             node_role_claim: PeerNodeRole::FullStorage,
         },
         &Libp2pReachabilitySnapshot {
+            active_transport_kind: Some(LiveTransportKind::RelayReserved),
+            active_transport_kind_since_unix_ms: Some(1_700_000_000_000),
+            last_transport_transition: Some(LiveTransportTransition {
+                from_kind: Some(LiveTransportKind::Direct),
+                to_kind: Some(LiveTransportKind::RelayReserved),
+                at_unix_ms: 1_700_000_000_100,
+            }),
+            transport_transition_counters: LiveTransportTransitionCounters {
+                direct_to_relay_reserved: 1,
+                selected_kind_change_count: 1,
+                ..LiveTransportTransitionCounters::default()
+            },
+            active_direct_path_count: 0,
+            active_hole_punch_path_count: 0,
+            active_relay_path_count: 1,
             autonat_status: LiveAutoNatStatus::Public,
             public_port_reachability: LivePublicPortReachability::Reachable,
             observed_public_addr: Some("/dns4/public.example/tcp/4001".to_string()),
@@ -334,6 +359,27 @@ fn assert_chain_status_payload_consensus_health_metrics() {
     assert_eq!(
         payload.p2p.confirmed_external_direct_addrs,
         vec!["/dns4/public.example/tcp/4001".to_string()]
+    );
+    assert_eq!(
+        payload.p2p.active_transport_kind.as_deref(),
+        Some("relay_reserved")
+    );
+    assert_eq!(payload.p2p.active_relay_path_count, 1);
+    assert_eq!(
+        payload
+            .observability
+            .path_observability
+            .selected_path_kind
+            .as_deref(),
+        Some("relay_reserved")
+    );
+    assert_eq!(
+        payload
+            .observability
+            .path_observability
+            .transitions
+            .direct_to_relay_reserved,
+        1
     );
     assert_eq!(
         payload.release_security_policy,

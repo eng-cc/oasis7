@@ -104,6 +104,7 @@ pub use network_bridge::NodeReplicationNetworkHandle;
 pub use oasis7_net::{
     Libp2pControlPlaneMetricsSnapshot, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
     LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability, LiveTransportKind,
+    LiveTransportTransition, LiveTransportTransitionCounters,
 };
 pub use replication::NodeReplicationConfig;
 pub use types::{

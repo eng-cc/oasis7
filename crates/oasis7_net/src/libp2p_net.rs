@@ -75,7 +75,7 @@ use peer_record_republish::{
 use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snapshot_clone};
 pub use reachability::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
-    LiveTransportKind,
+    LiveTransportKind, LiveTransportTransition, LiveTransportTransitionCounters,
 };
 #[cfg(test)]
 use runtime_loop::{

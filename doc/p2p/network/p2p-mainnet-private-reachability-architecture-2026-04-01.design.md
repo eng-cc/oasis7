@@ -52,6 +52,38 @@
 - peer record 默认短 TTL，reachability 变化必须允许快速刷新。
 - 私网地址默认不公开；若需暴露给 sentry/relay allowlist，必须作为受限提示而不是公共字段。
 
+## Peer Reachability Contract Normalization
+本节是 2026-06-15 iroh-inspired follow-up 的设计落点。借鉴点只限于 identity-first address boundary、显式 selected path 与 reachability evidence；不引入 iroh 依赖，不替换 libp2p，也不采用 iroh relay/DNS/Pkarr 默认。
+
+### Contract 目标
+`PeerReachabilityContract` 是 oasis7 内部归一化视图，负责把 signed peer record、runtime-observed transport path、deployment/role policy 与 network-tier publish policy 合并成单一可投影真值：
+
+| 字段 | 来源 | 用途 |
+| --- | --- | --- |
+| `peer_id` | signed peer record / libp2p identity | 稳定身份，不随地址漂移 |
+| `deployment_mode` | peer record + local policy | 判定 `public/hybrid/private/relay_only/validator_hidden` 公开面 |
+| `node_role` | peer record + local role admission | 判定 validator/sentry/relay/full-storage/observer 权限 |
+| `reachability_class` | peer record declaration + local observation | 表达当前可达性分类；远端声明不可覆盖本地探测 |
+| `capability_lanes` | peer record + role defaults | request peer selection 与 lane serve/request gate |
+| `ranked_paths` | `TransportPath` normalization | `direct -> hole-punched -> relay` 或 policy override 后的候选路径 |
+| `publish_policy` | deployment/network-tier manifest | 决定哪些地址可公开、哪些只能作为 allowlist hint |
+| `selected_path` | runtime path selector | 当前正在使用的 path kind/flavor 与 selected-at 时间 |
+| `claim_boundary` | matrix/status projection | 指出该 peer/path 能支持的 claim 类型，例如 `exact`, `proxy`, `manual_lab_required` |
+
+### 真值链
+1. `SignedPeerRecord` 继续是远端声明与签名真值。
+2. `TransportPath` 继续是 libp2p path materialization 与排序真值。
+3. `PeerReachabilityContract` 归一化二者，并套用本地 deployment/role/network-tier policy。
+4. request peer selection、debug/status projection、mixed-topology matrix summary 只能消费该 contract 的投影，不得重新定义 direct/hole-punched/relay 标签。
+5. 若现有字段不足以表达 selected path age、transition reason 或 publish boundary，先在 contract 内部补 summary，再选择性投影到 status；不要先新增第二套 status truth。
+
+### 非目标与防重复真值
+- 不把 libp2p `Multiaddr` 替换成 iroh address 类型。
+- 不让 matrix 脚本或 triad report 反向定义 canonical reachability。
+- 不把 relay reservation 等同于 `public reachable`。
+- 不把 proxy drill 成功等同于 physical NAT/CGNAT 覆盖。
+- 不导出 unbounded per-peer Prometheus labels；peer-level 明细只允许 bounded snapshot/top-N 或 debug-only artifact。
+
 ## Reachability 生命周期
 1. 启动时通过 bootnode / relay / observed addr 获取自我外部视图。
 2. Reachability service 判定 `unknown/public/private/symmetric_nat`。
@@ -106,6 +138,37 @@
 - runtime 现已为 `blocked` peer 维护可调试的 block artifact，至少跨 peer-manager 重算保留 `peer_id/status/issues/path/operator/asn/first_blocked_at/last_blocked_at/last_cleared_at`；当前仍未升级为跨重启 banlist 或 release-gate 证据存储。
 - `P2PARCH-5` 当前已按 runtime substrate milestone 收口；剩余 `mixed-topology / fail-signature` required/full 套件与 release evidence contract 不再阻断 `P2PARCH-5` 关闭，而是继续留在 `P2PARCH-6/7`。
 - `P2PARCH-6` 现已新增 `scripts/p2p-mixed-topology-matrix.sh`：QA 会把 `private/validator_hidden/relay_only` 角色边界、bootstrap poisoning、relay exhaustion 与 path failover 组装成 `required` exact matrix，再把 triad/triad_distributed 的 disconnect/restart longrun 组装成 `full` proxy matrix。该 matrix 会明确标注 `proxy != dedicated sentry/NAT lab`，避免把当前可执行近似 drill 误写成最终 mixed-topology 实证。
+
+## Path Behavior Matrix Taxonomy
+Matrix 是 evidence/claim taxonomy，不是 runtime reachability truth。它的职责是把“当前证据能支持什么说法”写清楚。
+
+| 维度 | 允许值 | 说明 |
+| --- | --- | --- |
+| `evidence_class` | `exact / proxy / manual_lab / real_env / unsupported` | `exact` 为 deterministic repo test；`proxy` 为当前可执行近似 longrun；`manual_lab` 需要专门 NAT/sentry lab；`real_env` 为同窗口真实网络证据；`unsupported` 明确不承诺 |
+| `path_expectation` | `must_direct / may_direct_must_recover / must_relay / must_not_publish_public_direct / manual_lab_required / unsupported` | 描述粗粒度 claim；case-specific route sequence 留在 `expected_route` |
+| `reachability_pair` | `public_direct / home_nat / cgnat / relay_only / validator_hidden / cloud_public / mixed_validator_observer` | 描述 topology pair 或角色组合 |
+| `degradation_class` | `none / sentry_loss / relay_exhaustion / degraded_latency_loss / restart_pause_disconnect / bootstrap_poisoning` | 描述弱网、故障或攻击近似场景 |
+| `claim_boundary` | `required_exact / full_proxy / physical_nat_pending / shared_window_partial / public_testnet_blocked_or_ready` | 直接限制对外或 release gate 语言 |
+
+Gate 语义：
+- `test_tier_required` 只接受 `coverage=exact` 且 deterministic 的 case。
+- `test_tier_full` 可以包含 `proxy` 和 `real_env`，但必须在 summary 中写明哪些 claim 仍需要 `manual_lab` 或 dedicated evidence。
+- `public_testnet` 或 `shared_devnet` 升级 claim 必须同时引用 matrix summary、same-window evidence 和 producer/QA pass-uplift decision；不能只改 case 状态。
+
+## Reachability Status Observability Projection
+Status observability 只投影 contract 与 runtime-selected path 的 bounded summary，默认接入现有 `/v1/chain/status.observability` 与 triad merged summary。
+
+建议字段：
+- `selected_path_kind`: `direct / hole_punched / relay / unknown`。
+- `selected_path_age_ms` 或窗口摘要，避免 per-peer 高基数序列。
+- `path_transition_counters`: `direct_to_relay`, `relay_to_direct`, `direct_to_hole_punched`, `hole_punched_to_relay`。
+- `active_path_mix`: 当前 direct/hole-punched/relay active counts。
+- `recent_fallback_reason`: bounded enum，禁止自由文本无限扩张。
+- `reachability_confidence`: `observed_direct / relay_reserved / punched_recently / proxy_only / manual_lab_required` 等 operator-facing 摘要。
+
+边界：
+- byte split 只能在现有 metrics scope 可证明时输出；不得把 wire/control-plane bytes 说成 NIC-level overhead。
+- status 不是第二套健康权威；release claim 仍回到 matrix/shared-network gate。
 
 ## 适配多链型的数据面
 | 适配器 | 典型链型 | 说明 |
