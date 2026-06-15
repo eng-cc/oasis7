@@ -530,10 +530,19 @@ if [[ "$CREATE_PR" == "1" && "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
   die "missing passed pre-PR local role review evidence for $SOURCE_BRANCH at $SOURCE_HEAD ($LOCAL_ROLE_REVIEW_REASON; log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-unknown}; missing: ${LOCAL_ROLE_REVIEW_MISSING_MARKERS:-unknown})"
 fi
 
+WORKFLOW_LINT_ARGS=("--phase" "pr-ready" "--allow-unbound")
+if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
+  WORKFLOW_LINT_ARGS=("--task-uid" "$LOCAL_ROLE_REVIEW_TASK_UID" "${WORKFLOW_LINT_ARGS[@]}")
+fi
+
 WORKFLOW_LINT_OUTPUT=""
-if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --phase pr-ready --allow-unbound 2>&1)"; then
+if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh "${WORKFLOW_LINT_ARGS[@]}" 2>&1)"; then
   if [[ "$WORKFLOW_LINT_OUTPUT" == *"unknown arg: --phase"* ]]; then
-    WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh --allow-unbound 2>&1)" || {
+    WORKFLOW_LINT_FALLBACK_ARGS=("--allow-unbound")
+    if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
+      WORKFLOW_LINT_FALLBACK_ARGS=("--task-uid" "$LOCAL_ROLE_REVIEW_TASK_UID" "${WORKFLOW_LINT_FALLBACK_ARGS[@]}")
+    fi
+    WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && ./scripts/pm/workflow-lint.sh "${WORKFLOW_LINT_FALLBACK_ARGS[@]}" 2>&1)" || {
       cat >&2 <<EOF
 error: workflow-lint preflight failed.
 $WORKFLOW_LINT_OUTPUT
