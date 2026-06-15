@@ -236,3 +236,12 @@ Example:
 - Expected Result: PR exists for exact branch/SHA and is explicitly treated as manual packaging CI plus deploy hold, not normal auto-merge.
 - Actual Result: Created PR #478: https://github.com/eng-cc/oasis7/pull/478. PR purpose decision: `manual_packaging_ci_hold`; do not auto-merge until package/deploy verification is complete.
 - Blocker / Next Action: Trigger `testnet-packages.yml` with `build_profile=release`, `package_scope=linux_only`, and `ref_or_sha=1dd3e145cc2b2f2e427246a122916ed9283ade10`; watch workflow and verify artifacts before live node restart.
+
+## 2026-06-15 16:16:44 CST / tpm
+- 完成内容: Fixed PR Rust required-gate failure caused by test file size policy.
+- 遗留事项: Push CI-fix commit, rerun PR checks, trigger a fresh `Testnet Packages` run for the new HEAD, verify artifacts, then redeploy when SSH credentials are available.
+- Action: GitHub PR #478 `required-gate` failed in `./scripts/check-rust-file-size.sh` because `crates/oasis7_node/src/tests_storage_challenge_gate.rs` had grown to 1732 lines after adding storage-challenge regressions. Split provider-route tests into `tests_storage_challenge_gate/provider_routes.rs` and provider trap mocks into `tests_storage_challenge_gate/provider_route_mocks.rs`; no production behavior changed.
+- Validation Command: `cargo fmt -p oasis7_node -p oasis7 -- --check`; `./scripts/check-rust-file-size.sh`; `./scripts/cargo-dev.sh test -p oasis7_node storage_challenge_gate -- --nocapture`.
+- Expected Result: File-size gate passes and all storage-challenge regressions remain green after test module split.
+- Actual Result: Formatting passed; file-size gate passed with oversized code/test/structural counts all zero; `storage_challenge_gate` passed 18/18.
+- Blocker / Next Action: Create and push CI-fix commit. Existing package run `27530860667` completed successfully for older HEAD `70b3dfa370982cb3407c94c86365a302347dae47`; because deployment records bind commit SHA, trigger a fresh package run after pushing the new HEAD.
