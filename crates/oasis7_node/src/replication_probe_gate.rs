@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn provider_aware_fallback_treats_fetch_blob_unsupported_as_retryable_without_debug_text() {
         let err = NodeError::Replication {
-            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-blob/1.0.0 detail=remote peer declined request"
+            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-blob/1.0.0 detail=/aw/node/replication/fetch-blob/1.0.0 unsupported by remote"
                 .to_string(),
         };
 
@@ -193,6 +193,17 @@ mod tests {
             should_fallback_provider_aware_replication_request(&err),
             "classification should use structured kind/protocol data, not the WorldError Debug text spelling"
         );
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_does_not_hide_business_unsupported() {
+        let err = NodeError::Replication {
+            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-blob/1.0.0 detail=remote peer declined request"
+                .to_string(),
+        };
+
+        assert!(!should_fallback_provider_aware_replication_request(&err));
         assert!(!replication_request_waitable_connection_gap(&err));
     }
 
@@ -209,7 +220,7 @@ mod tests {
     #[test]
     fn successor_probe_treats_fetch_commit_unsupported_as_unavailable_without_debug_text() {
         let err = NodeError::Replication {
-            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-commit/1.0.0 detail=remote peer declined request"
+            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-commit/1.0.0 detail=/aw/node/replication/fetch-commit/1.0.0 unsupported by remote"
                 .to_string(),
         };
 

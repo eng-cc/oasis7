@@ -56,9 +56,11 @@ pub(crate) fn replication_network_error_is_unsupported_protocol(
     let NodeError::Replication { reason } = err else {
         return false;
     };
-    reason.contains(protocol)
-        && (network_request_reason_has_kind(reason, "unsupported")
-            || (reason.contains("NetworkRequestFailed") && reason.contains("ErrUnsupported")))
+    (network_request_reason_has_kind(reason, "unsupported")
+        && network_request_reason_detail_mentions_protocol(reason, protocol))
+        || (reason.contains("NetworkRequestFailed")
+            && reason.contains("ErrUnsupported")
+            && reason.contains(protocol))
 }
 
 pub(crate) fn replication_network_error_is_protocol_unavailable(
@@ -89,4 +91,10 @@ fn network_request_reason_has_kind(reason: &str, kind: &str) -> bool {
     reason
         .split_whitespace()
         .any(|field| field.strip_prefix("kind=") == Some(kind))
+}
+
+fn network_request_reason_detail_mentions_protocol(reason: &str, protocol: &str) -> bool {
+    reason
+        .split_once(" detail=")
+        .is_some_and(|(_, detail)| detail.contains(protocol))
 }
