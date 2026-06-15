@@ -287,3 +287,12 @@ Example:
 - Expected Result: A lagging node should not spend long network retry budgets inside a runtime tick; head/fetch-commit gap-sync repair becomes bounded and retryable across ticks while existing gap-sync/storage-challenge behavior remains covered.
 - Actual Result: Formatting passed; `network_gap_sync` passed 21/21; storage challenge mismatch target test passed 1/1; file-size gate passed with oversized code/test/structural counts all zero; `git diff --check` passed.
 - Blocker / Next Action: Commit/push hotfix, trigger fresh package for the new head SHA, verify BUILDINFO/checksums, redeploy both nodes, and confirm storage/sequencer `tick_count`, `worker_poll_count`, and `last_tick_unix_ms` advance across samples.
+
+## 2026-06-15 20:58:00 CST / tpm
+- 完成内容: Fourth hotfix after `.87` storage redeploy: bounded fetch-commit timeouts must remain waitable, not become runtime hard errors.
+- 遗留事项: Commit/push, trigger new exact-SHA package, redeploy, and confirm tick progress.
+- Action: Deployed package `0.0.0+testnet.87.8d3db4d77167` to storage. The long tick block was successfully reduced to a short `request budget exhausted ... budget_ms=3000` path, but after three gap-sync attempts the runtime still set `last_error` and readiness failed `runtime_last_error`. Updated `replication_request_waitable_connection_gap` so fetch-commit route-unavailable / request-budget-exhausted errors are treated as waitable gap-sync conditions. Fetch-blob route-unavailable remains non-waitable for storage challenge hard-failure boundaries unless it is explicitly classified elsewhere.
+- Validation Command: `cargo fmt -p oasis7_node -p oasis7_proto -p oasis7 -- --check`; `./scripts/cargo-dev.sh test -p oasis7_node replication_probe_gate -- --nocapture`; `./scripts/cargo-dev.sh test -p oasis7_node network_gap_sync -- --nocapture`; `./scripts/cargo-dev.sh test -p oasis7_node runtime_replication_storage_challenge_gate_blocks_on_network_blob_mismatch -- --nocapture`; `./scripts/check-rust-file-size.sh`; `git diff --check`.
+- Expected Result: Gap-sync fetch-commit budget exhaustion no longer writes `runtime_last_error`; worker can retry across ticks while readiness reports lag/transport conditions.
+- Actual Result: `replication_probe_gate` passed 4/4; `network_gap_sync` passed 21/21; storage challenge mismatch target passed 1/1; formatting, file-size, and diff checks passed.
+- Blocker / Next Action: Build and deploy a new package, then re-sample storage before upgrading sequencer.

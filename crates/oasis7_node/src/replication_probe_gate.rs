@@ -127,6 +127,10 @@ pub(super) fn replication_request_waitable_connection_gap(err: &NodeError) -> bo
         return false;
     };
     reason.starts_with(crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX)
+        || (reason.contains(super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL)
+            && (reason
+                .starts_with(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX)
+                || reason.contains("request budget exhausted")))
 }
 
 fn replication_successor_probe_fetch_commit_unavailable(err: &NodeError) -> bool {
