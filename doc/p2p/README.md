@@ -30,7 +30,7 @@
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接罗列近期专题长名单。
-- 高频 active 入口保留在 `prd.md`、`project.md`、`node/README.md`、上述少量主题真值专题与 `prd.index.md`。
+- 高频当前入口保留在 `prd.md`、`project.md`、`node/README.md`、上述少量主题真值专题与 `prd.index.md`。
 - 执行细节、runbook、release 补充材料与历史背景，改为从 `prd.index.md` 的定向检索入口进入。
 
 ## 模块职责
@@ -64,7 +64,7 @@
 
 ## 高密度提示
 - `doc/p2p/` 的文件数会随专题推进变化；需要当前数量时，以 `find doc/p2p -type f | wc -l` 或 `git ls-files 'doc/p2p/**'` 为准。
-- 需要完整活跃专题清单时，进入 `doc/p2p/prd.index.md`；进入 `node/` 时，优先先读 `doc/p2p/node/README.md` 再继续下钻；需要 runbook / release 补充材料时，再按具体专题路径进入。
+- 需要完整专题检索清单时，进入 `doc/p2p/prd.index.md`；进入 `node/` 时，优先先读 `doc/p2p/node/README.md` 再继续下钻；需要 runbook / release 补充材料时，再按具体专题路径进入。
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。

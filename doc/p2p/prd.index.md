@@ -29,11 +29,11 @@
 | `viewer-live/` | viewer-live 发行、开关与观察服务边界 |
 | `consensus/` | 共识实现与内建 wasm 身份口径 |
 
-## 活跃补充文档
+## 当前补充阅读面
 - `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`：项目级 test/prod 环境分层、hosted-login 云上清单与 `testnet/mainnet` claim boundary。
 - `doc/p2p/node/README.md`：`node/` 热点子域 landing page，按奖励、复制、PoS 时间、身份引导与 WASM 编译分流读者。
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`：formal `public_testnet` 从 `specified_skeleton_only` 进入 `ready_for_live_candidate` 前的 companion checklist/runbook。
-- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的执行 companion runbook，不并入下方 PRD 三件套长表。
+- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的 legacy 执行 companion runbook；`shared_devnet` pass 仅作 rehearsal evidence，不等于 formal `public_testnet` / `mainnet` readiness。
 - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.design.md`：不受当前实现约束的理想化交易目标态，覆盖字段分组、完整 JSON 草案、理想签名域、理想回执与 phased rollout。
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`：LetAI Run OpenAPI bridge 的 operator companion runbook，覆盖独立部署、首次演练、manual review 与回滚边界。
 
@@ -43,14 +43,20 @@
 - `node/README.md` 负责最高密度热点子域的首读分流；完整长表继续由本页保留。
 - runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
 
+## 状态语义
+- `active`：当前执行真值仍以 `doc/p2p/project.md` 和具体专题 `*.project.md` 的状态段为准。
+- `canonical`：模块规格、设计总览、热点子域入口、当前补充阅读面和专题主文档；这些文档可长期保留在默认可达路径中。
+- `completed`：已完成但仍需按文件名可达的专题三件套；保留在下方检索清单，不自动进入默认首读面。
+- `historical` / `evidence-snapshot`：历史审计清单、旧轮次证据、release 补充材料与 legacy runbook；只作为追溯证据或兼容入口，不作为当前执行状态或可删除依据。
+
 ## 覆盖规则（ROUND-005 统一）
 - 纳入规则：纳入 `doc/p2p/**` 下所有 `*.prd.md` 与同名 `*.project.md`。
-- 活跃补充：`*.runbook.md` 与仍被当前模块 PRD / 项目态直接引用的 supporting spec，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
+- 当前补充阅读面：`*.runbook.md` 与仍被当前模块 PRD / 项目态直接引用的 supporting spec，可在“当前补充阅读面”区定向列出，但不并入下方三件套长表。
 - 排除规则：不纳入 `doc/devlog/**` 与非 PRD 配对文档（如 `*.release.md` 补充材料）。
 - 历史入口：根目录历史入口文件（`p2p.prd.md` / `p2p.project.md`）仅保留兼容跳转语义，不作为主索引分母。
 - 兼容跳转：历史路径命中时统一跳转到本目录 `prd.md` / `project.md` 主入口。
 
-## 完整活跃专题清单（按文件名精确检索）
+## 完整专题检索清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.project.md` |
