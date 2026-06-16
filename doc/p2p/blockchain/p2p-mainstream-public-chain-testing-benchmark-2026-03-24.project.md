@@ -4,6 +4,12 @@
 - 对应需求文档: `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
 
 审计轮次: 2
+
+> Current canonical source: this project file is benchmark/background status only.
+> It does not own current network-tier truth. Use
+> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+> for current `public_testnet` / `mainnet` readiness.
+
 ## 任务拆解（含 PRD-ID 映射）
 - [x] BENCH-0 (PRD-P2P-BENCH-001/002/003/004) [test_tier_required]: 新建 benchmark 专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪。
 - [x] BENCH-1 (PRD-P2P-BENCH-001/002) [test_tier_required]: 冻结主流公链测试分层模型与 oasis7 等价要求。
@@ -19,7 +25,7 @@
   - `L0/L1/L3`: 已有正式基础
   - `L2`: 已有基础，但仍偏库测/长跑，缺 shared network 维度
   - `L4`: 长跑已有，controller slot 与 finality slot 的 clone-world / default-live 首轮 governance drill 已完成；finality 已补到两条独立 single-signer recovery 样本、一条 multi-signer loss import-policy reject 样本、一条 `2-of-2 -> 2-of-3` non-baseline rejoin 样本，以及一条 baseline rejoin 样本，但覆盖范围仍有限
-  - `L5`: first `shared_devnet` dry run 已落证据，但当前只到 `partial`
+  - `L5`: first `shared_devnet` dry run 最初为 `partial`；2026-05-24 legacy rehearsal 追溯结论已补到 `pass / eligible_for_promotion`，但它只作 benchmark L5 / legacy rehearsal evidence，不能替代 formal `public_testnet` 或 public large-world launch readiness
 
 ## 依赖
 - `testing-manual.md`
@@ -35,5 +41,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 把 `shared_devnet` 从 first dry run 的 `partial` 提升到 `pass`，再进入 `staging/canary`；在此之前，不升级“对标主流公链测试成熟度”相关口径。
-- 最近更新: 2026-03-24
+- 下一步: benchmark L5 的 `shared_devnet` rehearsal 已有 pass 追溯结论；后续不应继续把目标写成“把 shared_devnet 从 partial 提升到 pass”，而应转向 formal `public_testnet` six-lane readiness、`staging/canary` rehearsal、以及 mainnet gates。即使引用 `shared_devnet pass`，也不得升级“对标主流公链测试成熟度”或 public large-world 相关口径。
+- 最近更新: 2026-06-16

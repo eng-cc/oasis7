@@ -4,6 +4,13 @@
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
 
 审计轮次: 2
+
+> Current canonical source: this document is legacy/rehearsal background for the old
+> `shared_devnet -> staging -> canary` release-train model. Current network-tier
+> truth lives in `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+> `shared_devnet` pass evidence must not be used as `public_testnet`, `mainnet`,
+> public launch, or public large-world readiness.
+
 ## 1. Executive Summary
 - Problem Statement: oasis7 现在已经具备 `required/full`、Web-first 闭环、S9/S10 长跑和首轮真实 governance drill 证据，但这些验证大多仍停留在本地或单 owner 控制的 execution world。即便 `P2PARCH-6` 已补出 mixed-topology matrix，shared network / release train 若没有把 mixed-topology 作为显式 required lane，团队仍可能把“本地矩阵通过”误记成“共享环境已准备好 promotion”。
 - Proposed Solution: 冻结一份 producer-owned 的 shared network / release train minimum PRD，定义 `shared_devnet -> staging -> canary` 三层最小执行轨道、`release_candidate_bundle` 单一真值、promotion/rollback/freeze 规则和 QA/liveops 证据门禁，并把 mixed-topology baseline / rehearsal / claim review 升级为各轨必经 lane，让 oasis7 把 benchmark 中的 `L5 shared network/release train` 从“仅有缺口描述”升级成正式 execution workstream。

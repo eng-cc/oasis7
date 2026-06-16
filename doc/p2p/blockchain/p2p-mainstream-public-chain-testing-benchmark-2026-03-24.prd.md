@@ -4,6 +4,12 @@
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md`
 
 审计轮次: 1
+
+> Current canonical source: this benchmark document explains testing-maturity
+> background only. It must not maintain current `shared_devnet` or
+> `public_testnet` status. Current network-tier truth lives in
+> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+
 ## 1. Executive Summary
 - Problem Statement: oasis7 近几轮已经补齐签名交易、生产 signer custody、治理 signer 外部化和创世 ceremony 的专题规格，也已经开始做真实 governance registry import/audit/runbook，但团队仍缺一份“主流公链到底怎样分层测试、oasis7 当前已经覆盖到哪一层、还缺什么才能把 preview 做成更像主流链的工程体系”的正式基准。若继续只用零散 required/full、长跑和 drill 结果沟通，很容易把“局部门禁已存在”误判成“整体测试体系已接近主流公链”。
 - Proposed Solution: 新建 producer-owned 的测试体系对标 PRD，把主流公链常见测试层拆成 `spec/reference -> deterministic/unit/integration -> distributed/multi-node -> ui/playability -> longrun/chaos/drill -> shared network/release train` 六层，再把 oasis7 当前命令、证据与缺口映射进去，形成后续 `MAINNET-1~3` execution workstreams 的测试优先级。
@@ -11,7 +17,7 @@
   - SC-1: 明确给出不少于 6 层的“主流公链测试体系”分层模型，并区分“单客户端项目的等价替代要求”与“多客户端公链的原生做法”。
   - SC-2: 明确给出 oasis7 当前 `已有 / 部分具备 / 缺失` 的测试矩阵，而不是只给抽象建议。
   - SC-3: 明确指出当前强项至少包括：`required/full 基础门禁`、`分布式子系统库测试`、`Web-first UI 闭环`、`长跑套件`、`governance registry audit + drill runbook`。
-  - SC-4: 明确指出当前缺口至少包括：`fuzz/property-based gate 缺失`、`共享 devnet/testnet/canary release train 缺失`、`真实 ceremony/drill 证据仍未完成`。
+  - SC-4: 明确指出当前缺口至少包括：`fuzz/property-based gate 缺失`、formal `public_testnet` / `mainnet` readiness 仍需独立 gate、`真实 ceremony/drill 证据仍未完成`。
   - SC-5: 形成 producer 可直接使用的下一步顺序：`先补 drill evidence -> 再补 fault/chaos/negative gate -> 再补 shared network / release train`。
 
 ## 2. User Experience & Functionality
