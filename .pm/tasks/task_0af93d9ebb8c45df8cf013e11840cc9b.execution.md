@@ -60,3 +60,46 @@ Example:
 - Expected Result: Current task workflow lint passes; repo-wide PM lint emits no current-task matches; doc governance passes; whitespace diff check passes.
 - Actual Result: `workflow-lint: OK (task_0af93d9ebb8c45df8cf013e11840cc9b, phase=current)`; filtered PM lint command exited 0 with no current-task matches; `doc-governance-check: OK`; `git diff --check` passed with no output.
 - Blocker / Next Action: No current-task blocker. If preparing PR, next phase is pre-PR local role review and normal PR closeout flow.
+
+## 2026-06-16 20:25:00 CST / tpm
+- Review Trigger: pre-PR local role review.
+- Review Scope: `.pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.*`; `doc/testing/README.md`; `doc/testing/prd.index.md`; `doc/testing/project.md`; `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`; `doc/testing/manual/systematic-application-testing-manual.{prd,design,project}.md`.
+- Review Roles: `repository_health_engineer`, `qa_engineer`.
+- Review Question: Confirm the committed diff `1b4a63c582cc0ebb58fbe85b4e618443e69bd4c4` safely slims testing documentation default surfaces, preserves traceability, and does not misstate QA / required-gate semantics.
+- Evidence Available: commit `1b4a63c582cc0ebb58fbe85b4e618443e69bd4c4`; closeout verified `doc-governance-check: OK`, `workflow-lint: OK`, `git diff --check` clean; repo-wide PM lint remains red only on unrelated historical task logs with current-task filtered check clean.
+- Expected Return Contract: `findings | no_findings | residual_risk`.
+- Formal Sink: `.pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.execution.md`.
+- 完成内容: Pre-PR local role review request recorded before dispatching role slices.
+- 遗留事项: Await role findings before recording `Pre-PR Local Role Review: passed`.
+- Action: Dispatch `repository_health_engineer` and `qa_engineer` pre-PR review slices.
+- Validation Command: N/A for review request entry; verification evidence listed above.
+- Expected Result: Both role slices return findings/no_findings with residual risk.
+- Actual Result: Pending.
+- Blocker / Next Action: Integrate role review results.
+
+## 2026-06-16 20:33:00 CST / tpm
+- 完成内容: Integrated pre-PR local role review results.
+- Review Evidence:
+  - `repository_health_engineer`: `no_findings`. Confirmed the diff narrows default testing-doc reading surface while preserving traceability via README landing scope, `prd.index.md` file-level table, and `project.md` current-window plus historical trace pointers. Confirmed static count drift is controlled, `test-coverage-gate-fill` is the active blocker, Viewer perf wording matches report-only gate behavior, and the manual triplet is clearly historical with canonical redirects. Reviewer ran fresh `./scripts/doc-governance-check.sh`, current-task workflow lint, `git diff --check origin/main...HEAD`, and current-task filtered PM lint clean.
+  - `qa_engineer`: `no_findings`. Confirmed no QA gate-semantic regressions: Viewer perf smoke is explicitly report-only and not PR/release blocking; the compressed project page preserves active blocker/caveats; the manual triplet redirects current execution to `testing-manual.md`.
+- Review Findings Disposition: no_findings.
+- Finding Disposition Evidence: No code/doc changes required after role review; only this review evidence was appended.
+- Residual Risk: Repo-wide PM lint remains known-red on unrelated historical task logs; current-task workflow lint and current-task filtered PM lint are clean. Review request/result evidence is appended after reviewed commit and will be included as review-evidence-only commit before PR creation.
+- Pre-PR Local Role Review: passed
+- Task UID: task_0af93d9ebb8c45df8cf013e11840cc9b
+- Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-testing-testing-doc-default-surface-slimming`
+- Source Branch: `task/testing-testing-doc-default-surface-slimming`
+- Source Head: `1b4a63c582cc0ebb58fbe85b4e618443e69bd4c4` (reviewed implementation commit; later change is this task review evidence only)
+- Comparison Ref: `refs/remotes/origin/main`
+- Reviewed Changed Paths: `.pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.execution.md`; `.pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.yaml`; `doc/testing/README.md`; `doc/testing/prd.index.md`; `doc/testing/project.md`; `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`; `doc/testing/manual/systematic-application-testing-manual.prd.md`; `doc/testing/manual/systematic-application-testing-manual.design.md`; `doc/testing/manual/systematic-application-testing-manual.project.md`
+- Role Selection Basis: testing documentation governance diff touches default reading surfaces, doc traceability, QA blocker wording, and required-gate/report-only semantics; selected `repository_health_engineer` for doc governance/traceability and `qa_engineer` for gate/release semantic correctness.
+- Review Roles: `repository_health_engineer`, `qa_engineer`
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: Both roles returned no findings; no fixes required.
+- Residual Risk: Same as above; repo-wide PM lint historical failures unrelated to this task remain out of scope.
+- 遗留事项: None for pre-PR local role review.
+- Action: Commit review evidence and run `./scripts/prepare-task-pr.sh --create`.
+- Validation Command: role review subagent returns + task execution log evidence packet.
+- Expected Result: Required pre-PR local role review packet exists before PR creation.
+- Actual Result: Passed packet recorded in this entry.
+- Blocker / Next Action: Commit evidence-only update, then run PR preflight/create.
