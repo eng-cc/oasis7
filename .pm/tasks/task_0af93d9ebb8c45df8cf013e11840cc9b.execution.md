@@ -103,3 +103,25 @@ Example:
 - Expected Result: Required pre-PR local role review packet exists before PR creation.
 - Actual Result: Passed packet recorded in this entry.
 - Blocker / Next Action: Commit evidence-only update, then run PR preflight/create.
+
+## 2026-06-16 20:39:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_0af93d9ebb8c45df8cf013e11840cc9b
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-testing-testing-doc-default-surface-slimming
+- Source Branch: task/testing-testing-doc-default-surface-slimming
+- Source Head: 7d8c65bd67f1d2d88df1adf1cbac42fa37d00422
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.execution.md; .pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.yaml; doc/testing/README.md; doc/testing/prd.index.md; doc/testing/project.md; doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md; doc/testing/manual/systematic-application-testing-manual.prd.md; doc/testing/manual/systematic-application-testing-manual.design.md; doc/testing/manual/systematic-application-testing-manual.project.md
+- Role Selection Basis: testing documentation governance diff touches default reading surfaces, doc traceability, QA blocker wording, and required-gate/report-only semantics; selected repository_health_engineer and qa_engineer.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Evidence: repository_health_engineer no_findings; qa_engineer no_findings; both reviewed commit 1b4a63c582cc0ebb58fbe85b4e618443e69bd4c4 and accepted later review-evidence-only execution log change.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: No fixes required; both role reviews returned no findings; this entry reformats the already recorded passed review packet for prepare-task-pr parser compatibility.
+- Residual Risk: Repo-wide PM lint remains known-red on unrelated historical task logs; current-task workflow lint and current-task filtered PM lint are clean.
+- 完成内容: Added parser-compatible pre-PR local role review packet after prepare-task-pr preflight rejected the human-readable packet formatting.
+- 遗留事项: None.
+- Action: Commit parser-compatible review packet and rerun prepare-task-pr.
+- Validation Command: ./scripts/prepare-task-pr.sh --create
+- Expected Result: Preflight recognizes passed local role review packet.
+- Actual Result: Pending rerun.
+- Blocker / Next Action: Commit evidence formatting fix.
