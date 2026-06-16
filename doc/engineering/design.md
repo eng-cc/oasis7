@@ -42,7 +42,7 @@
 - 规范正文：`doc/engineering/doc-governance/doc-structure-standard.design.md`
 - 执行挂靠：`doc/engineering/doc-governance/doc-structure-standard.project.md`
 - 项目级执行台账：`doc/core/reviews/consistency-review-round-006.md`
-- 逐文档执行面：`doc/core/reviews/round-006-reviewed-files.md`
+- 逐文档执行面：`doc/core/reviews/round-006-reviewed-files.md`（compact snapshot entrypoint；pre-compaction 逐行证据见 git snapshot）
 
 ## 4. 集成点
 - `AGENTS.md`

@@ -27,11 +27,12 @@
   - 最大 Markdown / devlog 文件仍为 `doc/devlog/README.md`，`3288` 行
   - 模块体量前三：`world-simulator=553`、`p2p=270`、`testing=180`
   - 热点子目录前三：`doc/world-simulator/viewer=297`、`doc/readme/governance=98`、`doc/world-simulator/launcher=86`
-  - near-limit active docs：`doc/world-simulator/project.md=1000`、`doc/readme/project.md=978`、`doc/core/reviews/round-006-reviewed-files.md=932`、`doc/core/reviews/round-007-reviewed-files.md=906`
+  - near-limit active docs at snapshot time：`doc/world-simulator/project.md=1000`、`doc/readme/project.md=978`、`doc/core/reviews/round-006-reviewed-files.md=932`、`doc/core/reviews/round-007-reviewed-files.md=906`
+  - 2026-06-16 follow-up：`doc/core/reviews/round-006-reviewed-files.md` 与 `doc/core/reviews/round-007-reviewed-files.md` 已迁为 compact snapshot entrypoint；全量逐行证据保留在 git snapshot，不再作为当前 near-limit active docs。
 - 复核结论：
   - 首批路径级治理入口已全部落地，但热点体量仍在增长；当前更急的风险已从“缺 landing page”转成“活跃 project/review 文档逼近或触达长度门禁”。
   - 因此本轮不再把下一步写成泛化的“季度复核后再看”，也不继续在当前 PR 横向扩 `ci/longrun/templates`、`gap` 或 `production` 新路径治理。
-  - 下一条正式 follow-up 应优先拆分 near-limit active project docs，先处理 `doc/world-simulator/project.md` 与 `doc/readme/project.md`，再视结果判断是否需要把 `core/reviews` 或 `world-simulator/launcher` 升级为下一轮专题。
+  - 下一条正式 follow-up 应优先拆分 near-limit active project docs，先处理 `doc/world-simulator/project.md` 与 `doc/readme/project.md`；`core/reviews` 的 ROUND-006/007 长表已由后续 compact snapshot follow-up 收口。
 
 说明:
 `doc/devlog` 历史压缩、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 路径级治理都已完成首批入口收口。季度复核也已完成当前快照重算；后续若要继续扩 `core/reviews`、`world-simulator/launcher`、`ci/longrun/templates`、`gap` 或 `production` 等 follow-up，仍需至少各自独立创建 `.pm` task；默认仍建议独立 worktree，除非用户明确要求复用当前 PR/工作树。

@@ -66,10 +66,10 @@ rg -n "^审计轮次:\s*7$" doc --glob '*.md' -g '!doc/devlog/**'
 - G7-004: 复审、延期项登记与门禁回写
 
 ## 逐文档复核清单（S_round007）
-- 清单文件：`doc/core/reviews/round-007-reviewed-files.md`
+- 清单文件：`doc/core/reviews/round-007-reviewed-files.md`（compact snapshot entrypoint）
 - 统计口径：`doc/**/*.md` 排除 `doc/devlog/**`，即 ROUND-007 固定分母。
 - 当前基线（2026-03-10，完成态）：`874` 份文档
-- 用途：逐文档记录当前类型、边界判定、问题编号、整改动作与完成状态。
+- 用途：保留 ROUND-007 固定分母、字段契约与完成态入口；全量逐行记录可从 pre-compaction git snapshot `0d6fd50849cae07bac17883cca14f141ede93196` 恢复。
 
 ## 复核进度日志（逐文档）
 - 日志文件：`doc/core/reviews/round-007-audit-progress-log.md`
@@ -91,8 +91,8 @@ rg -n "^审计轮次:\s*7$" doc --glob '*.md' -g '!doc/devlog/**'
 | --- | --- | --- | --- | --- | --- |
 | A7-001 | 建立 ROUND-007 内容职责边界复核台账（本文件 + 清单 + 工作清单 + 进度日志） | `producer_system_designer` | 2026-03-09 | `test -f doc/core/reviews/consistency-review-round-007.md && test -f doc/core/reviews/round-007-reviewed-files.md && test -f doc/core/reviews/round-007-kickoff-worklist.md && test -f doc/core/reviews/round-007-audit-progress-log.md` | done |
 | A7-002 | 冻结 ROUND-007 范围、批次、问题池与判定口径 | `producer_system_designer` | 2026-03-09 | `rg -n "总范围|执行批次|G7-|I7-" doc/core/reviews/consistency-review-round-007.md` | done |
-| A7-003 | 生成逐文档复核清单并标注字段定义 | `producer_system_designer` | 2026-03-09 | `rg -n "当前类型|边界判定|问题编号|整改动作|状态" doc/core/reviews/round-007-reviewed-files.md` | done |
-| A7-004 | 按批次执行内容职责边界复核与文档回写 | 各模块 owner | 2026-03-10 | `rg -n "当前已完成复核文档数: 874|ROUND-007 总范围（\`doc/**/*.md\` - \`doc/devlog/**\`） \| 874 \| completed" doc/core/reviews/round-007-reviewed-files.md` | done |
+| A7-003 | 生成逐文档复核清单并标注字段定义 | `producer_system_designer` | 2026-03-09 | `./scripts/doc-evidence-snapshot-check.sh` | done |
+| A7-004 | 按批次执行内容职责边界复核与文档回写 | 各模块 owner | 2026-03-10 | `./scripts/doc-evidence-snapshot-check.sh` | done |
 | A7-005 | ROUND-007 复审与验收 | `qa_engineer` | 2026-03-10 | `python - <<'PY' ...` 全量边界启发式扫描 + 样本抽查 | done |
 
 ## 复审结果
