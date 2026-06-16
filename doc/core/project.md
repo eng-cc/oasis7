@@ -43,12 +43,12 @@
     - `doc/core/reviews/round-005-audit-progress-log.md`
   - ROUND-006 启动产物（2026-03-09，结构治理执行台账）:
     - `doc/core/reviews/consistency-review-round-006.md`
-    - `doc/core/reviews/round-006-reviewed-files.md`
+    - `doc/core/reviews/round-006-reviewed-files.md`（compact snapshot entrypoint；逐行证据可由 git snapshot 恢复）
     - `doc/core/reviews/round-006-kickoff-worklist.md`
     - `doc/core/reviews/round-006-audit-progress-log.md`
   - ROUND-007 启动产物（2026-03-09，内容职责边界复核轮）:
     - `doc/core/reviews/consistency-review-round-007.md`
-    - `doc/core/reviews/round-007-reviewed-files.md`
+    - `doc/core/reviews/round-007-reviewed-files.md`（compact snapshot entrypoint；逐行证据可由 git snapshot 恢复）
     - `doc/core/reviews/round-007-kickoff-worklist.md`
     - `doc/core/reviews/round-007-audit-progress-log.md`
   - ROUND-007 进展（2026-03-10）:
@@ -112,7 +112,7 @@
 - [x] TASK-CORE-010 (PRD-CORE-003) [test_tier_required]: 建立 ROUND-006 结构治理执行台账，将本轮目标明确为按 `doc-structure-standard` 逐文档改造，并落档治理清单/批次/进度日志骨架。
   - 产物文件:
     - `doc/core/reviews/consistency-review-round-006.md`
-    - `doc/core/reviews/round-006-reviewed-files.md`
+    - `doc/core/reviews/round-006-reviewed-files.md`（compact snapshot entrypoint；pre-compaction 逐行证据见 commit `0d6fd50849cae07bac17883cca14f141ede93196`）
     - `doc/core/reviews/round-006-kickoff-worklist.md`
     - `doc/core/reviews/round-006-audit-progress-log.md`
   - 验收命令 (`test_tier_required`):
@@ -120,7 +120,8 @@
     - `test -f doc/core/reviews/round-006-reviewed-files.md`
     - `test -f doc/core/reviews/round-006-kickoff-worklist.md`
     - `test -f doc/core/reviews/round-006-audit-progress-log.md`
-    - `rg -n "doc-structure-standard|结构治理|当前类型|目标类型|改造动作|未完成不升轮次" doc/core/reviews/consistency-review-round-006.md doc/core/reviews/round-006-reviewed-files.md doc/core/reviews/round-006-kickoff-worklist.md`
+    - `rg -n "doc-structure-standard|结构治理|当前类型|目标类型|改造动作|未完成不升轮次|compact snapshot" doc/core/reviews/consistency-review-round-006.md doc/core/reviews/round-006-reviewed-files.md doc/core/reviews/round-006-kickoff-worklist.md`
+    - `./scripts/doc-evidence-snapshot-check.sh`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-011 (PRD-CORE-004) [test_tier_required]: 在 core PRD 中建立当前阶段收口优先级（P0/P1/P2）唯一口径，明确玩法 / runtime / testing / playability / headless 的发布前排序原则。
   - 产物文件:

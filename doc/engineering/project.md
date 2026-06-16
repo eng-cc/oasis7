@@ -118,6 +118,7 @@
 - [x] TASK-ENGINEERING-106 (PRD-ENGINEERING-024) [test_tier_required]: 建立“文档体量治理与活跃阅读面收敛”专题 `prd/design/project`，冻结 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 四层消费模型、默认阅读面减重规则与高密度模块优先级，并同步回写 engineering 主入口、allowlist 与 task execution log。
 - [x] TASK-ENGINEERING-107 (PRD-ENGINEERING-024) [test_tier_required]: 先对 `world-simulator` 执行首批活跃阅读面收敛，回写 `README.md` / `prd.index.md` 的首读分流、热点子域导航与密度提示，去掉模块入口对近期专题长名单的默认暴露。
 - [x] TASK-ENGINEERING-108 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `p2p / testing` 执行同批次活跃阅读面收敛，回写 `README.md` / `prd.index.md` 的首读分流、热点子域导航、密度提示与活跃补充文档边界，去掉模块入口对近期专题长名单的默认暴露。
+- [x] evidence-archive-reference-migration (PRD-ENGINEERING-024) [test_tier_required]: 将 ROUND-006/007 全量审计清单迁为 compact snapshot entrypoint，并把逐行证据改为可验证的 git snapshot 恢复链路。 Trace: .pm/tasks/task_355ea5d491de4d86bbf0759556cb4f4a.yaml
 - [x] environment-tier-description-clarity (PRD-ENGINEERING-015) [test_tier_required]: 收口本地、test、正式三套环境说明，明确 `shared_devnet` 仅作 legacy/rehearsal evidence、当前无面向用户的正式环境，并同步 public-testnet readiness 六条 lane。 Trace: .pm/tasks/task_0e236e8beab6428497508d1afff2b4f5.yaml
 - [x] TASK-ENGINEERING-109 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `readme/core` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 canonical/material/execution 长名单的默认暴露。
 - [x] TASK-ENGINEERING-110 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `core` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 review/audit/活跃专题长名单的默认暴露。

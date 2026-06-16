@@ -64,10 +64,10 @@ rg -n "^审计轮次:\s*6$" doc --glob '*.md' -g '!doc/devlog/**'
 - G6-003: 索引、互链、历史引用与 redirect 收口
 
 ## 逐文档治理清单（S_round006）
-- 清单文件：`doc/core/reviews/round-006-reviewed-files.md`
+- 清单文件：`doc/core/reviews/round-006-reviewed-files.md`（compact snapshot entrypoint）
 - 统计口径：`doc/**/*.md` 排除 `doc/devlog/**`，即 ROUND-006 全量治理分母。
 - 当前基线（2026-03-09，已完成最终收口）：`870` 份文档
-- 用途：作为 ROUND-006 固定分母，逐文档记录当前类型、目标类型、改造动作与完成状态。
+- 用途：作为 ROUND-006 固定分母与完成态入口；全量逐行记录可从 pre-compaction git snapshot `0d6fd50849cae07bac17883cca14f141ede93196` 恢复。
 
 ## 治理进度日志（逐文档）
 - 日志文件：`doc/core/reviews/round-006-audit-progress-log.md`
@@ -89,7 +89,7 @@ rg -n "^审计轮次:\s*6$" doc --glob '*.md' -g '!doc/devlog/**'
 | --- | --- | --- | --- | --- | --- |
 | A6-001 | 建立 ROUND-006 结构治理执行台账（本文件 + 治理清单 + 执行清单 + 进度日志） | `producer_system_designer` | 2026-03-09 | `test -f doc/core/reviews/consistency-review-round-006.md && test -f doc/core/reviews/round-006-reviewed-files.md && test -f doc/core/reviews/round-006-kickoff-worklist.md && test -f doc/core/reviews/round-006-audit-progress-log.md` | done |
 | A6-002 | 冻结 ROUND-006 执行批次与模块 owner，并确认“全量范围、分批执行”的分母口径 | `producer_system_designer` | 2026-03-09 | `rg -n "总范围|执行批次|G6-|I6-" doc/core/reviews/consistency-review-round-006.md` | done |
-| A6-003 | 生成逐文档治理台账并标注当前/目标类型、改造动作与依赖回写项 | `producer_system_designer` | 2026-03-09 | `test "$(rg -c "^\| `doc/" doc/core/reviews/round-006-reviewed-files.md)" -eq 870` && rg -n "当前类型|目标类型|改造动作|索引回写|引用回写|状态" doc/core/reviews/round-006-reviewed-files.md` | done |
+| A6-003 | 生成逐文档治理台账并标注当前/目标类型、改造动作与依赖回写项 | `producer_system_designer` | 2026-03-09 | `./scripts/doc-evidence-snapshot-check.sh` | done |
 | A6-004 | 按批次执行文档改造并同步回写入口/索引/引用 | 各模块 owner | 2026-03-09 | `find doc -type f -name "*.project.md" | wc -l`（配合 legacy=0 验证） | done |
 | A6-005 | ROUND-006 复审与门禁验收 | `qa_engineer` | 2026-03-09 | `python - <<'PY' ...` 快速结构校验 + 引用可达性校验 | done |
 
