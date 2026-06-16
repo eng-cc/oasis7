@@ -44,6 +44,7 @@ expect:
   - `init`：显式 `WorldInitConfig`（完全自定义）。
 - `seed`：若提供，覆盖初始化的 `seed`。
 - `config`：可选 `WorldConfig`，缺省则 `WorldConfig::default()`。
+- 顶层字段与 `expect` 字段均采用严格解析；未知字段会直接解析失败，避免断言拼写错误被静默忽略。
 
 ### CLI 入口
 - 单文件：`env -u RUSTC_WRAPPER cargo run -- --scenario path/to/file.yaml`

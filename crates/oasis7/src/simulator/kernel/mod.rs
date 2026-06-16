@@ -9,6 +9,7 @@ mod persistence;
 mod power;
 mod replay;
 mod replay_module_lifecycle;
+mod replay_power_market;
 mod social;
 mod step;
 mod types;

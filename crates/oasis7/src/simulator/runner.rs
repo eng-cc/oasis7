@@ -462,20 +462,7 @@ impl<B: AgentBehavior> AgentRunner<B> {
         };
         let llm_api_duration =
             self.record_decision_runtime_samples(decision_duration, decision_trace.as_ref());
-        if let Some(trace) = decision_trace.as_ref() {
-            for intent in &trace.llm_effect_intents {
-                kernel.record_event(WorldEventKind::LlmEffectQueued {
-                    agent_id: trace.agent_id.clone(),
-                    intent: intent.clone(),
-                });
-            }
-            for receipt in &trace.llm_effect_receipts {
-                kernel.record_event(WorldEventKind::LlmReceiptAppended {
-                    agent_id: trace.agent_id.clone(),
-                    receipt: receipt.clone(),
-                });
-            }
-        }
+        Self::record_decision_trace_effects(kernel, decision_trace.as_ref());
 
         let result = match decision {
             AgentDecision::Wait => Some(AgentTickResult {
@@ -619,6 +606,7 @@ impl<B: AgentBehavior> AgentRunner<B> {
         };
         let llm_api_duration =
             self.record_decision_runtime_samples(decision_duration, decision_trace.as_ref());
+        Self::record_decision_trace_effects(kernel, decision_trace.as_ref());
 
         let result = match decision {
             AgentDecision::Wait => Some(AgentTickResult {
@@ -762,6 +750,27 @@ impl<B: AgentBehavior> AgentRunner<B> {
             .record_decision_duration(decision_local_duration);
         self.runtime_perf.record_llm_api_duration(llm_api_duration);
         llm_api_duration
+    }
+
+    fn record_decision_trace_effects(
+        kernel: &mut WorldKernel,
+        decision_trace: Option<&AgentDecisionTrace>,
+    ) {
+        let Some(trace) = decision_trace else {
+            return;
+        };
+        for intent in &trace.llm_effect_intents {
+            kernel.record_event(WorldEventKind::LlmEffectQueued {
+                agent_id: trace.agent_id.clone(),
+                intent: intent.clone(),
+            });
+        }
+        for receipt in &trace.llm_effect_receipts {
+            kernel.record_event(WorldEventKind::LlmReceiptAppended {
+                agent_id: trace.agent_id.clone(),
+                receipt: receipt.clone(),
+            });
+        }
     }
 
     fn record_tick_duration_without_llm_api(

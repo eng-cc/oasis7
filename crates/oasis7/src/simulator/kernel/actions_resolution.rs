@@ -111,200 +111,186 @@ impl WorldKernel {
         let mut fills = Vec::new();
         let mut auto_cancelled_order_ids = Vec::new();
 
-        while remaining_amount > 0 {
-            let candidate_order_ids = self.sorted_opposite_power_order_ids(side);
-            if candidate_order_ids.is_empty() {
+        let candidate_order_ids = self.sorted_opposite_power_order_ids(side);
+        for candidate_order_id in candidate_order_ids {
+            if remaining_amount <= 0 {
                 break;
             }
 
-            let mut matched_this_round = false;
-            let mut stop_matching = false;
+            let Some(candidate_index) = self.find_power_order_index(candidate_order_id) else {
+                continue;
+            };
+            let candidate_order = self.model.power_order_book.open_orders[candidate_index].clone();
+            if !Self::power_order_limits_cross(
+                side,
+                limit_price_per_pu,
+                candidate_order.limit_price_per_pu,
+            ) {
+                break;
+            }
 
-            for candidate_order_id in candidate_order_ids {
-                let Some(candidate_index) = self.find_power_order_index(candidate_order_id) else {
-                    continue;
-                };
-                let candidate_order =
-                    self.model.power_order_book.open_orders[candidate_index].clone();
-                if !Self::power_order_limits_cross(
-                    side,
+            let fill_amount = remaining_amount.min(candidate_order.remaining_amount);
+            if fill_amount <= 0 {
+                self.model
+                    .power_order_book
+                    .open_orders
+                    .remove(candidate_index);
+                Self::append_auto_cancelled_order_id(
+                    &mut auto_cancelled_order_ids,
+                    candidate_order.order_id,
+                );
+                continue;
+            }
+
+            let (seller, buyer, sell_limit_price_per_pu, buy_limit_price_per_pu) = match side {
+                PowerOrderSide::Buy => (
+                    candidate_order.owner.clone(),
+                    owner.clone(),
+                    candidate_order.limit_price_per_pu,
+                    limit_price_per_pu,
+                ),
+                PowerOrderSide::Sell => (
+                    owner.clone(),
+                    candidate_order.owner.clone(),
                     limit_price_per_pu,
                     candidate_order.limit_price_per_pu,
-                ) {
-                    stop_matching = true;
+                ),
+            };
+            let (buy_order_id, sell_order_id) = match side {
+                PowerOrderSide::Buy => (order_id, candidate_order.order_id),
+                PowerOrderSide::Sell => (candidate_order.order_id, order_id),
+            };
+
+            let prepared = match self.prepare_power_transfer(&seller, &buyer, fill_amount) {
+                Ok(prepared) => prepared,
+                Err(reason) => {
+                    if matches!(side, PowerOrderSide::Buy)
+                        && matches!(
+                            reason,
+                            RejectReason::InsufficientResource {
+                                owner: ref rejected_owner,
+                                kind: ResourceKind::Electricity,
+                                ..
+                            } if rejected_owner == &seller
+                        )
+                    {
+                        self.model
+                            .power_order_book
+                            .open_orders
+                            .remove(candidate_index);
+                        Self::append_auto_cancelled_order_id(
+                            &mut auto_cancelled_order_ids,
+                            candidate_order.order_id,
+                        );
+                    }
+                    continue;
+                }
+            };
+
+            if !Self::power_order_quote_within_limits(
+                prepared.quoted_price_per_pu,
+                sell_limit_price_per_pu,
+                buy_limit_price_per_pu,
+            ) {
+                if (matches!(side, PowerOrderSide::Buy)
+                    && prepared.quoted_price_per_pu < sell_limit_price_per_pu)
+                    || (matches!(side, PowerOrderSide::Sell)
+                        && prepared.quoted_price_per_pu > buy_limit_price_per_pu)
+                {
                     break;
                 }
+                continue;
+            }
 
-                let fill_amount = remaining_amount.min(candidate_order.remaining_amount);
-                if fill_amount <= 0 {
-                    self.model
-                        .power_order_book
-                        .open_orders
-                        .remove(candidate_index);
-                    Self::append_auto_cancelled_order_id(
-                        &mut auto_cancelled_order_ids,
-                        candidate_order.order_id,
-                    );
-                    continue;
-                }
-
-                let (seller, buyer, sell_limit_price_per_pu, buy_limit_price_per_pu) = match side {
-                    PowerOrderSide::Buy => (
-                        candidate_order.owner.clone(),
-                        owner.clone(),
-                        candidate_order.limit_price_per_pu,
-                        limit_price_per_pu,
-                    ),
-                    PowerOrderSide::Sell => (
-                        owner.clone(),
-                        candidate_order.owner.clone(),
-                        limit_price_per_pu,
-                        candidate_order.limit_price_per_pu,
-                    ),
-                };
-                let (buy_order_id, sell_order_id) = match side {
-                    PowerOrderSide::Buy => (order_id, candidate_order.order_id),
-                    PowerOrderSide::Sell => (candidate_order.order_id, order_id),
-                };
-
-                let prepared = match self.prepare_power_transfer(&seller, &buyer, fill_amount) {
-                    Ok(prepared) => prepared,
-                    Err(reason) => {
-                        if matches!(side, PowerOrderSide::Buy)
-                            && matches!(
-                                reason,
-                                RejectReason::InsufficientResource {
-                                    owner: ref rejected_owner,
-                                    kind: ResourceKind::Electricity,
-                                    ..
-                                } if rejected_owner == &seller
-                            )
-                        {
-                            self.model
-                                .power_order_book
-                                .open_orders
-                                .remove(candidate_index);
-                            Self::append_auto_cancelled_order_id(
-                                &mut auto_cancelled_order_ids,
-                                candidate_order.order_id,
-                            );
-                        }
-                        continue;
-                    }
-                };
-
-                if !Self::power_order_quote_within_limits(
-                    prepared.quoted_price_per_pu,
-                    sell_limit_price_per_pu,
-                    buy_limit_price_per_pu,
-                ) {
-                    if (matches!(side, PowerOrderSide::Buy)
-                        && prepared.quoted_price_per_pu < sell_limit_price_per_pu)
-                        || (matches!(side, PowerOrderSide::Sell)
-                            && prepared.quoted_price_per_pu > buy_limit_price_per_pu)
+            let transfer = match self.transfer_power(
+                &seller,
+                &buyer,
+                fill_amount,
+                prepared.quoted_price_per_pu,
+            ) {
+                Ok(transfer) => transfer,
+                Err(reason) => {
+                    if matches!(side, PowerOrderSide::Buy)
+                        && matches!(
+                            reason,
+                            RejectReason::InsufficientResource {
+                                owner: ref rejected_owner,
+                                kind: ResourceKind::Electricity,
+                                ..
+                            } if rejected_owner == &seller
+                        )
                     {
-                        stop_matching = true;
-                        break;
+                        self.model
+                            .power_order_book
+                            .open_orders
+                            .remove(candidate_index);
+                        Self::append_auto_cancelled_order_id(
+                            &mut auto_cancelled_order_ids,
+                            candidate_order.order_id,
+                        );
                     }
                     continue;
                 }
+            };
 
-                let transfer = match self.transfer_power(
-                    &seller,
-                    &buyer,
-                    fill_amount,
-                    prepared.quoted_price_per_pu,
-                ) {
-                    Ok(transfer) => transfer,
-                    Err(reason) => {
-                        if matches!(side, PowerOrderSide::Buy)
-                            && matches!(
-                                reason,
-                                RejectReason::InsufficientResource {
-                                    owner: ref rejected_owner,
-                                    kind: ResourceKind::Electricity,
-                                    ..
-                                } if rejected_owner == &seller
-                            )
-                        {
-                            self.model
-                                .power_order_book
-                                .open_orders
-                                .remove(candidate_index);
-                            Self::append_auto_cancelled_order_id(
-                                &mut auto_cancelled_order_ids,
-                                candidate_order.order_id,
-                            );
-                        }
-                        continue;
-                    }
+            let PowerEvent::PowerTransferred {
+                from,
+                to,
+                amount: transferred_amount,
+                loss,
+                quoted_price_per_pu,
+                price_per_pu,
+                settlement_amount,
+            } = transfer
+            else {
+                continue;
+            };
+
+            let Some(candidate_index) = self.find_power_order_index(candidate_order_id) else {
+                return WorldEventKind::ActionRejected {
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "power orderbook inconsistent: order {} missing during fill",
+                            candidate_order_id
+                        )],
+                    },
                 };
-
-                let PowerEvent::PowerTransferred {
-                    from,
-                    to,
-                    amount: transferred_amount,
-                    loss,
-                    quoted_price_per_pu,
-                    price_per_pu,
-                    settlement_amount,
-                } = transfer
-                else {
-                    continue;
+            };
+            let candidate_state = &mut self.model.power_order_book.open_orders[candidate_index];
+            if candidate_state.remaining_amount < transferred_amount {
+                return WorldEventKind::ActionRejected {
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "power orderbook inconsistent: order {} remaining {} < fill {}",
+                            candidate_order_id,
+                            candidate_state.remaining_amount,
+                            transferred_amount
+                        )],
+                    },
                 };
-
-                let Some(candidate_index) = self.find_power_order_index(candidate_order_id) else {
-                    return WorldEventKind::ActionRejected {
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "power orderbook inconsistent: order {} missing during fill",
-                                candidate_order_id
-                            )],
-                        },
-                    };
-                };
-                let candidate_state = &mut self.model.power_order_book.open_orders[candidate_index];
-                if candidate_state.remaining_amount < transferred_amount {
-                    return WorldEventKind::ActionRejected {
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "power orderbook inconsistent: order {} remaining {} < fill {}",
-                                candidate_order_id,
-                                candidate_state.remaining_amount,
-                                transferred_amount
-                            )],
-                        },
-                    };
-                }
-                candidate_state.remaining_amount = candidate_state
-                    .remaining_amount
-                    .saturating_sub(transferred_amount);
-                if candidate_state.remaining_amount == 0 {
-                    self.model
-                        .power_order_book
-                        .open_orders
-                        .remove(candidate_index);
-                }
-
-                remaining_amount = remaining_amount.saturating_sub(transferred_amount);
-                fills.push(PowerOrderFill {
-                    buy_order_id,
-                    sell_order_id,
-                    buyer: to,
-                    seller: from,
-                    amount: transferred_amount,
-                    loss,
-                    quoted_price_per_pu,
-                    price_per_pu,
-                    settlement_amount,
-                });
-                matched_this_round = true;
-                break;
+            }
+            candidate_state.remaining_amount = candidate_state
+                .remaining_amount
+                .saturating_sub(transferred_amount);
+            if candidate_state.remaining_amount == 0 {
+                self.model
+                    .power_order_book
+                    .open_orders
+                    .remove(candidate_index);
             }
 
-            if remaining_amount <= 0 || stop_matching || !matched_this_round {
-                break;
-            }
+            remaining_amount = remaining_amount.saturating_sub(transferred_amount);
+            fills.push(PowerOrderFill {
+                buy_order_id,
+                sell_order_id,
+                buyer: to,
+                seller: from,
+                amount: transferred_amount,
+                loss,
+                quoted_price_per_pu,
+                price_per_pu,
+                settlement_amount,
+            });
         }
 
         if remaining_amount > 0 {

@@ -1066,3 +1066,89 @@ fn power_order_match_prefers_earlier_order_at_same_price() {
         other => panic!("expected power order placed event, got {other:?}"),
     }
 }
+
+#[test]
+fn power_order_match_sweeps_many_resting_orders_in_priority_order() {
+    let mut config = WorldConfig::default();
+    config.power.market_base_price_per_pu = 2;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "hub".to_string(),
+        name: "hub".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "buyer".to_string(),
+        location_id: "hub".to_string(),
+    });
+    for index in 0..32 {
+        kernel.submit_action(Action::RegisterAgent {
+            agent_id: format!("seller-{index}"),
+            location_id: "hub".to_string(),
+        });
+    }
+    kernel.step_until_empty();
+
+    let mut sell_order_ids = Vec::new();
+    for index in 0..32 {
+        let seller_id = format!("seller-{index}");
+        seed_owner_resource(
+            &mut kernel,
+            ResourceOwner::Agent {
+                agent_id: seller_id.clone(),
+            },
+            ResourceKind::Electricity,
+            1,
+        );
+        kernel.submit_action(Action::PlacePowerOrder {
+            owner: ResourceOwner::Agent {
+                agent_id: seller_id,
+            },
+            side: PowerOrderSide::Sell,
+            amount: 1,
+            limit_price_per_pu: 2,
+        });
+        let sell_event = kernel.step().expect("place resting sell order");
+        match sell_event.kind {
+            WorldEventKind::PowerOrderPlaced {
+                order_id,
+                remaining_amount,
+                fills,
+                ..
+            } => {
+                assert_eq!(remaining_amount, 1);
+                assert!(fills.is_empty());
+                sell_order_ids.push(order_id);
+            }
+            other => panic!("expected power order placed event, got {other:?}"),
+        }
+    }
+
+    kernel.submit_action(Action::PlacePowerOrder {
+        owner: ResourceOwner::Agent {
+            agent_id: "buyer".to_string(),
+        },
+        side: PowerOrderSide::Buy,
+        amount: 32,
+        limit_price_per_pu: 5,
+    });
+    let buy_event = kernel.step().expect("place sweeping buy order");
+    match buy_event.kind {
+        WorldEventKind::PowerOrderPlaced {
+            remaining_amount,
+            fills,
+            auto_cancelled_order_ids,
+            ..
+        } => {
+            assert_eq!(remaining_amount, 0);
+            assert!(auto_cancelled_order_ids.is_empty());
+            assert_eq!(fills.len(), sell_order_ids.len());
+            let filled_sell_order_ids: Vec<u64> =
+                fills.iter().map(|fill| fill.sell_order_id).collect();
+            assert_eq!(filled_sell_order_ids, sell_order_ids);
+        }
+        other => panic!("expected power order placed event, got {other:?}"),
+    }
+    assert!(kernel.model().power_order_book.open_orders.is_empty());
+}
