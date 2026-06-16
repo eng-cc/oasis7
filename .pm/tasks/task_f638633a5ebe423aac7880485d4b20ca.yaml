@@ -10,6 +10,8 @@ source_refs:
   - doc/p2p/prd.index.md
 doc_refs:
   - doc/p2p/README.md
+  - doc/p2p/project.md
+  - doc/engineering/project.md
   - doc/engineering/prd-review/checklists/active-p2p.md
 related_prd: []
 acceptance:
