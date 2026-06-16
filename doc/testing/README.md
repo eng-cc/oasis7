@@ -42,19 +42,19 @@
 - 汇总 CI、启动器、长稳、性能、人工手册与治理专题。
 - 承接跨模块测试范围定义、证据归档与趋势基线建设。
 
-## 热点子域导航（2026-05-06 快照）
-- `evidence/`（49）：发布证据、趋势基线与审计留痕；当前已补 `evidence/README.md` 作为热点子域入口。
-- `ci/`（33）：CI、wasm determinism、tiering 与 gate 保护。
-- `longrun/`（24）：长稳、chaos、soak 与在线稳定性。
-- `launcher/`（18）：启动器链路测试、playtest 与配置自动接线。
-- `governance/`（28）：质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated player personas。
-- `templates/`（16）：证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入。
-- `performance/`（12）：runtime / viewer 性能观测与方法学。
-- `manual/`（7）：系统测试手册分册与 Web UI 闭环 manual。
-- `chaos-plans/`（1）：专项 chaos plan 入口。
+## 热点子域导航
+- `evidence/`：发布证据、趋势基线与审计留痕；当前已补 `evidence/README.md` 作为热点子域入口。
+- `ci/`：CI、wasm determinism、tiering 与 gate 保护。
+- `longrun/`：长稳、chaos、soak 与在线稳定性。
+- `launcher/`：启动器链路测试、playtest 与配置自动接线。
+- `governance/`：质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated player personas。
+- `templates/`：证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入。
+- `performance/`：runtime / viewer 性能观测与方法学。
+- `manual/`：系统测试手册分册与 Web UI 闭环 manual。
+- `chaos-plans/`：专项 chaos plan 入口。
 
 ## 高密度提示
-- `doc/testing/` 当前共有 194 份文件；这一层入口不再尝试把热点专题直接摊平展示。
+- 本页不维护静态文件数量；这些数字容易随任务流转漂移，不能作为默认阅读面的判断依据。
 - 需要完整活跃专题清单时，进入 `doc/testing/prd.index.md`；进入 `evidence/` 时，优先先读 `doc/testing/evidence/README.md` 再继续下钻；需要 template / blocker 留痕时，再按具体子域进入。
 
 ## 共享约定
