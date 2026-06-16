@@ -129,3 +129,12 @@ Example:
 - Expected Result: Pre-PR local role review status is passed.
 - Actual Result: Pending rerun after this evidence-only amend.
 - Blocker / Next Action: Amend evidence and rerun prepare-task-pr.
+
+## 2026-06-16 20:57:09 CST / tpm
+- 完成内容: Draft PR created
+- 遗留事项: Normal PR CI/comment watch if/when PR is moved out of draft or required checks start
+- Action: PR evidence: created draft PR https://github.com/eng-cc/oasis7/pull/494 via GitHub connector because local gh was not installed. PR purpose decision: normal_pr_ci_watch after draft is marked ready; current PR is draft for review/CI staging, not a manual packaging CI hold.
+- Validation Command: GitHub connector _create_pull_request returned PR #494 with head task/p2p-testnet-package-upgrade-script and head_sha 5d2c27034eb11a3b12a96b5d60e42dffd026eb9f.
+- Expected Result: PR URL and purpose decision are recorded in task execution log.
+- Actual Result: Draft PR #494 created and recorded.
+- Blocker / Next Action: Commit and push this PR evidence entry.
