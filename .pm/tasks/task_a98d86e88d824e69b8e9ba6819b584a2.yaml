@@ -1,0 +1,27 @@
+task_uid: task_a98d86e88d824e69b8e9ba6819b584a2
+title: "Audit WASM docs for slimming opportunities"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-wasm-doc-slimming-audit
+execution_log_path: .pm/tasks/task_a98d86e88d824e69b8e9ba6819b584a2.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "Sample several WASM-related docs and upstream/downstream related docs."
+  - "Record repository_health_engineer slice contract and findings in the task execution log."
+  - "Return concise slimming recommendations with evidence and residual risk."
+handoff_to: []
+updated_at: 2026-06-16T20:09:08+08:00
+last_started_at: 2026-06-16T17:02:12+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-16T20:08:57+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-16T20:09:06+08:00

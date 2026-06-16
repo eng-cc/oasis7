@@ -3,6 +3,12 @@
 - 对应需求文档: `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md`
 - 对应项目管理文档: `doc/scripts/wasm/builtin-wasm-nightly-build-std.project.md`
 
+## 当前状态（2026-06-16）
+- 本设计保留为历史实现证据（historical only; not a release-chain entry），用于解释 nightly build-std 脚本切片的设计边界。
+- 当前 WASM 发布级 canonical build / release evidence 设计入口为 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md`。
+- 本设计不得覆盖 Docker-only publishable build、build receipt、single canonical token 或 cross-host evidence requirements。
+- 新的构建链路设计评审应优先进入 world-runtime WASM canonical pipeline，再按需回查本文。
+
 ## 1. 设计定位
 定义 WASM 构建脚本专题设计，统一 nightly build-std、可复现构建与环境约束。
 

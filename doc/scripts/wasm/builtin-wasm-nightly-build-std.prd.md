@@ -5,6 +5,11 @@
 
 审计轮次: 4
 
+## 当前状态（2026-06-16）
+- 本文保留为历史实现证据（historical only; not a release-chain entry），记录 nightly + `-Z build-std` 方案如何收口当时的 builtin wasm 构建输入。
+- 当前发布级 canonical build / release evidence 入口已收敛到 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`；涉及 Docker builder、build receipt、identity 与 release evidence 的新判断应从该入口开始。
+- 本文不得覆盖 Docker-only publishable build、build receipt、single canonical token 或 cross-host evidence requirements；`WDBP-3.2` 的跨宿主 closure 仍以真实 Docker-capable `darwin-arm64` live summary / proof 输入为准。
+- 本文仍可用于追溯脚本参数、旧 CI 环境约束和 hash 漂移治理背景，但不再作为 WASM 发布链路的首读入口。
 
 ## 目标
 - 采用 nightly + `-Z build-std` 重建 wasm 目标 std，实现 builtin wasm 构建输入闭环可控。
