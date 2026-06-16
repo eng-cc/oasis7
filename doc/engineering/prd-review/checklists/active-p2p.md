@@ -1,9 +1,12 @@
 # p2p 模块 PRD 已读清单（2026-03 历史审计快照）
 
-审计轮次: 4
+审计轮次: 5
 
 更新时间：2026-03-05
 文档数：143
+
+> Historical compatibility path: 本文件名里的 `active` 只保留历史路径兼容，不表示当前活跃状态。
+> 当前活跃执行状态只看 `doc/p2p/project.md` 和具体专题 `*.project.md` 的状态段；当前入口分流只看 `doc/p2p/README.md` 与 `doc/p2p/prd.index.md`。
 
 说明：
 - 本文件是 `2026-03-03` 全量 PRD 体系审读的 p2p 模块历史证据快照，保留路径 `active-p2p.md` 仅为兼容既有审计引用；它不是当前 p2p 活跃专题索引或执行真值。
