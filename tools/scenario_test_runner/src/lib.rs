@@ -8,11 +8,23 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub enum ScenarioError {
-    Io { path: PathBuf, source: std::io::Error },
-    UnsupportedFormat { path: PathBuf },
-    Parse { path: PathBuf, message: String },
-    InvalidScenario { message: String },
-    Init { message: String },
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    UnsupportedFormat {
+        path: PathBuf,
+    },
+    Parse {
+        path: PathBuf,
+        message: String,
+    },
+    InvalidScenario {
+        message: String,
+    },
+    Init {
+        message: String,
+    },
 }
 
 impl fmt::Display for ScenarioError {
@@ -36,6 +48,7 @@ impl fmt::Display for ScenarioError {
 impl std::error::Error for ScenarioError {}
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ScenarioFile {
     pub version: u32,
     pub name: String,
@@ -51,6 +64,7 @@ pub struct ScenarioFile {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Expectations {
     #[serde(default)]
     pub agents: Option<usize>,
@@ -116,8 +130,9 @@ pub fn run_loaded_scenario(
         init.seed = seed;
     }
 
-    let (model, report) = build_world_model(&config, &init)
-        .map_err(|err| ScenarioError::Init { message: format!("{err:?}") })?;
+    let (model, report) = build_world_model(&config, &init).map_err(|err| ScenarioError::Init {
+        message: format!("{err:?}"),
+    })?;
 
     let failures = evaluate_expectations(&scenario.expect, &model, &report);
     Ok(ScenarioOutcome {
@@ -198,14 +213,18 @@ fn evaluate_expectations(
     if let Some(expected) = expect.agents {
         let actual = model.agents.len();
         if actual != expected {
-            failures.push(format!("agents mismatch: expected {expected}, got {actual}"));
+            failures.push(format!(
+                "agents mismatch: expected {expected}, got {actual}"
+            ));
         }
     }
 
     if let Some(expected) = expect.locations {
         let actual = model.locations.len();
         if actual != expected {
-            failures.push(format!("locations mismatch: expected {expected}, got {actual}"));
+            failures.push(format!(
+                "locations mismatch: expected {expected}, got {actual}"
+            ));
         }
     }
 
@@ -313,5 +332,44 @@ mod tests {
         let outcome = run_loaded_scenario(&scenario, "memory").expect("run scenario");
         assert!(!outcome.passed);
         assert_eq!(outcome.failures.len(), 1);
+    }
+
+    #[test]
+    fn scenario_parse_rejects_unknown_top_level_fields() {
+        let input = r#"
+version: 1
+name: minimal
+scenario: minimal
+unexpected: ignored-before
+expect:
+  agents: 1
+"#;
+
+        let err = serde_yaml::from_str::<ScenarioFile>(input)
+            .expect_err("unknown top-level fields should fail parse");
+        assert!(
+            err.to_string().contains("unknown field `unexpected`"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn scenario_parse_rejects_unknown_expectation_fields() {
+        let input = r#"
+version: 1
+name: minimal
+scenario: minimal
+expect:
+  agents: 1
+  require_agentz:
+    - agent-0
+"#;
+
+        let err = serde_yaml::from_str::<ScenarioFile>(input)
+            .expect_err("unknown expectation fields should fail parse");
+        assert!(
+            err.to_string().contains("unknown field `require_agentz`"),
+            "{err}"
+        );
     }
 }

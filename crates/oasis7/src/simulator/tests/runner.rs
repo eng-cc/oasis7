@@ -866,18 +866,45 @@ fn runner_persists_llm_effect_trace_to_kernel_journal() {
 
     let _ = runner.tick(&mut kernel).expect("tick result");
 
+    assert_llm_effect_trace_journaled(&kernel, "agent-1");
+}
+
+#[test]
+fn runner_decide_only_persists_llm_effect_trace_to_kernel_journal() {
+    let mut kernel = setup_kernel_with_wait_agent("agent-1");
+    let mut runner: AgentRunner<TraceEffectAgent> = AgentRunner::new();
+    runner.register(TraceEffectAgent::new("agent-1"));
+
+    let _ = runner.tick_decide_only(&mut kernel).expect("tick result");
+
+    assert_llm_effect_trace_journaled(&kernel, "agent-1");
+}
+
+#[test]
+fn runner_batch_collect_persists_llm_effect_trace_to_kernel_journal() {
+    let mut kernel = setup_kernel_with_wait_agent("agent-1");
+    let mut runner: AgentRunner<TraceEffectAgent> = AgentRunner::new();
+    runner.register(TraceEffectAgent::new("agent-1"));
+
+    let results = runner.tick_collect_intents_and_commit(&mut kernel, 1);
+    assert_eq!(results.len(), 1);
+
+    assert_llm_effect_trace_journaled(&kernel, "agent-1");
+}
+
+fn assert_llm_effect_trace_journaled(kernel: &WorldKernel, expected_agent_id: &str) {
     let mut has_intent = false;
     let mut has_receipt = false;
     for event in kernel.journal() {
         match &event.kind {
             WorldEventKind::LlmEffectQueued { agent_id, intent } => {
                 has_intent = true;
-                assert_eq!(agent_id, "agent-1");
+                assert_eq!(agent_id, expected_agent_id);
                 assert_eq!(intent.intent_id, "llm-intent-0");
             }
             WorldEventKind::LlmReceiptAppended { agent_id, receipt } => {
                 has_receipt = true;
-                assert_eq!(agent_id, "agent-1");
+                assert_eq!(agent_id, expected_agent_id);
                 assert_eq!(receipt.intent_id, "llm-intent-0");
             }
             _ => {}
