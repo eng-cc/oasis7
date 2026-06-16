@@ -115,12 +115,12 @@ Example:
 - Task UID: task_f0d884daaa044f3a896aa2a9121acbc5
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-p2p-testnet-package-upgrade-script
 - Source Branch: task/p2p-testnet-package-upgrade-script
-- Source Head: b7d90b87a93792506928fa65fbfc8fc1156d8260
+- Source Head: 7f17bdacdf252b7c771558ff5923667d092d8f4a
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: scripts/p2p-public-testnet-package-rollout.py; scripts/p2p-public-testnet-package-rollout.test.sh; doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md; doc/p2p/project.md; .pm/tasks/task_f0d884daaa044f3a896aa2a9121acbc5.yaml; .pm/tasks/task_f0d884daaa044f3a896aa2a9121acbc5.execution.md
 - Role Selection Basis: package upgrade operations helper, verification contract, operator runbook, project trace, and task truth changed.
 - Review Roles: blockchain_ops_engineer, repository_health_engineer, qa_engineer
-- Review Evidence: subagents 019ed06a-c3ba-7592-a7d6-b3ceb64f759d, 019ed06b-128e-7d02-9ebf-a98616e207d6, 019ed06b-4775-7c43-9a2a-5b9dca9b41cd reviewed commit 5a4333a68e5a6f1abfa08788578a7368b16f1828; valid findings were fixed before commit b7d90b87a93792506928fa65fbfc8fc1156d8260.
+- Review Evidence: subagents 019ed06a-c3ba-7592-a7d6-b3ceb64f759d, 019ed06b-128e-7d02-9ebf-a98616e207d6, 019ed06b-4775-7c43-9a2a-5b9dca9b41cd reviewed commit 5a4333a68e5a6f1abfa08788578a7368b16f1828; valid findings were fixed before commit 7f17bdacdf252b7c771558ff5923667d092d8f4a.
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: Linux remote entries render scp plus ssh with remote bundle/script paths; Windows generated PowerShell validates governed bundle runtime_build before stopping/installing and fails closed if missing; checksum validation requires both platform asset and platform BUILDINFO to be present in SHA256SUMS; rollout tests cover remote Linux plan, missing asset checksum rejection, and Windows runtime_build fail-closed text.
 - Residual Risk: Windows execution is statically tested from generated PowerShell text; live host execution remains operator-environment dependent.
