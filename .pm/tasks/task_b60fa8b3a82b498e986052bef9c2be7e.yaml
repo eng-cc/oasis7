@@ -8,7 +8,8 @@ priority: P2
 source_signal: null
 source_refs:
   - AGENTS.md
-doc_refs: []
+doc_refs:
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Randomly sample files not modified for more than two months and assess whether they can be simplified or slimmed down."
