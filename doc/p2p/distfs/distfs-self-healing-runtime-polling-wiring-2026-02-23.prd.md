@@ -5,8 +5,7 @@
 
 审计轮次: 5
 ## ROUND-002 主从口径
-- 本文档为增量子文档（slave），主入口为 `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md`。
-- 本文档仅描述 NodeRuntime 接线与执行器增量；控制面基础语义以主文档为准。
+- 本文档仅描述 self-healing NodeRuntime 接线与执行器增量；主文档为 `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md`，完整主从说明见 `doc/p2p/prd.index.md` 的 ROUND-002 distfs/self-healing 条目。
 
 ## 1. Executive Summary
 - Problem Statement: 将已实现的 `run_replica_maintenance_poll` 接入 `NodeRuntime` 周期循环，实现自动触发副本维护。

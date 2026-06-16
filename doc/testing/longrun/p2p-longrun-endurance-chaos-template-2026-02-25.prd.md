@@ -2,6 +2,7 @@
 
 - 对应设计文档: `doc/testing/longrun/p2p-longrun-endurance-chaos-template-2026-02-25.design.md`
 - 对应项目管理文档: `doc/testing/longrun/p2p-longrun-endurance-chaos-template-2026-02-25.project.md`
+- strict-schema 迁移映射: `doc/testing/longrun/p2p-longrun-endurance-chaos-template-2026-02-25.migration.md`
 
 审计轮次: 4
 
@@ -98,11 +99,3 @@
 | DEC-CHAOSTPL-001 | 引入静态 180 分钟模板作为固定基线 | 仅依赖 continuous 随机注入 | 固定模板更利于跨版本可比与审计。 |
 | DEC-CHAOSTPL-002 | 支持模板与 continuous 叠加 | 两者互斥 | 兼顾基线回归与覆盖探索。 |
 | DEC-CHAOSTPL-003 | 在 S9 明确 `soak_*` 与 `test_tier_*` 边界 | 沿用模糊表述 | 降低执行与门禁解释歧义。 |
-
-## 原文约束点映射（内容保真）
-- 原“目标（180 分钟模板 + continuous 配合 + 语义边界）” -> 第 1 章 Problem/Solution/SC。
-- 原“In/Out of Scope” -> 第 2 章 AC 与 Non-Goals。
-- 原“模板路径/结构、动作节点约束、S9 建议” -> 第 2 章规格矩阵 + 第 4 章技术规格。
-- 原“里程碑 M0~M3” -> 第 5 章 Phased Rollout（CHAOSTPL-1~5）。
-- 原“风险（过密噪声、复现、语义混淆）” -> 第 4 章 Edge Cases + 第 5 章 Technical Risks。
-- 原“当前状态（190 事件、手册接线、短窗计数）” -> 第 6 章 Test Plan 与验证证据。
