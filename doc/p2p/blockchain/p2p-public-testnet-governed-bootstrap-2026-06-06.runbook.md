@@ -514,6 +514,19 @@ curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committ
   --out-dir .tmp/public-testnet-preflight
 ```
 
+### Package version replacement
+```bash
+./scripts/p2p-public-testnet-package-rollout.py \
+  --manifest .tmp/public-testnet-package-rollout/nodes.json \
+  --package-dir .tmp/testnet-packages/<run-id> \
+  --out-dir .tmp/public-testnet-package-rollout \
+  --readiness-policy rpc-running
+```
+
+默认模式只生成计划，不改节点；脚本会校验各平台 `*-BUILDINFO` 和 `*-SHA256SUMS`，并输出 Linux/Windows operator 命令和 `rollout-plan.json`。本地 Linux 节点需要显式加 `--apply-local` 才会调用 `p2p-public-testnet-package-node-upgrade.sh` 执行替换；远端 SSH、Windows PowerShell 和凭据注入仍由 operator 在脚本外执行，manifest 不写密码。
+
+Windows 计划脚本只更新受治理的 `public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json`，并用无 BOM UTF-8 回写 runtime hash/version。常规替换使用 `rpc-running` 保持“软件版本替换”和“网络恢复 ready”解耦；只有确认要把 ready 状态作为替换 gate 时才用 `strict-ready`。
+
 ### Validator status
 ```bash
 ssh root@39.104.204.172 'curl -s http://127.0.0.1:6631/v1/chain/status'
