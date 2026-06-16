@@ -5,6 +5,13 @@
 - 对应运行手册: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
 
 审计轮次: 7
+
+> Current canonical source: this design is legacy/rehearsal background for the old
+> shared release-train model. Current network-tier truth lives in
+> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+> Do not read `shared_devnet` pass as `public_testnet`, `mainnet`, public launch,
+> or public large-world readiness.
+
 ## 设计目标
 - 把 benchmark 中 `L5 shared network/release train` 的缺口落成正式执行模型，而不是继续停留在口头 backlog。
 - 明确 oasis7 下一阶段的最小 shared track、promotion 规则、rollback 规则与 claims gate。
@@ -14,7 +21,7 @@
 | --- | --- | --- |
 | local required/full + S6 + S9/S10 | 已具备 | `present` |
 | governance drill clone/live evidence | 已具备基础 | `present_with_limited_coverage` |
-| shared_devnet/staging/canary | 已执行 first `shared_devnet` dry run 与 follow-up 窗口，但 shared access / mixed-topology / rollback target 仍未全量升到 shared-grade `pass`，且 `staging/canary` 仍未正式执行 | `partial` |
+| shared_devnet/staging/canary | 作为 legacy/rehearsal evidence，`shared_devnet` 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论；`staging/canary` 仍未正式执行，且该轨不再是目标 test 环境 | `legacy_rehearsal_pass` |
 | public claims | 仍受 preview policy 限制 | `limited playable technical preview` + `crypto-hardened preview` |
 
 ## 三层 shared track
@@ -46,7 +53,7 @@
 - 当前设计含义:
   - `release_candidate_bundle` 现在已具备机器可读 JSON 工件、路径哈希与 `git_commit` pinning。
   - `release-gate` 已可在进入 shared track 前先校验 bundle 存在性、引用路径与 hash 漂移。
-  - shared 环境本身仍未建立，因此总 verdict 继续保持 `specified_not_executed`。
+  - 本段记录 RTMIN-1 当时的实现入口；当前网络层 verdict 不在本文维护，见 formal network-tier project。
 
 ## 当前实现入口（RTMIN-2）
 - QA gate 生成:

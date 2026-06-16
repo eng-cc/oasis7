@@ -19,7 +19,7 @@
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
 - 本手册负责 oasis7 自己的执行分层与命令入口；benchmark 专题负责把这些层对位到主流公链常见 testing stack。
-- shared network / release train 专题负责冻结 `L5` 的目标态与 claims gate；它当前表示“已建档、未执行”，不代表仓库已经具备正式 shared devnet/staging/canary。
+- shared network / release train 专题负责冻结 benchmark `L5` legacy rehearsal evidence 与 claims gate；当前 `shared_devnet` 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论，但它只作历史 rehearsal 证据，不代表仓库已经具备 live `public_testnet`、正式 `staging/canary` 或公开大世界上线。
 
 ## 范围
 
@@ -837,231 +837,30 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 - 默认串行执行：`ci-tests full`、`sync-m1/m4/m5 --check`、Web strict、S9/S10。
 - `--quick` 用于缩短 S9/S10 时长并关闭 Web visual baseline。
 
-### Shared Network / Release Train Minimum（Benchmark L5，首轮 dry run 已落地）
-- 当前 canonical 三环境口径已不再把 `shared_devnet` 作为目标 test 子环境；本节只保留 legacy evidence / benchmark L5 历史追溯，不再作为新测试环境规划入口。
-- 参考专题：
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
-- 当前状态：
-  - `partial`
-  - 这表示 first `shared_devnet` dry run 已完成并留有正式 evidence，但 shared access / mixed-topology / rollback target 仍未达到 promotion-ready `pass`，`staging/canary` 也尚未执行。
-- 通过 shared-network gate 之前，以下表述都不允许：
-  - `production release train is established`
-  - `shared network validated`
-  - `mainnet-grade testing maturity`
-- 当前最小执行顺序：
-  1. 生成统一 `release_candidate_bundle`
-  2. 执行 first `shared_devnet` dry run（当前已完成，结论 `partial`）
-  3. 把 `shared_devnet` 从 `partial` 提升到 `pass`
-     这里至少要补齐 `shared_access`、`rollback_target_ready` 与 same-window `mixed_topology_baseline`
-  4. 执行 `staging` rehearsal
-  5. 执行 `canary` rehearsal
-- 当前 evidence 入口：
-  - `doc/testing/evidence/shared-network-shared-devnet-dry-run-2026-03-24.md`
-  - `doc/testing/evidence/shared-network-shared-devnet-promotion-record-2026-03-24.md`
-  - `doc/testing/evidence/shared-network-shared-devnet-incident-2026-03-24.md`
-  - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
-- 当前 runtime 入口：
+### Network Tiers / Shared-Network Evidence
+- 当前网络层真值统一以 `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md` 与对应 project/runbook 为准：
+  - 目标层级是 `local_devnet -> public_testnet -> mainnet`。
+  - `shared_devnet` 只作 legacy/rehearsal evidence，不再作为目标 test 环境。
+  - `shared_devnet` legacy rehearsal 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论，但这不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
+  - formal `public_testnet` 当前仍由 six-lane readiness 判定，不能用 `shared_devnet_pass` 替代。
+- Canonical docs:
+  - Current network-tier source of truth: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+  - `public_testnet` live-candidate checklist: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
+  - Legacy shared-network evidence: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
+  - Benchmark background: `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md`
+- Canonical commands:
 ```bash
-./scripts/release-candidate-bundle.sh create \
-  --bundle output/release-candidates/shared-devnet-01.json \
-  --candidate-id shared-devnet-01 \
-  --track shared_devnet \
-  --runtime-build-ref <runtime-build-path> \
-  --world-snapshot-ref <world-snapshot-path> \
-  --governance-manifest-ref <governance-manifest-path> \
-  --evidence-ref <evidence-path>
-
-./scripts/release-candidate-bundle.sh validate \
-  --bundle output/release-candidates/shared-devnet-01.json \
-  --check-git-head
-
-./scripts/release-gate.sh --candidate-bundle output/release-candidates/shared-devnet-01.json --dry-run
-./scripts/shared-devnet-rehearsal.sh \
-  --window-id shared-devnet-20260324-02 \
-  --candidate-bundle output/release-candidates/shared-devnet-01.json \
-  --bundle-dir output/release/game-launcher-local \
-  --viewer-port 4174 \
-  --live-bind 127.0.0.1:5123 \
-  --web-bind 127.0.0.1:5111 \
-  --release-gate-mode dry-run \
-  --web-mode execute \
-  --headless-mode execute \
-  --pure-api-mode execute \
-  --longrun-mode dry-run
-./scripts/shared-devnet-rehearsal-smoke.sh
-./scripts/shared-devnet-blocker-packet.sh \
-  --window-id shared-devnet-20260324-06 \
-  --candidate-bundle output/release-candidates/shared-devnet-20260324-05.json \
-  --candidate-gate-summary output/shared-network/shared-devnet-20260324-06/gate/shared_devnet-20260324-175501/summary.md \
-  --access-out doc/testing/evidence/shared-network-shared-devnet-shared-access-2026-05-23.md \
-  --mixed-topology-out doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md \
-  --rollback-out doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md
-./scripts/shared-devnet-blocker-packet-smoke.sh
-./scripts/release-candidate-bundle-smoke.sh
-./scripts/shared-network-track-gate.sh \
-  --track shared_devnet \
-  --candidate-bundle output/release-candidates/shared-devnet-01.json \
-  --lanes-tsv doc/testing/templates/shared-network-track-gate-lanes.shared_devnet.template.tsv \
-  --out-dir output/shared-network-gates
-./scripts/shared-network-track-gate-smoke.sh
-```
-- 当前 `release_candidate_bundle` 最小职责：
-  - 固定 `candidate_id`
-  - 固定 `git_commit`
-  - 固定 `runtime_build/world_snapshot/governance_manifest` 的路径与 hash
-  - 固定 `evidence_refs`
-- 当前 `shared-devnet-rehearsal` 最小职责：
-  - 复用同一 `candidate_bundle` 作为 shared-devnet 编排真值
-  - 用 execute/evidence/skip 模式统一收口 same-candidate `headed Web + no-ui + pure_api`
-  - 统一生成 `multi-entry-summary`、mixed-topology gate note、lane scaffold、`lanes.shared_devnet.tsv` 与 gate 输出
-  - 未提供 shared access / rollback / governance / short-window / same-window mixed-topology 新证据时，默认保持保守 `partial`，避免误判为已 `pass`
-  - 若要把 `shared_access` 标为 `pass`，必须同时提供 shared endpoint ref、shared operator/handoff ref 和 independent access evidence ref；仅有 endpoint 或 duty ref 不算通过
-  - 若要把 `rollback_target_ready` 标为 `pass`，必须同时提供 fallback bundle、fallback gate ref、fallback owner ref、restore step ref 和 restoration scope；仅有 fallback bundle 不算通过
-  - 若要把 mixed-topology lane 标为 `pass`，必须同时提供 same-window evidence 和 producer/QA 审计通过的 pass-uplift decision ref；仅有脚本开关不算通过
-- 当前 `shared-devnet-blocker-packet` 最小职责：
-  - 基于已通过的 candidate bundle 和当前 gate 输出，生成 `shared_access` / `mixed_topology_baseline` / `rollback_target_ready` 的实例草稿
-  - 固定三条 blocker 的留证字段，避免后续 shared operator / fallback candidate / same-window mixed-topology 输入到位后还要手工重写结构
-  - `shared_access` 若准备从 `partial` 升到 `pass`，必须把 endpoint、operator handoff 和 independent access evidence 同时写成正式字段；脚本层面也必须一起提供，不能只改 lane 状态
-  - `rollback_target_ready` 若准备从 `partial` 升到 `pass`，必须把 fallback gate、fallback owner、restore steps 和 restoration scope 同时写成正式字段；脚本层面也必须一起提供，不能只改 lane 状态
-  - mixed-topology 若准备从 `partial` 升到 `pass`，必须把 `pass_uplift_decision_ref` 作为正式字段写入草稿；脚本层面也必须与 same-window evidence 一起提供，不能只改 lane 状态
-  - 仅生成 `partial` draft 时不需要提供 `--mixed-topology-pass-decision-ref`；只有 lane 要升到 `pass` 时才补这条 audited decision ref
-- 当前补证据标准命令：
-```bash
-./scripts/shared-devnet-rehearsal.sh \
-  --window-id <shared-devnet-window-id> \
-  --candidate-bundle <output/release-candidates/current.json> \
-  --out-dir <output/shared-network/...> \
-  --release-gate-mode skip \
-  --web-mode evidence \
-  --web-evidence-ref <same-window web evidence> \
-  --headless-mode evidence \
-  --headless-evidence-ref <same-window no-ui evidence> \
-  --pure-api-mode evidence \
-  --pure-api-evidence-ref <same-window pure-api evidence> \
-  --governance-mode evidence \
-  --governance-window-evidence-ref <same-window governance evidence> \
-  --longrun-mode evidence \
-  --longrun-window-evidence-ref <same-window longrun evidence> \
-  --shared-access-pass \
-  --shared-endpoint-ref <shared endpoint ref> \
-  --shared-operator-ref <shared operator/handoff ref> \
-  --shared-access-evidence-ref <independent access evidence ref> \
-  --fallback-candidate-bundle <output/release-candidates/fallback.json> \
-  --fallback-gate-ref <audited fallback gate ref> \
-  --fallback-owner-ref <approval/handoff ref> \
-  --fallback-class <formal_pass_candidate|bootstrap_restore_ready> \
-  --rollback-restore-step-ref <restore checklist/log ref> \
-  --rollback-restoration-scope "runtime build | world snapshot | governance manifest" \
-  --mixed-topology-pass \
-  --mixed-topology-shared-evidence-ref <same-window mixed-topology evidence> \
-  --mixed-topology-pass-decision-ref <producer/QA decision ref>
-```
-- 上述命令适用于：同一 `window_id`、同一 `candidate_bundle` 下，把 `shared_access / rollback_target_ready / mixed_topology_baseline` 一次性从 `partial` 补到 `pass`。
-- 当前 QA gate 最小职责：
-  - 按 `shared_devnet / staging / canary` 校验 required lanes 是否齐全
-  - `shared_devnet` 必须包含 `candidate_bundle_integrity / shared_access / multi_entry_closure / mixed_topology_baseline / governance_live_drill / short_window_longrun / rollback_target_ready`
-  - `staging` 必须包含 `candidate_bundle_integrity / shared_access / unified_candidate_gate / mixed_topology_rehearsal / governance_live_drill / upgrade_rehearsal / rollback_rehearsal / incident_template`
-  - `canary` 必须包含 `candidate_bundle_integrity / promotion_record / canary_window / mixed_topology_claim_review / rollback_rehearsal / incident_review / exit_decision`
-  - 统一输出 `pass / partial / block`
-  - 统一生成 `summary.json` 与 `summary.md`
-  - 缺 required lane 时直接 `block`
-- QA 模板入口：
-  - `doc/testing/templates/shared-network-track-gate-template.md`
-  - `doc/testing/templates/shared-network-track-gate-lanes.shared_devnet.template.tsv`
-  - `doc/testing/templates/shared-network-track-gate-lanes.staging.template.tsv`
-  - `doc/testing/templates/shared-network-track-gate-lanes.canary.template.tsv`
-- LiveOps runbook 入口：
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
-- LiveOps 模板入口：
-  - `doc/testing/templates/shared-network-promotion-record-template.md`
-  - `doc/testing/templates/shared-network-incident-template.md`
-  - `doc/testing/templates/shared-network-incident-review-template.md`
-  - `doc/testing/templates/shared-network-exit-decision-template.md`
-  - `doc/testing/templates/shared-network-mixed-topology-gate-template.md`
-  - `doc/testing/templates/shared-network-shared-access-check-template.md`
-  - `doc/testing/templates/shared-network-rollback-target-template.md`
-- 当前 liveops 最小职责：
-  - 每个窗口固定 `window_id/candidate_id/fallback_candidate_id/owners_on_duty/claim_envelope`
-  - 发现真值漂移、QA `block`、共享访问失效或 preview 口径越界时立即 `freeze`
-  - `staging/canary` 的 `rollback` 只能回到最近一次 `pass` 的 candidate bundle；首条 `shared_devnet pass` 若尚无历史 `pass` candidate，则至少要固定一条受审计 `bootstrap_restore_ready` fallback，并补齐 `restore_steps_ref/fallback_owner_ref/restoration_scope`
-  - 没有 `promotion_record`、`incident_review`、`exit_decision` 的 track 不得记完成
-- 当前 `shared_devnet` dry-run 结论：
-  - `gate_result=partial`
-  - `promotion_recommendation=hold_promotion`
-  - 这不是 shared-network `pass`，也不允许升级 public claims
-- 当前 follow-up window `shared-devnet-20260324-05` 结论：
-  - `candidate_bundle_integrity=pass`
-  - `multi_entry_closure=pass`
-  - `governance_live_drill=pass`
-  - `shared_access=partial`
-  - `short_window_longrun=partial`
-  - `rollback_target_ready=partial`
-  - 按当前 gate 语义还必须补 `mixed_topology_baseline`；仅有 `P2PARCH-6` matrix baseline 时最多仍是 `partial`
-  - 因此整体仍是 `gate_result=partial`
-- 当前 short-window follow-up `shared-devnet-20260324-06` 结论：
-  - `candidate_bundle_integrity=pass`
-  - `multi_entry_closure=pass`
-  - `governance_live_drill=pass`
-  - `short_window_longrun=pass`
-  - `shared_access=partial`
-  - `rollback_target_ready=partial`
-  - `mixed_topology_baseline=partial`
-  - 当前 formal lane evidence: `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
-  - `mixed_topology_baseline` 在当前语义下仍未升到 shared-window `pass`
-  - 因此 shared-devnet 剩余 blocker 现收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline`
-- `--dry-run` 用于门禁编排冒烟，不执行真实命令。
-
-### 正式网络分层 / testnet 机制 skeleton
-- 当前正式网络层口径：
-  - `local_devnet`: 本地开发/单人验证，不对外承诺 public availability。
-  - `shared_devnet`: legacy 共享 release-train 轨，只作历史 evidence / benchmark L5 追溯，不再作为目标 test 子环境。
-  - `public_testnet`: 应具备 public RPC/explorer/guarded faucet/reset policy 的公开 rehearsal 网络；当前仓库已有 rehearsal / governed-bootstrap 证据，但仍不是 `ready_for_live_candidate`。
-  - `mainnet`: 应具备 frozen genesis/no faucet/no reset/`MAINNET-1~4` gate 的正式价值网络；当前仓库只完成 skeleton。
-- 当前 verdict：
-  - `public_testnet`: `rehearsal / governed-bootstrap evidence exists, not ready_for_live_candidate`
-  - `mainnet`: `specified_skeleton_only`
-  - 不允许据此宣称 live `public_testnet` / `mainnet` 已建立。
-- 当前 skeleton 入口：
-```bash
-./scripts/network-tier-manifest.sh validate \
-  --manifest doc/testing/templates/network-tier-shared-devnet.example.json
 ./scripts/network-tier-manifest.sh validate \
   --manifest doc/testing/templates/network-tier-public-testnet.example.json
-./scripts/network-tier-manifest.sh validate \
-  --manifest doc/testing/templates/network-tier-mainnet.example.json
-./scripts/network-tier-exit-review.sh \
-  --manifest doc/testing/templates/network-tier-public-testnet.example.json
-./scripts/network-tier-exit-review.sh \
-  --manifest doc/testing/templates/network-tier-mainnet.example.json
 ./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest doc/testing/templates/network-tier-public-testnet.example.json
+./scripts/network-tier-exit-review.sh \
   --manifest doc/testing/templates/network-tier-public-testnet.example.json
 ./scripts/network-tier-manifest-smoke.sh
 ```
-- 当前 `network_tier_manifest` 最小职责：
-  - 固定 `tier/status/network_id/chain_id`
-  - 固定 `release_candidate_bundle_ref/genesis_ref/bootstrap_peer_ref`
-  - 固定 `rpc/explorer/faucet` endpoint policy
-  - 固定 `validator_admission/governance_mode/target_validator_count`
-  - 固定 `faucet_mode/reset_policy/value_semantics`
-  - 固定 `allowed_claims/denied_claims` 与 `required_gates`
-- 当前已接线范围：
-  - `oasis7_chain_runtime --network-tier-manifest <path>` 可从 manifest 读取 `chain_id/world_id/bootstrap_peer_ref` 默认值，并在 `/v1/chain/status` 暴露 formal `tier/status`。
-  - `oasis7_game_launcher` 与 `oasis7_web_launcher` 支持 `chain_network_tier_manifest` 透传，不再要求 manifest 模式下重复手填同一套 tier 基本参数。
-  - `./scripts/network-tier-exit-review.sh` 可把 `public_testnet` 的 rehearsal gate 和 `mainnet` 的 `MAINNET-1~4` gate 汇总成最小 exit-review 输入。
-  - `./scripts/network-tier-public-testnet-readiness.sh` 可把 `public_testnet` 的 skeleton manifest、lane evidence 与 claims boundary 汇总成 `specified_skeleton_only|partial|block|ready_for_live_candidate` verdict。
-- `public_testnet` readiness review 规则：
-  - 只有 manifest、没有 lane evidence 时，`specified_skeleton_only` 仍只代表 skeleton，不代表可部署。
-  - 要进入 live candidate 评审，至少要补齐 `public_rpc_ready/explorer_public_ready/faucet_guard_ready/reset_policy_announced/runtime_bootstrap/claims_boundary_review` 六条 lane。
-  - `shared_devnet_pass` 已从新目标中移除；历史 shared-devnet 证据只能辅助追溯，不能作为 public_testnet 的必需 promotion gate。
-  - 示例 lane scaffold: `doc/testing/templates/public-testnet-readiness-lanes.example.tsv`
-  - 示例 placeholder evidence: `doc/testing/templates/public-testnet-skeleton-evidence.example.md`
-  - 当前 live lane evidence: `doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`、`doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md`、`doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md`、`doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv`
-  - companion checklist/runbook: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
-- 当前边界：
-  - legacy `shared_devnet` 不得叫 `public_testnet`
-  - `mainnet` 只要不是 `faucet_mode=none`、`reset_policy=frozen`、`governance_registry_only` 并且缺 `MAINNET-1~4`，就不得叫 `mainnet`
-  - skeleton manifest/example 与 runtime/launcher 接线，只代表 formal mechanism 已冻结并接到入口，不代表 liveops 已建立 live `public_testnet` / `mainnet`
+- Boundary:
+  - `testing-manual.md` is an execution index only; do not duplicate current network-tier verdicts here.
+  - `shared_devnet` history may explain benchmark L5 evidence, but current public readiness belongs to formal `public_testnet` readiness docs.
 
 ### S11：去中心化模块发布运行与告警（world-runtime）
 - 适用范围：线上模块发布（`proposal -> attestation -> apply`）与 builtin 在线清单加载故障分诊。

@@ -6,6 +6,10 @@
 
 审计轮次: 5
 
+> Current canonical source: use this runbook only for legacy shared-network /
+> release-train operations. Current network-tier truth lives in
+> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+
 ## Meta
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
@@ -16,13 +20,14 @@
   - `testing-manual.md`
 
 ## 1. 适用范围
-- 本 runbook 只定义 shared-network / release-train 的执行方法；当前虽然已有 first `shared_devnet` dry run，但共享执行仍未达 `pass`。
-- 当前总 verdict 已更新为 `partial`。
-- 在 `RTMIN-4/5` 真实 rehearsal 留证据前，对外只允许：
+- 本 runbook 只定义 shared-network / release-train 的执行方法；它不定义 formal `public_testnet`、`mainnet` 或玩家意义上的公开大世界上线。
+- 当前 `shared_devnet` legacy rehearsal 已在 2026-05-24 追溯结论中达到 `pass / eligible_for_promotion`；这只证明 legacy shared-network rehearsal evidence 已闭环，不等于 live `public_testnet`、`mainnet`、public launch 或赛季上线。
+- 当前总 verdict 已更新为 `shared_devnet legacy rehearsal pass; formal public_testnet/mainnet still gated`。
+- 在 formal `public_testnet` live-candidate readiness 与后续 release/public claims gate 通过前，对外只允许：
   - `limited playable technical preview`
   - `crypto-hardened preview`
-  - `first shared_devnet dry run is recorded, but shared execution remains partial`
-  - `mixed-topology matrix baseline is pinned, but shared-network mixed-topology evidence is still incomplete`
+  - `shared_devnet rehearsal evidence is recorded as pass, but it is legacy/rehearsal evidence only`
+  - `formal public_testnet/mainnet readiness remains separately gated`
 
 ## 2. 开窗前输入
 每次开任何 track 窗口前，必须先固定以下输入：
@@ -153,11 +158,13 @@
   - `production release train is established`
   - `shared network validated`
   - `mainnet-grade testing maturity`
+  - `public_testnet is live`
+  - `public large shared world is launched`
 - 外部追问统一回到：
   - `当前仍是 limited playable technical preview。`
   - `安全与治理硬化在推进，但仍是 crypto-hardened preview。`
-  - `shared network / release train 已有首轮 shared_devnet dry run，但 shared execution 仍是 partial。`
-  - `mixed-topology matrix 已建基线，但 shared-network mixed-topology gate 仍未通过。`
+  - `shared_devnet rehearsal evidence 已补到 pass，但它只作 legacy/rehearsal evidence。`
+  - `formal public_testnet / mainnet / public large-world launch 仍需单独 gate。`
 
 ## 8. 回写要求
 - 每个窗口至少回写一次：
@@ -175,11 +182,11 @@
   - QA gate scaffold
   - liveops promotion/freeze/rollback/run window/public claims runbook
   - first `shared_devnet` dry-run candidate / gate / promotion / incident 产物
-- 当前 `mixed_topology_baseline` 已有正式 `partial` evidence：
+  - 2026-05-24 legacy `shared_devnet` pass / eligible-for-promotion 追溯结论
+- 当前 `mixed_topology_baseline` 已有正式 pass evidence：
   - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
-- shared-network 总 verdict 当前是 `partial`，不是 `pass`。
-- shared-devnet 剩余 blocker 当前收敛到：
-  - `shared_access`
-  - `rollback_target_ready`
-  - `mixed_topology_baseline`
-- 下一步不是升级 public claims，也不是直接进 `staging`，而是先把这三条 lane 提升到 `pass`；如果 mixed-topology 继续停留在 proxy/shared-window 近似、没有 pass-uplift decision ref，或该 decision ref 没进入正式 evidence 字段，就必须显式保持 `partial`，不能口头升级。
+- shared-network legacy `shared_devnet` verdict 当前是 `pass / eligible_for_promotion`；但该 pass 不升级 public claims，也不等于 `public_testnet` 或正式在线大世界。
+- 当前 release-train 剩余边界:
+  - `staging/canary` 仍需要按本 runbook 另行开窗验证
+  - formal `public_testnet` readiness 由 network-tier six-lane gate 单独判定
+  - public launch / season / large shared-world claim 仍受 product, liveops, security, and gameplay gates 约束

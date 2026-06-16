@@ -5,6 +5,13 @@
 - 对应运行手册: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
 
 审计轮次: 10
+
+> Current canonical source: this project file tracks historical shared-network /
+> release-train work. Current network-tier truth lives in
+> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+> `shared_devnet` pass is legacy/rehearsal evidence only, not public testnet or
+> public large-world readiness.
+
 ## 任务拆解（含 PRD-ID 映射）
 - [x] RTMIN-0 (PRD-P2P-RTMIN-001/002/003/004) [test_tier_required]: 新建 shared network / release train minimum 专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪与 `testing-manual`。
 - [x] RTMIN-1 (PRD-P2P-RTMIN-001/002) [test_tier_required]: `runtime_engineer` 落地 `release_candidate_bundle` 真值、版本 pinning 与 drift blocker，并把 bundle 校验接入 `release-gate` 前置步骤。
