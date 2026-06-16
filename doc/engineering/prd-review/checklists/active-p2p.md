@@ -7,6 +7,7 @@
 
 说明：
 - 本文件是 `2026-03-03` 全量 PRD 体系审读的 p2p 模块历史证据快照，保留路径 `active-p2p.md` 仅为兼容既有审计引用；它不是当前 p2p 活跃专题索引或执行真值。
+- Legacy path notice: `active-p2p.md` 是历史文件名，不表达当前 active 状态；当前 active/completed/historical/evidence-snapshot 语义以 `doc/p2p/prd.index.md` 的“状态语义”为准。
 - 当前 p2p 入口以 `doc/p2p/README.md` 为 landing page，以 `doc/p2p/prd.index.md` 为精确文件级索引，以 `doc/p2p/project.md` 为活跃执行状态。
 - 下方勾选项仅表示 2026-03 审读批次的当时结论，不得重新解释为当前覆盖率、当前代码一致性或可删除依据。
 - 逐篇阅读后再勾选，必须填写阅读时刻与核对结论。
