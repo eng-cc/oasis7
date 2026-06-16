@@ -31,6 +31,7 @@
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接罗列近期专题长名单。
 - 高频 active 入口保留在 `prd.md`、`project.md`、`viewer-manual.manual.md` 和 `prd.index.md`。
 - 审计留痕、历史背景或只在特定问题下才需要的专题，改为从 `prd.index.md` 的定向检索入口进入。
+- 历史审读清单与 core review round logs 仅作为 archive-only evidence，用于审计追溯；日常阅读路径从 `README.md`、`prd.md`、`project.md`、`prd.index.md` 进入。
 
 ## 模块职责
 - 维护模拟世界主入口、viewer / launcher / kernel / scenario / llm / m4 六大主题口径。

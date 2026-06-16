@@ -1,0 +1,26 @@
+task_uid: task_d929d9a4f3e745539c68e21eff8e58bf
+title: "simulation docs slimming random audit"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-simulation-doc-slimming-random-audit
+execution_log_path: .pm/tasks/task_d929d9a4f3e745539c68e21eff8e58bf.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Randomly inspect simulation-related docs and upstream/downstream docs for slimming candidates"
+  - "Record repository-health slice contract, evidence, and attribution in the task execution log"
+  - "Return concise slimming recommendations without editing docs unless explicitly requested"
+handoff_to: []
+updated_at: 2026-06-16T20:07:47+08:00
+last_started_at: 2026-06-16T17:02:16+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && git diff --check"
+last_verified_at: 2026-06-16T20:07:37+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-16T20:07:46+08:00
