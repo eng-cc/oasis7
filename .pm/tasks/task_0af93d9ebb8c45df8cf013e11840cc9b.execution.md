@@ -134,3 +134,25 @@ Example:
 - Expected Result: ready_for_pr claim verification passes; closeout provenance is visible to workflow-lint; task YAML remains `status: done` with `last_closed_at`.
 - Actual Result: `claim-ready.sh` returned `status=verified`, `verification_exit_code=0`, `allowed_to_claim=true`, `verified_at=2026-06-16T20:36:41+08:00`; earlier `task-closeout.sh` exited 0 with `claim_verification_status: verified`, `final_status: done`, `last_closed_at=2026-06-16T20:22:44+08:00`, and `pm_lint: skipped` due unrelated repo-wide historical PM lint debt.
 - Blocker / Next Action: Commit workflow-lint evidence repair, rerun `prepare-task-pr.sh --create`.
+
+## 2026-06-16 20:58:00 CST / tpm
+- 完成内容: Integrated narrow repository-health re-review after `prepare-task-pr.sh --create` detected post-review non-evidence change `doc/testing/project.md`. The only non-`.pm` post-review change was the one-line task Trace added for PR-readiness provenance.
+- Pre-PR Local Role Review: passed
+- Task UID: task_0af93d9ebb8c45df8cf013e11840cc9b
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-testing-testing-doc-default-surface-slimming
+- Source Branch: task/testing-testing-doc-default-surface-slimming
+- Source Head: a8cd055431bbebf498d25cd0572c5d4581219217
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.execution.md; doc/testing/project.md
+- Role Selection Basis: narrow repository-health re-review required because post-review PR-readiness provenance touched the testing project trace surface.
+- Review Roles: repository_health_engineer
+- Review Evidence: repository_health_engineer no_findings for commit a8cd055431bbebf498d25cd0572c5d4581219217; inspected only the readiness evidence additions and the one-line `doc/testing/project.md` Trace addition; confirmed no repository-health/doc-governance issue, traceability regression, or non-evidence content change requiring docs fixes before PR creation.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: No fixes required after narrow re-review; subsequent commit is expected to contain only this execution-log evidence.
+- Residual Risk: Repo-wide PM lint remains known-red on unrelated historical task logs; this narrow re-review ran `workflow-lint --phase pr-ready` and `git diff --check` against the scoped commit successfully.
+- 遗留事项: None for pre-PR local role review.
+- Action: Commit this re-review evidence-only update and rerun `./scripts/prepare-task-pr.sh --create`.
+- Validation Command: repository_health_engineer narrow re-review; `./scripts/pm/workflow-lint.sh --task-uid task_0af93d9ebb8c45df8cf013e11840cc9b --phase pr-ready`; `git diff --check a8cd055431bbebf498d25cd0572c5d4581219217^ a8cd055431bbebf498d25cd0572c5d4581219217`
+- Expected Result: Pre-PR packet source head covers the `doc/testing/project.md` Trace addition; later changes are evidence-only.
+- Actual Result: repository_health_engineer returned `no_findings`; workflow-lint and diff check passed in the narrow review evidence.
+- Blocker / Next Action: Commit evidence-only update, then create PR.
