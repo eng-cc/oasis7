@@ -31,6 +31,22 @@ count_detail_rows_after_heading() {
   ' "$file"
 }
 
+sum_distribution_rows() {
+  local file="$1"
+  awk '
+    /^## 模块分布/ { in_rows = 1; next }
+    in_rows && /^## / { exit }
+    in_rows && /^\| `/ {
+      split($0, parts, "|")
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", parts[3])
+      if (parts[3] ~ /^[0-9]+$/) {
+        sum += parts[3]
+      }
+    }
+    END { print sum + 0 }
+  ' "$file"
+}
+
 round006_fields=(
   '^\| 文档路径 \|'
   '^\| 当前类型 \|'
@@ -89,6 +105,8 @@ require_patterns "$round007_history" \
 
 round006_rows="$(count_detail_rows_after_heading "$round006_history" '## 逐文档清单')"
 round007_rows="$(count_detail_rows_after_heading "$round007_history" '## 明细')"
+round006_distribution_sum="$(sum_distribution_rows "$round006_current")"
+round007_distribution_sum="$(sum_distribution_rows "$round007_current")"
 
 if (( round006_rows < 870 )); then
   echo "ROUND-006 historical detail rows below denominator: $round006_rows < 870" >&2
@@ -100,6 +118,18 @@ if (( round007_rows != 874 )); then
   exit 1
 fi
 
+if (( round006_distribution_sum != 882 )); then
+  echo "ROUND-006 compact distribution sum mismatch: $round006_distribution_sum != 882" >&2
+  exit 1
+fi
+
+if (( round007_distribution_sum != 874 )); then
+  echo "ROUND-007 compact distribution sum mismatch: $round007_distribution_sum != 874" >&2
+  exit 1
+fi
+
 echo "doc-evidence-snapshot-check: OK"
 echo "ROUND-006 historical detail rows: ${round006_rows} (denominator 870; duplicate/backfill-aware)"
 echo "ROUND-007 historical detail rows: ${round007_rows}"
+echo "ROUND-006 compact distribution sum: ${round006_distribution_sum} (historical governance-row scope; denominator 870)"
+echo "ROUND-007 compact distribution sum: ${round007_distribution_sum}"

@@ -52,6 +52,8 @@ git show 0d6fd50849cae07bac17883cca14f141ede93196:doc/core/reviews/round-006-rev
 | 合计 | 870 | completed |
 
 ## 模块分布（按顶层目录）
+ROUND-006 模块分布保留历史治理行口径，含重复/backfill 行，合计 882；固定文档分母仍为 870。
+
 | 模块 | 文档数 |
 | --- | --- |
 | `(root)` | 10 |

@@ -55,6 +55,7 @@ git show 0d6fd50849cae07bac17883cca14f141ede93196:doc/core/reviews/round-007-rev
 | `game-test.prd.md` | 1 |
 | `game-test.project.md` | 1 |
 | `headless-runtime` | 13 |
+| `historical removed viewer docs` | 80 |
 | `p2p` | 156 |
 | `playability_test_card.md` | 1 |
 | `playability_test_manual.md` | 1 |
