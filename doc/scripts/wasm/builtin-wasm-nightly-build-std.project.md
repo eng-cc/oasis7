@@ -5,6 +5,12 @@
 
 审计轮次: 4
 
+## 当前状态（2026-06-16）
+- 本项目文档已完成并保留为历史执行证据（historical only; not a release-chain entry）。
+- 当前 WASM 发布级 canonical build / release evidence 的项目状态入口为 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md`。
+- 本项目文档不得覆盖 Docker-only publishable build、build receipt、single canonical token 或 cross-host evidence requirements；跨宿主 full closure 仍需真实 Docker-capable `darwin-arm64` live summary / proof。
+- 若后续需要继续治理 build-std、Docker builder、receipt 或 cross-host evidence，请在 world-runtime WASM canonical pipeline 下新建/绑定任务，不要把本文恢复为活跃项目入口。
+
 ## 任务拆解
 - [x] NBS-1 设计文档：`doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md`
 - [x] NBS-2 项目管理文档：本文件

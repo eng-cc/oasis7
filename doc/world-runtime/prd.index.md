@@ -1,8 +1,8 @@
 # world-runtime PRD 文件级索引
 
-审计轮次: 7
+审计轮次: 8
 
-更新时间：2026-04-20
+更新时间：2026-06-16
 
 ## 入口
 - 模块 PRD：`doc/world-runtime/prd.md`
@@ -50,10 +50,18 @@
 - `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`：玩家发布实体与模块发布链路衔接入口。
 - `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md`：治理收据安全 hardening 主入口。
 
+## WASM 相邻历史入口
+| 文档路径 | 当前状态 | 当前阅读入口 |
+| --- | --- | --- |
+| `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md` | 历史实现证据；记录 nightly build-std 方案，不再作为发布级 canonical build 入口 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` |
+| `doc/testing/governance/wasm-build-determinism-guard.prd.md` | 历史 QA gate substrate；记录脚本护栏和编译期拦截，不替代当前 release evidence / Docker canonical 口径 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` 与 `doc/testing/prd.md` |
+| `doc/testing/evidence/viewer-wasm-only-runtime-proof-2026-05-13.md` | dated evidence；只证明当轮 viewer wasm-only runtime proof，不替代 required/full gate | `doc/world-simulator/viewer/README.md` 与当前 viewer/testing task truth |
+
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部 runtime / wasm / module 专题表。
 - `evidence/`、模板、checklist 与 handoff 文档继续保留可检索性，但默认不和活跃专题三件套同屏平铺。
 - 完整活跃专题清单继续保留在下方，用于精确文件名检索和互链可达性。
+- WASM 相关的跨目录历史文档只保留在“相邻历史入口”或对应模块索引中；除非 owner 明确恢复为当前任务入口，不再作为 world-runtime 默认首读面。
 
 ## 覆盖规则
 - 纳入规则：纳入 `doc/world-runtime/{runtime,wasm,module,governance}/*.prd.md` 与同名 `*.design.md` / `*.project.md` 的活跃专题三件套。

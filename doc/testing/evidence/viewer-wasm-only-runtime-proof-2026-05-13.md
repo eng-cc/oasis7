@@ -3,7 +3,7 @@
 ## Scope
 
 - 目标: 为 PR #217 补一张真实 Viewer 页面截图，证明当前 `pixel-world` 嵌入舞台仍能在真实 launcher/live 栈下正常渲染，同时本轮去掉 JS renderer fallback 后主入口仍可加载、连接并显示世界舞台。
-- 边界: 这份证据只补“真实页面截图”与当前页面可见状态，不替代 `required-gate`、repo-owned loader/host 测试或更长玩法回归。
+- 边界: 这份证据只补“真实页面截图”与当前页面可见状态，不替代 `required-gate`、repo-owned loader/host 测试、更长玩法回归或 release/full verification。
 
 ## Capture Method
 
