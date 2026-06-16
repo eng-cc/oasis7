@@ -3,6 +3,12 @@
 - 对应设计文档: `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.design.md`
 - 对应需求文档: `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
 
+## 生命周期状态
+- 本文保留为 2026-03-23 `STRAUTH` 实现切片的历史项目证据；不得因两个月以上未改动而删除或移出索引。
+- 本切片已完成 signed transfer、shared payload auth envelope、controller slot binding、本地 signer allowlist / threshold enforcement，以及 Web/native signed submit 证据闭环。
+- 本文不再作为 ceremony、external signer、HSM/KMS、production keystore / custody、signer rotation 或长期 world-state / governance source of truth 的当前 owner；这些安全 / 运维生命周期事项由后续 P2P governance / custody / ceremony 专题承接。
+- 相关后续入口：`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md`、`doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.project.md`、`doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.project.md`、`doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.project.md`。
+
 审计轮次: 3
 ## 任务拆解（含 PRD-ID 映射）
 - [x] STRAUTH-0 (PRD-P2P-TXAUTH-001/002/003) [test_tier_required]: 新建“主链 Token 签名交易鉴权”专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪。
@@ -75,6 +81,6 @@
 - `git diff --check`
 
 ## 状态
-- 当前阶段: active
-- 下一步: `STRAUTH-3` 已收口；另开专题把 ceremony / external signer / keystore 收成长期治理真值，并把当前本地 controller signer policy 升级为更长期的治理 source of truth，覆盖 genesis/treasury/restricted-admin-registry 全部 controller-bound 动作。
-- 最近更新: 2026-03-23
+- 当前阶段: completed_as_historical_protocol_slice
+- 下一步: ceremony / external signer / keystore / signer rotation / 长期治理真值不在本文继续推进；由后续 governance signer externalization、production signer custody、genesis freeze / ceremony QA gate 与 ideal transaction upgrade 专题承接。
+- 最近更新: 2026-06-16（生命周期治理标注；未改变 STRAUTH 协议语义）
