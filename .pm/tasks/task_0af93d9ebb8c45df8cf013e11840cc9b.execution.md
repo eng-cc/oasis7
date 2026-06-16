@@ -125,3 +125,12 @@ Example:
 - Expected Result: Preflight recognizes passed local role review packet.
 - Actual Result: Pending rerun.
 - Blocker / Next Action: Commit evidence formatting fix.
+
+## 2026-06-16 20:41:00 CST / tpm
+- 完成内容: Added workflow-lint PR-readiness provenance after prepare-task-pr preflight found missing project Trace / claim-ready / closeout markers.
+- 遗留事项: Repo-wide PM lint remains known-red on unrelated historical task logs; current task workflow lint is the governing PM check for this PR path.
+- Action: Added `testing-doc-default-surface-slimming` Trace to `doc/testing/project.md`; recorded explicit `claim-ready.sh` and `task-closeout.sh` evidence markers.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_0af93d9ebb8c45df8cf013e11840cc9b --phase current && git diff --check" --json`; `./scripts/pm/task-closeout.sh --role tpm --task-uid task_0af93d9ebb8c45df8cf013e11840cc9b --verify-command "<doc-governance timeout-wrapper + workflow-lint + git diff --check>" --no-lint`
+- Expected Result: ready_for_pr claim verification passes; closeout provenance is visible to workflow-lint; task YAML remains `status: done` with `last_closed_at`.
+- Actual Result: `claim-ready.sh` returned `status=verified`, `verification_exit_code=0`, `allowed_to_claim=true`, `verified_at=2026-06-16T20:36:41+08:00`; earlier `task-closeout.sh` exited 0 with `claim_verification_status: verified`, `final_status: done`, `last_closed_at=2026-06-16T20:22:44+08:00`, and `pm_lint: skipped` due unrelated repo-wide historical PM lint debt.
+- Blocker / Next Action: Commit workflow-lint evidence repair, rerun `prepare-task-pr.sh --create`.

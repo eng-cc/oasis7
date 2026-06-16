@@ -30,6 +30,7 @@
 | Performance coverage and baselines | `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`testing-manual.md` 的 required-gate / Viewer performance probe 段落 |
 
 ## 最近高价值完成摘要
+- `testing-doc-default-surface-slimming` (Trace: .pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.yaml): 默认 testing 文档阅读面已压缩为当前执行窗口、历史追溯索引与 canonical redirect；Viewer perf smoke 当前态同步为 required-gate report-only scoped 行为。
 - `engineering-code-quality-performance-baselines` (Trace: `.pm/tasks/task_35657c5f0a5543dda5d57f51fc4b8841.execution.md`): Viewer changed-path perf smoke 已接入 required-gate report-only scope；runtime module routing perf harness 已有首个 dev/release baseline。
 - `required-gate-ondemand-launcher-web-build` (Trace: `.pm/tasks/task_3778b0e747b249bc85b92b942a32b3fd.yaml`): launcher Web `trunk build` 已按 changed-path 注入 required gate，避免 release `build-web-dist` 才暴露编译错误。
 - `release-web-*` hardening 系列 (Trace examples: `.pm/tasks/task_b7097f476e674a429469a98d6ae36794.execution.md`、`.pm/tasks/task_bca86dc8b045420baf35b7e28414818c.execution.md`、`.pm/tasks/task_f59a3d14ebcd47dcacbee3a7aa725675.execution.md`): release Web gate 已收口 preflight shadow、独立端口、software-safe live-control 语义与 headed/headless evidence 边界。
