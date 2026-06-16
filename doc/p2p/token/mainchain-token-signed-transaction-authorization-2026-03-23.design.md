@@ -3,6 +3,12 @@
 - 对应需求文档: `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
 - 对应项目管理文档: `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.project.md`
 
+## 生命周期状态
+- 本文保留为 2026-03-23 `STRAUTH` 实现切片的历史协议 / 安全边界证据；不得因两个月以上未改动而删除或移出索引。
+- 本切片已完成代码级 signed payload gating、controller slot binding 与本地 signer allowlist / threshold enforcement；这不等同于生产级 signer governance 或 mainnet-grade 安全完成。
+- 当前未完成项仍由后续专题承接：ceremony freeze、external signer、HSM/KMS、production keystore / custody、signer rotation，以及长期 world-state / governance source of truth。
+- 相关后续入口：`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`、`doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md`。
+
 审计轮次: 2
 ## 设计目标
 - 在不重做整个资产动作协议的前提下，先关闭当前公开 `transfer submit` 面的未签名提交漏洞。
