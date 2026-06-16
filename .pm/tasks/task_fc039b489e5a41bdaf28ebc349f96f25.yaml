@@ -1,0 +1,31 @@
+task_uid: task_fc039b489e5a41bdaf28ebc349f96f25
+title: "Audit documentation slimming opportunities"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-docs-slimming-audit
+execution_log_path: .pm/tasks/task_fc039b489e5a41bdaf28ebc349f96f25.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "Randomly sample several docs and related upstream/downstream docs for slimming opportunities"
+  - "Record repository_health_engineer findings and evidence in the .pm execution log"
+  - "Slim active PRD review checklists by replacing repeated default status prose with a preserved default legend and exception-only rows"
+  - "Move the sampled strict-schema migration tail out of the primary PRD read path while preserving auditability"
+  - "Centralize the sampled P2P master/slave explanation in the index and leave child docs with one-line pointers"
+handoff_to:
+  - repository_health_engineer
+  - producer_system_designer
+updated_at: 2026-06-16T15:45:12+08:00
+last_started_at: 2026-06-16T14:55:35+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/doc-governance-check.sh
+last_verified_at: 2026-06-16T15:45:10+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-16T15:45:12+08:00

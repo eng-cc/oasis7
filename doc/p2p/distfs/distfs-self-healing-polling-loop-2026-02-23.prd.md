@@ -5,8 +5,7 @@
 
 审计轮次: 5
 ## ROUND-002 主从口径
-- 本文档为增量子文档（slave），主入口为 `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md`。
-- 本文档仅描述“轮询策略/状态/入口”增量，不重复定义主文档中的通用边界。
+- 本文档仅描述 self-healing 轮询策略/状态/入口增量；主文档为 `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md`，完整主从说明见 `doc/p2p/prd.index.md` 的 ROUND-002 distfs/self-healing 条目。
 
 ## 1. Executive Summary
 - Problem Statement: 在现有 `plan_replica_maintenance + execute_replica_maintenance_plan` 基础上补齐按周期触发的轮询入口。

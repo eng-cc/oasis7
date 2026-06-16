@@ -163,5 +163,5 @@
 - ROUND-002 主从口径（observer）：`observer-sync-mode-runtime-metrics` 为主文档；`metrics-runtime-bridge` 与 `observability` 为增量子文档。
 - ROUND-002 主从口径（node）：`node-contribution-points` 为主文档；`runtime-closure` 与 `multi-node-closure-test` 为增量子文档。
 - ROUND-002 主从口径（node）：`node-redeemable-power-asset` 为主文档；`audit-hardening` 与 `signature-governance-phase3` 为增量子文档。
-- ROUND-002 主从口径（distfs）：`distfs-self-healing-control-plane-2026-02-23` 为主文档；`polling-loop` 与 `runtime-polling-wiring` 为增量子文档。
+- ROUND-002 主从口径（distfs/self-healing）：`distfs-self-healing-control-plane-2026-02-23` 为主文档与需求/范围主入口；`polling-loop` 仅补充轮询策略/状态/入口增量；`runtime-polling-wiring` 仅补充 NodeRuntime 接线与执行器增量。通用边界、基线语义与无单机完整数据假设以主文档为准。
 - ROUND-002 主从口径（distfs）：`distfs-production-hardening-phase1` 为主文档；`phase2~phase9` 为增量子文档。
