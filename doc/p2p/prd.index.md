@@ -1,6 +1,6 @@
 # p2p PRD 文件级索引
 
-审计轮次: 13
+审计轮次: 14
 
 更新时间：2026-06-13
 
@@ -20,37 +20,53 @@
 | 子域 | 适合回答的问题 |
 | --- | --- |
 | `node/` | 节点奖励、身份、复制、PoS 时间基线与执行验证 |
-| `distfs/` | DistFS 生产加固、路径索引、自愈与 runtime/bridge 集成 |
+| `distfs/` | DistFS 生产加固、路径索引、自愈与 runtime/bridge 集成；默认先读 `doc/p2p/distfs/README.md` |
 | `blockchain/` | 主链安全、mainnet readiness、signer custody、hosted player access |
-| `observer/` | 观察者同步模式、指标与可观测性 |
+| `observer/` | 观察者同步模式、指标与可观测性；默认先读 `doc/p2p/observer/README.md` |
 | `token/` | 创世分配、签名授权、治理分发与流通边界 |
 | `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |
 | `distributed/` | 分布式 runtime / consensus / hard split 路线 |
 | `viewer-live/` | viewer-live 发行、开关与观察服务边界 |
 | `consensus/` | 共识实现与内建 wasm 身份口径 |
 
-## 活跃补充文档
+## 当前补充阅读面
 - `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`：项目级 test/prod 环境分层、hosted-login 云上清单与 `testnet/mainnet` claim boundary。
 - `doc/p2p/node/README.md`：`node/` 热点子域 landing page，按奖励、复制、PoS 时间、身份引导与 WASM 编译分流读者。
-- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`：formal `public_testnet` 从 `specified_skeleton_only` 进入 `ready_for_live_candidate` 前的 companion checklist/runbook。
-- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的执行 companion runbook，不并入下方 PRD 三件套长表。
+- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`：formal `public_testnet` 从规格骨架进入候选状态前的 companion checklist/runbook。
+- `doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`：formal `public_testnet` governed bootstrap operator path，定义四节点重建输入、deployment truth、hard rules 与 evidence 闭包；不表示 `public_testnet` 已 live 或 ready。
+- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的 legacy 执行 companion runbook；`shared_devnet` pass 仅作 rehearsal evidence，不等于 formal `public_testnet` / `mainnet` readiness。
+- `doc/testing/evidence/README.md`：QA evidence landing page，负责 public-testnet / shared-network / claims-boundary / mixed-topology 证据的当前入口与归档边界。
 - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.design.md`：不受当前实现约束的理想化交易目标态，覆盖字段分组、完整 JSON 草案、理想签名域、理想回执与 phased rollout。
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`：LetAI Run OpenAPI bridge 的 operator companion runbook，覆盖独立部署、首次演练、manual review 与回滚边界。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
 - README 不再平铺“近期专题”；完整清单继续保留在下方，用于精确文件名检索和互链可达性。
-- `node/README.md` 负责最高密度热点子域的首读分流；完整长表继续由本页保留。
+- `node/README.md`、`distfs/README.md` 与 `observer/README.md` 负责高密度热点子域的首读分流；完整长表继续由本页保留。
 - runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
+
+## 状态语义
+- `active`：当前执行真值仍以 `doc/p2p/project.md` 和具体专题 `*.project.md` 的状态段为准。
+- `canonical`：模块规格、设计总览、热点子域入口、当前补充阅读面和专题主文档；这些文档可长期保留在默认可达路径中。
+- `completed`：已完成但仍需按文件名可达的专题三件套；保留在下方检索清单，不自动进入默认首读面。
+- `historical` / `evidence-snapshot`：历史审计清单、旧轮次证据、release 补充材料与 legacy runbook；只作为追溯证据或兼容入口，不作为当前执行状态或可删除依据。
 
 ## 覆盖规则（ROUND-005 统一）
 - 纳入规则：纳入 `doc/p2p/**` 下所有 `*.prd.md` 与同名 `*.project.md`。
-- 活跃补充：`*.runbook.md` 与仍被当前模块 PRD / 项目态直接引用的 supporting spec，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
+- 当前补充阅读面：`*.runbook.md` 与仍被当前模块 PRD / 项目态直接引用的 supporting spec，可在“当前补充阅读面”区定向列出，但不并入下方三件套长表。
 - 排除规则：不纳入 `doc/devlog/**` 与非 PRD 配对文档（如 `*.release.md` 补充材料）。
 - 历史入口：根目录历史入口文件（`p2p.prd.md` / `p2p.project.md`）仅保留兼容跳转语义，不作为主索引分母。
 - 兼容跳转：历史路径命中时统一跳转到本目录 `prd.md` / `project.md` 主入口。
 
-## 完整活跃专题清单（按文件名精确检索）
+## 折叠阅读层（主从/增量组）
+| 子域 | 默认先读 | 折叠的增量/追溯入口 |
+| --- | --- | --- |
+| `distfs/` production hardening | `doc/p2p/distfs/README.md` -> `doc/p2p/distfs/distfs-production-hardening-phase1.prd.md` | `distfs-production-hardening-phase2` 到 `distfs-production-hardening-phase9` 仅作为阶段 delta 和追溯入口 |
+| `distfs/` self-healing | `doc/p2p/distfs/README.md` -> `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md` | `distfs-self-healing-polling-loop-2026-02-23` 与 `distfs-self-healing-runtime-polling-wiring-2026-02-23` 仅作为增量入口 |
+| `observer/` sync source | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-source-mode.prd.md` | `observer-sync-source-dht-mode` 仅作为 DHT 组合链路 delta |
+| `observer/` sync mode metrics | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `observer-sync-mode-metrics-runtime-bridge` 与 `observer-sync-mode-observability` 仅作为增量入口 |
+
+## 完整专题检索清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.project.md` |
@@ -158,6 +174,7 @@
 - `*.release.md` 为发布补充材料，不参与 PRD 任务配对规则。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24` 另有执行 companion：`doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`。
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 另有执行 companion：`doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`。
+- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 另有 governed bootstrap operator path：`doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`。
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06` 另有执行 companion：`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`。
 - ROUND-002 主从口径（observer）：`observer-sync-source-mode` 为主文档；`observer-sync-source-dht-mode` 为 DHT 增量子文档。
 - ROUND-002 主从口径（observer）：`observer-sync-mode-runtime-metrics` 为主文档；`metrics-runtime-bridge` 与 `observability` 为增量子文档。

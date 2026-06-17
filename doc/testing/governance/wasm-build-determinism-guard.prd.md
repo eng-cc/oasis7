@@ -5,6 +5,11 @@
 
 审计轮次: 4
 
+## 当前状态（2026-06-16）
+- 本文保留为历史 QA gate substrate，记录 builtin wasm 构建确定性护栏、污染环境变量拦截和 workspace 编译期风险前置。
+- 当前 WASM 发布级 canonical build / release evidence 入口为 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`；本文不替代 Docker canonical build、release evidence 或 cross-host closure 的当前口径。
+- 需要判断 required/full 验证归属时，继续以 `doc/testing/prd.md`、`doc/testing/project.md`、`testing-manual.md` 和当前 `.pm` task truth 为准；本文仅作为该护栏切片的历史证据。
+- 不得宣称 cross-host/full closure，除非 Linux 加真实 Docker-capable `darwin-arm64` evidence 以及 node-side proof/attestation path 均已归档。
 
 ## 1. Executive Summary
 - Problem Statement: builtin wasm 在不同执行环境下可能因构建输入不一致产生 hash 漂移，导致本地与 CI 结果不一致且难以定位。

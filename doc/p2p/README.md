@@ -1,11 +1,12 @@
 # p2p 文档索引
 
-审计轮次: 12
+审计轮次: 13
 
 ## 从这里开始
 - 想先理解 P2P / 主链 / DistFS / 节点奖励的总边界：`doc/p2p/prd.md`
 - 想看当前活跃任务、阻断与最新完成项：`doc/p2p/project.md`
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：`doc/p2p/node/README.md`
+- 想先进入 phase / 增量文档密集的子域：先读 `doc/p2p/distfs/README.md` 或 `doc/p2p/observer/README.md`，再进入具体专题。
 - 想先看主链安全、mainnet-grade readiness 与 signer custody：`doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
 - 想先看 hosted player entry / `hosted_public_join` 玩家接入与网页会话鉴权：`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`（legacy topic label: hosted world）
 - 想先看 `hosted_public_join` 如何让普通玩家用邮箱登录、由服务端托管 player signer，并保留后续自托管升级路径：`doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
@@ -25,12 +26,13 @@
 - `prd.md` 是模块权威规格入口，适合先理解主链、共识、DistFS、节点、token 与 hosted player access 的统一边界。
 - `project.md` 是执行台账，适合确认当前安全硬化、signer 外部化、token 与 hosted access 相关任务的推进状态。
 - `node/README.md` 是当前最高密度热点子域 `node/` 的 canonical 入口，适合先按“奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译”分流，再进入具体专题。
+- `distfs/README.md` 与 `observer/README.md` 是 phase / 增量专题的折叠入口，适合先确认主文档，再按 delta 追溯。
 - `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 p2p 模块时的首读入口。
 - 高频专题承担主题真值：`p2p-mainnet-*` 负责主链安全与 readiness；`p2p-mainnet-private-reachability-architecture-2026-04-01` 负责 mixed-topology 覆盖网络目标态；`p2p-hosted-world-player-access-and-session-auth` 负责 hosted player entry / hosted access 与会话鉴权（旧专题名保留作 trace，不表示多个玩家世界）；`p2p-hosted-public-join-managed-identity-custody-2026-05-18` 负责邮箱 hosted login、托管 player signer 与自托管升级边界；token / signer 系列专题负责分配、签名交易与治理签名外部化。
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接罗列近期专题长名单。
-- 高频 active 入口保留在 `prd.md`、`project.md`、`node/README.md`、上述少量主题真值专题与 `prd.index.md`。
+- 高频当前入口保留在 `prd.md`、`project.md`、`node/README.md`、上述少量主题真值专题与 `prd.index.md`。
 - 执行细节、runbook、release 补充材料与历史背景，改为从 `prd.index.md` 的定向检索入口进入。
 
 ## 模块职责
@@ -41,9 +43,9 @@
 - 承接 hosted player entry / hosted access、网页会话鉴权、public/control/signer 平面边界等跨模块 Web/P2P 口径。
 
 ## 主题目录
-- `distfs/`：DistFS 设计与稳定性加固。
+- `distfs/`：DistFS 设计与稳定性加固；默认先读 `distfs/README.md`。
 - `node/`：节点能力、奖励、身份与复制链路；默认先读 `node/README.md`。
-- `observer/`：观察者同步模式与可观测性。
+- `observer/`：观察者同步模式与可观测性；默认先读 `observer/README.md`。
 - `blockchain/`：区块链与 P2PFS 硬化阶段。
 - `token/`：主链 token 分配、正式命名、创世分桶、低流通、治理分发与 `OC -> LetAI Run OpenAPI` 服务额度桥接方案。
 - `viewer-live/`：viewer live 发行与开关策略。
@@ -53,9 +55,9 @@
 
 ## 热点子域导航
 - `node/`：节点身份、奖励、复制、PoS 时间基线与执行验证；当前已补 `node/README.md` 作为热点子域入口。
-- `distfs/`：DistFS 生产加固、路径索引、自愈与 bridge 集成。
+- `distfs/`：DistFS 生产加固、路径索引、自愈与 bridge 集成；phase 组先从 `distfs/README.md` 折叠进入。
 - `blockchain/`：主链安全、readiness、signer custody、hosted player access 与 release train。
-- `observer/`：观察者同步模式、指标与可观测性。
+- `observer/`：观察者同步模式、指标与可观测性；同步源增量组先从 `observer/README.md` 折叠进入。
 - `token/`：创世分配、签名授权、治理分发与流通边界。
 - `network/`：reachability、mobile light client、runtime bridge 与 mixed-topology 约束。
 - `distributed/`：分布式 runtime / consensus / hard split 路线。
@@ -64,7 +66,7 @@
 
 ## 高密度提示
 - `doc/p2p/` 的文件数会随专题推进变化；需要当前数量时，以 `find doc/p2p -type f | wc -l` 或 `git ls-files 'doc/p2p/**'` 为准。
-- 需要完整活跃专题清单时，进入 `doc/p2p/prd.index.md`；进入 `node/` 时，优先先读 `doc/p2p/node/README.md` 再继续下钻；需要 runbook / release 补充材料时，再按具体专题路径进入。
+- 需要完整专题检索清单时，进入 `doc/p2p/prd.index.md`；进入 `node/`、`distfs/`、`observer/` 时，优先先读对应子域 README 再继续下钻；需要 runbook / release 补充材料时，再按具体专题路径进入。
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。

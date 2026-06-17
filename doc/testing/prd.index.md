@@ -2,7 +2,7 @@
 
 审计轮次: 10
 
-更新时间：2026-05-06
+更新时间：2026-06-16
 
 ## 入口
 - 模块 PRD：`doc/testing/prd.md`
@@ -24,30 +24,22 @@
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted access / legacy p2p network-rehearsal rehearsal / governance drill / claim-audit 问题分流：先读 `doc/testing/evidence/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-05-06）
-- `doc/testing/`：194 份文件
-- `doc/testing/evidence/`：49 份文件
-- `doc/testing/ci/`：33 份文件
-- `doc/testing/longrun/`：24 份文件
-- `doc/testing/launcher/`：18 份文件
-- `doc/testing/governance/`：28 份文件
-- `doc/testing/templates/`：16 份文件
-- `doc/testing/performance/`：12 份文件
-- `doc/testing/manual/`：7 份文件
-- `doc/testing/chaos-plans/`：1 份文件
+## 密度说明
+- 本索引不维护静态文件数量；数量快照容易漂移，只能作为历史审计材料，不作为默认阅读顺序或覆盖完整性的依据。
+- 需要重新统计时，使用 `find doc/testing -type f` / `rg --files doc/testing` 等当前命令输出，并把结果写入具体审计任务，而不是手工更新本页。
 
 ## 热点子域导航
-| 子域 | 文件数 | 适合回答的问题 |
-| --- | --- | --- |
-| `evidence/` | 49 | 发布证据、趋势基线与审计留痕；当前已补 `evidence/README.md` 作为热点子域入口 |
-| `ci/` | 33 | CI、wasm determinism、tiering、required check 保护 |
-| `longrun/` | 24 | 长稳、chaos、soak 与在线稳定性 |
-| `launcher/` | 18 | 启动器链路测试、playtest 与配置自动接线 |
-| `governance/` | 28 | 质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated personas |
-| `templates/` | 12 | 证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入 |
-| `performance/` | 12 | runtime / viewer 性能观测与方法学 |
-| `manual/` | 7 | 系统测试手册分册与 Web UI 闭环 manual |
-| `chaos-plans/` | 1 | 专项 chaos plan 入口 |
+| 子域 | 适合回答的问题 |
+| --- | --- |
+| `evidence/` | 发布证据、趋势基线与审计留痕；当前已补 `evidence/README.md` 作为热点子域入口 |
+| `ci/` | CI、wasm determinism、tiering、required check 保护 |
+| `longrun/` | 长稳、chaos、soak 与在线稳定性 |
+| `launcher/` | 启动器链路测试、playtest 与配置自动接线 |
+| `governance/` | 质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated personas |
+| `templates/` | 证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入 |
+| `performance/` | runtime / viewer 性能观测与方法学 |
+| `manual/` | 系统测试手册分册与 Web UI 闭环 manual |
+| `chaos-plans/` | 专项 chaos plan 入口 |
 
 ## 活跃补充文档
 - `doc/testing/evidence/README.md`：`evidence/` 热点子域 landing page，按 release gate、hosted access、legacy p2p network-rehearsal rehearsal、governance drill 与 claim/audit 分流读者。
@@ -59,7 +51,7 @@
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
-- README 不再平铺“近期专题”；完整清单继续保留在下方，用于精确文件名检索和互链可达性。
+- README 不再平铺“近期专题”；专题清单继续保留在下方，用于精确文件名检索和互链可达性。
 - `evidence/README.md` 负责最高密度热点子域的首读分流；完整长表继续由本页与目标 evidence 文件承担。
 - 手册、blocker、evidence 与 template 等 supporting / 审计材料继续保留可检索性，但不并入模块 PRD 三件套长表。
 
@@ -69,7 +61,9 @@
 - 排除规则：不纳入 `doc/devlog/**`、`doc/testing/evidence/**`、`doc/testing/templates/**` 与其他非 PRD 配对文档。
 - 按需进入：evidence、template、blocker、closure 说明与历史归档继续保留可检索性；除非它们重新成为当前 operator 或 owner 的直接入口，否则不进入默认首屏。
 
-## 完整活跃专题清单（按文件名精确检索）
+## 专题清单（含历史完成项，按文件名精确检索）
+本表用于互链可达性和 traceability，不代表每一行都是默认首读或当前活跃执行面；已完成的规划三件套应先读其 redirect / historical status，再进入当前 canonical 手册或 topic 文档。
+
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.prd.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.design.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.project.md` |

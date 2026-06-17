@@ -39,6 +39,17 @@
 - 历史入口：根目录 `doc/world-simulator.prd.md` 与 `doc/world-simulator.project.md` 仅保留兼容跳转语义，不作为主索引分母。
 - 兼容跳转：历史路径命中时统一跳转到本目录 `prd.md` / `project.md` 主入口。
 
+## 历史证据入口
+
+以下文档只作为 archive-only evidence，用于审计追溯，不作为 world-simulator 日常阅读入口：
+
+- `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`
+- `doc/core/reviews/round-005-audit-progress-log.md`
+- `doc/core/reviews/round-005-reviewed-files.md`
+- `doc/core/reviews/round-008-reviewed-files.md`
+
+若需要判断当前需求、执行状态或专题配对关系，仍以 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与本索引的活跃专题清单为准。
+
 ## 完整活跃专题清单（按文件名精确检索）
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |

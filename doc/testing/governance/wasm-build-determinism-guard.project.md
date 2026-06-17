@@ -5,6 +5,12 @@
 
 审计轮次: 4
 
+## 当前状态（2026-06-16）
+- 本项目文档已完成并保留为历史 QA gate 执行证据。
+- 当前 WASM 发布级 canonical build / release evidence 的项目状态入口为 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md`；当前 testing gate 归属继续以 `doc/testing/prd.md`、`doc/testing/project.md`、`testing-manual.md` 与绑定 `.pm` task truth 为准。
+- 不得宣称 cross-host/full closure，除非 Linux 加真实 Docker-capable `darwin-arm64` evidence 以及 node-side proof/attestation path 均已归档。
+- 若后续需要调整 required/full gate、release evidence 或 cross-host closure，请新建/绑定当前 testing 或 world-runtime 任务，不要把本文恢复为活跃项目入口。
+
 ## 任务拆解（含 PRD-ID 映射）
 - [x] WASMDET-1 (PRD-TESTING-GOV-WASMDET-001/003): 完成专题设计文档与项目管理文档基线。
 - [x] WASMDET-2 (PRD-TESTING-GOV-WASMDET-001/002): 在 `scripts/build-wasm-module.sh` 落地 canonical 输入约束、污染环境变量拦截、复现环境固定。
