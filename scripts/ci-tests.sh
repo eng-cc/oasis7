@@ -54,12 +54,17 @@ should_run_ci_required_component() {
 run_required_component() {
   local label="$1"
   local raw_value="$2"
-  shift 2
+  local skip_reason="${3:-disabled_by_scope_planner}"
+  if [[ $# -gt 2 ]]; then
+    shift 3
+  else
+    shift 2
+  fi
 
   if should_run_ci_required_component "$raw_value"; then
     "$@"
   else
-    echo "skip: ${label} disabled by CI scope planner"
+    echo "skip: ${label} reason=${skip_reason} claim_boundary=not_covered_by_this_required_run"
   fi
 }
 
@@ -165,7 +170,7 @@ run_required_gate_checks() {
   run ./scripts/unified-world-code-terminology-scan.test.sh
   run ./scripts/release-gate-bash-preflight.test.sh
   run_provider_remote_https_smoke
-  run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" run_provider_bridge_live_gate
+  run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" "explicit_opt_in_not_enabled" run_provider_bridge_live_gate
   run_newapi_bridge_service_accounting_tests
   run ./scripts/check-rust-file-size.sh
   run env -u RUSTC_WRAPPER cargo fmt --all -- --check
@@ -203,17 +208,17 @@ case "$tier" in
     ;;
   required)
     run_required_gate_checks
-    run_required_component "oasis7 required tests" "${OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:-}" run_oasis7_required_tier_tests
-    run_required_component "oasis7_consensus tests" "${OASIS7_CI_RUN_CONSENSUS_TESTS:-}" run_oasis7_consensus_tests
-    run_required_component "oasis7_distfs tests" "${OASIS7_CI_RUN_DISTFS_TESTS:-}" run_oasis7_distfs_tests
-    run_required_component "oasis7_node tests" "${OASIS7_CI_RUN_OASIS7_NODE_TESTS:-false}" run_oasis7_node_tests
-    run_required_component "oasis7_net tests" "${OASIS7_CI_RUN_OASIS7_NET_TESTS:-false}" run_oasis7_net_tests
-    run_required_component "oasis7_net libp2p tests" "${OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS:-false}" run_oasis7_net_libp2p_tests
-    run_required_component "viewer software-safe contract" "${OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS:-}" run_oasis7_viewer_software_safe_feedback_contract_tests
-    run_required_component "viewer software-safe build" "${OASIS7_CI_RUN_VIEWER_WASM_CHECK:-}" run_oasis7_viewer_software_safe_build
-    run_required_component "viewer performance smoke (report-only)" "${OASIS7_CI_RUN_VIEWER_PERF_SMOKE:-false}" run_oasis7_viewer_performance_smoke_report_only
-    run_required_component "hosted account local smoke" "${OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE:-false}" run_hosted_account_local_smoke
-    run_required_component "launcher web build" "${OASIS7_CI_RUN_LAUNCHER_WEB_BUILD:-false}" run_oasis7_client_launcher_web_build
+    run_required_component "oasis7 required tests" "${OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:-}" "disabled_by_scope_planner" run_oasis7_required_tier_tests
+    run_required_component "oasis7_consensus tests" "${OASIS7_CI_RUN_CONSENSUS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_consensus_tests
+    run_required_component "oasis7_distfs tests" "${OASIS7_CI_RUN_DISTFS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_distfs_tests
+    run_required_component "oasis7_node tests" "${OASIS7_CI_RUN_OASIS7_NODE_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_node_tests
+    run_required_component "oasis7_net tests" "${OASIS7_CI_RUN_OASIS7_NET_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_net_tests
+    run_required_component "oasis7_net libp2p tests" "${OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_net_libp2p_tests
+    run_required_component "viewer software-safe contract" "${OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_oasis7_viewer_software_safe_feedback_contract_tests
+    run_required_component "viewer software-safe build" "${OASIS7_CI_RUN_VIEWER_WASM_CHECK:-}" "disabled_by_scope_planner" run_oasis7_viewer_software_safe_build
+    run_required_component "viewer performance smoke (report-only)" "${OASIS7_CI_RUN_VIEWER_PERF_SMOKE:-false}" "report_only_scope_not_selected" run_oasis7_viewer_performance_smoke_report_only
+    run_required_component "hosted account local smoke" "${OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE:-false}" "not_in_local_required_baseline_or_scope_disabled" run_hosted_account_local_smoke
+    run_required_component "launcher web build" "${OASIS7_CI_RUN_LAUNCHER_WEB_BUILD:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_client_launcher_web_build
     ;;
   full)
     run_full_core_tier_tests

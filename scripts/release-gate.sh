@@ -28,6 +28,12 @@ Options:
   --skip-web-strict              Skip web strict loop
   --skip-s9                      Skip S9 soak gate
   --skip-s10                     Skip S10 soak gate
+  --skip-ci-full-reason <text>   Reason recorded when --skip-ci-full is used
+  --skip-sync-reason <text>      Reason recorded when --skip-sync is used
+  --skip-web-strict-reason <text>
+                                  Reason recorded when --skip-web-strict is used
+  --skip-s9-reason <text>        Reason recorded when --skip-s9 is used
+  --skip-s10-reason <text>       Reason recorded when --skip-s10 is used
   --web-scenario <name>          Scenario for web strict loop (default: llm_bootstrap)
   --web-headed                   Run web loop in headed mode
   --s9-duration-secs <n>         S9 release gate duration (default: 300)
@@ -48,6 +54,17 @@ ensure_positive_int() {
   local value=$2
   if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value <= 0 )); then
     echo "invalid $flag: $value" >&2
+    exit 2
+  fi
+}
+
+require_skip_reason() {
+  local flag=$1
+  local reason_flag=$2
+  local reason_value=$3
+  if [[ -z "$reason_value" ]]; then
+    echo "error: $flag requires non-empty $reason_flag" >&2
+    echo "hint: skipped release steps must record why they were not run and what claim they cannot support" >&2
     exit 2
   fi
 }
@@ -108,6 +125,10 @@ set_step_cmd() {
   set_step_field cmd "$1" "$2"
 }
 
+set_step_claim_boundary() {
+  set_step_field claim_boundary "$1" "$2"
+}
+
 get_step_status() {
   get_step_field status "$1"
 }
@@ -124,6 +145,10 @@ get_step_cmd() {
   get_step_field cmd "$1"
 }
 
+get_step_claim_boundary() {
+  get_step_field claim_boundary "$1"
+}
+
 dry_run=0
 dry_run_fail_step=""
 out_dir=".tmp/release_gate"
@@ -135,6 +160,11 @@ skip_sync=0
 skip_web_strict=0
 skip_s9=0
 skip_s10=0
+skip_ci_full_reason=""
+skip_sync_reason=""
+skip_web_strict_reason=""
+skip_s9_reason=""
+skip_s10_reason=""
 
 web_scenario="llm_bootstrap"
 web_headed=0
@@ -191,6 +221,26 @@ while [[ $# -gt 0 ]]; do
       skip_s10=1
       shift
       ;;
+    --skip-ci-full-reason)
+      skip_ci_full_reason=${2:-}
+      shift 2
+      ;;
+    --skip-sync-reason)
+      skip_sync_reason=${2:-}
+      shift 2
+      ;;
+    --skip-web-strict-reason)
+      skip_web_strict_reason=${2:-}
+      shift 2
+      ;;
+    --skip-s9-reason)
+      skip_s9_reason=${2:-}
+      shift 2
+      ;;
+    --skip-s10-reason)
+      skip_s10_reason=${2:-}
+      shift 2
+      ;;
     --web-scenario)
       web_scenario=${2:-}
       shift 2
@@ -246,6 +296,22 @@ if [[ "$quick" -eq 1 ]]; then
   fi
 fi
 
+if [[ "$skip_ci_full" -eq 1 ]]; then
+  require_skip_reason "--skip-ci-full" "--skip-ci-full-reason" "$skip_ci_full_reason"
+fi
+if [[ "$skip_sync" -eq 1 ]]; then
+  require_skip_reason "--skip-sync" "--skip-sync-reason" "$skip_sync_reason"
+fi
+if [[ "$skip_web_strict" -eq 1 ]]; then
+  require_skip_reason "--skip-web-strict" "--skip-web-strict-reason" "$skip_web_strict_reason"
+fi
+if [[ "$skip_s9" -eq 1 ]]; then
+  require_skip_reason "--skip-s9" "--skip-s9-reason" "$skip_s9_reason"
+fi
+if [[ "$skip_s10" -eq 1 ]]; then
+  require_skip_reason "--skip-s10" "--skip-s10-reason" "$skip_s10_reason"
+fi
+
 if [[ -n "$dry_run_fail_step" ]]; then
   if [[ "$dry_run" -ne 1 ]]; then
     echo "error: --dry-run-fail-step requires --dry-run" >&2
@@ -298,7 +364,34 @@ for step in "${all_steps[@]}"; do
   set_step_note "$step" "not scheduled"
   set_step_log "$step" "$run_dir/$step.log"
   set_step_cmd "$step" ""
+  set_step_claim_boundary "$step" ""
 done
+
+set_step_note candidate_bundle "no candidate bundle provided"
+set_step_claim_boundary candidate_bundle "no release candidate bundle validation claim"
+if [[ "$skip_ci_full" -eq 1 ]]; then
+  set_step_note ci_full "explicit_skip: $skip_ci_full_reason"
+  set_step_claim_boundary ci_full "does not support full CI/runtime coverage claim"
+fi
+if [[ "$skip_sync" -eq 1 ]]; then
+  step=""
+  for step in sync_m1 sync_m4 sync_m5; do
+    set_step_note "$step" "explicit_skip: $skip_sync_reason"
+    set_step_claim_boundary "$step" "does not support builtin wasm hash sync claim"
+  done
+fi
+if [[ "$skip_web_strict" -eq 1 ]]; then
+  set_step_note web_strict "explicit_skip: $skip_web_strict_reason"
+  set_step_claim_boundary web_strict "does not support Web strict release claim"
+fi
+if [[ "$skip_s9" -eq 1 ]]; then
+  set_step_note s9 "explicit_skip: $skip_s9_reason"
+  set_step_claim_boundary s9 "does not support S9 online longrun claim"
+fi
+if [[ "$skip_s10" -eq 1 ]]; then
+  set_step_note s10 "explicit_skip: $skip_s10_reason"
+  set_step_claim_boundary s10 "does not support S10 five-node game soak claim"
+fi
 
 run_step() {
   local step_name=$1
@@ -373,11 +466,16 @@ write_summary() {
       local step_note_value
       local step_cmd_value
       local step_log_value
+      local step_claim_boundary_value
       step_status_value="$(get_step_status "$step")"
       step_note_value="$(get_step_note "$step")"
       step_cmd_value="$(get_step_cmd "$step")"
       step_log_value="$(get_step_log "$step")"
+      step_claim_boundary_value="$(get_step_claim_boundary "$step")"
       echo "- $step: $step_status_value ($step_note_value)"
+      if [[ -n "$step_claim_boundary_value" ]]; then
+        echo "  - claim boundary: $step_claim_boundary_value"
+      fi
       if [[ -n "$step_cmd_value" ]]; then
         echo "  - command: \`$step_cmd_value\`"
       fi

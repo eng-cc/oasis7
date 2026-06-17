@@ -132,6 +132,18 @@
 - `wasm-determinism-gate` 负责 `m1/m4/m5` hash / receipt evidence 独立 gate；
 - 若目标是“整应用充分测试”，仍需在此基础上叠加 UI 闭环层（S6）与压力层（S8）。
 
+## 默认测试选择树（影响面覆盖 + 最小充分测试）
+
+先按改动影响面选择最小测试集，再按风险升级；不要把 `required`、`full` 或 release gate 当作“无脑全跑”的替代品。每次结论至少写清：本次影响面、已跑最小测试集、证据路径、未覆盖/残余风险。
+
+1. 文档、治理、脚本元数据：默认 S0；若改动测试/发布口径，再追加对应脚本的 syntax/dry-run 或 planner 样例，不因文档改动直接升级到 full。
+2. runtime / simulator / world-model：先跑命中的定向 S3；落地前补 S1；只有跨模块、持久化、规则/历史回归风险无法由定向测试覆盖时才升 S2。
+3. Viewer / Web / 可见 UI：先跑 deterministic contract、component test 或 wasm/build 前置；触达可见表面时追加 S6 截图与模型视觉评审。
+4. node / net / consensus / distfs：先跑命中的 S4 子系统测试；涉及在线拓扑、恢复、公开网络或存储/共识 claim 时追加 S9/S10。
+5. builtin wasm / module release / hash：先跑对应 scope planner 与 module-set evidence；发布或跨 runner claim 才进入 release evidence 对账。
+6. playability / player continue claim：自动化只能证明“没坏/可回归”；`L4A`、`L4B`、`L5` 按 claim 强度升级，不得互相替代。
+7. release candidate：默认完整 release gate；任何 `--skip-*` 都必须写明原因，并在 summary 里保留 claim boundary。带 skip 的结果只能支撑剩余已执行步骤，不能支撑被跳过层级的 release claim。
+
 ## 分层模型（针对当前仓库）
 
 ### L0 静态与工件一致性层
@@ -382,6 +394,11 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`（截图加模型视觉评审，用于替代 routine 人工视觉 review）
   - `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`（发布前人工体验与异常恢复检查清单）
 - 本手册仅保留分层与触发矩阵，执行时按上述文档操作。
+- S6 选择器：
+  - UI 结构 / 文案 / DOM anchor：优先 `npm --prefix crates/oasis7_viewer run test:ui` 或对应 contract test。
+  - 可见视觉 / 布局 / 遮挡 / 响应式：先采 desktop/mobile 截图，再执行模型视觉评审卡。
+  - formal player surface 可用性：执行 headed/browser S6，证据必须包含截图、console、关键状态与操作结果。
+  - playability claim：S6 只能作为 `L4A` 前置；继续游玩倾向需升级到 `L4A/L4B/L5` 对应证据。
 - 模式总口径（`PRD-CORE-009`）：
   - `viewer` / `pure_api` 是当前正式玩家访问模式，分别对应默认 Web 入口和纯接口正式入口；`software_safe` 仅保留为 `viewer` 的兼容 alias。
   - `pure_api` 的正式游玩与 headed Web/UI 一样，默认要求 active LLM access；禁用 LLM 后只能做 blocked/observer-debug 诊断，不再计入正式可玩性证据。
@@ -836,6 +853,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 ```
 - 默认串行执行：`ci-tests full`、`sync-m1/m4/m5 --check`、Web strict、S9/S10。
 - `--quick` 用于缩短 S9/S10 时长并关闭 Web visual baseline。
+- `--skip-*` 只用于已知外部约束或分片排障；必须在 summary 中保留 skip reason 与 claim boundary。跳过 `ci_full`、sync、Web strict、S9 或 S10 后，不得把本次结果写成完整 release coverage。
 
 ### Network Tiers / Shared-Network Evidence
 - 当前网络层真值统一以 `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md` 与对应 project/runbook 为准：

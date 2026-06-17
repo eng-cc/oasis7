@@ -126,6 +126,7 @@
   - AC-9B: `release-gate-web` 的 `software_safe` 分支必须按当前 live-control 契约验收：`play/pause` 允许 `queued`，后续 `step` 必须收口为 `completed_advanced` 且 `deltaLogicalTime > 0` 或 `deltaEventSeq > 0`；缺失 world delta 时要给出显式失败签名，而不是把“未即时涨 tick / 未选中 Agent”误判成回归。
   - AC-9A: release/package-native 触发前必须由 Linux required gate 显式扫描 tracked paths 的 Windows 兼容性，阻断会让 `windows-2022` checkout 直接失败的路径名。
   - AC-9C: release/package-native 触发前必须由 commit/required gate 显式扫描 release 关键 shell 脚本的 tracked mode 与 worktree 执行位，阻断会让 Linux runner 只在 `release-gate-web` / `package-native` 阶段暴露的 `Permission denied` 回归。
+  - AC-9D: release gate 的任何显式 `--skip-*` 都必须提供非空 skip reason，并在 summary 中输出对应 claim boundary；带 skip 的结果不得支撑被跳过层级的完整 release coverage claim。
   - AC-10: `release-gate-runtime` 必须允许将 `ci-tests.sh full` 拆为至少两个并行 shard，并与 builtin wasm sync 检查独立聚合，保证放行语义不变。
   - AC-11: runtime shard 划分必须按关键路径持续重平衡；`oasis7 --lib --bins` 等中重量级套件不应长期挤占最重 shard。
   - AC-12: `doc/testing/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` / `oasis7 Runtime` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。

@@ -247,9 +247,13 @@ jobs:
           xvfb-run -a ./scripts/release-gate.sh \
             --out-dir .tmp/release_gate_web \
             --skip-ci-full \
+            --skip-ci-full-reason mainnet-workflow-runtime-shard-runs-ci-full \
             --skip-sync \
+            --skip-sync-reason mainnet-workflow-sync-shards-run-wasm-sync \
             --skip-s9 \
+            --skip-s9-reason mainnet-workflow-soak-shard-runs-s9 \
             --skip-s10 \
+            --skip-s10-reason mainnet-workflow-soak-shard-runs-s10 \
             --web-headed
       - name: Upload web gate summary
         if: always()
@@ -298,8 +302,11 @@ jobs:
           ./scripts/release-gate.sh \
             --out-dir .tmp/release_gate_soak \
             --skip-ci-full \
+            --skip-ci-full-reason mainnet-workflow-runtime-shard-runs-ci-full \
             --skip-sync \
-            --skip-web-strict
+            --skip-sync-reason mainnet-workflow-sync-shards-run-wasm-sync \
+            --skip-web-strict \
+            --skip-web-strict-reason mainnet-workflow-web-shard-runs-web-strict
       - name: Upload soak gate summary
         if: always()
         uses: actions/upload-artifact@v7
