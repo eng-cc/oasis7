@@ -399,7 +399,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         }
     }
 
-    if provider_lookup_supplied && !policy.require_retryable_provider_route_before_fallback {
+    if provider_lookup_supplied {
         if let Some(response) = last_not_found {
             return Ok(response);
         }
@@ -407,7 +407,6 @@ fn request_fetch_blob_chunk_with_route_fallback(
 
     if policy.require_retryable_provider_route_before_fallback
         && last_retryable_error.is_none()
-        && last_not_found.is_none()
         && (provider_route_attempted || !provider_lookup_supplied)
     {
         return Err(NodeError::Replication {
@@ -418,11 +417,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         });
     }
 
-    if provider_lookup_supplied
-        && last_retryable_error.is_none()
-        && last_not_found.is_none()
-        && provider_route_attempted
-    {
+    if provider_lookup_supplied && last_retryable_error.is_none() && provider_route_attempted {
         return Err(NodeError::Replication {
             reason: format!(
                 "blob fetch provider routes exhausted without response for world_id={} hash={}",

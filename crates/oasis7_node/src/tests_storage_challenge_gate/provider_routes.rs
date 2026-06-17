@@ -211,17 +211,17 @@ fn runtime_replication_storage_challenge_gate_falls_back_after_provider_route_un
 }
 
 #[test]
-fn runtime_replication_storage_challenge_gate_falls_back_after_provider_route_not_found() {
+fn runtime_replication_storage_challenge_gate_degrades_after_provider_route_not_found() {
     let dir = temp_dir("challenge-gate-provider-not-found");
     let world_id = "world-challenge-provider-not-found";
     let network_impl = Arc::new(ProviderNotFoundFallbackTestNetwork::new(dir.clone()));
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
     > = network_impl.clone();
-    let dht = Arc::new(TestReplicaMaintenanceDht::new(
-        "storage-provider-1",
-        "node-a",
-    ));
+    let dht = Arc::new(
+        TestReplicaMaintenanceDht::new("storage-provider-1", "node-a")
+            .with_source_provider_for_all_lookups(),
+    );
     let pos_config = signed_pos_config_with_signer_seeds(
         vec![PosValidator {
             validator_id: "node-a".to_string(),
@@ -291,7 +291,7 @@ fn runtime_replication_storage_challenge_gate_falls_back_after_provider_route_no
     let generic_attempts = network_impl.generic_attempts();
     assert!(
         gate_result.is_ok(),
-        "provider route not-found should recover through generic fallback: {gate_result:?}"
+        "provider route not-found should degrade, not hard-block: {gate_result:?}"
     );
     assert!(
         provider_attempts.iter().any(|providers| {
@@ -302,12 +302,12 @@ fn runtime_replication_storage_challenge_gate_falls_back_after_provider_route_no
         "expected storage challenge gate to try DHT-selected provider before degraded mode: {provider_attempts:?}"
     );
     assert!(
-        generic_attempts > 0,
-        "storage challenge should try bounded generic lane after not-found provider response"
+        generic_attempts == 0,
+        "storage challenge should not retry generic lane after not-found provider response"
     );
     assert!(
-        snapshot.storage_challenge_network_degraded_height.is_none(),
-        "provider not-found should recover through generic fallback when the blob is reachable: {:?}",
+        snapshot.storage_challenge_network_degraded_height.is_some(),
+        "provider not-found should remain observable as degraded: {:?}",
         snapshot.storage_challenge_network_degraded_reason
     );
 
