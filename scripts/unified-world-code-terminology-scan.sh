@@ -60,6 +60,25 @@ allowed_snippets = {
         'shared_network_track_gate_smoke',
     ),
 }
+allowed_path_names = {
+    "doc/testing/templates/shared-network-exit-decision-template.md",
+    "doc/testing/templates/shared-network-incident-review-template.md",
+    "doc/testing/templates/shared-network-incident-template.md",
+    "doc/testing/templates/shared-network-mixed-topology-gate-template.md",
+    "doc/testing/templates/shared-network-promotion-record-template.md",
+    "doc/testing/templates/shared-network-rollback-target-template.md",
+    "doc/testing/templates/shared-network-shared-access-check-template.md",
+    "doc/testing/templates/shared-network-track-gate-lanes.canary.template.tsv",
+    "doc/testing/templates/shared-network-track-gate-lanes.shared_devnet.template.tsv",
+    "doc/testing/templates/shared-network-track-gate-lanes.staging.template.tsv",
+    "doc/testing/templates/shared-network-track-gate-template.md",
+    "scripts/shared-devnet-blocker-packet-smoke.sh",
+    "scripts/shared-devnet-blocker-packet.sh",
+    "scripts/shared-devnet-rehearsal-smoke.sh",
+    "scripts/shared-devnet-rehearsal.sh",
+    "scripts/shared-network-track-gate-smoke.sh",
+    "scripts/shared-network-track-gate.sh",
+}
 
 cmd = [
     "rg",
@@ -89,6 +108,24 @@ for line in proc.stdout.splitlines():
     else:
         unexpected.append(line)
 
+files_cmd = ["rg", "--files", *scan_paths]
+files_proc = subprocess.run(files_cmd, cwd=repo_root, text=True, capture_output=True)
+if files_proc.returncode != 0:
+    sys.stderr.write(files_proc.stderr)
+    raise SystemExit(files_proc.returncode)
+
+path_pattern = re.compile(pattern)
+allowed_path_hits: list[str] = []
+for rel in files_proc.stdout.splitlines():
+    if rel == "scripts/unified-world-code-terminology-scan.sh":
+        continue
+    if not path_pattern.search(rel):
+        continue
+    if rel in allowed_path_names:
+        allowed_path_hits.append(rel)
+    else:
+        unexpected.append(f"{rel}: legacy terminology in path name")
+
 if unexpected:
     print("unified-world-code-terminology-scan: FAIL")
     print("Unexpected legacy shared world terminology in active code/template surfaces:")
@@ -102,5 +139,6 @@ if unexpected:
     raise SystemExit(1)
 
 print("unified-world-code-terminology-scan: OK")
-print(f"allowed compatibility hits: {len(allowed_hits)}")
+print(f"allowed compatibility content hits: {len(allowed_hits)}")
+print(f"allowed compatibility path hits: {len(allowed_path_hits)}")
 PY
