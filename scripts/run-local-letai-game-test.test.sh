@@ -144,6 +144,7 @@ fi
 assert_contains "$missing_config_err" "error: local playtest preflight failed: LetAI config not found"
 assert_contains "$missing_config_err" "pass --config <path> or set OASIS7_LETAI_CONFIG_PATH"
 
+if command -v lsof >/dev/null 2>&1; then
 occupied_port_file="$tmp_dir/occupied-port.txt"
 python3 - "$occupied_port_file" <<'PY' &
 from __future__ import annotations
@@ -197,6 +198,9 @@ if [[ "$occupied_status" -eq 0 ]]; then
 fi
 assert_contains "$occupied_err" "error: local playtest preflight failed: provider bind address is already in use"
 assert_contains "$occupied_err" "Stop the previous local playtest stack, or pass --bind <free host:port>"
+else
+  echo "skip: occupied bind preflight assertion requires lsof" >&2
+fi
 
 missing_node_err="$tmp_dir/missing-node.err"
 set +e

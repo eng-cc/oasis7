@@ -153,6 +153,7 @@ fn mock_mode_health_is_ready_without_gateway_probe() {
     let info = state.provider_info();
     assert_eq!(info.provider_id, "provider_local_mock");
     assert!(info.capabilities.iter().any(|value| value == "mock"));
+    assert!(info.capabilities.iter().any(|value| value == "agent_chat"));
     assert!(info.capabilities.iter().any(|value| value == "no_billing"));
     let health = state.provider_health();
     assert!(health.ok);

@@ -533,6 +533,16 @@ fi
 
 agent_spoke_required_contains_json="$(js_array_literal "${AGENT_SPOKE_REQUIRED_CONTAINS[@]}")"
 agent_spoke_forbidden_contains_json="$(js_array_literal "${AGENT_SPOKE_FORBIDDEN_CONTAINS[@]}")"
+agent_spoke_forbidden_seen_script="(() => {
+  const forbidden = ${agent_spoke_forbidden_contains_json};
+  if (!Array.isArray(forbidden) || forbidden.length === 0) return false;
+  const h = window.__AW_TEST__?.getState?.()?.chatHistory ?? [];
+  return h.some((entry) => {
+    if (!entry || entry.source !== 'event' || entry.agentId !== ${AGENT_ID@Q}) return false;
+    const msg = String(entry.message ?? '');
+    return forbidden.some((needle) => msg.includes(String(needle)));
+  });
+})()"
 agent_spoke_entry_predicate="(entry) => {
   if (!entry || entry.source !== 'event' || entry.agentId !== ${AGENT_ID@Q}) return false;
   const msg = String(entry.message ?? '');
@@ -545,6 +555,12 @@ agent_spoke_entry_predicate="(entry) => {
   return true;
 }"
 agent_spoke_match_script="(() => { const h = window.__AW_TEST__?.getState?.()?.chatHistory ?? []; return h.some(${agent_spoke_entry_predicate}); })()"
+assert_no_forbidden_agent_spoke() {
+  if [[ "$(normalize_eval_token "$(ab_eval "$session" "$agent_spoke_forbidden_seen_script")")" == "true" ]]; then
+    echo "error: inbound agent_spoke contains forbidden text (${AGENT_SPOKE_FORBIDDEN_CONTAINS[*]})" >&2
+    exit 1
+  fi
+}
 
 immediate_wait_ms=$AGENT_SPOKE_TIMEOUT_MS
 if (( immediate_wait_ms > IMMEDIATE_AGENT_SPOKE_TIMEOUT_MS )); then
@@ -554,6 +570,7 @@ if wait_for_js_true "$agent_spoke_match_script" "$immediate_wait_ms"; then
   agent_spoke_seen=true
   agent_spoke_seen_immediate=true
 fi
+assert_no_forbidden_agent_spoke
 
 if [[ "$agent_spoke_seen_immediate" != true && "$require_immediate_agent_spoke" -eq 1 ]]; then
   echo "error: inbound agent_spoke not observed immediately after chat ack without extra control advance (expected_message=${agent_spoke_expected_message:-<any>})" >&2
@@ -562,6 +579,7 @@ fi
 
 if [[ "$agent_spoke_seen" != true ]]; then
   for step_batch in 1 2 3 4; do
+    assert_no_forbidden_agent_spoke
     if wait_for_js_true "$agent_spoke_match_script" 500; then
       agent_spoke_seen=true
       break
@@ -605,8 +623,10 @@ if [[ "$agent_spoke_seen" != true ]]; then
       agent_spoke_needed_advance=true
       break
     fi
+    assert_no_forbidden_agent_spoke
   done
 fi
+assert_no_forbidden_agent_spoke
 
 if [[ "$agent_spoke_seen" != true && "$REQUIRE_AGENT_SPOKE" -eq 1 ]]; then
   echo "error: inbound agent_spoke not observed within timeout (bootstrapped_stack=$BOOTSTRAPPED_STACK, bootstrap_uses_bundle=$BOOTSTRAP_USES_BUNDLE, expected_message=${agent_spoke_expected_message:-<any>})" >&2

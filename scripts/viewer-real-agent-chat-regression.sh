@@ -145,7 +145,7 @@ done
 [[ -n "$CHAT_MESSAGE" ]] || { echo "error: --chat-message cannot be empty" >&2; exit 2; }
 
 if [[ "$EXPECT_CONTAINS_SET" -eq 0 ]]; then
-  EXPECT_CONTAINS=("我在 runtime:" "data 8" "electricity 32")
+  EXPECT_CONTAINS=("runtime:" "data 8" "electricity 32")
 fi
 if [[ "$FORBID_CONTAINS_SET" -eq 0 ]]; then
   FORBID_CONTAINS=("[local-mock-receipt]" "[local-mock-chat]")

@@ -493,11 +493,8 @@ impl ViewerRuntimeLiveServer {
             player_id.as_str(),
             message.as_str(),
         ) {
-            Ok(provider_reply) => {
+            Ok(()) => {
                 self.llm_sidecar.request_decision();
-                if let Some(reply) = provider_reply {
-                    self.enqueue_agent_chat_reply_event(agent_id.as_str(), reply.as_str());
-                }
             }
             Err(error)
                 if chat_echo_enabled
@@ -874,6 +871,15 @@ impl ViewerRuntimeLiveServer {
             message: message.to_string(),
             target_agent_id: None,
         });
+    }
+
+    pub(super) fn enqueue_pending_provider_agent_chat_replies(&mut self) {
+        let replies = self
+            .llm_sidecar
+            .drain_provider_agent_chat_replies(&self.world);
+        for (agent_id, message) in replies {
+            self.enqueue_agent_chat_reply_event(agent_id.as_str(), message.as_str());
+        }
     }
 
     fn next_virtual_event_id(&mut self) -> u64 {

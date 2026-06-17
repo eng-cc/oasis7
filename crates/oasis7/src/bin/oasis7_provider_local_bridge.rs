@@ -226,6 +226,7 @@ impl ProviderState {
         let mut capabilities = vec![
             "decision".to_string(),
             "feedback".to_string(),
+            "agent_chat".to_string(),
             "loopback_only".to_string(),
         ];
         match self.options.mode {

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::geometry::GeoPos;
@@ -59,6 +59,7 @@ const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
 const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const RUNTIME_PROVIDER_CHECK_CACHE_MS: u64 = 2_000;
+const PROVIDER_AGENT_CHAT_CAPABILITY: &str = "agent_chat";
 const ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS: &str = "OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS";
 const DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS: u64 = 30_000;
 
@@ -127,6 +128,13 @@ struct RuntimeChatIntentAckRecord {
     intent_tick: Option<u64>,
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct RuntimePendingProviderAgentChat {
+    pub(super) agent_id: String,
+    player_id: String,
+    message: String,
+}
+
 impl RuntimeLlmDecision {
     fn from_error(world: &RuntimeWorld, message: String) -> Self {
         let agent_id = world
@@ -184,6 +192,7 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     runner: Option<RuntimeDecisionRunner>,
     shadow_kernel: Option<WorldKernel>,
     pending_actions: BTreeMap<u64, RuntimePendingAction>,
+    pending_provider_agent_chats: VecDeque<RuntimePendingProviderAgentChat>,
     provider_check_snapshot: Option<RuntimeProviderCheckSnapshot>,
 }
 
@@ -202,6 +211,7 @@ impl RuntimeLlmSidecar {
             runner: None,
             shadow_kernel: None,
             pending_actions: BTreeMap::new(),
+            pending_provider_agent_chats: VecDeque::new(),
             provider_check_snapshot: None,
         }
     }
@@ -554,7 +564,7 @@ impl RuntimeLlmSidecar {
         agent_id: &str,
         player_id: &str,
         message: &str,
-    ) -> Result<Option<String>, AgentChatError> {
+    ) -> Result<(), AgentChatError> {
         if !self.is_llm_mode() {
             return Err(AgentChatError {
                 code: "llm_mode_required".to_string(),
@@ -597,7 +607,6 @@ impl RuntimeLlmSidecar {
             }
         };
         if provider_backed {
-            let reply = self.request_provider_agent_chat(world, agent_id, player_id, message)?;
             let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() else {
                 return Err(AgentChatError {
                     code: "llm_init_failed".to_string(),
@@ -620,7 +629,13 @@ impl RuntimeLlmSidecar {
                     message: error.message,
                     agent_id: Some(agent_id.to_string()),
                 })?;
-            Ok(Some(reply))
+            self.pending_provider_agent_chats
+                .push_back(RuntimePendingProviderAgentChat {
+                    agent_id: agent_id.to_string(),
+                    player_id: player_id.to_string(),
+                    message: message.to_string(),
+                });
+            Ok(())
         } else {
             let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() else {
                 return Err(AgentChatError {
@@ -647,9 +662,37 @@ impl RuntimeLlmSidecar {
                         agent_id: Some(agent_id.to_string()),
                     });
                 }
-                Ok(None)
+                Ok(())
             }
         }
+    }
+
+    pub(super) fn drain_provider_agent_chat_replies(
+        &mut self,
+        world: &RuntimeWorld,
+    ) -> Vec<(String, String)> {
+        let pending: Vec<_> = self.pending_provider_agent_chats.drain(..).collect();
+        let mut replies = Vec::new();
+        for request in pending {
+            match self.request_provider_agent_chat(
+                world,
+                request.agent_id.as_str(),
+                request.player_id.as_str(),
+                request.message.as_str(),
+            ) {
+                Ok(Some(reply)) => replies.push((request.agent_id, reply)),
+                Ok(None) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        agent_id = error.agent_id.as_deref().unwrap_or(""),
+                        error_code = error.code.as_str(),
+                        error_message = error.message.as_str(),
+                        "provider-backed agent chat reply failed after ack"
+                    );
+                }
+            }
+        }
+        replies
     }
 
     fn request_provider_agent_chat(
@@ -658,7 +701,7 @@ impl RuntimeLlmSidecar {
         agent_id: &str,
         player_id: &str,
         message: &str,
-    ) -> Result<String, AgentChatError> {
+    ) -> Result<Option<String>, AgentChatError> {
         let settings = provider_settings_from_env()
             .map_err(|message| AgentChatError {
                 code: "provider_config_invalid".to_string(),
@@ -681,6 +724,18 @@ impl RuntimeLlmSidecar {
             message: error.to_string(),
             agent_id: Some(agent_id.to_string()),
         })?;
+        let info = client.provider_info().map_err(|error| AgentChatError {
+            code: "provider_unreachable".to_string(),
+            message: error.to_string(),
+            agent_id: Some(agent_id.to_string()),
+        })?;
+        if !info.capabilities.iter().any(|capability| {
+            capability
+                .trim()
+                .eq_ignore_ascii_case(PROVIDER_AGENT_CHAT_CAPABILITY)
+        }) {
+            return Ok(None);
+        }
         let agent = world.state().agents.get(agent_id);
         let location_id = agent.map(|agent| location_id_for_pos(agent.state.pos));
         let resources = agent.and_then(|agent| serde_json::to_value(&agent.state.resources).ok());
@@ -707,7 +762,7 @@ impl RuntimeLlmSidecar {
                 agent_id: Some(agent_id.to_string()),
             });
         }
-        Ok(reply.to_string())
+        Ok(Some(reply.to_string()))
     }
 
     pub(super) fn next_llm_decision(
