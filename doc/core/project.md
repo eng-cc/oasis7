@@ -337,6 +337,19 @@
     - `bash -n scripts/unified-world-code-terminology-scan.sh scripts/module-release-node-acceptance.sh scripts/p2p-longrun-soak.sh scripts/s10-five-node-game-soak.sh scripts/shared-devnet-blocker-packet.sh scripts/shared-devnet-rehearsal.sh scripts/shared-network-track-gate.sh`
     - `./scripts/pm/workflow-lint.sh --task-uid task_acb7e3599b4242628a7ac99a62628d55 --phase pr-ready`
     - `git diff --check`
+- [x] sig-pm-0068-test-coverage (PRD-CORE-003/009) [test_tier_required]: 补齐 SIG-PM-0068 代码层迁移的永久自动化回归测试，覆盖 active terminology scan 的内容/路径负向案例，以及 Bash 3.2-compatible local shell 下 release-gate Bash 4+ preflight 的前置失败行为。 Trace: .pm/tasks/task_22364604bc04498ebe7f10a5247757cd.yaml
+  - 产物文件:
+    - `scripts/unified-world-code-terminology-scan.test.sh`
+    - `scripts/release-gate-bash-preflight.test.sh`
+    - `scripts/ci-tests.sh`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/unified-world-code-terminology-scan.test.sh`
+    - `./scripts/release-gate-bash-preflight.test.sh`
+    - `bash -n scripts/unified-world-code-terminology-scan.test.sh scripts/release-gate-bash-preflight.test.sh scripts/ci-tests.sh`
+    - `./scripts/unified-world-code-terminology-scan.sh`
+    - `./scripts/check-script-executable-bits.sh`
+    - `./scripts/pm/workflow-lint.sh --task-uid task_22364604bc04498ebe7f10a5247757cd --phase pr-ready`
+    - `git diff --check`
 
 ## 依赖
 - doc/core/prd.index.md
