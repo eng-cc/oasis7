@@ -326,7 +326,7 @@ impl PosNodeEngine {
             return Ok(());
         }
 
-        if !hard_failure && failure_reasons.is_empty() {
+        if !hard_failure && successful_matches < required_matches {
             let fallback_samples = replication.replicated_content_refs_from_height(
                 world_id,
                 self.storage_challenge_fallback_height,

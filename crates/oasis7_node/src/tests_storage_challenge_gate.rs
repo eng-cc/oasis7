@@ -723,7 +723,10 @@ fn runtime_replication_storage_challenge_gate_falls_back_to_older_samples_during
         seeded_height,
         engine.storage_challenge_fallback_height,
     );
-    assert_eq!(engine.storage_challenge_fallback_height, 1);
+    assert!(
+        engine.storage_challenge_fallback_height > 1,
+        "successful old-sample fallback should advance the fallback cursor"
+    );
 
     assert!(
         requested_hashes_snapshot
@@ -874,7 +877,10 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_during_warmup(
         "storage challenge gate should allow a single remote match during warmup: seeded_height={} requested_hashes={requested_hashes_snapshot:?} err={gate_result:?}",
         seeded_height,
     );
-    assert_eq!(engine.storage_challenge_fallback_height, 1);
+    assert!(
+        engine.storage_challenge_fallback_height > 1,
+        "successful warmup fallback should advance the fallback cursor"
+    );
     assert!(
         requested_hashes_snapshot
             .iter()
@@ -1098,7 +1104,10 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_without_peer_h
         "storage challenge gate should allow a single remote match when peer heads remain empty after warmup: seeded_height={} requested_hashes={requested_hashes_snapshot:?} err={gate_result:?}",
         seeded_height,
     );
-    assert_eq!(engine.storage_challenge_fallback_height, 1);
+    assert!(
+        engine.storage_challenge_fallback_height > 1,
+        "successful peer-headless fallback should advance the fallback cursor"
+    );
     assert!(
         requested_hashes_snapshot
             .iter()
