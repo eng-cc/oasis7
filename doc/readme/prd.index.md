@@ -16,16 +16,17 @@
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-25）
-- `doc/readme/`：143 份文件
-- `doc/readme/governance/`：99 份文件
+## 密度快照（2026-06-17）
+- `doc/readme/`：120 份文件
+- `doc/readme/governance/`：76 份文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：12 份文件
+- `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `governance/` | 97 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
+| `governance/` | 76 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
 | `gap/` | 27 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口 |
 | `production/` | 12 | 生产收口、阶段边界、readiness 与对外承诺约束 |
 
@@ -34,9 +35,10 @@
 - `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`：面向第一次接触仓库读者的白皮书式项目总览，适合先理解“项目是什么、为什么存在、当前做到哪一步”，再下钻正式真值源。
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`：Moltbook 持续运营 canonical runbook，适合直接判断日常运营动作与边界。
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`：小红书持续运营 SOP，不并入下方模块 PRD 三件套长表。
-- `doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md`：小红书第十四篇素材包入口，已收口为“项目累计 token 用量不是炫账单，而是研发流程参与成本”版本，适合直接判断标题、正文、短版 caption、评论区引导、事实基线与禁滑坡边界。
-- `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`：小红书第十三篇素材包入口，现已收口为“开发者、玩家和认真把它讲出去的人一起参与把游戏做起来”的版本，并补齐共同参与主题封面与 4 页轮播入口，适合直接判断正文、评论区问题、封面/轮播资产与禁滑坡边界。
-- `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`：小红书博主 / 微信公众号绿洲币激励入口，适合判断两类宣传对象的奖励边界、证据字段与禁语。
+- `site/social/xiaohongshu/README.md`：小红书内容包目录规范，适合查找每篇内容的文案、视觉源文件、导出图与 package manifest。
+- `site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`：小红书第十四篇素材包入口，已收口为“项目累计 token 用量不是炫账单，而是研发流程参与成本”版本，适合直接判断标题、正文、短版 caption、评论区引导、事实基线与禁滑坡边界。
+- `site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md`：小红书第十三篇素材包入口，现已收口为“开发者、玩家和认真把它讲出去的人一起参与把游戏做起来”的版本，并补齐共同参与主题封面与 4 页轮播入口，适合直接判断正文、评论区问题、封面/轮播资产与禁滑坡边界。
+- `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`：小红书博主 / 微信公众号绿洲币激励入口，适合判断两类宣传对象的奖励边界、证据字段与禁语。
 - `doc/readme/governance/readme-root-status-alignment-2026-03-11.prd.md`：根 README 正式状态同步入口，适合判断对外口径和仓库当前承诺边界。
 - `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md`：invite-only limited preview 首轮执行记录，保留为按需进入的 execution_log 入口。
 
@@ -84,7 +86,7 @@
 | `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md` | `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.design.md` | `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.project.md` |
 | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.design.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.project.md` |
 | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.design.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.project.md` |
-| `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md` |
+| `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md` |
 | `doc/readme/governance/readme-world-rules-consolidation.prd.md` | `doc/readme/governance/readme-world-rules-consolidation.design.md` | `doc/readme/governance/readme-world-rules-consolidation.project.md` |
 | `doc/readme/production/readme-llm-p1p2-production-closure.prd.md` | `doc/readme/production/readme-llm-p1p2-production-closure.design.md` | `doc/readme/production/readme-llm-p1p2-production-closure.project.md` |
 | `doc/readme/production/readme-p0-p1-closure.prd.md` | `doc/readme/production/readme-p0-p1-closure.design.md` | `doc/readme/production/readme-p0-p1-closure.project.md` |
@@ -97,27 +99,27 @@
 | `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | `execution_log` | invite-only limited preview 首轮真实执行记录 |
 | `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md` | `overview` | 面向第一次接触项目读者的白皮书式 Explanation 总览 |
 | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` | `material` | invite-only limited preview 招募与沟通包 |
-| `doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md` | `material` | 小红书真实累计 token 用量主题帖素材包，已收口为“AI 进入长期项目后会变成研发流程参与成本”的推荐发布版 |
-| `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md` | `material` | 小红书“共同参与把游戏做起来”主题帖素材包，已收口为开发者、玩家和传播者共同参与的推荐发布版，并补齐封面与 4 页轮播 HTML/PNG 资产 |
-| `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md` | `material` | 小红书博主 / 微信公众号绿洲币激励操作包 |
+| `site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md` | `material` | 小红书真实累计 token 用量主题帖素材包，已收口为“AI 进入长期项目后会变成研发流程参与成本”的推荐发布版 |
+| `site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md` | `material` | 小红书“共同参与把游戏做起来”主题帖素材包，已收口为开发者、玩家和传播者共同参与的推荐发布版，并补齐封面与 4 页轮播 HTML/PNG 资产 |
+| `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md` | `material` | 小红书博主 / 微信公众号绿洲币激励操作包 |
 | `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md` | `runbook` | 小红书持续运营 SOP |
-| `doc/readme/governance/readme-xiaohongshu-cycle-carousel-pack-2026-04-09.md` | `material` | 小红书 AI 时代岗位穿越周期主题轮播图素材包 |
-| `doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md` | `material` | 小红书 AI 时代岗位穿越周期主题帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md` | `material` | 小红书首篇自我介绍帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-team-roster-post-pack-2026-03-22.md` | `material` | 小红书团队阵容帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-game-intro-post-pack-2026-03-24.md` | `material` | 小红书游戏介绍帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-player-boundary-post-pack-2026-03-25.md` | `material` | 小红书玩家边界帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-ai-laziness-game-mode-post-pack-2026-03-26.md` | `material` | 小红书 AI 懒惰模式讨论帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md` | `material` | 小红书春招主题帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md` | `material` | 小红书春招轮播图素材包 |
-| `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md` | `material` | 小红书 AI 人格 vs 世界内行动主题帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md` | `material` | 小红书 AI 人格主题轮播图素材包 |
-| `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md` | `material` | 小红书 demo 祛魅主题帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-demo-skepticism-carousel-pack-2026-03-31.md` | `material` | 小红书 demo 祛魅主题轮播图素材包 |
-| `doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md` | `material` | 小红书 GUI 退场 / 判断权主题帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md` | `material` | 小红书开封真人 NPC / 低门槛实景 RPG 主题帖素材包 |
-| `doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md` | `material` | 小红书 offer 选择 / 平台优先主题轮播图素材包 |
-| `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md` | `material` | 小红书 offer 选择 / 平台优先主题帖素材包 |
+| `site/social/xiaohongshu/cycle/cycle-carousel-pack-2026-04-09.md` | `material` | 小红书 AI 时代岗位穿越周期主题轮播图素材包 |
+| `site/social/xiaohongshu/cycle/cycle-post-pack-2026-04-08.md` | `material` | 小红书 AI 时代岗位穿越周期主题帖素材包 |
+| `site/social/xiaohongshu/intro/intro-post-pack-2026-03-22.md` | `material` | 小红书首篇自我介绍帖素材包 |
+| `site/social/xiaohongshu/team-roster/team-roster-post-pack-2026-03-22.md` | `material` | 小红书团队阵容帖素材包 |
+| `site/social/xiaohongshu/game-intro/game-intro-post-pack-2026-03-24.md` | `material` | 小红书游戏介绍帖素材包 |
+| `site/social/xiaohongshu/player-boundary/player-boundary-post-pack-2026-03-25.md` | `material` | 小红书玩家边界帖素材包 |
+| `site/social/xiaohongshu/ai-laziness-game-mode/ai-laziness-game-mode-post-pack-2026-03-26.md` | `material` | 小红书 AI 懒惰模式讨论帖素材包 |
+| `site/social/xiaohongshu/spring-recruit/spring-recruit-post-pack-2026-03-29.md` | `material` | 小红书春招主题帖素材包 |
+| `site/social/xiaohongshu/spring-recruit/spring-recruit-carousel-pack-2026-03-29.md` | `material` | 小红书春招轮播图素材包 |
+| `site/social/xiaohongshu/ai-persona/ai-persona-world-post-pack-2026-03-30.md` | `material` | 小红书 AI 人格 vs 世界内行动主题帖素材包 |
+| `site/social/xiaohongshu/ai-persona/ai-persona-carousel-pack-2026-03-30.md` | `material` | 小红书 AI 人格主题轮播图素材包 |
+| `site/social/xiaohongshu/demo-skepticism/demo-skepticism-post-pack-2026-03-31.md` | `material` | 小红书 demo 祛魅主题帖素材包 |
+| `site/social/xiaohongshu/demo-skepticism/demo-skepticism-carousel-pack-2026-03-31.md` | `material` | 小红书 demo 祛魅主题轮播图素材包 |
+| `site/social/xiaohongshu/gui-death/gui-death-post-pack-2026-04-01.md` | `material` | 小红书 GUI 退场 / 判断权主题帖素材包 |
+| `site/social/xiaohongshu/kaifeng-rpg/kaifeng-rpg-post-pack-2026-04-06.md` | `material` | 小红书开封真人 NPC / 低门槛实景 RPG 主题帖素材包 |
+| `site/social/xiaohongshu/offer-choice/offer-choice-carousel-pack-2026-04-03.md` | `material` | 小红书 offer 选择 / 平台优先主题轮播图素材包 |
+| `site/social/xiaohongshu/offer-choice/offer-choice-post-pack-2026-04-03.md` | `material` | 小红书 offer 选择 / 平台优先主题帖素材包 |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

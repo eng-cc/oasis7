@@ -7,13 +7,13 @@ status: done
 priority: P2
 source_signal: null
 source_refs:
-  - doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md
+  - site/social/xiaohongshu/gui-death/gui-death-post-pack-2026-04-01.md
   - doc/readme/project.md
   - doc/readme/prd.md
 doc_refs:
   - doc/readme/project.md
-  - doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md
-  - site/social/xiaohongshu-gui-death-cover.html
+  - site/social/xiaohongshu/gui-death/gui-death-post-pack-2026-04-01.md
+  - site/social/xiaohongshu/gui-death/gui-death-cover.html
 related_prd:
   - doc/readme/prd.md
 acceptance:

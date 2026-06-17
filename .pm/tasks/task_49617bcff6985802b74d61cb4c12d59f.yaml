@@ -10,11 +10,11 @@ source_refs:
   - doc/readme/prd.md
   - doc/readme/project.md
   - doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md
-  - doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md
+  - site/social/xiaohongshu/demo-skepticism/demo-skepticism-post-pack-2026-03-31.md
 doc_refs:
   - doc/readme/prd.md
   - doc/readme/project.md
-  - doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md
+  - site/social/xiaohongshu/gui-death/gui-death-post-pack-2026-04-01.md
 related_prd:
   - doc/readme/prd.md
 acceptance:

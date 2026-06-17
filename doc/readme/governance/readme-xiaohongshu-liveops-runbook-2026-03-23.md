@@ -8,31 +8,52 @@
 - Channel: `小红书`
 - Scope: `发帖前复核 + 发帖后巡检 + 评论分级 + 互动引导 + 信号回流 + devlog 回写`
 - Source Docs:
-  - `doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md`
-  - `doc/readme/governance/readme-xiaohongshu-team-roster-post-pack-2026-03-22.md`
-  - `doc/readme/governance/readme-xiaohongshu-game-intro-post-pack-2026-03-24.md`
-  - `doc/readme/governance/readme-xiaohongshu-player-boundary-post-pack-2026-03-25.md`
-  - `doc/readme/governance/readme-xiaohongshu-ai-laziness-game-mode-post-pack-2026-03-26.md`
-  - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
-  - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
-  - `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
-  - `doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md`
-  - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
-  - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-carousel-pack-2026-03-31.md`
-  - `doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md`
-  - `doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md`
-  - `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
-  - `doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md`
-  - `doc/readme/governance/readme-xiaohongshu-cycle-carousel-pack-2026-04-09.md`
-  - `doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md`
-  - `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`
-  - `doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md`
-  - `doc/readme/governance/readme-xiaohongshu-loop-engineering-game-dev-post-pack-2026-06-15.md`
+  - `site/social/xiaohongshu/intro/intro-post-pack-2026-03-22.md`
+  - `site/social/xiaohongshu/team-roster/team-roster-post-pack-2026-03-22.md`
+  - `site/social/xiaohongshu/game-intro/game-intro-post-pack-2026-03-24.md`
+  - `site/social/xiaohongshu/player-boundary/player-boundary-post-pack-2026-03-25.md`
+  - `site/social/xiaohongshu/ai-laziness-game-mode/ai-laziness-game-mode-post-pack-2026-03-26.md`
+  - `site/social/xiaohongshu/spring-recruit/spring-recruit-post-pack-2026-03-29.md`
+  - `site/social/xiaohongshu/spring-recruit/spring-recruit-carousel-pack-2026-03-29.md`
+  - `site/social/xiaohongshu/ai-persona/ai-persona-world-post-pack-2026-03-30.md`
+  - `site/social/xiaohongshu/ai-persona/ai-persona-carousel-pack-2026-03-30.md`
+  - `site/social/xiaohongshu/demo-skepticism/demo-skepticism-post-pack-2026-03-31.md`
+  - `site/social/xiaohongshu/demo-skepticism/demo-skepticism-carousel-pack-2026-03-31.md`
+  - `site/social/xiaohongshu/gui-death/gui-death-post-pack-2026-04-01.md`
+  - `site/social/xiaohongshu/offer-choice/offer-choice-carousel-pack-2026-04-03.md`
+  - `site/social/xiaohongshu/offer-choice/offer-choice-post-pack-2026-04-03.md`
+  - `site/social/xiaohongshu/kaifeng-rpg/kaifeng-rpg-post-pack-2026-04-06.md`
+  - `site/social/xiaohongshu/cycle/cycle-carousel-pack-2026-04-09.md`
+  - `site/social/xiaohongshu/cycle/cycle-post-pack-2026-04-08.md`
+  - `site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md`
+  - `site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`
+  - `site/social/xiaohongshu/loop-engineering-game-dev/loop-engineering-game-dev-post-pack-2026-06-15.md`
 
 ## 1. 适用范围
 - 这份文档用于 `oasis7` 在小红书进入“持续发帖与持续看反馈”阶段后的日常运营。
 - 它不替代具体帖子素材包；它只定义怎么执行、怎么回复、怎么观察、怎么回流。
 - 小红书默认面向人，不面向 agent；这里的叙事主语应优先保持为“人类开发者 / 制作者 / 我们在做什么”，而不是切到 agent 内视角。
+- 小红书具体内容包统一放在 `site/social/xiaohongshu/<post-slug>/`；包内 `README.md` 记录可发布导出图、视觉源、预览图、底图和对应文案文档。
+- `doc/readme/governance/` 只保留渠道 runbook、跨渠道治理和 README 口径控制；不要再把新小红书素材包平铺回 `doc/readme/governance/` 或 `site/social/` 根目录。
+
+## 1A. 内容包目录规则
+每篇小红书内容使用一个 package 文件夹：
+
+```text
+site/social/xiaohongshu/<post-slug>/
+  README.md
+  *-post-pack-*.md
+  cover.html / carousel.html
+  assets/
+  exports/
+```
+
+- `README.md`：素材 manifest，列出哪些 PNG 可直接上传、哪些图只用于复查、HTML 源文件在哪里、对应文案/治理文档是哪份。
+- `*-post-pack-*.md` / `*-carousel-pack-*.md`：标题、正文、caption、评论区引导、禁语和发布边界。
+- `cover.html` / `carousel.html`：可编辑视觉源，保留用于修字、重导出和后续复盘。
+- `assets/`：底图、生成源图、参考图等不直接上传的素材。
+- `exports/`：最终上传 PNG，以及 `contact-sheet.png` 等复查图；复查图必须在 package README 中标注为 preview/review only。
+- `_shared/`：只放跨 package 的模板、脚本、共享样式或复用视觉素材，不放单篇文案或最终导出图。
 
 ## 2. 渠道定位
 - 小红书的核心任务不是复述游戏设定，而是让人理解：

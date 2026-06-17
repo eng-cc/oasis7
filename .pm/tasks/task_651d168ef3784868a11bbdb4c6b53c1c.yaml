@@ -7,11 +7,11 @@ status: done
 priority: P2
 source_signal: null
 source_refs:
-  - doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md
+  - site/social/xiaohongshu/cycle/cycle-post-pack-2026-04-08.md
 doc_refs:
   - doc/readme/project.md
-  - doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md
-  - site/social/xiaohongshu-cycle-cover.html
+  - site/social/xiaohongshu/cycle/cycle-post-pack-2026-04-08.md
+  - site/social/xiaohongshu/cycle/cycle-cover.html
 related_prd:
   - doc/readme/prd.md
 acceptance:

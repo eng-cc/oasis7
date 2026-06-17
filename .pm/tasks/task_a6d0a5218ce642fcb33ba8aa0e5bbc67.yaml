@@ -13,7 +13,7 @@ source_refs:
 doc_refs:
   - doc/readme/prd.md
   - doc/readme/project.md
-  - doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md
+  - site/social/xiaohongshu/offer-choice/offer-choice-post-pack-2026-04-03.md
 related_prd:
   - doc/readme/prd.md
 acceptance:

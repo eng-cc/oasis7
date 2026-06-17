@@ -12,8 +12,8 @@ entries:
     entry_kind: decision
     summary: "第十篇轮播版采用 4 页 `offer decision memo / 决策档案` 结构，而不是把长文正文直接切成 4 张纯文字截图；四页分别承担冲突题、优先级判断、成熟团队价值和评论区站队。"
     source_refs:
-      - "doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md"
-      - "site/social/xiaohongshu-offer-choice-carousel.html"
+      - "site/social/xiaohongshu/offer-choice/offer-choice-carousel-pack-2026-04-03.md"
+      - "site/social/xiaohongshu/offer-choice/offer-choice-carousel.html"
       - ".pm/tasks/task_eceb1ea8964a449683d754632c860cdc.execution.md"
     captured_at: 2026-04-03T12:36:00+08:00
     expires_at: 2026-04-05T12:36:00+08:00
@@ -30,7 +30,7 @@ entries:
     entry_kind: next_step
     summary: "若用户后续要把这组轮播继续加强成封面首图、发布 caption 或第二版视觉微调，应单独新开任务，不继续复用本次 carousel asset task。"
     source_refs:
-      - "doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md"
+      - "site/social/xiaohongshu/offer-choice/offer-choice-carousel-pack-2026-04-03.md"
       - ".pm/tasks/task_eceb1ea8964a449683d754632c860cdc.execution.md"
     captured_at: 2026-04-03T12:36:00+08:00
     expires_at: 2026-04-05T12:36:00+08:00
