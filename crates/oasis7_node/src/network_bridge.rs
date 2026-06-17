@@ -372,7 +372,7 @@ impl ReplicationNetworkEndpoint {
             reason: format!("serialize replication network message failed: {}", err),
         })?;
         self.network
-            .publish(self.topic.as_str(), payload.as_slice())
+            .publish_best_effort(self.topic.as_str(), payload.as_slice())
             .map_err(network_err)
     }
 
