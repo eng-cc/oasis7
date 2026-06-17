@@ -5,7 +5,9 @@ use std::net::TcpStream;
 use serde::Serialize;
 use serde_json::json;
 
-use super::{AgentInvoker, DecisionRequest, FeedbackEnvelope, ProviderState};
+use super::{
+    AgentInvoker, DecisionRequest, FeedbackEnvelope, ProviderAgentChatRequest, ProviderState,
+};
 
 pub(super) fn handle_connection(
     stream: &mut TcpStream,
@@ -33,6 +35,18 @@ pub(super) fn handle_connection(
                 .map_err(|err| format!("decode feedback request failed: {err}"))?;
             state.record_feedback(decoded);
             write_json_response(stream, 200, &json!({"ok": true}))
+        }
+        ("POST", "/v1/world-simulator/agent-chat") => {
+            let decoded: ProviderAgentChatRequest = serde_json::from_slice(request.body.as_slice())
+                .map_err(|err| format!("decode agent chat request failed: {err}"))?;
+            match state.handle_agent_chat(decoded, route_label.as_deref(), invoker) {
+                Ok(response) => write_json_response(stream, 200, &response),
+                Err(err) => write_json_response(
+                    stream,
+                    500,
+                    &json!({"error_code": "provider_agent_chat_failed", "error": err}),
+                ),
+            }
         }
         _ => write_json_response(stream, 404, &json!({"error":"Not Found"})),
     }

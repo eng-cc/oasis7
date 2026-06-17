@@ -5592,6 +5592,18 @@ function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
     top: `${point.y.toFixed(1)}%`
   };
 }
+function agentMarkerStyle(agent, index, worldBounds) {
+  const base = toWorldPercentStyle(agent.pos, worldBounds, {
+    left: `${18 + index % 5 * 15}%`,
+    top: `${14 + Math.floor(index / 5) * 22}%`
+  });
+  const offsets = [[-18, -18], [18, -18], [-18, 18], [18, 18], [0, -30], [0, 30], [-30, 0], [30, 0], [-28, -28], [28, 28]];
+  const [x, y] = offsets[index % offsets.length] || [0, 0];
+  return {
+    ...base,
+    transform: `translate(${x}px, ${y}px)`
+  };
+}
 function worldPercentPoint(pos, worldBounds, fallbackX = 50, fallbackY = 50) {
   if (!pos || !worldBounds) {
     return {
@@ -6021,22 +6033,65 @@ function PixelWorldHostVisualLayer(props) {
       }));
       insert(_el$7, () => agent.label.slice(0, 1).toUpperCase());
       createRenderEffect((_p$) => {
-        var _v$0 = agent.position_source, _v$1 = toWorldPercentStyle(agent.pos, visualState().worldBounds, {
-          left: `${18 + index() % 5 * 15}%`,
-          top: `${14 + Math.floor(index() / 5) * 22}%`
-        }), _v$10 = agent.label;
-        _v$0 !== _p$.e && setAttribute(_el$6, "data-position-source", _p$.e = _v$0);
-        _p$.t = style(_el$6, _v$1, _p$.t);
-        _v$10 !== _p$.a && setAttribute(_el$6, "title", _p$.a = _v$10);
+        var _v$0 = agent.id, _v$1 = agent.id, _v$2 = agent.position_source, _v$3 = `${tr$1(props.locale(), "选择 Agent", "Select Agent")} ${agent.id}`, _v$4 = agentMarkerStyle(agent, index(), visualState().worldBounds), _v$10 = agent.label;
+        _v$0 !== _p$.e && setAttribute(_el$6, "data-pixel-world-agent-marker", _p$.e = "true");
+        _v$1 !== _p$.t && setAttribute(_el$6, "data-agent-id", _p$.t = _v$1);
+        _v$2 !== _p$.a && setAttribute(_el$6, "data-position-source", _p$.a = _v$2);
+        _v$3 !== _p$.o && setAttribute(_el$6, "aria-label", _p$.o = _v$3);
+        _p$.i = style(_el$6, _v$4, _p$.i);
+        _v$10 !== _p$.n && setAttribute(_el$6, "title", _p$.n = _v$10);
         return _p$;
       }, {
         e: void 0,
         t: void 0,
-        a: void 0
+        a: void 0,
+        o: void 0,
+        i: void 0,
+        n: void 0
       });
       return _el$6;
     })()
   })];
+}
+function PixelWorldCanvasAgentHitTargets(props) {
+  const visualState = () => pixelWorldVisualState(props.renderState());
+  return createComponent(For, {
+    get each() {
+      return visualState().agents.slice(0, 10);
+    },
+    children: (agent, index) => (() => {
+      var _el$6 = _tmpl$5$1(), _el$7 = _el$6.firstChild;
+      setAttribute(_el$6, "class", "pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target");
+      _el$6.$$click = () => props.onSelect({
+        kind: "agent",
+        id: agent.id
+      });
+      _el$6.addEventListener("mouseleave", () => props.onHover(null));
+      _el$6.addEventListener("mouseenter", () => props.onHover({
+        kind: "agent",
+        id: agent.id
+      }));
+      insert(_el$7, () => agent.label.slice(0, 1).toUpperCase());
+      createRenderEffect((_p$) => {
+        var _v$0 = agent.id, _v$1 = agent.id, _v$2 = agent.position_source, _v$3 = `${tr$1(props.locale(), "选择 Agent", "Select Agent")} ${agent.id}`, _v$4 = agentMarkerStyle(agent, index(), visualState().worldBounds), _v$10 = agent.label;
+        _v$0 !== _p$.e && setAttribute(_el$6, "data-pixel-world-agent-marker", _p$.e = "true");
+        _v$1 !== _p$.t && setAttribute(_el$6, "data-agent-id", _p$.t = _v$1);
+        _v$2 !== _p$.a && setAttribute(_el$6, "data-position-source", _p$.a = _v$2);
+        _v$3 !== _p$.o && setAttribute(_el$6, "aria-label", _p$.o = _v$3);
+        _p$.i = style(_el$6, _v$4, _p$.i);
+        _v$10 !== _p$.n && setAttribute(_el$6, "title", _p$.n = _v$10);
+        return _p$;
+      }, {
+        e: void 0,
+        t: void 0,
+        a: void 0,
+        o: void 0,
+        i: void 0,
+        n: void 0
+      });
+      return _el$6;
+    })()
+  });
 }
 function createPixelWorldHostAdapter({
   onSelectEntity,
@@ -6322,6 +6377,20 @@ function PixelWorldCanvasRenderer(props) {
     var _ref$ = canvasRef;
     typeof _ref$ === "function" ? use(_ref$, _el$9) : canvasRef = _el$9;
     insert(_el$0, () => tr$1(props.locale(), "Canvas 提供当前世界的只读概览；相邻 HUD、焦点栏和命令抽屉提供当前 Agent、阻塞、回执与命令路径。", "The canvas provides a read-only overview of the current world; adjacent HUD, focus rail, and command drawer expose the current agent, blocker, receipt, and command path."));
+    insert(_el$1, createComponent(PixelWorldCanvasAgentHitTargets, {
+      get locale() {
+        return props.locale;
+      },
+      get renderState() {
+        return props.renderState;
+      },
+      get onSelect() {
+        return props.onSelect;
+      },
+      get onHover() {
+        return props.onHover;
+      }
+    }), null);
     insert(_el$1, createComponent(PixelWorldHostVisualLayer, {
       enabled: false,
       get locale() {

@@ -13,8 +13,9 @@ use std::time::{Duration, Instant};
 
 use oasis7::observability::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
 use oasis7::simulator::{
-    DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderDecision, ProviderDiagnostics,
-    ProviderErrorEnvelope, ProviderHealth, ProviderInfo, ProviderTokenUsage, ProviderTraceEnvelope,
+    DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderAgentChatRequest,
+    ProviderAgentChatResponse, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
+    ProviderHealth, ProviderInfo, ProviderTokenUsage, ProviderTraceEnvelope,
     ProviderTranscriptEntry,
 };
 use reqwest::blocking::Client;
@@ -225,6 +226,7 @@ impl ProviderState {
         let mut capabilities = vec![
             "decision".to_string(),
             "feedback".to_string(),
+            "agent_chat".to_string(),
             "loopback_only".to_string(),
         ];
         match self.options.mode {
@@ -304,6 +306,67 @@ impl ProviderState {
             recent_feedback.pop_front();
         }
         recent_feedback.push_back(summary);
+    }
+
+    fn handle_agent_chat(
+        &self,
+        request: ProviderAgentChatRequest,
+        route_label: Option<&str>,
+        invoker: &dyn AgentInvoker,
+    ) -> Result<ProviderAgentChatResponse, String> {
+        let agent_id = request.agent_id.trim();
+        if agent_id.is_empty() {
+            return Err("agent_chat requires non-empty agent_id".to_string());
+        }
+        let player_id = request.player_id.trim();
+        if player_id.is_empty() {
+            return Err("agent_chat requires non-empty player_id".to_string());
+        }
+        let message = request.message.trim();
+        if message.is_empty() {
+            return Err("agent_chat requires non-empty message".to_string());
+        }
+        if self.options.mode == ProviderMode::Mock {
+            return Ok(ProviderAgentChatResponse {
+                agent_id: agent_id.to_string(),
+                message: format!("[local-mock-chat] {agent_id} 收到：{message}"),
+                location_id: request.location_id,
+            });
+        }
+
+        self.active_requests.fetch_add(1, Ordering::SeqCst);
+        let prompt = build_agent_chat_prompt(&request);
+        let session_key = format!(
+            "agent:{}:subagent:world-simulator-chat:{}",
+            self.options.provider_agent_id, agent_id
+        );
+        let invoke_result = invoker.invoke(AgentInvocation {
+            provider_cli_bin: self.options.provider_cli_bin.clone(),
+            agent_id: self.options.provider_agent_id.clone(),
+            thinking: self.options.provider_thinking.clone(),
+            session_key: session_key.clone(),
+            timeout_seconds: timeout_seconds_from_budget(60_000),
+            prompt,
+            idempotency_key: agent_chat_idempotency_key(&session_key, &request),
+            route_label: route_label.map(ToOwned::to_owned),
+        });
+        self.active_requests.fetch_sub(1, Ordering::SeqCst);
+
+        match invoke_result {
+            Ok(output) => {
+                self.set_last_error(None);
+                Ok(ProviderAgentChatResponse {
+                    agent_id: agent_id.to_string(),
+                    message: summarize_text(output.text.as_str(), 700),
+                    location_id: request.location_id,
+                })
+            }
+            Err(err) => {
+                let detail = format!("provider_agent_chat_unreachable: {err}");
+                self.set_last_error(Some(detail.clone()));
+                Err(detail)
+            }
+        }
     }
 
     fn resolve_newapi_bridge_route_label(&self, bearer: &str) -> Option<String> {
@@ -632,6 +695,27 @@ impl ProviderState {
     }
 }
 
+fn build_agent_chat_prompt(request: &ProviderAgentChatRequest) -> String {
+    let context = json!({
+        "agent_id": request.agent_id,
+        "player_id": request.player_id,
+        "world_time": request.world_time,
+        "location_id": request.location_id,
+        "resources": request.resources,
+        "recent_feedback": request.recent_feedback,
+        "player_message": request.message,
+    });
+    format!(
+        concat!(
+            "You are the selected oasis7 agent. Reply directly to the player in the same language as their message. ",
+            "Do not return JSON. Do not claim unavailable facts. ",
+            "If asked where you are, use location_id exactly. If asked about nearby resources, use resources exactly. ",
+            "Keep the reply under 80 Chinese characters or 60 English words. Context follows:\n{}"
+        ),
+        context
+    )
+}
+
 fn provider_error_upstream_trace(error: &str) -> Value {
     let diagnostics = error_diagnostics_json(error);
     json!({
@@ -852,6 +936,17 @@ fn short_sha256(text: &str) -> String {
     hasher.update(text.as_bytes());
     let digest = hasher.finalize();
     hex::encode(&digest[..8])
+}
+
+fn agent_chat_idempotency_key(session_key: &str, request: &ProviderAgentChatRequest) -> String {
+    let stable_chat_key = short_sha256(
+        format!(
+            "{}\0{}\0{}\0{}",
+            request.world_time, request.agent_id, request.player_id, request.message
+        )
+        .as_str(),
+    );
+    format!("{session_key}-{}-{stable_chat_key}", request.world_time)
 }
 
 fn main() {

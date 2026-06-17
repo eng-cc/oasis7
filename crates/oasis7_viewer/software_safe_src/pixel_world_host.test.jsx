@@ -573,6 +573,11 @@ describe("pixel world host", () => {
         label: "Agent 0",
         pos: { x_cm: 5_020_000, y_cm: 2_510_000, z_cm: 0 },
         positionSource: "location_derived",
+      }, {
+        id: "agent-1",
+        label: "Agent 1",
+        pos: { x_cm: 5_020_000, y_cm: 2_510_000, z_cm: 0 },
+        positionSource: "location_derived",
       }],
       links: [{
         id: "link:agent-0:loc-0",
@@ -653,7 +658,15 @@ describe("pixel world host", () => {
     const canvas = document.querySelector(".pixel-world-canvas--rendered");
     expect(canvas.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(0);
     expect(canvas.querySelector(".pixel-world-entity--location")).toBeNull();
-    expect(canvas.querySelector(".pixel-world-entity--agent")).toBeNull();
+    const agentMarker = canvas.querySelector("[data-pixel-world-agent-marker='true'][data-agent-id='agent-0']");
+    const secondAgentMarker = canvas.querySelector("[data-pixel-world-agent-marker='true'][data-agent-id='agent-1']");
+    expect(agentMarker).not.toBeNull();
+    expect(secondAgentMarker).not.toBeNull();
+    expect(agentMarker).toHaveAttribute("aria-label", "Select Agent agent-0");
+    expect(secondAgentMarker).toHaveAttribute("aria-label", "Select Agent agent-1");
+    expect(agentMarker.style.transform).not.toEqual(secondAgentMarker.style.transform);
+    agentMarker.click();
+    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
     expect(canvas.querySelector(".pixel-world-route")).toBeNull();
     expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();

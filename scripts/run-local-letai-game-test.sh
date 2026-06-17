@@ -34,6 +34,14 @@ MODEL=""
 OUTPUT_DIR=""
 BRIDGE_PID=""
 DETACH="0"
+PREFLIGHT_ONLY="0"
+DRY_RUN_LAUNCH="0"
+STARTUP_PROFILE="strict"
+PROVIDER_SMOKE_MODE=""
+PROVIDER_SMOKE_MODE_SET="0"
+REUSE_EXISTING_BUILD="0"
+SOURCE_BIN_DIR="${OASIS7_LOCAL_LETAI_SOURCE_BIN_DIR:-$ROOT_DIR/target/debug}"
+VIEWER_DIST_DIR="${OASIS7_LOCAL_LETAI_VIEWER_DIST_DIR:-$ROOT_DIR/crates/oasis7_viewer/dist}"
 LAUNCHER_ARGS=()
 BRIDGE_ARGS=()
 
@@ -73,7 +81,13 @@ Options:
   --hosted-public-join        Use hosted_public_join instead of the local trusted playtest chain
   --chat-probe-backend <name> rust-bridge|legacy-cli|none (default: rust-bridge)
   --skip-chat-probe           Alias for --chat-probe-backend none
-  --skip-bridge-smoke         Skip provider bridge contract smoke before launcher startup
+  --startup-profile <mode>    strict|playtest (playtest keeps page startup usable when provider smoke degrades)
+  --provider-smoke-mode <mode>
+                              strict|degraded|skip (default strict; playtest default degraded)
+  --skip-bridge-smoke         Alias for --provider-smoke-mode skip
+  --reuse-existing-build      Reuse existing source-mode binaries instead of rebuilding them
+  --preflight-only            Check local prerequisites and print the startup plan without launching
+  --dry-run-launch            Print the resolved launcher plan without starting bridge or launcher
   --bridge-smoke-attempts <n> Retry provider bridge smoke up to <n> times (default: 2)
   --chat-probe-timeout-ms <ms>
                               LetAI chat probe timeout (default: 60000)
@@ -99,6 +113,228 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM
+
+command_available() {
+  local command_name="$1"
+  if [[ "$command_name" == "npm" && "${OASIS7_LOCAL_LETAI_TEST_MISSING_NPM:-0}" == "1" ]]; then
+    return 1
+  fi
+  if [[ "$command_name" == "node" && "${OASIS7_LOCAL_LETAI_TEST_MISSING_NODE:-0}" == "1" ]]; then
+    return 1
+  fi
+  command -v "$command_name" >/dev/null 2>&1
+}
+
+viewer_dist_ready() {
+  [[ -f "$VIEWER_DIST_DIR/index.html" || -f "$VIEWER_DIST_DIR/software_safe.html" ]]
+}
+
+bind_port() {
+  addr_port "$BIND_ADDR"
+}
+
+addr_port() {
+  python3 - "$1" <<'PY'
+from __future__ import annotations
+
+import sys
+
+raw = sys.argv[1].strip()
+if raw.startswith("["):
+    _, _, tail = raw.rpartition("]:")
+else:
+    _, _, tail = raw.rpartition(":")
+if not tail.isdigit():
+    raise SystemExit(1)
+print(tail)
+PY
+}
+
+port_listeners() {
+  local port="$1"
+  if ! command -v lsof >/dev/null 2>&1; then
+    return 2
+  fi
+  local output
+  output="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  printf '%s\n' "$output" | awk 'NR > 1 { print }'
+}
+
+provider_bind_listeners() {
+  local port
+  port="$(bind_port)" || return 1
+  port_listeners "$port"
+}
+
+planned_launcher_ports() {
+  local viewer_port="4173"
+  local live_bind="127.0.0.1:5023"
+  local web_bind="127.0.0.1:5011"
+  local index=0
+  while [[ "$index" -lt "${#LAUNCHER_ARGS[@]}" ]]; do
+    case "${LAUNCHER_ARGS[$index]}" in
+      --viewer-port)
+        index=$((index + 1))
+        viewer_port="${LAUNCHER_ARGS[$index]:-$viewer_port}"
+        ;;
+      --live-bind)
+        index=$((index + 1))
+        live_bind="${LAUNCHER_ARGS[$index]:-$live_bind}"
+        ;;
+      --web-bind)
+        index=$((index + 1))
+        web_bind="${LAUNCHER_ARGS[$index]:-$web_bind}"
+        ;;
+    esac
+    index=$((index + 1))
+  done
+  printf 'viewer HTTP\t%s\n' "$viewer_port"
+  printf 'live TCP\t%s\n' "$(addr_port "$live_bind")"
+  printf 'web bridge\t%s\n' "$(addr_port "$web_bind")"
+}
+
+required_source_bins() {
+  printf '%s\n' \
+    oasis7_llm_provider_probe \
+    oasis7_game_launcher \
+    oasis7_viewer_live \
+    oasis7_chain_runtime
+}
+
+run_preflight() {
+  local failed="0"
+  echo "local LetAI game test preflight"
+  echo "startup_profile=$STARTUP_PROFILE"
+  echo "provider_smoke_mode=$PROVIDER_SMOKE_MODE"
+  echo "config=$CONFIG_PATH"
+  echo "viewer_dist=$VIEWER_DIST_DIR"
+  echo "source_bin_dir=$SOURCE_BIN_DIR"
+  if [[ "$REUSE_EXISTING_BUILD" == "1" ]]; then
+    echo "source_build=reuse-existing"
+  else
+    echo "source_build=build-if-needed"
+  fi
+
+  if [[ ! -f "$CONFIG_PATH" ]]; then
+    echo "error: local playtest preflight failed: LetAI config not found: $CONFIG_PATH" >&2
+    echo "hint: pass --config <path> or set OASIS7_LETAI_CONFIG_PATH." >&2
+    failed="1"
+  fi
+
+  local bind_listeners=""
+  if bind_listeners="$(provider_bind_listeners)"; then
+    if [[ -n "$bind_listeners" ]]; then
+      echo "error: local playtest preflight failed: provider bind address is already in use: $BIND_ADDR" >&2
+      echo "hint: Stop the previous local playtest stack, or pass --bind <free host:port>." >&2
+      echo "current listeners:" >&2
+      printf '%s\n' "$bind_listeners" >&2
+      failed="1"
+    fi
+  else
+    echo "warning: could not inspect provider bind listeners for $BIND_ADDR; lsof may be unavailable." >&2
+  fi
+
+  local seen_ports=" "
+  local launcher_label launcher_port launcher_listeners
+  while IFS=$'\t' read -r launcher_label launcher_port; do
+    [[ -n "$launcher_port" ]] || continue
+    if [[ "$seen_ports" == *" $launcher_port "* ]]; then
+      continue
+    fi
+    seen_ports="${seen_ports}${launcher_port} "
+    if launcher_listeners="$(port_listeners "$launcher_port")"; then
+      if [[ -n "$launcher_listeners" ]]; then
+        echo "error: local playtest preflight failed: $launcher_label port is already in use: $launcher_port" >&2
+        echo "hint: Stop the previous local playtest stack, or pass launcher overrides after --, for example -- --viewer-port <free-port> --live-bind 127.0.0.1:<free-port> --web-bind 127.0.0.1:<free-port>." >&2
+        echo "current listeners:" >&2
+        printf '%s\n' "$launcher_listeners" >&2
+        failed="1"
+      fi
+    else
+      echo "warning: could not inspect $launcher_label port $launcher_port; lsof may be unavailable." >&2
+    fi
+  done < <(planned_launcher_ports)
+
+  if ! command_available node; then
+    echo "error: local playtest preflight failed: missing Node.js runtime" >&2
+    echo "hint: Install Node.js and npm, or use a prepared bundle/source build that does not require frontend rebuilds." >&2
+    failed="1"
+  fi
+
+  if ! viewer_dist_ready && ! command_available npm; then
+    echo "error: local playtest preflight failed: missing npm and viewer dist" >&2
+    echo "hint: Install npm, or build/copy viewer dist at $VIEWER_DIST_DIR before launching." >&2
+    echo "hint: rerun with --reuse-existing-build only after a successful source build." >&2
+    failed="1"
+  elif ! viewer_dist_ready; then
+    echo "warning: viewer dist is missing; npm is available, so startup may rebuild frontend assets." >&2
+  elif ! command_available npm; then
+    echo "warning: npm is not available; using existing viewer dist at $VIEWER_DIST_DIR." >&2
+  fi
+
+  if [[ "$REUSE_EXISTING_BUILD" == "1" ]]; then
+    local missing_bins=()
+    local bin_name
+    while IFS= read -r bin_name; do
+      if [[ ! -x "$SOURCE_BIN_DIR/$bin_name" ]]; then
+        missing_bins+=("$bin_name")
+      fi
+    done < <(required_source_bins)
+    if [[ "${#missing_bins[@]}" -gt 0 ]]; then
+      echo "error: local playtest preflight failed: --reuse-existing-build requested but required binaries are missing" >&2
+      echo "missing: ${missing_bins[*]}" >&2
+      echo "hint: Run without --reuse-existing-build once, or build the missing binaries under $SOURCE_BIN_DIR." >&2
+      failed="1"
+    fi
+  else
+    echo "note: source build may take several minutes on a cold cache; shared target locks are normal." >&2
+  fi
+
+  case "$PROVIDER_SMOKE_MODE" in
+    strict)
+      echo "provider_smoke=strict"
+      ;;
+    degraded)
+      echo "provider_smoke=degraded"
+      echo "note: provider smoke failures will be reported and startup will continue for page playtest." >&2
+      ;;
+    skip)
+      echo "provider_smoke=skip"
+      echo "warning: provider smoke is skipped; LLM/gameplay quality is not validated before startup." >&2
+      ;;
+  esac
+
+  if [[ "$failed" != "0" ]]; then
+    exit 2
+  fi
+  echo "local LetAI game test preflight passed"
+}
+
+print_launch_plan() {
+  echo "local LetAI game test launch plan"
+  echo "startup_profile=$STARTUP_PROFILE"
+  echo "provider_smoke_mode=$PROVIDER_SMOKE_MODE"
+  case "$PROVIDER_SMOKE_MODE" in
+    strict)
+      echo "bridge_smoke=required"
+      ;;
+    degraded)
+      echo "bridge_smoke=degrade-on-failure"
+      echo "degraded startup will continue after provider smoke failure"
+      echo "--skip-llm-provider-preflight"
+      ;;
+    skip)
+      echo "bridge_smoke=skip"
+      echo "--skip-bridge-smoke"
+      echo "--skip-llm-provider-preflight"
+      ;;
+  esac
+  if [[ "$REUSE_EXISTING_BUILD" == "1" ]]; then
+    echo "OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD=1"
+  else
+    echo "OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD=0"
+  fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -166,8 +402,31 @@ while [[ $# -gt 0 ]]; do
       CHAT_PROBE_BACKEND="none"
       shift
       ;;
+    --startup-profile)
+      STARTUP_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --provider-smoke-mode)
+      PROVIDER_SMOKE_MODE="${2:-}"
+      PROVIDER_SMOKE_MODE_SET="1"
+      shift 2
+      ;;
     --skip-bridge-smoke)
+      PROVIDER_SMOKE_MODE="skip"
+      PROVIDER_SMOKE_MODE_SET="1"
       SKIP_BRIDGE_SMOKE="1"
+      shift
+      ;;
+    --reuse-existing-build)
+      REUSE_EXISTING_BUILD="1"
+      shift
+      ;;
+    --preflight-only)
+      PREFLIGHT_ONLY="1"
+      shift
+      ;;
+    --dry-run-launch)
+      DRY_RUN_LAUNCH="1"
       shift
       ;;
     --bridge-smoke-attempts)
@@ -226,6 +485,32 @@ case "$CHAT_PROBE_BACKEND" in
     exit 2
     ;;
 esac
+case "$STARTUP_PROFILE" in
+  strict|playtest) ;;
+  *)
+    echo "error: --startup-profile must be strict or playtest" >&2
+    exit 2
+    ;;
+esac
+if [[ "$PROVIDER_SMOKE_MODE_SET" == "0" ]]; then
+  if [[ "$STARTUP_PROFILE" == "playtest" ]]; then
+    PROVIDER_SMOKE_MODE="degraded"
+  else
+    PROVIDER_SMOKE_MODE="strict"
+  fi
+fi
+case "$PROVIDER_SMOKE_MODE" in
+  strict|degraded|skip) ;;
+  *)
+    echo "error: --provider-smoke-mode must be strict, degraded, or skip" >&2
+    exit 2
+    ;;
+esac
+if [[ "$PROVIDER_SMOKE_MODE" == "skip" ]]; then
+  SKIP_BRIDGE_SMOKE="1"
+else
+  SKIP_BRIDGE_SMOKE="0"
+fi
 if ! [[ "$BRIDGE_SMOKE_ATTEMPTS" =~ ^[0-9]+$ ]] || [[ "$BRIDGE_SMOKE_ATTEMPTS" -lt 1 ]]; then
   echo "error: --bridge-smoke-attempts must be a positive integer" >&2
   exit 2
@@ -247,9 +532,11 @@ if ! [[ "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" =~ ^[0-9]+$ ]] || [[ "$AGENT_PROVID
   exit 2
 fi
 
-if [[ ! -f "$CONFIG_PATH" ]]; then
-  echo "error: LetAI config not found: $CONFIG_PATH" >&2
-  exit 2
+if [[ "$REUSE_EXISTING_BUILD" == "1" ]]; then
+  export OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD=1
+fi
+if [[ "$PROVIDER_SMOKE_MODE" == "degraded" || "$PROVIDER_SMOKE_MODE" == "skip" ]]; then
+  LAUNCHER_ARGS+=(--skip-llm-provider-preflight)
 fi
 
 if [[ "$USE_DEFAULT_PROXY" == "1" ]]; then
@@ -286,6 +573,18 @@ if [[ -z "$OUTPUT_DIR" ]]; then
   OUTPUT_DIR="$ROOT_DIR/output/local-letai-game-test/$RUN_STAMP"
 fi
 mkdir -p "$OUTPUT_DIR"
+
+if [[ "$PREFLIGHT_ONLY" == "1" ]]; then
+  run_preflight
+  exit 0
+fi
+
+run_preflight
+
+if [[ "$DRY_RUN_LAUNCH" == "1" ]]; then
+  print_launch_plan
+  exit 0
+fi
 
 if [[ -n "$MODEL" ]]; then
   BRIDGE_ARGS+=(--model "$MODEL")
@@ -332,6 +631,8 @@ if [[ "$DETACH" == "1" && "${OASIS7_LOCAL_LETAI_DETACHED_CHILD:-0}" != "1" ]]; t
     --chat-probe-retry-delay-ms "$CHAT_PROBE_RETRY_DELAY_MS"
     --agent-provider-connect-timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
     --deployment-mode "$DEPLOYMENT_MODE"
+    --startup-profile "$STARTUP_PROFILE"
+    --provider-smoke-mode "$PROVIDER_SMOKE_MODE"
     --output-dir "$ABS_OUTPUT_DIR"
   )
   if [[ "$USE_DEFAULT_PROXY" != "1" ]]; then
@@ -352,6 +653,12 @@ if [[ "$DETACH" == "1" && "${OASIS7_LOCAL_LETAI_DETACHED_CHILD:-0}" != "1" ]]; t
   fi
   if [[ "$SKIP_BRIDGE_SMOKE" == "1" ]]; then
     DETACH_CMD+=(--skip-bridge-smoke)
+  fi
+  if [[ "$REUSE_EXISTING_BUILD" == "1" ]]; then
+    DETACH_CMD+=(--reuse-existing-build)
+  fi
+  if [[ "$DRY_RUN_LAUNCH" == "1" ]]; then
+    DETACH_CMD+=(--dry-run-launch)
   fi
   if [[ "${#LAUNCHER_ARGS[@]}" -gt 0 ]]; then
     DETACH_CMD+=(-- "${LAUNCHER_ARGS[@]}")
@@ -375,7 +682,9 @@ if [[ "$DETACH" == "1" && "${OASIS7_LOCAL_LETAI_DETACHED_CHILD:-0}" != "1" ]]; t
   } >"$DETACH_SCRIPT"
   chmod +x "$DETACH_SCRIPT"
   : >"$DETACH_LOG"
-  if command -v launchctl >/dev/null 2>&1; then
+  if [[ "${OASIS7_LOCAL_LETAI_TEST_DETACH_NO_SUBMIT:-0}" == "1" ]]; then
+    echo "test detach submit skipped" >"$DETACH_PID_FILE"
+  elif command -v launchctl >/dev/null 2>&1; then
     launchctl remove "$DETACH_LABEL" >/dev/null 2>&1 || true
     launchctl submit -l "$DETACH_LABEL" -- /bin/bash "$DETACH_SCRIPT"
     echo "$DETACH_LABEL" >"$DETACH_LABEL_FILE"
@@ -406,6 +715,8 @@ echo "bridge=http://$BIND_ADDR"
 echo "chat_echo=$([[ "$CHAT_ECHO" == "1" ]] && echo enabled-debug-only || echo disabled)"
 echo "auto_play=$([[ "$AUTO_PLAY" == "1" ]] && echo enabled || echo disabled)"
 echo "deployment_mode=$DEPLOYMENT_MODE"
+echo "startup_profile=$STARTUP_PROFILE"
+echo "provider_smoke_mode=$PROVIDER_SMOKE_MODE"
 echo "chat_probe_backend=$CHAT_PROBE_BACKEND"
 echo "chat_probe_timeout_ms=$CHAT_PROBE_TIMEOUT_MS"
 echo "chat_probe_attempts=$CHAT_PROBE_ATTEMPTS"
@@ -454,6 +765,11 @@ for _ in $(seq 1 90); do
     exit 1
   fi
   if curl -fsS "http://$BIND_ADDR/v1/provider/info" >/dev/null 2>&1; then
+    if ! kill -0 "$BRIDGE_PID" >/dev/null 2>&1; then
+      echo "error: local LetAI bridge exited while provider endpoint was becoming ready; log: $OUTPUT_DIR/local-letai-provider-bridge.log" >&2
+      tail -n 80 "$OUTPUT_DIR/local-letai-provider-bridge.log" >&2 || true
+      exit 1
+    fi
     break
   fi
   sleep 1
@@ -465,7 +781,7 @@ if ! curl -fsS "http://$BIND_ADDR/v1/provider/info" >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "$SKIP_BRIDGE_SMOKE" != "1" ]]; then
+if [[ "$PROVIDER_SMOKE_MODE" == "strict" || "$PROVIDER_SMOKE_MODE" == "degraded" ]]; then
   smoke_status=1
   for attempt in $(seq 1 "$BRIDGE_SMOKE_ATTEMPTS"); do
     if "$ROOT_DIR/scripts/provider-remote-https/provider-bridge-contract-smoke.sh" \
@@ -485,7 +801,14 @@ if [[ "$SKIP_BRIDGE_SMOKE" != "1" ]]; then
       --timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" \
       --decision-count 1 \
       --min-successes 0 >&2 || true
-    exit 1
+    if [[ "$PROVIDER_SMOKE_MODE" == "degraded" ]]; then
+      echo "warning: provider bridge smoke failed; continuing because --provider-smoke-mode degraded is active" >&2
+      echo "warning: page startup may succeed, but provider-backed LLM actions may show runtime blockers until the upstream recovers" >&2
+    else
+      echo "error: provider bridge smoke failed in strict mode" >&2
+      echo "hint: retry later, or use --startup-profile playtest / --provider-smoke-mode degraded to open the page while preserving a warning." >&2
+      exit 1
+    fi
   fi
 elif [[ "$CHAT_PROBE_BACKEND" == "rust-bridge" ]]; then
   echo "warning: --skip-bridge-smoke also skips the default Rust bridge chat probe" >&2
@@ -499,12 +822,17 @@ fi
 if [[ "$AUTO_PLAY" == "1" ]]; then
   LAUNCHER_MODE_ARGS+=(--auto-play)
 fi
-"$ROOT_DIR/scripts/run-launcher-stack.sh" \
-  "${LAUNCHER_MODE_ARGS[@]}" \
+LAUNCHER_CMD=(
+  "$ROOT_DIR/scripts/run-launcher-stack.sh"
+  "${LAUNCHER_MODE_ARGS[@]}"
   --agent-decision-source provider_backed \
   --agent-provider-url "http://$BIND_ADDR" \
-  --output-dir "$OUTPUT_DIR/launcher" \
-  ${LAUNCHER_ARGS[@]+"${LAUNCHER_ARGS[@]}"}
+  --output-dir "$OUTPUT_DIR/launcher"
+)
+if [[ "${#LAUNCHER_ARGS[@]}" -gt 0 ]]; then
+  LAUNCHER_CMD+=("${LAUNCHER_ARGS[@]}")
+fi
+"${LAUNCHER_CMD[@]}"
 launcher_status=$?
 set -e
 

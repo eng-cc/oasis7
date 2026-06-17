@@ -4,7 +4,10 @@ use super::*;
 fn runtime_agent_chat_provider_mode_reports_feedback_failure() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    std::env::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_bridge");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
     std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:9");
     std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     let mut server = ViewerRuntimeLiveServer::new(
@@ -59,7 +62,7 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(3, {
+    let base_url = spawn_runtime_live_mock_http_server(5, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -71,7 +74,7 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
                     status_code: 200,
                     body: serde_json::json!({
                         "provider_id": "provider_local_bridge",
-                        "capabilities": ["decision", "feedback"],
+                        "capabilities": ["decision", "feedback", "agent_chat"],
                         "supported_action_sets": ["phase1_low_frequency"]
                     })
                     .to_string(),
@@ -83,6 +86,14 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
                 ("POST", "/v1/world-simulator/feedback") => MockHttpResponse {
                     status_code: 200,
                     body: serde_json::json!({"ok": true}).to_string(),
+                },
+                ("POST", "/v1/world-simulator/agent-chat") => MockHttpResponse {
+                    status_code: 200,
+                    body: serde_json::json!({
+                        "agent_id": "agent-0",
+                        "message": "我在测试地点，资源是 electricity=32 data=8。"
+                    })
+                    .to_string(),
                 },
                 _ => MockHttpResponse {
                     status_code: 404,
@@ -147,22 +158,140 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
 
     let ack = server.handle_agent_chat(request).expect("chat accepted");
     assert_eq!(ack.agent_id, agent_id);
+    server.enqueue_pending_provider_agent_chat_replies();
     let recorded = recorded.lock().expect("recorded lock");
-    assert_eq!(recorded.len(), 3);
+    assert_eq!(recorded.len(), 5);
     assert_eq!(recorded[0].path, "/v1/provider/info");
     assert_eq!(recorded[1].path, "/v1/provider/health");
     assert_eq!(recorded[2].method, "POST");
     assert_eq!(recorded[2].path, "/v1/world-simulator/feedback");
+    assert_eq!(recorded[3].method, "GET");
+    assert_eq!(recorded[3].path, "/v1/provider/info");
+    assert_eq!(recorded[4].method, "POST");
+    assert_eq!(recorded[4].path, "/v1/world-simulator/agent-chat");
     let feedback: crate::simulator::FeedbackEnvelope =
         serde_json::from_slice(recorded[2].body.as_slice()).expect("decode feedback");
     assert_eq!(
         feedback.world_delta_summary.as_deref(),
         Some("player_message: hello provider feedback")
     );
+    assert!(server.pending_virtual_events.iter().any(|event| matches!(
+        &event.kind,
+        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
+            if event_agent_id == &agent_id && message == "我在测试地点，资源是 electricity=32 data=8。"
+    )));
     assert!(!server.pending_virtual_events.iter().any(|event| matches!(
         &event.kind,
         crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
             if event_agent_id == &agent_id && message.contains("[local-mock-receipt]")
+    )));
+    clear_runtime_provider_env();
+}
+
+#[test]
+fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
+    let base_url = spawn_runtime_live_mock_http_server(2, {
+        let recorded = Arc::clone(&recorded);
+        move |request| {
+            recorded
+                .lock()
+                .expect("recorded lock")
+                .push(request.clone());
+            match (request.method.as_str(), request.path.as_str()) {
+                ("GET", "/v1/provider/info") => MockHttpResponse {
+                    status_code: 200,
+                    body: serde_json::json!({
+                        "provider_id": "phase1_provider",
+                        "capabilities": ["decision", "feedback"],
+                        "supported_action_sets": ["phase1_low_frequency"]
+                    })
+                    .to_string(),
+                },
+                ("GET", "/v1/provider/health") => MockHttpResponse {
+                    status_code: 200,
+                    body: serde_json::json!({"ok": true, "status": "ok"}).to_string(),
+                },
+                ("POST", "/v1/world-simulator/feedback") => MockHttpResponse {
+                    status_code: 200,
+                    body: serde_json::json!({"ok": true}).to_string(),
+                },
+                ("POST", "/v1/world-simulator/agent-chat") => MockHttpResponse {
+                    status_code: 500,
+                    body: serde_json::json!({"ok": false, "error": "should_not_call"}).to_string(),
+                },
+                _ => MockHttpResponse {
+                    status_code: 404,
+                    body: serde_json::json!({"ok": false, "error": "not_found"}).to_string(),
+                },
+            }
+        }
+    });
+    std::env::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_bridge");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "0");
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(36);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello phase1 provider".to_string(),
+            intent_tick: Some(13),
+            intent_seq: Some(36),
+        },
+        36,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        35,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    let ack = server.handle_agent_chat(request).expect("chat accepted");
+    assert_eq!(ack.agent_id, agent_id);
+    server.enqueue_pending_provider_agent_chat_replies();
+    let recorded = recorded.lock().expect("recorded lock");
+    assert_eq!(recorded.len(), 2);
+    assert_eq!(recorded[0].method, "POST");
+    assert_eq!(recorded[0].path, "/v1/world-simulator/feedback");
+    assert_eq!(recorded[1].method, "GET");
+    assert_eq!(recorded[1].path, "/v1/provider/info");
+    assert!(!recorded
+        .iter()
+        .any(|request| request.path == "/v1/world-simulator/agent-chat"));
+    assert!(server.pending_virtual_events.iter().all(|event| !matches!(
+        &event.kind,
+        crate::simulator::WorldEventKind::AgentSpoke { .. }
     )));
     clear_runtime_provider_env();
 }

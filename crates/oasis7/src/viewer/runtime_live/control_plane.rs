@@ -490,6 +490,7 @@ impl ViewerRuntimeLiveServer {
             &self.world,
             &self.snapshot_config,
             agent_id.as_str(),
+            player_id.as_str(),
             message.as_str(),
         ) {
             Ok(()) => {
@@ -858,6 +859,27 @@ impl ViewerRuntimeLiveServer {
             ),
             target_agent_id: None,
         });
+    }
+
+    fn enqueue_agent_chat_reply_event(&mut self, agent_id: &str, message: &str) {
+        let Some(agent) = self.world.state().agents.get(agent_id) else {
+            return;
+        };
+        self.enqueue_virtual_event(WorldEventKind::AgentSpoke {
+            agent_id: agent_id.to_string(),
+            location_id: location_id_for_pos(agent.state.pos),
+            message: message.to_string(),
+            target_agent_id: None,
+        });
+    }
+
+    pub(super) fn enqueue_pending_provider_agent_chat_replies(&mut self) {
+        let replies = self
+            .llm_sidecar
+            .drain_provider_agent_chat_replies(&self.world);
+        for (agent_id, message) in replies {
+            self.enqueue_agent_chat_reply_event(agent_id.as_str(), message.as_str());
+        }
     }
 
     fn next_virtual_event_id(&mut self) -> u64 {

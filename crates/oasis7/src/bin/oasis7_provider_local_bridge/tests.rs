@@ -153,6 +153,7 @@ fn mock_mode_health_is_ready_without_gateway_probe() {
     let info = state.provider_info();
     assert_eq!(info.provider_id, "provider_local_mock");
     assert!(info.capabilities.iter().any(|value| value == "mock"));
+    assert!(info.capabilities.iter().any(|value| value == "agent_chat"));
     assert!(info.capabilities.iter().any(|value| value == "no_billing"));
     let health = state.provider_health();
     assert!(health.ok);
@@ -266,6 +267,28 @@ fn build_gateway_agent_params_uses_session_key_and_timeout() {
     assert_eq!(
         value.get("idempotencyKey").and_then(Value::as_str),
         Some("idem-1")
+    );
+}
+
+#[test]
+fn agent_chat_idempotency_key_distinguishes_same_tick_messages() {
+    let base = ProviderAgentChatRequest {
+        agent_id: "agent-0".to_string(),
+        player_id: "player-a".to_string(),
+        message: "where are you?".to_string(),
+        world_time: 7,
+        location_id: Some("loc-1".to_string()),
+        resources: None,
+        recent_feedback: Vec::new(),
+    };
+    let same = agent_chat_idempotency_key("session", &base);
+    assert_eq!(same, agent_chat_idempotency_key("session", &base));
+
+    let mut different_message = base.clone();
+    different_message.message = "what resources are nearby?".to_string();
+    assert_ne!(
+        same,
+        agent_chat_idempotency_key("session", &different_message)
     );
 }
 
