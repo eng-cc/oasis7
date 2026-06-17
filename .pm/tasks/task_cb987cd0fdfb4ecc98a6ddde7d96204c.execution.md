@@ -378,3 +378,13 @@ Example:
 - Expected Result: Task closeout records verified task completion and leaves only unrelated repo-wide PM lint issues if any.
 - Actual Result: Closeout verification succeeded and task metadata now records `last_verification_status: verified`, `last_verification_exit_code: 0`, and `last_closed_at: 2026-06-17T10:03:49+08:00`; the command exited nonzero afterward because repo-wide `pm-lint` reported many pre-existing historical `.pm` execution-log issues plus older task-local entries that are corrected in this follow-up metadata patch.
 - Blocker / Next Action: Run focused workflow lint for `task_cb987cd0fdfb4ecc98a6ddde7d96204c`, commit metadata updates, then run PR preflight/create.
+
+## 2026-06-17 10:07:00 CST / tpm
+- 完成内容: Created GitHub PR #498 for the unified world terminology migration.
+- 遗留事项: Continue normal PR CI/watch through checks, comments/review threads, mergeability, merge, and cleanup.
+- Action: `./scripts/prepare-task-pr.sh --create` preflight passed the local review packet after formatting fixes but could not create the PR because local `gh` is not installed; branch was already pushed and the GitHub connector created the PR instead.
+- Action: PR purpose decision: `normal_pr_ci_watch`.
+- Validation Command: `git push`; GitHub connector `_create_pull_request` for `eng-cc/oasis7`, base `main`, head `task/core-unified-world-terminology-upgrade-plan`.
+- Expected Result: Remote branch is available and a non-draft PR is open against `main`.
+- Actual Result: Passed; PR URL `https://github.com/eng-cc/oasis7/pull/498`, head `ecded347e62af72c8acef0f7fada00fb8aa6d168`, base `8a2ef6dd2134d1d7bd14c3794e03d4287d4dca6a`.
+- Blocker / Next Action: Push this PR evidence entry, then watch required checks, comments/review threads, and mergeability.
