@@ -193,17 +193,9 @@ pub(super) fn evaluate_storage_challenge_sample(
         });
     }
     if network_blob != local_blob {
-        if let Some(provider_lookup_failure) = provider_lookup_failure.as_deref() {
-            return Ok(StorageChallengeSampleOutcome::Unavailable {
-                reason: format!(
-                    "storage challenge gate fallback blob bytes mismatch for hash {} after provider lookup failed: {}",
-                    content_hash, provider_lookup_failure
-                ),
-            });
-        }
         return Ok(StorageChallengeSampleOutcome::HardFailure {
             reason: format!(
-                "storage challenge gate network blob bytes mismatch for hash {}",
+                "storage challenge gate local blob bytes mismatch for hash {}",
                 content_hash
             ),
         });

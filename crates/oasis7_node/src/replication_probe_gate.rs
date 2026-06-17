@@ -118,6 +118,7 @@ pub(super) fn should_fallback_provider_aware_replication_request(err: &NodeError
     crate::network_bridge::replication_network_error_is_availability_gap(err)
         || crate::network_bridge::replication_network_error_is_route_unavailable(err)
         || reason.starts_with("blob fetch routes exhausted without response")
+        || reason.starts_with("blob fetch provider routes exhausted without response")
         || crate::network_bridge::replication_network_error_is_unsupported_protocol(
             err,
             super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
@@ -168,6 +169,17 @@ mod tests {
                 crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX
             ),
         };
+        assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_treats_provider_route_exhaustion_as_retryable() {
+        let err = NodeError::Replication {
+            reason: "blob fetch provider routes exhausted without response for world_id=w hash=abc"
+                .to_string(),
+        };
+
         assert!(should_fallback_provider_aware_replication_request(&err));
         assert!(!replication_request_waitable_connection_gap(&err));
     }
