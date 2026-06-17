@@ -12,9 +12,9 @@ entries:
     entry_kind: decision
     summary: "第十篇新增的“优秀同事密度”论点被收口为训练环境的一部分，而不是单独的大厂光环论；文案和轮播第 3 页都把它和 review、反馈质量、做事标准绑定。"
     source_refs:
-      - "doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md"
-      - "doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md"
-      - "site/social/xiaohongshu-offer-choice-carousel.html"
+      - "site/social/xiaohongshu/offer-choice/offer-choice-post-pack-2026-04-03.md"
+      - "site/social/xiaohongshu/offer-choice/offer-choice-carousel-pack-2026-04-03.md"
+      - "site/social/xiaohongshu/offer-choice/offer-choice-carousel.html"
       - ".pm/tasks/task_dfc0ef35b0114c4589b79c97735122ca.execution.md"
     captured_at: 2026-04-03T12:48:00+08:00
     expires_at: 2026-04-05T12:48:00+08:00
@@ -32,7 +32,7 @@ entries:
     entry_kind: next_step
     summary: "如果后续继续强化这条观点，优先考虑补 caption 或发布版开头，不要再继续往第 3 页塞更多概念，避免轮播信息密度过满。"
     source_refs:
-      - "doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md"
+      - "site/social/xiaohongshu/offer-choice/offer-choice-carousel-pack-2026-04-03.md"
       - ".pm/tasks/task_dfc0ef35b0114c4589b79c97735122ca.execution.md"
     captured_at: 2026-04-03T12:48:00+08:00
     expires_at: 2026-04-05T12:48:00+08:00

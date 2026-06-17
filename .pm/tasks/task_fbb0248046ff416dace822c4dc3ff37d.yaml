@@ -7,9 +7,9 @@ status: done
 priority: P2
 source_signal: null
 source_refs:
-  - doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md
-  - site/social/xiaohongshu-future-ownership-cover.html
-  - site/social/xiaohongshu-future-ownership-carousel.html
+  - site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md
+  - site/social/xiaohongshu/future-ownership/future-ownership-cover.html
+  - site/social/xiaohongshu/future-ownership/future-ownership-carousel.html
   - doc/readme/prd.md
   - doc/readme/project.md
 doc_refs:

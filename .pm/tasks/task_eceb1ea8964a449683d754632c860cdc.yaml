@@ -7,11 +7,11 @@ status: done
 priority: P2
 source_signal: null
 source_refs:
-  - doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md
+  - site/social/xiaohongshu/offer-choice/offer-choice-post-pack-2026-04-03.md
 doc_refs:
   - doc/readme/project.md
-  - doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md
-  - site/social/xiaohongshu-offer-choice-carousel.html
+  - site/social/xiaohongshu/offer-choice/offer-choice-carousel-pack-2026-04-03.md
+  - site/social/xiaohongshu/offer-choice/offer-choice-carousel.html
 related_prd:
   - PRD-README-036
 acceptance:

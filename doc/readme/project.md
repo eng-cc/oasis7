@@ -13,6 +13,7 @@
 - [x] site-whitepaper-entry-alignment (PRD-README-049) [test_tier_required]: 更新站点首页与文档中心公开 framing，并新增站内白皮书静态展示页。 Trace: .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml
 - [x] readme-governance-path-governance (PRD-ENGINEERING-030) [test_tier_required]: 为 `doc/readme/governance/` 建立 canonical 子域入口。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
 - [x] xiaohongshu-loop-engineering-post-pack (PRD-README-050) [test_tier_required]: 新增 `Loop Engineering在游戏开发中的实践` 小红书素材包和预览图。 Trace: .pm/tasks/task_a9ab9b9760c24e1fac5a31a157404408.yaml
+- [x] xiaohongshu-social-package-migration (PRD-README-051) [test_tier_required]: 将历史小红书内容文案、HTML 源和导出素材迁移为 `site/social/xiaohongshu/<post-slug>/` package 布局，并更新治理引用。 Trace: .pm/tasks/task_9eff28a3b80d452b99c6890a981dc4d6.yaml
 
 ### 历史压缩索引
 - README consistency、link check、quarterly review、release communication 与 public positioning 历史：回看 `doc/readme/prd.index.md`、`doc/readme/governance/README.md` 与对应 task trace。
