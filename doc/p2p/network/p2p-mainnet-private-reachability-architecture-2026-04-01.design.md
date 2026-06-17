@@ -181,7 +181,7 @@ Status observability 只投影 contract 与 runtime-selected path 的 bounded su
 ## 对 oasis7 的迁移含义
 1. `oasis7_node` / `oasis7_net` 不再暴露“静态 UDP peer 列表就是主路径”的默认语义。
 2. consensus、replication、DistFS 都通过统一的 traffic-lane API 请求逻辑连接，而不是各自决定 transport 真值。
-3. 当前 triad / shared-network / hosted-world 都转成 deployment profile，而不是继续依赖特例脚本。
+3. 当前 triad / legacy shared-network rehearsal / hosted access 都转成 deployment profile，而不是继续依赖特例脚本。
 4. 本地家宽节点默认走 `private` 或 `validator_hidden` 模式，不再被迫伪装成 `public`。
 
 ## 当前结论

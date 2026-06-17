@@ -6,9 +6,9 @@
 审计轮次: 2
 ## 1. Executive Summary
 - Problem Statement: oasis7 现在需要把“本地 / test / 正式”三套环境讲清楚；历史 `shared_devnet/staging/canary` 容易被误读成目标 test 环境，而 `mainnet` 又容易被误读成“等 mainnet gates 文档齐了就能直接上线”。
-- Proposed Solution: 冻结一份 producer-owned 的正式网络分层 PRD，明确 `local_devnet -> public_testnet -> mainnet` 的目标层级、各层 network manifest 真值、faucet/reset/validator/claims policy 边界，以及 repo-owned script/config skeleton；`shared_devnet` 只作为 legacy/rehearsal evidence 追溯，不再作为目标环境入口。
+- Proposed Solution: 冻结一份 producer-owned 的正式网络分层 PRD，明确 `local_devnet -> public_testnet -> mainnet` 的 operator/runtime tier、各层 network manifest 真值、faucet/reset/validator/claims policy 边界，以及 repo-owned script/config skeleton；`shared_devnet` 只作为 legacy/rehearsal evidence 追溯，不再作为目标环境入口。Network tier 是统一持久大世界的运行/验证载体分层，不是玩家可见的多个世界模型。
 - Success Criteria:
-  - SC-1: 明确冻结三层目标网络模型：`local_devnet`、`public_testnet`、`mainnet`，并写清各层目标、访问方式、价值语义与允许 claims；`shared_devnet` 仅保留 legacy/rehearsal 语义。
+  - SC-1: 明确冻结 operator/runtime network-tier 模型：`local_devnet`、`public_testnet`、`mainnet`，并写清各层目标、访问方式、价值语义与允许 claims；`shared_devnet` 仅保留 legacy/rehearsal 语义，且这些 tier 不作为玩家世界名。
   - SC-2: `public_testnet` 必须拥有一套正式 manifest 字段集合，至少覆盖 `network_id/chain_id/genesis_ref/release_candidate_bundle_ref/bootstrap_peer_ref/public_rpc/explorer/faucet/reset_policy/validator_admission`。
   - SC-3: `mainnet` 必须明确绑定 `no faucet + no reset + frozen genesis + governance registry + MAINNET readiness gates`，不得与 `public_testnet` 共用“可随时重置”的语义。
   - SC-4: 仓库内必须落地 repo-owned skeleton：network-tier manifest create/validate 脚本、smoke、example manifests 与 `testing-manual` 入口。
@@ -46,10 +46,10 @@
 | Claims gate | `allowed_claims/denied_claims/required_gates` | 根据 tier 决定允许哪些公开口径 | `draft -> enforced` | `shared_devnet` 与 `public_testnet` 默认 deny `mainnet-grade live network` | `liveops_community` 执行，producer 审批 |
 - Acceptance Criteria:
   - AC-1: 本专题必须落地 PRD / design / project，并接入 `doc/p2p/prd.md`、`doc/p2p/project.md`、`doc/p2p/prd.index.md` 与 `testing-manual.md`。
-  - AC-2: 本专题必须明确 `local_devnet -> public_testnet -> mainnet` 三层目标模型，且明确 `shared_devnet` 只作为 legacy/rehearsal evidence，不是目标 test 环境。
+  - AC-2: 本专题必须明确 `local_devnet -> public_testnet -> mainnet` 三层 operator/runtime network-tier 模型，且明确 `shared_devnet` 只作为 legacy/rehearsal evidence，不是目标 test 环境，也不是玩家世界模型。
   - AC-3: `public_testnet` 的最小 manifest 字段必须至少包含 `network_id`、`chain_id`、`release_candidate_bundle_ref`、`genesis_ref`、`bootstrap_peer_ref`、`rpc_ref`、`explorer_ref`、`faucet_ref`、`reset_policy`、`validator_admission`、`allowed_claims` 与 `denied_claims`。
   - AC-4: `mainnet` 的最小 manifest 字段必须至少包含 `network_id`、`chain_id`、`release_candidate_bundle_ref`、`genesis_ref`、`bootstrap_peer_ref`、`rpc_ref`、`reset_policy=frozen`、`faucet_mode=none`、`validator_admission=governance_registry_only`，并把 `MAINNET-1~4` 写入 required gates。
-  - AC-5: 仓库内必须新增 repo-owned `scripts/network-tier-manifest.sh` 与 smoke，并提供目标环境 `public_testnet/mainnet` example manifests；`network-tier-shared-devnet.example.json` 仅作为 legacy/backward-compatible validation artifact 保留。
+  - AC-5: 仓库内必须新增 repo-owned `scripts/network-tier-manifest.sh` 与 smoke，并提供 `public_testnet` rehearsal、`public_testnet`、`mainnet` example manifests；旧 shared-devnet 模板路径不再作为正常 validation artifact。
   - AC-6: `testing-manual.md` 必须新增正式 network-tier skeleton 入口，并明确当前仍无 live `public_testnet` / `mainnet`。
   - AC-7: 本专题必须明确 `public_testnet` 的资产与 faucet 只用于 rehearsal/test surface，不得被写成 `OC` 的 mainnet 价值承诺。
   - AC-8: 本专题必须明确当前 verdict 为 `specified_skeleton_only`；本轮不部署真实公共 testnet，不提升 public claims，不宣称 mainnet ready。
@@ -64,7 +64,7 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 正式网络分层收束为目标三层：本地 `local_devnet`、测试 `public_testnet`、正式 `mainnet`。历史 `shared_devnet/staging/canary` 继续可作为内部 legacy/rehearsal evidence 追溯，但不再作为目标 test 环境；`public_testnet` 是可公开访问、可 reset、带 faucet 的 rehearsal 网络；`mainnet` 是 frozen genesis、no-reset、no-faucet、受治理准入约束的正式价值网络。各层通过同一 `network_tier_manifest` schema 固定 tier 语义。
+- Architecture Overview: 正式网络分层收束为 operator/runtime 目标三层：本地 `local_devnet`、测试 `public_testnet`、正式 `mainnet`。这些 tier 是统一持久大世界的运行/验证载体，不是多个玩家世界。历史 `shared_devnet/staging/canary` 继续可作为内部 legacy/rehearsal evidence 追溯，但不再作为目标 test 环境；`public_testnet` 是可公开访问、可 reset、带 faucet 的 rehearsal 网络；`mainnet` 是 frozen genesis、no-reset、no-faucet、受治理准入约束的正式价值网络。各层通过同一 `network_tier_manifest` schema 固定 tier 语义。
 - Integration Points:
   - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
@@ -91,7 +91,7 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP: 冻结三层目标网络模型、manifest schema、claims boundary 与 repo-owned skeleton。
+  - MVP: 冻结三层 operator/runtime network-tier 模型、manifest schema、claims boundary 与 repo-owned skeleton；该分层不作为玩家世界模型。
   - v1.1: 把 `public_testnet` governed-bootstrap rehearsal、public endpoint、faucet/reset/claims evidence 与 runbook 正式接线，避免把 legacy shared-devnet evidence 误读成目标 test 环境。
   - v1.2: 落第一轮 public testnet rehearsal，补齐 public RPC/explorer/faucet/reset evidence。
   - v2.0: 在 `public_testnet` exit review 与 `MAINNET-1~4` 全绿后，再讨论 mainnet manifest 激活。

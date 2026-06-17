@@ -11,7 +11,7 @@ Usage:
 
 Description:
   Compare two node-distfs replication roots before reusing one seed against
-  another live/shared-devnet node. The report prints:
+  another live/public-testnet rehearsal node. The report prints:
     - node_pos_state summary
     - replication hot/cold coverage
     - hot commit file / blob counts

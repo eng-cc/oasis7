@@ -78,10 +78,51 @@ format_cmd() {
   printf '%s' "$formatted"
 }
 
-declare -A step_status=()
-declare -A step_note=()
-declare -A step_log=()
-declare -A step_cmd=()
+set_step_field() {
+  local field=$1
+  local step=$2
+  local value=$3
+  printf -v "step_${field}_${step}" '%s' "$value"
+}
+
+get_step_field() {
+  local field=$1
+  local step=$2
+  local var="step_${field}_${step}"
+  printf '%s' "${!var:-}"
+}
+
+set_step_status() {
+  set_step_field status "$1" "$2"
+}
+
+set_step_note() {
+  set_step_field note "$1" "$2"
+}
+
+set_step_log() {
+  set_step_field log "$1" "$2"
+}
+
+set_step_cmd() {
+  set_step_field cmd "$1" "$2"
+}
+
+get_step_status() {
+  get_step_field status "$1"
+}
+
+get_step_note() {
+  get_step_field note "$1"
+}
+
+get_step_log() {
+  get_step_field log "$1"
+}
+
+get_step_cmd() {
+  get_step_field cmd "$1"
+}
 
 dry_run=0
 dry_run_fail_step=""
@@ -253,10 +294,10 @@ fi
 
 step=""
 for step in "${all_steps[@]}"; do
-  step_status["$step"]="skipped"
-  step_note["$step"]="not scheduled"
-  step_log["$step"]="$run_dir/$step.log"
-  step_cmd["$step"]=""
+  set_step_status "$step" "skipped"
+  set_step_note "$step" "not scheduled"
+  set_step_log "$step" "$run_dir/$step.log"
+  set_step_cmd "$step" ""
 done
 
 run_step() {
@@ -264,11 +305,12 @@ run_step() {
   shift
   local -a cmd=("$@")
   local cmd_rendered=""
-  local step_log_path="${step_log[$step_name]}"
+  local step_log_path
   local code=0
 
+  step_log_path="$(get_step_log "$step_name")"
   cmd_rendered="$(format_cmd "${cmd[@]}")"
-  step_cmd["$step_name"]="$cmd_rendered"
+  set_step_cmd "$step_name" "$cmd_rendered"
 
   {
     echo "step=$step_name"
@@ -280,13 +322,13 @@ run_step() {
     echo "+ $cmd_rendered (dry-run)"
     echo "mode=dry_run" >>"$step_log_path"
     if [[ -n "$dry_run_fail_step" && "$dry_run_fail_step" == "$step_name" ]]; then
-      step_status["$step_name"]="failed"
-      step_note["$step_name"]="simulated_dry_run_failure"
+      set_step_status "$step_name" "failed"
+      set_step_note "$step_name" "simulated_dry_run_failure"
       echo "result=simulated_failure" >>"$step_log_path"
       return 1
     fi
-    step_status["$step_name"]="passed"
-    step_note["$step_name"]="dry_run"
+    set_step_status "$step_name" "passed"
+    set_step_note "$step_name" "dry_run"
     echo "result=dry_run_pass" >>"$step_log_path"
     return 0
   fi
@@ -300,14 +342,14 @@ run_step() {
   set -e
 
   if [[ "$code" -eq 0 ]]; then
-    step_status["$step_name"]="passed"
-    step_note["$step_name"]="ok"
+    set_step_status "$step_name" "passed"
+    set_step_note "$step_name" "ok"
     echo "result=ok" >>"$step_log_path"
     return 0
   fi
 
-  step_status["$step_name"]="failed"
-  step_note["$step_name"]="exit_code=$code"
+  set_step_status "$step_name" "failed"
+  set_step_note "$step_name" "exit_code=$code"
   echo "result=failed" >>"$step_log_path"
   echo "exit_code=$code" >>"$step_log_path"
   return 1
@@ -327,11 +369,19 @@ write_summary() {
     echo ""
     echo "## Step Status"
     for step in "${all_steps[@]}"; do
-      echo "- $step: ${step_status[$step]} (${step_note[$step]})"
-      if [[ -n "${step_cmd[$step]}" ]]; then
-        echo "  - command: \`${step_cmd[$step]}\`"
+      local step_status_value
+      local step_note_value
+      local step_cmd_value
+      local step_log_value
+      step_status_value="$(get_step_status "$step")"
+      step_note_value="$(get_step_note "$step")"
+      step_cmd_value="$(get_step_cmd "$step")"
+      step_log_value="$(get_step_log "$step")"
+      echo "- $step: $step_status_value ($step_note_value)"
+      if [[ -n "$step_cmd_value" ]]; then
+        echo "  - command: \`$step_cmd_value\`"
       fi
-      echo "  - log: \`${step_log[$step]}\`"
+      echo "  - log: \`$step_log_value\`"
     done
   } >"$summary_path"
 }
@@ -339,9 +389,9 @@ write_summary() {
 emit_failure_hints() {
   local failed_step_name=$1
   echo "error: release gate failed at step: $failed_step_name" >&2
-  echo "hint: inspect step log: ${step_log[$failed_step_name]}" >&2
-  if [[ -n "${step_cmd[$failed_step_name]}" ]]; then
-    echo "hint: rerun step command: ${step_cmd[$failed_step_name]}" >&2
+  echo "hint: inspect step log: $(get_step_log "$failed_step_name")" >&2
+  if [[ -n "$(get_step_cmd "$failed_step_name")" ]]; then
+    echo "hint: rerun step command: $(get_step_cmd "$failed_step_name")" >&2
   fi
   echo "hint: gate summary: $summary_path" >&2
 }

@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use super::distfs_probe_runtime::{parse_distfs_probe_runtime_option, DistfsProbeRuntimeConfig};
 
 pub(super) const DEFAULT_NODE_ID: &str = "viewer-live-node";
-pub(super) const DEFAULT_WORLD_ID: &str = "live-llm_bootstrap";
+pub(super) const DEFAULT_WORLD_ID: &str = "oasis7-unified-world-v1";
 pub(super) const DEFAULT_STATUS_BIND: &str = "127.0.0.1:5121";
 pub(super) const DEFAULT_CONFIG_FILE: &str = "config.toml";
 pub(super) const DEFAULT_REPLICATION_NETWORK_LISTEN: &str = "/ip4/127.0.0.1/tcp/0";
@@ -726,7 +726,7 @@ pub(super) fn print_help() {
 Starts standalone chain/node runtime with status HTTP endpoints.\n\n\
 Options:\n\
   --node-id <id>                    node identifier (default: {DEFAULT_NODE_ID})\n\
-  --world-id <id>                   world identifier (default: {DEFAULT_WORLD_ID})\n\
+  --world-id <id>                   technical runtime partition id for the unified persistent world (default: {DEFAULT_WORLD_ID})\n\
   --storage-profile <name>          dev_local|release_default|soak_forensics (default: dev_local)\n\
   --traffic-profile <name>          default|triad_low_traffic (default: default)\n\
   --status-bind <host:port>         status HTTP bind (default: {DEFAULT_STATUS_BIND})\n\

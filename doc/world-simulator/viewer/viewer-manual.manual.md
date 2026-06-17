@@ -69,7 +69,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 ## 证据边界
 - 当前 formal gameplay PASS 证据以 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 为准。
   - 该证据包含 2026-04-08 的 LLM-enabled follow-up PASS，结论是当前 Web 主入口已具备 release-grade formal gameplay 样本。
-- `doc/world-runtime/evidence/formal-release-fixed-genesis-default-viewer-2026-05-16.md` 只证明 formal-release default world 在 `--no-llm` 观察链路下可加载、可连接、可选中实体。
+- `doc/world-runtime/evidence/formal-release-fixed-genesis-default-viewer-2026-05-16.md` 只证明 formal-release 技术启动状态在 `--no-llm` 观察链路下可加载、可连接、可选中实体。
   - 这份截图证据属于 observer/debug，不替代 formal gameplay 证明。
 
 ## Web 闭环

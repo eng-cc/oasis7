@@ -811,7 +811,8 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     }
     if canonical_chain_network_tier(config.chain_network_tier.as_str()).is_none() {
         issues.push(
-            "chain network tier must be one of: local_devnet|public_testnet|mainnet".to_string(),
+            "chain runtime technical tier must be one of: local_devnet|public_testnet|mainnet"
+                .to_string(),
         );
     }
     let network_tier_manifest = effective_chain_network_tier_manifest(config);

@@ -13,7 +13,7 @@
 - 想先回答模块在做什么、主链和 DistFS 的统一边界是什么：先读 `doc/p2p/prd.md`
 - 想先回答当前在推进什么、哪些安全/签名/覆盖网络任务仍在推进：先读 `doc/p2p/project.md`
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：先读 `doc/p2p/node/README.md`
-- 想先看主链安全、hosted world 接入、托管身份/托管密钥或 mixed-topology reachability：优先从 `blockchain/` 与 `network/` 子域进入
+- 想先看主链安全、hosted player access / `hosted_public_join` 接入、托管身份/托管密钥或 mixed-topology reachability：优先从 `blockchain/` 与 `network/` 子域进入
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 热点子域导航
@@ -21,7 +21,7 @@
 | --- | --- |
 | `node/` | 节点奖励、身份、复制、PoS 时间基线与执行验证 |
 | `distfs/` | DistFS 生产加固、路径索引、自愈与 runtime/bridge 集成 |
-| `blockchain/` | 主链安全、mainnet readiness、signer custody、hosted world 接入 |
+| `blockchain/` | 主链安全、mainnet readiness、signer custody、hosted player access |
 | `observer/` | 观察者同步模式、指标与可观测性 |
 | `token/` | 创世分配、签名授权、治理分发与流通边界 |
 | `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |

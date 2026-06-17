@@ -310,6 +310,18 @@
     - `bash -n scripts/setup-provider-oasis7-runtime.sh`
     - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_provider_local_bridge --bin oasis7_provider_parity_bench --bin oasis7_game_launcher -p oasis7_client_launcher`
     - `git diff --check`
+- [x] unified-persistent-world-terminology-upgrade-plan (PRD-CORE-003/009) [test_tier_required]: 建立统一持久大世界术语升级计划，把默认玩家/产品模型收束为“统一持久大世界”，并规划 legacy 环境/网络术语从 active product/player-facing docs 迁出，同时保留历史 evidence 与 runtime/ops 技术兼容边界。 Trace: .pm/tasks/task_cb987cd0fdfb4ecc98a6ddde7d96204c.yaml
+  - 产物文件:
+    - `doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
+    - `doc/core/README.md`
+    - `doc/core/prd.index.md`
+    - `doc/core/prd.md`
+    - `doc/core/project.md`
+  - 验收命令 (`test_tier_required`):
+    - `test -f doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
+    - `rg -n "统一持久大世界|unified persistent world|Legacy / Forbidden Product Terms|Upgrade Phases|Acceptance Criteria|Residual Risks" doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md doc/core/README.md doc/core/prd.index.md doc/core/prd.md doc/core/project.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/core/prd.index.md

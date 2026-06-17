@@ -19,7 +19,7 @@ ensure_file_contains() {
   fi
 }
 
-smoke_root=".tmp/shared_devnet_blocker_packet_smoke"
+smoke_root=".tmp/public_testnet_rehearsal_blocker_packet_smoke"
 rm -rf "$smoke_root"
 mkdir -p "$smoke_root/runtime" "$smoke_root/world" "$smoke_root/evidence"
 
@@ -42,8 +42,8 @@ fallback_bundle="$smoke_root/fallback.json"
 
 run ./scripts/release-candidate-bundle.sh create \
   --bundle "$current_bundle" \
-  --candidate-id "shared-devnet-current-01" \
-  --track "shared_devnet" \
+  --candidate-id "public-testnet-rehearsal-current-01" \
+  --track "public_testnet_rehearsal" \
   --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
   --world-snapshot-ref "$smoke_root/world" \
   --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
@@ -51,8 +51,8 @@ run ./scripts/release-candidate-bundle.sh create \
 
 run ./scripts/release-candidate-bundle.sh create \
   --bundle "$fallback_bundle" \
-  --candidate-id "shared-devnet-fallback-01" \
-  --track "shared_devnet" \
+  --candidate-id "public-testnet-rehearsal-fallback-01" \
+  --track "public_testnet_rehearsal" \
   --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
   --world-snapshot-ref "$smoke_root/world" \
   --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
@@ -61,8 +61,8 @@ run ./scripts/release-candidate-bundle.sh create \
 access_out="$smoke_root/shared-access.md"
 mixed_topology_out="$smoke_root/mixed-topology.md"
 rollback_out="$smoke_root/rollback-target.md"
-run ./scripts/shared-devnet-blocker-packet.sh \
-  --window-id shared-devnet-20260324-06 \
+run ./scripts/public-testnet-rehearsal-blocker-packet.sh \
+  --window-id public-testnet-rehearsal-20260324-06 \
   --candidate-bundle "$current_bundle" \
   --candidate-gate-summary "$smoke_root/evidence/current-gate.md" \
   --access-out "$access_out" \
@@ -82,18 +82,18 @@ run ./scripts/shared-devnet-blocker-packet.sh \
   --fallback-owner-ref "$smoke_root/evidence/oncall.md" \
   --restore-steps-ref "$smoke_root/evidence/restore.md"
 
-ensure_file_contains "$access_out" 'shared-devnet-current-01'
+ensure_file_contains "$access_out" 'public-testnet-rehearsal-current-01'
 ensure_file_contains "$access_out" 'https://shared.example.invalid/viewer'
 ensure_file_contains "$mixed_topology_out" 'mixed-topology-baseline.md'
 ensure_file_contains "$mixed_topology_out" 'mixed-topology-shared.md'
 ensure_file_contains "$mixed_topology_out" 'required when lane_result=pass'
-ensure_file_contains "$rollback_out" 'shared-devnet-fallback-01'
+ensure_file_contains "$rollback_out" 'public-testnet-rehearsal-fallback-01'
 ensure_file_contains "$rollback_out" 'bootstrap_restore_ready'
 ensure_file_contains "$rollback_out" 'fallback-gate.md'
 
 pass_access_out="$smoke_root/shared-access-pass.md"
-run ./scripts/shared-devnet-blocker-packet.sh \
-  --window-id shared-devnet-20260324-08 \
+run ./scripts/public-testnet-rehearsal-blocker-packet.sh \
+  --window-id public-testnet-rehearsal-20260324-08 \
   --candidate-bundle "$current_bundle" \
   --candidate-gate-summary "$smoke_root/evidence/current-gate.md" \
   --access-out "$pass_access_out" \
@@ -110,8 +110,8 @@ ensure_file_contains "$pass_access_out" 'shared.example.invalid:443'
 ensure_file_contains "$pass_access_out" 'screenshot.md'
 
 pass_rollback_out="$smoke_root/rollback-pass.md"
-run ./scripts/shared-devnet-blocker-packet.sh \
-  --window-id shared-devnet-20260324-09 \
+run ./scripts/public-testnet-rehearsal-blocker-packet.sh \
+  --window-id public-testnet-rehearsal-20260324-09 \
   --candidate-bundle "$current_bundle" \
   --candidate-gate-summary "$smoke_root/evidence/current-gate.md" \
   --access-out "$smoke_root/shared-access-rollback-pass.md" \
@@ -125,12 +125,12 @@ run ./scripts/shared-devnet-blocker-packet.sh \
   --restoration-scope "runtime build | world snapshot | governance manifest" \
   --rollback-lane-result pass
 
-ensure_file_contains "$pass_rollback_out" 'shared-devnet-fallback-01'
+ensure_file_contains "$pass_rollback_out" 'public-testnet-rehearsal-fallback-01'
 ensure_file_contains "$pass_rollback_out" 'runtime build | world snapshot | governance manifest'
 
 pass_mixed_topology_out="$smoke_root/mixed-topology-pass.md"
-run ./scripts/shared-devnet-blocker-packet.sh \
-  --window-id shared-devnet-20260324-07 \
+run ./scripts/public-testnet-rehearsal-blocker-packet.sh \
+  --window-id public-testnet-rehearsal-20260324-07 \
   --candidate-bundle "$current_bundle" \
   --candidate-gate-summary "$smoke_root/evidence/current-gate.md" \
   --access-out "$smoke_root/shared-access-pass.md" \
@@ -144,4 +144,4 @@ run ./scripts/shared-devnet-blocker-packet.sh \
 ensure_file_contains "$pass_mixed_topology_out" 'mixed-topology-pass-decision.md'
 ensure_file_contains "$pass_mixed_topology_out" '`pass_uplift_decision_ref`:'
 
-echo "shared-devnet blocker packet smoke checks passed"
+echo "public-testnet-rehearsal blocker packet smoke checks passed"

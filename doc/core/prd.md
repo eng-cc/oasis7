@@ -170,6 +170,7 @@
 
 ### 全局术语（Glossary）
 - PRD-ID: 需求追踪主键，连接 PRD、任务、测试与发布证据。
+- 统一持久大世界 / unified persistent world: oasis7 默认玩家和产品世界模型；环境、network tier 与 `world_id` 是研发/运行时维度，不得被包装成多个玩家世界。
 - required/full: 分层测试的两级核心门禁。
 - Web-first 闭环: 默认 UI 验证路径（agent-browser 优先）。
 - Effect/Receipt: 运行时外部副作用与回执审计机制。

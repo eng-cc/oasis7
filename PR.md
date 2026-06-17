@@ -1,47 +1,31 @@
 # PR Evidence
 
-## Harden WASM Rust governance surfaces
+## Unified Persistent World Terminology Migration
 
-- Harden WASM executor compiled-cache use by verifying request bytes against `wasm_hash` before any memory or disk cache hit.
-- Validate path-sensitive WASM artifact/module identifiers before filesystem joins, and map invalid store keys into module-change validation errors.
-- Strengthen prepared subscription and regex cache behavior with manifest-aware subscription keys plus prepared regex cache/metrics coverage.
+Task UID: `task_cb987cd0fdfb4ecc98a6ddde7d96204c`
 
-Verification:
-- `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_store artifact_paths_reject_path_shaped_wasm_hashes`
-- `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime wasm_executor_rejects_wasm_hash_bytes_mismatch_before_cache_hit`
-- `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime wasm_executor_epoch_watchdog_preempts_infinite_loop`
-- `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router router_metrics_track_prepared_regex_compile_count`
-- `env -u RUSTC_WRAPPER cargo test -p oasis7 prepared_subscription_cache_key_tracks_manifest_identity`
-- `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_build_suite/Cargo.toml minimal_template_rejects_path_shaped_module_id`
-- `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime observability`
-- `./scripts/pm/workflow-lint.sh --task-uid task_61ae4b646e994b3e91bff3141f7ef818 --phase pr-ready`
-- `./scripts/doc-governance-check.sh`
-- `git diff --check`
-
-Evidence:
-- task_uid: task_61ae4b646e994b3e91bff3141f7ef818
-- PR URL: https://github.com/eng-cc/oasis7/pull/483
-- Source worktree: `/Users/scc/ccwork/worktrees/oasis7-engineering-wasm-rust-governance-review`
-- Branch: `task/engineering-wasm-rust-governance-review`
-- Pre-PR Local Role Review: passed
-- Review roles: `wasm_platform_engineer`, `runtime_engineer`, `repository_health_engineer`, `qa_engineer`
-- Residual risk: targeted local tests cover the changed hardening surfaces; broader package/workspace checks, GitHub required checks, comments, requested changes, review threads, and mergeability remain required after PR creation.
-
-## Harden Launcher Provider Configuration Contracts
-
-PR URL: https://github.com/eng-cc/oasis7/pull/482
-
-Task: .pm/tasks/task_169255fb26a2410a9c9edfaa839fc466.yaml
-Task UID: task_169255fb26a2410a9c9edfaa839fc466
+Branch: `task/core-unified-world-terminology-upgrade-plan`
 
 Summary:
-- Add tested web launcher agent-provider schema/config/args coverage.
-- Make provider-backed web config fail closed for invalid provider subfields, transport URL policy, invalid DNS hostnames, and invalid agent_decision_source.
-- Redact provider auth tokens from state responses while preserving child-process forwarding.
-- Clarify trusted_local_only as an internal local-playtest escape hatch and share HTTP base URL parser coverage.
+- Make the product/default model a unified persistent world across active docs and site copy.
+- Migrate active `shared_devnet` / `shared-network` manifest and script compatibility toward public-testnet rehearsal / network-rehearsal terminology.
+- Keep old script names as compatibility wrappers only, with warnings that point to canonical entrypoints.
+- Add a global follow-up task for code-layer work that is outside this terminology/compatibility slice.
 
-## Add reachability path evidence and observability
+Verification:
+- `./scripts/network-tier-manifest-smoke.sh`
+- `./scripts/shared-network-track-gate-smoke.sh`
+- `./scripts/shared-devnet-rehearsal-smoke.sh`
+- `./scripts/shared-devnet-blocker-packet-smoke.sh`
+- `./scripts/release-candidate-bundle-smoke.sh`
+- `./scripts/check-script-executable-bits.sh`
+- `bash -n scripts/network-tier-manifest.sh scripts/network-rehearsal-track-gate.sh scripts/public-testnet-rehearsal.sh scripts/public-testnet-rehearsal-blocker-packet.sh scripts/shared-network-track-gate.sh scripts/shared-devnet-rehearsal.sh scripts/shared-devnet-blocker-packet.sh scripts/shared-network-track-gate-smoke.sh scripts/shared-devnet-rehearsal-smoke.sh scripts/shared-devnet-blocker-packet-smoke.sh scripts/network-tier-manifest-smoke.sh scripts/release-gate.sh`
+- `./scripts/cargo-dev.sh test -p oasis7 --lib network_tier_manifest -- --nocapture`
+- `git diff --check`
 
-- PR URL: https://github.com/eng-cc/oasis7/pull/484
-- Task UID: task_43a21163092541809de36036403d7c97
-- Branch: task/engineering-iroh-implementation-lessons
+Known Deferred Boundaries:
+- `./scripts/release-gate-smoke.sh` is not fully passing because downstream longrun scripts still use Bash 4-only features under macOS Bash 3.2.
+- `./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_chain_runtime network_tier -- --list` is not passing because the chain-runtime status/observability surface references API drift outside this terminology migration.
+
+Follow-up:
+- Global candidate task `task_acb7e3599b4242628a7ac99a62628d55` tracks the code-layer follow-up for chain-runtime API drift, release-gate longrun shell compatibility, legacy wrapper retirement, and code-level old-term regression scans.

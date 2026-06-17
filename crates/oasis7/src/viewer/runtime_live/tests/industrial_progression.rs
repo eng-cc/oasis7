@@ -638,7 +638,7 @@ fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync()
     assert_eq!(submit_ack.runtime_action_id, 1);
     assert!(
         !server.world.has_factory("factory.smelter.mk1"),
-        "chain-linked submit must not mutate local world before committed sync"
+        "chain-linked submit must not mutate local viewer state before committed sync"
     );
 
     let submitted = chain_status.submitted_gameplay_requests();

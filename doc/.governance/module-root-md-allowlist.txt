@@ -31,6 +31,7 @@ doc/core/release-candidate-readiness-entry-2026-03-11.project.md
 doc/core/release-candidate-version-escalation-2026-03-11.design.md
 doc/core/release-candidate-version-escalation-2026-03-11.prd.md
 doc/core/release-candidate-version-escalation-2026-03-11.project.md
+doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md
 doc/engineering/README.md
 doc/engineering/design.md
 doc/engineering/prd.index.md

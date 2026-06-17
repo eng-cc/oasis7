@@ -116,7 +116,7 @@ fn validate_manifest(manifest: &NetworkTierManifest, path: &Path) -> Result<(), 
     }
     validate_choice(
         manifest.tier.as_str(),
-        &["local_devnet", "shared_devnet", "public_testnet", "mainnet"],
+        &["local_devnet", "public_testnet", "mainnet"],
         "tier",
         path,
     )?;
@@ -306,29 +306,6 @@ fn validate_tier_semantics(manifest: &NetworkTierManifest, path: &Path) -> Resul
             if validator_policy.validator_admission != "local_only" {
                 return Err(format!(
                     "network tier manifest {} requires local_devnet validator_admission=local_only",
-                    path.display()
-                ));
-            }
-        }
-        "shared_devnet" => {
-            if token_policy.value_semantics != "preview" {
-                return Err(format!(
-                    "network tier manifest {} requires shared_devnet value_semantics=preview",
-                    path.display()
-                ));
-            }
-            if !matches!(
-                token_policy.reset_policy.as_str(),
-                "ephemeral" | "resettable"
-            ) {
-                return Err(format!(
-                    "network tier manifest {} requires shared_devnet reset_policy=ephemeral or reset_policy=resettable",
-                    path.display()
-                ));
-            }
-            if joined_allowed.contains("public_testnet") {
-                return Err(format!(
-                    "network tier manifest {} must not allow public_testnet claims for shared_devnet",
                     path.display()
                 ));
             }
@@ -546,8 +523,8 @@ mod tests {
     "denied_claims": ["mainnet_live", "production_oc_settlement"]
   }},
   "promotion_policy": {{
-    "promote_from": ["shared_devnet"],
-    "required_gates": ["shared_devnet_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
+    "promote_from": ["local_devnet"],
+    "required_gates": ["public_testnet_rehearsal_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
   }},
   "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
 }}"#,
@@ -670,8 +647,8 @@ mod tests {
     "denied_claims": ["mainnet_live", "production_oc_settlement"]
   }},
   "promotion_policy": {{
-    "promote_from": ["shared_devnet"],
-    "required_gates": ["shared_devnet_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
+    "promote_from": ["local_devnet"],
+    "required_gates": ["public_testnet_rehearsal_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
   }},
   "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
 }}"#,
@@ -730,8 +707,8 @@ mod tests {
     "denied_claims": ["mainnet_live"]
   }},
   "promotion_policy": {{
-    "promote_from": ["shared_devnet"],
-    "required_gates": ["shared_devnet_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
+    "promote_from": ["local_devnet"],
+    "required_gates": ["public_testnet_rehearsal_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
   }},
   "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
 }}"#,

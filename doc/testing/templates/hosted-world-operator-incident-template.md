@@ -1,4 +1,4 @@
-# Hosted World Operator Incident Template
+# Hosted Access Operator Incident Template
 
 审计轮次: 1
 
@@ -11,6 +11,7 @@
 - `owner`: `liveops_community`
 
 ## Exposure
+- Note: this template covers hosted access into the unified persistent world. It must not describe a separate player world.
 - `shared_url`:
 - `intended_join_url`:
 - `exposed_surface`: `operator_url` / `private_control_plane` / `claims_boundary` / `other`

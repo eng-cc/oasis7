@@ -20,7 +20,7 @@ Options:
   --interval-secs <n>              sleep interval between samples (default: 5)
   --ssh-timeout-secs <n>           SSH connect timeout in seconds (default: 8)
   --out-dir <path>                 output root (default: .tmp/p2p_real_env_triad)
-  --world-id <id>                  expected world id (default: shared-devnet-ecs-v1)
+  --world-id <id>                  expected world id (default: oasis7-unified-world-v1)
 
   --local-service <name>           local node systemd unit
                                    (default: oasis7-triad-observer.service)
@@ -326,7 +326,7 @@ samples=4
 interval_secs=5
 ssh_timeout_secs=8
 out_root=".tmp/p2p_real_env_triad"
-world_id="shared-devnet-ecs-v1"
+world_id="oasis7-unified-world-v1"
 
 local_service="oasis7-triad-observer.service"
 local_status_url="http://127.0.0.1:5633/v1/chain/status"

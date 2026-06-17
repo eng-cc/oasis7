@@ -10,6 +10,8 @@
 - 明确这轮只做 spec + skeleton，不做 live `public_testnet` / `mainnet` 激活。
 
 ## 分层模型
+Network tier 是统一持久大世界的运行/验证载体分层，不是玩家可见的多个世界模型。
+
 | Tier | 目标 | 可见性 | 价值语义 | reset/faucet | 当前状态 |
 | --- | --- | --- | --- | --- | --- |
 | `local_devnet` | 本地开发 / 单人验证 | `local_only` | `preview` | 可重置 / 无正式 faucet | 现有开发态 |
@@ -76,12 +78,11 @@
   - `validate`: 校验字段完整性与 tier 语义组合。
 - `scripts/network-tier-manifest-smoke.sh`
   - 验证 create/validate 主路径。
-  - 验证目标 example manifests；legacy shared-devnet example 仅保留 backward-compatible validation。
+  - 验证目标 example manifests；public-testnet rehearsal 使用独立 canonical template。
 - Example manifests:
+  - `doc/testing/templates/network-tier-public-testnet-rehearsal.example.json`
   - `doc/testing/templates/network-tier-public-testnet.example.json`
   - `doc/testing/templates/network-tier-mainnet.example.json`
-- Legacy validation artifact:
-  - `doc/testing/templates/network-tier-shared-devnet.example.json`
 
 ## 被否决方案
 - 否决-1: 直接把现有 `shared_devnet` 改名为 `testnet`。

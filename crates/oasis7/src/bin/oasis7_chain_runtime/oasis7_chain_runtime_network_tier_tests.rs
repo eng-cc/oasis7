@@ -103,7 +103,7 @@ fn write_test_network_tier_manifest_for_tier(
     "denied_claims": [{}]
   }},
   "promotion_policy": {{
-    "promote_from": ["shared_devnet"],
+    "promote_from": ["local_devnet"],
     "required_gates": [{}]
   }},
   "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
@@ -162,7 +162,7 @@ fn write_test_network_tier_manifest_for_tier(
             if tier == "mainnet" {
                 r#""MAINNET-1", "MAINNET-2", "MAINNET-3", "MAINNET-4""#.to_string()
             } else {
-                r#""shared_devnet_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced""#.to_string()
+                r#""public_testnet_rehearsal_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced""#.to_string()
             },
         ),
     )

@@ -1,0 +1,2 @@
+/dns4/public-testnet-rehearsal-bootstrap1.example.invalid/tcp/5611
+/dns4/public-testnet-rehearsal-bootstrap2.example.invalid/tcp/5612

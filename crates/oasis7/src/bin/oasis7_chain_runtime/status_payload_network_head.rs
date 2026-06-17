@@ -246,7 +246,6 @@ pub(crate) fn readiness_policy(
     let is_observer = snapshot.role.as_str() == "observer";
     let (peer_head_ttl_ms, max_network_height_lag, sync_stalled_after_ms) = match tier {
         "local_devnet" => (i64::MAX, 0, i64::MAX),
-        "shared_devnet" => (15_000, 2, 60_000),
         "public_testnet" => (10_000, 1, 30_000),
         "mainnet" => (5_000, if is_observer { 1 } else { 0 }, 15_000),
         _ => (PEER_HEAD_FRESHNESS_TTL_MS, 0, i64::MAX),
@@ -304,8 +303,6 @@ fn required_fresh_peer_heads(
     let max_peer_validators = target_validators.saturating_sub(1).max(1);
     match (loaded.manifest.tier.as_str(), snapshot.role.as_str()) {
         ("local_devnet", _) => 0,
-        ("shared_devnet", "observer") => 1,
-        ("shared_devnet", _) => 1,
         ("public_testnet", "observer") => 1,
         ("public_testnet", _) => max_peer_validators.min(2).max(1),
         ("mainnet", "observer") => max_peer_validators.min(2).max(1),

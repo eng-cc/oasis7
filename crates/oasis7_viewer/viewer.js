@@ -819,7 +819,7 @@ function createViewerAuthSurfaceModule({
     return auth.error || "viewer auth bootstrap is missing or incomplete";
   }
   function strongAuthReason() {
-    return "strong auth remains a separate upgrade plane; viewer already supports hosted player-session issue/reconnect/release, but backend reauth stays preview-only for prompt_control and still does not unlock hosted-ready asset/governance proofs";
+    return "strong auth remains a separate upgrade plane; viewer already supports hosted player-session issue/reconnect/release, but backend reauth stays preview-only for prompt_control and still does not unlock hosted access ready asset/governance proofs";
   }
   function buildStrongAuthTier() {
     const promptPolicy = hostedActionPolicy2("prompt_control");

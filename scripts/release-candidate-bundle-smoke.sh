@@ -34,8 +34,8 @@ validation_fail="$smoke_root/validation-fail.log"
 
 run ./scripts/release-candidate-bundle.sh create \
   --bundle "$bundle_path" \
-  --candidate-id "shared-devnet-smoke-01" \
-  --track "shared_devnet" \
+  --candidate-id "public-testnet-rehearsal-smoke-01" \
+  --track "public_testnet_rehearsal" \
   --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
   --world-snapshot-ref "$smoke_root/world" \
   --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
@@ -47,7 +47,7 @@ run ./scripts/release-candidate-bundle.sh validate \
   --bundle "$bundle_path" \
   >"$validation_ok"
 ensure_file_contains "$validation_ok" '"validation": "ok"'
-ensure_file_contains "$bundle_path" '"candidate_id": "shared-devnet-smoke-01"'
+ensure_file_contains "$bundle_path" '"candidate_id": "public-testnet-rehearsal-smoke-01"'
 
 printf 'mutated\n' >>"$smoke_root/world/state.txt"
 set +e
