@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, VecDeque};
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -34,18 +34,23 @@ use crate::simulator::{
     WorldInitConfig, WorldScenario, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION,
     SNAPSHOT_VERSION,
 };
-use serde_json::Value;
 use tracing::Level;
 mod authoritative;
 #[path = "runtime_live/chain_link.rs"]
 mod chain_link;
 mod claim_snapshot;
+#[path = "runtime_live/config.rs"]
+mod config;
+#[path = "runtime_live/control_blocking.rs"]
+mod control_blocking;
 #[path = "runtime_live/control_feedback.rs"]
 mod control_feedback;
 #[path = "runtime_live/control_plane.rs"]
 mod control_plane;
 #[path = "runtime_live/control_utils.rs"]
 mod control_utils;
+#[path = "runtime_live/decision_trace.rs"]
+mod decision_trace;
 mod gameplay_snapshot;
 mod mapping;
 mod player_gameplay;
@@ -59,8 +64,10 @@ use authoritative::{
     RuntimeSettlementRankingGate, RuntimeStableCheckpoint,
 };
 use claim_snapshot::build_player_agent_claim_snapshot;
+pub use config::{ChainLinkPolicy, ViewerRuntimeLiveServerConfig, ViewerRuntimeLiveServerError};
 use control_plane::RuntimeLlmSidecar;
 use control_utils::{control_mode_for_action, control_mode_label, runtime_control_error_details};
+use decision_trace::{append_decision_upstream_trace, decision_trace_provider_error_retryable};
 use gameplay_snapshot::{
     apply_runtime_snapshot_empty_entities_blocker, build_player_gameplay_snapshot,
     player_gameplay_causality_from_runtime_events, player_gameplay_feedback_from_control_ack,
@@ -94,68 +101,6 @@ const LLM_PROVIDER_GATEWAY_TIMEOUT_HINT: &str =
 const RUNTIME_CONTROL_REQUIRED_HINT: &str =
     "inspect the reported runtime failure, repair the broken world/module state, then retry the control";
 const BACKGROUND_PLAY_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(2);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChainLinkPolicy {
-    Enforcing,
-    Shadow,
-}
-
-impl ChainLinkPolicy {
-    pub fn parse(raw: &str) -> Option<Self> {
-        match raw.trim() {
-            "enforcing" => Some(Self::Enforcing),
-            "shadow" => Some(Self::Shadow),
-            _ => None,
-        }
-    }
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Enforcing => "enforcing",
-            Self::Shadow => "shadow",
-        }
-    }
-
-    fn records_player_facing_chain_failures(self) -> bool {
-        matches!(self, Self::Enforcing)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ViewerRuntimeLiveServerConfig {
-    pub bind_addr: String,
-    pub scenario: Option<WorldScenario>,
-    pub world_id: String,
-    pub decision_mode: ViewerLiveDecisionMode,
-    pub play_step_interval: Duration,
-    pub chain_poll_interval: Duration,
-    pub auto_play_on_connect: bool,
-    pub hosted_public_join_mode: bool,
-    pub chain_status_bind: Option<String>,
-    pub chain_link_policy: ChainLinkPolicy,
-    pub agent_chat_echo_enabled: bool,
-}
-
-#[derive(Debug)]
-pub enum ViewerRuntimeLiveServerError {
-    Io(io::Error),
-    Serde(String),
-    Init(String),
-    Runtime(RuntimeWorldError),
-}
-
-impl From<io::Error> for ViewerRuntimeLiveServerError {
-    fn from(err: io::Error) -> Self {
-        Self::Io(err)
-    }
-}
-
-impl From<RuntimeWorldError> for ViewerRuntimeLiveServerError {
-    fn from(err: RuntimeWorldError) -> Self {
-        Self::Runtime(err)
-    }
-}
 
 pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
@@ -196,47 +141,6 @@ fn should_emit_runtime_advance_snapshot(
         return true;
     }
     session.should_emit_background_snapshot(BACKGROUND_PLAY_SNAPSHOT_INTERVAL)
-}
-
-fn append_decision_upstream_trace(reason: String, trace: &AgentDecisionTrace) -> String {
-    if reason.contains("upstream_trace=") {
-        return reason;
-    }
-    let Some(output) = trace.llm_output.as_deref() else {
-        return reason;
-    };
-    let Ok(payload) = serde_json::from_str::<Value>(output) else {
-        return reason;
-    };
-    let upstream_trace = payload
-        .get("upstream_trace")
-        .or_else(|| payload.get("trace_payload")?.get("upstream_trace"));
-    let Some(upstream_trace) = upstream_trace else {
-        return reason;
-    };
-    let Ok(mut serialized) = serde_json::to_string(upstream_trace) else {
-        return reason;
-    };
-    const MAX_UPSTREAM_TRACE_REASON_CHARS: usize = 1200;
-    if serialized.len() > MAX_UPSTREAM_TRACE_REASON_CHARS {
-        let mut end = MAX_UPSTREAM_TRACE_REASON_CHARS;
-        while end > 0 && !serialized.is_char_boundary(end) {
-            end -= 1;
-        }
-        serialized.truncate(end);
-        serialized.push_str("...");
-    }
-    format!("{reason}; upstream_trace={serialized}")
-}
-
-fn decision_trace_provider_error_retryable(trace: &AgentDecisionTrace) -> Option<bool> {
-    let output = trace.llm_output.as_deref()?;
-    let payload = serde_json::from_str::<Value>(output).ok()?;
-    payload
-        .get("provider_error")
-        .or_else(|| payload.get("trace_payload")?.get("provider_error"))
-        .and_then(|error| error.get("retryable"))
-        .and_then(Value::as_bool)
 }
 
 impl ViewerRuntimeLiveServer {
@@ -980,341 +884,6 @@ impl ViewerRuntimeLiveServer {
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
         }
 
-        Ok(())
-    }
-
-    fn tolerate_background_play_gameplay_block(
-        &mut self,
-        session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
-        action: &str,
-        play_step_interval: Duration,
-        effect: &str,
-        reason: String,
-        delta_logical_time: u64,
-        delta_event_seq: u64,
-    ) -> Result<bool, ViewerRuntimeLiveServerError> {
-        let confirmed_runtime_progress = self.world.state().time > self.initial_world_time;
-        let is_background_play = action == "play" && session.playing;
-        if !is_background_play || !confirmed_runtime_progress {
-            return Ok(false);
-        }
-        session.transient_play_failures = session.transient_play_failures.saturating_add(1);
-        if session.transient_play_failures >= BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET {
-            return Ok(false);
-        }
-        self.defer_next_auto_play_step_after_completion(
-            play_step_interval.max(BACKGROUND_PLAY_TRANSIENT_FAILURE_RETRY_DELAY),
-        );
-        let hint = Self::llm_gameplay_hint_for_reason(&reason);
-        self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
-            action,
-            "blocked",
-            effect,
-            Some("continue advancing the live world".to_string()),
-            None,
-            Some(reason),
-            Some(hint),
-            delta_logical_time,
-            delta_event_seq,
-        ));
-        if session.subscribed.contains(&ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot();
-            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
-        }
-        Ok(true)
-    }
-
-    fn flush_pending_virtual_events(
-        &mut self,
-        session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
-    ) -> Result<(), ViewerRuntimeLiveServerError> {
-        if self.pending_virtual_events.is_empty() {
-            return Ok(());
-        }
-        let mapped_events: Vec<_> = self.pending_virtual_events.drain(..).collect();
-        let pending_batch = self.register_authoritative_batch(mapped_events.as_slice())?;
-        let batch_finality_updates =
-            self.advance_authoritative_batch_finality(self.world.state().time)?;
-
-        if session.subscribed.contains(&ViewerStream::Events) {
-            for event in &mapped_events {
-                if session.event_allowed(event) {
-                    send_response(
-                        writer,
-                        &ViewerResponse::Event {
-                            event: event.clone(),
-                        },
-                    )?;
-                }
-            }
-            send_response(
-                writer,
-                &ViewerResponse::AuthoritativeBatch {
-                    batch: pending_batch,
-                },
-            )?;
-            for batch in batch_finality_updates {
-                send_response(writer, &ViewerResponse::AuthoritativeBatch { batch })?;
-            }
-        }
-
-        if session.subscribed.contains(&ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot();
-            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
-        }
-
-        session.metrics = runtime_metrics(&self.world);
-        if session.subscribed.contains(&ViewerStream::Metrics) {
-            send_response(
-                writer,
-                &ViewerResponse::Metrics {
-                    time: Some(self.world.state().time),
-                    metrics: session.metrics.clone(),
-                },
-            )?;
-        }
-
-        Ok(())
-    }
-
-    fn compat_snapshot(&mut self) -> WorldSnapshot {
-        let runtime_snapshot = self.world.snapshot();
-        let runtime_journal_len = runtime_snapshot.journal_len;
-        let next_event_id = runtime_snapshot.last_event_id.saturating_add(1).max(1);
-        let next_action_id = runtime_snapshot.next_action_id.max(1);
-        self.llm_sidecar.refresh_provider_check_snapshot();
-        let gameplay_gate = if self.llm_sidecar.is_llm_mode() {
-            None
-        } else {
-            Some("gameplay requires runtime live server running with --llm".to_string())
-        };
-        let primary_agent_claim = self
-            .world
-            .state()
-            .agents
-            .keys()
-            .next()
-            .and_then(|agent_id| {
-                build_player_agent_claim_snapshot(
-                    self.world.state(),
-                    agent_id.as_str(),
-                    self.world.governance_execution_policy().epoch_length_ticks,
-                )
-            });
-        let model = runtime_state_to_simulator_model(self.world.state(), &self.llm_sidecar);
-        let mut player_gameplay = build_player_gameplay_snapshot(
-            self.world.state(),
-            self.confirmed_player_gameplay_progress_time.is_some(),
-            self.latest_player_gameplay_feedback.as_ref(),
-            self.latest_player_gameplay_causality.as_ref(),
-            gameplay_gate.is_none(),
-            gameplay_gate.as_deref(),
-            self.llm_sidecar.is_llm_mode() && self.supports_agent_chat(),
-            primary_agent_claim,
-        );
-        apply_runtime_snapshot_empty_entities_blocker(
-            &mut player_gameplay,
-            model.agents.is_empty(),
-            model.locations.is_empty(),
-        );
-        WorldSnapshot {
-            version: SNAPSHOT_VERSION,
-            chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
-            time: self.world.state().time,
-            config: self.snapshot_config.clone(),
-            model,
-            runtime_snapshot: Some(runtime_snapshot),
-            player_gameplay: Some(player_gameplay),
-            chunk_runtime: ChunkRuntimeConfig::default(),
-            intel_ttl_ticks: 0,
-            next_event_id,
-            next_action_id,
-            pending_actions: Vec::new(),
-            journal_len: runtime_journal_len,
-        }
-    }
-
-    fn ensure_gameplay_ready_for_control(&mut self, mode: &ViewerControl) -> Result<(), String> {
-        match mode {
-            ViewerControl::Pause => Ok(()),
-            ViewerControl::Play | ViewerControl::Step { .. } => self
-                .llm_sidecar
-                .ensure_gameplay_ready(&self.world, &self.snapshot_config),
-            ViewerControl::Seek { .. } => Ok(()),
-        }
-    }
-
-    fn ensure_gameplay_ready_for_action(
-        &mut self,
-        action: &str,
-        action_id: Option<&str>,
-        target_agent_id: Option<&str>,
-    ) -> Result<(), (String, String)> {
-        self.llm_sidecar
-            .ensure_gameplay_ready(&self.world, &self.snapshot_config)
-            .map_err(|message| {
-                self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
-                    action,
-                    "blocked",
-                    "gameplay action rejected before runtime submission",
-                    Some("submit a gameplay action".to_string()),
-                    target_agent_id.map(ToOwned::to_owned),
-                    Some(message.clone()),
-                    Some(LLM_GAMEPLAY_REQUIRED_HINT.to_string()),
-                    0,
-                    0,
-                ));
-                let code = if self.llm_sidecar.is_llm_mode() {
-                    "llm_init_failed"
-                } else {
-                    "llm_mode_required"
-                };
-                let detail = match (action_id, target_agent_id) {
-                    (Some(action_id), Some(target_agent_id)) => format!(
-                        "{message} (action_id={action_id}, target_agent_id={target_agent_id})"
-                    ),
-                    _ => message,
-                };
-                (code.to_string(), detail)
-            })
-    }
-
-    fn control_completion_delta(
-        &self,
-        baseline_logical_time: u64,
-        baseline_event_seq: u64,
-    ) -> (u64, u64) {
-        (
-            self.world
-                .state()
-                .time
-                .saturating_sub(baseline_logical_time),
-            latest_runtime_event_seq(&self.world).saturating_sub(baseline_event_seq),
-        )
-    }
-
-    fn gameplay_control_error(&self, reason: String) -> (String, String) {
-        let code = if self.llm_sidecar.is_llm_mode() {
-            "llm_init_failed"
-        } else {
-            "llm_mode_required"
-        };
-        (code.to_string(), reason)
-    }
-
-    fn llm_gameplay_hint_for_reason(reason: &str) -> String {
-        let normalized = reason.to_ascii_lowercase();
-        if normalized.contains("provider_gateway_unreachable")
-            || normalized.contains("provider_http_502")
-            || normalized.contains("provider_http_503")
-            || normalized.contains("provider_http_504")
-            || normalized.contains("provider bridge returned http 502")
-            || normalized.contains("provider bridge returned http 503")
-            || normalized.contains("provider bridge returned http 504")
-            || normalized.contains("read operation timed out")
-            || normalized.contains("operation timed out")
-            || normalized.contains("timed out")
-        {
-            LLM_PROVIDER_GATEWAY_TIMEOUT_HINT.to_string()
-        } else {
-            LLM_GAMEPLAY_REQUIRED_HINT.to_string()
-        }
-    }
-
-    fn block_gameplay_control(
-        &mut self,
-        session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
-        action: &str,
-        effect: &str,
-        reason: String,
-        request_id: Option<u64>,
-        delta_logical_time: u64,
-        delta_event_seq: u64,
-        emit_snapshot: bool,
-    ) -> Result<(), ViewerRuntimeLiveServerError> {
-        let (error_code, error_message) = self.gameplay_control_error(reason.clone());
-        self.pause_auto_play(session);
-        session.next_play_step_at = None;
-        let hint = Self::llm_gameplay_hint_for_reason(&reason);
-        self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
-            action,
-            "blocked",
-            effect,
-            Some("advance the live world".to_string()),
-            None,
-            Some(reason),
-            Some(hint),
-            delta_logical_time,
-            delta_event_seq,
-        ));
-        if let Some(request_id) = request_id {
-            let ack = ControlCompletionAck {
-                request_id,
-                status: ControlCompletionStatus::Blocked,
-                delta_logical_time,
-                delta_event_seq,
-                error_code: Some(error_code),
-                error_message: Some(error_message),
-            };
-            send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
-        }
-        if emit_snapshot && session.subscribed.contains(&ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot();
-            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
-        }
-        Ok(())
-    }
-
-    fn block_runtime_control(
-        &mut self,
-        session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
-        action: &str,
-        effect: &str,
-        error: ViewerRuntimeLiveServerError,
-        request_id: Option<u64>,
-        delta_logical_time: u64,
-        delta_event_seq: u64,
-        emit_snapshot: bool,
-    ) -> Result<(), ViewerRuntimeLiveServerError> {
-        let (error_code, error_message, hint) = runtime_control_error_details(&error);
-        emit_stderr_or_event(
-            Level::WARN,
-            format!("viewer runtime live: control {action} failed: {error_message} ({error:?})")
-                .as_str(),
-            "viewer runtime live control failed",
-        );
-        self.pause_auto_play(session);
-        session.next_play_step_at = None;
-        self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
-            action,
-            "blocked",
-            effect,
-            Some("advance the live world".to_string()),
-            None,
-            Some(error_message.clone()),
-            Some(hint),
-            delta_logical_time,
-            delta_event_seq,
-        ));
-        if let Some(request_id) = request_id {
-            let ack = ControlCompletionAck {
-                request_id,
-                status: ControlCompletionStatus::Blocked,
-                delta_logical_time,
-                delta_event_seq,
-                error_code: Some(error_code),
-                error_message: Some(error_message),
-            };
-            send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
-        }
-        if emit_snapshot && session.subscribed.contains(&ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot();
-            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
-        }
         Ok(())
     }
 }

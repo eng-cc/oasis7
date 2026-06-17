@@ -322,6 +322,21 @@
     - `rg -n "统一持久大世界|unified persistent world|Legacy / Forbidden Product Terms|Upgrade Phases|Acceptance Criteria|Residual Risks" doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md doc/core/README.md doc/core/prd.index.md doc/core/prd.md doc/core/project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] unified-world-code-layer-migration-follow-up (PRD-CORE-003/009) [test_tier_required]: 收口统一持久大世界术语迁移的代码层后续，确认 chain-runtime network-tier test discovery 不再被 status/observability API 漂移阻断，release-gate 长跑入口在 Bash 3.2 下前置声明 Bash 4+ 要求，legacy shared wrapper 只保留兼容转发并新增 active code/template 术语扫描。 Trace: .pm/tasks/task_acb7e3599b4242628a7ac99a62628d55.yaml
+  - 产物文件:
+    - `scripts/p2p-longrun-soak.sh`
+    - `scripts/s10-five-node-game-soak.sh`
+    - `scripts/module-release-node-acceptance.sh`
+    - `scripts/shared-network-track-gate.sh`
+    - `scripts/shared-devnet-rehearsal.sh`
+    - `scripts/shared-devnet-blocker-packet.sh`
+    - `scripts/unified-world-code-terminology-scan.sh`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_chain_runtime network_tier -- --list`
+    - `./scripts/unified-world-code-terminology-scan.sh`
+    - `bash -n scripts/unified-world-code-terminology-scan.sh scripts/module-release-node-acceptance.sh scripts/p2p-longrun-soak.sh scripts/s10-five-node-game-soak.sh scripts/shared-devnet-blocker-packet.sh scripts/shared-devnet-rehearsal.sh scripts/shared-network-track-gate.sh`
+    - `./scripts/pm/workflow-lint.sh --task-uid task_acb7e3599b4242628a7ac99a62628d55 --phase pr-ready`
+    - `git diff --check`
 
 ## 依赖
 - doc/core/prd.index.md
