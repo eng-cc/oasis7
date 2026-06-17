@@ -5,11 +5,11 @@
 
 审计轮次: 1
 ## 任务拆解（含 PRD-ID 映射）
-- [x] TASK-P2P-041-A (PRD-P2P-023-A/B/C) [test_tier_required + test_tier_full]: `runtime_engineer` 拆分 public player plane 与 private control plane，冻结 endpoint taxonomy、`/api/gui-agent/action` split 策略、hosted verdict 与 admission control，并移除 hosted access 公共路径中的浏览器长期 signer bootstrap。
+- [x] hosted-player-access-public-plane-runtime (PRD-P2P-023-A/B/C) [test_tier_required] + [test_tier_full]: `runtime_engineer` 拆分 public player plane 与 private control plane，冻结 endpoint taxonomy、`/api/gui-agent/action` split 策略、hosted verdict 与 admission control，并移除 hosted access 公共路径中的浏览器长期 signer bootstrap Trace: .pm/tasks/task_cb987cd0fdfb4ecc98a6ddde7d96204c.yaml
 - [x] TASK-P2P-041-B (PRD-P2P-023-B/D) [test_tier_required + test_tier_full]: `viewer_engineer` 落地 `guest session -> player session` 网页 join/login/reconnect UX，并按 capability 禁用敏感动作。
 - [x] TASK-P2P-041-C (PRD-P2P-023-B/C) [test_tier_required + test_tier_full]: `runtime_engineer` + `agent_engineer` 落地 session 验证、`player_id -> entity` 绑定、resume/revoke 与 ownership 冲突处理。
 - [x] TASK-P2P-041-D (PRD-P2P-023-B/D) [test_tier_required + test_tier_full]: `runtime_engineer` + `viewer_engineer` 落地 `strong auth` 升级链路，覆盖 `main token transfer` 与敏感 prompt/control 动作。
-- [x] TASK-P2P-041-E (PRD-P2P-023-C/E) [test_tier_required + test_tier_full]: `qa_engineer` 建立 hosted access abuse suite，覆盖 replay、expired session、revocation、operator/public URL 混淆、admission limit 和 capability bypass。
+- [x] hosted-player-access-abuse-suite (PRD-P2P-023-C/E) [test_tier_required] + [test_tier_full]: `qa_engineer` 建立 hosted access abuse suite，覆盖 replay、expired session、revocation、operator/public URL 混淆、admission limit 和 capability bypass Trace: .pm/tasks/task_cb987cd0fdfb4ecc98a6ddde7d96204c.yaml
 - [x] TASK-P2P-041-F (PRD-P2P-023-E) [test_tier_required]: `liveops_community` 建立 hosted operator runbook、分享规范、incident/rotation 流程与 claims boundary。
 
 ## 角色拆解
