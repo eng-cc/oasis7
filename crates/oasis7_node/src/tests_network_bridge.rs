@@ -6,12 +6,54 @@ use oasis7_proto::distributed_dht::{
 use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::{NodeConfig, NodeRole};
+use crate::{compute_consensus_action_root, NodeConfig, NodeRole};
 
 struct NoopDistributedNetwork;
 
 impl DistributedNetwork<WorldError> for NoopDistributedNetwork {
     fn publish(&self, _topic: &str, _payload: &[u8]) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        Ok(NetworkSubscription::new(
+            topic.to_string(),
+            Arc::new(Mutex::new(HashMap::new())),
+        ))
+    }
+
+    fn request(&self, protocol: &str, _payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        Err(WorldError::NetworkProtocolUnavailable {
+            protocol: protocol.to_string(),
+        })
+    }
+
+    fn register_handler(
+        &self,
+        _protocol: &str,
+        _handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct BestEffortOnlyNetwork {
+    best_effort_topics: Mutex<Vec<String>>,
+}
+
+impl DistributedNetwork<WorldError> for BestEffortOnlyNetwork {
+    fn publish(&self, topic: &str, _payload: &[u8]) -> Result<(), WorldError> {
+        Err(WorldError::NetworkProtocolUnavailable {
+            protocol: format!("sync publish should not be used for topic {topic}"),
+        })
+    }
+
+    fn publish_best_effort(&self, topic: &str, _payload: &[u8]) -> Result<(), WorldError> {
+        self.best_effort_topics
+            .lock()
+            .expect("lock best-effort topics")
+            .push(topic.to_string());
         Ok(())
     }
 
@@ -114,6 +156,50 @@ impl proto_dht::DistributedDht<WorldError> for BlockingProviderDht {
     ) -> Result<Option<SignedPeerRecord>, WorldError> {
         Ok(None)
     }
+}
+
+#[test]
+fn consensus_gossip_publish_uses_best_effort_network_path() {
+    let network = Arc::new(BestEffortOnlyNetwork::default());
+    let handle = NodeReplicationNetworkHandle::new(network.clone());
+    let config =
+        NodeConfig::new("node-a", "world-gossip-best-effort", NodeRole::Sequencer).expect("config");
+    let endpoint = ConsensusNetworkEndpoint::new(
+        &handle,
+        "world-gossip-best-effort",
+        false,
+        &config.network_policy,
+    )
+    .expect("endpoint");
+    let proposal = GossipProposalMessage {
+        version: 1,
+        world_id: "world-gossip-best-effort".to_string(),
+        node_id: "node-a".to_string(),
+        player_id: "player-a".to_string(),
+        proposer_id: "node-a".to_string(),
+        height: 1,
+        slot: 1,
+        epoch: 0,
+        block_hash: "block-hash".to_string(),
+        action_root: compute_consensus_action_root(&[]).expect("empty action root"),
+        actions: Vec::new(),
+        proposed_at_ms: 1,
+        public_key_hex: None,
+        signature_hex: None,
+    };
+
+    endpoint
+        .publish_proposal(&proposal)
+        .expect("best-effort consensus publish should not surface sync publish failure");
+
+    let topics = network
+        .best_effort_topics
+        .lock()
+        .expect("lock best-effort topics");
+    assert_eq!(
+        topics.as_slice(),
+        &["aw.world-gossip-best-effort.consensus.proposal"]
+    );
 }
 
 #[test]

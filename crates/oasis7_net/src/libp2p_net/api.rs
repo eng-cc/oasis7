@@ -259,9 +259,17 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
         self.enqueue_command(Command::Publish {
             topic: topic.to_string(),
             payload: payload.to_vec(),
-            response: sender,
+            response: Some(sender),
         })?;
         block_on_command_response(receiver, "publish")
+    }
+
+    fn publish_best_effort(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        self.enqueue_command(Command::Publish {
+            topic: topic.to_string(),
+            payload: payload.to_vec(),
+            response: None,
+        })
     }
 
     fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {

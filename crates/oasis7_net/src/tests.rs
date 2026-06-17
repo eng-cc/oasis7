@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 #[cfg(feature = "libp2p")]
+use std::time::{Duration, Instant};
+#[cfg(feature = "libp2p")]
 #[path = "tests_libp2p_discovery.rs"]
 mod libp2p_discovery_tests;
 #[cfg(feature = "libp2p")]
@@ -18,6 +20,18 @@ use oasis7_proto::distributed_dht::{DistributedDht as _, SignedPeerRecord};
 use oasis7_proto::distributed_net as proto_net;
 use oasis7_proto::distributed_net::DistributedNetwork as _;
 use oasis7_proto::distributed_storage as proto_storage;
+
+#[cfg(feature = "libp2p")]
+fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
+    while Instant::now() < deadline {
+        if condition() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("timed out waiting for {what}");
+}
+
 #[test]
 fn net_exports_are_available() {
     let _ = std::any::type_name::<NetworkMessage>();
@@ -290,6 +304,29 @@ fn libp2p_publish_surfaces_gossipsub_failures() {
     assert!(
         net.published().is_empty(),
         "failed publish should not be recorded"
+    );
+}
+
+#[cfg(feature = "libp2p")]
+#[test]
+fn libp2p_best_effort_publish_does_not_surface_gossipsub_failures() {
+    let net = Libp2pNetwork::new(Libp2pNetworkConfig::default());
+    let _sub = net
+        .subscribe("aw.publish.best_effort_fail")
+        .expect("subscribe");
+
+    net.publish_best_effort("aw.publish.best_effort_fail", b"payload")
+        .expect("best-effort publish should enqueue without waiting for gossipsub result");
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    wait_until("best-effort publish failure recorded", deadline, || {
+        net.debug_errors()
+            .iter()
+            .any(|err| err.contains("libp2p publish failed topic=aw.publish.best_effort_fail"))
+    });
+    assert!(
+        net.published().is_empty(),
+        "failed best-effort publish should not be recorded as delivered"
     );
 }
 

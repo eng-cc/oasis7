@@ -160,6 +160,9 @@ pub struct NetworkResponse {
 
 pub trait DistributedNetwork<E> {
     fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), E>;
+    fn publish_best_effort(&self, topic: &str, payload: &[u8]) -> Result<(), E> {
+        self.publish(topic, payload)
+    }
     fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, E>;
     fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, E>;
     fn connected_peer_ids(&self) -> Vec<String> {
