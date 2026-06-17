@@ -350,6 +350,15 @@ pub trait DistributedDht<E> {
         provider_id: &str,
     ) -> Result<(), E>;
 
+    fn publish_provider_best_effort(
+        &self,
+        world_id: &str,
+        content_hash: &str,
+        provider_id: &str,
+    ) -> Result<(), E> {
+        self.publish_provider(world_id, content_hash, provider_id)
+    }
+
     fn get_providers(&self, world_id: &str, content_hash: &str) -> Result<Vec<ProviderRecord>, E>;
 
     fn put_world_head(&self, world_id: &str, head: &WorldHeadAnnounce) -> Result<(), E>;

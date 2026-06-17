@@ -329,8 +329,18 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
     ) -> Result<(), WorldError> {
         let key = dht_provider_key(world_id, content_hash);
         let (sender, receiver) = mpsc::channel();
-        self.enqueue_command(Command::PublishProvider(key, sender))?;
+        self.enqueue_command(Command::PublishProvider(key, Some(sender)))?;
         block_on_command_response(receiver, "publish_provider")
+    }
+
+    fn publish_provider_best_effort(
+        &self,
+        world_id: &str,
+        content_hash: &str,
+        _provider_id: &str,
+    ) -> Result<(), WorldError> {
+        let key = dht_provider_key(world_id, content_hash);
+        self.enqueue_command(Command::PublishProvider(key, None))
     }
 
     fn get_providers(

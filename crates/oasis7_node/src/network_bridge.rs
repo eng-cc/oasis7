@@ -217,7 +217,7 @@ impl NodeReplicationNetworkHandle {
             .map_err(network_err)
     }
 
-    pub(crate) fn publish_checkpoint_descriptor_providers_from_root(
+    pub(crate) fn publish_checkpoint_descriptor_providers_from_root_best_effort(
         &self,
         network_policy: &NodeNetworkPolicy,
         root_dir: &Path,
@@ -227,7 +227,7 @@ impl NodeReplicationNetworkHandle {
         let Some(descriptor) = descriptor else {
             return Ok(());
         };
-        self.publish_checkpoint_blob_provider_from_root(
+        self.publish_checkpoint_blob_provider_from_root_best_effort(
             network_policy,
             root_dir,
             world_id,
@@ -235,7 +235,7 @@ impl NodeReplicationNetworkHandle {
             descriptor.manifest_size_bytes,
         )?;
         for blob_ref in &descriptor.blobs {
-            self.publish_checkpoint_blob_provider_from_root(
+            self.publish_checkpoint_blob_provider_from_root_best_effort(
                 network_policy,
                 root_dir,
                 world_id,
@@ -246,7 +246,7 @@ impl NodeReplicationNetworkHandle {
         Ok(())
     }
 
-    fn publish_checkpoint_blob_provider_from_root(
+    fn publish_checkpoint_blob_provider_from_root_best_effort(
         &self,
         network_policy: &NodeNetworkPolicy,
         root_dir: &Path,
@@ -267,7 +267,28 @@ impl NodeReplicationNetworkHandle {
                 ),
             });
         }
-        self.publish_local_content_provider(network_policy, world_id, content_hash)
+        self.publish_local_content_provider_best_effort(network_policy, world_id, content_hash);
+        Ok(())
+    }
+
+    pub(crate) fn publish_local_content_provider_best_effort(
+        &self,
+        network_policy: &NodeNetworkPolicy,
+        world_id: &str,
+        content_hash: &str,
+    ) {
+        let Some(dht) = self.dht.as_ref() else {
+            return;
+        };
+        let Some(local_provider_id) = self.local_provider_id.as_deref() else {
+            return;
+        };
+        if !network_policy
+            .allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Serve)
+        {
+            return;
+        }
+        let _ = dht.publish_provider_best_effort(world_id, content_hash, local_provider_id);
     }
 
     fn resolved_topic(&self, world_id: &str) -> String {
@@ -830,6 +851,7 @@ impl ReplicationNetworkEndpoint {
         Ok(Some(provider_ids))
     }
 
+    #[allow(dead_code)]
     pub(crate) fn publish_local_content_provider(
         &self,
         world_id: &str,
@@ -849,7 +871,19 @@ impl ReplicationNetworkEndpoint {
         world_id: &str,
         content_hash: &str,
     ) {
-        let _ = self.publish_local_content_provider(world_id, content_hash);
+        let Some(dht) = self.dht.as_ref() else {
+            return;
+        };
+        let Some(local_provider_id) = self.local_provider_id.as_deref() else {
+            return;
+        };
+        if !self
+            .network_policy
+            .allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Serve)
+        {
+            return;
+        }
+        let _ = dht.publish_provider_best_effort(world_id, content_hash, local_provider_id);
     }
 
     fn cached_fetch_commit_success_response(
@@ -901,55 +935,8 @@ fn cacheable_fetch_commit_success_response(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use oasis7_distfs::FileReplicationRecord;
-
-    #[test]
-    fn publish_failure_stays_generic_replication_error() {
-        let err = network_err(WorldError::NetworkProtocolUnavailable {
-            protocol: "libp2p publish failed topic=aw.publish.fail: InsufficientPeers".to_string(),
-        });
-        assert_eq!(
-            err,
-            NodeError::Replication {
-                reason: "replication network error: NetworkProtocolUnavailable { protocol: \"libp2p publish failed topic=aw.publish.fail: InsufficientPeers\" }".to_string(),
-            }
-        );
-    }
-
-    #[test]
-    fn cacheable_fetch_commit_success_response_drops_payload_allocation() {
-        let mut payload = Vec::with_capacity(4096);
-        payload.extend_from_slice(b"replicated-commit-payload");
-        let response = FetchCommitResponse {
-            found: true,
-            message: Some(GossipReplicationMessage {
-                version: 1,
-                world_id: "world-cache".to_string(),
-                node_id: "node-a".to_string(),
-                record: FileReplicationRecord {
-                    world_id: "world-cache".to_string(),
-                    writer_id: "writer-a".to_string(),
-                    writer_epoch: 1,
-                    sequence: 1,
-                    path: "consensus/commits/00000000000000000001.json".to_string(),
-                    content_hash: "hash-1".to_string(),
-                    size_bytes: payload.len() as u64,
-                    updated_at_ms: 1,
-                },
-                payload,
-                public_key_hex: None,
-                signature_hex: None,
-            }),
-        };
-
-        let cached = cacheable_fetch_commit_success_response(&response).expect("cached response");
-        let payload = &cached.message.expect("cached message").payload;
-        assert!(payload.is_empty());
-        assert_eq!(payload.capacity(), 0);
-    }
-}
+#[path = "tests_network_bridge.rs"]
+mod tests;
 
 pub(crate) struct ConsensusNetworkEndpoint {
     network: Arc<dyn DistributedNetwork<WorldError> + Send + Sync>,
