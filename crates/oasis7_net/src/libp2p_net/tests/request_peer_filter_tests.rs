@@ -1,4 +1,5 @@
 use super::*;
+use crate::libp2p_net::runtime_loop::active_transport_request_peers;
 
 #[test]
 fn filter_request_peers_by_health_prefers_non_suspect_peers() {
@@ -142,6 +143,78 @@ fn filter_request_peers_by_health_keeps_record_exchange_pending_blocked_peer_as_
 
     let filtered = filter_request_peers_by_health(peers, &healths);
     assert_eq!(filtered, vec![active_peer, soft_blocked_peer]);
+}
+
+#[test]
+fn active_transport_request_peers_keeps_record_exchange_pending_bootstrap_peer() {
+    let bootstrap_peer = PeerId::random();
+    let hard_blocked_peer = PeerId::random();
+    let healths = HashMap::from([
+        (
+            bootstrap_peer,
+            PeerManagerPeerHealth {
+                peer_id: bootstrap_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![
+                    PeerManagerHealthIssue::MissingPeerRecord,
+                    PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
+                        observed_sources: 1,
+                        required_sources: 2,
+                    },
+                ],
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
+            },
+        ),
+        (
+            hard_blocked_peer,
+            PeerManagerPeerHealth {
+                peer_id: hard_blocked_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![PeerManagerHealthIssue::RelayBudgetExceeded {
+                    relayed_active_peers: 2,
+                    active_peer_count: 2,
+                    limit_per_mille: 500,
+                }],
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("relay_reserved".to_string()),
+                source_operator: None,
+                source_asn: None,
+            },
+        ),
+    ]);
+
+    assert_eq!(
+        active_transport_request_peers(&healths),
+        vec![bootstrap_peer]
+    );
+}
+
+#[test]
+fn active_transport_request_peers_returns_empty_without_active_path() {
+    let bootstrap_peer = PeerId::random();
+    let healths = HashMap::from([(
+        bootstrap_peer,
+        PeerManagerPeerHealth {
+            peer_id: bootstrap_peer.to_string(),
+            status: PeerManagerHealthStatus::Blocked,
+            issues: vec![
+                PeerManagerHealthIssue::MissingPeerRecord,
+                PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
+                    observed_sources: 1,
+                    required_sources: 2,
+                },
+            ],
+            discovery_sources: Vec::new(),
+            active_path_kind: None,
+            source_operator: None,
+            source_asn: None,
+        },
+    )]);
+
+    assert!(active_transport_request_peers(&healths).is_empty());
 }
 
 #[test]
