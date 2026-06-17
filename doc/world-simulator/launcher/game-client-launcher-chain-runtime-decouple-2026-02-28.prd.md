@@ -33,7 +33,7 @@
 ## 4. Technical Specifications
 ### 1) `oasis7_chain_runtime` CLI（新增）
 - `--node-id <id>`：默认 `viewer-live-node`。
-- `--world-id <id>`：默认 `live-llm_bootstrap`。
+- `--world-id <id>`：技术运行分区标识；当前默认见 `oasis7_chain_runtime` 的 `DEFAULT_WORLD_ID`，用于统一持久大世界的 runtime state/cache，不是玩家世界名。
 - `--status-bind <host:port>`：默认 `127.0.0.1:5121`。
 - `--node-role <sequencer|storage|observer>`：默认 `sequencer`。
 - `--node-tick-ms <n>`：默认 `200`，仅用于 worker 轮询/回退间隔。

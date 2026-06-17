@@ -679,7 +679,7 @@ Options:\n\
   --chain-enable / --chain-disable\n\
   --chain-status-bind <host:port>\n\
   --chain-node-id <id>\n\
-  --chain-network-tier <tier>   local_devnet|public_testnet|mainnet\n\
+  --chain-network-tier <tier>   technical runtime tier: local_devnet|public_testnet|mainnet\n\
   --chain-network-tier-manifest <path>\n\
   --chain-storage-profile <name>  dev_local|release_default|soak_forensics\n\
   --chain-world-id <id>\n\
@@ -989,7 +989,8 @@ fn resolve_known_network_tier_manifest(tier: &str) -> Option<String> {
 fn normalize_chain_network_tier_config(config: &mut LauncherConfig) -> Result<(), String> {
     let tier =
         canonical_chain_network_tier(config.chain_network_tier.as_str()).ok_or_else(|| {
-            "chain network tier must be one of: local_devnet|public_testnet|mainnet".to_string()
+            "chain runtime technical tier must be one of: local_devnet|public_testnet|mainnet"
+                .to_string()
         })?;
     config.chain_network_tier = tier.to_string();
     if config.chain_network_tier_manifest.trim().is_empty() {

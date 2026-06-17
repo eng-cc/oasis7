@@ -24,6 +24,7 @@ reset_policy_evidence="$tmpdir/reset-policy-announced.md"
 runtime_bootstrap_evidence="$tmpdir/runtime-bootstrap-ready.md"
 claims_boundary_evidence="$tmpdir/claims-boundary-review.md"
 old_skeleton_evidence="$tmpdir/public-testnet-skeleton-example.md"
+legacy_coarse_gate_evidence="$tmpdir/public-testnet-rehearsal-coarse-gate.md"
 
 latest_summary() {
   local scenario_dir=$1
@@ -95,6 +96,12 @@ cat >"$claims_boundary_evidence" <<'EOF'
 - note: smoke-only claims boundary lane evidence
 EOF
 
+cat >"$legacy_coarse_gate_evidence" <<'EOF'
+# public testnet rehearsal coarse gate evidence
+
+- note: smoke-only compatibility lane evidence
+EOF
+
 cat >"$old_skeleton_evidence" <<'EOF'
 # old public testnet skeleton placeholder
 
@@ -161,7 +168,7 @@ cp "$ready_lanes_tsv" "$runtime_block_lanes_tsv"
 replace_literal "$runtime_block_lanes_tsv" $'runtime_bootstrap\truntime_engineer\tpass\t' $'runtime_bootstrap\truntime_engineer\tblock\t'
 
 ./scripts/network-tier-manifest.sh validate --manifest "$manifest_path" >/dev/null
-./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-shared-devnet.example.json >/dev/null
+./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-public-testnet-rehearsal.example.json >/dev/null
 ./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-public-testnet.example.json >/dev/null
 ./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-mainnet.example.json >/dev/null
 ./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json >/dev/null
@@ -268,15 +275,15 @@ jq -e '.readiness_verdict == "ready_for_live_candidate" and .live_candidate_allo
   "$(latest_summary "$out_dir/ready-lanes")/summary.json" >/dev/null
 
 cp "$ready_lanes_tsv" "$legacy_extra_lane_tsv"
-cat >>"$legacy_extra_lane_tsv" <<'EOF'
-shared_devnet_pass	qa_engineer	partial	doc/testing/evidence/shared-network-shared-devnet-follow-up-promotion-record-2026-03-24.md	legacy lane retained for historical trace only
+cat >>"$legacy_extra_lane_tsv" <<EOF
+public_testnet_rehearsal_pass	qa_engineer	partial	$legacy_coarse_gate_evidence	legacy lane retained for historical trace only
 EOF
 
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
   --lanes-tsv "$legacy_extra_lane_tsv" \
   --out-dir "$out_dir/legacy-extra-lane-ignored" >/dev/null
-jq -e '.readiness_verdict == "ready_for_live_candidate" and .live_candidate_allowed == true and (.ignored_lanes | any(.lane_id == "shared_devnet_pass")) and (.partial_lanes | length) == 0' \
+jq -e '.readiness_verdict == "ready_for_live_candidate" and .live_candidate_allowed == true and (.ignored_lanes | any(.lane_id == "public_testnet_rehearsal_pass")) and (.partial_lanes | length) == 0' \
   "$(latest_summary "$out_dir/legacy-extra-lane-ignored")/summary.json" >/dev/null
 
 cp "$manifest_path" "$legacy_gate_manifest_path"
@@ -286,7 +293,7 @@ import pathlib
 import sys
 path = pathlib.Path(sys.argv[1])
 data = json.loads(path.read_text(encoding="utf-8"))
-data["promotion_policy"]["required_gates"].insert(0, "shared_devnet_pass")
+data["promotion_policy"]["required_gates"].insert(0, "public_testnet_rehearsal_pass")
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 
@@ -294,7 +301,7 @@ PY
   --manifest "$legacy_gate_manifest_path" \
   --lanes-tsv "$ready_lanes_tsv" \
   --out-dir "$out_dir/legacy-manifest-gate-block" >/dev/null
-jq -e '.readiness_verdict == "block" and .live_candidate_allowed == false and (.manifest_blockers | any(. == "manifest_declares_unsupported_required_gates:shared_devnet_pass"))' \
+jq -e '.readiness_verdict == "block" and .live_candidate_allowed == false and (.manifest_blockers | any(. == "manifest_declares_unsupported_required_gates:public_testnet_rehearsal_pass"))' \
   "$(latest_summary "$out_dir/legacy-manifest-gate-block")/summary.json" >/dev/null
 
 echo "network-tier-manifest smoke passed"

@@ -62,8 +62,8 @@ fn public_testnet_loaded_manifest() -> LoadedNetworkTierManifest {
                 ],
             },
             promotion_policy: NetworkTierPromotionPolicy {
-                promote_from: vec!["shared_devnet".to_string()],
-                required_gates: vec!["shared_devnet_pass".to_string()],
+                promote_from: vec!["local_devnet".to_string()],
+                required_gates: vec!["public_testnet_rehearsal_pass".to_string()],
             },
             evidence_refs: Vec::new(),
         },
@@ -111,8 +111,8 @@ fn public_testnet_loaded_manifest_with_paths(
                 denied_claims: vec!["mainnet_live".to_string()],
             },
             promotion_policy: NetworkTierPromotionPolicy {
-                promote_from: vec!["shared_devnet".to_string()],
-                required_gates: vec!["shared_devnet_pass".to_string()],
+                promote_from: vec!["local_devnet".to_string()],
+                required_gates: vec!["public_testnet_rehearsal_pass".to_string()],
             },
             evidence_refs: Vec::new(),
         },

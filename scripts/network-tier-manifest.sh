@@ -13,13 +13,12 @@ Usage:
 Purpose:
   Freeze and validate one machine-readable formal network tier manifest for:
   - local_devnet
-  - shared_devnet
   - public_testnet
   - mainnet
 
 Create options:
   --manifest <path>                    Output manifest json path (required)
-  --tier <name>                        local_devnet|shared_devnet|public_testnet|mainnet
+  --tier <name>                        local_devnet|public_testnet|mainnet
   --status <name>                      planned|specified_skeleton_only|rehearsal|live
   --network-id <id>                    Stable network id
   --chain-id <id>                      Stable chain id
@@ -223,6 +222,10 @@ case "$mode" in
     require_non_empty "--faucet-mode" "$faucet_mode"
     require_non_empty "--reset-policy" "$reset_policy"
     require_non_empty "--value-semantics" "$value_semantics"
+    if [[ "$tier" == "shared_devnet" || "$tier" == "public_testnet_rehearsal" ]]; then
+      echo "error: $tier is no longer a manifest tier; use --tier public_testnet --status rehearsal for public testnet rehearsal manifests" >&2
+      exit 2
+    fi
     mkdir -p "$(dirname "$manifest_path")"
     join_with_newline() {
       local out=""
@@ -361,7 +364,7 @@ for field in required_top:
 if data["schema_version"] != "oasis7.network_tier_manifest.v1":
     raise SystemExit("unsupported schema_version")
 
-tiers = {"local_devnet", "shared_devnet", "public_testnet", "mainnet"}
+tiers = {"local_devnet", "public_testnet", "mainnet"}
 statuses = {"planned", "specified_skeleton_only", "rehearsal", "live"}
 governance_modes = {"bootstrap_local", "shared_ops", "governance_registry"}
 validator_admissions = {
@@ -454,12 +457,6 @@ if tier == "local_devnet":
     if validator_policy["validator_admission"] != "local_only":
         raise SystemExit("local_devnet must use validator_admission=local_only")
 
-if tier == "shared_devnet":
-    if token_policy["value_semantics"] != "preview":
-        raise SystemExit("shared_devnet must use value_semantics=preview")
-    if token_policy["reset_policy"] not in {"ephemeral", "resettable"}:
-        raise SystemExit("shared_devnet must use reset_policy=ephemeral or reset_policy=resettable")
-
 if tier == "public_testnet":
     if token_policy["value_semantics"] != "testnet":
         raise SystemExit("public_testnet must use value_semantics=testnet")
@@ -499,8 +496,6 @@ if tier == "public_testnet" and "public_testnet" not in joined_allowed:
     raise SystemExit("public_testnet must explicitly allow public_testnet claims")
 if tier == "public_testnet" and "production_oc_settlement" not in joined_denied:
     raise SystemExit("public_testnet must explicitly deny production_oc_settlement claims")
-if tier == "shared_devnet" and "public_testnet" in joined_allowed:
-    raise SystemExit("shared_devnet must not allow public_testnet claims")
 if tier == "mainnet" and "faucet" in joined_allowed:
     raise SystemExit("mainnet must not allow faucet claims")
 

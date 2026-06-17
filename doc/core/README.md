@@ -8,6 +8,7 @@
 - 想按主题或文件名继续下钻，而不是从活跃专题列表逐条找：`doc/core/prd.index.md`
 - 想先看下一轮跨模块优先级主入口：`doc/core/next-round-priority-slate-2026-03-11.prd.md`
 - 想先看三种玩家访问模式与 execution lane 的正式契约：`doc/core/player-access-mode-contract-2026-03-19.prd.md`
+- 想先看“统一持久大世界”默认产品模型与术语迁移计划：`doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
 - 想先看版本候选 readiness / go-no-go 的正式入口：`doc/core/release-candidate-readiness-entry-2026-03-11.prd.md` 与 `doc/core/release-candidate-go-no-go-entry-2026-03-11.prd.md`
 
 ## 入口

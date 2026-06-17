@@ -1,4 +1,4 @@
-# Hosted World Share Announcement Template
+# Unified World Hosted Access Announcement Template
 
 审计轮次: 1
 
@@ -12,8 +12,8 @@
 
 ## 使用规则
 - 对外只出现 `public_join_url`，不要带 operator/control URL。
-- 对外口径只允许使用 `limited playable technical preview`，不要升级成 `hosted-ready` / `production-ready`。
-- 若世界仍在收口 hosted access hardening，可直接写“可能需要重新获取 hosted player session”，不要承诺零中断。
+- 对外口径只允许使用 `limited playable technical preview`，不要升级成 hosted access readiness / `production-ready` 承诺。
+- 若统一持久大世界的 hosted access 仍在收口 hardening，可直接写“可能需要重新获取 hosted player session”，不要承诺零中断。
 - 如果已经发生过误分享或 revoke，优先改用 `hosted-world-share-correction-template.md`。
 
 ## Short Announcement
@@ -30,7 +30,7 @@
 适合公告、社区帖、置顶消息。
 
 ```text
-本次 hosted world 玩家入口如下：
+本次统一持久大世界的 hosted player entry 如下：
 
 <public_join_url>
 
@@ -46,7 +46,7 @@
 提醒：当前有效的玩家入口只有这一条：
 <public_join_url>
 
-本世界仍处于 limited playable technical preview。请不要转发其他地址；若你保留了旧页面，请关闭后通过上述玩家入口重新进入。
+统一持久大世界当前仍处于 limited playable technical preview。请不要转发其他地址；若你保留了旧页面，请关闭后通过上述玩家入口重新进入。
 ```
 
 ## Internal Record

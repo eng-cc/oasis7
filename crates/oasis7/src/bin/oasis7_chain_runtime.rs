@@ -79,7 +79,7 @@ mod transfer_submit_api;
 #[path = "oasis7_chain_runtime/wasm_status.rs"]
 mod wasm_status;
 #[cfg(test)]
-use self::cli::{parse_validator_spec, DEFAULT_NODE_ID, DEFAULT_STATUS_BIND};
+use self::cli::{parse_validator_spec, DEFAULT_NODE_ID, DEFAULT_STATUS_BIND, DEFAULT_WORLD_ID};
 use balances_api::build_chain_balances_payload;
 #[cfg(test)]
 use balances_api::build_chain_balances_payload_from_world;

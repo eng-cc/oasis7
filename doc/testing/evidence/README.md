@@ -4,8 +4,8 @@
 
 ## 从这里开始
 - 想确认 release readiness、candidate/trust gate 或 release 证据包：先读 `release-evidence-bundle-task-game-018-2026-03-10.md`、`closed-beta-candidate-release-gate-2026-03-22.md` 或 `gameplay-ten-minute-trust-gate-2026-04-09.md`
-- 想确认 hosted world、浏览器鉴权、web surface 或滥用矩阵：先读 `hosted-world-browser-auth-surface-2026-03-26.md`、`hosted-world-abuse-suite-matrix-2026-03-27.md` 或 `mainchain-token-signed-transfer-web-validation-2026-03-23.md`
-- 想确认 p2p/shared-network triad、mixed-topology、public testnet live candidate 或 rollout follow-up：先读 `public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`、`public-testnet-claims-boundary-review-2026-05-21.md`、`p2p-real-env-triad-current-version-full-game-nodes-2026-05-16.md`、`shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md` 或 `p2p-mixed-topology-validation-matrix-2026-04-07.md`
+- 想确认 hosted access、浏览器鉴权、web surface 或滥用矩阵：先读 `hosted-world-browser-auth-surface-2026-03-26.md`、`hosted-world-abuse-suite-matrix-2026-03-27.md` 或 `mainchain-token-signed-transfer-web-validation-2026-03-23.md`
+- 想确认 p2p/legacy shared-network rehearsal triad、mixed-topology、public testnet live candidate 或 rollout follow-up：先读 `public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`、`public-testnet-claims-boundary-review-2026-05-21.md`、`p2p-real-env-triad-current-version-full-game-nodes-2026-05-16.md`、`shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md` 或 `p2p-mixed-topology-validation-matrix-2026-04-07.md`
 - 想确认治理演练、live world drill 或 finality 证据：先读 `governance-registry-live-world-drill-finality-2026-03-24.md`、`governance-registry-live-world-drill-foundation-ops-2026-03-24.md` 或 `governance-registry-clone-world-drill-foundation-ops-2026-03-24.md`
 - 想确认 claim/restricted grant、token allocation audit 或质量基线：先读 `game-agent-claim-abuse-matrix-2026-03-27.md`、`token-genesis-allocation-audit-template-2026-03-22.md` 或 `testing-quality-trend-baseline-2026-03-11.md`
 - 想确认 provider recertification、software-safe web entry、pure-api parity、headless smoke 或 launcher UX：先读 `provider-agent-dual-mode-recertification-evidence-2026-04-07.md`、`software-safe-primary-web-entry-evidence-2026-04-07.md` 或 `post-onboarding-headless-smoke-2026-03-19.md`
@@ -35,17 +35,17 @@
   - closed beta / trust gate 的判定留痕在哪
   - 哪些 evidence 直接影响 release readiness 讨论
 
-### 2. Hosted world、浏览器与 Web surface
+### 2. Hosted access、浏览器与 Web surface
 - 首读入口:
   - `hosted-world-browser-auth-surface-2026-03-26.md`
   - `hosted-world-abuse-suite-matrix-2026-03-27.md`
   - `mainchain-token-signed-transfer-web-validation-2026-03-23.md`
 - 适合问题:
-  - 浏览器 auth surface 和 hosted world 风险留痕该看哪里
-  - hosted world 并发、revoke recovery、strong auth 证据在哪一组
+  - 浏览器 auth surface 和 hosted access 风险留痕该看哪里
+  - hosted access 并发、revoke recovery、strong auth 证据在哪一组
   - 主链 web validation 或网页资产动作验证证据怎么找
 
-### 3. P2P、shared network 与 triad rollout
+### 3. P2P、legacy shared-network rehearsal 与 triad rollout
 - 首读入口:
   - `public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`
   - `public-testnet-claims-boundary-review-2026-05-21.md`

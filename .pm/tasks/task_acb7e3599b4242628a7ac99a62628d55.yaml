@@ -1,0 +1,23 @@
+task_uid: task_acb7e3599b4242628a7ac99a62628d55
+title: "unified world code-layer migration follow-up"
+owner_role: runtime_engineer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_acb7e3599b4242628a7ac99a62628d55.execution.md
+status: candidate
+priority: P2
+source_signal: SIG-PM-0068
+source_refs:
+  - doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md
+doc_refs:
+  - doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md
+related_prd: []
+acceptance:
+  - "oasis7_chain_runtime network-tier bin test discovery is no longer blocked by status/observability API drift."
+  - "release-gate smoke either passes under the declared shell runtime or fails early with a documented Bash runtime requirement before downstream longrun execution."
+  - "legacy shared-devnet/shared-network wrappers have a documented retirement strategy and do not emit old manifest tiers, output schemas, or player-facing world semantics."
+  - "A code-level scan confirms shared_devnet does not return to manifest tiers, runtime readiness branches, new fixtures, or new output schemas."
+handoff_to:
+  - blockchain_ops_engineer
+  - qa_engineer
+  - repository_health_engineer
+updated_at: 2026-06-17T09:29:06+08:00

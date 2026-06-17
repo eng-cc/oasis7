@@ -358,7 +358,7 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime perf_probe_executor_call_and_watchdog_overhead --release -- --ignored --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router perf_probe_subscription_filter_parse_overhead --release -- --ignored --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_abi perf_probe_module_cache_clone_cost_scales_with_wasm_size --release -- --ignored --nocapture`
-- [x] chain-linked-gameplay-action-submit (PRD-WORLD_RUNTIME-033) [test_tier_required]: 为 chain-linked viewer gameplay action 增加 `/v1/chain/gameplay/submit` 提交路径，要求 viewer 提交只返回 consensus action ack、本地 world 不做 optimistic mutation，最终结果仅通过 committed execution world sync 回流。 Trace: .pm/tasks/task_dd49ad3480d14922993ceb3acf2555c6.yaml
+- [x] chain-linked-gameplay-action-submit (PRD-WORLD_RUNTIME-033) [test_tier_required]: 为 chain-linked viewer gameplay action 增加 `/v1/chain/gameplay/submit` 提交路径，要求 viewer 提交只返回 consensus action ack、本地 viewer state/cache 不做 optimistic mutation，最终结果仅通过 committed execution-state sync 回流。 Trace: .pm/tasks/task_dd49ad3480d14922993ceb3acf2555c6.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`
     - `doc/world-runtime/project.md`
@@ -424,7 +424,7 @@
     - `crates/oasis7_net/src/lib.rs`
     - `crates/oasis7_net/src/libp2p_net.rs`
     - `crates/oasis7_net/src/libp2p_net/api.rs`
-- [x] formal-release-fixed-genesis-default (PRD-WORLD_RUNTIME-027) [test_tier_required]: 将正式版本默认启动链路从 `llm_bootstrap` 调试场景切到固定 genesis / 固定 bootstrap world，确保 `oasis7_viewer_live`、`oasis7_game_launcher`、`oasis7_web_launcher`、`oasis7_client_launcher` 与 `oasis7_chain_runtime` 首次启动共享同一份 release default world，且不再默认注入 5 个预置 agent。 Trace: .pm/tasks/task_f7cfa848f7c04ea9b560458487c62755.yaml
+- [x] formal-release-fixed-genesis-default (PRD-WORLD_RUNTIME-027) [test_tier_required]: 将正式版本默认启动链路从 `llm_bootstrap` 调试场景切到固定 genesis / 固定 unified-world bootstrap `world_id`，确保 `oasis7_viewer_live`、`oasis7_game_launcher`、`oasis7_web_launcher`、`oasis7_client_launcher` 与 `oasis7_chain_runtime` 首次启动共享同一份技术启动真值，且不再默认注入 5 个预置 agent。 Trace: .pm/tasks/task_f7cfa848f7c04ea9b560458487c62755.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`
     - `doc/world-runtime/project.md`

@@ -15,11 +15,11 @@
 - 若当前任务涉及“主流公链测试体系一般怎么做”“oasis7 还缺哪几层才接近主流链测试成熟度”，先看：
   - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md`
-- 若当前任务涉及“shared network / release train 最小要做到什么、现在是否已具备正式共享轨道”，再看：
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
+- 若当前任务涉及“legacy network-rehearsal / release-train evidence 是否满足历史 L5 审计”，再看：
+  - `doc/p2p/blockchain/p2p-network-rehearsal-release-train-minimum-2026-03-24.prd.md`
+  - `doc/p2p/blockchain/p2p-network-rehearsal-release-train-minimum-2026-03-24.design.md`
 - 本手册负责 oasis7 自己的执行分层与命令入口；benchmark 专题负责把这些层对位到主流公链常见 testing stack。
-- shared network / release train 专题负责冻结 benchmark `L5` legacy rehearsal evidence 与 claims gate；当前 `shared_devnet` 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论，但它只作历史 rehearsal 证据，不代表仓库已经具备 live `public_testnet`、正式 `staging/canary` 或公开大世界上线。
+- network rehearsal / release train 专题负责冻结 benchmark `L5` legacy rehearsal evidence 与 claims gate；当前 `public_testnet_rehearsal` 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论，但它只作历史 rehearsal 证据，不代表仓库已经具备 live `public_testnet`、正式 `staging/canary` 或公开大世界上线。
 
 ## 范围
 
@@ -299,7 +299,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_net --features runtime_bridge --lib
   --replacement-public-key <replacement_public_key_hex> \
   --out-dir output/governance-drills/<run_id>
 ```
-- default/live execution world 正式证据入口：
+- 统一持久大世界的 committed execution-state 正式证据入口：
 ```bash
 ./scripts/governance-registry-live-drill.sh \
   --source-world-dir output/chain-runtime/viewer-live-node/reward-runtime-execution-world \
@@ -358,8 +358,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_net --features runtime_bridge --lib
     - `import_policy_reject`: `block_import_rc!=0` 且后续对 block manifest 的审计表现为 `manifest_mismatch`
   - 若 `block_enforcement_stage=audit_failover_gate`，脚本还会继续产出 `rejoin_case`；其期望结果是 `overall_status=ready_for_ops_drill`
   - `pass_manifest_mode=baseline` 适用于 temporary offline / same-signer rejoin；`pass_manifest_mode=rotate` 适用于 replacement / revocation 恢复
-  - clone-world 样本只证明 runbook/tooling 正确，不替代 default/live execution world 的最终 QA 证据
-  - `governance-registry-live-drill.sh` 会在真实默认 world 上自动执行 `baseline -> pass -> block -> restore`
+  - clone-world 样本只证明 runbook/tooling 正确，不替代统一持久大世界 committed execution-state 的最终 QA 证据
+  - `governance-registry-live-drill.sh` 会在真实默认 execution-state 上自动执行 `baseline -> pass -> block -> restore`
   - 当 block case 仍可导入时，`governance-registry-drill.sh` / `governance-registry-live-drill.sh` 会额外执行 `rejoin`
   - controller slot 可保持原 `signer_id` 仅替换公钥；`governance.finality.v1` 不行，必须显式传入新的 `--replacement-signer-id`
   - `--block-remove-signer-id` 可重复使用；当 block manifest 让 `finality signer_count < threshold` 时，默认预期是 `import_policy_reject`
@@ -610,16 +610,16 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
 ```bash
 ./scripts/p2p-mixed-topology-matrix.sh \
   --tier full \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-follow-up-window-2026-03-24.md \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-03-24.md \
+  --shared-window-evidence-ref doc/testing/evidence/network-rehearsal-public-testnet-rehearsal-follow-up-window-2026-03-24.md \
+  --shared-window-evidence-ref doc/testing/evidence/network-rehearsal-public-testnet-rehearsal-short-window-pass-2026-03-24.md \
   --dry-run
 ```
 - 建议命令（full 执行）：
 ```bash
 ./scripts/p2p-mixed-topology-matrix.sh \
   --tier full \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-follow-up-window-2026-03-24.md \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-03-24.md
+  --shared-window-evidence-ref doc/testing/evidence/network-rehearsal-public-testnet-rehearsal-follow-up-window-2026-03-24.md \
+  --shared-window-evidence-ref doc/testing/evidence/network-rehearsal-public-testnet-rehearsal-short-window-pass-2026-03-24.md
 ```
 - 建议命令（real env triad snapshot）：
 ```bash
@@ -656,7 +656,7 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - 若本轮 triad 已切到三节点等权 validator，`summary.json.analysis.claim_mode` 应为 `three_equal_validator`，且若要计入该 baseline，`summary.json.claim_status` 应达到 `pass_candidate`；
   - 若要宣称本机 mixed-topology observer 接入已打通，则 real-env summary 里不得再出现 `observer_known_peer_heads_zero`、`observer_network_committed_height_zero`、`observer_committed_height_not_advancing`；
   - 若要宣称三节点等权 validator 拓扑已打通，则 real-env summary 里不得再出现 `local_committed_height_zero`、`local_known_peer_heads_zero`、`local_network_committed_height_zero`、`local_no_recent_progress_signal`、`triad_not_all_validator_roles`；
-  - 若要继续给 shared-network lane 提供 uplift 输入，`summary.json.external_evidence.shared_window_evidence_refs` 必须明确列出 same-window refs，且 `summary.json.evidence_contract.claim_readiness.shared_network_pass_blockers` 只能保留经审计接受的剩余 blocker；
+  - 若要继续给 network-rehearsal lane 提供 uplift 输入，`summary.json.external_evidence.shared_window_evidence_refs` 必须明确列出 same-window refs，且 `summary.json.evidence_contract.claim_readiness.shared_network_pass_blockers` 只能保留经审计接受的剩余 blocker；
   - 产物目录下必须同时有 `summary.json`、`summary.md`、`cases/<case_id>/command.txt`，live 执行还必须留下 `stdout.log/stderr.log`。
 - 当前 exact case 入口：
   - `nat_private_role_policy`
@@ -761,7 +761,7 @@ git diff --check
   - 至少覆盖 `公网可达`、`受限 NAT 可打洞`、`对称 NAT/CGNAT 无法打洞`、`检测结果抖动或冲突` 四类 reachability 场景。
   - 覆盖用户从默认推荐切到高级设置覆盖，再回退到自动模式的往返路径，并验证审计证据持续可读。
   - 覆盖多节点混合场景中，非公网节点、公网入口节点与 relay/sentry 语义的映射一致性，避免 UI 用户模式与底层 role policy 脱节。
-  - 若复用 shared-network / mixed-topology lane 作为 full-tier 证据，summary 中必须单独标注哪些 case 验证的是用户模式推荐，哪些 case 验证的是底层 reachability 真值。
+  - 若复用 network-rehearsal / mixed-topology lane 作为 full-tier 证据，summary 中必须单独标注哪些 case 验证的是用户模式推荐，哪些 case 验证的是底层 reachability 真值。
 - `P2PARCH-9` executable full-tier 基线（2026-04-07）：
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher -- --nocapture
@@ -776,7 +776,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_client_launcher --target wasm32-unkno
 - 证据要求：
   - docs-only 阶段至少留下 `rg` 命中结果与文档门禁通过记录。
   - 实现阶段至少留下模式推荐结果、触发确认的风险提示文本、用户接受/拒绝后的最终模式，以及对应的检测依据摘要。
-  - 若当轮仍无法提供 dedicated NAT/public-entry lab，则必须在 evidence 中明确哪些结果来自 proxy/shared-network drill，不能冒充真实公网探测实验。
+  - 若当轮仍无法提供 dedicated NAT/public-entry lab，则必须在 evidence 中明确哪些结果来自 proxy/network-rehearsal drill，不能冒充真实公网探测实验。
 - 反作弊/反女巫证据链门禁（TASK-GAME-015）：
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime::tests::governance::governance_identity_penalty_ -- --nocapture
@@ -839,14 +839,14 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 
 ### Network Tiers / Shared-Network Evidence
 - 当前网络层真值统一以 `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md` 与对应 project/runbook 为准：
-  - 目标层级是 `local_devnet -> public_testnet -> mainnet`。
-  - `shared_devnet` 只作 legacy/rehearsal evidence，不再作为目标 test 环境。
-  - `shared_devnet` legacy rehearsal 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论，但这不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
-  - formal `public_testnet` 当前仍由 six-lane readiness 判定，不能用 `shared_devnet_pass` 替代。
+  - operator/runtime network-tier 是 `local_devnet -> public_testnet -> mainnet`，不作为玩家世界模型。
+  - `public_testnet_rehearsal` 只作 legacy/rehearsal evidence，不再作为目标 test 环境。
+  - `public_testnet_rehearsal` legacy rehearsal 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论，但这不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
+  - formal `public_testnet` 当前仍由 six-lane readiness 判定，不能用 `public_testnet_rehearsal_pass` 替代。
 - Canonical docs:
   - Current network-tier source of truth: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
   - `public_testnet` live-candidate checklist: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
-  - Legacy shared-network evidence: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
+  - Legacy network-rehearsal evidence: `doc/p2p/blockchain/p2p-network-rehearsal-release-train-minimum-2026-03-24.project.md`
   - Benchmark background: `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md`
 - Canonical commands:
 ```bash
@@ -860,7 +860,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 ```
 - Boundary:
   - `testing-manual.md` is an execution index only; do not duplicate current network-tier verdicts here.
-  - `shared_devnet` history may explain benchmark L5 evidence, but current public readiness belongs to formal `public_testnet` readiness docs.
+  - `public_testnet_rehearsal` history may explain benchmark L5 evidence, but current public readiness belongs to formal `public_testnet` readiness docs.
 
 ### S11：去中心化模块发布运行与告警（world-runtime）
 - 适用范围：线上模块发布（`proposal -> attestation -> apply`）与 builtin 在线清单加载故障分诊。

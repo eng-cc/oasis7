@@ -12,12 +12,12 @@ Usage:
 
 Purpose:
   Freeze and validate one machine-readable release candidate bundle so
-  shared_devnet/staging/canary promotion can reference the same truth.
+  public_testnet_rehearsal/staging/canary promotion can reference the same truth.
 
 Create options:
   --bundle <path>                    Output bundle json path (required)
   --candidate-id <id>                Candidate id (required)
-  --track <name>                     Intended track (default: shared_devnet)
+  --track <name>                     Intended track: public_testnet_rehearsal|staging|canary
   --runtime-build-ref <path>         Runtime build artifact path/ref (required)
   --world-snapshot-ref <path>        World snapshot path/ref (required)
   --governance-manifest-ref <path>   Governance manifest path/ref (required)
@@ -33,7 +33,7 @@ Validate options:
 Examples:
   ./scripts/release-candidate-bundle.sh create \
     --bundle output/release-candidates/rc.json \
-    --candidate-id shared-devnet-20260324-01 \
+    --candidate-id public-testnet-rehearsal-20260324-01 \
     --runtime-build-ref output/builds/oasis7_chain_runtime.tar.zst \
     --world-snapshot-ref output/worlds/reward-runtime-execution-world \
     --governance-manifest-ref /path/to/public_manifest.json \
@@ -54,7 +54,7 @@ fi
 shift || true
 
 candidate_id=""
-track="shared_devnet"
+track="public_testnet_rehearsal"
 bundle_path=""
 runtime_build_ref=""
 world_snapshot_ref=""
@@ -130,6 +130,23 @@ require_non_empty() {
     echo "error: missing required option: $flag" >&2
     exit 2
   fi
+}
+
+require_supported_track() {
+  case "$track" in
+    public_testnet_rehearsal|staging|canary)
+      ;;
+    shared_devnet|shared_network)
+      echo "error: unsupported --track: $track" >&2
+      echo "hint: use --track public_testnet_rehearsal for rehearsal promotion gates" >&2
+      exit 2
+      ;;
+    *)
+      echo "error: unsupported --track: $track" >&2
+      echo "supported tracks: public_testnet_rehearsal, staging, canary" >&2
+      exit 2
+      ;;
+  esac
 }
 
 ensure_existing_path() {
@@ -265,6 +282,18 @@ if bundle["schema_version"] != "oasis7.release_candidate_bundle.v1":
         f"unsupported schema_version: {bundle['schema_version']}"
     )
 
+supported_tracks = {"public_testnet_rehearsal", "staging", "canary"}
+if bundle["track"] not in supported_tracks:
+    if bundle["track"] in {"shared_devnet", "shared_network"}:
+        raise SystemExit(
+            "unsupported track: "
+            f"{bundle['track']}; use public_testnet_rehearsal for rehearsal promotion gates"
+        )
+    raise SystemExit(
+        f"unsupported track: {bundle['track']}; supported tracks: "
+        + ", ".join(sorted(supported_tracks))
+    )
+
 if expected_head and bundle["git_commit"] != expected_head:
     raise SystemExit(
         f"git commit drift: bundle={bundle['git_commit']} current={expected_head}"
@@ -362,6 +391,7 @@ case "$mode" in
   create)
     require_non_empty "--bundle" "$bundle_path"
     require_non_empty "--candidate-id" "$candidate_id"
+    require_supported_track
     require_non_empty "--runtime-build-ref" "$runtime_build_ref"
     require_non_empty "--world-snapshot-ref" "$world_snapshot_ref"
     require_non_empty "--governance-manifest-ref" "$governance_manifest_ref"

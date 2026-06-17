@@ -45,7 +45,7 @@
   - SC-13: `oasis7_viewer_live` 移除 legacy 参数兼容层，不再接受 `--runtime-world` 等历史别名；代码库中不再保留未接入生产入口的旧 CLI 解析路径。
   - SC-14: 历史 PRD/project 文档中的 `oasis7_viewer_live` 旧文件路径完成替换，不再指向已删除的 `src/bin/oasis7_viewer_live/` 子目录文件。
   - SC-15: 主链 Token 创世分配与早期贡献奖励口径具备可审计分桶、低流通边界、单人直持上限与贡献制发放约束，能够直接映射到现有 runtime 创世/金库机制。
-  - SC-16: hosted world 网页远程接入具备明确的 `public player plane / private control plane / signer plane` 分层、`guest/player/strong-auth` 授权梯度、公开 join admission control 与 `gui-agent` surface split 策略，且浏览器不再被视为可持有 host 节点长期私钥的受信环境。
+  - SC-16: hosted access 网页远程接入具备明确的 `public player plane / private control plane / signer plane` 分层、`guest/player/strong-auth` 授权梯度、公开 join admission control 与 `gui-agent` surface split 策略，且浏览器不再被视为可持有 host 节点长期私钥的受信环境。
   - SC-17: p2p 模块具备一份 public-chain-grade 的“非全公网依赖”覆盖网络目标态，明确 `public/hybrid/private/relay_only/validator_hidden` 多部署模式、`validator core/sentry/relay` 角色分离，以及 `peer record + discovery + reachability + traffic lanes` 的统一框架边界。
   - SC-17A: p2p 模块的 iroh-inspired reachability follow-up 必须保持 oasis7/libp2p 底座不变，只借鉴 identity-first address boundary、path behavior evidence taxonomy 与 bounded status observability；不得引入 iroh 依赖、替换 libp2p、或新增第二套 net health truth。
   - SC-18: 当前链上代币的正式产品命名、runtime `main_token.symbol` / ticker 与公钥派生账户前缀已统一迁移到“绿洲币 / Oasis Coin” / `OC` / `oc:pk:`；对外 API、viewer/client、脚本与测试不得再把 `AWT` / `awt:pk:` 当作现行真值。
@@ -54,9 +54,10 @@
   - SC-21: `hosted_public_join` 必须具备一条对普通玩家友好的正式身份路径：默认允许邮箱 hosted login、托管 player signer 与后续自托管升级；浏览器不再被要求作为长期玩家私钥保管面。
   - SC-26: 面向普通用户的 game / web / client launcher 默认进入 `hosted_public_join`，并不再暴露 `trusted_local_only` 本地可信预览作为可选启动模式；历史本地配置迁移到 hosted join 后继续走邮箱 hosted account / player session 登录链路。
   - SC-22: validator / finality signer 必须具备一条正式的治理准入流程，至少覆盖 `genesis registry cold start -> apply -> approved_candidate -> probation_ready -> active -> rotate/revoke`，并明确 world-state registry 才是正式激活真值；正式激活真值必须同时覆盖 validator membership、governed stake 与 finality signer binding，public tiers 的冷启动必须来自 genesis/world-state registry，且 genesis runtime import 只允许空 execution world 首启，已有 snapshot/journal world 必须走专用 registry migration/import；`--node-validator*` / `NODE_VALIDATORS_CSV` 与 operator-local env 只能作为 local/dev legacy fallback 或一次性迁移适配输入。
-  - SC-23: p2p 模块必须具备一套正式的公共主链式网络分层机制，明确目标 tier 收束为 `local_devnet -> public_testnet -> mainnet`，同时把 `shared_devnet` 限定为 legacy/rehearsal evidence，固定 manifest 真值与 claims/promotion 规则，避免把 shared release-train 与正式 testnet/mainnet 继续混写。
+  - SC-23: p2p 模块必须具备一套正式的公共主链式网络分层机制，明确目标 tier 收束为 `local_devnet -> public_testnet -> mainnet`，同时把 `public_testnet_rehearsal` 限定为 legacy/rehearsal evidence，固定 manifest 真值与 claims/promotion 规则，避免把 shared release-train 与正式 testnet/mainnet 继续混写。
   - SC-24: `public_testnet` 必须具备一条 repo-owned readiness review 路径，能把“只有 skeleton manifest”与“具备 live candidate evidence”明确区分，避免把 placeholder endpoint 或模板证据误报为可部署结论。
   - SC-25: `public_testnet` 必须具备一份 repo-owned live-candidate companion checklist，把 seven-lane readiness gate、最小 evidence、canonical 命令与允许/禁止 claims 固定成单一执行入口，避免 producer/liveops/QA 对“还差哪些”各说各话。
+  - SC-26A: `hosted world` 仅作为历史专题名 / legacy label 保留，现行概念名为 hosted player entry / hosted access / `hosted_public_join`，表示玩家进入统一持久大世界的接入面，不表示多个玩家世界。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -65,8 +66,8 @@
   - 安全评审者：需要签名、治理、资产流转的可审计证据。
   - 移动端玩家：需要低算力设备可持续在线并获得正确最终性反馈。
   - 制作人与金库治理维护者：需要在创世前冻结主链 Token 分配结构，避免过早流通、单人过度控盘或“玩就发币”的错误口径。
-  - hosted world host / operator：需要把可公开分享的 join URL 与私有世界控制面拆开，避免分享试玩地址时连控制权一起暴露。
-  - hosted world 远程玩家：需要通过网页先建立 session 再游玩，而不是直接继承 host 节点 signer。
+  - hosted access host / operator：需要把可公开分享的 join URL 与私有控制面拆开，避免分享试玩地址时连控制权一起暴露。
+  - hosted access 远程玩家：需要通过网页先建立 session 再游玩，而不是直接继承 host 节点 signer。
   - 私网 / 家宽 / 企业内网节点运营者：需要在没有公网 IP 的前提下，仍能以正式角色加入网络、同步状态或通过 sentry/relay 参与主链。
   - validator 候选运营者：需要明确提交什么材料、何时从候选转为 active validator，以及哪些 signer/控制权限并不对外开放。
 - User Scenarios & Frequency:
@@ -76,7 +77,7 @@
   - 安全审计复核：关键资产链路改动后立即触发。
   - 轻客户端接入验收：每次移动端协议调整后执行输入/最终性/重连验证。
   - 创世发行前评审：每次准备冻结 Token 创世配置或早期奖励口径时执行一次。
-  - hosted world 架构复核：每次准备让“玩家部署服务给其他玩家通过网页进入”进入公开测试前执行一次。
+  - hosted access 架构复核：每次准备让“玩家部署服务给其他玩家通过网页进入统一持久大世界”进入公开测试前执行一次。
 - User Stories:
   - PRD-P2P-001: As a 协议工程师, I want explicit protocol boundaries, so that multi-crate changes remain coherent.
   - PRD-P2P-002: As a 节点运营者, I want reliable longrun validation, so that production confidence increases.
@@ -99,13 +100,13 @@
   - PRD-P2P-019: As a producer_system_designer, I want one explicit genesis freeze/ceremony/QA gate, so that logic-frozen but still-unbound genesis parameters cannot be mistaken for mint readiness.
   - PRD-P2P-020: As a producer_system_designer, I want one final public claims policy re-evaluation after MAINNET readiness planning, so that outward language stays aligned with execution reality rather than spec completeness.
   - PRD-P2P-021: As a producer_system_designer, I want one explicit benchmark against mainstream public-chain testing systems, so that oasis7 testing maturity is judged by layered evidence rather than isolated green checks.
-  - PRD-P2P-022: As a producer_system_designer, I want one explicit shared network / release train minimum model, so that oasis7 can turn `L5` from a known gap into an executable workstream without overclaiming it is already in place.
-  - PRD-P2P-023: As a producer_system_designer, I want one explicit hosted-world player access and session-auth model, so that one player部署服务给另一个玩家通过网页进入时，不会再把 host control-plane、shared `gui-agent` control surface 与 node signer 暴露给浏览器。
+  - PRD-P2P-022: As a producer_system_designer, I want one explicit legacy network-rehearsal / release-train rehearsal model, so that oasis7 can preserve `L5` auditability without treating it as a current target environment or player world model.
+  - PRD-P2P-023: As a producer_system_designer, I want one explicit hosted player access and session-auth model, so that one player部署服务给另一个玩家通过网页进入统一持久大世界时，不会再把 host control-plane、shared `gui-agent` control surface 与 node signer 暴露给浏览器。
   - PRD-P2P-024: As a producer_system_designer, I want one public-chain-grade private-reachability P2P architecture, so that oasis7 不再把“所有正式节点都要有公网 IP”当成默认前提，并能在 mixed-topology 现实下继续对标公共主链。
   - PRD-P2P-025: As a producer_system_designer, I want one canonical triad observability stack, so that 当前 real-env triad（物理上为本机 + 2 ECS，runtime 上已收口为 three_equal_validator，历史 service label 仅作兼容别名）的真实运行状态可以在同一轮监控里同时回答资源、链状态、流量、WASM 健康，并进一步定位到具体 runtime 子模块和优化热点。
   - PRD-P2P-026: As a producer_system_designer, I want the live triad to support a three-equal-validator topology, so that the local node is no longer a permanent observer exception and triad semantics can match “three peer-equal validators” when operations explicitly choose that mode.
   - PRD-P2P-027: As a producer_system_designer, I want one canonical one-way `OC -> LetAI Run OpenAPI quota/token_key` bridge model, so that oasis7 可以把当前主链 Token 用作受控的 AI 服务额度充值资产，同时不误滑成公开兑换所、浏览器热钱包或双向提现承诺。
-  - PRD-P2P-028: As a producer_system_designer, I want one formal public-chain-style network-tier mechanism, so that oasis7 can stop treating `shared_devnet`、`public_testnet` and `mainnet` as informal aliases and instead promote networks through explicit manifest + gate truth.
+  - PRD-P2P-028: As a producer_system_designer, I want one formal public-chain-style network-tier mechanism, so that oasis7 can stop treating `public_testnet_rehearsal`、`public_testnet` and `mainnet` as informal aliases and instead promote networks through explicit manifest + gate truth.
   - PRD-P2P-028A: As a `producer_system_designer`, I want one idealized transaction target model, so that主链交易未来从“转账裸参数”升级为统一协议对象时，有一份不受当前实现约束的长期目标态可对齐。
   - PRD-P2P-029: As a producer_system_designer, I want one explicit hosted-public-join managed identity / custody model, so that普通玩家可以用邮箱登录游戏，而不是被迫管理裸公私钥，同时 hosted player signer、step-up auth 与自托管升级路径都保持在可审计边界内。
 - Critical User Flows:
@@ -131,7 +132,7 @@
   20. Flow-P2P-020: `读取 genesis freeze sheet -> 绑定 slot/bucket 真值 -> 执行 ceremony checklist -> QA 审核 evidence bundle -> 决定是否允许 mint-ready 口径`
   21. Flow-P2P-021: `读取 MAINNET-1~3 当前状态 -> 判断哪些仅为 spec gate、哪些已 execution complete -> 冻结 claim allowlist/denylist 与未来升级条件`
   22. Flow-P2P-022: `读取 testing-manual 与安全/readiness 专题 -> 映射 oasis7 当前测试层 -> 对照主流公链 testing benchmark -> 冻结 gap matrix 与下一步验证优先级`
-  23. Flow-P2P-023: `host 启动 hosted world -> public join 先过 admission control -> 远程访客建 guest/player session -> runtime 按 capability 绑定实体与动作 -> `gui-agent` 仅走 player-safe split surface -> 资产/治理类动作再升级 strong auth`
+  23. Flow-P2P-023: `host 启动 hosted access -> public join 先过 admission control -> 远程访客建 guest/player session -> runtime 按 capability 绑定实体与动作 -> `gui-agent` 仅走 player-safe split surface -> 资产/治理类动作再升级 strong auth`
   24. Flow-P2P-024: `用户绑定 bridge 身份 -> bridge-service 分配唯一 deposit route -> 用户通过受信转账面支付 OC -> bridge watcher 等待确认并写入 bridge_ledger -> LetAI OpenAPI 执行 user upsert / project+token_key / topup / query verification -> operator 对账与异常收口`
   25. Flow-P2P-025: `访客从 guest 升级到邮箱 hosted account -> identity broker 恢复账户与 signer_ref -> session broker 签发 device/player session -> 高风险动作再经 step-up + custody sign -> 如需退出托管则走 external wallet bind / transfer-out`
 - Functional Specification Matrix:
@@ -151,7 +152,7 @@
 | 主链 Token 签名交易鉴权 | `from_account_id/to_account_id/amount/nonce/public_key/signature` | runtime 先验签并校验 `oc:pk:` 账户绑定，再进入既有余额/nonce 预检与 consensus submit | `unsigned_surface -> transfer_signed_surface` | transfer submit 必须带固定版本签名；`from_account_id` 必须等于 `oc:pk:<public_key_hex>`；其他资产动作仍待后续专题 | `runtime_engineer` 牵头实现，`viewer_engineer`/`qa_engineer` 跟进客户端与回归 |
 | 主流公链测试体系对标 | `layer_id/current_coverage/evidence_paths/gap_status/next_action` | 将 oasis7 suites/evidence 对位到主流公链测试分层，并冻结缺口矩阵与执行优先级 | `draft -> mapped -> prioritized` | 若缺共享网络、真实 drill 证据或 fuzz/property gate，则不得宣称“主流公链级测试成熟度” | `producer_system_designer` 拍板，`qa_engineer` 联审 |
 | Validator / finality signer 治理准入 | `candidate_id/node_id/stake/finality_signer_public_key/operator_owner/public_manifest/activation_epoch/admission_status` | 创世时由 genesis validator registry 初始化 world-state registry；后续受理申请、审核 reachability/registry/failover 准入条件，并在 activation 生效后把候选节点的 membership、governed stake 与 signer binding 写入正式 validator truth | `genesis_registry -> applied -> approved_candidate -> probation_ready -> active -> rotated/revoked` | 只有 world-state registry 生效后才算正式 validator；public_testnet/mainnet 缺 registry 且未提供 genesis registry 时必须拒绝启动；genesis threshold 必须来自显式 genesis document/manifest policy，N>3 不允许静默降级为 `2-of-N`；finality 与 module-release threshold_bps 必须按签名 validator stake / active validator total stake 执行；`--node-validator*`、`NODE_VALIDATORS_CSV` 与本地 env 改动不算长期 admission 完成态；stake 必须来自 world-state registry / governance admission，旧 registry 缺失 stake 时只允许按兼容默认值回退 | `producer_system_designer` 拍板，`runtime_engineer`/`qa_engineer` 联审 |
-| Hosted world 玩家接入与 session auth | `deployment_mode/session_id/session_level/capability_set/control_plane_scope/strong_auth_state/admission_policy/player_safe_agent_surface` | 将网页远程玩家面、host 控制面与 signer plane 分层；签发 guest/player session，并对敏感动作要求 strong auth | `trusted_local_only_preview -> hosted_public_join_blocked_until_strong_auth -> hosted_public_join_strong_auth_preview -> hosted_ready` | 只要浏览器仍依赖 `node.private_key` bootstrap、可命中 host 控制面路由或未冻结 admission / `gui-agent` split，就不得判为 hosted-ready；`*_preview` 只表示受限预览态 | `producer_system_designer` 拍板，`runtime_engineer`/`viewer_engineer`/`qa_engineer`/`liveops_community` 联审 |
+| Hosted player access 与 session auth | `deployment_mode/session_id/session_level/capability_set/control_plane_scope/strong_auth_state/admission_policy/player_safe_agent_surface` | 将网页远程玩家面、host 控制面与 signer plane 分层；签发 guest/player session，并对敏感动作要求 strong auth | `trusted_local_only_preview -> hosted_public_join_blocked_until_strong_auth -> hosted_public_join_strong_auth_preview -> hosted_access_ready` | 只要浏览器仍依赖 `node.private_key` bootstrap、可命中 host 控制面路由或未冻结 admission / `gui-agent` split，就不得判为 hosted access ready；`*_preview` 只表示受限预览态，不表示一个单独玩家世界 | `producer_system_designer` 拍板，`runtime_engineer`/`viewer_engineer`/`qa_engineer`/`liveops_community` 联审 |
 | Hosted public join 托管身份与托管密钥 | `hosted_account_id/player_id/device_session_id/signer_ref/custody_mode/step_up_state/transfer_out_state` | 为公开 join 玩家提供邮箱登录、托管 signer、step-up auth 与自托管升级路径 | `guest_only -> account_verified -> managed_custody_active -> self_custody_bound/transferred_out` | 只要 hosted player 仍要求用户保存裸私钥、浏览器仍长期持有托管 signer 或 `main_token_transfer` 没有正式 custody lane，就不得宣称“任意新用户默认可安全登录并长期使用” | `producer_system_designer` 拍板，`runtime_engineer`/`viewer_engineer`/`qa_engineer`/`liveops_community` 联审 |
 - 三线联合验收清单（TASK-P2P-002）:
 | 线别 | 必跑命令（基线） | 联合验收门禁 | 阻断条件（任一命中即 fail） | 证据产物 |
@@ -186,9 +187,9 @@
   - AC-24: `p2p-governance-signer-externalization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-036`，明确 governance registry 优先、deterministic local seed / `NodeConfig` local fallback 只属于 preview/local truth，不得作为 production governance truth，并冻结 validator / finality signer 的治理准入目标流程。
   - AC-25: `p2p-genesis-freeze-ceremony-qa-gate-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-037`，明确 `logic_frozen_address_binding_pending`、`TBD_BEFORE_MINT`、`pending_binding` 与 `ready_pending_address_binding` 都属于 mint-ready blocker。
   - AC-26: `p2p-mainnet-public-claims-policy-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-038`，明确 `MAINNET-1~3` 当前仅完成 spec gate、整体 verdict 仍为 `not_mainnet_grade`，并冻结 allowlist/denylist 与 future upgrade conditions。
-  - AC-27: `p2p-mainstream-public-chain-testing-benchmark-2026-03-24` 专题文档落盘并映射任务链 `TASK-P2P-039`，明确主流公链测试分层模型、oasis7 当前映射、`fuzz/property` 与 `shared network/release train` 缺口，以及真实 governance drill 证据的当前优先级。
-  - AC-28: `p2p-shared-network-release-train-minimum-2026-03-24` 专题文档落盘并映射任务链 `TASK-P2P-040`，明确 `shared_devnet/staging/canary` 三层最小轨道、`release_candidate_bundle` 真值、promotion/freeze/rollback 规则、liveops runbook 入口与当前 `specified_not_executed` 结论。
-  - AC-29: `p2p-hosted-world-player-access-and-session-auth-2026-03-25` 专题文档落盘并映射任务链 `TASK-P2P-041`，明确 hosted world 的 `public player plane / private control plane / signer plane`、`guest/player/strong-auth` 会话梯度、`gui-agent` surface split、public join admission control，以及“无需 invite-only 也不能把长期 signer 暴露给浏览器”的边界。
+  - AC-27: `p2p-mainstream-public-chain-testing-benchmark-2026-03-24` 专题文档落盘并映射任务链 `TASK-P2P-039`，明确主流公链测试分层模型、oasis7 当前映射、`fuzz/property` 与 `network rehearsal/release train` 缺口，以及真实 governance drill 证据的当前优先级。
+  - AC-28: `p2p-shared-network-release-train-minimum-2026-03-24` legacy 专题文档落盘并映射历史任务链 `TASK-P2P-040`，明确 rehearsal `public_testnet_rehearsal/staging/canary` 三层最小轨道、`release_candidate_bundle` 真值、promotion/freeze/rollback 规则、liveops runbook 入口与当前 `specified_not_executed` 结论；当前不作为目标环境或玩家世界模型。
+  - AC-29: `p2p-hosted-world-player-access-and-session-auth-2026-03-25` 专题文档落盘并映射任务链 `TASK-P2P-041`，明确 hosted player access 的 `public player plane / private control plane / signer plane`、`guest/player/strong-auth` 会话梯度、`gui-agent` surface split、public join admission control，以及“无需 invite-only 也不能把长期 signer 暴露给浏览器”的边界；旧文件名里的 hosted world 仅为 legacy topic label。
   - AC-30: `p2p-mainnet-private-reachability-architecture-2026-04-01` 专题文档落盘并映射任务链 `TASK-P2P-043`，明确 `public/hybrid/private/relay_only/validator_hidden` 部署模式、`validator core/sentry/relay/full-storage/observer-light` 角色边界、`peer record + discovery + reachability + traffic lanes` 框架，以及 mixed-topology 下的 anti-eclipse / relay budget / claims gate。
   - AC-30A: `p2p-mainnet-private-reachability-architecture-2026-04-01` 必须补齐 iroh-inspired follow-up 的 truth chain：`PeerReachabilityContract` 负责 runtime reachability 归一化，path behavior matrix 只负责 evidence/claim taxonomy，triad/status observability 只消费 bounded status projection。
   - AC-31: `TASK-P2P-045` 必须把当前链上代币的正式产品名冻结为“绿洲币 / Oasis Coin”，作为后续 runtime 符号与账户派生迁移的前置口径。
@@ -197,7 +198,7 @@
   - AC-34: `triad-observability-stack` 必须把 real-env triad 的 host/process、chain status、traffic window、wasm window 收敛到统一 repo-owned 监控入口，并在 `testing-manual.md` 冻结 canonical 命令与产物路径。
   - AC-35: `triad-three-equal-validator-topology` 必须把当前 real-env triad 从“本机 observer + 两台云端 validator”提升为“三节点等权 validator”可审计基线，至少覆盖：`3` 个 validator 的 stake/signer binding、local 节点不再以 observer-only 角色运行、repo-owned snapshot/manual 不再把 `partial_with_observer_blocker` 当成唯一有效 claim、same-window evidence 对 legacy service label 与真实 runtime role 的区分，以及 `oasis7_chain_runtime` 在 execution world 已落盘 `governance_finality_signer_registry` 时会优先用该 world-state registry 恢复 validator membership / signer binding；`--node-validator*` 只保留为 bootstrap 或显式运维覆盖。
   - AC-36: `mainchain-token-newapi-quota-bridge-2026-05-06` 专题文档落盘并映射任务链，明确 `one-way OC -> LetAI Run OpenAPI quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、动态 project/`token_key`、query verification 与 manual review 风控，以及“不支持自动提现/不承诺公开兑换所”边界。
-  - AC-37: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 专题文档与 repo-owned skeleton 必须落盘并映射任务链 `formal-network-tiers-testnet-mechanism (PRD-P2P-028)`，明确 `local_devnet/public_testnet/mainnet` 三层目标模型、`shared_devnet` 的 legacy/rehearsal evidence 边界、`network_tier_manifest` 字段集合、`public_testnet` 的 public RPC/explorer/faucet/reset 语义，以及 `mainnet` 的 `no faucet + frozen reset + MAINNET-1~4` gate。
+  - AC-37: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 专题文档与 repo-owned skeleton 必须落盘并映射任务链 `formal-network-tiers-testnet-mechanism (PRD-P2P-028)`，明确 `local_devnet/public_testnet/mainnet` 三层 operator/runtime network-tier 模型、`public_testnet_rehearsal` 的 legacy/rehearsal evidence 边界、`network_tier_manifest` 字段集合、`public_testnet` 的 public RPC/explorer/faucet/reset 语义，以及 `mainnet` 的 `no faucet + frozen reset + MAINNET-1~4` gate；这些 tier 不作为玩家世界模型。
   - AC-38: `p2p-hosted-public-join-managed-identity-custody-2026-05-18` 专题文档必须落盘并映射任务链 `hosted-managed-identity-doc-freeze (PRD-P2P-029)`，明确 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、托管退出与“默认不让玩家管理裸私钥”的正式产品边界。
   - AC-38A: `mainchain-token-ideal-transaction-upgrade-2026-06-08` 专题文档必须落盘并映射任务链 `ideal-transaction-model-doc-freeze (PRD-P2P-028A)`，明确理想交易对象字段分组、完整 JSON 草案、理想签名域、理想回执与最小理想升级集，并显式声明其为 ideal target 而非当前实现真值。
   - AC-39: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`，并对 placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 保持阻断。
@@ -229,14 +230,14 @@
   - `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
   - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
+  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
   - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
   - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
   - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
   - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
   - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md`
   - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
+  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
   - `world-rule.md`
   - `doc/world-simulator/viewer/viewer-manual.md`
   - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`
@@ -261,15 +262,15 @@
   - 奖励语义漂移：若 early-player reward 被描述为“登录就发”或“时长挖矿”，则必须退回为 contribution-based 口径重审。
   - 安全等级误判：若局部 `ed25519`/allowlist 能力被误写成“整体已达主流公链安全”，则必须退回并以系统级交易授权/托管/治理真值重审。
   - 阶段误升级：若 `STRAUTH-3` 已完成但生产级 keystore、治理 signer 外部化或创世 ceremony 仍未通过，就把安全阶段升级为 `mainnet-grade`，必须直接阻断并回到 readiness gate 检查。
-  - hosted world 误暴露：若 public join URL 仍可命中 world 启停、链控制或 GUI operator action 等管理接口，则必须直接判定为架构越界而非部署细节问题。
-  - 浏览器 signer 泄露：若 HTML bootstrap、JS 全局对象或任意 public API 仍返回长期 signer 私钥、seed 或等价真值，则 hosted-world 路径必须直接阻断。
+  - hosted access 误暴露：若 public join URL 仍可命中 runtime/control 启停、链控制或 GUI operator action 等管理接口，则必须直接判定为架构越界而非部署细节问题。
+  - 浏览器 signer 泄露：若 HTML bootstrap、JS 全局对象或任意 public API 仍返回长期 signer 私钥、seed 或等价真值，则 hosted access 路径必须直接阻断。
   - 私网节点离网：若家宽 / NAT / CGNAT 节点因缺少公网入站而被默认判定为不可参与，则必须回到覆盖网络架构重审，而不是继续追加静态 peer 补丁。
   - relay 单点依赖：若 private/validator_hidden 节点只剩单一 relay-domain 路径，必须直接降级 verdict，不得继续声称已具备 public-chain-grade mixed-topology。
   - 拓扑安全退化：若 active peer set 集中于单一 operator、ASN 或 `/24`，则必须触发 anti-eclipse 阻断，而不是只要“能连上”就放行。
   - publish 假成功：若 `gossipsub.publish()` 因无路由、无连接或 topic 不可用失败，调用方必须拿到显式错误，且该消息不得继续记入“已发布”事件或成功出站流量统计。
   - fallback 误分类：若 replication fallback 仍依赖多层自由文本 contains 匹配，就可能把可等待的 availability gap、不可等待的 route unavailable 与真正 unsupported handler 混成同一类；判定必须收敛到共享 classifier 与稳定 prefix。
-  - 权限混层：若 guest/player session 在没有强鉴权的情况下能执行资产转账、治理或高风险 prompt/control，则必须回退到 hosted-world 权限设计审查。
-  - admission 失控：若 public join 在没有 `max_guest/max_player/rate_limit/world_full_policy` 的情况下无界签发 session，则必须回退到 hosted-world admission 设计审查。
+  - 权限混层：若 guest/player session 在没有强鉴权的情况下能执行资产转账、治理或高风险 prompt/control，则必须回退到 hosted access 权限设计审查。
+  - admission 失控：若 public join 在没有 `max_guest/max_player/rate_limit/world_full_policy` 的情况下无界签发 session，则必须回退到 hosted access admission 设计审查。
   - bridge 错配：若 bridge-service 无法把一笔 `OC` 入账唯一映射到一个 LetAI `platform_user_id`、`platform_project_id`、`external_order_id` 或 `token_key`，则必须停在 `manual_review`，不得把共享收款账户上的模糊入账自动折算成 quota。
   - credit 半成功：若链上入账已确认、`bridge_ledger` 已写入，但 LetAI OpenAPI 的 user/project/topup/query 任一步失败，则必须保留幂等重试键并阻止重复入账，不得靠人工重复发放覆盖。
 - Non-Functional Requirements:
@@ -296,10 +297,10 @@
   - NFR-P2P-21: 生产 governance truth 未外部化前，任何 deterministic local seed、单机 `NodeConfig` signer policy、手工 env 改动或 `--node-validator*` 参数注入都不得进入 production governance allowlist 或被视为正式 validator admission 完成态。
   - NFR-P2P-22: 在 genesis slot/bucket 真值、ceremony evidence bundle 与 QA `pass` 完成前，任何 `mint_ready` 或 `production mint ready` 口径都不得进入 public claims allowlist。
   - NFR-P2P-23: 在 `MAINNET-1~3` 仍停留于 spec gate 而 execution blockers 未清零时，任何高于 `crypto-hardened preview` 的 public claims 都必须被 denylist 拒绝。
-  - NFR-P2P-24: 在 `shared_devnet/staging/canary` 仍未形成正式 shared-network evidence 前，任何 `release train established`、`shared network validated` 或“对标主流公链测试成熟度已完成”的表述都必须被 denylist 拒绝。
-  - NFR-P2P-25: hosted world public player plane 在任何 HTML/JS/bootstrap/API 响应中都不得暴露长期 signer 私钥、seed 或等价真值。
-  - NFR-P2P-26: hosted world public join origin 默认不得暴露 world start/stop、chain start/stop 或 operator-only GUI action 入口；能力不足时前后端都必须拒绝。
-  - NFR-P2P-27: hosted world public join 必须具备有界 admission control，至少冻结 `max_guest_sessions/max_player_sessions/issue_rate_limit/world_full_policy`，且超限时返回结构化拒绝。
+  - NFR-P2P-24: 在 legacy/rehearsal `public_testnet_rehearsal/staging/canary` 仍未形成正式 network-rehearsal evidence 前，任何 `release train established`、`network rehearsal validated` 或“对标主流公链测试成熟度已完成”的表述都必须被 denylist 拒绝，且不得作为当前目标环境或玩家世界模型。
+  - NFR-P2P-25: hosted access public player plane 在任何 HTML/JS/bootstrap/API 响应中都不得暴露长期 signer 私钥、seed 或等价真值。
+  - NFR-P2P-26: hosted access public join origin 默认不得暴露 runtime/control start/stop、chain start/stop 或 operator-only GUI action 入口；能力不足时前后端都必须拒绝。
+  - NFR-P2P-27: hosted access public join 必须具备有界 admission control，至少冻结 `max_guest_sessions/max_player_sessions/issue_rate_limit/world_full_policy`，且超限时返回结构化拒绝。
   - NFR-P2P-28: `doc/p2p/**` 活跃文档、token 专题、模块入口与 runtime/account 相关实现提到当前链上代币时，必须统一使用“绿洲币 / Oasis Coin” / `OC` / `oc:pk:` 作为现行真值；`AWT` / `awt:pk:` 仅允许保留在明确标注的历史语境或兼容说明中。
   - NFR-P2P-29: `OC -> LetAI Run OpenAPI` bridge 必须坚持 `one-way service-credit only`、独立 bridge-service、唯一入账映射、`bridge_ledger` 幂等对账、动态 project/`token_key` 持久化与 operator-review fallback；在公开钱包体系、生产级 custody、双向兑回与价格发现机制缺失前，任何“公开兑换所”“自动提现”“浏览器直连热钱包充值”口径都不得进入 allowlist。
   - NFR-P2P-30: `hosted_public_join` 的正式产品路径必须允许邮箱 hosted login、服务端托管 player signer 与后续自托管升级；在浏览器仍长期持有托管私钥、账户恢复仍依赖手抄私钥或高风险动作仍没有正式 step-up + custody sign lane 之前，不得声称“任意新用户都已有安全可用的 hosted account + wallet”。
@@ -343,13 +344,13 @@
 | PRD-P2P-019 | TASK-P2P-037 | `test_tier_required` + `test_tier_full` | 创世 freeze/ceremony/QA gate 专题 PRD/project/design 建档、freeze sheet blocker 冻结、QA evidence bundle 与 claim gate 回写 | mint readiness、创世执行与对外口径 |
 | PRD-P2P-020 | TASK-P2P-038 | `test_tier_required` | public claims policy 复评专题 PRD/project/design 建档、allowlist/denylist 冻结、future upgrade condition 与 readiness 完结回写 | 对外口径、阶段复评与后续升级条件 |
 | PRD-P2P-021 | TASK-P2P-039 | `test_tier_required` | 主流公链测试体系 benchmark 专题 PRD/project/design 建档、testing-manual 映射、gap matrix 与执行优先级冻结 | 测试成熟度口径、QA 证据体系与后续 hardening 排序 |
-| PRD-P2P-022 | TASK-P2P-040 | `test_tier_required` | shared network / release train minimum 专题 PRD/project/design/runbook 建档、three-track model、candidate bundle、claims gate 与 `testing-manual` 入口冻结 | shared-network 执行模型、release train 口径与后续 rehearsal 排序 |
-| PRD-P2P-023 | TASK-P2P-041 | `test_tier_required` | hosted-world player access / session-auth 专题 PRD/project/design 建档、plane split、session ladder、`gui-agent` split、admission control、sensitive-action capability 与 claims boundary 冻结 | hosted web multiplayer 边界、浏览器 signer 暴露风险与后续实现排序 |
+| PRD-P2P-022 | TASK-P2P-040 | `test_tier_required` | legacy network-rehearsal / release-train minimum 专题 PRD/project/design/runbook 建档、three-track rehearsal model、candidate bundle、claims gate 与 `testing-manual` 入口冻结 | 历史 network-rehearsal 执行模型、release train 口径与后续 rehearsal 排序，不作为当前目标环境或玩家世界模型 |
+| PRD-P2P-023 | TASK-P2P-041 | `test_tier_required` | hosted player access / session-auth 专题 PRD/project/design 建档、plane split、session ladder、`gui-agent` split、admission control、sensitive-action capability 与 claims boundary 冻结 | hosted access 边界、浏览器 signer 暴露风险与后续实现排序 |
 | PRD-P2P-024 | TASK-P2P-043 | `test_tier_required` | 非全公网覆盖网络专题 PRD/project/design 建档、deployment mode / role model / peer record / reachability / traffic lanes 与 claims gate 冻结；2026-06-15 补齐 peer reachability contract、path behavior matrix taxonomy 与 no-iroh/no-libp2p-replacement 边界 | mixed-topology 网络边界、私网节点参与能力与后续框架拆解排序 |
 | PRD-P2P-025 | triad-observability-stack | `test_tier_required` | triad host/process monitor、merged observability summary、testing manual 入口、fixture 回归与 real-env smoke；2026-06-15 补齐 bounded reachability/path summary projection 边界 | 当前 real-env triad（本机 + 2 ECS，runtime 已为 three_equal_validator）的 canonical 运维监控入口，并显式区分 legacy service label 与真实 runtime role |
 | PRD-P2P-026 | triad-three-equal-validator-topology | `test_tier_required` | live triad validator-set/signer/bootstrap 改造、same-window snapshot evidence、testing manual claim 口径更新与 legacy service label 边界说明 | 三节点等权 validator 拓扑、live 运维真值与 mixed-topology 历史边界 |
 | PRD-P2P-027 | mainchain-token-newapi-quota-bridge-proposal | `test_tier_required` | `OC -> LetAI Run OpenAPI quota` 专题 PRD/design/project 建档、one-way bridge boundary、独立 bridge-service、唯一入账映射、`bridge_ledger` 状态机、动态 project/`token_key`、query verification 与 operator risk gate 冻结 | 链上资产到 AI 服务内部额度的受控桥接口径与后续实现排序 |
-| PRD-P2P-028 | formal-network-tiers-testnet-mechanism | `test_tier_required` | 正式网络分层 / testnet 机制专题 PRD/design/project 建档、`network_tier_manifest` 脚本+smoke+example manifests、`testing-manual` 入口、current verdict 冻结与 `public_testnet` live-candidate checklist companion runbook | 公共主链式 `local_devnet/public_testnet/mainnet` 目标分层口径、`shared_devnet` legacy/rehearsal evidence 边界、manifest 真值、live-candidate checklist 与后续 runtime/liveops 接线排序 |
+| PRD-P2P-028 | formal-network-tiers-testnet-mechanism | `test_tier_required` | 正式网络分层 / testnet 机制专题 PRD/design/project 建档、`network_tier_manifest` 脚本+smoke+example manifests、`testing-manual` 入口、current verdict 冻结与 `public_testnet` live-candidate checklist companion runbook | 公共主链式 `local_devnet/public_testnet/mainnet` 目标分层口径、`public_testnet_rehearsal` legacy/rehearsal evidence 边界、manifest 真值、live-candidate checklist 与后续 runtime/liveops 接线排序 |
 | PRD-P2P-028A | ideal-transaction-model-doc-freeze | `test_tier_required` | 理想化交易升级专题 `prd/design/project` 建档、字段分组、完整 JSON 草案、完整签名域建议、理想回执与最小理想升级集冻结 | 主链交易长期目标模型与未来协议升级对齐基线 |
 | PRD-P2P-029 | hosted-managed-identity-doc-freeze | `test_tier_required` | hosted-public-join 托管身份 / 托管密钥专题 PRD/design/project 建档、hosted account/device session/`signer_ref`/step-up auth/self-custody upgrade 边界冻结、模块入口映射与文档门禁 | 普通玩家 hosted onboarding、player custody 产品边界与后续实现排序 |
 - S9/S10 长跑结果模板（TASK-P2P-003）:
@@ -401,7 +402,7 @@
 | DEC-P2P-014 | `oasis7_viewer_live` 删除 `--runtime-world` 兼容别名与 legacy split CLI 代码，保留单一生产入口 `oasis7_viewer_live.rs` | 继续保留兼容别名和未接入入口的旧解析代码 | 避免“文档/测试改了但真实入口不生效”的双轨风险，降低后续维护和误判成本。 |
 | DEC-P2P-015 | 统一将历史文档中的 `oasis7_viewer_live` 旧文件路径替换为当前源码布局路径（`oasis7_viewer_live.rs` / `oasis7_chain_runtime/*`） | 保留旧路径并依赖读者自行映射 | 降低审计误导与排障成本，确保文档可直接定位现行实现。 |
 | DEC-P2P-016 | 先冻结“项目战略控制 50% + 协议奖励池 35% + 低流通 + 贡献制奖励”口径，再决定具体创世账户与执行节奏 | 先广泛发币或直接采用开放式 play-to-earn | 当前阶段仍是 `limited playable technical preview`，需要先守住低流通、可审计与反滥用边界。 |
-| DEC-P2P-017 | hosted world 采用 `public player plane / private control plane / signer plane` + `guest/player/strong-auth` 梯度 | 继续把 join/control/signer 混在单一 web bootstrap 里，或用 invite-only 代替安全边界 | hosted world 的核心问题是信任面混层，不先拆平面和能力就无法安全支持“一个玩家部署、另一个玩家通过网页进入”。 |
+| DEC-P2P-017 | hosted player access 采用 `public player plane / private control plane / signer plane` + `guest/player/strong-auth` 梯度 | 继续把 join/control/signer 混在单一 web bootstrap 里，或用 invite-only 代替安全边界 | 旧 hosted world 专题的核心问题是信任面混层；现行口径将其视为统一持久大世界的 hosted access 接入面，不是单独玩家世界。 |
 | DEC-P2P-018 | 先冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，再单开专题迁移 runtime/account 真值 | 在未评审 API/UI/兼容性影响前直接顺手改 runtime symbol / account prefix | 产品名、symbol、链上字段和客户端展示面属于不同治理层；先冻结 public naming，才能把后续 runtime 改动收成独立可审计任务。 |
 | DEC-P2P-019 | 在独立迁移专题中，把当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一切到 `OC` / `oc:pk:` | 继续让 `AWT` / `awt:pk:` 作为现行真值，或只改产品名不改 runtime/account | 当前 public naming 已冻结，继续双轨会让 API、viewer/client、liveops 与审计口径长期分叉；需要一次把 runtime/account 当前真值收口。 |
 | DEC-P2P-020 | `libp2p` 可用性错误分类统一沉淀在 `oasis7_net`，由 node 侧消费共享 classifier 与稳定 reason prefix；`publish()` 改为同步回传 gossipsub 失败 | 继续 fire-and-forget publish，或让 `oasis7_node`/probe gate 各自重复字符串匹配 | 这条路径直接决定 replication fallback、waitable gap 与 unsupported handler 的 claim；若 publish 仍可静默成功、fallback 仍靠重复猜字符串，网络故障会在跨 crate 边界被误报或漏报。 |

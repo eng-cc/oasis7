@@ -40,7 +40,7 @@ candidate_bundle="$candidate_root/candidate.json"
 run ./scripts/release-candidate-bundle.sh create \
   --bundle "$candidate_bundle" \
   --candidate-id "release-gate-smoke-01" \
-  --track "shared_devnet" \
+  --track "public_testnet_rehearsal" \
   --runtime-build-ref "$candidate_root/runtime/runtime.bin" \
   --world-snapshot-ref "$candidate_root/world" \
   --governance-manifest-ref "$candidate_root/world/public_manifest.json" \

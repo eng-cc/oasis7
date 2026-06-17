@@ -36,8 +36,8 @@ printf '# evidence\n' >"$smoke_root/evidence/mixed-topology.md"
 bundle_path="$smoke_root/candidate.json"
 run ./scripts/release-candidate-bundle.sh create \
   --bundle "$bundle_path" \
-  --candidate-id "shared-devnet-gate-smoke-01" \
-  --track "shared_devnet" \
+  --candidate-id "public-testnet-rehearsal-gate-smoke-01" \
+  --track "public_testnet_rehearsal" \
   --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
   --world-snapshot-ref "$smoke_root/world" \
   --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
@@ -56,8 +56,8 @@ rollback_target_ready	liveops_community	pass	$smoke_root/evidence/rollback.md	fa
 EOF
 
 pass_out="$smoke_root/pass"
-run ./scripts/shared-network-track-gate.sh \
-  --track shared_devnet \
+run ./scripts/network-rehearsal-track-gate.sh \
+  --track public_testnet_rehearsal \
   --candidate-bundle "$bundle_path" \
   --lanes-tsv "$lanes_pass" \
   --out-dir "$pass_out"
@@ -78,8 +78,8 @@ rollback_target_ready	liveops_community	pass	$smoke_root/evidence/rollback.md	fa
 EOF
 
 partial_out="$smoke_root/partial"
-run ./scripts/shared-network-track-gate.sh \
-  --track shared_devnet \
+run ./scripts/network-rehearsal-track-gate.sh \
+  --track public_testnet_rehearsal \
   --candidate-bundle "$bundle_path" \
   --lanes-tsv "$lanes_partial" \
   --out-dir "$partial_out"
@@ -99,8 +99,8 @@ rollback_target_ready	liveops_community	pass	$smoke_root/evidence/rollback.md	fa
 EOF
 
 block_out="$smoke_root/block"
-run ./scripts/shared-network-track-gate.sh \
-  --track shared_devnet \
+run ./scripts/network-rehearsal-track-gate.sh \
+  --track public_testnet_rehearsal \
   --candidate-bundle "$bundle_path" \
   --lanes-tsv "$lanes_block" \
   --out-dir "$block_out"
@@ -134,7 +134,7 @@ incident_template	liveops_community	pass	$smoke_root/evidence/rollback.md	incide
 EOF
 
 staging_out="$smoke_root/staging-pass"
-run ./scripts/shared-network-track-gate.sh \
+run ./scripts/network-rehearsal-track-gate.sh \
   --track staging \
   --candidate-bundle "$staging_bundle_path" \
   --lanes-tsv "$staging_lanes" \
@@ -167,7 +167,7 @@ exit_decision	producer_system_designer	pass	$smoke_root/evidence/longrun.md	exit
 EOF
 
 canary_out="$smoke_root/canary-pass"
-run ./scripts/shared-network-track-gate.sh \
+run ./scripts/network-rehearsal-track-gate.sh \
   --track canary \
   --candidate-bundle "$canary_bundle_path" \
   --lanes-tsv "$canary_lanes" \
@@ -177,4 +177,4 @@ canary_summary=$(ls -t "$canary_out"/*/summary.json | head -n 1)
 ensure_file_contains "$canary_summary" '"gate_result": "pass"'
 ensure_file_contains "$canary_summary" '"mixed_topology_claim_review"'
 
-echo "shared network track gate smoke checks passed"
+echo "network rehearsal track gate smoke checks passed"

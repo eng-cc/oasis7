@@ -1,4 +1,4 @@
-# Shared Network Exit Decision Template
+# Network Rehearsal Exit Decision Template
 
 审计轮次: 1
 

@@ -1,4 +1,4 @@
-# Hosted World Share Correction Template
+# Unified World Hosted Access Correction Template
 
 审计轮次: 1
 
@@ -14,7 +14,7 @@
 ## 使用规则
 - 先撤回/替换错误 URL，再发更正文案。
 - 更正文案里只能出现 `correct_join_url`，不能再次带出 operator/control URL。
-- 对外口径只允许使用 preview 表述，不允许升级到 `hosted-ready` / `production-ready`。
+- 对外口径只允许使用 preview 表述，不允许升级到 hosted access readiness / `production-ready` 承诺。
 - 若问题仍在排查，用“正在纠正/正在收口”，不要写“已完全修复”。
 
 ## Short Correction
@@ -26,7 +26,7 @@
 当前正确的游戏入口是：
 <correct_join_url>
 
-本世界当前仍处于 limited playable technical preview。如你此前打开的是错误链接，请关闭该页面，并改用上面的玩家入口重新进入。
+统一持久大世界的 hosted access 当前仍处于 limited playable technical preview。如你此前打开的是错误链接，请关闭该页面，并改用上面的玩家入口重新进入。
 ```
 
 ## Full Correction
@@ -39,7 +39,7 @@
 
 <correct_join_url>
 
-如果你已经打开过之前的错误链接，请直接关闭原页面，并重新通过上述玩家入口进入。当前 hosted world 仍处于 limited playable technical preview，我们正在继续收口 hosted access hardening，不会因此升级任何对外承诺。
+如果你已经打开过之前的错误链接，请直接关闭原页面，并重新通过上述玩家入口进入。当前统一持久大世界的 hosted access 仍处于 limited playable technical preview，我们正在继续收口 access hardening，不会因此升级任何对外承诺。
 ```
 
 ## Revoke Follow-up
@@ -52,7 +52,7 @@
 
 <correct_join_url>
 
-如果页面提示 Hosted Recovery / Re-acquire Hosted Player Session，请按页面提示重新获取会话。这是一次受控纠正动作，不代表 hosted world 已进入 production-ready 状态。
+如果页面提示 Hosted Recovery / Re-acquire Hosted Player Session，请按页面提示重新获取会话。这是一次受控纠正动作，不代表统一持久大世界的 hosted access 已进入 production-ready 状态。
 ```
 
 ## Internal Record

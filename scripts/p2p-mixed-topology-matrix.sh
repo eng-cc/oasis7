@@ -14,7 +14,7 @@ Options:
   --tier <tier>                    required | full (default: required)
   --out-dir <path>                 output root (default: .tmp/p2p_mixed_topology)
   --shared-window-evidence-ref <path>
-                                   attach same-window shared-network evidence ref
+                                   attach same-window network-rehearsal evidence ref
                                    (repeatable; summary only, does not execute it)
   --dedicated-lab-evidence-ref <path>
                                    attach dedicated sentry/NAT/live-lab evidence ref

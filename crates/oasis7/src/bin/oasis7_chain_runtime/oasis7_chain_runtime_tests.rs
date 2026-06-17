@@ -8,7 +8,7 @@ use super::{
     build_validator_signer_public_keys, derive_node_consensus_signer_keypair,
     derive_node_libp2p_identity_keypair_config, network_tier_allows_open_observer_fetch,
     node_keypair_config, parse_options, parse_validator_spec, CliOptions, DEFAULT_NODE_ID,
-    DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
+    DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND, DEFAULT_WORLD_ID,
 };
 use ed25519_dalek::SigningKey;
 use oasis7::network_tier_manifest::{
@@ -33,6 +33,7 @@ use std::path::Path;
 fn parse_options_defaults() {
     let options = parse_options(std::iter::empty()).expect("parse should succeed");
     assert_eq!(options.node_id, DEFAULT_NODE_ID);
+    assert_eq!(options.world_id, DEFAULT_WORLD_ID);
     assert_eq!(options.status_bind, DEFAULT_STATUS_BIND);
     assert_eq!(options.storage_profile, StorageProfile::DevLocal);
     assert_eq!(options.traffic_profile, TrafficProfile::Default);
@@ -955,8 +956,8 @@ fn test_network_tier_manifest(tier: &str, allow_observer_nodes: bool) -> LoadedN
                 denied_claims: vec!["mainnet_live".to_string()],
             },
             promotion_policy: NetworkTierPromotionPolicy {
-                promote_from: vec!["shared_devnet".to_string()],
-                required_gates: vec!["shared_devnet_pass".to_string()],
+                promote_from: vec!["local_devnet".to_string()],
+                required_gates: vec!["public_testnet_rehearsal_pass".to_string()],
             },
             evidence_refs: vec![],
         },

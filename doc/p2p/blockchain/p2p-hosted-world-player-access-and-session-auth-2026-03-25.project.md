@@ -1,15 +1,15 @@
-# oasis7 hosted world 玩家访问与会话鉴权（项目管理文档）
+# oasis7 hosted player access 玩家访问与会话鉴权（项目管理文档）
 
 - 对应设计文档: `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.design.md`
 - 对应需求文档: `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
 
 审计轮次: 1
 ## 任务拆解（含 PRD-ID 映射）
-- [x] TASK-P2P-041-A (PRD-P2P-023-A/B/C) [test_tier_required + test_tier_full]: `runtime_engineer` 拆分 public player plane 与 private control plane，冻结 endpoint taxonomy、`/api/gui-agent/action` split 策略、hosted verdict 与 admission control，并移除 hosted-world 公共路径中的浏览器长期 signer bootstrap。
+- [x] hosted-player-access-public-plane-runtime (PRD-P2P-023-A/B/C) [test_tier_required] + [test_tier_full]: `runtime_engineer` 拆分 public player plane 与 private control plane，冻结 endpoint taxonomy、`/api/gui-agent/action` split 策略、hosted verdict 与 admission control，并移除 hosted access 公共路径中的浏览器长期 signer bootstrap Trace: .pm/tasks/task_cb987cd0fdfb4ecc98a6ddde7d96204c.yaml
 - [x] TASK-P2P-041-B (PRD-P2P-023-B/D) [test_tier_required + test_tier_full]: `viewer_engineer` 落地 `guest session -> player session` 网页 join/login/reconnect UX，并按 capability 禁用敏感动作。
 - [x] TASK-P2P-041-C (PRD-P2P-023-B/C) [test_tier_required + test_tier_full]: `runtime_engineer` + `agent_engineer` 落地 session 验证、`player_id -> entity` 绑定、resume/revoke 与 ownership 冲突处理。
 - [x] TASK-P2P-041-D (PRD-P2P-023-B/D) [test_tier_required + test_tier_full]: `runtime_engineer` + `viewer_engineer` 落地 `strong auth` 升级链路，覆盖 `main token transfer` 与敏感 prompt/control 动作。
-- [x] TASK-P2P-041-E (PRD-P2P-023-C/E) [test_tier_required + test_tier_full]: `qa_engineer` 建立 hosted-world abuse suite，覆盖 replay、expired session、revocation、operator/public URL 混淆、admission limit 和 capability bypass。
+- [x] hosted-player-access-abuse-suite (PRD-P2P-023-C/E) [test_tier_required] + [test_tier_full]: `qa_engineer` 建立 hosted access abuse suite，覆盖 replay、expired session、revocation、operator/public URL 混淆、admission limit 和 capability bypass Trace: .pm/tasks/task_cb987cd0fdfb4ecc98a6ddde7d96204c.yaml
 - [x] TASK-P2P-041-F (PRD-P2P-023-E) [test_tier_required]: `liveops_community` 建立 hosted operator runbook、分享规范、incident/rotation 流程与 claims boundary。
 
 ## 角色拆解
@@ -27,7 +27,7 @@
   - public/private plane endpoint 清单
   - `/api/gui-agent/action` split 方案
   - join admission control 最小契约
-  - hosted-world browser signer bootstrap 退场方案
+  - hosted access browser signer bootstrap 退场方案
   - required/full 回归入口
 - 完成定义:
   - public join 路径不再依赖长期私钥 bootstrap
@@ -44,7 +44,7 @@
 - 输出:
   - join/login/reconnect UX
   - capability-based button state
-  - hosted-world 网页错误文案
+  - hosted access 网页错误文案
 - 完成定义:
   - guest/player/strong-auth 三档在 UI 明确可见
   - 没有能力时按钮禁用且错误可读
@@ -66,7 +66,7 @@
   - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
   - `doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.prd.md`
 - 输出:
-  - hosted-world strong-auth action list
+  - hosted access strong-auth action list
   - challenge/proof/verification 路径
   - Web sensitive-action regression
 - 完成定义:
@@ -93,13 +93,13 @@
   - incident/rotation/public claims 模板
   - 分享 URL 规范
 - 完成定义:
-  - hosted world 分享、误分享、撤销和事故通报均有 runbook
+  - hosted player access 分享、误分享、撤销和事故通报均有 runbook
 
 ## 当前结论
 - 当前阶段:
   - 游戏阶段口径: `limited playable technical preview`
   - 安全阶段口径: `crypto-hardened preview`
-  - hosted-world player access verdict: `trusted_local_only_preview` / `hosted_public_join_blocked_until_strong_auth` / `hosted_public_join_strong_auth_preview`
+  - hosted access player-entry verdict: `trusted_local_only_preview` / `hosted_public_join_blocked_until_strong_auth` / `hosted_public_join_strong_auth_preview`
 - 已实现的 `TASK-P2P-041-A` P0 收口:
   - `oasis7_game_launcher --deployment-mode hosted_public_join` 会停止向公开 viewer HTML 注入长期 signer bootstrap。
   - `oasis7_web_launcher --deployment-mode hosted_public_join` 会把 `/api/state`、`/api/start`、`/api/stop`、`/api/chain/start`、`/api/chain/stop`、`/api/gui-agent/*` 与 console static 路径收口为 loopback-only private control plane。
@@ -153,7 +153,7 @@
   - runtime-live 的 `authoritative_recovery_ack/error` 现已补结构化 `revoke_reason/revoked_by`；`software_safe.js` 会在 remote revoke / operator kick 后保留这两项元数据，`Hosted Recovery` 面板与 `__AW_TEST__.getState().authRevokeReason/authRevokedBy` 也会直接显示“谁撤销了会话、撤销原因是什么”，不再只剩模糊的 `session_revoked` 字符串。
   - `/api/public/state` 的 `hosted_access` contract 现已导出动态 `action_matrix`：若 `OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY/PRIVATE_KEY/APPROVAL_CODE` 已配置，则 `prompt_control_*` 会从 `blocked_until_strong_auth` 升为 `public_player_plane_with_backend_reauth_preview`；`main_token_transfer` 仍保持 `blocked_until_strong_auth`。
   - 当前 grant route 虽已泛化到 `action_id` 维度，但 allowlist 仍只放行 `prompt_control_*`；若请求 `main_token_transfer`，public player plane 会显式返回 `strong_auth_action_not_enabled`，避免 route 泛化后被误读成 hosted 资产动作已可用。
-  - 这条 hosted `prompt_control` strong-auth lane 仍明确属于 preview-grade backend reauth：后端 signer 当前只支持 env 托管 + approval code，不是 production signer custody，也不代表资产动作已具备 hosted-ready 安全级别。
+  - 这条 hosted `prompt_control` strong-auth lane 仍明确属于 preview-grade backend reauth：后端 signer 当前只支持 env 托管 + approval code，不是 production signer custody，也不代表资产动作已具备 hosted-access-ready 安全级别。
 - 2026-04-24 follow-up: `hosted-public-join-player-session-gate` 已把 launcher 真值也补齐到同一边界：`oasis7_client_launcher`、`oasis7_web_launcher` 与 `oasis7_game_launcher` 在 `deployment_mode=hosted_public_join` 下都会强制停用本地 `oasis7_chain_runtime`，不再把 public join 继续建模成 shared-devnet 节点 bootstrap；viewer/public snapshot 现会显式暴露 `local_chain_runtime=blocked_for_public_player_plane` 与 `node_admission=operator_managed_node_onboarding_only`。 Trace: `.pm/tasks/task_21dfffe808a24221a70fa5fe3fa895aa.yaml`
 - 已完成的 `TASK-P2P-041-E` abuse suite 收口:
   - runtime-live 现已补 hosted `prompt_control` abuse 定向测试，至少覆盖 `expired grant -> strong_auth_grant_invalid`、`replayed player auth nonce -> auth_nonce_replay` 与 `session revoked after grant issuance -> session_revoked` 三条高风险签名，证明 preview-grade backend reauth 不能单靠 grant 穿透 session 生命周期与 nonce 防重放。
@@ -206,5 +206,5 @@
 
 ## 状态
 - 当前状态: completed
-- 下一步: 如需继续提升 hosted-world 安全等级，应另立 production custody / wallet / hosted handoff hardening 子专题；不再占用 `TASK-P2P-041` 的完成定义。
+- 下一步: 如需继续提升 hosted access 安全等级，应另立 production custody / wallet / hosted handoff hardening 子专题；不再占用 `TASK-P2P-041` 的完成定义。
 - 最近更新: 2026-03-27

@@ -381,7 +381,7 @@ pub(super) fn execute_gui_agent_action(
             }
             state.config = config;
             state.append_log(format!(
-                "chain network tier switched to {}",
+                "chain runtime technical tier config updated to {}",
                 state.config.chain_network_tier
             ));
             state.mark_updated();

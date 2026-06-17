@@ -1,22 +1,23 @@
-# Shared Network Mixed-Topology Gate Template
+# Legacy Shared-Network Mixed-Topology Gate Template
 
 审计轮次: 1
 
 ## Meta
 - `window_id`:
-  - `<shared-devnet-window-id>`
+  - `<legacy-public-testnet-rehearsal-window-id | test-environment-candidate-id>`
 - `track`:
-  - `shared_devnet`
+  - `public_testnet_rehearsal`
 - `candidate_id`:
   - `<candidate-id>`
 - `owner`:
   - `qa_engineer`
 
 ## Candidate Truth
+- Note: this template is legacy rehearsal only. It must not be used for active product/player-facing unified-world claims.
 - `candidate_bundle_ref`:
   - `<output/release-candidates/current.json>`
 - `candidate_gate_summary_ref`:
-  - `<output/shared-network/.../gate/.../summary.md>`
+  - `<output/network-rehearsal/.../gate/.../summary.md>`
 
 ## Mixed-Topology Inputs
 - `baseline_evidence_ref`:

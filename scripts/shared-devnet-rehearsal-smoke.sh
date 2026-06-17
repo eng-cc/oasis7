@@ -19,7 +19,7 @@ ensure_file_contains() {
   fi
 }
 
-smoke_root=".tmp/shared_devnet_rehearsal_smoke"
+smoke_root=".tmp/public_testnet_rehearsal_smoke"
 rm -rf "$smoke_root"
 mkdir -p "$smoke_root/runtime" "$smoke_root/world" "$smoke_root/evidence" "$smoke_root/fallback"
 
@@ -42,10 +42,10 @@ printf '# rollback restore step\n' >"$smoke_root/evidence/rollback-restore.md"
 printf '{"candidate":"fallback"}\n' >"$smoke_root/fallback/pass-bundle.json"
 
 partial_out="$smoke_root/output-partial"
-run ./scripts/shared-devnet-rehearsal.sh \
-  --window-id shared-devnet-orch-smoke-partial \
-  --candidate-id shared-devnet-orch-smoke-partial \
-  --candidate-bundle-out "$smoke_root/shared-devnet-orch-smoke-partial.json" \
+run ./scripts/public-testnet-rehearsal.sh \
+  --window-id public-testnet-rehearsal-orch-smoke-partial \
+  --candidate-id public-testnet-rehearsal-orch-smoke-partial \
+  --candidate-bundle-out "$smoke_root/public-testnet-rehearsal-orch-smoke-partial.json" \
   --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
   --world-snapshot-ref "$smoke_root/world" \
   --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
@@ -58,18 +58,18 @@ run ./scripts/shared-devnet-rehearsal.sh \
   --governance-mode skip \
   --longrun-mode skip
 
-partial_gate=$(find "$partial_out/shared-devnet-orch-smoke-partial/gate" -mindepth 2 -maxdepth 2 -type f -name summary.json | sort | tail -n 1)
-partial_lanes="$partial_out/shared-devnet-orch-smoke-partial/lanes.shared_devnet.tsv"
+partial_gate=$(find "$partial_out/public-testnet-rehearsal-orch-smoke-partial/gate" -mindepth 2 -maxdepth 2 -type f -name summary.json | sort | tail -n 1)
+partial_lanes="$partial_out/public-testnet-rehearsal-orch-smoke-partial/lanes.public_testnet_rehearsal.tsv"
 ensure_file_contains "$partial_gate" '"gate_result": "partial"'
 ensure_file_contains "$partial_gate" '"promotion_recommendation": "hold_promotion"'
 ensure_file_contains "$partial_lanes" $'multi_entry_closure\tqa_engineer\tpartial'
 ensure_file_contains "$partial_lanes" $'mixed_topology_baseline\tqa_engineer\tpartial'
 ensure_file_contains "$partial_lanes" $'short_window_longrun\truntime_engineer\tpartial'
 
-if ./scripts/shared-devnet-rehearsal.sh \
-  --window-id shared-devnet-orch-smoke-missing-decision \
-  --candidate-id shared-devnet-orch-smoke-missing-decision \
-  --candidate-bundle-out "$smoke_root/shared-devnet-orch-smoke-missing-decision.json" \
+if ./scripts/public-testnet-rehearsal.sh \
+  --window-id public-testnet-rehearsal-orch-smoke-missing-decision \
+  --candidate-id public-testnet-rehearsal-orch-smoke-missing-decision \
+  --candidate-bundle-out "$smoke_root/public-testnet-rehearsal-orch-smoke-missing-decision.json" \
   --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
   --world-snapshot-ref "$smoke_root/world" \
   --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
@@ -89,10 +89,10 @@ if ./scripts/shared-devnet-rehearsal.sh \
 fi
 ensure_file_contains "$smoke_root/missing-decision.stderr" '--mixed-topology-pass requires --mixed-topology-pass-decision-ref'
 
-if ./scripts/shared-devnet-rehearsal.sh \
-  --window-id shared-devnet-orch-smoke-missing-access-evidence \
-  --candidate-id shared-devnet-orch-smoke-missing-access-evidence \
-  --candidate-bundle-out "$smoke_root/shared-devnet-orch-smoke-missing-access-evidence.json" \
+if ./scripts/public-testnet-rehearsal.sh \
+  --window-id public-testnet-rehearsal-orch-smoke-missing-access-evidence \
+  --candidate-id public-testnet-rehearsal-orch-smoke-missing-access-evidence \
+  --candidate-bundle-out "$smoke_root/public-testnet-rehearsal-orch-smoke-missing-access-evidence.json" \
   --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
   --world-snapshot-ref "$smoke_root/world" \
   --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
@@ -113,10 +113,10 @@ if ./scripts/shared-devnet-rehearsal.sh \
 fi
 ensure_file_contains "$smoke_root/missing-access-evidence.stderr" '--shared-access-pass requires at least one --shared-endpoint-ref, one --shared-operator-ref, and one --shared-access-evidence-ref'
 
-run ./scripts/shared-devnet-rehearsal.sh \
-  --window-id shared-devnet-orch-smoke-rollback-partial \
-  --candidate-id shared-devnet-orch-smoke-rollback-partial \
-  --candidate-bundle-out "$smoke_root/shared-devnet-orch-smoke-rollback-partial.json" \
+run ./scripts/public-testnet-rehearsal.sh \
+  --window-id public-testnet-rehearsal-orch-smoke-rollback-partial \
+  --candidate-id public-testnet-rehearsal-orch-smoke-rollback-partial \
+  --candidate-bundle-out "$smoke_root/public-testnet-rehearsal-orch-smoke-rollback-partial.json" \
   --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
   --world-snapshot-ref "$smoke_root/world" \
   --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
@@ -129,13 +129,13 @@ run ./scripts/shared-devnet-rehearsal.sh \
   --governance-mode skip \
   --longrun-mode skip \
   --fallback-candidate-bundle "$smoke_root/fallback/pass-bundle.json"
-ensure_file_contains "$smoke_root/output-rollback-partial/shared-devnet-orch-smoke-rollback-partial/rollback-target.md" 'fallback bundle is pinned, but audited fallback gate/owner/restore scope contract is still incomplete'
+ensure_file_contains "$smoke_root/output-rollback-partial/public-testnet-rehearsal-orch-smoke-rollback-partial/rollback-target.md" 'fallback bundle is pinned, but audited fallback gate/owner/restore scope contract is still incomplete'
 
 pass_out="$smoke_root/output-pass"
-run ./scripts/shared-devnet-rehearsal.sh \
-  --window-id shared-devnet-orch-smoke-pass \
-  --candidate-id shared-devnet-orch-smoke-pass \
-  --candidate-bundle-out "$smoke_root/shared-devnet-orch-smoke-pass.json" \
+run ./scripts/public-testnet-rehearsal.sh \
+  --window-id public-testnet-rehearsal-orch-smoke-pass \
+  --candidate-id public-testnet-rehearsal-orch-smoke-pass \
+  --candidate-bundle-out "$smoke_root/public-testnet-rehearsal-orch-smoke-pass.json" \
   --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
   --world-snapshot-ref "$smoke_root/world" \
   --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
@@ -166,17 +166,17 @@ run ./scripts/shared-devnet-rehearsal.sh \
   --rollback-restore-step-ref "$smoke_root/evidence/rollback-restore.md" \
   --rollback-restoration-scope "runtime build | world snapshot | governance manifest"
 
-pass_gate=$(find "$pass_out/shared-devnet-orch-smoke-pass/gate" -mindepth 2 -maxdepth 2 -type f -name summary.json | sort | tail -n 1)
-pass_lanes="$pass_out/shared-devnet-orch-smoke-pass/lanes.shared_devnet.tsv"
+pass_gate=$(find "$pass_out/public-testnet-rehearsal-orch-smoke-pass/gate" -mindepth 2 -maxdepth 2 -type f -name summary.json | sort | tail -n 1)
+pass_lanes="$pass_out/public-testnet-rehearsal-orch-smoke-pass/lanes.public_testnet_rehearsal.tsv"
 ensure_file_contains "$pass_gate" '"gate_result": "pass"'
 ensure_file_contains "$pass_gate" '"promotion_recommendation": "eligible_for_promotion"'
 ensure_file_contains "$pass_lanes" $'shared_access\tqa_engineer\tpass'
 ensure_file_contains "$pass_lanes" $'mixed_topology_baseline\tqa_engineer\tpass'
 ensure_file_contains "$pass_lanes" $'governance_live_drill\truntime_engineer\tpass'
 ensure_file_contains "$pass_lanes" $'rollback_target_ready\tliveops_community\tpass'
-ensure_file_contains "$pass_out/shared-devnet-orch-smoke-pass/mixed-topology-gate.md" 'pass-uplift decision ref'
-ensure_file_contains "$pass_out/shared-devnet-orch-smoke-pass/access-check.md" 'shared access evidence refs'
-ensure_file_contains "$pass_out/shared-devnet-orch-smoke-pass/rollback-target.md" 'fallback gate ref'
-ensure_file_contains "$pass_out/shared-devnet-orch-smoke-pass/rollback-target.md" 'restore step refs'
+ensure_file_contains "$pass_out/public-testnet-rehearsal-orch-smoke-pass/mixed-topology-gate.md" 'pass-uplift decision ref'
+ensure_file_contains "$pass_out/public-testnet-rehearsal-orch-smoke-pass/access-check.md" 'shared access evidence refs'
+ensure_file_contains "$pass_out/public-testnet-rehearsal-orch-smoke-pass/rollback-target.md" 'fallback gate ref'
+ensure_file_contains "$pass_out/public-testnet-rehearsal-orch-smoke-pass/rollback-target.md" 'restore step refs'
 
-echo "shared-devnet rehearsal smoke checks passed"
+echo "public-testnet-rehearsal rehearsal smoke checks passed"

@@ -8,7 +8,7 @@
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：`doc/p2p/node/README.md`
 - 想先进入 phase / 增量文档密集的子域：先读 `doc/p2p/distfs/README.md` 或 `doc/p2p/observer/README.md`，再进入具体专题。
 - 想先看主链安全、mainnet-grade readiness 与 signer custody：`doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
-- 想先看 hosted world 玩家接入与网页会话鉴权：`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
+- 想先看 hosted player entry / `hosted_public_join` 玩家接入与网页会话鉴权：`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`（legacy topic label: hosted world）
 - 想先看 `hosted_public_join` 如何让普通玩家用邮箱登录、由服务端托管 player signer，并保留后续自托管升级路径：`doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
 - 想先看“没有公网 IP 也要成为正式节点”的主链级覆盖网络目标态：`doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
 - 想先看 Token 分配 / 治理签名 / 理想化交易模型 / 生产 signer 外部化 / `OC -> LetAI Run OpenAPI quota` bridge：`doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`、`doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`、`doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md`、`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`、`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
@@ -23,12 +23,12 @@
 
 ## 入口分工
 - `README.md` 只承担 landing page 职责：帮助读者先选“总边界 / 当前执行 / 高频入口 / 精确索引”中的正确入口，不重复长表索引内容。
-- `prd.md` 是模块权威规格入口，适合先理解主链、共识、DistFS、节点、token 与 hosted world 的统一边界。
-- `project.md` 是执行台账，适合确认当前安全硬化、signer 外部化、token 与 hosted world 相关任务的推进状态。
+- `prd.md` 是模块权威规格入口，适合先理解主链、共识、DistFS、节点、token 与 hosted player access 的统一边界。
+- `project.md` 是执行台账，适合确认当前安全硬化、signer 外部化、token 与 hosted access 相关任务的推进状态。
 - `node/README.md` 是当前最高密度热点子域 `node/` 的 canonical 入口，适合先按“奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译”分流，再进入具体专题。
 - `distfs/README.md` 与 `observer/README.md` 是 phase / 增量专题的折叠入口，适合先确认主文档，再按 delta 追溯。
 - `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 p2p 模块时的首读入口。
-- 高频专题承担主题真值：`p2p-mainnet-*` 负责主链安全与 readiness；`p2p-mainnet-private-reachability-architecture-2026-04-01` 负责 mixed-topology 覆盖网络目标态；`p2p-hosted-world-player-access-and-session-auth` 负责玩家接入与会话鉴权；`p2p-hosted-public-join-managed-identity-custody-2026-05-18` 负责邮箱 hosted login、托管 player signer 与自托管升级边界；token / signer 系列专题负责分配、签名交易与治理签名外部化。
+- 高频专题承担主题真值：`p2p-mainnet-*` 负责主链安全与 readiness；`p2p-mainnet-private-reachability-architecture-2026-04-01` 负责 mixed-topology 覆盖网络目标态；`p2p-hosted-world-player-access-and-session-auth` 负责 hosted player entry / hosted access 与会话鉴权（旧专题名保留作 trace，不表示多个玩家世界）；`p2p-hosted-public-join-managed-identity-custody-2026-05-18` 负责邮箱 hosted login、托管 player signer 与自托管升级边界；token / signer 系列专题负责分配、签名交易与治理签名外部化。
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接罗列近期专题长名单。
@@ -40,7 +40,7 @@
 - 汇总 blockchain / distfs / node / observer / token / viewer-live / consensus / distributed / network 九类专题。
 - 承接跨 runtime、launcher、viewer-live 的分布式运行与发布约束收口。
 - 承接非全公网 mixed-topology、sentry/relay、overlay reachability 与多链型数据面适配的框架层口径。
-- 承接 hosted world 玩家接入、网页会话鉴权、public/control/signer 平面边界等跨模块 Web/P2P 口径。
+- 承接 hosted player entry / hosted access、网页会话鉴权、public/control/signer 平面边界等跨模块 Web/P2P 口径。
 
 ## 主题目录
 - `distfs/`：DistFS 设计与稳定性加固；默认先读 `distfs/README.md`。
@@ -56,7 +56,7 @@
 ## 热点子域导航
 - `node/`：节点身份、奖励、复制、PoS 时间基线与执行验证；当前已补 `node/README.md` 作为热点子域入口。
 - `distfs/`：DistFS 生产加固、路径索引、自愈与 bridge 集成；phase 组先从 `distfs/README.md` 折叠进入。
-- `blockchain/`：主链安全、readiness、signer custody、hosted world 接入与 release train。
+- `blockchain/`：主链安全、readiness、signer custody、hosted player access 与 release train。
 - `observer/`：观察者同步模式、指标与可观测性；同步源增量组先从 `observer/README.md` 折叠进入。
 - `token/`：创世分配、签名授权、治理分发与流通边界。
 - `network/`：reachability、mobile light client、runtime bridge 与 mixed-topology 约束。

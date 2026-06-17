@@ -15,6 +15,7 @@
 - 想先回答当前在推进什么、最近完成了什么、下一步是什么：先读 `doc/core/project.md`
 - 想直接进入下一轮跨模块优先级主入口：先读 `doc/core/next-round-priority-slate-2026-03-11.prd.md`
 - 想直接进入玩家访问模式 / execution lane 的正式契约：先读 `doc/core/player-access-mode-contract-2026-03-19.prd.md`
+- 想直接进入统一持久大世界默认产品模型与术语迁移计划：先读 `doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
 - 想直接进入版本候选 readiness / go-no-go：先读 `doc/core/release-candidate-readiness-entry-2026-03-11.prd.md` 与 `doc/core/release-candidate-go-no-go-entry-2026-03-11.prd.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
@@ -36,6 +37,7 @@
 ## 活跃补充文档
 - `doc/core/next-round-priority-slate-2026-03-11.prd.md`：下一轮跨模块优先级主入口，适合快速判断“接下来只做什么”。
 - `doc/core/player-access-mode-contract-2026-03-19.prd.md`：`software_safe / pure_api` 与 execution lane 的正式 cross-module 契约。
+- `doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`：统一持久大世界默认产品模型、legacy 术语清理、runtime/ops 兼容边界与后续 gate 计划。
 - `doc/core/release-candidate-readiness-entry-2026-03-11.prd.md`：版本候选 readiness 正式入口。
 - `doc/core/release-candidate-go-no-go-entry-2026-03-11.prd.md`：版本候选 go/no-go 正式入口。
 - `doc/core/doc-readme-public-entry-sync-2026-03-11.prd.md`：仓库 docs hub 与公共阅读路径同步入口。

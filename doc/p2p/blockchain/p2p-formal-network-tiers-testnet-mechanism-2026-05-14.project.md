@@ -36,10 +36,10 @@
   - 安全阶段口径: `crypto-hardened preview`
   - formal network-tier verdict: `block`
 - 当前完成范围:
-  - 已冻结 `local_devnet -> public_testnet -> mainnet` 三层目标模型；`shared_devnet` 只保留 legacy/rehearsal evidence 语义。
+  - 已冻结 `local_devnet -> public_testnet -> mainnet` 三层 operator/runtime network-tier 模型；这些 tier 是统一持久大世界的运行/验证载体，不作为玩家世界名；`shared_devnet` 只保留 legacy/rehearsal evidence 语义。
   - 已落地 `network_tier_manifest` repo-owned create/validate、smoke、exit review 与 example manifests。
   - `oasis7_chain_runtime`、`oasis7_game_launcher`、`oasis7_web_launcher` 已支持 formal manifest 输入；runtime status 面已暴露 formal tier/status。
-  - 已补 `shared_devnet/public_testnet/mainnet` 的 genesis/bootstrap example refs，以及 `public_testnet` rehearsal / exit-review 模板。
+  - 已补 `public_testnet` rehearsal、`public_testnet`、`mainnet` 的 genesis/bootstrap example refs，以及 `public_testnet` rehearsal / exit-review 模板。
   - 已补 `public_testnet` readiness review 入口：repo-owned lane scaffold、skeleton evidence placeholder 与 `specified_skeleton_only|partial|block|ready_for_live_candidate` verdict 脚本。
   - 已补 `public_testnet` live-candidate companion runbook，统一回答“当前还差哪些 lane / evidence / claims review 才能进入 live candidate”。
   - 已建立 `public_testnet` live-candidate 输入侧的 public RPC / explorer / guarded faucet / reset-policy / claims-boundary evidence，其中 `claims_boundary_review` 已有独立 `qa_engineer` verdict；这不等于 live public testnet 已上线。
@@ -81,13 +81,13 @@
 - `scripts/network-tier-exit-review.sh`
 - `scripts/network-tier-public-testnet-readiness.sh`
 - `.pm/tasks/task_7a279b3f05a34def8d75f86ce2ede4e7.execution.md`
-- `doc/testing/templates/network-tier-shared-devnet.example.json`
+- `doc/testing/templates/network-tier-public-testnet-rehearsal.example.json`
 - `doc/testing/templates/network-tier-public-testnet.example.json`
 - `doc/testing/templates/network-tier-mainnet.example.json`
-- `doc/testing/templates/shared-devnet-genesis.example.json`
+- `doc/testing/templates/public-testnet-rehearsal-genesis.example.json`
 - `doc/testing/templates/public-testnet-genesis.example.json`
 - `doc/testing/templates/mainnet-genesis.example.json`
-- `doc/testing/templates/shared-devnet-bootstrap.example.txt`
+- `doc/testing/templates/public-testnet-rehearsal-bootstrap.example.txt`
 - `doc/testing/templates/public-testnet-bootstrap.example.txt`
 - `doc/testing/templates/mainnet-bootstrap.example.txt`
 - `doc/testing/templates/public-testnet-rehearsal-template.md`
@@ -122,7 +122,7 @@
 
 ## 验收命令（本轮）
 - `./scripts/network-tier-manifest-smoke.sh`
-- `./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-shared-devnet.example.json`
+- `./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-public-testnet-rehearsal.example.json`
 - `./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-public-testnet.example.json`
 - `./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-mainnet.example.json`
 - `./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json`

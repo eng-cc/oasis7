@@ -38,7 +38,7 @@
   - SC-3: 玩家身份必须拆成 `hosted_account_id`、`player_id`、`device_session_id`、`signer_ref` 四类真值，不再把 `player_id` 直接当成完整账户体系。
   - SC-4: 高风险动作必须支持 `managed custody sign` lane，并由 step-up auth、风险策略和审计日志共同放行；`main_token_transfer` 不得再停留在“blocked，但没有目标方案”的状态。
   - SC-5: 玩家默认不需要保存或输入原始公私钥；如需自托管，必须走显式的 `bind external wallet` 或 `transfer-out to self-custody` 流程，而不是把托管私钥直接回流到浏览器。
-  - SC-6: 本专题必须与 `PRD-P2P-023 hosted-world session auth` 和 `PRD-P2P-017 signer custody` 形成清晰边界：只覆盖 hosted player identity/custody，不覆盖 node、validator、governance signer 的生产托管。
+  - SC-6: 本专题必须与 `PRD-P2P-023 hosted player access session auth` 和 `PRD-P2P-017 signer custody` 形成清晰边界：只覆盖 hosted player identity/custody，不覆盖 node、validator、governance signer 的生产托管。
   - SC-7: `doc/p2p/prd.md`、`doc/p2p/project.md` 与本专题三件套完成映射，后续实现任务可直接挂到统一真值。
   - SC-8: hosted account 中心化服务必须冻结至少 `dev/staging/production` 三层环境边界；登录投递、账户存储、强鉴权 signer、风控阈值、对外 claims 与验证命令不得跨层混用。
 
@@ -181,7 +181,7 @@
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-P2P-029-001 | `hosted_public_join` 默认走邮箱 hosted account，而不是用户手填公私钥 | 让新用户自己保存或输入公私钥 | 普通玩家 onboarding 成本过高，且无法支撑恢复、风控和运营收口。 |
-| DEC-P2P-029-002 | 浏览器只持有设备级短期会话材料，长期玩家 signer 留在 custody plane | 继续把 `privateKey` 持久化到浏览器 localStorage 作为正式方案 | 这与 hosted-world “浏览器不持有长期 signer” 的既有边界冲突。 |
+| DEC-P2P-029-002 | 浏览器只持有设备级短期会话材料，长期玩家 signer 留在 custody plane | 继续把 `privateKey` 持久化到浏览器 localStorage 作为正式方案 | 这与 hosted access “浏览器不持有长期 signer” 的既有边界冲突。 |
 | DEC-P2P-029-003 | 上层冻结 `signer_ref + sign API` 契约，底层后端允许 `KMS/HSM` 或 `KMS-wrapped sealed-key backend` | 直接把产品方案写死为单一云 KMS 的具体 key API | 产品首先需要稳定的 trust boundary，而不是把运行时算法/成本约束提前硬编码进 PRD。 |
 | DEC-P2P-029-004 | 自托管升级先支持 `bind external wallet` / `transfer-out`，不要求 MVP 导出托管私钥原文 | 把“导出原始托管私钥”当成 MVP 必备功能 | 迁移能力重要，但“把私钥直接吐给浏览器”不是 hosted onboarding 的最优安全默认值。 |
 | DEC-P2P-029-005 | 本专题只覆盖 hosted player identity/custody，不复用到 node/governance signer | 让一个统一 KMS 同时接管 player、node、governance 全部 signer | trust domain、审计要求与风险级别不同，混用会把 hosted player 产品问题和协议级 custody 问题绑死。 |

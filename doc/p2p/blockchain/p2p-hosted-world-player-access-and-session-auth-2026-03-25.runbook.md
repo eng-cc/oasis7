@@ -1,4 +1,4 @@
-# oasis7 hosted world 玩家访问与会话鉴权（Hosted Operator Runbook）
+# oasis7 hosted player access 玩家访问与会话鉴权（Hosted Operator Runbook）
 
 - 对应需求文档: `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
 - 对应设计文档: `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.design.md`
@@ -10,19 +10,19 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Scope: `hosted_public_join share discipline + operator/public URL boundary + incident first response + public claims`
-- Audience: `hosted world host / operator`
+- Audience: `hosted access host / operator`
 - Source Docs:
   - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
   - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.project.md`
   - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
 
 ## 1. 适用范围
-- 这份 runbook 只覆盖 `deployment_mode=hosted_public_join` 的 hosted world 分享与事故收口。
+- 这份 runbook 只覆盖 `deployment_mode=hosted_public_join` 的 hosted access 分享与事故收口。
 - 它定义的是 operator 执行方法，不替代 runtime/viewer 的实现细节，也不替代正式账户系统、钱包插件或 invite-only 方案。
-- 当前 hosted world 的对外口径仍然是：
+- 当前 hosted access 的对外口径仍然是：
   - `limited playable technical preview`
   - `crypto-hardened preview`
-  - `hosted-world player access verdict = hosted_public_join_blocked_until_strong_auth` unless the backend strong-auth grant lane is configured, then `hosted_public_join_strong_auth_preview`
+  - `hosted_public_join verdict = hosted_public_join_blocked_until_strong_auth` unless the backend strong-auth grant lane is configured, then `hosted_public_join_strong_auth_preview`
 
 ## 2. 先认清三类入口
 - `public join URL`
@@ -41,16 +41,16 @@
 - 不要把 operator/control URL 当成玩家分享链接。
 
 ## 3. 分享前检查
-每次准备把 hosted world 发给别人前，先做下面 6 项：
+每次准备把 hosted player access 发给别人前，先做下面 6 项：
 
 1. 确认 `deployment_mode` 是 `hosted_public_join`。
 2. 确认你准备发出去的是 game/viewer URL，而不是 launcher console 地址。
 3. 确认公开页面不会再注入长期 signer bootstrap。
 4. 确认 public snapshot 仍显示：
-   - `verdict = hosted_public_join_blocked_until_strong_auth` or `hosted_public_join_strong_auth_preview`; neither means `hosted_ready`
+   - `verdict = hosted_public_join_blocked_until_strong_auth` or `hosted_public_join_strong_auth_preview`; neither means `hosted_access_ready`
    - `main_token_transfer = blocked_until_strong_auth`
 5. 确认你没有对外宣称：
-   - `hosted-ready`
+   - `hosted-access-ready`
    - `production-ready`
    - `safe to share with anyone`
 6. 如果你走了反向代理或 tunnel，确认公网只暴露玩家 join 面，不暴露 operator/control 面。
@@ -70,7 +70,7 @@
   - 任意 `/api/gui-agent/*`
 
 ## 5. 远程 Operator Tunnel / Reverse Proxy 最低策略
-如果 operator 不是在本机 loopback 上操作，而是通过远程 tunnel / reverse proxy / 云主机对外提供 hosted world，至少满足下面 6 条：
+如果 operator 不是在本机 loopback 上操作，而是通过远程 tunnel / reverse proxy / 云主机对外提供 hosted player access，至少满足下面 6 条：
 
 1. 公网玩家入口与 operator/control 入口必须分离。
    - 最低要求是不同 origin 或不同仅内网可达的 bind。
@@ -335,14 +335,14 @@ env -u RUSTC_WRAPPER cargo run -q -p oasis7 --bin oasis7_pure_api_client -- \
 - `doc/testing/templates/hosted-world-share-announcement-template.md`
 
 使用时机：
-- 第一次把 hosted world 发给玩家
+- 第一次把 hosted player access 发给玩家
 - 需要重复提醒“哪个才是正确 join URL”
 - 需要把 preview claims、重入提示与 join discipline 一起说清楚
 
 使用规则：
 1. 对外只发 `public join URL`，不要附带 operator/control 地址。
 2. 文案里必须保留 `limited playable technical preview` 口径。
-3. 不要写 `hosted-ready`、`production-ready`、`invite-only secure` 一类升级承诺。
+3. 不要写 `hosted-access-ready`、`production-ready`、`invite-only secure` 一类升级承诺。
 4. 若玩家可能命中过旧页面，可在公告里提示“若页面提示 Hosted Recovery / Re-acquire Hosted Player Session，请按页面提示重新获取会话”。
 
 ## 14. 对外更正模板
