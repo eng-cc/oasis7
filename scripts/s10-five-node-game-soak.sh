@@ -3,6 +3,13 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+
+if (( BASH_VERSINFO[0] < 4 )); then
+  echo "error: scripts/s10-five-node-game-soak.sh requires Bash 4+ (uses associative arrays); current Bash is ${BASH_VERSION:-unknown}" >&2
+  echo "hint: install/run a newer bash, then invoke this script with that interpreter before release-gate longrun execution." >&2
+  exit 2
+fi
+
 source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
