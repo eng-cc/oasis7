@@ -9,7 +9,8 @@ source_signal: null
 source_refs:
   - AGENTS.md
   - doc/engineering/workflow/source-of-truth.md
-doc_refs: []
+doc_refs:
+  - doc/p2p/project.md
 related_prd: []
 acceptance:
   - "Replication transport/gap-sync root cause is fixed in code with focused tests."
