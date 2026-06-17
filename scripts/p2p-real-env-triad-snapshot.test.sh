@@ -13,6 +13,10 @@ mkdir -p "$bin_dir"
 cat >"$bin_dir/systemctl" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "is-active" ]]; then
+  if [[ " $* " == *" oasis7-inactive.service "* ]]; then
+    echo inactive
+    exit 3
+  fi
   echo active
   exit 0
 fi
@@ -130,6 +134,25 @@ grep -q '### `extra_alpha`' "$explicit_run_dir/summary.md"
 grep -q '### `extra_beta`' "$explicit_run_dir/summary.md"
 grep -q 'claim_mode: `explicit_nodes`' "$explicit_run_dir/summary.md"
 grep -q 'storage_challenge_network_degraded_any' "$explicit_run_dir/summary.md"
+
+PATH="$bin_dir:$PATH" ./scripts/p2p-real-env-triad-snapshot.sh \
+  --samples 1 \
+  --interval-secs 1 \
+  --ssh-timeout-secs 1 \
+  --out-dir "$tmp_root/out-single-explicit" \
+  --world-id fallback-test \
+  --node "label=custom_only,mode=local,service=oasis7-inactive.service,status_url=http://local/status,health_url=http://local/healthz,env_file=$tmp_root/missing-custom.env"
+
+single_explicit_run_dir="$(find "$tmp_root/out-single-explicit" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)"
+single_explicit_summary_json="$single_explicit_run_dir/summary.json"
+
+jq -e '
+  .totals.node_count == 1
+  and .analysis.claim_mode == "explicit_nodes"
+  and .nodes.custom_only.service_active == false
+  and (.failure_signatures | index("node_service_inactive")) != null
+  and .claim_status != "pass_candidate"
+' "$single_explicit_summary_json" >/dev/null
 
 if PATH="$bin_dir:$PATH" ./scripts/p2p-real-env-triad-snapshot.sh \
   --samples 1 \

@@ -746,6 +746,7 @@ jq -s \
       liveness_statuses: (map(select(.label == $label) | .liveness.status) | unique),
       readiness_statuses: (map(select(.label == $label) | .readiness.status) | unique),
       sync_statuses: (map(select(.label == $label) | .sync.status) | unique),
+      service_active: ((map(select(.label == $label) | .service_state) | unique | index("active")) != null),
       readiness_policies: {
         tiers: (map(select(.label == $label) | .readiness.policy.tier) | unique),
         quorum_modes: (map(select(.label == $label) | .readiness.policy.quorum_mode) | unique),
@@ -843,13 +844,34 @@ jq -s \
   | .generic_analysis = {
       all_healthz_ok: generic_all(["healthz_all_ok"]; true),
       all_status_fetch_ok: generic_all(["status_fetch_all_ok"]; true),
+      all_services_active: generic_all(["service_active"]; true),
       all_nodes_ready: generic_all(["readiness_all_ready"]; true),
       all_transport_stable: generic_all(["transport_stable_all"]; true),
       all_reachability_policy_ok: generic_all(["reachability_policy_ok_all"]; true),
       any_storage_challenge_network_degraded: generic_any(["storage_challenge_network_degraded_any"]; true),
       any_last_error: (.nodes | to_entries | any(.value.last_errors | map(select(. != null)) | length > 0))
     }
-  | .analysis = {
+  | if ($explicit_node_mode == true) then
+      .analysis = { claim_mode: "explicit_nodes" }
+      | .failure_signatures = (
+          []
+          + (if .generic_analysis.all_services_active then [] else ["node_service_inactive"] end)
+          + (if .generic_analysis.all_healthz_ok then [] else ["node_healthz_unhealthy"] end)
+          + (if .generic_analysis.all_status_fetch_ok then [] else ["node_status_fetch_failed"] end)
+          + (if .generic_analysis.all_nodes_ready then [] else ["node_not_ready"] end)
+          + (if .generic_analysis.all_transport_stable then [] else ["replication_transport_unstable"] end)
+          + (if .generic_analysis.all_reachability_policy_ok then [] else ["p2p_reachability_degraded"] end)
+          + (if .generic_analysis.any_storage_challenge_network_degraded then ["storage_challenge_network_degraded"] else [] end)
+          + (if .generic_analysis.any_last_error then ["runtime_last_error"] else [] end)
+        )
+      | .claim_status = (
+          if (.failure_signatures | length) == 0 then "pass_candidate"
+          elif .generic_analysis.all_healthz_ok and .generic_analysis.all_status_fetch_ok then "partial_with_node_health_blocker"
+          else "blocked"
+          end
+        )
+    else
+      .analysis = {
       local_service_healthy: (
         (.nodes.local_node.healthz_all_ok == true)
         and (.nodes.local_node.status_fetch_all_ok == true)
@@ -1089,27 +1111,7 @@ jq -s \
       then "partial_with_observer_blocker"
       else "blocked"
       end
-    )
-  | if ($explicit_node_mode == true) then
-      .failure_signatures = (
-        []
-        + (if .generic_analysis.all_healthz_ok then [] else ["node_healthz_unhealthy"] end)
-        + (if .generic_analysis.all_status_fetch_ok then [] else ["node_status_fetch_failed"] end)
-        + (if .generic_analysis.all_nodes_ready then [] else ["node_not_ready"] end)
-        + (if .generic_analysis.all_transport_stable then [] else ["replication_transport_unstable"] end)
-        + (if .generic_analysis.all_reachability_policy_ok then [] else ["p2p_reachability_degraded"] end)
-        + (if .generic_analysis.any_storage_challenge_network_degraded then ["storage_challenge_network_degraded"] else [] end)
-        + (if .generic_analysis.any_last_error then ["runtime_last_error"] else [] end)
       )
-      | .claim_status = (
-          if (.failure_signatures | length) == 0 then "pass_candidate"
-          elif .generic_analysis.all_healthz_ok and .generic_analysis.all_status_fetch_ok then "partial_with_node_health_blocker"
-          else "blocked"
-          end
-        )
-      | .analysis.claim_mode = "explicit_nodes"
-    else
-      .
     end
   ' "$samples_ndjson" > "$summary_json"
 
