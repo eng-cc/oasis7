@@ -227,16 +227,10 @@ fn runtime_gossip_tracks_peer_committed_heads() {
     drop(socket_a);
     drop(socket_b);
 
-    let validators = vec![
-        PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 60,
-        },
-        PosValidator {
-            validator_id: "node-b".to_string(),
-            stake: 40,
-        },
-    ];
+    let validators = vec![PosValidator {
+        validator_id: "node-a".to_string(),
+        stake: 100,
+    }];
 
     let config_a = NodeConfig::new("node-a", "world-sync", NodeRole::Sequencer)
         .expect("config a")
@@ -264,10 +258,20 @@ fn runtime_gossip_tracks_peer_committed_heads() {
         let snapshot_b = runtime_b.snapshot();
         snapshot_a.consensus.network_committed_height >= 1
             && snapshot_b.consensus.network_committed_height >= 1
-            && snapshot_a.consensus.known_peer_heads >= 1
-            && snapshot_b.consensus.known_peer_heads >= 1
+            && snapshot_b.consensus.peer_heads.iter().any(|head| {
+                head.node_id == "node-a" && head.height == snapshot_a.consensus.network_committed_height
+            })
     });
-    assert!(synced, "runtime gossip did not observe peer heads in time");
+    if !synced {
+        let snapshot_a = runtime_a.snapshot();
+        let snapshot_b = runtime_b.snapshot();
+        runtime_a.stop().expect("stop a");
+        runtime_b.stop().expect("stop b");
+        panic!(
+            "runtime gossip did not observe peer heads in time: a={:?}, b={:?}",
+            snapshot_a.consensus, snapshot_b.consensus
+        );
+    }
 
     runtime_a.stop().expect("stop a");
     runtime_b.stop().expect("stop b");

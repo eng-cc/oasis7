@@ -41,6 +41,9 @@ impl TestChainStatusServer {
             }
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    if stop_for_thread.load(Ordering::SeqCst) {
+                        break;
+                    }
                     let request = read_test_http_request(&mut stream);
                     let request_bytes = request.as_slice();
                     let request_text = String::from_utf8_lossy(request_bytes);
