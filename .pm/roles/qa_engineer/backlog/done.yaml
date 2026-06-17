@@ -461,3 +461,17 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_46ea1c81166043e3a1e3d5899b618ae6.yaml
+  - task_uid: task_22364604bc04498ebe7f10a5247757cd
+    title: "Backfill SIG-PM-0068 regression tests"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "Permanent automated regression coverage exists for unified-world terminology scan path/content negative cases."
+      - "Permanent automated regression coverage exists for Bash 4+ preflight behavior on SIG-PM-0068 release-gate entrypoints under Bash 3.2-compatible local shells."
+      - "Focused verification commands pass and are recorded in the task execution log."
+    handoff_to:
+      - repository_health_engineer
+      - qa_engineer
+    status: done
+    task_path: .pm/tasks/task_22364604bc04498ebe7f10a5247757cd.yaml
