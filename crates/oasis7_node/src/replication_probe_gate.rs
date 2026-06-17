@@ -344,6 +344,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
     let mut last_not_found: Option<FetchBlobResponse> = None;
     let mut last_retryable_error: Option<NodeError> = None;
     let mut attempted_provider_ids = std::collections::BTreeSet::new();
+    let provider_lookup_supplied = provider_ids.is_some();
 
     if let Some(provider_ids) = provider_ids {
         for provider_id in provider_ids {
@@ -372,6 +373,20 @@ fn request_fetch_blob_chunk_with_route_fallback(
                 Err(err) => return Err(err),
             }
         }
+    }
+
+    if provider_lookup_supplied {
+        if let Some(response) = last_not_found {
+            return Ok(response);
+        }
+        return Err(
+            last_retryable_error.unwrap_or_else(|| NodeError::Replication {
+                reason: format!(
+                    "blob fetch provider routes exhausted without response for world_id={} hash={}",
+                    world_id, content_hash
+                ),
+            }),
+        );
     }
 
     let mut generic_attempts = 0usize;

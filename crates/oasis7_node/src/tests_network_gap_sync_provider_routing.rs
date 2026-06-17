@@ -219,7 +219,7 @@ fn runtime_network_replication_gap_sync_prefers_dht_blob_providers() {
 }
 
 #[test]
-fn runtime_network_replication_gap_sync_falls_back_after_provider_route_unavailable() {
+fn runtime_network_replication_gap_sync_blocks_without_generic_fallback_after_provider_route_unavailable() {
     let world_id = "world-network-gap-provider-fallback";
     let dir_a = temp_dir("network-gap-provider-fallback-a");
     let dir_b = temp_dir("network-gap-provider-fallback-b");
@@ -334,15 +334,19 @@ fn runtime_network_replication_gap_sync_falls_back_after_provider_route_unavaila
         )
         .expect("register commit handler");
 
-    let synced = wait_until(Instant::now() + Duration::from_secs(3), || {
-        runtime_b.snapshot().consensus.committed_height >= target_height
+    let blocked = wait_until(Instant::now() + Duration::from_secs(3), || {
+        runtime_b
+            .snapshot()
+            .consensus
+            .replication_gap_sync_blocked_height
+            .is_some()
     });
     let snapshot_b = runtime_b.snapshot();
     let provider_attempts = network_impl.provider_attempts();
     let generic_attempts = network_impl.generic_attempts();
     assert!(
-        synced,
-        "observer did not sync missing commits after provider-route fallback: committed_height={} network_committed_height={} last_error={:?} provider_attempts={provider_attempts:?} generic_attempts={generic_attempts}",
+        blocked,
+        "observer did not expose provider-route gap-sync block: committed_height={} network_committed_height={} last_error={:?} provider_attempts={provider_attempts:?} generic_attempts={generic_attempts}",
         snapshot_b.consensus.committed_height,
         snapshot_b.consensus.network_committed_height,
         snapshot_b.last_error
@@ -353,11 +357,25 @@ fn runtime_network_replication_gap_sync_falls_back_after_provider_route_unavaila
                 .iter()
                 .any(|provider| provider == "storage-provider-1")
         }),
-        "expected gap sync to try DHT-selected provider before fallback: {provider_attempts:?}"
+        "expected gap sync to try DHT-selected provider before blocking: {provider_attempts:?}"
     );
     assert!(
-        generic_attempts > 0,
-        "expected gap sync fetch-blob to fall back to generic request"
+        provider_attempts.len() <= 1,
+        "gap sync should not repeatedly spend request budget on the same unavailable provider route: {provider_attempts:?}"
+    );
+    assert!(
+        generic_attempts == 0,
+        "gap sync fetch-blob should not fall back to generic non-provider requests"
+    );
+    assert!(
+        snapshot_b
+            .consensus
+            .replication_gap_sync_blocked_reason
+            .as_deref()
+            .map(|reason| reason.contains("provider route blocked"))
+            .unwrap_or(false),
+        "expected provider route block reason, got {:?}",
+        snapshot_b.consensus.replication_gap_sync_blocked_reason
     );
 
     runtime_b.stop().expect("stop b");
@@ -366,7 +384,7 @@ fn runtime_network_replication_gap_sync_falls_back_after_provider_route_unavaila
 }
 
 #[test]
-fn runtime_network_replication_gap_sync_falls_back_after_provider_route_not_found() {
+fn runtime_network_replication_gap_sync_blocks_without_generic_fallback_after_provider_route_not_found() {
     let world_id = "world-network-gap-provider-not-found";
     let dir_a = temp_dir("network-gap-provider-not-found-a");
     let dir_b = temp_dir("network-gap-provider-not-found-b");
@@ -481,15 +499,19 @@ fn runtime_network_replication_gap_sync_falls_back_after_provider_route_not_foun
         )
         .expect("register commit handler");
 
-    let synced = wait_until(Instant::now() + Duration::from_secs(3), || {
-        runtime_b.snapshot().consensus.committed_height >= target_height
+    let blocked = wait_until(Instant::now() + Duration::from_secs(3), || {
+        runtime_b
+            .snapshot()
+            .consensus
+            .replication_gap_sync_blocked_height
+            .is_some()
     });
     let snapshot_b = runtime_b.snapshot();
     let provider_attempts = network_impl.provider_attempts();
     let generic_attempts = network_impl.generic_attempts();
     assert!(
-        synced,
-        "observer did not sync missing commits after provider-route not-found fallback: committed_height={} network_committed_height={} last_error={:?} provider_attempts={provider_attempts:?} generic_attempts={generic_attempts}",
+        blocked,
+        "observer did not expose provider-route not-found gap-sync block: committed_height={} network_committed_height={} last_error={:?} provider_attempts={provider_attempts:?} generic_attempts={generic_attempts}",
         snapshot_b.consensus.committed_height,
         snapshot_b.consensus.network_committed_height,
         snapshot_b.last_error
@@ -500,11 +522,25 @@ fn runtime_network_replication_gap_sync_falls_back_after_provider_route_not_foun
                 .iter()
                 .any(|provider| provider == "storage-provider-1")
         }),
-        "expected gap sync to try DHT-selected provider before not-found fallback: {provider_attempts:?}"
+        "expected gap sync to try DHT-selected provider before blocking: {provider_attempts:?}"
     );
     assert!(
-        generic_attempts > 0,
-        "expected gap sync fetch-blob to retry on generic lane after not-found provider response"
+        provider_attempts.len() <= 1,
+        "gap sync should not repeatedly spend request budget on the same not-found provider route: {provider_attempts:?}"
+    );
+    assert!(
+        generic_attempts == 0,
+        "gap sync fetch-blob should not retry on generic non-provider lane after provider not-found"
+    );
+    assert!(
+        snapshot_b
+            .consensus
+            .replication_gap_sync_blocked_reason
+            .as_deref()
+            .map(|reason| reason.contains("provider route blocked"))
+            .unwrap_or(false),
+        "expected provider route block reason, got {:?}",
+        snapshot_b.consensus.replication_gap_sync_blocked_reason
     );
 
     runtime_b.stop().expect("stop b");
