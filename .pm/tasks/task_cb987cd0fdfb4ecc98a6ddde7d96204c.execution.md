@@ -148,6 +148,7 @@ Example:
 ## 2026-06-16 19:38:00 CST / tpm
 - 完成内容: Re-ran residual terminology scans across files and code after the cleanup pass.
 - 遗留事项: This entry records scan results only; no additional cleanup edits were applied in this pass.
+- Action: Performed read-only residual terminology scans and recorded classification of remaining hits.
 - Validation Command: `rg -n -i "shared[_ -]?devnet|shared[_ -]?network|shared world|hosted world|hosted web join|live-llm_bootstrap|default world|local world|release default world|world identifier|multiple worlds|multi-world|world selector|世界选择|多个世界|共享开发|共享网络|三层目标模型|三层目标网络|目标层级" . --glob '!target/**' --glob '!third_party/**' --glob '!output/**' --glob '!.git/**' --glob '!doc/testing/evidence/**' --glob '!doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md'`
 - Expected Result: Surface remaining active and historical residuals after excluding generated/build output and the new plan's deliberate forbidden-term examples.
 - Actual Result: Completed. Highest-count residuals were legacy/rehearsal scripts (`scripts/shared-devnet-rehearsal.sh`, smoke variants, `scripts/shared-devnet-blocker-packet.sh`), active hosted-access topic docs (`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.{prd,design,project,runbook}.md`), network-tier manifest compatibility code (`crates/oasis7/src/network_tier_manifest.rs`, `scripts/network-tier-manifest.sh`), testing templates/entrypoints, and historical/legacy p2p docs.
@@ -202,6 +203,7 @@ Example:
 ## 2026-06-16 20:26:00 CST / tpm
 - 完成内容: Re-ran residual file/code scans after the hosted-ready template cleanup.
 - 遗留事项: No additional cleanup edits were applied in this scan pass. Remaining hits are path/topic slugs, explicit legacy labels, compatibility scripts/tests, or known false positives.
+- Action: Performed follow-up residual scans after template cleanup and confirmed no further edit was needed in that pass.
 - Validation Command: `rg -n -i "hosted world|hosted-world|hosted-ready|hosted_ready|hosted web join|live-llm_bootstrap|shared world|default world|local world|release default world|world identifier|multiple worlds|multi-world|world selector|世界选择|多个世界|共享大世界|共享世界|共享开发|三层目标模型|三层目标网络" site crates scripts doc/core doc/p2p doc/testing doc/world-runtime doc/world-simulator testing-manual.md --glob '!doc/testing/evidence/**' --glob '!doc/core/reviews/**' --glob '!doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md' --glob '!doc/p2p/blockchain/p2p-shared-network-*' --glob '!target/**' --glob '!third_party/**'`
 - Expected Result: Confirm that active old player-world terminology does not reappear after cleanup.
 - Actual Result: Completed. Remaining hits are `hosted-world` path/topic references, explicit hosted-world legacy labels, `local world_id` shell-variable false positive, and already-qualified formal network-tier notes that state tiers are not multiple player worlds.
@@ -349,6 +351,7 @@ Example:
 ## 2026-06-17 10:02:00 CST / tpm
 - 完成内容: Completed pre-PR local role review closeout after syncing current `main` and addressing re-review findings.
 - 遗留事项: GitHub PR required checks, comments, review threads, and mergeability remain required after PR creation. Deferred code-layer work is tracked separately by `task_acb7e3599b4242628a7ac99a62628d55`.
+- Action: Recorded the passed pre-PR local role review packet after integrating role findings and re-review results.
 - Pre-PR Local Role Review: passed
 - Task UID: task_cb987cd0fdfb4ecc98a6ddde7d96204c
 - Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-core-unified-world-terminology-upgrade-plan`
@@ -366,3 +369,12 @@ Example:
 - Expected Result: Branch is ready for PR creation with local review findings addressed and unsupported verification boundaries explicitly deferred.
 - Actual Result: Passed for all listed completed checks; deferred boundaries remain tracked in the global follow-up task.
 - Blocker / Next Action: Run task closeout / PR preflight and create the GitHub PR.
+
+## 2026-06-17 10:04:00 CST / tpm
+- 完成内容: Ran task closeout for the unified world terminology migration task.
+- 遗留事项: Repo-wide `pm-lint` still has unrelated historical execution-log failures outside this task; focused workflow lint for this task is the next gate.
+- Action: Executed `task-closeout.sh` with a fresh doc-governance verification command; the task YAML was updated to `status: done` with verified closeout metadata.
+- Validation Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_cb987cd0fdfb4ecc98a6ddde7d96204c --verify-command "./scripts/doc-governance-check.sh"`
+- Expected Result: Task closeout records verified task completion and leaves only unrelated repo-wide PM lint issues if any.
+- Actual Result: Closeout verification succeeded and task metadata now records `last_verification_status: verified`, `last_verification_exit_code: 0`, and `last_closed_at: 2026-06-17T10:03:49+08:00`; the command exited nonzero afterward because repo-wide `pm-lint` reported many pre-existing historical `.pm` execution-log issues plus older task-local entries that are corrected in this follow-up metadata patch.
+- Blocker / Next Action: Run focused workflow lint for `task_cb987cd0fdfb4ecc98a6ddde7d96204c`, commit metadata updates, then run PR preflight/create.

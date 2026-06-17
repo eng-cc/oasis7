@@ -88,13 +88,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_81577d7e86df4cd0b7bbb1c4d08ad019.yaml
-  - task_uid: task_cb987cd0fdfb4ecc98a6ddde7d96204c
-    title: "Plan unified world terminology upgrade"
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance:
-      - "Create a repository plan file that makes the default product model a unified persistent world and defines a staged migration away from shared_devnet-style terminology without breaking historical evidence or compatibility contracts."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_cb987cd0fdfb4ecc98a6ddde7d96204c.yaml
