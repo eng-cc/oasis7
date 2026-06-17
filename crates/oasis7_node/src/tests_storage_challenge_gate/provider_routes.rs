@@ -133,10 +133,10 @@ fn runtime_replication_storage_challenge_gate_falls_back_after_provider_route_un
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
     > = network_impl.clone();
-    let dht = Arc::new(TestReplicaMaintenanceDht::new(
-        "storage-provider-1",
-        "node-a",
-    ));
+    let dht = Arc::new(
+        TestReplicaMaintenanceDht::new("storage-provider-1", "node-a")
+            .with_source_provider_for_all_lookups(),
+    );
     let pos_config = signed_pos_config_with_signer_seeds(
         vec![PosValidator {
             validator_id: "node-a".to_string(),

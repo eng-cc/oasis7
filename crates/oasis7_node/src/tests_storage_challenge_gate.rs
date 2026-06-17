@@ -486,8 +486,12 @@ fn runtime_replication_storage_challenge_gate_allows_when_network_matches_reach_
     .expect("pos config")
     .with_auto_attest_all_validators(true)
     .with_replication(signed_replication_config(dir.clone(), 86));
-    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config))
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
+        NodeReplicationNetworkHandle::new(Arc::clone(&network)).with_dht(Arc::new(
+            TestReplicaMaintenanceDht::new("storage-provider-1", "node-a")
+                .with_source_provider_for_all_lookups(),
+        )),
+    );
 
     let root_for_handler = dir.clone();
     let matched_hashes = Arc::new(Mutex::new(Vec::<String>::new()));

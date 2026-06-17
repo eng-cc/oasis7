@@ -8,7 +8,7 @@ const STORAGE_CHALLENGE_FETCH_BLOB_RETRY_BUDGET_MS: u64 = 3_000;
 struct FetchBlobRouteFallbackPolicy {
     allow_generic_route: bool,
     allow_connected_peer_fallback: bool,
-    allow_fallback_after_provider_routes: bool,
+    require_retryable_provider_route_before_fallback: bool,
 }
 
 impl PosNodeEngine {
@@ -267,7 +267,7 @@ pub(super) fn request_fetch_blob_with_route_fallback(
         FetchBlobRouteFallbackPolicy {
             allow_generic_route: true,
             allow_connected_peer_fallback: true,
-            allow_fallback_after_provider_routes: false,
+            require_retryable_provider_route_before_fallback: false,
         },
     )
 }
@@ -288,7 +288,7 @@ pub(super) fn request_fetch_blob_with_storage_challenge_routes(
         FetchBlobRouteFallbackPolicy {
             allow_generic_route: true,
             allow_connected_peer_fallback: false,
-            allow_fallback_after_provider_routes: true,
+            require_retryable_provider_route_before_fallback: true,
         },
     )
 }
@@ -403,7 +403,25 @@ fn request_fetch_blob_chunk_with_route_fallback(
         }
     }
 
-    if provider_lookup_supplied && !policy.allow_fallback_after_provider_routes {
+    if policy.require_retryable_provider_route_before_fallback && last_retryable_error.is_none() {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "blob fetch provider routes exhausted without response for world_id={} hash={} before retryable provider failure",
+                world_id, content_hash
+            ),
+        });
+    }
+
+    if provider_lookup_supplied && last_retryable_error.is_none() {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "blob fetch provider routes exhausted without response for world_id={} hash={}",
+                world_id, content_hash
+            ),
+        });
+    }
+
+    if provider_lookup_supplied && !policy.require_retryable_provider_route_before_fallback {
         return Err(
             last_retryable_error.unwrap_or_else(|| NodeError::Replication {
                 reason: format!(
