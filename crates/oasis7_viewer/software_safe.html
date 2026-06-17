@@ -294,6 +294,60 @@
         max-height: 360px;
         overflow: auto;
       }
+      .entity-list-pending {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 11px 12px;
+        background: rgba(255, 255, 255, 0.025);
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .entity-list-pending__row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .entity-list-pending__spinner {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 2px solid rgba(247, 242, 230, 0.16);
+        border-top-color: var(--accent);
+        flex: 0 0 auto;
+        animation: entity-list-pending-spin 820ms linear infinite;
+      }
+      .entity-list-pending__skeleton {
+        display: grid;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .entity-list-pending__skeleton span {
+        display: block;
+        height: 8px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(247, 242, 230, 0.06), rgba(247, 242, 230, 0.16), rgba(247, 242, 230, 0.06));
+        background-size: 180% 100%;
+        animation: entity-list-pending-sweep 1.4s ease-in-out infinite;
+      }
+      .entity-list-pending__skeleton span:nth-child(2) {
+        width: 82%;
+      }
+      .entity-list-pending__skeleton span:nth-child(3) {
+        width: 64%;
+      }
+      @keyframes entity-list-pending-spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes entity-list-pending-sweep {
+        0% { background-position: 120% 0; }
+        100% { background-position: -80% 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .entity-list-pending__spinner,
+        .entity-list-pending__skeleton span {
+          animation: none;
+        }
+      }
       .list-item {
         width: 100%;
         text-align: left;

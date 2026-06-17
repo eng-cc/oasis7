@@ -26,6 +26,7 @@ Accepted config fields:
   Key / api_key / token_key / OASIS7_LLM_API_KEY
   platform_key / OASIS7_REMOTE_LLM_PLATFORM_KEY
   platform_user_id / OASIS7_REMOTE_LLM_PLATFORM_USER_ID
+  platform_project_id / OASIS7_REMOTE_LLM_PLATFORM_PROJECT_ID
 
 Examples:
   ./scripts/with-letai-llm-config.sh -- ./scripts/check-active-llm-provider.sh --pretty
@@ -113,6 +114,9 @@ aliases = {
     "platform_user_id": "platform_user_id",
     "letai_platform_user_id": "platform_user_id",
     "oasis7_remote_llm_platform_user_id": "platform_user_id",
+    "platform_project_id": "platform_project_id",
+    "letai_platform_project_id": "platform_project_id",
+    "oasis7_remote_llm_platform_project_id": "platform_project_id",
 }
 
 parsed: dict[str, str] = {}
@@ -136,6 +140,7 @@ doc_url = parsed.get("doc_url", "").strip()
 api_key = parsed.get("api_key", "").strip()
 platform_key = parsed.get("platform_key", "").strip()
 platform_user_id = parsed.get("platform_user_id", "").strip()
+platform_project_id = parsed.get("platform_project_id", "").strip()
 
 if not base_url:
     raise SystemExit("error: LetAI base URL is empty")
@@ -154,6 +159,8 @@ payload = {
     "platform_key_present": bool(platform_key),
     "platform_user_id_len": len(platform_user_id),
     "platform_user_id_present": bool(platform_user_id),
+    "platform_project_id_len": len(platform_project_id),
+    "platform_project_id_present": bool(platform_project_id),
 }
 
 print("export OASIS7_LLM_BASE_URL=" + shlex.quote(base_url))
@@ -163,6 +170,8 @@ if platform_key:
     print("export OASIS7_REMOTE_LLM_PLATFORM_KEY=" + shlex.quote(platform_key))
 if platform_user_id:
     print("export OASIS7_REMOTE_LLM_PLATFORM_USER_ID=" + shlex.quote(platform_user_id))
+if platform_project_id:
+    print("export OASIS7_REMOTE_LLM_PLATFORM_PROJECT_ID=" + shlex.quote(platform_project_id))
 print("export OASIS7_LETAI_SANITIZED_CONFIG_JSON=" + shlex.quote(json.dumps(payload, ensure_ascii=False, sort_keys=True)))
 PY
 )"

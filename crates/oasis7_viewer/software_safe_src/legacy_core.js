@@ -39,8 +39,12 @@ export const state = createSoftwareSafeState();
 
 let socket = null;
 let reconnectTimer = null;
+let helloAckTimer = null;
 let initialSnapshotRequested = false;
+let initialSnapshotRetryTimer = null;
+let initialSnapshotRetryCount = 0;
 let hostedSessionRefreshTimer = null;
+let pendingAgentChatAckTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
 let semanticSendLoop = null;
@@ -51,6 +55,12 @@ let pendingSessionRegisterWaiter = null;
 const elements = {};
 let renderHook = () => {};
 let bootstrapped = false;
+const HELLO_ACK_TIMEOUT_MS = 2000;
+const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1000;
+const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
+const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5000;
+const SESSION_REGISTER_ACK_TIMEOUT_MS = 15000;
+const AGENT_CHAT_ACK_TIMEOUT_MS = 30000;
 
 function normalizeUiLocale(raw) {
   const value = String(raw || "").trim().toLowerCase();
@@ -673,6 +683,107 @@ function sendJson(payload) {
   socket.send(JSON.stringify(payload));
 }
 
+function clearInitialSnapshotRetryTimer() {
+  if (initialSnapshotRetryTimer) {
+    window.clearTimeout(initialSnapshotRetryTimer);
+    initialSnapshotRetryTimer = null;
+  }
+}
+
+function clearHelloAckTimer() {
+  if (helloAckTimer) {
+    window.clearTimeout(helloAckTimer);
+    helloAckTimer = null;
+  }
+}
+
+function clearPendingAgentChatAckTimer() {
+  if (pendingAgentChatAckTimer) {
+    window.clearTimeout(pendingAgentChatAckTimer);
+    pendingAgentChatAckTimer = null;
+  }
+}
+
+function scheduleAgentChatAckTimeout(feedback) {
+  clearPendingAgentChatAckTimer();
+  pendingAgentChatAckTimer = window.setTimeout(() => {
+    pendingAgentChatAckTimer = null;
+    if (state.lastChatFeedback !== feedback || feedback.stage !== "sent") {
+      return;
+    }
+    feedback.stage = "error";
+    feedback.ok = false;
+    feedback.accepted = false;
+    feedback.reason = "agent_chat timed out waiting for ack/error from live server";
+    feedback.effect = "agent_chat ack timeout";
+    state.lastChatFeedback = feedback;
+    render();
+  }, AGENT_CHAT_ACK_TIMEOUT_MS);
+}
+
+function failPendingAgentChatAck(reason, effect = "agent_chat ack failed") {
+  clearPendingAgentChatAckTimer();
+  const feedback = state.lastChatFeedback;
+  if (!feedback || feedback.stage !== "sent") {
+    return;
+  }
+  feedback.stage = "error";
+  feedback.ok = false;
+  feedback.accepted = false;
+  feedback.reason = reason;
+  feedback.effect = effect;
+  state.lastChatFeedback = feedback;
+}
+
+function closeSocketForReconnect(targetSocket) {
+  if (!targetSocket || targetSocket.readyState === WebSocket.CLOSING || targetSocket.readyState === WebSocket.CLOSED) {
+    return;
+  }
+  try {
+    targetSocket.close();
+  } catch (_) {
+  }
+}
+
+function scheduleHelloAckTimeout(targetSocket) {
+  clearHelloAckTimer();
+  helloAckTimer = window.setTimeout(() => {
+    helloAckTimer = null;
+    if (socket !== targetSocket || state.server || targetSocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    closeSocketForReconnect(targetSocket);
+  }, HELLO_ACK_TIMEOUT_MS);
+}
+
+function sendInitialSnapshotRequest() {
+  sendJson({ type: "subscribe", streams: ["snapshot", "events", "metrics"], event_kinds: [] });
+  sendJson({ type: "request_snapshot" });
+}
+
+function scheduleInitialSnapshotRetry() {
+  clearInitialSnapshotRetryTimer();
+  if (state.snapshot) {
+    return;
+  }
+  const retryDelay =
+    initialSnapshotRetryCount >= INITIAL_SNAPSHOT_SLOW_RETRY_AFTER
+      ? INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS
+      : INITIAL_SNAPSHOT_RETRY_DELAY_MS;
+  initialSnapshotRetryTimer = window.setTimeout(() => {
+    initialSnapshotRetryTimer = null;
+    if (state.snapshot || !socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    initialSnapshotRetryCount += 1;
+    try {
+      sendInitialSnapshotRequest();
+      scheduleInitialSnapshotRetry();
+    } catch (_) {
+    }
+  }, retryDelay);
+}
+
 function gameplayActionByProtocolAction(protocolAction) {
   const actions = state.snapshot?.player_gameplay?.available_actions;
   if (!Array.isArray(actions)) {
@@ -828,6 +939,7 @@ function addRecentEvent(event) {
 }
 
 function handleSnapshot(snapshot) {
+  clearInitialSnapshotRetryTimer();
   state.snapshot = snapshot;
   state.logicalTime = Math.max(state.logicalTime, Number(snapshot?.time || 0));
   state.tick = state.logicalTime;
@@ -1415,6 +1527,9 @@ function clearPendingSessionRegisterWaiter(error = null) {
   }
   const waiter = pendingSessionRegisterWaiter;
   pendingSessionRegisterWaiter = null;
+  if (waiter.timeoutId) {
+    window.clearTimeout(waiter.timeoutId);
+  }
   if (error != null) {
     waiter.reject(error instanceof Error ? error : new Error(String(error)));
   }
@@ -1525,7 +1640,22 @@ async function ensureRegisteredPlayerSession(requestedAgentId = null, options = 
     promise,
     resolve: resolveWaiter,
     reject: rejectWaiter,
+    timeoutId: null,
   };
+  pendingSessionRegisterWaiter.timeoutId = window.setTimeout(() => {
+    if (!pendingSessionRegisterWaiter || pendingSessionRegisterWaiter.promise !== promise) {
+      return;
+    }
+    const message = "player session registration timed out waiting for ack/error from live server";
+    state.auth.syncInFlight = false;
+    state.auth.registrationStatus = state.auth.available ? "issued" : "guest";
+    state.auth.runtimeStatus = "error";
+    state.auth.error = message;
+    state.auth.recoveryErrorCode = "session_register_timeout";
+    state.auth.recoveryErrorMessage = message;
+    clearPendingSessionRegisterWaiter(message);
+    render();
+  }, SESSION_REGISTER_ACK_TIMEOUT_MS);
   try {
     await dispatchSessionRegisterRequest(normalizedRequestedAgentId, forceRebind);
   } catch (error) {
@@ -1752,6 +1882,7 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
       feedback.effect = "agent_chat request sent; waiting for ack";
       state.lastChatFeedback = feedback;
       sendJson({ type: "agent_chat", request });
+      scheduleAgentChatAckTimeout(feedback);
       state.chatDraft.message = "";
       state.chatDraft.dirty = false;
       render();
@@ -2099,6 +2230,7 @@ function handlePromptControlError(error) {
 }
 
 function handleAgentChatAck(ack) {
+  clearPendingAgentChatAckTimer();
   const feedback = state.lastChatFeedback || createSemanticFeedback("chat", "agent_chat", ack?.agent_id || null);
   feedback.stage = "ack";
   feedback.ok = true;
@@ -2121,6 +2253,7 @@ function handleAgentChatAck(ack) {
 }
 
 function handleAgentChatError(error) {
+  clearPendingAgentChatAckTimer();
   const feedback = state.lastChatFeedback || createSemanticFeedback("chat", "agent_chat", error?.agent_id || selectedAgentId());
   feedback.stage = "error";
   feedback.ok = false;
@@ -2293,13 +2426,15 @@ function handleAuthoritativeRecoveryError(error) {
 function handleViewerMessage(message) {
   switch (message?.type) {
     case "hello_ack":
+      clearHelloAckTimer();
       state.server = message.server || null;
       state.worldId = message.world_id || null;
       state.controlProfile = message.control_profile || "playback";
       if (!initialSnapshotRequested) {
         initialSnapshotRequested = true;
-        sendJson({ type: "subscribe", streams: ["snapshot", "events", "metrics"], event_kinds: [] });
-        sendJson({ type: "request_snapshot" });
+        initialSnapshotRetryCount = 0;
+        sendInitialSnapshotRequest();
+        scheduleInitialSnapshotRetry();
       }
       void ensureHostedPlayerAuthAvailable().then(() => {
         syncHostedPlayerSessionOnConnect();
@@ -2366,8 +2501,14 @@ function attachSocket(ws) {
   ws.addEventListener("open", () => {
     state.connectionStatus = "connected";
     state.lastError = null;
+    state.server = null;
+    state.worldId = null;
     initialSnapshotRequested = false;
+    initialSnapshotRetryCount = 0;
+    clearHelloAckTimer();
+    clearInitialSnapshotRetryTimer();
     sendJson({ type: "hello", client: "viewer", version: 1 });
+    scheduleHelloAckTimeout(ws);
     syncHostedSessionRefreshLoop();
     render();
   });
@@ -2392,11 +2533,17 @@ function attachSocket(ws) {
       state.auth.runtimeStatus = "disconnected";
     }
     clearPendingSessionRegisterWaiter("websocket disconnected during player session registration");
+    failPendingAgentChatAck(
+      "websocket disconnected before agent_chat ack/error returned",
+      "agent_chat websocket disconnected",
+    );
     stopHostedSessionRefreshLoop();
     render();
     if (reconnectTimer) {
       window.clearTimeout(reconnectTimer);
     }
+    clearHelloAckTimer();
+    clearInitialSnapshotRetryTimer();
     reconnectTimer = window.setTimeout(connect, 1200);
   });
 }

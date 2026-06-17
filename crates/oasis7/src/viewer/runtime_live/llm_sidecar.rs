@@ -215,8 +215,7 @@ impl RuntimeLlmSidecar {
     }
 
     pub(in crate::viewer::runtime_live) fn supports_agent_chat(&self) -> bool {
-        !env_requests_provider_backend()
-            || super::control_plane::runtime_agent_chat_echo_enabled_from_env()
+        true
     }
 
     pub(in crate::viewer::runtime_live) fn refresh_provider_check_snapshot(&mut self) {
@@ -586,31 +585,43 @@ impl RuntimeLlmSidecar {
                 });
             }
         };
-        let RuntimeDecisionRunner::Builtin(runner) = runner else {
-            return Err(AgentChatError {
-                code: "agent_provider_chat_unsupported".to_string(),
-                message:
-                    "agent chat is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
-                        .to_string(),
-                agent_id: Some(agent_id.to_string()),
-            });
-        };
-        let Some(agent) = runner.get_mut(agent_id) else {
-            return Err(AgentChatError {
-                code: "agent_not_registered".to_string(),
-                message: format!("agent {} is not registered in llm runner", agent_id),
-                agent_id: Some(agent_id.to_string()),
-            });
-        };
-        if !agent
-            .behavior
-            .push_player_message(world.state().time, message)
-        {
-            return Err(AgentChatError {
-                code: "empty_message".to_string(),
-                message: "chat message cannot be empty".to_string(),
-                agent_id: Some(agent_id.to_string()),
-            });
+        match runner {
+            RuntimeDecisionRunner::Builtin(runner) => {
+                let Some(agent) = runner.get_mut(agent_id) else {
+                    return Err(AgentChatError {
+                        code: "agent_not_registered".to_string(),
+                        message: format!("agent {} is not registered in llm runner", agent_id),
+                        agent_id: Some(agent_id.to_string()),
+                    });
+                };
+                if !agent
+                    .behavior
+                    .push_player_message(world.state().time, message)
+                {
+                    return Err(AgentChatError {
+                        code: "empty_message".to_string(),
+                        message: "chat message cannot be empty".to_string(),
+                        agent_id: Some(agent_id.to_string()),
+                    });
+                }
+            }
+            RuntimeDecisionRunner::ProviderBacked(runner) => {
+                let Some(agent) = runner.get_mut(agent_id) else {
+                    return Err(AgentChatError {
+                        code: "agent_not_registered".to_string(),
+                        message: format!("agent {} is not registered in provider runner", agent_id),
+                        agent_id: Some(agent_id.to_string()),
+                    });
+                };
+                agent
+                    .behavior
+                    .push_player_message_feedback(world.state().time, message)
+                    .map_err(|error| AgentChatError {
+                        code: error.code,
+                        message: error.message,
+                        agent_id: Some(agent_id.to_string()),
+                    })?;
+            }
         }
         Ok(())
     }

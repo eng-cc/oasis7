@@ -4,7 +4,7 @@ use super::*;
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 #[derive(Debug, Clone)]
 struct RecordedHttpRequest {
@@ -61,6 +61,7 @@ fn provider_loopback_http_client_round_trips_info_health_decision_and_feedback()
                 total_tokens: Some(13),
             }),
             cost_cents: Some(1),
+            upstream_trace: None,
             schema_repair_count: 0,
         },
         memory_write_intents: vec![MemoryWriteIntent {
@@ -178,6 +179,57 @@ fn provider_loopback_http_client_rejects_non_loopback_base_url() {
     let err = ProviderLoopbackHttpClient::new("http://192.168.0.5:5841", None, 200)
         .expect_err("non-loopback should fail");
     assert!(err.to_string().contains("loopback"));
+}
+
+#[test]
+fn provider_loopback_http_client_bypasses_proxy_env_for_loopback_transport() {
+    let _guard = proxy_env_lock().lock().expect("proxy env lock");
+    let _proxy_env = ProxyEnvGuard::new();
+    set_bad_proxy_env();
+
+    let base_url = spawn_mock_http_server(1, |_| MockHttpResponse {
+        status_code: 200,
+        body: serde_json::json!({
+            "provider_id": "provider_local_bridge",
+            "capabilities": ["decision", "feedback"],
+            "supported_action_sets": ["phase1_low_frequency"]
+        })
+        .to_string(),
+    });
+    let client = ProviderLoopbackHttpClient::new(base_url.as_str(), None, 200)
+        .expect("build loopback client");
+    let info = client
+        .provider_info()
+        .expect("loopback client should ignore proxy env");
+    assert_eq!(info.provider_id, "provider_local_bridge");
+}
+
+#[test]
+fn provider_loopback_http_client_bypasses_proxy_env_for_trimmed_loopback_transport() {
+    let _guard = proxy_env_lock().lock().expect("proxy env lock");
+    let _proxy_env = ProxyEnvGuard::new();
+    set_bad_proxy_env();
+
+    let base_url = spawn_mock_http_server(1, |_| MockHttpResponse {
+        status_code: 200,
+        body: serde_json::json!({
+            "provider_id": "provider_local_bridge",
+            "capabilities": ["decision", "feedback"],
+            "supported_action_sets": ["phase1_low_frequency"]
+        })
+        .to_string(),
+    });
+    let client = ProviderLoopbackHttpClient::new_with_transport(
+        base_url.as_str(),
+        None,
+        200,
+        " loopback_http ",
+    )
+    .expect("build trimmed loopback client");
+    let info = client
+        .provider_info()
+        .expect("trimmed loopback client should ignore proxy env");
+    assert_eq!(info.provider_id, "provider_local_bridge");
 }
 
 #[test]
@@ -336,4 +388,65 @@ fn write_json_response(stream: &mut TcpStream, status_code: u16, body: &str) {
     stream
         .write_all(response.as_bytes())
         .expect("write mock response");
+}
+
+fn proxy_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn proxy_env_keys() -> &'static [&'static str] {
+    &[
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "NO_PROXY",
+        "no_proxy",
+    ]
+}
+
+fn save_proxy_env() -> Vec<(&'static str, Option<String>)> {
+    proxy_env_keys()
+        .iter()
+        .map(|key| (*key, std::env::var(key).ok()))
+        .collect()
+}
+
+struct ProxyEnvGuard {
+    saved: Vec<(&'static str, Option<String>)>,
+}
+
+impl ProxyEnvGuard {
+    fn new() -> Self {
+        Self {
+            saved: save_proxy_env(),
+        }
+    }
+}
+
+impl Drop for ProxyEnvGuard {
+    fn drop(&mut self) {
+        restore_proxy_env(std::mem::take(&mut self.saved));
+    }
+}
+
+fn set_bad_proxy_env() {
+    for key in proxy_env_keys() {
+        std::env::remove_var(key);
+    }
+    std::env::set_var("HTTP_PROXY", "http://127.0.0.1:9");
+    std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:9");
+    std::env::set_var("ALL_PROXY", "http://127.0.0.1:9");
+}
+
+fn restore_proxy_env(saved: Vec<(&'static str, Option<String>)>) {
+    for (key, value) in saved {
+        match value {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+    }
 }

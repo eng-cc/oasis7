@@ -8,6 +8,7 @@ use std::net::ToSocketAddrs;
 
 const CHAIN_GAMEPLAY_SUBMIT_PATH: &str = "/v1/chain/gameplay/submit";
 const CHAIN_LINK_TIMEOUT_MS: u64 = 300;
+const MAX_CHAIN_LINK_HTTP_RESPONSE_BYTES: usize = 1_048_576;
 
 #[derive(Debug, serde::Deserialize)]
 struct ChainStatusSyncSnapshot {
@@ -67,7 +68,12 @@ impl ViewerRuntimeLiveServer {
         let prepared = match prepare_chain_linked_runtime_update(chain_status_bind) {
             Ok(prepared) => prepared,
             Err(err) => {
-                if session_requests_runtime_feedback(session) {
+                if self
+                    .config
+                    .chain_link_policy
+                    .records_player_facing_chain_failures()
+                    && session_requests_runtime_feedback(session)
+                {
                     self.record_chain_sync_failure(&err);
                 }
                 return Err(err);
@@ -86,15 +92,22 @@ impl ViewerRuntimeLiveServer {
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<bool, ViewerRuntimeLiveServerError> {
-        let chain_status_bind = {
+        let (chain_status_bind, records_player_facing_chain_failures) = {
             let server = lock_shared_server(shared)?;
-            server
+            let chain_status_bind = server
                 .config
                 .chain_status_bind
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-                .map(str::to_string)
+                .map(str::to_string);
+            (
+                chain_status_bind,
+                server
+                    .config
+                    .chain_link_policy
+                    .records_player_facing_chain_failures(),
+            )
         };
         let Some(chain_status_bind) = chain_status_bind else {
             return Ok(false);
@@ -103,7 +116,9 @@ impl ViewerRuntimeLiveServer {
         let prepared = match prepare_chain_linked_runtime_update(chain_status_bind.as_str()) {
             Ok(prepared) => prepared,
             Err(err) => {
-                if session_requests_runtime_feedback(session) {
+                if records_player_facing_chain_failures
+                    && session_requests_runtime_feedback(session)
+                {
                     let mut server = lock_shared_server(shared)?;
                     server.record_chain_sync_failure(&err);
                 }
@@ -275,8 +290,7 @@ fn fetch_chain_status_snapshot(
     stream.write_all(request.as_bytes())?;
     stream.flush()?;
 
-    let mut response = Vec::new();
-    stream.read_to_end(&mut response)?;
+    let response = read_chain_link_http_response(&mut stream)?;
     let (status_code, payload): (u16, ChainStatusSyncSnapshot) =
         parse_http_json_response(response.as_slice(), "chain status")?;
     if status_code != 200 {
@@ -305,8 +319,7 @@ fn post_chain_linked_gameplay_action(
     stream.write_all(payload.as_slice())?;
     stream.flush()?;
 
-    let mut response = Vec::new();
-    stream.read_to_end(&mut response)?;
+    let response = read_chain_link_http_response(&mut stream)?;
     let (status_code, payload): (u16, ChainGameplaySubmitResponse) =
         parse_http_json_response(response.as_slice(), "chain gameplay submit")?;
     if !(200..=299).contains(&status_code) && payload.ok {
@@ -375,6 +388,76 @@ fn parse_http_json_response<T: serde::de::DeserializeOwned>(
     let payload = serde_json::from_slice::<T>(&response[(body_start + 4)..])
         .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
     Ok((status_code, payload))
+}
+
+fn read_chain_link_http_response(
+    stream: &mut TcpStream,
+) -> Result<Vec<u8>, ViewerRuntimeLiveServerError> {
+    let mut response = Vec::with_capacity(4096);
+    let mut chunk = [0_u8; 4096];
+
+    loop {
+        let bytes = stream.read(&mut chunk)?;
+        if bytes == 0 {
+            return Ok(response);
+        }
+        response.extend_from_slice(&chunk[..bytes]);
+        if response.len() > MAX_CHAIN_LINK_HTTP_RESPONSE_BYTES {
+            return Err(ViewerRuntimeLiveServerError::Serde(format!(
+                "chain HTTP response exceeds {MAX_CHAIN_LINK_HTTP_RESPONSE_BYTES} byte limit"
+            )));
+        }
+        if chain_link_http_response_is_complete(response.as_slice())? {
+            return Ok(response);
+        }
+    }
+}
+
+pub(super) fn chain_link_http_response_is_complete(
+    response: &[u8],
+) -> Result<bool, ViewerRuntimeLiveServerError> {
+    let Some(header_end) = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| index + 4)
+    else {
+        return Ok(false);
+    };
+    let header = std::str::from_utf8(&response[..header_end])
+        .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
+    let Some(content_length) = chain_link_http_content_length(header)? else {
+        return Ok(false);
+    };
+    let expected = header_end.checked_add(content_length).ok_or_else(|| {
+        ViewerRuntimeLiveServerError::Serde(
+            "chain HTTP response Content-Length overflow".to_string(),
+        )
+    })?;
+    if expected > MAX_CHAIN_LINK_HTTP_RESPONSE_BYTES {
+        return Err(ViewerRuntimeLiveServerError::Serde(format!(
+            "chain HTTP response exceeds {MAX_CHAIN_LINK_HTTP_RESPONSE_BYTES} byte limit"
+        )));
+    }
+    Ok(response.len() >= expected)
+}
+
+pub(super) fn chain_link_http_content_length(
+    header: &str,
+) -> Result<Option<usize>, ViewerRuntimeLiveServerError> {
+    for line in header.lines().skip(1) {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if name.trim().eq_ignore_ascii_case("Content-Length") {
+            let length = value.trim().parse::<usize>().map_err(|_| {
+                ViewerRuntimeLiveServerError::Serde(
+                    "chain HTTP response Content-Length must be a non-negative integer".to_string(),
+                )
+            })?;
+            return Ok(Some(length));
+        }
+    }
+    Ok(None)
 }
 
 fn gameplay_chain_submit_error(

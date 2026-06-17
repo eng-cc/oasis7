@@ -74,10 +74,11 @@ impl ProviderLoopbackAdapter {
         response: &DecisionResponse,
     ) -> Result<(), DecisionProviderError> {
         if let Some(error) = &response.provider_error {
-            return Err(DecisionProviderError::new(
+            return Err(DecisionProviderError::new_with_upstream_trace(
                 error.code.clone(),
                 error.message.clone(),
                 error.retryable,
+                response.trace_payload.upstream_trace.clone(),
             ));
         }
         match &response.decision {

@@ -144,7 +144,16 @@ fn provider_loopback_adapter_maps_provider_error_envelope_to_decision_provider_e
             retryable: true,
         }),
         diagnostics: ProviderDiagnostics::default(),
-        trace_payload: ProviderTraceEnvelope::default(),
+        trace_payload: ProviderTraceEnvelope {
+            upstream_trace: Some(serde_json::json!({
+                "stage": "decision_invocation",
+                "diagnostics": {
+                    "status_code": 200,
+                    "data_event_count": 2,
+                },
+            })),
+            ..ProviderTraceEnvelope::default()
+        },
         memory_write_intents: vec![],
     };
     let base_url = spawn_mock_http_server(1, move |_| MockHttpResponse {
@@ -158,6 +167,14 @@ fn provider_loopback_adapter_maps_provider_error_envelope_to_decision_provider_e
         .expect_err("provider error should surface");
     assert_eq!(err.code, "provider_timeout");
     assert!(err.retryable);
+    assert_eq!(
+        err.upstream_trace
+            .as_ref()
+            .and_then(|trace| trace.get("diagnostics"))
+            .and_then(|diagnostics| diagnostics.get("data_event_count"))
+            .and_then(serde_json::Value::as_u64),
+        Some(2)
+    );
 }
 
 #[test]

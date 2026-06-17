@@ -4,6 +4,7 @@ use std::fmt;
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 use super::{
     Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace,
@@ -301,6 +302,8 @@ pub struct ProviderTraceEnvelope {
     pub token_usage: Option<ProviderTokenUsage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost_cents: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_trace: Option<serde_json::Value>,
     #[serde(default)]
     pub schema_repair_count: u32,
 }
@@ -370,19 +373,30 @@ pub struct FeedbackEnvelope {
     pub world_delta_summary: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DecisionProviderError {
     pub code: String,
     pub message: String,
     pub retryable: bool,
+    pub upstream_trace: Option<Value>,
 }
 
 impl DecisionProviderError {
     pub fn new(code: impl Into<String>, message: impl Into<String>, retryable: bool) -> Self {
+        Self::new_with_upstream_trace(code, message, retryable, None)
+    }
+
+    pub fn new_with_upstream_trace(
+        code: impl Into<String>,
+        message: impl Into<String>,
+        retryable: bool,
+        upstream_trace: Option<Value>,
+    ) -> Self {
         Self {
             code: code.into(),
             message: message.into(),
             retryable,
+            upstream_trace,
         }
     }
 
@@ -542,6 +556,27 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
         self.recent_event_summary.push_back(summary);
     }
 
+    pub fn push_player_message_feedback(
+        &mut self,
+        world_time: WorldTime,
+        message: &str,
+    ) -> Result<(), DecisionProviderError> {
+        let message = message.trim();
+        if message.is_empty() {
+            return Ok(());
+        }
+        let summary = format!("player_message: {message}");
+        self.push_recent_event_summary(summary.clone());
+        self.memory_summary = Some(summary.clone());
+        self.provider.push_feedback(&FeedbackEnvelope {
+            action_id: world_time,
+            success: true,
+            reject_reason: None,
+            emitted_events: Vec::new(),
+            world_delta_summary: Some(summary),
+        })
+    }
+
     fn build_request(&self, observation: &Observation) -> DecisionRequest {
         let memory_summary = self.composed_memory_summary();
         DecisionRequest {
@@ -578,12 +613,22 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
     }
 
     fn provider_error_to_trace(error: &DecisionProviderError) -> AgentDecisionTrace {
+        let mut llm_output = json!({
+            "provider_error": {
+                "code": error.code,
+                "message": error.message,
+                "retryable": error.retryable,
+            },
+        });
+        if let Some(upstream_trace) = error.upstream_trace.as_ref() {
+            llm_output["upstream_trace"] = upstream_trace.clone();
+        }
         AgentDecisionTrace {
             agent_id: String::new(),
             time: 0,
             decision: AgentDecision::Wait,
             llm_input: None,
-            llm_output: None,
+            llm_output: Some(llm_output.to_string()),
             llm_error: Some(error.as_trace_message()),
             parse_error: None,
             llm_diagnostics: Some(LlmDecisionDiagnostics {

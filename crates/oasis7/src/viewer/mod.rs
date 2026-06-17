@@ -59,8 +59,8 @@ pub use protocol::{
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime_live::{
     runtime_agent_chat_echo_enabled_from_env, viewer_bootstrap_formal_release_runtime_world,
-    ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig, ViewerRuntimeLiveServerError,
-    VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+    ChainLinkPolicy, ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig,
+    ViewerRuntimeLiveServerError, VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use server::{ViewerServer, ViewerServerConfig, ViewerServerError};

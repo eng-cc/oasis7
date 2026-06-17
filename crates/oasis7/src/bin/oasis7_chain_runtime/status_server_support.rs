@@ -2,6 +2,8 @@ use super::*;
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use tracing::Level;
 
+const MAX_STATUS_HTTP_REQUEST_BYTES: usize = 65_536;
+
 #[derive(Debug)]
 pub(super) struct ChainStatusServer {
     stop_tx: Sender<()>,
@@ -189,18 +191,18 @@ fn handle_chain_status_connection(
     feedback_submit_signer: &FeedbackSubmitSigner,
 ) -> Result<(), String> {
     stream
+        .set_nonblocking(false)
+        .map_err(|err| format!("failed to set status stream blocking: {err}"))?;
+    stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|err| format!("failed to set read timeout: {err}"))?;
 
-    let mut buffer = [0_u8; 65_536];
-    let bytes = stream
-        .read(&mut buffer)
-        .map_err(|err| format!("failed to read request: {err}"))?;
-    if bytes == 0 {
+    let request_bytes = read_complete_status_http_request(&mut stream)?;
+    if request_bytes.is_empty() {
         return Ok(());
     }
 
-    let request = String::from_utf8_lossy(&buffer[..bytes]);
+    let request = String::from_utf8_lossy(request_bytes.as_slice());
     let Some(line) = request.lines().next() else {
         write_json_response(&mut stream, 400, b"{\"error\":\"bad request\"}", false)
             .map_err(|err| format!("failed to write 400 response: {err}"))?;
@@ -215,7 +217,7 @@ fn handle_chain_status_connection(
 
     if transfer_submit_api::maybe_handle_transfer_submit_request(
         &mut stream,
-        &buffer[..bytes],
+        request_bytes.as_slice(),
         &runtime,
         method,
         path,
@@ -228,7 +230,7 @@ fn handle_chain_status_connection(
 
     if agent_claim_api::maybe_handle_agent_claim_request(
         &mut stream,
-        &buffer[..bytes],
+        request_bytes.as_slice(),
         &runtime,
         method,
         target,
@@ -242,7 +244,7 @@ fn handle_chain_status_connection(
 
     if gameplay_submit_api::maybe_handle_gameplay_submit_request(
         &mut stream,
-        &buffer[..bytes],
+        request_bytes.as_slice(),
         &runtime,
         method,
         path,
@@ -252,7 +254,7 @@ fn handle_chain_status_connection(
 
     if module_release_attestation_submit_api::maybe_handle_module_release_attestation_submit_request(
         &mut stream,
-        &buffer[..bytes],
+        request_bytes.as_slice(),
         &runtime,
         method,
         path,
@@ -262,7 +264,7 @@ fn handle_chain_status_connection(
 
     if main_token_submit_api::maybe_handle_main_token_submit_request(
         &mut stream,
-        &buffer[..bytes],
+        request_bytes.as_slice(),
         &runtime,
         method,
         path,
@@ -271,7 +273,7 @@ fn handle_chain_status_connection(
     }
 
     if method.eq_ignore_ascii_case("POST") && path == "/v1/chain/feedback/submit" {
-        let body = match extract_http_json_body(&buffer[..bytes]) {
+        let body = match extract_http_json_body(request_bytes.as_slice()) {
             Ok(body) => body,
             Err(err) => {
                 write_feedback_submit_error(&mut stream, 400, err.as_str())?;
@@ -391,6 +393,72 @@ fn handle_chain_status_connection(
     }
 
     Ok(())
+}
+
+fn read_complete_status_http_request(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
+    let mut request = Vec::with_capacity(4096);
+    let mut chunk = [0_u8; 4096];
+
+    loop {
+        let bytes = stream
+            .read(&mut chunk)
+            .map_err(|err| format!("failed to read request: {err}"))?;
+        if bytes == 0 {
+            if request.is_empty() {
+                return Ok(request);
+            }
+            return Err("incomplete HTTP request before connection close".to_string());
+        }
+        request.extend_from_slice(&chunk[..bytes]);
+        if request.len() > MAX_STATUS_HTTP_REQUEST_BYTES {
+            return Err(format!(
+                "HTTP request exceeds {MAX_STATUS_HTTP_REQUEST_BYTES} byte limit"
+            ));
+        }
+        if status_http_request_is_complete(request.as_slice())? {
+            return Ok(request);
+        }
+    }
+}
+
+pub(super) fn status_http_request_is_complete(request: &[u8]) -> Result<bool, String> {
+    let Some(header_end) = request
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| index + 4)
+    else {
+        return Ok(false);
+    };
+    let header = std::str::from_utf8(&request[..header_end])
+        .map_err(|err| format!("HTTP request header is not valid UTF-8: {err}"))?;
+    let Some(content_length) = status_http_content_length(header)? else {
+        return Ok(true);
+    };
+    let expected = header_end
+        .checked_add(content_length)
+        .ok_or_else(|| "HTTP Content-Length overflow".to_string())?;
+    if expected > MAX_STATUS_HTTP_REQUEST_BYTES {
+        return Err(format!(
+            "HTTP request exceeds {MAX_STATUS_HTTP_REQUEST_BYTES} byte limit"
+        ));
+    }
+    Ok(request.len() >= expected)
+}
+
+pub(super) fn status_http_content_length(header: &str) -> Result<Option<usize>, String> {
+    for line in header.lines().skip(1) {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if name.trim().eq_ignore_ascii_case("Content-Length") {
+            let length = value
+                .trim()
+                .parse::<usize>()
+                .map_err(|_| "Content-Length must be a non-negative integer".to_string())?;
+            return Ok(Some(length));
+        }
+    }
+    Ok(None)
 }
 
 pub(super) fn attach_governance_slashing_receipts(

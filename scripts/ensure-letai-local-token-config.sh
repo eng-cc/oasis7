@@ -118,6 +118,9 @@ aliases = {
     "platform_user_id": "platform_user_id",
     "letai_platform_user_id": "platform_user_id",
     "oasis7_remote_llm_platform_user_id": "platform_user_id",
+    "platform_project_id": "platform_project_id",
+    "letai_platform_project_id": "platform_project_id",
+    "oasis7_remote_llm_platform_project_id": "platform_project_id",
 }
 
 parsed: dict[str, str] = {}
@@ -146,6 +149,7 @@ if parsed.get("chat_base_url"):
 api_key = parsed.get("api_key", "").strip()
 platform_key = parsed.get("platform_key", "").strip()
 platform_user_id = parsed.get("platform_user_id", "").strip()
+platform_project_id = parsed.get("platform_project_id", "").strip()
 
 if raw_key and not api_key and not platform_key:
     # LetAI platform keys observed in the operator file are longer than project
@@ -208,7 +212,6 @@ def post_json(path: str, payload: dict) -> dict:
         raise SystemExit(f"error: LetAI platform response was not JSON: {err}") from None
 
 generated = False
-platform_project_id = ""
 if not api_key:
     if not platform_key:
         raise SystemExit("error: config needs token_key/api_key or platform_key")
