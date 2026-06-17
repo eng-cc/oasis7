@@ -97,7 +97,7 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 分层测试触发 | 改动类型、测试层级、命令集合、changed-path scope | 依据矩阵选择最小必跑集合；PR `required-gate` 先规划 `minimal / targeted / full` 再执行命中的重型组件，必要时追加 launcher Web `trunk build` | `planned -> scoped -> running -> passed/failed` | 默认先 `commit`，按风险升级到 `required`，发布加跑 `full`；docs-only / 无关元数据 PR 允许在 stable context 下退化为 governance/fmt-only；`oasis7_client_launcher` / launcher shared runtime 命中时 required-gate 追加 launcher Web 构建覆盖 | 开发者可执行，发布者可放行 |
-| Web UI 驱动分流 | `surface_type`、`driver`、`evidence_mode` | Viewer 页面默认走 `agent-browser`；`oasis7_web_launcher` 产品动作默认走 GUI Agent，页面仅做状态/字段校验 | `selected -> driven -> verified` | 先按 surface 分流，再决定是否补充 Canvas/页面采样 | QA/发布与产品 owner 共同遵循 |
+| Web UI 驱动分流 | `surface_type`、`driver`、`evidence_mode` | Viewer 页面通用闭环默认走 `agent-browser`；真实本地栈 + 玩家 UI 操作流程回归走 Playwright 实跑系列；`oasis7_web_launcher` 产品动作默认走 GUI Agent，页面仅做状态/字段校验 | `selected -> driven -> verified` | 先按 surface 分流，再决定是否补充 Canvas/页面采样；Playwright 实跑用例按 `PWT-###` 编号管理 | QA/发布与产品 owner 共同遵循 |
 | 模型视觉评审 | `visual_change_trigger`、`screenshot_set`、`expected_visual_contract`、`automated_evidence`、`verdict`、`confidence`、`human_escalation_needed` | 任何可视化相关代码、样式、资源或可见输出改动默认触发截图评审；对截图执行固定 rubric，输出 visual review card；`verdict=pass` 且 `confidence=high` 可替代 routine 人工视觉 review；`verdict=watch/block/human_escalation` 或 `confidence=low` 必须写明 owner action | `visual_change_detected -> captured -> model_reviewed -> pass/watch/block/escalated` | 先跑确定性测试，再让模型判断视觉；只有明确不影响任何可见 surface 的改动才能豁免且需记录理由；模型只替代截图/布局/可读性类人工 review，不替代 GitHub required review、发布放行、L5 真实玩家验证或对外 claim 审批 | `producer_system_designer` / `qa_engineer` 守边界，命中的 UI owner 处理 findings |
 | software_safe release 语义门禁 | `renderMode`、`lastControlFeedback.stage`、`deltaLogicalTime`、`deltaEventSeq` | `software_safe` 下允许 `play/pause` 先返回 `queued`；formal progress 以后续 `step` 的 `completed_advanced` + 正向 world delta 判定 | `queued -> completed_advanced` 或 `queued -> blocked` | 主 Web 入口不再要求 `play` 立刻涨 tick，也不再强制 `selectedKind=agent`；若 `llm_required` 显式阻断则按 blocker 合约留痕 | QA/发布维护者维护 |
 | 证据包归档 | 命令、日志、截图、结论、责任人、`player_action`、`world_change_due_to_player`、`player_leverage_score`、`world_activity_only` | 执行后归档并建立索引 | `collecting -> archived -> reviewed` | 按版本与模块分层索引；若 `world_activity_only=yes`，则该样本不能直接支撑玩法放行 | 测试维护者负责最终校验 |
@@ -132,6 +132,7 @@
   - AC-13: `token-genesis-allocation-audit-checklist-2026-03-22` 专题文档与执行模板落盘并映射 `TASK-TESTING-062`，明确创世参数审计项、阻断条件、证据字段与 verdict 口径。
   - AC-14: `required-gate` 必须在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 改动时按需执行 launcher Web `trunk build`，避免仅在 release `build-web-dist` 才暴露 wasm 编译错误。
   - AC-14A: 仓库必须提供轻量 Web/UI automation smoke，允许 `qa_engineer` 在不启动完整 runtime 栈的前提下，用 fixture 页面复用真 `agent-browser` 验证 `viewer-software-safe-step-regression.sh` 的最小浏览器链路与 summary/state 产物契约；该 smoke 只用于 tooling 预检，不替代正式 S6 证据。
+  - AC-14B: 仓库必须维护 Playwright 实跑测试系列入口，记录 `PWT-###` 用例矩阵、真实本地栈/真实 provider/真实 UI 输入的覆盖边界、mock 禁用规则、证据产物要求和新增用例规则；首个用例为 `PWT-001 Real Agent Chat`，后续玩家操作流程必须从该入口扩展。
   - AC-15: 正式 gameplay/trust evidence 至少要有 1 条代表性样本明确记录 `player_action`、`world_change_due_to_player`、`player_leverage_score` 与 `world_activity_only`，否则不得宣称“玩家已有 meaningful participation”。
   - AC-16: `playability-evidence-stack-2026-05-06` 专题文档必须明确 `L1/L2/L3/L4A/L4B/L5` 证据边界、组合规则、现有 oasis7 锚点映射，以及“自动化不能单独保证好玩”的正式结论。
   - AC-17: `playability-subagent-review-system-2026-05-06` 专题文档必须明确标准角色 subagent 清单、review packet / output card、trigger matrix、sequencing rules 和 stop conditions。
@@ -146,7 +147,7 @@
   - 不承诺所有测试都进入 CI 默认路径。
 
 ## 3. AI System Requirements (If Applicable)
-- Tool Requirements: `scripts/ci-tests.sh`、agent-browser 闭环工具、`oasis7_web_launcher` GUI Agent 接口、长跑脚本、结果汇总工具、`scripts/prepare-playability-l4-review.sh`。
+- Tool Requirements: `scripts/ci-tests.sh`、agent-browser 闭环工具、Playwright 实跑脚本、`oasis7_web_launcher` GUI Agent 接口、长跑脚本、结果汇总工具、`scripts/prepare-playability-l4-review.sh`。
 - Evaluation Strategy: 通过门禁通过率、缺陷逃逸率、回归定位时长、证据完整度衡量测试体系质量。
 
 ## 4. Technical Specifications
@@ -154,6 +155,7 @@
 - Integration Points:
   - `testing-manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
+  - `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
   - `doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
   - `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`

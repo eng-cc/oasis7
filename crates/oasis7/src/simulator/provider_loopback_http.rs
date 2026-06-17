@@ -7,6 +7,7 @@ use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::{Method, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::{DecisionRequest, DecisionResponse, FeedbackEnvelope};
 
@@ -207,6 +208,28 @@ pub struct ProviderFeedbackAck {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProviderAgentChatRequest {
+    pub agent_id: String,
+    pub player_id: String,
+    pub message: String,
+    pub world_time: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resources: Option<Value>,
+    #[serde(default)]
+    pub recent_feedback: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProviderAgentChatResponse {
+    pub agent_id: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location_id: Option<String>,
+}
+
 #[derive(Debug)]
 pub enum ProviderLoopbackHttpError {
     InvalidBaseUrl(String),
@@ -327,6 +350,13 @@ impl ProviderLoopbackHttpClient {
         feedback: &FeedbackEnvelope,
     ) -> Result<ProviderFeedbackAck, ProviderLoopbackHttpError> {
         self.post_json("/v1/world-simulator/feedback", feedback)
+    }
+
+    pub fn request_agent_chat(
+        &self,
+        request: &ProviderAgentChatRequest,
+    ) -> Result<ProviderAgentChatResponse, ProviderLoopbackHttpError> {
+        self.post_json("/v1/world-simulator/agent-chat", request)
     }
 
     fn get_json<Response>(&self, path: &str) -> Result<Response, ProviderLoopbackHttpError>

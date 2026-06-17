@@ -378,6 +378,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 ### S6：Web UI 闭环 smoke 套件（L4A）
 - S6 详细执行步骤、agent-browser 命令、发布门禁与补充约定已拆分到：
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
+  - `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`（Playwright 实跑系列入口，管理真实本地栈 + 真实 UI 操作流程矩阵）
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`（需求边界/成功标准）
   - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`（截图加模型视觉评审，用于替代 routine 人工视觉 review）
   - `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`（发布前人工体验与异常恢复检查清单）
@@ -389,6 +390,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - repo-owned `remote_https` 参考装配当前采用 `oasis7_provider_local_bridge` + `scripts/provider-remote-https/letai_provider_cli.py` + `nginx` HTTPS 反代；操作步骤见 `doc/world-runtime/runtime/provider-remote-https-bridge-operator-runbook.md`。
   - 任何 QA / release / playability 结论都应先标明玩家访问模式，再补充 execution lane；不得把 `headless_agent` 直接当成“第三种入口”。
 - `oasis7_viewer_live` / Viewer 页面：默认使用 `agent-browser` 驱动页面与采集证据；当 `renderMode=viewer`（或兼容 alias `software_safe`）且带 viewer auth bootstrap 时，允许继续验证选中 Agent 的最小 `prompt/chat` 闭环。
+- 需要验证真实玩家输入流程、真实 provider、真实本地栈的一整条 Playwright 闭环时，进入 `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`。当前首个用例是 `PWT-001 Real Agent Chat`：`./scripts/viewer-real-agent-chat-regression.sh` 会启动本地 LetAI 栈、打开 Viewer、通过可见 UI 聊天输入框和发送按钮发消息、等待真实 Agent 回复，并断言不含 mock 标记；后续所有 Playwright 实跑用例按该手册的 `PWT-###` 矩阵扩展。
 - 若只需要回归 `software_safe` 纯实时最小闭环（加载 -> 连接 -> 选择目标 -> 实时事件/语义摘要可见，且页面不再暴露回放控件），优先执行 `./scripts/viewer-software-safe-step-regression.sh`；该脚本不再主动调用 `__AW_TEST__.sendControl('step')`，而是等待 `logicalTime/eventSeq` 自然增长；若当前 runtime 被 `llm_required` 等 gameplay blocker 卡住，则要求页面显式暴露 blocker，而不是再用手动步进补推进。
 - 若只想先确认 Web/UI automation tooling 本身没有漂移，而不想起完整 runtime/build，先执行 `./scripts/viewer-software-safe-step-regression-smoke.sh`；它会用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh` 验证最小浏览器链路和 summary/state 产物契约，但不替代正式 S6 证据。
 - 若需要把 `software_safe` 的 prompt/chat/rollback/message-flow 做成独立 QA smoke，优先执行 `./scripts/viewer-software-safe-chat-regression.sh`；当脚本自举 source stack 并自动启用 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` 时，若 QA echo 没有在 `chat ack` 后、无额外 `step/play` 的同一轮交互里进入消息流，会直接判为阻断失败；外部 URL 场景仍默认把 `agent_spoke` 缺失记为可追溯 warning，显式加 `--require-agent-spoke` 时再升级为阻断失败。
@@ -954,7 +956,7 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 | S3 | 应用主链定向 | runtime / simulator / viewer live / web bridge 定向改动 | 定向 cargo test 日志 |
 | S4 | 分布式子系统 | node / net / consensus / distfs / P2P 链路改动 | 子系统测试日志 |
 | S5 | viewer crate / wasm 编译 | `crates/oasis7_viewer/**` 或 viewer wasm 构建链路改动 | viewer 单测 + wasm 编译日志 |
-| S6 | Web UI 闭环 smoke | Viewer / launcher / Web 控制台 / 交互链路改动；任何可视化相关代码、样式、资源或可见输出改动还必须叠加截图模型视觉评审 | 截图、console、语义结果；visual review card |
+| S6 | Web UI 闭环 smoke | Viewer / launcher / Web 控制台 / 交互链路改动；真实玩家输入流程或真实 provider 回归优先补 Playwright 实跑用例；任何可视化相关代码、样式、资源或可见输出改动还必须叠加截图模型视觉评审 | 截图、console、语义结果；Playwright summary/state；visual review card |
 | S7 | 场景矩阵回归 | scenario / gameplay 初始化 / 场景 ID 与稳定性改动 | 场景测试日志 |
 | S8 | 长稳与压力 | 性能、内存、恢复、资源压力或 soak 相关改动 | stress/soak 目录与 summary |
 | S9 | P2P/存储/共识在线长跑 | 分布式一致性、存储、共识、在线网络改动 | S9 summary / timeline / failures |

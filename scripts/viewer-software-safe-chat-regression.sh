@@ -28,6 +28,12 @@ Options:
                                  Wait for inbound `agent_spoke` before any extra step/play
                                  (default: 4000)
   --require-agent-spoke          Treat missing inbound `agent_spoke` as failure
+  --expect-agent-spoke-message <text>
+                                 Require an exact inbound Agent reply message
+  --expect-agent-spoke-contains <text>
+                                 Require inbound Agent reply to contain text; repeatable
+  --forbid-agent-spoke-contains <text>
+                                 Fail if matching inbound Agent reply contains text; repeatable
   --headed                       Open browser in headed mode
   Note: this is a QA regression, not the local playtest entry. When the script
   bootstraps its own stack, it enables receipt-only debug echo with
@@ -122,6 +128,14 @@ normalize_eval_token() {
   raw=${raw#\"}
   raw=${raw%\"}
   printf '%s' "$raw"
+}
+
+js_array_literal() {
+  python3 - "$@" <<'PY'
+import json
+import sys
+print(json.dumps(sys.argv[1:], ensure_ascii=False))
+PY
 }
 
 log_note() {
@@ -245,6 +259,10 @@ payload = {
     "agentSpokeNeededAdvance": sys.argv[16] == "true",
     "requireAgentSpoke": sys.argv[17] == "true",
     "requireImmediateAgentSpoke": sys.argv[18] == "true",
+    "agentSpokeExpectedMessage": None if sys.argv[19] == "" else sys.argv[19],
+    "agentSpokeRequiredContains": json.loads(sys.argv[20]),
+    "agentSpokeForbiddenContains": json.loads(sys.argv[21]),
+    "agentSpokeMessage": None if sys.argv[22] == "" else sys.argv[22],
 }
 print(json.dumps(payload, ensure_ascii=False, indent=2))
 PY
@@ -259,6 +277,9 @@ AGENT_SPOKE_TIMEOUT_MS=45000
 IMMEDIATE_AGENT_SPOKE_TIMEOUT_MS=4000
 REQUIRE_AGENT_SPOKE=0
 REQUIRE_AGENT_SPOKE_EXPLICIT=0
+AGENT_SPOKE_EXPECTED_MESSAGE=""
+AGENT_SPOKE_REQUIRED_CONTAINS=()
+AGENT_SPOKE_FORBIDDEN_CONTAINS=()
 HEADED=0
 STACK_ARGS=()
 BOOTSTRAPPED_STACK=0
@@ -298,6 +319,22 @@ while [[ $# -gt 0 ]]; do
       REQUIRE_AGENT_SPOKE=1
       REQUIRE_AGENT_SPOKE_EXPLICIT=1
       shift
+      ;;
+    --expect-agent-spoke-message)
+      AGENT_SPOKE_EXPECTED_MESSAGE="${2:-}"
+      REQUIRE_AGENT_SPOKE=1
+      REQUIRE_AGENT_SPOKE_EXPLICIT=1
+      shift 2
+      ;;
+    --expect-agent-spoke-contains)
+      AGENT_SPOKE_REQUIRED_CONTAINS+=("${2:-}")
+      REQUIRE_AGENT_SPOKE=1
+      REQUIRE_AGENT_SPOKE_EXPLICIT=1
+      shift 2
+      ;;
+    --forbid-agent-spoke-contains)
+      AGENT_SPOKE_FORBIDDEN_CONTAINS+=("${2:-}")
+      shift 2
       ;;
     --headed)
       HEADED=1
@@ -488,16 +525,26 @@ agent_spoke_seen_immediate=false
 agent_spoke_needed_advance=false
 require_immediate_agent_spoke=0
 agent_spoke_deadline_ms=$((SECONDS * 1000 + AGENT_SPOKE_TIMEOUT_MS))
-agent_spoke_expected_message=""
+agent_spoke_expected_message="$AGENT_SPOKE_EXPECTED_MESSAGE"
 if [[ "$BOOTSTRAPPED_STACK" -eq 1 && "$BOOTSTRAP_USES_BUNDLE" -eq 0 ]]; then
   agent_spoke_expected_message="[local-mock-receipt] 已收到消息；当前本地 mock provider 不生成真实 Agent 回复：${CHAT_MESSAGE}"
   require_immediate_agent_spoke=1
 fi
 
-agent_spoke_match_script="(() => { const h = window.__AW_TEST__?.getState?.()?.chatHistory ?? []; return h.some((entry) => entry && entry.source === 'event' && entry.agentId === ${AGENT_ID@Q}); })()"
-if [[ -n "$agent_spoke_expected_message" ]]; then
-  agent_spoke_match_script="(() => { const h = window.__AW_TEST__?.getState?.()?.chatHistory ?? []; return h.some((entry) => entry && entry.source === 'event' && entry.agentId === ${AGENT_ID@Q} && entry.message === ${agent_spoke_expected_message@Q}); })()"
-fi
+agent_spoke_required_contains_json="$(js_array_literal "${AGENT_SPOKE_REQUIRED_CONTAINS[@]}")"
+agent_spoke_forbidden_contains_json="$(js_array_literal "${AGENT_SPOKE_FORBIDDEN_CONTAINS[@]}")"
+agent_spoke_entry_predicate="(entry) => {
+  if (!entry || entry.source !== 'event' || entry.agentId !== ${AGENT_ID@Q}) return false;
+  const msg = String(entry.message ?? '');
+  const expected = ${agent_spoke_expected_message@Q};
+  const required = ${agent_spoke_required_contains_json};
+  const forbidden = ${agent_spoke_forbidden_contains_json};
+  if (expected && msg !== expected) return false;
+  if (!required.every((needle) => msg.includes(String(needle)))) return false;
+  if (!forbidden.every((needle) => !msg.includes(String(needle)))) return false;
+  return true;
+}"
+agent_spoke_match_script="(() => { const h = window.__AW_TEST__?.getState?.()?.chatHistory ?? []; return h.some(${agent_spoke_entry_predicate}); })()"
 
 immediate_wait_ms=$AGENT_SPOKE_TIMEOUT_MS
 if (( immediate_wait_ms > IMMEDIATE_AGENT_SPOKE_TIMEOUT_MS )); then
@@ -568,6 +615,7 @@ fi
 
 final_state=$(ab_state)
 write_json_file "$final_state" "$final_state_json"
+agent_spoke_message="$(normalize_eval_token "$(ab_eval "$session" "(() => { const h = window.__AW_TEST__?.getState?.()?.chatHistory ?? []; const entry = h.find(${agent_spoke_entry_predicate}); return entry?.message ?? ''; })()")")"
 ab_screenshot "$session" "$screenshot_path" >>"$ab_log" 2>&1 || true
 
 summary_raw=$(summary_json \
@@ -579,7 +627,11 @@ summary_raw=$(summary_json \
   "$GAME_URL" \
   "$render_mode" \
   "$auth_ready" \
-  true true true true true "$agent_spoke_seen" "$agent_spoke_seen_immediate" "$agent_spoke_needed_advance" "$([[ "$REQUIRE_AGENT_SPOKE" -eq 1 ]] && printf 'true' || printf 'false')" "$([[ "$require_immediate_agent_spoke" -eq 1 ]] && printf 'true' || printf 'false')")
+  true true true true true "$agent_spoke_seen" "$agent_spoke_seen_immediate" "$agent_spoke_needed_advance" "$([[ "$REQUIRE_AGENT_SPOKE" -eq 1 ]] && printf 'true' || printf 'false')" "$([[ "$require_immediate_agent_spoke" -eq 1 ]] && printf 'true' || printf 'false')" \
+  "$agent_spoke_expected_message" \
+  "$agent_spoke_required_contains_json" \
+  "$agent_spoke_forbidden_contains_json" \
+  "$agent_spoke_message")
 printf '%s\n' "$summary_raw" >"$summary_json_path"
 python3 - "$summary_json_path" "$summary_md_path" <<'PY'
 import json
@@ -608,6 +660,10 @@ lines = [
     f"- agentSpokeNeededAdvance: `{data['agentSpokeNeededAdvance']}`",
     f"- requireAgentSpoke: `{data['requireAgentSpoke']}`",
     f"- requireImmediateAgentSpoke: `{data['requireImmediateAgentSpoke']}`",
+    f"- agentSpokeExpectedMessage: `{data['agentSpokeExpectedMessage']}`",
+    f"- agentSpokeRequiredContains: `{data['agentSpokeRequiredContains']}`",
+    f"- agentSpokeForbiddenContains: `{data['agentSpokeForbiddenContains']}`",
+    f"- agentSpokeMessage: `{data['agentSpokeMessage']}`",
     f"- gameUrl: `{data['gameUrl']}`",
 ]
 out.write_text("\n".join(lines) + "\n", encoding='utf-8')

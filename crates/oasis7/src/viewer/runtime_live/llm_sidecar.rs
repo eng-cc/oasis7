@@ -10,10 +10,10 @@ use crate::runtime::{
 use crate::simulator::{
     evaluate_provider_compatibility, Action as SimulatorAction, ActionCatalogEntry, ActionResult,
     AgentDecision, AgentDecisionTrace, AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
-    LlmAgentBehavior, LlmAgentConfig, OpenAiChatCompletionClient, ProviderBackedAgentBehavior,
-    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
-    WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot,
-    CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
+    LlmAgentBehavior, LlmAgentConfig, OpenAiChatCompletionClient, ProviderAgentChatRequest,
+    ProviderBackedAgentBehavior, ProviderExecutionMode, ProviderLoopbackAdapter,
+    ProviderLoopbackHttpClient, ResourceOwner, WorldConfig, WorldEvent, WorldEventKind,
+    WorldJournal, WorldKernel, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -552,8 +552,9 @@ impl RuntimeLlmSidecar {
         world: &RuntimeWorld,
         config: &WorldConfig,
         agent_id: &str,
+        player_id: &str,
         message: &str,
-    ) -> Result<(), AgentChatError> {
+    ) -> Result<Option<String>, AgentChatError> {
         if !self.is_llm_mode() {
             return Err(AgentChatError {
                 code: "llm_mode_required".to_string(),
@@ -575,8 +576,18 @@ impl RuntimeLlmSidecar {
                 agent_id: Some(agent_id.to_string()),
             });
         }
-        let runner = match self.runner.as_mut() {
-            Some(runner) => runner,
+        let provider_backed = match self.runner.as_ref() {
+            Some(RuntimeDecisionRunner::Builtin(_)) => false,
+            Some(RuntimeDecisionRunner::ProviderBacked(runner)) => {
+                if runner.get(agent_id).is_none() {
+                    return Err(AgentChatError {
+                        code: "agent_not_registered".to_string(),
+                        message: format!("agent {} is not registered in provider runner", agent_id),
+                        agent_id: Some(agent_id.to_string()),
+                    });
+                }
+                true
+            }
             None => {
                 return Err(AgentChatError {
                     code: "llm_init_failed".to_string(),
@@ -585,8 +596,40 @@ impl RuntimeLlmSidecar {
                 });
             }
         };
-        match runner {
-            RuntimeDecisionRunner::Builtin(runner) => {
+        if provider_backed {
+            let reply = self.request_provider_agent_chat(world, agent_id, player_id, message)?;
+            let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() else {
+                return Err(AgentChatError {
+                    code: "llm_init_failed".to_string(),
+                    message: "provider runner disappeared while sending agent chat".to_string(),
+                    agent_id: Some(agent_id.to_string()),
+                });
+            };
+            let Some(agent) = runner.get_mut(agent_id) else {
+                return Err(AgentChatError {
+                    code: "agent_not_registered".to_string(),
+                    message: format!("agent {} is not registered in provider runner", agent_id),
+                    agent_id: Some(agent_id.to_string()),
+                });
+            };
+            agent
+                .behavior
+                .push_player_message_feedback(world.state().time, message)
+                .map_err(|error| AgentChatError {
+                    code: error.code,
+                    message: error.message,
+                    agent_id: Some(agent_id.to_string()),
+                })?;
+            Ok(Some(reply))
+        } else {
+            let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() else {
+                return Err(AgentChatError {
+                    code: "llm_init_failed".to_string(),
+                    message: "builtin llm runner disappeared while sending agent chat".to_string(),
+                    agent_id: Some(agent_id.to_string()),
+                });
+            };
+            {
                 let Some(agent) = runner.get_mut(agent_id) else {
                     return Err(AgentChatError {
                         code: "agent_not_registered".to_string(),
@@ -604,26 +647,67 @@ impl RuntimeLlmSidecar {
                         agent_id: Some(agent_id.to_string()),
                     });
                 }
-            }
-            RuntimeDecisionRunner::ProviderBacked(runner) => {
-                let Some(agent) = runner.get_mut(agent_id) else {
-                    return Err(AgentChatError {
-                        code: "agent_not_registered".to_string(),
-                        message: format!("agent {} is not registered in provider runner", agent_id),
-                        agent_id: Some(agent_id.to_string()),
-                    });
-                };
-                agent
-                    .behavior
-                    .push_player_message_feedback(world.state().time, message)
-                    .map_err(|error| AgentChatError {
-                        code: error.code,
-                        message: error.message,
-                        agent_id: Some(agent_id.to_string()),
-                    })?;
+                Ok(None)
             }
         }
-        Ok(())
+    }
+
+    fn request_provider_agent_chat(
+        &self,
+        world: &RuntimeWorld,
+        agent_id: &str,
+        player_id: &str,
+        message: &str,
+    ) -> Result<String, AgentChatError> {
+        let settings = provider_settings_from_env()
+            .map_err(|message| AgentChatError {
+                code: "provider_config_invalid".to_string(),
+                message,
+                agent_id: Some(agent_id.to_string()),
+            })?
+            .ok_or_else(|| AgentChatError {
+                code: "provider_config_missing".to_string(),
+                message: "provider-backed agent chat requires provider settings".to_string(),
+                agent_id: Some(agent_id.to_string()),
+            })?;
+        let client = ProviderLoopbackHttpClient::new_with_transport(
+            settings.base_url.as_str(),
+            settings.auth_token.as_deref(),
+            settings.decision_timeout_ms,
+            settings.provider_transport.as_str(),
+        )
+        .map_err(|error| AgentChatError {
+            code: "provider_unreachable".to_string(),
+            message: error.to_string(),
+            agent_id: Some(agent_id.to_string()),
+        })?;
+        let agent = world.state().agents.get(agent_id);
+        let location_id = agent.map(|agent| location_id_for_pos(agent.state.pos));
+        let resources = agent.and_then(|agent| serde_json::to_value(&agent.state.resources).ok());
+        let response = client
+            .request_agent_chat(&ProviderAgentChatRequest {
+                agent_id: agent_id.to_string(),
+                player_id: player_id.to_string(),
+                message: message.to_string(),
+                world_time: world.state().time,
+                location_id,
+                resources,
+                recent_feedback: Vec::new(),
+            })
+            .map_err(|error| AgentChatError {
+                code: "provider_unreachable".to_string(),
+                message: error.to_string(),
+                agent_id: Some(agent_id.to_string()),
+            })?;
+        let reply = response.message.trim();
+        if reply.is_empty() {
+            return Err(AgentChatError {
+                code: "provider_empty_chat_response".to_string(),
+                message: "provider returned an empty agent chat response".to_string(),
+                agent_id: Some(agent_id.to_string()),
+            });
+        }
+        Ok(reply.to_string())
     }
 
     pub(super) fn next_llm_decision(

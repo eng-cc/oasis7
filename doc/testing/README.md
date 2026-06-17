@@ -10,8 +10,9 @@
 - 想先回答“这些标准角色 subagent 到底怎么设计、怎么组合成 review 流程”：`doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
 - 想先回答“agent 如何模拟多个不同风格的玩家视角，但又不把 `player` 写成正式角色”：`doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
 - 想用截图加模型视觉评审替代绝大部分人工视觉 review：先读 `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`，输出卡模板在 `doc/testing/templates/model-visual-review-card-template.md`
+- 想跑真实本地栈 + Playwright + 玩家 UI 操作流程，并把这些用例作为一个长期系列管理：`doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
 - 想看当前活跃任务、阻断与最新完成项：`doc/testing/project.md`
-- 想先判断要跑哪套测试或查操作步骤：`testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
+- 想先判断要跑哪套测试或查操作步骤：`testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`、`doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted access / legacy p2p network-rehearsal rehearsal / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
 - 想先看当前 QA 阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 - 想先确认云上测试/正式环境、hosted-login 服务清单与 testnet/mainnet 口径边界：`doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
@@ -29,7 +30,7 @@
 - `project.md` 是执行台账，适合确认当前 QA 阻断、活跃测试治理任务与最新完成项。
   当前窗口只保留 blocker、next step 与少量高价值收口摘要；更细的近期完成历史应回到对应 topic `*.project.md` 与 `.pm/tasks/*.yaml` / execution log 追溯。
 - `evidence/README.md` 是当前最高密度热点子域 `evidence/` 的 canonical 入口，适合先按“release gate / hosted access / legacy p2p network-rehearsal rehearsal / governance drill / claim-audit / 定向验证”分流，再进入具体留痕文件。
-- `testing-manual.md` 与 `manual/*.manual.md` 是 operator 手册层，用于决定跑哪套测试、按什么步骤执行。
+- `testing-manual.md` 与 `manual/*.manual.md` 是 operator 手册层，用于决定跑哪套测试、按什么步骤执行；其中 Playwright 实跑系列入口是 `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`。
 - `prd.index.md` 是定向检索索引，适合已知主题后按文件名查找，不是新读者的首读入口。
 
 ## 活跃阅读面边界
@@ -50,7 +51,7 @@
 - `governance/`：质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated player personas。
 - `templates/`：证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入。
 - `performance/`：runtime / viewer 性能观测与方法学。
-- `manual/`：系统测试手册分册与 Web UI 闭环 manual。
+- `manual/`：系统测试手册分册、Web UI 闭环 manual、Playwright 实跑系列入口。
 - `chaos-plans/`：专项 chaos plan 入口。
 
 ## 高密度提示

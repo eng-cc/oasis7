@@ -315,6 +315,30 @@ function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
   };
 }
 
+function agentMarkerStyle(agent, index, worldBounds) {
+  const base = toWorldPercentStyle(agent.pos, worldBounds, {
+    left: `${18 + ((index % 5) * 15)}%`,
+    top: `${14 + (Math.floor(index / 5) * 22)}%`,
+  });
+  const offsets = [
+    [-18, -18],
+    [18, -18],
+    [-18, 18],
+    [18, 18],
+    [0, -30],
+    [0, 30],
+    [-30, 0],
+    [30, 0],
+    [-28, -28],
+    [28, 28],
+  ];
+  const [x, y] = offsets[index % offsets.length] || [0, 0];
+  return {
+    ...base,
+    transform: `translate(${x}px, ${y}px)`,
+  };
+}
+
 function worldPercentPoint(pos, worldBounds, fallbackX = 50, fallbackY = 50) {
   if (!pos || !worldBounds) {
     return { x: fallbackX, y: fallbackY };
@@ -798,11 +822,11 @@ function PixelWorldHostVisualLayer(props) {
         {(agent, index) => (
           <button
             class="pixel-world-entity pixel-world-entity--agent"
+            data-pixel-world-agent-marker="true"
+            data-agent-id={agent.id}
             data-position-source={agent.position_source}
-            style={toWorldPercentStyle(agent.pos, visualState().worldBounds, {
-              left: `${18 + ((index() % 5) * 15)}%`,
-              top: `${14 + (Math.floor(index() / 5) * 22)}%`,
-            })}
+            aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent.id}`}
+            style={agentMarkerStyle(agent, index(), visualState().worldBounds)}
             title={agent.label}
             onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
             onMouseLeave={() => props.onHover(null)}
@@ -813,6 +837,31 @@ function PixelWorldHostVisualLayer(props) {
         )}
       </For>
     </>
+  );
+}
+
+function PixelWorldCanvasAgentHitTargets(props) {
+  const visualState = () => pixelWorldVisualState(props.renderState());
+  return (
+    <For each={visualState().agents.slice(0, 10)}>
+      {(agent, index) => (
+        <button
+          type="button"
+          class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"
+          data-pixel-world-agent-marker="true"
+          data-agent-id={agent.id}
+          data-position-source={agent.position_source}
+          aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent.id}`}
+          style={agentMarkerStyle(agent, index(), visualState().worldBounds)}
+          title={agent.label}
+          onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
+          onMouseLeave={() => props.onHover(null)}
+          onClick={() => props.onSelect({ kind: "agent", id: agent.id })}
+        >
+          <span>{agent.label.slice(0, 1).toUpperCase()}</span>
+        </button>
+      )}
+    </For>
   );
 }
 
@@ -1151,6 +1200,12 @@ function PixelWorldCanvasRenderer(props) {
         )}
       </div>
       <div class="pixel-world-canvas__overlay">
+        <PixelWorldCanvasAgentHitTargets
+          locale={props.locale}
+          renderState={props.renderState}
+          onSelect={props.onSelect}
+          onHover={props.onHover}
+        />
         <PixelWorldHostVisualLayer
           enabled={false}
           locale={props.locale}

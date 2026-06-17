@@ -490,10 +490,14 @@ impl ViewerRuntimeLiveServer {
             &self.world,
             &self.snapshot_config,
             agent_id.as_str(),
+            player_id.as_str(),
             message.as_str(),
         ) {
-            Ok(()) => {
+            Ok(provider_reply) => {
                 self.llm_sidecar.request_decision();
+                if let Some(reply) = provider_reply {
+                    self.enqueue_agent_chat_reply_event(agent_id.as_str(), reply.as_str());
+                }
             }
             Err(error)
                 if chat_echo_enabled
@@ -856,6 +860,18 @@ impl ViewerRuntimeLiveServer {
             message: format!(
                 "{RUNTIME_AGENT_CHAT_ECHO_PREFIX} {RUNTIME_AGENT_CHAT_ECHO_NOTICE}{message}"
             ),
+            target_agent_id: None,
+        });
+    }
+
+    fn enqueue_agent_chat_reply_event(&mut self, agent_id: &str, message: &str) {
+        let Some(agent) = self.world.state().agents.get(agent_id) else {
+            return;
+        };
+        self.enqueue_virtual_event(WorldEventKind::AgentSpoke {
+            agent_id: agent_id.to_string(),
+            location_id: location_id_for_pos(agent.state.pos),
+            message: message.to_string(),
             target_agent_id: None,
         });
     }

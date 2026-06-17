@@ -59,7 +59,7 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(3, {
+    let base_url = spawn_runtime_live_mock_http_server(4, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -83,6 +83,14 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
                 ("POST", "/v1/world-simulator/feedback") => MockHttpResponse {
                     status_code: 200,
                     body: serde_json::json!({"ok": true}).to_string(),
+                },
+                ("POST", "/v1/world-simulator/agent-chat") => MockHttpResponse {
+                    status_code: 200,
+                    body: serde_json::json!({
+                        "agent_id": "agent-0",
+                        "message": "我在测试地点，资源是 electricity=32 data=8。"
+                    })
+                    .to_string(),
                 },
                 _ => MockHttpResponse {
                     status_code: 404,
@@ -148,17 +156,24 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
     let ack = server.handle_agent_chat(request).expect("chat accepted");
     assert_eq!(ack.agent_id, agent_id);
     let recorded = recorded.lock().expect("recorded lock");
-    assert_eq!(recorded.len(), 3);
+    assert_eq!(recorded.len(), 4);
     assert_eq!(recorded[0].path, "/v1/provider/info");
     assert_eq!(recorded[1].path, "/v1/provider/health");
     assert_eq!(recorded[2].method, "POST");
-    assert_eq!(recorded[2].path, "/v1/world-simulator/feedback");
+    assert_eq!(recorded[2].path, "/v1/world-simulator/agent-chat");
+    assert_eq!(recorded[3].method, "POST");
+    assert_eq!(recorded[3].path, "/v1/world-simulator/feedback");
     let feedback: crate::simulator::FeedbackEnvelope =
-        serde_json::from_slice(recorded[2].body.as_slice()).expect("decode feedback");
+        serde_json::from_slice(recorded[3].body.as_slice()).expect("decode feedback");
     assert_eq!(
         feedback.world_delta_summary.as_deref(),
         Some("player_message: hello provider feedback")
     );
+    assert!(server.pending_virtual_events.iter().any(|event| matches!(
+        &event.kind,
+        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
+            if event_agent_id == &agent_id && message == "我在测试地点，资源是 electricity=32 data=8。"
+    )));
     assert!(!server.pending_virtual_events.iter().any(|event| matches!(
         &event.kind,
         crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
