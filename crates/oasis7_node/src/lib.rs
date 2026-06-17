@@ -54,6 +54,7 @@ mod network_error_classification;
 mod node_engine_core;
 mod node_engine_network;
 mod node_engine_replication;
+mod node_engine_replication_provider_route;
 mod node_engine_slashing;
 mod node_engine_storage_challenge;
 mod node_engine_transfer_filter;
