@@ -812,7 +812,7 @@ impl PosNodeEngine {
             world_id,
             content_hash,
             &request,
-            provider_lookup.as_deref(),
+            provider_lookup.as_deref().filter(|ids| !ids.is_empty()),
         )?;
         if !response.found {
             if let Some(provider_lookup_failure) = provider_lookup_failure {
