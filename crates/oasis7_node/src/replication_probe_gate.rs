@@ -4,6 +4,13 @@ const REPLICATION_FETCH_BLOB_CHUNK_BYTES: usize = 2 * 1024 * 1024;
 const STORAGE_CHALLENGE_FETCH_BLOB_REQUEST_TIMEOUT_MS: u64 = 2_000;
 const STORAGE_CHALLENGE_FETCH_BLOB_RETRY_BUDGET_MS: u64 = 3_000;
 
+#[derive(Clone, Copy)]
+struct FetchBlobRouteFallbackPolicy {
+    allow_generic_route: bool,
+    allow_connected_peer_fallback: bool,
+    allow_fallback_after_provider_routes: bool,
+}
+
 impl PosNodeEngine {
     pub(super) fn maybe_hold_proposal_for_replication_successor_probe(
         &mut self,
@@ -257,8 +264,11 @@ pub(super) fn request_fetch_blob_with_route_fallback(
         content_hash,
         request,
         provider_ids,
-        true,
-        true,
+        FetchBlobRouteFallbackPolicy {
+            allow_generic_route: true,
+            allow_connected_peer_fallback: true,
+            allow_fallback_after_provider_routes: false,
+        },
     )
 }
 
@@ -275,8 +285,11 @@ pub(super) fn request_fetch_blob_with_storage_challenge_routes(
         content_hash,
         request,
         provider_ids,
-        false,
-        false,
+        FetchBlobRouteFallbackPolicy {
+            allow_generic_route: true,
+            allow_connected_peer_fallback: false,
+            allow_fallback_after_provider_routes: true,
+        },
     )
 }
 
@@ -286,8 +299,7 @@ fn request_fetch_blob_with_route_fallback_policy(
     content_hash: &str,
     request: &FetchBlobRequest,
     provider_ids: Option<&[String]>,
-    allow_generic_route: bool,
-    allow_connected_peer_fallback: bool,
+    policy: FetchBlobRouteFallbackPolicy,
 ) -> Result<FetchBlobResponse, NodeError> {
     let mut offset = 0usize;
     let mut assembled = Vec::new();
@@ -302,8 +314,7 @@ fn request_fetch_blob_with_route_fallback_policy(
             content_hash,
             &chunk_request,
             provider_ids,
-            allow_generic_route,
-            allow_connected_peer_fallback,
+            policy,
         )?;
         if !response.found {
             return Ok(response);
@@ -350,8 +361,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
     content_hash: &str,
     request: &FetchBlobRequest,
     provider_ids: Option<&[String]>,
-    allow_generic_route: bool,
-    allow_connected_peer_fallback: bool,
+    policy: FetchBlobRouteFallbackPolicy,
 ) -> Result<FetchBlobResponse, NodeError> {
     let mut last_not_found: Option<FetchBlobResponse> = None;
     let mut last_retryable_error: Option<NodeError> = None;
@@ -391,6 +401,9 @@ fn request_fetch_blob_chunk_with_route_fallback(
         if let Some(response) = last_not_found {
             return Ok(response);
         }
+    }
+
+    if provider_lookup_supplied && !policy.allow_fallback_after_provider_routes {
         return Err(
             last_retryable_error.unwrap_or_else(|| NodeError::Replication {
                 reason: format!(
@@ -402,7 +415,9 @@ fn request_fetch_blob_chunk_with_route_fallback(
     }
 
     let mut generic_attempts = 0usize;
-    if allow_generic_route && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
+    if policy.allow_generic_route
+        && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS
+    {
         match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
             REPLICATION_FETCH_BLOB_PROTOCOL,
             request,
@@ -421,7 +436,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         generic_attempts += 1;
     }
 
-    if allow_connected_peer_fallback {
+    if policy.allow_connected_peer_fallback {
         let mut connected_peer_ids = endpoint.connected_peer_ids();
         connected_peer_ids.sort();
         connected_peer_ids.dedup();
@@ -450,7 +465,9 @@ fn request_fetch_blob_chunk_with_route_fallback(
         }
     }
 
-    while allow_generic_route && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
+    while policy.allow_generic_route
+        && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS
+    {
         match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
             REPLICATION_FETCH_BLOB_PROTOCOL,
             request,

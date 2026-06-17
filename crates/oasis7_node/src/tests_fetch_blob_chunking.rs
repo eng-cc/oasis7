@@ -320,7 +320,7 @@ fn fetch_blob_provider_route_miss_does_not_probe_generic_or_connected_peers() {
 }
 
 #[test]
-fn fetch_blob_provider_route_unavailable_does_not_probe_generic_or_connected_peers() {
+fn fetch_blob_provider_route_unavailable_falls_back_to_generic_route() {
     let world_id = "world-blob-provider-unavailable-strict";
     let dir = temp_dir("blob-provider-unavailable-strict-endpoint");
     let generic_attempts = Arc::new(Mutex::new(0usize));
@@ -351,22 +351,22 @@ fn fetch_blob_provider_route_unavailable_does_not_probe_generic_or_connected_pee
         requester_signature_hex: None,
     };
 
-    let result = super::request_fetch_blob_with_storage_challenge_routes(
+    let response = super::request_fetch_blob_with_storage_challenge_routes(
         &endpoint,
         world_id,
         "checkpoint-payload",
         &request,
         Some(&["stale-provider".to_string()]),
-    );
+    )
+    .expect("retryable provider route unavailability should fall back");
 
     assert!(
-        result.is_err(),
-        "provider-aware blob fetch should surface provider route unavailability without probing fallback peers: {result:?}"
+        !response.found,
+        "generic fallback should be attempted but still surface not-found when no fallback peer has the blob"
     );
-    assert_eq!(
-        *generic_attempts.lock().expect("lock generic attempts"),
-        0,
-        "provider-aware blob fetch should not spend budget on generic non-provider routing"
+    assert!(
+        *generic_attempts.lock().expect("lock generic attempts") > 0,
+        "provider-aware blob fetch should spend bounded generic attempts after retryable provider route unavailability"
     );
     assert_eq!(
         provider_attempts
@@ -374,7 +374,7 @@ fn fetch_blob_provider_route_unavailable_does_not_probe_generic_or_connected_pee
             .expect("lock provider attempts")
             .as_slice(),
         &[vec!["stale-provider".to_string()]],
-        "provider-aware blob fetch should not probe arbitrary connected peers after provider route unavailability"
+        "provider-aware blob fetch should try the stale provider before bounded generic fallback"
     );
 }
 
