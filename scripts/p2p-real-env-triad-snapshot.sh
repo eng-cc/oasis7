@@ -21,6 +21,16 @@ Options:
   --ssh-timeout-secs <n>           SSH connect timeout in seconds (default: 8)
   --out-dir <path>                 output root (default: .tmp/p2p_real_env_triad)
   --world-id <id>                  expected world id (default: oasis7-unified-world-v1)
+  --node <spec>                    explicit node spec; repeat for any number of nodes.
+                                   When at least one --node is supplied, only the explicit
+                                   nodes are sampled and legacy triad defaults are not added.
+                                   Spec format:
+                                     label=<safe-label>,mode=<local|remote>,service=<unit>,
+                                     status_url=<url>,health_url=<url>,env_file=<path>,
+                                     target=<user@host>,password_env=<ENV>,
+                                     public_status_url=<url>,public_health_url=<url>
+                                   Remote nodes require target. Password values must be
+                                   supplied through password_env, never in the CLI.
 
   --local-service <name>           local node systemd unit
                                    (default: oasis7-triad-observer.service)
@@ -91,6 +101,84 @@ ensure_positive_int() {
     echo "invalid $flag: $value" >&2
     exit 2
   fi
+}
+
+parse_node_spec() {
+  python3 - "$1" <<'PY'
+from __future__ import annotations
+
+import json
+import re
+import sys
+
+spec = sys.argv[1]
+fields: dict[str, str] = {}
+for part in spec.split(","):
+    if "=" not in part:
+        raise SystemExit(f"invalid --node segment (expected key=value): {part}")
+    key, value = part.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if not key:
+        raise SystemExit("invalid --node segment with empty key")
+    fields[key] = value
+
+allowed = {
+    "label",
+    "mode",
+    "target",
+    "service",
+    "status_url",
+    "health_url",
+    "env_file",
+    "public_status_url",
+    "public_health_url",
+    "password_env",
+}
+unknown = sorted(set(fields) - allowed)
+if unknown:
+    raise SystemExit(f"unknown --node keys: {', '.join(unknown)}")
+
+label = fields.get("label", "")
+if not re.fullmatch(r"[A-Za-z0-9_.-]+", label):
+    raise SystemExit("invalid --node label: use only [A-Za-z0-9_.-]+")
+
+mode = fields.get("mode") or ("remote" if fields.get("target") else "local")
+if mode not in {"local", "remote"}:
+    raise SystemExit("invalid --node mode: expected local or remote")
+
+required = ["service", "status_url", "health_url", "env_file"]
+missing = [key for key in required if not fields.get(key)]
+if missing:
+    raise SystemExit(f"missing --node keys for {label}: {', '.join(missing)}")
+if mode == "remote" and not fields.get("target"):
+    raise SystemExit(f"remote --node {label} requires target")
+if mode == "local" and fields.get("target"):
+    raise SystemExit(f"local --node {label} must not set target")
+
+node = {
+    "label": label,
+    "mode": mode,
+    "target": fields.get("target", ""),
+    "service": fields["service"],
+    "status_url": fields["status_url"],
+    "health_url": fields["health_url"],
+    "env_file": fields["env_file"],
+    "public_status_url": fields.get("public_status_url", ""),
+    "public_health_url": fields.get("public_health_url", ""),
+    "password_env": fields.get("password_env", ""),
+}
+print(json.dumps(node, separators=(",", ":")))
+PY
+}
+
+node_password() {
+  local password_env=$1
+  if [[ -z "$password_env" ]]; then
+    printf ''
+    return 0
+  fi
+  printf '%s' "${!password_env:-}"
 }
 
 run_ssh() {
@@ -273,6 +361,7 @@ append_sample_record() {
         misbehavior_evidence_count: ($status[0].observability.misbehavior_evidence_count // 0),
         quarantined_validator_count: ($status[0].observability.quarantined_validator_count // 0),
         slashable_stake_total: ($status[0].observability.slashable_stake_total // 0),
+        storage_challenge_network_degraded: ($status[0].observability.storage_challenge_network_degraded // false),
         active_peer_count: ($status[0].observability.active_peer_count // null),
         known_peer_heads: ($status[0].observability.known_peer_heads // null),
         alerts: ($status[0].observability.alerts // [])
@@ -297,6 +386,10 @@ append_sample_record() {
         slashable_stake_total: ($status[0].consensus.slashable_stake_total // 0),
         missed_slot_count: ($status[0].consensus.missed_slot_count // null),
         missed_tick_count: ($status[0].consensus.missed_tick_count // null),
+        storage_challenge_network_degraded_height: ($status[0].consensus.storage_challenge_network_degraded_height // null),
+        storage_challenge_network_degraded_reason: ($status[0].consensus.storage_challenge_network_degraded_reason // null),
+        storage_challenge_network_last_probe_at_ms: ($status[0].consensus.storage_challenge_network_last_probe_at_ms // null),
+        storage_challenge_network_next_probe_after_ms: ($status[0].consensus.storage_challenge_network_next_probe_after_ms // null),
         network_head: {
           source: ($status[0].consensus.network_head.source // null),
           decision: ($status[0].consensus.network_head.decision // null),
@@ -348,6 +441,7 @@ storage_health_url="http://127.0.0.1:5632/healthz"
 storage_public_status_url=""
 storage_public_health_url=""
 storage_env_file="/opt/oasis7/p2p-triad/config/node.env"
+explicit_node_specs=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -369,6 +463,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --world-id)
       world_id=${2:-}
+      shift 2
+      ;;
+    --node)
+      explicit_node_specs+=("$(parse_node_spec "${2:-}")")
       shift 2
       ;;
     --local-service|--observer-service)
@@ -466,38 +564,90 @@ samples_ndjson="$run_dir/samples.ndjson"
 summary_json="$run_dir/summary.json"
 summary_md="$run_dir/summary.md"
 config_json="$run_dir/config.json"
+nodes_json="$run_dir/nodes.json"
+node_labels_file="$run_dir/node-labels.txt"
 
-mkdir -p \
-  "$nodes_root/local_node/samples" \
-  "$nodes_root/sequencer_ecs/samples" \
-  "$nodes_root/storage_ecs/samples"
+mkdir -p "$nodes_root"
 : > "$samples_ndjson"
 
-seq_password=${P2PARCH6_SEQ_SSH_PASSWORD:-}
-storage_password=${P2PARCH6_STORAGE_SSH_PASSWORD:-}
+if (( ${#explicit_node_specs[@]} > 0 )); then
+  printf '%s\n' "${explicit_node_specs[@]}" | jq -s '.' > "$nodes_json"
+else
+  jq -n \
+    --arg local_service "$local_service" \
+    --arg local_status_url "$local_status_url" \
+    --arg local_health_url "$local_health_url" \
+    --arg local_env_file "$local_env_file" \
+    --arg sequencer_target "$sequencer_target" \
+    --arg sequencer_service "$sequencer_service" \
+    --arg sequencer_status_url "$sequencer_status_url" \
+    --arg sequencer_health_url "$sequencer_health_url" \
+    --arg sequencer_public_status_url "$sequencer_public_status_url" \
+    --arg sequencer_public_health_url "$sequencer_public_health_url" \
+    --arg sequencer_env_file "$sequencer_env_file" \
+    --arg storage_target "$storage_target" \
+    --arg storage_service "$storage_service" \
+    --arg storage_status_url "$storage_status_url" \
+    --arg storage_health_url "$storage_health_url" \
+    --arg storage_public_status_url "$storage_public_status_url" \
+    --arg storage_public_health_url "$storage_public_health_url" \
+    --arg storage_env_file "$storage_env_file" \
+    '[
+      {
+        label: "local_node",
+        mode: "local",
+        target: "",
+        service: $local_service,
+        status_url: $local_status_url,
+        health_url: $local_health_url,
+        env_file: $local_env_file,
+        public_status_url: "",
+        public_health_url: "",
+        password_env: ""
+      },
+      {
+        label: "sequencer_ecs",
+        mode: "remote",
+        target: $sequencer_target,
+        service: $sequencer_service,
+        status_url: $sequencer_status_url,
+        health_url: $sequencer_health_url,
+        public_status_url: $sequencer_public_status_url,
+        public_health_url: $sequencer_public_health_url,
+        env_file: $sequencer_env_file,
+        password_env: "P2PARCH6_SEQ_SSH_PASSWORD"
+      },
+      {
+        label: "storage_ecs",
+        mode: "remote",
+        target: $storage_target,
+        service: $storage_service,
+        status_url: $storage_status_url,
+        health_url: $storage_health_url,
+        public_status_url: $storage_public_status_url,
+        public_health_url: $storage_public_health_url,
+        env_file: $storage_env_file,
+        password_env: "P2PARCH6_STORAGE_SSH_PASSWORD"
+      }
+    ]' > "$nodes_json"
+fi
+
+jq -r '.[].label' "$nodes_json" > "$node_labels_file"
+duplicate_labels=$(jq -r 'group_by(.label)[] | select(length > 1) | .[0].label' "$nodes_json")
+if [[ -n "$duplicate_labels" ]]; then
+  printf 'duplicate --node label(s):\n%s\n' "$duplicate_labels" >&2
+  exit 2
+fi
+while IFS= read -r label; do
+  mkdir -p "$nodes_root/$label/samples"
+done < "$node_labels_file"
 
 jq -n \
   --arg run_id "$run_id" \
   --arg run_dir "$run_dir" \
   --arg world_id "$world_id" \
-  --arg local_service "$local_service" \
-  --arg local_status_url "$local_status_url" \
-  --arg local_health_url "$local_health_url" \
-  --arg local_env_file "$local_env_file" \
-  --arg sequencer_target "$sequencer_target" \
-  --arg sequencer_service "$sequencer_service" \
-  --arg sequencer_status_url "$sequencer_status_url" \
-  --arg sequencer_health_url "$sequencer_health_url" \
-  --arg sequencer_public_status_url "$sequencer_public_status_url" \
-  --arg sequencer_public_health_url "$sequencer_public_health_url" \
-  --arg sequencer_env_file "$sequencer_env_file" \
-  --arg storage_target "$storage_target" \
-  --arg storage_service "$storage_service" \
-  --arg storage_status_url "$storage_status_url" \
-  --arg storage_health_url "$storage_health_url" \
-  --arg storage_public_status_url "$storage_public_status_url" \
-  --arg storage_public_health_url "$storage_public_health_url" \
-  --arg storage_env_file "$storage_env_file" \
+  --slurpfile nodes "$nodes_json" \
+  --argjson explicit_node_mode "$([[ ${#explicit_node_specs[@]} -gt 0 ]] && echo true || echo false)" \
   --argjson samples "$samples" \
   --argjson interval_secs "$interval_secs" \
   --argjson ssh_timeout_secs "$ssh_timeout_secs" \
@@ -508,44 +658,31 @@ jq -n \
     samples: $samples,
     interval_secs: $interval_secs,
     ssh_timeout_secs: $ssh_timeout_secs,
-    nodes: {
-      local_node: {
-        mode: "local",
-        service: $local_service,
-        status_url: $local_status_url,
-        health_url: $local_health_url,
-        env_file: $local_env_file
-      },
-      sequencer_ecs: {
-        mode: "remote",
-        target: $sequencer_target,
-        service: $sequencer_service,
-        status_url: $sequencer_status_url,
-        health_url: $sequencer_health_url,
-        public_status_url: $sequencer_public_status_url,
-        public_health_url: $sequencer_public_health_url,
-        env_file: $sequencer_env_file
-      },
-      storage_ecs: {
-        mode: "remote",
-        target: $storage_target,
-        service: $storage_service,
-        status_url: $storage_status_url,
-        health_url: $storage_health_url,
-        public_status_url: $storage_public_status_url,
-        public_health_url: $storage_public_health_url,
-        env_file: $storage_env_file
-      }
-    }
+    explicit_node_mode: $explicit_node_mode,
+    nodes: ($nodes[0] | map({(.label): .}) | add)
   }' > "$config_json"
 
-record_env_copy local_node local "$local_env_file"
-record_env_copy sequencer_ecs remote "$sequencer_target" "$seq_password" "$sequencer_env_file"
-record_env_copy storage_ecs remote "$storage_target" "$storage_password" "$storage_env_file"
+while IFS= read -r node; do
+  label=$(jq -r '.label' <<<"$node")
+  mode=$(jq -r '.mode' <<<"$node")
+  target=$(jq -r '.target' <<<"$node")
+  env_file=$(jq -r '.env_file' <<<"$node")
+  password=$(node_password "$(jq -r '.password_env' <<<"$node")")
+  if [[ "$mode" == "remote" ]]; then
+    record_env_copy "$label" "$mode" "$target" "$password" "$env_file"
+  else
+    record_env_copy "$label" "$mode" "$env_file"
+  fi
+done < <(jq -c '.[]' "$nodes_json")
 
-capture_service_state local_node local "$local_service"
-capture_service_state sequencer_ecs remote "$sequencer_service" "$sequencer_target" "$seq_password"
-capture_service_state storage_ecs remote "$storage_service" "$storage_target" "$storage_password"
+while IFS= read -r node; do
+  label=$(jq -r '.label' <<<"$node")
+  mode=$(jq -r '.mode' <<<"$node")
+  target=$(jq -r '.target' <<<"$node")
+  service=$(jq -r '.service' <<<"$node")
+  password=$(node_password "$(jq -r '.password_env' <<<"$node")")
+  capture_service_state "$label" "$mode" "$service" "$target" "$password"
+done < <(jq -c '.[]' "$nodes_json")
 
 started_at=$(date -Iseconds)
 
@@ -553,14 +690,19 @@ for ((sample_index = 1; sample_index <= samples; sample_index++)); do
   captured_at=$(date -Iseconds)
   echo "sample $sample_index/$samples @ $captured_at"
 
-  capture_health_and_status local_node local "$local_health_url" "$local_status_url" "$sample_index"
-  append_sample_record local_node "$local_service"
-
-  capture_health_and_status sequencer_ecs remote "$sequencer_health_url" "$sequencer_status_url" "$sample_index" "$sequencer_target" "$seq_password" "$sequencer_public_health_url" "$sequencer_public_status_url"
-  append_sample_record sequencer_ecs "$sequencer_service"
-
-  capture_health_and_status storage_ecs remote "$storage_health_url" "$storage_status_url" "$sample_index" "$storage_target" "$storage_password" "$storage_public_health_url" "$storage_public_status_url"
-  append_sample_record storage_ecs "$storage_service"
+  while IFS= read -r node; do
+    label=$(jq -r '.label' <<<"$node")
+    mode=$(jq -r '.mode' <<<"$node")
+    target=$(jq -r '.target' <<<"$node")
+    service=$(jq -r '.service' <<<"$node")
+    health_url=$(jq -r '.health_url' <<<"$node")
+    status_url=$(jq -r '.status_url' <<<"$node")
+    public_health_url=$(jq -r '.public_health_url' <<<"$node")
+    public_status_url=$(jq -r '.public_status_url' <<<"$node")
+    password=$(node_password "$(jq -r '.password_env' <<<"$node")")
+    capture_health_and_status "$label" "$mode" "$health_url" "$status_url" "$sample_index" "$target" "$password" "$public_health_url" "$public_status_url"
+    append_sample_record "$label" "$service"
+  done < <(jq -c '.[]' "$nodes_json")
 
   if (( sample_index < samples )); then
     sleep "$interval_secs"
@@ -575,6 +717,7 @@ jq -s \
   --arg run_id "$run_id" \
   --arg run_dir "$run_dir" \
   --arg world_id "$world_id" \
+  --argjson explicit_node_mode "$([[ ${#explicit_node_specs[@]} -gt 0 ]] && echo true || echo false)" \
   '
   def heights_for($label):
     map(select(.label == $label) | .consensus.committed_height // 0);
@@ -603,6 +746,7 @@ jq -s \
       liveness_statuses: (map(select(.label == $label) | .liveness.status) | unique),
       readiness_statuses: (map(select(.label == $label) | .readiness.status) | unique),
       sync_statuses: (map(select(.label == $label) | .sync.status) | unique),
+      service_active: ((map(select(.label == $label) | .service_state) | unique | index("active")) != null),
       readiness_policies: {
         tiers: (map(select(.label == $label) | .readiness.policy.tier) | unique),
         quorum_modes: (map(select(.label == $label) | .readiness.policy.quorum_mode) | unique),
@@ -614,6 +758,23 @@ jq -s \
       observability_ready_all: all_true_or_false(map(select(.label == $label) | .observability.ready)),
       transport_stable_all: all_true_or_false(map(select(.label == $label) | .observability.transport_stable)),
       reachability_policy_ok_all: all_true_or_false(map(select(.label == $label) | .observability.reachability_policy_ok)),
+      storage_challenge_network_degraded_any: (
+        map(select(.label == $label) | (
+          (.observability.storage_challenge_network_degraded // false)
+          or ((.consensus.storage_challenge_network_degraded_height // null) != null)
+        ))
+        | any(. == true)
+      ),
+      storage_challenge_network_degraded_heights: (
+        map(select(.label == $label) | .consensus.storage_challenge_network_degraded_height)
+        | map(select(. != null))
+        | unique
+      ),
+      storage_challenge_network_degraded_reasons: (
+        map(select(.label == $label) | .consensus.storage_challenge_network_degraded_reason)
+        | map(select(. != null))
+        | unique
+      ),
       last_errors: (map(select(.label == $label) | .last_error) | unique),
       heights: {
         first_committed_height: first_or_zero(heights_for($label)),
@@ -658,6 +819,14 @@ jq -s \
     };
   def all_roles_equal($label; $role):
     (.nodes[$label].roles | length) > 0 and (.nodes[$label].roles | all(. == $role));
+  def node_summaries:
+    . as $rows
+    | ($rows | map(.label) | unique) as $labels
+    | reduce $labels[] as $label ({}; .[$label] = ($rows | node_summary($label)));
+  def generic_all($path; $value):
+    (.nodes | to_entries | map(.value | getpath($path) == $value) | all(. == true));
+  def generic_any($path; $value):
+    (.nodes | to_entries | map(.value | getpath($path) == $value) | any(. == true));
   . as $samples
   | {
       run_id: $run_id,
@@ -669,14 +838,40 @@ jq -s \
         sample_record_count: length,
         node_count: (map(.label) | unique | length)
       },
-      nodes: {
-        local_node: node_summary("local_node"),
-        sequencer_ecs: node_summary("sequencer_ecs"),
-        storage_ecs: node_summary("storage_ecs")
-      },
+      nodes: node_summaries,
       samples: $samples
     }
-  | .analysis = {
+  | .generic_analysis = {
+      all_healthz_ok: generic_all(["healthz_all_ok"]; true),
+      all_status_fetch_ok: generic_all(["status_fetch_all_ok"]; true),
+      all_services_active: generic_all(["service_active"]; true),
+      all_nodes_ready: generic_all(["readiness_all_ready"]; true),
+      all_transport_stable: generic_all(["transport_stable_all"]; true),
+      all_reachability_policy_ok: generic_all(["reachability_policy_ok_all"]; true),
+      any_storage_challenge_network_degraded: generic_any(["storage_challenge_network_degraded_any"]; true),
+      any_last_error: (.nodes | to_entries | any(.value.last_errors | map(select(. != null)) | length > 0))
+    }
+  | if ($explicit_node_mode == true) then
+      .analysis = { claim_mode: "explicit_nodes" }
+      | .failure_signatures = (
+          []
+          + (if .generic_analysis.all_services_active then [] else ["node_service_inactive"] end)
+          + (if .generic_analysis.all_healthz_ok then [] else ["node_healthz_unhealthy"] end)
+          + (if .generic_analysis.all_status_fetch_ok then [] else ["node_status_fetch_failed"] end)
+          + (if .generic_analysis.all_nodes_ready then [] else ["node_not_ready"] end)
+          + (if .generic_analysis.all_transport_stable then [] else ["replication_transport_unstable"] end)
+          + (if .generic_analysis.all_reachability_policy_ok then [] else ["p2p_reachability_degraded"] end)
+          + (if .generic_analysis.any_storage_challenge_network_degraded then ["storage_challenge_network_degraded"] else [] end)
+          + (if .generic_analysis.any_last_error then ["runtime_last_error"] else [] end)
+        )
+      | .claim_status = (
+          if (.failure_signatures | length) == 0 then "pass_candidate"
+          elif .generic_analysis.all_healthz_ok and .generic_analysis.all_status_fetch_ok then "partial_with_node_health_blocker"
+          else "blocked"
+          end
+        )
+    else
+      .analysis = {
       local_service_healthy: (
         (.nodes.local_node.healthz_all_ok == true)
         and (.nodes.local_node.status_fetch_all_ok == true)
@@ -916,7 +1111,8 @@ jq -s \
       then "partial_with_observer_blocker"
       else "blocked"
       end
-    )
+      )
+    end
   ' "$samples_ndjson" > "$summary_json"
 
 {
@@ -931,7 +1127,7 @@ jq -s \
   echo "- failure_signatures: \`$(jq -r '.failure_signatures | if length == 0 then "(none)" else join(", ") end' "$summary_json")\`"
   echo
   echo "## Node Summary"
-  for label in local_node sequencer_ecs storage_ecs; do
+  while IFS= read -r label; do
     echo "### \`$label\`"
     echo "- service_states: \`$(jq -r --arg label "$label" '.nodes[$label].service_states | join(", ")' "$summary_json")\`"
     echo "- healthz_all_ok: \`$(jq -r --arg label "$label" '.nodes[$label].healthz_all_ok' "$summary_json")\`"
@@ -943,12 +1139,15 @@ jq -s \
     echo "- readiness_all_ready: \`$(jq -r --arg label "$label" '.nodes[$label].readiness_all_ready' "$summary_json")\`"
     echo "- transport_stable_all: \`$(jq -r --arg label "$label" '.nodes[$label].transport_stable_all' "$summary_json")\`"
     echo "- reachability_policy_ok_all: \`$(jq -r --arg label "$label" '.nodes[$label].reachability_policy_ok_all' "$summary_json")\`"
+    echo "- storage_challenge_network_degraded_any: \`$(jq -r --arg label "$label" '.nodes[$label].storage_challenge_network_degraded_any' "$summary_json")\`"
+    echo "- storage_challenge_network_degraded_heights: \`$(jq -r --arg label "$label" '.nodes[$label].storage_challenge_network_degraded_heights | if length == 0 then "(none)" else join(", ") end' "$summary_json")\`"
+    echo "- storage_challenge_network_degraded_reasons: \`$(jq -r --arg label "$label" '.nodes[$label].storage_challenge_network_degraded_reasons | if length == 0 then "(none)" else join(" | ") end' "$summary_json")\`"
     echo "- last_errors: \`$(jq -r --arg label "$label" '.nodes[$label].last_errors | map(select(. != null)) | if length == 0 then "(none)" else join(" | ") end' "$summary_json")\`"
     echo "- committed_height: \`$(jq -r --arg label "$label" '.nodes[$label].heights.first_committed_height' "$summary_json") -> $(jq -r --arg label "$label" '.nodes[$label].heights.last_committed_height' "$summary_json")\`"
     echo "- network_committed_height: \`$(jq -r --arg label "$label" '.nodes[$label].network.first_network_committed_height' "$summary_json") -> $(jq -r --arg label "$label" '.nodes[$label].network.last_network_committed_height' "$summary_json")\`"
     echo "- known_peer_heads: \`$(jq -r --arg label "$label" '.nodes[$label].peers.min_known_peer_heads' "$summary_json") -> $(jq -r --arg label "$label" '.nodes[$label].peers.max_known_peer_heads' "$summary_json")\`"
     echo "- network_head: \`source=$(jq -r --arg label "$label" '.nodes[$label].network_head.sources | join(", ")' "$summary_json"), decision=$(jq -r --arg label "$label" '.nodes[$label].network_head.decisions | join(", ")' "$summary_json"), quorum=$(jq -r --arg label "$label" '.nodes[$label].network_head.quorum_modes | join(", ")' "$summary_json"), fresh=$(jq -r --arg label "$label" '.nodes[$label].network_head.min_fresh_peer_count' "$summary_json")->$(jq -r --arg label "$label" '.nodes[$label].network_head.max_fresh_peer_count' "$summary_json"), required=$(jq -r --arg label "$label" '.nodes[$label].network_head.max_required_peer_count' "$summary_json"), stake=$(jq -r --arg label "$label" '.nodes[$label].network_head.max_observed_stake' "$summary_json")/$(jq -r --arg label "$label" '.nodes[$label].network_head.max_required_stake' "$summary_json")/$(jq -r --arg label "$label" '.nodes[$label].network_head.max_total_stake' "$summary_json"), stale_max=$(jq -r --arg label "$label" '.nodes[$label].network_head.max_stale_peer_count' "$summary_json"), conflict_max=$(jq -r --arg label "$label" '.nodes[$label].network_head.max_conflicting_peer_count' "$summary_json")\`"
-  done
+  done < "$node_labels_file"
   echo
   echo "## Artifacts"
   echo "- config_json: \`$config_json\`"
