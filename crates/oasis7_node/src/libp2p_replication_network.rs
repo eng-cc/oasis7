@@ -379,6 +379,9 @@ impl Libp2pReplicationNetwork {
         if scored.is_empty() && !deferred_protocol_peers.is_empty() {
             scored = deferred_protocol_peers;
         }
+        if scored.iter().any(|(_, score, _)| *score > 0) {
+            scored.retain(|(_, score, _)| *score > 0);
+        }
         scored.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.2.cmp(&right.2)));
         let filtered = scored
             .into_iter()

@@ -5,6 +5,20 @@ use super::*;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
+fn replication_gap_sync_provider_blob_route_blocked(err: &NodeError) -> bool {
+    let NodeError::Replication { reason } = err else {
+        return false;
+    };
+    replication_gap_sync_provider_blob_route_blocked_reason(reason)
+}
+
+fn replication_gap_sync_provider_blob_route_blocked_reason(reason: &str) -> bool {
+    reason.contains("gap sync height ")
+        && (reason.contains(" blob not found for hash ")
+            || reason.contains("blob fetch provider routes exhausted")
+            || reason.contains(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX))
+}
+
 impl PosNodeEngine {
     // Mirrors release_default.execution_checkpoint_keep. Probe the advertised head first, then
     // the older retained-window boundaries. The newest aligned boundary can still be in-flight
@@ -922,6 +936,15 @@ impl PosNodeEngine {
             "replication_persisted_height",
             "starting replication gap sync",
         )?;
+        if self.last_replication_gap_sync_blocked_height == Some(next_height)
+            && self
+                .last_replication_gap_sync_blocked_reason
+                .as_deref()
+                .map(replication_gap_sync_provider_blob_route_blocked_reason)
+                .unwrap_or(false)
+        {
+            return Ok(());
+        }
         let gap_sync_target_height = advertised_network_height.min(
             self.replication_persisted_height
                 .saturating_add(REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL),
@@ -932,6 +955,7 @@ impl PosNodeEngine {
                 ReplicationCommitPayload,
             )> = None;
             let mut not_found = false;
+            let mut provider_route_blocked = false;
             let mut last_error = None;
             for attempt in 1..=REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT {
                 match self.sync_replication_height_once(
@@ -959,6 +983,18 @@ impl PosNodeEngine {
                                 self.network_committed_height.max(advertised_network_height);
                         }
                         return Ok(());
+                    }
+                    Err(err) if replication_gap_sync_provider_blob_route_blocked(&err) => {
+                        provider_route_blocked = true;
+                        let summary = format!(
+                            "attempt {attempt}/{} failed: {err}",
+                            REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT
+                        );
+                        self.last_replication_gap_sync_repair_attempt_height = Some(next_height);
+                        self.last_replication_gap_sync_repair_attempt_summary =
+                            Some(summary.clone());
+                        last_error = Some(summary);
+                        break;
                     }
                     Err(err) => {
                         last_error = Some(format!(
@@ -994,6 +1030,18 @@ impl PosNodeEngine {
                     "advancing replication gap sync cursor",
                 )?;
                 continue;
+            }
+            if provider_route_blocked {
+                self.last_replication_gap_sync_blocked_height = Some(next_height);
+                self.last_replication_gap_sync_blocked_reason = Some(format!(
+                    "replication gap sync provider route blocked: missing commit height {next_height} while advertised_network_height={} network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",
+                    advertised_network_height,
+                    self.network_committed_height,
+                    gap_sync_target_height,
+                    self.replication_persisted_height,
+                    last_error.as_deref().unwrap_or("provider route unavailable")
+                ));
+                break;
             }
             if not_found {
                 for checkpoint_candidate in Self::high_replication_checkpoint_candidates(
