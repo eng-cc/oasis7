@@ -1,0 +1,50 @@
+use std::fs;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+
+use super::{make_temp_dir, start_static_http_server, stop_static_http_server, DeploymentMode};
+
+#[test]
+fn static_http_server_serves_large_static_asset_completely() {
+    let temp_dir = make_temp_dir("large_static_asset");
+    let large_body = vec![b'a'; 512 * 1024];
+    fs::write(temp_dir.join("viewer.js"), &large_body).expect("write large asset");
+
+    let probe = TcpListener::bind(("127.0.0.1", 0)).expect("bind port probe");
+    let port = probe.local_addr().expect("probe addr").port();
+    drop(probe);
+
+    let mut server = start_static_http_server(
+        DeploymentMode::TrustedLocalOnly,
+        "127.0.0.1:0",
+        "127.0.0.1",
+        port,
+        temp_dir.as_path(),
+        None,
+    )
+    .expect("start static HTTP server");
+
+    let mut response = Vec::new();
+    for _ in 0..50 {
+        match TcpStream::connect(("127.0.0.1", port)) {
+            Ok(mut stream) => {
+                stream
+                    .write_all(b"GET /viewer.js HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+                    .expect("write request");
+                stream.read_to_end(&mut response).expect("read response");
+                break;
+            }
+            Err(_) => thread::sleep(std::time::Duration::from_millis(20)),
+        }
+    }
+    stop_static_http_server(&mut server);
+
+    let split_at = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .expect("response headers end")
+        + 4;
+    assert!(String::from_utf8_lossy(&response[..split_at]).starts_with("HTTP/1.1 200 OK"));
+    assert_eq!(&response[split_at..], large_body.as_slice());
+}
