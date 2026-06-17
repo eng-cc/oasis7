@@ -100,3 +100,47 @@ jq -e '
 
 test -f "$run_dir/nodes/sequencer_ecs/samples/sample-001/status.fallback.txt"
 test -f "$run_dir/nodes/storage_ecs/samples/sample-001/status.fallback.txt"
+
+PATH="$bin_dir:$PATH" ./scripts/p2p-real-env-triad-snapshot.sh \
+  --samples 1 \
+  --interval-secs 1 \
+  --ssh-timeout-secs 1 \
+  --out-dir "$tmp_root/out-explicit" \
+  --world-id fallback-test \
+  --node "label=local_node,mode=local,service=oasis7-triad-observer.service,status_url=http://local/status,health_url=http://local/healthz,env_file=$tmp_root/missing-local.env" \
+  --node "label=sequencer_ecs,mode=remote,target=root@127.0.0.1,service=oasis7-triad-sequencer.service,status_url=http://127.0.0.1:1/status,health_url=http://127.0.0.1:1/healthz,public_status_url=http://sequencer/status,public_health_url=http://sequencer/healthz,password_env=P2PARCH6_SEQ_SSH_PASSWORD,env_file=/tmp/sequencer.env" \
+  --node "label=storage_ecs,mode=remote,target=root@127.0.0.2,service=oasis7-triad-storage.service,status_url=http://127.0.0.1:2/status,health_url=http://127.0.0.1:2/healthz,public_status_url=http://storage/status,public_health_url=http://storage/healthz,password_env=P2PARCH6_STORAGE_SSH_PASSWORD,env_file=/tmp/storage.env" \
+  --node "label=extra_alpha,mode=local,service=oasis7-extra-alpha.service,status_url=http://local/status,health_url=http://local/healthz,env_file=$tmp_root/missing-alpha.env" \
+  --node "label=extra_beta,mode=remote,target=root@127.0.0.3,service=oasis7-extra-beta.service,status_url=http://127.0.0.1:3/status,health_url=http://127.0.0.1:3/healthz,public_status_url=http://storage/status,public_health_url=http://storage/healthz,env_file=/tmp/beta.env"
+
+explicit_run_dir="$(find "$tmp_root/out-explicit" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)"
+explicit_summary_json="$explicit_run_dir/summary.json"
+
+jq -e '
+	  .totals.node_count == 5
+	  and .analysis.claim_mode == "explicit_nodes"
+	  and ((.failure_signatures | index("local_service_unhealthy")) | not)
+	  and .nodes.extra_alpha.status_fetch_all_ok == true
+	  and .nodes.extra_beta.status_fetch_all_ok == true
+  and .nodes.extra_alpha.node_ids == ["local"]
+  and .nodes.extra_beta.node_ids == ["storage"]
+' "$explicit_summary_json" >/dev/null
+
+grep -q '### `extra_alpha`' "$explicit_run_dir/summary.md"
+grep -q '### `extra_beta`' "$explicit_run_dir/summary.md"
+grep -q 'claim_mode: `explicit_nodes`' "$explicit_run_dir/summary.md"
+grep -q 'storage_challenge_network_degraded_any' "$explicit_run_dir/summary.md"
+
+if PATH="$bin_dir:$PATH" ./scripts/p2p-real-env-triad-snapshot.sh \
+  --samples 1 \
+  --interval-secs 1 \
+  --ssh-timeout-secs 1 \
+  --out-dir "$tmp_root/out-duplicate" \
+  --world-id fallback-test \
+  --node "label=dup_node,mode=local,service=oasis7-one.service,status_url=http://local/status,health_url=http://local/healthz,env_file=$tmp_root/missing-one.env" \
+  --node "label=dup_node,mode=local,service=oasis7-two.service,status_url=http://local/status,health_url=http://local/healthz,env_file=$tmp_root/missing-two.env" \
+  >"$tmp_root/duplicate.out" 2>"$tmp_root/duplicate.err"; then
+  echo "duplicate --node labels should fail" >&2
+  exit 1
+fi
+grep -q 'duplicate --node label' "$tmp_root/duplicate.err"

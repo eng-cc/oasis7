@@ -239,6 +239,40 @@ fn connected_or_active_transport_peers_falls_back_to_bootstrap_peer_while_record
 }
 
 #[test]
+fn request_peer_score_recovers_after_stale_penalty_window() {
+    let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
+    let stale_peer = PeerId::random();
+    let recent_peer = PeerId::random();
+    {
+        let mut scores = network
+            .request_peer_scores
+            .lock()
+            .expect("lock request peer scores");
+        scores.insert(
+            stale_peer,
+            RequestPeerScore {
+                score: 0,
+                updated_at: Instant::now()
+                    - Duration::from_millis(REQUEST_PEER_SCORE_RECOVERY_AFTER_MS + 1),
+            },
+        );
+        scores.insert(
+            recent_peer,
+            RequestPeerScore {
+                score: 0,
+                updated_at: Instant::now(),
+            },
+        );
+    }
+
+    assert_eq!(
+        network.request_peer_score(stale_peer),
+        REQUEST_PEER_DEFAULT_SCORE
+    );
+    assert_eq!(network.request_peer_score(recent_peer), 0);
+}
+
+#[test]
 fn libp2p_replication_network_request_with_providers_honors_provider_subset() {
     let listener_fail = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener fail addr")],

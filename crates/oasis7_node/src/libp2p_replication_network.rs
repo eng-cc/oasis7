@@ -61,6 +61,7 @@ const REQUEST_PEER_TRANSPORT_PENALTY: u8 = 20;
 const REQUEST_PEER_PROTOCOL_PENALTY: u8 = 30;
 const REQUEST_PEER_GENERIC_PENALTY: u8 = 10;
 const REQUEST_PEER_SUCCESS_RECOVERY: u8 = 5;
+const REQUEST_PEER_SCORE_RECOVERY_AFTER_MS: u64 = 60_000;
 const REQUEST_TO_PEER_TIMEOUT_MS: u64 = 12_000;
 const REQUEST_RETRY_BUDGET_MS: u64 = 20_000;
 const FETCH_COMMIT_REQUEST_TO_PEER_TIMEOUT_MS: u64 = 30_000;
@@ -394,12 +395,21 @@ impl Libp2pReplicationNetwork {
     }
 
     fn request_peer_score(&self, peer: PeerId) -> u8 {
-        self.request_peer_scores
+        let mut scores = self
+            .request_peer_scores
             .lock()
-            .expect("lock request peer scores")
-            .get(&peer)
-            .map(|entry| entry.score)
-            .unwrap_or(REQUEST_PEER_DEFAULT_SCORE)
+            .expect("lock request peer scores");
+        let Some(entry) = scores.get_mut(&peer) else {
+            return REQUEST_PEER_DEFAULT_SCORE;
+        };
+        if entry.score < REQUEST_PEER_DEFAULT_SCORE
+            && entry.updated_at.elapsed()
+                >= Duration::from_millis(REQUEST_PEER_SCORE_RECOVERY_AFTER_MS)
+        {
+            entry.score = REQUEST_PEER_DEFAULT_SCORE;
+            entry.updated_at = Instant::now();
+        }
+        entry.score
     }
 
     fn adjust_request_peer_score(&self, peer: PeerId, delta: i16) {
