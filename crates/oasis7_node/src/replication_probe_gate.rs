@@ -367,6 +367,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
     let mut last_retryable_error: Option<NodeError> = None;
     let mut attempted_provider_ids = std::collections::BTreeSet::new();
     let provider_lookup_supplied = provider_ids.is_some();
+    let mut provider_route_attempted = false;
 
     if let Some(provider_ids) = provider_ids {
         for provider_id in provider_ids {
@@ -374,6 +375,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
             if provider_id.is_empty() || !attempted_provider_ids.insert(provider_id.to_string()) {
                 continue;
             }
+            provider_route_attempted = true;
             let provider_route = [provider_id.to_string()];
             match endpoint
                 .request_json_with_providers_budget::<FetchBlobRequest, FetchBlobResponse>(
@@ -403,7 +405,10 @@ fn request_fetch_blob_chunk_with_route_fallback(
         }
     }
 
-    if policy.require_retryable_provider_route_before_fallback && last_retryable_error.is_none() {
+    if policy.require_retryable_provider_route_before_fallback
+        && last_retryable_error.is_none()
+        && (provider_route_attempted || !provider_lookup_supplied)
+    {
         return Err(NodeError::Replication {
             reason: format!(
                 "blob fetch provider routes exhausted without response for world_id={} hash={} before retryable provider failure",
@@ -412,7 +417,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         });
     }
 
-    if provider_lookup_supplied && last_retryable_error.is_none() {
+    if provider_lookup_supplied && last_retryable_error.is_none() && provider_route_attempted {
         return Err(NodeError::Replication {
             reason: format!(
                 "blob fetch provider routes exhausted without response for world_id={} hash={}",
