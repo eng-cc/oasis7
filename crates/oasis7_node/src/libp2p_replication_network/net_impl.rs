@@ -150,11 +150,12 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
                 retry_budget,
             );
         }
-        self.dial_bootstrap_provider_peers(providers);
-        let peers = self.collect_connected_provider_peers(providers);
+        let started_at = std::time::Instant::now();
+        let peers = self.wait_for_connected_provider_peers_within(providers, retry_budget);
         if peers.is_empty() {
             return Err(no_connected_providers(protocol));
         }
+        let retry_budget = retry_budget.saturating_sub(started_at.elapsed());
         self.request_over_refreshed_peers_with_budget(
             protocol,
             payload,
