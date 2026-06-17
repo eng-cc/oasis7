@@ -32,4 +32,22 @@ assert payload["agent_provider_contract"] == "worldsim_provider_v1"
 assert payload["agent_provider_transport"] == "loopback_http"
 assert payload["agent_provider_url"] == "http://127.0.0.1:5841"
 assert payload["agent_provider_profile"] == "oasis7_p0_low_freq_npc"
+assert payload["chain_link_policy"] == "shadow"
+assert payload["agent_chat_echo"] == "0"
+PY
+
+OASIS7_RUNTIME_AGENT_CHAT_ECHO=1 ./scripts/run-launcher-stack.sh \
+  --deployment-mode trusted_local_only \
+  --allow-trusted-local-playtest \
+  --agent-provider-lane local-mock \
+  --print-agent-provider-config \
+  >"$config_json"
+
+python3 - "$config_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+assert payload["agent_chat_echo"] == "1"
 PY

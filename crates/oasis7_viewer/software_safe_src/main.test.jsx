@@ -187,7 +187,9 @@ async function renderViewerApp({
   document.body.appendChild(appRoot);
 
   core.setViewerLocale("en");
-  core.injectSnapshot(snapshot);
+  if (snapshot) {
+    core.injectSnapshot(snapshot);
+  }
   if (selection) {
     core.applySelection(selection);
   }
@@ -271,6 +273,17 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Runtime Diagnostics")).toBeInTheDocument();
     expect(screen.getByTestId("pixel-world-host")).toHaveTextContent("pixel-world-host:en");
   }, 60000);
+
+  it("shows target list loading affordances before the first snapshot arrives", async () => {
+    const { container } = await renderViewerApp({ snapshot: null });
+
+    const targetsPanel = container.querySelector("#viewer-targets-panel");
+    expect(targetsPanel).toBeTruthy();
+    expect(within(targetsPanel).getByText("Syncing agents…")).toBeInTheDocument();
+    expect(within(targetsPanel).getByText("Syncing locations…")).toBeInTheDocument();
+    expect(within(targetsPanel).queryByText("No agents in current snapshot.")).not.toBeInTheDocument();
+    expect(within(targetsPanel).queryByText("No locations in current snapshot.")).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("moves presentation notes into the stage help tip instead of the right details rail", async () => {
     const { container } = await renderViewerApp();
@@ -680,10 +693,15 @@ describe("viewer web ui automation baseline", () => {
     });
 
     const stagePanel = container.querySelector("#viewer-stage-panel");
+    const targetsPanel = container.querySelector("#viewer-targets-panel");
     expect(stagePanel).toBeTruthy();
+    expect(targetsPanel).toBeTruthy();
     expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Blocked").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
+    expect(within(targetsPanel).getByText("No agents in current snapshot.")).toBeInTheDocument();
+    expect(within(targetsPanel).getByText("No locations in current snapshot.")).toBeInTheDocument();
+    expect(within(targetsPanel).queryByText("Syncing agents…")).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
   it("surfaces hosted recovery and preview strong-auth truth without not-implemented drift", async () => {
     await renderViewerApp({

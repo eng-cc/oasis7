@@ -34,6 +34,7 @@ use crate::simulator::{
     WorldInitConfig, WorldScenario, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION,
     SNAPSHOT_VERSION,
 };
+use serde_json::Value;
 use tracing::Level;
 mod authoritative;
 #[path = "runtime_live/chain_link.rs"]
@@ -92,6 +93,34 @@ const LLM_PROVIDER_GATEWAY_TIMEOUT_HINT: &str =
     "local LLM provider gateway timed out; inspect output/local-letai-game-test/*/local-letai-provider-bridge.log, confirm proxy/upstream LetAI reachability, then rerun scripts/run-local-letai-game-test.sh or its chat probe/bridge smoke before retrying gameplay controls";
 const RUNTIME_CONTROL_REQUIRED_HINT: &str =
     "inspect the reported runtime failure, repair the broken world/module state, then retry the control";
+const BACKGROUND_PLAY_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(2);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChainLinkPolicy {
+    Enforcing,
+    Shadow,
+}
+
+impl ChainLinkPolicy {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim() {
+            "enforcing" => Some(Self::Enforcing),
+            "shadow" => Some(Self::Shadow),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Enforcing => "enforcing",
+            Self::Shadow => "shadow",
+        }
+    }
+
+    fn records_player_facing_chain_failures(self) -> bool {
+        matches!(self, Self::Enforcing)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ViewerRuntimeLiveServerConfig {
@@ -104,6 +133,7 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub auto_play_on_connect: bool,
     pub hosted_public_join_mode: bool,
     pub chain_status_bind: Option<String>,
+    pub chain_link_policy: ChainLinkPolicy,
     pub agent_chat_echo_enabled: bool,
 }
 
@@ -131,6 +161,8 @@ pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
     world: RuntimeWorld,
     initial_world_time: u64,
+    auto_play_paused: bool,
+    next_auto_play_step_at: Option<Instant>,
     last_chain_committed_height: u64,
     confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
@@ -151,7 +183,61 @@ pub struct ViewerRuntimeLiveServer {
     latest_player_gameplay_causality: Option<PlayerGameplayCausalitySignal>,
 }
 
-const BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET: u8 = 3;
+const BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET: u8 = 12;
+const BACKGROUND_PLAY_TRANSIENT_FAILURE_RETRY_DELAY: Duration = Duration::from_secs(5);
+
+fn should_emit_runtime_advance_snapshot(
+    session: &mut RuntimeLiveSession,
+    action: &str,
+    emit_while_paused: bool,
+) -> bool {
+    let is_background_play = action == "play" && session.playing && !emit_while_paused;
+    if !is_background_play {
+        return true;
+    }
+    session.should_emit_background_snapshot(BACKGROUND_PLAY_SNAPSHOT_INTERVAL)
+}
+
+fn append_decision_upstream_trace(reason: String, trace: &AgentDecisionTrace) -> String {
+    if reason.contains("upstream_trace=") {
+        return reason;
+    }
+    let Some(output) = trace.llm_output.as_deref() else {
+        return reason;
+    };
+    let Ok(payload) = serde_json::from_str::<Value>(output) else {
+        return reason;
+    };
+    let upstream_trace = payload
+        .get("upstream_trace")
+        .or_else(|| payload.get("trace_payload")?.get("upstream_trace"));
+    let Some(upstream_trace) = upstream_trace else {
+        return reason;
+    };
+    let Ok(mut serialized) = serde_json::to_string(upstream_trace) else {
+        return reason;
+    };
+    const MAX_UPSTREAM_TRACE_REASON_CHARS: usize = 1200;
+    if serialized.len() > MAX_UPSTREAM_TRACE_REASON_CHARS {
+        let mut end = MAX_UPSTREAM_TRACE_REASON_CHARS;
+        while end > 0 && !serialized.is_char_boundary(end) {
+            end -= 1;
+        }
+        serialized.truncate(end);
+        serialized.push_str("...");
+    }
+    format!("{reason}; upstream_trace={serialized}")
+}
+
+fn decision_trace_provider_error_retryable(trace: &AgentDecisionTrace) -> Option<bool> {
+    let output = trace.llm_output.as_deref()?;
+    let payload = serde_json::from_str::<Value>(output).ok()?;
+    payload
+        .get("provider_error")
+        .or_else(|| payload.get("trace_payload")?.get("provider_error"))
+        .and_then(|error| error.get("retryable"))
+        .and_then(Value::as_bool)
+}
 
 impl ViewerRuntimeLiveServer {
     pub fn new(
@@ -171,6 +257,8 @@ impl ViewerRuntimeLiveServer {
             config,
             world,
             initial_world_time,
+            auto_play_paused: false,
+            next_auto_play_step_at: None,
             last_chain_committed_height: 0,
             confirmed_player_gameplay_progress_time: None,
             snapshot_config,
@@ -233,6 +321,96 @@ impl ViewerRuntimeLiveServer {
         self.llm_sidecar.supports_agent_chat() || self.config.agent_chat_echo_enabled
     }
 
+    fn enable_auto_play_for_session_if_available(&mut self, session: &mut RuntimeLiveSession) {
+        if !self.config.auto_play_on_connect {
+            return;
+        }
+        session.playing = !self.auto_play_paused;
+        session.next_play_step_at = None;
+        session.transient_play_failures = 0;
+    }
+
+    fn pause_auto_play(&mut self, session: &mut RuntimeLiveSession) {
+        self.auto_play_paused = true;
+        session.playing = false;
+        session.next_play_step_at = None;
+    }
+
+    fn resume_auto_play(&mut self, session: &mut RuntimeLiveSession) {
+        self.auto_play_paused = false;
+        session.playing = true;
+        session.next_play_step_at = None;
+        session.transient_play_failures = 0;
+        self.next_auto_play_step_at = None;
+    }
+
+    fn should_advance_auto_play_step(&mut self) -> bool {
+        if !self.config.auto_play_on_connect || self.auto_play_paused {
+            self.next_auto_play_step_at = None;
+            return false;
+        }
+        let now = Instant::now();
+        if let Some(next_step_at) = self.next_auto_play_step_at {
+            if now < next_step_at {
+                return false;
+            }
+        }
+        self.next_auto_play_step_at = Some(now + self.config.play_step_interval);
+        true
+    }
+
+    fn defer_next_auto_play_step_after_completion(&mut self, interval: Duration) {
+        if self.config.auto_play_on_connect && !self.auto_play_paused {
+            self.next_auto_play_step_at = Some(Instant::now() + interval);
+        }
+    }
+
+    fn emit_background_play_snapshot(
+        &mut self,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        if session.subscribed.contains(&ViewerStream::Snapshot)
+            && should_emit_runtime_advance_snapshot(session, "play", false)
+        {
+            let snapshot = self.compat_snapshot();
+            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+        }
+        session.metrics = runtime_metrics(&self.world);
+        if session.subscribed.contains(&ViewerStream::Metrics) {
+            send_response(
+                writer,
+                &ViewerResponse::Metrics {
+                    time: Some(self.world.state().time),
+                    metrics: session.metrics.clone(),
+                },
+            )?;
+        }
+        Ok(())
+    }
+
+    fn drive_auto_play(
+        &mut self,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        if !self.config.auto_play_on_connect
+            || self.auto_play_paused
+            || !session.initial_snapshot_sent
+        {
+            return Ok(());
+        }
+        session.playing = true;
+        if self.should_advance_auto_play_step() {
+            let play_step_interval = self.config.play_step_interval;
+            self.advance_runtime(session, writer, "play", 1, None, false)?;
+            self.defer_next_auto_play_step_after_completion(play_step_interval);
+        } else {
+            self.emit_background_play_snapshot(session, writer)?;
+        }
+        Ok(())
+    }
+
     fn serve_shared_stream(
         shared: Arc<Mutex<Self>>,
         stream: TcpStream,
@@ -287,14 +465,8 @@ impl ViewerRuntimeLiveServer {
                 }
             }
 
-            let play_step_interval = {
-                let server = lock_shared_server(&shared)?;
-                server.config.play_step_interval
-            };
-            if session.should_advance_play_step(play_step_interval) {
-                let mut server = lock_shared_server(&shared)?;
-                server.advance_runtime(&mut session, &mut writer, "play", 1, None, false)?;
-            }
+            let mut server = lock_shared_server(&shared)?;
+            server.drive_auto_play(&mut session, &mut writer)?;
         }
     }
 
@@ -337,9 +509,7 @@ impl ViewerRuntimeLiveServer {
                 }
             }
 
-            if session.should_advance_play_step(self.config.play_step_interval) {
-                self.advance_runtime(&mut session, &mut writer, "play", 1, None, false)?;
-            }
+            self.drive_auto_play(&mut session, &mut writer)?;
         }
     }
 
@@ -422,11 +592,7 @@ impl ViewerRuntimeLiveServer {
                     self.emit_authoritative_challenge_snapshot(writer)?;
                 }
                 session.initial_snapshot_sent = true;
-                if self.config.auto_play_on_connect && !session.playing {
-                    session.playing = true;
-                    session.next_play_step_at = None;
-                    session.transient_play_failures = 0;
-                }
+                self.enable_auto_play_for_session_if_available(session);
             }
             ViewerRequest::PlaybackControl { mode, request_id } => {
                 self.apply_control_mode(ViewerControl::from(mode), request_id, session, writer)?;
@@ -526,23 +692,21 @@ impl ViewerRuntimeLiveServer {
         }
         match mode {
             ViewerControl::Pause => {
-                session.playing = false;
+                self.pause_auto_play(session);
                 session.next_play_step_at = None;
                 session.transient_play_failures = 0;
             }
             ViewerControl::Play => {
-                session.playing = true;
-                session.next_play_step_at = None;
-                session.transient_play_failures = 0;
+                self.resume_auto_play(session);
             }
             ViewerControl::Step { count } => {
-                session.playing = false;
+                self.pause_auto_play(session);
                 session.next_play_step_at = None;
                 session.transient_play_failures = 0;
                 self.advance_runtime(session, writer, "step", count.max(1), request_id, true)?;
             }
             ViewerControl::Seek { tick } => {
-                session.playing = false;
+                self.pause_auto_play(session);
                 session.next_play_step_at = None;
                 session.transient_play_failures = 0;
                 emit_stderr_or_event(
@@ -582,6 +746,7 @@ impl ViewerRuntimeLiveServer {
                     session,
                     writer,
                     action,
+                    self.config.play_step_interval,
                     "runtime play loop hit a transient LLM access failure; will retry on the next play tick",
                     reason.clone(),
                     delta_logical_time,
@@ -628,16 +793,20 @@ impl ViewerRuntimeLiveServer {
                                 "gameplay requires a configured and reachable LLM provider"
                                     .to_string()
                             });
-                            if self.tolerate_background_play_gameplay_block(
-                                session,
-                                writer,
-                                action,
-                                "runtime play loop hit a transient LLM decision failure; will retry on the next play tick",
-                                reason.clone(),
-                                delta_logical_time,
-                                delta_event_seq,
-                            )? {
-                                return Ok(());
+                            let reason = append_decision_upstream_trace(reason, &trace);
+                            if decision_trace_provider_error_retryable(&trace).unwrap_or(true) {
+                                if self.tolerate_background_play_gameplay_block(
+                                    session,
+                                    writer,
+                                    action,
+                                    self.config.play_step_interval,
+                                    "runtime play loop hit a transient LLM decision failure; will retry on the next play tick",
+                                    reason.clone(),
+                                    delta_logical_time,
+                                    delta_event_seq,
+                                )? {
+                                    return Ok(());
+                                }
                             }
                             return self.block_gameplay_control(
                                 session,
@@ -757,7 +926,9 @@ impl ViewerRuntimeLiveServer {
                 }
             }
 
-            if session.subscribed.contains(&ViewerStream::Snapshot) {
+            if session.subscribed.contains(&ViewerStream::Snapshot)
+                && should_emit_runtime_advance_snapshot(session, action, emit_while_paused)
+            {
                 let snapshot = self.compat_snapshot();
                 send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
             }
@@ -817,6 +988,7 @@ impl ViewerRuntimeLiveServer {
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
         action: &str,
+        play_step_interval: Duration,
         effect: &str,
         reason: String,
         delta_logical_time: u64,
@@ -831,6 +1003,10 @@ impl ViewerRuntimeLiveServer {
         if session.transient_play_failures >= BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET {
             return Ok(false);
         }
+        self.defer_next_auto_play_step_after_completion(
+            play_step_interval.max(BACKGROUND_PLAY_TRANSIENT_FAILURE_RETRY_DELAY),
+        );
+        let hint = Self::llm_gameplay_hint_for_reason(&reason);
         self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
             action,
             "blocked",
@@ -838,7 +1014,7 @@ impl ViewerRuntimeLiveServer {
             Some("continue advancing the live world".to_string()),
             None,
             Some(reason),
-            Some(LLM_GAMEPLAY_REQUIRED_HINT.to_string()),
+            Some(hint),
             delta_logical_time,
             delta_event_seq,
         ));
@@ -909,10 +1085,11 @@ impl ViewerRuntimeLiveServer {
         let next_event_id = runtime_snapshot.last_event_id.saturating_add(1).max(1);
         let next_action_id = runtime_snapshot.next_action_id.max(1);
         self.llm_sidecar.refresh_provider_check_snapshot();
-        let gameplay_gate = self
-            .llm_sidecar
-            .ensure_gameplay_ready(&self.world, &self.snapshot_config)
-            .err();
+        let gameplay_gate = if self.llm_sidecar.is_llm_mode() {
+            None
+        } else {
+            Some("gameplay requires runtime live server running with --llm".to_string())
+        };
         let primary_agent_claim = self
             .world
             .state()
@@ -1030,6 +1207,12 @@ impl ViewerRuntimeLiveServer {
     fn llm_gameplay_hint_for_reason(reason: &str) -> String {
         let normalized = reason.to_ascii_lowercase();
         if normalized.contains("provider_gateway_unreachable")
+            || normalized.contains("provider_http_502")
+            || normalized.contains("provider_http_503")
+            || normalized.contains("provider_http_504")
+            || normalized.contains("provider bridge returned http 502")
+            || normalized.contains("provider bridge returned http 503")
+            || normalized.contains("provider bridge returned http 504")
             || normalized.contains("read operation timed out")
             || normalized.contains("operation timed out")
             || normalized.contains("timed out")
@@ -1053,7 +1236,7 @@ impl ViewerRuntimeLiveServer {
         emit_snapshot: bool,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         let (error_code, error_message) = self.gameplay_control_error(reason.clone());
-        session.playing = false;
+        self.pause_auto_play(session);
         session.next_play_step_at = None;
         let hint = Self::llm_gameplay_hint_for_reason(&reason);
         self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
@@ -1104,7 +1287,7 @@ impl ViewerRuntimeLiveServer {
                 .as_str(),
             "viewer runtime live control failed",
         );
-        session.playing = false;
+        self.pause_auto_play(session);
         session.next_play_step_at = None;
         self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
             action,

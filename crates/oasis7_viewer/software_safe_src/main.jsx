@@ -34,6 +34,30 @@ function EmptyState(props) {
   return <div class={`empty ${props.class ?? ""}`} style={props.style}>{props.children}</div>;
 }
 
+function EntityListPendingState(props) {
+  const locale = () => props.locale ?? uiLocale();
+  const label = () => props.label ?? tr(locale(), "目标", "targets");
+  return (
+    <div class="entity-list-pending" aria-live="polite" aria-busy="true">
+      <div class="entity-list-pending__row">
+        <span class="entity-list-pending__spinner" aria-hidden="true" />
+        <span>
+          {tr(
+            locale(),
+            `正在同步${label()}…`,
+            `Syncing ${label()}…`,
+          )}
+        </span>
+      </div>
+      <div class="entity-list-pending__skeleton" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  );
+}
+
 function JsonBlock(props) {
   return <pre class="json">{JSON.stringify(props.value, null, 2)}</pre>;
 }
@@ -1104,6 +1128,7 @@ function MobileJumpRail() {
 function TargetsPanel() {
   const lists = () => core.modelLists();
   const locale = () => uiLocale();
+  const hasSnapshot = () => Boolean(core.state.snapshot);
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
       ? `${core.state.selectedKind}:${core.state.selectedId}`
@@ -1141,7 +1166,11 @@ function TargetsPanel() {
         <div class="list">
           <Show
             when={lists().agents.length > 0}
-            fallback={<EmptyState>{tr(locale(), "当前快照里没有行动体。", "No agents in current snapshot.")}</EmptyState>}
+            fallback={
+              hasSnapshot()
+                ? <EmptyState>{tr(locale(), "当前快照里没有行动体。", "No agents in current snapshot.")}</EmptyState>
+                : <EntityListPendingState locale={locale()} label={tr(locale(), "行动体", "agents")} />
+            }
           >
             <For each={lists().agents}>
               {(agent) => (
@@ -1167,7 +1196,11 @@ function TargetsPanel() {
         <div class="list">
           <Show
             when={lists().locations.length > 0}
-            fallback={<EmptyState>{tr(locale(), "当前快照里没有地点。", "No locations in current snapshot.")}</EmptyState>}
+            fallback={
+              hasSnapshot()
+                ? <EmptyState>{tr(locale(), "当前快照里没有地点。", "No locations in current snapshot.")}</EmptyState>
+                : <EntityListPendingState locale={locale()} label={tr(locale(), "地点", "locations")} />
+            }
           >
             <For each={lists().locations}>
               {(location) => (

@@ -5,8 +5,8 @@ use std::thread;
 use oasis7::observability::init_tracing;
 use oasis7::simulator::WorldScenario;
 use oasis7::viewer::{
-    ViewerLiveDecisionMode, ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig,
-    ViewerWebBridge, ViewerWebBridgeConfig,
+    ChainLinkPolicy, ViewerLiveDecisionMode, ViewerRuntimeLiveServer,
+    ViewerRuntimeLiveServerConfig, ViewerWebBridge, ViewerWebBridgeConfig,
 };
 use tracing::{error, info, warn};
 
@@ -27,6 +27,7 @@ struct CliOptions {
     llm_mode: bool,
     deployment_mode: String,
     chain_status_bind: Option<String>,
+    chain_link_policy: ChainLinkPolicy,
     auto_play: bool,
     agent_chat_echo: bool,
 }
@@ -40,6 +41,7 @@ impl Default for CliOptions {
             llm_mode: true,
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
             chain_status_bind: None,
+            chain_link_policy: ChainLinkPolicy::Enforcing,
             auto_play: false,
             agent_chat_echo: oasis7::viewer::runtime_agent_chat_echo_enabled_from_env(),
         }
@@ -78,6 +80,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         llm_mode = options.llm_mode,
         deployment_mode = %options.deployment_mode,
         chain_status_bind = ?options.chain_status_bind,
+        chain_link_policy = %options.chain_link_policy.as_str(),
         auto_play = options.auto_play,
         agent_chat_echo = options.agent_chat_echo,
         scenario = %options
@@ -108,6 +111,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         .with_hosted_public_join_mode(options.deployment_mode == "hosted_public_join")
         .with_auto_play_on_connect(options.auto_play)
         .with_agent_chat_echo_enabled(options.agent_chat_echo)
+        .with_chain_link_policy(options.chain_link_policy)
         .with_decision_mode(if options.llm_mode {
             ViewerLiveDecisionMode::Llm
         } else {
@@ -164,6 +168,10 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                 options.chain_status_bind =
                     Some(parse_required_value(&mut iter, "--chain-status-bind")?);
             }
+            "--chain-link-policy" => {
+                let raw = parse_required_value(&mut iter, "--chain-link-policy")?;
+                options.chain_link_policy = parse_chain_link_policy(raw.as_str())?;
+            }
             "--auto-play" => {
                 options.auto_play = true;
             }
@@ -207,6 +215,15 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     let _ = parse_deployment_mode(options.deployment_mode.as_str())?;
 
     Ok(options)
+}
+
+fn parse_chain_link_policy(raw: &str) -> Result<ChainLinkPolicy, String> {
+    ChainLinkPolicy::parse(raw).ok_or_else(|| {
+        format!(
+            "--chain-link-policy must be one of enforcing|shadow, got `{}`",
+            raw.trim()
+        )
+    })
 }
 
 fn parse_deployment_mode(raw: &str) -> Result<&'static str, String> {
@@ -267,6 +284,7 @@ Options:\n\
   --llm                     enable llm mode (default; required for gameplay)\n\
   --no-llm                  disable llm mode (observer/debug only; gameplay blocked)\n\
   --chain-status-bind <addr> follow committed chain world from oasis7_chain_runtime status bind\n\
+  --chain-link-policy <mode> chain sync policy: enforcing|shadow (default: enforcing)\n\
   --deployment-mode <mode>  trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
   --auto-play               advance gameplay/world on each connected session without pressing Play\n\
   --agent-chat-echo         accept provider-backed local QA chat with an echo event\n\
@@ -290,6 +308,7 @@ mod tests {
         assert!(options.llm_mode);
         assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
         assert_eq!(options.chain_status_bind, None);
+        assert_eq!(options.chain_link_policy, ChainLinkPolicy::Enforcing);
         assert!(!options.auto_play);
     }
 
@@ -305,6 +324,8 @@ mod tests {
                 "--llm",
                 "--chain-status-bind",
                 "127.0.0.1:7123",
+                "--chain-link-policy",
+                "shadow",
                 "--auto-play",
                 "--agent-chat-echo",
                 "--deployment-mode",
@@ -322,6 +343,7 @@ mod tests {
         assert!(options.llm_mode);
         assert_eq!(options.deployment_mode, "hosted_public_join");
         assert_eq!(options.chain_status_bind.as_deref(), Some("127.0.0.1:7123"));
+        assert_eq!(options.chain_link_policy, ChainLinkPolicy::Shadow);
         assert!(options.auto_play);
         assert!(options.agent_chat_echo);
     }

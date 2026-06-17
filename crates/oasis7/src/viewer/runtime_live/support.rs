@@ -18,6 +18,7 @@ impl ViewerRuntimeLiveServerConfig {
             auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
         }
     }
@@ -33,6 +34,7 @@ impl ViewerRuntimeLiveServerConfig {
             auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
         }
     }
@@ -93,6 +95,11 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn with_chain_status_bind(mut self, addr: impl Into<String>) -> Self {
         self.chain_status_bind = Some(addr.into());
+        self
+    }
+
+    pub fn with_chain_link_policy(mut self, policy: ChainLinkPolicy) -> Self {
+        self.chain_link_policy = policy;
         self
     }
 
@@ -199,6 +206,7 @@ pub(super) struct RuntimeLiveSession {
     pub(super) event_filters: Option<HashSet<ViewerEventKind>>,
     pub(super) playing: bool,
     pub(super) next_play_step_at: Option<Instant>,
+    pub(super) next_background_snapshot_at: Option<Instant>,
     pub(super) next_chain_poll_at: Option<Instant>,
     pub(super) metrics: RunnerMetrics,
     pub(super) transient_play_failures: u8,
@@ -217,6 +225,7 @@ impl RuntimeLiveSession {
             event_filters: None,
             playing,
             next_play_step_at: None,
+            next_background_snapshot_at: None,
             next_chain_poll_at: None,
             metrics: RunnerMetrics::default(),
             transient_play_failures: 0,
@@ -233,18 +242,14 @@ impl RuntimeLiveSession {
         }
     }
 
-    pub(super) fn should_advance_play_step(&mut self, interval: Duration) -> bool {
-        if !self.playing {
-            self.next_play_step_at = None;
-            return false;
-        }
+    pub(super) fn should_emit_background_snapshot(&mut self, interval: Duration) -> bool {
         let now = Instant::now();
-        if let Some(next_step_at) = self.next_play_step_at {
-            if now < next_step_at {
+        if let Some(next_snapshot_at) = self.next_background_snapshot_at {
+            if now < next_snapshot_at {
                 return false;
             }
         }
-        self.next_play_step_at = Some(now + interval);
+        self.next_background_snapshot_at = Some(now + interval);
         true
     }
 

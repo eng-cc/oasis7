@@ -1,5 +1,6 @@
 use super::cli::parse_validator_signer_public_key_spec;
 use super::cli::TrafficProfile;
+use super::status_server_support::status_http_request_is_complete;
 use super::{
     apply_traffic_profile_to_node_config, build_chain_balances_payload_from_world,
     build_default_peer_record, build_default_replication_network_config,
@@ -28,6 +29,24 @@ use oasis7_proto::distributed_dht::{
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use std::collections::BTreeMap;
 use std::path::Path;
+
+#[test]
+fn status_http_request_waits_for_full_content_length_body() {
+    let partial = b"POST /v1/chain/gameplay/submit HTTP/1.1\r\nContent-Length: 11\r\n\r\n{\"ok\":";
+    assert!(
+        !status_http_request_is_complete(partial).expect("partial request should parse headers")
+    );
+
+    let complete =
+        b"POST /v1/chain/gameplay/submit HTTP/1.1\r\nContent-Length: 11\r\n\r\n{\"ok\":true}";
+    assert!(status_http_request_is_complete(complete).expect("complete request should parse"));
+}
+
+#[test]
+fn status_http_request_without_body_is_complete_after_headers() {
+    let request = b"GET /v1/chain/status HTTP/1.1\r\nHost: 127.0.0.1:5121\r\n\r\n";
+    assert!(status_http_request_is_complete(request).expect("GET request should parse"));
+}
 
 #[test]
 fn parse_options_defaults() {

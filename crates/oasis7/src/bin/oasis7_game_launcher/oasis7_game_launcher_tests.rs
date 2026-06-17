@@ -16,18 +16,19 @@ use super::{
     sanitize_relative_request_path, start_static_http_server, stop_static_http_server,
     viewer_dev_dist_candidates, CliOptions, DeploymentMode, ViewerAuthBootstrap,
     BUILTIN_LLM_DECISION_SOURCE, DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS,
-    DEFAULT_AGENT_PROVIDER_PROFILE, DEFAULT_AGENT_PROVIDER_URL, DEFAULT_CHAIN_NODE_ID,
-    DEFAULT_CHAIN_STATUS_BIND, DEFAULT_DEPLOYMENT_MODE, DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS,
-    DEFAULT_LIVE_BIND, DEFAULT_SCENARIO, DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV,
-    LLM_TIMEOUT_MS_ENV, LOCAL_BRIDGE_PROVIDER_BACKEND, LOCAL_MOCK_PROVIDER_BACKEND,
-    LOOPBACK_HTTP_PROVIDER_TRANSPORT, PROVIDER_BACKED_DECISION_SOURCE,
-    VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_EXECUTION_LANE_ENV,
-    VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV, VIEWER_AGENT_PROVIDER_BACKEND_ENV,
-    VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV, VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
-    VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV,
-    VIEWER_AGENT_PROVIDER_PROFILE_ENV, VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
-    VIEWER_AGENT_PROVIDER_URL_ENV, VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV,
-    VIEWER_AUTH_PUBLIC_KEY_ENV, VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
+    DEFAULT_AGENT_PROVIDER_PROFILE, DEFAULT_AGENT_PROVIDER_URL, DEFAULT_CHAIN_LINK_POLICY,
+    DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND, DEFAULT_DEPLOYMENT_MODE,
+    DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, DEFAULT_LIVE_BIND, DEFAULT_SCENARIO,
+    DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV, LLM_TIMEOUT_MS_ENV,
+    LOCAL_BRIDGE_PROVIDER_BACKEND, LOCAL_MOCK_PROVIDER_BACKEND, LOOPBACK_HTTP_PROVIDER_TRANSPORT,
+    PROVIDER_BACKED_DECISION_SOURCE, VIEWER_AGENT_DECISION_SOURCE_ENV,
+    VIEWER_AGENT_EXECUTION_LANE_ENV, VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+    VIEWER_AGENT_PROVIDER_BACKEND_ENV, VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+    VIEWER_AGENT_PROVIDER_CONTRACT_ENV, VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV,
+    VIEWER_AGENT_PROVIDER_MODE_ENV, VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+    VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, VIEWER_AGENT_PROVIDER_URL_ENV,
+    VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
+    VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
 };
 use oasis7::launcher_bootstrap_peers::DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS;
 use oasis7::simulator::ProviderExecutionMode;
@@ -106,6 +107,7 @@ fn parse_options_defaults() {
     assert_eq!(options.viewer_static_dir, "web");
     assert!(!options.chain_enabled);
     assert_eq!(options.chain_status_bind, DEFAULT_CHAIN_STATUS_BIND);
+    assert_eq!(options.chain_link_policy, DEFAULT_CHAIN_LINK_POLICY);
     assert!(options
         .chain_node_id
         .starts_with(&format!("{DEFAULT_CHAIN_NODE_ID}-fresh-")));
@@ -149,6 +151,8 @@ fn parse_options_accepts_overrides() {
             "dist",
             "--chain-status-bind",
             "127.0.0.1:6331",
+            "--chain-link-policy",
+            "shadow",
             "--chain-node-id",
             "chain-a",
             "--chain-storage-profile",
@@ -214,6 +218,7 @@ fn parse_options_accepts_overrides() {
     assert_eq!(options.viewer_static_dir, "dist");
     assert!(options.auto_play);
     assert_eq!(options.chain_status_bind, "127.0.0.1:6331");
+    assert_eq!(options.chain_link_policy, "shadow");
     assert_eq!(options.chain_node_id, "chain-a");
     assert_eq!(options.chain_network_tier_manifest, "");
     assert_eq!(options.chain_storage_profile, StorageProfile::SoakForensics);
@@ -560,6 +565,8 @@ fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
     assert!(args.contains(&"--llm".to_string()));
     assert!(args.contains(&"--chain-status-bind".to_string()));
     assert!(args.contains(&options.chain_status_bind));
+    assert!(args.contains(&"--chain-link-policy".to_string()));
+    assert!(args.contains(&options.chain_link_policy));
     assert!(!args.iter().any(|arg| arg.is_empty()));
     assert!(!args.iter().any(|arg| arg == DEFAULT_SCENARIO));
     assert_eq!(
@@ -623,6 +630,13 @@ fn parse_options_rejects_invalid_chain_p2p_user_mode() {
     let err =
         parse_options(["--chain-p2p-user-mode", "wild"].into_iter()).expect_err("should fail");
     assert!(err.contains("auto_join, private_safe, public_entry"));
+}
+
+#[test]
+fn parse_options_rejects_invalid_chain_link_policy() {
+    let err = parse_options(["--chain-link-policy", "observe"].into_iter())
+        .expect_err("invalid chain link policy should fail");
+    assert!(err.contains("enforcing|shadow"));
 }
 
 #[test]

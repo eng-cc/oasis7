@@ -45,7 +45,7 @@ use cli::{
 use hosted_access::{DeploymentMode, DEFAULT_DEPLOYMENT_MODE};
 use hosted_account_identity::HostedAccountIdentityBroker;
 use hosted_player_session::HostedPlayerSessionIssuer;
-use oasis7::viewer::VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID;
+use oasis7::viewer::{ChainLinkPolicy, VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID};
 use runtime_paths::{
     resolve_oasis7_chain_runtime_binary, resolve_oasis7_viewer_live_binary,
     resolve_viewer_static_dir,
@@ -104,6 +104,7 @@ const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const DEFAULT_VIEWER_PLAYER_ID: &str = "viewer-player";
 const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
+const DEFAULT_CHAIN_LINK_POLICY: &str = "enforcing";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
 const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
@@ -173,6 +174,7 @@ struct CliOptions {
     open_browser: bool,
     chain_enabled: bool,
     chain_status_bind: String,
+    chain_link_policy: String,
     chain_node_id: String,
     chain_network_tier_manifest: String,
     chain_storage_profile: StorageProfile,
@@ -216,6 +218,7 @@ impl Default for CliOptions {
             open_browser: true,
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
+            chain_link_policy: DEFAULT_CHAIN_LINK_POLICY.to_string(),
             chain_node_id: default_chain_node_id(),
             chain_network_tier_manifest: DEFAULT_CHAIN_NETWORK_TIER_MANIFEST.to_string(),
             chain_storage_profile: StorageProfile::DevLocal,
@@ -354,6 +357,7 @@ fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), Stri
         viewer_live_pid = world_child.id(),
         chain_runtime_pid = chain_child.as_ref().map(Child::id),
         chain_status_bind = %options.chain_status_bind,
+        chain_link_policy = %options.chain_link_policy,
         viewer_static_dir = %viewer_static_dir.display(),
         "launcher stack is ready"
     );

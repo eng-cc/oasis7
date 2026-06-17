@@ -29,9 +29,10 @@ Options:
                                  (default: 4000)
   --require-agent-spoke          Treat missing inbound `agent_spoke` as failure
   --headed                       Open browser in headed mode
-  Note: when the script bootstraps its own stack, it enables
-  `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` automatically and treats missing
-  inbound `agent_spoke` before any extra step/play as a blocking failure.
+  Note: this is a QA regression, not the local playtest entry. When the script
+  bootstraps its own stack, it enables receipt-only debug echo with
+  `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` and treats missing inbound `agent_spoke`
+  before any extra step/play as a blocking failure.
   --headless                     Open browser in headless mode (default)
   -h, --help                     Show this help
 
@@ -489,7 +490,7 @@ require_immediate_agent_spoke=0
 agent_spoke_deadline_ms=$((SECONDS * 1000 + AGENT_SPOKE_TIMEOUT_MS))
 agent_spoke_expected_message=""
 if [[ "$BOOTSTRAPPED_STACK" -eq 1 && "$BOOTSTRAP_USES_BUNDLE" -eq 0 ]]; then
-  agent_spoke_expected_message="[qa-echo] ${CHAT_MESSAGE}"
+  agent_spoke_expected_message="[local-mock-receipt] 已收到消息；当前本地 mock provider 不生成真实 Agent 回复：${CHAT_MESSAGE}"
   require_immediate_agent_spoke=1
 fi
 

@@ -22,7 +22,9 @@ pub(super) use llm_sidecar::{
 };
 
 const RUNTIME_AGENT_CHAT_ECHO_ENV: &str = "OASIS7_RUNTIME_AGENT_CHAT_ECHO";
-const RUNTIME_AGENT_CHAT_ECHO_PREFIX: &str = "[qa-echo]";
+const RUNTIME_AGENT_CHAT_ECHO_PREFIX: &str = "[local-mock-receipt]";
+const RUNTIME_AGENT_CHAT_ECHO_NOTICE: &str =
+    "已收到消息；当前本地 mock provider 不生成真实 Agent 回复：";
 const HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
 
 #[allow(dead_code)]
@@ -851,7 +853,9 @@ impl ViewerRuntimeLiveServer {
         self.enqueue_virtual_event(WorldEventKind::AgentSpoke {
             agent_id: agent_id.to_string(),
             location_id: location_id_for_pos(agent.state.pos),
-            message: format!("{RUNTIME_AGENT_CHAT_ECHO_PREFIX} {message}"),
+            message: format!(
+                "{RUNTIME_AGENT_CHAT_ECHO_PREFIX} {RUNTIME_AGENT_CHAT_ECHO_NOTICE}{message}"
+            ),
             target_agent_id: None,
         });
     }

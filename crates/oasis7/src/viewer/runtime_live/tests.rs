@@ -1,5 +1,5 @@
 use super::*;
-use crate::simulator::ResourceOwner;
+use crate::simulator::{AgentDecision, ResourceOwner};
 use crate::simulator::{
     ProviderExecutionMode, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
@@ -639,7 +639,7 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
                         agent_id: event_agent_id,
                         message,
                         ..
-                    } if event_agent_id == &agent_id && message == "[qa-echo] hello runtime echo over socket"
+                    } if event_agent_id == &agent_id && message == "[local-mock-receipt] 已收到消息；当前本地 mock provider 不生成真实 Agent 回复：hello runtime echo over socket"
                 );
             }
             ViewerResponse::AuthoritativeBatch { .. } => {
@@ -748,22 +748,193 @@ fn runtime_live_server_config_play_interval_defaults_and_clamps() {
 }
 
 #[test]
-fn runtime_live_session_play_step_is_interval_gated() {
+fn runtime_background_play_throttles_full_snapshots() {
     let mut session = RuntimeLiveSession::new();
     session.playing = true;
 
-    assert!(session.should_advance_play_step(Duration::from_millis(40)));
-    assert!(!session.should_advance_play_step(Duration::from_millis(40)));
-    std::thread::sleep(Duration::from_millis(50));
-    assert!(session.should_advance_play_step(Duration::from_millis(40)));
+    assert!(
+        should_emit_runtime_advance_snapshot(&mut session, "play", false),
+        "first background play step should emit a full snapshot"
+    );
+    assert!(
+        !should_emit_runtime_advance_snapshot(&mut session, "play", false),
+        "second immediate background play step should be snapshot-throttled"
+    );
+    assert!(
+        should_emit_runtime_advance_snapshot(&mut session, "step", true),
+        "manual step should still emit a full snapshot immediately"
+    );
+    session.playing = false;
+    assert!(
+        should_emit_runtime_advance_snapshot(&mut session, "play", false),
+        "non-playing play control responses are not background auto-play and should not be throttled"
+    );
 }
 
 #[test]
-fn runtime_live_session_auto_play_initializes_playing() {
-    let mut session = RuntimeLiveSession::new_with_playing(true);
+fn runtime_decision_failure_reason_includes_upstream_trace() {
+    let trace = AgentDecisionTrace {
+        agent_id: "agent-0".to_string(),
+        time: 1,
+        decision: AgentDecision::Wait,
+        llm_input: None,
+        llm_output: Some(
+            serde_json::json!({
+                "provider_error": {
+                    "code": "provider_gateway_unreachable",
+                    "retryable": true,
+                },
+                "upstream_trace": {
+                    "stage": "decision_invocation",
+                    "diagnostics": {
+                        "status_code": 200,
+                        "data_event_count": 2,
+                    },
+                },
+            })
+            .to_string(),
+        ),
+        llm_error: Some("provider_gateway_unreachable: upstream failed".to_string()),
+        parse_error: None,
+        llm_diagnostics: None,
+        llm_effect_intents: Vec::new(),
+        llm_effect_receipts: Vec::new(),
+        llm_step_trace: Vec::new(),
+        llm_prompt_section_trace: Vec::new(),
+        llm_chat_messages: Vec::new(),
+    };
 
-    assert!(session.playing);
-    assert!(session.should_advance_play_step(Duration::from_millis(40)));
+    let reason = append_decision_upstream_trace(
+        "provider_gateway_unreachable: upstream failed".to_string(),
+        &trace,
+    );
+
+    assert!(reason.contains("upstream_trace="));
+    assert!(reason.contains("\"data_event_count\":2"));
+}
+
+#[test]
+fn runtime_decision_failure_reason_truncates_utf8_trace_safely() {
+    let trace = AgentDecisionTrace {
+        agent_id: "agent-0".to_string(),
+        time: 1,
+        decision: AgentDecision::Wait,
+        llm_input: None,
+        llm_output: Some(
+            serde_json::json!({
+                "provider_error": {
+                    "code": "provider_gateway_unreachable",
+                    "retryable": true,
+                },
+                "upstream_trace": {
+                    "error_summary": "余额不足".repeat(500),
+                },
+            })
+            .to_string(),
+        ),
+        llm_error: Some("provider_gateway_unreachable: upstream failed".to_string()),
+        parse_error: None,
+        llm_diagnostics: None,
+        llm_effect_intents: Vec::new(),
+        llm_effect_receipts: Vec::new(),
+        llm_step_trace: Vec::new(),
+        llm_prompt_section_trace: Vec::new(),
+        llm_chat_messages: Vec::new(),
+    };
+
+    let reason = append_decision_upstream_trace(
+        "provider_gateway_unreachable: upstream failed".to_string(),
+        &trace,
+    );
+
+    assert!(reason.contains("upstream_trace="));
+    assert!(reason.ends_with("..."));
+}
+
+#[test]
+fn runtime_decision_trace_reads_provider_retryable_flag() {
+    let trace = AgentDecisionTrace {
+        agent_id: "agent-0".to_string(),
+        time: 1,
+        decision: AgentDecision::Wait,
+        llm_input: None,
+        llm_output: Some(
+            serde_json::json!({
+                "provider_error": {
+                    "code": "provider_unauthorized",
+                    "retryable": false,
+                },
+                "upstream_trace": {
+                    "stage": "decision_invocation",
+                },
+            })
+            .to_string(),
+        ),
+        llm_error: Some("provider_unauthorized: no token".to_string()),
+        parse_error: None,
+        llm_diagnostics: None,
+        llm_effect_intents: Vec::new(),
+        llm_effect_receipts: Vec::new(),
+        llm_step_trace: Vec::new(),
+        llm_prompt_section_trace: Vec::new(),
+        llm_chat_messages: Vec::new(),
+    };
+
+    assert_eq!(decision_trace_provider_error_retryable(&trace), Some(false));
+}
+
+#[test]
+fn runtime_auto_play_uses_shared_server_gate_across_sessions() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal).with_auto_play_on_connect(true),
+    )
+    .expect("runtime server");
+    let mut first = RuntimeLiveSession::new();
+    let mut second = RuntimeLiveSession::new();
+
+    server.enable_auto_play_for_session_if_available(&mut first);
+    assert!(first.playing);
+    assert!(server.should_advance_auto_play_step());
+    assert!(
+        !server.should_advance_auto_play_step(),
+        "a second session should not advance the same server-level auto-play tick"
+    );
+
+    server.enable_auto_play_for_session_if_available(&mut second);
+    assert!(second.playing);
+    assert!(
+        !server.should_advance_auto_play_step(),
+        "joining sessions share the same background play gate instead of becoming owners"
+    );
+
+    server.next_auto_play_step_at = Some(Instant::now() - Duration::from_millis(1));
+    assert!(server.should_advance_auto_play_step());
+}
+
+#[test]
+fn runtime_auto_play_pause_and_resume_are_global() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal).with_auto_play_on_connect(true),
+    )
+    .expect("runtime server");
+    let mut first = RuntimeLiveSession::new();
+    let mut second = RuntimeLiveSession::new();
+
+    server.enable_auto_play_for_session_if_available(&mut first);
+    assert!(first.playing);
+    server.pause_auto_play(&mut first);
+    assert!(!first.playing);
+    assert!(!server.should_advance_auto_play_step());
+
+    server.enable_auto_play_for_session_if_available(&mut second);
+    assert!(
+        !second.playing,
+        "new sessions should respect a global pause until the user resumes live play"
+    );
+
+    server.resume_auto_play(&mut second);
+    assert!(second.playing);
+    assert!(server.should_advance_auto_play_step());
 }
 
 #[test]

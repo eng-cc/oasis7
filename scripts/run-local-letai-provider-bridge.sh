@@ -18,6 +18,10 @@ Usage: ./scripts/run-local-letai-provider-bridge.sh [options]
 Start the local provider bridge against LetAI's chat-completions API path.
 By default the bridge uses the Rust direct LetAI adapter; the legacy Python
 provider CLI remains available for targeted compatibility diagnostics.
+For normal local real-play, start `run-local-letai-game-test.sh` instead. This
+bridge script is the lower-level entrypoint used by that wrapper; starting the
+binary directly is for diagnostics only and must explicitly preserve the same
+LetAI token, platform user/key, and auto-topup environment.
 
 Options:
   --config <path>             LetAI config file for with-letai-llm-config.sh
@@ -140,9 +144,14 @@ export OASIS7_LOCAL_LETAI_PROVIDER_THINKING="$PROVIDER_THINKING"
 export OASIS7_LOCAL_LETAI_PROVIDER_BACKEND="$PROVIDER_BACKEND"
 export OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN="$AUTH_TOKEN"
 export OASIS7_LOCAL_LETAI_PROVIDER_CLI="$ROOT_DIR/scripts/provider-remote-https/letai_provider_cli.py"
+export OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN="$ROOT_DIR/target/debug/oasis7_provider_local_bridge"
 
+WRAPPER_CMD=("$ROOT_DIR/scripts/with-letai-llm-config.sh")
 if [[ "${#CONFIG_ARGS[@]}" -gt 0 ]]; then
-  exec "$ROOT_DIR/scripts/with-letai-llm-config.sh" "${CONFIG_ARGS[@]}" -- bash -s <<'BASH'
+  WRAPPER_CMD+=("${CONFIG_ARGS[@]}")
+fi
+
+exec "${WRAPPER_CMD[@]}" -- bash -s <<'BASH'
 set -euo pipefail
 export OASIS7_REMOTE_LLM_BASE_URL="$OASIS7_LLM_BASE_URL"
 export OASIS7_REMOTE_LLM_API_KEY="$OASIS7_LLM_API_KEY"
@@ -155,42 +164,20 @@ export OASIS7_REMOTE_LLM_PLATFORM_KEY="${OASIS7_REMOTE_LLM_PLATFORM_KEY:-}"
 export OASIS7_REMOTE_LLM_PLATFORM_USER_ID="${OASIS7_REMOTE_LLM_PLATFORM_USER_ID:-}"
 export OASIS7_REMOTE_LLM_PLATFORM_BASE_URL="${OASIS7_REMOTE_LLM_PLATFORM_BASE_URL:-${LETAI_PLATFORM_BASE_URL:-https://api.letai.run}}"
 
-cmd=(
-  env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge --
-  --bind "$OASIS7_LOCAL_LETAI_PROVIDER_BIND"
-  --provider-backend "$OASIS7_LOCAL_LETAI_PROVIDER_BACKEND"
-  --provider-agent "$OASIS7_LOCAL_LETAI_PROVIDER_AGENT"
-  --provider-thinking "$OASIS7_LOCAL_LETAI_PROVIDER_THINKING"
-  --gateway-health-url "${OASIS7_LLM_BASE_URL%/}/models"
-)
-
-if [[ "$OASIS7_LOCAL_LETAI_PROVIDER_BACKEND" == "legacy-cli" ]]; then
-  cmd+=(--provider-cli-bin "$OASIS7_LOCAL_LETAI_PROVIDER_CLI")
+if [[ -x "$OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN" && "${OASIS7_LOCAL_LETAI_PROVIDER_FORCE_CARGO_RUN:-0}" != "1" ]]; then
+  cmd=("$OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN")
+else
+  cmd=(env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge --)
 fi
-
-if [[ -n "$OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN" ]]; then
-  cmd+=(--auth-token "$OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN")
+bin_mtime=""
+bin_sha256=""
+if [[ "${cmd[0]}" == "$OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN" ]]; then
+  bin_mtime="$(stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%S%z' "${cmd[0]}" 2>/dev/null || stat -c '%y' "${cmd[0]}" 2>/dev/null || true)"
+  bin_sha256="$(shasum -a 256 "${cmd[0]}" 2>/dev/null | awk '{print $1}')"
 fi
-
-exec "${cmd[@]}"
-BASH
-fi
-
-exec "$ROOT_DIR/scripts/with-letai-llm-config.sh" -- bash -s <<'BASH'
-set -euo pipefail
-export OASIS7_REMOTE_LLM_BASE_URL="$OASIS7_LLM_BASE_URL"
-export OASIS7_REMOTE_LLM_API_KEY="$OASIS7_LLM_API_KEY"
-export OASIS7_REMOTE_LLM_MODEL="$OASIS7_LLM_MODEL"
-export OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKENS="${OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKENS:-256}"
-export OASIS7_REMOTE_LLM_TEMPERATURE="${OASIS7_REMOTE_LLM_TEMPERATURE:-0}"
-export OASIS7_REMOTE_LLM_STREAM="${OASIS7_REMOTE_LLM_STREAM:-true}"
-export OASIS7_REMOTE_LLM_AUTO_TOPUP_USD="${OASIS7_REMOTE_LLM_AUTO_TOPUP_USD:-${OASIS7_LETAI_AUTO_TOPUP_USD:-0.1}}"
-export OASIS7_REMOTE_LLM_PLATFORM_KEY="${OASIS7_REMOTE_LLM_PLATFORM_KEY:-}"
-export OASIS7_REMOTE_LLM_PLATFORM_USER_ID="${OASIS7_REMOTE_LLM_PLATFORM_USER_ID:-}"
-export OASIS7_REMOTE_LLM_PLATFORM_BASE_URL="${OASIS7_REMOTE_LLM_PLATFORM_BASE_URL:-${LETAI_PLATFORM_BASE_URL:-https://api.letai.run}}"
-
-cmd=(
-  env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge --
+printf 'local_letai_provider_bridge_exec cmd0=%s bin_mtime=%s bin_sha256=%s force_cargo=%s\n' \
+  "${cmd[0]}" "$bin_mtime" "$bin_sha256" "${OASIS7_LOCAL_LETAI_PROVIDER_FORCE_CARGO_RUN:-0}" >&2
+cmd+=(
   --bind "$OASIS7_LOCAL_LETAI_PROVIDER_BIND"
   --provider-backend "$OASIS7_LOCAL_LETAI_PROVIDER_BACKEND"
   --provider-agent "$OASIS7_LOCAL_LETAI_PROVIDER_AGENT"

@@ -18,6 +18,7 @@ VIEWER_STATIC_DIR="web"
 CHAIN_ENABLED="1"
 DEPLOYMENT_MODE="${OASIS7_DEPLOYMENT_MODE:-hosted_public_join}"
 ALLOW_TRUSTED_LOCAL_PLAYTEST="${OASIS7_ALLOW_TRUSTED_LOCAL_PLAYTEST:-0}"
+CHAIN_LINK_POLICY="${OASIS7_CHAIN_LINK_POLICY:-}"
 CHAIN_NODE_ID=""
 CHAIN_STATUS_BIND_ADDR=""
 BUNDLE_DIR=""
@@ -80,6 +81,7 @@ Options:
   --chain-disable          Disable chain runtime
   --chain-node-id <id>     Override chain node id (default: fresh per run)
   --chain-status-bind <a:p> Override chain status HTTP bind (default: web-bind port + 110)
+  --chain-link-policy <p>  enforcing or shadow (default: shadow for trusted local playtest, otherwise enforcing)
   --output-dir <path>      Override runtime log/artifact output directory
   --run-id <id>            Override logical run id used for output dir / chain node id defaults
   --meta-file <path>       Override metadata file path (default: <output-dir>/session.meta)
@@ -89,7 +91,7 @@ Options:
   --agent-decision-source <s>
                            provider_backed (default) or builtin_llm
   --agent-provider-lane <lane>
-                           local (default), local-mock, test, or prod
+                           local (default), local-mock (smoke/CI only), test, or prod
   --agent-provider-url <u> Provider bridge URL override for provider_backed mode
   --agent-provider-auth-token <t>
                            Optional provider bridge bearer token, e.g. newapi_user_ref:<user>
@@ -218,6 +220,10 @@ while [[ $# -gt 0 ]]; do
       CHAIN_STATUS_BIND_ADDR="${2:-}"
       shift 2
       ;;
+    --chain-link-policy)
+      CHAIN_LINK_POLICY="${2:-}"
+      shift 2
+      ;;
     --with-llm)
       ENABLE_LLM="1"
       shift
@@ -342,6 +348,40 @@ resolve_agent_provider_lane_defaults() {
 
 resolve_agent_provider_lane_defaults
 
+AGENT_CHAT_ECHO="${OASIS7_RUNTIME_AGENT_CHAT_ECHO:-}"
+if [[ -z "$AGENT_CHAT_ECHO" ]]; then
+  AGENT_CHAT_ECHO="0"
+fi
+AGENT_CHAT_ECHO_NORMALIZED="$(printf '%s' "$AGENT_CHAT_ECHO" | tr '[:upper:]' '[:lower:]')"
+case "$AGENT_CHAT_ECHO_NORMALIZED" in
+  1|true|yes|on)
+    AGENT_CHAT_ECHO="1"
+    ;;
+  0|false|no|off)
+    AGENT_CHAT_ECHO="0"
+    ;;
+  *)
+    echo "error: OASIS7_RUNTIME_AGENT_CHAT_ECHO must be boolean-like; got $AGENT_CHAT_ECHO" >&2
+    exit 1
+    ;;
+esac
+
+if [[ -z "$CHAIN_LINK_POLICY" ]]; then
+  if [[ "$DEPLOYMENT_MODE" == "trusted_local_only" && "$ALLOW_TRUSTED_LOCAL_PLAYTEST" == "1" ]]; then
+    CHAIN_LINK_POLICY="shadow"
+  else
+    CHAIN_LINK_POLICY="enforcing"
+  fi
+fi
+case "$CHAIN_LINK_POLICY" in
+  enforcing|shadow)
+    ;;
+  *)
+    echo "error: --chain-link-policy must be one of enforcing, shadow; got $CHAIN_LINK_POLICY" >&2
+    exit 1
+    ;;
+esac
+
 if [[ "$PRINT_AGENT_PROVIDER_CONFIG" == "1" ]]; then
   python3 - <<PY
 import json
@@ -359,6 +399,8 @@ payload = {
     "agent_provider_connect_timeout_ms": "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS",
     "agent_provider_profile": "$AGENT_PROVIDER_PROFILE",
     "agent_execution_lane": "$AGENT_EXECUTION_LANE",
+    "chain_link_policy": "$CHAIN_LINK_POLICY",
+    "agent_chat_echo": "$AGENT_CHAT_ECHO",
 }
 print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 PY
@@ -632,6 +674,7 @@ LAUNCHER_ENV_DEFAULTS=()
 while IFS= read -r env_default; do
   LAUNCHER_ENV_DEFAULTS+=("$env_default")
 done < <(oasis7_hosted_login_gate_env_defaults "$HOSTED_ACCOUNT_STORE_PATH")
+LAUNCHER_ENV_DEFAULTS+=("OASIS7_RUNTIME_AGENT_CHAT_ECHO=$AGENT_CHAT_ECHO")
 if [[ -n "$META_FILE" ]]; then
   if [[ "$META_FILE" != /* ]]; then
     META_FILE="$ROOT_DIR/$META_FILE"
@@ -677,6 +720,7 @@ if [[ "$CHAIN_ENABLED" == "1" ]]; then
     --chain-enable
     --chain-node-id "$CHAIN_NODE_ID"
     --chain-status-bind "$CHAIN_STATUS_BIND_ADDR"
+    --chain-link-policy "$CHAIN_LINK_POLICY"
   )
 else
   WORLD_ARGS+=(--chain-disable)
@@ -739,7 +783,11 @@ else
   if [[ "$CHAIN_ENABLED" == "1" ]]; then
     SOURCE_BUILD_ARGS+=(--bin oasis7_chain_runtime)
   fi
-  oasis7_cargo_dev "${SOURCE_BUILD_ARGS[@]}"
+  if [[ "${OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD:-0}" == "1" ]]; then
+    echo "warning: skipping source-mode cargo build; using existing binaries from $SOURCE_MODE_TARGET_DIR" >&2
+  else
+    oasis7_cargo_dev "${SOURCE_BUILD_ARGS[@]}"
+  fi
   [[ -x "$SOURCE_MODE_PROBE_BIN" ]] || { echo "error: built probe binary missing: $SOURCE_MODE_PROBE_BIN" >&2; exit 1; }
   [[ -x "$SOURCE_MODE_LAUNCHER_BIN" ]] || { echo "error: built launcher binary missing: $SOURCE_MODE_LAUNCHER_BIN" >&2; exit 1; }
   [[ -x "$SOURCE_MODE_VIEWER_LIVE_BIN" ]] || { echo "error: built viewer live binary missing: $SOURCE_MODE_VIEWER_LIVE_BIN" >&2; exit 1; }
@@ -910,9 +958,13 @@ INFO
 
 while true; do
   if ! kill -0 "$LAUNCHER_PID" >/dev/null 2>&1; then
-    echo "error: oasis7_game_launcher exited unexpectedly" >&2
+    set +e
+    wait "$LAUNCHER_PID"
+    launcher_status=$?
+    set -e
+    echo "error: oasis7_game_launcher exited unexpectedly with status $launcher_status" >&2
     tail_logs_on_error
-    exit 1
+    exit "$launcher_status"
   fi
   sleep 1
 done

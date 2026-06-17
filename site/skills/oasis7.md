@@ -95,7 +95,34 @@ Defaults:
 - workspace: `tools/provider/oasis7_provider_workspace`
 - model: `custom-right-codes/gpt-5.4`
 
-### 4. Start the bridge
+### 4. Start Local LetAI Real-Play
+
+For normal local real LetAI gameplay, always start from the one-command wrapper:
+
+```bash
+./scripts/run-local-letai-game-test.sh
+```
+
+Use this wrapper for every local real-play run unless you are deliberately doing
+low-level diagnostics. It normalizes platform credentials into a temporary
+project token config, forwards auto-topup and platform user/key environment,
+starts the Rust direct LetAI provider bridge, runs the provider contract smoke,
+and launches the game against `127.0.0.1:5841`.
+
+Directly running `oasis7_provider_local_bridge`, `oasis7_game_launcher`, or an
+already-built binary is not the canonical local playtest path. If you do that
+for debugging, you must manually mirror the wrapper's LetAI token,
+`OASIS7_REMOTE_LLM_PLATFORM_KEY`, `OASIS7_REMOTE_LLM_PLATFORM_USER_ID`, and
+`OASIS7_REMOTE_LLM_AUTO_TOPUP_USD` environment; otherwise auto-topup, token
+binding, or provider-backed behavior may differ from the real local flow.
+
+Pass extra launcher flags after `--`:
+
+```bash
+./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
+```
+
+### 5. Start the bridge manually for diagnostics
 
 Run the local bridge that exposes world-simulator provider endpoints:
 
@@ -145,32 +172,16 @@ default Rust direct adapter:
 adapter compatibility diagnostics or token-only comparison, but it is not the
 normal local gameplay preflight.
 
-For the usual local real-LLM gameplay test, use the one-command wrapper instead.
-It sets the local proxy defaults, starts the Rust direct LetAI provider bridge,
-runs the provider contract smoke as the default Rust bridge chat probe, and
-launches the game against `127.0.0.1:5841`:
-
-```bash
-./scripts/run-local-letai-game-test.sh
-```
-
 The wrapper prefers `OASIS7_LETAI_CONFIG_PATH`, then
 `/Users/scc/Documents/keys/letai.txt`, then `OASIS7_LETAI_TOKEN_CONFIG_PATH` or
 `/Users/scc/Documents/keys/letai-token-local.txt`. A generated token config must
 contain a real project `token_key`; the platform `Key` from `letai.txt` is only
 for management APIs and dynamic token provisioning.
 
-By default the wrapper also enables `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` so the
-local provider-backed playtest can accept chat input and show chat feedback while
-NPC decisions still run through the real LetAI provider bridge. Disable this
-with `--no-chat-echo` when validating the stricter provider-backed production
-surface where direct agent chat is not yet supported.
-
-Pass extra launcher flags after `--`:
-
-```bash
-./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
-```
+By default the wrapper keeps `OASIS7_RUNTIME_AGENT_CHAT_ECHO` disabled so local
+playtest follows the real provider-backed path. Use `--chat-echo` only for
+low-level receipt/debug checks where it is acceptable to show a
+`[local-mock-receipt]` message instead of a real Agent reply.
 
 For local real-provider runs, the LetAI wrapper can automatically top up quota
 when the upstream returns `insufficient_user_quota`. The local Rust bridge
@@ -193,7 +204,7 @@ curl -sS http://127.0.0.1:5841/v1/provider/info | jq .
 curl -sS http://127.0.0.1:5841/v1/provider/health | jq .
 ```
 
-### 5. Advanced manual launcher path
+### 6. Advanced manual launcher path
 
 For normal local real LetAI gameplay, use `./scripts/run-local-letai-game-test.sh`
 above. The commands below are lower-level manual launcher paths for operators
