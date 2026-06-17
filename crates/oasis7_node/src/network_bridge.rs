@@ -18,6 +18,10 @@ use serde::Serialize;
 use crate::gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipMessage, GossipProposalMessage,
 };
+use crate::network_bridge_gap_sync_budget::{
+    gap_sync_fetch_commit_probe_route_budget, gap_sync_fetch_commit_route_budget,
+    gap_sync_fetch_commit_route_budget_exhausted,
+};
 pub(crate) use crate::network_error_classification::{
     replication_network_error_is_availability_gap, replication_network_error_is_not_found,
     replication_network_error_is_protocol_unavailable,
@@ -43,8 +47,6 @@ pub(crate) const REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX: &str =
 pub(crate) const REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX: &str =
     "replication network route unavailable: ";
 const FETCH_COMMIT_GENERIC_ROUTE_ATTEMPTS: usize = 4;
-const GAP_SYNC_FETCH_COMMIT_REQUEST_TIMEOUT_MS: u64 = 1_500;
-const GAP_SYNC_FETCH_COMMIT_RETRY_BUDGET_MS: u64 = 3_000;
 const GAP_SYNC_FETCH_COMMIT_MAX_PROVIDER_ROUTES_PER_POLL: usize = 8;
 const GAP_SYNC_FETCH_HEAD_REQUEST_TIMEOUT_MS: u64 = 1_500;
 const GAP_SYNC_FETCH_HEAD_RETRY_BUDGET_MS: u64 = 3_000;
@@ -538,12 +540,24 @@ impl ReplicationNetworkEndpoint {
         }
         let mut last_err = None;
         let mut route_events = Vec::new();
+        let route_sweep_started_at = Instant::now();
+        let route_budget = || match retry_policy {
+            GapSyncFetchCommitRetryPolicy::FullGapSync => {
+                gap_sync_fetch_commit_route_budget(route_sweep_started_at)
+            }
+            GapSyncFetchCommitRetryPolicy::SingleProbe => {
+                gap_sync_fetch_commit_probe_route_budget(route_sweep_started_at)
+            }
+        };
+        let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {
+            return Err(gap_sync_fetch_commit_route_budget_exhausted());
+        };
         let mut response = match self
             .request_json_budget::<FetchCommitRequest, FetchCommitResponse>(
                 REPLICATION_FETCH_COMMIT_PROTOCOL,
                 request,
-                GAP_SYNC_FETCH_COMMIT_REQUEST_TIMEOUT_MS,
-                GAP_SYNC_FETCH_COMMIT_RETRY_BUDGET_MS,
+                request_timeout_ms,
+                retry_budget_ms,
             ) {
             Ok(response) => {
                 route_events.push(format!("generic:found={}", response.found));
@@ -566,13 +580,19 @@ impl ReplicationNetworkEndpoint {
             peer_ids.truncate(GAP_SYNC_FETCH_COMMIT_MAX_PROVIDER_ROUTES_PER_POLL);
             for peer_id in peer_ids {
                 let provider_route = [peer_id.clone()];
+                let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {
+                    if last_err.is_none() {
+                        last_err = Some(gap_sync_fetch_commit_route_budget_exhausted());
+                    }
+                    break;
+                };
                 match self
                     .request_json_with_providers_budget::<FetchCommitRequest, FetchCommitResponse>(
                         REPLICATION_FETCH_COMMIT_PROTOCOL,
                         request,
                         provider_route.as_slice(),
-                        GAP_SYNC_FETCH_COMMIT_REQUEST_TIMEOUT_MS,
-                        GAP_SYNC_FETCH_COMMIT_RETRY_BUDGET_MS,
+                        request_timeout_ms,
+                        retry_budget_ms,
                     ) {
                     Ok(candidate) => {
                         route_events.push(format!("peer:{}:found={}", peer_id, candidate.found));
@@ -600,11 +620,17 @@ impl ReplicationNetworkEndpoint {
                 if response.found {
                     break;
                 }
+                let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {
+                    if last_err.is_none() {
+                        last_err = Some(gap_sync_fetch_commit_route_budget_exhausted());
+                    }
+                    break;
+                };
                 match self.request_json_budget::<FetchCommitRequest, FetchCommitResponse>(
                     REPLICATION_FETCH_COMMIT_PROTOCOL,
                     request,
-                    GAP_SYNC_FETCH_COMMIT_REQUEST_TIMEOUT_MS,
-                    GAP_SYNC_FETCH_COMMIT_RETRY_BUDGET_MS,
+                    request_timeout_ms,
+                    retry_budget_ms,
                 ) {
                     Ok(candidate) => {
                         route_events.push(format!("generic_retry:found={}", candidate.found));
