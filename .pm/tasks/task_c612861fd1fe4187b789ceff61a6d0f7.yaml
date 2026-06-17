@@ -3,17 +3,24 @@ title: "Recover replication transport and gap sync routes"
 owner_role: tpm
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-replication-transport-gap-sync-recovery
 execution_log_path: .pm/tasks/task_c612861fd1fe4187b789ceff61a6d0f7.execution.md
-status: committed
+status: done
 priority: P1
 source_signal: null
 source_refs:
   - AGENTS.md
   - doc/engineering/workflow/source-of-truth.md
-doc_refs: []
+doc_refs:
+  - doc/p2p/project.md
 related_prd: []
 acceptance:
   - "Replication transport/gap-sync root cause is fixed in code with focused tests."
   - "Five-node health check shows upgraded nodes running and storage challenge/gap-sync regressions characterized."
 handoff_to: []
-updated_at: 2026-06-17T23:43:33+08:00
+updated_at: 2026-06-18T04:31:19+08:00
 last_started_at: 2026-06-17T23:43:33+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo test -p oasis7_net publish -- --nocapture"
+last_verified_at: 2026-06-18T04:31:18+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-18T04:31:19+08:00

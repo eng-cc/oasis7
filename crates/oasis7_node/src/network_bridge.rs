@@ -1050,7 +1050,7 @@ impl ConsensusNetworkEndpoint {
             reason: format!("serialize consensus network message failed: {}", err),
         })?;
         self.network
-            .publish(topic, payload.as_slice())
+            .publish_best_effort(topic, payload.as_slice())
             .map_err(network_err)
     }
 

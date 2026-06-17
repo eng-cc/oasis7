@@ -40,6 +40,10 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
         self.inner.publish(topic, payload)
     }
 
+    fn publish_best_effort(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        self.inner.publish_best_effort(topic, payload)
+    }
+
     fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
         self.inner.subscribe(topic)
     }

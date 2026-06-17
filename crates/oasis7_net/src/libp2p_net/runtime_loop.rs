@@ -78,7 +78,7 @@ pub(super) enum Command {
     Publish {
         topic: String,
         payload: Vec<u8>,
-        response: CommandResponseSender<()>,
+        response: Option<CommandResponseSender<()>>,
     },
     Subscribe {
         topic: String,
@@ -610,7 +610,9 @@ pub(super) fn handle_command(
                         "lock published",
                     );
                     record_gossip_outbound(ctx.event_traffic_metrics, topic.as_str(), payload_len);
-                    let _ = response.send(Ok(()));
+                    if let Some(response) = response {
+                        let _ = response.send(Ok(()));
+                    }
                 }
                 Err(err) => {
                     let error = WorldError::NetworkProtocolUnavailable {
@@ -622,7 +624,9 @@ pub(super) fn handle_command(
                         ctx.max_error_messages,
                         "lock errors",
                     );
-                    let _ = response.send(Err(error));
+                    if let Some(response) = response {
+                        let _ = response.send(Err(error));
+                    }
                 }
             }
             CommandOutcome::Continue
