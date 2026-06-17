@@ -4,6 +4,61 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+assert_guard_precedes_body() {
+  local script="$1"
+  local expected_reason="$2"
+  local expected_hint="$3"
+  python3 - "$script" "$expected_reason" "$expected_hint" <<'PY'
+from __future__ import annotations
+
+import pathlib
+import sys
+
+script = pathlib.Path(sys.argv[1])
+expected_reason = sys.argv[2]
+expected_hint = sys.argv[3]
+lines = script.read_text(encoding="utf-8").splitlines()
+
+def find(fragment: str) -> int:
+    for index, line in enumerate(lines):
+        if fragment in line:
+            return index
+    raise SystemExit(f"{script}: missing {fragment!r}")
+
+guard_index = find("BASH_VERSINFO[0] < 4")
+requirement_index = find("requires Bash 4+")
+reason_index = find(expected_reason)
+hint_index = find(expected_hint)
+exit_index = find("exit 2")
+body_candidates = [
+    index
+    for index, line in enumerate(lines)
+    for stripped in [line.lstrip()]
+    if (
+        stripped.startswith("source ")
+        or stripped.startswith("declare -A")
+        or stripped.startswith("mapfile ")
+        or stripped.startswith("usage()")
+    )
+]
+if not body_candidates:
+    raise SystemExit(f"{script}: missing body marker")
+first_body_index = min(body_candidates)
+for label, index in {
+    "guard": guard_index,
+    "requirement": requirement_index,
+    "reason": reason_index,
+    "hint": hint_index,
+    "exit": exit_index,
+}.items():
+    if index >= first_body_index:
+        raise SystemExit(
+            f"{script}: {label} line must appear before first body marker "
+            f"(line {index + 1} >= {first_body_index + 1})"
+        )
+PY
+}
+
 assert_preflight_for_bash3() {
   local script="$1"
   local expected_reason="$2"
@@ -52,16 +107,28 @@ assert_preflight_for_bash3() {
   fi
 }
 
+assert_guard_precedes_body \
+  "scripts/p2p-longrun-soak.sh" \
+  "uses mapfile and associative arrays" \
+  "before release-gate longrun execution"
 assert_preflight_for_bash3 \
   "scripts/p2p-longrun-soak.sh" \
   "uses mapfile and associative arrays" \
   "before release-gate longrun execution"
 
+assert_guard_precedes_body \
+  "scripts/s10-five-node-game-soak.sh" \
+  "uses associative arrays" \
+  "before release-gate longrun execution"
 assert_preflight_for_bash3 \
   "scripts/s10-five-node-game-soak.sh" \
   "uses associative arrays" \
   "before release-gate longrun execution"
 
+assert_guard_precedes_body \
+  "scripts/module-release-node-acceptance.sh" \
+  "uses associative arrays" \
+  "before module release acceptance execution"
 assert_preflight_for_bash3 \
   "scripts/module-release-node-acceptance.sh" \
   "uses associative arrays" \
