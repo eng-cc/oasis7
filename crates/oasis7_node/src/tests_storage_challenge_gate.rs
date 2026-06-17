@@ -4,6 +4,9 @@ use super::*;
 mod provider_route_mocks;
 use provider_route_mocks::*;
 
+#[path = "tests_storage_challenge_gate/provider_lookup_fallback.rs"]
+mod provider_lookup_fallback;
+
 #[test]
 fn runtime_replication_storage_challenge_gate_blocks_on_local_probe_failure() {
     let dir = temp_dir("challenge-gate-local");
@@ -269,103 +272,6 @@ fn runtime_replication_storage_challenge_gate_degrades_on_network_unavailable() 
     );
     let _ = fs::remove_dir_all(&dir);
 }
-#[test]
-fn runtime_replication_storage_challenge_gate_does_not_probe_connected_peers_after_provider_lookup_failure(
-) {
-    let dir = temp_dir("challenge-gate-provider-lookup-failure");
-    let world_id = "world-challenge-provider-lookup-failure";
-    let pos_config = signed_pos_config_with_signer_seeds(
-        vec![PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 100,
-        }],
-        &[("node-a", 121)],
-    );
-
-    let seed_config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
-        .expect("seed config")
-        .with_tick_interval(Duration::from_millis(10))
-        .expect("seed tick")
-        .with_pos_config(pos_config.clone())
-        .expect("seed pos config")
-        .with_auto_attest_all_validators(true)
-        .with_replication(signed_replication_config(dir.clone(), 121));
-    let mut seed_runtime = with_noop_execution_hook(NodeRuntime::new(seed_config));
-    seed_runtime.start().expect("start seed runtime");
-    let seeded = wait_until(Instant::now() + Duration::from_secs(2), || {
-        seed_runtime.snapshot().consensus.committed_height >= 6
-    });
-    assert!(seeded, "seed runtime did not build enough local commits");
-    seed_runtime.stop().expect("stop seed runtime");
-
-    let network_impl = Arc::new(ProviderLookupFailureConnectedPeerTrapNetwork::new());
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = network_impl.clone();
-    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
-        .expect("config")
-        .with_pos_config(pos_config)
-        .expect("pos config")
-        .with_replication(signed_replication_config(dir.clone(), 121));
-    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
-        .with_dht(Arc::new(ProviderLookupFailureDht))
-        .with_local_provider_id("node-a");
-    let endpoint =
-        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
-            .expect("endpoint");
-    let mut engine = PosNodeEngine::new(&config).expect("engine");
-    engine.committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
-    engine.network_committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
-    engine.peer_heads.insert(
-        "observer-light-peer".to_string(),
-        PeerCommittedHead {
-            height: 1,
-            block_hash: "observer-light-peer-head".to_string(),
-            committed_at_ms: 1_234,
-            observed_at_ms: 1_234,
-            execution_block_hash: None,
-            execution_state_root: None,
-            action_root: empty_action_root(),
-            public_key_hex: None,
-            signature_hex: None,
-        },
-    );
-    let replication = super::replication::ReplicationRuntime::new(
-        &signed_replication_config(dir.clone(), 121),
-        "node-a",
-    )
-    .expect("restart replication runtime");
-
-    let gate_result = engine.enforce_storage_challenge_gate(
-        &replication,
-        Some(&endpoint),
-        "node-a",
-        world_id,
-        1_234,
-    );
-
-    assert!(
-        gate_result.is_ok(),
-        "provider lookup failure should be treated as route unavailable, not converted into a connected-peer hard failure: {gate_result:?}"
-    );
-    assert_eq!(
-        network_impl.connected_peer_provider_attempts(),
-        0,
-        "storage challenge should not probe arbitrary connected peers after provider lookup fails"
-    );
-    let snapshot = engine.snapshot_from_decision(&engine.idle_pending_decision().expect("decision"));
-    assert!(
-        snapshot
-            .storage_challenge_network_degraded_reason
-            .as_deref()
-            .map(|reason| reason.contains("provider lookup failed"))
-            .unwrap_or(false),
-        "expected provider lookup failure to remain observable as degraded, got {:?}",
-        snapshot.storage_challenge_network_degraded_reason
-    );
-    let _ = fs::remove_dir_all(&dir);
-}
-
 #[test]
 fn runtime_replication_storage_challenge_gate_does_not_use_generic_route_after_provider_route_failure(
 ) {

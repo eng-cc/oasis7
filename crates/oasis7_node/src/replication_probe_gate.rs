@@ -118,6 +118,7 @@ pub(super) fn should_fallback_provider_aware_replication_request(err: &NodeError
     crate::network_bridge::replication_network_error_is_availability_gap(err)
         || crate::network_bridge::replication_network_error_is_route_unavailable(err)
         || reason.starts_with("blob fetch routes exhausted without response")
+        || reason.starts_with("blob fetch provider routes exhausted without response")
         || crate::network_bridge::replication_network_error_is_unsupported_protocol(
             err,
             super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
@@ -168,6 +169,17 @@ mod tests {
                 crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX
             ),
         };
+        assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_treats_provider_route_exhaustion_as_retryable() {
+        let err = NodeError::Replication {
+            reason: "blob fetch provider routes exhausted without response for world_id=w hash=abc"
+                .to_string(),
+        };
+
         assert!(should_fallback_provider_aware_replication_request(&err));
         assert!(!replication_request_waitable_connection_gap(&err));
     }
@@ -344,6 +356,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
     let mut last_not_found: Option<FetchBlobResponse> = None;
     let mut last_retryable_error: Option<NodeError> = None;
     let mut attempted_provider_ids = std::collections::BTreeSet::new();
+    let provider_lookup_supplied = provider_ids.is_some();
 
     if let Some(provider_ids) = provider_ids {
         for provider_id in provider_ids {
@@ -372,6 +385,20 @@ fn request_fetch_blob_chunk_with_route_fallback(
                 Err(err) => return Err(err),
             }
         }
+    }
+
+    if provider_lookup_supplied {
+        if let Some(response) = last_not_found {
+            return Ok(response);
+        }
+        return Err(
+            last_retryable_error.unwrap_or_else(|| NodeError::Replication {
+                reason: format!(
+                    "blob fetch provider routes exhausted without response for world_id={} hash={}",
+                    world_id, content_hash
+                ),
+            }),
+        );
     }
 
     let mut generic_attempts = 0usize;

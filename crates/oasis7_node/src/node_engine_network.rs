@@ -189,13 +189,15 @@ impl PosNodeEngine {
             replication_runtime.build_fetch_blob_request(message.record.content_hash.as_str())?;
         let provider_lookup = endpoint
             .lookup_provider_ids_for_content_hash(world_id, message.record.content_hash.as_str())?;
+        let provider_lookup = provider_lookup.as_deref().filter(|ids| !ids.is_empty());
         let blob_response = request_fetch_blob_with_route_fallback(
             endpoint,
             world_id,
             message.record.content_hash.as_str(),
             &blob_request,
-            provider_lookup.as_deref(),
-        )?;
+            provider_lookup,
+        )
+        .map_err(|err| Self::annotate_fetch_blob_gap_sync_error(height, err))?;
         if !blob_response.found {
             return Err(NodeError::Replication {
                 reason: format!(
@@ -301,6 +303,15 @@ impl PosNodeEngine {
             };
         }
         NodeError::Replication { reason }
+    }
+
+    fn annotate_fetch_blob_gap_sync_error(height: u64, err: NodeError) -> NodeError {
+        let NodeError::Replication { reason } = err else {
+            return err;
+        };
+        NodeError::Replication {
+            reason: format!("{reason}; gap sync height {height} fetch-blob"),
+        }
     }
 
     pub(super) fn persist_synced_replication_message(
@@ -454,6 +465,7 @@ impl PosNodeEngine {
         self.replication_persisted_height = self.replication_persisted_height.min(height);
         self.last_replication_gap_sync_blocked_height = None;
         self.last_replication_gap_sync_blocked_reason = None;
+        self.last_replication_gap_sync_blocked_at_ms = None;
         self.last_replication_gap_sync_repair_attempt_height = None;
         self.last_replication_gap_sync_repair_attempt_summary = None;
         self.last_committed_at_ms = Some(committed_at_ms);

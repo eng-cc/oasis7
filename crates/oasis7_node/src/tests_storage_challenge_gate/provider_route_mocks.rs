@@ -69,6 +69,90 @@ impl proto_dht::DistributedDht<WorldError> for ProviderLookupFailureDht {
 }
 
 #[derive(Clone, Default)]
+pub(super) struct ProviderLookupFailureGenericBlobNetwork {
+    blobs: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    generic_attempts: Arc<Mutex<usize>>,
+}
+
+impl ProviderLookupFailureGenericBlobNetwork {
+    pub(super) fn new(blobs: HashMap<String, Vec<u8>>) -> Self {
+        Self {
+            blobs: Arc::new(Mutex::new(blobs)),
+            generic_attempts: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    pub(super) fn generic_attempts(&self) -> usize {
+        *self.generic_attempts.lock().expect("lock generic attempts")
+    }
+
+    fn fetch_blob_response(&self, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        let request =
+            serde_json::from_slice::<crate::replication::FetchBlobRequest>(payload).map_err(
+                |err| WorldError::DistributedValidationFailed {
+                    reason: format!("decode fetch blob request failed: {err}"),
+                },
+            )?;
+        let blob = self
+            .blobs
+            .lock()
+            .expect("lock blobs")
+            .get(request.content_hash.as_str())
+            .cloned();
+        let response = crate::replication::FetchBlobResponse {
+            found: blob.is_some(),
+            range_offset_bytes: None,
+            range_complete: None,
+            blob,
+        };
+        serde_json::to_vec(&response).map_err(|err| WorldError::DistributedValidationFailed {
+            reason: format!("encode fetch blob response failed: {err}"),
+        })
+    }
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
+    for ProviderLookupFailureGenericBlobNetwork
+{
+    fn publish(&self, _topic: &str, _payload: &[u8]) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        Ok(NetworkSubscription::new(
+            topic.to_string(),
+            Arc::new(Mutex::new(HashMap::new())),
+        ))
+    }
+
+    fn request(&self, _protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        *self.generic_attempts.lock().expect("lock generic attempts") += 1;
+        self.fetch_blob_response(payload)
+    }
+
+    fn connected_peer_ids(&self) -> Vec<String> {
+        vec!["observer-fallback-peer".to_string()]
+    }
+
+    fn request_with_providers(
+        &self,
+        _protocol: &str,
+        payload: &[u8],
+        _providers: &[String],
+    ) -> Result<Vec<u8>, WorldError> {
+        self.fetch_blob_response(payload)
+    }
+
+    fn register_handler(
+        &self,
+        _protocol: &str,
+        _handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+}
+
+#[derive(Clone, Default)]
 pub(super) struct ProviderLookupFailureConnectedPeerTrapNetwork {
     connected_peer_provider_attempts: Arc<Mutex<usize>>,
 }

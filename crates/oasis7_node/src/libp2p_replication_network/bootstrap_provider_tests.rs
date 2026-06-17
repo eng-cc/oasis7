@@ -2,6 +2,7 @@ use super::*;
 use oasis7_proto::distributed_dht::{
     PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
 };
+use oasis7_proto::distributed_net::DistributedNetwork;
 use std::time::{Duration, Instant};
 
 fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
@@ -92,4 +93,42 @@ fn libp2p_replication_network_known_peers_includes_bootstrap_providers_before_co
             .any(|peer_id| peer_id == &storage.peer_id().to_string()),
         "bootstrap storage provider should be visible to gap-sync peer sweeps before it is connected"
     );
+}
+
+#[test]
+fn budgeted_provider_request_waits_for_bootstrap_provider_connection() {
+    let storage = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("storage addr")],
+        peer_record: Some(test_peer_record("storage-budgeted-provider-cold-start")),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    wait_until(
+        "storage bind",
+        Instant::now() + Duration::from_secs(10),
+        || !storage.listening_addrs().is_empty(),
+    );
+    storage
+        .register_handler(
+            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            Box::new(|_payload| Ok(b"commit-ok".to_vec())),
+        )
+        .expect("register fetch-commit handler");
+
+    let observer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("observer addr")],
+        bootstrap_peers: vec![listening_addr_with_peer_id(&storage)],
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+
+    let response = observer
+        .request_with_providers_budget(
+            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            b"commit",
+            &[storage.peer_id().to_string()],
+            5_000,
+            10_000,
+        )
+        .expect("cold bootstrap provider should connect within budget");
+
+    assert_eq!(response, b"commit-ok".to_vec());
 }

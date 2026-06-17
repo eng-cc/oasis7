@@ -1,3 +1,7 @@
+use super::node_engine_replication_provider_route::{
+    replication_gap_sync_provider_blob_route_blocked,
+    replication_gap_sync_provider_blob_route_blocked_in_cooldown,
+};
 use super::node_engine_storage_challenge::{
     evaluate_storage_challenge_sample, StorageChallengeSampleOutcome,
 };
@@ -97,6 +101,7 @@ impl PosNodeEngine {
         {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
+            self.last_replication_gap_sync_blocked_at_ms = None;
             self.last_replication_gap_sync_repair_attempt_height = None;
             self.last_replication_gap_sync_repair_attempt_summary = None;
         }
@@ -718,6 +723,7 @@ impl PosNodeEngine {
         self.record_synced_replication_height(checkpoint_height, block_hash, committed_at_ms)?;
         self.last_replication_gap_sync_blocked_height = None;
         self.last_replication_gap_sync_blocked_reason = None;
+        self.last_replication_gap_sync_blocked_at_ms = None;
         self.last_replication_gap_sync_repair_attempt_height = None;
         self.last_replication_gap_sync_repair_attempt_summary = None;
         if let Some(callback) = progress_callback.as_deref_mut() {
@@ -806,7 +812,7 @@ impl PosNodeEngine {
             world_id,
             content_hash,
             &request,
-            provider_lookup.as_deref(),
+            provider_lookup.as_deref().filter(|ids| !ids.is_empty()),
         )?;
         if !response.found {
             if let Some(provider_lookup_failure) = provider_lookup_failure {
@@ -872,6 +878,7 @@ impl PosNodeEngine {
         if advertised_network_height <= self.replication_persisted_height {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
+            self.last_replication_gap_sync_blocked_at_ms = None;
             return Ok(());
         }
 
@@ -922,6 +929,16 @@ impl PosNodeEngine {
             "replication_persisted_height",
             "starting replication gap sync",
         )?;
+        let now_ms = crate::runtime_util::now_unix_ms();
+        if replication_gap_sync_provider_blob_route_blocked_in_cooldown(
+            self.last_replication_gap_sync_blocked_height,
+            self.last_replication_gap_sync_blocked_reason.as_deref(),
+            self.last_replication_gap_sync_blocked_at_ms,
+            next_height,
+            now_ms,
+        ) {
+            return Ok(());
+        }
         let gap_sync_target_height = advertised_network_height.min(
             self.replication_persisted_height
                 .saturating_add(REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL),
@@ -932,6 +949,7 @@ impl PosNodeEngine {
                 ReplicationCommitPayload,
             )> = None;
             let mut not_found = false;
+            let mut provider_route_blocked = false;
             let mut last_error = None;
             for attempt in 1..=REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT {
                 match self.sync_replication_height_once(
@@ -959,6 +977,18 @@ impl PosNodeEngine {
                                 self.network_committed_height.max(advertised_network_height);
                         }
                         return Ok(());
+                    }
+                    Err(err) if replication_gap_sync_provider_blob_route_blocked(&err) => {
+                        provider_route_blocked = true;
+                        let summary = format!(
+                            "attempt {attempt}/{} failed: {err}",
+                            REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT
+                        );
+                        self.last_replication_gap_sync_repair_attempt_height = Some(next_height);
+                        self.last_replication_gap_sync_repair_attempt_summary =
+                            Some(summary.clone());
+                        last_error = Some(summary);
+                        break;
                     }
                     Err(err) => {
                         last_error = Some(format!(
@@ -995,6 +1025,19 @@ impl PosNodeEngine {
                 )?;
                 continue;
             }
+            if provider_route_blocked {
+                self.last_replication_gap_sync_blocked_height = Some(next_height);
+                self.last_replication_gap_sync_blocked_at_ms = Some(now_ms);
+                self.last_replication_gap_sync_blocked_reason = Some(format!(
+                    "replication gap sync provider route blocked: missing commit height {next_height} while advertised_network_height={} network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",
+                    advertised_network_height,
+                    self.network_committed_height,
+                    gap_sync_target_height,
+                    self.replication_persisted_height,
+                    last_error.as_deref().unwrap_or("provider route unavailable")
+                ));
+                break;
+            }
             if not_found {
                 for checkpoint_candidate in Self::high_replication_checkpoint_candidates(
                     advertised_network_height,
@@ -1030,6 +1073,7 @@ impl PosNodeEngine {
                     break;
                 }
                 self.last_replication_gap_sync_blocked_height = Some(next_height);
+                self.last_replication_gap_sync_blocked_at_ms = None;
                 self.last_replication_gap_sync_blocked_reason = Some(format!(
                     "replication gap sync blocked: missing commit height {next_height} while advertised_network_height={} network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",
                     advertised_network_height,
@@ -1043,6 +1087,7 @@ impl PosNodeEngine {
                 break;
             }
             self.last_replication_gap_sync_blocked_height = Some(next_height);
+            self.last_replication_gap_sync_blocked_at_ms = None;
             self.last_replication_gap_sync_blocked_reason = Some(format!(
                 "replication gap sync failed at height {next_height}: {}",
                 last_error
@@ -1061,6 +1106,7 @@ impl PosNodeEngine {
         if self.replication_persisted_height >= advertised_network_height {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
+            self.last_replication_gap_sync_blocked_at_ms = None;
             self.last_replication_gap_sync_repair_attempt_height = None;
             self.last_replication_gap_sync_repair_attempt_summary = None;
         } else {

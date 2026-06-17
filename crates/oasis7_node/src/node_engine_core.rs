@@ -124,6 +124,7 @@ impl PosNodeEngine {
             replication_persisted_height: 0,
             last_replication_gap_sync_blocked_height: None,
             last_replication_gap_sync_blocked_reason: None,
+            last_replication_gap_sync_blocked_at_ms: None,
             last_replication_gap_sync_repair_attempt_height: None,
             last_replication_gap_sync_repair_attempt_summary: None,
             last_replication_successor_probe_height: None,

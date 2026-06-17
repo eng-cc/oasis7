@@ -54,6 +54,7 @@ mod network_error_classification;
 mod node_engine_core;
 mod node_engine_network;
 mod node_engine_replication;
+mod node_engine_replication_provider_route;
 mod node_engine_slashing;
 mod node_engine_storage_challenge;
 mod node_engine_transfer_filter;
@@ -1098,6 +1099,7 @@ struct PosNodeEngine {
     replication_persisted_height: u64,
     last_replication_gap_sync_blocked_height: Option<u64>,
     last_replication_gap_sync_blocked_reason: Option<String>,
+    last_replication_gap_sync_blocked_at_ms: Option<i64>,
     last_replication_gap_sync_repair_attempt_height: Option<u64>,
     last_replication_gap_sync_repair_attempt_summary: Option<String>,
     last_replication_successor_probe_height: Option<u64>,

@@ -333,6 +333,26 @@ fn filtered_request_peers_keeps_low_score_peer_as_last_resort() {
 }
 
 #[test]
+fn filtered_request_peers_skips_zero_score_peer_when_positive_candidates_exist() {
+    let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
+    let exhausted_peer = PeerId::random();
+    let healthy_peer = PeerId::random();
+    network.adjust_request_peer_score(exhausted_peer, -(REQUEST_PEER_DEFAULT_SCORE as i16));
+
+    let filtered = network.filtered_request_peers(
+        "/aw/node/replication/fetch-commit/1.0.0",
+        vec![exhausted_peer, healthy_peer],
+    );
+    assert_eq!(filtered, vec![healthy_peer]);
+
+    let filtered_last_resort = network.filtered_request_peers(
+        "/aw/node/replication/fetch-commit/1.0.0",
+        vec![exhausted_peer],
+    );
+    assert_eq!(filtered_last_resort, vec![exhausted_peer]);
+}
+
+#[test]
 fn filtered_request_peers_retries_protocol_retry_cooldown_peer_after_retry_window() {
     let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         protocol_retry_cooldown_after: Duration::from_millis(5),

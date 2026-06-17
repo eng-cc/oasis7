@@ -379,6 +379,9 @@ impl Libp2pReplicationNetwork {
         if scored.is_empty() && !deferred_protocol_peers.is_empty() {
             scored = deferred_protocol_peers;
         }
+        if scored.iter().any(|(_, score, _)| *score > 0) {
+            scored.retain(|(_, score, _)| *score > 0);
+        }
         scored.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.2.cmp(&right.2)));
         let filtered = scored
             .into_iter()
@@ -506,19 +509,35 @@ impl Libp2pReplicationNetwork {
     }
 
     fn wait_for_connected_provider_peers(&self, providers: &[String]) -> Vec<PeerId> {
-        for attempt in 0..=REQUEST_PROVIDER_CONNECTED_PEER_WAIT_RETRIES {
+        self.wait_for_connected_provider_peers_within(
+            providers,
+            Duration::from_millis(
+                REQUEST_PROVIDER_CONNECTED_PEER_WAIT_RETRIES as u64
+                    * REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS,
+            ),
+        )
+    }
+
+    fn wait_for_connected_provider_peers_within(
+        &self,
+        providers: &[String],
+        max_wait: Duration,
+    ) -> Vec<PeerId> {
+        let started_at = Instant::now();
+        loop {
             self.dial_bootstrap_provider_peers(providers);
             let ordered_provider_peers = self.collect_connected_provider_peers(providers);
-            if !ordered_provider_peers.is_empty()
-                || attempt == REQUEST_PROVIDER_CONNECTED_PEER_WAIT_RETRIES
-            {
+            if !ordered_provider_peers.is_empty() || started_at.elapsed() >= max_wait {
                 return ordered_provider_peers;
             }
-            std::thread::sleep(Duration::from_millis(
-                REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS,
-            ));
+            let remaining_wait = max_wait.saturating_sub(started_at.elapsed());
+            if remaining_wait.is_zero() {
+                return Vec::new();
+            }
+            std::thread::sleep(
+                Duration::from_millis(REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS).min(remaining_wait),
+            );
         }
-        Vec::new()
     }
 
     fn request_over_refreshed_peers<F, G>(
