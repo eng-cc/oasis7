@@ -8,10 +8,12 @@
 - 当前阻断摘要: `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 - 活跃任务:
   - [ ] `test-coverage-gate-fill` (PRD-TESTING-002/003) [test_tier_required] + [test_tier_full]: 补齐 Rust CI 测试覆盖缺口，让 `full-support` 直接触达 workspace support crates，并为 `required-gate` changed-path planner 增加 regression，防止未分类代码路径绕过 full fallback。Trace: `.pm/tasks/task_ce44b8a269824fbcb718febd2140c425.yaml`
+  - [ ] `qa-test-governance-simplify` (PRD-TESTING-001/002/003) [governance]: 按“影响面覆盖 + 最小充分测试”收紧测试选择树、skip reason 与 claim boundary；不关闭 `test-coverage-gate-fill` 覆盖缺口。Trace: .pm/tasks/task_1ed6ad641a634905a3e7bc6423d61504.yaml
   - [ ] token genesis allocation audit follow-up: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.project.md` 与对应模板执行首轮正式审计。
 - 当前门禁/治理摘要:
   - `required-gate-ondemand-launcher-web-build`、`rust-required-gate-ondemand-scope` 与 `wasm-determinism-gate-ondemand-scope` 已把 GitHub required gate 收口为 stable context + changed-path on-demand 执行；launcher/shared runtime 命中时会额外补跑 launcher Web `trunk build`。
   - `engineering-code-quality-performance-baselines` 已为 `required-gate` 增补 Viewer changed-path perf smoke scope；`viewer-performance-probe.sh --profile smoke` 当前是 report-only scoped gate，不作为 blocking failure。
+  - `qa-test-governance-simplify` 正在把测试执行入口收口为“影响面 -> 最小测试集 -> 证据 -> 残余风险”，并要求 release skip 与 required-gate skip 输出 claim boundary，避免把未执行项误读成覆盖完成。
   - `playability-governance-stack-2026-05-06` 已把好玩性证据栈、标准角色 subagent 评审系统、模拟玩家 persona panel，以及 `L4A synthetic` / `L4B embodied-agent` / `L5` 真实人类与线上验证边界收口为单个 bundle 视图。
   - `playability-player-leverage-evidence-rubric` 已为 trust/playability 证据补单独的 `player leverage` 审查层，避免再用 world activity 代替玩家有效参与。
   - `shared-network-ecs-triad-chain-status-metrics-rollout` 已冻结本机 observer + 两台阿里云 ECS 的 same-window triad snapshot、最近 `10` 分钟 traffic window，以及 `/v1/chain/status` 新增 live contract 证据。
@@ -53,7 +55,7 @@
 - 阶段收口优先级: `P0`
 - 阶段 owner: `qa_engineer`（联审: `producer_system_designer`）
 - 当前阻断条件: 在 `test-coverage-gate-fill` 完成前，跨模块发布评审不得声称 workspace support crates 与 required-gate changed-path planner 覆盖已经完整。
-- 承接约束: `test-coverage-gate-fill` 是当前唯一 active 测试治理任务；历史 `TASK-TESTING-*` 完成项回到上方追溯索引、专题 project 与 `.pm` execution log 查询。
+- 承接约束: `test-coverage-gate-fill` 仍是当前唯一 active 覆盖缺口补齐任务；`qa-test-governance-simplify` 只收紧选择规则与证据语义，不得声称 workspace support crates 或 required-gate changed-path planner 覆盖已经完整。历史 `TASK-TESTING-*` 完成项回到上方追溯索引、专题 project 与 `.pm` execution log 查询。
 - headless-runtime 长稳门禁联动: 已通过 `doc/headless-runtime/templates/headless-runtime-release-gate-linkage.md` 约定证据包字段映射。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 模块进展补充（2026-03-11）: 已新增 `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`，以 launcher / game / runtime 三个近期样本建立首次通过率、阶段内逃逸率与修复时长 baseline。
