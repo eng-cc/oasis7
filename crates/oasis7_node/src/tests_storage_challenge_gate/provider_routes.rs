@@ -127,16 +127,16 @@ fn runtime_local_replication_publishes_blob_provider_to_dht() {
 }
 
 #[test]
-fn runtime_replication_storage_challenge_gate_degrades_after_provider_route_unavailable() {
+fn runtime_replication_storage_challenge_gate_falls_back_after_provider_route_unavailable() {
     let dir = temp_dir("challenge-gate-provider-fallback");
     let network_impl = Arc::new(ProviderFallbackTestNetwork::new(dir.clone()));
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
     > = network_impl.clone();
-    let dht = Arc::new(TestReplicaMaintenanceDht::new(
-        "storage-provider-1",
-        "node-a",
-    ));
+    let dht = Arc::new(
+        TestReplicaMaintenanceDht::new("storage-provider-1", "node-a")
+            .with_source_provider_for_all_lookups(),
+    );
     let pos_config = signed_pos_config_with_signer_seeds(
         vec![PosValidator {
             validator_id: "node-a".to_string(),
@@ -185,8 +185,8 @@ fn runtime_replication_storage_challenge_gate_degrades_after_provider_route_unav
         "expected storage challenge gate to try DHT-selected provider before fallback: {provider_attempts:?}"
     );
     assert!(
-        generic_attempts == 0,
-        "storage challenge should not fall back to generic lane request"
+        generic_attempts > 0,
+        "storage challenge should fall back to generic lane after retryable provider route unavailability"
     );
     assert!(
         !snapshot
@@ -201,8 +201,8 @@ fn runtime_replication_storage_challenge_gate_degrades_after_provider_route_unav
         snapshot
             .consensus
             .storage_challenge_network_degraded_height
-            .is_some(),
-        "provider route unavailability should be observable as degraded: {:?}",
+            .is_none(),
+        "retryable provider route unavailability should recover through generic fallback: {:?}",
         snapshot.consensus.storage_challenge_network_degraded_reason
     );
 
@@ -293,4 +293,3 @@ fn runtime_replication_storage_challenge_gate_degrades_after_provider_route_not_
     runtime.stop().expect("stop runtime");
     let _ = fs::remove_dir_all(&dir);
 }
-

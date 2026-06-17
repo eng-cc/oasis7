@@ -1,0 +1,27 @@
+task_uid: task_4cc7d5297e084dd1945223f5769c4e9c
+title: "Recover exhausted provider routes"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-provider-route-exhaustion-recovery
+execution_log_path: .pm/tasks/task_4cc7d5297e084dd1945223f5769c4e9c.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - crates/oasis7_node/src/node_engine_storage_challenge.rs
+  - crates/oasis7_node/src/libp2p_replication_network.rs
+doc_refs:
+  - doc/p2p/project.md
+related_prd: []
+acceptance:
+  - "Storage challenge falls back through retryable provider-route exhaustion without masking authoritative blob mismatches"
+  - "Replication peer selection does not permanently empty provider candidates after stale score penalties"
+  - "Focused Rust regression tests pass"
+handoff_to: []
+updated_at: 2026-06-17T20:58:31+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo test -p oasis7_node network_gap_sync_provider_routing -- --nocapture --test-threads=1 && env -u RUSTC_WRAPPER cargo test -p oasis7_node tests_fetch_blob_chunking -- --nocapture --test-threads=1 && env -u RUSTC_WRAPPER cargo test -p oasis7_node storage_challenge_gate -- --nocapture --test-threads=1 && env -u RUSTC_WRAPPER cargo test -p oasis7_node libp2p_replication_network::peer_selection_tests -- --nocapture --test-threads=1 && cargo fmt --check && git diff --check"
+last_verified_at: 2026-06-17T20:58:28+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_started_at: 2026-06-17T20:57:58+08:00
+last_closed_at: 2026-06-17T20:58:31+08:00

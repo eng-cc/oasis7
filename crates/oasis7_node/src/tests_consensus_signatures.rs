@@ -357,6 +357,7 @@ impl ProviderNotFoundFallbackTestNetwork {
 struct TestReplicaMaintenanceDht {
     source_provider_id: String,
     local_provider_id: String,
+    always_source_provider: bool,
     providers_by_hash: Arc<Mutex<HashMap<String, Vec<ProviderRecord>>>>,
     provider_seed_count: Arc<Mutex<usize>>,
     published: Arc<Mutex<Vec<(String, String, String)>>>,
@@ -369,12 +370,18 @@ impl TestReplicaMaintenanceDht {
         Self {
             source_provider_id: source_provider_id.into(),
             local_provider_id: local_provider_id.into(),
+            always_source_provider: false,
             providers_by_hash: Arc::new(Mutex::new(HashMap::new())),
             provider_seed_count: Arc::new(Mutex::new(0)),
             published: Arc::new(Mutex::new(Vec::new())),
             heads: Arc::new(Mutex::new(HashMap::new())),
             memberships: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    fn with_source_provider_for_all_lookups(mut self) -> Self {
+        self.always_source_provider = true;
+        self
     }
 
     fn published_records(&self) -> Vec<(String, String, String)> {
@@ -433,7 +440,7 @@ impl proto_dht::DistributedDht<WorldError> for TestReplicaMaintenanceDht {
             .provider_seed_count
             .lock()
             .expect("lock provider_seed_count");
-        let providers = if *seed_count == 0 {
+        let providers = if self.always_source_provider || *seed_count == 0 {
             vec![ProviderRecord {
                 provider_id: self.source_provider_id.clone(),
                 last_seen_ms: 1_000,

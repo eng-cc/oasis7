@@ -1,18 +1,34 @@
 version: 1
 task_uid: task_22699e838c6746fa8491befacfce985b
 role: blockchain_ops_engineer
-worktree_hint: p2p-storage-challenge-provider-routing-hardening
+worktree_hint: oasis7-p2p-storage-challenge-provider-routing-hardening
 source_session_id: manual
-source_thread_name: "PR 497 public-testnet package replacement follow-up"
+source_thread_name: "p2p-storage-challenge-provider-routing-hardening"
 transcript_source: manual_summary
-last_extracted_ts: 2026-06-17T13:20:00+08:00
-captured_until_ts: 2026-06-17T13:20:00+08:00
+last_extracted_ts: 2026-06-17T20:00:00+08:00
+captured_until_ts: 2026-06-17T20:00:00+08:00
 entries:
   - entry_id: WM-0001
-    entry_kind: next_step
-    summary: "PR #497 package run 27661234867 produced linux_only package 0.0.0+testnet.92.5905a838 for commit 5905a8385238f4372a708982173e0f8d87b47896; storage, sequencer, and local observer nodes were replaced; follow-up should keep watching non-green peer-head/replication readiness and the sequencer provider-route exhausted storage challenge last_error."
+    entry_kind: decision
+    summary: "PR #497 used normal PR CI watch plus public testnet package replacement for Linux package 0.0.0+testnet.92.5905a8385238."
     source_refs:
       - ".pm/tasks/task_22699e838c6746fa8491befacfce985b.execution.md"
-    captured_at: 2026-06-17T13:20:00+08:00
-    expires_at: 2026-06-19T13:20:00+08:00
+    captured_at: 2026-06-17T20:00:00+08:00
+    expires_at: 2026-06-19T20:00:00+08:00
+    promoted_to: []
+  - entry_id: WM-0002
+    entry_kind: hypothesis
+    summary: "The replacement covered storage, sequencer, and local observer nodes; storage_challenge_network_degraded and replication_transport_recent_errors cleared after replacement, while peer-head/readiness gates remained non-green."
+    source_refs:
+      - ".pm/tasks/task_22699e838c6746fa8491befacfce985b.execution.md"
+    captured_at: 2026-06-17T20:00:00+08:00
+    expires_at: 2026-06-19T20:00:00+08:00
+    promoted_to: []
+  - entry_id: WM-0003
+    entry_kind: next_step
+    summary: "Sequencer retained a provider-route-exhausted storage challenge last_error for follow-up after the package replacement."
+    source_refs:
+      - ".pm/tasks/task_22699e838c6746fa8491befacfce985b.execution.md"
+    captured_at: 2026-06-17T20:00:00+08:00
+    expires_at: 2026-06-19T20:00:00+08:00
     promoted_to: []

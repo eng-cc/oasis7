@@ -273,8 +273,7 @@ fn runtime_replication_storage_challenge_gate_degrades_on_network_unavailable() 
     let _ = fs::remove_dir_all(&dir);
 }
 #[test]
-fn runtime_replication_storage_challenge_gate_does_not_use_generic_route_after_provider_route_failure(
-) {
+fn runtime_replication_storage_challenge_gate_hard_fails_on_wrong_generic_fallback_blob() {
     let dir = temp_dir("challenge-gate-provider-route-failure");
     let world_id = "world-challenge-provider-route-failure";
     let pos_config = signed_pos_config_with_signer_seeds(
@@ -351,22 +350,25 @@ fn runtime_replication_storage_challenge_gate_does_not_use_generic_route_after_p
     );
 
     assert!(
-        gate_result.is_ok(),
-        "provider route failure should degrade without falling through to generic connected-peer routing: {gate_result:?}"
+        matches!(gate_result, Err(NodeError::Consensus { .. })),
+        "wrong blob returned by retryable provider-route fallback must remain a hard failure: {gate_result:?}"
     );
     assert_eq!(
         network_impl.generic_attempts(),
-        0,
-        "storage challenge should not use generic request routing after provider route failure"
+        1,
+        "storage challenge should make one bounded generic request after retryable provider route failure"
+    );
+    assert!(
+        format!("{gate_result:?}")
+            .contains("storage challenge gate network threshold unmet")
+            || format!("{gate_result:?}")
+                .contains("storage challenge gate network blob hash mismatch"),
+        "expected hard-failure reason to mention storage challenge blob mismatch, got {gate_result:?}"
     );
     let snapshot = engine.snapshot_from_decision(&engine.idle_pending_decision().expect("decision"));
     assert!(
-        snapshot
-            .storage_challenge_network_degraded_reason
-            .as_deref()
-            .map(|reason| reason.contains("storage challenge network degraded"))
-            .unwrap_or(false),
-        "expected provider route failure to be observable as degraded, got {:?}",
+        snapshot.storage_challenge_network_degraded_reason.is_none(),
+        "hard fallback mismatch should block directly instead of being downgraded to network degradation: {:?}",
         snapshot.storage_challenge_network_degraded_reason
     );
     let _ = fs::remove_dir_all(&dir);
@@ -484,8 +486,12 @@ fn runtime_replication_storage_challenge_gate_allows_when_network_matches_reach_
     .expect("pos config")
     .with_auto_attest_all_validators(true)
     .with_replication(signed_replication_config(dir.clone(), 86));
-    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config))
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
+        NodeReplicationNetworkHandle::new(Arc::clone(&network)).with_dht(Arc::new(
+            TestReplicaMaintenanceDht::new("storage-provider-1", "node-a")
+                .with_source_provider_for_all_lookups(),
+        )),
+    );
 
     let root_for_handler = dir.clone();
     let matched_hashes = Arc::new(Mutex::new(Vec::<String>::new()));

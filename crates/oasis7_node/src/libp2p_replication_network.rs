@@ -266,10 +266,15 @@ impl Libp2pReplicationNetwork {
         let mut recent_errors = self.inner.debug_errors();
         recent_errors.sort();
         recent_errors.dedup();
-        let request_peer_scores: HashMap<String, u8> = self
+        let mut scores = self
             .request_peer_scores
             .lock()
-            .expect("lock request peer scores")
+            .expect("lock request peer scores");
+        let now = Instant::now();
+        for entry in scores.values_mut() {
+            recover_stale_request_peer_score(entry, now);
+        }
+        let request_peer_scores: HashMap<String, u8> = scores
             .iter()
             .map(|(peer, score)| (peer.to_string(), score.score))
             .collect();
@@ -402,13 +407,7 @@ impl Libp2pReplicationNetwork {
         let Some(entry) = scores.get_mut(&peer) else {
             return REQUEST_PEER_DEFAULT_SCORE;
         };
-        if entry.score < REQUEST_PEER_DEFAULT_SCORE
-            && entry.updated_at.elapsed()
-                >= Duration::from_millis(REQUEST_PEER_SCORE_RECOVERY_AFTER_MS)
-        {
-            entry.score = REQUEST_PEER_DEFAULT_SCORE;
-            entry.updated_at = Instant::now();
-        }
+        recover_stale_request_peer_score(entry, Instant::now());
         entry.score
     }
 
@@ -710,6 +709,16 @@ impl Libp2pReplicationNetwork {
             return self.fetch_blob_request_retry_budget;
         }
         self.request_retry_budget
+    }
+}
+
+fn recover_stale_request_peer_score(entry: &mut RequestPeerScore, now: Instant) {
+    if entry.score < REQUEST_PEER_DEFAULT_SCORE
+        && now.duration_since(entry.updated_at)
+            >= Duration::from_millis(REQUEST_PEER_SCORE_RECOVERY_AFTER_MS)
+    {
+        entry.score = REQUEST_PEER_DEFAULT_SCORE;
+        entry.updated_at = now;
     }
 }
 
