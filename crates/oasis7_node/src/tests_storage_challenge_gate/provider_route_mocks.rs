@@ -68,6 +68,70 @@ impl proto_dht::DistributedDht<WorldError> for ProviderLookupFailureDht {
     }
 }
 
+pub(super) struct EmptyProviderLookupDht;
+
+impl proto_dht::DistributedDht<WorldError> for EmptyProviderLookupDht {
+    fn publish_provider(
+        &self,
+        _world_id: &str,
+        _content_hash: &str,
+        _provider_id: &str,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_providers(
+        &self,
+        _world_id: &str,
+        _content_hash: &str,
+    ) -> Result<Vec<ProviderRecord>, WorldError> {
+        Ok(Vec::new())
+    }
+
+    fn put_world_head(
+        &self,
+        _world_id: &str,
+        _head: &WorldHeadAnnounce,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_world_head(&self, _world_id: &str) -> Result<Option<WorldHeadAnnounce>, WorldError> {
+        Ok(None)
+    }
+
+    fn put_membership_directory(
+        &self,
+        _world_id: &str,
+        _snapshot: &MembershipDirectorySnapshot,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_membership_directory(
+        &self,
+        _world_id: &str,
+    ) -> Result<Option<MembershipDirectorySnapshot>, WorldError> {
+        Ok(None)
+    }
+
+    fn put_peer_record(
+        &self,
+        _world_id: &str,
+        _record: &SignedPeerRecord,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_peer_record(
+        &self,
+        _world_id: &str,
+        _peer_id: &str,
+    ) -> Result<Option<SignedPeerRecord>, WorldError> {
+        Ok(None)
+    }
+}
+
 #[derive(Clone, Default)]
 pub(super) struct ProviderLookupFailureGenericBlobNetwork {
     blobs: Arc<Mutex<HashMap<String, Vec<u8>>>>,

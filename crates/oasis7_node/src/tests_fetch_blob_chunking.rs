@@ -436,7 +436,7 @@ fn fetch_blob_storage_challenge_without_provider_lookup_does_not_probe_generic_r
 }
 
 #[test]
-fn fetch_blob_storage_challenge_empty_provider_routes_do_not_probe_generic_route() {
+fn fetch_blob_storage_challenge_empty_provider_routes_probe_bounded_generic_route() {
     let world_id = "world-blob-provider-empty-routes";
     let dir = temp_dir("blob-provider-empty-routes-endpoint");
     let generic_attempts = Arc::new(Mutex::new(0usize));
@@ -465,25 +465,23 @@ fn fetch_blob_storage_challenge_empty_provider_routes_do_not_probe_generic_route
     };
 
     let provider_ids: Vec<String> = Vec::new();
-    let err = super::request_fetch_blob_with_storage_challenge_routes(
+    let response = super::request_fetch_blob_with_storage_challenge_routes(
         &endpoint,
         world_id,
         "checkpoint-payload",
         &request,
         Some(provider_ids.as_slice()),
     )
-    .expect_err(
-        "storage challenge fallback requires at least one retryable provider route failure",
-    );
+    .expect("empty DHT provider lookup should allow bounded generic recovery");
 
     assert!(
-        should_fallback_provider_aware_replication_request(&err),
-        "empty provider routes should remain a retryable/degraded storage challenge condition: {err:?}"
+        !response.found,
+        "generic fallback miss should remain observable as blob-not-found"
     );
     assert_eq!(
         *generic_attempts.lock().expect("lock generic attempts"),
-        0,
-        "storage challenge should not probe generic lane when DHT has no non-local providers"
+        3,
+        "storage challenge should spend only the bounded generic attempts when DHT has no non-local providers"
     );
     assert!(
         provider_attempts
