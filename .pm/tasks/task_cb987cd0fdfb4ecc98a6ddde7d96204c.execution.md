@@ -354,10 +354,10 @@ Example:
 - Action: Recorded the passed pre-PR local role review packet after integrating role findings and re-review results.
 - Pre-PR Local Role Review: passed
 - Task UID: task_cb987cd0fdfb4ecc98a6ddde7d96204c
-- Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-core-unified-world-terminology-upgrade-plan`
-- Source Branch: `task/core-unified-world-terminology-upgrade-plan`
-- Source Head: `c20772c9ea2d9087eb379501334a5b838219ccac`
-- Comparison Ref: `main` at merge-base `8a2ef6dd2134d1d7bd14c3794e03d4287d4dca6a`
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-core-unified-world-terminology-upgrade-plan
+- Source Branch: task/core-unified-world-terminology-upgrade-plan
+- Source Head: b88f516a4cd9aa27cd494191cb031968a475ca33
+- Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/**`; `PR.md`; `crates/oasis7/**`; `crates/oasis7_viewer/**`; `doc/core/**`; `doc/p2p/**`; `doc/testing/**`; `doc/world-runtime/**`; `doc/world-simulator/**`; `scripts/**`; `site/**`; `testing-manual.md`
 - Role Selection Basis: `repository_health_engineer` for cross-cutting docs/scripts/code contracts, legacy wrapper strategy, stale-base risk, and generated-output schema/title migration; `qa_engineer` for verification boundary, PR evidence correctness, deferred failure root-cause claims, and final packet gate; `blockchain_ops_engineer` for network-tier manifest contract, public-testnet rehearsal track semantics, release-candidate bundle truth, and legacy shared-devnet/shared-network compatibility wrappers. Gameplay, visual-interaction, viewer, wasm, agent, and liveops/community were not selected because this branch does not change gameplay rules, visual UI behavior, WASM platform contracts, agent runtime behavior, or external community/incident commitments beyond template terminology.
 - Review Roles: `repository_health_engineer`, `qa_engineer`, `blockchain_ops_engineer`
