@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pathlib
 import re
-import subprocess
 import sys
 
 repo_root = pathlib.Path(sys.argv[1]).resolve()
@@ -80,43 +79,44 @@ allowed_path_names = {
     "scripts/shared-network-track-gate.sh",
 }
 
-cmd = [
-    "rg",
-    "-n",
-    "--no-heading",
-    "-g",
-    "!scripts/unified-world-code-terminology-scan.sh",
-    pattern,
-    *scan_paths,
-]
-proc = subprocess.run(cmd, cwd=repo_root, text=True, capture_output=True)
-if proc.returncode not in {0, 1}:
-    sys.stderr.write(proc.stderr)
-    raise SystemExit(proc.returncode)
+def iter_scan_files() -> list[pathlib.Path]:
+    files: list[pathlib.Path] = []
+    for rel in scan_paths:
+        path = repo_root / rel
+        if path.is_file():
+            files.append(path)
+            continue
+        if path.is_dir():
+            files.extend(p for p in path.rglob("*") if p.is_file())
+    return sorted(files)
+
 
 unexpected: list[str] = []
 allowed_hits: list[str] = []
-for line in proc.stdout.splitlines():
-    rel, _, rest = line.partition(":")
-    if not rest:
-        unexpected.append(line)
+scan_re = re.compile(pattern)
+scan_files = iter_scan_files()
+for path in scan_files:
+    rel = path.relative_to(repo_root).as_posix()
+    if rel == "scripts/unified-world-code-terminology-scan.sh":
         continue
-    _, _, text = rest.partition(":")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        continue
     snippets = allowed_snippets.get(rel, ())
-    if any(snippet in text for snippet in snippets):
-        allowed_hits.append(line)
-    else:
-        unexpected.append(line)
-
-files_cmd = ["rg", "--files", *scan_paths]
-files_proc = subprocess.run(files_cmd, cwd=repo_root, text=True, capture_output=True)
-if files_proc.returncode != 0:
-    sys.stderr.write(files_proc.stderr)
-    raise SystemExit(files_proc.returncode)
+    for line_no, text_line in enumerate(text.splitlines(), start=1):
+        if not scan_re.search(text_line):
+            continue
+        rendered = f"{rel}:{line_no}:{text_line}"
+        if any(snippet in text_line for snippet in snippets):
+            allowed_hits.append(rendered)
+        else:
+            unexpected.append(rendered)
 
 path_pattern = re.compile(pattern)
 allowed_path_hits: list[str] = []
-for rel in files_proc.stdout.splitlines():
+for path in scan_files:
+    rel = path.relative_to(repo_root).as_posix()
     if rel == "scripts/unified-world-code-terminology-scan.sh":
         continue
     if not path_pattern.search(rel):
