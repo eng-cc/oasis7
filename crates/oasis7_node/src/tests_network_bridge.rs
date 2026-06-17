@@ -203,6 +203,56 @@ fn consensus_gossip_publish_uses_best_effort_network_path() {
 }
 
 #[test]
+fn replication_gossip_publish_uses_best_effort_network_path() {
+    let network = Arc::new(BestEffortOnlyNetwork::default());
+    let handle = NodeReplicationNetworkHandle::new(network.clone());
+    let config = NodeConfig::new(
+        "node-a",
+        "world-replication-best-effort",
+        NodeRole::Sequencer,
+    )
+    .expect("config");
+    let endpoint = ReplicationNetworkEndpoint::new(
+        &handle,
+        "world-replication-best-effort",
+        false,
+        &config.network_policy,
+    )
+    .expect("endpoint");
+    let message = GossipReplicationMessage {
+        version: 1,
+        world_id: "world-replication-best-effort".to_string(),
+        node_id: "node-a".to_string(),
+        record: FileReplicationRecord {
+            world_id: "world-replication-best-effort".to_string(),
+            writer_id: "node-a".to_string(),
+            writer_epoch: 1,
+            sequence: 1,
+            path: "consensus/commits/00000000000000000001.json".to_string(),
+            content_hash: "hash-1".to_string(),
+            size_bytes: 7,
+            updated_at_ms: 1,
+        },
+        payload: b"payload".to_vec(),
+        public_key_hex: None,
+        signature_hex: None,
+    };
+
+    endpoint
+        .publish_replication(&message)
+        .expect("best-effort replication publish should not surface sync publish failure");
+
+    let topics = network
+        .best_effort_topics
+        .lock()
+        .expect("lock best-effort topics");
+    assert_eq!(
+        topics.as_slice(),
+        &["aw.world-replication-best-effort.replication"]
+    );
+}
+
+#[test]
 fn publish_failure_stays_generic_replication_error() {
     let err = network_err(WorldError::NetworkProtocolUnavailable {
         protocol: "libp2p publish failed topic=aw.publish.fail: InsufficientPeers".to_string(),
