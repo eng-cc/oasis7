@@ -5,6 +5,8 @@ use super::*;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
+const REPLICATION_GAP_SYNC_PROVIDER_ROUTE_BLOCK_RETRY_COOLDOWN_MS: i64 = 30_000;
+
 fn replication_gap_sync_provider_blob_route_blocked(err: &NodeError) -> bool {
     let NodeError::Replication { reason } = err else {
         return false;
@@ -17,6 +19,66 @@ fn replication_gap_sync_provider_blob_route_blocked_reason(reason: &str) -> bool
         && (reason.contains(" blob not found for hash ")
             || reason.contains("blob fetch provider routes exhausted")
             || reason.contains(crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX))
+}
+
+fn replication_gap_sync_provider_blob_route_blocked_in_cooldown(
+    blocked_height: Option<u64>,
+    blocked_reason: Option<&str>,
+    blocked_at_ms: Option<i64>,
+    next_height: u64,
+    now_ms: i64,
+) -> bool {
+    if blocked_height != Some(next_height)
+        || !blocked_reason
+            .map(replication_gap_sync_provider_blob_route_blocked_reason)
+            .unwrap_or(false)
+    {
+        return false;
+    }
+    let Some(blocked_at_ms) = blocked_at_ms else {
+        return false;
+    };
+    now_ms.saturating_sub(blocked_at_ms)
+        < REPLICATION_GAP_SYNC_PROVIDER_ROUTE_BLOCK_RETRY_COOLDOWN_MS
+}
+
+#[cfg(test)]
+mod provider_route_block_cooldown_tests {
+    use super::*;
+
+    #[test]
+    fn provider_route_blocked_cooldown_expires_for_retry() {
+        let reason = "replication gap sync provider route blocked: gap sync height 1 blob not found for hash abc";
+        let blocked_at_ms = 1_000;
+
+        assert!(
+            replication_gap_sync_provider_blob_route_blocked_in_cooldown(
+                Some(1),
+                Some(reason),
+                Some(blocked_at_ms),
+                1,
+                blocked_at_ms + REPLICATION_GAP_SYNC_PROVIDER_ROUTE_BLOCK_RETRY_COOLDOWN_MS - 1
+            )
+        );
+        assert!(
+            !replication_gap_sync_provider_blob_route_blocked_in_cooldown(
+                Some(1),
+                Some(reason),
+                Some(blocked_at_ms),
+                1,
+                blocked_at_ms + REPLICATION_GAP_SYNC_PROVIDER_ROUTE_BLOCK_RETRY_COOLDOWN_MS
+            )
+        );
+        assert!(
+            !replication_gap_sync_provider_blob_route_blocked_in_cooldown(
+                Some(1),
+                Some(reason),
+                None,
+                1,
+                blocked_at_ms
+            )
+        );
+    }
 }
 
 impl PosNodeEngine {
@@ -111,6 +173,7 @@ impl PosNodeEngine {
         {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
+            self.last_replication_gap_sync_blocked_at_ms = None;
             self.last_replication_gap_sync_repair_attempt_height = None;
             self.last_replication_gap_sync_repair_attempt_summary = None;
         }
@@ -732,6 +795,7 @@ impl PosNodeEngine {
         self.record_synced_replication_height(checkpoint_height, block_hash, committed_at_ms)?;
         self.last_replication_gap_sync_blocked_height = None;
         self.last_replication_gap_sync_blocked_reason = None;
+        self.last_replication_gap_sync_blocked_at_ms = None;
         self.last_replication_gap_sync_repair_attempt_height = None;
         self.last_replication_gap_sync_repair_attempt_summary = None;
         if let Some(callback) = progress_callback.as_deref_mut() {
@@ -886,6 +950,7 @@ impl PosNodeEngine {
         if advertised_network_height <= self.replication_persisted_height {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
+            self.last_replication_gap_sync_blocked_at_ms = None;
             return Ok(());
         }
 
@@ -936,13 +1001,14 @@ impl PosNodeEngine {
             "replication_persisted_height",
             "starting replication gap sync",
         )?;
-        if self.last_replication_gap_sync_blocked_height == Some(next_height)
-            && self
-                .last_replication_gap_sync_blocked_reason
-                .as_deref()
-                .map(replication_gap_sync_provider_blob_route_blocked_reason)
-                .unwrap_or(false)
-        {
+        let now_ms = crate::runtime_util::now_unix_ms();
+        if replication_gap_sync_provider_blob_route_blocked_in_cooldown(
+            self.last_replication_gap_sync_blocked_height,
+            self.last_replication_gap_sync_blocked_reason.as_deref(),
+            self.last_replication_gap_sync_blocked_at_ms,
+            next_height,
+            now_ms,
+        ) {
             return Ok(());
         }
         let gap_sync_target_height = advertised_network_height.min(
@@ -1033,6 +1099,7 @@ impl PosNodeEngine {
             }
             if provider_route_blocked {
                 self.last_replication_gap_sync_blocked_height = Some(next_height);
+                self.last_replication_gap_sync_blocked_at_ms = Some(now_ms);
                 self.last_replication_gap_sync_blocked_reason = Some(format!(
                     "replication gap sync provider route blocked: missing commit height {next_height} while advertised_network_height={} network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",
                     advertised_network_height,
@@ -1078,6 +1145,7 @@ impl PosNodeEngine {
                     break;
                 }
                 self.last_replication_gap_sync_blocked_height = Some(next_height);
+                self.last_replication_gap_sync_blocked_at_ms = None;
                 self.last_replication_gap_sync_blocked_reason = Some(format!(
                     "replication gap sync blocked: missing commit height {next_height} while advertised_network_height={} network_committed_height={} gap_sync_target_height={} replication_persisted_height={} repair_attempt={}",
                     advertised_network_height,
@@ -1091,6 +1159,7 @@ impl PosNodeEngine {
                 break;
             }
             self.last_replication_gap_sync_blocked_height = Some(next_height);
+            self.last_replication_gap_sync_blocked_at_ms = None;
             self.last_replication_gap_sync_blocked_reason = Some(format!(
                 "replication gap sync failed at height {next_height}: {}",
                 last_error
@@ -1109,6 +1178,7 @@ impl PosNodeEngine {
         if self.replication_persisted_height >= advertised_network_height {
             self.last_replication_gap_sync_blocked_height = None;
             self.last_replication_gap_sync_blocked_reason = None;
+            self.last_replication_gap_sync_blocked_at_ms = None;
             self.last_replication_gap_sync_repair_attempt_height = None;
             self.last_replication_gap_sync_repair_attempt_summary = None;
         } else {

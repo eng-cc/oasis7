@@ -464,6 +464,7 @@ impl PosNodeEngine {
         self.replication_persisted_height = self.replication_persisted_height.min(height);
         self.last_replication_gap_sync_blocked_height = None;
         self.last_replication_gap_sync_blocked_reason = None;
+        self.last_replication_gap_sync_blocked_at_ms = None;
         self.last_replication_gap_sync_repair_attempt_height = None;
         self.last_replication_gap_sync_repair_attempt_summary = None;
         self.last_committed_at_ms = Some(committed_at_ms);

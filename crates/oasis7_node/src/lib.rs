@@ -1098,6 +1098,7 @@ struct PosNodeEngine {
     replication_persisted_height: u64,
     last_replication_gap_sync_blocked_height: Option<u64>,
     last_replication_gap_sync_blocked_reason: Option<String>,
+    last_replication_gap_sync_blocked_at_ms: Option<i64>,
     last_replication_gap_sync_repair_attempt_height: Option<u64>,
     last_replication_gap_sync_repair_attempt_summary: Option<String>,
     last_replication_successor_probe_height: Option<u64>,
