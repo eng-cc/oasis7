@@ -162,6 +162,8 @@ run_required_gate_checks() {
   run bash ./scripts/check-script-executable-bits.sh
   run ./scripts/cargo-dev-lib.test.sh
   run ./scripts/plan-rust-required-scope.test.sh
+  run ./scripts/unified-world-code-terminology-scan.test.sh
+  run ./scripts/release-gate-bash-preflight.test.sh
   run_provider_remote_https_smoke
   run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" run_provider_bridge_live_gate
   run_newapi_bridge_service_accounting_tests
