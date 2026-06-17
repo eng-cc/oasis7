@@ -7,6 +7,7 @@
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] p2p-provider-route-exhaustion-recovery (PRD-P2P-001/003/028) [test_tier_required]: 修复 public testnet storage challenge 在 retryable provider-route exhausted 后长期 degraded；storage challenge 可走 bounded generic fallback，同时保留 provider not-found、gap sync strictness 与 wrong blob hard-failure 边界。 Trace: .pm/tasks/task_4cc7d5297e084dd1945223f5769c4e9c.yaml
 - [x] p2p-storage-challenge-provider-routing-hardening (PRD-P2P-001/003/028) [test_tier_required]: 收口 public testnet storage challenge / replication fetch provider route，不再让 observer/light、非 provider 或低分 peer 消耗 fetch budget，并为 provider-route blocked 增加 bounded retry cooldown。 Trace: .pm/tasks/task_22699e838c6746fa8491befacfce985b.yaml
 - [x] iroh-inspired-reachability-evidence-observability (PRD-P2P-024/025/030) [test_tier_required]: 落地 peer reachability contract、path behavior matrix taxonomy 与 bounded status/triad observability 三项，不引入 iroh 依赖、不替换 libp2p。 Trace: .pm/tasks/task_43a21163092541809de36036403d7c97.yaml
 - [x] module-project-log-slimming (PRD-ENGINEERING-030) [test_tier_required]: 压缩 p2p 主项目页历史流水为当前/最近任务索引与历史追溯入口，保留模块判断、状态和一跳 task trace。 Trace: .pm/tasks/task_49ef9270afc646d98d4a8386c0888eab.yaml

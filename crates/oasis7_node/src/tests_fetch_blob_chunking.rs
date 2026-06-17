@@ -1,4 +1,5 @@
 use super::*;
+use crate::replication_probe_gate::should_fallback_provider_aware_replication_request;
 use oasis7_proto::distributed::DistributedErrorCode;
 use oasis7_proto::distributed_net::NetworkSubscription;
 use oasis7_proto::world_error::WorldError;
@@ -320,7 +321,7 @@ fn fetch_blob_provider_route_miss_does_not_probe_generic_or_connected_peers() {
 }
 
 #[test]
-fn fetch_blob_provider_route_unavailable_does_not_probe_generic_or_connected_peers() {
+fn fetch_blob_provider_route_unavailable_falls_back_to_generic_route() {
     let world_id = "world-blob-provider-unavailable-strict";
     let dir = temp_dir("blob-provider-unavailable-strict-endpoint");
     let generic_attempts = Arc::new(Mutex::new(0usize));
@@ -351,22 +352,22 @@ fn fetch_blob_provider_route_unavailable_does_not_probe_generic_or_connected_pee
         requester_signature_hex: None,
     };
 
-    let result = super::request_fetch_blob_with_storage_challenge_routes(
+    let response = super::request_fetch_blob_with_storage_challenge_routes(
         &endpoint,
         world_id,
         "checkpoint-payload",
         &request,
         Some(&["stale-provider".to_string()]),
-    );
+    )
+    .expect("retryable provider route unavailability should fall back");
 
     assert!(
-        result.is_err(),
-        "provider-aware blob fetch should surface provider route unavailability without probing fallback peers: {result:?}"
+        !response.found,
+        "generic fallback should be attempted but still surface not-found when no fallback peer has the blob"
     );
-    assert_eq!(
-        *generic_attempts.lock().expect("lock generic attempts"),
-        0,
-        "provider-aware blob fetch should not spend budget on generic non-provider routing"
+    assert!(
+        *generic_attempts.lock().expect("lock generic attempts") > 0,
+        "provider-aware blob fetch should spend bounded generic attempts after retryable provider route unavailability"
     );
     assert_eq!(
         provider_attempts
@@ -374,7 +375,122 @@ fn fetch_blob_provider_route_unavailable_does_not_probe_generic_or_connected_pee
             .expect("lock provider attempts")
             .as_slice(),
         &[vec!["stale-provider".to_string()]],
-        "provider-aware blob fetch should not probe arbitrary connected peers after provider route unavailability"
+        "provider-aware blob fetch should try the stale provider before bounded generic fallback"
+    );
+}
+
+#[test]
+fn fetch_blob_storage_challenge_without_provider_lookup_does_not_probe_generic_route() {
+    let world_id = "world-blob-provider-lookup-missing";
+    let dir = temp_dir("blob-provider-lookup-missing-endpoint");
+    let generic_attempts = Arc::new(Mutex::new(0usize));
+    let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let network = Arc::new(ConnectedPeerBlobFallbackNetwork {
+        blob_provider_id: "storage-peer".to_string(),
+        blob: b"checkpoint-payload-from-storage".to_vec(),
+        generic_attempts: Arc::clone(&generic_attempts),
+        provider_attempts: Arc::clone(&provider_attempts),
+        connected_peer_ids: vec!["storage-peer".to_string()],
+        unsupported_provider_ids: Vec::new(),
+    });
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config")
+        .with_replication(signed_replication_config(dir, 46));
+    let handle = NodeReplicationNetworkHandle::new(network);
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+    let request = super::replication::FetchBlobRequest {
+        content_hash: "checkpoint-payload".to_string(),
+        offset_bytes: None,
+        limit_bytes: None,
+        requester_public_key_hex: None,
+        requester_signature_hex: None,
+    };
+
+    let err = super::request_fetch_blob_with_storage_challenge_routes(
+        &endpoint,
+        world_id,
+        "checkpoint-payload",
+        &request,
+        None,
+    )
+    .expect_err("storage challenge fallback requires a retryable provider route failure");
+
+    assert!(
+        should_fallback_provider_aware_replication_request(&err),
+        "missing provider lookup should remain a retryable/degraded storage challenge condition: {err:?}"
+    );
+    assert_eq!(
+        *generic_attempts.lock().expect("lock generic attempts"),
+        0,
+        "storage challenge should not probe generic lane when provider lookup is unavailable"
+    );
+    assert!(
+        provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .is_empty(),
+        "storage challenge should not invent provider attempts without a provider lookup"
+    );
+}
+
+#[test]
+fn fetch_blob_storage_challenge_empty_provider_routes_do_not_probe_generic_route() {
+    let world_id = "world-blob-provider-empty-routes";
+    let dir = temp_dir("blob-provider-empty-routes-endpoint");
+    let generic_attempts = Arc::new(Mutex::new(0usize));
+    let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let network = Arc::new(ConnectedPeerBlobFallbackNetwork {
+        blob_provider_id: "storage-peer".to_string(),
+        blob: b"checkpoint-payload-from-storage".to_vec(),
+        generic_attempts: Arc::clone(&generic_attempts),
+        provider_attempts: Arc::clone(&provider_attempts),
+        connected_peer_ids: vec!["storage-peer".to_string()],
+        unsupported_provider_ids: Vec::new(),
+    });
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config")
+        .with_replication(signed_replication_config(dir, 47));
+    let handle = NodeReplicationNetworkHandle::new(network);
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+    let request = super::replication::FetchBlobRequest {
+        content_hash: "checkpoint-payload".to_string(),
+        offset_bytes: None,
+        limit_bytes: None,
+        requester_public_key_hex: None,
+        requester_signature_hex: None,
+    };
+
+    let provider_ids: Vec<String> = Vec::new();
+    let err = super::request_fetch_blob_with_storage_challenge_routes(
+        &endpoint,
+        world_id,
+        "checkpoint-payload",
+        &request,
+        Some(provider_ids.as_slice()),
+    )
+    .expect_err(
+        "storage challenge fallback requires at least one retryable provider route failure",
+    );
+
+    assert!(
+        should_fallback_provider_aware_replication_request(&err),
+        "empty provider routes should remain a retryable/degraded storage challenge condition: {err:?}"
+    );
+    assert_eq!(
+        *generic_attempts.lock().expect("lock generic attempts"),
+        0,
+        "storage challenge should not probe generic lane when DHT has no non-local providers"
+    );
+    assert!(
+        provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .is_empty(),
+        "storage challenge should not try provider routes when DHT returns no non-local providers"
     );
 }
 
