@@ -864,14 +864,14 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                             let _ = thread::Builder::new()
                                 .name("replication-fetch-commit-provider-publish".to_string())
                                 .spawn(move || {
-                                    let _ = publish_handle.publish_local_content_provider(
+                                    publish_handle.publish_local_content_provider_best_effort(
                                         &publish_network_policy,
                                         publish_world_id.as_str(),
                                         payload_content_hash.as_str(),
                                     );
                                     if let Some(descriptor) = descriptor {
                                         let _ = publish_handle
-                                            .publish_checkpoint_descriptor_providers_from_root(
+                                            .publish_checkpoint_descriptor_providers_from_root_best_effort(
                                                 &publish_network_policy,
                                                 publish_root_dir.as_path(),
                                                 publish_world_id.as_str(),

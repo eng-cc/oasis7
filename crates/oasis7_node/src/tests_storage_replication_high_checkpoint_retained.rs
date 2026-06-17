@@ -352,6 +352,18 @@ impl proto_dht::DistributedDht<WorldError> for BlockingCheckpointProviderDht {
         Ok(())
     }
 
+    fn publish_provider_best_effort(
+        &self,
+        _world_id: &str,
+        _content_hash: &str,
+        _provider_id: &str,
+    ) -> Result<(), WorldError> {
+        let (entered_lock, entered_cvar) = &*self.entered_publish;
+        *entered_lock.lock().expect("lock entered_publish") = true;
+        entered_cvar.notify_all();
+        Ok(())
+    }
+
     fn get_providers(
         &self,
         _world_id: &str,

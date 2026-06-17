@@ -102,7 +102,7 @@ pub(super) enum Command {
         handler: Handler,
         response: CommandResponseSender<()>,
     },
-    PublishProvider(String, CommandResponseSender<()>),
+    PublishProvider(String, Option<CommandResponseSender<()>>),
     GetProviders(String, CommandResponseSender<Vec<ProviderRecord>>),
     PutWorldHead {
         key: String,
@@ -797,17 +797,14 @@ pub(super) fn handle_command(
             match swarm.behaviour_mut().kademlia.start_providing(dht_key) {
                 Ok(query_id) => {
                     provider_keys.insert(key, now_ms());
-                    pending_dht.insert(
-                        query_id,
-                        PendingDhtQuery::PublishProvider {
-                            response: Some(response),
-                        },
-                    );
+                    pending_dht.insert(query_id, PendingDhtQuery::PublishProvider { response });
                 }
                 Err(err) => {
-                    let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
-                        protocol: format!("kad start_providing failed: {err}"),
-                    }));
+                    if let Some(response) = response {
+                        let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
+                            protocol: format!("kad start_providing failed: {err}"),
+                        }));
+                    }
                 }
             }
             CommandOutcome::Continue
