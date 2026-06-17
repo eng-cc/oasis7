@@ -21,7 +21,7 @@ USE_DEFAULT_PROXY="1"
 CHAT_PROBE_BACKEND="${OASIS7_LETAI_CHAT_PROBE_BACKEND:-rust-bridge}"
 SKIP_BRIDGE_SMOKE="0"
 ENSURE_TOKEN_CONFIG="1"
-CHAT_ECHO="1"
+CHAT_ECHO="0"
 AUTO_PLAY="${OASIS7_LOCAL_LETAI_AUTO_PLAY:-1}"
 DEPLOYMENT_MODE="${OASIS7_LOCAL_LETAI_DEPLOYMENT_MODE:-trusted_local_only}"
 BRIDGE_SMOKE_ATTEMPTS="2"
@@ -33,6 +33,7 @@ AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS:-6
 MODEL=""
 OUTPUT_DIR=""
 BRIDGE_PID=""
+DETACH="0"
 LAUNCHER_ARGS=()
 BRIDGE_ARGS=()
 
@@ -49,6 +50,10 @@ Start the canonical local real LetAI gameplay test stack:
 Use this wrapper instead of manually stitching together the provider bridge and
 run-launcher-stack.sh when validating local provider-backed gameplay or
 agent_chat behavior.
+This wrapper is the canonical local real-play entrypoint: it normalizes platform
+credentials into a temporary token config, forwards auto-topup settings, starts
+the Rust provider bridge, and then launches the game stack. Direct binary
+startup is for low-level debugging only and must mirror these env vars by hand.
 
 Options:
   --config <path>             LetAI config file (default: $OASIS7_LETAI_CONFIG_PATH,
@@ -60,8 +65,8 @@ Options:
   --no-default-proxy          Do not set proxy environment defaults
   --auto-topup-usd <amount>   Auto top up on insufficient quota (default: 0.1)
   --no-ensure-token-config    Use --config directly; do not generate token config from platform key
-  --chat-echo                 Enable local QA chat echo with provider-backed gameplay (default)
-  --no-chat-echo              Keep provider-backed agent chat disabled
+  --chat-echo                 Enable local receipt-only chat echo for low-level debugging
+  --no-chat-echo              Keep provider-backed agent chat disabled (default)
   --auto-play                 Start gameplay/world progression on viewer connection (default)
   --no-auto-play              Require manual Play before gameplay/world progression
   --deployment-mode <mode>    Launcher deployment mode (default: trusted_local_only)
@@ -78,6 +83,7 @@ Options:
   --agent-provider-connect-timeout-ms <ms>
                               Runtime provider decision timeout (default: 60000)
   --output-dir <path>         Launcher output dir; bridge log goes there too
+  --detach                    Start the stack in the background and return after spawning
   -h, --help                  Show help
 
 Examples:
@@ -188,6 +194,10 @@ while [[ $# -gt 0 ]]; do
       OUTPUT_DIR="${2:-}"
       shift 2
       ;;
+    --detach)
+      DETACH="1"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -247,6 +257,23 @@ if [[ "$USE_DEFAULT_PROXY" == "1" ]]; then
   export http_proxy="${http_proxy:-$PROXY_URL}"
   export all_proxy="${all_proxy:-$SOCKS_PROXY_URL}"
 fi
+LOOPBACK_NO_PROXY="127.0.0.1,localhost,::1"
+if [[ -n "${no_proxy:-}" ]]; then
+  case ",$no_proxy," in
+    *",127.0.0.1,"*) ;;
+    *) export no_proxy="$LOOPBACK_NO_PROXY,$no_proxy" ;;
+  esac
+else
+  export no_proxy="$LOOPBACK_NO_PROXY"
+fi
+if [[ -n "${NO_PROXY:-}" ]]; then
+  case ",$NO_PROXY," in
+    *",127.0.0.1,"*) ;;
+    *) export NO_PROXY="$LOOPBACK_NO_PROXY,$NO_PROXY" ;;
+  esac
+else
+  export NO_PROXY="$LOOPBACK_NO_PROXY"
+fi
 if [[ "$CHAT_ECHO" == "1" ]]; then
   export OASIS7_RUNTIME_AGENT_CHAT_ECHO=1
 else
@@ -277,11 +304,106 @@ if [[ "$ENSURE_TOKEN_CONFIG" == "1" ]]; then
     ${ENSURE_ARGS[@]+"${ENSURE_ARGS[@]}"}
 fi
 
+if [[ "$DETACH" == "1" && "${OASIS7_LOCAL_LETAI_DETACHED_CHILD:-0}" != "1" ]]; then
+  ABS_OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+  if [[ "$EFFECTIVE_CONFIG_PATH" == /* ]]; then
+    ABS_EFFECTIVE_CONFIG_PATH="$EFFECTIVE_CONFIG_PATH"
+  else
+    ABS_EFFECTIVE_CONFIG_PATH="$ROOT_DIR/$EFFECTIVE_CONFIG_PATH"
+  fi
+  DETACH_LOG="$ABS_OUTPUT_DIR/local-letai-game-test.supervisor.log"
+  DETACH_PID_FILE="$ABS_OUTPUT_DIR/local-letai-game-test.supervisor.pid"
+  DETACH_LABEL_FILE="$ABS_OUTPUT_DIR/local-letai-game-test.launchctl-label"
+  DETACH_SCRIPT="$ABS_OUTPUT_DIR/local-letai-game-test.detached.sh"
+  DETACH_LABEL_SUFFIX="$(basename "$ABS_OUTPUT_DIR" | tr -c 'A-Za-z0-9_.-' '-')"
+  DETACH_LABEL="oasis7.local-letai.$DETACH_LABEL_SUFFIX"
+  DETACH_CMD=(
+    "$ROOT_DIR/scripts/run-local-letai-game-test.sh"
+    --config "$ABS_EFFECTIVE_CONFIG_PATH"
+    --no-ensure-token-config
+    --bind "$BIND_ADDR"
+    --proxy "$PROXY_URL"
+    --socks-proxy "$SOCKS_PROXY_URL"
+    --auto-topup-usd "$BRIDGE_AUTO_TOPUP_USD"
+    --chat-probe-backend "$CHAT_PROBE_BACKEND"
+    --bridge-smoke-attempts "$BRIDGE_SMOKE_ATTEMPTS"
+    --chat-probe-timeout-ms "$CHAT_PROBE_TIMEOUT_MS"
+    --chat-probe-attempts "$CHAT_PROBE_ATTEMPTS"
+    --chat-probe-retry-delay-ms "$CHAT_PROBE_RETRY_DELAY_MS"
+    --agent-provider-connect-timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS"
+    --deployment-mode "$DEPLOYMENT_MODE"
+    --output-dir "$ABS_OUTPUT_DIR"
+  )
+  if [[ "$USE_DEFAULT_PROXY" != "1" ]]; then
+    DETACH_CMD+=(--no-default-proxy)
+  fi
+  if [[ -n "$MODEL" ]]; then
+    DETACH_CMD+=(--model "$MODEL")
+  fi
+  if [[ "$CHAT_ECHO" == "1" ]]; then
+    DETACH_CMD+=(--chat-echo)
+  else
+    DETACH_CMD+=(--no-chat-echo)
+  fi
+  if [[ "$AUTO_PLAY" == "1" ]]; then
+    DETACH_CMD+=(--auto-play)
+  else
+    DETACH_CMD+=(--no-auto-play)
+  fi
+  if [[ "$SKIP_BRIDGE_SMOKE" == "1" ]]; then
+    DETACH_CMD+=(--skip-bridge-smoke)
+  fi
+  if [[ "${#LAUNCHER_ARGS[@]}" -gt 0 ]]; then
+    DETACH_CMD+=(-- "${LAUNCHER_ARGS[@]}")
+  fi
+
+  {
+    echo "#!/usr/bin/env bash"
+    echo "set -euo pipefail"
+    printf 'export HOME=%q\n' "${HOME:-}"
+    printf 'export PATH=%q\n' "${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
+    printf 'exec >>%q 2>&1\n' "$DETACH_LOG"
+    printf 'echo detached child started at "$(date +%%F\\ %%T\\ %%Z)" pid=$$ label=%q\n' "$DETACH_LABEL"
+    echo "trap 'status=\$?; echo detached child exiting with status \$status >&2' EXIT"
+    echo "trap 'echo detached child received SIGHUP >&2' HUP"
+    echo "trap 'echo detached child received SIGTERM >&2' TERM"
+    echo "trap 'echo detached child received SIGINT >&2' INT"
+    printf 'cd %q\n' "$ROOT_DIR"
+    printf 'env OASIS7_LOCAL_LETAI_DETACHED_CHILD=1 OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD=%q ' "${OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD:-0}"
+    printf '%q ' "${DETACH_CMD[@]}"
+    printf '\n'
+  } >"$DETACH_SCRIPT"
+  chmod +x "$DETACH_SCRIPT"
+  : >"$DETACH_LOG"
+  if command -v launchctl >/dev/null 2>&1; then
+    launchctl remove "$DETACH_LABEL" >/dev/null 2>&1 || true
+    launchctl submit -l "$DETACH_LABEL" -- /bin/bash "$DETACH_SCRIPT"
+    echo "$DETACH_LABEL" >"$DETACH_LABEL_FILE"
+    sleep 0.2
+    launchctl list | awk -v label="$DETACH_LABEL" '$3 == label { print $1 }' >"$DETACH_PID_FILE" || true
+  else
+    nohup /bin/bash "$DETACH_SCRIPT" >/dev/null 2>&1 &
+    echo "$!" >"$DETACH_PID_FILE"
+  fi
+  echo "local LetAI game test detached"
+  echo "output_dir=$ABS_OUTPUT_DIR"
+  echo "supervisor_log=$DETACH_LOG"
+  echo "supervisor_script=$DETACH_SCRIPT"
+  if [[ -f "$DETACH_LABEL_FILE" ]]; then
+    echo "launchctl_label=$(cat "$DETACH_LABEL_FILE")"
+  fi
+  if [[ -s "$DETACH_PID_FILE" ]]; then
+    echo "supervisor_pid=$(cat "$DETACH_PID_FILE")"
+  fi
+  echo "wait for STACK_READY=1 in $ABS_OUTPUT_DIR/launcher/session.meta, then open the GAME_URL from that file"
+  exit 0
+fi
+
 echo "local LetAI game test"
 echo "config=$CONFIG_PATH"
 echo "effective_config=$EFFECTIVE_CONFIG_PATH"
 echo "bridge=http://$BIND_ADDR"
-echo "chat_echo=$([[ "$CHAT_ECHO" == "1" ]] && echo enabled || echo disabled)"
+echo "chat_echo=$([[ "$CHAT_ECHO" == "1" ]] && echo enabled-debug-only || echo disabled)"
 echo "auto_play=$([[ "$AUTO_PLAY" == "1" ]] && echo enabled || echo disabled)"
 echo "deployment_mode=$DEPLOYMENT_MODE"
 echo "chat_probe_backend=$CHAT_PROBE_BACKEND"
@@ -385,5 +507,7 @@ fi
   ${LAUNCHER_ARGS[@]+"${LAUNCHER_ARGS[@]}"}
 launcher_status=$?
 set -e
+
+echo "local LetAI launcher stack exited with status $launcher_status" >&2
 
 exit "$launcher_status"

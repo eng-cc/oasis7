@@ -12,8 +12,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use oasis7::observability::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
-#[cfg(test)]
-use oasis7::simulator::Action;
 use oasis7::simulator::{
     DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderDecision, ProviderDiagnostics,
     ProviderErrorEnvelope, ProviderHealth, ProviderInfo, ProviderTokenUsage, ProviderTraceEnvelope,
@@ -110,13 +108,12 @@ use self::agent_decision::{
     timeout_seconds_from_budget,
 };
 use self::http_bridge_support::handle_connection;
-use self::letai_direct::invoke_rust_direct_letai;
 #[cfg(test)]
 use self::letai_direct::{
-    decode_letai_completion_payload, decode_letai_sse_reader, error_diagnostics_json,
-    load_letai_chat_config, maybe_auto_topup_letai_user, quota_from_usd,
-    should_auto_topup_letai_error, LetaiChatConfig,
+    decode_letai_completion_payload, decode_letai_sse_reader, load_letai_chat_config,
+    maybe_auto_topup_letai_user, quota_from_usd, should_auto_topup_letai_error, LetaiChatConfig,
 };
+use self::letai_direct::{error_diagnostics_json, invoke_rust_direct_letai};
 use self::support::{
     agent_output_from_json, local_session_id_from_session_key, should_fallback_to_local_agent,
 };
@@ -363,7 +360,7 @@ impl ProviderState {
     ) -> DecisionResponse {
         if let Err(err) = request.validate_contract() {
             self.set_last_error(Some(err.to_string()));
-            return self.provider_error_response(err.code, err.message, false, None, None);
+            return self.provider_error_response(err.code, err.message, false, None, None, None);
         }
         if let Some(err) = validate_profile(request.agent_profile.as_deref()) {
             self.set_last_error(Some(err.clone()));
@@ -371,6 +368,7 @@ impl ProviderState {
                 "unsupported_agent_profile",
                 err,
                 false,
+                None,
                 None,
                 None,
             );
@@ -469,6 +467,7 @@ impl ProviderState {
                                 total_tokens: output.total_tokens,
                             }),
                             cost_cents: None,
+                            upstream_trace: output.upstream_trace.clone(),
                             schema_repair_count,
                         },
                         memory_write_intents: Vec::new(),
@@ -530,6 +529,7 @@ impl ProviderState {
                                 total_tokens: output.total_tokens,
                             }),
                             cost_cents: None,
+                            upstream_trace: output.upstream_trace.clone(),
                             schema_repair_count: 1,
                         },
                         memory_write_intents: Vec::new(),
@@ -545,6 +545,7 @@ impl ProviderState {
                     true,
                     Some(latency_ms),
                     Some("decision invocation failed".to_string()),
+                    Some(provider_error_upstream_trace(err.as_str())),
                 )
             }
         }
@@ -581,6 +582,7 @@ impl ProviderState {
                 ],
                 token_usage: None,
                 cost_cents: None,
+                upstream_trace: None,
                 schema_repair_count: 0,
             },
             memory_write_intents: Vec::new(),
@@ -594,6 +596,7 @@ impl ProviderState {
         retryable: bool,
         latency_ms: Option<u64>,
         output_summary: Option<String>,
+        upstream_trace: Option<Value>,
     ) -> DecisionResponse {
         DecisionResponse {
             decision: ProviderDecision::Wait,
@@ -617,6 +620,7 @@ impl ProviderState {
                 tool_trace: Vec::new(),
                 token_usage: None,
                 cost_cents: None,
+                upstream_trace,
                 schema_repair_count: 0,
             },
             memory_write_intents: Vec::new(),
@@ -626,6 +630,16 @@ impl ProviderState {
     fn set_last_error(&self, detail: Option<String>) {
         *self.last_error.lock().expect("last_error lock") = detail;
     }
+}
+
+fn provider_error_upstream_trace(error: &str) -> Value {
+    let diagnostics = error_diagnostics_json(error);
+    json!({
+        "stage": "decision_invocation",
+        "error_summary": summarize_text(error, 500),
+        "diagnostics": diagnostics,
+        "diagnostics_present": !diagnostics.is_null(),
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -650,6 +664,7 @@ struct AgentInvocationOutput {
     completion_tokens: Option<u64>,
     total_tokens: Option<u64>,
     route_note: Option<String>,
+    upstream_trace: Option<Value>,
 }
 
 trait AgentInvoker: Send + Sync {

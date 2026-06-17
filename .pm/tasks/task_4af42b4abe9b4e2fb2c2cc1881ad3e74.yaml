@@ -1,0 +1,28 @@
+task_uid: task_4af42b4abe9b4e2fb2c2cc1881ad3e74
+title: "latest code local playtest"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-testing-latest-local-playtest
+execution_log_path: .pm/tasks/task_4af42b4abe9b4e2fb2c2cc1881ad3e74.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/project.md
+doc_refs:
+  - doc/testing/prd.md
+  - doc/testing/project.md
+related_prd: []
+acceptance:
+  - "Local environment starts from latest origin/main code"
+  - "A bounded playtest records launch status, interaction notes, and blocking issues"
+handoff_to:
+  - viewer_engineer
+  - qa_engineer
+updated_at: 2026-06-17T10:16:23+08:00
+last_started_at: 2026-06-14T23:49:30+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -lc 'set -euo pipefail; ./scripts/cargo-dev.sh fmt --check; bash -n scripts/run-local-letai-game-test.sh scripts/run-local-letai-provider-bridge.sh scripts/run-launcher-stack.sh; git diff --check; env -u RUSTC_WRAPPER cargo test -p oasis7 --lib runtime_agent_chat_provider_mode -- --nocapture --test-threads=1; env -u RUSTC_WRAPPER cargo test -p oasis7 --lib runtime_decision -- --nocapture; env -u RUSTC_WRAPPER cargo test -p oasis7 --lib provider_loopback_http_client_bypasses_proxy_env -- --nocapture; env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_provider_local_bridge maybe_auto_topup_letai_user -- --nocapture; (cd crates/oasis7_viewer && /Users/scc/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node ./node_modules/vitest/vitest.mjs run software_safe_src/main.test.jsx && WASM_BINDGEN_BIN=/Users/scc/.cache/oasis7/wasm-bindgen-cli/0.2.122/bin/wasm-bindgen /Users/scc/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node ./node_modules/vite/bin/vite.js build --config vite.software-safe.config.mjs && WASM_BINDGEN_BIN=/Users/scc/.cache/oasis7/wasm-bindgen-cli/0.2.122/bin/wasm-bindgen /Users/scc/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node ./scripts/finalize-software-safe-build.mjs); cmp -s crates/oasis7_viewer/viewer.js crates/oasis7_viewer/dist/viewer.js; ./scripts/pm/workflow-lint.sh --task-uid task_4af42b4abe9b4e2fb2c2cc1881ad3e74 --phase current'"
+last_verified_at: 2026-06-17T10:16:19+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-17T10:16:22+08:00

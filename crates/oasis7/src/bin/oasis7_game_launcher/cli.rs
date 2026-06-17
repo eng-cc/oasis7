@@ -109,6 +109,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--chain-status-bind" => {
                 options.chain_status_bind = parse_required_value(&mut iter, "--chain-status-bind")?;
             }
+            "--chain-link-policy" => {
+                let raw = parse_required_value(&mut iter, "--chain-link-policy")?;
+                options.chain_link_policy = parse_chain_link_policy(raw.as_str())?.to_string();
+            }
             "--chain-node-id" => {
                 options.chain_node_id = parse_required_value(&mut iter, "--chain-node-id")?;
             }
@@ -255,6 +259,7 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     )?;
     if options.chain_enabled {
         let _ = parse_host_port(options.chain_status_bind.as_str(), "--chain-status-bind")?;
+        let _ = parse_chain_link_policy(options.chain_link_policy.as_str())?;
         if options.chain_node_id.trim().is_empty() {
             return Err("--chain-node-id requires a non-empty value".to_string());
         }
@@ -399,6 +404,17 @@ fn validate_chain_replication_network_peer(raw: &str) -> Result<(), String> {
         .map_err(|err| format!("--chain-replication-network-peer invalid: {err}"))
 }
 
+fn parse_chain_link_policy(raw: &str) -> Result<&'static str, String> {
+    ChainLinkPolicy::parse(raw)
+        .map(ChainLinkPolicy::as_str)
+        .ok_or_else(|| {
+            format!(
+                "--chain-link-policy must be one of enforcing|shadow, got `{}`",
+                raw.trim()
+            )
+        })
+}
+
 pub(super) fn print_help() {
     println!(
         "Usage: oasis7_game_launcher [options]\n\n\
@@ -420,6 +436,7 @@ Options:\n\
   --chain-enable               enable oasis7_chain_runtime (default)\n\
   --chain-disable              disable oasis7_chain_runtime\n\
   --chain-status-bind <addr>   oasis7_chain_runtime status bind (default: {DEFAULT_CHAIN_STATUS_BIND})\n\
+  --chain-link-policy <mode>   viewer chain sync policy: enforcing|shadow (default: {DEFAULT_CHAIN_LINK_POLICY})\n\
   --chain-node-id <id>         oasis7_chain_runtime node id (default: {DEFAULT_CHAIN_NODE_ID})\n\
   --chain-network-tier-manifest <path>\n\
                                formal network tier manifest json; when set, chain bootstrap peers/status tier metadata load from manifest and explicit storage profile becomes optional\n\

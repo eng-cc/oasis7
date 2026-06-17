@@ -285,9 +285,13 @@ impl ProviderLoopbackHttpClient {
         timeout_ms: u64,
         transport: &str,
     ) -> Result<Self, ProviderLoopbackHttpError> {
+        let transport = transport.trim();
         let base_url = validate_provider_http_base_url(base_url, transport)?;
-        let http = Client::builder()
-            .timeout(Duration::from_millis(timeout_ms.max(1)))
+        let mut builder = Client::builder().timeout(Duration::from_millis(timeout_ms.max(1)));
+        if transport == LOOPBACK_HTTP_PROVIDER_TRANSPORT {
+            builder = builder.no_proxy();
+        }
+        let http = builder
             .build()
             .map_err(|err| ProviderLoopbackHttpError::RequestFailed {
                 path: "<client>".to_string(),

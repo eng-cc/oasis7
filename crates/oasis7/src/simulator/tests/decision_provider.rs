@@ -102,6 +102,7 @@ fn provider_backed_agent_behavior_executes_mocked_move_and_records_feedback() {
                 total_tokens: Some(15),
             }),
             cost_cents: Some(1),
+            upstream_trace: None,
             schema_repair_count: 0,
         },
         memory_write_intents: vec![],

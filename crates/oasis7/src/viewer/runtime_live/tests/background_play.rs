@@ -10,7 +10,8 @@ fn runtime_background_play_retries_transient_llm_access_failure_after_prior_prog
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_auto_play_on_connect(true),
     )
     .expect("runtime server");
     server
@@ -39,6 +40,10 @@ fn runtime_background_play_retries_transient_llm_access_failure_after_prior_prog
         server.world.state().time,
         baseline_time,
         "failed retry should not advance world time"
+    );
+    assert!(
+        !server.should_advance_auto_play_step(),
+        "transient background play failure should back off before the next retry"
     );
     let feedback = server
         .latest_player_gameplay_feedback
@@ -92,6 +97,22 @@ fn runtime_background_play_stops_after_retry_budget_exhausted() {
     assert_eq!(
         session.transient_play_failures,
         BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET,
+    );
+}
+
+#[test]
+fn provider_bridge_5xx_gets_local_letai_recovery_hint() {
+    let hint = ViewerRuntimeLiveServer::llm_gameplay_hint_for_reason(
+        "provider_http_502: provider bridge returned HTTP 502",
+    );
+
+    assert!(
+        hint.contains("local-letai-provider-bridge.log"),
+        "provider 5xx hint should point at the local LetAI bridge log"
+    );
+    assert!(
+        hint.contains("proxy/upstream LetAI reachability"),
+        "provider 5xx hint should explain the likely operator checks"
     );
 }
 

@@ -58,6 +58,7 @@ pub(super) fn agent_output_from_json(
             .and_then(|agent_meta| agent_meta.usage.as_ref())
             .and_then(|usage| usage.total),
         route_note,
+        upstream_trace: None,
     })
 }
 

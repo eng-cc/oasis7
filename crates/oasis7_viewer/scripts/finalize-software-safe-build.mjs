@@ -11,6 +11,7 @@ const softwareSafeSrcDir = resolve(viewerRoot, "software_safe_src");
 const viewerDistDir = resolve(viewerRoot, "dist");
 const builtBundlePath = resolve(tempOutDir, "viewer.js");
 const finalCanonicalBundlePath = resolve(viewerRoot, "viewer.js");
+const finalDistBundlePath = resolve(viewerDistDir, "viewer.js");
 const finalCompatBundlePath = resolve(viewerRoot, "software_safe.js");
 const pixelWorldRuntimeDir = resolve(viewerDistDir, "pixel-world-bridge");
 const pixelWorldRuntimeSelectorSourcePath = resolve(softwareSafeSrcDir, "pixel_world_runtime_module_selector.js");
@@ -171,9 +172,10 @@ if (emittedFiles.length !== 1 || emittedFiles[0] !== "viewer.js") {
   throw new Error(`unexpected viewer canonical bundle outputs: ${emittedFiles.join(", ") || "(none)"}`);
 }
 await copyFile(builtBundlePath, finalCanonicalBundlePath);
+await mkdir(viewerDistDir, { recursive: true });
+await copyFile(builtBundlePath, finalDistBundlePath);
 await writeFile(finalCompatBundlePath, compatBundleContents(), "utf8");
 await rm(pixelWorldRuntimeDir, { recursive: true, force: true });
-await mkdir(viewerDistDir, { recursive: true });
 await mkdir(pixelWorldRuntimeDir, { recursive: true });
 await buildPixelWorldRuntimeVariant({
   featureName: "webgl2_runtime",
