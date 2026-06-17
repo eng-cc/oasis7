@@ -2,6 +2,8 @@
 mod network_gap_sync_execution_failure_tests;
 #[path = "tests_network_gap_sync_not_found.rs"]
 mod network_gap_sync_not_found_tests;
+#[path = "tests_network_gap_sync_budget.rs"]
+mod network_gap_sync_budget_tests;
 #[path = "tests_network_gap_sync_provider_routing.rs"]
 mod network_gap_sync_provider_routing_tests;
 #[path = "tests_network_gap_sync.rs"]
