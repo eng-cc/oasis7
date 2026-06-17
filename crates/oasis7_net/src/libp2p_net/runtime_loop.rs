@@ -182,10 +182,40 @@ pub(super) fn dial_target_is_already_connected(peers: &[PeerId], addr: &Multiadd
         .unwrap_or(false)
 }
 
-fn current_request_peers(peers: &[PeerId], swarm: &Swarm<Behaviour>) -> Vec<PeerId> {
+fn current_request_peers(
+    peers: &[PeerId],
+    swarm: &Swarm<Behaviour>,
+    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
+) -> Vec<PeerId> {
     let mut current = peers.to_vec();
     current.extend(swarm.connected_peers().copied());
-    super::api::dedup_sorted_peers(current)
+    let current = super::api::dedup_sorted_peers(current);
+    if !current.is_empty() {
+        return current;
+    }
+    active_transport_request_peers(peer_healths)
+}
+
+pub(super) fn active_transport_request_peers(
+    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
+) -> Vec<PeerId> {
+    let peers = peer_healths
+        .iter()
+        .filter(|(_, health)| health.active_path_kind.is_some())
+        .map(|(peer_id, _)| *peer_id)
+        .collect::<Vec<_>>();
+    filter_request_peers_by_health(super::api::dedup_sorted_peers(peers), peer_healths)
+}
+
+fn request_peer_is_connected_or_active(
+    peer: PeerId,
+    peers: &[PeerId],
+    swarm: &Swarm<Behaviour>,
+    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
+) -> bool {
+    peers.contains(&peer)
+        || swarm.is_connected(&peer)
+        || active_transport_request_peers(peer_healths).contains(&peer)
 }
 
 pub(super) fn filter_request_peers_by_lane(
@@ -650,7 +680,8 @@ pub(super) fn handle_command(
             providers,
             response,
         }) => {
-            let connected_request_peers = current_request_peers(peers.as_slice(), swarm);
+            let connected_request_peers =
+                current_request_peers(peers.as_slice(), swarm, peer_healths_by_id);
             if connected_request_peers.is_empty() {
                 if providers.is_empty() {
                     if let Some(handler) = handlers.get(&protocol) {
@@ -725,7 +756,12 @@ pub(super) fn handle_command(
             peer,
             response,
         }) => {
-            if !peers.contains(&peer) && !swarm.is_connected(&peer) {
+            if !request_peer_is_connected_or_active(
+                peer,
+                peers.as_slice(),
+                swarm,
+                peer_healths_by_id,
+            ) {
                 let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
                     protocol: format!("peer {peer} is not connected for protocol {protocol}"),
                 }));
