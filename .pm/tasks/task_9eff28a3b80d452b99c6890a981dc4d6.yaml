@@ -1,5 +1,5 @@
 task_uid: task_9eff28a3b80d452b99c6890a981dc4d6
-title: "Audit stale files for slimming opportunities"
+title: "Migrate Xiaohongshu social content packages"
 owner_role: tpm
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-stale-file-slimming-audit
 execution_log_path: .pm/tasks/task_9eff28a3b80d452b99c6890a981dc4d6.execution.md
@@ -11,13 +11,15 @@ source_refs:
   - doc/engineering/workflow/source-of-truth.md
 doc_refs:
   - doc/readme/project.md
-related_prd: []
+related_prd:
+  - PRD-README-051
 acceptance:
-  - "Randomly sample several repository files whose last commit is older than two months."
-  - "Have repository_health_engineer assess whether sampled files have safe slimming opportunities."
-  - "Record slice contract, evidence, findings, and residual risk in the task execution log."
+  - "Migrate historical Xiaohongshu copy docs, HTML sources, source assets, and export PNGs into per-content packages under site/social/xiaohongshu/<post-slug>/."
+  - "Add package README manifests and shared package governance so publish-ready exports, preview-only files, and source assets are clearly separated."
+  - "Update governance, index, project, PM task, working-memory, and liveops references to the new package paths while preserving historical execution-log provenance."
+  - "Pass migration-specific reference, package-structure, HTML relative-ref, doc-governance, diff, and pre-PR role-review checks."
 handoff_to: []
-updated_at: 2026-06-17T21:35:35+08:00
+updated_at: 2026-06-17T22:08:00+08:00
 last_started_at: 2026-06-17T20:33:00+08:00
 last_claim_type: task_complete
 last_verify_command: ./scripts/doc-governance-check.sh
