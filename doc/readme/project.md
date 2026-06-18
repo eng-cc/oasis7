@@ -14,6 +14,7 @@
 - [x] readme-governance-path-governance (PRD-ENGINEERING-030) [test_tier_required]: 为 `doc/readme/governance/` 建立 canonical 子域入口。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
 - [x] xiaohongshu-loop-engineering-post-pack (PRD-README-050) [test_tier_required]: 新增 `Loop Engineering在游戏开发中的实践` 小红书素材包和预览图。 Trace: .pm/tasks/task_a9ab9b9760c24e1fac5a31a157404408.yaml
 - [x] xiaohongshu-social-package-migration (PRD-README-051) [test_tier_required]: 将历史小红书内容文案、HTML 源和导出素材迁移为 `site/social/xiaohongshu/<post-slug>/` package 布局，并更新治理引用。 Trace: .pm/tasks/task_9eff28a3b80d452b99c6890a981dc4d6.yaml
+- [x] xiaohongshu-ai-economy-visual-draft (PRD-README-052) [test_tier_required]: 新增 AI 经济繁荣/萧条视角分享的小红书文案、8 张竖版轮播图、生成脚本与上传顺序说明。 Trace: .pm/tasks/task_0745838e8c6546a09faba1ce8c602e33.yaml
 
 ### 历史压缩索引
 - README consistency、link check、quarterly review、release communication 与 public positioning 历史：回看 `doc/readme/prd.index.md`、`doc/readme/governance/README.md` 与对应 task trace。
