@@ -28,7 +28,7 @@ use super::{
     ChainRuntimeStatus, ClientLauncherApp, ConfigIssue, GlossaryTerm, LaunchConfig, LauncherStatus,
     ProviderCompatibilityStatus, UiLanguage, WebChainRecoverySnapshot, WebRequestDomain,
     WebStateSnapshot, DEFAULT_CLIENT_LAUNCHER_CONTROL_BIND, OASIS7_CJK_FONT_NAME,
-    OASIS7_CLIENT_LAUNCHER_LANG_ENV, OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL_ENV,
+    OASIS7_CLIENT_LAUNCHER_LANG_ENV,
 };
 use eframe::egui;
 use oasis7::launcher_bootstrap_peers::{
