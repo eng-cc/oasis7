@@ -221,6 +221,39 @@ async function renderViewerApp({
   };
 }
 
+async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), search }) {
+  activeCleanup?.();
+  activeCleanup = null;
+  vi.resetModules();
+  window.history.replaceState({}, "", search);
+  window.localStorage.clear();
+  document.body.innerHTML = "";
+
+  const core = await import("./legacy_core.js");
+  core.setViewerLocale("en");
+  if (snapshot) {
+    core.injectSnapshot(snapshot);
+  }
+
+  const appRoot = document.createElement("div");
+  appRoot.id = "app";
+  document.body.appendChild(appRoot);
+  await import("./main.jsx");
+
+  const cleanup = () => {
+    appRoot.textContent = "";
+    if (activeCleanup === cleanup) {
+      activeCleanup = null;
+    }
+  };
+  activeCleanup = cleanup;
+  return {
+    core,
+    cleanup,
+    container: appRoot,
+  };
+}
+
 beforeEach(() => {
   window.history.replaceState({}, "", viewerUrl());
   window.localStorage.clear();
@@ -906,6 +939,23 @@ describe("viewer web ui automation baseline", () => {
 
       cleanup();
     }
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps visual fixture query parameters inert without test_api", async () => {
+    const { container } = await renderViewerAppThroughAutoMount({
+      snapshot: null,
+      search: "/software_safe.html?connect=0&hosted_bootstrap=0&locale=en&viewer_visual_fixture=gameplay_diagnostics_expanded",
+    });
+
+    expect(window.__OASIS7_VIEWER_VISUAL_FIXTURES__).toBeUndefined();
+    expect(container).not.toHaveAttribute("data-viewer-visual-fixture");
+    expect(document.body).not.toHaveAttribute("data-viewer-visual-fixture");
+    expect(container.querySelector("#viewer-gameplay-details")).not.toHaveAttribute("open");
+    expect(container.querySelector("#viewer-diagnostics-panel")).not.toHaveAttribute("open");
+    expect(elementPrecedes(
+      container.querySelector(".stage-hero"),
+      container.querySelector("#viewer-gameplay-details"),
+    )).toBe(true);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders the shell selected-blocker fixture as a populated command desk", async () => {

@@ -11165,6 +11165,9 @@ function AppShell() {
   })()];
 }
 function viewerVisualFixtureNameFromQuery() {
+  if (!viewerTestApiEnabled()) {
+    return null;
+  }
   const value = String(new URLSearchParams(window.location.search || "").get("viewer_visual_fixture") || "").trim();
   return value || null;
 }
@@ -11562,6 +11565,8 @@ function openFixtureDetails(name) {
 }
 function installViewerVisualFixture() {
   if (!viewerTestApiEnabled()) {
+    delete window[VIEWER_VISUAL_FIXTURE_GLOBAL];
+    document.body.removeAttribute("data-viewer-visual-fixture");
     return null;
   }
   const fixtures = {
