@@ -228,9 +228,9 @@ impl PosNodeEngine {
                 .saturating_mul(self.ticks_per_slot as u128))
                 / self.slot_duration_ms as u128) as u64;
             let wall_clock_slot = wall_clock_tick / self.ticks_per_slot;
-            restored_next_slot = restored_next_slot.min(wall_clock_slot);
-            restored_last_observed_slot = restored_last_observed_slot.min(wall_clock_slot);
-            restored_last_observed_tick = restored_last_observed_tick.min(wall_clock_tick);
+            restored_next_slot = wall_clock_slot;
+            restored_last_observed_slot = wall_clock_slot;
+            restored_last_observed_tick = wall_clock_tick;
         }
 
         self.pending = None;

@@ -657,6 +657,45 @@ fn restore_state_snapshot_clamps_future_clock_state_when_fixed_genesis_is_config
 }
 
 #[test]
+fn restore_state_snapshot_advances_stale_clock_state_when_fixed_genesis_is_configured() {
+    let mut config = NodeConfig::new("node-a", "world-restore-clock-advance", NodeRole::Observer)
+        .expect("config");
+    config.pos_config.slot_duration_ms = 100;
+    config.pos_config.ticks_per_slot = 10;
+    config.pos_config.slot_clock_genesis_unix_ms = Some(1_000);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let snapshot = super::pos_state_store::PosNodeStateSnapshot {
+        next_height: 4,
+        next_slot: 1,
+        last_observed_slot: 1,
+        missed_slot_count: 0,
+        last_observed_tick: 10,
+        missed_tick_count: 0,
+        committed_height: 3,
+        network_committed_height: 3,
+        last_broadcast_proposal_height: 3,
+        last_broadcast_local_attestation_height: 3,
+        last_broadcast_committed_height: 3,
+        last_committed_block_hash: Some("committed-3".to_string()),
+        last_execution_height: 3,
+        last_execution_block_hash: Some("exec-3".to_string()),
+        last_execution_state_root: Some("state-3".to_string()),
+    };
+
+    engine
+        .restore_state_snapshot(snapshot, Some(1_230))
+        .expect("fixed genesis restore should advance stale clock state");
+
+    assert_eq!(engine.next_height, 4);
+    assert_eq!(engine.committed_height, 3);
+    assert_eq!(engine.network_committed_height, 3);
+    assert_eq!(engine.next_slot, 2);
+    assert_eq!(engine.last_observed_slot, 2);
+    assert_eq!(engine.last_observed_tick, 23);
+}
+
+#[test]
 fn restore_state_snapshot_clamps_stale_heights_and_broadcast_cursors() {
     let config = NodeConfig::new("node-a", "world-restore-stale-heights", NodeRole::Observer)
         .expect("config");
