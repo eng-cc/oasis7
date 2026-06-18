@@ -116,3 +116,23 @@ Example:
 - Expected Result: required Clippy scope passes with only non-blocking warnings; changed scripts/workflow parse; executable-bit/doc-governance/diff checks pass.
 - Actual Result: Clippy command exited 0 after 49.69s with non-blocking existing warnings; script syntax OK; workflow YAML parsed; script executable bits OK; `doc-governance-check: OK`; `git diff --check` passed.
 - Blocker / Next Action: create follow-up commit, then request a fresh targeted pre-PR role review on the updated head because code changed after the first review.
+
+## 2026-06-18 16:08:52 CST / tpm
+- 完成内容: Pre-PR Local Role Review: passed.
+- Pre-PR Local Role Review: passed
+- Task UID: task_a13b76fa56f64e4ebd7af333425bb8dc
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-metrics-research
+- Source Branch: task/engineering-rust-governance-metrics-research
+- Source Head: e78eb44259476bd177d7485808945f761f9d84d1
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .github/workflows/rust.yml, rust-toolchain.toml, scripts/ci-tests.sh, scripts/ci-rust-governance-report.sh, scripts/ensure-cargo-deny.sh, deny.toml, crates/oasis7_wasm_router/src/cache.rs, crates/oasis7/src/bin/oasis7_game_launcher.rs, crates/oasis7/src/bin/oasis7_pure_api_client/support.rs, crates/oasis7/src/runtime/tests/rules_enforcement.rs, .pm/tasks/task_a13b76fa56f64e4ebd7af333425bb8dc.yaml, .pm/tasks/task_a13b76fa56f64e4ebd7af333425bb8dc.execution.md
+- Role Selection Basis: repository_health_engineer owns repository governance and CI health; qa_engineer owns validation risk and gate behavior.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Evidence: repository_health_engineer follow-up returned no blocking findings after checking cargo-deny workflow install, CI fail-fast, RustSec enforcement, and Clippy scope; qa_engineer follow-up returned no findings and independently reran the required Clippy command with exit 0.
+- Finding Disposition Evidence: prior P1/P0 findings were addressed by workflow-level cargo-deny installation, CI fail-fast, narrowed Clippy hard-deny scope, and fixes for correctness/suspicious Clippy blockers.
+- Review Findings Disposition: addressed
+- Residual Risk: PR CI must still prove taiki-e/install-action resolves cargo-deny@0.19.9 and live RustSec advisory data passes; broader all-features advisory coverage remains report/future scope.
+- repository_health_engineer Result: no blocking findings. Confirmed workflow-level `taiki-e/install-action@v2` pinned `cargo-deny@0.19.9`, CI fail-fast in `scripts/ensure-cargo-deny.sh`, required RustSec enforcement in `scripts/ci-tests.sh`, and required Clippy hard-deny limited to `correctness`/`suspicious` are appropriate for low-flake PR CI. Residual risk: PR CI must prove install-action resolution and live RustSec advisory DB result; broader all-features advisory coverage remains intentionally report/future scope.
+- qa_engineer Result: no findings. Confirmed prior Clippy blockers are fixed, gate matches verified command, and `cargo-deny` risk is reduced to acceptable PR-CI validation. QA independently reran `env -u RUSTC_WRAPPER cargo clippy -p oasis7 --tests --features test_tier_required -- -D clippy::correctness -D clippy::suspicious` with exit 0; also noted `bash -n` and workflow YAML parse passed.
+- Findings Disposition: all P0/P1 review findings either fixed or explicitly accepted as PR-CI residual risk; no actionable blocker remains before PR creation.
+- Next Action: commit review evidence and create PR.
