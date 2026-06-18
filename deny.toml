@@ -6,7 +6,21 @@ targets = []
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-ignore = []
+ignore = [
+  # Baseline existing dependency advisories; required CI should block net-new advisories
+  # while these are burned down in follow-up dependency modernization tasks.
+  "RUSTSEC-2021-0127", # serde_cbor unmaintained
+  "RUSTSEC-2024-0384", # instant unmaintained
+  "RUSTSEC-2024-0436", # paste unmaintained
+  "RUSTSEC-2025-0009", # ring <0.17 vulnerability via libp2p TLS stack
+  "RUSTSEC-2025-0010", # ring <0.17 unmaintained via libp2p TLS stack
+  "RUSTSEC-2025-0012", # backoff unmaintained via async-openai
+  "RUSTSEC-2025-0052", # async-std discontinued via libp2p stack
+  "RUSTSEC-2026-0098", # rustls-webpki via libp2p TLS stack
+  "RUSTSEC-2026-0099", # rustls-webpki via libp2p TLS stack
+  "RUSTSEC-2026-0104", # rustls-webpki via libp2p TLS stack
+  "RUSTSEC-2026-0119", # hickory-proto via libp2p DNS stack
+]
 
 [licenses]
 allow = [

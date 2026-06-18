@@ -145,3 +145,21 @@ Example:
 - Expected Result: fresh PR-ready verification passes; execution log contains claim-ready/task-closeout evidence markers required by workflow-lint without mutating closed task claim fields.
 - Actual Result: Fresh Clippy verification exited 0; script syntax, workflow YAML parse, executable-bit check, doc governance, and diff whitespace checks passed; previous task-closeout.sh evidence remains in task YAML.
 - Blocker / Next Action: commit PM evidence repair and rerun `./scripts/prepare-task-pr.sh --create --title "Add Rust CI governance checks"`.
+
+## 2026-06-18 16:43:23 CST / tpm
+- 完成内容: Investigated and fixed PR #525 Rust required-gate failure.
+- 遗留事项: Existing advisory baseline remains in `deny.toml` for dependency modernization follow-up; required CI now blocks net-new advisories beyond this baseline.
+- Action: Used GitHub Actions job log for Rust run `27746138205` / job `82084772175`; identified failure in `cargo deny check advisories` on `wasmtime 41.0.4` RustSec advisories. Updated `crates/oasis7_wasm_executor` to `wasmtime 43.0.2`, refreshed `Cargo.lock`, and added baseline ignores for pre-existing advisories in `deny.toml`.
+- Validation Command: `cargo deny check advisories`; `env -u RUSTC_WRAPPER cargo check -p oasis7_wasm_executor --features wasmtime`; `env -u RUSTC_WRAPPER cargo clippy -p oasis7 --tests --features test_tier_required -- -D clippy::correctness -D clippy::suspicious`; `bash -n scripts/ci-tests.sh scripts/ci-rust-governance-report.sh scripts/ensure-cargo-deny.sh && ruby -e 'require "yaml"; YAML.load_file(".github/workflows/rust.yml"); puts "ok rust.yml"' && ./scripts/check-script-executable-bits.sh && ./scripts/doc-governance-check.sh && git diff --check`.
+- Expected Result: advisory gate passes after wasmtime upgrade and baseline; wasmtime executor still compiles; required Clippy remains green; script/YAML/doc/diff checks pass.
+- Actual Result: `cargo deny check advisories` returned `advisories ok`; `cargo check -p oasis7_wasm_executor --features wasmtime` finished successfully; required Clippy exited 0; script syntax, workflow YAML parse, executable-bit check, `doc-governance-check: OK`, and `git diff --check` passed.
+- Blocker / Next Action: wait for repository_health_engineer and qa_engineer follow-up review, then commit/push CI fix and watch PR checks again.
+
+## 2026-06-18 16:45:59 CST / tpm
+- 完成内容: Follow-up role review completed for PR #525 CI fix.
+- 遗留事项: RustSec baseline ignores remain real dependency modernization debt; attempted `./scripts/pm/capture-todo.sh --source-ref .pm/tasks/task_a13b76fa56f64e4ebd7af333425bb8dc.execution.md --summary "Burn down RustSec baseline ignores added for Rust CI governance gate: async-std/backoff/hickory/ring/rustls-webpki/serde_cbor/paste/instant."` failed with existing helper bug `PROMOTE_ARGS[@]: unbound variable`, so no reflection signal was created in this turn.
+- Action: repository_health_engineer and qa_engineer reviewed the wasmtime upgrade plus `deny.toml` advisory baseline approach after the Rust CI failure.
+- Validation Command: role review evidence; `cargo deny check advisories`; `env -u RUSTC_WRAPPER cargo check -p oasis7_wasm_executor --features wasmtime`; `env -u RUSTC_WRAPPER cargo clippy -p oasis7 --tests --features test_tier_required -- -D clippy::correctness -D clippy::suspicious`; script/YAML/doc/diff checks.
+- Expected Result: no role blocker remains before pushing the PR CI fix.
+- Actual Result: repository_health_engineer returned `no_findings` with residual risk that baseline ignores should get a follow-up owner/task; qa_engineer returned `no_findings`, independently confirming `cargo deny check advisories` and `cargo check -p oasis7_wasm_executor --features wasmtime` exit 0.
+- Blocker / Next Action: commit/push PR CI fix and continue watching PR #525 checks.
