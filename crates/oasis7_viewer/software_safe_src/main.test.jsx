@@ -16,6 +16,10 @@ function viewerUrl() {
 let activeCleanup = null;
 const HEAVY_UI_TEST_TIMEOUT_MS = 60000;
 
+function elementPrecedes(first, second) {
+  return Boolean(first?.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
 function sampleSnapshot(overrides = {}) {
   return {
     time: 12,
@@ -170,13 +174,14 @@ function sampleHostedPublicJoinAccess(overrides = {}) {
 async function renderViewerApp({
   snapshot = sampleSnapshot(),
   selection = null,
+  search = viewerUrl(),
   setupCore = null,
   setupAfterMount = null,
 } = {}) {
   activeCleanup?.();
   activeCleanup = null;
   vi.resetModules();
-  window.history.replaceState({}, "", viewerUrl());
+  window.history.replaceState({}, "", search);
   window.localStorage.clear();
   document.body.innerHTML = "";
 
@@ -204,6 +209,39 @@ async function renderViewerApp({
   }
   const cleanup = () => {
     dispose();
+    if (activeCleanup === cleanup) {
+      activeCleanup = null;
+    }
+  };
+  activeCleanup = cleanup;
+  return {
+    core,
+    cleanup,
+    container: appRoot,
+  };
+}
+
+async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), search }) {
+  activeCleanup?.();
+  activeCleanup = null;
+  vi.resetModules();
+  window.history.replaceState({}, "", search);
+  window.localStorage.clear();
+  document.body.innerHTML = "";
+
+  const core = await import("./legacy_core.js");
+  core.setViewerLocale("en");
+  if (snapshot) {
+    core.injectSnapshot(snapshot);
+  }
+
+  const appRoot = document.createElement("div");
+  appRoot.id = "app";
+  document.body.appendChild(appRoot);
+  await import("./main.jsx");
+
+  const cleanup = () => {
+    appRoot.textContent = "";
     if (activeCleanup === cleanup) {
       activeCleanup = null;
     }
@@ -878,5 +916,135 @@ describe("viewer web ui automation baseline", () => {
         "hosted preview backend reauth stays pending until the browser device-session-backed player_session finishes runtime registration",
       ),
     ).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("installs visual fixture states for screenshot parity without production semantics", async () => {
+    const states = [
+      "shell_selected_blocker",
+      "agent_chat_history",
+      "gameplay_diagnostics_expanded",
+      "hosted_login_gate",
+      "empty_world_recovery",
+    ];
+
+    for (const fixtureName of states) {
+      const { cleanup, container } = await renderViewerApp({
+        snapshot: null,
+        search: `${viewerUrl()}&viewer_visual_fixture=${fixtureName}`,
+      });
+
+      expect(window.__OASIS7_VIEWER_VISUAL_FIXTURES__).toBeTruthy();
+      expect(container).toHaveAttribute("data-viewer-visual-fixture", fixtureName);
+      expect(document.body).toHaveAttribute("data-viewer-visual-fixture", fixtureName);
+
+      cleanup();
+    }
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps visual fixture query parameters inert without test_api", async () => {
+    const { container } = await renderViewerAppThroughAutoMount({
+      snapshot: null,
+      search: "/software_safe.html?connect=0&hosted_bootstrap=0&locale=en&viewer_visual_fixture=gameplay_diagnostics_expanded",
+    });
+
+    expect(window.__OASIS7_VIEWER_VISUAL_FIXTURES__).toBeUndefined();
+    expect(container).not.toHaveAttribute("data-viewer-visual-fixture");
+    expect(document.body).not.toHaveAttribute("data-viewer-visual-fixture");
+    expect(container.querySelector("#viewer-gameplay-details")).not.toHaveAttribute("open");
+    expect(container.querySelector("#viewer-diagnostics-panel")).not.toHaveAttribute("open");
+    expect(elementPrecedes(
+      container.querySelector(".stage-hero"),
+      container.querySelector("#viewer-gameplay-details"),
+    )).toBe(true);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders the shell selected-blocker fixture as a populated command desk", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: null,
+      search: `${viewerUrl()}&viewer_visual_fixture=shell_selected_blocker`,
+    });
+
+    const state = window.__AW_TEST__.getState();
+    expect(state.selectedKind).toBe("agent");
+    expect(state.selectedId).toBe("agent-0");
+    expect(within(container.querySelector("#viewer-targets-panel")).getByText("agent-0")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-targets-panel")).getByText("Assembly Nexus")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
+    expect(within(container.querySelector("#viewer-details-panel")).getByText("Agent Chat")).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders the agent chat fixture with history and collapsed prompt controls", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: null,
+      search: `${viewerUrl()}&viewer_visual_fixture=agent_chat_history`,
+    });
+
+    const detailsPanel = container.querySelector("#viewer-details-panel");
+    const commandSurface = detailsPanel.querySelector(".command-surface");
+    expect(commandSurface).toHaveAttribute("data-command-agent", "agent-0");
+    expect(commandSurface).toHaveAttribute("data-command-chat-history", "3");
+    expect(commandSurface.querySelector(".command-surface__chat-panel")).toBeTruthy();
+    expect(elementPrecedes(
+      commandSurface.querySelector(".command-surface__chat-panel"),
+      commandSurface.querySelector(".command-surface__advanced-panel"),
+    )).toBe(true);
+    expect(within(detailsPanel).getByText("Chat Ready")).toBeInTheDocument();
+    expect(within(detailsPanel).getByText("Awaiting material recovery before the smelter can proceed.")).toBeInTheDocument();
+    expect(within(detailsPanel).getByText("Hold position and confirm the blocker.")).toBeInTheDocument();
+    expect(within(detailsPanel).getByText("state=hidden_by_default")).toBeInTheDocument();
+    expect(within(detailsPanel).queryByLabelText("System Prompt Override")).not.toBeInTheDocument();
+    expect(within(detailsPanel).getAllByText(/no transfer form/i).length).toBeGreaterThan(0);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("opens gameplay details and diagnostics for the diagnostics visual fixture", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: null,
+      search: `${viewerUrl()}&viewer_visual_fixture=gameplay_diagnostics_expanded`,
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector("#viewer-gameplay-details")).toHaveAttribute("open");
+      expect(container.querySelector("#viewer-diagnostics-panel")).toHaveAttribute("open");
+    });
+    expect(within(container.querySelector("#viewer-gameplay-details")).getByText("Formal Gameplay Summary")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-gameplay-details")).getByText("Capability Economics")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-diagnostics-panel")).getByText("Execution Lanes")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-diagnostics-panel")).getByText("state sync")).toBeInTheDocument();
+    expect(elementPrecedes(
+      container.querySelector("#viewer-gameplay-details"),
+      container.querySelector(".stage-hero"),
+    )).toBe(true);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("forces a hosted login gate fixture with reserved retry/error guidance", async () => {
+    await renderViewerApp({
+      snapshot: null,
+      search: `${viewerUrl()}&viewer_visual_fixture=hosted_login_gate`,
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Sign In With Email" });
+    expect(dialog).toHaveAttribute("data-viewer-fixture-state", "hosted_login_gate");
+    expect(within(dialog).getByDisplayValue("player@example.com")).toBeInTheDocument();
+    expect(within(dialog).getByText("challenge=fixture-challenge")).toBeInTheDocument();
+    expect(within(dialog).getByText("Enter the latest verification code to continue.")).toBeInTheDocument();
+    expect(within(dialog).getByText("retry_after=18s")).toBeInTheDocument();
+    expect(screen.queryByText(/wallet/i)).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders empty-world recovery as intentional recovery instead of selected-agent acceptance", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: null,
+      search: `${viewerUrl()}&viewer_visual_fixture=empty_world_recovery`,
+    });
+
+    const state = window.__AW_TEST__.getState();
+    expect(state.selectedKind).toBe(null);
+    expect(state.selectedId).toBe(null);
+    expect(state.gameplaySummary.blockerKind).toBe("runtime_snapshot_empty_entities");
+    expect(within(container.querySelector("#viewer-targets-panel")).getByText("No agents in current snapshot.")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-stage-panel")).getByText("Recover World Snapshot")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("Request snapshot").length).toBeGreaterThan(0);
+    expect(within(container.querySelector("#viewer-details-panel")).getByText("Current Snapshot Has No Playable Entities")).toBeInTheDocument();
+    expect(container.querySelector("[data-callout-kind='empty_world_recovery']")).toBeTruthy();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 });
