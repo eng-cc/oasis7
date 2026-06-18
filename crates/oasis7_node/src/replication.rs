@@ -66,13 +66,18 @@ pub(crate) fn load_latest_commit_message_from_root(
         .hot_window
         .latest_height
         .unwrap_or(0);
+    if hot_height > 0 {
+        if let Some(message) = load_commit_message_from_root(root_dir, world_id, hot_height)? {
+            return Ok(Some(message));
+        }
+    }
     let cold_height = load_commit_message_cold_index_from_root(root_dir)?
         .by_height
         .keys()
         .next_back()
         .copied()
         .unwrap_or(0);
-    let mut candidate = hot_height.max(cold_height);
+    let mut candidate = hot_height.saturating_sub(1).max(cold_height);
     while candidate > 0 {
         if let Some(message) = load_commit_message_from_root(root_dir, world_id, candidate)? {
             return Ok(Some(message));
@@ -1177,5 +1182,7 @@ fn commit_height_from_payload(payload: &[u8]) -> Option<u64> {
 
 #[cfg(test)]
 mod checkpoint_tests;
+#[cfg(test)]
+mod recovery_tests;
 #[cfg(test)]
 mod tests;

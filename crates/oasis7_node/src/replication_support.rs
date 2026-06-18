@@ -1,4 +1,7 @@
 use super::*;
+use std::io::Write as _;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt as _;
 
 pub(super) fn signing_key_from_hex(private_key_hex: &str) -> Result<SigningKey, NodeError> {
     let private_key = decode_hex_array::<32>(private_key_hex, "replication private key")?;
@@ -243,31 +246,108 @@ where
 }
 
 pub(super) fn write_json_pretty<T: Serialize>(path: &Path, value: &T) -> Result<(), NodeError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| NodeError::Replication {
-            reason: format!("create dir {} failed: {}", parent.display(), err),
-        })?;
-    }
     let bytes = serde_json::to_vec_pretty(value).map_err(|err| NodeError::Replication {
         reason: format!("serialize {} failed: {}", path.display(), err),
     })?;
-    fs::write(path, bytes).map_err(|err| NodeError::Replication {
-        reason: format!("write {} failed: {}", path.display(), err),
-    })
+    write_json_bytes_atomically(path, bytes.as_slice())
 }
 
 pub(super) fn write_json_compact<T: Serialize>(path: &Path, value: &T) -> Result<(), NodeError> {
+    let bytes = serde_json::to_vec(value).map_err(|err| NodeError::Replication {
+        reason: format!("serialize {} failed: {}", path.display(), err),
+    })?;
+    write_json_bytes_atomically(path, bytes.as_slice())
+}
+
+fn write_json_bytes_atomically(path: &Path, bytes: &[u8]) -> Result<(), NodeError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| NodeError::Replication {
             reason: format!("create dir {} failed: {}", parent.display(), err),
         })?;
     }
-    let bytes = serde_json::to_vec(value).map_err(|err| NodeError::Replication {
-        reason: format!("serialize {} failed: {}", path.display(), err),
-    })?;
-    fs::write(path, bytes).map_err(|err| NodeError::Replication {
-        reason: format!("write {} failed: {}", path.display(), err),
+
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("replication-json");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let tmp_path = parent.join(format!(".{file_name}.tmp-{}-{unique}", std::process::id()));
+
+    let write_result = (|| -> Result<(), NodeError> {
+        let mut file = fs::File::create(&tmp_path).map_err(|err| NodeError::Replication {
+            reason: format!("create {} failed: {}", tmp_path.display(), err),
+        })?;
+        file.write_all(bytes)
+            .map_err(|err| NodeError::Replication {
+                reason: format!("write {} failed: {}", tmp_path.display(), err),
+            })?;
+        file.sync_all().map_err(|err| NodeError::Replication {
+            reason: format!("sync {} failed: {}", tmp_path.display(), err),
+        })?;
+        drop(file);
+        replace_file_atomically(&tmp_path, path)?;
+        if let Ok(parent_dir) = fs::File::open(parent) {
+            let _ = parent_dir.sync_all();
+        }
+        Ok(())
+    })();
+
+    if write_result.is_err() {
+        let _ = fs::remove_file(&tmp_path);
+    }
+    write_result.map_err(|err| match err {
+        NodeError::Replication { reason } => NodeError::Replication {
+            reason: format!("write {} failed: {}", path.display(), reason),
+        },
+        other => other,
     })
+}
+
+#[cfg(not(windows))]
+fn replace_file_atomically(tmp_path: &Path, path: &Path) -> Result<(), NodeError> {
+    fs::rename(tmp_path, path).map_err(|err| NodeError::Replication {
+        reason: format!(
+            "rename {} to {} failed: {}",
+            tmp_path.display(),
+            path.display(),
+            err
+        ),
+    })
+}
+
+#[cfg(windows)]
+fn replace_file_atomically(tmp_path: &Path, path: &Path) -> Result<(), NodeError> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+    };
+
+    let source = tmp_path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let target = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let flags = MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH;
+    let replaced = unsafe { MoveFileExW(source.as_ptr(), target.as_ptr(), flags) };
+    if replaced == 0 {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "replace {} with {} failed: {}",
+                path.display(),
+                tmp_path.display(),
+                std::io::Error::last_os_error()
+            ),
+        });
+    }
+    Ok(())
 }
 
 pub(super) fn distfs_error_to_node_error<E>(err: E) -> NodeError
