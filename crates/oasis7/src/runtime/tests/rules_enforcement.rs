@@ -548,7 +548,7 @@ fn rule_decision_rejects_on_insufficient_resources() {
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
-    assert!(world.state().agents.get("agent-1").is_none());
+    assert!(!world.state().agents.contains_key("agent-1"));
     assert_eq!(world.resource_balance(ResourceKind::Electricity), 1);
     let last = world.journal().events.last().unwrap();
     match &last.body {
@@ -656,7 +656,7 @@ fn rule_decision_cost_overflow_rejected_without_partial_apply() {
         .step_with_modules(&mut sandbox)
         .expect("overflow cost should be rejected, not fatal");
 
-    assert!(world.state().agents.get("agent-1").is_none());
+    assert!(!world.state().agents.contains_key("agent-1"));
     assert_eq!(world.resource_balance(ResourceKind::Electricity), 5);
     assert_eq!(world.resource_balance(ResourceKind::Data), i64::MAX);
     let last = world.journal().events.last().unwrap();

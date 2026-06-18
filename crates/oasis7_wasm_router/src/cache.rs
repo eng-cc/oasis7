@@ -28,8 +28,8 @@ impl<V> BoundedCache<V> {
             self.insertion_order.clear();
             return;
         }
-        if self.entries.contains_key(&key) {
-            self.entries.insert(key, value);
+        if let Some(existing) = self.entries.get_mut(&key) {
+            *existing = value;
             return;
         }
         while self.entries.len() >= self.capacity {

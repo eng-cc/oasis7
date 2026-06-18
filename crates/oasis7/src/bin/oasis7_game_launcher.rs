@@ -620,7 +620,6 @@ fn run_static_http_loop(
                 let root_dir = Arc::clone(&root_dir);
                 let live_bind = Arc::clone(&live_bind);
                 let default_viewer_player_id = Arc::clone(&default_viewer_player_id);
-                let deployment_mode = deployment_mode;
                 let hosted_session_issuer = Arc::clone(&hosted_session_issuer);
                 let hosted_account_broker = Arc::clone(&hosted_account_broker);
                 thread::spawn(move || {
