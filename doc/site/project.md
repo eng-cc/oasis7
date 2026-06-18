@@ -3,7 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
-- [x] historical-doc-governance-slimdown-round (PRD-SITE-003, README governance) [test_tier_required]: 对 `doc/site` 与 `doc/readme` 中已完成且只承担历史证据职责的专题三件套做索引曝光瘦身，保留原路径、互链和治理状态块，同时把当前读者路由回 active site/readme/gap/public-status 入口。 Trace: .pm/tasks/task_fc499abed90742caa7c1a66166f7d926.yaml
+- [x] historical-doc-governance-slimdown-round (PRD-SITE-003) [test_tier_required]: 对 `doc/site` 与 `doc/readme` 中已完成且只承担历史证据职责的专题三件套做索引曝光瘦身，保留原路径、互链和治理状态块，同时把当前读者路由回 active site/readme/gap/public-status 入口。 Trace: .pm/tasks/task_fc499abed90742caa7c1a66166f7d926.yaml
   - 产物文件:
     - `doc/site/README.md`
     - `doc/site/prd.index.md`
