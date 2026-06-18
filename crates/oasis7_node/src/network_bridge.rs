@@ -48,6 +48,7 @@ pub(crate) const REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX: &str =
     "replication network route unavailable: ";
 const FETCH_COMMIT_GENERIC_ROUTE_ATTEMPTS: usize = 4;
 const GAP_SYNC_FETCH_COMMIT_MAX_PROVIDER_ROUTES_PER_POLL: usize = 8;
+const GAP_SYNC_FETCH_COMMIT_MIN_PROVIDER_ROUTE_TIMEOUT_MS: u64 = 1_500;
 const GAP_SYNC_FETCH_HEAD_REQUEST_TIMEOUT_MS: u64 = 1_500;
 const GAP_SYNC_FETCH_HEAD_RETRY_BUDGET_MS: u64 = 3_000;
 const GAP_SYNC_FETCH_HEAD_MAX_PROVIDER_ROUTES_PER_POLL: usize = 2;
@@ -599,7 +600,8 @@ impl ReplicationNetworkEndpoint {
             peer_ids.dedup();
             peer_ids.retain(|peer_id| !peer_id.trim().is_empty());
             peer_ids.truncate(GAP_SYNC_FETCH_COMMIT_MAX_PROVIDER_ROUTES_PER_POLL);
-            for peer_id in peer_ids {
+            let peer_count = peer_ids.len();
+            for (peer_index, peer_id) in peer_ids.into_iter().enumerate() {
                 let provider_route = [peer_id.clone()];
                 let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {
                     if last_err.is_none() {
@@ -607,6 +609,13 @@ impl ReplicationNetworkEndpoint {
                     }
                     break;
                 };
+                let remaining_provider_routes = peer_count.saturating_sub(peer_index).max(1);
+                let retry_budget_ms = split_provider_route_timeout_ms(
+                    retry_budget_ms,
+                    remaining_provider_routes,
+                    GAP_SYNC_FETCH_COMMIT_MIN_PROVIDER_ROUTE_TIMEOUT_MS,
+                );
+                let request_timeout_ms = request_timeout_ms.min(retry_budget_ms);
                 match self
                     .request_json_with_providers_budget::<FetchCommitRequest, FetchCommitResponse>(
                         REPLICATION_FETCH_COMMIT_PROTOCOL,
@@ -1168,4 +1177,14 @@ fn replication_network_error_detail(err: &WorldError) -> &str {
         WorldError::Io(message) | WorldError::Serde(message) => message.as_str(),
         WorldError::SignatureKeyInvalid => "invalid signature key",
     }
+}
+
+fn split_provider_route_timeout_ms(
+    retry_budget_ms: u64,
+    remaining_provider_routes: usize,
+    min_timeout_ms: u64,
+) -> u64 {
+    let remaining_provider_routes = remaining_provider_routes.max(1) as u64;
+    let divided = retry_budget_ms / remaining_provider_routes;
+    divided.max(min_timeout_ms).min(retry_budget_ms)
 }
