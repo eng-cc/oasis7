@@ -18,7 +18,7 @@
   - SC-1: 明确冻结不少于三层的 shared execution track：`shared_devnet`、`staging`、`canary`，并写清各层目标、输入、owner 和通过标准。
   - SC-2: 明确冻结统一的 `release_candidate_bundle` 字段集合，要求同一候选版本在三个轨道之间可追溯、可回滚、不可口头漂移。
   - SC-3: 明确区分 `complete / partial / blocked` 三种 network-rehearsal 状态，避免把“单机 smoke”误记成 release train。
-  - SC-4: 明确当前 public claims 在 network rehearsal 未执行前仍只能维持 `limited playable technical preview` 与 `crypto-hardened preview`。
+  - SC-4: 明确 legacy network-rehearsal / shared-network evidence 不提升当前 public claims；在 formal `public_testnet` / `mainnet` gate 通过前，公开口径仍只能维持 `limited playable technical preview` 与 `crypto-hardened preview`。
   - SC-5: 输出 producer 可直接排任务的 project 拆解，至少覆盖 `runtime_engineer`、`qa_engineer`、`liveops_community` 三个角色。
   - SC-6: 明确 shared-devnet / staging / canary 三轨都必须包含 mixed-topology required lane；仅有 matrix baseline 时最多记为 `partial`，不得直接 promotion 或升级 claims。
 
@@ -54,10 +54,10 @@
   - AC-1: 本专题必须冻结 `shared_devnet`、`staging`、`canary` 三层 legacy rehearsal track 的目标、owner、最小入口门禁和通过标准。
   - AC-2: 本专题必须冻结统一的 `release_candidate_bundle` 字段集合，至少包含 `candidate_id`、`git_commit`、`runtime_build`、`world_snapshot_ref`、`governance_manifest_ref`、`evidence_refs`。
   - AC-3: 本专题必须明确什么情况只能记为 `partial`，至少包括：仅本地单机运行、没有共享访问、没有固定 candidate id、没有可审计 rollback target、没有 QA 证据。
-  - AC-4: 本专题必须明确：network rehearsal / release train 未完成前，仍不得使用 `production release train is established`、`mainnet-grade testing maturity` 或任何高于当前 preview 的口径。
+  - AC-4: 本专题必须明确：legacy network-rehearsal / shared-network evidence 不得支撑 `production release train is established`、`mainnet-grade testing maturity` 或任何高于当前 preview 的口径。
   - AC-5: `testing-manual.md` 必须能找到本专题入口，并明确它是 benchmark `L5` 的正式 execution 入口，而不是已完成能力。
   - AC-6: `doc/p2p/project.md` 必须建立 `TASK-P2P-040` 任务链，并拆出后续 runtime/QA/liveops 子任务。
-  - AC-7: 本专题必须明确 network-rehearsal 当前状态仍是 `specified_not_executed`，不得把建档误写成完成执行。
+  - AC-7: 本专题必须明确 network-rehearsal 状态必须由 project/runbook/evidence 汇总；早期 `specified_not_executed` 只可作为建档阶段历史状态，不得覆盖后续 pass/hold 结论。
   - AC-8: 本专题必须给出 first shared-devnet dry run、first staging rehearsal、first canary rehearsal 的顺序与阻断条件。
   - AC-9: 本专题必须明确 mixed-topology 是 `shared_devnet/staging/canary` 的 required lane；`P2PARCH-6` matrix baseline 只能作为 legacy shared-devnet rehearsal 的起始输入，不能单独构成 network-rehearsal `pass` 或 public claim 升级依据。
   - AC-10: 本专题必须明确 `mixed_topology_baseline` 从 `partial` 升到 `pass` 时，至少同时固定 same-window shared evidence、producer/QA 联审通过的 `pass_uplift_decision_ref`，并在 evidence 模板/脚本中保留为显式字段。

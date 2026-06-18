@@ -1,0 +1,27 @@
+task_uid: task_ec82303be7e24a64bf5695f7b935b806
+title: "Clarify local game world shape"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-viewer-local-world-shape-question
+execution_log_path: .pm/tasks/task_ec82303be7e24a64bf5695f7b935b806.execution.md
+status: done
+priority: P3
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Answer whether the local game startup represents a local large world, with repo evidence and attribution boundaries."
+  - "Update test-environment testing flow documentation so local hosted-login-shaped entrypoints only count as public_testnet unified-world testing when backed by a healthy, synced formal testnet node/world state."
+  - "Trim or consolidate old test-environment wording that now conflicts with, duplicates, or obscures the formal public_testnet hosted-login flow boundary."
+  - "Sweep current-facing docs and indexes for stale shared_devnet / public_testnet_rehearsal / specified_skeleton_only wording while preserving evidence-only provenance."
+handoff_to: []
+updated_at: 2026-06-18T17:35:52+08:00
+last_started_at: 2026-06-17T23:11:37+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check && ./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json | rg '\"readiness_verdict\": \"specified_skeleton_only\"|\"claim_recommendation\": \"hold_public_testnet_claims\"' >/dev/null && ! rg -n '当前 .*specified_skeleton_only|当前 .*specified_not_executed|seven-lane|当前 .*shared_devnet.*partial|promotion recommendation.*hold_promotion' testing-manual.md doc/README.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/blockchain doc/engineering/governance --glob '!doc/testing/evidence/**' --glob '!**/*.execution.md'"
+last_verified_at: 2026-06-18T17:34:29+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-18T17:35:34+08:00

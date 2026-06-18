@@ -48,7 +48,7 @@
 - `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
-- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
+- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`（legacy rehearsal provenance only）
 - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
 
 ## 状态

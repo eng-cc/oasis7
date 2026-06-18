@@ -35,7 +35,7 @@
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`：formal `public_testnet` 从规格骨架进入候选状态前的 companion checklist/runbook。
 - `doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`：formal `public_testnet` governed bootstrap operator path，定义四节点重建输入、deployment truth、hard rules 与 evidence 闭包；不表示 `public_testnet` 已 live 或 ready。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的 legacy 执行 companion runbook；`shared_devnet` pass 仅作 rehearsal evidence，不等于 formal `public_testnet` / `mainnet` readiness。
-- `doc/testing/evidence/README.md`：QA evidence landing page，负责 public-testnet / legacy shared-network / claims-boundary / mixed-topology 证据的当前入口与归档边界。
+- `doc/testing/evidence/README.md`：QA evidence landing page，负责 public-testnet readiness evidence / claims-boundary / mixed-topology / legacy shared-network 证据的当前入口与归档边界。
 - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.design.md`：不受当前实现约束的理想化交易目标态，覆盖字段分组、完整 JSON 草案、理想签名域、理想回执与 phased rollout。
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`：LetAI Run OpenAPI bridge 的 operator companion runbook，覆盖独立部署、首次演练、manual review 与回滚边界。
 

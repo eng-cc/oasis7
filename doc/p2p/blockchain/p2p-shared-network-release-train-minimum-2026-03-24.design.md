@@ -137,15 +137,10 @@
 4. `canary` 必须有固定观察窗、`incident_review` 和 `exit_decision`，否则只能维持 `hold`。
 5. 若共享访问失效、owner 值班断档或 public claims 越过 preview 边界，窗口立即转为 `frozen`。
 
-## RTMIN-4 当前结论
-1. first `shared_devnet` dry run 已执行完成，且已有 candidate / gate / promotion / incident 产物。
-2. follow-up window `shared-devnet-20260324-05` 已把 `multi_entry_closure` 提升到 `pass`，并证明 same-candidate `headed Web + no-ui + pure_api` 编排链路可复用。
-3. follow-up window `shared-devnet-20260324-06` 已把 `short_window_longrun` 提升到 `pass`，并留下真实 S9/S10 short-window evidence。
-4. 当前 `shared_devnet` gate 结论仍为 `partial`，promotion recommendation 仍为 `hold_promotion`。
-5. 造成 `partial` 的主因已明确收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline` 三条 lane；其中 mixed-topology 现在已有正式 `partial` 证据，但仍未达到 shared-window `pass`。
-6. mixed-topology 的剩余缺口不再是“没有模板”，而是“没有被正式采纳的 pass-uplift 合同与对应真值”；因此后续收口必须优先保证模板/脚本/编排输出的字段一致，再决定是否接受 proxy/shared-window 近似作为当前 track 的 `pass` 依据。
-7. shared-access 的剩余缺口也不再是“没有结构”，而是“没有真实共享入口与独立 operator/access evidence”；因此后续若要宣称 `pass`，必须先补真实 shared endpoint/operator/access proof，而不是只修改 lane 状态。
-8. rollback 的剩余缺口同样不再是“缺少字段名”，而是“缺少受审计 fallback gate/owner/restore scope 真值”；因此后续若要宣称 `pass`，必须先补完整 rollback 合同，而不是只挂一个 fallback bundle。
+## RTMIN-4 历史结论收束
+1. 早期 RTMIN-4 的 `partial` / `hold_promotion` 结论已被后续 project/runbook/evidence 更新；不要继续把本节旧缺口当成当前 shared-devnet 状态。
+2. 当前可读口径是：`shared_devnet` 已有 legacy rehearsal `pass / eligible_for_promotion` 追溯结论，但该结论只作为历史 rehearsal evidence，不等于 formal `public_testnet`、`mainnet`、public launch 或公开大世界 readiness。
+3. `staging/canary` 仍未作为当前目标环境推进；formal test 环境真值转到 `public_testnet` six-lane readiness 与 formal network-tier docs。
 
 ## Partial / Block 语义
 | 状态 | 含义 |

@@ -11,8 +11,8 @@
 - Review Roles:
   - `qa_engineer`
   - `liveops_community`
-- Scope: formal `public_testnet` 从 `specified_skeleton_only` 进入 `ready_for_live_candidate` 前的最小执行闭环
-- Current Verdict: `specified_skeleton_only`
+- Scope: formal `public_testnet` 从 skeleton / governed-bootstrap rehearsal 进入 `ready_for_live_candidate` 前的最小执行闭环
+- Current Verdict: `block` / governed-bootstrap rehearsal / not `ready_for_live_candidate`
 
 ## 1. 适用范围
 - 本 runbook 只定义 formal `public_testnet` 的 live-candidate checklist。
@@ -20,10 +20,10 @@
   - `network_tier_manifest` schema / validate / smoke
   - `public_testnet` readiness review 脚本
   - six-lane scaffold
-  - placeholder skeleton evidence
+  - governed-bootstrap rehearsal evidence
 - 当前仓库还不具备：
   - live `public_testnet` public RPC/explorer/faucet/reset evidence
-  - 真实 lane evidence TSV
+  - formal all-pass lane TSV / readiness verdict
   - `ready_for_live_candidate` 结论
 - 本 runbook 不覆盖：
   - 真实 public testnet 部署细节实现
@@ -41,6 +41,11 @@
   - `rpc_ref`
   - `explorer_ref`
   - `faucet_ref`
+- 本机 hosted-login 形态测试入口输入（若本轮要验证该入口）
+  - 本机节点的 formal `public_testnet` manifest / `world_id` / `chain_id`
+  - genesis / bootstrap peers / validator registry refs
+  - 节点 health/status、connected peers、height/head 推进证据
+  - hosted-login / launcher / viewer / pure API 指向该节点 runtime/status/API 的配置证据
 - 政策输入
   - reset policy announcement ref
   - faucet guard policy ref
@@ -52,10 +57,11 @@
   - `producer_system_designer`
 
 ## 3. 硬阻断条件
-- manifest 仍是 `example.invalid`、template ref 或 `specified_skeleton_only` 占位输出。
+- manifest 仍是 `example.invalid`、template ref、`specified_skeleton_only` 占位输出，或 governed-bootstrap evidence 尚未升级出 rehearsal 状态。
 - `release_candidate_bundle_ref` 不存在或不是当前候选版本真值。
 - 六条 lane 任一没有 owner 或 evidence ref。
 - 公开 RPC/explorer/faucet 仍是私网、单机 localhost 或 placeholder。
+- 本机 hosted-login 形态入口没有证明背后 chain/world state 已接入 formal `public_testnet`，或仍指向本地新建 execution world。
 - reset policy 只存在口头说明，没有正式 announcement/evidence。
 - runtime bootstrap 只有 template，没有真实运行证据。
 - claims boundary review 缺失，或 visible claim 越过 `testnet/resettable/guarded faucet` 边界。
@@ -83,8 +89,9 @@
    - `guarded_testnet_faucet`
    - `non-mainnet value semantics`
 4. 跑 runtime bootstrap rehearsal，留下 bundle/genesis/bootstrap peer 对账证据。
-5. 由 `qa_engineer` 审 claims boundary，确认允许/禁止表述。
-6. 把六条 lane 写入正式 TSV，再运行 readiness review 脚本，只有全部 `pass` 才允许进入 `ready_for_live_candidate`。
+5. 若要暴露本机 hosted-login 形态入口，先确认本机节点已健康接入 testnet 网络，再确认 hosted-login / launcher / viewer / pure API 读取的是该节点的 testnet world state；节点健康是必要条件，但不是充分条件。
+6. 由 `qa_engineer` 审 claims boundary，确认允许/禁止表述。
+7. 把六条 lane 写入正式 TSV，再运行 readiness review 脚本，只有全部 `pass` 才允许进入 `ready_for_live_candidate`。
 
 ## 6. Canonical Commands
 ```bash
@@ -99,18 +106,44 @@
   --manifest <public-testnet-manifest.json>
 ```
 
+本机 hosted-login 形态接入 testnet 的辅助核查：
+```bash
+./scripts/p2p-public-testnet-local-observer-sync.sh render \
+  --local-env <local-observer-node.env> \
+  --sequencer-env <sequencer.env> \
+  --storage-env <storage.env> \
+  --manifest-path <public-testnet-manifest.json> \
+  --out <rendered-local-observer.env>
+
+./scripts/p2p-public-testnet-preflight.sh \
+  --bundle <public-testnet-bundle.json> \
+  --sequencer-status-url <url> \
+  --sequencer-ip <ip> \
+  --sequencer-port <port> \
+  --storage-status-url <url> \
+  --storage-ip <ip> \
+  --storage-port <port> \
+  --observer-env <local-observer-node.env>
+```
+
+该入口的 evidence 必须同时说明：
+- 本机节点使用的 manifest / `world_id` / `chain_id` / genesis / bootstrap peers。
+- 本机节点健康、已连接 testnet peers，且 height/head 持续推进。
+- hosted-login / launcher / viewer / pure API 指向该节点 world state。
+- 若只完成账号登录 smoke 或本地 hosted-public-join UI smoke，不得写成已接入 `public_testnet` 大世界。
+
 辅助检查：
 - `rg -n "public_testnet|ready_for_live_candidate|specified_skeleton_only" testing-manual.md doc/p2p/prd.md doc/p2p/project.md`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
 ## 7. 当前缺口（2026-06-06）
-- 历史 `specified_skeleton_only` 缺口已不再是唯一事实：仓库现在已有 live-candidate / governed-bootstrap 证据集：
+- 历史 `specified_skeleton_only` 只能说明早期 skeleton 状态；当前还必须同时参考候选输入与 governed-bootstrap 证据集：
   - `doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
   - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json`
-- 当前仍不能宣称 `ready_for_live_candidate` 的原因已转为：
+- 当前仍不能宣称 `ready_for_live_candidate`：
   - governed bootstrap manifest 仍是 `status=rehearsal`
   - six-lane readiness 仍必须以正式 lanes TSV + `network-tier-public-testnet-readiness.sh` 汇总为准
   - 只要任一 lane 仍是 `partial` / `block`，或 evidence 仍是 template / placeholder / private-only ref，就不得升级为 `ready_for_live_candidate`

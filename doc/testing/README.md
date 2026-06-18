@@ -13,7 +13,7 @@
 - 想跑真实本地栈 + Playwright + 玩家 UI 操作流程，并把这些用例作为一个长期系列管理：`doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
 - 想看当前活跃任务、阻断与最新完成项：`doc/testing/project.md`
 - 想先判断要跑哪套测试或查操作步骤：`testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`、`doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
-- 想先进入 `evidence` 热点子域，并按 release gate / hosted access / legacy p2p network rehearsal / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
+- 想先进入 `evidence` 热点子域，并按 release gate / hosted access / public-testnet readiness evidence / legacy p2p rehearsal / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
 - 想先看当前 QA 阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 - 想先确认云上测试/正式环境、hosted-login 服务清单与 testnet/mainnet 口径边界：`doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/testing/prd.index.md`
@@ -29,7 +29,7 @@
 - `prd.md` 是模块权威规格入口，适合先理解 required/full 分层、证据包与跨模块测试边界。
 - `project.md` 是执行台账，适合确认当前 QA 阻断、活跃测试治理任务与最新完成项。
   当前窗口只保留 blocker、next step 与少量高价值收口摘要；更细的近期完成历史应回到对应 topic `*.project.md` 与 `.pm/tasks/*.yaml` / execution log 追溯。
-- `evidence/README.md` 是当前最高密度热点子域 `evidence/` 的 canonical 入口，适合先按“release gate / hosted access / legacy p2p network rehearsal / governance drill / claim-audit / 定向验证”分流，再进入具体留痕文件。
+- `evidence/README.md` 是当前最高密度热点子域 `evidence/` 的 canonical 入口，适合先按“release gate / hosted access / public-testnet readiness evidence / legacy p2p rehearsal / governance drill / claim-audit / 定向验证”分流，再进入具体留痕文件。
 - `testing-manual.md` 与 `manual/*.manual.md` 是 operator 手册层，用于决定跑哪套测试、按什么步骤执行；其中 Playwright 实跑系列入口是 `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`。
 - `prd.index.md` 是定向检索索引，适合已知主题后按文件名查找，不是新读者的首读入口。
 
