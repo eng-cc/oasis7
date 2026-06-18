@@ -62,8 +62,8 @@ Network tier 是统一持久大世界的运行/验证载体分层，不是玩家
 - 规则-6: validator/remote writer 准入仍由 validator set、governance registry 或显式 writer allowlist 控制；observer 自动入网不得授予 gossip write、共识签名或 validator 身份。
 
 ## 与现有专题的关系
-- `p2p-shared-network-release-train-minimum-2026-03-24`：
-  - 负责 `shared_devnet/staging/canary` 内部 shared release-train。
+- legacy topic `p2p-shared-network-release-train-minimum-2026-03-24`：
+  - 负责 legacy `shared_devnet/staging/canary` 内部 shared release-train。
   - 现在只作为 legacy/rehearsal evidence 追溯，不作为 `public_testnet` 的必需 promotion gate。
 - `p2p-mainnet-grade-readiness-hardening-2026-03-23`：
   - 负责 `MAINNET-1~4` 的安全/治理/创世 readiness gates。
@@ -85,7 +85,7 @@ Network tier 是统一持久大世界的运行/验证载体分层，不是玩家
   - `doc/testing/templates/network-tier-mainnet.example.json`
 
 ## 被否决方案
-- 否决-1: 直接把现有 `shared_devnet` 改名为 `testnet`。
+- 否决-1: 直接把现有 legacy `shared_devnet` 改名为 `testnet`；这会把非目标测试环境误写成目标环境。
   - 原因: 这会把内部 shared access / partial rehearsal 与 public availability 混在一起。
 - 否决-2: 先做 live public testnet，再考虑 manifest。
   - 原因: 没有统一 manifest，后续 runtime / QA / liveops 无法共享同一套 tier 真值。

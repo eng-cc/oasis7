@@ -19,7 +19,7 @@
 - [x] testnet-auto-high-state-sync (PRD-P2P-001/003) [test_tier_required]: 允许 cold observer 自动探测 retained execution checkpoint。 Trace: .pm/tasks/task_761375d25bc24fe59147a853e8c8acb0.yaml
 - [x] testnet-high-state-peer-retry (PRD-P2P-001/003) [test_tier_required]: 支持 observer 从 storage/full-storage peer 获得 checkpoint descriptor。 Trace: .pm/tasks/task_96c772c830e043f9b1e40b03e6f73d38.yaml
 - [x] testnet-storage-challenge-degraded-readiness (PRD-P2P-001/003/028) [test_tier_required]: 修复 public testnet storage challenge 在 provider/DHT/fetch route retryable 不可用时误 hard-block sequencer 的问题。 Trace: .pm/tasks/task_8d92c7fdfbc742e3866ef1162faedd66.yaml
-- [x] p2p-evidence-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 清理无外部引用的 generated shared-network gate 中间快照并刷新 p2p 首读证据链。 Trace: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml
+- [x] p2p-evidence-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 清理无外部引用的 generated legacy shared-network gate 中间快照并刷新 p2p 首读证据链。 Trace: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml
 - [x] p2p-peer-head-readiness-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 删除已失去当前权威入口职责的 peer-head readiness 历史叙事 design 文档。 Trace: .pm/tasks/task_56f67be67a5a43c09027cb224f1416ad.yaml
 - [x] p2p-stale-evidence-reference-cleanup (PRD-P2P-001/003/028) [test_tier_required]: 删除被新 evidence/docs 取代的 stale evidence 引用。 Trace: .pm/tasks/task_deab30d82bd54824b5be64fac1b2c961.yaml
 - [x] p2p-shared-world-doc-boundary-cleanup (PRD-P2P-028) [test_tier_required]: 精简 legacy shared-network / benchmark / testing manual 重复叙事，明确 `shared_devnet` 仅是 legacy rehearsal evidence，不等同 `public_testnet`、mainnet、public launch 或公开统一大世界上线。 Trace: .pm/tasks/task_d3129d0dff0f4111bcd87b1d2658179c.yaml
