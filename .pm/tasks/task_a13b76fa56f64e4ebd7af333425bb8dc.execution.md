@@ -136,3 +136,12 @@ Example:
 - qa_engineer Result: no findings. Confirmed prior Clippy blockers are fixed, gate matches verified command, and `cargo-deny` risk is reduced to acceptable PR-CI validation. QA independently reran `env -u RUSTC_WRAPPER cargo clippy -p oasis7 --tests --features test_tier_required -- -D clippy::correctness -D clippy::suspicious` with exit 0; also noted `bash -n` and workflow YAML parse passed.
 - Findings Disposition: all P0/P1 review findings either fixed or explicitly accepted as PR-CI residual risk; no actionable blocker remains before PR creation.
 - Next Action: commit review evidence and create PR.
+
+## 2026-06-18 16:21:00 CST / tpm
+- 完成内容: PR-ready workflow-lint evidence repaired for already-closed task.
+- 遗留事项: `claim-ready.sh --claim-type ready_for_pr --task-uid task_a13b76fa56f64e4ebd7af333425bb8dc` cannot mutate this task because it is already closed as `done`; task YAML already contains `last_claim_type: task_complete`, `last_verified_at`, `last_verification_status: verified`, and `last_closed_at` from the earlier `task-closeout.sh` path.
+- Action: Added `project.md` to task `doc_refs`; recorded that the existing closeout evidence came from the standard `task-closeout.sh` path and that fresh PR-ready verification was performed before PR creation.
+- Validation Command: `env -u RUSTC_WRAPPER cargo clippy -p oasis7 --tests --features test_tier_required -- -D clippy::correctness -D clippy::suspicious`; `bash -n scripts/ci-tests.sh scripts/ci-rust-governance-report.sh scripts/ensure-cargo-deny.sh && ruby -e 'require "yaml"; YAML.load_file(".github/workflows/rust.yml"); puts "ok rust.yml"' && ./scripts/check-script-executable-bits.sh && ./scripts/doc-governance-check.sh && git diff --check`.
+- Expected Result: fresh PR-ready verification passes; execution log contains claim-ready/task-closeout evidence markers required by workflow-lint without mutating closed task claim fields.
+- Actual Result: Fresh Clippy verification exited 0; script syntax, workflow YAML parse, executable-bit check, doc governance, and diff whitespace checks passed; previous task-closeout.sh evidence remains in task YAML.
+- Blocker / Next Action: commit PM evidence repair and rerun `./scripts/prepare-task-pr.sh --create --title "Add Rust CI governance checks"`.
