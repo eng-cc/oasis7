@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] legacy-world-terminology-cleanup (PRD-CORE-003) [test_tier_required]: Clean up old hosted/shared/local/testnet world terminology in active docs while preserving historical evidence and compatibility identifiers. Trace: .pm/tasks/task_735872fee5174fc28f10166a9e54d56b.yaml
 - [x] TASK-CORE-001 (PRD-CORE-001) [test_tier_required]: 完成 core PRD 改写，固化跨模块治理基线。
 - [x] TASK-CORE-002 (PRD-CORE-001/002/003) [test_tier_required]: 将 core PRD 扩展为项目全局总览入口（模块地图/关键链路/关键分册导航）。
 - [x] TASK-CORE-003 (PRD-CORE-001/002) [test_tier_required]: 建立跨模块变更影响检查清单（设计/代码/测试/发布），并固化 N/A、整改项与特殊备注机制。

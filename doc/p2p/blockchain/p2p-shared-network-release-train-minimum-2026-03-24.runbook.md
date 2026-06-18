@@ -1,4 +1,4 @@
-# oasis7 shared network / release train 最小执行形态（LiveOps Runbook）
+# oasis7 legacy shared-network rehearsal / release-train background（LiveOps Runbook）
 
 - 对应需求文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
 - 对应设计文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
@@ -20,8 +20,8 @@
   - `testing-manual.md`
 
 ## 1. 适用范围
-- 本 runbook 只定义 shared-network / release-train 的执行方法；它不定义 formal `public_testnet`、`mainnet` 或玩家意义上的公开大世界上线。
-- 当前 `shared_devnet` legacy rehearsal 已在 2026-05-24 追溯结论中达到 `pass / eligible_for_promotion`；这只证明 legacy shared-network rehearsal evidence 已闭环，不等于 live `public_testnet`、`mainnet`、public launch 或赛季上线。
+- 本 runbook 只定义 legacy network-rehearsal / release-train 的执行方法；它不定义 formal `public_testnet`、`mainnet` 或玩家意义上的公开大世界上线。
+- 当前 `shared_devnet` legacy rehearsal 已在 2026-05-24 追溯结论中达到 `pass / eligible_for_promotion`；这只证明 historical network-rehearsal evidence 已闭环，不等于 live `public_testnet`、`mainnet`、public launch 或赛季上线。
 - 当前总 verdict 已更新为 `shared_devnet legacy rehearsal pass; formal public_testnet/mainnet still gated`。
 - 在 formal `public_testnet` live-candidate readiness 与后续 release/public claims gate 通过前，对外只允许：
   - `limited playable technical preview`
@@ -156,7 +156,7 @@
 - 没有 producer 新批复前，不因单次 shared window 或单次 canary 观察而升级 public claim。
 - 公开沟通禁止出现：
   - `production release train is established`
-  - `shared network validated`
+  - `network rehearsal fully validated`
   - `mainnet-grade testing maturity`
   - `public_testnet is live`
   - `public large shared world is launched`
@@ -185,7 +185,7 @@
   - 2026-05-24 legacy `shared_devnet` pass / eligible-for-promotion 追溯结论
 - 当前 `mixed_topology_baseline` 已有正式 pass evidence：
   - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
-- shared-network legacy `shared_devnet` verdict 当前是 `pass / eligible_for_promotion`；但该 pass 不升级 public claims，也不等于 `public_testnet` 或正式在线大世界。
+- legacy network-rehearsal `shared_devnet` verdict 当前是 `pass / eligible_for_promotion`；但该 pass 不升级 public claims，也不等于 `public_testnet` 或正式在线大世界。
 - 当前 release-train 剩余边界:
   - `staging/canary` 仍需要按本 runbook 另行开窗验证
   - formal `public_testnet` readiness 由 network-tier six-lane gate 单独判定

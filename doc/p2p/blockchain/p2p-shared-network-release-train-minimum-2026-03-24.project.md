@@ -1,4 +1,4 @@
-# oasis7 shared network / release train 最小执行形态（项目管理文档）
+# oasis7 legacy shared-network rehearsal / release-train background（项目管理文档）
 
 - 对应设计文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
 - 对应需求文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
@@ -13,7 +13,7 @@
 > public large-world readiness.
 
 ## 任务拆解（含 PRD-ID 映射）
-- [x] RTMIN-0 (PRD-P2P-RTMIN-001/002/003/004) [test_tier_required]: 新建 shared network / release train minimum 专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪与 `testing-manual`。
+- [x] rtmin-0 (PRD-P2P-RTMIN-001/002/003/004) [test_tier_required]: 新建 legacy network rehearsal / release-train readiness 专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪与 `testing-manual`。 Trace: .pm/tasks/task_735872fee5174fc28f10166a9e54d56b.yaml
 - [x] RTMIN-1 (PRD-P2P-RTMIN-001/002) [test_tier_required]: `runtime_engineer` 落地 `release_candidate_bundle` 真值、版本 pinning 与 drift blocker，并把 bundle 校验接入 `release-gate` 前置步骤。
 - [x] RTMIN-2 (PRD-P2P-RTMIN-003) [test_tier_required]: `qa_engineer` 冻结 `shared_devnet/staging/canary` 的 `pass/partial/block` 证据模板与 gate 表，并落地统一 `summary.json/md` scaffold。
 - [x] RTMIN-3 (PRD-P2P-RTMIN-004) [test_tier_required]: `liveops_community` 冻结 promotion/freeze/rollback/run window/public claims runbook。
@@ -100,7 +100,7 @@
 - 当前阶段:
   - 游戏阶段口径: `limited playable technical preview`
   - 安全阶段口径: `crypto-hardened preview`
-  - shared network verdict: `pass`
+  - legacy network-rehearsal verdict: `pass`
 - 当前缺口:
   - `shared_devnet` 已到 `pass`
   - 当前 formal gate 已更新到 `candidate_id=shared-devnet-live-reset-20260523-01`，见 `doc/testing/evidence/generated-shared-network-gates/shared_devnet-20260524-101652/summary.md`；aggregate 结论为 `pass / eligible_for_promotion`
@@ -109,7 +109,7 @@
   - `governance_live_drill` 已基于同窗 post-reset finality drill 升到 `pass`
   - 2026-05-23 的 live triad 卡死事件已通过 `doc/testing/evidence/shared-network-shared-devnet-triad-reset-recovery-2026-05-23.md` 收口：旧链历史被放弃，三节点已在 fresh shared-devnet chain 上恢复推进；因此当前 `shared_devnet` 不再被“observer retention window / sequencer predecessor-gap”这组运行时故障阻断
   - `rollback_target_ready` 已通过 `doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md` 升到 first-pass 允许的 `bootstrap_restore_ready` `pass`：当前 live-reset candidate 的 fallback bundle/gate、owner、restore steps 与 restoration scope 都已固定
-  - `P2PARCH-6` matrix baseline 已成为 shared-network required lane，但它当前只足以阻止 claims 越界，不等价于 shared-window `pass`
+  - `P2PARCH-6` matrix baseline 已成为 legacy network-rehearsal required lane，但它当前只足以阻止 claims 越界，不等价于 same-window `pass`
   - `shared_access / rollback_target_ready / short_window_longrun` 已全部在当前 candidate 窗口内转为 `pass`
   - `mixed_topology_baseline` 现已通过 `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md` 升到 `pass`：同窗 live repair 后，本地 workstation validator 与两台 ECS validator 已在 `2026-05-24 10:13:55 CST` 收敛到 `committed_height=1280 / network_committed_height=1280 / last_execution_height=1280`，并已补齐 producer/QA `pass_uplift_decision_ref`
   - `shared_access` 的 endpoint / operator handoff / access evidence 现在已在同窗 candidate 上闭环；后续不再需要围绕 shared access 本身补结构

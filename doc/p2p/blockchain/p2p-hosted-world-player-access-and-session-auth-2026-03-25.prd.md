@@ -110,7 +110,7 @@
   - MVP: 冻结三层平面、会话梯度、动作能力矩阵和 claims boundary。
   - v1.1: 落地 `guest session` + `player session`，把浏览器长期私钥 bootstrap 从 hosted access 路径移除。
   - v1.2: 落地 runtime capability enforcement、entity bind/reconnect/revoke。
-  - v2.0: 落地 `strong auth` 与 hosted access runbook/QA abuse suite，并与 shared network 轨道衔接。
+  - v2.0: 落地 `strong auth` 与 hosted access runbook/QA abuse suite，并与 legacy network-rehearsal 轨道衔接。
 - Technical Risks:
   - 风险-1: 如果继续让 public player plane 和 control plane 共用同一入口，任何部署细节失误都会直接变成 world 控制泄露。
   - 风险-2: 如果只把私钥从 UI 隐掉但后端仍默认代签，仍然只是“看不见私钥”的假隔离。

@@ -23,7 +23,7 @@
   - 总 verdict: `not_mainnet_grade`
 - 当前 benchmark 结论:
   - `L0/L1/L3`: 已有正式基础
-  - `L2`: 已有基础，但仍偏库测/长跑，缺 shared network 维度
+  - `L2`: 已有基础，但仍偏库测/长跑，缺 network rehearsal 维度
   - `L4`: 长跑已有，controller slot 与 finality slot 的 clone-world / default-live 首轮 governance drill 已完成；finality 已补到两条独立 single-signer recovery 样本、一条 multi-signer loss import-policy reject 样本、一条 `2-of-2 -> 2-of-3` non-baseline rejoin 样本，以及一条 baseline rejoin 样本，但覆盖范围仍有限
   - `L5`: first `shared_devnet` dry run 最初为 `partial`；2026-05-24 legacy rehearsal 追溯结论已补到 `pass / eligible_for_promotion`，但它只作 benchmark L5 / legacy rehearsal evidence，不能替代 formal `public_testnet` 或 public large-world launch readiness
 
@@ -35,7 +35,7 @@
 - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
 
 ## 验收命令（本轮）
-- `rg -n "shared network|release train|fuzz/property|governance drill|mainstream public-chain" doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md doc/p2p/prd.md doc/p2p/project.md testing-manual.md`
+- `rg -n "network rehearsal|release train|fuzz/property|governance drill|mainstream public-chain|legacy shared_devnet" doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md doc/p2p/prd.md doc/p2p/project.md testing-manual.md`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 

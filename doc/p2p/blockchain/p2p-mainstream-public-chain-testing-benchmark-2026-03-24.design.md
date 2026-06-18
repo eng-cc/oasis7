@@ -47,7 +47,7 @@
 3. 因此下一步优先级应是：
    - `真实 governance drill 证据`
    - `negative/fault drill`
-   - `shared network/release train`
+   - `network rehearsal / release-train readiness`
    - `fuzz/property gate`
 
 ## 对外口径影响

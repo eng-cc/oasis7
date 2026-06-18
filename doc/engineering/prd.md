@@ -190,7 +190,7 @@
   - AC-27B: `doc/devlog` 必须存在一个 canonical archive entrypoint，用于按月份和高体量热点导航历史日文件；该入口只能承担历史归档职责，不得重新成为运行态真值。
   - AC-27C: 对已进入路径级治理的热点子域，必须存在一个子目录级 canonical landing page；至少 `doc/world-simulator/viewer/` 需要通过 `viewer/README.md` 把 `manual`、`software_safe`、runtime live 与定向检索区分开来，避免继续由 `viewer-manual.manual.md` 或 `prd.index.md` 单独承担全部首读分流。
   - AC-27D: `doc/p2p/node/` 必须存在一个 canonical 子目录入口 `node/README.md`，能把节点奖励/资产、复制链路、PoS 时间、身份引导与 WASM 编译护栏分开导航，避免继续让 `p2p` 模块 README 或 `prd.index.md` 单独承担整个热点子域的首读分流。
-  - AC-27E: `doc/testing/evidence/` 必须存在一个 canonical 子目录入口 `evidence/README.md`，能把 release gate、hosted-world/browser、p2p/shared-network triad、governance drill、claim/audit matrix 与定向验证 evidence 分开导航，避免继续让 `testing` 模块 README 或 `prd.index.md` 单独承担整个热点子域的首读分流。
+  - AC-27E: `doc/testing/evidence/` 必须存在一个 canonical 子目录入口 `evidence/README.md`，能把 release gate、hosted access / browser、p2p / legacy network-rehearsal evidence、governance drill、claim/audit matrix 与定向验证 evidence 分开导航，避免继续让 `testing` 模块 README 或 `prd.index.md` 单独承担整个热点子域的首读分流。
   - AC-27F: `doc/readme/governance/` 必须存在一个 canonical 子目录入口 `governance/README.md`，能把治理控制、release communication、Moltbook、limited preview/reward、小红书与公开定位入口分开导航，避免继续让 `readme` 模块 README 或 `prd.index.md` 单独承担整个热点子域的首读分流。
   - AC-28: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须降级为 git-ignored 的本地生成视图；PM lint/report/read-path 在这些文件缺失时必须可自动重建，而 engineering 根 `project.md` 不再手工追加 `最新完成` 长列表热点。
   - AC-29: 根 `AGENTS.md`、角色职责卡与 handoff 模板必须显式要求“先创建/绑定 `.pm` task，再执行 `workflow-report --phase start`”，并明确一个 task 收口后若继续 `project.md` 下一个任务，默认重新开独立 `worktree` 与 `.pm` task；任何当前态 checklist 不得再把 `doc/devlog/*.md` 当必写项。
