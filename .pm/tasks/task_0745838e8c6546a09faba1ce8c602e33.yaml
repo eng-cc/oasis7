@@ -8,7 +8,8 @@ priority: P2
 source_signal: null
 source_refs:
   - AGENTS.md
-doc_refs: []
+doc_refs:
+  - doc/readme/project.md
 related_prd: []
 acceptance:
   - "Read /Users/scc/Downloads/deep-research-report.md and extract usable viewpoints."
