@@ -123,7 +123,7 @@ Example:
 - Task UID: task_a13b76fa56f64e4ebd7af333425bb8dc
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-metrics-research
 - Source Branch: task/engineering-rust-governance-metrics-research
-- Source Head: e78eb44259476bd177d7485808945f761f9d84d1
+- Source Head: aae1edf0007e34617e90050ce6255f837cf1ca87
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .github/workflows/rust.yml, rust-toolchain.toml, scripts/ci-tests.sh, scripts/ci-rust-governance-report.sh, scripts/ensure-cargo-deny.sh, deny.toml, crates/oasis7_wasm_router/src/cache.rs, crates/oasis7/src/bin/oasis7_game_launcher.rs, crates/oasis7/src/bin/oasis7_pure_api_client/support.rs, crates/oasis7/src/runtime/tests/rules_enforcement.rs, .pm/tasks/task_a13b76fa56f64e4ebd7af333425bb8dc.yaml, .pm/tasks/task_a13b76fa56f64e4ebd7af333425bb8dc.execution.md
 - Role Selection Basis: repository_health_engineer owns repository governance and CI health; qa_engineer owns validation risk and gate behavior.
