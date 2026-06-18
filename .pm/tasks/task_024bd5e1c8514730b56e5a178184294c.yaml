@@ -11,7 +11,8 @@ source_refs:
   - .agents/skills
   - skills-lock.json
   - .agents/skills/writing-repo-owned-skills/SKILL.md
-doc_refs: []
+doc_refs:
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Remove the repo-owned xiaohongshu skill and related references without leaving stale skill discovery entries."
