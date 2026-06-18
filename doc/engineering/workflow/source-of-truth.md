@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.21**
-Last Updated: **2026-06-11**
+Version: **v1.4.22**
+Last Updated: **2026-06-18**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -63,7 +63,7 @@ Specialist skills are not mandatory workflow phases. They become reachable throu
 - Product/planning docs: `prd`, `game-architect`; these may create planning artifacts, but the route, TODOs, and downstream handoff must still be recorded in `.pm/tasks/<TASK-UID>.execution.md`.
 - Game/domain implementation: `game-design-theory`, `gameplay-mechanics`, `level-design`, `audio-systems`, `particle-systems`, `optimization-performance`, `memory-management`, `asset-optimization`, `synchronization-algorithms`, `monetization-systems`.
 - Narrative/community/content: `epic-story-orchestrator-zh`, `content-creation`, `humanizer-zh`.
-- Browser/visual/content tools: `agent-browser`, `gpt-image-2`, `xiaohongshu`, `xiaohongshu-note-analyzer`.
+- Browser/visual/content tools: `agent-browser`, `gpt-image-2`, `xiaohongshu-note-analyzer`.
 - Visual companion / Image2 target workflows are optional evidence, not universal gates. They may be used inside an existing task/worktree as visual target and screenshot-comparison evidence, but cannot replace implementation, real native/browser screenshots, interaction smoke, QA evidence, or PR review. Screenshot-only previews count as stable visual-comparison evidence, not real interaction coverage.
 
 If a specialist skill is used, TPM must still bind it to the same owner, `.pm` task, canonical worktree, and PR chain through the subagent slice contract. TPM may route to specialist skills, but the specialist role owns the professional conclusion.
@@ -240,6 +240,8 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.22 (2026-06-18)**
+  - Removed the retired `xiaohongshu` automation skill from the specialist skill reachability list while keeping `xiaohongshu-note-analyzer`.
 - **v1.4.21 (2026-06-11)**
   - Added `repository_health_engineer` as the professional role for repository health stewardship, documentation/code alignment, semantic clarity, bug-risk surfacing, and technical-debt triage.
   - Extended read-only professional routing and pre-PR local role review selection so repository-health judgment comes from the matching bounded role slice.

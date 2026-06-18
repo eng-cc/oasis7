@@ -27,7 +27,6 @@
   - `tdd-test-writer`
 - repo-owned or scenario-specific content surfaces
   - `prd`
-  - `xiaohongshu`
   - `xiaohongshu-note-analyzer`
   - `gpt-image-2`
   - `humanizer-zh`

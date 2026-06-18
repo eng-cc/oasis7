@@ -36,7 +36,7 @@
 - Success Criteria:
   - SC-1: 当前 `.agents/skills/` inventory 中的 skill 至少完成一轮 `keep / replace / retire / defer` 归类，并为每项给出 repo-specific 理由。
   - SC-2: 至少一批低耦合、纯通用、与当前仓库默认流程冲突的本地 skill surface 被正式退役，且角色卡/活跃文档不再残留悬空引用。
-  - SC-3: `agent-browser`、`prd`、`xiaohongshu*` 等 repo-owned 或明确场景专属 skill 的保留边界被显式写清，不与通用 skill 混为同类。
+  - SC-3: `agent-browser`、`prd`、`xiaohongshu-note-analyzer` 等 repo-owned 或明确场景专属 skill 的保留边界被显式写清，不与通用 skill 混为同类。
   - SC-4: 外部/上游 skill 的借鉴必须继续服从 `worktree -> .pm -> PRD/project -> tests -> GitHub PR` 单一主链，不得因为“skill 更完整”而引入第二套默认流程。
   - SC-5: `writing-skills` 的可 salvage 部分必须被翻译成 repo-owned skill authoring surface，包括本地 authoring entrypoint、template、checklist 与 bounded borrowing 说明，而不是继续停留在泛化 deferred。
   - SC-6: 若某个 upstream workflow skill 的可借部分已经被正式收口为 repo-owned local skill，则 `.agents/skills` inventory、README 入口与治理文档必须同步把它记录为已保留的 repo-owned surface，而不是继续停留在“仅 borrowing 文档存在”的悬空状态。
@@ -69,7 +69,7 @@
 - Acceptance Criteria:
   - AC-1: 当前 skill inventory 中必须明确写出至少一批 `retire` 项，并给出对应 replacement surface。
   - AC-2: 本轮至少完成 1 组以上低耦合 skill surface 的正式退役，并清理角色卡中的直接引用。
-  - AC-3: `agent-browser`、`prd`、`xiaohongshu`、`xiaohongshu-note-analyzer`、`gpt-image-2`、`humanizer-zh`，以及后续新增的 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`tdd-test-writer`、`bounded-brainstorming`，其保留理由都必须显式记录为 repo-owned 或明确场景专属。
+  - AC-3: `agent-browser`、`prd`、`xiaohongshu-note-analyzer`、`gpt-image-2`、`humanizer-zh`，以及后续新增的 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`tdd-test-writer`、`bounded-brainstorming`，其保留理由都必须显式记录为 repo-owned 或明确场景专属。
   - AC-4: 对 generic game-skill 镜像簇若未本轮删除，必须标记为 `defer` 并说明“为何先不动”。
   - AC-5: 本轮必须为 `.agents/skills` 增加 repo-owned authoring surface，至少包含本地 skill、template、checklist 与入口说明，并明确 upstream `writing-skills` 哪些部分仍未采纳。
   - AC-6: `repo-owned-workflow-router` 必须被显式记录为保留的 repo-owned workflow surface，并在 `.agents/skills/README.md`、root `AGENTS.md` 和相关治理文档中保持同一默认 phase-order 口径。
@@ -116,7 +116,7 @@
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-SKILL-001 | 先退役低耦合通用 skill，再处理 generic game-skill 镜像簇 | 一次性批量删除全部 generic skill | 引用面和角色卡同步风险太高，应先做低风险收缩。 |
-| DEC-SKILL-002 | repo-owned/场景专属 skill 保留，本轮不动 | 统一要求所有 skill 都改成上游安装 | `agent-browser`、`prd`、`xiaohongshu*` 等已与当前仓库工作流强绑定。 |
+| DEC-SKILL-002 | repo-owned/场景专属 skill 保留，本轮不动 | 统一要求所有 skill 都改成上游安装 | `agent-browser`、`prd`、`xiaohongshu-note-analyzer` 等仍与当前仓库工作流或内容评审场景绑定。 |
 | DEC-SKILL-003 | 对与当前默认流程冲突的通用 skill 直接 retire | 保留 skill 但继续在角色卡中推荐 | 会继续制造“存在即推荐”的误导。 |
 | DEC-SKILL-004 | 对已在 borrowing 专题中裁定为可借鉴、且能直接绑定 repo-owned helper / workflow truth 的 skill，允许新增为本地 repo-owned skill | 只在 borrowing 文档里记录 adopted 结论，不把 skill surface 真正落盘 | 若 adopted 项始终不进入 `.agents/skills/`，角色层就无法稳定触发这些 repo-native 工作流。 |
 | DEC-SKILL-005 | 将 `writing-skills` 只收敛为 repo-owned authoring surface，不引入其完整 TDD/subagent gate | 要么完全不借，要么整套照搬 upstream skill | 当前真正缺的是本地 skill 作者入口与结构纪律，不是再造一条与主链竞争的 skill deployment 流程。 |
