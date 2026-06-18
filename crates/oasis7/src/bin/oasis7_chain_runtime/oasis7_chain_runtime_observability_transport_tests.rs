@@ -78,3 +78,69 @@ fn classify_transport_stability_ignores_reachability_diagnostics() {
     assert_eq!(stability.connection_closed_count, 0);
     assert_eq!(stability.protocol_error_count, 0);
 }
+
+#[test]
+fn classify_transport_stability_recovers_when_active_request_peer_is_healthy() {
+    let stability =
+        super::status_payload::classify_transport_stability(&super::ChainReplicationDebugStatus {
+            local_peer_id: "peer-local".to_string(),
+            connected_peers: vec!["peer-a".to_string()],
+            peer_healths: vec![super::ChainPeerHealthStatus {
+                peer_id: "peer-a".to_string(),
+                status: "active".to_string(),
+                issues: Vec::new(),
+                discovery_sources: vec!["static_bootstrap".to_string()],
+                active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
+            }],
+            registered_protocols: Vec::new(),
+            protocol_retry_cooldown_peers: BTreeMap::new(),
+            transport_retry_cooldown_peers: Vec::new(),
+            request_peer_scores: BTreeMap::from([("peer-a".to_string(), 100)]),
+            recent_errors: vec![
+                "request failed: Timeout protocol=/aw/node/replication/fetch-commit/1.0.0 peer=peer-b".to_string(),
+                "request failed: Io(Custom { kind: UnexpectedEof, error: Eof { name: \"map\" } }) protocol=/aw/node/replication/fetch-commit/head/1.0.0 peer=peer-b".to_string(),
+            ],
+        });
+
+    assert!(stability.stable);
+    assert_eq!(stability.score, 100);
+    assert_eq!(stability.blocking_error_count, 0);
+    assert_eq!(stability.timeout_count, 0);
+    assert_eq!(stability.protocol_error_count, 0);
+}
+
+#[test]
+fn classify_transport_stability_keeps_request_errors_blocking_without_requestable_peer() {
+    let stability =
+        super::status_payload::classify_transport_stability(&super::ChainReplicationDebugStatus {
+            local_peer_id: "peer-local".to_string(),
+            connected_peers: vec!["peer-a".to_string()],
+            peer_healths: vec![super::ChainPeerHealthStatus {
+                peer_id: "peer-a".to_string(),
+                status: "active".to_string(),
+                issues: Vec::new(),
+                discovery_sources: vec!["static_bootstrap".to_string()],
+                active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
+            }],
+            registered_protocols: Vec::new(),
+            protocol_retry_cooldown_peers: BTreeMap::new(),
+            transport_retry_cooldown_peers: vec!["peer-a".to_string()],
+            request_peer_scores: BTreeMap::from([("peer-a".to_string(), 100)]),
+            recent_errors: vec![
+                "request failed: Timeout protocol=/aw/node/replication/fetch-commit/1.0.0 peer=peer-a".to_string(),
+                "request failed: Io(Custom { kind: UnexpectedEof, error: Eof { name: \"map\" } }) protocol=/aw/node/replication/fetch-commit/head/1.0.0 peer=peer-a".to_string(),
+                "request failed: Timeout protocol=/aw/node/replication/fetch-commit/head/1.0.0 peer=peer-a".to_string(),
+                "request failed: Timeout protocol=/aw/node/replication/fetch-commit/1.0.0 peer=peer-a".to_string(),
+            ],
+        });
+
+    assert!(!stability.stable);
+    assert!(stability.score < 70);
+    assert_eq!(stability.blocking_error_count, 4);
+    assert_eq!(stability.timeout_count, 3);
+    assert_eq!(stability.protocol_error_count, 4);
+}

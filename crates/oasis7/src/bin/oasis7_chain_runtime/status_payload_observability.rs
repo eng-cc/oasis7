@@ -245,6 +245,10 @@ fn replication_error_is_blocking(
         return false;
     }
     let lower = error.to_ascii_lowercase();
+    let recovered_request_path = replication_has_recovered_request_path(replication);
+    if recovered_request_path && replication_error_is_recovered_request_path_failure(&lower) {
+        return false;
+    }
     let active_peer_available = replication
         .peer_healths
         .iter()
@@ -260,6 +264,53 @@ fn replication_error_is_blocking(
         return false;
     }
     true
+}
+
+fn replication_has_recovered_request_path(
+    replication: &super::super::ChainReplicationDebugStatus,
+) -> bool {
+    let protocol_cooldown_peer_ids = replication
+        .protocol_retry_cooldown_peers
+        .values()
+        .flat_map(|peers| peers.iter().map(String::as_str))
+        .collect::<BTreeSet<_>>();
+    let transport_cooldown_peer_ids = replication
+        .transport_retry_cooldown_peers
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let peer_is_requestable = |peer_id: &str| {
+        !protocol_cooldown_peer_ids.contains(peer_id)
+            && !transport_cooldown_peer_ids.contains(peer_id)
+            && replication
+                .request_peer_scores
+                .get(peer_id)
+                .copied()
+                .unwrap_or(100)
+                > 0
+    };
+    replication
+        .peer_healths
+        .iter()
+        .any(|health| health.status == "active" && peer_is_requestable(health.peer_id.as_str()))
+        || (replication.peer_healths.is_empty()
+            && replication
+                .connected_peers
+                .iter()
+                .any(|peer_id| peer_is_requestable(peer_id.as_str())))
+}
+
+fn replication_error_is_recovered_request_path_failure(lower: &str) -> bool {
+    (lower.contains("request failed:")
+        || lower.contains("outbound request failed")
+        || lower.contains("network request failed"))
+        && (lower.contains("timeout")
+            || lower.contains("unexpectedeof")
+            || lower.contains("unexpected eof")
+            || lower.contains("eof")
+            || lower.contains("connectionclosed")
+            || lower.contains("connection closed")
+            || lower.contains("connection reset"))
 }
 
 fn replication_error_is_diagnostic(error: &str) -> bool {
