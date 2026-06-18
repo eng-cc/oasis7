@@ -67,3 +67,18 @@ Example:
 - Expected Result: claim-ready records focused verification as verified; task-closeout records done closeout with focused verification while skipping unrelated global PM lint noise.
 - Actual Result: `claim_verification_status: verified`, `claim_type: task_complete`, `verify_command: bash -n scripts/pm/capture-todo.sh scripts/pm/capture-todo-smoke.sh && git diff --check`, `pm_lint: skipped`, `final_status: done`.
 - Blocker / Next Action: rerun `./scripts/prepare-task-pr.sh --create`.
+
+## 2026-06-18 18:00:13 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_5effbd8aa09c4d4cb3b78c47b02872a0
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-capture-todo-promote-args-fix
+- Source Branch: task/engineering-capture-todo-promote-args-fix
+- Source Head: dfac3019ea77c8328a28530186decdf334d6d0e0
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/inbox/signals.jsonl`; `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.yaml`; `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.execution.md`; `doc/scripts/project.md`; `scripts/pm/capture-todo-smoke.sh`; `scripts/pm/capture-todo.sh`
+- Role Selection Basis: final diff changes PM/workflow helper script, PM evidence, and scripts module project trace; these are repository health / workflow-governance surfaces; no gameplay, UI, runtime, WASM, blockchain ops, viewer, QA release, or external/community-facing surfaces changed.
+- Review Roles: repository_health_engineer
+- Review Evidence: bounded local review slice `019eda2a-1cbf-72a3-83ca-6667702e4b86` returned findings: none; no_findings: command-array fix avoids Bash 3.2 `set -u` empty-array failure while preserving passthrough behavior, smoke covers the no-passthrough path plus existing JSON/task/passthrough assertions, PM evidence and `SIG-PM-0069` are consistent, and `doc/scripts/project.md` traces back to the task yaml with touched artifacts and focused verification commands.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no code changes required after review.
+- Residual Risk: non-blocking full PM lint/doc-governance noise remains outside this patch scope; no PR-blocking repository health risks found for the reviewed scope.
