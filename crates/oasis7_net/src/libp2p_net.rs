@@ -102,7 +102,7 @@ pub use traffic_metrics::{
     WireByteLaneMetricsSnapshot,
 };
 use transport_paths::{
-    retry_transport_path_after_error, sync_static_bootstrap_transport_paths, TransportPath,
+    bootstrap_transport_path_state, retry_transport_path_after_error, TransportPath,
 };
 use utils::{
     decode_membership_directory, decode_world_head, now_ms, push_bounded_clone,
@@ -201,13 +201,8 @@ impl Libp2pNetwork {
             let mut peers: Vec<PeerId> = Vec::new();
             let mut provider_keys: HashMap<String, i64> = HashMap::new();
             let mut discovered_peer_records: HashMap<PeerId, SignedPeerRecord> = HashMap::new();
-            let mut known_transport_paths: HashMap<PeerId, Vec<TransportPath>> = HashMap::new();
-            let mut failed_transport_path_labels: HashSet<String> = HashSet::new();
-            sync_static_bootstrap_transport_paths(
-                &mut known_transport_paths,
-                &mut failed_transport_path_labels,
-                &config_clone.bootstrap_peers,
-            );
+            let (mut known_transport_paths, mut failed_transport_path_labels) =
+                bootstrap_transport_path_state(&config_clone.bootstrap_peers);
             let mut last_dialed_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
             let mut active_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
             let mut established_transport_paths_by_connection: HashMap<

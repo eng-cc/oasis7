@@ -211,6 +211,19 @@ pub(super) fn sync_static_bootstrap_transport_paths(
     }
 }
 
+pub(super) fn bootstrap_transport_path_state(
+    bootstrap_peers: &[Multiaddr],
+) -> (HashMap<PeerId, Vec<TransportPath>>, HashSet<String>) {
+    let mut known_transport_paths = HashMap::new();
+    let mut failed_transport_path_labels = HashSet::new();
+    sync_static_bootstrap_transport_paths(
+        &mut known_transport_paths,
+        &mut failed_transport_path_labels,
+        bootstrap_peers,
+    );
+    (known_transport_paths, failed_transport_path_labels)
+}
+
 pub(super) fn select_preferred_transport_path(
     paths: &[TransportPath],
     failed_transport_path_labels: &HashSet<String>,
