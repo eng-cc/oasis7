@@ -17,6 +17,16 @@ cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
 mkdir -p "$TMPDIR/.pm/evidence"
 printf 'discovered pre-task todo source\n' > "$TMPDIR/.pm/evidence/discovery.md"
 
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/capture-todo.sh" \
+  --source-ref .pm/evidence/discovery.md \
+  --summary "capture a pre-task discovery with no passthrough args" \
+  >"$TMPDIR/minimal.out"
+grep -q "promote-signal: wrote SIG-PM-" "$TMPDIR/minimal.out" || {
+  echo "capture-todo-smoke: minimal capture did not write a signal" >&2
+  cat "$TMPDIR/minimal.out" >&2
+  exit 1
+}
+
 SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/capture-todo.sh" \
   --signal-id SIG-PM-9001 \
   --source-ref .pm/evidence/discovery.md \

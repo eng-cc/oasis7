@@ -87,10 +87,16 @@ done
 [[ -n "$SOURCE_REF" ]] || { echo "capture-todo: --source-ref is required" >&2; exit 2; }
 [[ -n "$SUMMARY" ]] || { echo "capture-todo: --summary or --text is required" >&2; exit 2; }
 
-exec "$SCRIPT_DIR/promote-signal.sh" \
-  --source-type reflection \
-  --source-ref "$SOURCE_REF" \
-  --role-hint "$ROLE_HINT" \
-  --severity "$SEVERITY" \
-  --summary "$SUMMARY" \
-  "${PROMOTE_ARGS[@]}"
+COMMAND=(
+  "$SCRIPT_DIR/promote-signal.sh"
+  --source-type reflection
+  --source-ref "$SOURCE_REF"
+  --role-hint "$ROLE_HINT"
+  --severity "$SEVERITY"
+  --summary "$SUMMARY"
+)
+if [[ "${#PROMOTE_ARGS[@]}" -gt 0 ]]; then
+  COMMAND+=("${PROMOTE_ARGS[@]}")
+fi
+
+exec "${COMMAND[@]}"
