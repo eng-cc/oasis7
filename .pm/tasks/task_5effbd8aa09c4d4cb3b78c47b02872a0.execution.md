@@ -34,3 +34,27 @@ Example:
 - Expected Result: shell syntax and whitespace checks pass; no-passthrough capture writes a signal without `PROMOTE_ARGS[@]` nounset failure; passthrough args are preserved.
 - Actual Result: syntax and diff checks passed; fixture produced `promote-signal: wrote SIG-PM-0001`, JSON for `SIG-PM-0002`, and `minimal capture-todo fixture: OK`.
 - Blocker / Next Action: close out with focused verification and commit the branch.
+
+## 2026-06-18 17:46:45 CST / repository_health_engineer
+- Review Trigger: pre-PR local role review.
+- Review Scope: `.pm/inbox/signals.jsonl`; `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.yaml`; `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.execution.md`; `scripts/pm/capture-todo-smoke.sh`; `scripts/pm/capture-todo.sh`.
+- Review Roles: repository_health_engineer.
+- Review Question: Confirm that the capture-todo empty passthrough fix addresses the root cause without weakening passthrough behavior or PM evidence integrity, and identify any PR-blocking repository health risks.
+- Evidence Available: commit `59cfbf67e`; `bash -n scripts/pm/capture-todo.sh scripts/pm/capture-todo-smoke.sh && git diff --check`; temporary `PM_ROOT_DIR` fixture covering no-passthrough and passthrough paths; real TODO signal `SIG-PM-0069`.
+- Expected Return Contract: findings | no_findings | residual_risk.
+- Formal Sink: `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.execution.md`.
+
+## 2026-06-18 17:52:57 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_5effbd8aa09c4d4cb3b78c47b02872a0
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-capture-todo-promote-args-fix
+- Source Branch: task/engineering-capture-todo-promote-args-fix
+- Source Head: 59cfbf67e9c779d1c2d028e83cde93ad68586e87
+- Comparison Ref: main
+- Reviewed Changed Paths: `.pm/inbox/signals.jsonl`; `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.yaml`; `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.execution.md`; `scripts/pm/capture-todo-smoke.sh`; `scripts/pm/capture-todo.sh`
+- Role Selection Basis: changed PM/workflow helper script and task evidence paths are repository health / workflow-governance surfaces; no gameplay, UI, runtime, WASM, blockchain ops, viewer, QA release, or external/community-facing surfaces changed.
+- Review Roles: repository_health_engineer
+- Review Evidence: bounded local review slice `019eda20-f794-77b2-a221-4babb0c97af4` returned findings: none; no_findings: `capture-todo.sh` command-array fix avoids Bash 3.2 `set -u` empty-array failure without dropping passthrough args, smoke preserves signal/task/JSON passthrough coverage, and `SIG-PM-0069` preserves PM evidence integrity as a triaged reflection signal with no auto-created task.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no code changes required after review.
+- Residual Risk: non-blocking full PM lint/doc-governance noise remains outside this patch scope; no PR-blocking repository health risks found for the reviewed scope.
