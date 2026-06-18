@@ -12,6 +12,7 @@ Usage:
     --run-id <github-actions-run-id> \
     [--artifact-ref <ref>] \
     [--systemd-service <name>] \
+    [--release-retention-count <count>] \
     [--restart-service] \
     [--post-restart-status-url <url>] \
     [--post-restart-timeout-secs <secs>]
@@ -134,6 +135,59 @@ print(
 PY
 }
 
+prune_old_releases() {
+  local releases_dir=$1
+  local current_path=$2
+  local retention_count=$3
+  shift 3
+
+  python3 - "$releases_dir" "$current_path" "$retention_count" "$@" <<'PY'
+from __future__ import annotations
+
+import shutil
+import sys
+from pathlib import Path
+
+releases_dir = Path(sys.argv[1]).resolve()
+current_path = Path(sys.argv[2]).resolve(strict=False)
+retention_count = int(sys.argv[3])
+extra_keep_paths = [Path(value).resolve(strict=False) for value in sys.argv[4:] if value]
+
+if retention_count < 0:
+    raise SystemExit("release retention count must be non-negative")
+if not releases_dir.is_dir():
+    raise SystemExit(0)
+
+entries = sorted(
+    (
+        path
+        for path in releases_dir.iterdir()
+        if path.is_dir() and not path.name.startswith(".")
+    ),
+    key=lambda path: (path.stat().st_mtime_ns, path.name),
+    reverse=True,
+)
+
+keep = {current_path}
+keep.update(extra_keep_paths)
+for path in entries[:retention_count]:
+    keep.add(path.resolve(strict=False))
+
+for path in entries:
+    resolved = path.resolve(strict=False)
+    if resolved in keep:
+        print(f"retained_release={path}")
+        continue
+    try:
+        resolved.relative_to(releases_dir)
+    except ValueError:
+        print(f"skip_release_outside_root={path}", file=sys.stderr)
+        continue
+    shutil.rmtree(path)
+    print(f"pruned_release={path}")
+PY
+}
+
 node_root=""
 bundle_tar=""
 package_version=""
@@ -141,6 +195,7 @@ commit=""
 run_id=""
 artifact_ref=""
 systemd_service=""
+release_retention_count=3
 restart_service=0
 post_restart_status_url=""
 post_restart_timeout_secs=60
@@ -173,6 +228,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --systemd-service)
       systemd_service=${2:-}
+      shift 2
+      ;;
+    --release-retention-count)
+      release_retention_count=${2:-}
       shift 2
       ;;
     --restart-service)
@@ -211,6 +270,9 @@ if [[ -n "$post_restart_status_url" && "$restart_service" -ne 1 ]]; then
 fi
 if [[ ! "$post_restart_timeout_secs" =~ ^[0-9]+$ || "$post_restart_timeout_secs" -le 0 ]]; then
   die "--post-restart-timeout-secs must be a positive integer"
+fi
+if [[ ! "$release_retention_count" =~ ^[0-9]+$ ]]; then
+  die "--release-retention-count must be a non-negative integer"
 fi
 
 node_root=$(abs_path "$node_root")
@@ -311,8 +373,12 @@ mv "$bundle_root" "$release_dir"
 rm -rf "$tmp_dir"
 
 current_path="$node_root/current"
+previous_current_path=""
 if [[ -L "$current_path" || -e "$current_path" ]]; then
-  readlink -f "$current_path" >"$node_root/last-$backup_suffix.txt" || true
+  previous_current_path="$(readlink -f "$current_path" || true)"
+  if [[ -n "$previous_current_path" ]]; then
+    printf '%s\n' "$previous_current_path" >"$node_root/last-$backup_suffix.txt"
+  fi
   if [[ -d "$current_path" && ! -L "$current_path" ]]; then
     mv "$current_path" "$node_root/current-$backup_suffix.dir"
   else
@@ -322,6 +388,7 @@ fi
 ln -s "$release_dir" "$current_path"
 
 migrate_legacy_replication_root "$node_root" "$node_id"
+prune_old_releases "$node_root/releases" "$current_path" "$release_retention_count" "$previous_current_path"
 
 if [[ "$restart_service" -eq 1 ]]; then
   systemctl daemon-reload

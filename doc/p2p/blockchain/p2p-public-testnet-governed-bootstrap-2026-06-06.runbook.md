@@ -301,6 +301,29 @@ systemctl stop oasis7-testnet-storage.service
 4. runtime binary hash 必须与当前 staged package 一致
 5. world staging 必须是“单次传输 + 远端复制”，不能复用同一 stdin tar 流做双重解包
 
+### Deployment artifact retention and cleanup
+标准 Linux package 升级入口是 `scripts/p2p-public-testnet-package-node-upgrade.sh`。该脚本默认在每次成功升级后执行 release retention：
+
+1. 永远保留 `<node-root>/current` 解析到的真实 release 目录。
+2. 本次升级前的 previous current release 目录也会被保留，作为当前升级尝试的回滚保护。
+3. 额外保留 `<node-root>/releases` 下按 mtime 排序最新的 3 个 release 目录。
+4. 删除其余非隐藏旧 release 目录；不会把 `<node-root>/data`、`<node-root>/config`、`<node-root>/backups`、service 文件、journal 或 live logs 当作 package 残留清理。
+5. 如需临时扩大回滚窗口，可用 `--release-retention-count <N>` 调整最新 release 保留数量；该参数不取消 current realpath 和 previous current 的强保留。
+
+外层 operator/自动化负责清理脚本作用域之外的上传和 driver 临时目录：
+
+```bash
+tmp_upload_dir="/tmp/oasis7-upgrade-${run_id}"
+cleanup_upload_dir() {
+  if [[ "${OASIS7_KEEP_DEPLOY_TMP:-0}" != "1" ]]; then
+    rm -rf "$tmp_upload_dir"
+  fi
+}
+trap cleanup_upload_dir EXIT
+```
+
+上传目录如 `/tmp/oasis7-upgrade-<run_id>`、per-run driver 目录如 `/tmp/oasis7-run*-<node>` 必须在部署流程成功或失败收口时清理；只有设置明确 debug keep 开关时才允许保留。`<node-root>/tmp` 仅用于本轮 staging/bundle/bootstrap 临时产物，部署成功后应清空本轮产物。`<node-root>/backups` 不属于 package cleanup，必须按单独的备份保留策略处理。
+
 ## 10. Phase D - Verify Validator Pair
 ### Goal
 确认两台 validator 形成可持续推进的 governed chain。

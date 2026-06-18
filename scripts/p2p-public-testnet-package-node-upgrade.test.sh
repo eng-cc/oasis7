@@ -11,12 +11,29 @@ package_version="0.0.0+testnet.test.abcdef123456"
 commit="abcdef1234567890abcdef1234567890abcdef12"
 run_id="12345"
 
-mkdir -p "$bundle_root/bin" "$node_root/config/doc/testing/evidence" "$node_root/releases/old/bin"
+mkdir -p \
+  "$bundle_root/bin" \
+  "$node_root/config/doc/testing/evidence" \
+  "$node_root/releases/old/bin" \
+  "$node_root/data" \
+  "$node_root/backups"
 printf 'runtime-v2\n' >"$bundle_root/bin/oasis7_chain_runtime"
 chmod +x "$bundle_root/bin/oasis7_chain_runtime"
 printf 'runtime-v1\n' >"$node_root/releases/old/bin/oasis7_chain_runtime"
 chmod +x "$node_root/releases/old/bin/oasis7_chain_runtime"
+touch -t 202001010000 "$node_root/releases/old"
 ln -s "$node_root/releases/old" "$node_root/current"
+printf 'keep-data\n' >"$node_root/data/sentinel.txt"
+printf 'keep-config\n' >"$node_root/config/sentinel.txt"
+printf 'keep-backups\n' >"$node_root/backups/sentinel.txt"
+
+for index in 1 2 3 4 5; do
+  mkdir -p "$node_root/releases/retention-candidate-$index/bin"
+  printf 'runtime-retention-%s\n' "$index" \
+    >"$node_root/releases/retention-candidate-$index/bin/oasis7_chain_runtime"
+  chmod +x "$node_root/releases/retention-candidate-$index/bin/oasis7_chain_runtime"
+  touch -t "20260601010${index}" "$node_root/releases/retention-candidate-$index"
+done
 
 cat >"$node_root/config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" <<'EOF'
 {
@@ -32,6 +49,7 @@ cat >"$node_root/config/doc/testing/evidence/public-testnet-governed-bootstrap-b
 }
 EOF
 
+touch -t 202001010000 "$bundle_root"
 tar -czf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
 
 "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
@@ -52,6 +70,18 @@ test -f "$node_root_abs/CURRENT_VERSION"
 test -f "$node_root_abs/DEPLOYED_BUILDINFO"
 grep -q "^package_version=$package_version$" "$node_root_abs/DEPLOYED_BUILDINFO"
 grep -q "^commit=$commit$" "$node_root_abs/DEPLOYED_BUILDINFO"
+release_count=$(find "$node_root_abs/releases" -mindepth 1 -maxdepth 1 -type d ! -name '.*' | wc -l | tr -d ' ')
+test "$release_count" = "5"
+test -d "$node_root_abs/releases/$package_version"
+test -d "$node_root_abs/releases/old"
+test -d "$node_root_abs/releases/retention-candidate-3"
+test -d "$node_root_abs/releases/retention-candidate-4"
+test -d "$node_root_abs/releases/retention-candidate-5"
+test ! -e "$node_root_abs/releases/retention-candidate-1"
+test ! -e "$node_root_abs/releases/retention-candidate-2"
+test -f "$node_root_abs/data/sentinel.txt"
+test -f "$node_root_abs/config/sentinel.txt"
+test -f "$node_root_abs/backups/sentinel.txt"
 
 jq -e \
   --arg expected "$expected_sha" \
