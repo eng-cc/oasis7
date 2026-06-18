@@ -297,9 +297,7 @@ fn persist_tick_consensus_archive(
                 write_json_to_path(&segment_file, dir.join(relative_path.as_str()).as_path())?;
             }
             write_json_to_path(&archive_index, archive_index_path.as_path())?;
-            if legacy_archive_path.exists() {
-                fs::remove_file(legacy_archive_path.as_path())?;
-            }
+            write_json_to_path(archive, legacy_archive_path.as_path())?;
             Ok(())
         }
         _ => {
@@ -442,6 +440,36 @@ fn load_tick_consensus_archive_records_from_index(
     Ok(Some(archived_records))
 }
 
+fn tick_consensus_archive_segment_missing(reason: &str) -> bool {
+    reason.starts_with("tick consensus archive segment missing:")
+}
+
+fn load_tick_consensus_legacy_archive_records(
+    dir: &Path,
+    snapshot: &Snapshot,
+) -> Result<Vec<TickConsensusRecord>, WorldError> {
+    let archive_path = tick_consensus_archive_path(dir);
+    if !archive_path.exists() {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: format!(
+                "tick consensus archive missing: path={}",
+                archive_path.display()
+            ),
+        });
+    }
+    let archive: TickConsensusArchiveFile = read_json_from_path(archive_path.as_path())?;
+    if archive.archived_records.len() != snapshot.tick_consensus_archived_record_count {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: format!(
+                "tick consensus archive count mismatch: expected={} actual={}",
+                snapshot.tick_consensus_archived_record_count,
+                archive.archived_records.len(),
+            ),
+        });
+    }
+    Ok(archive.archived_records)
+}
+
 fn hydrate_tick_consensus_snapshot_from_archive(
     dir: &Path,
     snapshot: &mut Snapshot,
@@ -473,30 +501,19 @@ fn hydrate_tick_consensus_snapshot_from_archive(
         return Ok(());
     }
 
-    let archived_records = match load_tick_consensus_archive_records_from_index(dir, snapshot)? {
-        Some(records) => records,
-        None => {
-            let archive_path = tick_consensus_archive_path(dir);
-            if !archive_path.exists() {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "tick consensus archive missing: path={}",
-                        archive_path.display(),
-                    ),
-                });
+    let archived_records = match load_tick_consensus_archive_records_from_index(dir, snapshot) {
+        Ok(Some(records)) => records,
+        Ok(None) => load_tick_consensus_legacy_archive_records(dir, snapshot)?,
+        Err(WorldError::DistributedValidationFailed { reason })
+            if tick_consensus_archive_segment_missing(reason.as_str()) =>
+        {
+            if tick_consensus_archive_path(dir).exists() {
+                load_tick_consensus_legacy_archive_records(dir, snapshot)?
+            } else {
+                return Err(WorldError::DistributedValidationFailed { reason });
             }
-            let archive: TickConsensusArchiveFile = read_json_from_path(archive_path.as_path())?;
-            if archive.archived_records.len() != snapshot.tick_consensus_archived_record_count {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "tick consensus archive count mismatch: expected={} actual={}",
-                        snapshot.tick_consensus_archived_record_count,
-                        archive.archived_records.len(),
-                    ),
-                });
-            }
-            archive.archived_records
         }
+        Err(err) => return Err(err),
     };
     let mut records = archived_records;
     records.extend(snapshot.tick_consensus_records.clone());
