@@ -1,0 +1,26 @@
+task_uid: task_024bd5e1c8514730b56e5a178184294c
+title: "Remove Xiaohongshu skill"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-delete-xiaohongshu-skill
+execution_log_path: .pm/tasks/task_024bd5e1c8514730b56e5a178184294c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - .agents/skills
+  - skills-lock.json
+  - .agents/skills/writing-repo-owned-skills/SKILL.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Remove the repo-owned xiaohongshu skill and related references without leaving stale skill discovery entries."
+handoff_to: []
+updated_at: 2026-06-18T23:55:21+08:00
+last_started_at: 2026-06-18T23:46:24+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/lint-skills.sh && ./scripts/pm/workflow-lint.sh --task-uid task_024bd5e1c8514730b56e5a178184294c --phase current && git diff --check && ! rg -n 'zhjiang22/openclaw-xhs|\\.agents/skills/xiaohongshu|xhs-downloader|XHS-Downloader|xiaohongshu-mcp' . --glob '!third_party/**' --glob '!target/**' --glob '!.git/**' && ! rg -n 'name: xiaohongshu$|\"xiaohongshu\"' .agents skills-lock.json doc/engineering/workflow/source-of-truth.md doc/engineering/self-evolution --glob '!third_party/**' --glob '!target/**'"
+last_verified_at: 2026-06-18T23:55:19+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-18T23:55:21+08:00

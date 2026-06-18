@@ -17,11 +17,6 @@
       "sourceType": "github",
       "computedHash": "7bd195e3bcdcc24f078dfd4e3b3e37e8ac321c36f410a41241fc4175eab1825a"
     },
-    "xiaohongshu": {
-      "source": "zhjiang22/openclaw-xhs",
-      "sourceType": "github",
-      "computedHash": "1075f772f0d5fee092fa63c3eac324430e0712b8a7f2c3d42245b736f618978b"
-    },
     "xiaohongshu-note-analyzer": {
       "source": "softbread/xiaohongshu-doctor",
       "sourceType": "github",
