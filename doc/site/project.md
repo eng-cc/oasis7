@@ -3,6 +3,15 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] historical-doc-governance-slimdown-round (PRD-SITE-003, README governance) [test_tier_required]: 对 `doc/site` 与 `doc/readme` 中已完成且只承担历史证据职责的专题三件套做索引曝光瘦身，保留原路径、互链和治理状态块，同时把当前读者路由回 active site/readme/gap/public-status 入口。 Trace: .pm/tasks/task_fc499abed90742caa7c1a66166f7d926.yaml
+  - 产物文件:
+    - `doc/site/README.md`
+    - `doc/site/prd.index.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/README.md`
+    - `.pm/tasks/task_fc499abed90742caa7c1a66166f7d926.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/pm/workflow-lint.sh --task-uid task_fc499abed90742caa7c1a66166f7d926 --phase current && git diff --check`
 - [x] pages-homepage-claim-gate-refresh (PRD-SITE-003/004) [test_tier_required]: 对齐 Pages 质量门禁与当前中英首页 `limited playable technical preview` 口径，并把 site local link check 从 GNU `realpath -m` 改为跨平台批量路径校验，恢复本地与 CI 的 Pages gate 验证链路。 Trace: .pm/tasks/task_8f70a068b4864e41971de595fd3dff31.yaml
   - 产物文件:
     - `scripts/site-homepage-claim-check.sh`
