@@ -329,28 +329,48 @@ pub(super) fn dial_transport_path(
     Ok(())
 }
 
-pub(super) fn failover_transport_path(
+pub(super) fn failover_transport_path_after_close(
     swarm: &mut Swarm<Behaviour>,
     known_transport_paths: &HashMap<PeerId, Vec<TransportPath>>,
     active_transport_paths: &mut HashMap<PeerId, TransportPath>,
     last_dialed_transport_paths: &mut HashMap<PeerId, TransportPath>,
     failed_transport_path_labels: &mut HashSet<String>,
     peer_id: PeerId,
-) -> Result<Option<(TransportPath, TransportPath)>, WorldError> {
-    let Some(active_path) = active_transport_paths.remove(&peer_id) else {
+    disconnected_path: Option<TransportPath>,
+) -> Result<Option<(Option<TransportPath>, TransportPath)>, WorldError> {
+    let Some((previous_path, next_path)) = select_reconnect_transport_path_after_close(
+        known_transport_paths,
+        active_transport_paths,
+        failed_transport_path_labels,
+        peer_id,
+        disconnected_path,
+    ) else {
         return Ok(None);
     };
-    failed_transport_path_labels.insert(active_path.label());
-    let Some(next_path) = known_transport_paths.get(&peer_id).and_then(|paths| {
-        select_preferred_transport_path(paths.as_slice(), failed_transport_path_labels)
-    }) else {
-        return Ok(None);
-    };
-    if next_path.label() == active_path.label() {
-        return Ok(None);
-    }
     dial_transport_path(swarm, last_dialed_transport_paths, next_path.clone())?;
-    Ok(Some((active_path, next_path)))
+    Ok(Some((previous_path, next_path)))
+}
+
+pub(super) fn select_reconnect_transport_path_after_close(
+    known_transport_paths: &HashMap<PeerId, Vec<TransportPath>>,
+    active_transport_paths: &mut HashMap<PeerId, TransportPath>,
+    failed_transport_path_labels: &mut HashSet<String>,
+    peer_id: PeerId,
+    disconnected_path: Option<TransportPath>,
+) -> Option<(Option<TransportPath>, TransportPath)> {
+    let previous_path = active_transport_paths
+        .remove(&peer_id)
+        .or(disconnected_path);
+    if let Some(path) = &previous_path {
+        failed_transport_path_labels.insert(path.label());
+    }
+    let next_path = known_transport_paths
+        .get(&peer_id)
+        .and_then(|paths| {
+            select_preferred_transport_path(paths.as_slice(), failed_transport_path_labels)
+        })
+        .or_else(|| previous_path.clone())?;
+    Some((previous_path, next_path))
 }
 
 pub(super) fn retry_transport_path_after_error(

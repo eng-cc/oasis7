@@ -1023,6 +1023,8 @@ impl Libp2pNetwork {
                                             LIFECYCLE_EVENT_ERROR_COOLDOWN_MS,
                                         );
                                     } else {
+                                        let disconnected_path =
+                                            active_transport_paths.get(&peer_id).cloned();
                                         established_transport_paths_by_connection
                                             .remove(&connection_id);
                                         established_connections_by_peer.remove(&peer_id);
@@ -1062,6 +1064,7 @@ impl Libp2pNetwork {
                                                 &event_errors,
                                                 max_error_messages,
                                                 peer_id,
+                                                disconnected_path,
                                             );
                                         }
                                         push_bounded_string_with_keyed_cooldown(

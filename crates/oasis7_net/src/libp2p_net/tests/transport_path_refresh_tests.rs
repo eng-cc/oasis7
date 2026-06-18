@@ -1,12 +1,51 @@
 use super::*;
 use libp2p::swarm::ConnectionId;
 
-use crate::libp2p_net::transport_paths::recompute_active_transport_path_for_peer;
+use crate::libp2p_net::transport_paths::{
+    recompute_active_transport_path_for_peer, select_reconnect_transport_path_after_close,
+};
 
 #[test]
 fn libp2p_network_generates_peer_id() {
     let network = Libp2pNetwork::new(Libp2pNetworkConfig::default());
     assert!(!network.peer_id().to_string().is_empty());
+}
+
+#[test]
+fn reconnect_after_final_close_retries_single_disconnected_static_path() {
+    let peer_id = PeerId::random();
+    let direct_addr = format!("/ip4/39.104.204.172/tcp/6831/p2p/{peer_id}")
+        .parse()
+        .expect("direct addr");
+    let direct_path = active_transport_path_from_endpoint(&HashMap::new(), peer_id, &direct_addr);
+    let mut known = HashMap::from([(peer_id, vec![direct_path.clone()])]);
+    let mut active_transport_paths = HashMap::new();
+    let mut failed = HashSet::new();
+
+    let (previous_path, next_path) = select_reconnect_transport_path_after_close(
+        &known,
+        &mut active_transport_paths,
+        &mut failed,
+        peer_id,
+        Some(direct_path.clone()),
+    )
+    .expect("single static path should be redialable");
+
+    assert_eq!(previous_path, Some(direct_path.clone()));
+    assert_eq!(next_path, direct_path);
+    assert!(failed.contains(&direct_addr.to_string()));
+
+    known.clear();
+    failed.clear();
+    let (_, next_path) = select_reconnect_transport_path_after_close(
+        &known,
+        &mut active_transport_paths,
+        &mut failed,
+        peer_id,
+        Some(direct_path.clone()),
+    )
+    .expect("disconnected path should be enough to retry after final close");
+    assert_eq!(next_path, direct_path);
 }
 
 #[test]
