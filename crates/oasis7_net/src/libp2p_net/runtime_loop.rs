@@ -284,6 +284,14 @@ fn peer_health_is_hard_request_blocked(health: &PeerManagerPeerHealth) -> bool {
                 .all(peer_health_issue_is_record_exchange_pending))
 }
 
+fn peer_health_is_record_exchange_pending(health: &PeerManagerPeerHealth) -> bool {
+    !health.issues.is_empty()
+        && health
+            .issues
+            .iter()
+            .all(peer_health_issue_is_record_exchange_pending)
+}
+
 pub(super) fn peer_requires_active_quarantine(
     peer_id: PeerId,
     peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
@@ -405,6 +413,14 @@ pub(super) fn refresh_peer_manager_healths(
         let Some(path) = active_transport_paths.get(&peer_id) else {
             continue;
         };
+        if raw_healths
+            .get(&peer_id)
+            .is_some_and(peer_health_is_record_exchange_pending)
+        {
+            admitted_paths.insert(peer_id, path.clone());
+            admitted_active_peers.insert(peer_id);
+            continue;
+        }
         let Some(record) = discovered_peer_records.get(&peer_id) else {
             continue;
         };

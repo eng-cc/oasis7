@@ -573,7 +573,7 @@ fn refresh_peer_manager_healths_keeps_missing_record_active_peer_soft_blocked_fo
         .iter()
         .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)));
     assert!(quarantined.is_empty());
-    assert_eq!(admitted, HashSet::from([healthy_peer]));
+    assert_eq!(admitted, HashSet::from([healthy_peer, unverified_peer]));
     let event_healths = event_peer_healths.lock().expect("lock peer healths");
     let unverified_health = event_healths
         .get(unverified_peer.to_string().as_str())
@@ -583,6 +583,43 @@ fn refresh_peer_manager_healths_keeps_missing_record_active_peer_soft_blocked_fo
         unverified_peer,
         &healths
     ));
+}
+
+#[test]
+fn refresh_peer_manager_healths_admits_record_exchange_pending_active_peer() {
+    let bootstrap_peer = PeerId::random();
+    let active_transport_paths = HashMap::from([(
+        bootstrap_peer,
+        active_transport_path_from_endpoint(
+            &HashMap::new(),
+            bootstrap_peer,
+            &"/ip4/10.0.0.2/tcp/6832"
+                .parse()
+                .expect("bootstrap endpoint"),
+        ),
+    )]);
+    let event_peer_healths = Arc::new(Mutex::new(HashMap::new()));
+    let event_block_artifacts = Arc::new(Mutex::new(HashMap::new()));
+    let event_errors = Arc::new(Mutex::new(Vec::new()));
+
+    let (healths, quarantined, admitted) = refresh_peer_manager_healths(
+        &HashMap::new(),
+        &active_transport_paths,
+        &HashSet::new(),
+        &PeerManagerPolicy::default(),
+        &event_peer_healths,
+        &event_block_artifacts,
+        &event_errors,
+        32,
+    );
+
+    assert!(healths[&bootstrap_peer]
+        .issues
+        .iter()
+        .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)));
+    assert!(quarantined.is_empty());
+    assert_eq!(admitted, HashSet::from([bootstrap_peer]));
+    assert!(!peer_requires_active_quarantine(bootstrap_peer, &healths));
 }
 
 #[test]
