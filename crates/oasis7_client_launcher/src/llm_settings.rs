@@ -68,151 +68,122 @@ impl LlmSettingsPanel {
         egui::Window::new(tr(language, "设置中心", "Settings Center"))
             .open(&mut open)
             .resizable(true)
+            .default_size(egui::vec2(860.0, 620.0))
             .show(ctx, |ui| {
-                ui.heading(tr(language, "启动器配置", "Launcher Configuration"));
-                ui.separator();
-
-                ui.collapsing(tr(language, "游戏与显示", "Game & Viewer"), |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(tr(language, "场景", "Scenario"));
-                        ui.text_edit_singleline(&mut config.scenario);
-                        ui.label(tr(language, "实时服务绑定", "Live Bind"));
-                        ui.text_edit_singleline(&mut config.live_bind);
-                    });
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(tr(language, "WebSocket 绑定", "Web Bind"));
-                        ui.text_edit_singleline(&mut config.web_bind);
-                        ui.label(tr(language, "游戏页面主机", "Viewer Host"));
-                        ui.text_edit_singleline(&mut config.viewer_host);
-                    });
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(tr(language, "游戏页面端口", "Viewer Port"));
-                        ui.text_edit_singleline(&mut config.viewer_port);
-                        ui.label(tr(language, "前端静态资源目录", "Viewer Static Directory"));
-                        ui.text_edit_singleline(&mut config.viewer_static_dir);
-                    });
-                    ui.horizontal_wrapped(|ui| {
-                        ui.checkbox(
-                            &mut config.llm_enabled,
-                            tr(language, "启用 LLM", "Enable LLM"),
-                        );
-                        ui.checkbox(
-                            &mut config.auto_open_browser,
-                            tr(language, "自动打开浏览器", "Open Browser Automatically"),
-                        );
-                    });
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(tr(language, "启动器二进制路径", "Launcher Binary"));
-                        ui.text_edit_singleline(&mut config.launcher_bin);
-                    });
-                });
-
-                ui.separator();
-                ui.collapsing(
-                    tr(language, "区块链运行时", "Blockchain Runtime"),
-                    |ui| {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.checkbox(
-                                &mut config.chain_enabled,
-                                tr(language, "启用链运行时", "Enable Chain Runtime"),
-                            );
-                            ui.label(tr(language, "链状态服务绑定", "Chain Status Bind"));
-                            ui.text_edit_singleline(&mut config.chain_status_bind);
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(tr(language, "链节点 ID", "Chain Node ID"));
-                            ui.text_edit_singleline(&mut config.chain_node_id);
-                            ui.label(tr(language, "链世界 ID", "Chain World ID"));
-                            ui.text_edit_singleline(&mut config.chain_world_id);
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(tr(language, "链节点角色", "Chain Role"));
-                            ui.text_edit_singleline(&mut config.chain_node_role);
-                            ui.label(tr(
-                                language,
-                                "链轮询间隔毫秒",
-                                "Chain Worker Poll/Fallback Milliseconds",
-                            ));
-                            ui.text_edit_singleline(&mut config.chain_node_tick_ms);
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(tr(
-                                language,
-                                "PoS 槽时长毫秒",
-                                "PoS Slot Duration Milliseconds",
-                            ));
-                            ui.text_edit_singleline(&mut config.chain_pos_slot_duration_ms);
-                            ui.label(tr(language, "PoS 每槽 Tick 数", "PoS Ticks Per Slot"));
-                            ui.text_edit_singleline(&mut config.chain_pos_ticks_per_slot);
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(tr(
-                                language,
-                                "PoS 提案 Tick 相位",
-                                "PoS Proposal Tick Phase",
-                            ));
-                            ui.text_edit_singleline(&mut config.chain_pos_proposal_tick_phase);
-                            ui.label(tr(language, "PoS 过旧槽滞后上限", "PoS Max Past Slot Lag"));
-                            ui.text_edit_singleline(&mut config.chain_pos_max_past_slot_lag);
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            ui.checkbox(
-                                &mut config.chain_pos_adaptive_tick_scheduler_enabled,
-                                tr(
-                                    language,
-                                    "启用 PoS 自适应 Tick 调度",
-                                    "Enable PoS Adaptive Tick Scheduler",
-                                ),
-                            );
-                            ui.label(tr(
-                                language,
-                                "PoS 槽时钟起点 Unix 毫秒（可留空）",
-                                "PoS Slot Clock Genesis Unix Ms (optional)",
-                            ));
-                            ui.text_edit_singleline(
-                                &mut config.chain_pos_slot_clock_genesis_unix_ms,
-                            );
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(tr(language, "链验证者", "Chain Validators"));
-                            ui.text_edit_singleline(&mut config.chain_node_validators);
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(tr(language, "链运行时二进制路径", "Chain Runtime Binary"));
-                            ui.text_edit_singleline(&mut config.chain_runtime_bin);
-                        });
-                    },
-                );
-
-                ui.separator();
-                ui.heading(tr(language, "LLM 连接配置", "LLM Connection"));
-                ui.label(format!(
-                    "{}: {}",
-                    tr(language, "配置文件", "Config File"),
-                    self.config_path.display()
-                ));
-                ui.separator();
-
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("API Key");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.draft.api_key)
-                            .desired_width(480.0)
-                            .password(true),
+                modal_card(ui, |ui| {
+                    ui.label(
+                        egui::RichText::new(tr(language, "设置中心", "Settings Center"))
+                            .strong()
+                            .size(18.0),
                     );
+                    ui.small(tr(
+                        language,
+                        "管理启动器、链运行时和 LLM 连接配置。",
+                        "Manage launcher, chain runtime, and LLM connection settings.",
+                    ));
                 });
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Base URL");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.draft.base_url).desired_width(480.0),
-                    );
-                });
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Model");
-                    ui.add(egui::TextEdit::singleline(&mut self.draft.model).desired_width(480.0));
-                });
+                ui.add_space(8.0);
 
-                ui.horizontal(|ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(500.0)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        modal_card(ui, |ui| {
+                            ui.collapsing(tr(language, "游戏与显示", "Game & Viewer"), |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(tr(language, "场景", "Scenario"));
+                                    ui.text_edit_singleline(&mut config.scenario);
+                                    ui.label(tr(language, "实时服务绑定", "Live Bind"));
+                                    ui.text_edit_singleline(&mut config.live_bind);
+                                });
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(tr(language, "WebSocket 绑定", "Web Bind"));
+                                    ui.text_edit_singleline(&mut config.web_bind);
+                                    ui.label(tr(language, "游戏页面主机", "Viewer Host"));
+                                    ui.text_edit_singleline(&mut config.viewer_host);
+                                });
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(tr(language, "游戏页面端口", "Viewer Port"));
+                                    ui.text_edit_singleline(&mut config.viewer_port);
+                                    ui.label(tr(
+                                        language,
+                                        "前端静态资源目录",
+                                        "Viewer Static Directory",
+                                    ));
+                                    ui.text_edit_singleline(&mut config.viewer_static_dir);
+                                });
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.checkbox(
+                                        &mut config.llm_enabled,
+                                        tr(language, "启用 LLM", "Enable LLM"),
+                                    );
+                                    ui.checkbox(
+                                        &mut config.auto_open_browser,
+                                        tr(
+                                            language,
+                                            "自动打开浏览器",
+                                            "Open Browser Automatically",
+                                        ),
+                                    );
+                                });
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(tr(language, "启动器二进制路径", "Launcher Binary"));
+                                    ui.text_edit_singleline(&mut config.launcher_bin);
+                                });
+                            });
+                        });
+                        ui.add_space(8.0);
+
+                        modal_card(ui, |ui| {
+                            ui.collapsing(
+                                tr(language, "区块链运行时", "Blockchain Runtime"),
+                                |ui| {
+                                    render_chain_settings(ui, language, config);
+                                },
+                            );
+                        });
+                        ui.add_space(8.0);
+
+                        modal_card(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(tr(language, "LLM 连接配置", "LLM Connection"))
+                                    .strong()
+                                    .size(14.0),
+                            );
+                            ui.small(format!(
+                                "{}: {}",
+                                tr(language, "配置文件", "Config File"),
+                                self.config_path.display()
+                            ));
+                            ui.add_space(6.0);
+
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("API Key");
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.draft.api_key)
+                                        .desired_width((ui.available_width() - 8.0).max(220.0))
+                                        .password(true),
+                                );
+                            });
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Base URL");
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.draft.base_url)
+                                        .desired_width((ui.available_width() - 8.0).max(220.0)),
+                                );
+                            });
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Model");
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.draft.model)
+                                        .desired_width((ui.available_width() - 8.0).max(220.0)),
+                                );
+                            });
+                        });
+                    });
+
+                ui.add_space(8.0);
+                ui.horizontal_wrapped(|ui| {
                     if ui
                         .button(tr(language, "保存到 config.toml", "Save to config.toml"))
                         .clicked()
@@ -294,6 +265,91 @@ fn tr(language: UiLanguage, zh: &'static str, en: &'static str) -> &'static str 
         UiLanguage::ZhCn => zh,
         UiLanguage::EnUs => en,
     }
+}
+
+fn modal_card(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new()
+        .fill(egui::Color32::from_rgb(255, 255, 255))
+        .stroke(egui::Stroke::new(
+            1.0,
+            egui::Color32::from_rgb(224, 229, 236),
+        ))
+        .inner_margin(egui::Margin::symmetric(10, 8))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            add_contents(ui);
+        });
+}
+
+fn render_chain_settings(ui: &mut egui::Ui, language: UiLanguage, config: &mut LaunchConfig) {
+    ui.horizontal_wrapped(|ui| {
+        ui.checkbox(
+            &mut config.chain_enabled,
+            tr(language, "启用链运行时", "Enable Chain Runtime"),
+        );
+        ui.label(tr(language, "链状态服务绑定", "Chain Status Bind"));
+        ui.text_edit_singleline(&mut config.chain_status_bind);
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.label(tr(language, "链节点 ID", "Chain Node ID"));
+        ui.text_edit_singleline(&mut config.chain_node_id);
+        ui.label(tr(language, "链世界 ID", "Chain World ID"));
+        ui.text_edit_singleline(&mut config.chain_world_id);
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.label(tr(language, "链节点角色", "Chain Role"));
+        ui.text_edit_singleline(&mut config.chain_node_role);
+        ui.label(tr(
+            language,
+            "链轮询间隔毫秒",
+            "Chain Worker Poll/Fallback Milliseconds",
+        ));
+        ui.text_edit_singleline(&mut config.chain_node_tick_ms);
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.label(tr(
+            language,
+            "PoS 槽时长毫秒",
+            "PoS Slot Duration Milliseconds",
+        ));
+        ui.text_edit_singleline(&mut config.chain_pos_slot_duration_ms);
+        ui.label(tr(language, "PoS 每槽 Tick 数", "PoS Ticks Per Slot"));
+        ui.text_edit_singleline(&mut config.chain_pos_ticks_per_slot);
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.label(tr(
+            language,
+            "PoS 提案 Tick 相位",
+            "PoS Proposal Tick Phase",
+        ));
+        ui.text_edit_singleline(&mut config.chain_pos_proposal_tick_phase);
+        ui.label(tr(language, "PoS 过旧槽滞后上限", "PoS Max Past Slot Lag"));
+        ui.text_edit_singleline(&mut config.chain_pos_max_past_slot_lag);
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.checkbox(
+            &mut config.chain_pos_adaptive_tick_scheduler_enabled,
+            tr(
+                language,
+                "启用 PoS 自适应 Tick 调度",
+                "Enable PoS Adaptive Tick Scheduler",
+            ),
+        );
+        ui.label(tr(
+            language,
+            "PoS 槽时钟起点 Unix 毫秒（可留空）",
+            "PoS Slot Clock Genesis Unix Ms (optional)",
+        ));
+        ui.text_edit_singleline(&mut config.chain_pos_slot_clock_genesis_unix_ms);
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.label(tr(language, "链验证者", "Chain Validators"));
+        ui.text_edit_singleline(&mut config.chain_node_validators);
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.label(tr(language, "链运行时二进制路径", "Chain Runtime Binary"));
+        ui.text_edit_singleline(&mut config.chain_runtime_bin);
+    });
 }
 
 fn load_llm_settings_from_config(path: &Path) -> Result<LlmSettingsDraft, String> {

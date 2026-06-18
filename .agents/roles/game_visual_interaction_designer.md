@@ -60,6 +60,7 @@
 - 是否说明玩家第一眼应读到的目标、对象、行动和反馈
 - 是否区分视觉/交互体验判断、玩法规则判断和工程实现判断
 - 是否为 UI-heavy 改动提供 visual companion / screenshot / browser smoke 需求或 skip 原因
+- 若使用 Image2 / 视觉目标图，是否记录 target image、真实 native/browser screenshot、comparison/gap notes，并明确它不替代功能验收、真实交互 smoke 或 QA evidence
 - 是否给出移动端、低性能、无 renderer fallback 或可访问性风险
 - 是否把实现 brief 回流给 `viewer_engineer`，把规则/玩家承诺风险回流给对应 owner
 - 若 `game_visual_interaction_designer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role game_visual_interaction_designer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`

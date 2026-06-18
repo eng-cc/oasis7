@@ -47,7 +47,7 @@ Do not use this skill when:
    - main tradeoff
    - why it fits or does not fit oasis7 workflow truth
 5. Recommend one approach.
-6. If the problem is visual, decide whether to use `agent-browser` or another repo-owned visual step to compare layouts, IA, or states.
+6. If the problem is visual, decide whether to use `agent-browser`, `gpt-image-2` when explicitly requested/authorized, or another repo-owned visual step to compare layouts, IA, states, or Image2 target images against real native/browser screenshots.
 7. Write the chosen direction back into repo truth before implementation:
    - `prd.md` if scope/behavior/boundary changed
    - `project.md` if execution path or affected surfaces changed
@@ -79,6 +79,10 @@ BOUNDED BRAINSTORMING COMPLETE
 ## Visual Companion
 - Needed: yes/no
 - If yes: artifact type and target question
+- Target image path:
+- Native/browser screenshot path:
+- Comparison/gap notes path:
+- Non-goal:
 
 ## Repo Truth Writeback
 - `prd.md`:
@@ -91,3 +95,4 @@ BOUNDED BRAINSTORMING COMPLETE
 - Do not leave the result as chat-only guidance if it changes task truth.
 - Do not turn this into mandatory upfront ceremony for every request.
 - Do not present option lists without a recommendation unless the user explicitly wants open-ended exploration.
+- Do not claim completion from an Image2 target image alone; real UI screenshot, interaction smoke, or QA evidence is still required for implementation convergence.

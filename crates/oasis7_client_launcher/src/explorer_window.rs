@@ -11,6 +11,8 @@ mod explorer_window_p1_mempool_view;
 
 #[path = "explorer_window_view.rs"]
 mod explorer_window_view;
+#[path = "explorer_window_view_search.rs"]
+mod explorer_window_view_search;
 
 use explorer_window_p1::ExplorerP1State;
 pub(super) use explorer_window_p1::{

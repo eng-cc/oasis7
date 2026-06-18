@@ -5,6 +5,7 @@
 - [ ] software-safe-playability-unblock (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 让 `software_safe` formal summary 将 canonical `available_actions` 重新暴露为可执行入口，并在 gameplay summary 与空实体快照并存时显式标记 `runtime_snapshot_empty_entities` blocker。 Trace: .pm/tasks/task_1c5ac527bed54e969b737137fc998ab8.yaml
 
 ### 最近完成（保留一跳 Trace）
+- [x] launcher-visual-comp-workflow-ui-optimization (PRD-WORLD_SIMULATOR-039/046) [test_tier_required]: 用 Image2 目标图、真实 native 截图对比和专业角色 review 收敛 launcher 首屏、弹窗/重型窗口视觉系统，并把 visual companion 方法论边界写回 workflow/skill/governance 文档。 Trace: .pm/tasks/task_54647d0add024a98b801d3736700ff22.yaml
 - [x] module-project-log-slimming (PRD-ENGINEERING-030) [test_tier_required]: 压缩 world-simulator 主项目页历史流水为当前/最近任务索引与历史追溯入口，保留未完成任务、模块状态和一跳 task trace。 Trace: .pm/tasks/task_49ef9270afc646d98d4a8386c0888eab.yaml
 - [x] viewer-layout-spacing-polish (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 优化 `software_safe` Viewer 首屏布局层级、移动端快捷入口、fallback diagnostic 顺序与沉浸模式移动端间距。 Trace: .pm/tasks/task_0c3cddc969d24f48b0575be3d7aa87f7.yaml
 - [x] viewer-pixel-world-semantic-positioning (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 增加 `location_derived` 确定性语义定位、关系线恢复与 fallback DOM world-coordinate placement。 Trace: .pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.yaml

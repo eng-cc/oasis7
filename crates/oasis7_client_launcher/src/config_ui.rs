@@ -490,57 +490,90 @@ impl ClientLauncherApp {
         }
 
         let mut keep_open = self.config_window_open;
+        let window_size = Self::modal_window_size(ctx, 900.0, 660.0);
         egui::Window::new(self.tr("高级配置", "Advanced Config"))
             .collapsible(false)
             .resizable(true)
-            .default_width(780.0)
-            .default_height(640.0)
+            .default_size(window_size)
             .open(&mut keep_open)
             .show(ctx, |ui| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        for section in NATIVE_UI_SECTIONS {
-                            self.render_config_section(ui, section);
-                        }
-                    });
+                let chain_issue_count = if self.config.chain_enabled {
+                    chain_required_issues.len()
+                } else {
+                    0
+                };
+                let issue_count = game_required_issues.len() + chain_issue_count;
+                Self::modal_header(
+                    ui,
+                    self.tr("高级配置", "Advanced Config"),
+                    self.tr(
+                        "集中编辑启动器、链运行时和 Provider 字段。",
+                        "Edit launcher, chain runtime, and provider fields in one place.",
+                    ),
+                    Some((
+                        if issue_count == 0 {
+                            self.tr("配置通过", "Config Ready")
+                        } else {
+                            self.tr("存在阻断", "Blocked")
+                        },
+                        if issue_count == 0 {
+                            egui::Color32::from_rgb(62, 152, 92)
+                        } else {
+                            egui::Color32::from_rgb(188, 60, 60)
+                        },
+                    )),
+                );
+                ui.add_space(8.0);
 
-                ui.separator();
+                Self::modal_card(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height((window_size.y - 220.0).max(300.0))
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            for section in NATIVE_UI_SECTIONS {
+                                self.render_config_section(ui, section);
+                            }
+                        });
+                });
+                ui.add_space(8.0);
 
-                if game_required_issues.is_empty() {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(36, 130, 78),
+                if issue_count == 0 {
+                    Self::modal_banner(
+                        ui,
                         self.tr(
                             "必填配置项已通过校验，可启动游戏",
                             "Required configuration check passed; game can start",
                         ),
+                        egui::Color32::from_rgb(36, 130, 78),
                     );
                 } else {
-                    ui.group(|ui| {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(188, 60, 60),
-                            self.tr(
-                                "游戏启动前请先修复以下必填配置项：",
-                                "Fix the required game configuration issues before starting:",
-                            ),
+                    Self::modal_card(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(self.tr("启动前阻断项", "Preflight Blockers"))
+                                .strong()
+                                .size(14.0),
                         );
                         for issue in game_required_issues {
-                            ui.label(format!("- {}", issue.text(self.ui_language)));
+                            ui.horizontal_wrapped(|ui| {
+                                Self::modal_status_chip(
+                                    ui,
+                                    self.tr("游戏", "Game"),
+                                    egui::Color32::from_rgb(188, 60, 60),
+                                );
+                                ui.small(issue.text(self.ui_language));
+                            });
                         }
-                    });
-                }
-
-                if self.config.chain_enabled && !chain_required_issues.is_empty() {
-                    ui.group(|ui| {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(188, 60, 60),
-                            self.tr(
-                                "区块链启动前请先修复以下配置项：",
-                                "Fix the blockchain configuration issues before starting:",
-                            ),
-                        );
-                        for issue in chain_required_issues {
-                            ui.label(format!("- {}", issue.text(self.ui_language)));
+                        if self.config.chain_enabled {
+                            for issue in chain_required_issues {
+                                ui.horizontal_wrapped(|ui| {
+                                    Self::modal_status_chip(
+                                        ui,
+                                        self.tr("区块链", "Chain"),
+                                        egui::Color32::from_rgb(188, 60, 60),
+                                    );
+                                    ui.small(issue.text(self.ui_language));
+                                });
+                            }
                         }
                     });
                 }
@@ -657,63 +690,112 @@ impl ClientLauncherApp {
 
         let mut keep_open = self.startup_guide_state.open;
         let mut request_close = false;
+        let window_size = Self::modal_window_size(ctx, 760.0, 560.0);
         egui::Window::new(title)
             .collapsible(false)
             .resizable(true)
-            .default_width(760.0)
-            .default_height(560.0)
+            .default_size(window_size)
             .open(&mut keep_open)
             .show(ctx, |ui| {
-                ui.label(intro);
-                ui.separator();
+                Self::modal_header(
+                    ui,
+                    title,
+                    intro,
+                    Some((
+                        if issues.is_empty() {
+                            self.tr("已通过", "Ready")
+                        } else {
+                            self.tr("需修复", "Needs Fix")
+                        },
+                        if issues.is_empty() {
+                            egui::Color32::from_rgb(62, 152, 92)
+                        } else {
+                            egui::Color32::from_rgb(188, 60, 60)
+                        },
+                    )),
+                );
+                ui.add_space(8.0);
 
                 if issues.is_empty() {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(36, 130, 78),
+                    Self::modal_banner(
+                        ui,
                         self.tr(
                             "当前目标已无阻断配置，可关闭窗口后继续启动。",
                             "No blocking configuration remains for this target. Close this window and start again.",
                         ),
+                        egui::Color32::from_rgb(36, 130, 78),
                     );
-                    if ui.button(self.tr("关闭", "Close")).clicked() {
+                    ui.add_space(8.0);
+                    if Self::modal_primary_button(ui, self.tr("关闭", "Close")).clicked() {
                         request_close = true;
                     }
                     return;
                 }
 
-                ui.colored_label(
-                    egui::Color32::from_rgb(188, 60, 60),
-                    self.tr("待修复问题：", "Issues to fix:"),
-                );
-                for issue in issues {
-                    ui.label(format!("- {}", issue.text(self.ui_language)));
-                }
+                Self::modal_card(ui, |ui| {
+                    ui.label(
+                        egui::RichText::new(self.tr("待修复问题", "Issues to Fix"))
+                            .strong()
+                            .size(14.0),
+                    );
+                    ui.add_space(4.0);
+                    for issue in issues {
+                        ui.horizontal_wrapped(|ui| {
+                            Self::modal_status_chip(
+                                ui,
+                                self.tr("阻断", "Blocked"),
+                                egui::Color32::from_rgb(188, 60, 60),
+                            );
+                            ui.small(issue.text(self.ui_language));
+                        });
+                    }
+                });
+                ui.add_space(8.0);
 
-                ui.separator();
-                ui.label(self.tr("直接编辑下列字段：", "Edit fields directly below:"));
-
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        let stack_text_fields = ui.available_width() <= 560.0;
-                        for field_id in &field_ids {
-                            if !self.render_config_field_by_id(ui, field_id, stack_text_fields) {
-                                ui.small(
-                                    self.tr(
-                                        "存在未映射字段，请通过“高级配置”继续修复。",
-                                        "Some fields are not mapped. Use Advanced Config to continue.",
-                                    ),
-                                );
+                Self::modal_card(ui, |ui| {
+                    ui.label(
+                        egui::RichText::new(
+                            self.tr("直接编辑下列字段", "Edit Fields Directly"),
+                        )
+                        .strong()
+                        .size(14.0),
+                    );
+                    ui.add_space(4.0);
+                    egui::ScrollArea::vertical()
+                        .max_height((window_size.y - 260.0).max(180.0))
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            let stack_text_fields = ui.available_width() <= 560.0;
+                            for field_id in &field_ids {
+                                if !self.render_config_field_by_id(
+                                    ui,
+                                    field_id,
+                                    stack_text_fields,
+                                ) {
+                                    Self::modal_banner(
+                                        ui,
+                                        self.tr(
+                                            "存在未映射字段，请通过“高级配置”继续修复。",
+                                            "Some fields are not mapped. Use Advanced Config to continue.",
+                                        ),
+                                        egui::Color32::from_rgb(201, 146, 44),
+                                    );
+                                }
                             }
-                        }
-                    });
+                        });
+                });
 
-                ui.separator();
+                ui.add_space(8.0);
                 ui.horizontal_wrapped(|ui| {
-                    if ui.button(self.tr("打开高级配置", "Open Advanced Config")).clicked() {
+                    if Self::modal_secondary_button(
+                        ui,
+                        self.tr("打开高级配置", "Open Advanced Config"),
+                    )
+                    .clicked()
+                    {
                         self.config_window_open = true;
                     }
-                    if ui.button(self.tr("关闭", "Close")).clicked() {
+                    if Self::modal_primary_button(ui, self.tr("关闭", "Close")).clicked() {
                         request_close = true;
                     }
                 });
@@ -730,7 +812,7 @@ impl ClientLauncherApp {
         self.startup_guide_state.open = true;
     }
 
-    fn collect_issue_fields(&self, issues: &[ConfigIssue]) -> Vec<&'static str> {
+    pub(super) fn collect_issue_fields(&self, issues: &[ConfigIssue]) -> Vec<&'static str> {
         let mut fields = Vec::new();
         for issue in issues {
             for field_id in issue_field_ids(*issue) {
@@ -948,7 +1030,7 @@ impl ClientLauncherApp {
         );
     }
 
-    fn render_config_field_by_id(
+    pub(super) fn render_config_field_by_id(
         &mut self,
         ui: &mut egui::Ui,
         field_id: &str,

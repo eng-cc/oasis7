@@ -59,7 +59,12 @@ mod llm_settings;
 #[path = "llm_settings_web.rs"]
 mod llm_settings;
 mod main_app_shell;
+mod main_app_shell_health;
+#[cfg(not(target_arch = "wasm32"))]
+mod main_app_shell_screenshot_preview;
 mod main_chain_status;
+#[cfg(not(target_arch = "wasm32"))]
+mod main_screenshot_override;
 mod main_ui_helpers;
 mod peer_details_window;
 mod platform_ops;
@@ -68,6 +73,7 @@ mod self_guided;
 mod self_guided_blocked_actions;
 mod self_guided_error_cards;
 mod self_guided_onboarding_reminder;
+mod self_guided_onboarding_steps;
 mod self_guided_preflight;
 mod transfer_auth;
 #[cfg(not(target_arch = "wasm32"))]
@@ -81,7 +87,9 @@ use main_chain_status::*;
 pub(crate) use provider_check_status::{
     ProviderCheckStatus, ProviderCompatibilityStatus, ProviderSnapshot,
 };
-use self_guided::{DemoModePhase, LauncherUxState, OnboardingState};
+use self_guided::{
+    resolve_next_task_hint, DemoModePhase, LauncherUxState, NextTaskHint, OnboardingState,
+};
 #[cfg(test)]
 pub(crate) use web_api_support::{encode_query_value, WebChainNodeObservabilityAlert};
 pub(crate) use web_api_support::{
@@ -127,6 +135,10 @@ const EGUI_CJK_FONT_BYTES: &[u8] = include_bytes!("../../../third_party/ms-yahei
 const OASIS7_CLIENT_LAUNCHER_FONT_ENV: &str = "OASIS7_CLIENT_LAUNCHER_FONT";
 const OASIS7_CLIENT_LAUNCHER_LANG_ENV: &str = "OASIS7_CLIENT_LAUNCHER_LANG";
 #[cfg(not(target_arch = "wasm32"))]
+const OASIS7_CLIENT_LAUNCHER_WINDOW_SIZE_ENV: &str = "OASIS7_CLIENT_LAUNCHER_WINDOW_SIZE";
+#[cfg(not(target_arch = "wasm32"))]
+const OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL_ENV: &str = "OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL";
+#[cfg(not(target_arch = "wasm32"))]
 const GRACEFUL_STOP_TIMEOUT_MS: u64 = 4000;
 #[cfg(not(target_arch = "wasm32"))]
 const STOP_POLL_INTERVAL_MS: u64 = 80;
@@ -171,7 +183,7 @@ fn default_chain_node_id() -> String {
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size(egui::vec2(920.0, 680.0)),
+        viewport: egui::ViewportBuilder::default().with_inner_size(default_native_window_size()),
         ..Default::default()
     };
 
@@ -180,9 +192,31 @@ fn main() -> eframe::Result<()> {
         native_options,
         Box::new(|cc| {
             configure_egui_fonts(&cc.egui_ctx);
+            configure_egui_visuals(&cc.egui_ctx);
             Ok(Box::<ClientLauncherApp>::default())
         }),
     )
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn default_native_window_size() -> egui::Vec2 {
+    env::var(OASIS7_CLIENT_LAUNCHER_WINDOW_SIZE_ENV)
+        .ok()
+        .and_then(|raw| parse_window_size(raw.as_str()))
+        .unwrap_or_else(|| egui::vec2(920.0, 680.0))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn parse_window_size(raw: &str) -> Option<egui::Vec2> {
+    let normalized = raw.replace(['X', ','], "x");
+    let (width, height) = normalized.split_once('x')?;
+    let width = width.trim().parse::<f32>().ok()?;
+    let height = height.trim().parse::<f32>().ok()?;
+    if width >= 640.0 && height >= 520.0 {
+        Some(egui::vec2(width, height))
+    } else {
+        None
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -205,6 +239,7 @@ fn main() {
                 web_options,
                 Box::new(|cc| {
                     configure_egui_fonts(&cc.egui_ctx);
+                    configure_egui_visuals(&cc.egui_ctx);
                     Ok(Box::<ClientLauncherApp>::default())
                 }),
             )
@@ -261,6 +296,26 @@ fn configure_egui_fonts(context: &egui::Context) {
         ),
     }
     context.set_fonts(fonts);
+}
+
+fn configure_egui_visuals(context: &egui::Context) {
+    let mut style = (*context.style()).clone();
+    style.visuals = egui::Visuals::light();
+    style.spacing.item_spacing = egui::vec2(7.0, 5.0);
+    style.spacing.button_padding = egui::vec2(8.0, 5.0);
+    style.spacing.window_margin = egui::Margin::same(12);
+    style.visuals.panel_fill = egui::Color32::from_rgb(247, 249, 251);
+    style.visuals.extreme_bg_color = egui::Color32::from_rgb(241, 245, 249);
+    style.visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(255, 255, 255);
+    style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(249, 251, 253);
+    style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(239, 246, 255);
+    let soft_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(224, 229, 236));
+    style.visuals.widgets.noninteractive.bg_stroke = soft_stroke;
+    style.visuals.widgets.inactive.bg_stroke = soft_stroke;
+    style.visuals.widgets.hovered.bg_stroke = soft_stroke;
+    style.visuals.window_stroke = soft_stroke;
+    style.visuals.selection.bg_fill = egui::Color32::from_rgb(76, 139, 111);
+    context.set_style(style);
 }
 
 fn load_font_override_from_env() -> Option<(String, egui::FontData)> {
@@ -1020,7 +1075,8 @@ impl Default for ClientLauncherApp {
         } else {
             ChainRuntimeStatus::Disabled
         };
-        Self {
+        #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
+        let mut app = Self {
             config,
             config_dirty: false,
             provider_check_status: ProviderCheckStatus::Disabled,
@@ -1065,10 +1121,16 @@ impl Default for ClientLauncherApp {
             control_listen_bind,
             #[cfg(not(target_arch = "wasm32"))]
             control_manage_service,
-        }
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        app.apply_screenshot_modal_override();
+        app
     }
 }
 
+#[cfg(test)]
+#[path = "main_tests_modal_render.rs"]
+mod modal_render_tests;
 #[cfg(test)]
 #[path = "main_observability_tests.rs"]
 mod observability_tests;

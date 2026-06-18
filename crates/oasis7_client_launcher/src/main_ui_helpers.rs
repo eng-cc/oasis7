@@ -48,7 +48,7 @@ impl ClientLauncherApp {
         }
     }
 
-    fn p2p_probe_bool_text(&self, value: bool) -> &'static str {
+    pub(super) fn p2p_probe_bool_text(&self, value: bool) -> &'static str {
         match (value, self.ui_language) {
             (true, UiLanguage::ZhCn) => "是",
             (true, UiLanguage::EnUs) => "yes",
@@ -57,7 +57,7 @@ impl ClientLauncherApp {
         }
     }
 
-    fn observability_status_text(&self, status: &str) -> &'static str {
+    pub(super) fn observability_status_text(&self, status: &str) -> &'static str {
         match (status, self.ui_language) {
             ("ok", UiLanguage::ZhCn) => "正常",
             ("ok", UiLanguage::EnUs) => "OK",
@@ -70,13 +70,141 @@ impl ClientLauncherApp {
         }
     }
 
-    fn observability_status_color(&self, status: &str) -> egui::Color32 {
+    pub(super) fn observability_status_color(&self, status: &str) -> egui::Color32 {
         match status {
             "ok" => egui::Color32::from_rgb(54, 132, 74),
             "warn" => egui::Color32::from_rgb(184, 122, 36),
             "critical" => egui::Color32::from_rgb(188, 60, 60),
             _ => egui::Color32::from_rgb(110, 110, 110),
         }
+    }
+
+    pub(super) fn modal_window_size(
+        ctx: &egui::Context,
+        desired_width: f32,
+        desired_height: f32,
+    ) -> egui::Vec2 {
+        let screen = ctx.input(|input| input.content_rect().size());
+        let width = desired_width.min((screen.x - 48.0).max(360.0));
+        let height = desired_height.min((screen.y - 72.0).max(300.0));
+        egui::vec2(width, height)
+    }
+
+    pub(super) fn modal_card(
+        ui: &mut egui::Ui,
+        add_contents: impl FnOnce(&mut egui::Ui),
+    ) -> egui::Response {
+        egui::Frame::new()
+            .fill(egui::Color32::from_rgb(255, 255, 255))
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(224, 229, 236),
+            ))
+            .inner_margin(egui::Margin::symmetric(10, 8))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                add_contents(ui);
+            })
+            .response
+    }
+
+    pub(super) fn modal_header(
+        ui: &mut egui::Ui,
+        title: &str,
+        subtitle: &str,
+        chip: Option<(&str, egui::Color32)>,
+    ) {
+        Self::modal_card(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new(title).strong().size(18.0));
+                    if !subtitle.is_empty() {
+                        ui.small(
+                            egui::RichText::new(subtitle)
+                                .color(egui::Color32::from_rgb(92, 105, 118)),
+                        );
+                    }
+                });
+                if let Some((label, color)) = chip {
+                    ui.add_space(8.0);
+                    Self::modal_status_chip(ui, label, color);
+                }
+            });
+        });
+    }
+
+    pub(super) fn modal_status_chip(
+        ui: &mut egui::Ui,
+        label: &str,
+        color: egui::Color32,
+    ) -> egui::Response {
+        let fill = if color == egui::Color32::from_rgb(62, 152, 92) {
+            egui::Color32::from_rgb(229, 246, 235)
+        } else if color == egui::Color32::from_rgb(188, 60, 60) {
+            egui::Color32::from_rgb(252, 235, 232)
+        } else if color == egui::Color32::from_rgb(201, 146, 44) {
+            egui::Color32::from_rgb(253, 244, 224)
+        } else {
+            egui::Color32::from_rgb(238, 244, 252)
+        };
+        egui::Frame::new()
+            .fill(fill)
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(224, 229, 236),
+            ))
+            .inner_margin(egui::Margin::symmetric(7, 3))
+            .show(ui, |ui| {
+                ui.small(egui::RichText::new(label).strong().color(color));
+            })
+            .response
+    }
+
+    pub(super) fn modal_banner(ui: &mut egui::Ui, text: &str, color: egui::Color32) {
+        let fill = if color == egui::Color32::from_rgb(62, 152, 92) {
+            egui::Color32::from_rgb(238, 249, 242)
+        } else if color == egui::Color32::from_rgb(188, 60, 60) {
+            egui::Color32::from_rgb(253, 241, 239)
+        } else {
+            egui::Color32::from_rgb(238, 244, 252)
+        };
+        egui::Frame::new()
+            .fill(fill)
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(224, 229, 236),
+            ))
+            .inner_margin(egui::Margin::symmetric(9, 6))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.small(egui::RichText::new(text).strong().color(color));
+            });
+    }
+
+    pub(super) fn modal_primary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+        ui.add(
+            egui::Button::new(
+                egui::RichText::new(label)
+                    .strong()
+                    .size(12.0)
+                    .color(egui::Color32::WHITE),
+            )
+            .fill(egui::Color32::from_rgb(42, 169, 87))
+            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(34, 142, 74)))
+            .min_size(egui::vec2(104.0, 30.0)),
+        )
+    }
+
+    pub(super) fn modal_secondary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+        ui.add(
+            egui::Button::new(egui::RichText::new(label).size(12.0))
+                .fill(egui::Color32::from_rgb(247, 250, 253))
+                .stroke(egui::Stroke::new(
+                    1.0,
+                    egui::Color32::from_rgb(218, 226, 236),
+                ))
+                .min_size(egui::vec2(104.0, 30.0)),
+        )
     }
 
     fn peer_health_status_text(&self, status: &str) -> &'static str {
@@ -132,21 +260,26 @@ impl ClientLauncherApp {
         rows: &[(&str, Option<&WebChainReplicationPeerHealth>)],
     ) {
         if rows.is_empty() {
-            ui.small(self.tr(
-                "当前没有已连接 peer；如已发现候选 peer，可继续看上面的 Peer 健康统计和告警。",
-                "No peers are currently connected. Use the peer health counts and alerts above to inspect discovered candidates.",
-            ));
+            Self::modal_banner(
+                ui,
+                self.tr(
+                    "当前没有已连接 peer；如已发现候选 peer，可继续看上面的 Peer 健康统计和告警。",
+                    "No peers are currently connected. Use the peer health counts and alerts above to inspect discovered candidates.",
+                ),
+                egui::Color32::from_rgb(201, 146, 44),
+            );
             return;
         }
 
         for (peer_id, health) in rows {
-            ui.group(|ui| {
+            Self::modal_card(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(egui::RichText::new(*peer_id).monospace());
                     if let Some(health) = health {
-                        ui.colored_label(
-                            self.peer_health_status_color(health.status.as_str()),
+                        Self::modal_status_chip(
+                            ui,
                             self.peer_health_status_text(health.status.as_str()),
+                            self.peer_health_status_color(health.status.as_str()),
                         );
                         if let Some(path_kind) = health.active_path_kind.as_deref() {
                             ui.small(format!("{}: {}", self.tr("路径", "Path"), path_kind));
@@ -172,10 +305,15 @@ impl ClientLauncherApp {
                             ));
                         }
                     } else {
-                        ui.small(self.tr("未附带 health 快照", "No health snapshot attached"));
+                        Self::modal_status_chip(
+                            ui,
+                            self.tr("无快照", "No Snapshot"),
+                            egui::Color32::from_rgb(201, 146, 44),
+                        );
                     }
                 });
             });
+            ui.add_space(6.0);
         }
     }
 
@@ -185,69 +323,96 @@ impl ClientLauncherApp {
         include_title: bool,
     ) {
         if include_title {
-            ui.heading(self.tr("P2P Peer 明细", "P2P Peer Details"));
-            ui.small(self.tr(
-                "单独窗口查看本地 peer、已连接 peer、路径和来源细节。",
-                "Inspect local peer, connected peers, path kind, and discovery details in a dedicated window.",
-            ));
+            Self::modal_header(
+                ui,
+                self.tr("P2P Peer 明细", "P2P Peer Details"),
+                self.tr(
+                    "单独窗口查看本地 peer、已连接 peer、路径和来源细节。",
+                    "Inspect local peer, connected peers, path kind, and discovery details in a dedicated window.",
+                ),
+                None,
+            );
             ui.add_space(6.0);
         }
 
         if !self.config.chain_enabled {
-            ui.small(self.tr(
-                "当前配置已禁用区块链，因此没有可展示的 peer 明细。",
-                "Blockchain is disabled in the current configuration, so no peer details are available.",
-            ));
+            Self::modal_banner(
+                ui,
+                self.tr(
+                    "当前配置已禁用区块链，因此没有可展示的 peer 明细。",
+                    "Blockchain is disabled in the current configuration, so no peer details are available.",
+                ),
+                egui::Color32::from_rgb(188, 60, 60),
+            );
             return;
         }
 
         if let Some(status) = self.chain_observability_status.as_ref() {
             ui.horizontal_wrapped(|ui| {
-                ui.small(format!("{}:", self.tr("状态", "Status")));
-                ui.colored_label(
-                    self.observability_status_color(status.status.as_str()),
+                Self::modal_status_chip(
+                    ui,
                     self.observability_status_text(status.status.as_str()),
+                    self.observability_status_color(status.status.as_str()),
                 );
-                ui.separator();
-                ui.small(format!(
-                    "{}: {}",
-                    self.tr("已连接 Peer", "Connected Peers"),
-                    status.connected_peer_count
-                ));
-                ui.separator();
-                ui.small(format!(
-                    "{}: {}",
-                    self.tr("Peer Heads", "Peer Heads"),
-                    status.known_peer_heads
-                ));
-                ui.separator();
-                ui.small(format!(
-                    "{}: {}",
-                    self.tr("网络落后高度", "Network Lag"),
-                    status.network_height_lag
-                ));
+                Self::modal_status_chip(
+                    ui,
+                    &format!(
+                        "{}: {}",
+                        self.tr("已连接 Peer", "Connected Peers"),
+                        status.connected_peer_count
+                    ),
+                    egui::Color32::from_rgb(74, 116, 168),
+                );
+                Self::modal_status_chip(
+                    ui,
+                    &format!(
+                        "{}: {}",
+                        self.tr("Peer Heads", "Peer Heads"),
+                        status.known_peer_heads
+                    ),
+                    egui::Color32::from_rgb(81, 104, 132),
+                );
+                Self::modal_status_chip(
+                    ui,
+                    &format!(
+                        "{}: {}",
+                        self.tr("网络落后高度", "Network Lag"),
+                        status.network_height_lag
+                    ),
+                    egui::Color32::from_rgb(112, 121, 130),
+                );
             });
             ui.horizontal_wrapped(|ui| {
-                ui.small(format!(
-                    "{}: active={} candidate={} suspect={} blocked={}",
-                    self.tr("Peer 健康", "Peer Health"),
-                    status.active_peer_count,
-                    status.candidate_peer_count,
-                    status.suspect_peer_count,
-                    status.blocked_peer_count
-                ));
-                ui.separator();
-                ui.small(format!(
-                    "{}: {}",
-                    self.tr("带问题 Peer", "Peers With Issues"),
-                    status.peer_with_issues_count
-                ));
-                ui.separator();
-                ui.small(format!(
-                    "{}: {}",
-                    self.tr("复制近期错误", "Recent Replication Errors"),
-                    status.recent_replication_error_count
-                ));
+                Self::modal_status_chip(
+                    ui,
+                    &format!(
+                        "{}: active={} candidate={} suspect={} blocked={}",
+                        self.tr("Peer 健康", "Peer Health"),
+                        status.active_peer_count,
+                        status.candidate_peer_count,
+                        status.suspect_peer_count,
+                        status.blocked_peer_count
+                    ),
+                    egui::Color32::from_rgb(74, 116, 168),
+                );
+                Self::modal_status_chip(
+                    ui,
+                    &format!(
+                        "{}: {}",
+                        self.tr("带问题 Peer", "Peers With Issues"),
+                        status.peer_with_issues_count
+                    ),
+                    egui::Color32::from_rgb(201, 146, 44),
+                );
+                Self::modal_status_chip(
+                    ui,
+                    &format!(
+                        "{}: {}",
+                        self.tr("复制近期错误", "Recent Replication Errors"),
+                        status.recent_replication_error_count
+                    ),
+                    egui::Color32::from_rgb(188, 60, 60),
+                );
             });
             ui.small(format!(
                 "{}: {}",
@@ -275,10 +440,14 @@ impl ClientLauncherApp {
                 ));
             }
         } else {
-            ui.small(self.tr(
-                "启动区块链后，这里会显示节点健康、Peer 数、网络滞后和当前告警。",
-                "After blockchain starts, this view will show node health, peer counts, network lag, and active alerts.",
-            ));
+            Self::modal_banner(
+                ui,
+                self.tr(
+                    "启动区块链后，这里会显示节点健康、Peer 数、网络滞后和当前告警。",
+                    "After blockchain starts, this view will show node health, peer counts, network lag, and active alerts.",
+                ),
+                egui::Color32::from_rgb(201, 146, 44),
+            );
         }
 
         ui.separator();

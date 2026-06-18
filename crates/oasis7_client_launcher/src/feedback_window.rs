@@ -163,76 +163,131 @@ impl ClientLauncherApp {
             .to_string();
 
         let mut window_open = self.feedback_window_open;
+        let mut request_close = false;
+        let window_size = Self::modal_window_size(ctx, 620.0, 440.0);
         egui::Window::new(title)
             .open(&mut window_open)
             .resizable(true)
+            .default_size(window_size)
             .show(ctx, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(self.tr("类型", "Type"));
-                    egui::ComboBox::from_id_salt("feedback_kind_window")
-                        .selected_text(self.feedback_kind_label(self.feedback_draft.kind))
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(
-                                &mut self.feedback_draft.kind,
-                                FeedbackKind::Bug,
-                                feedback_bug_label.as_str(),
-                            );
-                            ui.selectable_value(
-                                &mut self.feedback_draft.kind,
-                                FeedbackKind::Suggestion,
-                                feedback_suggestion_label.as_str(),
-                            );
-                        });
-                    ui.label(self.tr("标题", "Title"));
-                    ui.text_edit_singleline(&mut self.feedback_draft.title);
-                });
-                ui.label(self.tr("描述", "Description"));
-                ui.add(
-                    egui::TextEdit::multiline(&mut self.feedback_draft.description)
-                        .desired_rows(4)
-                        .hint_text(feedback_desc_hint),
+                Self::modal_header(
+                    ui,
+                    self.tr("反馈", "Feedback"),
+                    self.tr(
+                        "记录问题、建议和近期运行上下文。",
+                        "Capture issues, suggestions, and recent runtime context.",
+                    ),
+                    Some((
+                        if self.is_feedback_available() {
+                            self.tr("可提交", "Ready")
+                        } else {
+                            self.tr("链未就绪", "Chain Pending")
+                        },
+                        if self.is_feedback_available() {
+                            egui::Color32::from_rgb(62, 152, 92)
+                        } else {
+                            egui::Color32::from_rgb(201, 146, 44)
+                        },
+                    )),
                 );
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(self.tr("反馈目录", "Feedback Directory"));
-                    ui.text_edit_singleline(&mut self.feedback_draft.output_dir);
-                    if ui.button(self.tr("提交反馈", "Submit Feedback")).clicked() {
-                        self.submit_feedback();
-                    }
+                ui.add_space(8.0);
+
+                Self::modal_card(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(self.tr("类型", "Type"));
+                        egui::ComboBox::from_id_salt("feedback_kind_window")
+                            .selected_text(self.feedback_kind_label(self.feedback_draft.kind))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut self.feedback_draft.kind,
+                                    FeedbackKind::Bug,
+                                    feedback_bug_label.as_str(),
+                                );
+                                ui.selectable_value(
+                                    &mut self.feedback_draft.kind,
+                                    FeedbackKind::Suggestion,
+                                    feedback_suggestion_label.as_str(),
+                                );
+                            });
+                        ui.label(self.tr("标题", "Title"));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.feedback_draft.title)
+                                .desired_width((ui.available_width() - 8.0).max(180.0)),
+                        );
+                    });
+                    ui.add_space(6.0);
+                    ui.label(self.tr("描述", "Description"));
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.feedback_draft.description)
+                            .desired_rows(5)
+                            .desired_width(ui.available_width())
+                            .hint_text(feedback_desc_hint),
+                    );
+                    ui.add_space(6.0);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(self.tr("反馈目录", "Feedback Directory"));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.feedback_draft.output_dir)
+                                .desired_width((ui.available_width() - 8.0).max(220.0)),
+                        );
+                    });
                 });
+                ui.add_space(8.0);
 
                 let feedback_issues = validate_feedback_draft(&self.feedback_draft);
                 if !feedback_issues.is_empty() {
-                    ui.small(
-                        egui::RichText::new(self.tr(
-                            "提交前请完善必填项：",
-                            "Please complete required fields before submit:",
-                        ))
-                        .color(egui::Color32::from_rgb(196, 84, 84)),
+                    let summary = feedback_issues
+                        .iter()
+                        .map(|issue| self.feedback_issue_text(*issue))
+                        .collect::<Vec<_>>()
+                        .join(" / ");
+                    Self::modal_banner(
+                        ui,
+                        format!(
+                            "{} {}",
+                            self.tr(
+                                "提交前请完善必填项：",
+                                "Please complete required fields before submit:"
+                            ),
+                            summary
+                        )
+                        .as_str(),
+                        egui::Color32::from_rgb(196, 84, 84),
                     );
-                    for issue in feedback_issues {
-                        ui.small(
-                            egui::RichText::new(format!("- {}", self.feedback_issue_text(issue)))
-                                .color(egui::Color32::from_rgb(196, 84, 84)),
-                        );
-                    }
                 }
                 match &self.feedback_submit_state {
                     FeedbackSubmitState::Success(message) => {
-                        ui.small(
-                            egui::RichText::new(message.as_str())
-                                .color(egui::Color32::from_rgb(62, 152, 92)),
+                        Self::modal_banner(
+                            ui,
+                            message.as_str(),
+                            egui::Color32::from_rgb(62, 152, 92),
                         );
                     }
                     FeedbackSubmitState::Failed(message) => {
-                        ui.small(
-                            egui::RichText::new(message.as_str())
-                                .color(egui::Color32::from_rgb(196, 84, 84)),
+                        Self::modal_banner(
+                            ui,
+                            message.as_str(),
+                            egui::Color32::from_rgb(196, 84, 84),
                         );
                     }
                     FeedbackSubmitState::None => {}
                 }
+                ui.add_space(8.0);
+                ui.horizontal_wrapped(|ui| {
+                    if Self::modal_primary_button(ui, self.tr("提交反馈", "Submit Feedback"))
+                        .clicked()
+                    {
+                        self.submit_feedback();
+                    }
+                    if Self::modal_secondary_button(ui, self.tr("关闭", "Close")).clicked() {
+                        request_close = true;
+                    }
+                });
             });
 
+        if request_close {
+            window_open = false;
+        }
         self.feedback_window_open = window_open;
     }
 }
