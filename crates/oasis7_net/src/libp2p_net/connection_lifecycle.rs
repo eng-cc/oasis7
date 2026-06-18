@@ -11,7 +11,7 @@ use super::reachability::refresh_active_transport_snapshot;
 use super::runtime_loop::{enforce_peer_manager_quarantine, refresh_peer_manager_healths};
 use super::swarm_behaviour::Behaviour;
 use super::transport_paths::{
-    failover_transport_path, note_established_transport_path,
+    failover_transport_path_after_close, note_established_transport_path,
     recompute_active_transport_path_for_peer, TransportPath,
 };
 use super::utils::{push_bounded_clone, push_bounded_string_with_keyed_cooldown};
@@ -296,21 +296,26 @@ pub(super) fn failover_after_disconnect(
     event_errors: &Arc<Mutex<Vec<String>>>,
     max_error_messages: usize,
     peer_id: PeerId,
+    disconnected_path: Option<TransportPath>,
 ) {
-    match failover_transport_path(
+    match failover_transport_path_after_close(
         swarm,
         known_transport_paths,
         active_transport_paths,
         last_dialed_transport_paths,
         failed_transport_path_labels,
         peer_id,
+        disconnected_path,
     ) {
-        Ok(Some((active_path, next_path))) => {
+        Ok(Some((previous_path, next_path))) => {
+            let previous_addr = previous_path
+                .map(|path| path.addr.to_string())
+                .unwrap_or_else(|| "none".to_string());
             push_bounded_clone(
                 event_errors,
                 format!(
                     "libp2p transport failover peer={peer_id} from={} to={}",
-                    active_path.addr, next_path.addr,
+                    previous_addr, next_path.addr,
                 ),
                 max_error_messages,
                 "lock errors",

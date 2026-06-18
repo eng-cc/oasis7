@@ -190,6 +190,40 @@ pub(super) fn sync_known_transport_paths(
     known_transport_paths.insert(peer_id, paths);
 }
 
+pub(super) fn sync_static_bootstrap_transport_paths(
+    known_transport_paths: &mut HashMap<PeerId, Vec<TransportPath>>,
+    failed_transport_path_labels: &mut HashSet<String>,
+    bootstrap_peers: &[Multiaddr],
+) {
+    for addr in bootstrap_peers {
+        let Some(peer_id) = split_peer_id(addr.clone()).0 else {
+            continue;
+        };
+        let path = active_transport_path_from_endpoint(known_transport_paths, peer_id, addr);
+        let label = path.label();
+        let paths = known_transport_paths.entry(peer_id).or_default();
+        if paths.iter().any(|known| known.label() == label) {
+            continue;
+        }
+        failed_transport_path_labels.remove(&label);
+        paths.push(path);
+        paths.sort_unstable_by_key(TransportPath::preference_rank);
+    }
+}
+
+pub(super) fn bootstrap_transport_path_state(
+    bootstrap_peers: &[Multiaddr],
+) -> (HashMap<PeerId, Vec<TransportPath>>, HashSet<String>) {
+    let mut known_transport_paths = HashMap::new();
+    let mut failed_transport_path_labels = HashSet::new();
+    sync_static_bootstrap_transport_paths(
+        &mut known_transport_paths,
+        &mut failed_transport_path_labels,
+        bootstrap_peers,
+    );
+    (known_transport_paths, failed_transport_path_labels)
+}
+
 pub(super) fn select_preferred_transport_path(
     paths: &[TransportPath],
     failed_transport_path_labels: &HashSet<String>,
@@ -329,28 +363,45 @@ pub(super) fn dial_transport_path(
     Ok(())
 }
 
-pub(super) fn failover_transport_path(
+pub(super) fn failover_transport_path_after_close(
     swarm: &mut Swarm<Behaviour>,
     known_transport_paths: &HashMap<PeerId, Vec<TransportPath>>,
     active_transport_paths: &mut HashMap<PeerId, TransportPath>,
     last_dialed_transport_paths: &mut HashMap<PeerId, TransportPath>,
     failed_transport_path_labels: &mut HashSet<String>,
     peer_id: PeerId,
-) -> Result<Option<(TransportPath, TransportPath)>, WorldError> {
-    let Some(active_path) = active_transport_paths.remove(&peer_id) else {
+    disconnected_path: Option<TransportPath>,
+) -> Result<Option<(Option<TransportPath>, TransportPath)>, WorldError> {
+    let Some((previous_path, next_path)) = select_reconnect_transport_path_after_close(
+        known_transport_paths,
+        active_transport_paths,
+        failed_transport_path_labels,
+        peer_id,
+        disconnected_path,
+    ) else {
         return Ok(None);
     };
-    failed_transport_path_labels.insert(active_path.label());
-    let Some(next_path) = known_transport_paths.get(&peer_id).and_then(|paths| {
-        select_preferred_transport_path(paths.as_slice(), failed_transport_path_labels)
-    }) else {
-        return Ok(None);
-    };
-    if next_path.label() == active_path.label() {
-        return Ok(None);
-    }
     dial_transport_path(swarm, last_dialed_transport_paths, next_path.clone())?;
-    Ok(Some((active_path, next_path)))
+    Ok(Some((previous_path, next_path)))
+}
+
+pub(super) fn select_reconnect_transport_path_after_close(
+    known_transport_paths: &HashMap<PeerId, Vec<TransportPath>>,
+    active_transport_paths: &mut HashMap<PeerId, TransportPath>,
+    failed_transport_path_labels: &mut HashSet<String>,
+    peer_id: PeerId,
+    disconnected_path: Option<TransportPath>,
+) -> Option<(Option<TransportPath>, TransportPath)> {
+    let previous_path = active_transport_paths
+        .remove(&peer_id)
+        .or(disconnected_path);
+    if let Some(path) = &previous_path {
+        failed_transport_path_labels.insert(path.label());
+    }
+    let next_path = known_transport_paths.get(&peer_id).and_then(|paths| {
+        select_preferred_transport_path(paths.as_slice(), failed_transport_path_labels)
+    })?;
+    Some((previous_path, next_path))
 }
 
 pub(super) fn retry_transport_path_after_error(
