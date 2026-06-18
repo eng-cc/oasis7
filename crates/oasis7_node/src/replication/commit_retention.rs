@@ -183,10 +183,30 @@ pub(super) fn load_commit_message_cold_index_from_root(
     let canonical_path = commit_message_cold_index_manifest_path_from_root(root_dir);
     let compat_alias_path = commit_message_cold_index_compat_alias_path_from_root(root_dir);
     if canonical_path.exists() {
-        let loaded = load_json_or_default::<CommitMessageColdIndex>(canonical_path.as_path())?;
+        let mut recovered_from_compat_alias = false;
+        let loaded = match load_json_or_default::<CommitMessageColdIndex>(canonical_path.as_path())
+        {
+            Ok(loaded) => loaded,
+            Err(canonical_err) if compat_alias_path.exists() => {
+                recovered_from_compat_alias = true;
+                load_json_or_default::<CommitMessageColdIndex>(compat_alias_path.as_path())
+                    .map_err(|alias_err| NodeError::Replication {
+                        reason: format!(
+                            "load commit message cold index failed: canonical={} error={:?}; compat_alias={} error={:?}",
+                            canonical_path.display(),
+                            canonical_err,
+                            compat_alias_path.display(),
+                            alias_err
+                        ),
+                    })?
+            }
+            Err(err) => return Err(err),
+        };
         let mut cold_index = normalize_commit_message_cold_index(loaded.clone());
         let migrated_hashes = migrate_legacy_cold_entries_to_packs(root_dir, &mut cold_index)?;
-        if !compat_alias_path.exists() || cold_index != loaded {
+        if recovered_from_compat_alias {
+            write_commit_message_cold_index_to_root(root_dir, &cold_index)?;
+        } else if !compat_alias_path.exists() || cold_index != loaded {
             write_commit_message_cold_index_to_root(root_dir, &cold_index)?;
             delete_legacy_cold_commit_blobs_if_unreferenced(root_dir, &migrated_hashes)?;
             prune_unreferenced_commit_message_pack_files(root_dir, &cold_index)?;

@@ -1,3 +1,4 @@
+use super::commit_retention::CommitMessageColdIndex;
 use super::*;
 use crate::NodeExecutionCheckpointBlob;
 use oasis7_proto::storage_cold_index::{
@@ -857,6 +858,80 @@ fn load_commit_message_cold_index_restores_compat_alias_from_canonical_manifest(
         compat_alias_path.exists(),
         "canonical load should restore compat alias"
     );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn load_commit_message_cold_index_recovers_truncated_canonical_from_compat_alias() {
+    let dir = temp_dir("commit-cold-index-truncated-canonical");
+    let world_id = "world-commit-cold-index-truncated-canonical";
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_max_hot_commit_messages(2)
+        .expect("hot commit cap");
+    let runtime = ReplicationRuntime::new(&config, "node-a").expect("runtime");
+
+    runtime
+        .persist_commit_message(1, &signed_remote_message(96, world_id, "node-b", 1))
+        .expect("persist message 1");
+    runtime
+        .persist_commit_message(100, &signed_remote_message(97, world_id, "node-b", 100))
+        .expect("persist message 100");
+
+    let canonical_path = dir
+        .join(storage_cold_index_dir_name(COMMIT_MESSAGE_DIR))
+        .join(STORAGE_COLD_INDEX_MANIFEST_FILE);
+    let compat_alias_path = dir.join("replication_commit_messages_cold_index.json");
+    let alias_before = std::fs::read(&compat_alias_path).expect("read compat alias");
+    std::fs::write(&canonical_path, b"{\"by_height\":{\"1\"").expect("truncate canonical");
+
+    let cold_index = load_commit_message_cold_index_from_root(dir.as_path())
+        .expect("recover cold index from compat alias");
+    assert!(
+        cold_index.by_height.contains_key(&1),
+        "compat alias should preserve cold height 1"
+    );
+    assert_eq!(
+        std::fs::read(&compat_alias_path).expect("read compat alias after recovery"),
+        alias_before,
+        "recovery should not rewrite a valid compat alias differently"
+    );
+    let canonical_after = load_json_or_default::<CommitMessageColdIndex>(&canonical_path)
+        .expect("canonical repaired");
+    assert_eq!(canonical_after, cold_index);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn load_latest_commit_message_reads_hot_latest_before_corrupt_cold_index() {
+    let dir = temp_dir("latest-commit-hot-before-corrupt-cold-index");
+    let world_id = "world-latest-commit-hot-before-corrupt-cold-index";
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_max_hot_commit_messages(2)
+        .expect("hot commit cap");
+    let runtime = ReplicationRuntime::new(&config, "node-a").expect("runtime");
+
+    runtime
+        .persist_commit_message(1, &signed_remote_message(98, world_id, "node-b", 1))
+        .expect("persist message 1");
+    runtime
+        .persist_commit_message(100, &signed_remote_message(99, world_id, "node-b", 100))
+        .expect("persist message 100");
+
+    let canonical_path = dir
+        .join(storage_cold_index_dir_name(COMMIT_MESSAGE_DIR))
+        .join(STORAGE_COLD_INDEX_MANIFEST_FILE);
+    let compat_alias_path = dir.join("replication_commit_messages_cold_index.json");
+    std::fs::write(&canonical_path, b"{\"by_height\":{\"1\"").expect("truncate canonical");
+    std::fs::remove_file(&compat_alias_path).expect("remove compat alias");
+
+    let latest = load_latest_commit_message_from_root(dir.as_path(), world_id, 2)
+        .expect("load hot latest despite corrupt cold index")
+        .expect("latest message");
+    assert_eq!(latest.record.sequence, 100);
 
     let _ = std::fs::remove_dir_all(&dir);
 }
