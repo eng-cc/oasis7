@@ -8,7 +8,8 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/engineering/workflow/source-of-truth.md
-doc_refs: []
+doc_refs:
+  - doc/scripts/project.md
 related_prd: []
 acceptance:
   - "capture-todo.sh can record a reflection TODO without PROMOTE_ARGS unbound variable errors, and the RustSec baseline burn-down TODO is recorded."

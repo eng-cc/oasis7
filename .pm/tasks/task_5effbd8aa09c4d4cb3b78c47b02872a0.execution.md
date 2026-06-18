@@ -58,3 +58,12 @@ Example:
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: no code changes required after review.
 - Residual Risk: non-blocking full PM lint/doc-governance noise remains outside this patch scope; no PR-blocking repository health risks found for the reviewed scope.
+
+## 2026-06-18 17:56:34 CST / tpm
+- 完成内容: Added workflow-lint evidence required for PR preflight.
+- 遗留事项: Full PM lint/doc-governance noise remains outside this patch scope.
+- Action: Added `doc/scripts/project.md` to task `doc_refs`; added a `doc/scripts/project.md` Trace item for this scripts/pm fix; recorded explicit `claim-ready.sh` and `task-closeout.sh` evidence after preflight reported missing markers.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type task_complete --verify-command "bash -n scripts/pm/capture-todo.sh scripts/pm/capture-todo-smoke.sh && git diff --check" --task-uid task_5effbd8aa09c4d4cb3b78c47b02872a0 --json`; `./scripts/pm/task-closeout.sh --role tpm --task-uid task_5effbd8aa09c4d4cb3b78c47b02872a0 --verify-command "bash -n scripts/pm/capture-todo.sh scripts/pm/capture-todo-smoke.sh && git diff --check" --no-lint`.
+- Expected Result: claim-ready records focused verification as verified; task-closeout records done closeout with focused verification while skipping unrelated global PM lint noise.
+- Actual Result: `claim_verification_status: verified`, `claim_type: task_complete`, `verify_command: bash -n scripts/pm/capture-todo.sh scripts/pm/capture-todo-smoke.sh && git diff --check`, `pm_lint: skipped`, `final_status: done`.
+- Blocker / Next Action: rerun `./scripts/prepare-task-pr.sh --create`.
