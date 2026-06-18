@@ -48,7 +48,6 @@ boundary_markers = (
     "不等于",
     "不替代",
     "not a target",
-    "not ready",
     "no longer",
     "does not replace",
     "not public_testnet",
