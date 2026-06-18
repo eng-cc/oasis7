@@ -10,6 +10,7 @@ source_refs:
   - AGENTS.md
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/p2p/project.md
 related_prd: []
 acceptance:
   - "Answer which local, test, and production environment properties should match or differ for oasis7, grounded in similar game/live-service practice and role-attributed repo analysis."
