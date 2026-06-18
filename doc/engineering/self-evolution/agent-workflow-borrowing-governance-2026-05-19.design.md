@@ -41,7 +41,7 @@
 
 ### 可保留但不是默认门禁的层
 
-- Viewer visual companion：只作为 UI-heavy 设计题的 optional ideation layer，不替代 `agent-browser`、repo-owned regression 或正式实现 task。
+- Viewer visual companion：只作为 UI-heavy 设计题的 optional ideation / evidence layer，可包含 Image2 target image 与 native/browser screenshot comparison；target image 不替代 `agent-browser`、真实交互 smoke、repo-owned regression 或正式实现 task。
 - workflow behavior eval harness：已落为 `scripts/pm/workflow-behavior-eval.sh`，通过 task-worktree bootstrap smoke、subagent contract surface 校验、PM closeout/claim gate smoke、PR preflight fixture 与 review-thread closeout fixture 证明主链仍可回放。
 
 ### 继续拒绝或 deferred 的边界
@@ -88,7 +88,7 @@
 - rejected 项若重新出现在 root workflow，视为治理回弹。
 - subagent 协作若缺少 owner、write scope 或 return contract，视为越界。
 - brainstorming / TDD 若被写成所有任务的 mandatory pre-step，视为越界。
-- visual companion 若绕过实现 task / regression / PR review，视为越界。
+- visual companion 若绕过实现 task / 真实截图或交互 smoke / regression / PR review，视为越界。
 
 ## 使用方式
 

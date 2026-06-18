@@ -7,7 +7,7 @@ mod storage;
 
 use self::storage::current_unix_ms;
 pub(super) use self::storage::load_launcher_ux_state;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 pub(super) use self::storage::UX_STATE_PATH;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -509,7 +509,7 @@ impl ClientLauncherApp {
         }
     }
 
-    fn next_task_hint_text(&self, hint: NextTaskHint) -> &'static str {
+    pub(super) fn next_task_hint_text(&self, hint: NextTaskHint) -> &'static str {
         match (hint, self.ui_language) {
             (NextTaskHint::FixChainConfig, UiLanguage::ZhCn) => {
                 "下一步：先修复区块链配置，再启动区块链"
@@ -547,7 +547,11 @@ impl ClientLauncherApp {
         game_running: bool,
         chain_running: bool,
     ) {
-        ui.label(self.tr("任务流（推荐顺序）", "Task Flow (Recommended Order)"));
+        ui.label(
+            egui::RichText::new(self.tr("任务流（推荐顺序）", "Guided Task Flow"))
+                .strong()
+                .size(14.0),
+        );
         let hint = resolve_next_task_hint(
             self.config.chain_enabled,
             game_required_issues,
@@ -555,10 +559,7 @@ impl ClientLauncherApp {
             game_running,
             chain_running,
         );
-        ui.small(
-            egui::RichText::new(self.next_task_hint_text(hint))
-                .color(egui::Color32::from_rgb(74, 116, 168)),
-        );
+        ui.small(egui::RichText::new(self.next_task_hint_text(hint)).color(Self::task_blue()));
 
         if let Some(target) = resolve_config_guide_target(
             self.config.chain_enabled,
@@ -566,7 +567,10 @@ impl ClientLauncherApp {
             chain_required_issues,
         ) {
             ui.horizontal_wrapped(|ui| {
-                if ui.button(self.config_guide_button_text(target)).clicked() {
+                if ui
+                    .small_button(self.config_guide_button_text(target))
+                    .clicked()
+                {
                     self.record_guided_quick_action_click();
                     match target {
                         ConfigGuideTargetHint::Game => self.open_game_config_guide(),
@@ -579,7 +583,7 @@ impl ClientLauncherApp {
                 }
                 if !self.is_expert_mode()
                     && ui
-                        .button(self.tr("重置新手引导", "Reset Onboarding"))
+                        .small_button(self.tr("重置新手引导", "Reset Onboarding"))
                         .clicked()
                 {
                     self.record_guided_quick_action_click();
@@ -588,11 +592,159 @@ impl ClientLauncherApp {
             });
         }
 
-        ui.horizontal_wrapped(|ui| {
-            self.render_chain_task_card(ui, chain_required_issues, chain_running);
-            self.render_game_task_card(ui, game_required_issues, game_running);
-            self.render_page_task_card(ui, game_required_issues, game_running);
-        });
+        self.render_chain_task_card(ui, chain_required_issues, chain_running);
+        ui.add_space(6.0);
+        self.render_game_task_card(ui, game_required_issues, game_running);
+        ui.add_space(6.0);
+        self.render_page_task_card(ui, game_required_issues, game_running);
+    }
+
+    pub(super) fn task_blue() -> egui::Color32 {
+        egui::Color32::from_rgb(74, 116, 168)
+    }
+
+    fn task_card_fill() -> egui::Color32 {
+        egui::Color32::from_rgb(252, 253, 250)
+    }
+
+    fn render_task_card_frame(
+        ui: &mut egui::Ui,
+        step: &str,
+        icon: &str,
+        title: &str,
+        status: &str,
+        status_color: egui::Color32,
+        body: &str,
+        add_actions: impl FnOnce(&mut egui::Ui),
+    ) {
+        egui::Frame::group(ui.style())
+            .fill(Self::task_card_fill())
+            .inner_margin(egui::Margin::same(8))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.set_min_height(70.0);
+                let available_width = ui.available_width();
+                if available_width < 292.0 {
+                    ui.horizontal_top(|ui| {
+                        ui.label(
+                            egui::RichText::new(step)
+                                .strong()
+                                .size(15.0)
+                                .color(Self::task_blue()),
+                        );
+                        egui::Frame::new()
+                            .fill(egui::Color32::from_rgb(236, 244, 252))
+                            .stroke(egui::Stroke::new(
+                                1.0,
+                                egui::Color32::from_rgb(199, 215, 235),
+                            ))
+                            .inner_margin(egui::Margin::same(6))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    egui::RichText::new(icon)
+                                        .strong()
+                                        .size(12.0)
+                                        .color(Self::task_blue()),
+                                );
+                            });
+                        ui.vertical(|ui| {
+                            ui.label(egui::RichText::new(title).strong().size(13.0));
+                            ui.small(body);
+                        });
+                    });
+                    ui.add_space(4.0);
+                    ui.horizontal_wrapped(|ui| {
+                        egui::Frame::new()
+                            .fill(egui::Color32::from_rgb(252, 253, 250))
+                            .stroke(egui::Stroke::new(
+                                1.0,
+                                egui::Color32::from_rgb(218, 224, 217),
+                            ))
+                            .inner_margin(egui::Margin::symmetric(5, 2))
+                            .show(ui, |ui| {
+                                ui.small(egui::RichText::new(status).strong().color(status_color));
+                            });
+                        add_actions(ui);
+                    });
+                    return;
+                }
+                ui.horizontal_top(|ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(36.0);
+                        ui.label(
+                            egui::RichText::new(step)
+                                .strong()
+                                .size(16.0)
+                                .color(Self::task_blue()),
+                        );
+                        ui.label(egui::RichText::new("|").size(16.0).color(Self::task_blue()));
+                    });
+                    ui.vertical(|ui| {
+                        ui.set_width(42.0);
+                        egui::Frame::new()
+                            .fill(egui::Color32::from_rgb(236, 244, 252))
+                            .stroke(egui::Stroke::new(
+                                1.0,
+                                egui::Color32::from_rgb(199, 215, 235),
+                            ))
+                            .inner_margin(egui::Margin::same(8))
+                            .show(ui, |ui| {
+                                ui.set_min_size(egui::vec2(26.0, 26.0));
+                                ui.label(
+                                    egui::RichText::new(icon)
+                                        .strong()
+                                        .size(13.0)
+                                        .color(Self::task_blue()),
+                                );
+                            });
+                    });
+                    ui.vertical(|ui| {
+                        ui.set_width(142.0);
+                        ui.label(egui::RichText::new(title).strong().size(13.0));
+                        ui.small(body);
+                    });
+                    ui.vertical(|ui| {
+                        ui.set_width(104.0);
+                        egui::Frame::new()
+                            .fill(egui::Color32::from_rgb(252, 253, 250))
+                            .stroke(egui::Stroke::new(
+                                1.0,
+                                egui::Color32::from_rgb(218, 224, 217),
+                            ))
+                            .inner_margin(egui::Margin::symmetric(5, 2))
+                            .show(ui, |ui| {
+                                ui.small(egui::RichText::new(status).strong().color(status_color));
+                            });
+                        ui.horizontal_wrapped(add_actions);
+                    });
+                });
+            });
+    }
+
+    fn task_primary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+        ui.add(
+            egui::Button::new(
+                egui::RichText::new(label)
+                    .strong()
+                    .size(11.5)
+                    .color(egui::Color32::WHITE),
+            )
+            .fill(egui::Color32::from_rgb(42, 169, 87))
+            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(34, 142, 74)))
+            .min_size(egui::vec2(96.0, 28.0)),
+        )
+    }
+
+    fn task_secondary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+        ui.add(
+            egui::Button::new(egui::RichText::new(label).size(11.5))
+                .fill(egui::Color32::from_rgb(247, 250, 253))
+                .stroke(egui::Stroke::new(
+                    1.0,
+                    egui::Color32::from_rgb(218, 226, 236),
+                ))
+                .min_size(egui::vec2(96.0, 28.0)),
+        )
     }
 
     fn render_chain_task_card(
@@ -601,48 +753,76 @@ impl ClientLauncherApp {
         chain_required_issues: &[ConfigIssue],
         chain_running: bool,
     ) {
-        ui.group(|ui| {
-            ui.set_min_width(220.0);
-            ui.label(self.tr("1. 启动区块链", "1. Start Blockchain"));
+        if !self.config.chain_enabled {
+            Self::render_task_card_frame(
+                ui,
+                "01",
+                "🔗",
+                self.tr("启动区块链", "Start Blockchain"),
+                self.tr("状态：已关闭", "Status: Disabled"),
+                egui::Color32::from_rgb(116, 119, 124),
+                self.tr("链功能已关闭。", "Blockchain is disabled."),
+                |_| {},
+            );
+            return;
+        }
 
-            if !self.config.chain_enabled {
-                ui.small(self.tr("链功能已关闭", "Blockchain disabled"));
-                return;
-            }
+        if chain_running {
+            Self::render_task_card_frame(
+                ui,
+                "01",
+                "🔗",
+                self.tr("启动区块链", "Start Blockchain"),
+                self.tr("状态：就绪/启动中", "Status: Ready/Starting"),
+                egui::Color32::from_rgb(62, 152, 92),
+                self.tr(
+                    "链节点已进入可用路径。",
+                    "Blockchain node is on the ready path.",
+                ),
+                |_| {},
+            );
+            return;
+        }
 
-            if chain_running {
-                ui.small(
-                    egui::RichText::new(self.tr("状态：已就绪/启动中", "Status: Ready/Starting"))
-                        .color(egui::Color32::from_rgb(62, 152, 92)),
-                );
-                return;
-            }
+        if !chain_required_issues.is_empty() {
+            Self::render_task_card_frame(
+                ui,
+                "01",
+                "🔗",
+                self.tr("启动区块链", "Start Blockchain"),
+                self.tr("状态：配置阻断", "Status: Config Blocked"),
+                egui::Color32::from_rgb(188, 60, 60),
+                self.tr(
+                    "先修复链配置再启动节点。",
+                    "Fix chain configuration before starting the node.",
+                ),
+                |ui| {
+                    if Self::task_primary_button(ui, self.tr("修复区块链配置", "Fix Chain Config"))
+                        .clicked()
+                    {
+                        self.handle_start_chain_click(chain_required_issues);
+                    }
+                },
+            );
+            return;
+        }
 
-            if !chain_required_issues.is_empty() {
-                ui.small(
-                    egui::RichText::new(self.tr(
-                        "状态：配置阻断（点击修复）",
-                        "Status: blocked by config (click to fix)",
-                    ))
-                    .color(egui::Color32::from_rgb(188, 60, 60)),
-                );
-                if ui
-                    .button(self.tr("修复区块链配置", "Fix Chain Config"))
+        Self::render_task_card_frame(
+            ui,
+            "01",
+            "🔗",
+            self.tr("启动区块链", "Start Blockchain"),
+            self.tr("状态：待启动", "Status: Pending"),
+            egui::Color32::from_rgb(201, 146, 44),
+            self.tr("启动本地链运行时。", "Start the local chain runtime."),
+            |ui| {
+                if Self::task_primary_button(ui, self.tr("启动区块链", "Start Blockchain"))
                     .clicked()
                 {
-                    self.handle_start_chain_click(chain_required_issues);
+                    self.start_chain_process();
                 }
-                return;
-            }
-
-            ui.small(self.tr("状态：待启动", "Status: pending start"));
-            if ui
-                .button(self.tr("启动区块链", "Start Blockchain"))
-                .clicked()
-            {
-                self.start_chain_process();
-            }
-        });
+            },
+        );
     }
 
     fn render_game_task_card(
@@ -651,53 +831,66 @@ impl ClientLauncherApp {
         game_required_issues: &[ConfigIssue],
         game_running: bool,
     ) {
-        ui.group(|ui| {
-            ui.set_min_width(220.0);
-            ui.label(self.tr("2. 启动游戏", "2. Start Game"));
+        if game_running {
+            Self::render_task_card_frame(
+                ui,
+                "02",
+                "▶",
+                self.tr("启动游戏", "Start Game"),
+                self.tr("状态：运行中", "Status: Running"),
+                egui::Color32::from_rgb(62, 152, 92),
+                self.tr("游戏服务正在运行。", "The game service is running."),
+                |_| {},
+            );
+            return;
+        }
 
-            if game_running {
-                ui.small(
-                    egui::RichText::new(self.tr("状态：运行中", "Status: Running"))
-                        .color(egui::Color32::from_rgb(62, 152, 92)),
-                );
-                return;
-            }
+        if !game_required_issues.is_empty() {
+            Self::render_task_card_frame(
+                ui,
+                "02",
+                "▶",
+                self.tr("启动游戏", "Start Game"),
+                self.tr("状态：配置阻断", "Status: Config Blocked"),
+                egui::Color32::from_rgb(188, 60, 60),
+                self.tr(
+                    "修复游戏配置后再启动。",
+                    "Fix game configuration before starting.",
+                ),
+                |ui| {
+                    if Self::task_primary_button(ui, self.tr("修复游戏配置", "Fix Game Config"))
+                        .clicked()
+                    {
+                        self.handle_start_game_click(game_required_issues);
+                    }
+                },
+            );
+            return;
+        }
 
-            if !game_required_issues.is_empty() {
-                ui.small(
-                    egui::RichText::new(self.tr(
-                        "状态：配置阻断（点击修复）",
-                        "Status: blocked by config (click to fix)",
-                    ))
-                    .color(egui::Color32::from_rgb(188, 60, 60)),
-                );
-                if ui
-                    .button(self.tr("修复游戏配置", "Fix Game Config"))
-                    .clicked()
-                {
-                    self.handle_start_game_click(game_required_issues);
+        let chain_waiting = self.config.chain_enabled
+            && !matches!(
+                self.chain_runtime_status,
+                ChainRuntimeStatus::Starting | ChainRuntimeStatus::Ready
+            );
+        Self::render_task_card_frame(
+            ui,
+            "02",
+            "▶",
+            self.tr("启动游戏", "Start Game"),
+            if chain_waiting {
+                self.tr("状态：建议先启动链", "Status: Chain First")
+            } else {
+                self.tr("状态：待启动", "Status: Pending")
+            },
+            egui::Color32::from_rgb(201, 146, 44),
+            self.tr("启动客户端游戏流程。", "Start the client game flow."),
+            |ui| {
+                if Self::task_primary_button(ui, self.tr("启动游戏", "Start Game")).clicked() {
+                    self.start_process();
                 }
-                return;
-            }
-
-            if self.config.chain_enabled
-                && !matches!(
-                    self.chain_runtime_status,
-                    ChainRuntimeStatus::Starting | ChainRuntimeStatus::Ready
-                )
-            {
-                ui.small(
-                    egui::RichText::new(
-                        self.tr("提示：建议先启动区块链", "Tip: start blockchain first"),
-                    )
-                    .color(egui::Color32::from_rgb(201, 146, 44)),
-                );
-            }
-            ui.small(self.tr("状态：待启动", "Status: pending start"));
-            if ui.button(self.tr("启动游戏", "Start Game")).clicked() {
-                self.start_process();
-            }
-        });
+            },
+        );
     }
 
     fn render_page_task_card(
@@ -706,39 +899,52 @@ impl ClientLauncherApp {
         game_required_issues: &[ConfigIssue],
         game_running: bool,
     ) {
-        ui.group(|ui| {
-            ui.set_min_width(220.0);
-            ui.label(self.tr("3. 打开游戏页", "3. Open Game Page"));
-            if game_running {
-                ui.small(
-                    egui::RichText::new(
-                        self.tr("状态：可打开并验证画面", "Status: ready to open and verify"),
-                    )
-                    .color(egui::Color32::from_rgb(62, 152, 92)),
-                );
-                if ui.button(self.tr("打开游戏页", "Open Game Page")).clicked() {
-                    let url = self.current_game_url();
-                    if let Err(err) = open_browser(url.as_str()) {
-                        self.append_log(format!("open browser failed: {err}"));
-                    } else {
-                        self.append_log(format!("open browser: {url}"));
+        if game_running {
+            Self::render_task_card_frame(
+                ui,
+                "03",
+                "↗",
+                self.tr("打开游戏页", "Open Game Page"),
+                self.tr("状态：可打开", "Status: Ready"),
+                egui::Color32::from_rgb(62, 152, 92),
+                self.tr(
+                    "打开浏览器验证游戏画面。",
+                    "Open the browser and verify the game view.",
+                ),
+                |ui| {
+                    if Self::task_primary_button(ui, self.tr("打开游戏页", "Open Game Page"))
+                        .clicked()
+                    {
+                        let url = self.current_game_url();
+                        if let Err(err) = open_browser(url.as_str()) {
+                            self.append_log(format!("open browser failed: {err}"));
+                        } else {
+                            self.append_log(format!("open browser: {url}"));
+                        }
                     }
-                }
-            } else {
-                ui.small(
-                    egui::RichText::new(
-                        self.tr("状态：等待游戏启动", "Status: waiting for game to start"),
-                    )
-                    .color(egui::Color32::from_rgb(201, 146, 44)),
-                );
-                if ui
-                    .button(self.tr("先启动游戏", "Start Game First"))
-                    .clicked()
-                {
-                    self.handle_start_game_click(game_required_issues);
-                }
-            }
-        });
+                },
+            );
+        } else {
+            Self::render_task_card_frame(
+                ui,
+                "03",
+                "↗",
+                self.tr("打开游戏页", "Open Game Page"),
+                self.tr("状态：等待游戏启动", "Status: Waiting"),
+                egui::Color32::from_rgb(201, 146, 44),
+                self.tr(
+                    "游戏运行后才能打开页面。",
+                    "Open the page after the game is running.",
+                ),
+                |ui| {
+                    if Self::task_secondary_button(ui, self.tr("先启动游戏", "Start Game First"))
+                        .clicked()
+                    {
+                        self.handle_start_game_click(game_required_issues);
+                    }
+                },
+            );
+        }
     }
 
     pub(super) fn maybe_open_onboarding_on_first_visit(
@@ -850,68 +1056,100 @@ impl ClientLauncherApp {
 
         let step = self.onboarding_state.step;
         let title = self.tr("首次引导（可随时跳过）", "First-Run Onboarding (Skippable)");
+        let progress_label = format!(
+            "{} {}/{}",
+            self.tr("进度", "Progress"),
+            step.index(),
+            ONBOARDING_STEP_TOTAL
+        );
+        let step_title = step.title(self.ui_language);
+        let step_body = step.body(self.ui_language);
+        let window_size = Self::modal_window_size(ctx, 700.0, 460.0);
 
         egui::Window::new(title)
             .collapsible(false)
             .resizable(true)
-            .default_width(700.0)
-            .default_height(420.0)
+            .default_size(window_size)
             .open(&mut keep_open)
             .show(ctx, |ui| {
-                ui.heading(step.title(self.ui_language));
-                ui.small(format!(
-                    "{} {}/{}",
-                    self.tr("进度", "Progress"),
-                    step.index(),
-                    ONBOARDING_STEP_TOTAL
-                ));
-                ui.separator();
-                ui.label(step.body(self.ui_language));
-                ui.separator();
+                Self::modal_header(
+                    ui,
+                    step_title,
+                    step_body,
+                    Some((
+                        progress_label.as_str(),
+                        egui::Color32::from_rgb(74, 116, 168),
+                    )),
+                );
+                ui.add_space(8.0);
 
-                match step {
-                    OnboardingStep::Understand => {
-                        self.render_onboarding_understand_step(ui, game_running, chain_running);
-                    }
-                    OnboardingStep::FixConfig => {
-                        self.render_onboarding_fix_config_step(
-                            ui,
-                            game_required_issues,
-                            chain_required_issues,
-                        );
-                    }
-                    OnboardingStep::Launch => {
-                        self.render_onboarding_launch_step(
-                            ui,
-                            game_required_issues,
-                            chain_required_issues,
-                            game_running,
-                            chain_running,
-                        );
-                    }
-                }
+                Self::modal_card(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for index in 1..=ONBOARDING_STEP_TOTAL {
+                            let active = index == step.index();
+                            Self::modal_status_chip(
+                                ui,
+                                match index {
+                                    1 => self.tr("01 理解", "01 Understand"),
+                                    2 => self.tr("02 配置", "02 Configure"),
+                                    _ => self.tr("03 启动", "03 Launch"),
+                                },
+                                if active {
+                                    egui::Color32::from_rgb(74, 116, 168)
+                                } else {
+                                    egui::Color32::from_rgb(116, 119, 124)
+                                },
+                            );
+                        }
+                    });
+                    ui.add_space(8.0);
 
-                ui.separator();
+                    match step {
+                        OnboardingStep::Understand => {
+                            self.render_onboarding_understand_step(ui, game_running, chain_running);
+                        }
+                        OnboardingStep::FixConfig => {
+                            self.render_onboarding_fix_config_step(
+                                ui,
+                                game_required_issues,
+                                chain_required_issues,
+                            );
+                        }
+                        OnboardingStep::Launch => {
+                            self.render_onboarding_launch_step(
+                                ui,
+                                game_required_issues,
+                                chain_required_issues,
+                                game_running,
+                                chain_running,
+                            );
+                        }
+                    }
+                });
+
+                ui.add_space(8.0);
                 ui.horizontal_wrapped(|ui| {
                     if let Some(previous) = step.previous() {
-                        if ui.button(self.tr("上一步", "Back")).clicked() {
+                        if Self::modal_secondary_button(ui, self.tr("上一步", "Back")).clicked()
+                        {
                             self.onboarding_state.step = previous;
                         }
                     }
 
                     if let Some(next) = step.next() {
-                        if ui.button(self.tr("下一步", "Next")).clicked() {
+                        if Self::modal_primary_button(ui, self.tr("下一步", "Next")).clicked() {
                             self.onboarding_state.step = next;
                         }
-                    } else if ui
-                        .button(self.tr("完成引导", "Finish Onboarding"))
-                        .clicked()
+                    } else if Self::modal_primary_button(
+                        ui,
+                        self.tr("完成引导", "Finish Onboarding"),
+                    )
+                    .clicked()
                     {
                         request_complete = true;
                     }
 
-                    if ui
-                        .button(self.tr("跳过（稍后再看）", "Skip for now"))
+                    if Self::modal_secondary_button(ui, self.tr("跳过（稍后再看）", "Skip for now"))
                         .clicked()
                     {
                         request_skip = true;
@@ -976,36 +1214,51 @@ impl ClientLauncherApp {
         self.guidance_insights_open = keep_open;
     }
 
-    fn render_onboarding_understand_step(
+    pub(super) fn render_onboarding_understand_step(
         &mut self,
         ui: &mut egui::Ui,
         game_running: bool,
         chain_running: bool,
     ) {
-        ui.label(self.tr("推荐顺序：", "Recommended order:"));
-        ui.small(self.tr(
-            "1) 启动区块链  2) 启动游戏  3) 打开游戏页",
-            "1) Start Blockchain  2) Start Game  3) Open Game Page",
-        ));
-        ui.separator();
-        ui.small(format!(
-            "{}: {}",
-            self.tr("区块链状态", "Blockchain status"),
-            if chain_running {
-                self.tr("已就绪/启动中", "Ready/Starting")
-            } else {
-                self.tr("未启动", "Not started")
-            }
-        ));
-        ui.small(format!(
-            "{}: {}",
-            self.tr("游戏状态", "Game status"),
-            if game_running {
-                self.tr("运行中", "Running")
-            } else {
-                self.tr("未启动", "Not started")
-            }
-        ));
+        ui.label(
+            egui::RichText::new(self.tr("推荐顺序", "Recommended Order"))
+                .strong()
+                .size(14.0),
+        );
+        ui.horizontal_wrapped(|ui| {
+            Self::modal_status_chip(ui, self.tr("01 启动链", "01 Chain"), Self::task_blue());
+            Self::modal_status_chip(ui, self.tr("02 启动游戏", "02 Game"), Self::task_blue());
+            Self::modal_status_chip(ui, self.tr("03 打开页面", "03 Page"), Self::task_blue());
+        });
+        ui.add_space(8.0);
+        ui.horizontal_wrapped(|ui| {
+            Self::modal_status_chip(
+                ui,
+                if chain_running {
+                    self.tr("区块链 已就绪", "Chain Ready")
+                } else {
+                    self.tr("区块链 未启动", "Chain Not Started")
+                },
+                if chain_running {
+                    egui::Color32::from_rgb(62, 152, 92)
+                } else {
+                    egui::Color32::from_rgb(116, 119, 124)
+                },
+            );
+            Self::modal_status_chip(
+                ui,
+                if game_running {
+                    self.tr("游戏 运行中", "Game Running")
+                } else {
+                    self.tr("游戏 未启动", "Game Not Started")
+                },
+                if game_running {
+                    egui::Color32::from_rgb(62, 152, 92)
+                } else {
+                    egui::Color32::from_rgb(116, 119, 124)
+                },
+            );
+        });
     }
 
     fn render_onboarding_fix_config_step(
@@ -1027,17 +1280,19 @@ impl ClientLauncherApp {
         ));
 
         if game_required_issues.is_empty() && chain_issue_count == 0 {
-            ui.colored_label(
-                egui::Color32::from_rgb(62, 152, 92),
+            Self::modal_banner(
+                ui,
                 self.tr(
                     "当前必填配置已通过，可进入下一步。",
                     "Required configuration is valid. You can continue.",
                 ),
+                egui::Color32::from_rgb(62, 152, 92),
             );
         } else {
-            ui.colored_label(
-                egui::Color32::from_rgb(188, 60, 60),
+            Self::modal_banner(
+                ui,
                 self.tr("请先修复下列阻断项：", "Please fix blocking issues first:"),
+                egui::Color32::from_rgb(188, 60, 60),
             );
             for issue in game_required_issues {
                 ui.small(format!(
@@ -1058,8 +1313,7 @@ impl ClientLauncherApp {
         }
 
         ui.horizontal_wrapped(|ui| {
-            if ui
-                .button(self.tr("打开配置引导", "Open Configuration Guide"))
+            if Self::modal_primary_button(ui, self.tr("打开配置引导", "Open Configuration Guide"))
                 .clicked()
             {
                 if !game_required_issues.is_empty() {
@@ -1070,8 +1324,7 @@ impl ClientLauncherApp {
                     self.config_window_open = true;
                 }
             }
-            if ui
-                .button(self.tr("打开高级配置", "Open Advanced Config"))
+            if Self::modal_secondary_button(ui, self.tr("打开高级配置", "Open Advanced Config"))
                 .clicked()
             {
                 self.config_window_open = true;
@@ -1092,7 +1345,10 @@ impl ClientLauncherApp {
             if ui
                 .add_enabled(
                     self.config.chain_enabled && !chain_running,
-                    egui::Button::new(self.tr("启动区块链", "Start Blockchain")),
+                    egui::Button::new(
+                        egui::RichText::new(self.tr("启动区块链", "Start Blockchain")).strong(),
+                    )
+                    .fill(egui::Color32::from_rgb(42, 169, 87)),
                 )
                 .clicked()
             {
@@ -1102,14 +1358,18 @@ impl ClientLauncherApp {
             if ui
                 .add_enabled(
                     !game_running,
-                    egui::Button::new(self.tr("启动游戏", "Start Game")),
+                    egui::Button::new(
+                        egui::RichText::new(self.tr("启动游戏", "Start Game")).strong(),
+                    )
+                    .fill(egui::Color32::from_rgb(42, 169, 87)),
                 )
                 .clicked()
             {
                 self.handle_start_game_click(game_required_issues);
             }
 
-            if ui.button(self.tr("打开游戏页", "Open Game Page")).clicked() {
+            if Self::modal_secondary_button(ui, self.tr("打开游戏页", "Open Game Page")).clicked()
+            {
                 let url = self.current_game_url();
                 if let Err(err) = open_browser(url.as_str()) {
                     self.append_log(format!("open browser failed: {err}"));
@@ -1122,18 +1382,23 @@ impl ClientLauncherApp {
         ui.separator();
         let ready_for_finish = game_running && (!self.config.chain_enabled || chain_running);
         if ready_for_finish {
-            ui.colored_label(
-                egui::Color32::from_rgb(62, 152, 92),
+            Self::modal_banner(
+                ui,
                 self.tr(
                     "启动链路已就绪，可以完成引导。",
                     "Startup flow is ready. You can finish onboarding.",
                 ),
+                egui::Color32::from_rgb(62, 152, 92),
             );
         } else {
-            ui.small(self.tr(
-                "提示：建议区块链与游戏都启动成功后再完成引导。",
-                "Tip: finish onboarding after blockchain and game are started.",
-            ));
+            Self::modal_banner(
+                ui,
+                self.tr(
+                    "提示：建议区块链与游戏都启动成功后再完成引导。",
+                    "Tip: finish onboarding after blockchain and game are started.",
+                ),
+                egui::Color32::from_rgb(201, 146, 44),
+            );
         }
     }
 }

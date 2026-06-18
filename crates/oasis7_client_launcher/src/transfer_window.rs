@@ -710,239 +710,335 @@ impl ClientLauncherApp {
         egui::Window::new(title)
             .open(&mut window_open)
             .resizable(true)
+            .default_size(Self::modal_window_size(ctx, 920.0, 680.0))
             .show(ctx, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(self.tr("转出账户", "From Account"));
-                    let mut selected_from_account: Option<String> = None;
-                    egui::ComboBox::from_id_salt("transfer_from_account_selector")
-                        .selected_text(if self.transfer_draft.from_account_id.trim().is_empty() {
-                            self.tr("请选择", "Select")
-                        } else {
-                            self.transfer_draft.from_account_id.as_str()
-                        })
-                        .show_ui(ui, |ui| {
-                            for account in &self.transfer_panel_state.accounts {
-                                if ui
-                                    .selectable_label(
-                                        self.transfer_draft.from_account_id
-                                            == account.account_id,
-                                        account.account_id.as_str(),
-                                    )
-                                    .clicked()
-                                {
-                                    selected_from_account = Some(account.account_id.clone());
-                                }
-                            }
-                        });
-                    if let Some(account_id) = selected_from_account {
-                        self.transfer_draft.from_account_id = account_id;
-                        self.refresh_auto_nonce_hint();
-                    }
-                    if ui
-                        .text_edit_singleline(&mut self.transfer_draft.from_account_id)
-                        .changed()
-                    {
-                        self.refresh_auto_nonce_hint();
-                    }
-                    if self.transfer_draft.from_account_id.trim().is_empty() {
-                        if let Some(recommended_from) = recommend_default_from_account(
-                            self.transfer_panel_state.accounts.as_slice(),
-                        ) {
-                            let button_text = format!(
-                                "{}: {recommended_from}",
-                                self.tr("推荐转出", "Suggested Sender")
-                            );
-                            if ui.button(button_text).clicked() {
-                                self.transfer_draft.from_account_id = recommended_from;
-                                self.refresh_auto_nonce_hint();
-                            }
-                        }
-                    }
-                });
-
-                if let Some(from_account) =
-                    self.transfer_account(self.transfer_draft.from_account_id.trim())
-                {
-                    ui.small(format!(
-                        "{}: {} (vested={})",
-                        self.tr("可用余额", "Liquid balance"),
-                        from_account.liquid_balance,
-                        from_account.vested_balance
-                    ));
-                }
-
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(self.tr("转入账户", "To Account"));
-                    egui::ComboBox::from_id_salt("transfer_to_account_selector")
-                        .selected_text(if self.transfer_draft.to_account_id.trim().is_empty() {
-                            self.tr("请选择", "Select")
-                        } else {
-                            self.transfer_draft.to_account_id.as_str()
-                        })
-                        .show_ui(ui, |ui| {
-                            for account in &self.transfer_panel_state.accounts {
-                                if ui
-                                    .selectable_label(
-                                        self.transfer_draft.to_account_id
-                                            == account.account_id,
-                                        account.account_id.as_str(),
-                                    )
-                                    .clicked()
-                                {
-                                    self.transfer_draft.to_account_id = account.account_id.clone();
-                                }
-                            }
-                        });
-                    ui.text_edit_singleline(&mut self.transfer_draft.to_account_id);
-                    ui.label(self.tr("金额", "Amount"));
-                    ui.text_edit_singleline(&mut self.transfer_draft.amount);
-                    ui.label(self.tr("快捷金额", "Quick Amount"));
-                    for preset in transfer_amount_presets() {
-                        if ui.button(preset.to_string()).clicked() {
-                            self.transfer_draft.amount = preset.to_string();
-                        }
-                    }
-                });
-
-                let recommended_to_accounts = recommend_transfer_account_ids(
-                    self.transfer_panel_state.accounts.as_slice(),
-                    self.transfer_draft.from_account_id.as_str(),
-                    3,
+                let header_chip = if submit_enabled {
+                    (
+                        self.tr("可提交", "Ready"),
+                        egui::Color32::from_rgb(62, 152, 92),
+                    )
+                } else if self.any_transfer_request_inflight() {
+                    (
+                        self.tr("请求中", "In Flight"),
+                        egui::Color32::from_rgb(201, 146, 44),
+                    )
+                } else {
+                    (
+                        self.tr("需检查", "Needs Check"),
+                        egui::Color32::from_rgb(188, 60, 60),
+                    )
+                };
+                Self::modal_header(
+                    ui,
+                    self.tr("链上转账", "On-Chain Transfer"),
+                    self.tr(
+                        "选择账户、金额和 nonce 后提交链上转账。",
+                        "Choose accounts, amount, and nonce before submitting an on-chain transfer.",
+                    ),
+                    Some(header_chip),
                 );
-                if !recommended_to_accounts.is_empty() {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(self.tr("推荐转入", "Suggested Receiver"));
-                        for account_id in &recommended_to_accounts {
-                            if ui.button(account_id.as_str()).clicked() {
-                                self.transfer_draft.to_account_id = account_id.clone();
+                ui.add_space(8.0);
+
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        Self::modal_card(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(self.tr("提交转账", "Submit Transfer"))
+                                    .strong()
+                                    .size(14.0),
+                            );
+                            ui.add_space(6.0);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(self.tr("转出账户", "From Account"));
+                                let mut selected_from_account: Option<String> = None;
+                                egui::ComboBox::from_id_salt("transfer_from_account_selector")
+                                    .selected_text(
+                                        if self.transfer_draft.from_account_id.trim().is_empty() {
+                                            self.tr("请选择", "Select")
+                                        } else {
+                                            self.transfer_draft.from_account_id.as_str()
+                                        },
+                                    )
+                                    .show_ui(ui, |ui| {
+                                        for account in &self.transfer_panel_state.accounts {
+                                            if ui
+                                                .selectable_label(
+                                                    self.transfer_draft.from_account_id
+                                                        == account.account_id,
+                                                    account.account_id.as_str(),
+                                                )
+                                                .clicked()
+                                            {
+                                                selected_from_account =
+                                                    Some(account.account_id.clone());
+                                            }
+                                        }
+                                    });
+                                if let Some(account_id) = selected_from_account {
+                                    self.transfer_draft.from_account_id = account_id;
+                                    self.refresh_auto_nonce_hint();
+                                }
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.transfer_draft.from_account_id,
+                                        )
+                                        .desired_width(260.0),
+                                    )
+                                    .changed()
+                                {
+                                    self.refresh_auto_nonce_hint();
+                                }
+                            });
+
+                            if self.transfer_draft.from_account_id.trim().is_empty() {
+                                if let Some(recommended_from) = recommend_default_from_account(
+                                    self.transfer_panel_state.accounts.as_slice(),
+                                ) {
+                                    let button_text = format!(
+                                        "{}: {recommended_from}",
+                                        self.tr("推荐转出", "Suggested Sender")
+                                    );
+                                    if Self::modal_secondary_button(ui, &button_text).clicked() {
+                                        self.transfer_draft.from_account_id = recommended_from;
+                                        self.refresh_auto_nonce_hint();
+                                    }
+                                }
+                            } else if let Some(from_account) =
+                                self.transfer_account(self.transfer_draft.from_account_id.trim())
+                            {
+                                Self::modal_status_chip(
+                                    ui,
+                                    &format!(
+                                        "{}: {} / vested {}",
+                                        self.tr("可用余额", "Liquid balance"),
+                                        from_account.liquid_balance,
+                                        from_account.vested_balance
+                                    ),
+                                    egui::Color32::from_rgb(74, 116, 168),
+                                );
                             }
-                        }
-                    });
-                }
 
-                ui.horizontal_wrapped(|ui| {
-                    ui.small(self.tr("术语", "Glossary"));
-                    self.render_glossary_term_chip(ui, GlossaryTerm::Nonce);
-                    self.render_glossary_term_chip(ui, GlossaryTerm::ActionId);
-                });
+                            ui.add_space(6.0);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(self.tr("转入账户", "To Account"));
+                                egui::ComboBox::from_id_salt("transfer_to_account_selector")
+                                    .selected_text(
+                                        if self.transfer_draft.to_account_id.trim().is_empty() {
+                                            self.tr("请选择", "Select")
+                                        } else {
+                                            self.transfer_draft.to_account_id.as_str()
+                                        },
+                                    )
+                                    .show_ui(ui, |ui| {
+                                        for account in &self.transfer_panel_state.accounts {
+                                            if ui
+                                                .selectable_label(
+                                                    self.transfer_draft.to_account_id
+                                                        == account.account_id,
+                                                    account.account_id.as_str(),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.transfer_draft.to_account_id =
+                                                    account.account_id.clone();
+                                            }
+                                        }
+                                    });
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.transfer_draft.to_account_id,
+                                    )
+                                    .desired_width(260.0),
+                                );
+                            });
 
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(self.tr("Nonce 模式", "Nonce Mode"));
-                    let auto_text = self.tr("自动", "Auto");
-                    let manual_text = self.tr("手动", "Manual");
-                    ui.selectable_value(
-                        &mut self.transfer_panel_state.nonce_mode,
-                        TransferNonceMode::Auto,
-                        auto_text,
-                    );
-                    ui.selectable_value(
-                        &mut self.transfer_panel_state.nonce_mode,
-                        TransferNonceMode::Manual,
-                        manual_text,
-                    );
-                });
+                            ui.add_space(6.0);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(self.tr("金额", "Amount"));
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.transfer_draft.amount)
+                                        .desired_width(140.0),
+                                );
+                                ui.label(self.tr("快捷金额", "Quick Amount"));
+                                for preset in transfer_amount_presets() {
+                                    if Self::modal_secondary_button(ui, &preset.to_string())
+                                        .clicked()
+                                    {
+                                        self.transfer_draft.amount = preset.to_string();
+                                    }
+                                }
+                            });
 
-                ui.horizontal_wrapped(|ui| match self.transfer_panel_state.nonce_mode {
-                    TransferNonceMode::Auto => {
-                        if let Some(hint) = self.transfer_panel_state.auto_nonce_hint {
-                            self.transfer_draft.nonce = hint.to_string();
-                            ui.small(format!(
-                                "{}: {}",
-                                self.tr("自动 nonce", "Auto nonce hint"),
-                                hint
-                            ));
-                        } else {
+                            let recommended_to_accounts = recommend_transfer_account_ids(
+                                self.transfer_panel_state.accounts.as_slice(),
+                                self.transfer_draft.from_account_id.as_str(),
+                                3,
+                            );
+                            if !recommended_to_accounts.is_empty() {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(self.tr("推荐转入", "Suggested Receiver"));
+                                    for account_id in &recommended_to_accounts {
+                                        if Self::modal_secondary_button(ui, account_id.as_str())
+                                            .clicked()
+                                        {
+                                            self.transfer_draft.to_account_id = account_id.clone();
+                                        }
+                                    }
+                                });
+                            }
+
+                            ui.add_space(6.0);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(self.tr("Nonce 模式", "Nonce Mode"));
+                                let auto_text = self.tr("自动", "Auto");
+                                let manual_text = self.tr("手动", "Manual");
+                                ui.selectable_value(
+                                    &mut self.transfer_panel_state.nonce_mode,
+                                    TransferNonceMode::Auto,
+                                    auto_text,
+                                );
+                                ui.selectable_value(
+                                    &mut self.transfer_panel_state.nonce_mode,
+                                    TransferNonceMode::Manual,
+                                    manual_text,
+                                );
+                                match self.transfer_panel_state.nonce_mode {
+                                    TransferNonceMode::Auto => {
+                                        if let Some(hint) =
+                                            self.transfer_panel_state.auto_nonce_hint
+                                        {
+                                            self.transfer_draft.nonce = hint.to_string();
+                                            Self::modal_status_chip(
+                                                ui,
+                                                &format!(
+                                                    "{}: {}",
+                                                    self.tr("自动 nonce", "Auto nonce hint"),
+                                                    hint
+                                                ),
+                                                egui::Color32::from_rgb(62, 152, 92),
+                                            );
+                                        } else {
+                                            ui.small(self.tr(
+                                                "当前账户暂无 nonce 提示，请先刷新账户或改为手动",
+                                                "No nonce hint for current account, refresh accounts or switch to manual",
+                                            ));
+                                        }
+                                    }
+                                    TransferNonceMode::Manual => {
+                                        ui.label("Nonce");
+                                        ui.add(
+                                            egui::TextEdit::singleline(
+                                                &mut self.transfer_draft.nonce,
+                                            )
+                                            .desired_width(120.0),
+                                        );
+                                    }
+                                }
+                            });
+
+                            ui.add_space(6.0);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.small(self.tr("术语", "Glossary"));
+                                self.render_glossary_term_chip(ui, GlossaryTerm::Nonce);
+                                self.render_glossary_term_chip(ui, GlossaryTerm::ActionId);
+                            });
+                            ui.add_space(8.0);
+                            ui.horizontal_wrapped(|ui| {
+                                if ui
+                                    .add_enabled(
+                                        submit_enabled,
+                                        egui::Button::new(self.tr("提交转账", "Submit Transfer"))
+                                            .fill(egui::Color32::from_rgb(39, 128, 75)),
+                                    )
+                                    .clicked()
+                                {
+                                    self.submit_transfer();
+                                }
+                                if Self::modal_secondary_button(
+                                    ui,
+                                    self.tr("刷新账户/历史", "Refresh Accounts/History"),
+                                )
+                                .clicked()
+                                {
+                                    self.transfer_panel_state.pending_accounts_refresh = true;
+                                    self.transfer_panel_state.pending_history_refresh = true;
+                                }
+                            });
                             ui.small(self.tr(
-                                "当前账户暂无 nonce 提示，请先刷新账户或改为手动",
-                                "No nonce hint for current account, refresh accounts or switch to manual",
+                                "建议：先选转出/转入账户，再点快捷金额，保持自动 nonce 后提交。",
+                                "Tip: choose sender/receiver, use quick amount presets, then submit with auto nonce.",
                             ));
-                        }
-                    }
-                    TransferNonceMode::Manual => {
-                        ui.label("Nonce");
-                        ui.text_edit_singleline(&mut self.transfer_draft.nonce);
-                    }
-                });
-
-                ui.horizontal_wrapped(|ui| {
-                    if ui
-                        .add_enabled(
-                            submit_enabled,
-                            egui::Button::new(self.tr("提交转账", "Submit Transfer")),
-                        )
-                        .clicked()
-                    {
-                        self.submit_transfer();
-                    }
-                    if ui
-                        .button(self.tr("刷新账户/历史", "Refresh Accounts/History"))
-                        .clicked()
-                    {
-                        self.transfer_panel_state.pending_accounts_refresh = true;
-                        self.transfer_panel_state.pending_history_refresh = true;
-                    }
-                });
-                ui.small(self.tr(
-                    "建议：先选转出/转入账户，再点快捷金额，保持自动 nonce 后提交。",
-                    "Tip: choose sender/receiver, use quick amount presets, then submit with auto nonce.",
-                ));
+                        });
+                        ui.add_space(8.0);
 
                 if self.any_transfer_request_inflight() {
-                    ui.small(
-                        egui::RichText::new(
+                    Self::modal_banner(
+                        ui,
                             self.tr("请求处理中，请稍候…", "Request in flight, please wait..."),
-                        )
-                        .color(egui::Color32::from_rgb(201, 146, 44)),
+                        egui::Color32::from_rgb(201, 146, 44),
                     );
                 }
                 if !self.is_feedback_available() {
-                    ui.small(
-                        egui::RichText::new(self.tr(
+                    Self::modal_banner(
+                        ui,
+                        self.tr(
                             "区块链未就绪时不可提交转账",
                             "Transfer submit is unavailable until blockchain is ready",
-                        ))
-                        .color(egui::Color32::from_rgb(196, 84, 84)),
+                        ),
+                        egui::Color32::from_rgb(196, 84, 84),
                     );
                 }
                 if strong_auth_barrier {
-                    ui.small(
-                        egui::RichText::new(hosted_public_join_transfer_block_message(self))
-                            .color(egui::Color32::from_rgb(196, 84, 84)),
+                    Self::modal_banner(
+                        ui,
+                        &hosted_public_join_transfer_block_message(self),
+                        egui::Color32::from_rgb(196, 84, 84),
                     );
                 }
                 if !issues.is_empty() {
-                    ui.small(
-                        egui::RichText::new(self.tr(
+                    Self::modal_card(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(self.tr(
                             "提交前请完善必填项：",
                             "Please complete required fields before submit:",
                         ))
                         .color(egui::Color32::from_rgb(196, 84, 84)),
-                    );
-                    for issue in issues {
-                        ui.small(
-                            egui::RichText::new(format!("- {}", self.transfer_issue_text(issue)))
-                                .color(egui::Color32::from_rgb(196, 84, 84)),
                         );
-                    }
+                        for issue in &issues {
+                            ui.small(
+                                egui::RichText::new(format!(
+                                    "- {}",
+                                    self.transfer_issue_text(*issue)
+                                ))
+                                .color(egui::Color32::from_rgb(196, 84, 84)),
+                            );
+                        }
+                    });
+                    ui.add_space(8.0);
                 }
                 match &self.transfer_submit_state {
                     TransferSubmitState::Success(message) => {
-                        ui.small(
-                            egui::RichText::new(message.as_str())
-                                .color(egui::Color32::from_rgb(62, 152, 92)),
+                        Self::modal_banner(
+                            ui,
+                            message.as_str(),
+                            egui::Color32::from_rgb(62, 152, 92),
                         );
                     }
                     TransferSubmitState::Failed(message) => {
-                        ui.small(
-                            egui::RichText::new(message.as_str())
-                                .color(egui::Color32::from_rgb(196, 84, 84)),
+                        Self::modal_banner(
+                            ui,
+                            message.as_str(),
+                            egui::Color32::from_rgb(196, 84, 84),
                         );
                     }
                     TransferSubmitState::None => {}
                 }
 
-                ui.separator();
-                ui.label(self.tr("状态追踪", "Transfer Status"));
+                ui.add_space(8.0);
+                Self::modal_card(ui, |ui| {
+                ui.label(egui::RichText::new(self.tr("状态追踪", "Transfer Status")).strong().size(14.0));
                 if let Some(status) = self.transfer_panel_state.tracked_action_status.as_ref() {
                     ui.small(format!(
                         "action_id={} | from={} -> to={} | amount={} | nonce={} | submitted_at={} | updated_at={}",
@@ -981,22 +1077,38 @@ impl ClientLauncherApp {
                         ],
                         None,
                     );
+                } else {
+                    ui.small(self.tr(
+                        "提交后会在这里展示 action 状态和确认进度。",
+                        "After submit, action status and confirmation progress appear here.",
+                    ));
                 }
+                });
 
-                ui.separator();
-                ui.label(self.tr("转账历史", "Transfer History"));
+                ui.add_space(8.0);
+                Self::modal_card(ui, |ui| {
+                ui.label(egui::RichText::new(self.tr("转账历史", "Transfer History")).strong().size(14.0));
+                ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
                     ui.label(self.tr("账户过滤", "Account Filter"));
-                    ui.text_edit_singleline(&mut self.transfer_panel_state.history_account_filter);
+                    ui.add(
+                        egui::TextEdit::singleline(
+                            &mut self.transfer_panel_state.history_account_filter,
+                        )
+                        .desired_width(180.0),
+                    );
                     ui.label(self.tr("Action 查询", "Action Query"));
-                    ui.text_edit_singleline(&mut self.transfer_panel_state.history_action_filter);
-                    if ui
-                        .button(self.tr("应用过滤", "Apply Filter"))
-                        .clicked()
+                    ui.add(
+                        egui::TextEdit::singleline(
+                            &mut self.transfer_panel_state.history_action_filter,
+                        )
+                        .desired_width(140.0),
+                    );
+                    if Self::modal_secondary_button(ui, self.tr("应用过滤", "Apply Filter")).clicked()
                     {
                         self.transfer_panel_state.pending_history_refresh = true;
                     }
-                    if ui.button(self.tr("清空过滤", "Clear Filters")).clicked() {
+                    if Self::modal_secondary_button(ui, self.tr("清空过滤", "Clear Filters")).clicked() {
                         self.clear_transfer_history_filters();
                     }
                 });
@@ -1019,6 +1131,8 @@ impl ClientLauncherApp {
                         if self.transfer_panel_state.history.is_empty() {
                             ui.small(self.tr("暂无转账历史", "No transfer history"));
                         }
+                    });
+                });
                     });
             });
 

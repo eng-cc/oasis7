@@ -77,6 +77,7 @@ Optional:
 ## Default behavior
 
 - **Pass the user's prompt through raw.** Do not translate, polish, or add style modifiers unless the user asked for it.
+- **Preserve repo-local visual-role constraints.** When a prompt is derived from a `game_visual_interaction_designer` slice or task brief rather than a direct user wording request, preserve the slice's explicit constraints and evidence target instead of mechanically using only the user's raw sentence.
 - **Choose the output path.** Default to `./image-<YYYYMMDD-HHMMSS>.png` in the current working directory if the user didn't specify.
 - **Trust the printed path.** If the requested suffix does not match the recovered image bytes, the script rewrites the suffix to the detected format and prints the final saved path on stdout.
 - **Deliver the image.** After the script succeeds, display / attach the output file. Do not stop at "done, see path X".

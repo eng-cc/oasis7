@@ -38,6 +38,75 @@ impl ClientLauncherApp {
         }
     }
 
+    fn preflight_row_frame(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
+        egui::Frame::group(ui.style())
+            .fill(egui::Color32::from_rgb(255, 255, 255))
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(219, 226, 236),
+            ))
+            .inner_margin(egui::Margin::same(8))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                add_contents(ui);
+            });
+    }
+
+    fn render_preflight_state_pill(
+        ui: &mut egui::Ui,
+        text: &str,
+        color: egui::Color32,
+    ) -> egui::Response {
+        egui::Frame::new()
+            .fill(egui::Color32::from_rgb(247, 251, 247))
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(218, 224, 217),
+            ))
+            .inner_margin(egui::Margin::symmetric(5, 2))
+            .show(ui, |ui| {
+                ui.small(egui::RichText::new(text).strong().color(color));
+            })
+            .response
+    }
+
+    fn preflight_icon(ui: &mut egui::Ui, state: PreflightCheckState) {
+        let (icon, fill, color) = match state {
+            PreflightCheckState::Pass => (
+                "✓",
+                egui::Color32::from_rgb(232, 247, 237),
+                egui::Color32::from_rgb(46, 150, 82),
+            ),
+            PreflightCheckState::Blocked => (
+                "!",
+                egui::Color32::from_rgb(255, 246, 224),
+                egui::Color32::from_rgb(221, 139, 23),
+            ),
+        };
+        egui::Frame::new()
+            .fill(fill)
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(217, 225, 235),
+            ))
+            .inner_margin(egui::Margin::symmetric(8, 6))
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new(icon).strong().size(17.0).color(color));
+            });
+    }
+
+    fn preflight_action_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+        ui.add(
+            egui::Button::new(egui::RichText::new(label).size(10.0))
+                .fill(egui::Color32::from_rgb(255, 255, 255))
+                .stroke(egui::Stroke::new(
+                    1.0,
+                    egui::Color32::from_rgb(213, 222, 232),
+                ))
+                .min_size(egui::vec2(56.0, 24.0)),
+        )
+    }
+
     fn render_preflight_game_config_row(
         &mut self,
         ui: &mut egui::Ui,
@@ -48,29 +117,48 @@ impl ClientLauncherApp {
         } else {
             PreflightCheckState::Blocked
         };
-        ui.horizontal_wrapped(|ui| {
-            ui.label(self.tr("1) 游戏配置", "1) Game Configuration"));
-            ui.colored_label(
-                self.preflight_state_color(state),
-                self.preflight_state_text(state),
-            );
+        Self::preflight_row_frame(ui, |ui| {
+            ui.horizontal(|ui| {
+                Self::preflight_icon(ui, state);
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new(self.tr("游戏配置", "Game Configuration"))
+                            .strong()
+                            .size(12.0),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.small(self.tr("状态", "Status"));
+                        Self::render_preflight_state_pill(
+                            ui,
+                            self.preflight_state_text(state),
+                            self.preflight_state_color(state),
+                        );
+                    });
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if state == PreflightCheckState::Blocked
+                        && Self::preflight_action_button(ui, self.tr("修复", "Fix")).clicked()
+                    {
+                        self.record_guided_quick_action_click();
+                        self.open_game_config_guide();
+                    }
+                });
+            });
             if state == PreflightCheckState::Blocked {
                 ui.small(format!(
                     "{}={}",
                     self.tr("问题数", "issues"),
                     game_required_issues.len()
                 ));
-                if ui.button(self.tr("修复", "Fix")).clicked() {
-                    self.record_guided_quick_action_click();
-                    self.open_game_config_guide();
-                }
-                if ui
-                    .button(self.tr("自动补默认值", "Autofill Defaults"))
-                    .clicked()
-                {
-                    self.record_guided_quick_action_click();
-                    self.apply_safe_defaults_for_startup_target(StartupGuideTarget::Game);
-                }
+                ui.horizontal(|ui| {
+                    if Self::preflight_action_button(ui, self.tr("自动补默", "Autofill")).clicked()
+                    {
+                        self.record_guided_quick_action_click();
+                        self.apply_safe_defaults_for_startup_target(StartupGuideTarget::Game);
+                    }
+                });
+            } else {
+                ui.small(self.tr("必要字段已通过。", "Required fields passed."));
             }
         });
     }
@@ -85,26 +173,47 @@ impl ClientLauncherApp {
         } else {
             PreflightCheckState::Blocked
         };
-        ui.horizontal_wrapped(|ui| {
-            ui.label(self.tr("2) 区块链配置", "2) Blockchain Configuration"));
-            ui.colored_label(
-                self.preflight_state_color(state),
-                self.preflight_state_text(state),
-            );
+        Self::preflight_row_frame(ui, |ui| {
+            ui.horizontal(|ui| {
+                Self::preflight_icon(ui, state);
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new(self.tr("区块链配置", "Blockchain Configuration"))
+                            .strong()
+                            .size(12.0),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.small(self.tr("状态", "Status"));
+                        Self::render_preflight_state_pill(
+                            ui,
+                            self.preflight_state_text(state),
+                            self.preflight_state_color(state),
+                        );
+                    });
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if !self.config.chain_enabled
+                        && Self::preflight_action_button(ui, self.tr("启用", "Enable")).clicked()
+                    {
+                        self.record_guided_quick_action_click();
+                        self.config.chain_enabled = true;
+                        self.config.normalize();
+                        self.chain_runtime_status =
+                            if chain_runtime_effectively_enabled(&self.config) {
+                                ChainRuntimeStatus::NotStarted
+                            } else {
+                                ChainRuntimeStatus::Disabled
+                            };
+                    } else if state == PreflightCheckState::Blocked
+                        && Self::preflight_action_button(ui, self.tr("修复", "Fix")).clicked()
+                    {
+                        self.record_guided_quick_action_click();
+                        self.open_chain_config_guide();
+                    }
+                });
+            });
             if !self.config.chain_enabled {
-                if ui
-                    .button(self.tr("启用区块链", "Enable Blockchain"))
-                    .clicked()
-                {
-                    self.record_guided_quick_action_click();
-                    self.config.chain_enabled = true;
-                    self.config.normalize();
-                    self.chain_runtime_status = if chain_runtime_effectively_enabled(&self.config) {
-                        ChainRuntimeStatus::NotStarted
-                    } else {
-                        ChainRuntimeStatus::Disabled
-                    };
-                }
+                ui.small(self.tr("链功能当前未启用。", "Blockchain is currently disabled."));
                 return;
             }
             if state == PreflightCheckState::Blocked {
@@ -113,17 +222,15 @@ impl ClientLauncherApp {
                     self.tr("问题数", "issues"),
                     chain_required_issues.len()
                 ));
-                if ui.button(self.tr("修复", "Fix")).clicked() {
-                    self.record_guided_quick_action_click();
-                    self.open_chain_config_guide();
-                }
-                if ui
-                    .button(self.tr("自动补默认值", "Autofill Defaults"))
-                    .clicked()
-                {
-                    self.record_guided_quick_action_click();
-                    self.apply_safe_defaults_for_startup_target(StartupGuideTarget::Chain);
-                }
+                ui.horizontal(|ui| {
+                    if Self::preflight_action_button(ui, self.tr("自动补默", "Autofill")).clicked()
+                    {
+                        self.record_guided_quick_action_click();
+                        self.apply_safe_defaults_for_startup_target(StartupGuideTarget::Chain);
+                    }
+                });
+            } else {
+                ui.small(self.tr("链配置满足启动要求。", "Chain config is launch-ready."));
             }
         });
     }
@@ -137,27 +244,39 @@ impl ClientLauncherApp {
             self.config.chain_enabled,
             &self.chain_runtime_status,
         );
-        ui.horizontal_wrapped(|ui| {
-            ui.label(self.tr(
-                "3) 链状态依赖（反馈/转账/浏览器）",
-                "3) Chain Dependency (Feedback/Transfer/Explorer)",
+        Self::preflight_row_frame(ui, |ui| {
+            ui.horizontal(|ui| {
+                Self::preflight_icon(ui, state);
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new(self.tr("链状态依赖", "Chain Dependency"))
+                            .strong()
+                            .size(12.0),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.small(self.tr("状态", "Status"));
+                        Self::render_preflight_state_pill(
+                            ui,
+                            self.preflight_state_text(state),
+                            self.preflight_state_color(state),
+                        );
+                    });
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if state == PreflightCheckState::Blocked
+                        && Self::preflight_action_button(ui, self.tr("启动链", "Start")).clicked()
+                    {
+                        self.record_guided_quick_action_click();
+                        self.handle_start_chain_click(chain_required_issues);
+                    }
+                });
+            });
+            ui.small(self.tr(
+                "反馈/转账/浏览器依赖链就绪。",
+                "Feedback/transfer/explorer depend on chain readiness.",
             ));
-            ui.colored_label(
-                self.preflight_state_color(state),
-                self.preflight_state_text(state),
-            );
             if state == PreflightCheckState::Blocked {
-                if ui
-                    .button(self.tr("启动区块链", "Start Blockchain"))
-                    .clicked()
-                {
-                    self.record_guided_quick_action_click();
-                    self.handle_start_chain_click(chain_required_issues);
-                }
-                if ui
-                    .button(self.tr("重试状态探测", "Retry Status Probe"))
-                    .clicked()
-                {
+                if Self::preflight_action_button(ui, self.tr("重试探测", "Retry")).clicked() {
                     self.record_guided_quick_action_click();
                     self.trigger_state_refresh();
                     self.update_chain_runtime_status();
@@ -173,7 +292,12 @@ impl ClientLauncherApp {
         chain_required_issues: &[ConfigIssue],
     ) {
         ui.group(|ui| {
-            ui.label(self.tr("启动前体检（Preflight）", "Startup Preflight Checklist"));
+            ui.set_width(ui.available_width());
+            ui.label(
+                egui::RichText::new(self.tr("启动前检查", "Preflight Checklist"))
+                    .strong()
+                    .size(14.0),
+            );
             self.render_preflight_game_config_row(ui, game_required_issues);
             self.render_preflight_chain_config_row(ui, chain_required_issues);
             self.render_preflight_chain_runtime_row(ui, chain_required_issues);

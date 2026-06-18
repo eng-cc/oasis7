@@ -53,7 +53,7 @@
   1. Flow-AWB-001: `producer_system_designer` 评估外部 workflow repo -> 提取 planning / review / verification / visual-companion / packaging 模式 -> 冻结 adopted / rejected / deferred 矩阵 -> 只将 adopted 项回写为 repo-owned follow-up。
   2. Flow-AWB-002: adopted 的 workflow 行为补强进入 `engineering` 主项目 -> 形成 helper/eval/smoke/root rule -> 以 repo truth 验证 agent 是否真的遵守 `new-task-worktree -> workflow-report -> TPM orchestrate / professional role subagent dispatch -> task-closeout -> prepare-task-pr -> review-thread-closeout`。
   3. Flow-AWB-003: adopted 的 completion gate 在任务收口前要求 fresh verification evidence -> owner 只有在命令已重新执行并读取结果后，才可宣称“通过/完成/可提 PR”。
-  4. Flow-AWB-004: Viewer Web 新一轮结构/视觉专题开始前，若问题本身包含 wireframe/IA/布局对比，则可先启用 visual companion 产出浏览器侧 mockup；确认方向后再创建实现 task，并继续按现有 `agent-browser` / repo-owned UI regression 收口。
+  4. Flow-AWB-004: Viewer Web 新一轮结构/视觉专题开始前，若问题本身包含 wireframe/IA/布局对比，则可先启用 visual companion 产出浏览器侧 mockup、Image2 target image 或 native/browser screenshot compare；若已存在绑定 `.pm` task，visual companion 只能作为当前 task 内 evidence，不创建第二 task/worktree/PR；若还没有实现 task，则确认方向后再创建实现 task，并继续按现有 `agent-browser` / repo-owned UI regression 收口。
   5. Flow-AWB-005: 当一个 task 需要多角色协作时，`tpm` 默认派生所需专业角色 subagent -> 将分析、实现、验证、补充 review 切成 role-owned slices -> 为每个 subagent 明确目标、输入、输出、验证方式与 write scope -> 若 write scope 不互斥则串行，若互斥则可限域并行 -> 所有结果统一回收到同一 owner / `.pm` task / canonical worktree / PR。
   6. Flow-AWB-006: 外部 workflow 若要求替换现有 owner role、GitHub PR review 默认边界或 `.pm` task 真值，则直接标记 rejected；若能翻译成“默认角色 subagent 编排”或“bounded subagent-driven execution”且不替代正式真值，则允许 adopted；若只是 distribution/packaging 问题，则列入 deferred。
   7. Flow-AWB-007: 当 `writing-plans` 的结构化拆分被判定值得借鉴时，owner 先把它翻译为 repo-owned planning surface：在 `project.md` 写 `File Structure / Affected Paths`，在 handoff 写原子步骤、验证命令和预期结果，再按轻量 self-checklist 清掉占位词、遗漏 task 和命名漂移后才进入实现。
@@ -74,7 +74,7 @@
 | Bounded brainstorming contract | `decision_question`、`scope_split`、`options_considered`、`recommended_direction`、`visual_companion_needed`、`writeback_surface` | 对仍需定方向或拆 scope 的任务，先做有限度的 brainstorming：判断是否需要拆分、列 2-3 个方案、给出推荐，并只在问题本身偏视觉/结构时才启用 visual companion | `not_needed -> option_framing -> recommended -> written_back -> implementation_ready` | 先判断是否真的存在方向歧义；若 scope 已明确，就不进入 brainstorming；若启用 visual companion，必须保持 optional 并回到正式实现链 | `producer_system_designer` 或相关 owner 触发；`viewer_engineer` 可辅助视觉比较；最终 owner 冻结方向并回写正式文档 |
 | Behavior-first testing contract | `behavior_contract`、`target_test_surface`、`red_command`、`expected_red_failure`、`green_command`、`skip_reason` | 对行为变更且存在稳定自动化 harness 的任务，优先先写失败测试/回归测试，再写生产实现；若不适用则记录 skip 原因 | `not_applicable -> red_defined -> red_verified -> implementation_in_progress -> green_verified` | 先判断是否真有稳定测试面；若没有，则不能伪造 RED，只能记录 skip reason 并继续走现有验证链 | feature owner 决定是否适用；`qa_engineer` 可审查 skip reason；相关实现 owner 执行 RED/GREEN |
 | Completion verification gate | `claim_type`、`required_command`、`freshness_rule`、`allowed_evidence`、`blocked_phrases` | 在 owner 宣称“完成/通过/可合并”前，要求 fresh 跑验证并读取结果；失败时只能报告实际状态 | `undefined -> documented -> helper-backed -> smoke-verified` | 每条 claim 必须映射到一个完整命令；禁止 partial evidence 替代 | 全体 owner 遵守；`qa_engineer` 可阻断 |
-| Visual companion contract | `applicability`、`artifact_kind=wireframe|layout_compare|IA_mockup|diagram`、`handoff_boundary`、`non_goal` | 只在 UI-heavy 设计前置阶段可选启用；完成方向确认后回到 repo-owned实现/回归链路 | `optional -> used -> retired` | 仅当“看比读更清楚”时启用；不涉及实现时不强制 | `viewer_engineer` 决定是否启用；producer 审核边界 |
+| Visual companion contract | `applicability`、`artifact_kind=wireframe|layout_compare|IA_mockup|diagram|image_target|native_screenshot_compare|browser_screenshot_compare|gap_notes`、`handoff_boundary`、`non_goal` | 可在 UI-heavy 设计前置或已绑定 task 内作为视觉收敛 evidence 启用；Image2 可多次生成/筛选为 target image，但不能只凭 target image 宣称完成；实现收口必须对比真实 native/browser screenshot 并回到 repo-owned 实现/回归链路 | `optional -> used -> retired` | 仅当“看比读更清楚”时启用；不涉及实现时不强制；screenshot-only preview 只算视觉比较证据，不算真实交互覆盖 | `viewer_engineer` 决定是否启用；producer 审核边界 |
 | Planning surface tightening contract | `affected_paths`、`read_only_dependencies`、`validation_entrypoints`、`doc_writebacks`、`atomic_steps`、`planning_self_check` | 对复杂 task 把 `writing-plans` 的执行纪律翻译成 repo-owned `project.md`/handoff/checklist 约束，不新建并行计划系统 | `implicit -> documented -> template-backed -> enforced by review` | 先要求影响面可见，再要求步骤和验证可执行，最后检查命名/占位词一致性 | `producer_system_designer` 冻结规则；各 owner 按 task 落地 |
 | Execution surface tightening contract | `execution_inputs`、`plan_gap_review`、`atomic_execution_steps`、`step_verification`、`blocker_report_rule`、`closeout_handoff` | 对已有正式计划的 task 把 `executing-plans` 的可 salvage 部分翻译成 repo-owned execution skill 与 root workflow 规则，不生成第二套计划系统 | `implicit -> skill-backed -> review-enforced` | 先确认计划足够可执行，再按步骤落地并逐步验证；一旦 scope drift 或重复失败则停下报告 | 全体 owner 遵守；`producer_system_designer` 冻结规则，`qa_engineer` 可据此阻断 completion claim |
 | Deferred packaging track | `target_harness`、`distribution_mode`、`bootstrap_contract`、`eval_requirement` | 只有当 repo-owned workflow 与 eval 稳定后，才允许评估 pluginization/multi-harness packaging | `deferred -> re-opened -> adopted/rejected` | 先本仓库真值，再分发形态 | `producer_system_designer` 开题，相关平台 owner 联审 |
@@ -111,7 +111,7 @@
 - Non-Goals:
   - 不把 `superpowers` 或其他外部 workflow repo 直接接入为 oasis7 当前默认 bootstrap。
   - 不把“默认角色 subagent 编排”放宽成无 owner、无 write-scope、无 worktree 约束的自由 swarm。
-  - 不让 visual companion 替代 `agent-browser`、repo-owned UI regression 或 GitHub PR review。
+  - 不让 visual companion 替代 `agent-browser`、真实 native/browser screenshot、交互 smoke、QA evidence、repo-owned UI regression 或 GitHub PR review。
   - 不在本期实现 multi-harness plugin packaging。
 
 ## 3. AI System Requirements (If Applicable)
@@ -154,6 +154,7 @@
   - 默认角色 subagent 或 subagent-driven execution 未声明 owner、write scope、return contract 或 handoff：视为未绑定真值，不得执行并行写入或宣称流程合规。
   - 行为变更任务若声称采用 TDD / behavior-first，但没有 RED 命令、目标测试面或 skip 原因：视为未满足 bounded TDD contract。
   - visual companion 被误升级为所有需求的 mandatory pre-step：必须回退到 optional 设计辅助边界。
+  - visual companion / Image2 target 被当成功能验收，或替代真实截图、交互 smoke、QA evidence：视为无效 evidence。
   - completion verification gate 只验证部分命令或旧结果：视为无效 evidence，不得宣称完成。
   - workflow eval 只验证静态文案而不验证 agent 行为：视为 coverage 不足，不得声称 adopted 项已经落地。
   - planning surface 只有“多写了一个段落”，但没有把验证命令、预期结果或命名漂移写清：视为借到了形式，没借到执行纪律。
@@ -167,7 +168,7 @@
   - NFR-AWB-3C: bounded TDD contract 不得把 universal TDD 写回 root 默认门禁；它只能约束“行为变更且存在稳定自动化测试面”的实现任务，并且仍需落在现有 `test_tier_required/full` 与 GitHub PR 主链内。
   - NFR-AWB-3D: bounded brainstorming contract 不得把 universal brainstorming gate、逐段审批或单独 spec 流程写回 root 默认门禁；它只能约束“方向仍模糊、范围过大或问题本身偏视觉/结构”的任务，并且产出必须回写到现有 `prd.md` / `project.md` / handoff / execution log。
   - NFR-AWB-3E: repo-owned workflow router 不得取代 root workflow 真值；它只能编排当前已经 adopted 的本地 workflow surface，并且阶段切换必须可回放到 `AGENTS.md`、`.agents/skills/README.md`、handoff、`project.md` 或 execution log。
-  - NFR-AWB-4: visual companion pilot 不得增加 world-simulator Viewer 默认 required gate 的在线依赖。
+  - NFR-AWB-4: visual companion pilot 不得增加 world-simulator Viewer 默认 required gate 的在线依赖；Image2 只能在用户明确要求/授权或专业 slice 明确采用时作为 optional evidence 使用。
   - NFR-AWB-5: planning surface tightening 不得要求额外在线依赖、外部 bootstrap 或第二套 plan storage；所有新增约束必须落在现有 repo-owned 文档和模板里。
   - NFR-AWB-6: execution surface tightening 不得绕开 `project.md` / `.pm` / task execution log / GitHub PR review，也不得把 step-level verification 替换成事后总结式宣称。
 - Security & Privacy:

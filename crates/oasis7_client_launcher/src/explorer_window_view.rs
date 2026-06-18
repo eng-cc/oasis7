@@ -22,8 +22,28 @@ impl ClientLauncherApp {
         egui::Window::new(title)
             .open(&mut window_open)
             .resizable(true)
-            .default_size(egui::vec2(1240.0, 780.0))
+            .default_size(Self::modal_window_size(ctx, 1120.0, 700.0))
             .show(ctx, |ui| {
+                Self::modal_header(
+                    ui,
+                    self.tr("区块链浏览器", "Blockchain Explorer"),
+                    self.tr(
+                        "浏览链健康、区块、交易、账户和内存池状态。",
+                        "Browse chain health, blocks, transactions, accounts, and mempool state.",
+                    ),
+                    Some(if self.is_feedback_available() {
+                        (
+                            self.tr("链已就绪", "Chain Ready"),
+                            egui::Color32::from_rgb(62, 152, 92),
+                        )
+                    } else {
+                        (
+                            self.tr("链未就绪", "Chain Pending"),
+                            egui::Color32::from_rgb(201, 146, 44),
+                        )
+                    }),
+                );
+                ui.add_space(8.0);
                 self.render_explorer_command_deck(ui);
                 ui.add_space(6.0);
                 self.render_overview(ui);
@@ -46,7 +66,7 @@ impl ClientLauncherApp {
         self.explorer_window_open = window_open;
     }
 
-    fn render_explorer_command_deck(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn render_explorer_command_deck(&mut self, ui: &mut egui::Ui) {
         let title = self.tr("Explorer Deck", "Explorer Deck");
         let subtitle = self.tr(
             "主链级浏览器操作台：先判断链健康，再进入明细核查。",
@@ -159,7 +179,7 @@ impl ClientLauncherApp {
         });
     }
 
-    fn render_overview(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn render_overview(&mut self, ui: &mut egui::Ui) {
         if let Some(overview) = self.explorer_panel_state.overview.as_ref() {
             let title = self.tr("链健康概览", "Chain Health");
             let subtitle = self.tr(
@@ -167,45 +187,175 @@ impl ClientLauncherApp {
                 "Mainnet-style first screen: read heights, identity, hashes, and status mix first.",
             );
             Self::explorer_card(ui, title, subtitle, |ui| {
-                ui.columns(4, |cols| {
-                    Self::explorer_metric_card(
-                        &mut cols[0],
-                        self.tr("最新高度", "Latest Height"),
-                        overview.latest_height.to_string(),
-                        Some(self.tr("head", "head").to_string()),
-                        egui::Color32::from_rgb(74, 116, 168),
-                    );
-                    Self::explorer_metric_card(
-                        &mut cols[1],
-                        self.tr("已提交高度", "Committed"),
-                        overview.committed_height.to_string(),
-                        Some(self.tr("local", "local").to_string()),
-                        egui::Color32::from_rgb(62, 152, 92),
-                    );
-                    Self::explorer_metric_card(
-                        &mut cols[2],
-                        self.tr("网络高度", "Network"),
-                        overview.network_committed_height.to_string(),
-                        Some(self.tr("network", "network").to_string()),
-                        egui::Color32::from_rgb(81, 104, 132),
-                    );
-                    Self::explorer_metric_card(
-                        &mut cols[3],
-                        self.tr("追踪记录", "Tracked"),
-                        overview.tracked_records.to_string(),
-                        Some(format!(
-                            "{} {}",
-                            self.tr("总交易", "Total"),
-                            overview.transfer_total
-                        )),
-                        egui::Color32::from_rgb(112, 121, 130),
-                    );
-                });
+                if ui.available_width() >= 760.0 {
+                    ui.columns(4, |cols| {
+                        Self::explorer_metric_card(
+                            &mut cols[0],
+                            self.tr("最新高度", "Latest Height"),
+                            overview.latest_height.to_string(),
+                            Some(self.tr("head", "head").to_string()),
+                            egui::Color32::from_rgb(74, 116, 168),
+                        );
+                        Self::explorer_metric_card(
+                            &mut cols[1],
+                            self.tr("已提交高度", "Committed"),
+                            overview.committed_height.to_string(),
+                            Some(self.tr("local", "local").to_string()),
+                            egui::Color32::from_rgb(62, 152, 92),
+                        );
+                        Self::explorer_metric_card(
+                            &mut cols[2],
+                            self.tr("网络高度", "Network"),
+                            overview.network_committed_height.to_string(),
+                            Some(self.tr("network", "network").to_string()),
+                            egui::Color32::from_rgb(81, 104, 132),
+                        );
+                        Self::explorer_metric_card(
+                            &mut cols[3],
+                            self.tr("追踪记录", "Tracked"),
+                            overview.tracked_records.to_string(),
+                            Some(format!(
+                                "{} {}",
+                                self.tr("总交易", "Total"),
+                                overview.transfer_total
+                            )),
+                            egui::Color32::from_rgb(112, 121, 130),
+                        );
+                    });
+                } else if ui.available_width() >= 520.0 {
+                    ui.columns(2, |cols| {
+                        Self::explorer_metric_card(
+                            &mut cols[0],
+                            self.tr("最新高度", "Latest Height"),
+                            overview.latest_height.to_string(),
+                            Some(self.tr("head", "head").to_string()),
+                            egui::Color32::from_rgb(74, 116, 168),
+                        );
+                        Self::explorer_metric_card(
+                            &mut cols[1],
+                            self.tr("已提交高度", "Committed"),
+                            overview.committed_height.to_string(),
+                            Some(self.tr("local", "local").to_string()),
+                            egui::Color32::from_rgb(62, 152, 92),
+                        );
+                    });
+                    ui.add_space(4.0);
+                    ui.columns(2, |cols| {
+                        Self::explorer_metric_card(
+                            &mut cols[0],
+                            self.tr("网络高度", "Network"),
+                            overview.network_committed_height.to_string(),
+                            Some(self.tr("network", "network").to_string()),
+                            egui::Color32::from_rgb(81, 104, 132),
+                        );
+                        Self::explorer_metric_card(
+                            &mut cols[1],
+                            self.tr("追踪记录", "Tracked"),
+                            overview.tracked_records.to_string(),
+                            Some(format!(
+                                "{} {}",
+                                self.tr("总交易", "Total"),
+                                overview.transfer_total
+                            )),
+                            egui::Color32::from_rgb(112, 121, 130),
+                        );
+                    });
+                } else {
+                    for (label, value, detail, accent) in [
+                        (
+                            self.tr("最新高度", "Latest Height"),
+                            overview.latest_height.to_string(),
+                            Some(self.tr("head", "head").to_string()),
+                            egui::Color32::from_rgb(74, 116, 168),
+                        ),
+                        (
+                            self.tr("已提交高度", "Committed"),
+                            overview.committed_height.to_string(),
+                            Some(self.tr("local", "local").to_string()),
+                            egui::Color32::from_rgb(62, 152, 92),
+                        ),
+                        (
+                            self.tr("网络高度", "Network"),
+                            overview.network_committed_height.to_string(),
+                            Some(self.tr("network", "network").to_string()),
+                            egui::Color32::from_rgb(81, 104, 132),
+                        ),
+                        (
+                            self.tr("追踪记录", "Tracked"),
+                            overview.tracked_records.to_string(),
+                            Some(format!(
+                                "{} {}",
+                                self.tr("总交易", "Total"),
+                                overview.transfer_total
+                            )),
+                            egui::Color32::from_rgb(112, 121, 130),
+                        ),
+                    ] {
+                        Self::explorer_metric_card(ui, label, value, detail, accent);
+                        ui.add_space(4.0);
+                    }
+                }
 
                 ui.add_space(6.0);
-                ui.columns(2, |cols| {
+                if ui.available_width() >= 700.0 {
+                    ui.columns(2, |cols| {
+                        Self::explorer_card(
+                            &mut cols[0],
+                            self.tr("链身份", "Chain Identity"),
+                            self.tr(
+                                "当前窗口消费的 explorer 观测源。",
+                                "Current explorer observation source.",
+                            ),
+                            |ui| {
+                                Self::render_explorer_detail_row(
+                                    ui,
+                                    "node_id",
+                                    overview.node_id.as_str(),
+                                    true,
+                                );
+                                Self::render_explorer_detail_row(
+                                    ui,
+                                    "world_id",
+                                    overview.world_id.as_str(),
+                                    true,
+                                );
+                                Self::render_explorer_detail_row(
+                                    ui,
+                                    "observed_at",
+                                    &overview.observed_at_unix_ms.to_string(),
+                                    false,
+                                );
+                            },
+                        );
+                        Self::explorer_card(
+                            &mut cols[1],
+                            self.tr("最新哈希", "Latest Hashes"),
+                            self.tr(
+                                "用于快速判断区块推进和执行对齐。",
+                                "Quick read on block progress and execution alignment.",
+                            ),
+                            |ui| {
+                                Self::render_explorer_detail_row(
+                                    ui,
+                                    "last_block",
+                                    overview.last_block_hash.as_deref().unwrap_or("n/a"),
+                                    true,
+                                );
+                                Self::render_explorer_detail_row(
+                                    ui,
+                                    "last_exec",
+                                    overview
+                                        .last_execution_block_hash
+                                        .as_deref()
+                                        .unwrap_or("n/a"),
+                                    true,
+                                );
+                            },
+                        );
+                    });
+                } else {
                     Self::explorer_card(
-                        &mut cols[0],
+                        ui,
                         self.tr("链身份", "Chain Identity"),
                         self.tr(
                             "当前窗口消费的 explorer 观测源。",
@@ -232,8 +382,9 @@ impl ClientLauncherApp {
                             );
                         },
                     );
+                    ui.add_space(6.0);
                     Self::explorer_card(
-                        &mut cols[1],
+                        ui,
                         self.tr("最新哈希", "Latest Hashes"),
                         self.tr(
                             "用于快速判断区块推进和执行对齐。",
@@ -257,7 +408,7 @@ impl ClientLauncherApp {
                             );
                         },
                     );
-                });
+                }
 
                 ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
@@ -326,7 +477,7 @@ impl ClientLauncherApp {
         }
     }
 
-    fn render_tabs(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn render_tabs(&mut self, ui: &mut egui::Ui) {
         let title = self.tr("导航", "Navigation");
         let subtitle = self.tr(
             "按主链浏览器的工作流切视图：先概览，再列表，再详情。",
@@ -1024,12 +1175,15 @@ impl ClientLauncherApp {
     where
         F: FnOnce(&mut egui::Ui),
     {
-        ui.group(|ui| {
+        Self::modal_card(ui, |ui| {
             ui.vertical(|ui| {
                 ui.horizontal_wrapped(|ui| {
-                    ui.heading(title);
+                    ui.label(egui::RichText::new(title).strong().size(14.0));
                     if !subtitle.is_empty() {
-                        ui.small(subtitle);
+                        ui.small(
+                            egui::RichText::new(subtitle)
+                                .color(egui::Color32::from_rgb(92, 105, 118)),
+                        );
                     }
                 });
                 ui.add_space(4.0);
@@ -1045,7 +1199,7 @@ impl ClientLauncherApp {
         detail: Option<String>,
         accent: egui::Color32,
     ) {
-        ui.group(|ui| {
+        Self::modal_card(ui, |ui| {
             ui.small(label);
             ui.label(egui::RichText::new(value).strong().color(accent).size(18.0));
             if let Some(detail) = detail {
@@ -1059,7 +1213,7 @@ impl ClientLauncherApp {
         label: impl Into<String>,
         color: egui::Color32,
     ) {
-        ui.label(egui::RichText::new(label.into()).color(color).strong());
+        Self::modal_status_chip(ui, &label.into(), color);
     }
 
     pub(super) fn render_explorer_detail_row(
@@ -1079,7 +1233,7 @@ impl ClientLauncherApp {
     }
 
     pub(super) fn render_explorer_empty_panel(ui: &mut egui::Ui, title: &str, body: &str) {
-        ui.group(|ui| {
+        Self::modal_card(ui, |ui| {
             ui.strong(title);
             ui.small(body);
         });
