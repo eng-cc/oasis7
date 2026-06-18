@@ -50,7 +50,7 @@ Example:
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-capture-todo-promote-args-fix
 - Source Branch: task/engineering-capture-todo-promote-args-fix
 - Source Head: 59cfbf67e9c779d1c2d028e83cde93ad68586e87
-- Comparison Ref: main
+- Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/inbox/signals.jsonl`; `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.yaml`; `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.execution.md`; `scripts/pm/capture-todo-smoke.sh`; `scripts/pm/capture-todo.sh`
 - Role Selection Basis: changed PM/workflow helper script and task evidence paths are repository health / workflow-governance surfaces; no gameplay, UI, runtime, WASM, blockchain ops, viewer, QA release, or external/community-facing surfaces changed.
 - Review Roles: repository_health_engineer
