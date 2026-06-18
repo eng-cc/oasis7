@@ -5,6 +5,11 @@
 
 审计轮次: 4
 
+## 治理状态（2026-06-18）
+- 状态：历史压缩专题，保留原址与互链用于追溯，不再作为默认活跃阅读面。
+- 当前入口：`doc/readme/project.md`、`doc/readme/prd.index.md`、`doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.prd.md` 与 `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md`。
+- 保留原因：本文记录 `scripts/readme-link-check.sh` 的原始范围、验收标准和任务收口证据，不替代当前 README 治理节奏或后续复核专题。
+
 ## 1. Executive Summary
 - Problem Statement: `TASK-README-002` 已定义人工巡检清单，但 `README.md` 与 `doc/README.md` 的入口链接仍缺最小自动检查任务。仅靠人工复核时，断链很容易在重构或移动文档后被漏掉。
 - Proposed Solution: 新增 `scripts/readme-link-check.sh`，自动扫描 `README.md` 与 `doc/README.md` 中的本地 Markdown 链接，并在引用目标不存在时失败。

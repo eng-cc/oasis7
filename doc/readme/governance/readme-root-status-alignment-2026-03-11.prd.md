@@ -5,6 +5,11 @@
 
 审计轮次: 4
 
+## 治理状态（2026-06-18）
+- 本专题已完成，保留为 2026-03-11 根 README 公开状态对齐的历史证据。
+- 当前公开状态真值以根 `README.md` 为准；README 治理与沟通节奏继续由 `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`、`doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.prd.md`、`doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` 和 release communication surfaces 承接。
+- 本文件不保留当前下一步；若公开状态发生变化，应更新根 `README.md` 及当前治理 / release communication 入口，而不是在此历史专题追加新承诺。
+
 ## 1. Executive Summary
 - Problem Statement: 根 `README.md` 仍保留“基础推进游戏层已有，正在测试完善阶段”这类旧表述，已经落后于当前 `site` 与 release communication 链中的“技术预览（尚不可玩）/ 公告准备态”统一口径。
 - Proposed Solution: 对齐根 `README.md` 的项目状态描述，明确当前为技术预览、尚不可玩、公开公告仍在准备中，并引导读者按站点 / 文档入口理解当前阶段。

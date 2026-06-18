@@ -2,7 +2,7 @@
 
 审计轮次: 14
 
-更新时间：2026-04-25
+更新时间：2026-06-18
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -16,12 +16,15 @@
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-06-17）
+## 密度快照（2026-06-18）
 - `doc/readme/`：120 份文件
 - `doc/readme/governance/`：76 份文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：12 份文件
 - `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）
+- 正式专题三件套：30 组
+- 当前默认活跃专题三件套：27 组
+- 历史压缩专题三件套：3 组
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
@@ -39,12 +42,13 @@
 - `site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`：小红书第十四篇素材包入口，已收口为“项目累计 token 用量不是炫账单，而是研发流程参与成本”版本，适合直接判断标题、正文、短版 caption、评论区引导、事实基线与禁滑坡边界。
 - `site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md`：小红书第十三篇素材包入口，现已收口为“开发者、玩家和认真把它讲出去的人一起参与把游戏做起来”的版本，并补齐共同参与主题封面与 4 页轮播入口，适合直接判断正文、评论区问题、封面/轮播资产与禁滑坡边界。
 - `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`：小红书博主 / 微信公众号绿洲币激励入口，适合判断两类宣传对象的奖励边界、证据字段与禁语。
-- `doc/readme/governance/readme-root-status-alignment-2026-03-11.prd.md`：根 README 正式状态同步入口，适合判断对外口径和仓库当前承诺边界。
+- 根 `README.md`：当前公开状态真值；配合 `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`、一致性 checklist、季度复核与 release communication surfaces 判断最新对外口径。
 - `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md`：invite-only limited preview 首轮执行记录，保留为按需进入的 execution_log 入口。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
 - README 不再平铺“当前推荐入口”或“近期专题”长名单；完整清单继续保留在下方，用于精确文件名检索和互链可达性。
+- 已完成且只承担历史证据职责的治理微专题进入“历史压缩专题清单”，不再计入默认活跃阅读面。
 - runbook、material 与 execution_log 仍保留可检索性，但默认不与模块 PRD 三件套一起暴露在首屏。
 
 ## 索引分层
@@ -56,10 +60,11 @@
 ## 覆盖规则
 - 纳入规则：纳入 `doc/readme/**` 下所有 `*.prd.md` 与同名 `*.project.md`。
 - 活跃补充：仍被当前模块 PRD / 项目态直接引用的 `runbook`、`material`、`execution_log` supporting doc，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
+- 历史压缩：已完成、无下一步、且当前治理入口已由脚本/模块 project/后续复核专题覆盖的专题，保留文件原址和互链，但从默认活跃清单降级到历史压缩清单。
 - 排除规则：不纳入 `doc/devlog/**` 与其他非 PRD 配对文档。
 - 按需进入：素材包、执行记录、帖子草案、审计 checklist 与历史收口材料继续保留可检索性；除非它们重新成为当前 operator 或 owner 的直接入口，否则不进入默认首屏。
 
-## 完整活跃专题清单（按文件名精确检索）
+## 当前默认活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md` |
@@ -69,17 +74,14 @@
 | `doc/readme/gap/readme-gap12-market-closure.prd.md` | `doc/readme/gap/readme-gap12-market-closure.design.md` | `doc/readme/gap/readme-gap12-market-closure.project.md` |
 | `doc/readme/gap/readme-gap123-runtime-consensus-metering.prd.md` | `doc/readme/gap/readme-gap123-runtime-consensus-metering.design.md` | `doc/readme/gap/readme-gap123-runtime-consensus-metering.project.md` |
 | `doc/readme/gap/readme-gap2-llm-wasm-lifecycle.prd.md` | `doc/readme/gap/readme-gap2-llm-wasm-lifecycle.design.md` | `doc/readme/gap/readme-gap2-llm-wasm-lifecycle.project.md` |
-| `doc/readme/gap/readme-gap3-install-target-infrastructure.prd.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.design.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.project.md` |
 | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.prd.md` | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.design.md` | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.project.md` |
 | `doc/readme/governance/readme-resource-model-layering.prd.md` | `doc/readme/governance/readme-resource-model-layering.design.md` | `doc/readme/governance/readme-resource-model-layering.project.md` |
 | `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.prd.md` | `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.design.md` | `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.project.md` |
-| `doc/readme/governance/readme-link-check-automation-2026-03-11.prd.md` | `doc/readme/governance/readme-link-check-automation-2026-03-11.design.md` | `doc/readme/governance/readme-link-check-automation-2026-03-11.project.md` |
 | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.design.md` | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.project.md` |
 | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md` | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.design.md` | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md` |
 | `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md` | `doc/readme/governance/readme-release-communication-template-2026-03-11.design.md` | `doc/readme/governance/readme-release-communication-template-2026-03-11.project.md` |
 | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.prd.md` | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.design.md` | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.project.md` |
 | `doc/readme/governance/readme-release-announcement-template-2026-03-11.prd.md` | `doc/readme/governance/readme-release-announcement-template-2026-03-11.design.md` | `doc/readme/governance/readme-release-announcement-template-2026-03-11.project.md` |
-| `doc/readme/governance/readme-root-status-alignment-2026-03-11.prd.md` | `doc/readme/governance/readme-root-status-alignment-2026-03-11.design.md` | `doc/readme/governance/readme-root-status-alignment-2026-03-11.project.md` |
 | `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.prd.md` | `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.design.md` | `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.project.md` |
 | `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.prd.md` | `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.design.md` | `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.project.md` |
 | `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md` | `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.design.md` | `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.project.md` |
@@ -92,6 +94,13 @@
 | `doc/readme/production/readme-p0-p1-closure.prd.md` | `doc/readme/production/readme-p0-p1-closure.design.md` | `doc/readme/production/readme-p0-p1-closure.project.md` |
 | `doc/readme/production/readme-prod-closure-llm-distfs-consensus.prd.md` | `doc/readme/production/readme-prod-closure-llm-distfs-consensus.design.md` | `doc/readme/production/readme-prod-closure-llm-distfs-consensus.project.md` |
 | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.project.md` |
+
+## 历史压缩专题清单（保留原址与互链）
+| 专题 PRD | 专题设计文档 | 专题项目文档 | 压缩理由 |
+| --- | --- | --- | --- |
+| `doc/readme/gap/readme-gap3-install-target-infrastructure.prd.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.design.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.project.md` | 已完成 README gap3 模块安装目标语义增量专题；当前 gap 主入口由 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`、`doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` 与 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md` 承接，本文只保留历史追溯 |
+| `doc/readme/governance/readme-link-check-automation-2026-03-11.prd.md` | `doc/readme/governance/readme-link-check-automation-2026-03-11.design.md` | `doc/readme/governance/readme-link-check-automation-2026-03-11.project.md` | 已完成 README 顶层链接检查微专题；当前执行入口由 `scripts/readme-link-check.sh` 和 `doc/readme/project.md` 承接，治理节奏由一致性 checklist 与季度复核专题继续覆盖 |
+| `doc/readme/governance/readme-root-status-alignment-2026-03-11.prd.md` | `doc/readme/governance/readme-root-status-alignment-2026-03-11.design.md` | `doc/readme/governance/readme-root-status-alignment-2026-03-11.project.md` | 已完成根 README 公开状态对齐微专题；当前状态真值由根 `README.md` 承接，治理和沟通节奏由白皮书总览、一致性 checklist、季度复核与 release communication surfaces 继续覆盖 |
 
 ## Material / Execution / SOP 补充入口
 | 文档路径 | 类型 | 用途 |

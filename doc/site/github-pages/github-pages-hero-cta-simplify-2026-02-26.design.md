@@ -3,6 +3,11 @@
 - 对应需求文档: `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.prd.md`
 - 对应项目管理文档: `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.project.md`
 
+## 治理状态（2026-06-18）
+- 状态：历史压缩专题设计，保留为 CTA 收敛设计证据。
+- 当前入口：默认从 `doc/site/prd.index.md` 的历史压缩清单或同名 PRD/Project 进入。
+- 边界：不作为当前首页视觉、转化或发布下载口径的主入口。
+
 ## 1. 设计定位
 定义 GitHub Pages 站点专题设计，统一首页信息架构、视觉层、内容同步、转化入口与发布流水线。
 

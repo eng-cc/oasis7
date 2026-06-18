@@ -1,9 +1,14 @@
-# README 缺口 3 收口：模块安装目标语义（自身 / 基础设施）（设计文档）
+# README 缺口 3 收口：模块安装目标语义（自身 / 基础设施）（需求文档）
 
 - 对应设计文档: `doc/readme/gap/readme-gap3-install-target-infrastructure.design.md`
 - 对应项目管理文档: `doc/readme/gap/readme-gap3-install-target-infrastructure.project.md`
 
 审计轮次: 4
+
+## 治理状态（2026-06-18）
+- 本文是已完成的 README gap3 模块安装目标语义增量专题，保留原址用于历史追溯。
+- 当前主入口统一指向 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`、`doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` 与 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md`。
+- 本专题无当前下一步动作。
 
 ## ROUND-002 主从口径
 - 主入口统一指向 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`，本文仅维护增量。
