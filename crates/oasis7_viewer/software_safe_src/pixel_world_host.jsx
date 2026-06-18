@@ -1270,6 +1270,19 @@ function PixelWorldActionReceipt(props) {
 
 function PixelWorldCommercialHud(props) {
   const surface = () => props.renderState().commercial_surface;
+  const executableNextMoveKinds = new Set(["gameplay_action", "step", "play", "request_snapshot"]);
+  const nextMoveRoutesToGameplayDetails = () => executableNextMoveKinds.has(surface().next_action.execute_kind);
+  const nextMoveRoute = () => nextMoveRoutesToGameplayDetails() ? "gameplay_details" : "command";
+  const nextMoveHref = () => nextMoveRoutesToGameplayDetails() ? "#viewer-gameplay-details" : "#viewer-details-panel";
+  const openGameplayDetails = () => {
+    if (!nextMoveRoutesToGameplayDetails()) {
+      return;
+    }
+    const details = document.getElementById("viewer-gameplay-details");
+    if (details) {
+      details.open = true;
+    }
+  };
   return (
     <Show when={surface()}>
       <div
@@ -1286,7 +1299,7 @@ function PixelWorldCommercialHud(props) {
         </div>
         <div
           class="pixel-world-command-cell pixel-world-command-cell--next"
-          data-next-move-route="command"
+          data-next-move-route={nextMoveRoute()}
           data-execute-kind={surface().next_action.execute_kind || "none"}
         >
           <div class="pixel-world-command-cell__label">
@@ -1296,8 +1309,10 @@ function PixelWorldCommercialHud(props) {
           <Show when={surface().next_action.detail}>
             <div class="pixel-world-command-cell__detail">{surface().next_action.detail}</div>
           </Show>
-          <a class="pixel-world-command-cell__action" href="#viewer-details-panel">
-            {tr(props.locale(), "去指挥面板", "Go to Command")}
+          <a class="pixel-world-command-cell__action" href={nextMoveHref()} onClick={openGameplayDetails}>
+            {nextMoveRoutesToGameplayDetails()
+              ? tr(props.locale(), "打开玩法明细", "Open Gameplay Details")
+              : tr(props.locale(), "去指挥面板", "Go to Command")}
           </a>
         </div>
         <div class="pixel-world-command-cell pixel-world-command-cell--leverage">

@@ -338,22 +338,26 @@ describe("pixel world host", () => {
     expect(readout.querySelector('[data-world-tick="12"]')).toHaveTextContent("tick=12");
   });
 
-  it("routes the commercial next move to the command surface without executing gameplay", async () => {
+  it("routes executable commercial next moves to gameplay details without executing gameplay", async () => {
     const { core } = await renderPixelWorldHost(
       sampleSnapshot(),
       "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
     );
     const sendGameplayAction = vi.spyOn(core, "sendGameplayAction");
+    const gameplayDetails = document.createElement("details");
+    gameplayDetails.id = "viewer-gameplay-details";
+    document.body.appendChild(gameplayDetails);
 
     const nextMove = document.querySelector(".pixel-world-command-cell--next");
-    expect(nextMove).toHaveAttribute("data-next-move-route", "command");
+    expect(nextMove).toHaveAttribute("data-next-move-route", "gameplay_details");
     expect(nextMove).toHaveAttribute("data-execute-kind", "gameplay_action");
     expect(nextMove).toHaveTextContent("Build smelter mk1");
 
-    const commandRoute = screen.getByRole("link", { name: "Go to Command" });
-    expect(commandRoute).toHaveAttribute("href", "#viewer-details-panel");
-    commandRoute.click();
+    const gameplayRoute = screen.getByRole("link", { name: "Open Gameplay Details" });
+    expect(gameplayRoute).toHaveAttribute("href", "#viewer-gameplay-details");
+    gameplayRoute.click();
 
+    expect(gameplayDetails.open).toBe(true);
     expect(sendGameplayAction).not.toHaveBeenCalled();
   });
 
