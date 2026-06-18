@@ -1,9 +1,9 @@
 # `world-simulator/viewer` 热点子域入口
 
-更新时间: 2026-05-29
+更新时间: 2026-06-18
 
 ## 从这里开始
-- 想确认 Viewer / player-facing surface 的整体视觉方向、层级、pixel-world 可读性与视觉评审 gate：先读 `viewer-visual-design-spec-2026-06-05.design.md`；涉及 brand book、token、icon/status、资产准入和截图矩阵时继续读 `viewer-brand-system-2026-06-05.design.md`
+- 想确认 Viewer / player-facing surface 的整体视觉方向、层级、pixel-world 可读性与视觉评审 gate：先读 `viewer-visual-design-spec-2026-06-05.design.md`；涉及本轮 image2 视觉目标、首屏总体设计与分模块落地时继续读 `viewer-page-module-design-2026-06-18.design.md`；涉及 brand book、token、icon/status、资产准入和截图矩阵时继续读 `viewer-brand-system-2026-06-05.design.md`
 - 想执行 Viewer、走 Web 闭环、看命令或手工步骤：先读 `viewer-manual.manual.md`
 - 想确认正式浏览器主入口、`viewer` / `software_safe` 兼容边界或弱机/CI 默认路径：先读 `viewer-web-software-safe-mode-2026-03-16.prd.md`
 - 想确认 `legacy_core.js` 拆分边界、`viewer.js` / `software_safe.js` canonical/compat 关系，或 `pixel-world-bridge` generated runtime 真值：先读 `viewer-web-single-source-build-truth-2026-05-19.prd.md`
@@ -41,12 +41,14 @@
 ### 2. 视觉方向与评审 gate
 - 首读入口:
   - `viewer-visual-design-spec-2026-06-05.design.md`
+  - `viewer-page-module-design-2026-06-18.design.md`
   - `viewer-brand-system-2026-06-05.design.md`
   - `viewer-visual-system-review-card-2026-06-05.design.md`
 - 适合问题:
   - Viewer / player-facing surface 的统一视觉方向是什么
   - 世界、目标、Agent、路径、回执、诊断的视觉层级怎么排
   - pixel-world、2D 地图、移动端和视觉 review gate 应该按什么标准验收
+  - 本轮 image2 视觉目标如何拆成首屏总体设计、Stage Hero、Pixel World Board、Command Strip、Action Receipt、Targets、Details 和 Diagnostics
   - brand book、语义 token、icon/status vocabulary、资产语言和截图矩阵如何执行
   - 本轮视觉系统大项的截图矩阵与模型视觉 review verdict 是什么
 

@@ -1029,7 +1029,7 @@ function WorldStageHero() {
       : selectionHint();
 
   return (
-    <div class="stage-hero">
+    <div class="stage-hero stage-hero--compact">
       <div class="stage-hero__topline">
         <div class="stack stack--hero">
           <div class="stage-hero__eyebrow-row">
@@ -1069,7 +1069,7 @@ function WorldStageHero() {
           </div>
         )}
       </Show>
-      <div class="hero-focus-grid">
+      <div class="hero-focus-grid hero-focus-grid--compact">
         <div class="hero-focus-card">
           <div class="hero-focus-card__label">{tr(locale(), "局势", "Situation")}</div>
           <div class={gameplayStageToneClass(gameplaySummary()?.stageStatus)}>
@@ -1272,12 +1272,22 @@ function WorldSummaryPanel() {
   ];
 
   return (
-    <div class="stack">
-      <PanelSection
-        title={tr(locale(), "正式玩法摘要", "Formal Gameplay Summary")}
-        eyebrow={tr(locale(), "玩家主路径", "Player Path")}
-        meta={tr(locale(), "先看目标、阻塞和下一步，再决定是否进入右侧指挥区。", "Read the goal, blocker, and next step first, then decide whether to enter the command surface.")}
-      >
+    <details class="gameplay-details-surface" id="viewer-gameplay-details">
+      <summary class="gameplay-details-surface__summary">
+        <div class="diagnostic-surface__title">
+          <span>{tr(locale(), "玩法明细", "Gameplay Details")}</span>
+          <span class="diagnostic-surface__meta">
+            {tr(locale(), "世界棋盘上方已保留目标、下一步和回执；这里展开看完整状态机与经济明细。", "The world board already carries objective, next move, and receipt; expand here for the full state machine and economy details.")}
+          </span>
+        </div>
+        <Badge>{diagnosticsSummaryBadges().join(" · ")}</Badge>
+      </summary>
+      <div class="stack flow-top">
+        <PanelSection
+          title={tr(locale(), "正式玩法摘要", "Formal Gameplay Summary")}
+          eyebrow={tr(locale(), "玩家主路径", "Player Path")}
+          meta={tr(locale(), "先看目标、阻塞和下一步，再决定是否进入右侧指挥区。", "Read the goal, blocker, and next step first, then decide whether to enter the command surface.")}
+        >
         <Show
           when={gameplaySummary()}
           fallback={<EmptyState>{tr(locale(), "等待首条规范玩法快照…", "Waiting for the first canonical gameplay snapshot…")}</EmptyState>}
@@ -1859,7 +1869,8 @@ function WorldSummaryPanel() {
           </div>
         </div>
       </details>
-    </div>
+      </div>
+    </details>
   );
 }
 

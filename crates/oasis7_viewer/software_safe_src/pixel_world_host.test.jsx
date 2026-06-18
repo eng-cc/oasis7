@@ -338,6 +338,29 @@ describe("pixel world host", () => {
     expect(readout.querySelector('[data-world-tick="12"]')).toHaveTextContent("tick=12");
   });
 
+  it("routes executable commercial next moves to gameplay details without executing gameplay", async () => {
+    const { core } = await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+    const sendGameplayAction = vi.spyOn(core, "sendGameplayAction");
+    const gameplayDetails = document.createElement("details");
+    gameplayDetails.id = "viewer-gameplay-details";
+    document.body.appendChild(gameplayDetails);
+
+    const nextMove = document.querySelector(".pixel-world-command-cell--next");
+    expect(nextMove).toHaveAttribute("data-next-move-route", "gameplay_details");
+    expect(nextMove).toHaveAttribute("data-execute-kind", "gameplay_action");
+    expect(nextMove).toHaveTextContent("Build smelter mk1");
+
+    const gameplayRoute = screen.getByRole("link", { name: "Open Gameplay Details" });
+    expect(gameplayRoute).toHaveAttribute("href", "#viewer-gameplay-details");
+    gameplayRoute.click();
+
+    expect(gameplayDetails.open).toBe(true);
+    expect(sendGameplayAction).not.toHaveBeenCalled();
+  });
+
   it("localizes command board goal and next-action copy for the selected UI language", async () => {
     vi.resetModules();
     window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=zh");
@@ -757,7 +780,7 @@ describe("pixel world host", () => {
     expect(document.body).toHaveClass("pixel-world-focus-active");
     expect(screen.getByText("World Focus")).toBeInTheDocument();
     expect(screen.queryByText("No blocker")).not.toBeInTheDocument();
-    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Current Prompt");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Current Objective");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Recover sustainable capability");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Build smelter mk1");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Missing Material");
@@ -768,7 +791,6 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("68%");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Replenish upstream materials, then advance again to confirm the line resumes.");
-    expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Objective");
     expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Next Move");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Routes");
@@ -795,7 +817,7 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("fragments=2");
     expect(document.querySelector(".pixel-world-focus-controls")).toHaveAttribute("aria-label", "World focus controls");
     expect(document.querySelector(".pixel-world-focus-controls")).toContainElement(screen.getByRole("button", { name: "Command" }));
-    expect(document.querySelector(".pixel-world-focus-hud__cell--prompt")).toHaveTextContent("Current Prompt");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--prompt")).toHaveTextContent("Current Objective");
     expect(document.querySelector(".pixel-world-focus-hud__cell--tick")).toHaveAttribute("data-world-tick", "12");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-blocker-present", "true");
     expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
