@@ -12,6 +12,11 @@ if command -v cargo-deny >/dev/null 2>&1; then
   fi
 fi
 
+if [[ "${CI:-}" == "true" ]]; then
+  echo "error: cargo-deny ${version} is required in CI; install it in the workflow before invoking this script" >&2
+  exit 127
+fi
+
 echo "installing cargo-deny ${version}"
 python3 - "$version" "$timeout_seconds" <<'PY'
 from __future__ import annotations

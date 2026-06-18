@@ -6,12 +6,12 @@ pub(super) fn parse_bool_flag(args: &mut ArgCursor, flag_name: &str) -> Result<b
         args.next();
         enabled = true;
     }
-    while let Some(flag) = args.peek() {
+    if let Some(flag) = args.peek() {
         if flag == "-h" || flag == "--help" {
             return Err(usage());
         }
         if flag.starts_with("--") {
-            break;
+            return Ok(enabled);
         }
         return Err(format!("unexpected positional argument `{flag}`"));
     }

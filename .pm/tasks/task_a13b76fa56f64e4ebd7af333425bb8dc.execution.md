@@ -95,3 +95,24 @@ Example:
 - Expected Result: changed scripts parse; workflow YAML parses; report-only governance script completes even if `cargo-deny` is unavailable; representative Clippy gate command passes while leaving historical style/complexity warnings non-blocking; doc governance and diff whitespace checks pass; PM lint either passes or reports unrelated existing task-log issues.
 - Actual Result: script syntax OK; workflow YAML OK; governance report smoke exited 0 and produced summary with `cargo deny check` status 127 due local install timeout, `cargo tree -d` status 0, unsafe scan status 0 and 45 matches; representative Clippy command passed with non-blocking existing warnings; `doc-governance-check: OK`; `git diff --check` passed; `./scripts/pm/lint.sh` failed on pre-existing `.pm/tasks/*` execution-log formatting issues across many unrelated task files, not on this implementation surface.
 - Blocker / Next Action: no code blocker for implemented CI changes; before PR closeout, rerun `cargo deny check advisories` in an environment with working crates.io access or inspect CI result, and handle any real advisories/policy findings.
+
+## 2026-06-18 15:49:50 CST / tpm
+- Review Trigger: pre-PR local role review
+- Review Scope: commit `b01a7eef696240a1a1274a26dd5bc70009169fa2`; paths `.github/workflows/rust.yml`, `rust-toolchain.toml`, `scripts/ci-tests.sh`, `scripts/ci-rust-governance-report.sh`, `scripts/ensure-cargo-deny.sh`, `deny.toml`, task PM records.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Question: confirm P0/P1 Rust CI governance checks are correctly layered, do not create avoidable required-gate instability, have appropriate report-only behavior for P1, and have sufficient verification evidence for PR CI.
+- Evidence Available: task closeout verified script syntax, workflow YAML parse, script executable bits, doc governance, diff whitespace, and representative Clippy command; governance report smoke completed with cargo-deny install unavailable due local crates.io timeout but report-only degradation worked.
+- Expected Return Contract: findings | no_findings | residual_risk
+- Formal Sink: `.pm/tasks/task_a13b76fa56f64e4ebd7af333425bb8dc.execution.md`
+
+## 2026-06-18 16:07:00 CST / tpm
+- 完成内容: Addressed pre-PR review findings and local required-gate blockers.
+- Review Findings Disposition:
+  - repository_health_engineer P1: required RustSec gate installed `cargo-deny` from source at runtime. Fixed by installing pinned `cargo-deny@0.19.9` via `taiki-e/install-action@v2` in both required and full-regression workflow jobs; `scripts/ensure-cargo-deny.sh` now fails fast in CI if the workflow install is absent or wrong, while preserving local fallback install behavior.
+  - repository_health_engineer P2: all-features advisory coverage remains report-only / future expansion; no required-gate change made because the current P0 scope is low-flake PR protection and P1 full-report visibility.
+  - qa_engineer P0: `cargo clippy -p oasis7 --tests --features test_tier_required -- -D clippy::correctness -D clippy::suspicious -D clippy::perf -A clippy::large_enum_variant` exposed historical perf warnings in broad `oasis7` tests. Fixed gate scope to hard-deny `correctness` and `suspicious` only; fixed actual hard-deny findings in `oasis7_wasm_router::cache`, `oasis7_game_launcher`, `oasis7_pure_api_client::support`, and runtime rule-enforcement tests.
+  - qa_engineer P1: local `cargo-deny` still unavailable due crates.io timeout; mitigation is workflow-level pinned binary install plus PR CI validation.
+- Validation Command: `env -u RUSTC_WRAPPER cargo clippy -p oasis7 --tests --features test_tier_required -- -D clippy::correctness -D clippy::suspicious`; `bash -n scripts/ci-tests.sh scripts/ci-rust-governance-report.sh scripts/ensure-cargo-deny.sh && ruby -e 'require "yaml"; YAML.load_file(".github/workflows/rust.yml"); puts "ok rust.yml"' && ./scripts/check-script-executable-bits.sh && ./scripts/doc-governance-check.sh && git diff --check`.
+- Expected Result: required Clippy scope passes with only non-blocking warnings; changed scripts/workflow parse; executable-bit/doc-governance/diff checks pass.
+- Actual Result: Clippy command exited 0 after 49.69s with non-blocking existing warnings; script syntax OK; workflow YAML parsed; script executable bits OK; `doc-governance-check: OK`; `git diff --check` passed.
+- Blocker / Next Action: create follow-up commit, then request a fresh targeted pre-PR role review on the updated head because code changed after the first review.

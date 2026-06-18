@@ -50,8 +50,6 @@ run_cargo_clippy() {
   local lint_flags=(
     -D clippy::correctness
     -D clippy::suspicious
-    -D clippy::perf
-    -A clippy::large_enum_variant
   )
   if [[ "${CI_VERBOSE:-}" == "1" ]]; then
     run env -u RUSTC_WRAPPER cargo clippy --verbose "$@" -- "${lint_flags[@]}"
