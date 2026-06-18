@@ -1284,7 +1284,11 @@ function PixelWorldCommercialHud(props) {
           <div class="pixel-world-command-cell__value">{surface().objective.title}</div>
           <div class="pixel-world-command-cell__detail">{surface().objective.detail}</div>
         </div>
-        <div class="pixel-world-command-cell pixel-world-command-cell--next">
+        <div
+          class="pixel-world-command-cell pixel-world-command-cell--next"
+          data-next-move-route="command"
+          data-execute-kind={surface().next_action.execute_kind || "none"}
+        >
           <div class="pixel-world-command-cell__label">
             {tr(props.locale(), "下一步", "Next Move")}
           </div>
@@ -1292,6 +1296,9 @@ function PixelWorldCommercialHud(props) {
           <Show when={surface().next_action.detail}>
             <div class="pixel-world-command-cell__detail">{surface().next_action.detail}</div>
           </Show>
+          <a class="pixel-world-command-cell__action" href="#viewer-details-panel">
+            {tr(props.locale(), "去指挥面板", "Go to Command")}
+          </a>
         </div>
         <div class="pixel-world-command-cell pixel-world-command-cell--leverage">
           <div class="pixel-world-command-cell__label">
@@ -1339,7 +1346,7 @@ function PixelWorldFocusHud(props) {
           </div>
         </div>
         <div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt">
-          <span>{tr(props.locale(), "当前指令", "Current Prompt")}</span>
+          <span>{tr(props.locale(), "当前目标", "Current Objective")}</span>
           <strong>{surface().objective.title}</strong>
           <em>{surface().next_action.label}</em>
         </div>
