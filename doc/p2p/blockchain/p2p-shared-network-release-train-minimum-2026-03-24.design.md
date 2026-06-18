@@ -1,4 +1,4 @@
-# oasis7 shared network / release train 最小执行形态（设计文档）
+# oasis7 legacy shared-network rehearsal / release-train background（设计文档）
 
 - 对应需求文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
@@ -13,8 +13,8 @@
 > or public large-world readiness.
 
 ## 设计目标
-- 把 benchmark 中 `L5 shared network/release train` 的缺口落成正式执行模型，而不是继续停留在口头 backlog。
-- 明确 oasis7 下一阶段的最小 shared track、promotion 规则、rollback 规则与 claims gate。
+- 把 benchmark 中 `L5 network rehearsal / release-train readiness` 的缺口落成正式执行模型，而不是继续停留在口头 backlog。
+- 明确 oasis7 下一阶段的最小 legacy rehearsal track、promotion 规则、rollback 规则与 claims gate。
 
 ## 当前结论
 | 维度 | 当前状态 | 结论 |
@@ -24,10 +24,10 @@
 | shared_devnet/staging/canary | 作为 legacy/rehearsal evidence，`shared_devnet` 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论；`staging/canary` 仍未正式执行，且该轨不再是目标 test 环境 | `legacy_rehearsal_pass` |
 | public claims | 仍受 preview policy 限制 | `limited playable technical preview` + `crypto-hardened preview` |
 
-## 三层 shared track
+## 三层 legacy rehearsal track
 | Track | 目标 | 最小入口 | 最小通过标准 | 不算完成的情况 |
 | --- | --- | --- | --- | --- |
-| `shared_devnet` | 首次把统一 candidate 放到多人共享环境中运行 | 本地 gate 通过、candidate bundle 完整、共享访问路径明确 | 能被共享访问、版本固定、QA 有 `pass/block` 结论、可回滚到前一 bundle | 仍是单机私有 world、只有运行命令没有结论 |
+| `shared_devnet` | 首次把统一 candidate 放到多人 network rehearsal 环境中运行 | 本地 gate 通过、candidate bundle 完整、共享访问路径明确 | 能被共享访问、版本固定、QA 有 `pass/block` 结论、可回滚到前一 bundle | 仍是单机私有 execution instance、只有运行命令没有结论 |
 | `staging` | 做升级窗口、恢复、回滚和彩排 | `shared_devnet=pass`、升级窗口与 owner 值班明确 | promotion/rollback 各至少一轮，证据完整，liveops 认可 | 只是复用 shared_devnet、没有独立升级/恢复演练 |
 | `canary` | 小范围真实发布轨道，验证 freeze/incident 响应 | `staging=pass`、duration/freeze 条件/incident owner 明确 | 有固定观察窗、可执行 freeze/rollback、incident 结论闭环 | 没有观察窗、没有 incident 结论、没有 fallback bundle |
 
@@ -52,7 +52,7 @@
   - `./scripts/release-gate.sh --candidate-bundle <bundle.json>`
 - 当前设计含义:
   - `release_candidate_bundle` 现在已具备机器可读 JSON 工件、路径哈希与 `git_commit` pinning。
-  - `release-gate` 已可在进入 shared track 前先校验 bundle 存在性、引用路径与 hash 漂移。
+  - `release-gate` 已可在进入 rehearsal track 前先校验 bundle 存在性、引用路径与 hash 漂移。
   - 本段记录 RTMIN-1 当时的实现入口；当前网络层 verdict 不在本文维护，见 formal network-tier project。
 
 ## 当前实现入口（RTMIN-2）
@@ -94,7 +94,7 @@
   - `./scripts/shared-devnet-rehearsal-smoke.sh`
 - 当前设计含义:
   - 同一条命令现在可以围绕一个 `candidate_id` 串起 `release-candidate-bundle create/validate`、可选 `release-gate --dry-run`、same-candidate `headed Web + no-ui + pure_api` 复跑或证据复用、lane scaffold、`lanes.shared_devnet.tsv` 和 `shared-network-track-gate` 输出。
-  - 它默认仍对 `shared_access`、`mixed_topology_baseline`、`governance_live_drill`、`short_window_longrun`、`rollback_target_ready` 维持保守语义；编排入口本身不等于 shared-network `pass` 或 claims 升级。
+  - 它默认仍对 `shared_access`、`mixed_topology_baseline`、`governance_live_drill`、`short_window_longrun`、`rollback_target_ready` 维持保守语义；编排入口本身不等于 network-rehearsal `pass` 或 claims 升级。
 
 ## Track QA Required Lanes
 | Track | Required lanes | Gate 结论规则 |
@@ -160,8 +160,8 @@
 - 当前允许：
   - `limited playable technical preview`
   - `crypto-hardened preview`
-  - `shared network / release train is specified but not yet executed`
+  - `network rehearsal / release train is specified but not yet executed`
 - 当前禁止：
   - `production release train is established`
-  - `shared network validated`
+  - `network rehearsal validated`
   - `mainnet-grade testing maturity`

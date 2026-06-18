@@ -6,8 +6,8 @@
 审计轮次: 1
 
 ## 1. Executive Summary
-- Problem Statement: `doc-corpus-maintenance-governance` 已把文档治理债界定为“入口减重之后的存量维护成本”，而 `doc/testing/evidence/` 仍是当前 `testing` 模块内最高密度热点路径，当前快照已有 49 份 Markdown 文件。虽然 `doc/testing/README.md` 与 `prd.index.md` 已完成模块级首读分流，但 `evidence/` 子目录内部仍缺少一个 canonical 子域入口，读者进入该路径后依然会直接面对 release gate、hosted world、shared network triad、claim matrix 与 assorted validation evidence 的平铺文件面。
-- Proposed Solution: 建立 `testing-evidence-path-governance` 专题，把 `evidence/` 作为 `PRD-ENGINEERING-025` 的第四条已执行 follow-up；新增 `doc/testing/evidence/README.md` 作为热点子域 landing page，按“release gate / hosted-world & web / p2p & shared-network / governance drill / claim & audit matrix / 定向验证”分流读者，并同步回写 `testing` 与 `engineering` 上游入口。
+- Problem Statement: `doc-corpus-maintenance-governance` 已把文档治理债界定为“入口减重之后的存量维护成本”，而 `doc/testing/evidence/` 仍是当前 `testing` 模块内最高密度热点路径，当前快照已有 49 份 Markdown 文件。虽然 `doc/testing/README.md` 与 `prd.index.md` 已完成模块级首读分流，但 `evidence/` 子目录内部仍缺少一个 canonical 子域入口，读者进入该路径后依然会直接面对 release gate、hosted access / web evidence、legacy shared-network rehearsal triad、claim matrix 与 assorted validation evidence 的平铺文件面。
+- Proposed Solution: 建立 `testing-evidence-path-governance` 专题，把 `evidence/` 作为 `PRD-ENGINEERING-025` 的第四条已执行 follow-up；新增 `doc/testing/evidence/README.md` 作为热点子域 landing page，按“release gate / hosted access & web / p2p & legacy network rehearsal / governance drill / claim & audit matrix / 定向验证”分流读者，并同步回写 `testing` 与 `engineering` 上游入口。
 - Success Criteria:
   - SC-1: engineering 存在正式 `testing-evidence-path-governance` 专题三件套，冻结为什么优先处理 `testing/evidence`、这批动作边界以及后续顺序。
   - SC-2: `doc/testing/evidence/README.md` 成为 `evidence/` 子目录 canonical 入口，能把进入该路径的默认阅读方式从“文件系统平铺浏览”收口到“按问题分流”。
@@ -17,19 +17,19 @@
 
 ## 2. User Experience & Functionality
 - User Personas:
-  - 项目经理 / `producer_system_designer`: 需要在高密度 evidence 路径里快速判断“先看 release gate、hosted world、shared network triad 还是 claim/audit matrix”，而不是把留痕目录当文件仓库顺扫。
+  - 项目经理 / `producer_system_designer`: 需要在高密度 evidence 路径里快速判断“先看 release gate、hosted access、legacy shared-network rehearsal triad 还是 claim/audit matrix”，而不是把留痕目录当文件仓库顺扫。
   - `qa_engineer` / `liveops_community`: 需要先进入正确证据簇，再决定是否下钻到某个具体 evidence 文件，而不是在近 50 份文档里凭文件名碰运气。
   - 文档治理评审者: 需要识别 `evidence/` 的主要阅读簇，判断哪些是活跃入口，哪些只是保留可检索性。
 - User Scenarios & Frequency:
   - 查看 release/preview/trust gate 证据: 高频，在 release readiness 和口径评审中触发。
-  - 查看 hosted world / browser / web surface 证据: 高频，在接入边界、权限与滥用分析中触发。
-  - 查看 p2p/shared-network triad 证据: 高频，在 rollout、same-window snapshot 和 mixed-topology 讨论中触发。
+  - 查看 hosted access / browser / web surface 证据: 高频，在接入边界、权限与滥用分析中触发。
+  - 查看 p2p / legacy shared-network rehearsal triad 证据: 高频，在 rollout、same-window snapshot 和 mixed-topology 讨论中触发。
   - 精确追溯某份矩阵、incident 或 validation evidence: 中低频，但需要一个稳定的定向检索入口，而不是平铺浏览。
 - User Stories:
   - PRD-ENGINEERING-029: As a 项目经理/Testing owner, I want a canonical `doc/testing/evidence/` path entrypoint, so that I can navigate the densest testing hotspot path by intent instead of scanning nearly 50 evidence files blindly.
 - Critical User Flows:
   1. Flow-TEPG-001:
-     `进入 doc/testing/evidence/README.md -> 根据“release gate / hosted-world & web / p2p & shared-network / governance drill / claim & audit matrix / 定向验证”选择簇 -> 再进入对应证据`
+     `进入 doc/testing/evidence/README.md -> 根据“release gate / hosted access & web / p2p & legacy network rehearsal / governance drill / claim & audit matrix / 定向验证”选择簇 -> 再进入对应证据`
   2. Flow-TEPG-002:
      `从 doc/testing/README.md 进入 evidence 热点子域 -> 命中 evidence/README.md -> 再决定看某一簇还是回到 prd.index`
   3. Flow-TEPG-003:
@@ -39,7 +39,7 @@
 | 对象/能力 | 字段定义 | 动作/行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | `doc/testing/evidence/README.md` | 首读分流、主题簇、现行边界、定向检索入口 | 作为 `evidence/` 子域 landing page | `missing -> canonical -> maintained` | 先按读者问题，再按推荐文档 | 所有人可读，治理 owner 可更新 |
-| `evidence/` 主题簇导航 | `release-gate`、`hosted-world-and-web`、`p2p-shared-network`、`governance-drill`、`claim-and-audit`、`targeted-validation` | 把近 50 份 evidence 文档压成有限入口组 | `flat -> clustered` | 先高频问题，再按具体留痕下钻 | 所有人可读 |
+| `evidence/` 主题簇导航 | `release-gate`、`hosted-access-and-web`、`p2p-legacy-network-rehearsal`、`governance-drill`、`claim-and-audit`、`targeted-validation` | 把近 50 份 evidence 文档压成有限入口组 | `flat -> clustered` | 先高频问题，再按具体留痕下钻 | 所有人可读 |
 | 模块上游回链 | `testing/README.md`、`testing/prd.index.md`、engineering 根入口 | 把 `evidence/README.md` 提升为热点子域默认入口 | `module_only -> path_entrypoint` | `evidence` 热点优先命中子域入口 | 所有人可读 |
 | 路径级治理专题 | 问题定义、边界、验证、后续顺序 | 明确 `evidence/` 是当前 `testing` 热点路径治理切片 | `implicit -> formalized` | `devlog -> viewer -> p2p/node -> testing/evidence -> quarterly review` | 仅治理 owner 可写 |
 - Acceptance Criteria:
@@ -57,7 +57,7 @@
 - Tool Requirements: 主要依赖 `find`、`rg` 与库存报告结果做 `evidence/` 目录体量统计与簇级分流，配合 Markdown 入口文档回写。
 - Evaluation Strategy:
   - 复算 `doc/testing/evidence/` 文件数与主要主题簇，确认 `evidence/README.md` 的分流说明与当前路径结构一致。
-  - 人工验证从 `doc/testing/README.md` 进入 `evidence/README.md` 后，能在 2 分钟内命中 release gate、hosted world 或 p2p/shared-network 入口。
+  - 人工验证从 `doc/testing/README.md` 进入 `evidence/README.md` 后，能在 2 分钟内命中 release gate、hosted access 或 p2p / legacy network rehearsal 入口。
 
 ## 4. Technical Specifications
 - Architecture Overview:

@@ -28,8 +28,8 @@
   - 维护约定
 - 推荐主题簇:
   - `release-gate`: release evidence bundle、candidate gate、trust gate
-  - `hosted-world-and-web`: hosted world browser/auth/abuse/web surface 与主链 web validation
-  - `p2p-and-shared-network`: triad snapshot、mixed topology、shared devnet、upgrade 与 rollout follow-up
+  - `hosted-access-and-web`: hosted access browser/auth/abuse/web surface 与主链 web validation
+  - `p2p-and-legacy-network-rehearsal`: triad snapshot、mixed topology、legacy shared-devnet rehearsal、upgrade 与 rollout follow-up
   - `governance-drill`: clone/live world drill、finality、foundation ops 等治理演练留痕
   - `claim-and-audit`: claim abuse/restricted grant matrix、token allocation audit、quality baseline
   - `targeted-validation`: provider recertification、pure-api parity、software-safe web entry、headless smoke、launcher UX

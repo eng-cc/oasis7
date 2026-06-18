@@ -17,7 +17,7 @@
 
 ## 2. User Experience & Functionality
 - User Personas:
-  - `producer_system_designer`：需要把“什么时候叫 shared devnet，什么时候才叫 public testnet / mainnet”冻结成正式口径。
+  - `producer_system_designer`：需要把“旧 shared_devnet rehearsal 字段何时只能作为历史共享预演，什么时候才叫 public_testnet / mainnet”冻结成正式口径。
   - `runtime_engineer`：需要知道一个网络 tier 至少要固定哪些字段，后续 runtime/config 才能围绕单一 manifest 接线。
   - `qa_engineer`：需要知道 testnet/mainnet 的 promotion gate、reset/faucet 边界和 current verdict，避免把 rehearsal 当上线。
   - `liveops_community`：需要知道哪些 tier 可以公开给外部访问，哪些还只能作为团队内部共享轨道。

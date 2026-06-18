@@ -31,7 +31,7 @@
   - 每次设计 validator / sentry / relay 部署形态时，先看本专题角色边界。
   - 每次网络层计划从点状补丁进入框架重构时，先以本专题冻结目标态和非目标。
   - 每次新用户首次启动节点、切换网络环境或重新检测公网/NAT 条件时，系统都应自动重算默认模式。
-  - 每次 shared network / release train / chaos drill 设计新门禁时，把本专题当作流量分层和 reachability 真值。
+  - 每次 network rehearsal / release-train / chaos drill 设计新门禁时，把本专题当作流量分层和 reachability 真值。
 - User Stories:
   - PRD-P2P-024-A: As a `producer_system_designer`, I want one public-chain-grade private-reachability architecture, so that oasis7 不会因为家宽/NAT 现实被迫退回“全员公网节点”假设。
   - PRD-P2P-024-B: As a `runtime_engineer`, I want identity, discovery, transport and relay semantics separated from consensus logic, so that the framework can support different main-chain data planes without重写底层可达性。

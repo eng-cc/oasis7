@@ -28,7 +28,7 @@
 | Launcher / Web UI / release gate hardening 批次 (`TASK-TESTING-041` 至 `TASK-TESTING-065`) | `doc/testing/launcher/*.project.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.project.md`、相关 `.pm/tasks/task_<32hex>.*` |
 | 2026-03-02 / 2026-03-03 / 2026-03-06 专题任务映射 | `doc/testing/prd.index.md` 按文件名检索对应 `*.project.md`；旧 `SUBTASK-TESTING-*` 映射保留在专题 project 文档与 task evidence 中 |
 | Playability evidence stack / L4A-L4B / model visual review | `doc/testing/governance/playability-*.project.md`、`doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`、`doc/testing/templates/model-visual-review-card-template.md` |
-| Shared network / hosted-world / release evidence | `doc/testing/evidence/README.md` 先分流，再进入具体 evidence 文件 |
+| Legacy shared-network rehearsal / hosted access / release evidence | `doc/testing/evidence/README.md` 先分流，再进入具体 evidence 文件 |
 | Performance coverage and baselines | `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`testing-manual.md` 的 required-gate / Viewer performance probe 段落 |
 
 ## 最近高价值完成摘要
