@@ -9,8 +9,9 @@ source_signal: null
 source_refs:
   - AGENTS.md
 doc_refs:
-  - doc/viewer/project.md
-  - doc/viewer/prd.md
+  - doc/world-simulator/project.md
+  - doc/world-simulator/viewer/README.md
+  - doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md
 related_prd: []
 acceptance:
   - "Game viewer visual hierarchy and HUD readability are improved according to game_visual_interaction_designer slice findings."
