@@ -464,6 +464,16 @@
     - `./scripts/provider-remote-https/letai-provider-cli.test.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] capture-todo-empty-args-fix (PRD-SCRIPTS-001/002) [test_tier_required]: 修复 `capture-todo.sh` 在无 passthrough 参数时于 Bash 3.2 + `set -u` 下展开空 `PROMOTE_ARGS` 触发 `unbound variable` 的问题，并补齐无 passthrough capture smoke 覆盖。 Trace: .pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.yaml
+  - 产物文件:
+    - `scripts/pm/capture-todo.sh`
+    - `scripts/pm/capture-todo-smoke.sh`
+    - `.pm/inbox/signals.jsonl`
+    - `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.yaml`
+    - `.pm/tasks/task_5effbd8aa09c4d4cb3b78c47b02872a0.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/pm/capture-todo.sh scripts/pm/capture-todo-smoke.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
