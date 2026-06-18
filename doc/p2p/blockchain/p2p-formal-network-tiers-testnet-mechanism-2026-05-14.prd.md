@@ -43,7 +43,7 @@
 | `shared_devnet` boundary | `visibility=shared_operator`、`value_semantics=preview`、`faucet_mode=none|operator_grant` | 只保留 legacy/rehearsal evidence 语义，不再作为目标 test 环境 | `legacy -> referenced` | 即便已有 shared access，也不自动等于 public RPC/faucet/testnet claim | `runtime_engineer`/`qa_engineer` 维护 |
 | `public_testnet` policy | `visibility=public`、`value_semantics=testnet`、`faucet_mode=guarded_testnet_faucet`、`reset_policy=resettable`、`validator_admission=allowlist_or_governed_candidate` | 对外开放 public testnet，并明确它仍可重置、资产无 mainnet 价值承诺 | `planned -> specified_skeleton_only -> rehearsal -> live` | 没有 public RPC/explorer/faucet/reset policy 时不得叫 public testnet | `liveops_community` 执行公开面，producer 审批 |
 | `mainnet` policy | `visibility=public`、`value_semantics=production`、`faucet_mode=none`、`reset_policy=frozen`、`validator_admission=governance_registry_only` | 宣告正式价值网络 | `planned -> gated -> live` | 只有 `MAINNET-1~4`、frozen genesis、no-reset commitment 全部具备时才允许 | `producer_system_designer` 审批，`qa_engineer` 阻断 |
-| Claims gate | `allowed_claims/denied_claims/required_gates` | 根据 tier 决定允许哪些公开口径 | `draft -> enforced` | `shared_devnet` 与 `public_testnet` 默认 deny `mainnet-grade live network` | `liveops_community` 执行，producer 审批 |
+| Claims gate | `allowed_claims/denied_claims/required_gates` | 根据 tier 决定允许哪些公开口径 | `draft -> enforced` | legacy `shared_devnet` 与 `public_testnet` 默认 deny `mainnet-grade live network` | `liveops_community` 执行，producer 审批 |
 - Acceptance Criteria:
   - AC-1: 本专题必须落地 PRD / design / project，并接入 `doc/p2p/prd.md`、`doc/p2p/project.md`、`doc/p2p/prd.index.md` 与 `testing-manual.md`。
   - AC-2: 本专题必须明确 `local_devnet -> public_testnet -> mainnet` 三层 operator/runtime network-tier 模型，且明确 `shared_devnet` 只作为 legacy/rehearsal evidence，不是目标 test 环境，也不是玩家世界模型。
@@ -96,7 +96,7 @@
   - v1.2: 落第一轮 public testnet rehearsal，补齐 public RPC/explorer/faucet/reset evidence。
   - v2.0: 在 `public_testnet` exit review 与 `MAINNET-1~4` 全绿后，再讨论 mainnet manifest 激活。
 - Technical Risks:
-  - 风险-1: 如果继续把 `shared_devnet` 和 `public_testnet` 混用，团队会在 claims、faucet、reset 承诺上持续越界。
+  - 风险-1: 如果继续把 legacy `shared_devnet` 和 `public_testnet` 混用，团队会在 claims、faucet、reset 承诺上持续越界。
   - 风险-2: 如果 `mainnet` 没有单独 schema 约束，后续很容易把 preview/testnet 运行习惯直接带进正式网络。
   - 风险-3: 如果只有文档没有 manifest skeleton，后续 runtime/liveops 会再次把 tier 真值散落到各自脚本里。
 

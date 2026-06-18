@@ -7,6 +7,7 @@
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] p2p-environment-terminology-guard (PRD-P2P-028) [test_tier_required]: 加强 active 环境 / network-tier 文档中的 legacy `shared_devnet` / shared-network 边界扫描，避免被误读为当前 `public_testnet`、mainnet 或公开上线证据。 Trace: .pm/tasks/task_d5247a8f051443c38a6d551ab75efac8.yaml
 - [x] p2p-replication-transport-gap-sync-recovery (PRD-P2P-001/003/028) [test_tier_required]: 修复 public testnet replication transport / gap-sync / storage challenge 多轮 live degraded 根因，收口 fetch-commit route budget、active transport request fallback、provider publication best-effort、empty-provider lookup generic fallback 与 consensus gossip best-effort publish，并形成多节点健康检查/升级验证链路。 Trace: .pm/tasks/task_c612861fd1fe4187b789ceff61a6d0f7.yaml
 - [x] p2p-provider-route-exhaustion-recovery (PRD-P2P-001/003/028) [test_tier_required]: 修复 public testnet storage challenge 在 retryable provider-route exhausted 后长期 degraded；storage challenge 可走 bounded generic fallback，同时保留 provider not-found、gap sync strictness 与 wrong blob hard-failure 边界。 Trace: .pm/tasks/task_4cc7d5297e084dd1945223f5769c4e9c.yaml
 - [x] p2p-storage-challenge-provider-routing-hardening (PRD-P2P-001/003/028) [test_tier_required]: 收口 public testnet storage challenge / replication fetch provider route，不再让 observer/light、非 provider 或低分 peer 消耗 fetch budget，并为 provider-route blocked 增加 bounded retry cooldown。 Trace: .pm/tasks/task_22699e838c6746fa8491befacfce985b.yaml
@@ -19,7 +20,7 @@
 - [x] testnet-auto-high-state-sync (PRD-P2P-001/003) [test_tier_required]: 允许 cold observer 自动探测 retained execution checkpoint。 Trace: .pm/tasks/task_761375d25bc24fe59147a853e8c8acb0.yaml
 - [x] testnet-high-state-peer-retry (PRD-P2P-001/003) [test_tier_required]: 支持 observer 从 storage/full-storage peer 获得 checkpoint descriptor。 Trace: .pm/tasks/task_96c772c830e043f9b1e40b03e6f73d38.yaml
 - [x] testnet-storage-challenge-degraded-readiness (PRD-P2P-001/003/028) [test_tier_required]: 修复 public testnet storage challenge 在 provider/DHT/fetch route retryable 不可用时误 hard-block sequencer 的问题。 Trace: .pm/tasks/task_8d92c7fdfbc742e3866ef1162faedd66.yaml
-- [x] p2p-evidence-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 清理无外部引用的 generated shared-network gate 中间快照并刷新 p2p 首读证据链。 Trace: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml
+- [x] p2p-evidence-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 清理无外部引用的 generated legacy shared-network gate 中间快照并刷新 p2p 首读证据链。 Trace: .pm/tasks/task_1f333657aba5468aa74bd2435fcbbbcf.yaml
 - [x] p2p-peer-head-readiness-doc-cleanup (PRD-P2P-001/003) [test_tier_required]: 删除已失去当前权威入口职责的 peer-head readiness 历史叙事 design 文档。 Trace: .pm/tasks/task_56f67be67a5a43c09027cb224f1416ad.yaml
 - [x] p2p-stale-evidence-reference-cleanup (PRD-P2P-001/003/028) [test_tier_required]: 删除被新 evidence/docs 取代的 stale evidence 引用。 Trace: .pm/tasks/task_deab30d82bd54824b5be64fac1b2c961.yaml
 - [x] p2p-shared-world-doc-boundary-cleanup (PRD-P2P-028) [test_tier_required]: 精简 legacy shared-network / benchmark / testing manual 重复叙事，明确 `shared_devnet` 仅是 legacy rehearsal evidence，不等同 `public_testnet`、mainnet、public launch 或公开统一大世界上线。 Trace: .pm/tasks/task_d3129d0dff0f4111bcd87b1d2658179c.yaml

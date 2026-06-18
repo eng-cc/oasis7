@@ -16,9 +16,43 @@ scan_paths = [
     "crates",
     "scripts",
     "doc/testing/templates",
+    "doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md",
+    "doc/p2p/prd.md",
+    "doc/p2p/project.md",
+    "doc/p2p/prd.index.md",
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md",
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md",
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md",
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md",
     "testing-manual.md",
 ]
 pattern = r"shared_devnet|shared_network|shared-devnet|shared-network"
+boundary_files = {
+    "doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md",
+    "doc/p2p/prd.md",
+    "doc/p2p/project.md",
+    "doc/p2p/prd.index.md",
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md",
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md",
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md",
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md",
+}
+boundary_markers = (
+    "legacy",
+    "旧",
+    "历史",
+    "不再",
+    "不是",
+    "不能",
+    "不得",
+    "不等于",
+    "不替代",
+    "not a target",
+    "no longer",
+    "does not replace",
+    "not public_testnet",
+    "not mainnet",
+)
 allowed_snippets = {
     "testing-manual.md": (
         "summary.json.evidence_contract.claim_readiness.shared_network_pass_blockers",
@@ -57,6 +91,24 @@ allowed_snippets = {
     ),
     "scripts/shared-network-track-gate-smoke.sh": (
         'shared_network_track_gate_smoke',
+    ),
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md": (
+        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
+        "scripts/shared-network-track-gate.sh",
+    ),
+    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md": (
+        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
+        'rg -n "public_testnet|mainnet|shared_devnet|specified_skeleton_only|network_tier_manifest"',
+    ),
+    "doc/p2p/prd.md": (
+        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
+        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md",
+    ),
+    "doc/p2p/project.md": (
+        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
+    ),
+    "doc/p2p/prd.index.md": (
+        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24",
     ),
 }
 allowed_path_names = {
@@ -109,6 +161,8 @@ for path in scan_files:
             continue
         rendered = f"{rel}:{line_no}:{text_line}"
         if any(snippet in text_line for snippet in snippets):
+            allowed_hits.append(rendered)
+        elif rel in boundary_files and any(marker in text_line for marker in boundary_markers):
             allowed_hits.append(rendered)
         else:
             unexpected.append(rendered)
