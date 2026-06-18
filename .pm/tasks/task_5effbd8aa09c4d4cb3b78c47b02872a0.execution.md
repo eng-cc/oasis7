@@ -59,6 +59,15 @@ Example:
 - Finding Disposition Evidence: no code changes required after review.
 - Residual Risk: non-blocking full PM lint/doc-governance noise remains outside this patch scope; no PR-blocking repository health risks found for the reviewed scope.
 
+## 2026-06-18 18:02:32 CST / tpm
+- 完成内容: Created GitHub PR for normal PR CI watch.
+- 遗留事项: GitHub required checks, mergeability, PR comments, and review threads still need to be watched to completion.
+- Action: `./scripts/prepare-task-pr.sh --create` passed local preflight but stopped at GitHub creation because `gh` is not installed; pushed branch with `git push -u origin task/engineering-capture-todo-promote-args-fix`; created PR via GitHub connector.
+- Validation Command: `git push -u origin task/engineering-capture-todo-promote-args-fix`; GitHub connector `_create_pull_request`.
+- Expected Result: branch is available on origin and a non-draft PR is created against `main`.
+- Actual Result: PR URL: https://github.com/eng-cc/oasis7/pull/527; PR purpose decision: `normal_pr_ci_watch`.
+- Blocker / Next Action: watch PR #527 required checks, mergeability, comments, and review threads; fix and push any CI/comment findings.
+
 ## 2026-06-18 17:56:34 CST / tpm
 - 完成内容: Added workflow-lint evidence required for PR preflight.
 - 遗留事项: Full PM lint/doc-governance noise remains outside this patch scope.
