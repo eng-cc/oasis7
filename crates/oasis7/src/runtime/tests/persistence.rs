@@ -272,7 +272,7 @@ fn persist_splits_tick_consensus_records_into_hot_snapshot_and_archive() {
         })
         .sum::<usize>();
     assert_eq!(indexed_record_count, archived_record_count);
-    assert!(!dir.join("tick-consensus.archive.json").exists());
+    assert!(dir.join("tick-consensus.archive.json").exists());
     assert!(dir.join("tick-consensus.archive.index.json").exists());
     assert!(dir.join("tick-consensus.archive.segments").exists());
 
@@ -470,6 +470,41 @@ fn persist_loads_legacy_tick_consensus_archive_without_index() {
     let loaded_records = World::load_tick_consensus_records_from_dir(&dir, None, None)
         .expect("load tick consensus records from legacy archive");
     assert_eq!(loaded_records, world.tick_consensus_records());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn persist_uses_legacy_tick_consensus_archive_when_index_segment_is_missing() {
+    let mut world = World::new();
+    for _ in 0..260 {
+        world.step().expect("step");
+    }
+
+    let dir = temp_dir("persist-tick-consensus-missing-segment-legacy-fallback");
+    world
+        .save_to_dir(&dir)
+        .expect("save world with archive index");
+
+    let archive_index: serde_json::Value = serde_json::from_slice(
+        &fs::read(dir.join("tick-consensus.archive.index.json"))
+            .expect("read tick consensus archive index json"),
+    )
+    .expect("decode tick consensus archive index json");
+    let missing_segment_path = archive_index
+        .get("archived_segments")
+        .and_then(|value| value.as_array())
+        .and_then(|segments| segments.first())
+        .and_then(|segment| segment.get("relative_path"))
+        .and_then(|value| value.as_str())
+        .expect("first segment relative path");
+    fs::remove_file(dir.join(missing_segment_path)).expect("remove archive segment");
+
+    let restored = World::load_from_dir(&dir).expect("restore world from legacy archive");
+    assert_eq!(
+        restored.tick_consensus_records(),
+        world.tick_consensus_records()
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
