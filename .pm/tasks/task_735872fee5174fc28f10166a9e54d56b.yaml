@@ -10,7 +10,8 @@ source_refs:
   - doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md
   - doc/core/prd.md
   - doc/core/project.md
-doc_refs: []
+doc_refs:
+  - doc/core/project.md
 related_prd: []
 acceptance:
   - "Active product/player-facing docs use unified persistent world terminology and no longer present hosted/shared/local/testnet terms as player world brands."
