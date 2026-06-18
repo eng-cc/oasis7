@@ -84,7 +84,7 @@ jobs:
           echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
       - name: Install pinned Rust toolchains
         run: |
-          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt --component clippy
           rustup default "${RUST_TOOLCHAIN}"
           if [[ "${{ steps.scope.outputs.needs_wasm_target }}" == "true" ]]; then
             rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
@@ -145,7 +145,7 @@ jobs:
         run: npm ci --prefix crates/oasis7_viewer
       - name: Install pinned Rust toolchains
         run: |
-          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt --component clippy
           rustup default "${RUST_TOOLCHAIN}"
           rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
           rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
@@ -170,6 +170,22 @@ jobs:
           cache-on-failure: true
       - name: Run full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
+
+      - name: Run Rust governance report
+        if: always()
+        run: ./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance
+
+      - name: Append Rust governance summary
+        if: always()
+        run: cat output/rust-governance/summary.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Rust governance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-governance-report
+          path: output/rust-governance
+          if-no-files-found: error
 
   newapi-bridge-package:
     if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'newapi_bridge_package'

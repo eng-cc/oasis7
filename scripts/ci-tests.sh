@@ -46,6 +46,20 @@ run_cargo() {
   fi
 }
 
+run_cargo_clippy() {
+  local lint_flags=(
+    -D clippy::correctness
+    -D clippy::suspicious
+    -D clippy::perf
+    -A clippy::large_enum_variant
+  )
+  if [[ "${CI_VERBOSE:-}" == "1" ]]; then
+    run env -u RUSTC_WRAPPER cargo clippy --verbose "$@" -- "${lint_flags[@]}"
+  else
+    run env -u RUSTC_WRAPPER cargo clippy "$@" -- "${lint_flags[@]}"
+  fi
+}
+
 should_run_ci_required_component() {
   local raw_value="${1:-}"
   [[ -z "$raw_value" || "$raw_value" == "1" || "$raw_value" == "true" ]]
@@ -72,6 +86,10 @@ run_oasis7_required_tier_tests() {
   run_cargo test -p oasis7 --tests --features test_tier_required
 }
 
+run_oasis7_required_tier_clippy() {
+  run_cargo_clippy -p oasis7 --tests --features test_tier_required
+}
+
 run_oasis7_full_tier_tests() {
   run_cargo test -p oasis7 --tests --features "test_tier_full,wasmtime,viewer_live_integration"
 }
@@ -80,20 +98,40 @@ run_oasis7_consensus_tests() {
   run_cargo test -p oasis7_consensus --lib
 }
 
+run_oasis7_consensus_clippy() {
+  run_cargo_clippy -p oasis7_consensus --lib
+}
+
 run_oasis7_distfs_tests() {
   run_cargo test -p oasis7_distfs --lib
+}
+
+run_oasis7_distfs_clippy() {
+  run_cargo_clippy -p oasis7_distfs --lib
 }
 
 run_oasis7_node_tests() {
   run_cargo test -p oasis7_node --lib
 }
 
+run_oasis7_node_clippy() {
+  run_cargo_clippy -p oasis7_node --lib
+}
+
 run_oasis7_net_tests() {
   run_cargo test -p oasis7_net --lib
 }
 
+run_oasis7_net_clippy() {
+  run_cargo_clippy -p oasis7_net --lib
+}
+
 run_oasis7_net_libp2p_tests() {
   run_cargo test -p oasis7_net --features libp2p --lib
+}
+
+run_oasis7_net_libp2p_clippy() {
+  run_cargo_clippy -p oasis7_net --features libp2p --lib
 }
 
 run_oasis7_workspace_support_crate_tests() {
@@ -109,6 +147,11 @@ run_oasis7_workspace_support_crate_tests() {
     --lib
   run_cargo test -p oasis7_wasm_executor --features wasmtime --lib
   run_cargo test -p oasis7_client_launcher --bin oasis7_client_launcher
+}
+
+run_rustsec_advisory_check() {
+  run ./scripts/ensure-cargo-deny.sh
+  run cargo deny check advisories
 }
 
 run_oasis7_llm_baseline_fixture_smoke() {
@@ -175,6 +218,7 @@ run_required_gate_checks() {
   run_newapi_bridge_service_accounting_tests
   run ./scripts/check-rust-file-size.sh
   run env -u RUSTC_WRAPPER cargo fmt --all -- --check
+  run_rustsec_advisory_check
 }
 
 run_commit_gate_checks() {
@@ -220,6 +264,12 @@ case "$tier" in
     run_required_component "viewer performance smoke (report-only)" "${OASIS7_CI_RUN_VIEWER_PERF_SMOKE:-false}" "report_only_scope_not_selected" run_oasis7_viewer_performance_smoke_report_only
     run_required_component "hosted account local smoke" "${OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE:-false}" "not_in_local_required_baseline_or_scope_disabled" run_hosted_account_local_smoke
     run_required_component "launcher web build" "${OASIS7_CI_RUN_LAUNCHER_WEB_BUILD:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_client_launcher_web_build
+    run_required_component "oasis7 required clippy" "${OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:-}" "disabled_by_scope_planner" run_oasis7_required_tier_clippy
+    run_required_component "oasis7_consensus clippy" "${OASIS7_CI_RUN_CONSENSUS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_consensus_clippy
+    run_required_component "oasis7_distfs clippy" "${OASIS7_CI_RUN_DISTFS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_distfs_clippy
+    run_required_component "oasis7_node clippy" "${OASIS7_CI_RUN_OASIS7_NODE_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_node_clippy
+    run_required_component "oasis7_net clippy" "${OASIS7_CI_RUN_OASIS7_NET_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_net_clippy
+    run_required_component "oasis7_net libp2p clippy" "${OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_net_libp2p_clippy
     ;;
   full)
     run_full_core_tier_tests
