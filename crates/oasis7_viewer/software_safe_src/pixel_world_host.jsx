@@ -8,6 +8,7 @@ function tr(locale, zh, en) {
 }
 
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
+const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
 const DEFER_RENDERER_VALUES = new Set(["0", "false", "no", "off", "defer", "fallback"]);
 const pixelWorldFocusUiSessionState = {
   focusMode: false,
@@ -27,6 +28,170 @@ const FRAGMENT_TERRAIN_PALETTE = {
   thorium_bearing_ore: [244, 114, 182],
   unknown: [148, 163, 184],
 };
+
+export function pixelWorldSelectedBlockerVisualFixture() {
+  return {
+    time: 12,
+    config: {
+      space: {
+        width_cm: 10_000_000,
+        depth_cm: 5_000_000,
+        height_cm: 1_000_000,
+      },
+    },
+    model: {
+      agents: {
+        "agent-0": {
+          id: "agent-0",
+          name: "Agent 0",
+          location_id: "loc-0",
+          pos: { x_cm: 2_900_000, y_cm: 3_450_000, z_cm: 0 },
+          resources: {},
+        },
+        "agent-1": {
+          id: "agent-1",
+          name: "Agent 1",
+          location_id: "loc-1",
+          pos: { x_cm: 6_900_000, y_cm: 1_150_000, z_cm: 0 },
+          resources: {},
+        },
+      },
+      locations: {
+        "loc-0": {
+          id: "loc-0",
+          name: "Factory Anchor",
+          pos: { x_cm: 7_150_000, y_cm: 2_200_000, z_cm: 0 },
+          profile: { radius_cm: 55_000, radiation_emission_per_tick: 0, material: "silicate" },
+          fragment_profile: {
+            blocks: {
+              blocks: [
+                {
+                  origin_cm: { x_cm: -36_000, y_cm: 0, z_cm: -22_000 },
+                  size_cm: { x_cm: 28_000, y_cm: 7_500, z_cm: 20_000 },
+                  density_kg_per_m3: 3200,
+                  compounds: {
+                    ppm: {
+                      silicate_matrix: 800_000,
+                      water_ice: 200_000,
+                    },
+                  },
+                },
+                {
+                  origin_cm: { x_cm: 4_000, y_cm: 1_000, z_cm: -12_000 },
+                  size_cm: { x_cm: 42_000, y_cm: 8_000, z_cm: 18_000 },
+                  density_kg_per_m3: 7800,
+                  compounds: {
+                    ppm: {
+                      iron_nickel_alloy: 900_000,
+                      sulfide_ore: 100_000,
+                    },
+                  },
+                },
+                {
+                  origin_cm: { x_cm: -18_000, y_cm: 500, z_cm: 18_000 },
+                  size_cm: { x_cm: 34_000, y_cm: 6_000, z_cm: 24_000 },
+                  density_kg_per_m3: 5200,
+                  compounds: { ppm: { sulfide_ore: 620_000, hydrated_mineral: 380_000 } },
+                },
+                {
+                  origin_cm: { x_cm: 30_000, y_cm: 0, z_cm: 24_000 },
+                  size_cm: { x_cm: 22_000, y_cm: 4_500, z_cm: 16_000 },
+                  density_kg_per_m3: 2600,
+                  compounds: { ppm: { silicate_matrix: 700_000, rare_earth_oxide: 300_000 } },
+                },
+              ],
+            },
+          },
+          resources: {},
+        },
+        "loc-1": {
+          id: "loc-1",
+          name: "Assembly Nexus",
+          pos: { x_cm: 4_550_000, y_cm: 1_200_000, z_cm: 0 },
+          profile: { radius_cm: 38_000, radiation_emission_per_tick: 0, material: "alloy" },
+          resources: {},
+        },
+      },
+      agent_prompt_profiles: {},
+      agent_execution_debug_contexts: {},
+    },
+    player_gameplay: {
+      stage_id: "post_onboarding",
+      stage_status: "blocked",
+      execution_state: "blocked",
+      accepted_intent_id: "gameplay_action:build_factory_smelter_mk1",
+      intent_summary: "Queue build_factory_smelter_mk1 for agent-0",
+      intent_scope: "gameplay_action",
+      intent_target: "agent-0",
+      goal_id: "post_onboarding.recover_capability",
+      goal_kind: "RecoverCapability",
+      goal_title: "Recover sustainable capability",
+      objective: "Stabilize the first production line before expanding.",
+      progress_detail: "The primary line is blocked by missing material input.",
+      progress_percent: 68,
+      blocker_kind: "material_shortage",
+      blocker_detail: "iron input exhausted at factory-0",
+      causality_kind: "world_constraint",
+      causality_detail: "iron input exhausted at factory-0",
+      last_world_change: "Smelter build request reached factory-0; iron shortage blocks construction.",
+      blocker_supplemental_detail: null,
+      next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
+      branch_hint: null,
+      available_actions: [
+        {
+          action_id: "build_factory_smelter_mk1",
+          target_agent_id: "agent-0",
+          label: "Build smelter mk1",
+          protocol_action: "gameplay_action.submit",
+          disabled_reason: null,
+        },
+      ],
+      recent_feedback: {
+        action: "build_factory_smelter_mk1",
+        stage: "completed_no_progress",
+        effect: "Smelter build request reached factory-0; iron shortage blocks construction.",
+        reason: "iron input exhausted at factory-0",
+        hint: "Replenish upstream materials, then advance again.",
+        delta_logical_time: 1,
+        delta_event_seq: 2,
+      },
+      agent_claim: null,
+    },
+  };
+}
+
+function pixelWorldTestApiEnabled() {
+  if (typeof window === "undefined" || !window.location) {
+    return false;
+  }
+  const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+function requestedVisualFixtureName() {
+  if (typeof window === "undefined" || !window.location) {
+    return null;
+  }
+  return String(new URLSearchParams(window.location.search || "").get("pixel_world_visual_fixture") || "").trim();
+}
+
+function installPixelWorldVisualFixtureHook() {
+  if (typeof window === "undefined" || !pixelWorldTestApiEnabled()) {
+    return null;
+  }
+  const fixtures = {
+    selected_blocker: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
+  };
+  window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
+
+  const fixtureName = requestedVisualFixtureName();
+  if (!fixtureName || !fixtures[fixtureName]) {
+    return null;
+  }
+  core.injectSnapshot(fixtures[fixtureName](), { returnState: false });
+  core.applySelection({ kind: "agent", id: "agent-0" });
+  return fixtureName;
+}
 
 async function waitForRuntimeCanvasAttachment(canvas) {
   for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -378,7 +543,7 @@ function routeStyle(link, worldBounds, index) {
 }
 
 function fragmentTerrainStyle(patch, worldBounds, index) {
-  const sizePx = Math.max(7, Math.min(26, safeNumber(patch.footprint_cm, 1) / 1200));
+  const sizePx = Math.max(12, Math.min(48, safeNumber(patch.footprint_cm, 1) / 840));
   return {
     ...toWorldPercentStyle(patch.pos, worldBounds, {
       left: `${12 + ((index % 6) * 13)}%`,
@@ -387,6 +552,37 @@ function fragmentTerrainStyle(patch, worldBounds, index) {
     width: `${sizePx.toFixed(1)}px`,
     height: `${sizePx.toFixed(1)}px`,
     "background-color": colorToCss(patch.color),
+    transform: "translate(-50%, -50%)",
+  };
+}
+
+function routeWaypointStyle(link, worldBounds, index, stop) {
+  const fallbackFrom = {
+    x: 14 + ((index % 5) * 15),
+    y: 18 + (Math.floor(index / 5) * 14),
+  };
+  const fallbackTo = {
+    x: fallbackFrom.x + 14,
+    y: fallbackFrom.y + 8,
+  };
+  const from = worldPercentPoint(link.from, worldBounds, fallbackFrom.x, fallbackFrom.y);
+  const to = worldPercentPoint(link.to, worldBounds, fallbackTo.x, fallbackTo.y);
+  const ratio = stop === "to" ? 1 : 0.52;
+  return {
+    left: `${(from.x + ((to.x - from.x) * ratio)).toFixed(1)}%`,
+    top: `${(from.y + ((to.y - from.y) * ratio)).toFixed(1)}%`,
+  };
+}
+
+function hotspotStyle(hotspot, worldBounds, index) {
+  const sizePx = Math.max(14, Math.min(32, safeNumber(hotspot.size_hint_px, 16)));
+  return {
+    ...toWorldPercentStyle(hotspot.pos, worldBounds, {
+      left: `${20 + ((index % 4) * 16)}%`,
+      top: `${22 + (Math.floor(index / 4) * 16)}%`,
+    }),
+    width: `${sizePx}px`,
+    height: `${sizePx}px`,
     transform: "translate(-50%, -50%)",
   };
 }
@@ -435,6 +631,7 @@ function pixelWorldVisualState(renderState) {
     selection: fieldValue(state, "selection", "selection", null),
     goalHighlight: fieldValue(state, "goal_highlight", "goalHighlight", null),
     blockerHighlight: fieldValue(state, "blocker_highlight", "blockerHighlight", null),
+    visualHotspots: arrayField(state, "visual_hotspots", "visualHotspots").map(normalizeVisualEntity),
   };
 }
 
@@ -777,6 +974,8 @@ function PixelWorldHostVisualLayer(props) {
   return (
     <>
       <div class="pixel-world-canvas__grid" />
+      <div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one" />
+      <div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two" />
       <For each={visualState().fragmentTerrain.slice(0, 96)}>
         {(patch, index) => (
           <div
@@ -789,12 +988,38 @@ function PixelWorldHostVisualLayer(props) {
       </For>
       <For each={visualState().links.slice(0, 10)}>
         {(link, index) => (
+          <>
+            <div
+              class="pixel-world-route"
+              data-route-kind={link.kind}
+              style={routeStyle(link, visualState().worldBounds, index())}
+              title={`${link.kind}:${link.id}`}
+            />
+            <div
+              class="pixel-world-route-waypoint pixel-world-route-waypoint--mid"
+              data-route-kind={link.kind}
+              style={routeWaypointStyle(link, visualState().worldBounds, index(), "mid")}
+              title={`${link.kind}:waypoint`}
+            />
+            <div
+              class="pixel-world-route-waypoint pixel-world-route-waypoint--target"
+              data-route-kind={link.kind}
+              style={routeWaypointStyle(link, visualState().worldBounds, index(), "to")}
+              title={`${link.kind}:target`}
+            />
+          </>
+        )}
+      </For>
+      <For each={visualState().visualHotspots.slice(0, 8)}>
+        {(hotspot, index) => (
           <div
-            class="pixel-world-route"
-            data-route-kind={link.kind}
-            style={routeStyle(link, visualState().worldBounds, index())}
-            title={`${link.kind}:${link.id}`}
-          />
+            class="pixel-world-hotspot"
+            data-hotspot-kind={hotspot.kind}
+            style={hotspotStyle(hotspot, visualState().worldBounds, index())}
+            title={`${hotspot.kind}:${hotspot.label}`}
+          >
+            <span>{hotspot.kind === "blocker" ? "!" : hotspot.kind === "goal" ? "G" : "i"}</span>
+          </div>
         )}
       </For>
       <For each={visualState().locations.slice(0, 8)}>
@@ -824,6 +1049,7 @@ function PixelWorldHostVisualLayer(props) {
             class="pixel-world-entity pixel-world-entity--agent"
             data-pixel-world-agent-marker="true"
             data-agent-id={agent.id}
+            data-selected={visualState().selection?.kind === "agent" && visualState().selection?.id === agent.id ? "true" : "false"}
             data-position-source={agent.position_source}
             aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent.id}`}
             style={agentMarkerStyle(agent, index(), visualState().worldBounds)}
@@ -1207,7 +1433,7 @@ function PixelWorldCanvasRenderer(props) {
           onHover={props.onHover}
         />
         <PixelWorldHostVisualLayer
-          enabled={false}
+          enabled={props.visualOverlayEnabled?.() ?? false}
           locale={props.locale}
           renderState={props.renderState}
           onSelect={props.onSelect}
@@ -1375,7 +1601,11 @@ function PixelWorldFocusHud(props) {
           <em>{surface().next_action.detail || surface().objective.detail}</em>
         </div>
         <Show when={surface().world_read.tick !== null && surface().world_read.tick !== undefined}>
-          <div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick" data-world-tick={String(surface().world_read.tick)}>
+          <div
+            class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"
+            data-world-tick={String(surface().world_read.tick)}
+            data-hud-priority="telemetry"
+          >
             <span>{tr(props.locale(), "世界 Tick", "World Tick")}</span>
             <strong>{surface().world_read.tick}</strong>
             <em>{`tick=${surface().world_read.tick}`}</em>
@@ -1384,6 +1614,7 @@ function PixelWorldFocusHud(props) {
         <div
           class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"
           data-blocker-present={surface().blocker.label ? "true" : "false"}
+          data-hud-priority={surface().blocker.label ? "critical" : "clear"}
         >
           <span>{tr(props.locale(), "阻塞", "Blocker")}</span>
           <strong>{surface().blocker.label || tr(props.locale(), "暂无阻塞", "No blocker")}</strong>
@@ -1391,6 +1622,7 @@ function PixelWorldFocusHud(props) {
         <div
           class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"
           data-receipt-confidence={surface().action_receipt.confidence}
+          data-hud-priority={surface().action_receipt.present ? "receipt" : "waiting"}
         >
           <span>{tr(props.locale(), "回执", "Receipt")}</span>
           <strong>{surface().action_receipt.title}</strong>
@@ -1440,6 +1672,22 @@ function PixelWorldFocusCinematicBanner(props) {
       </div>
     </Show>
   );
+}
+
+function shouldShowFocusCinematic(renderState) {
+  const surface = renderState?.commercial_surface;
+  if (!surface) {
+    return false;
+  }
+  const hasComparableFocusState = Boolean(
+    renderState.selection
+      || surface.active_agent_id
+      || renderState.links?.length
+      || renderState.fragment_terrain?.length
+      || surface.blocker?.label
+      || surface.action_receipt?.present,
+  );
+  return !hasComparableFocusState;
 }
 
 function PixelWorldFocusRail(props) {
@@ -1568,6 +1816,13 @@ function PixelWorldFocusCommandSurface(props) {
   const binding = () => core.selectedAgentBindingInfo();
   const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
+  const gameplaySummary = () => core.buildGameplaySummary(locale());
+  const blockerLabel = () =>
+    gameplaySummary()?.blockerLabel || gameplaySummary()?.blockerKind || tr(locale(), "无阻塞", "No blocker");
+  const receiptLabel = () =>
+    gameplaySummary()?.executionStateLabel
+      || gameplaySummary()?.recentFeedback?.stage
+      || tr(locale(), "等待回执", "Waiting");
   const chatHistory = () =>
     core.state.chatHistory
       .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
@@ -1589,6 +1844,29 @@ function PixelWorldFocusCommandSurface(props) {
             {chatCapability().enabled ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
           </span>
         </div>
+        <div class="pixel-world-focus-command-tray" data-chat-ready={chatCapability().enabled ? "true" : "false"}>
+          <div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target">
+            <span>{tr(locale(), "目标", "Target")}</span>
+            <strong>{`agent=${agentId()}`}</strong>
+          </div>
+          <div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker" data-blocker-present={blockerLabel() !== tr(locale(), "无阻塞", "No blocker") ? "true" : "false"}>
+            <span>{tr(locale(), "阻塞", "Blocker")}</span>
+            <strong>{blockerLabel()}</strong>
+          </div>
+          <div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt">
+            <span>{tr(locale(), "回执", "Receipt")}</span>
+            <strong>{receiptLabel()}</strong>
+          </div>
+          <button
+            type="button"
+            class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"
+            data-chat-send="1"
+            disabled={!chatCapability().enabled}
+            onClick={() => core.sendAgentChat(agentId(), core.state.chatDraft.message)}
+          >
+            {tr(locale(), "发送聊天", "Send Chat")}
+          </button>
+        </div>
         <Show when={!chatCapability().enabled}>
           <div class="empty">{chatCapability().reason}</div>
         </Show>
@@ -1600,8 +1878,8 @@ function PixelWorldFocusCommandSurface(props) {
               <div class="panel__meta-copy">
                 {tr(
                   locale(),
-                  "沉浸态保持世界视图在前，但这里可以直接给当前目标发消息并读取反馈。",
-                  "World Focus keeps the world view in front, while this surface sends messages to the current target and reads feedback directly.",
+                  "给当前目标发消息并读取反馈。",
+                  "Message the current target and read feedback.",
                 )}
               </div>
             </div>
@@ -1611,7 +1889,7 @@ function PixelWorldFocusCommandSurface(props) {
               <label for="agent-chat-message">{tr(locale(), "消息", "Message")}</label>
               <textarea
                 id="agent-chat-message"
-                rows="4"
+                rows="2"
                 placeholder={tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent")}
                 disabled={!chatCapability().enabled}
                 value={core.state.chatDraft.message}
@@ -1708,6 +1986,7 @@ function PixelWorldCanvasPlaceholder(props) {
 
 export function PixelWorldHost(props) {
   const locale = () => props.locale ?? core.state.uiLocale;
+  const visualFixtureName = installPixelWorldVisualFixtureHook();
   const renderInput = createMemo(() => buildPixelWorldRenderInput(locale()));
   const fallbackRenderState = createMemo(() => buildPixelWorldRenderStateFromInput(renderInput()));
   const [rustRenderState, setRustRenderState] = createSignal(null);
@@ -1724,6 +2003,10 @@ export function PixelWorldHost(props) {
   const [commandDrawerOpen, setCommandDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.commandDrawerOpen);
   const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.diagnosticsDrawerOpen);
   const [maximized, setMaximized] = createSignal(pixelWorldFocusUiSessionState.maximized);
+  const visualOverlayEnabled = () => Boolean(
+    visualFixtureName
+      || document.body?.getAttribute("data-viewer-visual-fixture"),
+  );
 
   function setPersistentFocusMode(next) {
     pixelWorldFocusUiSessionState.focusMode = next;
@@ -1942,24 +2225,33 @@ export function PixelWorldHost(props) {
       class={`pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""} ${focusMode() && maximized() ? "pixel-world-host--focus-maximized" : ""}`}
       data-world-focus={focusMode() ? "true" : "false"}
       data-world-focus-maximized={focusMode() && maximized() ? "true" : "false"}
+      data-visual-fixture={visualFixtureName || ""}
+      data-focus-comparable={shouldShowFocusCinematic(renderState()) ? "false" : "true"}
     >
       <Show when={!focusMode() || !maximized()}>
         <div class="pixel-world-host__summary">
-          <div class="pixel-world-host__headline">
-            {tr(locale(), "世界指挥棋盘", "World Command Board")}
-          </div>
-          <div class="feedback-detail">
-            {renderState().commercial_surface?.objective?.detail}
+          <div class="pixel-world-host__summary-copy">
+            <div class="pixel-world-host__headline">
+              {tr(locale(), "世界指挥棋盘", "World Command Board")}
+            </div>
+            <div class="feedback-detail">
+              {renderState().commercial_surface?.objective?.detail}
+            </div>
           </div>
           <div class="pixel-world-focus-entry">
-            <button type="button" onClick={enterFocusMode} aria-pressed={focusMode() ? "true" : "false"}>
+            <button
+              type="button"
+              class="pixel-world-focus-entry__button"
+              onClick={enterFocusMode}
+              aria-pressed={focusMode() ? "true" : "false"}
+            >
               {tr(locale(), "进入沉浸模式", "Enter World Focus")}
             </button>
           </div>
         </div>
       </Show>
       <Show when={focusMode()}>
-        <Show when={!maximized()}>
+        <Show when={!maximized() && shouldShowFocusCinematic(renderState())}>
           <PixelWorldFocusCinematicBanner
             locale={locale}
             renderState={renderState}
@@ -1992,6 +2284,7 @@ export function PixelWorldHost(props) {
           locale={locale}
           renderInput={renderInput}
           renderState={renderState}
+          visualOverlayEnabled={visualOverlayEnabled}
           onSelect={(selection) => adapter().simulateSelect(selection)}
           onHover={(selection) => adapter().simulateHover(selection)}
           onFatal={(message) => adapter().simulateFatal(message)}

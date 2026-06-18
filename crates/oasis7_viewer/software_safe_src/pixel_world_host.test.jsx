@@ -266,6 +266,11 @@ describe("pixel world host", () => {
     expect(html).toContain(".panel--stage > .panel__body");
     expect(html).not.toContain("body.pixel-world-focus-active .panel--stage .panel__body");
     expect(html).not.toContain(".panel--stage .panel__body {");
+    expect(html).toMatch(/\.pixel-world-focus-hud__cell--tick\s*\{[^}]*grid-column:\s*3;/s);
+    expect(html).toMatch(/\.pixel-world-focus-hud__cell--tick strong,[\s\S]*?\.pixel-world-focus-hud__cell--tick em\s*\{[^}]*white-space:\s*nowrap;/s);
+    expect(html).toMatch(/\.pixel-world-focus-rail\s*\{[^}]*top:\s*112px;/s);
+    expect(html).toContain("max-height: min(42vh, 340px);");
+    expect(html).toContain(".pixel-world-focus-command-tray");
   });
 
   it("builds richer visual DTO layers from the existing snapshot contract", async () => {
@@ -359,7 +364,7 @@ describe("pixel world host", () => {
 
     expect(gameplayDetails.open).toBe(true);
     expect(sendGameplayAction).not.toHaveBeenCalled();
-  });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("localizes command board goal and next-action copy for the selected UI language", async () => {
     vi.resetModules();
@@ -798,9 +803,8 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveClass("pixel-world-action-receipt--focus-compact");
     expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
-    expect(document.querySelector('[data-focus-cinematic="true"]')).toHaveTextContent("Industrial World Command Board");
-    expect(document.querySelector('[data-focus-cinematic="true"]')).toHaveTextContent("Stabilize the first production line before expanding.");
-    expect(document.querySelector('[data-focus-cinematic="true"]')).toHaveTextContent("Recover sustainable capability");
+    expect(host).toHaveAttribute("data-focus-comparable", "true");
+    expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
     expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent("Renderer Not Attached");
     expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent(/formal gameplay summary/i);
     expect(elementPrecedes(document.querySelector(".pixel-world-canvas"), document.querySelector('[data-renderer-state="fallback"]'))).toBe(true);
@@ -819,12 +823,19 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-controls")).toContainElement(screen.getByRole("button", { name: "Command" }));
     expect(document.querySelector(".pixel-world-focus-hud__cell--prompt")).toHaveTextContent("Current Objective");
     expect(document.querySelector(".pixel-world-focus-hud__cell--tick")).toHaveAttribute("data-world-tick", "12");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--tick")).toHaveAttribute("data-hud-priority", "telemetry");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-blocker-present", "true");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
     expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveClass("pixel-world-focus-fallback-map");
 
     const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
     expect(commandDrawer.open).toBe(true);
+    expect(commandDrawer.querySelector(".pixel-world-focus-command-tray")).toHaveAttribute("data-chat-ready", "false");
+    expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--target")).toHaveTextContent("agent=agent-0");
+    expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--blocker")).toHaveAttribute("data-blocker-present", "true");
+    expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--receipt")).toHaveTextContent("Blocked");
     expect(commandDrawer).toHaveTextContent("Agent Chat");
     expect(commandDrawer).toHaveTextContent("Command Surface");
     expect(commandDrawer).toHaveTextContent("Current Target");
@@ -862,7 +873,7 @@ describe("pixel world host", () => {
     expect(host).toHaveAttribute("data-world-focus-maximized", "false");
     expect(document.body).not.toHaveClass("pixel-world-focus-maximized");
     expect(document.querySelector(".pixel-world-host__summary")).not.toBeNull();
-    expect(document.querySelector('[data-focus-cinematic="true"]')).not.toBeNull();
+    expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
 
     screen.getByRole("button", { name: "Diagnostics" }).click();
     const diagnosticsDrawer = document.querySelector(".pixel-world-focus-drawer--diagnostics");
@@ -875,6 +886,41 @@ describe("pixel world host", () => {
     expect(host).toHaveAttribute("data-world-focus", "false");
     expect(document.body).not.toHaveClass("pixel-world-focus-active");
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).toBeNull();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("provides a test-only selected blocker visual fixture for comparable focus screenshots", async () => {
+    await renderPixelWorldHost(
+      emptyWorldSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer&pixel_world_visual_fixture=selected_blocker",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+    });
+
+    const host = document.querySelector(".pixel-world-host");
+    expect(host).toHaveAttribute("data-visual-fixture", "selected_blocker");
+    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.selected_blocker()).toMatchObject({
+      player_gameplay: {
+        blocker_kind: "material_shortage",
+        intent_target: "agent-0",
+      },
+    });
+
+    screen.getByRole("button", { name: "Enter World Focus" }).click();
+
+    expect(host).toHaveAttribute("data-world-focus", "true");
+    expect(host).toHaveAttribute("data-focus-comparable", "true");
+    expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
+    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
+    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent/agent-0");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
+    expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
+    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("agents=2");
+    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("routes=2");
+    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("fragments=4");
+    expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveTextContent("agent=agent-0");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("demotes raw focus command feedback and chat history behind diagnostics", async () => {
@@ -1018,10 +1064,10 @@ describe("pixel world host", () => {
       "silicate_matrix",
       "iron_nickel_alloy",
     ]);
-    expect(numericInlineStyle(fragments[0], "width")).toBeCloseTo(10, 1);
-    expect(numericInlineStyle(fragments[0], "height")).toBeCloseTo(10, 1);
-    expect(numericInlineStyle(fragments[1], "width")).toBeCloseTo(16.7, 1);
-    expect(numericInlineStyle(fragments[1], "height")).toBeCloseTo(16.7, 1);
+    expect(numericInlineStyle(fragments[0], "width")).toBeCloseTo(14.3, 1);
+    expect(numericInlineStyle(fragments[0], "height")).toBeCloseTo(14.3, 1);
+    expect(numericInlineStyle(fragments[1], "width")).toBeCloseTo(23.8, 1);
+    expect(numericInlineStyle(fragments[1], "height")).toBeCloseTo(23.8, 1);
     expect(route).toHaveAttribute("data-route-kind", "agent_assignment");
     expect(numericInlineStyle(route, "opacity")).toBeCloseTo(0.5936, 4);
     expect(numericInlineStyle(route, "width")).toBeCloseTo(4, 1);

@@ -1,0 +1,188 @@
+[
+  {
+    "name": "layout-desktop",
+    "url": "http://127.0.0.1:4176/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en&viewer_visual_fixture=shell_selected_blocker&t=1781790560644",
+    "screenshot": "/Users/scc/ccwork/worktrees/oasis7-viewer-optimize-game-viewer/.pm/tasks/viewer-round2-actual-layout-desktop.png",
+    "probe": {
+      "appFixture": "shell_selected_blocker",
+      "bodyFocus": false,
+      "pixelFixture": null,
+      "focusComparable": "true",
+      "scrollWidth": 1440,
+      "viewportWidth": 1440,
+      "hasHorizontalOverflow": false,
+      "mapRect": {
+        "top": 209,
+        "left": 307,
+        "width": 756,
+        "height": 520,
+        "bottom": 729
+      },
+      "drawerRect": null,
+      "drawerViewportRatio": null,
+      "chatHistoryCount": "0",
+      "chatPanelRect": {
+        "top": 688,
+        "left": 1099,
+        "width": 304,
+        "height": 460,
+        "bottom": 1148
+      },
+      "sendVisible": true,
+      "textareaVisible": true,
+      "detailsOpen": false,
+      "diagnosticsOpen": false,
+      "textSample": "NAVIGATE\nTARGETS\nLock onto a target first, then move into the stage or command surface.\nLocked Target\nagent:agent-0\nLock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.\nFilter targets\nAGENTS\nagent-0\nlocation=loc-0 · resources=alloy:3\nagent-1\nlocation=loc-1 · resources=-\nLOCATIONS\nFactory Anchor\nid=loc-0"
+    }
+  },
+  {
+    "name": "layout-mobile",
+    "url": "http://127.0.0.1:4176/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en&viewer_visual_fixture=shell_selected_blocker&t=1781790562766",
+    "screenshot": "/Users/scc/ccwork/worktrees/oasis7-viewer-optimize-game-viewer/.pm/tasks/viewer-round2-actual-layout-mobile.png",
+    "probe": {
+      "appFixture": "shell_selected_blocker",
+      "bodyFocus": false,
+      "pixelFixture": null,
+      "focusComparable": "true",
+      "scrollWidth": 390,
+      "viewportWidth": 390,
+      "hasHorizontalOverflow": false,
+      "mapRect": {
+        "top": 335,
+        "left": 27,
+        "width": 336,
+        "height": 422,
+        "bottom": 757
+      },
+      "drawerRect": null,
+      "drawerViewportRatio": null,
+      "chatHistoryCount": "0",
+      "chatPanelRect": {
+        "top": 3516.84375,
+        "left": 27,
+        "width": 336,
+        "height": 460,
+        "bottom": 3976.84375
+      },
+      "sendVisible": false,
+      "textareaVisible": false,
+      "detailsOpen": false,
+      "diagnosticsOpen": false,
+      "textSample": "World\nTargets\nCommand\nDiagnostics\nNAVIGATE\nTARGETS\nLock onto a target first, then move into the stage or command surface.\nLocked Target\nagent:agent-0\nLock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.\nFilter targets\nAGENTS\nagent-0\nlocation=loc-0 · resources=alloy:3\nagent-1\nlocation=loc-1 · resources=-"
+    }
+  },
+  {
+    "name": "focus-mobile",
+    "url": "http://127.0.0.1:4176/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en&pixel_world_renderer=defer&pixel_world_visual_fixture=selected_blocker&t=1781790564192",
+    "screenshot": "/Users/scc/ccwork/worktrees/oasis7-viewer-optimize-game-viewer/.pm/tasks/viewer-round2-actual-focus-mobile.png",
+    "probe": {
+      "appFixture": null,
+      "bodyFocus": true,
+      "pixelFixture": "selected_blocker",
+      "focusComparable": "true",
+      "scrollWidth": 390,
+      "viewportWidth": 390,
+      "hasHorizontalOverflow": false,
+      "mapRect": {
+        "top": 266,
+        "left": 10,
+        "width": 370,
+        "height": 480,
+        "bottom": 746
+      },
+      "drawerRect": {
+        "top": 494,
+        "left": 10,
+        "width": 370,
+        "height": 340,
+        "bottom": 834
+      },
+      "drawerViewportRatio": 0.4028436018957346,
+      "chatHistoryCount": "0",
+      "chatPanelRect": {
+        "top": 0,
+        "left": 0,
+        "width": 0,
+        "height": 0,
+        "bottom": 0
+      },
+      "sendVisible": true,
+      "textareaVisible": true,
+      "detailsOpen": false,
+      "diagnosticsOpen": false,
+      "textSample": "WORLD FOCUS\nWorld Command Board\nCURRENT OBJECTIVE\nRecover sustainable capability\nBuild smelter mk1\nWORLD TICK\n12\ntick=12\nBLOCKER\nMissing Material\nRECEIPT\nAction blocked\nworld_delta\nCommand\nDiagnostics\nMaximize\nExit\nFOCUS\nAGENT\nagent-0\nSELECTED\nagent/agent-0\nROUTES\n2\nBLOCKER\nMissing Material\nMISSION MAP\nReference: Factory Anchor\nTARGET\nBuild smelter mk1\nAGENT\nagent-0\nSELECTED\nag"
+    }
+  },
+  {
+    "name": "command-agent-chat",
+    "url": "http://127.0.0.1:4176/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en&viewer_visual_fixture=agent_chat_history&t=1781790566152",
+    "screenshot": "/Users/scc/ccwork/worktrees/oasis7-viewer-optimize-game-viewer/.pm/tasks/viewer-round2-actual-command-agent-chat.png",
+    "probe": {
+      "appFixture": "agent_chat_history",
+      "bodyFocus": false,
+      "pixelFixture": null,
+      "focusComparable": "true",
+      "scrollWidth": 1440,
+      "viewportWidth": 1440,
+      "hasHorizontalOverflow": false,
+      "mapRect": {
+        "top": 209,
+        "left": 307,
+        "width": 756,
+        "height": 520,
+        "bottom": 729
+      },
+      "drawerRect": null,
+      "drawerViewportRatio": null,
+      "chatHistoryCount": "3",
+      "chatPanelRect": {
+        "top": 150,
+        "left": 1099,
+        "width": 304,
+        "height": 794,
+        "bottom": 944
+      },
+      "sendVisible": true,
+      "textareaVisible": true,
+      "detailsOpen": false,
+      "diagnosticsOpen": false,
+      "textSample": "NAVIGATE\nTARGETS\nLock onto a target first, then move into the stage or command surface.\nLocked Target\nagent:agent-0\nLock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.\nFilter targets\nAGENTS\nagent-0\nlocation=loc-0 · resources=alloy:3\nagent-1\nlocation=loc-1 · resources=-\nLOCATIONS\nFactory Anchor\nid=loc-0"
+    }
+  },
+  {
+    "name": "gameplay-diagnostics",
+    "url": "http://127.0.0.1:4176/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en&viewer_visual_fixture=gameplay_diagnostics_expanded&t=1781790568037",
+    "screenshot": "/Users/scc/ccwork/worktrees/oasis7-viewer-optimize-game-viewer/.pm/tasks/viewer-round2-actual-gameplay-diagnostics.png",
+    "probe": {
+      "appFixture": "gameplay_diagnostics_expanded",
+      "bodyFocus": false,
+      "pixelFixture": null,
+      "focusComparable": "true",
+      "scrollWidth": 1440,
+      "viewportWidth": 1440,
+      "hasHorizontalOverflow": false,
+      "mapRect": {
+        "top": 4663.46875,
+        "left": 307,
+        "width": 756,
+        "height": 260,
+        "bottom": 4923.46875
+      },
+      "drawerRect": null,
+      "drawerViewportRatio": null,
+      "chatHistoryCount": "3",
+      "chatPanelRect": {
+        "top": 778,
+        "left": 1099,
+        "width": 304,
+        "height": 880,
+        "bottom": 1658
+      },
+      "sendVisible": true,
+      "textareaVisible": true,
+      "detailsOpen": true,
+      "diagnosticsOpen": true,
+      "textSample": "NAVIGATE\nTARGETS\nLock onto a target first, then move into the stage or command surface.\nLocked Target\nagent:agent-0\nLock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.\nFilter targets\nAGENTS\nagent-0\nlocation=loc-0 · resources=alloy:3\nagent-1\nlocation=loc-1 · resources=-\nLOCATIONS\nFactory Anchor\nid=loc-0"
+    }
+  }
+]
