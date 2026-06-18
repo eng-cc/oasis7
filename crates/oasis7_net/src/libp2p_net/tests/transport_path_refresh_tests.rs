@@ -3,6 +3,7 @@ use libp2p::swarm::ConnectionId;
 
 use crate::libp2p_net::transport_paths::{
     recompute_active_transport_path_for_peer, select_reconnect_transport_path_after_close,
+    sync_static_bootstrap_transport_paths,
 };
 
 #[test]
@@ -37,15 +38,54 @@ fn reconnect_after_final_close_retries_single_disconnected_static_path() {
 
     known.clear();
     failed.clear();
-    let (_, next_path) = select_reconnect_transport_path_after_close(
+    assert!(select_reconnect_transport_path_after_close(
         &known,
         &mut active_transport_paths,
         &mut failed,
         peer_id,
         Some(direct_path.clone()),
     )
-    .expect("disconnected path should be enough to retry after final close");
-    assert_eq!(next_path, direct_path);
+    .is_none());
+}
+
+#[test]
+fn static_bootstrap_paths_are_known_before_peer_record_exchange() {
+    let peer_id = PeerId::random();
+    let direct_addr: Multiaddr = format!("/ip4/39.104.204.172/tcp/6831/p2p/{peer_id}")
+        .parse()
+        .expect("direct addr");
+    let transient_peer = PeerId::random();
+    let transient_addr: Multiaddr = format!("/ip4/10.0.0.42/tcp/49200/p2p/{transient_peer}")
+        .parse()
+        .expect("transient addr");
+    let mut known = HashMap::new();
+    let mut failed = HashSet::from([direct_addr.to_string()]);
+
+    sync_static_bootstrap_transport_paths(
+        &mut known,
+        &mut failed,
+        &[direct_addr.clone(), transient_addr.clone()],
+    );
+
+    assert_eq!(
+        known
+            .get(&peer_id)
+            .expect("static bootstrap peer path")
+            .first()
+            .expect("static bootstrap path")
+            .addr,
+        direct_addr
+    );
+    assert_eq!(
+        known
+            .get(&transient_peer)
+            .expect("configured peer path")
+            .first()
+            .expect("configured path")
+            .addr,
+        transient_addr
+    );
+    assert!(!failed.contains(&direct_addr.to_string()));
 }
 
 #[test]

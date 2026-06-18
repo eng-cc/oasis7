@@ -101,7 +101,9 @@ pub use traffic_metrics::{
     TrafficDirectionMetricsSnapshot, TrafficLaneMetricsSnapshot, WireByteDirectionMetricsSnapshot,
     WireByteLaneMetricsSnapshot,
 };
-use transport_paths::{retry_transport_path_after_error, TransportPath};
+use transport_paths::{
+    retry_transport_path_after_error, sync_static_bootstrap_transport_paths, TransportPath,
+};
 use utils::{
     decode_membership_directory, decode_world_head, now_ms, push_bounded_clone,
     push_bounded_string_with_keyed_cooldown, should_republish, try_send_command,
@@ -200,6 +202,12 @@ impl Libp2pNetwork {
             let mut provider_keys: HashMap<String, i64> = HashMap::new();
             let mut discovered_peer_records: HashMap<PeerId, SignedPeerRecord> = HashMap::new();
             let mut known_transport_paths: HashMap<PeerId, Vec<TransportPath>> = HashMap::new();
+            let mut failed_transport_path_labels: HashSet<String> = HashSet::new();
+            sync_static_bootstrap_transport_paths(
+                &mut known_transport_paths,
+                &mut failed_transport_path_labels,
+                &config_clone.bootstrap_peers,
+            );
             let mut last_dialed_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
             let mut active_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
             let mut established_transport_paths_by_connection: HashMap<
@@ -213,7 +221,6 @@ impl Libp2pNetwork {
             let mut peer_healths_by_id: HashMap<PeerId, PeerManagerPeerHealth> = HashMap::new();
             let mut quarantined_active_peers: HashSet<PeerId> = HashSet::new();
             let mut admitted_active_peers: HashSet<PeerId> = HashSet::new();
-            let mut failed_transport_path_labels: HashSet<String> = HashSet::new();
             let mut pending_quarantine_disconnects: HashSet<PeerId> = HashSet::new();
             let mut pending_discovery_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_connected_peer_records: HashSet<PeerId> = HashSet::new();

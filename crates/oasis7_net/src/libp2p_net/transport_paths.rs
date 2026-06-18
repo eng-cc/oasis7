@@ -190,6 +190,27 @@ pub(super) fn sync_known_transport_paths(
     known_transport_paths.insert(peer_id, paths);
 }
 
+pub(super) fn sync_static_bootstrap_transport_paths(
+    known_transport_paths: &mut HashMap<PeerId, Vec<TransportPath>>,
+    failed_transport_path_labels: &mut HashSet<String>,
+    bootstrap_peers: &[Multiaddr],
+) {
+    for addr in bootstrap_peers {
+        let Some(peer_id) = split_peer_id(addr.clone()).0 else {
+            continue;
+        };
+        let path = active_transport_path_from_endpoint(known_transport_paths, peer_id, addr);
+        let label = path.label();
+        let paths = known_transport_paths.entry(peer_id).or_default();
+        if paths.iter().any(|known| known.label() == label) {
+            continue;
+        }
+        failed_transport_path_labels.remove(&label);
+        paths.push(path);
+        paths.sort_unstable_by_key(TransportPath::preference_rank);
+    }
+}
+
 pub(super) fn select_preferred_transport_path(
     paths: &[TransportPath],
     failed_transport_path_labels: &HashSet<String>,
@@ -364,12 +385,9 @@ pub(super) fn select_reconnect_transport_path_after_close(
     if let Some(path) = &previous_path {
         failed_transport_path_labels.insert(path.label());
     }
-    let next_path = known_transport_paths
-        .get(&peer_id)
-        .and_then(|paths| {
-            select_preferred_transport_path(paths.as_slice(), failed_transport_path_labels)
-        })
-        .or_else(|| previous_path.clone())?;
+    let next_path = known_transport_paths.get(&peer_id).and_then(|paths| {
+        select_preferred_transport_path(paths.as_slice(), failed_transport_path_labels)
+    })?;
     Some((previous_path, next_path))
 }
 
