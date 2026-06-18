@@ -1,0 +1,24 @@
+task_uid: task_0745838e8c6546a09faba1ce8c602e33
+title: "Draft XiaoHongShu content from research report"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-content-xhs-deep-research-report
+execution_log_path: .pm/tasks/task_0745838e8c6546a09faba1ce8c602e33.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Read /Users/scc/Downloads/deep-research-report.md and extract usable viewpoints."
+  - "Produce a ready-to-post XiaoHongShu draft with title options, body, and tags."
+handoff_to: []
+updated_at: 2026-06-18T20:25:53+08:00
+last_started_at: 2026-06-18T19:07:21+08:00
+last_claim_type: task_complete
+last_verify_command: "/Users/scc/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m py_compile doc/readme/production/assets/xhs-ai-economy-2026-06-18/generate_carousel.py && /Users/scc/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 - <<'PY'\nfrom pathlib import Path\nfrom PIL import Image\npaths = sorted(Path(\"doc/readme/production/assets/xhs-ai-economy-2026-06-18\").glob(\"xhs-ai-economy-carousel-*.png\"))\nassert len(paths) == 8, len(paths)\nfor path in paths:\n    with Image.open(path) as im:\n        assert im.size == (1080, 1440), (path, im.size)\nprint(\"ok: 8 images, all 1080x1440\")\nPY\n! rg -n \"报告强调|报告的观点|报告观点|报告判断|报告给出|报告更强调|报告的核心判断|研究报告整理|报告整理|原始报告\" doc/readme/production/xiaohongshu-ai-economy-report-draft-2026-06-18.md doc/readme/production/assets/xhs-ai-economy-2026-06-18 && git diff --check && ./scripts/pm/workflow-lint.sh --task-uid task_0745838e8c6546a09faba1ce8c602e33 --phase current"
+last_verified_at: 2026-06-18T20:25:53+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-18T20:25:53+08:00
