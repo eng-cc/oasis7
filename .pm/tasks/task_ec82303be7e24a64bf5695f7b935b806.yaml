@@ -9,7 +9,8 @@ source_signal: null
 source_refs:
   - AGENTS.md
   - doc/engineering/workflow/source-of-truth.md
-doc_refs: []
+doc_refs:
+  - doc/p2p/project.md
 related_prd: []
 acceptance:
   - "Answer whether the local game startup represents a local large world, with repo evidence and attribution boundaries."
