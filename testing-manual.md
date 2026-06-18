@@ -12,14 +12,8 @@
 - 统一证据标准（命令、日志、截图、结论），保证测试可复盘、可审计。
 
 ## 对标入口
-- 若当前任务涉及“主流公链测试体系一般怎么做”“oasis7 还缺哪几层才接近主流链测试成熟度”，先看：
-  - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
-  - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md`
-- 若当前任务涉及“legacy network-rehearsal / release-train evidence 是否满足历史 L5 审计”，再看：
-  - `doc/p2p/blockchain/p2p-network-rehearsal-release-train-minimum-2026-03-24.prd.md`
-  - `doc/p2p/blockchain/p2p-network-rehearsal-release-train-minimum-2026-03-24.design.md`
-- 本手册负责 oasis7 自己的执行分层与命令入口；benchmark 专题负责把这些层对位到主流公链常见 testing stack。
-- network rehearsal / release train 专题负责冻结 benchmark `L5` legacy rehearsal evidence 与 claims gate；当前 `public_testnet_rehearsal` 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论，但它只作历史 rehearsal 证据，不代表仓库已经具备 live `public_testnet`、正式 `staging/canary` 或公开大世界上线。
+- 本手册负责 oasis7 自己的执行分层与命令入口；当前 `public_testnet` readiness 以本手册的 Network Tiers 入口和 formal `public_testnet` runbook 为准。
+- 主流公链成熟度 benchmark 与 legacy network-rehearsal / release-train 专题只作对标和历史 evidence 追溯，不作为当前 `public_testnet`、`mainnet` 或统一持久大世界上线结论。
 
 ## 范围
 
@@ -860,9 +854,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 ### Network Tiers / Shared-Network Evidence
 - 当前网络层真值统一以 `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md` 与对应 project/runbook 为准：
   - operator/runtime network-tier 是 `local_devnet -> public_testnet -> mainnet`，不作为玩家世界模型。
-  - `public_testnet_rehearsal` 只作 legacy/rehearsal evidence，不再作为目标 test 环境。
-  - `public_testnet_rehearsal` legacy rehearsal 已有 2026-05-24 `pass / eligible_for_promotion` 追溯结论，但这不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
-  - formal `public_testnet` 当前仍由 six-lane readiness 判定，不能用 `public_testnet_rehearsal_pass` 替代。
+  - `public_testnet_rehearsal` 只作 legacy/rehearsal evidence，不能替代 formal `public_testnet` 的 six-lane readiness，也不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
 - Canonical docs:
   - Current network-tier source of truth: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
   - `public_testnet` live-candidate checklist: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
@@ -878,6 +870,10 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   --manifest doc/testing/templates/network-tier-public-testnet.example.json
 ./scripts/network-tier-manifest-smoke.sh
 ```
+- Testnet-connected hosted entry flow:
+  - 本机暴露 `hosted_public_join` / hosted-login 形态入口时，先证明本机节点已按 formal `public_testnet` manifest / `world_id` / `chain_id` / genesis / bootstrap peers 接入并同步到 testnet，再证明 hosted-login / launcher / viewer / pure API 的 runtime/status/API endpoint 指向该节点 world state。
+  - 最小证据包括：manifest validation、local observer sync/preflight 输出、节点 health/status、connected peers、height/head 推进、hosted-login `login/start -> login/complete` smoke、以及 viewer / pure API 读取同一 testnet world state 的截图或 JSON 摘要。
+  - 若缺少节点同步证据或 hosted-login 接入面仍指向 local execution world，只能记为 local hosted-public-join / hosted-login smoke，不得支撑 `public_testnet` unified-world 测试 claim。
 - Boundary:
   - `testing-manual.md` is an execution index only; do not duplicate current network-tier verdicts here.
   - `public_testnet_rehearsal` history may explain benchmark L5 evidence, but current public readiness belongs to formal `public_testnet` readiness docs.
