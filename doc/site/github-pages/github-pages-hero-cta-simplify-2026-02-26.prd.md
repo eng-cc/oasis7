@@ -5,6 +5,11 @@
 
 审计轮次: 5
 
+## 治理状态（2026-06-18）
+- 状态：历史压缩专题，保留原址与互链用于追溯，不再作为默认活跃阅读面。
+- 当前入口：`doc/site/project.md`、`doc/site/prd.index.md` 与 `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`。
+- 保留原因：本文记录 2026-02-26 首屏 CTA 收敛的原始范围、接口约束与风险，不替代后续首页公开叙事或下载链路真值。
+
 ## ROUND-002 主从口径
 - 主入口统一指向 `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`，本文仅维护增量。
 

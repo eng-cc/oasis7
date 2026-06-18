@@ -1,10 +1,10 @@
 # `readme/governance` 热点子域入口
 
-更新时间: 2026-04-25
+更新时间: 2026-06-18
 
 ## 从这里开始
 - 想先用一份长说明快速看懂“项目是什么、为什么要做、当前做到哪一步”：先读 `readme-project-overview-whitepaper-2026-04-25.md`
-- 想确认 README 口径控制、链接检查、季度复核或根 README 状态同步：先读 `readme-consistency-audit-checklist-2026-03-11.prd.md`、`readme-link-check-automation-2026-03-11.prd.md`、`readme-quarterly-review-cycle-2026-03-11.prd.md` 或 `readme-root-status-alignment-2026-03-11.prd.md`
+- 想确认 README 口径控制、季度复核或当前公开状态：先读根 `../../../README.md`、`readme-project-overview-whitepaper-2026-04-25.md`、`readme-consistency-audit-checklist-2026-03-11.prd.md` 或 `readme-quarterly-review-cycle-2026-03-11.prd.md`
 - 想确认 release communication、brief、announcement draft 或 template：先读 `readme-release-candidate-communication-brief-2026-03-11.prd.md`、`readme-release-communication-template-2026-03-11.prd.md` 或 `readme-release-announcement-draft-2026-03-11.prd.md`
 - 想确认 Moltbook 推广方案、持续运营或 repair follow-up：先读 `readme-moltbook-promotion-plan-2026-03-19.prd.md`、`readme-moltbook-liveops-runbook-2026-03-21.prd.md` 或 `readme-moltbook-post-drafts-2026-03-19.prd.md`
 - 想确认 limited preview、reward review、ledger、distribution closure 或 merged PR reward round scan：先读 `readme-limited-preview-invite-pack-2026-03-22.md`、`readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
@@ -37,14 +37,27 @@
 
 ### 1. 治理控制与季度复核
 - 首读入口:
+  - `../../../README.md`
+  - `readme-project-overview-whitepaper-2026-04-25.md`
   - `readme-consistency-audit-checklist-2026-03-11.prd.md`
-  - `readme-link-check-automation-2026-03-11.prd.md`
   - `readme-quarterly-review-cycle-2026-03-11.prd.md`
-  - `readme-root-status-alignment-2026-03-11.prd.md`
 - 适合问题:
   - README 对外口径一致性和链接检查该看哪里
   - 季度复核模板和 remediation 节奏在哪
-  - 根 README 当前公开状态对齐的正式入口是什么
+  - 根 README 当前公开状态和后续状态变更该从哪里确认
+
+### 历史压缩治理专题
+- 追溯入口:
+  - `readme-link-check-automation-2026-03-11.prd.md`
+  - `readme-root-status-alignment-2026-03-11.prd.md`
+- 适合问题:
+  - README 顶层链接检查脚本最初为什么只覆盖 `README.md` 与 `doc/README.md`
+  - `scripts/readme-link-check.sh` 的原始验收标准和边界是什么
+  - `TASK-README-003` 的完成证据在哪里
+  - 2026-03-11 根 README 公开状态对齐最初如何定义技术预览、可玩性和公告准备态
+- 当前边界:
+  - 这些专题已完成且无当前下一步，不再作为默认首读入口。
+  - 当前公开状态以根 `../../../README.md` 为准，治理节奏从一致性 checklist、季度复核、release communication surfaces 和 `../prd.index.md` 的历史压缩清单进入。
 
 ### 2. Release communication 与 announcement
 - 首读入口:
@@ -90,9 +103,10 @@
 
 ### 6. 公开定位、世界规则与资源模型
 - 首读入口:
+  - `../../../README.md`
+  - `readme-project-overview-whitepaper-2026-04-25.md`
   - `readme-resource-model-layering.prd.md`
   - `readme-world-rules-consolidation.prd.md`
-  - `readme-root-status-alignment-2026-03-11.prd.md`
 - 适合问题:
   - README 对外定位与世界规则入口的关系怎么理解
   - 资源模型、世界规则与公开主定位怎样互相约束

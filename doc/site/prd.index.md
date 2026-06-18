@@ -2,7 +2,7 @@
 
 审计轮次: 7
 
-更新时间：2026-04-11
+更新时间：2026-06-18
 
 ## 入口
 - 模块 PRD：`doc/site/prd.md`
@@ -18,17 +18,20 @@
 - 想先看“正式公告仍在准备中”的公开口径占位：先读 `doc/site/github-pages/github-pages-release-communication-placeholder-2026-03-11.prd.md`
 - 想继续按子域或文件名下钻：使用下方密度快照、热点子域导航与补充入口
 
-## 密度快照（2026-04-11）
+## 密度快照（2026-06-18）
 - `doc/site/`：67 份文件
 - `doc/site/github-pages/`：56 份文件
 - `doc/site/manual/`：6 份文件
 - 模块根入口：5 份文件
 - `doc/site/` 正式专题三件套：60 份文件
+- 当前默认活跃专题三件套：57 份文件
+- 历史压缩专题三件套：3 份文件
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `github-pages/` 正式专题三件套 | 54 | 公开首页、下载链路、公告占位、CTA、内容同步、SEO 与质量门禁 |
+| `github-pages/` 当前默认活跃专题三件套 | 51 | 公开首页、下载链路、公告占位、内容同步、SEO 与质量门禁 |
+| `github-pages/` 历史压缩专题三件套 | 3 | 已完成且由后续首页主叙事/项目台账覆盖的历史 CTA 微专题 |
 | `manual/` 正式专题三件套 | 6 | 静态 docs hub、Viewer 手册镜像与 canonical/manual 映射 |
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
@@ -42,16 +45,18 @@
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部 github-pages 与 manual 专题表。
-- 完整活跃专题清单继续保留在下方，用于精确文件名检索和互链可达性。
+- 当前默认活跃专题清单继续保留在下方，用于精确文件名检索和互链可达性。
+- 已完成且只承担历史证据职责的微专题进入“历史压缩专题清单”，不再计入默认活跃阅读面。
 - 公开 HTML 页面、同步脚本和镜像页继续保留可检索性，但默认不与专题三件套同屏平铺成长名单。
 
 ## 覆盖规则
-- 纳入规则：纳入 `doc/site/{github-pages,manual}/*.prd.md` 与同名 `*.design.md` / `*.project.md` 的活跃专题三件套。
+- 纳入规则：纳入 `doc/site/{github-pages,manual}/*.prd.md` 与同名 `*.design.md` / `*.project.md` 的当前默认活跃专题三件套。
 - 活跃补充：仍承担当前公开边界判断职责的高频专题，可在“活跃补充文档”区定向列出，但不再替代完整清单。
+- 历史压缩：已完成、无下一步、由模块 project 或后续主专题覆盖当前真值的专题，保留文件原址和互链，但从默认活跃清单降级到历史压缩清单。
 - 排除规则：`site/**` 下的公开 HTML 页面、同步脚本与镜像产物不并入专题三件套长表，只在补充入口中定向说明。
 - 按需进入：当 `README.md` 与 `project.md` 已能完成首读分流时，本页只承担精确检索与补充路由职责。
 
-## 完整活跃专题清单（按文件名精确检索）
+## 当前默认活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/site/github-pages/github-pages-architecture-svg-refresh.prd.md` | `doc/site/github-pages/github-pages-architecture-svg-refresh.design.md` | `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md` |
@@ -60,7 +65,6 @@
 | `doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md` | `doc/site/github-pages/github-pages-content-sync-2026-02-25.design.md` | `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md` |
 | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.design.md` | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` |
 | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md` | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.design.md` | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md` |
-| `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.design.md` | `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.project.md` |
 | `doc/site/github-pages/github-pages-hero-motion-layer.prd.md` | `doc/site/github-pages/github-pages-hero-motion-layer.design.md` | `doc/site/github-pages/github-pages-hero-motion-layer.project.md` |
 | `doc/site/github-pages/github-pages-hero-pointer-interaction.prd.md` | `doc/site/github-pages/github-pages-hero-pointer-interaction.design.md` | `doc/site/github-pages/github-pages-hero-pointer-interaction.project.md` |
 | `doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.design.md` | `doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.project.md` |
@@ -74,6 +78,11 @@
 | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.prd.md` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.design.md` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.project.md` |
 | `doc/site/manual/site-manual-static-docs.prd.md` | `doc/site/manual/site-manual-static-docs.design.md` | `doc/site/manual/site-manual-static-docs.project.md` |
 | `doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` | `doc/site/manual/viewer-manual-content-migration-2026-02-15.design.md` | `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md` |
+
+## 历史压缩专题清单（保留原址与互链）
+| 专题 PRD | 专题设计文档 | 专题项目文档 | 压缩理由 |
+| --- | --- | --- | --- |
+| `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.design.md` | `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.project.md` | 已完成 CTA 微专题；当前首页叙事与 CTA 真值由 `doc/site/project.md` 最新任务、`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` 和站点文件 diff 承接 |
 
 ## 公开镜像 / 手册补充入口
 | 文档路径 | 类型 | 用途 |

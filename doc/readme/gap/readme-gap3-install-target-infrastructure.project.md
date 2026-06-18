@@ -5,6 +5,11 @@
 
 审计轮次: 4
 
+## 治理状态（2026-06-18）
+- 本文是已完成的 README gap3 模块安装目标语义增量专题，保留原址用于历史追溯。
+- 当前主入口统一指向 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`、`doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` 与 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md`。
+- 本专题无当前下一步动作。
+
 ## 审计备注
 - 主项目入口统一指向 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md`，本文仅维护增量任务。
 

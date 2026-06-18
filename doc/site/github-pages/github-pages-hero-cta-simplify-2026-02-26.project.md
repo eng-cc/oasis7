@@ -5,6 +5,11 @@
 
 审计轮次: 5
 
+## 治理状态（2026-06-18）
+- 状态：历史压缩专题项目记录，任务 0/1 已完成且无下一步。
+- 当前入口：`doc/site/project.md` 汇总当前站点任务状态；本文件仅保留该 CTA 微专题的完成证据。
+- 边界：后续首页 CTA、公开叙事或下载入口变化，应在新的 task/project 记录中增量维护，不继续扩写本文。
+
 ## 审计备注
 - 主项目入口统一指向 `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md`，本文仅维护增量任务。
 
