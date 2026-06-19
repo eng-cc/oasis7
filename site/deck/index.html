@@ -33,7 +33,7 @@
         <span>oasis7</span>
       </a>
       <div class="deck-actions">
-        <a href="../index.html">首页</a>
+        <a class="is-active" href="../index.html">首页</a>
         <a href="../doc/cn/index.html">文档中心</a>
         <a href="../doc/cn/project-overview.html">项目总览</a>
         <a href="en/index.html">English Deck</a>
@@ -43,6 +43,12 @@
     <div class="deck-status">
       <span class="deck-status-chip is-live">HTML Deck</span>
       <span class="deck-status-chip">limited playable technical preview</span>
+    </div>
+
+    <div class="deck-mobile-nav" aria-label="移动端 slide 导航">
+      <button type="button" data-deck-prev aria-label="上一页">‹</button>
+      <span data-deck-count>1 / 12</span>
+      <button type="button" data-deck-next aria-label="下一页">›</button>
     </div>
 
     <div class="reveal">
@@ -55,6 +61,10 @@
               世界发生在破碎小行星带里。你不直接点单位，而是在受控验证场景里站在文明外部设定目标、约束和治理边界，
               然后看 Agent 如何把资源压力、交易、协作和治理一路推成会留下后果的历史。
             </p>
+            <aside class="cover-boundary-card" aria-label="边界说明">
+              <strong>边界说明</strong>
+              <span>当前为受限技术预览内容，聚焦机制展示与系统验证，不代表最终品质与完整体验。</span>
+            </aside>
             <div class="metric-grid">
               <article class="metric-card">
                 <strong>题材</strong>
@@ -370,6 +380,8 @@
 
     <script src="../vendor/reveal.js/dist/reveal.js"></script>
     <script>
+      const isPhoneDeck = window.matchMedia("(max-width: 520px)").matches;
+      const isTabletDeck = window.matchMedia("(min-width: 521px) and (max-width: 900px)").matches;
       const deck = new Reveal({
         controls: true,
         progress: true,
@@ -378,14 +390,33 @@
         slideNumber: "c/t",
         transition: "slide",
         backgroundTransition: "fade",
-        width: 1440,
-        height: 810,
-        margin: 0.04,
+        width: isPhoneDeck ? 390 : isTabletDeck ? 768 : 1440,
+        height: isPhoneDeck ? 844 : isTabletDeck ? 900 : 810,
+        margin: isPhoneDeck || isTabletDeck ? 0 : 0.04,
         touch: true,
         embedded: false,
       });
 
       deck.initialize();
+
+      const mobileCount = document.querySelector("[data-deck-count]");
+      const mobilePrev = document.querySelector("[data-deck-prev]");
+      const mobileNext = document.querySelector("[data-deck-next]");
+      const updateMobileNav = () => {
+        if (!mobileCount || !mobilePrev || !mobileNext) {
+          return;
+        }
+        const index = deck.getIndices().h;
+        const total = deck.getTotalSlides();
+        mobileCount.textContent = `${index + 1} / ${total}`;
+        mobilePrev.disabled = index <= 0;
+        mobileNext.disabled = index >= total - 1;
+      };
+      mobilePrev?.addEventListener("click", () => deck.prev());
+      mobileNext?.addEventListener("click", () => deck.next());
+      deck.on("ready", updateMobileNav);
+      deck.on("slidechanged", updateMobileNav);
+      updateMobileNav();
     </script>
   </body>
 </html>
