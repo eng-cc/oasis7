@@ -22,7 +22,7 @@
     <link rel="stylesheet" href="../assets/styles.css" />
     <script defer src="../assets/app.js"></script>
   </head>
-  <body>
+  <body class="story-page">
     <a class="skip-link" href="#top">跳到正文</a>
     <header class="topbar">
       <a class="brand" href="../index.html">
@@ -31,6 +31,10 @@
       </a>
       <nav class="nav" data-menu data-section-nav>
         <a href="#reader">阅读器</a>
+        <a href="releases/volume-01-reading-version.md">发布清单</a>
+        <a href="background/world-background.md">世界观</a>
+        <a href="outline/novel-outline.md">总纲</a>
+        <a href="draft/README.md">正文索引</a>
       </nav>
       <button class="menu-button" type="button" aria-label="切换菜单" data-menu-toggle>
         ☰
@@ -89,7 +93,10 @@
         </div>
         <div class="reader-shell">
           <aside class="reader-nav" aria-label="正文章节">
-            <p class="reader-nav-title">章节</p>
+            <div class="reader-nav-header">
+              <p class="reader-nav-title">章节目录</p>
+              <span aria-hidden="true">⌕</span>
+            </div>
             <div class="reader-chapter-group" data-story-group>
               <p class="reader-group-title">第一卷 · 阅读版 v1.0-rc</p>
               <button type="button" data-story-src="draft/volume-01-chapter-001.md">第一章 阅读版 CH-001 - CH-012</button>
@@ -123,7 +130,16 @@
             </div>
           </aside>
           <article class="reader-panel" aria-live="polite" aria-busy="false">
+            <div class="reader-toolbar" aria-label="阅读器状态">
+              <span>CH-001 · 阅读版 v1.0-rc</span>
+              <span>最近校对 2026-06-18</span>
+            </div>
             <div class="reader-status" data-story-status>选择左侧章节开始阅读。</div>
+            <div class="reader-state-samples" aria-label="阅读器状态示例">
+              <p class="reader-state-sample is-loading">正在载入下一节...</p>
+              <p class="reader-state-sample is-error">未能同步阅读进度，请稍后重试</p>
+              <p class="reader-state-sample is-empty">暂无附录内容</p>
+            </div>
             <div class="reader-content" data-story-content></div>
           </article>
         </div>

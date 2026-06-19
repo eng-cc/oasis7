@@ -1,0 +1,31 @@
+task_uid: task_e02c8fe08ebb4f51887b116675f676c1
+title: "Add Image2 design drafts for missing pages"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-site-missing-page-image2-designs
+execution_log_path: .pm/tasks/task_e02c8fe08ebb4f51887b116675f676c1.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/story/index.html
+  - site/deck/index.html
+  - site/deck/en/index.html
+  - doc/site/prd.md
+  - doc/site/project.md
+  - .agents/roles/game_visual_interaction_designer.md
+doc_refs:
+  - doc/site/project.md
+related_prd: []
+acceptance:
+  - "Create Image2-backed design draft for the story reader page."
+  - "Create Image2-backed design draft or shared coverage for the roadshow deck pages."
+  - "Classify evidence/test fixture page surfaces so they are not counted as missing product page designs."
+handoff_to: []
+updated_at: 2026-06-19T21:06:33+08:00
+last_started_at: 2026-06-19T00:07:03+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.sh --task-uid task_e02c8fe08ebb4f51887b116675f676c1 --phase current"
+last_verified_at: 2026-06-19T21:06:32+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-19T21:06:33+08:00

@@ -38,6 +38,26 @@
     - `./scripts/site-link-check.sh`
     - `rg -n "Deck|路演|roadshow|pitch" site/index.html site/en/index.html site/doc/cn/index.html site/doc/en/index.html site/deck/index.html site/deck/en/index.html`
     - `git diff --check`
+- [x] site-missing-page-image2-designs (PRD-SITE-001/003/004) [test_tier_required]: 补齐 story reader、HTML roadshow deck 与 GitHub Pages 首页的 Image2 页面级设计稿，更新页面设计覆盖索引，并按设计稿完成对应前端还原与尺寸适应收口。 Trace: .pm/tasks/task_e02c8fe08ebb4f51887b116675f676c1.yaml
+  - 产物文件:
+    - `doc/site/story/story-reader-page-2026-06-19.design.md`
+    - `doc/site/story/assets/story-reader-page-*-image2-2026-06-19.png`
+    - `doc/site/deck/html-roadshow-deck-page-2026-06-19.design.md`
+    - `doc/site/deck/assets/html-roadshow-deck-*-image2-2026-06-19.png`
+    - `doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md`
+    - `doc/site/github-pages/assets/github-pages-homepage-*-image2-2026-06-19.png`
+    - `doc/site/github-pages/page-design-coverage-2026-06-19.md`
+    - `site/index.html`
+    - `site/en/index.html`
+    - `site/story/index.html`
+    - `site/deck/index.html`
+    - `site/deck/en/index.html`
+    - `site/assets/styles.css`
+    - `site/deck/deck.css`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/site-link-check.sh`
+    - `git diff --check`
+    - `./scripts/pm/workflow-lint.sh --task-uid task_e02c8fe08ebb4f51887b116675f676c1 --phase current`
 - [x] public-oasis7-skill (PRD-SITE-002/003/011) [test_tier_required]: 在公开站点新增 `oasis7` skill raw 入口：`site/skills/oasis7.md` 提供可直接抓取的 Markdown skill 内容，并从中英 docs hub 保证可达。 Trace: .pm/tasks/task_088b948d76f843588493368e2c6779d3.yaml
   - 产物文件:
     - `doc/site/prd.md`
