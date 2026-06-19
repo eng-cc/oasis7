@@ -222,3 +222,14 @@ Example:
 - Finding Disposition Evidence: Added missing structured fields to current task execution-log entries; `./scripts/pm/workflow-lint.sh --task-uid task_ba86c4d2de4349a8941ef5bfafe15d74 --phase current` passed; filtered `./scripts/pm/lint.sh` output no longer mentions current task UID.
 - Residual Risk: Low. Repo-wide `doc-governance-check.sh` and `pm/lint.sh` still have unrelated historical baseline failures outside this diff; PR path should report them as existing baselines if preflight surfaces them.
 - Blocker / Next Action: Amend commit with this evidence-only update, rerun `prepare-task-pr`, then create PR.
+
+## 2026-06-19 13:45:26 CST / tpm
+- 完成内容: Created PR and entered the normal PR CI/comments/mergeability watch path.
+- 遗留事项: Push this PR evidence-only update, re-check comments/review threads/status, then merge if GitHub accepts the repository merge path.
+- Action: Ran `prepare-task-pr` preflight, pushed branch `task/engineering-historical-doc-skill-surface-governance`, and created PR #538 through the GitHub connector because local `gh` is unavailable in this environment.
+- Validation Command: `./scripts/prepare-task-pr.sh --json`; `./scripts/prepare-task-pr.sh --create --title "Govern stale skill surface cleanup"`; `git push -u origin task/engineering-historical-doc-skill-surface-governance`; GitHub connector `_create_pull_request`; GitHub connector `_get_commit_combined_status`; GitHub connector `_fetch_pr_comments`; GitHub connector `_list_pull_request_review_threads`.
+- Expected Result: PR exists on `main`, no unresolved comments or review threads are present, and the task proceeds into the default watch-fix-merge path.
+- Actual Result: `prepare-task-pr` reported `pre_pr_local_role_review.status=passed`, `ahead_count=2`, `behind_count=0`, and no rebase requirement. Local `gh` was not found in `PATH`, so PR creation used the GitHub connector. PR #538 was created at `https://github.com/eng-cc/oasis7/pull/538`; initial status query returned no combined statuses, no comments, and no review threads.
+- PR URL: https://github.com/eng-cc/oasis7/pull/538
+- PR Watch Decision: normal_pr_ci_watch
+- Blocker / Next Action: Push this evidence update, refresh PR state, and attempt merge if checks/comments/mergeability allow it.
