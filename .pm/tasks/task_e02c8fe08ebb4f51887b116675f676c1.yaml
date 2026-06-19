@@ -11,8 +11,10 @@ source_refs:
   - site/deck/index.html
   - site/deck/en/index.html
   - doc/site/prd.md
+  - doc/site/project.md
   - .agents/roles/game_visual_interaction_designer.md
-doc_refs: []
+doc_refs:
+  - doc/site/project.md
 related_prd: []
 acceptance:
   - "Create Image2-backed design draft for the story reader page."
