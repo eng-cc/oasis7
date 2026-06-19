@@ -13,7 +13,7 @@
 - [x] workflow-router-skill-reconciliation (PRD-ENGINEERING-032/PRD-ENGINEERING-032E/PRD-ENGINEERING-AWB-009) [test_tier_required]: 将 `using-superpowers` 中可借的 process-skill routing order 收口为本地 `repo-owned-workflow-router` skill，并同步回写 skill inventory 与 root workflow phase order。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
 
 ## Planned Follow-ups
-- `generic-game-skill-mirror-retirement-followup` (`PRD-ENGINEERING-032`, target `test_tier_required`): 继续评估 `asset-optimization` 到 `synchronization-algorithms` 这一组 generic game-skill mirror 是否转成“上游跟踪清单”而非本地长期维护。
+- `generic-game-skill-mirror-retirement-followup` (`PRD-ENGINEERING-032`, target `test_tier_required`): 继续评估 `asset-optimization` 到 `synchronization-algorithms` 这一组 generic game-skill mirror 是否转成“上游跟踪清单”而非本地长期维护。2026-06-19 aftercare 已先收口一个低风险占位面：未被 `gameplay-mechanics/SKILL.md` 或其 reference 承接的 `scripts/mechanics_designer.py` 退役，并把 supporting-file 承接规则补入 `.agents/skills/README.md`。Trace: .pm/tasks/task_ba86c4d2de4349a8941ef5bfafe15d74.yaml
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -36,5 +36,5 @@
 - 更新日期: 2026-05-22
 - 当前阶段: planned
 - 当前任务: `generic-game-skill-mirror-retirement-followup`
-- 关键缺口: `generic-game-skill-mirror-retirement-followup` 仍需先盘清 generic mirror 簇的真实引用面和上游同步需求。
+- 关键缺口: `generic-game-skill-mirror-retirement-followup` 仍需盘清 generic mirror 簇的真实引用面和上游同步需求；已完成一处未承接 placeholder helper aftercare，后续应继续按“引用面最小、无入口承接、无角色卡依赖”顺序处理。
 - 下一步: 优先判断这组 generic mirror 是否应整体降为“上游跟踪清单”，而不是继续本地长期维护。

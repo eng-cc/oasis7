@@ -69,6 +69,7 @@ Specialist skills are domain-triggered through TPM routing or professional subag
 - `SKILL.md` 是入口，不是整本手册；超过 lint 阈值的详细说明、示例、命令矩阵应移入 `references/`、`scripts/`、`assets/`、`templates/` 等 supporting files。
 - `description` 必须以 `Use when` 开头，只描述触发条件。
 - entrypoint 中列出的 supporting files 必须真实存在。
+- `scripts/` 下的 placeholder helper 必须被 `SKILL.md` 或直接引用的 reference 明确承接；未被承接的 placeholder helper 进入 skill-surface 退役候选，不作为“存在即保留”的默认资产。`assets/`、`templates/` 与重型 reference material 的治理仍按对应 skill entrypoint 和专题 follow-up 单独裁定。
 - 核心 workflow skill 必须保留 `Known Failure Modes`，把反复踩过的流程坑写进入口。
 - 修改本地 skill surface 后运行 `./scripts/lint-skills.sh`。
 
