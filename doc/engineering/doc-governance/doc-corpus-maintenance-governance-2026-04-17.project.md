@@ -19,6 +19,7 @@
 - [x] doc-surface-slimming-followup (PRD-ENGINEERING-025) [test_tier_required]: 执行 near-limit active project docs aftercare，先压缩 `doc/readme/project.md`、`doc/scripts/project.md`、`doc/site/project.md`、`doc/world-runtime/project.md` 与 `doc/world-simulator/project.md` 的状态区，避免主项目页继续接管完成历史归档职责。 Trace: .pm/tasks/task_732e8ae00c634232ad5ec570b53f5e5b.yaml
 - [x] devlog-summary-retire-followup (PRD-ENGINEERING-026) [test_tier_required]: 将 `doc/devlog/README.md` 升级为 compact archive summary，删除 57 份 `doc/devlog/2026-*.md` 日文件，并收敛具体日文件引用到 summary 入口。 Trace: .pm/tasks/task_eebbcc11039940dcbc99c540a15ece03.yaml
 - [x] simulation-cleanup-governance-aftercare (PRD-ENGINEERING-021/025) [test_tier_required]: 将 world-simulator 旧全量审读清单从 active reading truth 降格为 historical snapshot，并把仿真模拟 demo/bin 退役候选转成 replacement-evidence follow-up signals；当前不直接删除 active simulator code/docs。 Trace: .pm/tasks/task_41b18b1a7fef4d7b95e5d51aac64974f.yaml
+- [x] historical-doc-skill-surface-governance (PRD-ENGINEERING-025/032) [test_tier_required]: 收口 stale-file 抽样后的治理落地，把历史 project/handoff/evidence 与 skill placeholder 表面纳入 batch compaction/retirement 口径，并先退役一个未被入口承接的 `gameplay-mechanics` placeholder helper。 Trace: .pm/tasks/task_ba86c4d2de4349a8941ef5bfafe15d74.yaml
 
 ## 2026-04-24 季度复核快照
 - `bash ./scripts/doc-inventory-report.sh` 当前快照：
@@ -39,6 +40,7 @@
 2026-05-18 补充：已对 `world-simulator` 已治理路径执行一轮重复入口 aftercare，清掉 `viewer-manual.md` 的 legacy 正文残留，并将 `prd.index.md` 收回 index-first 角色；该动作不改变季度复核已冻结的“near-limit active project docs 拆分优先”下一步顺序。
 2026-05-26 补充：已执行首批 near-limit active project docs aftercare，压缩 `readme/scripts/site/world-runtime/world-simulator` 主项目状态区；后续若继续处理 `core/reviews`、`world-simulator/launcher` 或把 `prd.index.md` 改为生成式索引，仍需新开独立 task。
 2026-05-27 补充：`doc/devlog` 已从“README 导航 57 个日文件”推进到“README 摘要替代 + 日文件退役”；后续不再新增 daily devlog，当前执行证据继续写入 `.pm/tasks/*.execution.md`。
+2026-06-19 补充：stale-file 抽样后的后续治理先按低风险 skill-surface aftercare 落地；历史 project/handoff/evidence 的批量压缩仍应保留索引 backlink、归档位置、保留例外和验证命令，不做随机单删。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -53,5 +55,5 @@
 - 当前阶段: M2 已完成
 - 阶段说明: formalize + report + five path follow-ups + quarterly review closed
 - 阻塞项: 无
-- 最近更新: 2026-05-27
-- 后续动作: 入口减重专题 `PRD-ENGINEERING-024`、首批五条路径级 follow-up、`world-simulator` 重复入口 aftercare、首批 near-limit project 状态区 aftercare 与 devlog 摘要退役均已完成。下一条正式 follow-up 应在 `core/reviews`、`world-simulator/launcher` 或 `prd.index.md` 生成化之间择一单独立项。
+- 最近更新: 2026-06-19
+- 后续动作: 入口减重专题 `PRD-ENGINEERING-024`、首批五条路径级 follow-up、`world-simulator` 重复入口 aftercare、首批 near-limit project 状态区 aftercare、devlog 摘要退役与低风险 skill placeholder aftercare 均已完成。下一条正式 follow-up 应在 `core/reviews`、`world-simulator/launcher`、`prd.index.md` 生成化或 generic game-skill mirror 批量治理之间择一单独立项。

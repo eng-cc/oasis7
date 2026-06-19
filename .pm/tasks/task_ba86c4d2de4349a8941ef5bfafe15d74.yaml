@@ -1,0 +1,33 @@
+task_uid: task_ba86c4d2de4349a8941ef5bfafe15d74
+title: "Govern historical docs and skill surface compaction"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-historical-doc-skill-surface-governance
+execution_log_path: .pm/tasks/task_ba86c4d2de4349a8941ef5bfafe15d74.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-024
+  - PRD-ENGINEERING-025
+  - PRD-ENGINEERING-032
+acceptance:
+  - "Define repository-governance policy for historical project docs, handoff/evidence docs, and skill placeholder surfaces."
+  - "Apply a small, verifiable compaction cleanup to one low-risk skill/document surface without touching active source/test semantics."
+  - "Record role slice contracts, evidence, verification, and residual risk in the task execution log."
+handoff_to: []
+updated_at: 2026-06-19T13:04:17+08:00
+last_started_at: 2026-06-19T12:32:23+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.sh --task-uid task_ba86c4d2de4349a8941ef5bfafe15d74 --phase current && ./scripts/lint-skills.sh && git diff --check && rg -n 'mechanics_designer|gameplay-mechanics/scripts' . --glob '!target/**' --glob '!third_party/**'"
+last_verified_at: 2026-06-19T13:04:16+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-19T13:04:17+08:00
