@@ -212,7 +212,7 @@ Example:
 - Task UID: task_ba86c4d2de4349a8941ef5bfafe15d74
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-historical-doc-skill-surface-governance
 - Source Branch: task/engineering-historical-doc-skill-surface-governance
-- Source Head: 66ac62f92b4037cca6b88ea7c47352e27771bbcf
+- Source Head: d0e3035b9bb088f369e2e35f596584e1b571d45e
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .agents/skills/README.md; .agents/skills/gameplay-mechanics/scripts/mechanics_designer.py; .pm/tasks/task_ba86c4d2de4349a8941ef5bfafe15d74.yaml; .pm/tasks/task_ba86c4d2de4349a8941ef5bfafe15d74.execution.md; doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md; doc/engineering/project.md; doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.project.md
 - Role Selection Basis: repository_health_engineer for cross-cutting governance docs, skill-surface policy, PM evidence, and baseline-failure attribution; gameplay_designer for deleting a gameplay-mechanics skill helper; qa_engineer for verification adequacy and PR-readiness evidence.
