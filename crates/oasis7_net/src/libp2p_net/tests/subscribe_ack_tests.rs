@@ -4,14 +4,14 @@ use std::time::Duration;
 
 use futures::{FutureExt, StreamExt};
 use libp2p::swarm::SwarmEvent;
-use libp2p::{identity::Keypair, Multiaddr, PeerId};
+use libp2p::{Multiaddr, PeerId, identity::Keypair};
 
 use super::super::runtime_loop::{
-    handle_command, Command, CommandContext, CommandOutcome, CommandStateRefs,
+    Command, CommandContext, CommandOutcome, CommandStateRefs, handle_command,
 };
 use super::super::{
-    Libp2pReachabilitySnapshot, PeerManagerHealthIssue, PeerManagerHealthStatus,
-    PeerManagerPeerHealth, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, Libp2pReachabilitySnapshot, PeerManagerHealthIssue,
+    PeerManagerHealthStatus, PeerManagerPeerHealth,
 };
 
 #[test]

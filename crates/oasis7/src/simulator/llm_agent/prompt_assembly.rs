@@ -685,10 +685,12 @@ mod tests {
         let output = PromptAssembler::assemble(sample_input());
         assert!(!output.sections.is_empty());
         assert!(!output.section_trace.is_empty());
-        assert!(output
-            .section_trace
-            .iter()
-            .any(|trace| trace.kind == PromptSectionKind::Policy && trace.included));
+        assert!(
+            output
+                .section_trace
+                .iter()
+                .any(|trace| trace.kind == PromptSectionKind::Policy && trace.included)
+        );
         assert!(output.section_trace.iter().all(|trace| {
             if trace.included {
                 trace.emitted_tokens > 0
@@ -998,9 +1000,11 @@ mod tests {
         assert!(output.user_prompt.contains("\"max_ticks\":<u64 1..=3>"));
         assert!(output.user_prompt.contains("不超过 42"));
         assert!(output.user_prompt.contains("硬裁剪到 3"));
-        assert!(output
-            .user_prompt
-            .contains("move_agent.to 不能是当前所在位置"));
+        assert!(
+            output
+                .user_prompt
+                .contains("move_agent.to 不能是当前所在位置")
+        );
         assert!(output.user_prompt.contains("transfer_resource"));
         assert!(output.user_prompt.contains("buy_power"));
         assert!(output.user_prompt.contains("sell_power"));
@@ -1011,9 +1015,11 @@ mod tests {
         assert!(output.user_prompt.contains("schedule_recipe"));
         assert!(output.user_prompt.contains("factory.smelter.mk1"));
         assert!(output.user_prompt.contains("recipe.smelter.iron_ingot"));
-        assert!(output
-            .user_prompt
-            .contains("post_onboarding 工业主线优先级"));
+        assert!(
+            output
+                .user_prompt
+                .contains("post_onboarding 工业主线优先级")
+        );
         assert!(output.user_prompt.contains("publish_social_fact"));
         assert!(output.user_prompt.contains("challenge_social_fact"));
         assert!(output.user_prompt.contains("adjudicate_social_fact"));
@@ -1035,45 +1041,65 @@ mod tests {
         assert!(output.user_prompt.contains("recipe.assembler.sensor_pack"));
         assert!(output.user_prompt.contains("recipe.assembler.module_rack"));
         assert!(output.user_prompt.contains("recipe.assembler.factory_core"));
-        assert!(output
-            .user_prompt
-            .contains("默认 recipe_hardware_cost_per_batch"));
+        assert!(
+            output
+                .user_prompt
+                .contains("默认 recipe_hardware_cost_per_batch")
+        );
         assert!(output.user_prompt.contains("iron_ingot=2"));
         assert!(output.user_prompt.contains("control_chip=2"));
         assert!(output.user_prompt.contains("factory_core=8"));
-        assert!(output
-            .user_prompt
-            .contains("schedule_recipe.batches 必须 <= floor(self_resources.data"));
+        assert!(
+            output
+                .user_prompt
+                .contains("schedule_recipe.batches 必须 <= floor(self_resources.data")
+        );
         assert!(output.user_prompt.contains("compound_mass_g >= 1000"));
-        assert!(output
-            .user_prompt
-            .contains("owner 字段仅允许 self/agent:<id>/location:<id>"));
-        assert!(output
-            .user_prompt
-            .contains("publish_social_fact.confidence_ppm 必须在 1..=1000000"));
-        assert!(output
-            .user_prompt
-            .contains("adjudicate_social_fact.adjudication 仅允许 confirm/retract"));
+        assert!(
+            output
+                .user_prompt
+                .contains("owner 字段仅允许 self/agent:<id>/location:<id>")
+        );
+        assert!(
+            output
+                .user_prompt
+                .contains("publish_social_fact.confidence_ppm 必须在 1..=1000000")
+        );
+        assert!(
+            output
+                .user_prompt
+                .contains("adjudicate_social_fact.adjudication 仅允许 confirm/retract")
+        );
         assert!(output.user_prompt.contains("[Failure Recovery Policy]"));
-        assert!(output
-            .user_prompt
-            .contains("insufficient_resource.data -> mine_compound"));
-        assert!(output
-            .user_prompt
-            .contains("insufficient_resource.electricity -> harvest_radiation"));
-        assert!(output
-            .user_prompt
-            .contains("factory_not_found -> build_factory"));
-        assert!(output
-            .user_prompt
-            .contains("agent_already_at_location -> 禁止重复 move_agent"));
+        assert!(
+            output
+                .user_prompt
+                .contains("insufficient_resource.data -> mine_compound")
+        );
+        assert!(
+            output
+                .user_prompt
+                .contains("insufficient_resource.electricity -> harvest_radiation")
+        );
+        assert!(
+            output
+                .user_prompt
+                .contains("factory_not_found -> build_factory")
+        );
+        assert!(
+            output
+                .user_prompt
+                .contains("agent_already_at_location -> 禁止重复 move_agent")
+        );
         assert!(output.user_prompt.contains("推荐 harvest 模板"));
         assert!(output.user_prompt.contains("推荐 move 模板"));
         assert!(output.user_prompt.contains("推荐 gameplay 模板（简版）"));
         assert!(output.user_prompt.contains("推荐 economic 合约链路"));
         assert!(output.user_prompt.contains("治理节奏建议"));
-        assert!(output
-            .user_prompt
-            .contains("优先切换到另一种 gameplay 动作"));
+        assert!(
+            output
+                .user_prompt
+                .contains("优先切换到另一种 gameplay 动作")
+        );
     }
 }

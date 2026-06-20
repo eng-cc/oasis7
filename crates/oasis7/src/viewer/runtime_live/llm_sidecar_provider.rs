@@ -11,8 +11,8 @@ pub(super) fn env_requests_provider_backend() -> bool {
     .is_some_and(|value| value == PROVIDER_BACKED_DECISION_SOURCE)
 }
 
-pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
-) -> Result<Option<ProviderDecisionSettings>, String> {
+pub(in crate::viewer::runtime_live) fn provider_settings_from_env()
+-> Result<Option<ProviderDecisionSettings>, String> {
     let decision_source = named_env_var_any(&[
         VIEWER_AGENT_DECISION_SOURCE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
@@ -84,19 +84,18 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
             "{VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV} must be greater than zero"
         ));
     }
-    let decision_timeout_ms =
-        named_env_var_any(&[VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV])
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .map(|value| {
-                value.parse::<u64>().map_err(|err| {
-                    format!(
-                        "invalid {VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV} value `{value}`: {err}"
-                    )
-                })
+    let decision_timeout_ms = named_env_var_any(&[VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV])
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            value.parse::<u64>().map_err(|err| {
+                format!(
+                    "invalid {VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV} value `{value}`: {err}"
+                )
             })
-            .transpose()?
-            .unwrap_or(connect_timeout_ms);
+        })
+        .transpose()?
+        .unwrap_or(connect_timeout_ms);
     if decision_timeout_ms == 0 {
         return Err(format!(
             "{VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV} must be greater than zero"

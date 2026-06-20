@@ -4,11 +4,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use oasis7::consensus_action_payload::{
-    encode_consensus_action_payload, ConsensusActionPayloadEnvelope,
+    ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
 };
 use oasis7::viewer::{
-    build_runtime_action_from_gameplay_request, verify_gameplay_action_auth_proof,
-    GameplayActionRequest,
+    GameplayActionRequest, build_runtime_action_from_gameplay_request,
+    verify_gameplay_action_auth_proof,
 };
 use oasis7_node::NodeRuntime;
 use serde::{Deserialize, Serialize};

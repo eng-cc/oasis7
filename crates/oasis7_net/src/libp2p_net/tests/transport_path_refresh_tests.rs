@@ -38,14 +38,16 @@ fn reconnect_after_final_close_retries_single_disconnected_static_path() {
 
     known.clear();
     failed.clear();
-    assert!(select_reconnect_transport_path_after_close(
-        &known,
-        &mut active_transport_paths,
-        &mut failed,
-        peer_id,
-        Some(direct_path.clone()),
-    )
-    .is_none());
+    assert!(
+        select_reconnect_transport_path_after_close(
+            &known,
+            &mut active_transport_paths,
+            &mut failed,
+            peer_id,
+            Some(direct_path.clone()),
+        )
+        .is_none()
+    );
 }
 
 #[test]

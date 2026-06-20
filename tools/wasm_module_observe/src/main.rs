@@ -1,6 +1,6 @@
 use std::env;
 use std::path::PathBuf;
-use wasm_module_observe::{run_observe, ObserveRunRequest};
+use wasm_module_observe::{ObserveRunRequest, run_observe};
 
 fn main() {
     if let Err(err) = run_cli() {

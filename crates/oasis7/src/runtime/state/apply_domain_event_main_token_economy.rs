@@ -3,10 +3,10 @@ use super::helpers::{
     resolve_main_token_effective_config_for_epoch,
 };
 use super::*;
+use crate::runtime::MainTokenTreasuryDistribution;
 use crate::runtime::main_token::{
     is_main_token_treasury_distribution_bucket, validate_main_token_config_bounds,
 };
-use crate::runtime::MainTokenTreasuryDistribution;
 use std::collections::BTreeSet;
 
 impl WorldState {

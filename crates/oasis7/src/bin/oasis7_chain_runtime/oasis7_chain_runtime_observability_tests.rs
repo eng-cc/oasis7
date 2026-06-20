@@ -571,26 +571,34 @@ fn assert_chain_status_payload_consensus_health_metrics() {
             .as_deref(),
         Some("attestation target_epoch mismatch")
     );
-    assert!(payload
-        .observability
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_network_lag"));
-    assert!(payload
-        .observability
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "replication_peer_health_degraded"));
-    assert!(payload
-        .observability
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "replication_recent_errors"));
-    assert!(payload
-        .observability
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "storage_degraded"));
+    assert!(
+        payload
+            .observability
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "consensus_network_lag")
+    );
+    assert!(
+        payload
+            .observability
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "replication_peer_health_degraded")
+    );
+    assert!(
+        payload
+            .observability
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "replication_recent_errors")
+    );
+    assert!(
+        payload
+            .observability
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "storage_degraded")
+    );
 }
 
 #[test]
@@ -696,10 +704,12 @@ fn build_chain_status_payload_marks_peer_head_unavailable_not_ready() {
     assert_eq!(observability.known_peer_heads, 0);
     assert!(!observability.network_head_available);
     assert_eq!(observability.network_height_lag, 0);
-    assert!(observability
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_peer_head_unavailable"));
+    assert!(
+        observability
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "consensus_peer_head_unavailable")
+    );
 }
 
 #[test]
@@ -888,10 +898,12 @@ fn build_chain_status_payload_marks_validator_unknown_reachability_not_ready() {
     assert_eq!(status.status, "warn");
     assert!(!status.ready);
     assert!(!status.reachability_policy_ok);
-    assert!(status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "p2p_reachability_degraded"));
+    assert!(
+        status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "p2p_reachability_degraded")
+    );
 }
 
 #[test]
@@ -1103,8 +1115,10 @@ fn build_chain_status_payload_zeroes_replication_gap_when_replication_disabled()
     assert!(!status.replication_enabled);
     assert_eq!(status.replication_persisted_height, 0);
     assert_eq!(status.replication_state_gap, 0);
-    assert!(!status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_replication_state_gap"));
+    assert!(
+        !status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "consensus_replication_state_gap")
+    );
 }

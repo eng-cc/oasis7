@@ -44,10 +44,12 @@ fn chain_linked_runtime_missing_persistence_keeps_world_and_height() {
         .expect("chain sync failure should be reflected in gameplay feedback");
     assert_eq!(feedback.action, "chain_sync");
     assert_eq!(feedback.stage, "blocked");
-    assert!(feedback
-        .reason
-        .as_deref()
-        .is_some_and(|reason| reason.contains("execution world is not ready")));
+    assert!(
+        feedback
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("execution world is not ready"))
+    );
 }
 
 #[test]
@@ -175,23 +177,29 @@ fn chain_linked_runtime_shadow_policy_keeps_chain_failures_out_of_gameplay_feedb
 #[test]
 fn chain_link_http_response_waits_for_full_content_length_body() {
     let partial = b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n{\"ok\":";
-    assert!(!chain_link_http_response_is_complete(partial)
-        .expect("partial response should parse headers"));
+    assert!(
+        !chain_link_http_response_is_complete(partial)
+            .expect("partial response should parse headers")
+    );
 
     let complete = b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n{\"ok\":true}";
-    assert!(chain_link_http_response_is_complete(complete).expect("complete response should parse"));
+    assert!(
+        chain_link_http_response_is_complete(complete).expect("complete response should parse")
+    );
 }
 
 #[test]
 fn chain_link_http_response_without_content_length_waits_for_eof() {
     let response = b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{}";
-    assert!(!chain_link_http_response_is_complete(response)
-        .expect("response without content length should parse"));
+    assert!(
+        !chain_link_http_response_is_complete(response)
+            .expect("response without content length should parse")
+    );
 }
 
 #[test]
-fn chain_linked_runtime_dev_local_policy_normalizes_main_token_config_before_verifying_tick_consensus(
-) {
+fn chain_linked_runtime_dev_local_policy_normalizes_main_token_config_before_verifying_tick_consensus()
+ {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_dev_local_main_token_normalize");
     let mut execution_world = crate::runtime::World::new_production_hardened();
     execution_world.submit_action(RuntimeAction::RegisterAgent {

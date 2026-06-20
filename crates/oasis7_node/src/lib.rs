@@ -14,26 +14,25 @@ use oasis7_consensus::node_consensus_action::{
 };
 use oasis7_consensus::node_consensus_error::NodeConsensusError;
 use oasis7_consensus::node_consensus_signature::{
-    sign_attestation_message as core_sign_attestation_message,
+    NodeConsensusMessageSigner, sign_attestation_message as core_sign_attestation_message,
     sign_commit_message as core_sign_commit_message,
     sign_proposal_message as core_sign_proposal_message,
     verify_attestation_message_signature as core_verify_attestation_message_signature,
     verify_commit_message_signature as core_verify_commit_message_signature,
     verify_proposal_message_signature as core_verify_proposal_message_signature,
-    NodeConsensusMessageSigner,
 };
 use oasis7_consensus::node_pos::{
+    NodePosDecision, NodePosError, NodePosPendingProposal, NodePosStatusAdapter,
     advance_pending_attestations as core_advance_pending_attestations,
     insert_attestation as core_insert_attestation, propose_next_head as core_propose_next_head,
-    NodePosDecision, NodePosError, NodePosPendingProposal, NodePosStatusAdapter,
 };
 use oasis7_distfs::{
-    blake3_hex, FeedbackAnnounce, FeedbackAnnounceBridge, FeedbackStore, LocalCasStore,
+    FeedbackAnnounce, FeedbackAnnounceBridge, FeedbackStore, LocalCasStore, blake3_hex,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use oasis7_net::{
-    run_replica_maintenance_poll, ReplicaMaintenancePolicy, ReplicaMaintenancePollingPolicy,
-    ReplicaMaintenancePollingState, ReplicaTransferExecutor, ReplicaTransferTask,
+    ReplicaMaintenancePolicy, ReplicaMaintenancePollingPolicy, ReplicaMaintenancePollingState,
+    ReplicaTransferExecutor, ReplicaTransferTask, run_replica_maintenance_poll,
 };
 use oasis7_proto::distributed::DistributedErrorCode;
 use oasis7_proto::distributed_dht as proto_dht;
@@ -97,11 +96,11 @@ pub use gossip_udp::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use libp2p_replication_network::{
-    derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
+    Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig, derive_libp2p_identity_keypair,
 };
 #[cfg(target_arch = "wasm32")]
 pub use libp2p_replication_network_wasm::{
-    derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
+    Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig, derive_libp2p_identity_keypair,
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
 pub use oasis7_net::{
@@ -135,10 +134,10 @@ use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
 use replica_maintenance_support::maybe_run_runtime_replica_maintenance_poll;
 use replication::{
-    load_blob_from_root, load_commit_message_from_root, load_latest_commit_message_from_root,
     FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
-    FetchHeadResponse, ReplicationHeadSummary, ReplicationRuntime, REPLICATION_FETCH_BLOB_PROTOCOL,
-    REPLICATION_FETCH_COMMIT_PROTOCOL, REPLICATION_GET_HEAD_PROTOCOL,
+    FetchHeadResponse, REPLICATION_FETCH_BLOB_PROTOCOL, REPLICATION_FETCH_COMMIT_PROTOCOL,
+    REPLICATION_GET_HEAD_PROTOCOL, ReplicationHeadSummary, ReplicationRuntime, load_blob_from_root,
+    load_commit_message_from_root, load_latest_commit_message_from_root,
 };
 use replication_fetch_handler_support::{
     attach_checkpoint_for_fetch_commit_if_boundary, should_export_checkpoint_for_fetch_commit,
@@ -148,9 +147,8 @@ use replication_probe_gate::{
     request_fetch_blob_with_storage_challenge_routes,
 };
 use replication_state_reconcile::{
-    parse_replication_commit_payload, parse_replication_commit_payload_view,
-    reconcile_engine_with_persisted_replication, NodeEngineTickResult,
-    ReplicationCommitPayloadView,
+    NodeEngineTickResult, ReplicationCommitPayloadView, parse_replication_commit_payload,
+    parse_replication_commit_payload_view, reconcile_engine_with_persisted_replication,
 };
 use runtime_util::{lock_state, now_unix_ms};
 

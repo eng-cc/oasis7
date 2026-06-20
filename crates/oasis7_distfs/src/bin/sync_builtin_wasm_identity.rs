@@ -474,9 +474,7 @@ fn expected_manifest(options: &Options) -> Result<IdentityManifest, String> {
             Some(existing) if existing != &receipt.build_manifest_hash => {
                 return Err(format!(
                     "build_manifest_hash mismatch across modules baseline={} current={} module_id={}",
-                    existing,
-                    receipt.build_manifest_hash,
-                    module_id
+                    existing, receipt.build_manifest_hash, module_id
                 ));
             }
             None => expected_build_manifest_hash = Some(receipt.build_manifest_hash.clone()),
@@ -684,7 +682,7 @@ mod tests {
         );
         write_file(
             &root.join("module/Cargo.toml"),
-            "[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
+            "[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
         );
         write_file(
             &root.join("module/src/lib.rs"),
@@ -692,7 +690,7 @@ mod tests {
         );
         write_file(
             &root.join("shared/Cargo.toml"),
-            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
         );
         write_file(
             &root.join("shared/src/lib.rs"),

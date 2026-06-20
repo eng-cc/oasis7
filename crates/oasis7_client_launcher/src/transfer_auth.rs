@@ -388,13 +388,13 @@ fn decode_hex_array<const N: usize>(raw: &str, label: &str) -> Result<[u8; N], S
 #[cfg(test)]
 mod tests {
     use super::{
+        VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
         build_signed_web_transfer_submit_request, resolve_transfer_auth_signer_from_env,
-        resolve_transfer_auth_signer_from_path, VIEWER_AUTH_PRIVATE_KEY_ENV,
-        VIEWER_AUTH_PUBLIC_KEY_ENV,
+        resolve_transfer_auth_signer_from_path,
     };
     use oasis7::consensus_action_payload::{
-        sign_main_token_runtime_action_auth, verify_main_token_runtime_action_auth,
-        MainTokenActionAuthScheme,
+        MainTokenActionAuthScheme, sign_main_token_runtime_action_auth,
+        verify_main_token_runtime_action_auth,
     };
     use oasis7::runtime::Action;
     use serde::Serialize;
@@ -518,11 +518,20 @@ mod tests {
     #[test]
     fn resolve_transfer_auth_signer_from_env_requires_both_keys() {
         let _guard = super::TRANSFER_AUTH_ENV_LOCK.lock().expect("env lock");
-        std::env::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
-        std::env::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, "private");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, "private");
+        }
         let err = resolve_transfer_auth_signer_from_env().expect_err("missing public key");
         assert!(err.contains(VIEWER_AUTH_PUBLIC_KEY_ENV));
-        std::env::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
+        }
     }
 
     #[test]
@@ -561,8 +570,14 @@ mod tests {
             application_payload_hash: None,
             client_request_id: None,
         };
-        std::env::set_var(VIEWER_AUTH_PUBLIC_KEY_ENV, public_key.as_str());
-        std::env::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, private_key.as_str());
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(VIEWER_AUTH_PUBLIC_KEY_ENV, public_key.as_str());
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, private_key.as_str());
+        }
         let request = build_signed_web_transfer_submit_request(
             from_account_id.as_str(),
             "protocol:treasury",
@@ -586,8 +601,14 @@ mod tests {
         .expect("verify");
         assert_eq!(verified.account_id, from_account_id);
         assert_eq!(verified.signer_public_keys, vec![public_key.clone()]);
-        std::env::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
-        std::env::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
+        }
     }
 
     #[test]

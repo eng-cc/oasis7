@@ -289,11 +289,13 @@ fn publish_membership_change_with_dht_signed_with_ed25519_keyring_restores_with_
         )
         .expect("publish signed membership change");
     assert_eq!(published.signature_key_id.as_deref(), Some("k-ed"));
-    assert!(published
-        .signature
-        .as_deref()
-        .expect("signature")
-        .starts_with("ed25519:v1:"));
+    assert!(
+        published
+            .signature
+            .as_deref()
+            .expect("signature")
+            .starts_with("ed25519:v1:")
+    );
 
     let mut consensus = sample_consensus();
     let policy = MembershipSnapshotRestorePolicy {

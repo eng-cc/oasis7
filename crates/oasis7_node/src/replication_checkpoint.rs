@@ -1,5 +1,5 @@
 use oasis7_distfs::{
-    apply_replication_record, blake3_hex, build_replication_record_with_epoch, BlobStore as _,
+    BlobStore as _, apply_replication_record, blake3_hex, build_replication_record_with_epoch,
 };
 
 use crate::{
@@ -7,8 +7,8 @@ use crate::{
     NodeExecutionCheckpointBundle, NodeExecutionCheckpointDescriptor,
 };
 
-use super::support::{distfs_error_to_node_error, sign_replication_message};
 use super::ReplicationRuntime;
+use super::support::{distfs_error_to_node_error, sign_replication_message};
 use super::{GossipReplicationMessage, ReplicatedCommitPayload};
 
 impl ReplicationRuntime {

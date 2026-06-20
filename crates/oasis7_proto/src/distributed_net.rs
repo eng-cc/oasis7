@@ -310,20 +310,34 @@ mod tests {
 
     #[test]
     fn lane_role_policy_blocks_obvious_role_mismatches() {
-        assert!(NetworkLane::ConsensusGossip
-            .allows_role(PeerNodeRole::ValidatorCore, NetworkLaneOperation::Publish));
-        assert!(!NetworkLane::ConsensusGossip
-            .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Publish));
-        assert!(NetworkLane::Sync
-            .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Request));
-        assert!(!NetworkLane::Sync
-            .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Serve));
-        assert!(NetworkLane::BlobState
-            .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Request));
-        assert!(!NetworkLane::BlobState
-            .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Serve));
-        assert!(NetworkLane::BlobState
-            .allows_role(PeerNodeRole::FullStorage, NetworkLaneOperation::Serve));
+        assert!(
+            NetworkLane::ConsensusGossip
+                .allows_role(PeerNodeRole::ValidatorCore, NetworkLaneOperation::Publish)
+        );
+        assert!(
+            !NetworkLane::ConsensusGossip
+                .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Publish)
+        );
+        assert!(
+            NetworkLane::Sync
+                .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Request)
+        );
+        assert!(
+            !NetworkLane::Sync
+                .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Serve)
+        );
+        assert!(
+            NetworkLane::BlobState
+                .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Request)
+        );
+        assert!(
+            !NetworkLane::BlobState
+                .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Serve)
+        );
+        assert!(
+            NetworkLane::BlobState
+                .allows_role(PeerNodeRole::FullStorage, NetworkLaneOperation::Serve)
+        );
         assert!(
             !NetworkLane::BlobState.allows_role(PeerNodeRole::Relay, NetworkLaneOperation::Serve)
         );

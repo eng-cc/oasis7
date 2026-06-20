@@ -4,12 +4,30 @@ use super::*;
 fn runtime_agent_chat_provider_mode_reports_feedback_failure() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_bridge");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:9");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_bridge");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:9");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -102,10 +120,22 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
             }
         }
     });
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "0");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "0");
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -116,10 +146,12 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
         .compat_snapshot()
         .player_gameplay
         .expect("player gameplay snapshot");
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .any(|action| action.protocol_action == "agent_chat"));
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.protocol_action == "agent_chat")
+    );
     let agent_id = server
         .world
         .state()
@@ -229,13 +261,34 @@ fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() 
             }
         }
     });
-    std::env::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_bridge");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "0");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_bridge");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "0");
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -286,9 +339,11 @@ fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() 
     assert_eq!(recorded[0].path, "/v1/world-simulator/feedback");
     assert_eq!(recorded[1].method, "GET");
     assert_eq!(recorded[1].path, "/v1/provider/info");
-    assert!(!recorded
-        .iter()
-        .any(|request| request.path == "/v1/world-simulator/agent-chat"));
+    assert!(
+        !recorded
+            .iter()
+            .any(|request| request.path == "/v1/world-simulator/agent-chat")
+    );
     assert!(server.pending_virtual_events.iter().all(|event| !matches!(
         &event.kind,
         crate::simulator::WorldEventKind::AgentSpoke { .. }
@@ -370,7 +425,10 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
 #[test]
 fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
     let _guard = lock_test_llm_env();
-    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -421,10 +479,12 @@ fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
     assert_eq!(feedback.action, "agent_chat");
     assert_eq!(feedback.stage, "accepted");
     assert_eq!(feedback.target_agent_id.as_deref(), Some(agent_id.as_str()));
-    assert!(feedback
-        .intent_summary
-        .as_deref()
-        .is_some_and(|summary| summary.contains(agent_id.as_str())));
+    assert!(
+        feedback
+            .intent_summary
+            .as_deref()
+            .is_some_and(|summary| summary.contains(agent_id.as_str()))
+    );
 
     let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
     assert!(events.iter().any(|event| matches!(
@@ -438,10 +498,22 @@ fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
 fn runtime_agent_chat_echo_env_accepts_chat_without_llm_runner_config() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_MODEL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_BASE_URL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_API_KEY);
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -497,10 +569,13 @@ fn runtime_agent_chat_echo_env_accepts_chat_without_llm_runner_config() {
 #[test]
 fn runtime_agent_chat_echo_removed_old_brand_env_is_ignored() {
     let _guard = lock_test_llm_env();
-    std::env::set_var(
-        removed_old_brand_runtime_live_env("RUNTIME_AGENT_CHAT_ECHO"),
-        "1",
-    );
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(
+            removed_old_brand_runtime_live_env("RUNTIME_AGENT_CHAT_ECHO"),
+            "1",
+        );
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),

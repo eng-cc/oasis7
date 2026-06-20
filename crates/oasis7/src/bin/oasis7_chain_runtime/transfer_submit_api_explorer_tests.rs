@@ -216,8 +216,7 @@ fn explorer_p0_blocks_txs_tx_search_queries_return_expected_payloads() {
         .expect("block tx hash");
 
     let (mut txs_server, mut txs_client) = tcp_stream_pair();
-    let txs_http =
-        "GET /v1/chain/explorer/txs?status=confirmed&limit=20&cursor=0 HTTP/1.1\r\nHost: 127.0.0.1:5121\r\n\r\n";
+    let txs_http = "GET /v1/chain/explorer/txs?status=confirmed&limit=20&cursor=0 HTTP/1.1\r\nHost: 127.0.0.1:5121\r\n\r\n";
     maybe_handle_transfer_submit_request(
         &mut txs_server,
         txs_http.as_bytes(),
@@ -521,8 +520,7 @@ fn explorer_p1_endpoints_return_expected_payloads() {
     );
 
     let (mut contracts_server, mut contracts_client) = tcp_stream_pair();
-    let contracts_http =
-        "GET /v1/chain/explorer/contracts?limit=20&cursor=0 HTTP/1.1\r\nHost: 127.0.0.1:5121\r\n\r\n";
+    let contracts_http = "GET /v1/chain/explorer/contracts?limit=20&cursor=0 HTTP/1.1\r\nHost: 127.0.0.1:5121\r\n\r\n";
     maybe_handle_transfer_submit_request(
         &mut contracts_server,
         contracts_http.as_bytes(),
@@ -545,10 +543,12 @@ fn explorer_p1_endpoints_return_expected_payloads() {
     let (_, contracts): (u16, ExplorerContractsResponse) =
         decode_http_json_response(&contracts_response_bytes);
     assert!(contracts.ok);
-    assert!(contracts
-        .items
-        .iter()
-        .any(|item| item.contract_id == "contract:alpha"));
+    assert!(
+        contracts
+            .items
+            .iter()
+            .any(|item| item.contract_id == "contract:alpha")
+    );
 
     let (mut contract_server, mut contract_client) = tcp_stream_pair();
     let contract_http = "GET /v1/chain/explorer/contract?contract_id=contract:alpha HTTP/1.1\r\nHost: 127.0.0.1:5121\r\n\r\n";
@@ -604,20 +604,26 @@ fn explorer_p1_endpoints_return_expected_payloads() {
         decode_http_json_response(&assets_response_bytes);
     assert!(assets.ok);
     assert_eq!(assets.token_symbol, "OC");
-    assert!(assets
-        .holders
-        .iter()
-        .any(|item| item.account_id == "player:alice"));
-    assert!(assets
-        .holders
-        .iter()
-        .any(|item| item.account_id == "player:alice"
-            && item.restricted_starter_claim_balance == 125
-            && item.total_balance == 1500));
-    assert!(assets
-        .holders
-        .iter()
-        .all(|item| item.total_balance == item.liquid_balance + item.vested_balance));
+    assert!(
+        assets
+            .holders
+            .iter()
+            .any(|item| item.account_id == "player:alice")
+    );
+    assert!(
+        assets
+            .holders
+            .iter()
+            .any(|item| item.account_id == "player:alice"
+                && item.restricted_starter_claim_balance == 125
+                && item.total_balance == 1500)
+    );
+    assert!(
+        assets
+            .holders
+            .iter()
+            .all(|item| item.total_balance == item.liquid_balance + item.vested_balance)
+    );
     assert!(!assets.nft_supported);
 
     let (mut mempool_server, mut mempool_client) = tcp_stream_pair();

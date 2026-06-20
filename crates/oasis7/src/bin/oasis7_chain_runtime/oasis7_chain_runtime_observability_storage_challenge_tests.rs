@@ -113,8 +113,10 @@ fn build_chain_status_payload_marks_storage_challenge_network_degraded_not_ready
             && alert.summary.contains("provider lookup failed")
     }));
     assert_eq!(readiness.status, "not_ready");
-    assert!(readiness
-        .failed_gates
-        .iter()
-        .any(|gate| gate == "storage_challenge_network_degraded"));
+    assert!(
+        readiness
+            .failed_gates
+            .iter()
+            .any(|gate| gate == "storage_challenge_network_degraded")
+    );
 }

@@ -1,6 +1,6 @@
 use super::*;
 use oasis7::simulator::WorldSnapshot;
-use oasis7::viewer::{ViewerRequest, ViewerResponse, VIEWER_PROTOCOL_VERSION};
+use oasis7::viewer::{VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse};
 
 const HOSTED_SESSION_RUNTIME_PROBE_TIMEOUT_MS: u64 = 300;
 const HOSTED_SESSION_RUNTIME_PROBE_INTERVAL_MS: u64 = 1_000;
@@ -107,10 +107,10 @@ impl ViewerRuntimeProbeClient {
                     }
                 }
                 ViewerResponseLine::Timeout => {
-                    return Err("runtime probe timed out waiting for snapshot".to_string())
+                    return Err("runtime probe timed out waiting for snapshot".to_string());
                 }
                 ViewerResponseLine::Closed => {
-                    return Err("runtime probe closed before snapshot".to_string())
+                    return Err("runtime probe closed before snapshot".to_string());
                 }
             }
         }
@@ -122,10 +122,10 @@ impl ViewerRuntimeProbeClient {
                 ViewerResponseLine::Response(ViewerResponse::HelloAck { .. }) => return Ok(()),
                 ViewerResponseLine::Response(_) => {}
                 ViewerResponseLine::Timeout => {
-                    return Err("runtime probe timed out waiting for hello_ack".to_string())
+                    return Err("runtime probe timed out waiting for hello_ack".to_string());
                 }
                 ViewerResponseLine::Closed => {
-                    return Err("runtime probe closed before hello_ack".to_string())
+                    return Err("runtime probe closed before hello_ack".to_string());
                 }
             }
         }

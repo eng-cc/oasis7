@@ -173,8 +173,8 @@ fn submit_consensus_action_payload_accepts_signed_main_token_genesis_action() {
 }
 
 #[test]
-fn submit_consensus_action_payload_rejects_signed_main_token_genesis_action_with_wrong_controller_slot(
-) {
+fn submit_consensus_action_payload_rejects_signed_main_token_genesis_action_with_wrong_controller_slot()
+ {
     let runtime = NodeRuntime::new(
         NodeConfig::new(
             "node-token-genesis-wrong-slot",
@@ -397,8 +397,8 @@ fn submit_consensus_action_payload_accepts_signed_main_token_treasury_action() {
 }
 
 #[test]
-fn submit_consensus_action_payload_rejects_signed_main_token_treasury_action_with_wrong_controller_slot(
-) {
+fn submit_consensus_action_payload_rejects_signed_main_token_treasury_action_with_wrong_controller_slot()
+ {
     let runtime = NodeRuntime::new(
         NodeConfig::new(
             "node-token-treasury-wrong-slot",
@@ -607,8 +607,8 @@ fn submit_consensus_action_payload_accepts_signed_restricted_grant_admin_registr
 }
 
 #[test]
-fn submit_consensus_action_payload_rejects_restricted_grant_admin_registry_action_with_wrong_controller_slot(
-) {
+fn submit_consensus_action_payload_rejects_restricted_grant_admin_registry_action_with_wrong_controller_slot()
+ {
     let runtime = NodeRuntime::new(
         NodeConfig::new(
             "node-token-restricted-admin-wrong-slot",
@@ -639,7 +639,8 @@ fn submit_consensus_action_payload_rejects_restricted_grant_admin_registry_actio
     let err = runtime
         .submit_consensus_action_payload(1, payload)
         .expect_err("wrong restricted admin registry controller slot must fail");
-    assert!(err
-        .to_string()
-        .contains("restricted claim admin registry controller slot"));
+    assert!(
+        err.to_string()
+            .contains("restricted claim admin registry controller slot")
+    );
 }

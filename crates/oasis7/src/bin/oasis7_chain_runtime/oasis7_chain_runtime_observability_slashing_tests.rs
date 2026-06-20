@@ -175,18 +175,24 @@ fn build_chain_status_payload_marks_consensus_misbehavior_critical() {
     assert_eq!(status.pending_slashing_intent_count, 1);
     assert_eq!(status.quarantined_validator_count, 1);
     assert_eq!(status.slashable_stake_total, 60);
-    assert!(status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_misbehavior_evidence_present"));
-    assert!(status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_validator_quarantined"));
-    assert!(status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_slashing_intent_pending"));
+    assert!(
+        status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "consensus_misbehavior_evidence_present")
+    );
+    assert!(
+        status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "consensus_validator_quarantined")
+    );
+    assert!(
+        status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "consensus_slashing_intent_pending")
+    );
 
     let mut receipted_snapshot = snapshot.clone();
     receipted_snapshot.consensus.slashing_receipts = vec![NodeConsensusSlashingReceiptSnapshot {
@@ -219,10 +225,12 @@ fn build_chain_status_payload_marks_consensus_misbehavior_critical() {
     assert_eq!(receipted_status.slashing_receipt_count, 1);
     assert_eq!(receipted_status.applied_slashing_receipt_count, 1);
     assert_eq!(receipted_status.pending_slashing_intent_count, 0);
-    assert!(!receipted_status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_slashing_intent_pending"));
+    assert!(
+        !receipted_status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "consensus_slashing_intent_pending")
+    );
 }
 
 #[test]

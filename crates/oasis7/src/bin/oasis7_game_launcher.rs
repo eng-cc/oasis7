@@ -1,6 +1,6 @@
 use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_vec;
 use oasis7::observability::{
-    emit_stderr_or_event, init_tracing, resolve_trace_session_id, TRACE_SESSION_ID_ENV,
+    TRACE_SESSION_ID_ENV, emit_stderr_or_event, init_tracing, resolve_trace_session_id,
 };
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7_proto::storage_profile::StorageProfile;
@@ -15,7 +15,7 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::{error, info, Level};
+use tracing::{Level, error, info};
 #[path = "oasis7_game_launcher/cli.rs"]
 mod cli;
 #[path = "../hosted_access.rs"]
@@ -42,7 +42,7 @@ use cli::{
     deployment_mode_from_options, parse_host_port, parse_options, print_help,
     uses_provider_http_transport,
 };
-use hosted_access::{DeploymentMode, DEFAULT_DEPLOYMENT_MODE};
+use hosted_access::{DEFAULT_DEPLOYMENT_MODE, DeploymentMode};
 use hosted_account_identity::HostedAccountIdentityBroker;
 use hosted_player_session::HostedPlayerSessionIssuer;
 use oasis7::viewer::{ChainLinkPolicy, VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID};

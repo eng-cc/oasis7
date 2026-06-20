@@ -350,10 +350,12 @@ fn build_radiation_power_factory_registers_plant_and_generates_to_owner() {
     let event = kernel.step().expect("build radiation power factory");
     assert!(matches!(event.kind, WorldEventKind::FactoryBuilt { .. }));
     assert!(kernel.model().factories.contains_key("factory.power.alpha"));
-    assert!(kernel
-        .model()
-        .power_plants
-        .contains_key("factory.power.alpha"));
+    assert!(
+        kernel
+            .model()
+            .power_plants
+            .contains_key("factory.power.alpha")
+    );
 
     let events = kernel.process_power_generation_tick();
     assert!(!events.is_empty());
@@ -976,12 +978,14 @@ fn power_order_match_prefers_lower_ask_price() {
         other => panic!("expected power order placed event, got {other:?}"),
     }
 
-    assert!(kernel
-        .model()
-        .power_order_book
-        .open_orders
-        .iter()
-        .any(|entry| entry.order_id == high_ask_order_id));
+    assert!(
+        kernel
+            .model()
+            .power_order_book
+            .open_orders
+            .iter()
+            .any(|entry| entry.order_id == high_ask_order_id)
+    );
 }
 
 #[test]

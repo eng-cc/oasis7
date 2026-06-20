@@ -129,9 +129,11 @@ fn validator_admission_lifecycle_updates_effective_registry_and_allows_reapply_a
         .expect("resolve effective registry after revoke")
         .expect("effective registry after revoke");
     assert!(!revoked_registry.signer_bindings.contains_key("validator-c"));
-    assert!(!revoked_registry
-        .validator_stakes
-        .contains_key("validator-c"));
+    assert!(
+        !revoked_registry
+            .validator_stakes
+            .contains_key("validator-c")
+    );
 
     submit_candidate(
         &mut world,
@@ -212,9 +214,11 @@ fn validator_admission_probation_becomes_effective_once_activation_epoch_is_due(
         .resolve_governance_effective_finality_signer_registry()
         .expect("resolve pre-epoch registry")
         .expect("pre-epoch registry");
-    assert!(!pre_epoch_registry
-        .signer_bindings
-        .contains_key("validator-future"));
+    assert!(
+        !pre_epoch_registry
+            .signer_bindings
+            .contains_key("validator-future")
+    );
 
     for _ in 0..7 {
         world.step().expect("advance governance epoch");
@@ -307,7 +311,9 @@ fn validator_admission_rejects_zero_stake() {
     });
     world.step().expect("reject zero stake admission");
 
-    assert!(!world
-        .governance_validator_admissions()
-        .contains_key("candidate-zero"));
+    assert!(
+        !world
+            .governance_validator_admissions()
+            .contains_key("candidate-zero")
+    );
 }

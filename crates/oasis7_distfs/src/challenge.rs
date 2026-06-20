@@ -7,7 +7,7 @@ use oasis7_proto::distributed::{
 use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
 
-use super::{blake3_hex, validate_hash, LocalCasStore};
+use super::{LocalCasStore, blake3_hex, validate_hash};
 
 pub const STORAGE_CHALLENGE_VERSION: u64 = 1;
 pub const STORAGE_CHALLENGE_PROOF_KIND_CHUNK_HASH_V1: &str = "chunk_hash:v1";

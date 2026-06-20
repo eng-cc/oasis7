@@ -1,5 +1,5 @@
 use super::{
-    build_launcher_args, validate_game_config, LauncherConfig, LAUNCHER_AGENT_PROVIDER_FIELD_IDS,
+    LAUNCHER_AGENT_PROVIDER_FIELD_IDS, LauncherConfig, build_launcher_args, validate_game_config,
 };
 
 fn arg_value(args: &[String], flag: &str) -> Option<String> {

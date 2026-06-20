@@ -4,7 +4,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use wasmparser::Payload;
 
-use wasm_build_suite::{run_build, BuildMetadata, BuildReceipt, BuildRequest, DEFAULT_TARGET};
+use wasm_build_suite::{BuildMetadata, BuildReceipt, BuildRequest, DEFAULT_TARGET, run_build};
 
 fn template_manifest_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -56,9 +56,11 @@ fn minimal_template_dry_run_resolves_paths() {
 
     let output = run_build(&request).expect("dry-run build should succeed");
     assert!(output.dry_run);
-    assert!(output
-        .source_artifact_path
-        .ends_with("wasm32-unknown-unknown/debug/minimal_wasm_module.wasm"));
+    assert!(
+        output
+            .source_artifact_path
+            .ends_with("wasm32-unknown-unknown/debug/minimal_wasm_module.wasm")
+    );
     assert_eq!(
         output.packaged_wasm_path,
         out_dir.join(format!("{module_id}.wasm"))

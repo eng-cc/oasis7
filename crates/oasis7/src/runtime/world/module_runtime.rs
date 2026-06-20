@@ -6,8 +6,8 @@ use oasis7_wasm_abi::{
     ModuleContext, ModuleEmitEvent, ModuleOutput, ModuleSandbox, ModuleStateUpdate,
 };
 use oasis7_wasm_router::{
-    prepare_subscriptions, prepared_module_subscribes_to_action,
-    prepared_module_subscribes_to_event, PreparedSubscription,
+    PreparedSubscription, prepare_subscriptions, prepared_module_subscribes_to_action,
+    prepared_module_subscribes_to_event,
 };
 
 use super::super::util::{hash_json, to_canonical_cbor};
@@ -16,11 +16,11 @@ use super::super::{
     ModuleLimits, ModuleManifest, ModuleRegistry, ModuleSubscriptionStage, WorldError, WorldEvent,
     WorldEventBody,
 };
+use super::World;
 use super::module_runtime_labels::{
     action_kind_label, event_kind_label, module_kind_label, module_role_label,
     subscription_stage_label,
 };
-use super::World;
 use crate::simulator::ModuleInstallTarget;
 
 fn count_exceeds_limit(count: usize, limit: u32) -> bool {

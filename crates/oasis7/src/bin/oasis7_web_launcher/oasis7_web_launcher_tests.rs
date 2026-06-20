@@ -7,19 +7,22 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::runtime_paths::{repo_root_dir, viewer_dev_dist_candidates};
 use super::{
-    build_chain_runtime_args, build_game_url, build_launcher_args,
-    build_launcher_args_with_launcher_bin, chain_error_code_for_state, execute_gui_agent_action,
-    finalize_chain_start_outcome, gui_agent_capabilities_response,
+    ChainP2pStatusSnapshot, ChainRecoverySnapshot, ChainRuntimeStatus, CliOptions,
+    DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND, DEFAULT_LISTEN_BIND, DEFAULT_SCENARIO,
+    LauncherConfig, ProcessState, ServiceState, build_chain_runtime_args, build_game_url,
+    build_launcher_args, build_launcher_args_with_launcher_bin, chain_error_code_for_state,
+    execute_gui_agent_action, finalize_chain_start_outcome, gui_agent_capabilities_response,
     parse_chain_replication_bootstrap_peers, parse_chain_validators, parse_host_port,
     parse_options, parse_port, query_chain_status_endpoint, remap_transfer_runtime_target,
     snapshot_from_state, stop_chain_process, stop_process, validate_chain_config,
-    validate_game_config, validate_game_config_with_launcher_bin, ChainP2pStatusSnapshot,
-    ChainRecoverySnapshot, ChainRuntimeStatus, CliOptions, LauncherConfig, ProcessState,
-    ServiceState, DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND, DEFAULT_LISTEN_BIND,
-    DEFAULT_SCENARIO,
+    validate_game_config, validate_game_config_with_launcher_bin,
 };
 use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_csv;
 use oasis7_proto::storage_profile::StorageProfile;
+
+fn contains_issue(issues: &[String], text: &str) -> bool {
+    issues.iter().any(|item| item.contains(text))
+}
 
 #[test]
 fn parse_options_defaults() {
@@ -59,10 +62,12 @@ fn parse_options_defaults() {
     assert!(options.initial_config.llm_enabled);
     assert!(!options.initial_config.chain_enabled);
     assert!(!options.initial_config.auto_open_browser);
-    assert!(options
-        .initial_config
-        .chain_node_id
-        .starts_with(&format!("{DEFAULT_CHAIN_NODE_ID}-fresh-")));
+    assert!(
+        options
+            .initial_config
+            .chain_node_id
+            .starts_with(&format!("{DEFAULT_CHAIN_NODE_ID}-fresh-"))
+    );
 }
 
 #[test]
@@ -550,11 +555,9 @@ fn validate_game_config_reports_missing_required_fields() {
     };
     let issues = validate_game_config(&config);
     assert!(!issues.is_empty());
-    assert!(issues.iter().any(|item| item.contains("live bind")));
-    assert!(issues.iter().any(|item| item.contains("viewer host")));
-    assert!(issues
-        .iter()
-        .any(|item| item.contains("viewer static directory")));
+    assert!(contains_issue(&issues, "live bind"));
+    assert!(contains_issue(&issues, "viewer host"));
+    assert!(contains_issue(&issues, "viewer static directory"));
 }
 
 #[test]
@@ -580,9 +583,7 @@ fn validate_game_config_rejects_no_llm_playability_config() {
         ..LauncherConfig::default()
     };
     let issues = validate_game_config(&config);
-    assert!(issues
-        .iter()
-        .any(|item| item.contains("llm must stay enabled")));
+    assert!(contains_issue(&issues, "llm must stay enabled"));
     let _ = fs::remove_dir_all(static_dir);
 }
 
@@ -667,16 +668,12 @@ fn validate_chain_config_reports_missing_required_fields() {
     };
     let issues = validate_chain_config(&config);
     assert!(!issues.is_empty());
-    assert!(issues.iter().any(|item| item.contains("chain status bind")));
-    assert!(issues.iter().any(|item| item.contains("chain node id")));
-    assert!(issues
-        .iter()
-        .any(|item| item.contains("chain storage profile")));
-    assert!(issues
-        .iter()
-        .any(|item| item.contains("chain P2P user mode")));
-    assert!(issues.iter().any(|item| item.contains("bootstrap peers")));
-    assert!(issues.iter().any(|item| item.contains("chain pos")));
+    assert!(contains_issue(&issues, "chain status bind"));
+    assert!(contains_issue(&issues, "chain node id"));
+    assert!(contains_issue(&issues, "chain storage profile"));
+    assert!(contains_issue(&issues, "chain P2P user mode"));
+    assert!(contains_issue(&issues, "bootstrap peers"));
+    assert!(contains_issue(&issues, "chain pos"));
 }
 
 #[test]
@@ -691,9 +688,7 @@ fn validate_chain_config_requires_public_entry_confirmation() {
         chain_node_validators: "chain-a:100".to_string(),
         ..LauncherConfig::default()
     });
-    assert!(issues
-        .iter()
-        .any(|item| item.contains("explicit confirmation")));
+    assert!(contains_issue(&issues, "explicit confirmation"));
 }
 
 #[test]
@@ -708,9 +703,10 @@ fn validate_chain_config_rejects_invalid_manifest_path() {
         chain_node_validators: "chain-a:100".to_string(),
         ..LauncherConfig::default()
     });
-    assert!(issues
-        .iter()
-        .any(|item| item.contains("chain network tier manifest is invalid")));
+    assert!(contains_issue(
+        &issues,
+        "chain network tier manifest is invalid"
+    ));
 }
 
 #[test]
@@ -855,10 +851,12 @@ fn gui_agent_set_chain_network_tier_updates_config_manifest() {
     );
     assert_eq!(
         encoded["state"]["config"]["chain_network_tier_manifest"],
-        serde_json::json!(repo_root_dir()
-            .join("doc/testing/templates/network-tier-mainnet.example.json")
-            .to_string_lossy()
-            .to_string())
+        serde_json::json!(
+            repo_root_dir()
+                .join("doc/testing/templates/network-tier-mainnet.example.json")
+                .to_string_lossy()
+                .to_string()
+        )
     );
     assert_eq!(state.config.chain_network_tier, "mainnet");
     assert!(state.updated_at_unix_ms > 0);
@@ -912,10 +910,12 @@ fn gui_agent_query_chain_disabled_returns_structured_error() {
         serde_json::json!("query_transfer_accounts")
     );
     assert_eq!(encoded["error_code"], serde_json::json!("chain_disabled"));
-    assert!(encoded
-        .get("data")
-        .and_then(|value| value.get("error_code"))
-        .is_some());
+    assert!(
+        encoded
+            .get("data")
+            .and_then(|value| value.get("error_code"))
+            .is_some()
+    );
     assert!(encoded.get("state").is_some());
 }
 
@@ -939,16 +939,20 @@ fn gui_agent_action_response_includes_state_snapshot_fields() {
     assert_eq!(encoded["action"], serde_json::json!("stop_game"));
     assert!(encoded.get("error_code").is_none());
     assert!(encoded.get("state").is_some());
-    assert!(encoded
-        .get("state")
-        .and_then(|value| value.get("status"))
-        .and_then(serde_json::Value::as_str)
-        .is_some());
-    assert!(encoded
-        .get("state")
-        .and_then(|value| value.get("chain_status"))
-        .and_then(serde_json::Value::as_str)
-        .is_some());
+    assert!(
+        encoded
+            .get("state")
+            .and_then(|value| value.get("status"))
+            .and_then(serde_json::Value::as_str)
+            .is_some()
+    );
+    assert!(
+        encoded
+            .get("state")
+            .and_then(|value| value.get("chain_status"))
+            .and_then(serde_json::Value::as_str)
+            .is_some()
+    );
 }
 
 #[test]
@@ -1027,9 +1031,11 @@ fn gui_agent_capabilities_include_recover_chain_action() {
         .get("actions")
         .and_then(serde_json::Value::as_array)
         .expect("actions array");
-    assert!(actions
-        .iter()
-        .any(|item| item.as_str() == Some("recover_chain")));
+    assert!(
+        actions
+            .iter()
+            .any(|item| item.as_str() == Some("recover_chain"))
+    );
 }
 
 #[test]

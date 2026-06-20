@@ -16,6 +16,9 @@ fn build_chain_runtime_args_resolves_public_testnet_manifest_from_tier() {
     let args = build_chain_runtime_args(&config).expect("args should build");
 
     assert!(args.contains(&"--network-tier-manifest".to_string()));
-    assert!(args
-        .contains(&"doc/testing/templates/network-tier-public-testnet.example.json".to_string()));
+    assert!(
+        args.contains(
+            &"doc/testing/templates/network-tier-public-testnet.example.json".to_string()
+        )
+    );
 }

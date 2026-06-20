@@ -1,10 +1,11 @@
 use super::{
+    ChainModuleReleaseAttestationSubmitResponse,
     build_module_release_attestation_submit_action_payload,
     maybe_handle_module_release_attestation_submit_request,
-    parse_module_release_attestation_submit_request, ChainModuleReleaseAttestationSubmitResponse,
+    parse_module_release_attestation_submit_request,
 };
 use oasis7::consensus_action_payload::{
-    decode_consensus_action_payload, ConsensusActionPayloadBody,
+    ConsensusActionPayloadBody, decode_consensus_action_payload,
 };
 use oasis7::runtime::Action;
 use oasis7_node::{

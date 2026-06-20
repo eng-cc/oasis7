@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::distributed_net::{DistributedNetwork, InMemoryNetwork};
 
 use crate::{
-    error::WorldError, FileMembershipRevocationDeadLetterReplayPolicyStore,
+    FileMembershipRevocationDeadLetterReplayPolicyStore,
     InMemoryMembershipRevocationAlertDeadLetterStore,
     InMemoryMembershipRevocationAlertRecoveryStore,
     InMemoryMembershipRevocationCoordinatorStateStore,
@@ -19,7 +19,7 @@ use crate::{
     MembershipRevocationDeadLetterReplayPolicyState,
     MembershipRevocationDeadLetterReplayPolicyStore,
     MembershipRevocationDeadLetterReplayRollbackGuard, MembershipRevocationPendingAlert,
-    MembershipSyncClient, StoreBackedMembershipRevocationScheduleCoordinator,
+    MembershipSyncClient, StoreBackedMembershipRevocationScheduleCoordinator, error::WorldError,
 };
 
 fn sample_client() -> MembershipSyncClient {

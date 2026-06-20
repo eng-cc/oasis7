@@ -96,9 +96,11 @@ fn kernel_wasm_pre_action_evaluator_deny_rejects_action() {
     match event.kind {
         WorldEventKind::ActionRejected { reason } => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| note.contains("blocked by wasm pre-action rule")));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| note.contains("blocked by wasm pre-action rule"))
+                );
             }
             other => panic!("unexpected reject reason: {other:?}"),
         },
@@ -118,9 +120,11 @@ fn kernel_wasm_pre_action_evaluator_error_is_translated_to_rule_denied() {
     match event.kind {
         WorldEventKind::ActionRejected { reason } => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| note.contains("wasm pre-action evaluator failed")));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| note.contains("wasm pre-action evaluator failed"))
+                );
                 assert!(notes.iter().any(|note| note.contains("sandbox timeout")));
             }
             other => panic!("unexpected reject reason: {other:?}"),

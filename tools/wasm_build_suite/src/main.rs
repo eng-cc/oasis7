@@ -1,6 +1,6 @@
 use std::env;
 use std::path::PathBuf;
-use wasm_build_suite::{run_build, BuildOutput, BuildRequest, DEFAULT_OUT_DIR, DEFAULT_TARGET};
+use wasm_build_suite::{BuildOutput, BuildRequest, DEFAULT_OUT_DIR, DEFAULT_TARGET, run_build};
 
 fn main() {
     if let Err(err) = run_cli() {

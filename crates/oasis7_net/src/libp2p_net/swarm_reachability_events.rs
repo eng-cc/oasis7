@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
+use libp2p::Multiaddr;
 use libp2p::autonat;
 use libp2p::swarm::Swarm;
-use libp2p::Multiaddr;
 
 use super::reachability::{
-    note_autonat_status, note_external_addr_confirmed, note_external_addr_expired,
-    should_register_external_listen_addr, sync_relay_reservation_from_listening_addrs,
-    Libp2pReachabilitySnapshot, LiveAutoNatStatus,
+    Libp2pReachabilitySnapshot, LiveAutoNatStatus, note_autonat_status,
+    note_external_addr_confirmed, note_external_addr_expired, should_register_external_listen_addr,
+    sync_relay_reservation_from_listening_addrs,
 };
 use super::swarm_behaviour::Behaviour;
 use super::utils::push_bounded_clone;

@@ -6,15 +6,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::distributed_net::{DistributedNetwork, InMemoryNetwork};
 
 use crate::{
-    error::WorldError, InMemoryMembershipRevocationAlertSink,
-    InMemoryMembershipRevocationScheduleCoordinator,
+    InMemoryMembershipRevocationAlertSink, InMemoryMembershipRevocationScheduleCoordinator,
     InMemoryMembershipRevocationScheduleStateStore, MembershipDirectorySignerKeyring,
     MembershipRevocationAlertDedupPolicy, MembershipRevocationAlertDedupState,
     MembershipRevocationAlertPolicy, MembershipRevocationAlertSeverity,
     MembershipRevocationAlertSink, MembershipRevocationAnomalyAlert,
     MembershipRevocationReconcilePolicy, MembershipRevocationReconcileSchedulePolicy,
     MembershipRevocationReconcileScheduleState, MembershipRevocationScheduleCoordinator,
-    MembershipRevocationScheduleStateStore, MembershipSyncClient,
+    MembershipRevocationScheduleStateStore, MembershipSyncClient, error::WorldError,
 };
 
 fn sample_client() -> MembershipSyncClient {
@@ -278,9 +277,11 @@ fn run_revocation_reconcile_coordinated_reports_not_acquired_when_locked() {
     let alert_sink = InMemoryMembershipRevocationAlertSink::new();
     let coordinator = InMemoryMembershipRevocationScheduleCoordinator::new();
 
-    assert!(coordinator
-        .acquire("w1", "node-a", 1000, 1000)
-        .expect("seed lock"));
+    assert!(
+        coordinator
+            .acquire("w1", "node-a", 1000, 1000)
+            .expect("seed lock")
+    );
 
     let report = client
         .run_revocation_reconcile_coordinated(
@@ -313,9 +314,11 @@ fn run_revocation_reconcile_coordinated_reports_not_acquired_when_locked() {
 #[test]
 fn in_memory_schedule_coordinator_rejects_expiry_overflow_without_mutation() {
     let coordinator = InMemoryMembershipRevocationScheduleCoordinator::new();
-    assert!(coordinator
-        .acquire("w1", "node-a", 1000, 500)
-        .expect("seed lease"));
+    assert!(
+        coordinator
+            .acquire("w1", "node-a", 1000, 500)
+            .expect("seed lease")
+    );
 
     let err = coordinator
         .acquire("w1", "node-a", i64::MAX, 1)

@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{
-    resolve_viewer_static_dir_with_override, viewer_dev_dist_candidates, DEFAULT_VIEWER_STATIC_DIR,
-    GAME_STATIC_DIR_ENV,
+    DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV, resolve_viewer_static_dir_with_override,
+    viewer_dev_dist_candidates,
 };
 
 #[test]

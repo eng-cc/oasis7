@@ -20,7 +20,7 @@
 - 脚本路径：`scripts/pre-commit.sh`
 - 运行命令：`./scripts/pre-commit.sh`
 - 执行内容：
-  - 先通过 `git diff --cached --name-only --diff-filter=ACMR -- '*.rs'` 收集已暂存 Rust 文件，再执行 `env -u RUSTC_WRAPPER rustfmt --edition 2021 <files>`，并自动 `git add` 回暂存区。
+  - 先通过 `git diff --cached --name-only --diff-filter=ACMR -- '*.rs'` 收集已暂存 Rust 文件，再执行 `env -u RUSTC_WRAPPER rustfmt --edition 2024 <files>`，并自动 `git add` 回暂存区。
   - 调用统一测试清单脚本：`./scripts/ci-tests.sh commit`。
     - `commit` tier 固定覆盖 `doc-governance + rust-size + fmt --check + oasis7_consensus --lib + oasis7_distfs --lib + software-safe feedback contract`。
     - `cargo test -p oasis7 --tests --features test_tier_required` 与 `cargo test -p oasis7_viewer` / `cargo check -p oasis7_viewer --target wasm32-unknown-unknown` 都不进入默认提交路径；这些较重校验继续保留在显式 `./scripts/ci-tests.sh required` 与 CI required gate 中，本地 landing 前若需要兜底 viewer Rust 回归，也应显式执行该命令。

@@ -614,7 +614,10 @@ impl WorldState {
                     return Err(WorldError::ResourceBalanceInvalid {
                         reason: format!(
                             "agent claim reclaim settlement mismatch: target={} collected={} penalty={} refund={}",
-                            target_agent_id, collected_upkeep_amount, penalty_amount, refunded_bond_amount
+                            target_agent_id,
+                            collected_upkeep_amount,
+                            penalty_amount,
+                            refunded_bond_amount
                         ),
                     });
                 }

@@ -2,8 +2,8 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-use oasis7_wasm_executor::{snapshot_global_wasm_executor_metrics, WasmExecutorMetricsSnapshot};
-use oasis7_wasm_router::{snapshot_global_wasm_router_metrics, WasmRouterMetricsSnapshot};
+use oasis7_wasm_executor::{WasmExecutorMetricsSnapshot, snapshot_global_wasm_executor_metrics};
+use oasis7_wasm_router::{WasmRouterMetricsSnapshot, snapshot_global_wasm_router_metrics};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
@@ -258,10 +258,12 @@ mod tests {
         let _ = fs::remove_file(&path);
 
         assert!(!status.metrics_available);
-        assert!(status
-            .degraded_reason
-            .as_deref()
-            .is_some_and(|reason| reason.contains("parse build metrics")));
+        assert!(
+            status
+                .degraded_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("parse build metrics"))
+        );
     }
 
     fn temp_metrics_path(label: &str) -> std::path::PathBuf {

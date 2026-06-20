@@ -397,7 +397,7 @@ mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
     use oasis7::consensus_action_payload::{
-        verify_main_token_runtime_action_auth, MainTokenActionAuthProof, MainTokenActionAuthScheme,
+        MainTokenActionAuthProof, MainTokenActionAuthScheme, verify_main_token_runtime_action_auth,
     };
 
     fn sample_keys_file() -> String {
@@ -468,9 +468,11 @@ mod tests {
         };
         verify_main_token_runtime_action_auth(&action, &proof).expect("verify signature");
         assert!(request.signature.starts_with("octransferauth:v1:"));
-        assert!(!serde_json::to_string(&request)
-            .expect("request json")
-            .contains("chain_private_key_hex"));
+        assert!(
+            !serde_json::to_string(&request)
+                .expect("request json")
+                .contains("chain_private_key_hex")
+        );
         let memo_config = CliConfig {
             command: Command::Sign,
             keys_file: path.clone(),

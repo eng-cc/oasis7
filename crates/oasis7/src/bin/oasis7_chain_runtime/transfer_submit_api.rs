@@ -5,10 +5,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use oasis7::consensus_action_payload::{
+    ConsensusActionAuthEnvelope, ConsensusActionPayloadBody, ConsensusActionPayloadEnvelope,
+    MainTokenActionAuthError, MainTokenActionAuthProof, MainTokenActionAuthScheme,
     decode_consensus_action_payload, encode_consensus_action_payload,
-    verify_main_token_runtime_action_auth, ConsensusActionAuthEnvelope, ConsensusActionPayloadBody,
-    ConsensusActionPayloadEnvelope, MainTokenActionAuthError, MainTokenActionAuthProof,
-    MainTokenActionAuthScheme,
+    verify_main_token_runtime_action_auth,
 };
 use oasis7::runtime::Action;
 use oasis7_node::NodeRuntime;

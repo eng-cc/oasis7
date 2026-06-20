@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use super::super::peer_manager::{PeerManagerHealthStatus, PeerManagerPolicy};
 use super::super::peer_manager_active_set::{
-    candidate_status_with_active_set, candidate_would_degrade_admitted_peers, ActivePeerCandidate,
-    ActivePeerSetStats,
+    ActivePeerCandidate, ActivePeerSetStats, candidate_status_with_active_set,
+    candidate_would_degrade_admitted_peers,
 };
 use super::*;
 

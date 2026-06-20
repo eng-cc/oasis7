@@ -110,23 +110,36 @@ impl ProviderCheckStatus {
 
     pub(crate) fn detail(&self) -> Option<String> {
         match self {
-            Self::Ready(snapshot) | Self::Degraded(snapshot) | Self::Incompatible(snapshot) => Some(format!(
-                "provider_id={} name={} version={} protocol={} compatibility_status={} status={} queue_depth={} capabilities={} supported_action_sets={} check_latency_ms={{info:{}, health:{}, total:{}}} last_error={} fallback_reason={}",
-                snapshot.provider_id,
-                snapshot.name,
-                snapshot.version,
-                snapshot.protocol_version,
-                snapshot.compatibility_status.as_str(),
-                snapshot.status,
-                snapshot.queue_depth.map(|value| value.to_string()).unwrap_or_else(|| "n/a".to_string()),
-                if snapshot.capabilities.is_empty() { "none".to_string() } else { snapshot.capabilities.join(",") },
-                if snapshot.supported_action_sets.is_empty() { "none".to_string() } else { snapshot.supported_action_sets.join(",") },
-                snapshot.info_latency_ms,
-                snapshot.health_latency_ms,
-                snapshot.total_latency_ms,
-                snapshot.last_error.as_deref().unwrap_or("none"),
-                snapshot.fallback_reason.as_deref().unwrap_or("none")
-            )),
+            Self::Ready(snapshot) | Self::Degraded(snapshot) | Self::Incompatible(snapshot) => {
+                Some(format!(
+                    "provider_id={} name={} version={} protocol={} compatibility_status={} status={} queue_depth={} capabilities={} supported_action_sets={} check_latency_ms={{info:{}, health:{}, total:{}}} last_error={} fallback_reason={}",
+                    snapshot.provider_id,
+                    snapshot.name,
+                    snapshot.version,
+                    snapshot.protocol_version,
+                    snapshot.compatibility_status.as_str(),
+                    snapshot.status,
+                    snapshot
+                        .queue_depth
+                        .map(|value| value.to_string())
+                        .unwrap_or_else(|| "n/a".to_string()),
+                    if snapshot.capabilities.is_empty() {
+                        "none".to_string()
+                    } else {
+                        snapshot.capabilities.join(",")
+                    },
+                    if snapshot.supported_action_sets.is_empty() {
+                        "none".to_string()
+                    } else {
+                        snapshot.supported_action_sets.join(",")
+                    },
+                    snapshot.info_latency_ms,
+                    snapshot.health_latency_ms,
+                    snapshot.total_latency_ms,
+                    snapshot.last_error.as_deref().unwrap_or("none"),
+                    snapshot.fallback_reason.as_deref().unwrap_or("none")
+                ))
+            }
             Self::Unsupported(detail)
             | Self::InvalidConfig(detail)
             | Self::Unreachable(detail)

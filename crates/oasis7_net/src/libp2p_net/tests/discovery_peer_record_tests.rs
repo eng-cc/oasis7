@@ -663,10 +663,12 @@ fn clear_disconnected_peer_state_removes_peer_record_cooldowns() {
     assert!(!cached_discovery_peer_cooldowns.contains_key(&target_peer_id));
     assert!(!peers.contains(&target_peer_id));
     assert!(!admitted_active_peers.contains(&target_peer_id));
-    assert!(!event_connected_peers
-        .lock()
-        .expect("lock connected peers")
-        .contains(&target_peer_id));
+    assert!(
+        !event_connected_peers
+            .lock()
+            .expect("lock connected peers")
+            .contains(&target_peer_id)
+    );
 
     let connected_requested = super::super::discovery::maybe_request_connected_peer_record(
         &mut swarm,

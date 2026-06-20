@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use libp2p::Multiaddr;
 use libp2p::identity::Keypair;
 use libp2p::kad;
 use libp2p::swarm::Swarm;
-use libp2p::Multiaddr;
 
 use oasis7_proto::distributed_dht::PeerRecord;
 

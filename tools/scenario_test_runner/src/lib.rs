@@ -1,5 +1,5 @@
 use oasis7::simulator::{
-    build_world_model, WorldConfig, WorldInitConfig, WorldInitReport, WorldModel, WorldScenario,
+    WorldConfig, WorldInitConfig, WorldInitReport, WorldModel, WorldScenario, build_world_model,
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;

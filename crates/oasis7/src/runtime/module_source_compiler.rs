@@ -382,7 +382,10 @@ mod tests {
         let _guard = module_source_env_lock().lock().expect("env lock");
         let key = module_source_env_key("COMPILER");
         let _env_guard = TestEnvGuard::capture(key.as_str());
-        std::env::set_var(key.as_str(), "/tmp/oasis7-module-source-compiler");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(key.as_str(), "/tmp/oasis7-module-source-compiler");
+        }
 
         assert_eq!(
             module_source_env_non_empty("COMPILER").as_deref(),
@@ -397,11 +400,17 @@ mod tests {
         let _env_guard = TestEnvGuard::capture(key.as_str());
         let removed_old_brand_key = removed_old_brand_module_source_env("COMPILER");
         let _removed_old_brand_guard = TestEnvGuard::capture(removed_old_brand_key.as_str());
-        std::env::remove_var(key.as_str());
-        std::env::set_var(
-            removed_old_brand_key.as_str(),
-            "/tmp/removed-old-brand-module-source-compiler",
-        );
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(key.as_str());
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(
+                removed_old_brand_key.as_str(),
+                "/tmp/removed-old-brand-module-source-compiler",
+            );
+        }
 
         assert!(module_source_env_non_empty("COMPILER").is_none());
     }
@@ -432,9 +441,15 @@ mod tests {
     impl Drop for TestEnvGuard {
         fn drop(&mut self) {
             if let Some(value) = self.previous.as_ref() {
-                std::env::set_var(self.key.as_str(), value);
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::set_var(self.key.as_str(), value);
+                }
             } else {
-                std::env::remove_var(self.key.as_str());
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::remove_var(self.key.as_str());
+                }
             }
         }
     }

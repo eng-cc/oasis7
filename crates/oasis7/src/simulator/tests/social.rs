@@ -147,12 +147,13 @@ fn social_adjudication_confirm_slashes_challenge_stake_and_releases_publisher() 
         .expect("fact exists");
     assert_eq!(fact.lifecycle, SocialFactLifecycleState::Confirmed);
     assert!(fact.stake.is_none());
-    assert!(fact
-        .challenge
-        .as_ref()
-        .expect("challenge exists")
-        .stake
-        .is_none());
+    assert!(
+        fact.challenge
+            .as_ref()
+            .expect("challenge exists")
+            .stake
+            .is_none()
+    );
     assert_eq!(electricity_of(&kernel, "agent-a"), 1_000);
     assert_eq!(electricity_of(&kernel, "agent-c"), 980);
     assert_eq!(

@@ -8,12 +8,12 @@ use crate::runtime::{
     WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
-    evaluate_provider_compatibility, Action as SimulatorAction, ActionCatalogEntry, ActionResult,
-    AgentDecision, AgentDecisionTrace, AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
+    Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace,
+    AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
     LlmAgentBehavior, LlmAgentConfig, OpenAiChatCompletionClient, ProviderAgentChatRequest,
     ProviderBackedAgentBehavior, ProviderExecutionMode, ProviderLoopbackAdapter,
-    ProviderLoopbackHttpClient, ResourceOwner, WorldConfig, WorldEvent, WorldEventKind,
-    WorldJournal, WorldKernel, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
+    ProviderLoopbackHttpClient, ResourceOwner, SNAPSHOT_VERSION, WorldConfig, WorldEvent,
+    WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot, evaluate_provider_compatibility,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -1075,7 +1075,10 @@ mod tests {
     #[test]
     fn runtime_live_llm_timeout_defaults_to_configured_budget() {
         let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
-        std::env::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
+        }
         assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 30_000);
         assert_eq!(resolve_runtime_live_llm_timeout_ms(8_000), 8_000);
     }
@@ -1083,9 +1086,15 @@ mod tests {
     #[test]
     fn runtime_live_llm_timeout_respects_env_ceiling_without_expanding_budget() {
         let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
-        std::env::set_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS, "9000");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS, "9000");
+        }
         assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 9_000);
         assert_eq!(resolve_runtime_live_llm_timeout_ms(4_000), 4_000);
-        std::env::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
+        }
     }
 }

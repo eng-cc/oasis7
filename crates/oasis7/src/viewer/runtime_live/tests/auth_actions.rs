@@ -123,29 +123,41 @@ fn runtime_step_control_reports_blocked_without_llm_mode() {
         read_control_completion_ack(&client, Duration::from_millis(250)).expect("blocked step ack");
     assert_eq!(ack.status, ControlCompletionStatus::Blocked);
     assert_eq!(ack.error_code.as_deref(), Some("llm_mode_required"));
-    assert!(ack
-        .error_message
-        .as_deref()
-        .is_some_and(|message| message.contains("--llm")));
+    assert!(
+        ack.error_message
+            .as_deref()
+            .is_some_and(|message| message.contains("--llm"))
+    );
 
     let feedback = server
         .latest_player_gameplay_feedback
         .as_ref()
         .expect("blocked feedback recorded");
     assert_eq!(feedback.stage, "blocked");
-    assert!(feedback
-        .reason
-        .as_deref()
-        .is_some_and(|reason| reason.contains("--llm")));
+    assert!(
+        feedback
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("--llm"))
+    );
 }
 
 #[test]
 fn runtime_step_control_reports_llm_init_failed_when_provider_unavailable() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_MODEL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_BASE_URL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_API_KEY);
+    }
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -169,29 +181,41 @@ fn runtime_step_control_reports_llm_init_failed_when_provider_unavailable() {
         .expect("blocked init failure ack");
     assert_eq!(ack.status, ControlCompletionStatus::Blocked);
     assert_eq!(ack.error_code.as_deref(), Some("llm_init_failed"));
-    assert!(ack
-        .error_message
-        .as_deref()
-        .is_some_and(|message| message.contains("configured and reachable LLM provider")));
+    assert!(
+        ack.error_message
+            .as_deref()
+            .is_some_and(|message| message.contains("configured and reachable LLM provider"))
+    );
 
     let feedback = server
         .latest_player_gameplay_feedback
         .as_ref()
         .expect("blocked feedback recorded");
     assert_eq!(feedback.stage, "blocked");
-    assert!(feedback
-        .reason
-        .as_deref()
-        .is_some_and(|reason| { reason.contains("configured and reachable LLM provider") }));
+    assert!(
+        feedback
+            .reason
+            .as_deref()
+            .is_some_and(|reason| { reason.contains("configured and reachable LLM provider") })
+    );
 }
 
 #[test]
 fn runtime_background_play_stops_when_llm_access_is_unavailable() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_MODEL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_BASE_URL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_API_KEY);
+    }
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -222,10 +246,12 @@ fn runtime_background_play_stops_when_llm_access_is_unavailable() {
         .expect("blocked feedback recorded");
     assert_eq!(feedback.action, "play");
     assert_eq!(feedback.stage, "blocked");
-    assert!(feedback
-        .reason
-        .as_deref()
-        .is_some_and(|reason| { reason.contains("configured and reachable LLM provider") }));
+    assert!(
+        feedback
+            .reason
+            .as_deref()
+            .is_some_and(|reason| { reason.contains("configured and reachable LLM provider") })
+    );
 }
 
 #[test]
@@ -277,10 +303,22 @@ fn runtime_background_play_tolerates_transient_llm_failure_after_confirmed_progr
             }
         }
     });
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -320,10 +358,12 @@ fn runtime_background_play_tolerates_transient_llm_failure_after_confirmed_progr
         .expect("blocked feedback recorded");
     assert_eq!(feedback.action, "play");
     assert_eq!(feedback.stage, "blocked");
-    assert!(feedback
-        .reason
-        .as_deref()
-        .is_some_and(|reason| reason.contains("provider temporarily unavailable")));
+    assert!(
+        feedback
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("provider temporarily unavailable"))
+    );
     clear_runtime_provider_env();
 }
 
@@ -385,10 +425,22 @@ fn runtime_background_play_stops_on_non_retryable_provider_error_after_progress(
             }
         }
     });
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -417,10 +469,12 @@ fn runtime_background_play_stops_on_non_retryable_provider_error_after_progress(
         .expect("blocked feedback recorded");
     assert_eq!(feedback.action, "play");
     assert_eq!(feedback.stage, "blocked");
-    assert!(feedback
-        .reason
-        .as_deref()
-        .is_some_and(|reason| reason.contains("provider_unauthorized")));
+    assert!(
+        feedback
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("provider_unauthorized"))
+    );
     clear_runtime_provider_env();
 }
 
@@ -458,10 +512,11 @@ fn runtime_step_control_surfaces_runtime_failure_as_blocked_ack() {
     assert_eq!(ack.status, ControlCompletionStatus::Blocked);
     assert_eq!(ack.error_code.as_deref(), Some("agent_not_found"));
     assert_eq!(ack.delta_logical_time, 1);
-    assert!(ack
-        .error_message
-        .as_deref()
-        .is_some_and(|message| message.contains(missing_agent.as_str())));
+    assert!(
+        ack.error_message
+            .as_deref()
+            .is_some_and(|message| message.contains(missing_agent.as_str()))
+    );
 
     let feedback = server
         .latest_player_gameplay_feedback
@@ -469,14 +524,18 @@ fn runtime_step_control_surfaces_runtime_failure_as_blocked_ack() {
         .expect("blocked feedback recorded");
     assert_eq!(feedback.stage, "blocked");
     assert_eq!(feedback.delta_logical_time, 1);
-    assert!(feedback
-        .reason
-        .as_deref()
-        .is_some_and(|reason| reason.contains(missing_agent.as_str())));
-    assert!(feedback
-        .hint
-        .as_deref()
-        .is_some_and(|hint| hint.contains("restore the missing agent")));
+    assert!(
+        feedback
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains(missing_agent.as_str()))
+    );
+    assert!(
+        feedback
+            .hint
+            .as_deref()
+            .is_some_and(|hint| hint.contains("restore the missing agent"))
+    );
 }
 
 #[derive(Debug, Clone)]
@@ -536,10 +595,22 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
             }
         }
     });
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)

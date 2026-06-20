@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 
-use super::{make_temp_dir, start_static_http_server, stop_static_http_server, DeploymentMode};
+use super::{DeploymentMode, make_temp_dir, start_static_http_server, stop_static_http_server};
 
 #[test]
 fn static_http_server_serves_large_static_asset_completely() {

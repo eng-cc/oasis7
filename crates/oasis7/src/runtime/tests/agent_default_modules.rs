@@ -218,9 +218,11 @@ fn default_mobility_module_rejects_zero_distance_move() {
             reason: RejectReason::RuleDenied { notes },
             ..
         } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("equals current position")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("equals current position"))
+            );
         }
         other => panic!("unexpected domain event: {other:?}"),
     }
@@ -448,10 +450,12 @@ fn scenario_modules_with_transfer_and_body_keep_wasm_closed_loop_consistent() {
     match last_domain_event(&world).expect("observation event") {
         DomainEvent::Observation { observation } => {
             assert_eq!(observation.agent_id, "agent-1");
-            assert!(observation
-                .visible_agents
-                .iter()
-                .any(|agent| agent.agent_id == "agent-2"));
+            assert!(
+                observation
+                    .visible_agents
+                    .iter()
+                    .any(|agent| agent.agent_id == "agent-2")
+            );
         }
         other => panic!("unexpected domain event after observation: {other:?}"),
     }

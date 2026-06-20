@@ -1,8 +1,8 @@
 use super::pos;
 use crate::runtime::{
-    util, Action, CapabilityGrant, DomainEvent, MaterialLedgerId, ModuleAbiContract,
-    ModuleActivation, ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRole,
-    PolicySet, ProposalDecision, RejectReason, World, WorldEventBody,
+    Action, CapabilityGrant, DomainEvent, MaterialLedgerId, ModuleAbiContract, ModuleActivation,
+    ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, PolicySet,
+    ProposalDecision, RejectReason, World, WorldEventBody, util,
 };
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{
@@ -872,9 +872,11 @@ fn schedule_recipe_with_module_rejects_when_module_denies() {
     match &rejected.body {
         WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| note.contains("recipe module denied: insufficient pressure")));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| note.contains("recipe module denied: insufficient pressure"))
+                );
             }
             other => panic!("expected RuleDenied, got {other:?}"),
         },

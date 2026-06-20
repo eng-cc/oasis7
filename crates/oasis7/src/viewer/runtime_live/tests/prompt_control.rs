@@ -81,9 +81,10 @@ fn runtime_prompt_control_hosted_public_join_requires_strong_auth() {
         .handle_prompt_control(crate::viewer::PromptControlCommand::Apply { request })
         .expect_err("hosted public join should require strong auth");
     assert_eq!(err.code, "strong_auth_required");
-    assert!(err
-        .message
-        .contains("prompt_control requires hosted strong auth"));
+    assert!(
+        err.message
+            .contains("prompt_control requires hosted strong auth")
+    );
     assert!(server.llm_sidecar.prompt_profiles.is_empty());
 }
 
@@ -92,10 +93,13 @@ fn runtime_prompt_control_hosted_public_join_accepts_valid_backend_grant() {
     let _llm_guard = lock_test_llm_env();
     let _strong_auth_guard = lock_test_hosted_strong_auth_env();
     let (backend_public_key, backend_private_key) = test_signer(28);
-    std::env::set_var(
-        HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
-        backend_public_key.as_str(),
-    );
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(
+            HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
+            backend_public_key.as_str(),
+        );
+    }
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -168,10 +172,13 @@ fn runtime_prompt_control_hosted_public_join_rejects_expired_backend_grant() {
     let _llm_guard = lock_test_llm_env();
     let _strong_auth_guard = lock_test_hosted_strong_auth_env();
     let (backend_public_key, backend_private_key) = test_signer(30);
-    std::env::set_var(
-        HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
-        backend_public_key.as_str(),
-    );
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(
+            HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
+            backend_public_key.as_str(),
+        );
+    }
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -245,10 +252,13 @@ fn runtime_prompt_control_hosted_public_join_rejects_replayed_auth_nonce_even_wi
     let _llm_guard = lock_test_llm_env();
     let _strong_auth_guard = lock_test_hosted_strong_auth_env();
     let (backend_public_key, backend_private_key) = test_signer(32);
-    std::env::set_var(
-        HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
-        backend_public_key.as_str(),
-    );
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(
+            HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
+            backend_public_key.as_str(),
+        );
+    }
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -332,10 +342,13 @@ fn runtime_prompt_control_hosted_public_join_rejects_revoked_session_even_with_v
     let _llm_guard = lock_test_llm_env();
     let _strong_auth_guard = lock_test_hosted_strong_auth_env();
     let (backend_public_key, backend_private_key) = test_signer(34);
-    std::env::set_var(
-        HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
-        backend_public_key.as_str(),
-    );
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(
+            HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
+            backend_public_key.as_str(),
+        );
+    }
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -419,9 +432,18 @@ fn runtime_prompt_control_hosted_public_join_rejects_revoked_session_even_with_v
 fn runtime_prompt_control_provider_mode_reports_unsupported() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -520,10 +542,12 @@ fn runtime_prompt_control_apply_updates_snapshot_and_bindings() {
     assert_eq!(feedback.action, "prompt_control.apply");
     assert_eq!(feedback.stage, "completed_advanced");
     assert_eq!(feedback.target_agent_id.as_deref(), Some(agent_id.as_str()));
-    assert!(feedback
-        .intent_summary
-        .as_deref()
-        .is_some_and(|summary| summary.contains(agent_id.as_str())));
+    assert!(
+        feedback
+            .intent_summary
+            .as_deref()
+            .is_some_and(|summary| summary.contains(agent_id.as_str()))
+    );
     let snapshot = server.compat_snapshot();
     let profile = snapshot
         .model

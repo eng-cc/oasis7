@@ -6,10 +6,10 @@ use std::collections::BTreeMap;
 
 use super::super::util::{hash_json, to_canonical_cbor};
 use super::super::{ModuleKind, ModuleManifest, ModuleRegistry, WorldError};
+use super::World;
 use super::module_runtime_labels::{
     module_kind_label, module_role_label, subscription_stage_label,
 };
-use super::World;
 use crate::simulator::ModuleInstallTarget;
 
 impl World {

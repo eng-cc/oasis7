@@ -82,11 +82,13 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
             seeker.get_peer_record("world-discovery", publisher_peer_id.to_string().as_str())
         {
             assert_eq!(record.record.peer_id, publisher_peer_id.to_string());
-            assert!(record
-                .record
-                .discovery_sources
-                .iter()
-                .any(|source| matches!(source, PeerDiscoverySource::Dht)));
+            assert!(
+                record
+                    .record
+                    .discovery_sources
+                    .iter()
+                    .any(|source| matches!(source, PeerDiscoverySource::Dht))
+            );
             return;
         }
         std::thread::sleep(Duration::from_millis(20));

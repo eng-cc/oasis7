@@ -112,10 +112,12 @@ fn persist_and_restore_world_defaults_to_module_store_roundtrip() {
     );
 
     let mut restored = World::load_from_dir(&dir).expect("load with default module store");
-    assert!(restored
-        .module_registry()
-        .records
-        .contains_key(&module_record_key));
+    assert!(
+        restored
+            .module_registry()
+            .records
+            .contains_key(&module_record_key)
+    );
     let artifact = restored
         .load_module(&wasm_hash)
         .expect("module bytes hydrated from default load");
@@ -158,10 +160,12 @@ fn load_from_dir_without_module_store_keeps_legacy_compatibility() {
     fs::remove_dir_all(dir.join("modules")).expect("remove module store modules dir");
 
     let mut restored = World::load_from_dir(&dir).expect("legacy load without module store");
-    assert!(restored
-        .module_registry()
-        .records
-        .contains_key(&module_record_key));
+    assert!(
+        restored
+            .module_registry()
+            .records
+            .contains_key(&module_record_key)
+    );
     let err = restored
         .load_module(&wasm_hash)
         .expect_err("legacy world should load without hydrated module bytes");
@@ -200,10 +204,12 @@ fn persist_writes_distfs_sidecar_and_restores_without_json_files() {
         Some("distfs_restored")
     );
     assert!(audit_value.get("reason").is_none());
-    assert!(audit_value
-        .get("timestamp_ms")
-        .and_then(|value| value.as_i64())
-        .is_some());
+    assert!(
+        audit_value
+            .get("timestamp_ms")
+            .and_then(|value| value.as_i64())
+            .is_some()
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -630,14 +636,16 @@ fn persist_writes_sidecar_generation_index_and_pinset() {
         .and_then(|value| value.as_str())
         .expect("latest generation");
     assert!(index.get("rollback_safe_generation").is_none());
-    assert!(dir
-        .join(".distfs-state/sidecar-generations/generation.tmp")
-        .exists());
-    assert!(dir
-        .join(format!(
+    assert!(
+        dir.join(".distfs-state/sidecar-generations/generation.tmp")
+            .exists()
+    );
+    assert!(
+        dir.join(format!(
             ".distfs-state/sidecar-generations/generations/{latest_generation}.json"
         ))
-        .exists());
+        .exists()
+    );
 
     let generation = index
         .get("generations")
@@ -714,14 +722,16 @@ fn persist_sidecar_generation_record_points_to_generation_local_payloads() {
         .expect("journal segments path");
     assert!(snapshot_manifest_path.contains(&format!("payloads/{latest_generation}/")));
     assert!(journal_segments_path.contains(&format!("payloads/{latest_generation}/")));
-    assert!(dir
-        .join(".distfs-state")
-        .join(snapshot_manifest_path)
-        .exists());
-    assert!(dir
-        .join(".distfs-state")
-        .join(journal_segments_path)
-        .exists());
+    assert!(
+        dir.join(".distfs-state")
+            .join(snapshot_manifest_path)
+            .exists()
+    );
+    assert!(
+        dir.join(".distfs-state")
+            .join(journal_segments_path)
+            .exists()
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -762,16 +772,18 @@ fn persist_sidecar_generation_switch_keeps_latest_and_rollback_safe_only() {
     assert_eq!(generations.len(), 2);
     assert!(generations.contains_key(latest_generation.as_str()));
     assert!(generations.contains_key(rollback_safe_generation.as_str()));
-    assert!(dir
-        .join(format!(
+    assert!(
+        dir.join(format!(
             ".distfs-state/sidecar-generations/payloads/{latest_generation}"
         ))
-        .exists());
-    assert!(dir
-        .join(format!(
+        .exists()
+    );
+    assert!(
+        dir.join(format!(
             ".distfs-state/sidecar-generations/payloads/{rollback_safe_generation}"
         ))
-        .exists());
+        .exists()
+    );
     let staging_entries =
         fs::read_dir(dir.join(".distfs-state/sidecar-generations/generation.tmp"))
             .expect("read staging dir")
@@ -843,10 +855,12 @@ fn persist_sidecar_generation_sweep_keeps_only_retained_blobs() {
             .and_then(|value| value.as_str()),
         Some("success")
     );
-    assert!(index
-        .get("last_gc_result")
-        .and_then(|value| value.get("error"))
-        .is_none());
+    assert!(
+        index
+            .get("last_gc_result")
+            .and_then(|value| value.get("error"))
+            .is_none()
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -915,11 +929,13 @@ fn persist_sidecar_generation_gc_failure_preserves_latest_and_rollback_blobs() {
             .and_then(|value| value.as_str()),
         Some("failed")
     );
-    assert!(third_index
-        .get("last_gc_result")
-        .and_then(|value| value.get("error"))
-        .and_then(|value| value.as_str())
-        .is_some());
+    assert!(
+        third_index
+            .get("last_gc_result")
+            .and_then(|value| value.get("error"))
+            .and_then(|value| value.as_str())
+            .is_some()
+    );
 
     let generations = third_index
         .get("generations")
@@ -1133,14 +1149,18 @@ fn persist_updates_sidecar_generation_index_with_rollback_safe_generation() {
         .expect("rollback safe generation");
     assert_ne!(latest_generation, rollback_safe_generation);
     assert_eq!(rollback_safe_generation, first_latest);
-    assert!(second_index
-        .get("generations")
-        .and_then(|value| value.get(latest_generation))
-        .is_some());
-    assert!(second_index
-        .get("generations")
-        .and_then(|value| value.get(rollback_safe_generation))
-        .is_some());
+    assert!(
+        second_index
+            .get("generations")
+            .and_then(|value| value.get(latest_generation))
+            .is_some()
+    );
+    assert!(
+        second_index
+            .get("generations")
+            .and_then(|value| value.get(rollback_safe_generation))
+            .is_some()
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }

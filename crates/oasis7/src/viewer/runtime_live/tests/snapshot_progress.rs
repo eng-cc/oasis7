@@ -33,10 +33,22 @@ fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -113,9 +125,18 @@ fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "agent_direct_connect");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "agent_direct_connect");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -177,19 +198,25 @@ fn compat_snapshot_exposes_player_gameplay_snapshot() {
         gameplay.available_actions[0].protocol_action,
         "request_snapshot"
     );
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .any(|action| action.action_id == "advance_step"
-            && action.disabled_reason.as_deref().is_some()));
-    assert!(!gameplay
-        .available_actions
-        .iter()
-        .any(|action| action.action_id == "build_factory_smelter_mk1"));
-    assert!(!gameplay
-        .available_actions
-        .iter()
-        .any(|action| action.action_id == "chat_first_agent"));
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "advance_step"
+                && action.disabled_reason.as_deref().is_some())
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "build_factory_smelter_mk1")
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "chat_first_agent")
+    );
     assert!(gameplay.recent_feedback.is_none());
 }
 
@@ -198,10 +225,22 @@ fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
-    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -283,14 +322,18 @@ fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
         gameplay.causality_kind,
         Some(crate::simulator::PlayerGameplayCausalityKind::AgentOverride)
     );
-    assert!(gameplay
-        .causality_detail
-        .as_deref()
-        .is_some_and(|detail| detail.contains("redirected the accepted action")));
-    assert!(gameplay
-        .causality_detail
-        .as_deref()
-        .is_some_and(|detail| detail.contains("reroute to safer waypoint")));
+    assert!(
+        gameplay
+            .causality_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("redirected the accepted action"))
+    );
+    assert!(
+        gameplay
+            .causality_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("reroute to safer waypoint"))
+    );
     assert_eq!(gameplay.accepted_intent_id.as_deref(), Some("move_agent"));
     assert_eq!(
         gameplay.status_reason.as_deref(),
@@ -302,11 +345,15 @@ fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
     );
     assert_eq!(
         gameplay.resume_anchor.as_deref(),
-        Some("Establish your first sustainable capability (post_onboarding.establish_first_capability)")
+        Some(
+            "Establish your first sustainable capability (post_onboarding.establish_first_capability)"
+        )
     );
     assert_eq!(
         gameplay.resume_next_step.as_deref(),
-        Some("Advance 2-3 more times and prioritize the first output, the first stable line, or one clear recovery signal.")
+        Some(
+            "Advance 2-3 more times and prioritize the first output, the first stable line, or one clear recovery signal."
+        )
     );
 
     clear_runtime_provider_env();
@@ -359,7 +406,9 @@ fn compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedba
     assert_eq!(gameplay.last_world_change, None);
     assert_eq!(
         gameplay.resume_anchor.as_deref(),
-        Some("Create the first visible world feedback (first_session_loop.create_first_world_feedback)")
+        Some(
+            "Create the first visible world feedback (first_session_loop.create_first_world_feedback)"
+        )
     );
     assert_eq!(
         gameplay.resume_next_step.as_deref(),
@@ -406,21 +455,25 @@ fn empty_entity_guard_marks_gameplay_snapshot_blocked() {
         gameplay.blocker_kind.as_deref(),
         Some("runtime_snapshot_empty_entities")
     );
-    assert!(gameplay
-        .blocker_detail
-        .as_deref()
-        .is_some_and(|detail| detail.contains("no agents/locations")));
+    assert!(
+        gameplay
+            .blocker_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("no agents/locations"))
+    );
     let request_snapshot_action = gameplay
         .available_actions
         .iter()
         .find(|action| action.protocol_action == "request_snapshot")
         .expect("request_snapshot action should be available");
     assert_eq!(request_snapshot_action.protocol_action, "request_snapshot");
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .filter(|action| action.protocol_action != "request_snapshot")
-        .all(|action| action.disabled_reason.is_some()));
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .filter(|action| action.protocol_action != "request_snapshot")
+            .all(|action| action.disabled_reason.is_some())
+    );
 }
 
 #[test]
@@ -846,15 +899,19 @@ fn compat_snapshot_blocks_first_session_when_chain_sync_is_unavailable() {
         gameplay.blocker_kind.as_deref(),
         Some("execution_world_not_ready")
     );
-    assert!(gameplay
-        .blocker_detail
-        .as_deref()
-        .is_some_and(|detail| detail.contains("execution world is not ready")));
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .filter(|action| action.protocol_action != "request_snapshot")
-        .all(|action| action.disabled_reason.is_some()));
+    assert!(
+        gameplay
+            .blocker_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("execution world is not ready"))
+    );
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .filter(|action| action.protocol_action != "request_snapshot")
+            .all(|action| action.disabled_reason.is_some())
+    );
 }
 
 #[test]

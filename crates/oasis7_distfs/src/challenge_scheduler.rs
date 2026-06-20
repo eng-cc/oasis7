@@ -5,9 +5,10 @@ use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    storage_challenge_receipt_to_proof_semantics, verify_storage_challenge_receipt, LocalCasStore,
-    StorageChallenge, StorageChallengeProbeConfig, StorageChallengeProbeReport,
-    StorageChallengeReceipt, StorageChallengeRequest, STORAGE_CHALLENGE_PROOF_KIND_CHUNK_HASH_V1,
+    LocalCasStore, STORAGE_CHALLENGE_PROOF_KIND_CHUNK_HASH_V1, StorageChallenge,
+    StorageChallengeProbeConfig, StorageChallengeProbeReport, StorageChallengeReceipt,
+    StorageChallengeRequest, storage_challenge_receipt_to_proof_semantics,
+    verify_storage_challenge_receipt,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

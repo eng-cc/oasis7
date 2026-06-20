@@ -2,12 +2,12 @@
 
 mod common;
 
+use oasis7::GeoPos;
 use oasis7::runtime::{
     Action, Manifest, ModuleAbiContract, ModuleActivation, ModuleChangeSet, ModuleKind,
     ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription, ModuleSubscriptionStage,
     PolicySet, ProposalDecision, World, WorldEvent,
 };
-use oasis7::GeoPos;
 use oasis7_wasm_abi::{
     ModuleCallFailure, ModuleCallInput, ModuleCallRequest, ModuleOutput, ModuleSandbox,
 };

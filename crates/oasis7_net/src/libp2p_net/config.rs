@@ -1,5 +1,5 @@
-use libp2p::identity::Keypair;
 use libp2p::Multiaddr;
+use libp2p::identity::Keypair;
 use std::time::Duration;
 
 use oasis7_proto::distributed_dht::PeerRecord;

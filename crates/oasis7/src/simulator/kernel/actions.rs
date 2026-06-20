@@ -1,16 +1,16 @@
-use crate::geometry::{space_distance_cm, GeoPos};
+use crate::geometry::{GeoPos, space_distance_cm};
 use std::collections::BTreeMap;
 
 use super::super::chunking::CHUNK_SIZE_X_CM;
 use super::super::module_visual::ModuleVisualAnchor;
 use super::super::power::{PlantStatus, PowerEvent, PowerPlant};
 use super::super::types::{
-    Action, ElementBudgetError, FragmentElementKind, PowerOrderSide, ResourceKind, ResourceOwner,
-    StockError, CM_PER_KM, PPM_BASE,
+    Action, CM_PER_KM, ElementBudgetError, FragmentElementKind, PPM_BASE, PowerOrderSide,
+    ResourceKind, ResourceOwner, StockError,
 };
 use super::super::world_model::{Agent, Factory, FragmentResourceError, Location, PowerOrderState};
-use super::types::{ChunkGenerationCause, PowerOrderFill, RejectReason, WorldEventKind};
 use super::WorldKernel;
+use super::types::{ChunkGenerationCause, PowerOrderFill, RejectReason, WorldEventKind};
 
 #[derive(Debug, Clone, Copy)]
 struct RecipePlan {

@@ -14,10 +14,8 @@ const DEFAULT_SCENARIO_LABEL: &str = "formal_release_default";
 const DEFAULT_BIND: &str = "127.0.0.1:5023";
 const DEFAULT_WEB_BIND: &str = "127.0.0.1:5011";
 const DEFAULT_DEPLOYMENT_MODE: &str = "trusted_local_only";
-const REMOVAL_HINT: &str =
-    "embedded node flags were removed from oasis7_viewer_live; use oasis7_chain_runtime (normally launched by oasis7_game_launcher)";
-const RUNTIME_ALIAS_REMOVAL_HINT: &str =
-    "`--runtime-world` was removed; oasis7_viewer_live is runtime/world only, start without this flag";
+const REMOVAL_HINT: &str = "embedded node flags were removed from oasis7_viewer_live; use oasis7_chain_runtime (normally launched by oasis7_game_launcher)";
+const RUNTIME_ALIAS_REMOVAL_HINT: &str = "`--runtime-world` was removed; oasis7_viewer_live is runtime/world only, start without this flag";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {

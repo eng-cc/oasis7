@@ -1,7 +1,7 @@
 use super::super::{
-    m1_builtin_manifest_hash_tokens, m1_builtin_module_artifact_identity,
+    WorldError, m1_builtin_manifest_hash_tokens, m1_builtin_module_artifact_identity,
     m4_builtin_manifest_hash_tokens, m4_builtin_module_artifact_identity,
-    m5_builtin_manifest_hash_tokens, m5_builtin_module_artifact_identity, WorldError,
+    m5_builtin_manifest_hash_tokens, m5_builtin_module_artifact_identity,
 };
 
 fn first_hash_token_value(tokens: &[String]) -> &str {

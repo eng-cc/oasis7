@@ -1,7 +1,7 @@
 use crate::geometry::GeoPos;
 
 use super::super::asteroid_fragment::generate_fragments;
-use super::super::chunking::{chunk_bounds, chunk_coord_of, chunk_seed, ChunkBounds, ChunkCoord};
+use super::super::chunking::{ChunkBounds, ChunkCoord, chunk_bounds, chunk_coord_of, chunk_seed};
 use super::super::fragment_physics::{synthesize_fragment_budget, synthesize_fragment_profile};
 use super::super::types::{ChunkResourceBudget, PPM_BASE};
 use super::super::world_model::{ChunkState, SpaceConfig, WorldModel};

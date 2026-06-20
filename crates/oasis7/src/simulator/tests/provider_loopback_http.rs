@@ -435,18 +435,40 @@ impl Drop for ProxyEnvGuard {
 
 fn set_bad_proxy_env() {
     for key in proxy_env_keys() {
-        std::env::remove_var(key);
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(key);
+        }
     }
-    std::env::set_var("HTTP_PROXY", "http://127.0.0.1:9");
-    std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:9");
-    std::env::set_var("ALL_PROXY", "http://127.0.0.1:9");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var("HTTP_PROXY", "http://127.0.0.1:9");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var("HTTPS_PROXY", "http://127.0.0.1:9");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var("ALL_PROXY", "http://127.0.0.1:9");
+    }
 }
 
 fn restore_proxy_env(saved: Vec<(&'static str, Option<String>)>) {
     for (key, value) in saved {
         match value {
-            Some(value) => std::env::set_var(key, value),
-            None => std::env::remove_var(key),
+            Some(value) => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::set_var(key, value);
+                }
+            }
+            None => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::remove_var(key);
+                }
+            }
         }
     }
 }

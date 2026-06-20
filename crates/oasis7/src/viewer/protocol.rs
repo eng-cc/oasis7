@@ -15,8 +15,8 @@ pub use proto::{
     AuthoritativeSessionRotateRequest, ControlCompletionStatus, GameplayActionError,
     GameplayActionRequest, HostedStrongAuthGrant, LiveControl, PlaybackControl, PlayerAuthProof,
     PlayerAuthScheme, PromptControlApplyRequest, PromptControlCommand, PromptControlError,
-    PromptControlOperation, PromptControlRollbackRequest, ViewerControl, ViewerControlProfile,
-    ViewerEventKind, ViewerRequest, ViewerStream, VIEWER_PROTOCOL_VERSION,
+    PromptControlOperation, PromptControlRollbackRequest, VIEWER_PROTOCOL_VERSION, ViewerControl,
+    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
 };
 
 pub type ViewerResponse =

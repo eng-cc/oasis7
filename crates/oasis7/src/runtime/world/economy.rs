@@ -4,17 +4,17 @@ use oasis7_wasm_abi::{
     ModuleSandbox, ProductValidationDecision, ProductValidationRequest, RecipeExecutionPlan,
     RecipeExecutionRequest,
 };
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
 
 use super::super::util::to_canonical_cbor;
 use super::super::{
-    Action, ActionEnvelope, ActionId, DomainEvent, MaterialLedgerId, RejectReason, WorldError,
-    WorldEvent, WorldEventBody, M4_PRODUCT_ALLOY_PLATE_MODULE_ID,
+    Action, ActionEnvelope, ActionId, DomainEvent, M4_PRODUCT_ALLOY_PLATE_MODULE_ID,
     M4_PRODUCT_CONTROL_CHIP_MODULE_ID, M4_PRODUCT_FACTORY_CORE_MODULE_ID,
     M4_PRODUCT_IRON_INGOT_MODULE_ID, M4_PRODUCT_LOGISTICS_DRONE_MODULE_ID,
     M4_PRODUCT_MODULE_RACK_MODULE_ID, M4_PRODUCT_MOTOR_MODULE_ID, M4_PRODUCT_SENSOR_PACK_MODULE_ID,
+    MaterialLedgerId, RejectReason, WorldError, WorldEvent, WorldEventBody,
 };
 use super::World;
 use crate::simulator::ResourceKind;

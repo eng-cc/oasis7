@@ -1,12 +1,12 @@
 //! LLM-powered agent behavior and OpenAI-compatible completion client.
 
+use async_openai::Client as AsyncOpenAiClient;
 use async_openai::config::OpenAIConfig;
 use async_openai::error::OpenAIError;
 use async_openai::types::responses::{
     CreateResponse, CreateResponseArgs, FunctionTool, OutputItem, Response, ResponseStreamEvent,
     Tool, ToolChoiceOptions, ToolChoiceParam,
 };
-use async_openai::Client as AsyncOpenAiClient;
 use futures_util::StreamExt;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -24,8 +24,8 @@ use super::kernel::{Observation, RejectReason, WorldEvent, WorldEventKind};
 use super::llm_defaults::DEFAULT_LLM_MODEL;
 use super::memory::{AgentMemory, LongTermMemoryEntry, MemoryEntry};
 use super::types::{
-    Action, ModuleInstallTarget, ResourceKind, ResourceOwner, CM_PER_KM,
-    DEFAULT_MOVE_COST_PER_KM_ELECTRICITY,
+    Action, CM_PER_KM, DEFAULT_MOVE_COST_PER_KM_ELECTRICITY, ModuleInstallTarget, ResourceKind,
+    ResourceOwner,
 };
 
 mod behavior_guardrails;
@@ -46,13 +46,12 @@ pub use prompt_assembly::{
 };
 
 use decision_flow::{
-    parse_limit_arg, parse_llm_turn_payloads_with_debug_mode, prompt_section_kind_name,
-    prompt_section_priority_name, summarize_trace_text, DecisionRewriteReceipt,
-    ExecuteUntilCondition, ExecuteUntilDirective, LlmModuleCallRequest, ModuleCallExchange,
-    ParsedLlmTurn,
+    DecisionRewriteReceipt, ExecuteUntilCondition, ExecuteUntilDirective, LlmModuleCallRequest,
+    ModuleCallExchange, ParsedLlmTurn, parse_limit_arg, parse_llm_turn_payloads_with_debug_mode,
+    prompt_section_kind_name, prompt_section_priority_name, summarize_trace_text,
 };
 use execution_controls::{
-    default_execute_until_conditions_for_action, ActionReplanGuardState, ActiveExecuteUntil,
+    ActionReplanGuardState, ActiveExecuteUntil, default_execute_until_conditions_for_action,
 };
 
 use config_helpers::{
@@ -172,8 +171,7 @@ pub const DEFAULT_CONFIG_FILE_NAME: &str = "config.toml";
 pub const DEFAULT_LLM_TIMEOUT_MS: u64 = 180_000;
 pub const DEFAULT_LLM_SYSTEM_PROMPT: &str = "你是硅基文明发展 Agent。按“读规则/观察 -> 资源稳态 -> 产业建设 -> 治理协作 -> 危机韧性”推进文明进程，每轮仅提交一个可执行 decision。若规则或动作前置条件不明确，先调用 world.rules.guide 与 environment.current_observation，再做决策。";
 pub const DEFAULT_LLM_SHORT_TERM_GOAL: &str = "先识别当前阶段最关键瓶颈，并按前置条件逐步推进：能源与数据稳定后再扩产，扩产后推进治理与风险处理。遇到 action_rejected 时根据 reject_reason 切换到补前置动作，避免原样重复失败参数。";
-pub const DEFAULT_LLM_LONG_TERM_GOAL: &str =
-    "构建可持续、可治理、具韧性的文明系统，让资源、组织与风险应对形成长期正反馈，并保持阶段推进可解释。";
+pub const DEFAULT_LLM_LONG_TERM_GOAL: &str = "构建可持续、可治理、具韧性的文明系统，让资源、组织与风险应对形成长期正反馈，并保持阶段推进可解释。";
 pub const DEFAULT_LLM_MAX_MODULE_CALLS: usize = 3;
 pub const DEFAULT_LLM_MAX_DECISION_STEPS: usize = 4;
 pub const DEFAULT_LLM_MAX_REPAIR_ROUNDS: usize = 1;

@@ -5,10 +5,9 @@ use std::path::Path;
 use oasis7::runtime::{BlobStore, LocalCasStore};
 
 use super::{
-    write_bytes_atomic, ExecutionBridgePinSet, ExecutionBridgeRecord,
-    ExecutionCheckpointLatestPointer, ExecutionCheckpointManifest,
-    ExecutionCheckpointManifestHashPayload, EXECUTION_BRIDGE_RECORD_SCHEMA_V2,
-    EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1,
+    EXECUTION_BRIDGE_RECORD_SCHEMA_V2, EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1,
+    ExecutionBridgePinSet, ExecutionBridgeRecord, ExecutionCheckpointLatestPointer,
+    ExecutionCheckpointManifest, ExecutionCheckpointManifestHashPayload, write_bytes_atomic,
 };
 
 impl ExecutionCheckpointManifest {

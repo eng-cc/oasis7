@@ -42,9 +42,9 @@ pub mod distributed_consensus {
 
 pub mod distributed_pos_consensus {
     pub use super::pos::{
-        attest_world_head_with_pos, decide_pos_status, propose_world_head_with_pos, PosAttestation,
-        PosConsensus, PosConsensusConfig, PosConsensusDecision, PosConsensusStatus, PosHeadRecord,
-        PosValidator, POS_CONSENSUS_SNAPSHOT_VERSION,
+        POS_CONSENSUS_SNAPSHOT_VERSION, PosAttestation, PosConsensus, PosConsensusConfig,
+        PosConsensusDecision, PosConsensusStatus, PosHeadRecord, PosValidator,
+        attest_world_head_with_pos, decide_pos_status, propose_world_head_with_pos,
     };
 }
 
@@ -61,8 +61,8 @@ pub mod error {
 }
 
 pub mod util {
-    use serde::de::DeserializeOwned;
     use serde::Serialize;
+    use serde::de::DeserializeOwned;
     use std::fs;
     use std::path::Path;
 
@@ -196,15 +196,15 @@ pub use membership_recovery::{
 };
 pub use mempool::{ActionBatchRules, ActionMempool, ActionMempoolConfig};
 pub use pos::{
-    attest_world_head_with_pos, decide_pos_status, propose_world_head_with_pos, PosAttestation,
-    PosConsensus, PosConsensusConfig, PosConsensusDecision, PosConsensusStatus, PosHeadRecord,
-    PosValidator, POS_CONSENSUS_SNAPSHOT_VERSION,
+    POS_CONSENSUS_SNAPSHOT_VERSION, PosAttestation, PosConsensus, PosConsensusConfig,
+    PosConsensusDecision, PosConsensusStatus, PosHeadRecord, PosValidator,
+    attest_world_head_with_pos, decide_pos_status, propose_world_head_with_pos,
 };
 pub use quorum::{
-    ensure_lease_holder_validator, propose_world_head_with_quorum, vote_world_head_with_quorum,
-    ConsensusConfig, ConsensusDecision, ConsensusMembershipChange,
+    CONSENSUS_SNAPSHOT_VERSION, ConsensusConfig, ConsensusDecision, ConsensusMembershipChange,
     ConsensusMembershipChangeRequest, ConsensusMembershipChangeResult, ConsensusStatus,
-    ConsensusVote, HeadConsensusRecord, QuorumConsensus, CONSENSUS_SNAPSHOT_VERSION,
+    ConsensusVote, HeadConsensusRecord, QuorumConsensus, ensure_lease_holder_validator,
+    propose_world_head_with_quorum, vote_world_head_with_quorum,
 };
 pub use sequencer_mainloop::{
     SequencerMainloop, SequencerMainloopConfig, SequencerTickReport, SequencerTickState,

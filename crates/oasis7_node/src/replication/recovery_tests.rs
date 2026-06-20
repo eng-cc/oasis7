@@ -1,7 +1,7 @@
 use super::commit_retention::{self, CommitMessageColdIndex};
 use super::*;
 use oasis7_proto::storage_cold_index::{
-    storage_cold_index_dir_name, STORAGE_COLD_INDEX_MANIFEST_FILE,
+    STORAGE_COLD_INDEX_MANIFEST_FILE, storage_cold_index_dir_name,
 };
 use std::path::PathBuf;
 

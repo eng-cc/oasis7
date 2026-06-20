@@ -1,6 +1,6 @@
 use super::{
-    maybe_handle_agent_claim_request, reset_agent_claim_api_state_for_tests,
-    ChainAgentClaimActionResponse, ChainAgentClaimSubmitRequest,
+    ChainAgentClaimActionResponse, ChainAgentClaimSubmitRequest, maybe_handle_agent_claim_request,
+    reset_agent_claim_api_state_for_tests,
 };
 use crate::cli::DEFAULT_NODE_ID;
 use oasis7::geometry::GeoPos;
@@ -218,10 +218,12 @@ fn agent_claim_submit_handler_rejects_missing_claimer_in_preflight() {
     assert_eq!(status, 409);
     assert!(!response.ok);
     assert_eq!(response.error_code.as_deref(), Some("action_rejected"));
-    assert!(response
-        .error
-        .as_deref()
-        .is_some_and(|error| error.contains("agent not found")));
+    assert!(
+        response
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("agent not found"))
+    );
 }
 
 #[test]

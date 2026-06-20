@@ -2,8 +2,8 @@ use super::*;
 use oasis7_proto::distributed::DistributedErrorCode;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 use std::net::TcpListener;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
@@ -166,9 +166,11 @@ fn libp2p_replication_network_redials_bootstrap_peer_until_listener_is_ready() {
     std::thread::sleep(Duration::from_millis(200));
 
     let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-        listen_addrs: vec![format!("/ip4/127.0.0.1/tcp/{bootstrap_port}")
-            .parse()
-            .expect("listener addr")],
+        listen_addrs: vec![
+            format!("/ip4/127.0.0.1/tcp/{bootstrap_port}")
+                .parse()
+                .expect("listener addr"),
+        ],
         peer_record: Some(test_peer_record("late-listener")),
         ..Libp2pReplicationNetworkConfig::default()
     });
@@ -220,9 +222,11 @@ fn libp2p_replication_network_request_waits_for_delayed_bootstrap_connection() {
     let listener_thread = std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(250));
         let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec![format!("/ip4/127.0.0.1/tcp/{bootstrap_port}")
-                .parse()
-                .expect("listener addr")],
+            listen_addrs: vec![
+                format!("/ip4/127.0.0.1/tcp/{bootstrap_port}")
+                    .parse()
+                    .expect("listener addr"),
+            ],
             peer_record: Some(test_peer_record("delayed-listener")),
             ..Libp2pReplicationNetworkConfig::default()
         });

@@ -6,16 +6,16 @@ use std::path::{Path, PathBuf};
 
 use oasis7_distfs::{FileStore as _, LocalCasStore};
 use oasis7_proto::storage_cold_index::{
-    storage_cold_index_dir_name, StorageColdIndexManifest, StorageColdIndexRange,
-    StorageColdIndexRangeAnchor, STORAGE_COLD_INDEX_KEY_KIND_HEIGHT,
-    STORAGE_COLD_INDEX_MANIFEST_FILE, STORAGE_COLD_INDEX_SEGMENTS_DIR,
-    STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF, STORAGE_COLD_INDEX_VALUE_KIND_CONTENT_HASH,
+    STORAGE_COLD_INDEX_KEY_KIND_HEIGHT, STORAGE_COLD_INDEX_MANIFEST_FILE,
+    STORAGE_COLD_INDEX_SEGMENTS_DIR, STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
+    STORAGE_COLD_INDEX_VALUE_KIND_CONTENT_HASH, StorageColdIndexManifest, StorageColdIndexRange,
+    StorageColdIndexRangeAnchor, storage_cold_index_dir_name,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::NodeError;
 
-use super::{write_json_compact, COMMIT_MESSAGE_DIR};
+use super::{COMMIT_MESSAGE_DIR, write_json_compact};
 
 const COMMIT_MESSAGE_PACK_HEIGHT_SPAN: u64 = 256;
 const COMMIT_MESSAGE_PACK_ENTRY_LEN_BYTES: u64 = 8;

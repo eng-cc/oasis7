@@ -1,12 +1,13 @@
 use super::super::util::{hash_json, sha256_hex};
 use super::super::{
-    apply_manifest_patch, GovernanceEvent, GovernanceExecutionPolicy,
-    GovernanceFinalityCertificate, GovernanceFinalityEpochSnapshot,
-    GovernanceFinalitySignerRegistry, GovernanceIdentityPenaltyRecord,
-    GovernanceIdentityPenaltyStatus, GovernanceIdentityProfileState, GovernanceIdentityStatus,
-    GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy, Manifest,
-    ManifestPatch, ManifestUpdate, Proposal, ProposalDecision, ProposalId, ProposalStatus,
-    WorldError, WorldEventBody, WorldTime, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    GovernanceEvent, GovernanceExecutionPolicy, GovernanceFinalityCertificate,
+    GovernanceFinalityEpochSnapshot, GovernanceFinalitySignerRegistry,
+    GovernanceIdentityPenaltyRecord, GovernanceIdentityPenaltyStatus,
+    GovernanceIdentityProfileState, GovernanceIdentityStatus,
+    GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy,
+    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, Manifest, ManifestPatch, ManifestUpdate, Proposal,
+    ProposalDecision, ProposalId, ProposalStatus, WorldError, WorldEventBody, WorldTime,
+    apply_manifest_patch,
 };
 use super::World;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
@@ -547,7 +548,7 @@ impl World {
                     proposal_id,
                     expected: "approved".to_string(),
                     found: other.label(),
-                })
+                });
             }
         };
         let consensus_height = self.journal.events.len() as u64 + 1;
@@ -624,7 +625,7 @@ impl World {
                     proposal_id,
                     expected: "approved".to_string(),
                     found: other.label(),
-                })
+                });
             }
         };
         if self.is_governance_emergency_brake_active() {

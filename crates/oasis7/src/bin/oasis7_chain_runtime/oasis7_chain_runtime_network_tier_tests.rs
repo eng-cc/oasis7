@@ -670,10 +670,12 @@ fn mainnet_validator_readiness_blocks_when_stake_mapping_is_unavailable() {
 
     assert_eq!(policy.quorum_mode, "count_fallback_stake_unavailable");
     assert!(!status.ready);
-    assert!(status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_stake_quorum_unavailable"));
+    assert!(
+        status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "consensus_stake_quorum_unavailable")
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -731,10 +733,12 @@ fn mainnet_sync_lag_stalls_after_policy_window() {
     );
 
     assert!(!status.ready);
-    assert!(status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "consensus_sync_stalled"));
+    assert!(
+        status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "consensus_sync_stalled")
+    );
     let sync = super::status_payload::build_sync_status(
         &network_head,
         status.network_height_lag,
@@ -809,14 +813,18 @@ fn mainnet_validator_relay_policy_requires_governed_redundancy_and_surfaces_slas
     assert_eq!(policy.slashing_policy, "evidence_only_readiness_gate");
     assert!(!policy.slashing_enforced);
     assert!(!status.reachability_policy_ok);
-    assert!(status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "p2p_reachability_degraded"));
-    assert!(status
-        .alerts
-        .iter()
-        .any(|alert| alert.code == "mainnet_slashing_evidence_only"));
+    assert!(
+        status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "p2p_reachability_degraded")
+    );
+    assert!(
+        status
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "mainnet_slashing_evidence_only")
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

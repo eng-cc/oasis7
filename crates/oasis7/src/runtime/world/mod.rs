@@ -44,6 +44,7 @@ use std::sync::Arc;
 
 use oasis7_wasm_router::PreparedSubscription;
 
+use super::CrisisStatus;
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::events::{ActionEnvelope, MaterialTransitPriority};
@@ -60,7 +61,6 @@ use super::signer::ReceiptSigner;
 use super::snapshot::{Journal, SnapshotCatalog};
 use super::state::WorldState;
 use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
-use super::CrisisStatus;
 
 const DEFAULT_MAX_PENDING_ACTIONS: usize = 8_192;
 const DEFAULT_MAX_PENDING_EFFECTS: usize = 8_192;

@@ -4,8 +4,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    host_for_url, parse_host_port, runtime_paths, ChainNodeObservabilitySnapshot,
-    ChainP2pStatusSnapshot, ChainReplicationSnapshot, CHAIN_STATUS_PROBE_TIMEOUT_MS,
+    CHAIN_STATUS_PROBE_TIMEOUT_MS, ChainNodeObservabilitySnapshot, ChainP2pStatusSnapshot,
+    ChainReplicationSnapshot, host_for_url, parse_host_port, runtime_paths,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -6,10 +6,10 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 #[cfg(not(target_arch = "wasm32"))]
 use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::Arc;
 
 use eframe::egui;
 #[cfg(not(target_arch = "wasm32"))]
@@ -30,9 +30,9 @@ use transfer_entry::TransferDraft;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 #[cfg(target_arch = "wasm32")]
-use web_sys::wasm_bindgen::JsCast;
-#[cfg(target_arch = "wasm32")]
 use web_sys::HtmlCanvasElement;
+#[cfg(target_arch = "wasm32")]
+use web_sys::wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
 use web_sys::{Document, HtmlElement};
 #[cfg(target_arch = "wasm32")]
@@ -88,15 +88,15 @@ pub(crate) use provider_check_status::{
     ProviderCheckStatus, ProviderCompatibilityStatus, ProviderSnapshot,
 };
 use self_guided::{
-    resolve_next_task_hint, DemoModePhase, LauncherUxState, NextTaskHint, OnboardingState,
+    DemoModePhase, LauncherUxState, NextTaskHint, OnboardingState, resolve_next_task_hint,
+};
+pub(crate) use web_api_support::{
+    WebApiEvent, WebApiResponse, WebChainNodeObservabilityStatus, WebChainP2pStatus,
+    WebChainRecoverySnapshot, WebRequestDomain, WebRequestInflight, WebStateSnapshot,
+    WebTransferSubmitRequest, WebTransferSubmitResponse, encoded_query_pair,
 };
 #[cfg(test)]
-pub(crate) use web_api_support::{encode_query_value, WebChainNodeObservabilityAlert};
-pub(crate) use web_api_support::{
-    encoded_query_pair, WebApiEvent, WebApiResponse, WebChainNodeObservabilityStatus,
-    WebChainP2pStatus, WebChainRecoverySnapshot, WebRequestDomain, WebRequestInflight,
-    WebStateSnapshot, WebTransferSubmitRequest, WebTransferSubmitResponse,
-};
+pub(crate) use web_api_support::{WebChainNodeObservabilityAlert, encode_query_value};
 #[cfg(target_arch = "wasm32")]
 pub(crate) use web_api_support::{WebFeedbackSubmitRequest, WebFeedbackSubmitResponse};
 

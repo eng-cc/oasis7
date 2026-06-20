@@ -232,10 +232,12 @@ fn gameplay_mode_readiness_reports_coverage_and_missing_kinds() {
     assert!(sandbox_report.missing_kinds.is_empty());
     assert_eq!(sandbox_report.active_modules.len(), 5);
     assert_eq!(sandbox_report.coverage.len(), 5);
-    assert!(sandbox_report
-        .coverage
-        .iter()
-        .all(|entry| entry.active_count == 1));
+    assert!(
+        sandbox_report
+            .coverage
+            .iter()
+            .all(|entry| entry.active_count == 1)
+    );
 
     let ranked_report = world.gameplay_mode_readiness("ranked");
     assert!(!ranked_report.is_ready());

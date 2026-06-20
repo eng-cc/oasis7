@@ -342,11 +342,13 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_move_and_records_
         trace.llm_diagnostics.and_then(|value| value.latency_ms),
         Some(33)
     );
-    assert!(trace
-        .llm_output
-        .as_deref()
-        .unwrap_or_default()
-        .contains("move_agent"));
+    assert!(
+        trace
+            .llm_output
+            .as_deref()
+            .unwrap_or_default()
+            .contains("move_agent")
+    );
 
     let agent = kernel.model().agents.get("agent-1").expect("agent exists");
     assert_eq!(agent.location_id, "loc-2");
@@ -535,11 +537,13 @@ fn provider_backed_behavior_downgrades_provider_loopback_adapter_unsupported_sem
     assert!(matches!(tick.decision, AgentDecision::Wait));
     assert!(tick.action_result.is_none());
     let trace = tick.decision_trace.expect("error trace emitted");
-    assert!(trace
-        .llm_error
-        .as_deref()
-        .unwrap_or_default()
-        .contains("action_ref_mismatch"));
+    assert!(
+        trace
+            .llm_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("action_ref_mismatch")
+    );
 }
 
 fn spawn_mock_http_server<F>(expected_connections: usize, handler: F) -> String

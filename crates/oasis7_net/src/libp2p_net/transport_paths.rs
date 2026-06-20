@@ -11,7 +11,7 @@ use oasis7_proto::distributed_dht::{
 use oasis7_proto::distributed_net::NetworkLane;
 
 use super::swarm_behaviour::{
-    dial_addr_with_optional_peer_id, ensure_peer_id, split_peer_id, Behaviour,
+    Behaviour, dial_addr_with_optional_peer_id, ensure_peer_id, split_peer_id,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

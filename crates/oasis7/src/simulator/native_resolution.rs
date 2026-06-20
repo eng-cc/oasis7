@@ -1,8 +1,8 @@
 use crate::geometry::SPACE_UNIT_CM;
 
 use super::{
-    chunking::{CHUNK_SIZE_X_CM, CHUNK_SIZE_Y_CM, CHUNK_SIZE_Z_CM},
     CM_PER_KM,
+    chunking::{CHUNK_SIZE_X_CM, CHUNK_SIZE_Y_CM, CHUNK_SIZE_Z_CM},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

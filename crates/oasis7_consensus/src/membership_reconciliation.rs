@@ -10,8 +10,8 @@ use sha2::{Digest, Sha256};
 use super::distributed::topic_membership_reconcile;
 use super::error::WorldError;
 use super::membership::{
-    to_canonical_cbor, MembershipDirectorySignerKeyring, MembershipSyncClient,
-    MembershipSyncSubscription,
+    MembershipDirectorySignerKeyring, MembershipSyncClient, MembershipSyncSubscription,
+    to_canonical_cbor,
 };
 use super::membership_logic;
 use super::tiered_file_log;

@@ -263,11 +263,13 @@ fn hosted_account_login_start_enforces_extended_rate_limit() {
     assert!(!blocked.ok);
     assert_eq!(blocked.error_code.as_deref(), Some("login_rate_limited"));
     assert!(blocked.retry_after_seconds.unwrap_or_default() >= 1);
-    assert!(blocked
-        .error
-        .as_deref()
-        .unwrap_or_default()
-        .contains("last 10 minutes"));
+    assert!(
+        blocked
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("last 10 minutes")
+    );
 }
 
 #[test]

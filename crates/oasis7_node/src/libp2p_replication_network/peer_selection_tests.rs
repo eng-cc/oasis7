@@ -214,8 +214,8 @@ fn connected_or_active_transport_peers_falls_back_to_missing_record_peer_when_ne
 }
 
 #[test]
-fn connected_or_active_transport_peers_falls_back_to_bootstrap_peer_while_record_exchange_is_pending(
-) {
+fn connected_or_active_transport_peers_falls_back_to_bootstrap_peer_while_record_exchange_is_pending()
+ {
     let bootstrap_peer = PeerId::random();
     let healths = vec![PeerManagerPeerHealth {
         peer_id: bootstrap_peer.to_string(),

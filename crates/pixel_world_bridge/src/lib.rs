@@ -1,6 +1,6 @@
 use std::cell::RefCell;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::mem;
 
@@ -8,8 +8,8 @@ use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowPlugin};
 use js_sys::{Function, Object, Reflect};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use serde_wasm_bindgen::{from_value, Serializer};
+use serde_json::{Value, json};
+use serde_wasm_bindgen::{Serializer, from_value};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
@@ -290,7 +290,7 @@ pub fn build_pixel_world_render_state(raw_input: JsValue) -> JsValue {
             return render_state_fatal_value(
                 "pixel_world_render_state_parse_failed",
                 &format!("render state input parse failed: {error}"),
-            )
+            );
         }
     };
     let render_state = host_state::build_render_state(&input);

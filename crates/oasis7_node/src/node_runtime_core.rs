@@ -4,8 +4,8 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use oasis7_distfs::{
-    build_feedback_announce_from_receipt, FeedbackAppendRequest, FeedbackCreateRequest,
-    FeedbackMutationReceipt, FeedbackStore, FeedbackTombstoneRequest, LocalCasStore,
+    FeedbackAppendRequest, FeedbackCreateRequest, FeedbackMutationReceipt, FeedbackStore,
+    FeedbackTombstoneRequest, LocalCasStore, build_feedback_announce_from_receipt,
 };
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::world_error::WorldError as ProtoWorldError;
@@ -942,7 +942,7 @@ fn validate_local_main_token_action_account_binding(
         other => {
             return Err(format!(
                 "main token auth is not supported for action {other}"
-            ))
+            ));
         }
     }
     Ok(())

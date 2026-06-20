@@ -15,12 +15,21 @@ use std::time::{Duration, Instant};
 mod tests_auth;
 
 fn set_test_llm_env() {
-    std::env::set_var(crate::simulator::ENV_LLM_MODEL, "gpt-4o-mini");
-    std::env::set_var(
-        crate::simulator::ENV_LLM_BASE_URL,
-        "https://api.openai.com/v1",
-    );
-    std::env::set_var(crate::simulator::ENV_LLM_API_KEY, "test-api-key");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(crate::simulator::ENV_LLM_MODEL, "gpt-4o-mini");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(
+                crate::simulator::ENV_LLM_BASE_URL,
+                "https://api.openai.com/v1",
+            );
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(crate::simulator::ENV_LLM_API_KEY, "test-api-key");
+    }
 }
 
 fn test_signer(seed: u8) -> (String, String) {
@@ -230,7 +239,10 @@ fn viewer_live_llm_timeout_env_lock() -> &'static Mutex<()> {
 #[test]
 fn viewer_live_llm_timeout_defaults_to_trust_floor_budget() {
     let _guard = viewer_live_llm_timeout_env_lock().lock().expect("env lock");
-    std::env::remove_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS");
+    }
     assert_eq!(resolve_viewer_live_llm_timeout_ms(180_000), 30_000);
     assert_eq!(resolve_viewer_live_llm_timeout_ms(8_000), 8_000);
 }
@@ -238,10 +250,16 @@ fn viewer_live_llm_timeout_defaults_to_trust_floor_budget() {
 #[test]
 fn viewer_live_llm_timeout_respects_env_ceiling_without_expanding_budget() {
     let _guard = viewer_live_llm_timeout_env_lock().lock().expect("env lock");
-    std::env::set_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS", "9000");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS", "9000");
+    }
     assert_eq!(resolve_viewer_live_llm_timeout_ms(180_000), 9_000);
     assert_eq!(resolve_viewer_live_llm_timeout_ms(4_000), 4_000);
-    std::env::remove_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS");
+    }
 }
 
 #[test]

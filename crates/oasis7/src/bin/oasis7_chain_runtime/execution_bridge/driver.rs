@@ -3,21 +3,22 @@ use std::path::Path;
 
 use crate::release_security_policy_for_storage_profile;
 use oasis7::consensus_action_payload::{
-    decode_consensus_action_payload, ConsensusActionPayloadBody,
+    ConsensusActionPayloadBody, decode_consensus_action_payload,
 };
 use oasis7::runtime::{
-    blake3_hex, production_hardened_main_token_config, BlobStore, Journal as RuntimeJournal,
-    LocalCasStore, MainTokenConfig, MainTokenSupplyState, ReleaseSecurityPolicy,
-    Snapshot as RuntimeSnapshot, World as RuntimeWorld,
+    BlobStore, Journal as RuntimeJournal, LocalCasStore, MainTokenConfig, MainTokenSupplyState,
+    ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
+    production_hardened_main_token_config,
 };
 use oasis7::simulator::{
     Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldJournal as SimulatorJournal,
     WorldKernel, WorldSnapshot as SimulatorSnapshot,
 };
 use oasis7_node::{
-    compute_consensus_action_root, NodeExecutionCheckpointBlob, NodeExecutionCheckpointBundle,
-    NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionCommitResult,
-    NodeExecutionHook, NodeSnapshot, EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE,
+    EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE, NodeExecutionCheckpointBlob,
+    NodeExecutionCheckpointBundle, NodeExecutionCheckpointInstallContext,
+    NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook, NodeSnapshot,
+    compute_consensus_action_root,
 };
 use oasis7_proto::storage_profile::StorageProfileConfig;
 use oasis7_wasm_abi::ModuleSandbox;
@@ -36,9 +37,9 @@ use super::external_effect::{
     persist_execution_external_effect_materialization,
 };
 use super::{
-    ExecutionBridgeRecord, ExecutionBridgeState, ExecutionSimulatorMirrorRecord,
     EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_INTERVAL_HEIGHTS,
     EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_KEEP_LATEST, EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS,
+    ExecutionBridgeRecord, ExecutionBridgeState, ExecutionSimulatorMirrorRecord,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -257,9 +258,7 @@ impl NodeRuntimeExecutionDriver {
         if recovered_last_event_id != snapshot.last_event_id {
             return Err(format!(
                 "execution record at height {} missing journal_ref and loaded execution world journal prefix mismatches snapshot last_event_id expected={} actual={}",
-                target_height,
-                snapshot.last_event_id,
-                recovered_last_event_id
+                target_height, snapshot.last_event_id, recovered_last_event_id
             ));
         }
 

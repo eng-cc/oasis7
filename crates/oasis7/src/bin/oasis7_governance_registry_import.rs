@@ -5,9 +5,9 @@ use std::process;
 
 use oasis7::runtime::{
     GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
-    GovernanceThresholdSignerPolicy, ReleaseSecurityPolicy, World, WorldState,
-    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE,
-    MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
+    GovernanceThresholdSignerPolicy, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
+    ReleaseSecurityPolicy, World, WorldState,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

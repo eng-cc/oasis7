@@ -149,7 +149,7 @@ impl World {
                                         "update restricted claim admin registry rejected: {err:?}"
                                     )],
                                 },
-                            }))
+                            }));
                         }
                     };
                 if controller_account_id != expected_controller_account_id {
@@ -229,7 +229,7 @@ impl World {
                                         "submit validator admission rejected: {err:?}"
                                     )],
                                 },
-                            }))
+                            }));
                         }
                     };
                 if controller_account_id != expected_controller_account_id {
@@ -266,7 +266,7 @@ impl World {
                                     "submit validator admission rejected: {err:?}"
                                 )],
                             },
-                        }))
+                        }));
                     }
                 };
                 if self
@@ -340,7 +340,9 @@ impl World {
                             reason: RejectReason::RuleDenied {
                                 notes: vec![format!(
                                     "submit validator admission rejected: node identity binding mismatch node_id={} expected={} actual={}",
-                                    record.node_id, existing_public_key, record.finality_signer_public_key
+                                    record.node_id,
+                                    existing_public_key,
+                                    record.finality_signer_public_key
                                 )],
                             },
                         }));
@@ -428,7 +430,7 @@ impl World {
                                         "approve validator admission rejected: {err:?}"
                                     )],
                                 },
-                            }))
+                            }));
                         }
                     };
                 if controller_account_id != expected_controller_account_id {
@@ -502,7 +504,7 @@ impl World {
                                         "activate validator admission rejected: {err:?}"
                                     )],
                                 },
-                            }))
+                            }));
                         }
                     };
                 if controller_account_id != expected_controller_account_id {
@@ -604,7 +606,7 @@ impl World {
                                         "revoke validator admission rejected: {err:?}"
                                     )],
                                 },
-                            }))
+                            }));
                         }
                     };
                 if controller_account_id != expected_controller_account_id {
@@ -864,7 +866,7 @@ impl World {
                         action_id,
                         reason: RejectReason::RuleDenied {
                             notes: vec![
-                                "expires_at must be greater than current world time".to_string()
+                                "expires_at must be greater than current world time".to_string(),
                             ],
                         },
                     }));
@@ -874,7 +876,9 @@ impl World {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
                         reason: RejectReason::RuleDenied {
-                            notes: vec!["economic contract description cannot be empty".to_string()],
+                            notes: vec![
+                                "economic contract description cannot be empty".to_string(),
+                            ],
                         },
                     }));
                 }
@@ -1045,7 +1049,7 @@ impl World {
                         action_id,
                         reason: RejectReason::RuleDenied {
                             notes: vec![
-                                "settlement operator must belong to contract parties".to_string()
+                                "settlement operator must belong to contract parties".to_string(),
                             ],
                         },
                     }));
@@ -1056,7 +1060,7 @@ impl World {
                         action_id,
                         reason: RejectReason::RuleDenied {
                             notes: vec![
-                                "economic contract settlement notes cannot be empty".to_string()
+                                "economic contract settlement notes cannot be empty".to_string(),
                             ],
                         },
                     }));

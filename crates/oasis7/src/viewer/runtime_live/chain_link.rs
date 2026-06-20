@@ -2,7 +2,7 @@ use super::*;
 
 use super::super::protocol::{GameplayActionError, GameplayActionRequest};
 use crate::runtime::{
-    production_hardened_main_token_config, MainTokenConfig, MainTokenSupplyState,
+    MainTokenConfig, MainTokenSupplyState, production_hardened_main_token_config,
 };
 use std::net::ToSocketAddrs;
 

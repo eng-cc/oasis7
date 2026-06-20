@@ -368,9 +368,11 @@ fn file_store_delete_if_match_enforces_hash_precondition() {
         .expect("delete with match");
     assert!(removed);
     assert!(store.stat_file("state/a.txt").expect("stat").is_none());
-    assert!(!store
-        .delete_file_if_match("state/a.txt", None)
-        .expect("delete missing without precondition"));
+    assert!(
+        !store
+            .delete_file_if_match("state/a.txt", None)
+            .expect("delete missing without precondition")
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -421,9 +423,11 @@ fn file_index_audit_reports_missing_dangling_and_orphan_blobs() {
     let report = store.audit_file_index().expect("audit");
     assert_eq!(report.total_indexed_files, 2);
     assert_eq!(report.total_pins, 1);
-    assert!(report
-        .missing_file_blob_hashes
-        .contains(&missing.content_hash));
+    assert!(
+        report
+            .missing_file_blob_hashes
+            .contains(&missing.content_hash)
+    );
     assert!(!report.missing_file_blob_hashes.contains(&live.content_hash));
     assert!(report.dangling_pin_hashes.contains(&dangling_pin_hash));
     assert!(report.orphan_blob_hashes.contains(&orphan_hash));

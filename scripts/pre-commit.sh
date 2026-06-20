@@ -10,8 +10,8 @@ while IFS= read -r file; do
 done < <(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
 
 if [[ ${#staged_rust_files[@]} -gt 0 ]]; then
-  echo "+ env -u RUSTC_WRAPPER rustfmt --edition 2021 ${staged_rust_files[*]}"
-  env -u RUSTC_WRAPPER rustfmt --edition 2021 "${staged_rust_files[@]}"
+  echo "+ env -u RUSTC_WRAPPER rustfmt --edition 2024 ${staged_rust_files[*]}"
+  env -u RUSTC_WRAPPER rustfmt --edition 2024 "${staged_rust_files[@]}"
   echo "+ git add ${staged_rust_files[*]}"
   git add "${staged_rust_files[@]}"
 else

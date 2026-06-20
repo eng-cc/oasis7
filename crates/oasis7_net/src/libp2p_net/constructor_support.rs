@@ -5,12 +5,14 @@ pub(super) fn schedule_periodic_republish(command_tx: mpsc::Sender<Command>, int
         return;
     }
     let mut command_tx = command_tx;
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_millis(interval_ms as u64));
-        match command_tx.try_send(Command::RepublishProviders) {
-            Ok(()) => {}
-            Err(err) if err.is_full() => {}
-            Err(_) => break,
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(interval_ms as u64));
+            match command_tx.try_send(Command::RepublishProviders) {
+                Ok(()) => {}
+                Err(err) if err.is_full() => {}
+                Err(_) => break,
+            }
         }
     });
 }
@@ -23,12 +25,14 @@ pub(super) fn schedule_periodic_discovery_refresh(
         return;
     }
     let mut command_tx = command_tx;
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_millis(interval_ms as u64));
-        match command_tx.try_send(Command::RefreshPeerDiscovery) {
-            Ok(()) => {}
-            Err(err) if err.is_full() => {}
-            Err(_) => break,
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(interval_ms as u64));
+            match command_tx.try_send(Command::RefreshPeerDiscovery) {
+                Ok(()) => {}
+                Err(err) if err.is_full() => {}
+                Err(_) => break,
+            }
         }
     });
 }
@@ -42,13 +46,15 @@ pub(super) fn schedule_bootstrap_redial(
         return;
     }
     let mut command_tx = command_tx;
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_millis(interval_ms as u64));
-        for addr in &peers {
-            match command_tx.try_send(Command::Dial(addr.clone())) {
-                Ok(()) => {}
-                Err(err) if err.is_full() => break,
-                Err(_) => return,
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(interval_ms as u64));
+            for addr in &peers {
+                match command_tx.try_send(Command::Dial(addr.clone())) {
+                    Ok(()) => {}
+                    Err(err) if err.is_full() => break,
+                    Err(_) => return,
+                }
             }
         }
     });

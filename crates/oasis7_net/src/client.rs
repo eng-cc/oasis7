@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use oasis7_proto::distributed as proto_distributed;
 use oasis7_proto::distributed::WorldHeadAnnounce;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use super::distributed_dht::DistributedDht;
 use super::distributed_net::DistributedNetwork;
 use super::error::WorldError;
 use super::modules::{ModuleArtifact, ModuleManifest};
-use super::provider_distribution::{audit_provider_distribution, ProviderDistributionPolicy};
+use super::provider_distribution::{ProviderDistributionPolicy, audit_provider_distribution};
 use super::provider_selection::ProviderSelectionPolicy;
 use super::util::{to_canonical_cbor, unix_now_ms_i64};
 

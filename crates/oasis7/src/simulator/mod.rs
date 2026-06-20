@@ -49,30 +49,29 @@ pub use agent::{
 };
 pub use asteroid_fragment::generate_fragments;
 pub use chunking::{
-    chunk_bounds, chunk_coord_of, chunk_coords, chunk_grid_dims, chunk_seed, ChunkBounds,
-    ChunkCoord, CHUNK_SIZE_X_CM, CHUNK_SIZE_Y_CM, CHUNK_SIZE_Z_CM,
+    CHUNK_SIZE_X_CM, CHUNK_SIZE_Y_CM, CHUNK_SIZE_Z_CM, ChunkBounds, ChunkCoord, chunk_bounds,
+    chunk_coord_of, chunk_coords, chunk_grid_dims, chunk_seed,
 };
 pub use decision_provider::{
-    golden_decision_provider_fixtures, ActionCatalogEntry, DecisionProvider, DecisionProviderError,
+    ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, DecisionProvider, DecisionProviderError,
     DecisionRequest, DecisionRequestContractError, DecisionResponse, FeedbackEnvelope,
     GoldenDecisionFixture, MemoryWriteIntent, MockDecisionProvider, MockDecisionProviderState,
     ObservationEnvelope, ProviderBackedAgentBehavior, ProviderDecision, ProviderDiagnostics,
     ProviderErrorEnvelope, ProviderExecutionMode, ProviderInteractionTarget,
     ProviderMissionContext, ProviderNavigationNode, ProviderNearbyEntity, ProviderObservation,
     ProviderRecentEvent, ProviderSelfState, ProviderTokenUsage, ProviderTraceEnvelope,
-    ProviderTranscriptEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    ProviderTranscriptEntry, golden_decision_provider_fixtures,
 };
 pub use fragment_physics::{
-    infer_element_ppm, mass_grams_from_volume_density, synthesize_fragment_budget,
-    synthesize_fragment_profile, CompoundComposition, CuboidSizeCm, FragmentBlock,
-    FragmentBlockField, FragmentCompoundKind, FragmentPhysicalProfile, GridPosCm, CM3_PER_M3,
-    MIN_BLOCK_EDGE_CM,
+    CM3_PER_M3, CompoundComposition, CuboidSizeCm, FragmentBlock, FragmentBlockField,
+    FragmentCompoundKind, FragmentPhysicalProfile, GridPosCm, MIN_BLOCK_EDGE_CM, infer_element_ppm,
+    mass_grams_from_volume_density, synthesize_fragment_budget, synthesize_fragment_profile,
 };
 pub use init::{
-    build_world_model, initialize_kernel, AgentSpawnConfig, AsteroidFragmentInitConfig,
-    LocationSeedConfig, OriginLocationConfig, PowerPlantSeedConfig, WorldInitConfig,
-    WorldInitError, WorldInitReport,
+    AgentSpawnConfig, AsteroidFragmentInitConfig, LocationSeedConfig, OriginLocationConfig,
+    PowerPlantSeedConfig, WorldInitConfig, WorldInitError, WorldInitReport, build_world_model,
+    initialize_kernel,
 };
 pub use kernel::ChunkRuntimeConfig;
 pub use kernel::{
@@ -100,9 +99,9 @@ pub use memory::{
 };
 pub use module_visual::{ModuleVisualAnchor, ModuleVisualEntity};
 pub use native_resolution::{
-    fragment_block_native_resolution, native_resolution_by_subsystem, runtime_native_resolutions,
     CmMappingRule, NativeResolutionDeclaration, NativeResolutionKind, NativeResolutionValue,
-    RoundingRule, RUNTIME_NATIVE_RESOLUTIONS,
+    RUNTIME_NATIVE_RESOLUTIONS, RoundingRule, fragment_block_native_resolution,
+    native_resolution_by_subsystem, runtime_native_resolutions,
 };
 pub use persist::{
     PersistError, PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot,
@@ -115,13 +114,12 @@ pub use persist::{
 pub use provider_loopback_adapter::ProviderLoopbackAdapter;
 #[cfg(not(target_arch = "wasm32"))]
 pub use provider_loopback_http::{
-    evaluate_provider_compatibility, provider_phase1_required_actions,
-    provider_phase1_required_capabilities, validate_provider_http_base_url,
-    validate_provider_loopback_http_base_url, ProviderAgentChatRequest, ProviderAgentChatResponse,
-    ProviderCompatibilityReport, ProviderCompatibilityStatus, ProviderFeedbackAck, ProviderHealth,
-    ProviderInfo, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
-    LOOPBACK_HTTP_PROVIDER_TRANSPORT, PROVIDER_PHASE1_ACTION_SET_ALIAS,
-    REMOTE_HTTPS_PROVIDER_TRANSPORT,
+    LOOPBACK_HTTP_PROVIDER_TRANSPORT, PROVIDER_PHASE1_ACTION_SET_ALIAS, ProviderAgentChatRequest,
+    ProviderAgentChatResponse, ProviderCompatibilityReport, ProviderCompatibilityStatus,
+    ProviderFeedbackAck, ProviderHealth, ProviderInfo, ProviderLoopbackHttpClient,
+    ProviderLoopbackHttpError, REMOTE_HTTPS_PROVIDER_TRANSPORT, evaluate_provider_compatibility,
+    provider_phase1_required_actions, provider_phase1_required_capabilities,
+    validate_provider_http_base_url, validate_provider_loopback_http_base_url,
 };
 pub use runner::{
     AgentQuota, AgentRunner, AgentStats, AgentTickResult, RateLimitPolicy, RateLimitState,
@@ -133,22 +131,21 @@ pub use social::{
     SocialFactLifecycleState, SocialFactState, SocialStake,
 };
 pub use types::{
-    Action, ActionEnvelope, ActionId, ActionSubmitter, AgentId, AssetId, ChunkResourceBudget,
-    ElementBudgetError, ElementComposition, FacilityId, FragmentElementKind,
-    FragmentResourceBudget, LocationId, LocationProfile, MaterialKind, ModuleInstallTarget,
-    PowerOrderSide, ResourceKind, ResourceOwner, ResourceStock, StockError, WorldEventId,
-    WorldTime, CHUNK_GENERATION_SCHEMA_VERSION, CM_PER_KM, DEFAULT_ELEMENT_RECOVERABILITY_PPM,
-    DEFAULT_MOVE_COST_PER_KM_ELECTRICITY, DEFAULT_VISIBILITY_RANGE_CM, JOURNAL_VERSION, PPM_BASE,
-    SNAPSHOT_VERSION,
+    Action, ActionEnvelope, ActionId, ActionSubmitter, AgentId, AssetId,
+    CHUNK_GENERATION_SCHEMA_VERSION, CM_PER_KM, ChunkResourceBudget,
+    DEFAULT_ELEMENT_RECOVERABILITY_PPM, DEFAULT_MOVE_COST_PER_KM_ELECTRICITY,
+    DEFAULT_VISIBILITY_RANGE_CM, ElementBudgetError, ElementComposition, FacilityId,
+    FragmentElementKind, FragmentResourceBudget, JOURNAL_VERSION, LocationId, LocationProfile,
+    MaterialKind, ModuleInstallTarget, PPM_BASE, PowerOrderSide, ResourceKind, ResourceOwner,
+    ResourceStock, SNAPSHOT_VERSION, StockError, WorldEventId, WorldTime,
 };
 pub use world_model::{
-    physics_parameter_specs, Agent, AgentExecutionDebugContext, AgentKinematics,
-    AgentPromptProfile, Asset, AssetKind, AsteroidFragmentConfig, BoundaryReservation, ChunkState,
-    EconomyConfig, Factory, FragmentResourceError, InstalledModuleState, Location,
-    MaterialDistributionStrategy, MaterialRadiationFactors, MaterialWeights,
-    ModuleArtifactBidState, ModuleArtifactListingState, ModuleArtifactState, PhysicsConfig,
-    PhysicsParameterSpec, PowerOrderBookState, PowerOrderState, SpaceConfig, ThermalStatus,
-    WorldConfig, WorldModel,
+    Agent, AgentExecutionDebugContext, AgentKinematics, AgentPromptProfile, Asset, AssetKind,
+    AsteroidFragmentConfig, BoundaryReservation, ChunkState, EconomyConfig, Factory,
+    FragmentResourceError, InstalledModuleState, Location, MaterialDistributionStrategy,
+    MaterialRadiationFactors, MaterialWeights, ModuleArtifactBidState, ModuleArtifactListingState,
+    ModuleArtifactState, PhysicsConfig, PhysicsParameterSpec, PowerOrderBookState, PowerOrderState,
+    SpaceConfig, ThermalStatus, WorldConfig, WorldModel, physics_parameter_specs,
 };
 
 // Re-export power system types
@@ -162,8 +159,8 @@ pub use runtime_perf::{
 
 // Re-export event types from kernel
 pub use kernel::{
-    merge_kernel_rule_decisions, ChunkGenerationCause, KernelRuleCost, KernelRuleDecision,
-    KernelRuleDecisionMergeError, KernelRuleModuleContext, KernelRuleModuleInput,
-    KernelRuleModuleOutput, KernelRuleVerdict, PowerOrderFill, PromptUpdateOperation, RejectReason,
-    WorldEvent, WorldEventKind,
+    ChunkGenerationCause, KernelRuleCost, KernelRuleDecision, KernelRuleDecisionMergeError,
+    KernelRuleModuleContext, KernelRuleModuleInput, KernelRuleModuleOutput, KernelRuleVerdict,
+    PowerOrderFill, PromptUpdateOperation, RejectReason, WorldEvent, WorldEventKind,
+    merge_kernel_rule_decisions,
 };

@@ -1,34 +1,33 @@
 use super::platform_ops::viewer_dev_dist_candidates;
 use super::{
-    build_chain_runtime_args, build_game_url, build_launcher_args,
-    chain_runtime_effectively_enabled, chain_runtime_status_from_web,
-    check_provider_loopback_http_provider, collect_chain_required_config_issues,
-    collect_required_config_issues,
-    config_ui::{issue_field_ids, StartupGuideTarget},
+    ChainRuntimeStatus, ClientLauncherApp, ConfigIssue, DEFAULT_CLIENT_LAUNCHER_CONTROL_BIND,
+    GlossaryTerm, LaunchConfig, LauncherStatus, OASIS7_CJK_FONT_NAME,
+    OASIS7_CLIENT_LAUNCHER_LANG_ENV, ProviderCompatibilityStatus, UiLanguage,
+    WebChainRecoverySnapshot, WebRequestDomain, WebStateSnapshot, build_chain_runtime_args,
+    build_game_url, build_launcher_args, chain_runtime_effectively_enabled,
+    chain_runtime_status_from_web, check_provider_loopback_http_provider,
+    collect_chain_required_config_issues, collect_required_config_issues,
+    config_ui::{StartupGuideTarget, issue_field_ids},
     encode_query_value, encoded_query_pair,
     explorer_window::{
-        resolve_explorer_my_account_candidate, ExplorerQuickShortcut, ExplorerStatusFilter,
-        ExplorerTab, WebExplorerOverviewResponse,
+        ExplorerQuickShortcut, ExplorerStatusFilter, ExplorerTab, WebExplorerOverviewResponse,
+        resolve_explorer_my_account_candidate,
     },
     install_cjk_font, normalize_host_for_url, normalize_launch_config, parse_chain_role,
     parse_chain_validators, parse_host_port, parse_http_base_url, parse_port,
     probe_chain_status_endpoint, read_named_env_value_with, resolve_control_plane_env_with,
     self_guided::{
-        resolve_config_guide_target, resolve_next_task_hint, resolve_primary_disabled_cta,
         ConfigGuideTargetHint, DemoModePhase, DisabledActionCta, NextTaskHint, OnboardingStep,
+        resolve_config_guide_target, resolve_next_task_hint, resolve_primary_disabled_cta,
     },
     self_guided_blocked_actions::resolve_disabled_cta_plan,
-    self_guided_preflight::{resolve_chain_runtime_preflight_state, PreflightCheckState},
+    self_guided_preflight::{PreflightCheckState, resolve_chain_runtime_preflight_state},
     should_request_auto_chain_start,
     transfer_window::{
+        TransferTimelineState, WebTransferAccountEntry, WebTransferLifecycleStatus,
         hosted_public_join_transfer_blocked, recommend_default_from_account,
         recommend_transfer_account_ids, resolve_transfer_timeline, transfer_amount_presets,
-        TransferTimelineState, WebTransferAccountEntry, WebTransferLifecycleStatus,
     },
-    ChainRuntimeStatus, ClientLauncherApp, ConfigIssue, GlossaryTerm, LaunchConfig, LauncherStatus,
-    ProviderCompatibilityStatus, UiLanguage, WebChainRecoverySnapshot, WebRequestDomain,
-    WebStateSnapshot, DEFAULT_CLIENT_LAUNCHER_CONTROL_BIND, OASIS7_CJK_FONT_NAME,
-    OASIS7_CLIENT_LAUNCHER_LANG_ENV,
 };
 use eframe::egui;
 use oasis7::launcher_bootstrap_peers::{
@@ -63,14 +62,26 @@ fn clear_hosted_strong_auth_env() {
         "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY",
         "OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE",
     ] {
-        std::env::remove_var(name);
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(name);
+        }
     }
 }
 
 fn set_hosted_strong_auth_env() {
-    std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY", "public-key");
-    std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY", "private-key");
-    std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE", "approval");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var("OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY", "public-key");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var("OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY", "private-key");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var("OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE", "approval");
+    }
 }
 #[test]
 fn parse_port_rejects_zero() {

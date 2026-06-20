@@ -370,21 +370,27 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
         PlayerGameplayStageStatus::BranchReady
     );
     assert_eq!(gameplay.progress_percent, 92);
-    assert!(gameplay
-        .branch_hint
-        .as_deref()
-        .is_some_and(|hint| hint.contains("throughput expansion")));
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .any(
-            |action| action.action_id == "schedule_recipe_smelter_alloy_plate"
-                && action.disabled_reason.is_none()
-        ));
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .any(|action| action.action_id == "build_factory_assembler_mk1"));
+    assert!(
+        gameplay
+            .branch_hint
+            .as_deref()
+            .is_some_and(|hint| hint.contains("throughput expansion"))
+    );
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(
+                |action| action.action_id == "schedule_recipe_smelter_alloy_plate"
+                    && action.disabled_reason.is_none()
+            )
+    );
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "build_factory_assembler_mk1")
+    );
 }
 
 #[test]
@@ -399,13 +405,15 @@ fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() 
         PlayerGameplayGoalKind::ChooseMidLoopPath
     );
     assert_eq!(gameplay.progress_percent, 100);
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .any(
-            |action| action.action_id == "schedule_recipe_smelter_alloy_plate"
-                && action.disabled_reason.is_none()
-        ));
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(
+                |action| action.action_id == "schedule_recipe_smelter_alloy_plate"
+                    && action.disabled_reason.is_none()
+            )
+    );
 }
 
 #[test]
@@ -441,27 +449,33 @@ fn runtime_gameplay_actions_expose_scale_out_and_governance_recipes_once_assembl
         &mut server,
         "player gameplay after assembler build in governance stage",
     );
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .any(
-            |action| action.action_id == "schedule_recipe_assembler_sensor_pack"
-                && action.disabled_reason.is_none()
-        ));
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .any(
-            |action| action.action_id == "schedule_recipe_assembler_module_rack"
-                && action.disabled_reason.is_none()
-        ));
-    assert!(gameplay
-        .available_actions
-        .iter()
-        .any(
-            |action| action.action_id == "schedule_recipe_assembler_factory_core"
-                && action.disabled_reason.is_none()
-        ));
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(
+                |action| action.action_id == "schedule_recipe_assembler_sensor_pack"
+                    && action.disabled_reason.is_none()
+            )
+    );
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(
+                |action| action.action_id == "schedule_recipe_assembler_module_rack"
+                    && action.disabled_reason.is_none()
+            )
+    );
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(
+                |action| action.action_id == "schedule_recipe_assembler_factory_core"
+                    && action.disabled_reason.is_none()
+            )
+    );
 }
 
 #[test]

@@ -4,8 +4,8 @@ use libp2p::PeerId;
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, SignedPeerRecord};
 
 use super::peer_manager::{
-    discovery_source_label, exceeds_share_limit, ipv4_subnet_bucket, meets_or_exceeds_share_limit,
-    normalized_source_label, relay_domain, PeerManagerHealthStatus, PeerManagerPolicy,
+    PeerManagerHealthStatus, PeerManagerPolicy, discovery_source_label, exceeds_share_limit,
+    ipv4_subnet_bucket, meets_or_exceeds_share_limit, normalized_source_label, relay_domain,
 };
 use super::transport_paths::{TransportPath, TransportPathKind};
 

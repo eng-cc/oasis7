@@ -1,10 +1,10 @@
 use super::*;
 
 use super::super::auth::{
-    verify_agent_chat_auth_proof, verify_hosted_prompt_control_apply_strong_auth_grant,
+    PromptControlAuthIntent, VerifiedPlayerAuth, verify_agent_chat_auth_proof,
+    verify_hosted_prompt_control_apply_strong_auth_grant,
     verify_hosted_prompt_control_rollback_strong_auth_grant,
     verify_prompt_control_apply_auth_proof, verify_prompt_control_rollback_auth_proof,
-    PromptControlAuthIntent, VerifiedPlayerAuth,
 };
 use super::super::protocol::{
     AgentChatAck, AgentChatError, AgentChatRequest, PromptControlAck, PromptControlApplyRequest,
@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 
 mod llm_sidecar;
 pub(super) use llm_sidecar::{
-    simulator_action_label, simulator_action_to_runtime, RuntimeLlmSidecar,
+    RuntimeLlmSidecar, simulator_action_label, simulator_action_to_runtime,
 };
 
 const RUNTIME_AGENT_CHAT_ECHO_ENV: &str = "OASIS7_RUNTIME_AGENT_CHAT_ECHO";
@@ -28,8 +28,8 @@ const RUNTIME_AGENT_CHAT_ECHO_NOTICE: &str =
 const HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
 
 #[allow(dead_code)]
-pub(in crate::viewer::runtime_live) fn runtime_provider_settings_from_env(
-) -> Result<Option<llm_sidecar::ProviderDecisionSettings>, String> {
+pub(in crate::viewer::runtime_live) fn runtime_provider_settings_from_env()
+-> Result<Option<llm_sidecar::ProviderDecisionSettings>, String> {
     llm_sidecar::provider_settings_from_env()
 }
 

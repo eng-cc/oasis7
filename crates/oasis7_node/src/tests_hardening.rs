@@ -2,12 +2,12 @@ use super::gossip_udp::{GossipEndpoint, GossipProposalMessage};
 use super::*;
 use ed25519_dalek::{Signer as _, SigningKey};
 use oasis7_consensus::node_consensus_signature::{
-    sign_proposal_message, NodeConsensusMessageSigner as ConsensusMessageSigner,
+    NodeConsensusMessageSigner as ConsensusMessageSigner, sign_proposal_message,
 };
 use oasis7_distfs::{
-    blake3_hex, build_replication_record_with_epoch, feedback_announce_topic,
-    public_key_hex_from_signing_key_hex, sign_feedback_create_request, FeedbackCreateRequest,
-    FeedbackStore, FeedbackStoreConfig, FileReplicationRecord, LocalCasStore,
+    FeedbackCreateRequest, FeedbackStore, FeedbackStoreConfig, FileReplicationRecord,
+    LocalCasStore, blake3_hex, build_replication_record_with_epoch, feedback_announce_topic,
+    public_key_hex_from_signing_key_hex, sign_feedback_create_request,
 };
 use oasis7_proto::distributed::DistributedErrorCode;
 use oasis7_proto::distributed_net::NetworkSubscription;

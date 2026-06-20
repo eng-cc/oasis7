@@ -330,8 +330,7 @@ fn explorer_overview_and_transaction_queries_return_expected_payloads() {
     assert!(overview.latest_height >= 1);
 
     let (mut txs_server, mut txs_client) = tcp_stream_pair();
-    let txs_http =
-        "GET /v1/chain/explorer/transactions?status=confirmed&limit=10 HTTP/1.1\r\nHost: 127.0.0.1:5121\r\n\r\n";
+    let txs_http = "GET /v1/chain/explorer/transactions?status=confirmed&limit=10 HTTP/1.1\r\nHost: 127.0.0.1:5121\r\n\r\n";
     maybe_handle_transfer_submit_request(
         &mut txs_server,
         txs_http.as_bytes(),

@@ -221,9 +221,11 @@ fn sequencer_auto_join_can_promote_to_public_entry_after_consent() {
         recommendation.effective_policy.node_role_claim,
         PeerNodeRole::ValidatorCore
     );
-    assert!(recommendation
-        .effective_policy
-        .public_direct_surface_allowed());
+    assert!(
+        recommendation
+            .effective_policy
+            .public_direct_surface_allowed()
+    );
 }
 
 #[test]

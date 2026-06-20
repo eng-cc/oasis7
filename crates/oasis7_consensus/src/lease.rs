@@ -323,10 +323,12 @@ mod tests {
 
         let decision = manager.try_acquire("seq-1", 100, 10);
         assert!(!decision.granted);
-        assert!(decision
-            .reason
-            .as_ref()
-            .is_some_and(|reason| reason.contains("term overflow")));
+        assert!(
+            decision
+                .reason
+                .as_ref()
+                .is_some_and(|reason| reason.contains("term overflow"))
+        );
         assert!(manager.current().is_none());
         assert_eq!(manager.next_term, u64::MAX);
     }
@@ -337,10 +339,12 @@ mod tests {
 
         let decision = manager.try_acquire("seq-1", i64::MAX - 1, 10);
         assert!(!decision.granted);
-        assert!(decision
-            .reason
-            .as_ref()
-            .is_some_and(|reason| reason.contains("expires_at overflow")));
+        assert!(
+            decision
+                .reason
+                .as_ref()
+                .is_some_and(|reason| reason.contains("expires_at overflow"))
+        );
         assert!(manager.current().is_none());
         assert_eq!(manager.next_term, 1);
     }
@@ -354,10 +358,12 @@ mod tests {
 
         let renewed = manager.renew(&lease.lease_id, i64::MAX - 15, 20);
         assert!(!renewed.granted);
-        assert!(renewed
-            .reason
-            .as_ref()
-            .is_some_and(|reason| reason.contains("expires_at overflow")));
+        assert!(
+            renewed
+                .reason
+                .as_ref()
+                .is_some_and(|reason| reason.contains("expires_at overflow"))
+        );
         assert_eq!(
             manager.current().expect("active lease").expires_at_ms,
             previous_expiry

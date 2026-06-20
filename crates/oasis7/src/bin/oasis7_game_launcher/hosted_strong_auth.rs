@@ -3,7 +3,7 @@ use super::hosted_player_session::{
     HostedPlayerSessionIssuer,
 };
 use super::*;
-use oasis7::viewer::{sign_hosted_prompt_control_strong_auth_grant, HostedStrongAuthGrant};
+use oasis7::viewer::{HostedStrongAuthGrant, sign_hosted_prompt_control_strong_auth_grant};
 use serde::Serialize;
 
 pub(super) const HOSTED_STRONG_AUTH_GRANT_ROUTE: &str = "/api/public/strong-auth/grant";
@@ -216,7 +216,10 @@ mod tests {
     }
 
     fn set_env(name: &str, value: &str) {
-        std::env::set_var(name, value);
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(name, value);
+        }
     }
 
     fn clear_env() {
@@ -225,7 +228,10 @@ mod tests {
             HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV,
             HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV,
         ] {
-            std::env::remove_var(name);
+            // SAFETY: This test/setup code mutates process environment in a controlled scope.
+            unsafe {
+                oasis7::env_mut::remove_var(name);
+            }
         }
     }
 
@@ -331,10 +337,12 @@ mod tests {
             response.error_code.as_deref(),
             Some("strong_auth_action_not_enabled")
         );
-        assert!(response
-            .error
-            .as_deref()
-            .is_some_and(|message| message.contains("main_token_transfer")));
+        assert!(
+            response
+                .error
+                .as_deref()
+                .is_some_and(|message| message.contains("main_token_transfer"))
+        );
         clear_env();
     }
 }

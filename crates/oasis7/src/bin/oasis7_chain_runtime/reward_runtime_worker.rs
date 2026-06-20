@@ -8,10 +8,10 @@ use std::time::Duration;
 
 use oasis7::observability::emit_stderr_or_event;
 use oasis7::runtime::{
-    measure_directory_storage_bytes, Action as RuntimeAction, BlobStore, LocalCasStore,
-    NodePointsConfig, NodePointsRuntimeCollector, NodePointsRuntimeCollectorSnapshot,
-    NodePointsRuntimeHeuristics, NodePointsRuntimeObservation, ProtocolPowerReserve,
-    RewardAssetConfig, RewardSignatureGovernancePolicy, World as RuntimeWorld,
+    Action as RuntimeAction, BlobStore, LocalCasStore, NodePointsConfig,
+    NodePointsRuntimeCollector, NodePointsRuntimeCollectorSnapshot, NodePointsRuntimeHeuristics,
+    NodePointsRuntimeObservation, ProtocolPowerReserve, RewardAssetConfig,
+    RewardSignatureGovernancePolicy, World as RuntimeWorld, measure_directory_storage_bytes,
 };
 use oasis7_distfs::StorageChallengeProbeCursorState;
 use oasis7_node::{NodeRole, NodeRuntime, PosConsensusStatus};
@@ -19,8 +19,8 @@ use serde::Serialize;
 use tracing::Level;
 
 use super::distfs_probe_runtime::{
-    collect_distfs_challenge_report_with_config, load_reward_runtime_distfs_probe_state,
-    persist_reward_runtime_distfs_probe_state, DistfsProbeRuntimeConfig,
+    DistfsProbeRuntimeConfig, collect_distfs_challenge_report_with_config,
+    load_reward_runtime_distfs_probe_state, persist_reward_runtime_distfs_probe_state,
 };
 use super::reward_runtime_settlement::{
     auto_redeem_runtime_rewards, build_reward_settlement_mint_records,
@@ -294,7 +294,7 @@ fn reward_runtime_loop(
         let snapshot = match node_runtime.lock() {
             Ok(locked) => locked.snapshot(),
             Err(_) => {
-                return Err("reward runtime failed to read node snapshot: lock poisoned".into())
+                return Err("reward runtime failed to read node snapshot: lock poisoned".into());
             }
         };
         let observed_at_unix_ms = super::now_unix_ms();

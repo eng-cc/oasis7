@@ -120,8 +120,8 @@ fn build_viewer_auth_bootstrap_script(auth: &ViewerAuthBootstrap) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
+        VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV, ViewerAuthBootstrap,
         inject_viewer_auth_bootstrap_if_html, resolve_optional_viewer_auth_bootstrap,
-        ViewerAuthBootstrap, VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -144,8 +144,14 @@ mod tests {
                 public_key: std::env::var(VIEWER_AUTH_PUBLIC_KEY_ENV).ok(),
                 private_key: std::env::var(VIEWER_AUTH_PRIVATE_KEY_ENV).ok(),
             };
-            std::env::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
-            std::env::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
+            // SAFETY: This test/setup code mutates process environment in a controlled scope.
+            unsafe {
+                oasis7::env_mut::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
+            }
+            // SAFETY: This test/setup code mutates process environment in a controlled scope.
+            unsafe {
+                oasis7::env_mut::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
+            }
             restore
         }
     }
@@ -159,8 +165,18 @@ mod tests {
 
     fn restore_env_var(name: &str, value: Option<&str>) {
         match value {
-            Some(value) => std::env::set_var(name, value),
-            None => std::env::remove_var(name),
+            Some(value) => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::set_var(name, value);
+                }
+            }
+            None => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::remove_var(name);
+                }
+            }
         }
     }
 
@@ -199,8 +215,14 @@ mod tests {
     fn resolve_optional_viewer_auth_bootstrap_prefers_env_keys() {
         let _guard = viewer_auth_test_env_lock().lock().expect("env lock");
         let _restore = ViewerAuthEnvRestore::clear();
-        std::env::set_var(VIEWER_AUTH_PUBLIC_KEY_ENV, "env-public");
-        std::env::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, "env-private");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(VIEWER_AUTH_PUBLIC_KEY_ENV, "env-public");
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, "env-private");
+        }
         let auth = resolve_optional_viewer_auth_bootstrap().expect("auth");
         assert_eq!(auth.public_key, "env-public");
         assert_eq!(auth.private_key, "env-private");

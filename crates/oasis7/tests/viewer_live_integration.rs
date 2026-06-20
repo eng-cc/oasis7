@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 
 use oasis7::simulator::WorldScenario;
 use oasis7::viewer::{
-    PromptControlApplyRequest, PromptControlCommand, ViewerControl, ViewerLiveServer,
-    ViewerLiveServerConfig, ViewerRequest, ViewerResponse, ViewerStream, VIEWER_PROTOCOL_VERSION,
+    PromptControlApplyRequest, PromptControlCommand, VIEWER_PROTOCOL_VERSION, ViewerControl,
+    ViewerLiveServer, ViewerLiveServerConfig, ViewerRequest, ViewerResponse, ViewerStream,
 };
 
 #[test]

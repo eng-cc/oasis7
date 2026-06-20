@@ -384,9 +384,7 @@ fn action_signature(action: &Action) -> String {
             wasm_hash,
             module_id_hint,
             ..
-        } => format!(
-            "deploy_module_artifact:{publisher_agent_id}:{wasm_hash}:{module_id_hint:?}"
-        ),
+        } => format!("deploy_module_artifact:{publisher_agent_id}:{wasm_hash}:{module_id_hint:?}"),
         Action::InstallModuleFromArtifact {
             installer_agent_id,
             module_id,
@@ -477,9 +475,7 @@ fn action_signature(action: &Action) -> String {
             alliance_id,
             members,
             charter,
-        } => format!(
-            "form_alliance:{proposer_agent_id}:{alliance_id}:{members:?}:{charter}"
-        ),
+        } => format!("form_alliance:{proposer_agent_id}:{alliance_id}:{members:?}:{charter}"),
         Action::JoinAlliance {
             operator_agent_id,
             alliance_id,
@@ -559,9 +555,9 @@ fn action_signature(action: &Action) -> String {
             contract_id,
             success,
             notes,
-        } => format!(
-            "settle_economic_contract:{operator_agent_id}:{contract_id}:{success}:{notes}"
-        ),
+        } => {
+            format!("settle_economic_contract:{operator_agent_id}:{contract_id}:{success}:{notes}")
+        }
         other => format!("other:{other:?}"),
     }
 }

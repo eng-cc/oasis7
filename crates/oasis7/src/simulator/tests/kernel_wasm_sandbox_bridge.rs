@@ -179,9 +179,11 @@ fn kernel_wasm_sandbox_bridge_deny_rejects_action() {
     match event.kind {
         WorldEventKind::ActionRejected { reason } => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| note.contains("blocked by sandbox rule")));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| note.contains("blocked by sandbox rule"))
+                );
             }
             other => panic!("unexpected reject reason: {other:?}"),
         },
@@ -215,9 +217,11 @@ fn kernel_wasm_sandbox_bridge_failure_is_rejected_with_rule_denied_note() {
     match event.kind {
         WorldEventKind::ActionRejected { reason } => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| note.contains("wasm pre-action evaluator failed")));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| note.contains("wasm pre-action evaluator failed"))
+                );
                 assert!(notes.iter().any(|note| note.contains("module call failed")));
                 assert!(notes.iter().any(|note| note.contains("Timeout")));
             }

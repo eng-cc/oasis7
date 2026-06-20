@@ -1,14 +1,14 @@
 use crate::geometry::space_distance_cm;
 
-use super::super::chunking::ChunkCoord;
-use super::super::init::{generate_chunk_fragments, AsteroidFragmentInitConfig, WorldInitConfig};
 use super::super::ChunkState;
+use super::super::chunking::ChunkCoord;
+use super::super::init::{AsteroidFragmentInitConfig, WorldInitConfig, generate_chunk_fragments};
+use super::WorldKernel;
 use super::types::{
     ChunkGenerationCause, Observation, ObservedAgent, ObservedLocation,
     ObservedModuleArtifactRecord, ObservedModuleLifecycleState, ObservedModuleMarketState,
     ObservedPowerMarketState, ObservedSocialState, RejectReason, WorldEventKind,
 };
-use super::WorldKernel;
 
 impl WorldKernel {
     pub fn observe(&mut self, agent_id: &str) -> Result<Observation, RejectReason> {

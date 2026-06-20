@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use libp2p::identity::Keypair;
 use libp2p::PeerId;
+use libp2p::identity::Keypair;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerRecord};
 
 use super::peer_record::sign_peer_record;
@@ -333,17 +333,23 @@ fn refresh_peer_discovery_respects_republish_and_query_budgets() {
     );
     assert!(matches!(outcome, super::CommandOutcome::Continue));
     assert_eq!(pending_dht.len(), 2);
-    assert!(pending_dht
-        .values()
-        .any(|query| matches!(query, PendingDhtQuery::PutPeerRecord { .. })));
-    assert!(pending_dht
-        .values()
-        .any(|query| matches!(query, PendingDhtQuery::DiscoverPeers { .. })));
+    assert!(
+        pending_dht
+            .values()
+            .any(|query| matches!(query, PendingDhtQuery::PutPeerRecord { .. }))
+    );
+    assert!(
+        pending_dht
+            .values()
+            .any(|query| matches!(query, PendingDhtQuery::DiscoverPeers { .. }))
+    );
     assert!(peer_record_last_published_at_ms.is_some_and(|last| last > 0));
     assert!(peer_discovery_query_last_started_at_ms.is_some_and(|last| last > 0));
-    assert!(provider_keys
-        .get(&provider_key)
-        .is_some_and(|last| *last > 0));
+    assert!(
+        provider_keys
+            .get(&provider_key)
+            .is_some_and(|last| *last > 0)
+    );
 }
 
 #[test]
@@ -439,9 +445,11 @@ fn refresh_peer_discovery_skips_backfill_when_connected_peers_are_already_known(
 
     assert!(matches!(outcome, super::CommandOutcome::Continue));
     assert_eq!(pending_dht.len(), 1);
-    assert!(pending_dht
-        .values()
-        .all(|query| matches!(query, PendingDhtQuery::PutPeerRecord { .. })));
+    assert!(
+        pending_dht
+            .values()
+            .all(|query| matches!(query, PendingDhtQuery::PutPeerRecord { .. }))
+    );
     assert!(pending_peer_record_requests.is_empty());
     assert_eq!(peer_discovery_query_last_started_at_ms, Some(0));
 }

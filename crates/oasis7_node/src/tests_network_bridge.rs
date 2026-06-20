@@ -6,7 +6,7 @@ use oasis7_proto::distributed_dht::{
 use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::{compute_consensus_action_root, NodeConfig, NodeRole};
+use crate::{NodeConfig, NodeRole, compute_consensus_action_root};
 
 struct NoopDistributedNetwork;
 

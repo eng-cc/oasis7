@@ -2,9 +2,9 @@
 
 mod common;
 
+use oasis7::GeoPos;
 use oasis7::runtime::*;
 use oasis7::simulator::{ModuleInstallTarget, ResourceKind};
-use oasis7::GeoPos;
 use oasis7_wasm_abi::MaterialStack;
 use serde_json::json;
 use sha2::{Digest, Sha256};

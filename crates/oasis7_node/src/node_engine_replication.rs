@@ -3,7 +3,7 @@ use super::node_engine_replication_provider_route::{
     replication_gap_sync_provider_blob_route_blocked_in_cooldown,
 };
 use super::node_engine_storage_challenge::{
-    evaluate_storage_challenge_sample, StorageChallengeSampleOutcome,
+    StorageChallengeSampleOutcome, evaluate_storage_challenge_sample,
 };
 use super::*;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
@@ -642,72 +642,72 @@ impl PosNodeEngine {
             }
         }
 
-        let Some((block_hash, committed_at_ms)) =
-            (if let Some(checkpoint_descriptor) = payload.execution_checkpoint.clone() {
-                let Some(execution_block_hash) = payload.execution_block_hash.clone() else {
-                    return Ok(false);
+        let Some((block_hash, committed_at_ms)) = (if let Some(checkpoint_descriptor) =
+            payload.execution_checkpoint.clone()
+        {
+            let Some(execution_block_hash) = payload.execution_block_hash.clone() else {
+                return Ok(false);
+            };
+            let Some(execution_state_root) = payload.execution_state_root.clone() else {
+                return Ok(false);
+            };
+            if checkpoint_descriptor.height != payload.height
+                || checkpoint_descriptor.execution_block_hash != execution_block_hash
+                || checkpoint_descriptor.execution_state_root != execution_state_root
+            {
+                return Ok(false);
+            }
+            let checkpoint_bundle = self.fetch_execution_checkpoint_bundle(
+                endpoint,
+                world_id,
+                replication_runtime,
+                &checkpoint_descriptor,
+            )?;
+            with_execution_hook(execution_hook, |hook| {
+                let Some(hook) = hook else {
+                    return Ok(None);
                 };
-                let Some(execution_state_root) = payload.execution_state_root.clone() else {
-                    return Ok(false);
-                };
-                if checkpoint_descriptor.height != payload.height
-                    || checkpoint_descriptor.execution_block_hash != execution_block_hash
-                    || checkpoint_descriptor.execution_state_root != execution_state_root
+                let result = hook
+                    .install_checkpoint_bundle(
+                        NodeExecutionCheckpointInstallContext {
+                            world_id: world_id.to_string(),
+                            node_id: node_id.to_string(),
+                            height: payload.height,
+                            node_block_hash: payload.block_hash.clone(),
+                            execution_block_hash: execution_block_hash.clone(),
+                            execution_state_root: execution_state_root.clone(),
+                            committed_at_unix_ms: payload.committed_at_ms,
+                        },
+                        checkpoint_bundle,
+                    )
+                    .map_err(|reason| NodeError::Execution { reason })?;
+                if result.execution_height != payload.height
+                    || result.execution_block_hash != execution_block_hash
+                    || result.execution_state_root != execution_state_root
                 {
-                    return Ok(false);
-                }
-                let checkpoint_bundle = self.fetch_execution_checkpoint_bundle(
-                    endpoint,
-                    world_id,
-                    replication_runtime,
-                    &checkpoint_descriptor,
-                )?;
-                with_execution_hook(execution_hook, |hook| {
-                    let Some(hook) = hook else {
-                        return Ok(None);
-                    };
-                    let result = hook
-                        .install_checkpoint_bundle(
-                            NodeExecutionCheckpointInstallContext {
-                                world_id: world_id.to_string(),
-                                node_id: node_id.to_string(),
-                                height: payload.height,
-                                node_block_hash: payload.block_hash.clone(),
-                                execution_block_hash: execution_block_hash.clone(),
-                                execution_state_root: execution_state_root.clone(),
-                                committed_at_unix_ms: payload.committed_at_ms,
-                            },
-                            checkpoint_bundle,
-                        )
-                        .map_err(|reason| NodeError::Execution { reason })?;
-                    if result.execution_height != payload.height
-                        || result.execution_block_hash != execution_block_hash
-                        || result.execution_state_root != execution_state_root
-                    {
-                        return Err(NodeError::Execution {
-                            reason: format!(
+                    return Err(NodeError::Execution {
+                        reason: format!(
                             "execution checkpoint install returned mismatched binding at height {}",
                             payload.height
                         ),
-                        });
-                    }
-                    self.last_execution_height = result.execution_height;
-                    self.last_execution_block_hash = Some(result.execution_block_hash);
-                    self.last_execution_state_root = Some(result.execution_state_root);
-                    self.remember_execution_binding_for_height(payload.height);
-                    Ok(Some((payload.block_hash.clone(), payload.committed_at_ms)))
-                })?
-            } else {
-                if execution_hook.is_some()
-                    && checkpoint_height > self.last_execution_height.saturating_add(1)
-                {
-                    return Ok(false);
+                    });
                 }
-                Some(with_execution_hook(execution_hook, |hook| {
-                    self.execute_synced_replication_commit(world_id, &payload, hook)
-                })?)
-            })
-        else {
+                self.last_execution_height = result.execution_height;
+                self.last_execution_block_hash = Some(result.execution_block_hash);
+                self.last_execution_state_root = Some(result.execution_state_root);
+                self.remember_execution_binding_for_height(payload.height);
+                Ok(Some((payload.block_hash.clone(), payload.committed_at_ms)))
+            })?
+        } else {
+            if execution_hook.is_some()
+                && checkpoint_height > self.last_execution_height.saturating_add(1)
+            {
+                return Ok(false);
+            }
+            Some(with_execution_hook(execution_hook, |hook| {
+                self.execute_synced_replication_commit(world_id, &payload, hook)
+            })?)
+        }) else {
             return Ok(false);
         };
         self.persist_synced_replication_message(
@@ -1034,7 +1034,9 @@ impl PosNodeEngine {
                     self.network_committed_height,
                     gap_sync_target_height,
                     self.replication_persisted_height,
-                    last_error.as_deref().unwrap_or("provider route unavailable")
+                    last_error
+                        .as_deref()
+                        .unwrap_or("provider route unavailable")
                 ));
                 break;
             }

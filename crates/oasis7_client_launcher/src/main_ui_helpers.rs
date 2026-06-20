@@ -900,7 +900,9 @@ impl ClientLauncherApp {
                 format!("反馈/转账/浏览器功能暂不可用：区块链配置错误（{detail}）")
             }
             (ChainRuntimeStatus::ConfigError(detail), UiLanguage::EnUs) => {
-                format!("Feedback/Transfer/Explorer are unavailable: blockchain config error ({detail})")
+                format!(
+                    "Feedback/Transfer/Explorer are unavailable: blockchain config error ({detail})"
+                )
             }
             (ChainRuntimeStatus::Ready, UiLanguage::ZhCn) => {
                 "反馈/转账/浏览器功能暂不可用：区块链功能关闭".to_string()

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use oasis7_proto::distributed_pos::{
-    decide_pos_status, slot_epoch as shared_slot_epoch, PosDecisionStatus,
+    PosDecisionStatus, decide_pos_status, slot_epoch as shared_slot_epoch,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

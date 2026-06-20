@@ -11,8 +11,8 @@ use super::reachability::refresh_active_transport_snapshot;
 use super::runtime_loop::{enforce_peer_manager_quarantine, refresh_peer_manager_healths};
 use super::swarm_behaviour::Behaviour;
 use super::transport_paths::{
-    failover_transport_path_after_close, note_established_transport_path,
-    recompute_active_transport_path_for_peer, TransportPath,
+    TransportPath, failover_transport_path_after_close, note_established_transport_path,
+    recompute_active_transport_path_for_peer,
 };
 use super::utils::{push_bounded_clone, push_bounded_string_with_keyed_cooldown};
 use super::{

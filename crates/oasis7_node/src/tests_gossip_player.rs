@@ -155,11 +155,13 @@ fn pos_engine_rejects_gossiped_proposal_with_future_slot_window() {
         .expect("ingest proposal");
     assert!(engine.pending.is_none());
     assert_eq!(engine.inbound_rejected_proposal_future_slot, 1);
-    assert!(engine
-        .last_inbound_timing_reject_reason
-        .as_deref()
-        .unwrap_or_default()
-        .contains("future"));
+    assert!(
+        engine
+            .last_inbound_timing_reject_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("future")
+    );
 }
 
 #[test]
@@ -195,11 +197,13 @@ fn pos_engine_rejects_gossiped_proposal_with_stale_slot_window() {
         .expect("ingest proposal");
     assert!(engine.pending.is_none());
     assert_eq!(engine.inbound_rejected_proposal_stale_slot, 1);
-    assert!(engine
-        .last_inbound_timing_reject_reason
-        .as_deref()
-        .unwrap_or_default()
-        .contains("stale"));
+    assert!(
+        engine
+            .last_inbound_timing_reject_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("stale")
+    );
 }
 
 #[test]

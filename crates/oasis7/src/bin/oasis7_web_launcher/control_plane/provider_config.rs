@@ -218,7 +218,7 @@ pub(super) fn validate_provider_base_url_for_transport(
         _ => {
             return Err(
                 "agent provider transport must be loopback_http or remote_https".to_string(),
-            )
+            );
         }
     }
     Ok(())

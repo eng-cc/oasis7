@@ -259,9 +259,11 @@ fn concurrent_claim_conflict_charges_only_winner() {
         }
     }
     assert_eq!(claim_events, 1);
-    assert!(rejection_notes
-        .iter()
-        .any(|note| note.contains("already claimed")));
+    assert!(
+        rejection_notes
+            .iter()
+            .any(|note| note.contains("already claimed"))
+    );
 }
 
 #[test]
@@ -366,11 +368,13 @@ fn release_refunds_remaining_bond_after_cooldown() {
         target_agent_id: "bob".to_string(),
     });
     world.step().expect("request release");
-    assert!(world
-        .agent_claim("bob")
-        .expect("claim still held")
-        .release_requested_at_epoch
-        .is_some());
+    assert!(
+        world
+            .agent_claim("bob")
+            .expect("claim still held")
+            .release_requested_at_epoch
+            .is_some()
+    );
 
     for _ in 0..cooldown_epochs.saturating_sub(1) {
         world.step().expect("advance cooldown");
@@ -665,9 +669,11 @@ fn slot_2_claim_cannot_spend_restricted_balance() {
         .expect("slot 2 rejection");
     match rejection {
         RejectReason::RuleDenied { notes } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("restricted/liquid funding unavailable")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("restricted/liquid funding unavailable"))
+            );
         }
         other => panic!("expected rule denied, got {other:?}"),
     }
@@ -1005,9 +1011,11 @@ fn restricted_grant_issue_rejects_when_admin_registry_is_missing() {
         .expect("missing admin registry rejection event");
     match rejection {
         RejectReason::RuleDenied { notes } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("admin registry is not configured")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("admin registry is not configured"))
+            );
         }
         other => panic!("expected rule denied, got {other:?}"),
     }
@@ -1038,9 +1046,11 @@ fn restricted_grant_issue_rejects_non_admin_issuer_before_grant_checks() {
         .expect("non-admin rejection event");
     match rejection {
         RejectReason::RuleDenied { notes } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("not allowlisted admin")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("not allowlisted admin"))
+            );
         }
         other => panic!("expected rule denied, got {other:?}"),
     }
@@ -1078,9 +1088,11 @@ fn restricted_grant_revoke_rejects_non_admin_before_issuer_match_checks() {
         .expect("non-admin revoke rejection event");
     match rejection {
         RejectReason::RuleDenied { notes } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("not allowlisted admin")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("not allowlisted admin"))
+            );
             assert!(!notes.iter().any(|note| note.contains("issuer mismatch")));
         }
         other => panic!("expected rule denied, got {other:?}"),

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
-use wasm_module_observe::{run_observe, ObserveRunRequest};
+use wasm_module_observe::{ObserveRunRequest, run_observe};
 
 fn fixture_spec_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join(

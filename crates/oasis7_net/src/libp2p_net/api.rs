@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::time::Duration;
 
 use libp2p::{Multiaddr, PeerId};
@@ -10,8 +10,8 @@ use oasis7_proto::distributed_net::DistributedNetwork as ProtoDistributedNetwork
 use crate::error::WorldError;
 use crate::util::to_canonical_cbor;
 use oasis7_proto::distributed::{
-    dht_membership_key, dht_peer_record_key, dht_provider_key, dht_world_head_key,
-    WorldHeadAnnounce,
+    WorldHeadAnnounce, dht_membership_key, dht_peer_record_key, dht_provider_key,
+    dht_world_head_key,
 };
 use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, ProviderRecord, SignedPeerRecord,
@@ -19,9 +19,9 @@ use oasis7_proto::distributed_dht::{
 use oasis7_proto::distributed_net::{NetworkMessage, NetworkSubscription};
 
 use super::{
-    snapshot_clone, snapshot_traffic_metrics, Command, Libp2pNetwork, Libp2pReachabilitySnapshot,
-    Libp2pTrafficMetricsSnapshot, PeerManagerBlockArtifact, PeerManagerHealthIssue,
-    PeerManagerHealthStatus, PeerManagerPeerHealth,
+    Command, Libp2pNetwork, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
+    PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
+    PeerManagerPeerHealth, snapshot_clone, snapshot_traffic_metrics,
 };
 
 const LIBP2P_COMMAND_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);

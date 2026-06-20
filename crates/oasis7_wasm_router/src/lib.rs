@@ -2,7 +2,7 @@ mod cache;
 mod filtering;
 mod metrics;
 
-use cache::{BoundedCache, RegexCache, MAX_CACHE_ENTRIES};
+use cache::{BoundedCache, MAX_CACHE_ENTRIES, RegexCache};
 #[cfg(test)]
 use filtering::ruleset_matches;
 use filtering::{
@@ -10,8 +10,8 @@ use filtering::{
     subscription_filters_match, subscription_match, validate_rule,
 };
 pub use filtering::{validate_subscription_filters, validate_subscription_stage};
-pub use metrics::snapshot_global_wasm_router_metrics;
 pub use metrics::WasmRouterMetricsSnapshot;
+pub use metrics::snapshot_global_wasm_router_metrics;
 
 use oasis7_wasm_abi::{ModuleSubscription, ModuleSubscriptionStage};
 use serde::Deserialize;

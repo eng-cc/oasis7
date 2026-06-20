@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::distributed::{
-    BlobRef, BlockAnnounce, SnapshotManifest, WorldBlock, WorldHeadAnnounce, WIRE_ENCODING_CBOR,
+    BlobRef, BlockAnnounce, SnapshotManifest, WIRE_ENCODING_CBOR, WorldBlock, WorldHeadAnnounce,
 };
 
 pub const DEFAULT_SNAPSHOT_CHUNK_BYTES: usize = 256 * 1024;

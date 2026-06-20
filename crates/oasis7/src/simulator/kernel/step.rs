@@ -1,11 +1,11 @@
 use super::super::types::{
     Action, ActionEnvelope, ActionId, ActionSubmitter, ResourceOwner, WorldTime,
 };
+use super::WorldKernel;
 use super::types::{
     KernelRuleDecision, KernelRuleModuleContext, KernelRuleModuleInput, KernelRuleVerdict,
     RejectReason, WorldEvent, WorldEventKind,
 };
-use super::WorldKernel;
 use serde::Serialize;
 use std::collections::BTreeMap;
 

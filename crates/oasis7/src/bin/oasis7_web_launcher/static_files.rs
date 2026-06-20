@@ -87,7 +87,7 @@ fn content_type_for_path(path: &Path) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_console_static_asset, StaticAsset};
+    use super::{StaticAsset, load_console_static_asset};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};

@@ -1,11 +1,11 @@
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::super::credit_adapter::{LetaiOpenApiAdapter, LetaiUserTopupRequest};
 use super::super::{short_sha256, summarize_text};
-use super::{value_keys, AutoTopupOutcome, LetaiChatConfig};
+use super::{AutoTopupOutcome, LetaiChatConfig, value_keys};
 
 const LETAI_QUOTA_UNITS_PER_USD: f64 = 500_000.0;
 static LETAI_AUTO_TOPUP_ORDER_COUNTER: AtomicU64 = AtomicU64::new(1);

@@ -379,7 +379,7 @@ pub trait DistributedDht<E> {
     fn put_peer_record(&self, world_id: &str, record: &SignedPeerRecord) -> Result<(), E>;
 
     fn get_peer_record(&self, world_id: &str, peer_id: &str)
-        -> Result<Option<SignedPeerRecord>, E>;
+    -> Result<Option<SignedPeerRecord>, E>;
 }
 
 #[cfg(test)]

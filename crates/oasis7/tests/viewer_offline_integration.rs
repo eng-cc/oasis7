@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 
 use oasis7::simulator::WorldScenario;
 use oasis7::viewer::{
-    generate_viewer_demo, ViewerControl, ViewerRequest, ViewerResponse, ViewerServer,
-    ViewerServerConfig, ViewerStream, VIEWER_PROTOCOL_VERSION,
+    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerRequest, ViewerResponse, ViewerServer,
+    ViewerServerConfig, ViewerStream, generate_viewer_demo,
 };
 
 #[cfg(feature = "test_tier_required")]

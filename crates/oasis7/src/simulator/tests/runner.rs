@@ -402,12 +402,14 @@ fn agent_runner_tick_decide_only_defers_world_mutation_until_notified() {
         .location_id
         .clone();
     assert_eq!(location_after_decide, initial_location);
-    assert!(runner
-        .get("patrol-1")
-        .expect("registered")
-        .behavior
-        .action_results
-        .is_empty());
+    assert!(
+        runner
+            .get("patrol-1")
+            .expect("registered")
+            .behavior
+            .action_results
+            .is_empty()
+    );
 
     let action = tick.decision.action().expect("decision action").clone();
     let action_id = kernel.submit_action_from_agent("patrol-1", action.clone());

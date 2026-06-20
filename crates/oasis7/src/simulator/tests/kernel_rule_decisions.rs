@@ -58,9 +58,11 @@ fn kernel_pre_action_rule_deny_rejects_action() {
     match event.kind {
         WorldEventKind::ActionRejected { reason } => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| note.contains("blocked by test hook")));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| note.contains("blocked by test hook"))
+                );
             }
             other => panic!("unexpected reject reason: {other:?}"),
         },
@@ -108,9 +110,11 @@ fn kernel_pre_action_rule_can_read_kernel_time_context() {
     match rejected.kind {
         WorldEventKind::ActionRejected { reason } => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| note.contains("time gate blocks tick zero")));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| note.contains("time gate blocks tick zero"))
+                );
             }
             other => panic!("unexpected reject reason: {other:?}"),
         },
@@ -160,9 +164,11 @@ fn kernel_pre_action_rule_can_read_model_state_context() {
     match denied.kind {
         WorldEventKind::ActionRejected { reason } => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| note.contains("loc-ready is required")));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| note.contains("loc-ready is required"))
+                );
             }
             other => panic!("unexpected reject reason: {other:?}"),
         },

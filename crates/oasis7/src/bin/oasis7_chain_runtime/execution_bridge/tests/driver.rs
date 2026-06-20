@@ -3,22 +3,22 @@ use super::super::checkpoint::{
     load_execution_bridge_record,
 };
 use super::super::driver::{
-    load_execution_bridge_state, load_execution_world, load_execution_world_with_policy,
-    persist_execution_bridge_state, persist_execution_world,
-    simulator_world_dir_from_execution_world_dir, NodeRuntimeExecutionDriver,
+    NodeRuntimeExecutionDriver, load_execution_bridge_state, load_execution_world,
+    load_execution_world_with_policy, persist_execution_bridge_state, persist_execution_world,
+    simulator_world_dir_from_execution_world_dir,
 };
 use super::super::external_effect::load_execution_external_effect_materialization;
 use super::*;
-use oasis7::consensus_action_payload::encode_consensus_action_payload;
 use oasis7::consensus_action_payload::ConsensusActionPayloadEnvelope;
+use oasis7::consensus_action_payload::encode_consensus_action_payload;
 use oasis7::runtime::{
-    production_hardened_main_token_config, Action as RuntimeAction, DomainEvent, LocalCasStore,
+    Action as RuntimeAction, DomainEvent, FROZEN_MAIN_TOKEN_INITIAL_SUPPLY, LocalCasStore,
     ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
     ModuleSubscriptionStage, ReleaseSecurityPolicy, WorldEventBody,
-    FROZEN_MAIN_TOKEN_INITIAL_SUPPLY,
+    production_hardened_main_token_config,
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
-use oasis7_node::{compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionHook};
+use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
 use oasis7_proto::storage_profile::StorageProfile;
 use oasis7_proto::storage_profile::StorageProfileConfig;
 use oasis7_wasm_abi::ModuleCallFailure;
@@ -41,9 +41,11 @@ fn execution_world_persistence_roundtrip() {
 fn load_execution_world_defaults_to_hardened_release_policy() {
     let dir = temp_dir("execution-world-release-policy");
     let missing_world = load_execution_world(dir.as_path()).expect("load missing world");
-    assert!(missing_world
-        .release_security_policy()
-        .is_production_hardened());
+    assert!(
+        missing_world
+            .release_security_policy()
+            .is_production_hardened()
+    );
     assert_eq!(
         missing_world.main_token_config().initial_supply,
         FROZEN_MAIN_TOKEN_INITIAL_SUPPLY
@@ -62,9 +64,11 @@ fn load_execution_world_defaults_to_hardened_release_policy() {
     let legacy_world = RuntimeWorld::new();
     persist_execution_world(legacy_world_dir.as_path(), &legacy_world).expect("persist world");
     let loaded_world = load_execution_world(legacy_world_dir.as_path()).expect("load world");
-    assert!(loaded_world
-        .release_security_policy()
-        .is_production_hardened());
+    assert!(
+        loaded_world
+            .release_security_policy()
+            .is_production_hardened()
+    );
     assert_eq!(
         loaded_world.main_token_config().initial_supply,
         FROZEN_MAIN_TOKEN_INITIAL_SUPPLY
@@ -802,10 +806,12 @@ fn node_runtime_execution_driver_recovers_malformed_v2_record_from_state_root_an
         repaired_record.snapshot_ref.as_deref(),
         Some(repaired_record.execution_state_root.as_str())
     );
-    assert!(repaired_record
-        .journal_ref
-        .as_deref()
-        .is_some_and(|journal_ref| !journal_ref.is_empty()));
+    assert!(
+        repaired_record
+            .journal_ref
+            .as_deref()
+            .is_some_and(|journal_ref| !journal_ref.is_empty())
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -946,10 +952,12 @@ fn production_release_policy_release_default_applies_hardened_policy() {
         driver.execution_world.release_security_policy(),
         &ReleaseSecurityPolicy::production_hardened()
     );
-    assert!(driver
-        .execution_world
-        .release_security_policy()
-        .is_production_hardened());
+    assert!(
+        driver
+            .execution_world
+            .release_security_policy()
+            .is_production_hardened()
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -1122,14 +1130,18 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         record.latest_state_ref.as_deref(),
         record.snapshot_ref.as_deref()
     );
-    assert!(record
-        .snapshot_ref
-        .as_deref()
-        .is_some_and(|snapshot_ref| !snapshot_ref.is_empty()));
-    assert!(record
-        .journal_ref
-        .as_deref()
-        .is_some_and(|journal_ref| !journal_ref.is_empty()));
+    assert!(
+        record
+            .snapshot_ref
+            .as_deref()
+            .is_some_and(|snapshot_ref| !snapshot_ref.is_empty())
+    );
+    assert!(
+        record
+            .journal_ref
+            .as_deref()
+            .is_some_and(|journal_ref| !journal_ref.is_empty())
+    );
     let external_effect_ref = record
         .external_effect_ref
         .as_deref()

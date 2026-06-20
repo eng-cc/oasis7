@@ -1036,8 +1036,9 @@ pub(super) fn apply_runtime_snapshot_empty_entities_blocker(
         missing_parts.push("locations");
     }
     let missing_summary = missing_parts.join("/");
-    let disabled_reason =
-        format!("runtime snapshot is missing {missing_summary}; refresh snapshot or repair runtime bootstrap first");
+    let disabled_reason = format!(
+        "runtime snapshot is missing {missing_summary}; refresh snapshot or repair runtime bootstrap first"
+    );
     gameplay.stage_status = PlayerGameplayStageStatus::Blocked;
     gameplay.execution_state = PlayerGameplayExecutionState::Blocked;
     gameplay.blocker_kind = Some("runtime_snapshot_empty_entities".to_string());

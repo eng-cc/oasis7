@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::net::Ipv4Addr;
 
-use libp2p::multiaddr::Protocol;
 use libp2p::PeerId;
+use libp2p::multiaddr::Protocol;
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, SignedPeerRecord};
 
 use super::peer_manager_active_set::ActivePeerSetStats;
@@ -875,10 +875,12 @@ mod tests {
         for peer in [peer_a, peer_b] {
             let health = &healths[&peer];
             assert_eq!(health.status, PeerManagerHealthStatus::Blocked);
-            assert!(health
-                .issues
-                .iter()
-                .any(|issue| matches!(issue, PeerManagerHealthIssue::RelayBudgetExceeded { .. })));
+            assert!(
+                health.issues.iter().any(|issue| matches!(
+                    issue,
+                    PeerManagerHealthIssue::RelayBudgetExceeded { .. }
+                ))
+            );
             assert!(health.issues.iter().any(|issue| matches!(
                 issue,
                 PeerManagerHealthIssue::RelayDomainConcentration { relay_domain, .. } if relay_domain == "relay-a.example"
@@ -926,10 +928,12 @@ mod tests {
         );
         let health = healths.get(&peer).expect("health");
         assert_eq!(health.status, PeerManagerHealthStatus::Suspect);
-        assert!(health
-            .issues
-            .iter()
-            .any(|issue| matches!(issue, PeerManagerHealthIssue::SingleSourceDiscovery { .. })));
+        assert!(
+            health
+                .issues
+                .iter()
+                .any(|issue| matches!(issue, PeerManagerHealthIssue::SingleSourceDiscovery { .. }))
+        );
     }
 
     #[test]

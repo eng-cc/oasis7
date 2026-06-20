@@ -322,7 +322,7 @@ fn replace_file_atomically(tmp_path: &Path, path: &Path) -> Result<(), NodeError
 #[cfg(windows)]
 fn replace_file_atomically(tmp_path: &Path, path: &Path) -> Result<(), NodeError> {
     use windows_sys::Win32::Storage::FileSystem::{
-        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
     };
 
     let source = tmp_path

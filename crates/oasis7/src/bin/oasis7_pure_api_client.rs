@@ -6,16 +6,15 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use ed25519_dalek::SigningKey;
 use oasis7::simulator::WorldSnapshot;
 use oasis7::viewer::{
-    sign_agent_chat_auth_proof, sign_gameplay_action_auth_proof,
-    sign_prompt_control_apply_auth_proof, sign_prompt_control_rollback_auth_proof,
     AgentChatRequest, AuthoritativeReconnectSyncRequest, AuthoritativeRecoveryCommand,
     AuthoritativeSessionRevokeRequest, AuthoritativeSessionRotateRequest, GameplayActionRequest,
     LiveControl, PromptControlApplyRequest, PromptControlAuthIntent, PromptControlCommand,
-    PromptControlRollbackRequest, ViewerRequest, ViewerResponse, ViewerStream,
-    VIEWER_PROTOCOL_VERSION,
+    PromptControlRollbackRequest, VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse,
+    ViewerStream, sign_agent_chat_auth_proof, sign_gameplay_action_auth_proof,
+    sign_prompt_control_apply_auth_proof, sign_prompt_control_rollback_auth_proof,
 };
 use rand_core::OsRng;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const DEFAULT_ADDR: &str = "127.0.0.1:5023";
 const DEFAULT_CLIENT: &str = "oasis7_pure_api_client";

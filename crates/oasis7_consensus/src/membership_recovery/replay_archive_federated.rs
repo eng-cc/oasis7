@@ -31,7 +31,7 @@ use super::replay_audit::{
     MembershipRevocationDeadLetterReplayRollbackGovernanceLevel,
     MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore,
 };
-use super::{normalized_schedule_key, MembershipSyncClient};
+use super::{MembershipSyncClient, normalized_schedule_key};
 use crate::tiered_file_log;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -468,12 +468,16 @@ impl MembershipSyncClient {
         world_id: &str,
         node_ids: &[String],
         policy: &MembershipRevocationDeadLetterReplayRollbackGovernanceAuditAggregateQueryPolicy,
-        hot_archive_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
-              + Send
-              + Sync),
-        cold_archive_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
-              + Send
-              + Sync),
+        hot_archive_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
+                 + Send
+                 + Sync
+         ),
+        cold_archive_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
+                 + Send
+                 + Sync
+         ),
     ) -> Result<
         MembershipRevocationDeadLetterReplayRollbackGovernanceAuditAggregateQueryReport,
         WorldError,
@@ -565,9 +569,11 @@ impl MembershipSyncClient {
         outcomes: &[MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventOutcome],
         offset: usize,
         max_records: usize,
-        event_bus: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
-              + Send
-              + Sync),
+        event_bus: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
+                 + Send
+                 + Sync
+         ),
     ) -> Result<
         Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEvent>,
         WorldError,
@@ -599,9 +605,11 @@ impl MembershipSyncClient {
         since_event_at_ms: i64,
         outcomes: &[MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventOutcome],
         max_records: usize,
-        event_bus: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
-              + Send
-              + Sync),
+        event_bus: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
+                 + Send
+                 + Sync
+         ),
     ) -> Result<
         Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEvent>,
         WorldError,
@@ -629,9 +637,11 @@ impl MembershipSyncClient {
         since_event_at_ms: i64,
         outcomes: &[MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventOutcome],
         max_records: usize,
-        event_bus: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
-              + Send
-              + Sync),
+        event_bus: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
+                 + Send
+                 + Sync
+         ),
     ) -> Result<
         (
             Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEvent>,
@@ -664,9 +674,11 @@ impl MembershipSyncClient {
         since_node_id: Option<&str>,
         outcomes: &[MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventOutcome],
         max_records: usize,
-        event_bus: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
-              + Send
-              + Sync),
+        event_bus: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
+                 + Send
+                 + Sync
+         ),
     ) -> Result<
         (
             Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEvent>,
@@ -721,9 +733,11 @@ impl MembershipSyncClient {
         since_node_event_offset: usize,
         outcomes: &[MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventOutcome],
         max_records: usize,
-        event_bus: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
-              + Send
-              + Sync),
+        event_bus: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
+                 + Send
+                 + Sync
+         ),
     ) -> Result<
         (
             Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEvent>,
@@ -874,9 +888,11 @@ impl MembershipSyncClient {
         world_id: &str,
         node_ids: &[String],
         min_event_at_ms: Option<i64>,
-        event_bus: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
-              + Send
-              + Sync),
+        event_bus: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
+                 + Send
+                 + Sync
+         ),
     ) -> Result<BTreeMap<String, usize>, WorldError> {
         let events = collect_governance_recovery_drill_alert_events_aggregated(
             world_id,
@@ -1049,9 +1065,11 @@ fn collect_governance_recovery_drill_alert_events_aggregated(
     node_ids: &[String],
     min_event_at_ms: Option<i64>,
     outcomes: &[MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventOutcome],
-    event_bus: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
-          + Send
-          + Sync),
+    event_bus: &(
+         dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
+             + Send
+             + Sync
+     ),
 ) -> Result<
     Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEvent>,
     WorldError,

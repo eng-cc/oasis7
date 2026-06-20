@@ -6,8 +6,8 @@ use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    blake3_hex, FeedbackActionKind, FeedbackEventRecord, FeedbackMutationReceipt,
-    FeedbackRootRecord, FeedbackStore,
+    FeedbackActionKind, FeedbackEventRecord, FeedbackMutationReceipt, FeedbackRootRecord,
+    FeedbackStore, blake3_hex,
 };
 
 pub const FEEDBACK_ANNOUNCE_TOPIC_SUFFIX: &str = "feedback.announce";
@@ -238,9 +238,9 @@ mod tests {
 
     use super::*;
     use crate::{
-        sign_feedback_append_request, sign_feedback_create_request,
-        sign_feedback_tombstone_request, BlobStore, FeedbackAppendRequest, FeedbackCreateRequest,
-        FeedbackStoreConfig, FeedbackTombstoneRequest, LocalCasStore,
+        BlobStore, FeedbackAppendRequest, FeedbackCreateRequest, FeedbackStoreConfig,
+        FeedbackTombstoneRequest, LocalCasStore, sign_feedback_append_request,
+        sign_feedback_create_request, sign_feedback_tombstone_request,
     };
 
     fn temp_dir(prefix: &str) -> std::path::PathBuf {

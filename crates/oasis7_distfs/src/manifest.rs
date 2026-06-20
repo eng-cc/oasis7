@@ -4,8 +4,8 @@ use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    normalize_file_path, to_canonical_cbor, validate_hash, BlobStore, FileIndexFile, FileMetadata,
-    LocalCasStore, FILE_INDEX_VERSION,
+    BlobStore, FILE_INDEX_VERSION, FileIndexFile, FileMetadata, LocalCasStore, normalize_file_path,
+    to_canonical_cbor, validate_hash,
 };
 
 const FILE_INDEX_MANIFEST_VERSION: u64 = 1;

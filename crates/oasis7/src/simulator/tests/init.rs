@@ -404,10 +404,12 @@ fn asteroid_fragment_bootstrap_seeds_fragments_and_resources() {
     assert!(model.agents.contains_key("agent-0"));
     assert!(!init.asteroid_fragment.bootstrap_chunks.is_empty());
     for coord in &init.asteroid_fragment.bootstrap_chunks {
-        assert!(model
-            .chunks
-            .get(coord)
-            .is_some_and(|state| matches!(state, ChunkState::Generated | ChunkState::Exhausted)));
+        assert!(
+            model.chunks.get(coord).is_some_and(|state| matches!(
+                state,
+                ChunkState::Generated | ChunkState::Exhausted
+            ))
+        );
         assert!(model.chunk_resource_budgets.contains_key(coord));
     }
 }
@@ -427,10 +429,12 @@ fn asteroid_fragment_twin_region_bootstrap_seeds_fragments_and_regions() {
     assert!(model.agents.contains_key("agent-1"));
     assert!(!init.asteroid_fragment.bootstrap_chunks.is_empty());
     for coord in &init.asteroid_fragment.bootstrap_chunks {
-        assert!(model
-            .chunks
-            .get(coord)
-            .is_some_and(|state| matches!(state, ChunkState::Generated | ChunkState::Exhausted)));
+        assert!(
+            model.chunks.get(coord).is_some_and(|state| matches!(
+                state,
+                ChunkState::Generated | ChunkState::Exhausted
+            ))
+        );
         assert!(model.chunk_resource_budgets.contains_key(coord));
     }
 }
@@ -445,17 +449,21 @@ fn asteroid_fragment_detail_bootstrap_seeds_dense_fragments_for_viewer() {
     assert!(report.asteroid_fragment_seed.is_some());
     assert!(model.agents.is_empty());
     assert!(!model.locations.contains_key("origin"));
-    assert!(model
-        .locations
-        .values()
-        .any(|loc| loc.id.starts_with("frag-")));
+    assert!(
+        model
+            .locations
+            .values()
+            .any(|loc| loc.id.starts_with("frag-"))
+    );
     assert!(init.asteroid_fragment.min_fragment_spacing_cm.is_some());
     assert!(!init.asteroid_fragment.bootstrap_chunks.is_empty());
     for coord in &init.asteroid_fragment.bootstrap_chunks {
-        assert!(model
-            .chunks
-            .get(coord)
-            .is_some_and(|state| matches!(state, ChunkState::Generated | ChunkState::Exhausted)));
+        assert!(
+            model.chunks.get(coord).is_some_and(|state| matches!(
+                state,
+                ChunkState::Generated | ChunkState::Exhausted
+            ))
+        );
         assert!(model.chunk_resource_budgets.contains_key(coord));
     }
 }
@@ -479,10 +487,12 @@ fn asteroid_fragment_triad_region_bootstrap_seeds_fragments_and_regions() {
     assert!(model.agents.contains_key("agent-2"));
     assert!(!init.asteroid_fragment.bootstrap_chunks.is_empty());
     for coord in &init.asteroid_fragment.bootstrap_chunks {
-        assert!(model
-            .chunks
-            .get(coord)
-            .is_some_and(|state| matches!(state, ChunkState::Generated | ChunkState::Exhausted)));
+        assert!(
+            model.chunks.get(coord).is_some_and(|state| matches!(
+                state,
+                ChunkState::Generated | ChunkState::Exhausted
+            ))
+        );
         assert!(model.chunk_resource_budgets.contains_key(coord));
     }
 }
@@ -729,14 +739,18 @@ fn boundary_reservations_are_created_for_unexplored_neighbor_chunks() {
     init.asteroid_fragment.bootstrap_chunks = vec![ChunkCoord { x: 0, y: 0, z: 0 }];
 
     let (model, _) = build_world_model(&config, &init).expect("scenario init");
-    assert!(model
-        .chunks
-        .get(&ChunkCoord { x: 1, y: 0, z: 0 })
-        .is_some_and(|state| matches!(state, ChunkState::Unexplored)));
-    assert!(model
-        .chunk_boundary_reservations
-        .get(&ChunkCoord { x: 1, y: 0, z: 0 })
-        .is_some_and(|entries| !entries.is_empty()));
+    assert!(
+        model
+            .chunks
+            .get(&ChunkCoord { x: 1, y: 0, z: 0 })
+            .is_some_and(|state| matches!(state, ChunkState::Unexplored))
+    );
+    assert!(
+        model
+            .chunk_boundary_reservations
+            .get(&ChunkCoord { x: 1, y: 0, z: 0 })
+            .is_some_and(|entries| !entries.is_empty())
+    );
 }
 
 #[test]
@@ -973,10 +987,12 @@ fn scenario_asteroid_fragment_bootstrap_chunks_generate_without_seed_locations()
     assert!(report.asteroid_fragment_seed.is_some());
 
     for coord in &init.asteroid_fragment.bootstrap_chunks {
-        assert!(model
-            .chunks
-            .get(coord)
-            .is_some_and(|state| matches!(state, ChunkState::Generated | ChunkState::Exhausted)));
+        assert!(
+            model.chunks.get(coord).is_some_and(|state| matches!(
+                state,
+                ChunkState::Generated | ChunkState::Exhausted
+            ))
+        );
         assert!(model.chunk_resource_budgets.contains_key(coord));
     }
 }

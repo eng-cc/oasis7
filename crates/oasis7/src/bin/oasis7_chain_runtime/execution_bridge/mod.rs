@@ -298,4 +298,4 @@ mod external_effect;
 mod tests;
 
 #[allow(unused_imports)]
-pub(super) use self::driver::{load_execution_world, NodeRuntimeExecutionDriver};
+pub(super) use self::driver::{NodeRuntimeExecutionDriver, load_execution_world};

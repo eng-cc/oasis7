@@ -29,7 +29,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "module release submit rejected: module_id is empty".to_string()
+                            "module release submit rejected: module_id is empty".to_string(),
                         ],
                     },
                 }),
@@ -287,7 +287,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "module release attestation rejected: platform is empty".to_string()
+                            "module release attestation rejected: platform is empty".to_string(),
                         ],
                     },
                 }),
@@ -540,7 +540,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "module release approve_role rejected: role is empty".to_string()
+                            "module release approve_role rejected: role is empty".to_string(),
                         ],
                     },
                 }),

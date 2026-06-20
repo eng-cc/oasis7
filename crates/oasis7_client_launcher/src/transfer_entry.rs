@@ -262,8 +262,8 @@ fn normalize_connect_host(host: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_transfer_submit_request, parse_http_json_response, submit_transfer_remote,
-        validate_transfer_draft, TransferDraft, TransferDraftIssue,
+        TransferDraft, TransferDraftIssue, build_transfer_submit_request, parse_http_json_response,
+        submit_transfer_remote, validate_transfer_draft,
     };
     use ed25519_dalek::SigningKey;
     use std::io::{Read, Write};
@@ -361,8 +361,14 @@ mod tests {
             amount: "7".to_string(),
             nonce: "3".to_string(),
         };
-        std::env::set_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY", public_key.as_str());
-        std::env::set_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY", private_key.as_str());
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY", public_key.as_str());
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY", private_key.as_str());
+        }
         let request = build_transfer_submit_request(&draft).expect("request");
         assert_eq!(request.from_account_id, format!("oc:pk:{public_key}"));
         assert_eq!(request.to_account_id, "protocol:treasury");
@@ -370,8 +376,14 @@ mod tests {
         assert_eq!(request.nonce, 3);
         assert_eq!(request.public_key, public_key);
         assert!(request.signature.starts_with("octransferauth:v2:"));
-        std::env::remove_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY");
-        std::env::remove_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY");
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY");
+        }
     }
 
     #[test]
@@ -426,16 +438,28 @@ mod tests {
             amount: "7".to_string(),
             nonce: "9".to_string(),
         };
-        std::env::set_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY", public_key.as_str());
-        std::env::set_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY", private_key.as_str());
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY", public_key.as_str());
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY", private_key.as_str());
+        }
         let response =
             submit_transfer_remote(&draft, format!("127.0.0.1:{}", bind.port()).as_str())
                 .expect("submit transfer should succeed");
         assert!(response.ok);
         assert_eq!(response.action_id, Some(17));
         assert_eq!(response.submitted_at_unix_ms, Some(123));
-        std::env::remove_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY");
-        std::env::remove_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY");
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY");
+        }
 
         server.join().expect("mock chain server should finish");
     }
@@ -464,14 +488,26 @@ mod tests {
             amount: "7".to_string(),
             nonce: "9".to_string(),
         };
-        std::env::set_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY", public_key.as_str());
-        std::env::set_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY", private_key.as_str());
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY", public_key.as_str());
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY", private_key.as_str());
+        }
         let err = submit_transfer_remote(&draft, format!("127.0.0.1:{}", bind.port()).as_str())
             .expect_err("submit should return structured remote rejection");
         assert!(err.contains("HTTP 400"));
         assert!(err.contains("nonce replay"));
-        std::env::remove_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY");
-        std::env::remove_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY");
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY");
+        }
 
         server.join().expect("mock chain server should finish");
     }

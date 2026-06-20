@@ -75,7 +75,8 @@ fn runtime_network_replication_respects_topic_isolation() {
             runtime_b.stop().expect("stop b");
 
             assert_eq!(
-                snapshot_b.consensus.known_peer_heads, 0,
+                snapshot_b.consensus.known_peer_heads,
+                0,
                 "topic-isolated observer should not learn peer heads: committed_height={} network_committed_height={} last_error={:?}",
                 snapshot_b.consensus.committed_height,
                 snapshot_b.consensus.network_committed_height,

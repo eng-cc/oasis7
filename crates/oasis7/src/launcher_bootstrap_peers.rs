@@ -45,9 +45,9 @@ pub fn parse_chain_replication_bootstrap_peers(raw: &str) -> Result<Vec<String>,
 #[cfg(test)]
 mod tests {
     use super::{
-        default_chain_replication_bootstrap_peers_csv,
+        DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS, default_chain_replication_bootstrap_peers_csv,
         default_chain_replication_bootstrap_peers_vec, parse_chain_replication_bootstrap_peer,
-        parse_chain_replication_bootstrap_peers, DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS,
+        parse_chain_replication_bootstrap_peers,
     };
 
     #[test]

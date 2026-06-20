@@ -12,10 +12,10 @@ use super::error::WorldError;
 use super::lease::{LeaseDecision, LeaseManager};
 use super::mempool::{ActionBatchRules, ActionMempool, ActionMempoolConfig};
 use super::pos::{
-    attest_world_head_with_pos, propose_world_head_with_pos, PosConsensus, PosConsensusConfig,
-    PosConsensusDecision, PosConsensusStatus,
+    PosConsensus, PosConsensusConfig, PosConsensusDecision, PosConsensusStatus,
+    attest_world_head_with_pos, propose_world_head_with_pos,
 };
-use super::signature::{Ed25519SignatureSigner, HmacSha256Signer, ED25519_SIGNATURE_V1_PREFIX};
+use super::signature::{ED25519_SIGNATURE_V1_PREFIX, Ed25519SignatureSigner, HmacSha256Signer};
 
 #[derive(Debug, Clone)]
 pub struct SequencerMainloopConfig {
@@ -547,7 +547,7 @@ mod tests {
     use super::super::distributed_dht::InMemoryDht;
     use super::super::pos::PosValidator;
     use super::super::signature::{
-        Ed25519SignatureSigner, HmacSha256Signer, ED25519_SIGNATURE_V1_PREFIX,
+        ED25519_SIGNATURE_V1_PREFIX, Ed25519SignatureSigner, HmacSha256Signer,
     };
     use oasis7_proto::distributed_dht::DistributedDht as _;
 

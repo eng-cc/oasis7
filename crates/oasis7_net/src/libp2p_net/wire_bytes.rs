@@ -2,8 +2,8 @@ use std::convert::TryFrom as _;
 use std::io;
 use std::pin::Pin;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc,
+    atomic::{AtomicU64, Ordering},
 };
 use std::task::{Context, Poll};
 

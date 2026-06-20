@@ -1,9 +1,9 @@
 use oasis7_proto::distributed::DistributedErrorCode;
 
+use crate::NodeError;
 use crate::network_bridge::{
     REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX, REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX,
 };
-use crate::NodeError;
 
 pub(crate) fn replication_network_error_kind_label(code: DistributedErrorCode) -> &'static str {
     match code {

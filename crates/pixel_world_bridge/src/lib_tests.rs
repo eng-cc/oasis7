@@ -1,6 +1,6 @@
 use crate::render::{
-    agent_visual_style, build_grid_layout, classify_fragment_lod, fragment_screen_size_px,
-    fragment_visual_style, location_visual_style, FragmentTerrainLod,
+    FragmentTerrainLod, agent_visual_style, build_grid_layout, classify_fragment_lod,
+    fragment_screen_size_px, fragment_visual_style, location_visual_style,
 };
 
 use super::*;

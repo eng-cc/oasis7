@@ -2,13 +2,13 @@ mod report;
 mod spec;
 
 pub use report::{
-    render_markdown, CaseActualSummary, CaseResultSummary, ExecutorMetricsDelta, ObserveSummary,
-    PerfStats, RouterMetricsDelta, RouterProbeResultSummary,
+    CaseActualSummary, CaseResultSummary, ExecutorMetricsDelta, ObserveSummary, PerfStats,
+    RouterMetricsDelta, RouterProbeResultSummary, render_markdown,
 };
 pub use spec::{
-    load_spec, CaseExpectationSpec, CaseRequestSpec, ExpectedEmitSpec, ModuleObserveSpec,
-    ObserveCaseSpec, ResolvedModuleObserveSpec, RouterProbeInputSpec, RouterProbeSpec,
-    TickLifecycleExpectation,
+    CaseExpectationSpec, CaseRequestSpec, ExpectedEmitSpec, ModuleObserveSpec, ObserveCaseSpec,
+    ResolvedModuleObserveSpec, RouterProbeInputSpec, RouterProbeSpec, TickLifecycleExpectation,
+    load_spec,
 };
 
 use oasis7_wasm_abi::{
@@ -16,13 +16,13 @@ use oasis7_wasm_abi::{
     ModuleOutput, ModuleSandbox, ModuleTickLifecycleDirective,
 };
 use oasis7_wasm_executor::{
-    init_shared_wasm_executor_metrics, snapshot_wasm_executor_metrics, WasmExecutor,
-    WasmExecutorConfig, WasmExecutorMetricsSnapshot,
+    WasmExecutor, WasmExecutorConfig, WasmExecutorMetricsSnapshot,
+    init_shared_wasm_executor_metrics, snapshot_wasm_executor_metrics,
 };
 use oasis7_wasm_router::{
-    module_subscribes_to_action, module_subscribes_to_event, prepare_subscriptions,
-    prepared_module_subscribes_to_action, prepared_module_subscribes_to_event,
-    snapshot_global_wasm_router_metrics, WasmRouterMetricsSnapshot,
+    WasmRouterMetricsSnapshot, module_subscribes_to_action, module_subscribes_to_event,
+    prepare_subscriptions, prepared_module_subscribes_to_action,
+    prepared_module_subscribes_to_event, snapshot_global_wasm_router_metrics,
 };
 use report::ActualEmitSummary;
 use serde_json::Value as JsonValue;
@@ -31,7 +31,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tools_wasm_build_suite::{run_build, BuildRequest};
+use tools_wasm_build_suite::{BuildRequest, run_build};
 
 #[derive(Debug, Clone)]
 pub struct ObserveRunRequest {

@@ -1,7 +1,7 @@
 use super::super::types::{ResourceKind, ResourceOwner};
 use super::super::world_model::{ModuleArtifactBidState, ModuleArtifactListingState};
-use super::types::{RejectReason, WorldEventKind};
 use super::WorldKernel;
+use super::types::{RejectReason, WorldEventKind};
 
 impl WorldKernel {
     pub(super) fn apply_list_module_artifact_for_sale(

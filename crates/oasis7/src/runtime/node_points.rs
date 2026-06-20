@@ -540,9 +540,9 @@ fn normalize_ratio_with_threshold(raw_ratio: f64, min_ratio: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        NodeContributionSample, NodePointsConfig, NodePointsLedger, NodePointsLedgerSnapshot,
         DEFAULT_WEIGHT_COMPUTE, DEFAULT_WEIGHT_RELIABILITY, DEFAULT_WEIGHT_STORAGE,
-        DEFAULT_WEIGHT_UPTIME,
+        DEFAULT_WEIGHT_UPTIME, NodeContributionSample, NodePointsConfig, NodePointsLedger,
+        NodePointsLedgerSnapshot,
     };
     use std::collections::BTreeMap;
 

@@ -15,10 +15,10 @@ pub use replay_state_store::{
 use sort::sort_dead_letter_bucket;
 
 use super::{
-    normalized_schedule_key, validate_coordinator_lease_ttl_ms,
     MembershipRevocationAlertDeadLetterReason, MembershipRevocationAlertDeadLetterRecord,
     MembershipRevocationAlertDeadLetterStore, MembershipRevocationAlertRecoveryStore,
-    MembershipRevocationScheduleCoordinator, MembershipSyncClient,
+    MembershipRevocationScheduleCoordinator, MembershipSyncClient, normalized_schedule_key,
+    validate_coordinator_lease_ttl_ms,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
