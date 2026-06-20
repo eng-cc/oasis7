@@ -576,6 +576,90 @@ fn non_proposer_committed_decision_does_not_persist_local_replication() {
 }
 
 #[test]
+fn non_proposer_missing_remote_replication_retains_pending_commit() {
+    let world_id = "world-non-proposer-missing-remote-replication";
+    let dir = temp_dir("non-proposer-missing-remote-replication");
+    let validators = vec![
+        PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        },
+        PosValidator {
+            validator_id: "node-b".to_string(),
+            stake: 100,
+        },
+    ];
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(signed_pos_config_with_signer_seeds(
+            validators,
+            &[("node-a", 41), ("node-b", 42)],
+        ))
+        .expect("pos config")
+        .with_auto_attest_all_validators(true)
+        .with_replication(signed_replication_config(dir.clone(), 42));
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.pending = Some(PendingProposal {
+        height: 1,
+        slot: 0,
+        epoch: 0,
+        opened_at_ms: 100,
+        proposer_id: "node-a".to_string(),
+        block_hash: "remote-block-1".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        attestations: std::collections::BTreeMap::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        status: PosConsensusStatus::Pending,
+    });
+    let mut replication = ReplicationRuntime::new(
+        config.replication.as_ref().expect("replication"),
+        "node-b",
+    )
+    .expect("replication runtime");
+
+    let result = engine
+        .tick(
+            &config.node_id,
+            &config.world_id,
+            1_000,
+            None,
+            Some(&mut replication),
+            None,
+            None,
+            Vec::new(),
+            None,
+        )
+        .expect("tick");
+
+    assert_eq!(engine.committed_height, 0);
+    assert_eq!(engine.replication_persisted_height, 0);
+    let pending = engine.pending.as_ref().expect("pending retained");
+    assert_eq!(pending.height, 1);
+    assert_eq!(pending.proposer_id, "node-a");
+    assert_eq!(
+        result.consensus_snapshot.last_status,
+        Some(PosConsensusStatus::Pending)
+    );
+    assert_eq!(
+        result
+            .consensus_snapshot
+            .last_inbound_timing_reject_reason
+            .as_deref(),
+        Some("drop remote committed height 1 without matching persisted replication commit")
+    );
+    assert_eq!(
+        replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted height"),
+        0
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn proposer_local_replication_advances_persisted_height_without_network_endpoint() {
     let world_id = "world-local-replication-persisted-height";
     let dir = temp_dir("local-replication-persisted-height");

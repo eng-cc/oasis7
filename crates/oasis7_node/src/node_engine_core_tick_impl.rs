@@ -201,7 +201,6 @@ impl PosNodeEngine {
                 None => true,
             };
             if !has_remote_replication {
-                self.pending = None;
                 self.last_inbound_timing_reject_reason = Some(format!(
                     "drop remote committed height {} without matching persisted replication commit",
                     decision.height
