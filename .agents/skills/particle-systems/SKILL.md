@@ -30,6 +30,14 @@ observability:
 
 # Particle Systems
 
+## Oasis7 Workflow Binding
+
+In oasis7, this is a domain-triggered, non-default VFX aid. It supports
+`game_visual_interaction_designer` and the relevant implementation slice when a
+task actually changes player-facing effects, readability, or visual-performance
+behavior. It does not replace visual direction, implementation ownership, QA
+verification, or real screenshot/playtest evidence.
+
 ## When to Use
 
 Use this skill when:
@@ -42,6 +50,8 @@ Do not use this skill when:
 
 - the visual change is static UI styling with no particle/VFX behavior
 - the task is pure gameplay logic without player-facing visual feedback
+- the task only needs generic VFX education without an oasis7 visual or runtime
+  decision
 
 ## Core Workflow
 
@@ -70,6 +80,9 @@ Do not use this skill when:
 - Keep this entrypoint concise; move heavy examples or catalog material to supporting files.
 - Do not bypass oasis7 task/worktree truth or professional role ownership when the workflow requires it.
 - Do not present reference material as verified project behavior without checking the current repo state.
+- Do not treat a particle recipe as accepted visual direction without
+  `game_visual_interaction_designer` ownership and real rendering/playtest
+  evidence.
 
 ## Verification
 

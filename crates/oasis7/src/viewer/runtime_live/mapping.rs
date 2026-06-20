@@ -127,6 +127,8 @@ pub(super) fn map_runtime_event(
     runtime_event: &RuntimeWorldEvent,
     config: &WorldConfig,
 ) -> WorldEvent {
+    // Runtime-live compat keeps unmapped runtime events visible to the viewer
+    // while preserving the canonical runtime payload for later inspection.
     let kind = match &runtime_event.body {
         RuntimeWorldEventBody::Domain(domain) => map_runtime_domain_event(domain, config)
             .unwrap_or_else(|| runtime_fallback_event_kind(runtime_event)),
@@ -533,6 +535,8 @@ fn material_stack_summary(stacks: &[RuntimeMaterialStack]) -> String {
 }
 
 fn fallback_non_empty<'a>(value: &'a str, fallback: &'a str) -> &'a str {
+    // Summary fallbacks are display/observability labels only; the preserved
+    // runtime payload remains the source of truth for empty or unknown fields.
     let trimmed = value.trim();
     if trimmed.is_empty() {
         fallback
@@ -836,6 +840,38 @@ mod tests {
         assert!(mapped.runtime_event.is_some());
         assert_eq!(mapped.id, 9);
         assert_eq!(mapped.time, 42);
+    }
+
+    #[test]
+    fn map_runtime_event_unmapped_domain_event_keeps_payload_with_domain_label() {
+        let event = RuntimeWorldEvent {
+            id: 10,
+            time: 43,
+            caused_by: None,
+            body: RuntimeWorldEventBody::Domain(RuntimeDomainEvent::DataCollected {
+                collector_agent_id: "agent.alpha".to_string(),
+                electricity_cost: 2,
+                data_amount: 5,
+            }),
+        };
+        let mapped = map_runtime_event(&event, &WorldConfig::default());
+        match mapped.kind {
+            WorldEventKind::RuntimeEvent { kind, domain_kind } => {
+                assert_eq!(kind, "domain");
+                assert_eq!(domain_kind, None);
+            }
+            other => panic!("unexpected mapped event: {other:?}"),
+        }
+        assert_eq!(mapped.runtime_event, Some(event));
+    }
+
+    #[test]
+    fn fallback_non_empty_trims_values_and_labels_empty_summaries() {
+        assert_eq!(
+            fallback_non_empty("  agent.alpha  ", "system"),
+            "agent.alpha"
+        );
+        assert_eq!(fallback_non_empty("  ", "unknown_action"), "unknown_action");
     }
 
     #[test]

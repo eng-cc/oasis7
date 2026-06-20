@@ -1,6 +1,6 @@
 # XiaoHongShu Visual Asset Manifest
 
-Reference material: `/Users/scc/Downloads/deep-research-report.md`
+Reference material: external research notes (not committed; local source path intentionally omitted for repository portability; extraction boundary recorded in `.pm/tasks/task_0745838e8c6546a09faba1ce8c602e33.execution.md`).
 
 Generated size: 1080 x 1440 PNG.
 

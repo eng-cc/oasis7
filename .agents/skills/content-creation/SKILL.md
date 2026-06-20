@@ -1,24 +1,44 @@
 ---
 name: content-creation
-description: Use when drafting marketing content across channels, including blog posts, social media, email newsletters, landing pages, press releases, case studies, SEO copy, headlines, or calls to action.
+description: Use when drafting or adapting oasis7 liveops, community, channel, release, or marketing copy that needs format, headline, SEO, CTA, or campaign guidance.
 user-invocable: false
 ---
 
 # Content Creation Skill
 
+## Oasis7 Workflow Binding
+
+In oasis7, this skill is a content-format and copywriting aid, not the owner of
+player promises, incident communication, release positioning, or community
+strategy. When the content is external-facing, `liveops_community` must own or
+verify the professional conclusion, and TPM must keep the work bound to the
+same `.pm` task/worktree/PR chain.
+
+Use this skill to shape the artifact after the task has a clear audience,
+channel, factual basis, and approval boundary. Do not use it to invent product
+claims, player commitments, metrics, endorsements, or release status.
+
 ## When to Use
 
 Use this skill when:
 
-- marketing or channel copy needs to be drafted, adapted, or optimized
-- the output needs SEO, headline, CTA, or campaign-format guidance
+- oasis7 liveops, community, release, site, or channel copy needs to be drafted,
+  adapted, or optimized
+- the output needs SEO, headline, CTA, campaign-format, or channel-structure
+  guidance
+- a `liveops_community` slice needs reusable copy templates after it has set
+  the factual and audience boundary
 
 Do not use this skill when:
 
 - the task does not match the trigger conditions above
+- the content would make external promises without `liveops_community` review
+- the request is product direction, release readiness, incident ownership, or
+  community strategy rather than copy drafting/adaptation
 
 
-Guidelines and frameworks for creating effective marketing content across channels.
+Guidelines and frameworks for creating effective copy across oasis7-relevant
+channels.
 
 ## Content Type Templates
 
@@ -172,3 +192,7 @@ Guidelines and frameworks for creating effective marketing content across channe
 
 - Keep claims factual and channel-appropriate.
 - Do not invent data, endorsements, or customer outcomes.
+- Do not present this skill's formatting guidance as `liveops_community`
+  approval or release readiness.
+- Preserve source evidence for any factual claim, metric, date, availability,
+  or player-facing commitment.

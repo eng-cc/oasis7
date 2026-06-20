@@ -1,227 +1,78 @@
 ---
 name: game-design-theory
 version: "2.0.0"
-description: Use when analyzing or designing game systems through MDA, player psychology, balance principles, progression, motivation, or fun-factor theory.
+description: Use when an oasis7 gameplay, product, agent, visual, or liveops slice needs theory-backed framing for player motivation, core loops, progression, balance, or experience design.
 sasmp_version: "1.3.0"
 bonded_agent: 01-game-designer
 bond_type: PRIMARY_BOND
-
-parameters:
-  - name: framework
-    type: string
-    required: false
-    validation:
-      enum: [mda, bartle, flow, reward_systems]
-  - name: game_type
-    type: string
-    required: false
-    validation:
-      enum: [action, rpg, puzzle, strategy, casual, simulation]
-
-retry_policy:
-  enabled: true
-  max_attempts: 3
-  backoff: exponential
-
-observability:
-  log_events: [start, complete, error]
-  metrics: [design_quality_score, iteration_count]
 ---
 
 # Game Design Theory
+
+## Oasis7 Workflow Binding
+
+In oasis7, this is a domain-triggered, non-default specialist aid. It does not
+own gameplay, product, liveops, visual, or agent conclusions by itself.
+
+Use it only inside an already-bound task/worktree and route professional
+conclusions through the matching role slice, such as `gameplay_designer`,
+`producer_system_designer`, `game_visual_interaction_designer`,
+`agent_engineer`, or `liveops_community`.
 
 ## When to Use
 
 Use this skill when:
 
-- a game design decision needs theory-backed framing
-- the task involves motivation, MDA, progression, balance, retention, or player psychology
+- a role slice needs MDA, motivation, progression, balance, retention, or player
+  psychology framing for an oasis7 decision
+- a design discussion needs reusable theory language tied to current
+  `doc/game/*`, PRD/project truth, task evidence, or playtest observations
+- community or agent behavior signals need to be translated into experience
+  hypotheses without making product or liveops promises
 
 Do not use this skill when:
 
-- the task does not match the trigger conditions above
+- the request is direct implementation with already-sufficient gameplay truth
+- a generic game-design essay would not change the current task decision
+- the conclusion should be owned by `gameplay_designer`,
+  `producer_system_designer`, `agent_engineer`, or `liveops_community` without a
+  theory aid
 
+## Core Workflow
 
-## The MDA Framework
+1. Start from current repo truth: `.pm` task, relevant PRD/project docs, role
+   card, and any playtest or community evidence.
+2. Pick the smallest useful theory lens, such as core loop, motivation,
+   progression pressure, balance tradeoff, or player feedback timing.
+3. Tie every recommendation to observable oasis7 behavior or a documented
+   follow-up validation path.
+4. Attribute professional conclusions to the owning role slice, not to this
+   skill.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    MDA FRAMEWORK                             │
-├─────────────────────────────────────────────────────────────┤
-│  MECHANICS (Rules):                                          │
-│  → Player actions, constraints, state changes               │
-│  → Example: Jump has height limit, costs stamina            │
-│                              ↓                               │
-│  DYNAMICS (Behavior):                                        │
-│  → Emergent gameplay from mechanic interactions             │
-│  → Example: Wall-jump combos, speedrun routes               │
-│                              ↓                               │
-│  AESTHETICS (Experience):                                    │
-│  → Emotional responses: Fun, tension, achievement           │
-│  → Example: Flow state, satisfaction, immersion             │
-└─────────────────────────────────────────────────────────────┘
-```
+## Supporting Files
 
-## Core Game Loop
+- `references/DESIGN_GUIDE.md`: compact upstream-tracking reference for generic
+  theory terms. Read it only when the current slice needs a theory refresher.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    ENGAGEMENT LOOP                           │
-├─────────────────────────────────────────────────────────────┤
-│  1. INPUT    → Player takes action                          │
-│  2. PROCESS  → Game calculates results                      │
-│  3. FEEDBACK → Immediate visual/audio response              │
-│  4. REWARD   → Progress, points, unlocks                    │
-│  5. REPEAT   → Loop invites next iteration                  │
-│                                                              │
-│  Loop Quality Criteria:                                      │
-│  ✓ Fast feedback (< 100ms)                                  │
-│  ✓ Clear causation                                          │
-│  ✓ Rewarding outcomes                                       │
-│  ✓ Compelling repetition                                    │
-└─────────────────────────────────────────────────────────────┘
-```
+## Known Failure Modes
 
-## Flow Channel (Csikszentmihalyi)
-
-```
-     Anxiety
-         ↑
-  Hard   │     ████
-         │   ██████   ← FLOW CHANNEL
-Skill    │ ████████      (Optimal Engagement)
-Level    │████████████
-  Easy   │██████████████
-         └──────────────────→
-           Low    Challenge    High
-
-TARGET: Match challenge to player skill
-```
-
-## Player Psychology
-
-### Bartle's Player Types
-
-| Type | Motivation | Design For |
-|------|------------|------------|
-| Achiever | Goals, progression | Achievements, levels |
-| Explorer | Discovery, secrets | Hidden content, lore |
-| Socializer | Community | Chat, guilds, co-op |
-| Killer | Competition | PvP, leaderboards |
-
-### Motivation Drivers
-
-```
-SELF-DETERMINATION THEORY:
-┌─────────────────────────────────────────────────────────────┐
-│  AUTONOMY:   Choice and control over actions               │
-│  COMPETENCE: Mastery and skill demonstration               │
-│  RELATEDNESS: Connection to characters/community           │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Reward Systems
-
-```
-REWARD TYPES:
-┌─────────────────────────────────────────────────────────────┐
-│  INTRINSIC (Internal):                                       │
-│  • Achievement satisfaction                                 │
-│  • Creative expression                                      │
-│  • Curiosity fulfillment                                    │
-│  • Skill mastery                                            │
-├─────────────────────────────────────────────────────────────┤
-│  EXTRINSIC (External):                                       │
-│  • Points, scores                                           │
-│  • Unlocks, cosmetics                                       │
-│  • Leaderboard position                                     │
-│  • Currency rewards                                         │
-└─────────────────────────────────────────────────────────────┘
-
-REWARD SCHEDULING:
-• Fixed Ratio: Every N actions (predictable)
-• Variable Ratio: Random timing (engaging but ethical concerns)
-• Fixed Interval: Every N seconds
-• Milestone: At progression checkpoints
-```
-
-## Balance Principles
-
-| Aspect | Goal | Technique |
-|--------|------|-----------|
-| Mechanical | All options viable | Counter-play, trade-offs |
-| Economic | Meaningful scarcity | Sinks and faucets |
-| Difficulty | Appropriate challenge | Dynamic scaling |
-| Competitive | Fair play | Mirror balance, no dominance |
-
-## 🔧 Troubleshooting
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ PROBLEM: Players find game boring                           │
-├─────────────────────────────────────────────────────────────┤
-│ ROOT CAUSES:                                                 │
-│ • Challenge too easy (below flow channel)                   │
-│ • No clear goals or progression                             │
-│ • Feedback loop too slow                                    │
-├─────────────────────────────────────────────────────────────┤
-│ SOLUTIONS:                                                   │
-│ → Increase challenge curve                                  │
-│ → Add clear milestones and rewards                          │
-│ → Speed up core loop, add variety                           │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│ PROBLEM: Players frustrated / quitting                      │
-├─────────────────────────────────────────────────────────────┤
-│ ROOT CAUSES:                                                 │
-│ • Difficulty spike (above flow channel)                     │
-│ • Unclear mechanics or feedback                             │
-│ • Unfair or random feeling deaths                           │
-├─────────────────────────────────────────────────────────────┤
-│ SOLUTIONS:                                                   │
-│ → Smooth difficulty curve                                   │
-│ → Improve tutorial and feedback                             │
-│ → Make deaths feel fair and educational                     │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│ PROBLEM: Dominant strategy / no variety                     │
-├─────────────────────────────────────────────────────────────┤
-│ SOLUTIONS:                                                   │
-│ → Add counter-play to dominant options                      │
-│ → Buff underused alternatives                               │
-│ → Create situational advantages                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Design Checklist
-
-```
-PRE-PRODUCTION:
-□ Target audience defined
-□ Core loop documented
-□ Unique selling point clear
-□ Reference games analyzed
-
-PRODUCTION:
-□ Mechanics serve aesthetics
-□ Feedback loops verified
-□ Balance spreadsheets maintained
-□ Playtest schedule in place
-
-POLISH:
-□ First-time user experience tested
-□ Difficulty curve validated
-□ Reward timing optimized
-□ Edge cases handled
-```
-
----
-
-**Use this skill**: When designing game systems, understanding player psychology, or balancing gameplay.
+- Treating generic theory as product evidence.
+- Letting this skill replace the `gameplay_designer` or
+  `producer_system_designer` role boundary.
+- Making liveops or player-facing claims from theory without
+  `liveops_community` review.
 
 ## Guardrails
 
-- Use theory to frame decisions, not to override current repo/game evidence.
-- Route concrete gameplay conclusions through the matching professional slice when required.
+- Keep the entrypoint tied to oasis7 repo truth; generic theory belongs in the
+  supporting reference only.
+- Do not produce final gameplay, product, agent, visual, or liveops conclusions
+  without the owning professional role slice.
+- Do not treat player psychology frameworks as validation evidence unless they
+  are paired with task-specific acceptance, playtest, or community evidence.
+
+## Verification
+
+- Record the owning role, theory lens, evidence, and residual risk in the task
+  execution log.
+- Run `./scripts/lint-skills.sh` after skill-surface edits.
