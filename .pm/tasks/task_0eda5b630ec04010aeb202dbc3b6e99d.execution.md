@@ -61,3 +61,12 @@ Example:
 - Expected Result: Task-local verification remains usable for PR refresh; current task evidence is lint-clean after correction.
 - Actual Result: Targeted verification passed and task status is done/verified; repo-wide pm-lint still has unrelated historical debt; current URL source_ref was removed and workflow-lint current now passes.
 - Blocker / Next Action: Proceed with commit/push while preserving residual risk note.
+
+## 2026-06-21 00:06:33 CST / tpm
+- 完成内容: Addressed GitHub review comments on PR #494: strict-ready Linux restarts now require status_url, and remote Windows installer upload path is aligned with generated PowerShell installer path.
+- 遗留事项: Commit/push review fixes, resolve GitHub threads after push, rerun GitHub checks, then merge if clean.
+- Action: Handle unresolved PR review threads PRRT_kwDORHhWec6LBW01 and PRRT_kwDORHhWec6LBW02 with minimal code/test fixes.
+- Validation Command: python3 -m py_compile scripts/p2p-public-testnet-package-rollout.py && bash -n scripts/p2p-public-testnet-package-rollout.test.sh && ./scripts/p2p-public-testnet-package-rollout.test.sh && ./scripts/p2p-public-testnet-package-node-upgrade.test.sh && ./scripts/doc-governance-check.sh && git diff --check && ./scripts/pm/workflow-lint.sh --task-uid task_0eda5b630ec04010aeb202dbc3b6e99d --phase current
+- Expected Result: Review fixes are covered by targeted package rollout tests and task-local lint remains clean.
+- Actual Result: PASS: package rollout helper test passed with strict-ready missing-status and Windows remote-installer path coverage; adjacent node upgrade test, doc governance, diff check, and workflow-lint passed.
+- Blocker / Next Action: Commit and push review fixes.

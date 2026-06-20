@@ -173,7 +173,9 @@ def linux_command(
             die(f"linux node {node.get('name', '<unnamed>')} has restart=true but no systemd_service")
         command.extend(["--systemd-service", service, "--restart-service"])
         status_url = str(node.get("status_url") or "")
-        if readiness_policy == "strict-ready" and status_url:
+        if readiness_policy == "strict-ready" and not status_url:
+            die(f"linux node {node.get('name', '<unnamed>')} uses strict-ready but has no status_url")
+        if readiness_policy == "strict-ready":
             command.extend(["--post-restart-status-url", status_url])
             timeout_secs = str(node.get("post_restart_timeout_secs") or 120)
             command.extend(["--post-restart-timeout-secs", timeout_secs])
@@ -347,14 +349,17 @@ def write_windows_plan(
     name = str(node.get("name") or "windows-node")
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
     script_path = out_dir / f"{safe_name}-windows-upgrade.ps1"
-    script_text = windows_script(node, windows_asset.name, version, commit, run_id)
-    script_path.write_text(script_text, encoding="utf-8")
-    # Rewrite without BOM explicitly; Windows PowerShell accepts this and the runtime JSON writer also uses no-BOM.
-    script_path.write_bytes(script_text.encode("utf-8"))
     host = str(node.get("host") or "")
     user = str(node.get("user") or "Administrator")
     remote_script = str(node.get("remote_script") or f"{safe_name}-windows-upgrade.ps1")
     remote_installer = str(node.get("remote_installer") or windows_asset.name)
+    script_node = dict(node)
+    if host and not script_node.get("installer_path"):
+        script_node["installer_path"] = remote_installer
+    script_text = windows_script(script_node, windows_asset.name, version, commit, run_id)
+    script_path.write_text(script_text, encoding="utf-8")
+    # Rewrite without BOM explicitly; Windows PowerShell accepts this and the runtime JSON writer also uses no-BOM.
+    script_path.write_bytes(script_text.encode("utf-8"))
     commands: list[str] = []
     if host:
         commands.append(shell_join(["scp", str(windows_asset), f"{user}@{host}:{remote_installer}"]))

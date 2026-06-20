@@ -98,6 +98,7 @@ cat >"$TMP_DIR/manifest.json" <<EOF
       "host": "192.0.2.33",
       "user": "Administrator",
       "deploy_root": "C:\\\\oasis7-deploy",
+      "remote_installer": "C:/oasis7-deploy/oasis7-windows-x64.exe",
       "scheduled_task": "Oasis7Observer",
       "status_url": "http://127.0.0.1:5121/v1/chain/status"
     }
@@ -119,6 +120,7 @@ jq -e '
   and (.nodes[] | select(.name == "remote-linux") | .commands[0] | startswith("scp "))
   and (.nodes[] | select(.name == "remote-linux") | .commands[1] | startswith("ssh root@198.51.100.44 "))
   and (.nodes[] | select(.name == "remote-linux") | .commands[1] | contains("--bundle-tar /tmp/oasis7-linux-x64-bundle.tar.gz"))
+  and (.nodes[] | select(.name == "windows-observer") | .commands[0] | contains(":C:/oasis7-deploy/oasis7-windows-x64.exe"))
   and (.nodes[] | select(.name == "windows-observer") | .governed_bundle_path | endswith("public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"))' \
   "$TMP_DIR/plan-only.json" >/dev/null
 
@@ -151,6 +153,7 @@ data = Path(sys.argv[1]).read_bytes()
 assert not data.startswith(b"\xef\xbb\xbf"), "PowerShell script must be UTF-8 without BOM"
 text = data.decode("utf-8")
 assert "Set-JsonProperty $json.runtime_build 'sha256' $hash" in text
+assert '$installer = "C:/oasis7-deploy/oasis7-windows-x64.exe"' in text
 assert 'throw "governed bundle missing runtime_build' in text
 assert "[System.Text.UTF8Encoding]::new($false)" in text
 assert "Start-ScheduledTask -TaskName $taskName" in text
@@ -228,5 +231,25 @@ jq -e '
   .readiness_policy == "strict-ready"
   and (.nodes[] | select(.name == "local-linux") | .commands[0] | contains("--post-restart-status-url"))' \
   "$TMP_DIR/strict-plan.json" >/dev/null
+
+python3 - "$TMP_DIR/manifest.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+manifest = json.loads(Path(sys.argv[1]).read_text())
+manifest["nodes"][0].pop("status_url", None)
+Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + "\n")
+PY
+if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$TMP_DIR/manifest.json" \
+  --package-dir "$package_dir" \
+  --out-dir "$TMP_DIR/strict-missing-status-out" \
+  --readiness-policy strict-ready \
+  >"$TMP_DIR/strict-missing-status.out" 2>"$TMP_DIR/strict-missing-status.err"; then
+  echo "expected strict-ready restart without status_url to fail" >&2
+  exit 1
+fi
+grep -q "uses strict-ready but has no status_url" "$TMP_DIR/strict-missing-status.err"
 
 echo "ok: package rollout helper validates artifacts and standardizes linux/windows replacement plans"
