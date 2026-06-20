@@ -1,5 +1,5 @@
 use super::GossipReplicationMessage;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct FetchCommitRequest {
@@ -40,7 +40,7 @@ pub(crate) struct FetchBlobResponse {
     #[serde(
         default,
         deserialize_with = "deserialize_optional_hex_or_bytes",
-        serialize_with = "serialize_optional_hex_bytes"
+        skip_serializing_if = "Option::is_none"
     )]
     pub blob: Option<Vec<u8>>,
 }
@@ -50,16 +50,6 @@ pub(crate) struct FetchBlobResponse {
 enum BlobBytesWire {
     Hex(String),
     Bytes(Vec<u8>),
-}
-
-fn serialize_optional_hex_bytes<S>(blob: &Option<Vec<u8>>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    match blob {
-        Some(bytes) => serializer.serialize_some(&hex::encode(bytes)),
-        None => serializer.serialize_none(),
-    }
 }
 
 fn deserialize_optional_hex_or_bytes<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
@@ -82,7 +72,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fetch_blob_response_serializes_blob_as_compact_hex_string() {
+    fn fetch_blob_response_serializes_blob_as_legacy_json_byte_array_for_v1_compatibility() {
         let response = FetchBlobResponse {
             found: true,
             range_offset_bytes: None,
@@ -92,8 +82,8 @@ mod tests {
 
         let encoded = serde_json::to_string(&response).expect("encode response");
 
-        assert!(encoded.contains("\"blob\":\"000102feff\""));
-        assert!(!encoded.contains("[0,1,2"));
+        assert!(encoded.contains("\"blob\":[0,1,2,254,255]"));
+        assert!(!encoded.contains("\"blob\":\"000102feff\""));
     }
 
     #[test]
@@ -101,6 +91,15 @@ mod tests {
         let decoded: FetchBlobResponse =
             serde_json::from_str(r#"{"found":true,"blob":[0,1,2,254,255]}"#)
                 .expect("decode legacy response");
+
+        assert_eq!(decoded.blob, Some(vec![0, 1, 2, 254, 255]));
+    }
+
+    #[test]
+    fn fetch_blob_response_accepts_compact_hex_string_from_newer_peers() {
+        let decoded: FetchBlobResponse =
+            serde_json::from_str(r#"{"found":true,"blob":"000102feff"}"#)
+                .expect("decode compact response");
 
         assert_eq!(decoded.blob, Some(vec![0, 1, 2, 254, 255]));
     }
