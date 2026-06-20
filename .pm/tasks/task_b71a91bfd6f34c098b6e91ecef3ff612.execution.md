@@ -313,3 +313,12 @@ Example:
 - Expected Result: Claim-ready helper verifies the current task evidence and allows a ready-for-PR claim.
 - Actual Result: Pass; `workflow-lint: OK (task_b71a91bfd6f34c098b6e91ecef3ff612, phase=current)`; `status: verified`; `allowed_to_claim: true`; `claim_message: Fresh verification passed; the branch can now be claimed ready for PR.`
 - Blocker / Next Action: commit metadata/evidence update, then rerun `./scripts/prepare-task-pr.sh --create`.
+
+## 2026-06-20 21:17:08 CST / tpm
+- 完成内容: PR created and normal PR purpose decision recorded.
+- 遗留事项: push this PR-purpose evidence update, then watch GitHub required checks, mergeability, comments, and review threads through the normal PR path.
+- Action: Ran `./scripts/prepare-task-pr.sh --create` after satisfying local preflight blockers.
+- Validation Command: `./scripts/prepare-task-pr.sh --create`
+- Expected Result: Branch pushes cleanly and a normal PR is created with local preflight summary and passed local role review evidence.
+- Actual Result: Created PR `https://github.com/eng-cc/oasis7/pull/546`; preflight status passed; local role review status passed; recommended required command is the full `./scripts/ci-tests.sh required` matrix for runtime/launcher/consensus/distfs/node/net/viewer/wasm/launcher-web scope.
+- Blocker / Next Action: PR purpose is `normal_pr_ci_watch`; continue watching required checks, mergeability, comments, and review threads, treating `REVIEW_REQUIRED`/`BEHIND` as informational unless GitHub reports an actual gate blocker.
