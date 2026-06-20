@@ -7,11 +7,13 @@
 - 模块 PRD：`doc/game/prd.md`
 - 模块设计总览：`doc/game/design.md`
 - 模块标准执行入口：`doc/game/project.md`
-- 当前高频 gameplay 入口：`doc/game/gameplay/gameplay-top-level-design.prd.md`
+- gameplay 子域入口：`doc/game/gameplay/README.md`
+- 核心玩法骨架入口：`doc/game/gameplay/gameplay-top-level-design.prd.md`
 
 ## 首读分流
 - 想先回答 game 模块当前目标态、阶段判断与完成定义：先读 `doc/game/prd.md`
 - 想先回答当前还在推进什么、阻断在哪里、下一步做什么：先读 `doc/game/project.md`
+- 想先进入 gameplay 热点子域，而不是直接面对 80+ 份 gameplay 文档：先读 `doc/game/gameplay/README.md`
 - 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - 想先看当前冲刺窗口与留存修复：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 - 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
@@ -35,6 +37,7 @@
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
 ## 活跃补充文档
+- `doc/game/gameplay/README.md`：`gameplay/` 热点子域 landing page，适合先做簇级分流，再决定进入玩法骨架、留存、agency、preview/beta gate 或 economy/claim 专题。
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`：核心玩法骨架主入口。
 - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`：当前冲刺窗口、跨角色优先级与 10 分钟留存修复主入口。
 - `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`：间接控制下的 accepted intent、主因果、打断重排与续玩恢复合同主入口。

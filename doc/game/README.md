@@ -6,7 +6,8 @@
 - 想先确认当前产品目标、阶段口径与完成定义：先读 `doc/game/prd.md`。
 - 想看当前正在推进什么、谁在阻断、下一步做什么：先读 `doc/game/project.md`。
 - 想直接按文件名定位某个 gameplay 专题：先读 `doc/game/prd.index.md`。
-- 想快速理解核心玩法骨架，而不是顺扫近期长名单：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`。
+- 想先进入 gameplay 热点子域，而不是顺扫近期长名单：先读 `doc/game/gameplay/README.md`。
+- 想快速理解核心玩法骨架：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`。
 - 想直接看“接下来两周只做什么”：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`。
 - 想确认“间接控制为什么仍然应该感觉像我在控制，而不是旁观 AI”：先读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
 - 想确认“成熟世界里小玩家/新玩家靠什么继续有独立价值，而不是只能投靠大组织”：先读 `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`。
@@ -24,6 +25,7 @@
 - `prd.md` 是玩法目标态与阶段口径真值，适合先理解当前 game 模块在管什么、哪些边界已经冻结。
 - `project.md` 是执行入口，适合确认 retention、preview、经济规则与放行门禁当前推进到哪一步。
 - `prd.index.md` 是精确检索索引，适合已经知道专题名或需要完整文件清单时使用，不适合作为第一次进入模块时的首读入口。
+- `gameplay/README.md` 是 `gameplay/` 热点子域 landing page，负责把玩法骨架、留存、agency、preview/beta gate 与 economy/claim 按问题分流。
 - 高频专题文档继续承担专题真值：`gameplay-top-level-design` 管核心玩法骨架，`gameplay-ten-minute-retention-recovery-2026-04-09` 管当前冲刺窗口，`gameplay-indirect-control-feeling-contract-2026-05-14` 管间接控制下的 agency 合同，`gameplay-limited-preview-execution-2026-03-22` / `gameplay-closed-beta-readiness-2026-03-21` 管试玩与放行边界，`gameplay-agent-claim-token-cost-2026-03-27` 管近期高频经济规则。
 - `gameplay-small-player-progression-lane-2026-05-17` 管 mature-world 小玩家承接：首个持续能力之后，如何通过受保护 first win、专业化与局部影响力继续形成独立价值。
 
@@ -43,14 +45,15 @@
 - 承接 agent claim restricted grant 的运营发放、撤销、过期与 incident runbook。
 
 ## 热点子域导航（2026-05-17 快照）
-- `gameplay/` 正式专题三件套（63）：玩法骨架、留存修复、preview/beta gate、claim economy、长稳治理、agency 合同与 mature-world 小玩家承接。
+- `gameplay/`（82）：先看 `gameplay/README.md`，再按簇进入玩法骨架、留存修复、preview/beta gate、claim economy、长稳治理、agency 合同与 mature-world 小玩家承接。
+- `gameplay/` 正式专题三件套（63）：用于已知专题后的精确下钻。
 - `gameplay/` 补充材料（18）：runbook、evidence、checklist、handoff 与跨角色执行留痕。
 - 模块根入口（5）：`README.md`、`prd.md`、`project.md`、`design.md`、`prd.index.md`。
 
 ## 高密度提示
-- `doc/game/` 当前共有 87 份文件，其中 `doc/game/gameplay/` 占 82 份；默认入口不再尝试把 gameplay 长表直接摊平到模块首页。
+- `doc/game/` 当前共有 87 份 Markdown，其中 `doc/game/gameplay/` 占 82 份；默认入口只负责把你送到 `gameplay/README.md`，不再尝试把 gameplay 长表直接摊平到模块首页。
 - 需要完整活跃专题清单时，进入 `doc/game/prd.index.md`；需要 runbook、evidence、handoff 或 checklist 时，再按 `gameplay/` 中的补充文件精确进入。
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
-- 玩法行为、发布门禁或体验验收变化时，优先更新 `doc/game/prd.md` 与 `doc/game/project.md`；新增 gameplay 专题或默认首读入口变化时，再同步回写 `doc/game/prd.index.md` 与本页“从这里开始”。
+- 玩法行为、发布门禁或体验验收变化时，优先更新 `doc/game/prd.md` 与 `doc/game/project.md`；新增 gameplay 专题或默认首读入口变化时，再同步回写 `doc/game/gameplay/README.md`、`doc/game/prd.index.md` 与本页“从这里开始”。
