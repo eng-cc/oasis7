@@ -27,6 +27,7 @@ struct CliOptions {
     chain_status_bind: Option<String>,
     chain_link_policy: ChainLinkPolicy,
     auto_play: bool,
+    allow_debug_scenario: bool,
     agent_chat_echo: bool,
 }
 
@@ -41,6 +42,7 @@ impl Default for CliOptions {
             chain_status_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             auto_play: false,
+            allow_debug_scenario: false,
             agent_chat_echo: oasis7::viewer::runtime_agent_chat_echo_enabled_from_env(),
         }
     }
@@ -80,6 +82,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         chain_status_bind = ?options.chain_status_bind,
         chain_link_policy = %options.chain_link_policy.as_str(),
         auto_play = options.auto_play,
+        allow_debug_scenario = options.allow_debug_scenario,
         agent_chat_echo = options.agent_chat_echo,
         scenario = %options
             .scenario
@@ -173,6 +176,9 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--auto-play" => {
                 options.auto_play = true;
             }
+            "--allow-debug-scenario" => {
+                options.allow_debug_scenario = true;
+            }
             "--agent-chat-echo" => {
                 options.agent_chat_echo = true;
             }
@@ -211,8 +217,22 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
         parse_socket_addr(chain_status_bind, "--chain-status-bind")?;
     }
     let _ = parse_deployment_mode(options.deployment_mode.as_str())?;
+    validate_debug_scenario_guardrail(&options)?;
 
     Ok(options)
+}
+
+fn validate_debug_scenario_guardrail(options: &CliOptions) -> Result<(), String> {
+    if matches!(options.scenario, Some(WorldScenario::LlmBootstrap))
+        && !options.allow_debug_scenario
+    {
+        return Err(
+            "`llm_bootstrap` is a seeded debug/LLM scenario, not a normal playtest or testnet entry; \
+rerun with `--allow-debug-scenario` only for targeted diagnostics, or omit the scenario for the formal release default world"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 fn parse_chain_link_policy(raw: &str) -> Result<ChainLinkPolicy, String> {
@@ -285,6 +305,7 @@ Options:\n\
   --chain-link-policy <mode> chain sync policy: enforcing|shadow (default: enforcing)\n\
   --deployment-mode <mode>  trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
   --auto-play               advance gameplay/world on each connected session without pressing Play\n\
+  --allow-debug-scenario    allow seeded debug scenarios such as llm_bootstrap\n\
   --agent-chat-echo         accept provider-backed local QA chat with an echo event\n\
   -h, --help                show help\n\n\
 Removed:\n\
@@ -308,6 +329,7 @@ mod tests {
         assert_eq!(options.chain_status_bind, None);
         assert_eq!(options.chain_link_policy, ChainLinkPolicy::Enforcing);
         assert!(!options.auto_play);
+        assert!(!options.allow_debug_scenario);
     }
 
     #[test]
@@ -325,6 +347,7 @@ mod tests {
                 "--chain-link-policy",
                 "shadow",
                 "--auto-play",
+                "--allow-debug-scenario",
                 "--agent-chat-echo",
                 "--deployment-mode",
                 "hosted_public_join",
@@ -343,6 +366,7 @@ mod tests {
         assert_eq!(options.chain_status_bind.as_deref(), Some("127.0.0.1:7123"));
         assert_eq!(options.chain_link_policy, ChainLinkPolicy::Shadow);
         assert!(options.auto_play);
+        assert!(options.allow_debug_scenario);
         assert!(options.agent_chat_echo);
     }
 
@@ -389,6 +413,21 @@ mod tests {
     fn parse_options_rejects_unknown_scenario() {
         let err = parse_options(["wat"].into_iter()).expect_err("unknown scenario");
         assert!(err.contains("unknown scenario"));
+    }
+
+    #[test]
+    fn parse_options_rejects_llm_bootstrap_without_debug_opt_in() {
+        let err = parse_options(["llm_bootstrap"].into_iter()).expect_err("debug scenario");
+        assert!(err.contains("seeded debug/LLM scenario"));
+        assert!(err.contains("--allow-debug-scenario"));
+    }
+
+    #[test]
+    fn parse_options_accepts_llm_bootstrap_with_debug_opt_in() {
+        let options = parse_options(["llm_bootstrap", "--allow-debug-scenario"].into_iter())
+            .expect("debug scenario opt-in");
+        assert_eq!(options.scenario, Some(WorldScenario::LlmBootstrap));
+        assert!(options.allow_debug_scenario);
     }
 
     #[test]

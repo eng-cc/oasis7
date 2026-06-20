@@ -27,6 +27,9 @@ pub(super) fn build_oasis7_viewer_live_command(
     if options.auto_play {
         command.arg("--auto-play");
     }
+    if options.allow_debug_scenario {
+        command.arg("--allow-debug-scenario");
+    }
     if options.with_llm {
         command.arg("--llm");
         if oasis7::viewer::runtime_agent_chat_echo_enabled_from_env() {

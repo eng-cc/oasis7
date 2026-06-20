@@ -134,6 +134,7 @@
 | `doc/world-simulator/scenario/scenario-files.prd.md` | `doc/world-simulator/scenario/scenario-files.design.md` | `doc/world-simulator/scenario/scenario-files.project.md` |
 | `doc/world-simulator/scenario/scenario-power-facility-baseline.prd.md` | `doc/world-simulator/scenario/scenario-power-facility-baseline.design.md` | `doc/world-simulator/scenario/scenario-power-facility-baseline.project.md` |
 | `doc/world-simulator/scenario/scenario-seed-locations.prd.md` | `doc/world-simulator/scenario/scenario-seed-locations.design.md` | `doc/world-simulator/scenario/scenario-seed-locations.project.md` |
+| `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md` | `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.design.md` | `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.project.md` |
 | `doc/world-simulator/scenario/world-initialization.prd.md` | `doc/world-simulator/scenario/world-initialization.design.md` | `doc/world-simulator/scenario/world-initialization.project.md` |
 | `doc/world-simulator/viewer/viewer-minimal-system.prd.md` | `doc/world-simulator/viewer/viewer-minimal-system.design.md` | `doc/world-simulator/viewer/viewer-minimal-system.project.md` |
 | `doc/world-simulator/viewer/viewer-module-visual-entities.prd.md` | `doc/world-simulator/viewer/viewer-module-visual-entities.design.md` | `doc/world-simulator/viewer/viewer-module-visual-entities.project.md` |

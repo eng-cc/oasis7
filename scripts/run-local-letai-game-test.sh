@@ -22,7 +22,7 @@ CHAT_PROBE_BACKEND="${OASIS7_LETAI_CHAT_PROBE_BACKEND:-rust-bridge}"
 SKIP_BRIDGE_SMOKE="0"
 ENSURE_TOKEN_CONFIG="1"
 CHAT_ECHO="0"
-AUTO_PLAY="${OASIS7_LOCAL_LETAI_AUTO_PLAY:-1}"
+AUTO_PLAY="${OASIS7_LOCAL_LETAI_AUTO_PLAY:-0}"
 DEPLOYMENT_MODE="${OASIS7_LOCAL_LETAI_DEPLOYMENT_MODE:-trusted_local_only}"
 BRIDGE_SMOKE_ATTEMPTS="2"
 BRIDGE_AUTO_TOPUP_USD="${OASIS7_LETAI_AUTO_TOPUP_USD:-0.1}"
@@ -75,8 +75,8 @@ Options:
   --no-ensure-token-config    Use --config directly; do not generate token config from platform key
   --chat-echo                 Enable local receipt-only chat echo for low-level debugging
   --no-chat-echo              Keep provider-backed agent chat disabled (default)
-  --auto-play                 Start gameplay/world progression on viewer connection (default)
-  --no-auto-play              Require manual Play before gameplay/world progression
+  --auto-play                 Start gameplay/world progression on viewer connection
+  --no-auto-play              Require manual Play before gameplay/world progression (default)
   --deployment-mode <mode>    Launcher deployment mode (default: trusted_local_only)
   --hosted-public-join        Use hosted_public_join instead of the local trusted playtest chain
   --chat-probe-backend <name> rust-bridge|legacy-cli|none (default: rust-bridge)

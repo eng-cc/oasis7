@@ -35,7 +35,7 @@ asset-language rules, and the expanded screenshot matrix, use
 ## 2. Scope
 In scope:
 - Viewer Web and `software_safe` player-facing screens.
-- Pixel-world stage, fallback DOM world surfaces, 2D map/readability overlays,
+- Pixel-world stage, rendered DOM world surfaces, 2D map/readability overlays,
   right-side command surfaces, chat/prompt panels, receipts, blockers, empty
   states, loading states, and diagnostics disclosure.
 - Site or documentation screenshots only when they represent the current Viewer
@@ -92,8 +92,8 @@ secondary detail before shrinking the main subject.
 - The world stage is the primary visual surface in Player mode.
 - Diagnostics, raw JSON, renderer badges, provider checks, and governance labels
   must never compete with the world stage on first load.
-- If a renderer is degraded or missing, the fallback surface must still show an
-  honest world summary and the reason for degraded mode.
+- If a renderer is degraded or missing, the unavailable diagnostic must show the
+  honest reason without constructing a second JS world.
 
 ### 5.2 Player Leverage Before Ambient Activity
 - The UI must distinguish player-caused progress from ambient simulation
@@ -110,7 +110,7 @@ secondary detail before shrinking the main subject.
   discoverable and scriptable.
 
 ### 5.4 Data Honesty
-- Derived visual positions, fallback states, inferred routes, and missing
+- Derived visual positions, unavailable states, inferred routes, and missing
   runtime fields must be labelled or visually scoped so they cannot be mistaken
   for authoritative runtime truth.
 - Visual hierarchy must not imply progress, causality, health, or ownership
@@ -209,7 +209,7 @@ The following states need stable visual and text equivalents:
 - completed;
 - no receipt;
 - derived position;
-- fallback or degraded renderer.
+- unavailable or degraded renderer.
 
 ## 7. Information Architecture
 ### 7.1 Player Mode Default
@@ -269,7 +269,7 @@ agent, route, objective, and receipt must remain easier to identify.
 
 When exact coordinates are missing:
 - derived positions may be used for readability;
-- the source must remain inspectable as `location_derived`, fallback, or
+- the source must remain inspectable as `location_derived`, `missing`, or
   equivalent;
 - derived visuals must not claim runtime authority.
 
@@ -360,14 +360,14 @@ Pixel-world specific blockers:
 - Location markers dominate as main entities when the task is agent/action
   focused.
 - Derived or missing positions lack an honest source marker.
-- Sparse snapshots do not show relationships, route, or readable fallback.
+- Sparse snapshots do not show relationships, route, or readable world state.
 
 ## 13. Implementation Brief for Viewer Work
 Viewer implementation tasks that change visible surfaces should include:
 - target mode: Player, Director, or both;
 - primary first-read subject;
 - affected stage/command/context/diagnostics level;
-- expected receipt/blocker/empty/fallback behavior;
+- expected receipt/blocker/empty/unavailable behavior;
 - desktop and mobile screenshot plan;
 - DOM or semantic test anchors that must remain stable;
 - explicit non-goals, especially protocol, runtime, and art-pipeline boundaries.

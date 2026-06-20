@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 use std::io::{self, Write};
 
+use crate::simulator::Location;
+use crate::viewer::gameplay_actions::formal_release_default_seed_model;
+
 use super::*;
 
 pub(crate) const FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = "live-formal-release-default";
@@ -367,13 +370,17 @@ pub(super) fn bootstrap_runtime_world(
 }
 
 pub fn bootstrap_formal_release_runtime_world() -> Result<(RuntimeWorld, WorldConfig), String> {
-    let config = WorldConfig::default();
+    let (config, seed_model) = formal_release_default_seed_model()?;
+    let starter_agent = seed_model
+        .agents
+        .get(FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID)
+        .ok_or_else(|| {
+            format!(
+                "formal release seed model missing bootstrap agent {}",
+                FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID
+            )
+        })?;
     let mut world = RuntimeWorld::new_production_hardened();
-    let bootstrap_pos = GeoPos::new(
-        config.space.width_cm / 2,
-        config.space.depth_cm / 2,
-        config.space.height_cm / 2,
-    );
     world.set_resource_balance(ResourceKind::Electricity, 400);
     for (material, amount) in [
         ("structural_frame", 40),
@@ -398,7 +405,7 @@ pub fn bootstrap_formal_release_runtime_world() -> Result<(RuntimeWorld, WorldCo
     }
     world.submit_action(RuntimeAction::RegisterAgent {
         agent_id: FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID.to_string(),
-        pos: bootstrap_pos,
+        pos: starter_agent.pos,
     });
     world
         .step()
@@ -407,7 +414,10 @@ pub fn bootstrap_formal_release_runtime_world() -> Result<(RuntimeWorld, WorldCo
         .set_agent_resource_balance(
             FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID,
             ResourceKind::Electricity,
-            32,
+            starter_agent
+                .resources
+                .get(ResourceKind::Electricity)
+                .max(32),
         )
         .map_err(|err| {
             format!(
@@ -419,7 +429,7 @@ pub fn bootstrap_formal_release_runtime_world() -> Result<(RuntimeWorld, WorldCo
         .set_agent_resource_balance(
             FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID,
             ResourceKind::Data,
-            8,
+            starter_agent.resources.get(ResourceKind::Data).max(8),
         )
         .map_err(|err| {
             format!(
@@ -428,6 +438,16 @@ pub fn bootstrap_formal_release_runtime_world() -> Result<(RuntimeWorld, WorldCo
             )
         })?;
     Ok((world, config))
+}
+
+pub(super) fn formal_release_default_seed_location_for_pos(pos: GeoPos) -> Option<Location> {
+    let (_, model) = formal_release_default_seed_model().ok()?;
+    let location_id = model
+        .agents
+        .values()
+        .find(|agent| agent.pos == pos)
+        .map(|agent| agent.location_id.clone())?;
+    model.locations.get(&location_id).cloned()
 }
 
 pub(super) fn runtime_metrics(world: &RuntimeWorld) -> RunnerMetrics {
@@ -528,7 +548,7 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_formal_release_runtime_world_uses_single_fixed_bootstrap_agent() {
+    fn bootstrap_formal_release_runtime_world_uses_seeded_fragment_bootstrap_agent() {
         let (world, _) =
             bootstrap_formal_release_runtime_world().expect("formal release bootstrap");
         let agent = world
@@ -536,7 +556,20 @@ mod tests {
             .agents
             .get(FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID)
             .expect("bootstrap agent should exist");
+        let (_, seed_model) =
+            formal_release_default_seed_model().expect("formal release seed model");
+        let seed_agent = seed_model
+            .agents
+            .get(FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID)
+            .expect("seed bootstrap agent should exist");
+        let seed_location = seed_model
+            .locations
+            .get(&seed_agent.location_id)
+            .expect("seed bootstrap location should exist");
         assert_eq!(world.state().agents.len(), 1);
+        assert_eq!(agent.state.pos, seed_agent.pos);
+        assert!(seed_agent.location_id.starts_with("frag-"));
+        assert!(seed_location.fragment_budget.is_some());
         assert_eq!(agent.state.resources.get(ResourceKind::Electricity), 32);
         assert_eq!(agent.state.resources.get(ResourceKind::Data), 8);
     }

@@ -61,6 +61,8 @@ const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
 const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5000;
 const SESSION_REGISTER_ACK_TIMEOUT_MS = 15000;
 const AGENT_CHAT_ACK_TIMEOUT_MS = 30000;
+const CHAT_HISTORY_STORAGE_PREFIX = "oasis7.viewer.chatHistory.v1";
+const CHAT_HISTORY_LIMIT = 40;
 
 function normalizeUiLocale(raw) {
   const value = String(raw || "").trim().toLowerCase();
@@ -938,6 +940,97 @@ function addRecentEvent(event) {
   state.eventSeq = Math.max(state.eventSeq, Number(event?.id || 0));
 }
 
+function storageSafe() {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return null;
+    }
+    return window.localStorage;
+  } catch (_) {
+    return null;
+  }
+}
+
+function chatHistoryStorageKey() {
+  const worldId = state.worldId || state.snapshot?.world_id || state.snapshot?.worldId || null;
+  if (!worldId) {
+    return null;
+  }
+  const wsUrl = state.wsUrl || initialWsUrl();
+  return `${CHAT_HISTORY_STORAGE_PREFIX}:${encodeURIComponent(String(worldId))}:${encodeURIComponent(String(wsUrl || "viewer"))}`;
+}
+
+function normalizeChatHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const message = String(entry.message || "").trim();
+  if (!message) {
+    return null;
+  }
+  return {
+    id: entry.id || `${entry.source || "chat"}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    source: entry.source || "event",
+    agentId: entry.agentId || null,
+    locationId: entry.locationId || null,
+    message,
+    tick: Number(entry.tick || 0),
+    speaker: entry.speaker || null,
+    playerId: entry.playerId || null,
+    targetAgentId: entry.targetAgentId || null,
+    intentSeq: entry.intentSeq || null,
+  };
+}
+
+function setChatHistory(entries) {
+  const seen = new Set();
+  const next = [];
+  for (const raw of entries || []) {
+    const entry = normalizeChatHistoryEntry(raw);
+    if (!entry || seen.has(entry.id)) {
+      continue;
+    }
+    seen.add(entry.id);
+    next.push(entry);
+    if (next.length >= CHAT_HISTORY_LIMIT) {
+      break;
+    }
+  }
+  state.chatHistory = next;
+}
+
+function persistChatHistory() {
+  const storage = storageSafe();
+  const key = chatHistoryStorageKey();
+  if (!storage || !key) {
+    return;
+  }
+  try {
+    storage.setItem(key, JSON.stringify(state.chatHistory.slice(0, CHAT_HISTORY_LIMIT)));
+  } catch (_) {
+  }
+}
+
+function hydrateChatHistoryFromStorage() {
+  const storage = storageSafe();
+  const key = chatHistoryStorageKey();
+  if (!storage || !key) {
+    return;
+  }
+  try {
+    const raw = storage.getItem(key);
+    if (!raw) {
+      return;
+    }
+    const stored = JSON.parse(raw);
+    if (!Array.isArray(stored)) {
+      return;
+    }
+    setChatHistory([...(state.chatHistory || []), ...stored]);
+  } catch (_) {
+  }
+}
+
 function handleSnapshot(snapshot) {
   clearInitialSnapshotRetryTimer();
   state.snapshot = snapshot;
@@ -953,6 +1046,7 @@ function handleSnapshot(snapshot) {
   } else if (state.selectedKind && state.selectedId) {
     applySelection({ kind: state.selectedKind, id: state.selectedId });
   }
+  hydrateChatHistoryFromStorage();
   syncAgentInteractionDrafts(false);
 }
 
@@ -1171,6 +1265,67 @@ function canAutoIssueHostedPlayerSession() {
     && state.auth.source !== "legacy_viewer_auth_bootstrap";
 }
 
+function isLoopbackHostname(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  return value === "localhost" || value === "127.0.0.1" || value === "::1" || value === "[::1]" || value === "";
+}
+
+function hostnameFromUrl(raw, base = window.location.href) {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  try {
+    return new URL(value, base).hostname || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function canAutoIssueLocalTestPlayerSession() {
+  if (state.auth.available) {
+    return false;
+  }
+  if (String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join") {
+    return false;
+  }
+  const pageHost = String(window.location.hostname || "").trim();
+  const wsHost = hostnameFromUrl(state.wsUrl || initialWsUrl());
+  return isLoopbackHostname(pageHost) && isLoopbackHostname(wsHost);
+}
+
+async function issueLocalTestPlayerSession() {
+  const keypair = await generateEphemeralEd25519Keypair();
+  const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
+  state.auth = {
+    available: true,
+    hostedAccountId: null,
+    playerId,
+    loginChannel: null,
+    maskedLoginHint: null,
+    deviceSessionId: playerId,
+    publicKey: keypair.publicKey,
+    privateKey: keypair.privateKey,
+    releaseToken: null,
+    error: null,
+    revokeReason: null,
+    revokedBy: null,
+    source: "local_test_api_ephemeral",
+    registrationStatus: "issued",
+    sessionEpoch: null,
+    issuedAtUnixMs: Date.now(),
+    recoveryErrorCode: null,
+    recoveryErrorMessage: null,
+    issueInFlight: false,
+    syncInFlight: false,
+    runtimeStatus: "issued",
+    boundAgentId: null,
+    pendingRequestedAgentId: null,
+    pendingForceRebind: false,
+    rebindNotice: null,
+  };
+  render();
+  return state.auth;
+}
+
 async function startHostedAccountLogin() {
   if (!canAutoIssueHostedPlayerSession()) {
     return { ok: false, reason: "hosted account login is unavailable on this lane" };
@@ -1325,6 +1480,9 @@ async function issueHostedPlayerIdentity() {
 }
 
 async function ensureHostedPlayerAuthAvailable() {
+  if (canAutoIssueLocalTestPlayerSession()) {
+    return issueLocalTestPlayerSession();
+  }
   return state.auth;
 }
 
@@ -1521,7 +1679,7 @@ function syncHostedPlayerSessionOnConnect() {
   void sendReconnectSync();
 }
 
-function clearPendingSessionRegisterWaiter(error = null) {
+function clearPendingSessionRegisterWaiter(error = null, options = {}) {
   if (!pendingSessionRegisterWaiter) {
     return;
   }
@@ -1530,7 +1688,7 @@ function clearPendingSessionRegisterWaiter(error = null) {
   if (waiter.timeoutId) {
     window.clearTimeout(waiter.timeoutId);
   }
-  if (error != null) {
+  if (error != null && options.reject !== false) {
     waiter.reject(error instanceof Error ? error : new Error(String(error)));
   }
 }
@@ -1659,7 +1817,15 @@ async function ensureRegisteredPlayerSession(requestedAgentId = null, options = 
   try {
     await dispatchSessionRegisterRequest(normalizedRequestedAgentId, forceRebind);
   } catch (error) {
-    clearPendingSessionRegisterWaiter(error);
+    state.auth.syncInFlight = false;
+    state.auth.registrationStatus = state.auth.available ? "issued" : "guest";
+    state.auth.runtimeStatus = "error";
+    state.auth.error = String(error);
+    state.auth.recoveryErrorCode = "session_register_send_failed";
+    state.auth.recoveryErrorMessage = String(error);
+    clearPendingSessionRegisterWaiter(error, { reject: false });
+    markCurrentGameplayActionFeedbackError(error, "player session registration failed");
+    render();
     throw error;
   }
   return promise;
@@ -1724,22 +1890,12 @@ function buildPromptRollbackRequest(agentId, toVersion) {
 }
 
 function pushChatHistory(entry) {
-  if (!entry) {
+  const normalized = normalizeChatHistoryEntry(entry);
+  if (!normalized) {
     return;
   }
-  state.chatHistory.unshift({
-    id: entry.id || `${entry.source || "chat"}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    source: entry.source || "event",
-    agentId: entry.agentId || null,
-    locationId: entry.locationId || null,
-    message: String(entry.message || ""),
-    tick: Number(entry.tick || 0),
-    speaker: entry.speaker || null,
-    playerId: entry.playerId || null,
-    targetAgentId: entry.targetAgentId || null,
-    intentSeq: entry.intentSeq || null,
-  });
-  state.chatHistory = state.chatHistory.slice(0, 40);
+  setChatHistory([normalized, ...(state.chatHistory || [])]);
+  persistChatHistory();
 }
 
 function extractAgentSpokeEntry(event) {
@@ -1782,6 +1938,19 @@ function createSemanticFeedback(kind, action, agentId, extra = {}) {
     response: null,
     ...extra,
   };
+}
+
+function markCurrentGameplayActionFeedbackError(error, effect = "gameplay action send failed") {
+  const feedback = state.lastGameplayActionFeedback;
+  if (!feedback || feedback.kind !== "gameplay_action") {
+    return;
+  }
+  feedback.stage = "error";
+  feedback.ok = false;
+  feedback.accepted = false;
+  feedback.reason = String(error);
+  feedback.effect = effect;
+  state.lastGameplayActionFeedback = feedback;
 }
 
 function markPendingSemanticRebind(message) {
@@ -2086,6 +2255,8 @@ function sendGameplayAction(actionOrId) {
       render();
       const registrationAgentId = gameplayActionRequiresActorAgent(actionId)
         ? actorAgentId || state.auth.boundAgentId || targetAgentId
+        : actionId === "claim_first_agent"
+          ? null
         : targetAgentId;
       await ensureRegisteredPlayerSession(registrationAgentId);
       feedback.stage = "signing";
@@ -2110,12 +2281,7 @@ function sendGameplayAction(actionOrId) {
       });
       render();
     } catch (error) {
-      feedback.stage = "error";
-      feedback.ok = false;
-      feedback.accepted = false;
-      feedback.reason = String(error);
-      feedback.effect = "gameplay action send failed";
-      state.lastGameplayActionFeedback = feedback;
+      markCurrentGameplayActionFeedbackError(error);
       render();
     }
   })();
@@ -2139,6 +2305,45 @@ function handleGameplayActionAck(ack) {
   requestSnapshotSafe();
 }
 
+async function retryGameplayActionAfterMissingSession(feedback, error) {
+  const actionId = String(error?.action_id || feedback?.action || "").trim();
+  const targetAgentId = String(error?.target_agent_id || feedback?.agentId || "").trim();
+  if (!actionId || !targetAgentId || feedback?.sessionRefreshRetryAttempted) {
+    return;
+  }
+  const action = resolveGameplayActionRequest(actionId) || normalizeGameplayActionRequest({
+    protocol_action: "gameplay_action.submit",
+    action_id: actionId,
+    target_agent_id: targetAgentId,
+  });
+  if (!action) {
+    return;
+  }
+  feedback.sessionRefreshRetryAttempted = true;
+  feedback.stage = "registering";
+  feedback.ok = false;
+  feedback.accepted = false;
+  feedback.reason = "runtime session was missing; refreshing player session and retrying";
+  feedback.effect = "refreshing player session";
+  state.lastGameplayActionFeedback = feedback;
+  render();
+  try {
+    const registrationAgentId = gameplayActionRequiresActorAgent(actionId)
+      ? action.actor_agent_id || action.actorAgentId || state.auth.boundAgentId || targetAgentId
+      : actionId === "claim_first_agent"
+        ? null
+        : targetAgentId;
+    await ensureRegisteredPlayerSession(registrationAgentId, { forceRebind: true });
+    sendGameplayAction(action);
+  } catch (retryError) {
+    markCurrentGameplayActionFeedbackError(
+      retryError,
+      "player session refresh failed before retrying gameplay action",
+    );
+    render();
+  }
+}
+
 function handleGameplayActionError(error) {
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
     "gameplay_action",
@@ -2152,6 +2357,9 @@ function handleGameplayActionError(error) {
   feedback.effect = error?.code || "gameplay action error";
   feedback.response = clone(error);
   state.lastGameplayActionFeedback = feedback;
+  if (String(error?.code || "").trim() === "session_not_found") {
+    void retryGameplayActionAfterMissingSession(feedback, error);
+  }
 }
 
 function applyPromptAckLocally(ack) {
@@ -2430,6 +2638,7 @@ function handleViewerMessage(message) {
       state.server = message.server || null;
       state.worldId = message.world_id || null;
       state.controlProfile = message.control_profile || "playback";
+      hydrateChatHistoryFromStorage();
       if (!initialSnapshotRequested) {
         initialSnapshotRequested = true;
         initialSnapshotRetryCount = 0;
@@ -3355,9 +3564,11 @@ export {
   focus,
   getState,
   handleControlCompletionAck,
+  chatHistoryStorageKey,
   hostedActionPolicy,
   injectSnapshot,
   modelLists,
+  pushChatHistory,
   refreshHostedAdmissionState,
   requestRender,
   renderInteractionPanel,

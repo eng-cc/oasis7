@@ -165,6 +165,22 @@ impl Drop for TestChainStatusServer {
         }
     }
 }
+
+#[test]
+fn chain_linked_formal_default_starts_without_local_fallback_agent() {
+    let server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::formal_release_default()
+            .with_chain_status_bind("127.0.0.1:1")
+            .with_chain_link_policy(ChainLinkPolicy::Enforcing),
+    )
+    .expect("runtime server");
+
+    assert!(
+        server.world.state().agents.is_empty(),
+        "chain-linked default entry should wait for committed runtime or player claim"
+    );
+}
+
 #[test]
 fn chain_linked_runtime_sync_advances_without_play() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_progress");

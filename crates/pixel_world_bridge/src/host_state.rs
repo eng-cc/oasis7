@@ -435,7 +435,7 @@ fn build_visual_hotspots(
     if let Some(kind) = str_key(blocker_highlight, "kind") {
         staged.push(json!({
             "id": "blocker-highlight",
-            "label": kind,
+            "label": str_key(blocker_highlight, "label").unwrap_or(kind),
             "kind": "blocker",
             "emphasis": 1.0,
             "size_hint_px": 16.0,
@@ -475,7 +475,7 @@ fn action_receipt_title(locale: &str, state: &str, present: bool) -> String {
         return tr(locale, "暂无行动回执", "No action receipt yet");
     }
     match state {
-        "accepted" => tr(locale, "行动已接受", "Action accepted"),
+        "accepted" | "submitted" | "queued" | "ack" => tr(locale, "行动已接受", "Action accepted"),
         "blocked" => tr(locale, "行动被阻塞", "Action blocked"),
         "completed" => tr(locale, "世界已改变", "World changed"),
         "rejected" => tr(locale, "行动被拒绝", "Action rejected"),
@@ -483,14 +483,51 @@ fn action_receipt_title(locale: &str, state: &str, present: bool) -> String {
     }
 }
 
+fn has_enabled_first_agent_claim(gameplay: &Value) -> bool {
+    obj(gameplay, "availableActions")
+        .as_array()
+        .is_some_and(|actions| {
+            actions.iter().any(|action| {
+                str_key(action, "actionId") == Some("claim_first_agent")
+                    && str_key(action, "disabledReason").is_none()
+            })
+        })
+}
+
 fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<&str>) -> Value {
     let recent_feedback = obj(gameplay, "recentFeedback");
+    let recent_feedback_action = str_key(recent_feedback, "action");
     let has_world_delta = str_key(gameplay, "lastWorldChange").is_some()
         || str_key(recent_feedback, "effect").is_some();
     let has_player_intent = str_key(gameplay, "acceptedIntentId").is_some()
         || str_key(gameplay, "acceptedIntentScope").is_some()
         || str_key(gameplay, "acceptedIntentTarget").is_some()
-        || str_key(recent_feedback, "action").is_some();
+        || recent_feedback_action.is_some_and(|action| action != "chain_sync");
+    if str_key(gameplay, "blockerKind") == Some("runtime_snapshot_empty_entities")
+        && has_enabled_first_agent_claim(gameplay)
+        && !has_player_intent
+    {
+        return json!({
+            "present": false,
+            "state": "waiting_for_intent",
+            "confidence": "none",
+            "title": action_receipt_title(locale, "waiting_for_intent", false),
+            "summary": tr(
+                locale,
+                "当前是新用户空世界，先认领第一个 Agent。",
+                "This is a new-user empty world; claim the first Agent first.",
+            ),
+            "detail": tr(
+                locale,
+                "链同步回执不会作为阻塞主因显示；认领提交并同步后，Agent 会出现在世界里。",
+                "Chain-sync feedback is not the primary blocker here; after the claim is submitted and synced, the Agent will appear in the world.",
+            ),
+            "target_agent_id": Value::Null,
+            "effect_kind": Value::Null,
+            "delta_logical_time": Value::Null,
+            "delta_event_seq": Value::Null,
+        });
+    }
     let present =
         has_world_delta || has_player_intent || str_key(recent_feedback, "reason").is_some();
     let raw_state = str_key(gameplay, "executionState")
@@ -547,6 +584,12 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
         "target_agent_id": if present {
             string_key(gameplay, "acceptedIntentTarget")
                 .or_else(|| string_key(obj(gameplay, "recommendedAction"), "targetAgentId"))
+                .or_else(|| {
+                    arr(gameplay, "availableActions")
+                        .iter()
+                        .find(|action| str_key(action, "actionId") == Some("claim_first_agent"))
+                        .and_then(|action| string_key(action, "targetAgentId"))
+                })
                 .or_else(|| active_agent_id.map(ToString::to_string))
                 .map(Value::String)
                 .unwrap_or(Value::Null)
@@ -682,6 +725,25 @@ fn localized_next_action_label(locale: &str, gameplay: &Value) -> String {
     }
 }
 
+fn localized_blocker_label(locale: &str, gameplay: &Value) -> Option<String> {
+    if str_key(gameplay, "blockerKind") == Some("runtime_snapshot_empty_entities") {
+        return Some(tr(locale, "认领第一个 Agent", "Claim the first Agent"));
+    }
+    if let Some(published) = str_key(gameplay, "blockerLabel") {
+        if !is_zh_locale(locale) || contains_cjk(published) {
+            return Some(published.to_string());
+        }
+    }
+    match str_key(gameplay, "blockerKind") {
+        Some("material_shortage") => Some(tr(locale, "物料不足", "Missing Material")),
+        Some("power_shortage") => Some(tr(locale, "供电不足", "Power Shortage")),
+        Some("governance_gate") => Some(tr(locale, "治理门槛", "Governance Gate")),
+        Some("llm_required") => Some(tr(locale, "需要 LLM", "LLM Required")),
+        Some(kind) => Some(kind.to_string()),
+        None => None,
+    }
+}
+
 fn localized_optional_detail(locale: &str, published: Option<&str>) -> Option<String> {
     let published = published?;
     if !is_zh_locale(locale) || contains_cjk(published) {
@@ -748,6 +810,7 @@ fn build_commercial_surface(
         .or_else(|| str_key(gameplay, "progressDetail"))
         .map(ToString::to_string);
     let action_receipt = build_action_receipt(locale, gameplay, active_agent_id.as_deref());
+    let blocker_label = localized_blocker_label(locale, gameplay);
 
     json!({
         "objective": {
@@ -777,8 +840,7 @@ fn build_commercial_surface(
         },
         "action_receipt": action_receipt,
         "blocker": {
-            "label": string_key(gameplay, "blockerLabel")
-                .or_else(|| string_key(gameplay, "blockerKind")),
+            "label": blocker_label,
             "detail": string_key(gameplay, "narrativeBlockerDetail")
                 .or_else(|| string_key(gameplay, "blockerDetail")),
         },
@@ -909,8 +971,10 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
     let blocker_highlight = if str_key(gameplay, "blockerKind").is_some()
         || str_key(gameplay, "blockerDetail").is_some()
     {
+        let blocker_label = localized_blocker_label(locale, gameplay);
         json!({
             "kind": str_key(gameplay, "blockerKind").unwrap_or("blocked"),
+            "label": blocker_label,
             "detail": string_key(gameplay, "blockerDetail"),
         })
     } else {

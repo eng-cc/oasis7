@@ -308,6 +308,21 @@ export function createViewerFeedbackModule({
     }
     const code = semanticFeedbackCode(feedback);
     const diagnostics = semanticFeedbackMessage(feedback);
+    const rejectionSummary = (fallbackZh, fallbackEn) => {
+      const fallback = isLocaleZh(locale) ? fallbackZh : fallbackEn;
+      if (diagnostics && code) {
+        return `${fallback} ${code}: ${diagnostics}`;
+      }
+      if (diagnostics) {
+        return `${fallback} ${diagnostics}`;
+      }
+      if (code) {
+        return `${fallback} ${code}`;
+      }
+      return fallback;
+    };
+    const rejectionDetail = (fallbackZh, fallbackEn) =>
+      diagnostics || code || (isLocaleZh(locale) ? fallbackZh : fallbackEn);
     const description = {
       label: feedback.stage || "idle",
       summary: feedback.effect || diagnostics || (isLocaleZh(locale) ? "反馈已更新。" : "Feedback updated."),
@@ -351,32 +366,29 @@ export function createViewerFeedbackModule({
       }
       if (feedback.kind === "prompt") {
         description.label = isLocaleZh(locale) ? "Prompt 失败" : "Prompt failed";
-        description.summary = isLocaleZh(locale)
-          ? "Prompt 控制没有完成。"
-          : "Prompt control did not complete.";
-        description.detail = isLocaleZh(locale)
-          ? "展开诊断可查看后端拒绝的具体原因。"
-          : "Open diagnostics for the exact backend rejection.";
+        description.summary = rejectionSummary("Prompt 控制没有完成。", "Prompt control did not complete.");
+        description.detail = rejectionDetail(
+          "后端没有返回更详细的拒绝原因；可展开诊断查看原始载荷。",
+          "The backend did not return a more specific rejection reason; open diagnostics for the raw payload.",
+        );
         return description;
       }
       if (feedback.kind === "chat") {
         description.label = isLocaleZh(locale) ? "聊天失败" : "Chat failed";
-        description.summary = isLocaleZh(locale)
-          ? "Agent 聊天没有完成。"
-          : "Agent chat did not complete.";
-        description.detail = isLocaleZh(locale)
-          ? "展开诊断可查看后端拒绝的具体原因。"
-          : "Open diagnostics for the exact backend rejection.";
+        description.summary = rejectionSummary("Agent 聊天没有完成。", "Agent chat did not complete.");
+        description.detail = rejectionDetail(
+          "后端没有返回更详细的拒绝原因；可展开诊断查看原始载荷。",
+          "The backend did not return a more specific rejection reason; open diagnostics for the raw payload.",
+        );
         return description;
       }
       if (feedback.kind === "gameplay_action") {
         description.label = isLocaleZh(locale) ? "玩法动作失败" : "Gameplay action failed";
-        description.summary = isLocaleZh(locale)
-          ? "正式玩法动作没有完成。"
-          : "The gameplay action did not complete.";
-        description.detail = isLocaleZh(locale)
-          ? "展开诊断可查看 runtime 返回的拒绝原因。"
-          : "Open diagnostics for the runtime rejection details.";
+        description.summary = rejectionSummary("正式玩法动作没有完成。", "The gameplay action did not complete.");
+        description.detail = rejectionDetail(
+          "runtime 没有返回更详细的拒绝原因；可展开诊断查看原始载荷。",
+          "The runtime did not return a more specific rejection reason; open diagnostics for the raw payload.",
+        );
         return description;
       }
       description.label = code || "Request failed";
@@ -454,14 +466,20 @@ export function createViewerFeedbackModule({
     if (feedback.kind === "gameplay_action") {
       if (feedback.stage === "ack") {
         const acceptedAtTick = Number(feedback?.response?.accepted_at_tick || 0);
+        const message = String(feedback?.response?.message || "");
+        const submittedToChain = /\bsubmitted\b.*\bchain runtime\b/i.test(message);
         description.label = isLocaleZh(locale) ? "玩法动作已受理" : "Gameplay action accepted";
         description.summary = isLocaleZh(locale)
           ? `动作已在 tick ${acceptedAtTick} 进入 runtime 队列。`
           : `The action entered the runtime queue at tick ${acceptedAtTick}.`;
-        description.detail = feedback?.response?.message
-          || (isLocaleZh(locale)
-            ? "请继续观察 gameplay feedback 或刷新后的快照。"
-            : "Watch gameplay feedback or the refreshed snapshot for the next world-state change.");
+        description.detail = submittedToChain
+          ? (isLocaleZh(locale)
+            ? `${message}。正在等待 committed world sync；同步完成后 Agent 会出现在世界里。`
+            : `${message}. Waiting for committed world sync; the Agent will appear after the synced snapshot lands.`)
+          : message
+            || (isLocaleZh(locale)
+              ? "请继续观察 gameplay feedback 或刷新后的快照。"
+              : "Watch gameplay feedback or the refreshed snapshot for the next world-state change.");
         return description;
       }
       description.label = isLocaleZh(locale) ? "玩法动作进行中" : "Gameplay action in progress";
@@ -534,21 +552,21 @@ export function createViewerFeedbackModule({
           blockerDetail: localeText(
             locale,
             missingAgents && missingLocations
-              ? "当前 gameplay 快照没有 Agent / 地点，说明 runtime world bootstrap 还没稳定输出正式实体。"
-              : `当前 gameplay 快照缺少 ${missingLabel}，说明 runtime world bootstrap 还没稳定输出正式实体。`,
+              ? "当前 gameplay 快照没有 Agent / 地点；如果这是新用户空世界，请先认领第一个 Agent。"
+              : `当前 gameplay 快照缺少 ${missingLabel}；如果这是新用户空世界，请先认领第一个 Agent。`,
             missingAgents && missingLocations
-              ? "The current gameplay snapshot has no agents/locations, so the runtime world bootstrap has not produced stable canonical entities yet."
-              : `The current gameplay snapshot is missing ${missingLabel}, so the runtime world bootstrap has not produced stable canonical entities yet.`,
+              ? "The current gameplay snapshot has no agents/locations; if this is a new-user empty world, claim the first Agent first."
+              : `The current gameplay snapshot is missing ${missingLabel}; if this is a new-user empty world, claim the first Agent first.`,
           ),
           nextStepHint: localeText(
             locale,
-            "先刷新快照；如果实体仍为空，再去修复或重启 runtime world bootstrap 后再继续。",
-            "Request a fresh snapshot first. If entities stay empty, repair or restart the runtime world bootstrap before continuing.",
+            "如果页面显示“认领第一个 Agent”，先提交认领；只有认领入口缺失时才刷新快照或检查 runtime bootstrap。",
+            "If the page shows Claim First Agent, submit that claim first; only refresh the snapshot or inspect runtime bootstrap when the claim entry is missing.",
           ),
           disabledReason: localeText(
             locale,
-            `当前快照缺少 ${missingLabel}；刷新快照或修复 runtime bootstrap 后再试。`,
-            `Current snapshot is missing ${missingLabel}; refresh the snapshot or repair runtime bootstrap before retrying.`,
+            `当前快照缺少 ${missingLabel}；先完成第一个 Agent 认领。`,
+            `Current snapshot is missing ${missingLabel}; claim the first Agent first.`,
           ),
         };
       })()
@@ -574,7 +592,10 @@ export function createViewerFeedbackModule({
           protocolAction: action?.protocol_action || null,
           targetAgentId: action?.target_agent_id || null,
           disabledReason:
-            action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot"
+            action?.protocol_action === "request_snapshot"
+                || action?.protocol_action === "world.request_snapshot"
+                || action?.action_id === "claim_first_agent"
+                || action?.action_id === "claim_starter_oc"
               ? action?.disabled_reason || null
               : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
           executeKind:
@@ -585,14 +606,19 @@ export function createViewerFeedbackModule({
                 : action?.protocol_action === "live_control.play"
                   ? "play"
                   : action?.protocol_action === "gameplay_action.submit"
-                    ? "gameplay_action"
+                    ? action?.action_id === "claim_first_agent"
+                      ? "claim_first_agent"
+                      : action?.action_id === "claim_starter_oc"
+                        ? "claim_starter_oc"
+                      : "gameplay_action"
                     : action?.protocol_action === "agent_chat"
                       ? "agent_chat"
                       : "unsupported",
         }))
       : [];
-    const recentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object"
+    const runtimeRecentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object"
       ? {
+          source: "runtime",
           action: gameplay.recent_feedback.action || null,
           stage: gameplay.recent_feedback.stage || null,
           effect: gameplay.recent_feedback.effect || null,
@@ -602,11 +628,31 @@ export function createViewerFeedbackModule({
           deltaEventSeq: Number(gameplay.recent_feedback.delta_event_seq || 0),
         }
       : null;
+    const localGameplayFeedback = state.lastGameplayActionFeedback?.kind === "gameplay_action"
+      ? {
+          source: "local_gameplay_action",
+          action: state.lastGameplayActionFeedback.action || null,
+          stage: state.lastGameplayActionFeedback.stage || null,
+          effect: state.lastGameplayActionFeedback.effect || null,
+          reason: state.lastGameplayActionFeedback.reason || null,
+          hint: state.lastGameplayActionFeedback.response?.hint || null,
+          deltaLogicalTime: Number(state.lastGameplayActionFeedback.deltaLogicalTime || 0),
+          deltaEventSeq: Number(state.lastGameplayActionFeedback.deltaEventSeq || 0),
+        }
+      : null;
+    const recentFeedback = localGameplayFeedback || runtimeRecentFeedback;
     const runtimeBlockerKind = gameplay.blocker_kind || null;
     const runtimeBlockerDetail = gameplay.blocker_detail || null;
     const runtimeAlreadyPublishedEmptyEntityBlocker =
       runtimeBlockerKind === "runtime_snapshot_empty_entities";
-    const resolvedStageStatus = emptyEntityBlocker ? "blocked" : gameplay.stage_status || null;
+    const recentStage = String(recentFeedback?.stage || "").trim().toLowerCase();
+    const pendingGameplayFeedback =
+      ["accepted", "submitted", "queued", "ack", "registering", "signing", "sent"].includes(recentStage)
+      && Boolean(String(recentFeedback?.action || "").trim());
+    const pendingEmptyWorldClaimSync = Boolean(emptyEntityBlocker && pendingGameplayFeedback);
+    const resolvedStageStatus = pendingEmptyWorldClaimSync
+      ? gameplay.stage_status || "accepted"
+      : emptyEntityBlocker ? "blocked" : gameplay.stage_status || null;
     const resolvedBlockerKind = runtimeAlreadyPublishedEmptyEntityBlocker
       ? runtimeBlockerKind
       : emptyEntityBlocker
@@ -617,11 +663,12 @@ export function createViewerFeedbackModule({
       : emptyEntityBlocker
         ? emptyEntityBlocker.blockerDetail
         : runtimeBlockerDetail;
-    const executionState = emptyEntityBlocker
+    const executionState = pendingEmptyWorldClaimSync
+      ? "accepted"
+      : emptyEntityBlocker
       ? "blocked"
       : gameplay.execution_state
       || (() => {
-        const recentStage = String(recentFeedback?.stage || "").trim().toLowerCase();
         if (["accepted", "submitted", "queued", "ack"].includes(recentStage)) {
           return "accepted";
         }
@@ -663,7 +710,9 @@ export function createViewerFeedbackModule({
       { id: "completed", label: localeText(locale, "已完成", "Completed") },
       { id: "rejected", label: localeText(locale, "已拒绝", "Rejected") },
     ];
-    const executionCauseKind = emptyEntityBlocker
+    const executionCauseKind = pendingEmptyWorldClaimSync
+      ? "queued_for_execution"
+      : emptyEntityBlocker
       ? "world_constraint"
       : gameplay.causality_kind
       || (() => {
@@ -689,7 +738,9 @@ export function createViewerFeedbackModule({
           return null;
       }
     })();
-    const executionCauseDetail = emptyEntityBlocker
+    const executionCauseDetail = pendingEmptyWorldClaimSync
+      ? recentFeedback?.hint || recentFeedback?.effect || resolvedBlockerDetail || null
+      : emptyEntityBlocker
       ? resolvedBlockerDetail || emptyEntityBlocker.blockerDetail || null
       : gameplay.causality_detail
       || (() => {
@@ -765,12 +816,18 @@ export function createViewerFeedbackModule({
         case "execution_world_not_ready":
           return localeText(locale, "执行世界未就绪", "Execution World Not Ready");
         case "runtime_snapshot_empty_entities":
-          return localeText(locale, "空快照", "Empty Snapshot");
+          return localeText(locale, "认领第一个 Agent", "Claim the first Agent");
         default:
           return resolvedBlockerKind || null;
       }
     })();
-    const narrativeNextStep = emptyEntityBlocker
+    const narrativeNextStep = pendingEmptyWorldClaimSync
+      ? localeText(
+        locale,
+        "认领动作已提交到本地 testnet，正在等待 committed world sync；同步完成后 Agent 会出现在世界里。",
+        "The claim has been submitted to the local testnet and is waiting for committed world sync; the Agent will appear after the synced snapshot lands.",
+      )
+      : emptyEntityBlocker
       ? emptyEntityBlocker.nextStepHint
       : gameplay.next_step_hint || resumeNextStep || null;
     const recoveryCueText = [
@@ -799,11 +856,16 @@ export function createViewerFeedbackModule({
             if (action.executeKind === "request_snapshot") return wantsSnapshotProof ? 0 : 2;
             if (action.executeKind === "step") return wantsAdvanceProof ? 0 : 1;
             if (action.executeKind === "play") return wantsResumeProof ? 1 : 2;
+            if (action.executeKind === "claim_first_agent") return 1;
+            if (action.executeKind === "claim_starter_oc") return 1;
             if (action.executeKind === "gameplay_action") return 4;
             if (action.executeKind === "agent_chat") return 5;
             return 6;
           }
           switch (action.executeKind) {
+            case "claim_first_agent":
+            case "claim_starter_oc":
+              return 0;
             case "gameplay_action":
               return 0;
             case "step":
@@ -867,6 +929,7 @@ export function createViewerFeedbackModule({
     };
     const acceptedIntentSummary = intentSummary
       || acceptedIntentId
+      || (pendingEmptyWorldClaimSync ? recentFeedback?.effect || recentFeedback?.action : null)
       || localeText(
         locale,
         "还没有一条被正式接受的玩家意图",
@@ -882,13 +945,22 @@ export function createViewerFeedbackModule({
       if (recentFeedback?.hint) {
         return recentFeedback.hint;
       }
+      if (pendingEmptyWorldClaimSync) {
+        return localeText(
+          locale,
+          "系统已经收到认领请求，正在等待链上 committed 快照把新 Agent 同步到 viewer。",
+          "The system has accepted the claim and is waiting for the committed chain snapshot to sync the new Agent into the viewer.",
+        );
+      }
       return localeText(
         locale,
         "先提交一个玩法动作，再看系统如何确认、推进或阻塞它。",
         "Submit one gameplay action first, then read how the system confirms, advances, or blocks it.",
       );
     })();
-    const narrativeBlockerDetail = resolvedBlockerDetail || statusReason || recentFeedback?.reason || null;
+    const narrativeBlockerDetail = pendingEmptyWorldClaimSync
+      ? recentFeedback?.hint || resolvedBlockerDetail || statusReason || null
+      : resolvedBlockerDetail || statusReason || recentFeedback?.reason || null;
     const economicSurface = buildGameplayEconomicSurface({
       locale,
       gameplay,

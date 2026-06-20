@@ -18,7 +18,8 @@ use super::gameplay_state::{
     EconomicContractStatus, GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT, GameplayPolicyState,
     GovernanceIdentityProfileState, GovernanceIdentityStatus, GovernanceProposalState,
     GovernanceProposalStatus, GovernanceVoteBallotState, GovernanceVoteState,
-    GovernanceVoteWeightSnapshotState, MetaProgressState, WarParticipantOutcome, WarState,
+    GovernanceVoteWeightSnapshotState, MetaProgressState, StarterOcClaimState,
+    WarParticipantOutcome, WarState,
 };
 use super::governance::{
     GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
@@ -424,6 +425,8 @@ pub struct WorldState {
     #[serde(default)]
     pub agent_claims: BTreeMap<String, AgentClaimState>,
     #[serde(default)]
+    pub starter_oc_claims: BTreeMap<String, StarterOcClaimState>,
+    #[serde(default)]
     pub agent_claim_last_processed_epoch: u64,
     #[serde(default)]
     pub contract_pair_last_success_settled_at: BTreeMap<String, WorldTime>,
@@ -547,6 +550,7 @@ impl Default for WorldState {
             data_access_permissions: BTreeMap::new(),
             economic_contracts: BTreeMap::new(),
             agent_claims: BTreeMap::new(),
+            starter_oc_claims: BTreeMap::new(),
             agent_claim_last_processed_epoch: 0,
             contract_pair_last_success_settled_at: BTreeMap::new(),
             reputation_reward_window_started_at: BTreeMap::new(),
@@ -957,6 +961,7 @@ impl WorldState {
             | DomainEvent::EconomicContractAccepted { .. }
             | DomainEvent::EconomicContractSettled { .. }
             | DomainEvent::EconomicContractExpired { .. }
+            | DomainEvent::StarterOcClaimed { .. }
             | DomainEvent::AgentClaimed { .. }
             | DomainEvent::AgentClaimReleaseRequested { .. }
             | DomainEvent::AgentClaimUpkeepSettled { .. }

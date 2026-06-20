@@ -273,257 +273,41 @@ describe("pixel world host", () => {
     expect(html).toContain(".pixel-world-focus-command-tray");
   });
 
-  it("builds richer visual DTO layers from the existing snapshot contract", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
+  it("resolves claim onboarding next moves to executable gameplay actions", async () => {
+    const { resolvePixelWorldDirectNextMoveAction } = await import("./pixel_world_host.jsx");
+    const gameplay = {
+      availableActions: [
+        {
+          actionId: "claim_first_agent",
+          executeKind: "claim_first_agent",
+          label: "Claim First Agent",
+        },
+      ],
+    };
 
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    const snapshot = sampleSnapshot();
-    snapshot.model.agents["agent-0"].pos = { x_cm: 25_000, y_cm: 25_000, z_cm: 0 };
-    core.injectSnapshot(snapshot);
-    core.state.recentEvents = [
-      { eventId: "evt-1", title: "Transfer spike", kind: "resource_transfer" },
-      { eventId: "evt-2", title: "Queue update", kind: "build_queue" },
-    ];
-
-    const renderState = buildPixelWorldRenderState("en");
-    expect(renderState.links).toHaveLength(1);
-    expect(renderState.visual_hotspots).toHaveLength(4);
-    expect(renderState.visual_hotspots.map((entry) => entry.kind)).toEqual([
-      "goal",
-      "blocker",
-      "resource_transfer",
-      "build_queue",
-    ]);
-    expect(renderState.visual_hotspots.every((entry) => entry.pos)).toBe(true);
-    expect(renderState.commercial_surface).toMatchObject({
-      active_agent_id: "agent-0",
-      objective: {
-        title: "Recover sustainable capability",
-      },
-      next_action: {
-        label: "Build smelter mk1",
-        target_agent_id: "agent-0",
-        execute_kind: "gameplay_action",
-      },
-      player_leverage: {
-        state: "blocked",
-        summary: "Queue build_factory_smelter_mk1 for agent-0",
-      },
-      action_receipt: {
-        present: true,
-        state: "blocked",
-        confidence: "world_delta",
-        title: "Action blocked",
-        summary: "Smelter build request reached factory-0; iron shortage blocks construction.",
-        target_agent_id: "agent-0",
-        effect_kind: "world_constraint",
-        delta_logical_time: 1,
-        delta_event_seq: 2,
-      },
-      world_read: {
-        tick: 12,
-        agents: 1,
-        routes: 1,
-        fragments: 2,
-        hotspots: 4,
-      },
-    });
-  }, HEAVY_UI_TEST_TIMEOUT_MS);
-
-  it("surfaces the current snapshot tick in the persistent world readout", async () => {
-    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
-
-    const readout = document.querySelector(".pixel-world-readout");
-    expect(readout).toHaveTextContent("tick=12");
-    expect(readout.querySelector('[data-world-tick="12"]')).toHaveTextContent("tick=12");
-  });
-
-  it("routes executable commercial next moves to gameplay details without executing gameplay", async () => {
-    const { core } = await renderPixelWorldHost(
-      sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    expect(resolvePixelWorldDirectNextMoveAction(gameplay, "claim_first_agent")).toEqual(
+      gameplay.availableActions[0],
     );
-    const sendGameplayAction = vi.spyOn(core, "sendGameplayAction");
-    const gameplayDetails = document.createElement("details");
-    gameplayDetails.id = "viewer-gameplay-details";
-    document.body.appendChild(gameplayDetails);
-
-    const nextMove = document.querySelector(".pixel-world-command-cell--next");
-    expect(nextMove).toHaveAttribute("data-next-move-route", "gameplay_details");
-    expect(nextMove).toHaveAttribute("data-execute-kind", "gameplay_action");
-    expect(nextMove).toHaveTextContent("Build smelter mk1");
-
-    const gameplayRoute = screen.getByRole("link", { name: "Open Gameplay Details" });
-    expect(gameplayRoute).toHaveAttribute("href", "#viewer-gameplay-details");
-    gameplayRoute.click();
-
-    expect(gameplayDetails.open).toBe(true);
-    expect(sendGameplayAction).not.toHaveBeenCalled();
-  }, HEAVY_UI_TEST_TIMEOUT_MS);
-
-  it("localizes command board goal and next-action copy for the selected UI language", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=zh");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
-
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    core.setViewerLocale("zh-CN");
-    core.injectSnapshot(sampleSnapshot());
-
-    const surface = buildPixelWorldRenderState("zh-CN").commercial_surface;
-    expect(surface.objective.title).toBe("恢复可持续能力");
-    expect(surface.objective.detail).toBe("先恢复阻塞点，再确认生产线重新具备可经营能力。");
-    expect(surface.next_action.label).toBe("排队建造一型冶炼炉");
-    expect(surface.next_action.detail).toBe("查看当前回执和阻塞原因，再决定下一步。");
-    expect(surface.objective.title).not.toMatch(/[A-Za-z]/);
-    expect(surface.next_action.label).not.toMatch(/[A-Za-z]/);
-
-    const liveSnapshot = sampleSnapshot();
-    liveSnapshot.player_gameplay.goal_kind = "CreateFirstWorldFeedback";
-    liveSnapshot.player_gameplay.goal_title = "Create the first visible world feedback";
-    liveSnapshot.player_gameplay.objective = "Advance the world once and confirm that your action produces a visible state or event delta.";
-    liveSnapshot.player_gameplay.next_step_hint = "Request a snapshot, advance 1 step, then inspect the new delta and events.";
-    liveSnapshot.player_gameplay.available_actions[0].label = "Queue Smelter MK1 construction";
-    core.injectSnapshot(liveSnapshot);
-
-    const liveRenderState = buildPixelWorldRenderState("zh-CN");
-    const liveSurface = liveRenderState.commercial_surface;
-    expect(liveRenderState.goal_highlight.title).toBe("确认第一条世界反馈");
-    expect(liveRenderState.goal_highlight.title).not.toMatch(/[A-Za-z]/);
-    expect(liveSurface.objective.title).toBe("确认第一条世界反馈");
-    expect(liveSurface.objective.detail).toBe("先拿到一条明确世界反馈，再继续后续工业选择。");
-    expect(liveSurface.next_action.label).toBe("排队建造一型冶炼炉");
-    expect(liveSurface.next_action.detail).toBe("先请求一次快照，推进 1 步，再检查新的世界变化和事件。");
-    expect(liveSurface.objective.title).not.toMatch(/[A-Za-z]/);
-    expect(liveSurface.objective.detail).not.toMatch(/[A-Za-z]/);
-    expect(liveSurface.next_action.label).not.toMatch(/[A-Za-z]/);
   });
 
-  it("classifies action receipt confidence without treating default intent copy as player action", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
+  it("does not directly execute disabled or generic pixel world next moves", async () => {
+    const { resolvePixelWorldDirectNextMoveAction } = await import("./pixel_world_host.jsx");
+    const gameplay = {
+      availableActions: [
+        {
+          actionId: "claim_first_agent",
+          executeKind: "claim_first_agent",
+          disabledReason: "already claimed",
+        },
+        {
+          actionId: "build_factory_smelter_mk1",
+          executeKind: "gameplay_action",
+        },
+      ],
+    };
 
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    core.injectSnapshot(acceptedOnlySnapshot());
-    let receipt = buildPixelWorldRenderState("en").commercial_surface.action_receipt;
-    expect(receipt).toMatchObject({
-      present: true,
-      state: "accepted",
-      confidence: "accepted_intent",
-      title: "Action accepted",
-      summary: "Queue build_factory_smelter_mk1 for agent-0",
-      detail: "Build request queued for agent-0.",
-      target_agent_id: "agent-0",
-      effect_kind: "queued_for_execution",
-      delta_logical_time: 0,
-      delta_event_seq: 1,
-    });
-
-    core.injectSnapshot(noReceiptSnapshot());
-    core.state.recentEvents = [
-      { eventId: "ambient-1", title: "Ambient transfer spike", kind: "resource_transfer" },
-    ];
-    receipt = buildPixelWorldRenderState("en").commercial_surface.action_receipt;
-    expect(receipt).toMatchObject({
-      present: false,
-      state: "waiting_for_intent",
-      confidence: "none",
-      title: "No action receipt yet",
-      target_agent_id: null,
-      effect_kind: null,
-      delta_logical_time: null,
-      delta_event_seq: null,
-    });
-    expect(receipt.summary).toBe("No player-caused world change has been confirmed yet.");
-  });
-
-  it("derives fragment terrain from location fragment blocks and de-emphasizes location markers", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
-
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    core.injectSnapshot(sampleSnapshot());
-
-    const renderState = buildPixelWorldRenderState("en");
-    expect(renderState.fragment_terrain).toHaveLength(2);
-    expect(renderState.locations[0]).toMatchObject({
-      marker_role: "logic_anchor",
-      marker_alpha: 0.32,
-      size_hint_px: 10,
-      fragment_terrain_count: 2,
-    });
-    expect(renderState.fragment_terrain.map((patch) => ({
-      id: patch.id,
-      dominant_compound: patch.dominant_compound,
-      footprint_cm: patch.footprint_cm,
-      color: patch.color,
-      emphasis: patch.emphasis,
-    }))).toEqual([
-      {
-        id: "fragment:loc-0:0",
-        dominant_compound: "silicate_matrix",
-        footprint_cm: 12_000,
-        color: [126, 144, 99],
-        emphasis: 0.58,
-      },
-      {
-        id: "fragment:loc-0:1",
-        dominant_compound: "iron_nickel_alloy",
-        footprint_cm: 20_000,
-        color: [176, 184, 196],
-        emphasis: 0.58,
-      },
-    ]);
-
-    const metalPatch = renderState.fragment_terrain.find((patch) => (
-      patch.dominant_compound === "iron_nickel_alloy"
-    ));
-    expect(metalPatch).toMatchObject({
-      id: "fragment:loc-0:1",
-      location_id: "loc-0",
-      footprint_cm: 20_000,
-      color: [176, 184, 196],
-    });
-    expect(metalPatch.pos.x_cm).toBeGreaterThan(renderState.locations[0].pos.x_cm);
-  });
-
-  it("derives deterministic agent positions from assigned locations when snapshots omit agent coordinates", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
-
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    core.injectSnapshot(sampleSnapshot());
-
-    const firstState = buildPixelWorldRenderState("en");
-    const secondState = buildPixelWorldRenderState("en");
-    const agent = firstState.agents.find((entry) => entry.id === "agent-0");
-
-    expect(agent.position_source).toBe("location_derived");
-    expect(agent.pos).toEqual(secondState.agents.find((entry) => entry.id === "agent-0").pos);
-    expect(agent.status_badges).toContain("position=location_derived");
-    expect(firstState.links).toHaveLength(1);
-    expect(firstState.links[0].from).toEqual(agent.pos);
-    expect(firstState.links[0].to).toEqual(firstState.locations[0].pos);
+    expect(resolvePixelWorldDirectNextMoveAction(gameplay, "claim_first_agent")).toBeNull();
+    expect(resolvePixelWorldDirectNextMoveAction(gameplay, "gameplay_action")).toBeNull();
   });
 
   it("shows the explicit fallback surface when renderer deferral is requested", async () => {

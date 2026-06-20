@@ -422,8 +422,8 @@ fn emit_fatal_payload(message: &str) -> JsValue {
             let _ = on_fatal.call1(&JsValue::NULL, &js_payload);
         }
     }
-    js_value_from_serializable(&json!({ "status": "fallback", "fatal": payload }))
-        .unwrap_or_else(|_| status_value("fallback"))
+    js_value_from_serializable(&json!({ "status": "unavailable", "fatal": payload }))
+        .unwrap_or_else(|_| status_value("unavailable"))
 }
 
 fn shared_snapshot() -> SharedSnapshot {

@@ -1,5 +1,19 @@
 use super::*;
 
+fn seed_agent_chat_oc(server: &mut ViewerRuntimeLiveServer, agent_id: &str) {
+    server
+        .world
+        .set_main_token_supply(crate::runtime::MainTokenSupplyState {
+            total_supply: 1_000_000,
+            circulating_supply: 1_000_000,
+            ..crate::runtime::MainTokenSupplyState::default()
+        });
+    server
+        .world
+        .set_main_token_account_balance(agent_id, 1, 0)
+        .expect("seed agent chat OC");
+}
+
 #[test]
 fn runtime_agent_chat_provider_mode_reports_feedback_failure() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
@@ -41,6 +55,7 @@ fn runtime_agent_chat_provider_mode_reports_feedback_failure() {
         .next()
         .cloned()
         .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key, private_key) = test_signer(35);
     let register_ack = register_runtime_session(
         &mut server,
@@ -160,6 +175,7 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
         .next()
         .cloned()
         .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key, private_key) = test_signer(34);
     let request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
@@ -302,6 +318,7 @@ fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() 
         .next()
         .cloned()
         .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key, private_key) = test_signer(36);
     let request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
@@ -423,6 +440,61 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
 }
 
 #[test]
+fn runtime_agent_chat_requires_starter_oc_balance() {
+    let _guard = lock_test_llm_env();
+    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(37);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello without OC".to_string(),
+            intent_tick: Some(14),
+            intent_seq: Some(37),
+        },
+        37,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        36,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    let err = server
+        .handle_agent_chat(request)
+        .expect_err("starter OC should be required before agent chat");
+    assert_eq!(err.code, "starter_oc_required");
+    assert_eq!(
+        server.llm_sidecar.player_auth_last_nonce.get("player-a"),
+        Some(&36)
+    );
+}
+
+#[test]
 fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
     let _guard = lock_test_llm_env();
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
@@ -442,6 +514,7 @@ fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
         .next()
         .cloned()
         .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key, private_key) = test_signer(31);
     let request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
@@ -527,6 +600,7 @@ fn runtime_agent_chat_echo_env_accepts_chat_without_llm_runner_config() {
         .next()
         .cloned()
         .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key, private_key) = test_signer(33);
     let request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
@@ -589,6 +663,7 @@ fn runtime_agent_chat_echo_removed_old_brand_env_is_ignored() {
         .next()
         .cloned()
         .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key, private_key) = test_signer(32);
     let request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {

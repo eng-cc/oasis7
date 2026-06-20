@@ -8,14 +8,14 @@
 
 ## 任务拆解
 - [x] viewer-pixel-world-fragment-lod-design (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 冻结 Fragment terrain DTO、screen-space LOD、Location logic-anchor 分层方案。 Trace: .pm/tasks/task_428db5366f654c5e892ac300807cb9cc.yaml
-- [x] viewer-pixel-world-fragment-lod-red-tests (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 补 RED 测试，覆盖 host DTO、fallback DOM 与 wasm LOD helper。 Trace: .pm/tasks/task_428db5366f654c5e892ac300807cb9cc.yaml
-- [x] viewer-pixel-world-fragment-lod-implementation (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 实现 host 派生、fallback DOM、wasm bridge fragment terrain 渲染和 marker 降权。 Trace: .pm/tasks/task_428db5366f654c5e892ac300807cb9cc.yaml
+- [x] viewer-pixel-world-fragment-lod-red-tests (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 补 RED 测试，覆盖 Rust DTO、rendered DOM 与 wasm LOD helper。 Trace: .pm/tasks/task_428db5366f654c5e892ac300807cb9cc.yaml
+- [x] viewer-pixel-world-fragment-lod-implementation (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 实现 Rust 派生、rendered DOM、wasm bridge fragment terrain 渲染和 marker 降权。 Trace: .pm/tasks/task_428db5366f654c5e892ac300807cb9cc.yaml
 - [x] viewer-pixel-world-fragment-lod-regression (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 回跑前端 UI 测试、wasm check、build/doc/diff hygiene，并记录证据。 Trace: .pm/tasks/task_428db5366f654c5e892ac300807cb9cc.yaml
 - [x] viewer-pixel-world-bevy-test-system (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 补 Bevy App/ECS render-probe 测试，直接断言 `Sprite` / `Transform` 层级、尺寸、透明度与 stale cache 清理。 Trace: .pm/tasks/task_428db5366f654c5e892ac300807cb9cc.yaml
 - [x] viewer-pixel-world-bevy-pixel-regression (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 补 native pixel regression probe，从 Bevy World 的 `Sprite` / `Transform` 栅格化 PNG，断言 raw RGBA hash、非背景像素、各层像素覆盖与采样颜色。 Trace: .pm/tasks/task_428db5366f654c5e892ac300807cb9cc.yaml
 
 ## 依赖
-- `viewer-pixel-world-semantic-positioning-2026-05-26` 提供 host DTO、agent derived position、links 与 fallback DOM 基线。
+- `viewer-pixel-world-semantic-positioning-2026-05-26` 提供 Rust DTO、agent derived position、links 与 rendered DOM 基线。
 - `viewer-fragment-element-rendering` 提供 fragment profile/block 与材料表达的历史设计约束。
 - `pixel_world_bridge` checked-in generated runtime 继续由 `npm --prefix crates/oasis7_viewer run build:software-safe` 统一生成。
 

@@ -9,7 +9,7 @@ const viewerRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(viewerRoot, "../..");
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const outDir = resolve(repoRoot, "output/playwright/pixel-world-fragment-visual", runId);
-const screenshotPath = join(outDir, "fragment-fallback-visual.png");
+const screenshotPath = join(outDir, "fragment-rendered-visual.png");
 const actionReceiptScreenshotPath = join(outDir, "action-receipt-visual.png");
 const mobileActionReceiptScreenshotPath = join(outDir, "mobile-action-receipt-visual.png");
 const mobileFocusOverlayScreenshotPath = join(outDir, "mobile-focus-overlay-visual.png");
@@ -308,12 +308,6 @@ function visualProbeScript() {
         badges: badges(),
       };
 
-      const fallbackButton = Array.from(document.querySelectorAll("button"))
-        .find((button) => /Host Fallback|切回/.test(button.textContent));
-      if (!fallbackButton) {
-        throw new Error("missing Host Fallback button");
-      }
-      fallbackButton.click();
       await waitFor(() => document.querySelectorAll(".pixel-world-fragment-terrain").length === 3);
 
       const stage = document.querySelector(".pixel-world-canvas");
@@ -328,7 +322,7 @@ function visualProbeScript() {
 
       return JSON.stringify({
         ready,
-        fallback: {
+        rendered: {
           runtimeStatus: state().pixelWorldRuntimeStatus,
           fragmentCount: fragments.length,
           fragmentRects,
@@ -450,14 +444,7 @@ function actionReceiptProbeScript() {
         return current?.present === "true" && current?.confidence === "world_delta" ? current : null;
       });
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
-      const fallbackButton = Array.from(document.querySelectorAll("button"))
-        .find((button) => /Host Fallback|切回/.test(button.textContent));
-      if (!fallbackButton) {
-        throw new Error("missing Host Fallback button for action receipt probe");
-      }
-      fallbackButton.click();
-      await waitFor(() => state().pixelWorldRuntimeStatus === "fallback");
-      await waitFor(() => /Renderer Not Attached|Renderer 未接管/.test(document.body.textContent || ""));
+      await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
       await waitFor(() => document.querySelectorAll(".pixel-world-fragment-terrain").length === 3);
       const fragments = Array.from(document.querySelectorAll(".pixel-world-fragment-terrain"));
       const stage = fragments[0]?.closest(".pixel-world-canvas") || document.querySelector(".pixel-world-canvas");
@@ -528,7 +515,7 @@ function mobileActionReceiptProbeScript() {
         };
       };
 
-      await waitFor(() => state().pixelWorldRuntimeStatus === "fallback");
+      await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
       const receiptElement = await waitFor(() => document.querySelector(".pixel-world-action-receipt"));
       receiptElement.scrollIntoView({ block: "start", inline: "nearest" });
       window.scrollBy(0, -8);
@@ -592,7 +579,7 @@ function mobileFocusOverlayProbeScript() {
         };
       };
 
-      await waitFor(() => state().pixelWorldRuntimeStatus === "fallback");
+      await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
       const focusButton = Array.from(document.querySelectorAll("button"))
         .find((button) => /Enter World Focus|进入沉浸模式/.test(button.textContent || ""));
       if (!focusButton) {
@@ -615,7 +602,7 @@ function mobileFocusOverlayProbeScript() {
       const prompt = rectOf(document.querySelector(".pixel-world-focus-hud__cell--prompt"));
       const blocker = rectOf(document.querySelector(".pixel-world-focus-hud__cell--blocker"));
       const receiptCell = rectOf(document.querySelector(".pixel-world-focus-hud__cell--receipt"));
-      const map = rectOf(document.querySelector('[data-focus-fallback-map="true"]'));
+      const map = rectOf(document.querySelector('[data-focus-minimap="true"]'));
       const receipt = rectOf(document.querySelector(".pixel-world-focus-receipt"));
       const horizontalOverflowPx = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
 
@@ -656,7 +643,7 @@ try {
   await runAgentBrowserJson(["open", url], { timeout: 45_000 });
   await runAgentBrowserJson(["set", "viewport", "1440", "1000"]);
 
-  console.log("probing wasm bridge and fallback visual hierarchy");
+  console.log("probing wasm bridge and rendered visual hierarchy");
   const summary = await evalJson(visualProbeScript());
 
   assert(summary.ready.runtimeStatus === "ready", "wasm runtime did not become ready", summary.ready);
@@ -664,17 +651,17 @@ try {
   assert(summary.ready.fatal === null, "pixel-world runtime reported a fatal error", summary.ready);
   assert(summary.ready.camera?.zoom > 1, "wheel interaction did not produce camera zoom telemetry", summary.ready);
   assert(summary.ready.wheelCanceled === true, "canvas did not capture wheel interaction", summary.ready);
-  assert(summary.fallback.runtimeStatus === "fallback", "fallback mode was not entered for visual DOM assertions", summary.fallback);
-  assert(summary.fallback.fragmentCount === 3, "expected exactly three fragment background markers", summary.fallback);
-  assert(summary.fallback.locationMarkerRole === "logic_anchor", "location marker was not demoted to logic anchor", summary.fallback);
-  assert(summary.fallback.locationOpacity < 0.5, "location marker remains too visually dominant", summary.fallback);
-  assert(summary.fallback.agentPositionSource === "location_derived", "agent position was not derived from its location", summary.fallback);
-  assert(summary.fallback.domOrder.fragmentsBeforeLocation, "fragment terrain is not behind the location layer", summary.fallback);
-  assert(summary.fallback.domOrder.locationBeforeAgent, "agent layer is not in front of the location layer", summary.fallback);
-  assert(summary.fallback.actionReceipt?.present === "false", "fallback hierarchy fixture should start from an honest no-receipt state", summary.fallback);
-  assert(summary.fallback.actionReceipt?.confidence === "none", "no-receipt fixture should not claim action receipt confidence", summary.fallback);
-  assert(summary.fallback.maxFragmentWidth > 0, "fragment marker boxes did not render with a measurable size", summary.fallback);
-  assert(summary.fallback.maxFragmentWidth < summary.fallback.agentRect.width, "fragment blocks are not visually quieter than the agent marker", summary.fallback);
+  assert(summary.rendered.runtimeStatus === "ready", "rendered bridge surface was not ready for visual DOM assertions", summary.rendered);
+  assert(summary.rendered.fragmentCount === 3, "expected exactly three fragment background markers", summary.rendered);
+  assert(summary.rendered.locationMarkerRole === "logic_anchor", "location marker was not demoted to logic anchor", summary.rendered);
+  assert(summary.rendered.locationOpacity < 0.5, "location marker remains too visually dominant", summary.rendered);
+  assert(summary.rendered.agentPositionSource === "location_derived", "agent position was not derived from its location", summary.rendered);
+  assert(summary.rendered.domOrder.fragmentsBeforeLocation, "fragment terrain is not behind the location layer", summary.rendered);
+  assert(summary.rendered.domOrder.locationBeforeAgent, "agent layer is not in front of the location layer", summary.rendered);
+  assert(summary.rendered.actionReceipt?.present === "false", "rendered hierarchy fixture should start from an honest no-receipt state", summary.rendered);
+  assert(summary.rendered.actionReceipt?.confidence === "none", "no-receipt fixture should not claim action receipt confidence", summary.rendered);
+  assert(summary.rendered.maxFragmentWidth > 0, "fragment marker boxes did not render with a measurable size", summary.rendered);
+  assert(summary.rendered.maxFragmentWidth < summary.rendered.agentRect.width, "fragment blocks are not visually quieter than the agent marker", summary.rendered);
 
   await runAgentBrowser(["screenshot", screenshotPath], { timeout: 20_000 });
   console.log("probing action receipt visual state");
@@ -683,7 +670,7 @@ try {
   assert(summary.actionReceipt.receipt?.state === "blocked", "action receipt did not expose the blocked state", summary.actionReceipt);
   assert(summary.actionReceipt.receipt?.confidence === "world_delta", "action receipt did not use world_delta confidence", summary.actionReceipt);
   assert(summary.actionReceipt.receipt?.title === "Action blocked", "action receipt title was not player-readable", summary.actionReceipt);
-  assert(summary.actionReceipt.runtimeStatus === "fallback", "action receipt screenshot did not stay on the host fallback surface", summary.actionReceipt);
+  assert(summary.actionReceipt.runtimeStatus === "ready", "action receipt screenshot did not stay on the Rust bridge surface", summary.actionReceipt);
   assert(
     /iron shortage blocks construction/.test(summary.actionReceipt.receipt?.summary || ""),
     "action receipt summary did not describe the confirmed blocker",
@@ -698,7 +685,7 @@ try {
   console.log("probing mobile action receipt visual state");
   await runAgentBrowserJson(["set", "viewport", "390", "844"]);
   summary.mobileActionReceipt = await evalJson(mobileActionReceiptProbeScript());
-  assert(summary.mobileActionReceipt.runtimeStatus === "fallback", "mobile action receipt did not stay on the host fallback surface", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.runtimeStatus === "ready", "mobile action receipt did not stay on the Rust bridge surface", summary.mobileActionReceipt);
   assert(summary.mobileActionReceipt.viewport?.clientWidth <= 430, "mobile visual pass did not use a phone-width viewport", summary.mobileActionReceipt);
   assert(summary.mobileActionReceipt.horizontalOverflowPx <= 2, "mobile pixel-world surface has horizontal overflow", summary.mobileActionReceipt);
   assert(summary.mobileActionReceipt.receipt?.present === "true", "mobile action receipt is not visible", summary.mobileActionReceipt);
@@ -717,14 +704,14 @@ try {
 
   console.log("probing mobile focus overlay safe areas");
   summary.mobileFocusOverlay = await evalJson(mobileFocusOverlayProbeScript());
-  assert(summary.mobileFocusOverlay.runtimeStatus === "fallback", "mobile focus overlay did not stay on the host fallback surface", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.runtimeStatus === "ready", "mobile focus overlay did not stay on the Rust bridge surface", summary.mobileFocusOverlay);
   assert(summary.mobileFocusOverlay.focusActive === true, "mobile focus overlay did not enter focus mode", summary.mobileFocusOverlay);
   assert(summary.mobileFocusOverlay.horizontalOverflowPx <= 2, "mobile focus overlay has horizontal overflow", summary.mobileFocusOverlay);
-  assert(summary.mobileFocusOverlay.gaps.hudToMap >= 8, "mobile focus fallback map starts too close to the HUD stack", summary.mobileFocusOverlay);
-  assert(summary.mobileFocusOverlay.gaps.mapToReceipt >= 10, "mobile focus fallback map starts too close to the receipt band", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.gaps.hudToMap >= 8, "mobile focus minimap starts too close to the HUD stack", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.gaps.mapToReceipt >= 10, "mobile focus minimap starts too close to the receipt band", summary.mobileFocusOverlay);
   assert(summary.mobileFocusOverlay.gaps.controlsToPrompt >= 4, "mobile focus controls overlap the prompt cell", summary.mobileFocusOverlay);
   assert(summary.mobileFocusOverlay.gaps.blockerToReceiptCell >= 0, "mobile focus blocker and receipt cells overlap", summary.mobileFocusOverlay);
-  assert(summary.mobileFocusOverlay.map.right <= summary.mobileFocusOverlay.viewport.clientWidth + 2, "mobile focus fallback map extends beyond the viewport", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.map.right <= summary.mobileFocusOverlay.viewport.clientWidth + 2, "mobile focus minimap extends beyond the viewport", summary.mobileFocusOverlay);
   assert(summary.mobileFocusOverlay.receipt.right <= summary.mobileFocusOverlay.viewport.clientWidth + 2, "mobile focus receipt extends beyond the viewport", summary.mobileFocusOverlay);
   await runAgentBrowser(["screenshot", mobileFocusOverlayScreenshotPath], { timeout: 20_000 });
 

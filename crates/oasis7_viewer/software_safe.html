@@ -1123,7 +1123,7 @@
         gap: 8px;
         align-items: baseline;
       }
-      .pixel-world-focus-fallback-map {
+      .pixel-world-focus-minimap {
         position: absolute;
         z-index: 112;
         inset: 92px 16px 72px 16px;
@@ -1137,7 +1137,7 @@
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
         pointer-events: none;
       }
-      .pixel-world-focus-fallback-map__grid {
+      .pixel-world-focus-minimap__grid {
         position: absolute;
         inset: 0;
         background-image:
@@ -1146,7 +1146,7 @@
         background-size: 42px 42px;
         mask-image: linear-gradient(180deg, transparent, #000 10%, #000 86%, transparent);
       }
-      .pixel-world-focus-fallback-map__label {
+      .pixel-world-focus-minimap__label {
         position: absolute;
         top: 10px;
         left: 10px;
@@ -1161,7 +1161,7 @@
         line-height: 1.1;
         text-transform: uppercase;
       }
-      .pixel-world-focus-fallback-map__route {
+      .pixel-world-focus-minimap__route {
         position: absolute;
         left: 29%;
         right: 29%;
@@ -1172,11 +1172,11 @@
         box-shadow: 0 0 14px rgba(141, 199, 170, 0.08);
         opacity: 0.72;
       }
-      .pixel-world-focus-fallback-map__route[data-routes="0"] {
+      .pixel-world-focus-minimap__route[data-routes="0"] {
         opacity: 0.2;
         background: rgba(152, 177, 150, 0.22);
       }
-      .pixel-world-focus-fallback-map__node {
+      .pixel-world-focus-minimap__node {
         position: absolute;
         min-width: 124px;
         max-width: min(220px, 36vw);
@@ -1187,13 +1187,13 @@
         backdrop-filter: blur(8px);
         box-shadow: var(--shadow-inset-stage), 0 12px 28px rgba(0, 0, 0, 0.22);
       }
-      .pixel-world-focus-fallback-map__node span,
-      .pixel-world-focus-fallback-map__meta span {
+      .pixel-world-focus-minimap__node span,
+      .pixel-world-focus-minimap__meta span {
         color: var(--muted);
         font-size: 11px;
         text-transform: uppercase;
       }
-      .pixel-world-focus-fallback-map__node strong {
+      .pixel-world-focus-minimap__node strong {
         display: block;
         margin-top: 3px;
         color: var(--text);
@@ -1201,25 +1201,25 @@
         line-height: 1.25;
         overflow-wrap: anywhere;
       }
-      .pixel-world-focus-fallback-map__node--target {
+      .pixel-world-focus-minimap__node--target {
         left: 16%;
         top: 28%;
         border-color: rgba(110, 231, 183, 0.36);
       }
-      .pixel-world-focus-fallback-map__node--agent {
+      .pixel-world-focus-minimap__node--agent {
         right: 17%;
         top: 54%;
         border-color: rgba(99, 179, 255, 0.32);
       }
-      .pixel-world-focus-fallback-map__node--selected {
+      .pixel-world-focus-minimap__node--selected {
         right: 18px;
         bottom: 18px;
         max-width: min(200px, 42vw);
       }
-      .pixel-world-focus-fallback-map__node--selected[data-selected="false"] {
+      .pixel-world-focus-minimap__node--selected[data-selected="false"] {
         opacity: 0.58;
       }
-      .pixel-world-focus-fallback-map__meta {
+      .pixel-world-focus-minimap__meta {
         position: absolute;
         left: 14px;
         bottom: 14px;
@@ -1227,7 +1227,7 @@
         flex-wrap: wrap;
         gap: 6px;
       }
-      .pixel-world-focus-fallback-map__meta span {
+      .pixel-world-focus-minimap__meta span {
         padding: 5px 7px;
         border: 1px solid rgba(152, 177, 150, 0.14);
         border-radius: 999px;
@@ -1845,11 +1845,11 @@
       .pixel-world-render-diagnostics .pixel-world-host__toolbar {
         margin-top: var(--space-section-tight);
       }
-      .pixel-world-render-fallback {
+      .pixel-world-render-unavailable {
         border-top-color: rgba(223, 182, 107, 0.28);
         padding-top: var(--space-section-tight);
       }
-      .pixel-world-render-fallback summary {
+      .pixel-world-render-unavailable summary {
         color: rgba(223, 182, 107, 0.9);
       }
       .entry-menu {
@@ -2196,42 +2196,42 @@
           max-height: 90px;
           overflow: hidden;
         }
-        .pixel-world-focus-fallback-map {
+        .pixel-world-focus-minimap {
           inset: 266px 10px 98px 10px;
           border-radius: 6px;
         }
-        .pixel-world-focus-fallback-map__label {
+        .pixel-world-focus-minimap__label {
           top: 12px;
           left: 10px;
           padding: 5px 7px;
         }
-        .pixel-world-focus-fallback-map__node {
+        .pixel-world-focus-minimap__node {
           min-width: 92px;
           max-width: 42vw;
           padding: 7px 8px;
         }
-        .pixel-world-focus-fallback-map__node strong {
+        .pixel-world-focus-minimap__node strong {
           font-size: 11px;
         }
-        .pixel-world-focus-fallback-map__node--target {
+        .pixel-world-focus-minimap__node--target {
           left: 7%;
           top: 12%;
         }
-        .pixel-world-focus-fallback-map__node--agent {
+        .pixel-world-focus-minimap__node--agent {
           right: 7%;
           top: 42%;
         }
-        .pixel-world-focus-fallback-map__node--selected {
+        .pixel-world-focus-minimap__node--selected {
           right: 8px;
           bottom: 48px;
         }
-        .pixel-world-focus-fallback-map__meta {
+        .pixel-world-focus-minimap__meta {
           left: 8px;
           right: 8px;
           bottom: 8px;
           gap: 4px;
         }
-        .pixel-world-focus-fallback-map__meta span {
+        .pixel-world-focus-minimap__meta span {
           padding: 4px 6px;
           font-size: 10px;
           max-width: min(190px, 68vw);

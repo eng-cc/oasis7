@@ -29,7 +29,7 @@
   - 直接消费上述文件的 Viewer Web dist / bundle / regression scripts
 - 范围外：
   - runtime 协议、world DTO、Prompt / Chat / hosted access 业务语义变更
-  - Pixel world bridge 的渲染行为、host fallback 语义或 wasm ABI 调整
+  - Pixel world bridge 的渲染行为、renderer unavailable 语义或 wasm ABI 调整
   - `viewer` / `software_safe` taxonomy rename 或 public copy 改版
 
 ## 2. User Experience & Functionality

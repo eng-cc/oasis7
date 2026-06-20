@@ -23,14 +23,14 @@
 - renderer 状态、DTO JSON 和调试按钮默认进入诊断折叠区。
 
 ## 范围
-- 范围内：host render state 的商业化语义层、PixelWorldHost 首屏 HUD、fallback DOM route 表达、定向 UI 测试、生成产物刷新。
+- 范围内：Rust render state 的商业化语义层、PixelWorldHost 首屏 HUD、rendered route 表达、定向 UI 测试、生成产物刷新。
 - 范围外：runtime snapshot 字段扩展、设施/生产线正式协议、dense terrain 聚合、3D renderer、正式美术资产。
 
 ### In Scope
 - `buildPixelWorldRenderState` 新增 `commercial_surface`，由现有 `buildGameplaySummary`、agents、links、fragment terrain 派生。
 - `commercial_surface` 至少表达 objective、next action、active agent、player leverage、blocker、route count 与 fragment count。
 - Pixel-world stage 顶部显示商业化 HUD，优先展示目标、下一步和玩家杠杆。
-- fallback DOM 绘制 agent-location route 线，使关系不只存在于 WASM renderer。
+- Rust-derived rendered DOM 绘制 agent-location route 线，使关系在 bridge 派生状态中可验证。
 - renderer 诊断 badges、控制按钮和 raw DTO 默认折叠。
 
 ### Out of Scope
@@ -76,7 +76,7 @@
 
 ## 里程碑
 - M1：专题 PRD/design/project 与模块入口回写。
-- M2：host DTO、commercial HUD、fallback route 与诊断折叠实现。
+- M2：Rust DTO、commercial HUD、rendered route 与诊断折叠实现。
 - M3：targeted UI test、build、PM/doc/diff hygiene 完成。
 
 ## 风险
@@ -87,14 +87,14 @@
 ## 6. Acceptance Criteria
 - AC-1: `buildPixelWorldRenderState` 返回 `commercial_surface`，并可在无 runtime 协议扩展时从现有 snapshot 派生。
 - AC-2: PixelWorldHost 首屏展示 objective、next action、player leverage，renderer diagnostics 默认折叠。
-- AC-3: fallback DOM 绘制 agent-location route，Fragment terrain 仍在背景层且非交互。
+- AC-3: rendered DOM 绘制 agent-location route，Fragment terrain 仍在背景层且非交互。
 - AC-4: UI tests 覆盖 commercial surface DTO、HUD 可见性和诊断折叠。
 - AC-5: `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host`、`npm --prefix crates/oasis7_viewer run build:software-safe`、`./scripts/doc-governance-check.sh`、`./scripts/pm/lint.sh` 与 `git diff --check` 通过。
 
 ## 7. Validation & Decision Record
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-WORLD_SIMULATOR-046 | `task_b399bf37eff94c44a300c55f5db739d3` | `test_tier_required` | `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host` + `npm --prefix crates/oasis7_viewer run build:software-safe` + `./scripts/doc-governance-check.sh` + `./scripts/pm/lint.sh` + `git diff --check` | Pixel-world host DTO、商业化 HUD、fallback route、diagnostics 信息架构、checked-in Viewer Web bundle |
+| PRD-WORLD_SIMULATOR-046 | `task_b399bf37eff94c44a300c55f5db739d3` | `test_tier_required` | `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host` + `npm --prefix crates/oasis7_viewer run build:software-safe` + `./scripts/doc-governance-check.sh` + `./scripts/pm/lint.sh` + `git diff --check` | Pixel-world Rust DTO、商业化 HUD、rendered route、diagnostics 信息架构、checked-in Viewer Web bundle |
 
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

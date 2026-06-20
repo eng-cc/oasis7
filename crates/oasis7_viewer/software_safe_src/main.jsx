@@ -675,23 +675,35 @@ function HostedLoginGate() {
 function EmptyEntityRecoveryCard(props) {
   const locale = () => props.locale ?? uiLocale();
   const gameplay = () => (typeof props.gameplay === "function" ? props.gameplay() : props.gameplay);
+  const firstAgentClaimAction = () =>
+    (gameplay()?.availableActions || []).find((action) => action.actionId === "claim_first_agent");
+  const firstAgentClaimDisabledReason = () =>
+    gameplayActionDisabledReason(firstAgentClaimAction(), gameplay(), locale());
 
   return (
     <CalloutCard
       class="empty-entity-recovery"
       kind="empty_world_recovery"
-      title={props.title ?? tr(locale(), "当前快照没有可继续游玩的实体", "Current Snapshot Has No Playable Entities")}
+      title={props.title ?? tr(locale(), "认领第一个 Agent", "Claim Your First Agent")}
       badge={gameplay()?.blockerKind || "blocked"}
-      badgeClass="badge badge--warn"
-      variant="warn"
+      badgeClass={firstAgentClaimAction() && !firstAgentClaimDisabledReason() ? "badge badge--good" : "badge badge--warn"}
+      variant={firstAgentClaimAction() && !firstAgentClaimDisabledReason() ? null : "warn"}
     >
       <div class="feedback-summary">
-        {gameplay()?.blockerDetail
-          || tr(
-            locale(),
-            "运行时已发布玩法摘要，但当前快照还没有可选行动体或地点。",
-            "Runtime published gameplay summary, but the current snapshot still has no selectable agents or locations.",
-          )}
+        {firstAgentClaimDisabledReason()
+          ? firstAgentClaimDisabledReason()
+          : firstAgentClaimAction()
+          ? tr(
+              locale(),
+              "这是新用户入口：当前还没有可玩实体，先用正式玩法动作认领你的第一个 Agent。",
+              "This is the new-user entry: there are no playable entities yet, so claim your first Agent through the canonical gameplay action.",
+            )
+          : gameplay()?.blockerDetail
+            || tr(
+              locale(),
+              "运行时已发布玩法摘要，但当前快照还没有可选行动体或地点。",
+              "Runtime published gameplay summary, but the current snapshot still has no selectable agents or locations.",
+            )}
       </div>
       <Show when={gameplay()?.nextStepHint}>
         <div class="feedback-detail">{gameplay().nextStepHint}</div>
@@ -702,12 +714,30 @@ function EmptyEntityRecoveryCard(props) {
           <Badge>{`locations=${gameplay().entityCounts.locations}`}</Badge>
         </div>
       </Show>
-      <div class="feedback-detail">
-        {tr(
-          locale(),
-          "如果中间栏仍保留“刷新快照”动作，先从那里重拉一次；如果数量仍然是 0，就需要修复或重启运行时世界引导流程。",
-          "If the middle column still exposes a refresh action, pull a fresh snapshot there first. If the counts stay at 0, repair or restart the runtime world bootstrap.",
+      <Show when={firstAgentClaimAction()}>
+        {(action) => (
+          <div class="toolbar">
+            <button
+              disabled={Boolean(gameplayActionDisabledReason(action(), gameplay(), locale()))}
+              onClick={() => renderGameplayAction(action())}
+            >
+              {gameplayActionButtonLabel(action(), locale())}
+            </button>
+          </div>
         )}
+      </Show>
+      <div class="feedback-detail">
+        {firstAgentClaimAction()
+          ? tr(
+              locale(),
+              "认领提交后等待链上提交与快照同步；同步完成后第一个 Agent 会出现在世界里。",
+              "After submitting the claim, wait for chain submission and snapshot sync; the first Agent appears once the committed world updates.",
+            )
+          : tr(
+              locale(),
+              "如果中间栏仍保留“刷新快照”动作，先从那里重拉一次；如果数量仍然是 0，就需要修复或重启运行时世界引导流程。",
+              "If the middle column still exposes a refresh action, pull a fresh snapshot there first. If the counts stay at 0, repair or restart the runtime world bootstrap.",
+            )}
       </div>
     </CalloutCard>
   );
@@ -798,7 +828,42 @@ function goalExecutionBadgeClass(state) {
       : "badge badge--accent";
 }
 
+const PENDING_GAMEPLAY_FEEDBACK_STAGES = new Set(["accepted", "submitted", "queued", "ack", "registering", "signing", "sent"]);
+
+function isPendingFirstAgentClaimSync(action, gameplay) {
+  if (action?.actionId !== "claim_first_agent") {
+    return false;
+  }
+  if (gameplay?.blockerKind !== "runtime_snapshot_empty_entities") {
+    return false;
+  }
+  const feedback = gameplay?.recentFeedback || core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback);
+  const feedbackAction = String(feedback?.action || "").trim();
+  const feedbackStage = String(feedback?.stage || "").trim().toLowerCase();
+  return feedbackAction.includes("claim_first_agent") && PENDING_GAMEPLAY_FEEDBACK_STAGES.has(feedbackStage);
+}
+
+function gameplayActionDisabledReason(action, gameplay, locale) {
+  if (action?.disabledReason) {
+    return action.disabledReason;
+  }
+  if (isPendingFirstAgentClaimSync(action, gameplay)) {
+    return tr(
+      locale,
+      "认领已提交，正在等待链上 committed 快照同步。",
+      "Claim submitted; waiting for the committed chain snapshot to sync.",
+    );
+  }
+  return null;
+}
+
 function gameplayActionButtonLabel(action, locale) {
+  if (action.actionId === "claim_first_agent") {
+    return tr(locale, "认领第一个 Agent", "Claim First Agent");
+  }
+  if (action.actionId === "claim_starter_oc") {
+    return tr(locale, "领取初始 OC", "Claim Starter OC");
+  }
   if (action.executeKind === "claim_agent") {
     return tr(locale, "认领 Agent", "Claim Agent");
   }
@@ -818,6 +883,14 @@ function gameplayActionButtonLabel(action, locale) {
 }
 
 function gameplayActionDetail(action, gameplay, locale) {
+  if (action?.actionId === "claim_first_agent") {
+    return action?.disabledReason
+      || tr(locale, "新用户空世界入口：提交后会创建并绑定第一个 starter Agent。", "New-user empty-world entry: submitting creates the first starter Agent.");
+  }
+  if (action?.actionId === "claim_starter_oc") {
+    return action?.disabledReason
+      || tr(locale, "领取一次性初始 OC，解锁第一次 LLM/Agent chat。", "Claim one-time starter OC to unlock the first LLM/Agent chat.");
+  }
   return action?.playerDetail
     || action?.disabledReason
     || gameplay?.economicSurface?.repairAction
@@ -1011,11 +1084,55 @@ function renderResourceSummary(resources) {
 function WorldStageHero() {
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
+  const authSurface = () => core.buildAuthSurfaceModel();
   const presentationScale = () => core.buildWorldScaleSurface(locale()).presentationScale;
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
       ? `${core.state.selectedKind}:${core.state.selectedId}`
       : null;
+  const identityKindLabel = () => {
+    const source = String(authSurface().source || core.state.auth.source || "").trim();
+    if (!core.state.auth.available) {
+      return tr(locale(), "访客 / 未登录", "Guest / Not Signed In");
+    }
+    if (source === "hosted_browser_storage" || source === "hosted_player_session_issue") {
+      return tr(locale(), "邮箱登录身份", "Hosted Account Identity");
+    }
+    if (source === "local_test_api_ephemeral" || source === "legacy_viewer_auth_bootstrap") {
+      return tr(locale(), "本地测试身份", "Local Test Identity");
+    }
+    return authSurface().currentTier || tr(locale(), "玩家身份", "Player Identity");
+  };
+  const publicKeyShort = () =>
+    core.state.auth.publicKey
+      ? `${String(core.state.auth.publicKey).slice(0, 12)}...`
+      : "-";
+  const identityDetail = () => {
+    if (!core.state.auth.available) {
+      return tr(
+        locale(),
+        "当前还没有玩家 session；本地测试动作会按需生成临时玩家 key，托管公开模式才需要邮箱登录。",
+        "No player session is active yet. Local test actions generate an ephemeral player key on demand; only hosted public join requires email sign-in.",
+      );
+    }
+    return [
+      `player=${core.state.auth.playerId || "-"}`,
+      `pubkey=${publicKeyShort()}`,
+      `session=${core.state.auth.registrationStatus || core.state.auth.runtimeStatus || "-"}`,
+      `agent=${core.state.auth.boundAgentId || "-"}`,
+    ].join(" · ");
+  };
+  const identityMeta = () => {
+    const source = authSurface().source || core.state.auth.source || "-";
+    if (!core.state.auth.available) {
+      return `source=${source}`;
+    }
+    const loginNote = String(source) === "hosted_browser_storage"
+      || String(source) === "hosted_player_session_issue"
+      ? tr(locale(), "已通过托管账号会话", "hosted account session")
+      : tr(locale(), "不是邮箱登录账号", "not an email login account");
+    return `source=${source} · ${loginNote}`;
+  };
   const selectionHint = () =>
     core.state.selectedKind && core.state.selectedId
       ? tr(locale(), "右侧指挥面板会围绕这个对象展开。", "The command surface on the right now follows this target.")
@@ -1094,6 +1211,12 @@ function WorldStageHero() {
           <div class="hero-focus-card__label">{tr(locale(), "下一步", "Next Step")}</div>
           <div class="hero-focus-card__value hero-focus-card__value--body">{nextStepCopy()}</div>
         </div>
+        <div class="hero-focus-card" data-testid="viewer-identity-card">
+          <div class="hero-focus-card__label">{tr(locale(), "当前身份", "Current Identity")}</div>
+          <div class="hero-focus-card__value hero-focus-card__value--body">{identityKindLabel()}</div>
+          <div class="hero-focus-card__detail">{identityDetail()}</div>
+          <div class="hero-focus-card__detail">{identityMeta()}</div>
+        </div>
       </div>
       <Show when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}>
         <EmptyEntityRecoveryCard
@@ -1143,6 +1266,9 @@ function MobileJumpRail() {
 function TargetsPanel() {
   const lists = () => core.modelLists();
   const locale = () => uiLocale();
+  const gameplaySummary = () => core.buildGameplaySummary(locale());
+  const firstAgentClaimAction = () =>
+    (gameplaySummary()?.availableActions || []).find((action) => action.actionId === "claim_first_agent");
   const hasSnapshot = () => Boolean(core.state.snapshot);
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
@@ -1166,6 +1292,33 @@ function TargetsPanel() {
           "Lock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.",
         )}
       </EmptyState>
+      <Show when={firstAgentClaimAction()}>
+        {(action) => (
+          <CalloutCard
+            title={tr(locale(), "认领第一个 Agent", "Claim Your First Agent")}
+            badge={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? "waiting" : "ready"}
+            badgeClass={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? "badge badge--accent" : "badge badge--good"}
+            variant={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? "warn" : null}
+          >
+            <div class="feedback-summary">
+              {gameplayActionDisabledReason(action(), gameplaySummary(), locale())
+                || tr(
+                  locale(),
+                  "当前是新用户空世界：先认领第一个 Agent，它会在链上提交并同步后出现在行动体列表。",
+                  "This is a new-user empty world: claim the first Agent first, then it will appear in the agent list after chain submission and sync.",
+                )}
+            </div>
+            <div class="toolbar">
+              <button
+                disabled={Boolean(gameplayActionDisabledReason(action(), gameplaySummary(), locale()))}
+                onClick={() => renderGameplayAction(action())}
+              >
+                {gameplayActionButtonLabel(action(), locale())}
+              </button>
+            </div>
+          </CalloutCard>
+        )}
+      </Show>
       <div class="field">
         <label for="entity-search">{tr(locale(), "筛选目标", "Filter targets")}</label>
         <input
@@ -1485,11 +1638,12 @@ function WorldSummaryPanel() {
                       {action().label || action().actionId || tr(locale(), "当前存在一条更合适的推进动作。", "One action is currently the best next move.")}
                     </div>
                     <div class="feedback-detail">
-                      {gameplayActionDetail(action(), gameplay(), locale())}
+                      {gameplayActionDisabledReason(action(), gameplay(), locale())
+                        || gameplayActionDetail(action(), gameplay(), locale())}
                     </div>
                     <div class="toolbar">
                       <button
-                        disabled={Boolean(action().disabledReason)}
+                        disabled={Boolean(gameplayActionDisabledReason(action(), gameplay(), locale()))}
                         onClick={() => renderGameplayAction(action())}
                       >
                         {gameplayActionButtonLabel(action(), locale())}
@@ -1526,14 +1680,15 @@ function WorldSummaryPanel() {
                           }
                         >
                           <div class="feedback-detail">
-                            {gameplayActionDetail(action, gameplay(), locale())}
+                            {gameplayActionDisabledReason(action, gameplay(), locale())
+                              || gameplayActionDetail(action, gameplay(), locale())}
                           </div>
                           <Show
-                            when={action.executeKind === "request_snapshot" || action.executeKind === "step" || action.executeKind === "play" || action.executeKind === "gameplay_action"}
+                            when={action.executeKind === "request_snapshot" || action.executeKind === "step" || action.executeKind === "play" || action.executeKind === "gameplay_action" || action.executeKind === "claim_first_agent" || action.executeKind === "claim_starter_oc"}
                           >
                             <div class="toolbar">
                               <button
-                                disabled={Boolean(action.disabledReason)}
+                                disabled={Boolean(gameplayActionDisabledReason(action, gameplay(), locale()))}
                                 onClick={() => renderGameplayAction(action)}
                               >
                                 {gameplayActionButtonLabel(action, locale())}
@@ -1543,7 +1698,7 @@ function WorldSummaryPanel() {
                           <Show when={action.executeKind === "agent_chat"}>
                             <div class="toolbar">
                               <button
-                                disabled={Boolean(action.disabledReason)}
+                                disabled={Boolean(gameplayActionDisabledReason(action, gameplay(), locale()))}
                                 onClick={() => renderGameplayAction(action)}
                               >
                                 {gameplayActionButtonLabel(action, locale())}

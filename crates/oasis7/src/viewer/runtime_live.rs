@@ -147,6 +147,10 @@ impl ViewerRuntimeLiveServer {
             Some(scenario) => {
                 bootstrap_runtime_world(scenario).map_err(ViewerRuntimeLiveServerError::Init)?
             }
+            None if config.chain_status_bind.is_some() => (
+                RuntimeWorld::new_production_hardened(),
+                WorldConfig::default(),
+            ),
             None => bootstrap_formal_release_runtime_world()
                 .map_err(ViewerRuntimeLiveServerError::Init)?,
         };

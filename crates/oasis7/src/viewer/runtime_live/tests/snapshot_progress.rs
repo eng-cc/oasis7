@@ -221,6 +221,37 @@ fn compat_snapshot_exposes_player_gameplay_snapshot() {
 }
 
 #[test]
+fn compat_snapshot_requires_starter_oc_before_first_agent_chat() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+
+    let snapshot = server.compat_snapshot();
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    let starter_oc_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_STARTER_OC)
+        .expect("starter OC action");
+    assert_eq!(starter_oc_action.protocol_action, "gameplay_action.submit");
+    assert!(starter_oc_action.disabled_reason.is_none());
+    let chat_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "chat_first_agent")
+        .expect("first agent chat action");
+    assert_eq!(
+        chat_action.disabled_reason.as_deref(),
+        Some("claim starter OC before using LLM/agent chat for this Agent")
+    );
+}
+
+#[test]
 fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
@@ -467,13 +498,88 @@ fn empty_entity_guard_marks_gameplay_snapshot_blocked() {
         .find(|action| action.protocol_action == "request_snapshot")
         .expect("request_snapshot action should be available");
     assert_eq!(request_snapshot_action.protocol_action, "request_snapshot");
+    let first_agent_claim_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+        .expect("first-agent claim action should remain available");
+    assert_eq!(
+        first_agent_claim_action.target_agent_id.as_deref(),
+        Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+    assert!(first_agent_claim_action.disabled_reason.is_none());
     assert!(
         gameplay
             .available_actions
             .iter()
-            .filter(|action| action.protocol_action != "request_snapshot")
+            .filter(|action| {
+                action.protocol_action != "request_snapshot"
+                    && action.action_id != crate::viewer::ACTION_CLAIM_FIRST_AGENT
+            })
             .all(|action| action.disabled_reason.is_some())
     );
+}
+
+#[test]
+fn empty_runtime_snapshot_publishes_first_agent_claim_action() {
+    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        &crate::runtime::WorldState::default(),
+        true,
+        None,
+        None,
+        true,
+        None,
+        false,
+        None,
+    );
+    let action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+        .expect("first-agent claim action");
+    assert_eq!(action.protocol_action, "gameplay_action.submit");
+    assert_eq!(
+        action.target_agent_id.as_deref(),
+        Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+    assert!(action.disabled_reason.is_none());
+}
+
+#[test]
+fn runtime_sync_blocker_preserves_empty_world_first_agent_claim() {
+    let feedback = crate::simulator::PlayerGameplayRecentFeedback {
+        action: "chain_sync".to_string(),
+        stage: "blocked".to_string(),
+        effect: "committed runtime sync failed before the viewer could observe new world state"
+            .to_string(),
+        intent_summary: None,
+        target_agent_id: None,
+        reason: Some("simulated missing persistence".to_string()),
+        hint: Some("wait for execution world persistence".to_string()),
+        delta_logical_time: 0,
+        delta_event_seq: 0,
+    };
+    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        &crate::runtime::WorldState::default(),
+        false,
+        Some(&feedback),
+        None,
+        true,
+        None,
+        false,
+        None,
+    );
+
+    assert_eq!(
+        gameplay.blocker_kind.as_deref(),
+        Some("runtime_sync_unavailable")
+    );
+    let first_agent_claim_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+        .expect("first-agent claim action should remain available");
+    assert!(first_agent_claim_action.disabled_reason.is_none());
 }
 
 #[test]

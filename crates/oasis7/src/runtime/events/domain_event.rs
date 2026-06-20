@@ -362,6 +362,16 @@ pub enum DomainEvent {
         configured_expires_at_epoch: u64,
         revoke_reason: String,
     },
+    StarterOcClaimed {
+        agent_id: String,
+        player_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        public_key: Option<String>,
+        amount: u64,
+        claimed_at: WorldTime,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_treasury_bucket_id: Option<String>,
+    },
     AgentClaimed {
         claimer_agent_id: String,
         target_agent_id: String,
@@ -843,6 +853,7 @@ impl DomainEvent {
                 Some(issuer_id.as_str())
             }
             DomainEvent::RestrictedStarterClaimGrantExpired { .. } => None,
+            DomainEvent::StarterOcClaimed { agent_id, .. } => Some(agent_id.as_str()),
             DomainEvent::AgentClaimed {
                 claimer_agent_id, ..
             }

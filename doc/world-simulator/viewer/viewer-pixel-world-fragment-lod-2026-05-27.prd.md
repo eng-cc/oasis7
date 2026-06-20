@@ -21,7 +21,7 @@
 - 保留 Location 的逻辑锚点职责，不再把 Location marker 当作主视觉。
 
 ## 范围
-- 范围内：host DTO 派生、fallback DOM terrain、wasm bridge terrain sprite、screen-space LOD helper、测试与文档。
+- 范围内：Rust DTO 派生、rendered DOM terrain、wasm bridge terrain sprite、screen-space LOD helper、测试与文档。
 - 范围外：snapshot 协议扩展、正式 fragment interaction、体素资产接入、dense terrain spatial index。
 
 ### In Scope
@@ -84,7 +84,7 @@
 
 ## 里程碑
 - M1：专题 PRD/design/project 与 RED 测试完成。
-- M2：host DTO、fallback DOM 与 wasm terrain renderer 完成。
+- M2：Rust DTO、rendered DOM 与 wasm terrain renderer 完成。
 - M3：targeted tests、wasm check、build 与治理检查完成。
 
 ## 风险
@@ -109,4 +109,4 @@
 ## 7. Validation & Decision Record
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-WORLD_SIMULATOR-046 | `task_428db5366f654c5e892ac300807cb9cc` | `test_tier_required` | `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host` + `env -u RUSTC_WRAPPER cargo test -p pixel_world_bridge --lib` + `./scripts/viewer-pixel-world-bevy-render-probe.sh` + `./scripts/viewer-pixel-world-bevy-pixel-regression.sh` + `./scripts/viewer-pixel-world-fragment-visual-smoke.sh` + `env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown` + `./scripts/doc-governance-check.sh` + `git diff --check` | Pixel-world host DTO、fragment terrain LOD、Bevy ECS visual reconciliation、Bevy pixel regression、wasm bridge render state schema、fallback DOM |
+| PRD-WORLD_SIMULATOR-046 | `task_428db5366f654c5e892ac300807cb9cc` | `test_tier_required` | `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host` + `env -u RUSTC_WRAPPER cargo test -p pixel_world_bridge --lib` + `./scripts/viewer-pixel-world-bevy-render-probe.sh` + `./scripts/viewer-pixel-world-bevy-pixel-regression.sh` + `./scripts/viewer-pixel-world-fragment-visual-smoke.sh` + `env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown` + `./scripts/doc-governance-check.sh` + `git diff --check` | Pixel-world Rust DTO、fragment terrain LOD、Bevy ECS visual reconciliation、Bevy pixel regression、wasm bridge render state schema、rendered DOM |

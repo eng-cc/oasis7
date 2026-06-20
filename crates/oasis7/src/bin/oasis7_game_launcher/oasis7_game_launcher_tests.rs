@@ -78,6 +78,7 @@ fn parse_options_defaults() {
     assert_eq!(options.live_bind, DEFAULT_LIVE_BIND);
     assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
     assert!(options.with_llm);
+    assert!(!options.allow_debug_scenario);
     assert_eq!(
         options.agent_decision_source,
         PROVIDER_BACKED_DECISION_SOURCE
@@ -133,6 +134,23 @@ fn parse_options_defaults() {
     assert_eq!(options.chain_pos_slot_clock_genesis_unix_ms, None);
     assert_eq!(options.chain_pos_max_past_slot_lag, 256);
     assert_eq!(options.chain_world_id, None);
+}
+
+#[test]
+fn parse_options_rejects_llm_bootstrap_without_debug_opt_in() {
+    let err = parse_options(["--scenario", "llm_bootstrap"].into_iter())
+        .expect_err("debug scenario should require opt-in");
+    assert!(err.contains("seeded debug/LLM scenario"));
+    assert!(err.contains("--allow-debug-scenario"));
+}
+
+#[test]
+fn parse_options_accepts_llm_bootstrap_with_debug_opt_in() {
+    let options =
+        parse_options(["--scenario", "llm_bootstrap", "--allow-debug-scenario"].into_iter())
+            .expect("debug scenario opt-in");
+    assert_eq!(options.scenario, "llm_bootstrap");
+    assert!(options.allow_debug_scenario);
 }
 
 #[test]
@@ -560,6 +578,20 @@ fn build_viewer_live_command_wires_auto_play_flag() {
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
     assert!(args.iter().any(|arg| arg == "--auto-play"));
+}
+
+#[test]
+fn build_viewer_live_command_wires_debug_scenario_opt_in() {
+    let mut options = CliOptions::default();
+    options.scenario = "llm_bootstrap".to_string();
+    options.allow_debug_scenario = true;
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    assert!(args.iter().any(|arg| arg == "llm_bootstrap"));
+    assert!(args.iter().any(|arg| arg == "--allow-debug-scenario"));
 }
 
 #[test]

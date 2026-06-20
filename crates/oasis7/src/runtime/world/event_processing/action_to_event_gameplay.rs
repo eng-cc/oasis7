@@ -14,6 +14,135 @@ impl World {
         action: &Action,
     ) -> Result<WorldEventBody, WorldError> {
         match action {
+            Action::ClaimStarterOc {
+                agent_id,
+                player_id,
+                public_key,
+            } => {
+                let agent_id = agent_id.trim();
+                if agent_id.is_empty() {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "claim starter OC rejected: agent_id cannot be empty".to_string(),
+                            ],
+                        },
+                    }));
+                }
+                if !self.state.agents.contains_key(agent_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::AgentNotFound {
+                            agent_id: agent_id.to_string(),
+                        },
+                    }));
+                }
+                let player_id = player_id.trim();
+                if player_id.is_empty() {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "claim starter OC rejected: player_id cannot be empty".to_string(),
+                            ],
+                        },
+                    }));
+                }
+                let public_key = public_key
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned);
+                if self.main_token_liquid_balance(agent_id) > 0 {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "claim starter OC rejected: agent already has liquid OC: agent_id={agent_id}"
+                            )],
+                        },
+                    }));
+                }
+                if self.state.starter_oc_claims.contains_key(agent_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "claim starter OC rejected: agent already claimed: agent_id={agent_id}"
+                            )],
+                        },
+                    }));
+                }
+                if self
+                    .state
+                    .starter_oc_claims
+                    .values()
+                    .any(|claim| claim.player_id == player_id)
+                {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "claim starter OC rejected: player already claimed: player_id={player_id}"
+                            )],
+                        },
+                    }));
+                }
+                if let Some(public_key) = public_key.as_deref() {
+                    if self
+                        .state
+                        .starter_oc_claims
+                        .values()
+                        .any(|claim| claim.public_key.as_deref() == Some(public_key))
+                    {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec![
+                                    "claim starter OC rejected: public key already claimed"
+                                        .to_string(),
+                                ],
+                            },
+                        }));
+                    }
+                }
+
+                let source_treasury_bucket_id = if self
+                    .main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL)
+                    >= STARTER_OC_CLAIM_AMOUNT
+                {
+                    Some(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL.to_string())
+                } else if self.state.main_token_supply.total_supply == 0
+                    && self.state.main_token_supply.total_issued == 0
+                    && self.state.main_token_supply.circulating_supply == 0
+                {
+                    None
+                } else {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "claim starter OC rejected: ecosystem pool has insufficient OC: bucket={} balance={} amount={}",
+                                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+                                self.main_token_treasury_balance(
+                                    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL
+                                ),
+                                STARTER_OC_CLAIM_AMOUNT
+                            )],
+                        },
+                    }));
+                };
+
+                Ok(WorldEventBody::Domain(DomainEvent::StarterOcClaimed {
+                    agent_id: agent_id.to_string(),
+                    player_id: player_id.to_string(),
+                    public_key,
+                    amount: STARTER_OC_CLAIM_AMOUNT,
+                    claimed_at: self.state.time,
+                    source_treasury_bucket_id,
+                }))
+            }
             Action::ClaimAgent {
                 claimer_agent_id,
                 target_agent_id,

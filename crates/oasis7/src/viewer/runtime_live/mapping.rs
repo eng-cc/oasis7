@@ -16,6 +16,9 @@ use crate::simulator::{
 use super::ViewerLiveDecisionMode;
 use super::control_plane::{RuntimeLlmSidecar, runtime_provider_settings_from_env};
 use super::location_id_for_pos;
+use super::support::{
+    FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID, formal_release_default_seed_location_for_pos,
+};
 
 pub(super) fn runtime_state_to_simulator_model(
     state: &crate::runtime::WorldState,
@@ -24,17 +27,28 @@ pub(super) fn runtime_state_to_simulator_model(
     let mut model = WorldModel::default();
 
     for (agent_id, cell) in &state.agents {
-        let location_id = location_id_for_pos(cell.state.pos);
-        model
-            .locations
-            .entry(location_id.clone())
-            .or_insert_with(|| {
-                Location::new(
-                    location_id.clone(),
-                    format!("runtime-{location_id}"),
-                    cell.state.pos,
-                )
-            });
+        let seeded_location = seed_location_for_runtime_agent(agent_id, cell.state.pos);
+        let location_id = seeded_location
+            .as_ref()
+            .map(|location| location.id.clone())
+            .unwrap_or_else(|| location_id_for_pos(cell.state.pos));
+        if let Some(location) = seeded_location {
+            model
+                .locations
+                .entry(location_id.clone())
+                .or_insert(location);
+        } else {
+            model
+                .locations
+                .entry(location_id.clone())
+                .or_insert_with(|| {
+                    Location::new(
+                        location_id.clone(),
+                        format!("runtime-{location_id}"),
+                        cell.state.pos,
+                    )
+                });
+        }
 
         let mut agent = Agent::new(agent_id.clone(), location_id, cell.state.pos);
         agent.body = cell.state.body.clone();
@@ -48,6 +62,16 @@ pub(super) fn runtime_state_to_simulator_model(
     model.agent_execution_debug_contexts = collect_agent_execution_debug_contexts(state, sidecar);
     model.player_auth_last_nonce = sidecar.player_auth_last_nonce.clone();
     model
+}
+
+fn seed_location_for_runtime_agent(
+    agent_id: &str,
+    pos: crate::geometry::GeoPos,
+) -> Option<Location> {
+    if agent_id != FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID {
+        return None;
+    }
+    formal_release_default_seed_location_for_pos(pos)
 }
 
 fn collect_agent_execution_debug_contexts(
@@ -572,7 +596,29 @@ mod tests {
     use crate::geometry::GeoPos;
     use crate::runtime::{FactoryModuleSpec, MaterialLedgerId, MaterialStack, SnapshotMeta};
     use crate::simulator::WorldScenario;
+    use crate::viewer::runtime_live::support::FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID;
     use crate::viewer::runtime_live::{ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig};
+
+    #[test]
+    fn runtime_state_to_simulator_model_preserves_formal_release_seed_fragment_location() {
+        let (world, _) = super::super::support::bootstrap_formal_release_runtime_world()
+            .expect("formal release runtime world");
+        let sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Script);
+        let model = runtime_state_to_simulator_model(world.state(), &sidecar);
+        let agent = model
+            .agents
+            .get(FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID)
+            .expect("formal release starter agent should be mapped");
+        let location = model
+            .locations
+            .get(&agent.location_id)
+            .expect("formal release starter location should be mapped");
+
+        assert!(agent.location_id.starts_with("frag-"));
+        assert!(!agent.location_id.starts_with("runtime:"));
+        assert_eq!(agent.location_id, location.id);
+        assert!(location.fragment_budget.is_some());
+    }
 
     #[test]
     fn map_runtime_domain_event_agent_registered_uses_runtime_location_id() {

@@ -20,7 +20,7 @@
 
 ## 4. 约束与边界
 - 不改 `pixel_world_runtime_module_wasm.js` 的宿主消费方式。
-- 不恢复 `pixel_world_bevy_bridge.js` JS renderer fallback。
+- 不新增第二套 `pixel_world_bevy_bridge.js` JS 世界渲染路径。
 - 不引入新的 render DTO 字段。
 - 不在本轮切换到 camera transform / shader grid / picking plugin。
 

@@ -15,11 +15,11 @@
 2. Build `locationById`.
 3. Resolve each agent position:
    - `snapshot` if `agent.pos` exists.
-   - `snapshot` if selected-object fallback position exists.
+   - `snapshot` if selected-object alternate position exists.
    - `location_derived` if `location_id` resolves to a positioned location.
    - `missing` otherwise.
 4. Build links from the resolved agent positions.
-5. Render via wasm or explicit host fallback.
+5. Render via wasm/Rust bridge; report unavailable if the bridge cannot derive render state.
 
 ## Derivation Algorithm
 - Input: `agent.id`, `agent.location_id`, `location.pos`, `location.radius_cm`, `world_bounds`.
@@ -32,11 +32,11 @@
 - Toolbar badge: `derived_positions=<count>`.
 - Agent DTO: `position_source`.
 - Agent status badges: `position=location_derived` only for derived positions.
-- Host fallback DOM: positions entities using world-coordinate percentages when possible.
+- Rendered DOM: positions entities using world-coordinate percentages when possible.
 
 ## Verification
 - Unit/UI test proves a sparse snapshot produces:
   - `agent.position_source === "location_derived"`
   - stable repeated derived coordinates
   - one relationship link from derived agent position to assigned location
-- Existing fallback test continues proving wasm runtime failure produces explicit fallback surface.
+- Existing unavailable-state test continues proving wasm runtime failure produces an explicit diagnostic state.

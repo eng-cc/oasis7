@@ -7,7 +7,7 @@
 ## 任务拆解（含 PRD-ID 映射）
 - [ ] viewer-pixel-world-bridge-runtime-cache (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 为 `pixel_world_bridge` 增加 grid/layout key 与 location/agent entity cache，移除 per-frame 全量清场前置。 Trace: .pm/tasks/task_40310c312e9f4681805b5b74b30cac9a.yaml
 - [ ] viewer-pixel-world-bridge-incremental-reconcile (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 将 grid/location/agent 渲染改为增量更新与按需回收，保持 `mount|update|tick|unmount`、hover/select、camera 事件契约不变。 Trace: .pm/tasks/task_40310c312e9f4681805b5b74b30cac9a.yaml
-- [ ] viewer-pixel-world-bridge-regression-recheck (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 回跑 wasm check、前端 repo-owned 测试与 diff hygiene，确认优化后 runtime 行为与 fallback 合同稳定。 Trace: .pm/tasks/task_40310c312e9f4681805b5b74b30cac9a.yaml
+- [ ] viewer-pixel-world-bridge-regression-recheck (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 回跑 wasm check、前端 repo-owned 测试与 diff hygiene，确认优化后 runtime 行为与 unavailable 合同稳定。 Trace: .pm/tasks/task_40310c312e9f4681805b5b74b30cac9a.yaml
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md`

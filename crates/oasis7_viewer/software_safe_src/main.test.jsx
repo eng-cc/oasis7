@@ -255,12 +255,18 @@ async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), se
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   window.history.replaceState({}, "", viewerUrl());
   window.localStorage.clear();
+  Object.defineProperty(window, "crypto", {
+    configurable: true,
+    value: globalThis.crypto,
+  });
   document.body.innerHTML = "";
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   activeCleanup?.();
   activeCleanup = null;
   document.body.innerHTML = "";
@@ -321,6 +327,190 @@ describe("viewer web ui automation baseline", () => {
     expect(within(targetsPanel).getByText("Syncing locations…")).toBeInTheDocument();
     expect(within(targetsPanel).queryByText("No agents in current snapshot.")).not.toBeInTheDocument();
     expect(within(targetsPanel).queryByText("No locations in current snapshot.")).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("auto-issues local test player auth before claiming the first agent", async () => {
+    const { core } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        model: {
+          agents: {},
+          locations: {},
+          agent_prompt_profiles: {},
+          agent_execution_debug_contexts: {},
+        },
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          available_actions: [
+            {
+              action_id: "claim_first_agent",
+              label: "Claim first Agent",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "starter-agent-0",
+              disabled_reason: null,
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(core.state.auth.available).toBe(false);
+
+    core.sendGameplayAction({
+      actionId: "claim_first_agent",
+      protocolAction: "gameplay_action.submit",
+      targetAgentId: "starter-agent-0",
+      executeKind: "claim_first_agent",
+    });
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      if (core.state.lastGameplayActionFeedback?.stage !== "queued") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(core.state.lastGameplayActionFeedback?.stage).toBe("error");
+    expect(core.state.auth.available).toBe(true);
+    expect(core.state.auth.source).toBe("local_test_api_ephemeral");
+    expect(core.state.auth.playerId).toMatch(/^local-test-player-/);
+    expect(core.state.lastGameplayActionFeedback?.reason).toMatch(/viewer websocket is not connected/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("auto-issues loopback local player auth without test_api before claiming the first agent", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?connect=0&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+    const core = await import("./legacy_core.js");
+
+    expect(core.state.auth.available).toBe(false);
+
+    core.sendGameplayAction({
+      actionId: "claim_first_agent",
+      protocolAction: "gameplay_action.submit",
+      targetAgentId: "starter-agent-0",
+      executeKind: "claim_first_agent",
+    });
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      if (core.state.lastGameplayActionFeedback?.stage !== "queued") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(core.state.auth.available).toBe(true);
+    expect(core.state.auth.source).toBe("local_test_api_ephemeral");
+    expect(core.state.auth.playerId).toMatch(/^local-test-player-/);
+    expect(core.state.lastGameplayActionFeedback?.stage).toBe("error");
+    expect(core.state.lastGameplayActionFeedback?.reason).toMatch(/viewer websocket is not connected/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("routes the empty-world Claim First Agent button into gameplay action feedback", async () => {
+    const { core, container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        model: {
+          agents: {},
+          locations: {},
+          agent_prompt_profiles: {},
+          agent_execution_debug_contexts: {},
+        },
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          available_actions: [
+            {
+              action_id: "claim_first_agent",
+              label: "Claim first Agent",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "starter-agent-0",
+              disabled_reason: null,
+            },
+          ],
+        },
+      }),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    const claimButtons = within(stagePanel).getAllByRole("button", { name: "Claim First Agent" });
+    expect(claimButtons.length).toBeGreaterThan(0);
+
+    fireEvent.click(claimButtons[0]);
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      if (core.state.lastGameplayActionFeedback?.stage !== "queued") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(core.state.auth.available).toBe(true);
+    expect(core.state.lastGameplayActionFeedback?.action).toBe("claim_first_agent");
+    expect(core.state.lastGameplayActionFeedback?.stage).toBe("error");
+    expect(core.state.lastGameplayActionFeedback?.reason).toMatch(/viewer websocket is not connected/i);
+    expect(core.buildGameplaySummary().recentFeedback).toMatchObject({
+      action: "claim_first_agent",
+      stage: "error",
+      source: "local_gameplay_action",
+    });
+    await waitFor(() => {
+      expect(within(stagePanel).getAllByText(/viewer websocket is not connected/i).length)
+        .toBeGreaterThan(0);
+    });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("disables first-agent claim buttons while committed snapshot sync is pending", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        model: {
+          agents: {},
+          locations: {},
+          agent_prompt_profiles: {},
+          agent_execution_debug_contexts: {},
+        },
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          blocker_kind: "runtime_snapshot_empty_entities",
+          blocker_detail: "runtime exposed an empty new-user world",
+          available_actions: [
+            {
+              action_id: "claim_first_agent",
+              label: "Claim first Agent",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "starter-agent-0",
+              disabled_reason: null,
+            },
+          ],
+        },
+      }),
+      setupCore(core) {
+        core.state.lastGameplayActionFeedback = {
+          kind: "gameplay_action",
+          action: "claim_first_agent",
+          stage: "ack",
+          accepted: true,
+          ok: true,
+          effect: "submitted gameplay action claim_first_agent for starter-agent-0",
+          reason: null,
+          response: null,
+        };
+      },
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    const targetsPanel = container.querySelector("#viewer-targets-panel");
+    const claimButtons = [
+      ...within(stagePanel).getAllByRole("button", { name: "Claim First Agent" }),
+      ...within(targetsPanel).getAllByRole("button", { name: "Claim First Agent" }),
+    ];
+    expect(claimButtons.length).toBeGreaterThan(1);
+    claimButtons.forEach((button) => expect(button).toBeDisabled());
+    expect(within(stagePanel).getAllByText(/waiting for the committed chain snapshot/i).length)
+      .toBeGreaterThan(0);
+    expect(within(targetsPanel).getAllByText(/waiting for the committed chain snapshot/i).length)
+      .toBeGreaterThan(0);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("moves presentation notes into the stage help tip instead of the right details rail", async () => {
@@ -632,6 +822,101 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByRole("button", { name: "Apply Prompt" })).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("surfaces backend agent chat rejection details without requiring diagnostics", async () => {
+    await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        core.state.lastChatFeedback = {
+          id: "chat-error-test",
+          kind: "chat",
+          action: "agent_chat",
+          agentId: "agent-0",
+          accepted: false,
+          ok: false,
+          stage: "error",
+          reason: "claim starter OC before using LLM/agent chat for this Agent",
+          effect: "insufficient_oc_budget",
+          response: {
+            code: "insufficient_oc_budget",
+            message: "claim starter OC before using LLM/agent chat for this Agent",
+            agent_id: "agent-0",
+          },
+        };
+      },
+    });
+
+    const agentChatPanel = screen.getByText("Agent Chat").closest("section");
+    expect(agentChatPanel).toBeTruthy();
+    expect(within(agentChatPanel).getByText("Chat failed")).toBeInTheDocument();
+    expect(within(agentChatPanel).getByText("code=insufficient_oc_budget")).toBeInTheDocument();
+    expect(within(agentChatPanel).getByText(/Agent chat did not complete.*insufficient_oc_budget.*claim starter OC/i))
+      .toBeInTheDocument();
+    expect(within(agentChatPanel).getByText("claim starter OC before using LLM/agent chat for this Agent"))
+      .toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("persists acknowledged chat messages for the current world", async () => {
+    const { core } = await renderViewerApp({
+      snapshot: null,
+      setupCore(core) {
+        core.state.worldId = "world-chat-cache";
+        core.state.wsUrl = "ws://127.0.0.1:5011";
+        core.injectSnapshot(sampleSnapshot());
+        core.applySelection({ kind: "agent", id: "agent-0" });
+      },
+    });
+
+    core.pushChatHistory({
+      id: "chat-cache-1",
+      source: "player",
+      agentId: "agent-0",
+      targetAgentId: "agent-0",
+      playerId: "player-one",
+      speaker: "player-one",
+      message: "Keep this message visible after refresh.",
+      tick: 44,
+    });
+
+    const stored = JSON.parse(window.localStorage.getItem(core.chatHistoryStorageKey()));
+    expect(stored).toEqual([
+      expect.objectContaining({
+        id: "chat-cache-1",
+        source: "player",
+        message: "Keep this message visible after refresh.",
+      }),
+    ]);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("hydrates cached chat history after a viewer refresh", async () => {
+    await renderViewerApp({
+      snapshot: null,
+      selection: null,
+      setupCore(core) {
+        core.state.worldId = "world-chat-cache";
+        core.state.wsUrl = "ws://127.0.0.1:5011";
+        window.localStorage.setItem(
+          core.chatHistoryStorageKey(),
+          JSON.stringify([
+            {
+              id: "chat-cache-reload-1",
+              source: "player",
+              agentId: "agent-0",
+              targetAgentId: "agent-0",
+              playerId: "player-one",
+              speaker: "player-one",
+              message: "This message survived refresh.",
+              tick: 45,
+            },
+          ]),
+        );
+        core.injectSnapshot(sampleSnapshot());
+        core.applySelection({ kind: "agent", id: "agent-0" });
+      },
+    });
+
+    expect(screen.getByText("This message survived refresh.")).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("renders chat history as readable messages with raw diagnostics behind disclosure", async () => {
     await renderViewerApp({
       selection: { kind: "agent", id: "agent-0" },
@@ -697,6 +982,47 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Actions Not Exposed On This Page")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("shows current player identity on the primary world surface", async () => {
+    const { container } = await renderViewerApp({
+      setupAfterMount(core) {
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "local-test-player-visible",
+          publicKey: "abcdef0123456789abcdef0123456789",
+          privateKey: "private-key-must-stay-hidden",
+          source: "local_test_api_ephemeral",
+          registrationStatus: "registered",
+          runtimeStatus: "registered",
+          boundAgentId: "starter-agent-0",
+        };
+      },
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(stagePanel).toBeTruthy();
+    const identityCard = within(stagePanel).getByTestId("viewer-identity-card");
+
+    expect(within(identityCard).getByText("Current Identity")).toBeInTheDocument();
+    expect(within(identityCard).getByText("Local Test Identity")).toBeInTheDocument();
+    expect(within(identityCard).getByText(/player=local-test-player-visible/)).toBeInTheDocument();
+    expect(within(identityCard).getByText(/pubkey=abcdef012345/)).toBeInTheDocument();
+    expect(within(identityCard).getByText(/not an email login account/)).toBeInTheDocument();
+    expect(identityCard).not.toHaveTextContent("private-key-must-stay-hidden");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("shows guest identity before local test auth is generated", async () => {
+    const { container } = await renderViewerApp();
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(stagePanel).toBeTruthy();
+    const identityCard = within(stagePanel).getByTestId("viewer-identity-card");
+
+    expect(within(identityCard).getByText("Current Identity")).toBeInTheDocument();
+    expect(within(identityCard).getByText("Guest / Not Signed In")).toBeInTheDocument();
+    expect(within(identityCard).getByText(/No player session is active yet/)).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("surfaces the first agent claim entry from gameplay snapshot", async () => {
     const { container } = await renderViewerApp({
       snapshot: sampleAgentClaimSnapshot(),
@@ -711,7 +1037,54 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("eligible=325")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("surfaces starter OC claim before first agent chat", async () => {
+    let sendGameplayAction;
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          available_actions: [
+            {
+              action_id: "claim_starter_oc",
+              label: "Claim starter OC",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "agent-0",
+              disabled_reason: null,
+            },
+            {
+              action_id: "chat_first_agent",
+              label: "Send one chat/command to the first available agent",
+              protocol_action: "agent_chat",
+              target_agent_id: "agent-0",
+              disabled_reason: "claim starter OC before using LLM/agent chat for this Agent",
+            },
+          ],
+        },
+      }),
+      setupAfterMount(core) {
+        sendGameplayAction = vi.spyOn(core, "sendGameplayAction").mockReturnValue({ ok: true });
+      },
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(stagePanel).toBeTruthy();
+    expect(within(stagePanel).getAllByText("Claim starter OC").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getAllByText(/one-time starter OC/i).length).toBeGreaterThan(0);
+    const claimButton = within(stagePanel).getAllByRole("button", { name: "Claim Starter OC" })[0];
+    expect(claimButton).toBeInTheDocument();
+    fireEvent.click(claimButton);
+    expect(sendGameplayAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionId: "claim_starter_oc",
+        targetAgentId: "agent-0",
+        executeKind: "claim_starter_oc",
+      }),
+    );
+    expect(within(stagePanel).getByRole("button", { name: "Use Chat Panel" })).toBeDisabled();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("forces goal execution blocked when the empty-entity guard trips", async () => {
+    let sendGameplayAction;
     const { container } = await renderViewerApp({
       snapshot: sampleSnapshot({
         model: {
@@ -726,8 +1099,26 @@ describe("viewer web ui automation baseline", () => {
           execution_state: "completed",
           blocker_kind: null,
           blocker_detail: null,
+          available_actions: [
+            {
+              action_id: "request_snapshot",
+              label: "Request snapshot",
+              protocol_action: "request_snapshot",
+              disabled_reason: null,
+            },
+            {
+              action_id: "claim_first_agent",
+              label: "Claim first Agent",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "starter-agent-0",
+              disabled_reason: null,
+            },
+          ],
         },
       }),
+      setupAfterMount(core) {
+        sendGameplayAction = vi.spyOn(core, "sendGameplayAction").mockReturnValue({ ok: true });
+      },
     });
 
     const stagePanel = container.querySelector("#viewer-stage-panel");
@@ -737,10 +1128,34 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Blocked").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Claim first Agent")).toBeInTheDocument();
+    const claimButton = within(stagePanel).getAllByRole("button", { name: "Claim First Agent" })[0];
+    expect(claimButton).toBeInTheDocument();
+    fireEvent.click(claimButton);
+    expect(sendGameplayAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionId: "claim_first_agent",
+        targetAgentId: "starter-agent-0",
+        executeKind: "claim_first_agent",
+      }),
+    );
+    const recoveryClaimButton = within(targetsPanel).getByRole("button", { name: "Claim First Agent" });
+    expect(recoveryClaimButton).toBeInTheDocument();
+    fireEvent.click(recoveryClaimButton);
+    expect(sendGameplayAction).toHaveBeenCalledTimes(2);
+    expect(sendGameplayAction).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        actionId: "claim_first_agent",
+        targetAgentId: "starter-agent-0",
+        executeKind: "claim_first_agent",
+      }),
+    );
+    expect(within(stagePanel).getByText(/New-user empty-world entry/i)).toBeInTheDocument();
     expect(within(targetsPanel).getByText("No agents in current snapshot.")).toBeInTheDocument();
     expect(within(targetsPanel).getByText("No locations in current snapshot.")).toBeInTheDocument();
     expect(within(targetsPanel).queryByText("Syncing agents…")).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("surfaces hosted recovery and preview strong-auth truth without not-implemented drift", async () => {
     await renderViewerApp({
       setupAfterMount(core) {
@@ -1044,7 +1459,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(container.querySelector("#viewer-targets-panel")).getByText("No agents in current snapshot.")).toBeInTheDocument();
     expect(within(container.querySelector("#viewer-stage-panel")).getByText("Recover World Snapshot")).toBeInTheDocument();
     expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("Request snapshot").length).toBeGreaterThan(0);
-    expect(within(container.querySelector("#viewer-details-panel")).getByText("Current Snapshot Has No Playable Entities")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-details-panel")).getByText("Claim Your First Agent")).toBeInTheDocument();
     expect(container.querySelector("[data-callout-kind='empty_world_recovery']")).toBeTruthy();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 });

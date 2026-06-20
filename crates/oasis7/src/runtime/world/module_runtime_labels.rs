@@ -69,6 +69,7 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::RestrictedStarterClaimGrantRevoked { .. } => {
                 "domain.main_token.restricted_claim_grant_revoked"
             }
+            DomainEvent::StarterOcClaimed { .. } => "domain.gameplay.starter_oc_claimed",
             DomainEvent::AgentClaimed { .. } => "domain.gameplay.agent_claimed",
             DomainEvent::AgentClaimReleaseRequested { .. } => {
                 "domain.gameplay.agent_claim_release_requested"
@@ -228,6 +229,7 @@ pub(super) fn action_kind_label(action: &Action) -> &'static str {
             "action.main_token.revoke_restricted_claim_grant"
         }
         Action::ClaimAgent { .. } => "action.gameplay.claim_agent",
+        Action::ClaimStarterOc { .. } => "action.gameplay.claim_starter_oc",
         Action::ReleaseAgentClaim { .. } => "action.gameplay.release_agent_claim",
         Action::TransferMaterial { .. } => "action.transfer_material",
         Action::FormAlliance { .. } => "action.gameplay.form_alliance",
