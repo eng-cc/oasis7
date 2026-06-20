@@ -10,6 +10,31 @@
 - 资源、出生点、可采碎片、Location 展示、viewer pixel-world 地形与链上/共识快照应来自同一份世界生成事实。
 - 资源生成必须链上化：正式世界的 chunk/resource provenance、remaining budget 与后续采集变更必须能由 chain/genesis/commit 证明，runtime live 只能消费或提交这些事实，不能在链下生成一套正式资源账本。
 
+## 目标
+- 将统一大世界的 starter spawn、fragment location、resource budget 与后续 resource delta 收敛为同一份 chain-authoritative seed/chunk/fragment 事实。
+- 让 local testnet、public testnet、viewer、runtime live 与 provider observation 对同一个 `world_seed` 和 resource provenance 给出一致解释。
+
+## 范围
+- In scope: seed manifest、chunk/fragment/resource provenance、starter chunk/onboarding 接线、viewer/provider observation 一致性、resource delta replay 合同。
+- Out of scope: 新经济数值平衡、新资源品类、完整删除兼容坐标锚点、非 testnet/正式世界的调试 fixture 迁移。
+
+## 接口 / 数据
+- `SeedManifest`: `world_id`、`world_seed`、`chunk_generation_schema_version`、`world_config_hash`、`genesis_ref` / `chain_id`。
+- `ChunkResourceManifest`: chunk coord、fragment ids、profile hash、budget total hash、budget remaining hash、commit ref。
+- `ResourceDelta`: action id、fragment id、material/resource key、delta amount、commit height/hash、replay ordering key。
+
+## 里程碑
+- M1: 文档合同冻结，明确资源生成必须链上化。
+- M2: runtime live snapshot 暴露 seed/chunk/resource provenance。
+- M3: claim/onboarding 绑定 starter chunk spawn 与 starter resource context。
+- M4: chain commit/replay 支持 resource manifest 与 delta。
+- M5: testnet readiness 证明 viewer/runtime/provider resource provenance 一致。
+
+## 风险
+- 既有 runtime live 与测试仍依赖固定 bootstrap 库存，需要阶段迁移。
+- 链上承载完整 fragment/profile/budget 明细可能过重，需要 hash/manifest/ref 折中。
+- optimistic UI 与 committed resource delta 之间需要清晰 pending/rollback 状态。
+
 ## 2. Problem Statement
 当前存在两条语义：
 
