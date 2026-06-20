@@ -10,6 +10,7 @@ source_refs:
   - AGENTS.md
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Fix code health finding 1 doc-governance absolute path blocker and finding 3 runtime_live mapping fallback semantics with role-attributed evidence and fresh verification."
