@@ -51,6 +51,7 @@
 - 若输出会驱动实现，已经给出 `viewer_engineer` 可执行的 brief 和 QA 可验证的验收点
 
 ## Recommended Skills
+- 可视化/玩家可见交互改动必用技能：`game-interaction-design`、`game-visual-design`，用于交互流程/状态反馈、视觉层级/截图审查；非可视化变更只在 slice contract 明确交互或视觉风险时按需使用。
 - 主技能：`bounded-brainstorming`、`agent-browser`、`gpt-image-2`，用于视觉方案比较、浏览器闭环和必要的视觉 companion。
 - 常复用技能：`game-design-theory`、`level-design`、`humanizer-zh`，用于玩家动线、空间/信息节奏和中文体验口径。
 - 使用约定：角色决定 owner，技能决定方法；视觉原型、图片或浏览器证据不能替代 runtime 权限边界、玩法规则或 QA 放行判断。

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game Interaction Design"
+  short_description: "Game UX flow and feedback review"
+  default_prompt: "Use $game-interaction-design to review a player-facing flow for interaction clarity and feedback."
