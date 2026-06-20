@@ -1,0 +1,26 @@
+task_uid: task_082d3f35aee2436c97ba2a629ec8437a
+title: "testnet five node health check"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-network-testnet-five-node-health
+execution_log_path: .pm/tasks/task_082d3f35aee2436c97ba2a629ec8437a.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/p2p/project.md
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Collect objective health evidence for the five testnet nodes without exposing secrets."
+  - "Report node health status with specialist attribution and command evidence."
+handoff_to: []
+updated_at: 2026-06-20T13:18:26+08:00
+last_started_at: 2026-06-19T22:49:14+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_chain_runtime storage_metrics -- --nocapture && ./scripts/cargo-dev.sh test -p oasis7_net connection_lifecycle -- --nocapture && git diff --check"
+last_verified_at: 2026-06-20T13:18:25+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-20T13:16:15+08:00

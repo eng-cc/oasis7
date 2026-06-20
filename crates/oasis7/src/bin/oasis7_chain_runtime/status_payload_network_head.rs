@@ -38,7 +38,22 @@ pub(crate) struct ChainConsensusNetworkHeadStatus {
     pub(crate) total_stake: u64,
     pub(crate) stake_quorum_met: bool,
     pub(crate) freshness_ttl_ms: i64,
+    pub(crate) peer_heads: Vec<ChainConsensusPeerHeadStatus>,
     pub(crate) decision: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChainConsensusPeerHeadStatus {
+    pub(crate) node_id: String,
+    pub(crate) validator_id: Option<String>,
+    pub(crate) height: u64,
+    pub(crate) block_hash: String,
+    pub(crate) committed_at_ms: i64,
+    pub(crate) observed_at_ms: i64,
+    pub(crate) age_ms: i64,
+    pub(crate) fresh: bool,
+    pub(crate) execution_block_hash: Option<String>,
+    pub(crate) execution_state_root: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -57,12 +72,26 @@ pub(crate) fn build_network_head_status(
     let policy = readiness_policy(snapshot, loaded_network_tier_manifest);
     let required_peer_count = required_fresh_peer_heads(snapshot, loaded_network_tier_manifest);
     let mut stale_peer_count = 0usize;
+    let mut peer_heads = Vec::new();
     let mut buckets: BTreeMap<PeerHeadBucketKey, Vec<&NodePeerCommittedHead>> = BTreeMap::new();
     for peer_head in &snapshot.consensus.peer_heads {
         let age_ms = observed_at_unix_ms
             .saturating_sub(peer_head.observed_at_ms)
             .max(0);
-        if age_ms > policy.peer_head_ttl_ms {
+        let fresh = age_ms <= policy.peer_head_ttl_ms;
+        peer_heads.push(ChainConsensusPeerHeadStatus {
+            node_id: peer_head.node_id.clone(),
+            validator_id: peer_head.validator_id.clone(),
+            height: peer_head.height,
+            block_hash: peer_head.block_hash.clone(),
+            committed_at_ms: peer_head.committed_at_ms,
+            observed_at_ms: peer_head.observed_at_ms,
+            age_ms,
+            fresh,
+            execution_block_hash: peer_head.execution_block_hash.clone(),
+            execution_state_root: peer_head.execution_state_root.clone(),
+        });
+        if !fresh {
             stale_peer_count += 1;
             continue;
         }
@@ -167,6 +196,7 @@ pub(crate) fn build_network_head_status(
         total_stake: snapshot.consensus.total_stake,
         stake_quorum_met,
         freshness_ttl_ms: policy.peer_head_ttl_ms,
+        peer_heads,
         decision: decision.to_string(),
     }
 }
@@ -246,7 +276,7 @@ pub(crate) fn readiness_policy(
     let is_observer = snapshot.role.as_str() == "observer";
     let (peer_head_ttl_ms, max_network_height_lag, sync_stalled_after_ms) = match tier {
         "local_devnet" => (i64::MAX, 0, i64::MAX),
-        "public_testnet" => (10_000, 1, 30_000),
+        "public_testnet" => (30_000, 1, 30_000),
         "mainnet" => (5_000, if is_observer { 1 } else { 0 }, 15_000),
         _ => (PEER_HEAD_FRESHNESS_TTL_MS, 0, i64::MAX),
     };

@@ -95,6 +95,7 @@ fn build_chain_status_payload_marks_storage_challenge_network_degraded_not_ready
             protocol_retry_cooldown_peers: BTreeMap::new(),
             transport_retry_cooldown_peers: Vec::new(),
             request_peer_scores: BTreeMap::new(),
+            connection_events: Vec::new(),
             recent_errors: Vec::new(),
         },
         &network_head,

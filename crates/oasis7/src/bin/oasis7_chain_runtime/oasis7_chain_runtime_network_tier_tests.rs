@@ -262,6 +262,7 @@ fn replication_with_active_peers(peer_count: usize) -> super::ChainReplicationDe
         protocol_retry_cooldown_peers: BTreeMap::new(),
         transport_retry_cooldown_peers: Vec::new(),
         request_peer_scores: BTreeMap::new(),
+        connection_events: Vec::new(),
         recent_errors: Vec::new(),
     }
 }

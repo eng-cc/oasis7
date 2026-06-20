@@ -852,12 +852,24 @@ impl Libp2pNetwork {
                                         .lock()
                                         .expect("lock connected peers")
                                         .insert(peer_id);
+                                    let (connection_direction, connection_addr) = match &endpoint {
+                                        libp2p::core::connection::ConnectedPoint::Dialer {
+                                            address,
+                                            ..
+                                        } => ("outbound", address.to_string()),
+                                        libp2p::core::connection::ConnectedPoint::Listener {
+                                            send_back_addr,
+                                            ..
+                                        } => ("inbound", send_back_addr.to_string()),
+                                    };
                                     push_bounded_string_with_keyed_cooldown(
                                         &event_errors,
                                         &mut lifecycle_event_errors_at_ms,
                                         &mut lifecycle_event_errors_last_prune_at_ms,
                                         format!("connection-established:{peer_id}"),
-                                        format!("libp2p connection established peer={peer_id}"),
+                                        format!(
+                                            "libp2p connection established peer={peer_id} direction={connection_direction} addr={connection_addr}"
+                                        ),
                                         max_error_messages,
                                         "lock errors",
                                         now_ms(),
