@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game Visual Design"
+  short_description: "Game UI visual hierarchy review"
+  default_prompt: "Use $game-visual-design to review a game screen for visual hierarchy and readability."

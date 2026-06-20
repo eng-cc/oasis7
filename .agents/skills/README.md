@@ -35,6 +35,8 @@
 ## Domain-Specific Entry Points
 
 - 中文长篇背景叙事与世界观资产编排：`.agents/skills/epic-story-orchestrator-zh/SKILL.md`
+- 游戏玩家交互流程、状态反馈、输入/控制、错误恢复和可访问性审查：`.agents/skills/game-interaction-design/SKILL.md`
+- 游戏 UI 视觉层级、可读性、截图审查和 visual reference workflow：`.agents/skills/game-visual-design/SKILL.md`
 
 ## Workflow Execution Entry Points
 
