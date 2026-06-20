@@ -344,3 +344,12 @@ Example:
 - Expected Result: No whitespace/task-evidence regressions; identity manifests are internally consistent with source closure and CI receipts; full Rust workspace check remains green.
 - Actual Result: Pass. `git diff --check` produced no output; workflow lint passed; m1/m4/m5 identity checks passed with module counts 10/22/5; full Rust check passed, `Finished dev profile [unoptimized + debuginfo] target(s) in 53.62s`. Existing unused/dead-code warnings and `block v0.1.6` future-incompat note remain non-blocking.
 - Blocker / Next Action: push to PR #546 and let GitHub canonical Docker `collect-wasm-summaries` revalidate byte-level WASM hashes.
+
+## 2026-06-20 21:54:34 CST / tpm
+- 完成内容: Addressed actionable PR review feedback on wasm_build_suite environment mutation tests.
+- 遗留事项: push the review-fix commit, resolve/reply to review threads after push, and continue refreshed PR checks watch.
+- Action: Classified Codex automated PR review threads. The builtin WASM identity thread was valid and already fixed by the manifest repair. The `tools/wasm_build_suite/src/env_prefix_tests.rs` thread was valid; added a file-level mutex and made each environment-mutating test hold it across capture, mutation, validation, and drop-time restoration.
+- Validation Command: `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_build_suite/Cargo.toml`; `env -u RUSTC_WRAPPER cargo fmt --all -- --check`; `git diff --check`; `./scripts/pm/workflow-lint.sh --task-uid task_b71a91bfd6f34c098b6e91ecef3ff612 --phase current`; `./scripts/cargo-dev.sh check --workspace --all-targets`.
+- Expected Result: The review-reported env mutation race is serialized; targeted wasm_build_suite tests pass; full Rust workspace check remains green.
+- Actual Result: Pass. `wasm_build_suite` tests passed with 15 unit tests, 0 main tests, 3 integration tests, and 0 doc tests; fmt passed; `git diff --check` passed; workflow lint passed; full Rust check passed, `Finished dev profile [unoptimized + debuginfo] target(s) in 9.29s`. Existing warnings and `block v0.1.6` future-incompat note remain non-blocking.
+- Blocker / Next Action: commit/push review feedback fix, then explicitly resolve or reply to the two PR review threads.

@@ -1,6 +1,15 @@
 use super::*;
 use std::env;
 use std::ffi::OsStr;
+use std::sync::{Mutex, MutexGuard};
+
+static ENV_MUTATION_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_env_mutations() -> MutexGuard<'static, ()> {
+    ENV_MUTATION_LOCK
+        .lock()
+        .expect("env mutation test lock should not be poisoned")
+}
 
 fn set_env_var<K, V>(key: K, value: V)
 where
@@ -8,8 +17,8 @@ where
     V: AsRef<OsStr>,
 {
     // SAFETY: These tests mutate process environment in a scoped guard setup.
-    // They must not run concurrently with code that reads or writes the same
-    // environment variables.
+    // Each test holds ENV_MUTATION_LOCK before capture, mutation, validation,
+    // and restoration.
     unsafe {
         env::set_var(key, value);
     }
@@ -20,8 +29,8 @@ where
     K: AsRef<OsStr>,
 {
     // SAFETY: These tests mutate process environment in a scoped guard setup.
-    // They must not run concurrently with code that reads or writes the same
-    // environment variables.
+    // Each test holds ENV_MUTATION_LOCK before capture, mutation, validation,
+    // and restoration.
     unsafe {
         env::remove_var(key);
     }
@@ -54,6 +63,7 @@ impl Drop for EnvVarGuard {
 
 #[test]
 fn compile_time_guard_rejects_workspace_build_script_target() {
+    let _env_lock = lock_env_mutations();
     let _guard = EnvVarGuard::capture(wasm_env_key("VALIDATE_WORKSPACE_COMPILETIME"));
     let removed_old_brand_key = removed_old_brand_wasm_env("VALIDATE_WORKSPACE_COMPILETIME");
     let _removed_old_brand_guard = EnvVarGuard::capture(removed_old_brand_key.as_str());
@@ -88,6 +98,7 @@ fn compile_time_guard_rejects_workspace_build_script_target() {
 
 #[test]
 fn compile_time_guard_allows_external_proc_macro_package() {
+    let _env_lock = lock_env_mutations();
     let _guard = EnvVarGuard::capture(wasm_env_key("VALIDATE_WORKSPACE_COMPILETIME"));
     let removed_old_brand_key = removed_old_brand_wasm_env("VALIDATE_WORKSPACE_COMPILETIME");
     let _removed_old_brand_guard = EnvVarGuard::capture(removed_old_brand_key.as_str());
@@ -115,6 +126,7 @@ fn compile_time_guard_allows_external_proc_macro_package() {
 
 #[test]
 fn wasm_env_value_or_default_reads_oasis7_prefix() {
+    let _env_lock = lock_env_mutations();
     let _primary = EnvVarGuard::capture(wasm_env_key("BUILD_STD"));
     let removed_old_brand_key = removed_old_brand_wasm_env("BUILD_STD");
     let _removed_old_brand = EnvVarGuard::capture(removed_old_brand_key.as_str());
@@ -126,6 +138,7 @@ fn wasm_env_value_or_default_reads_oasis7_prefix() {
 
 #[test]
 fn wasm_env_value_or_default_rejects_removed_old_brand_prefix() {
+    let _env_lock = lock_env_mutations();
     let _primary = EnvVarGuard::capture(wasm_env_key("BUILD_STD_COMPONENTS"));
     let removed_old_brand_key = removed_old_brand_wasm_env("BUILD_STD_COMPONENTS");
     let _removed_old_brand = EnvVarGuard::capture(removed_old_brand_key.as_str());
