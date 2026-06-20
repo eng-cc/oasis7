@@ -4,8 +4,8 @@
 
 ## 从这里开始
 - 想确认 launcher 当前面向玩家/开发者的整体可用性、分发与 release readiness：先读 `game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md`
-- 想确认本地 launcher/playtest 如何启动、哪些路径是当前 operator 入口：先读 `../../README.md` 与 `../../project.md`，再按具体问题进入本页专题簇
-- 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读 `../../project.md` 当前状态，再按 `.pm` task trace 进入最新任务证据
+- 想确认本地 launcher/playtest 如何启动、哪些路径是当前 operator 入口：先读 `../README.md` 与 `../project.md`，再按具体问题进入本页专题簇
+- 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读 `../project.md` 当前状态，再按 `.pm` task trace 进入最新任务证据
 - 想确认 Web / native control plane、console、settings、feedback、transfer 的兼容边界：先读 `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md`
 - 想确认 blockchain explorer、public chain、address / contract / assets / mempool 或 mainnet-grade rebuild：先读 `game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.prd.md`
 - 想确认 launcher 和 chain runtime / execution world dir / stale world recovery 的边界：先读 `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`，再按需读 `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
