@@ -11,6 +11,8 @@ source_refs:
   - .agents/skills
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/engineering/project.md
+  - doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.project.md
 related_prd: []
 acceptance:
   - "Inventory repo-owned skills and assess whether each has a useful trigger and current workflow purpose."
