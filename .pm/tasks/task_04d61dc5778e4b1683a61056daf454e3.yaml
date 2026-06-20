@@ -1,0 +1,37 @@
+task_uid: task_04d61dc5778e4b1683a61056daf454e3
+title: "doc hotspot path aftercare"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-doc-audit-governance
+execution_log_path: .pm/tasks/task_04d61dc5778e4b1683a61056daf454e3.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - doc/world-simulator/README.md
+  - doc/world-simulator/prd.index.md
+  - doc/game/README.md
+  - doc/game/prd.index.md
+related_prd:
+  - PRD-ENGINEERING-025
+  - PRD-ENGINEERING-033
+acceptance:
+  - "Assess whether another doc-directory audit governance round is warranted."
+  - "Record scope, risk boundaries, role-slice requirements, and recommended next phase before broad edits."
+  - "Add canonical landing pages for the re-identified hotspot paths doc/world-simulator/launcher/ and doc/game/gameplay/."
+  - "Update module README/prd.index and engineering traceability without broad historical evidence rewrites."
+handoff_to:
+  - repository_health_engineer
+  - gameplay_designer
+updated_at: 2026-06-20T14:58:08+08:00
+last_started_at: 2026-06-20T14:32:34+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/doc-governance-check.sh
+last_verified_at: 2026-06-20T14:58:07+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-20T14:58:08+08:00

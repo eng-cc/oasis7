@@ -17,6 +17,7 @@
 - 想先回答模块在做什么、能力边界是什么：先读 `doc/world-simulator/prd.md`
 - 想先回答当前在推进什么、谁在负责、哪里被阻断：先读 `doc/world-simulator/project.md`
 - 想先进入 Viewer 热点子域，而不是直接面对近 300 份 Viewer 文档：先读 `doc/world-simulator/viewer/README.md`
+- 想先进入 Launcher 热点子域，而不是直接面对 80+ 份启动器文档：先读 `doc/world-simulator/launcher/README.md`
 - 想直接执行 Viewer / Web 闭环 / 操作步骤：先读 `doc/world-simulator/viewer/viewer-manual.manual.md`
 - 想继续按文件名或子域精确下钻：直接使用下方完整清单
 
@@ -27,6 +28,7 @@
 - `doc/world-simulator/viewer/viewer-visual-system-review-card-2026-06-05.design.md`：本轮 Viewer 视觉系统大项的模型视觉 review card，引用 desktop/mobile/CJK/diagnostics/pixel-world 截图矩阵与 verdict。
 - `doc/world-simulator/viewer/viewer-manual.manual.md`：Viewer / Web 闭环 / operator 手册，不在下方 PRD 三件套长表中展开。
 - `doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`：pixel-world 商业化下一轮 bounded brainstorming，聚焦玩家因果、行动反馈、生产可读性与后续 runtime/viewer 协议候选。
+- `doc/world-simulator/launcher/README.md`：`launcher/` 热点子域 landing page，适合先做簇级分流，再决定进入 release/distribution、control plane、explorer、runtime 边界或 self-guided 专题。
 - `doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md`：`provider agent direct connect` 的正式 review，适合在判断双模式产品完整性、实施差距和后续 remediation 时定向进入。
 - `doc/world-simulator/llm/provider-agent-dual-mode-contract-2026-03-16.md`：`Local Provider` 双轨模式的 observation / action contract supporting spec。
 - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`：`Local Provider` `P0` 默认 profile supporting spec，用于解释 provider-side 行为约束与 parity 口径。
