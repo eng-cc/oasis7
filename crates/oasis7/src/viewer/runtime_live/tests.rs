@@ -47,6 +47,20 @@ fn read_runtime_live_response(reader: &mut BufReader<TcpStream>) -> ViewerRespon
     serde_json::from_str(line.trim_end()).expect("decode response")
 }
 
+fn seed_agent_chat_oc(server: &mut ViewerRuntimeLiveServer, agent_id: &str) {
+    server
+        .world
+        .set_main_token_supply(crate::runtime::MainTokenSupplyState {
+            total_supply: 1_000_000,
+            circulating_supply: 1_000_000,
+            ..crate::runtime::MainTokenSupplyState::default()
+        });
+    server
+        .world
+        .set_main_token_account_balance(agent_id, 1, 0)
+        .expect("seed agent chat OC");
+}
+
 fn test_writer_pair() -> (BufWriter<TcpStream>, TcpStream) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let addr = listener.local_addr().expect("listener local addr");
@@ -379,13 +393,22 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
 
     let server_addr = addr.to_string();
     thread::spawn(move || {
-        let server = ViewerRuntimeLiveServer::new(
+        let mut server = ViewerRuntimeLiveServer::new(
             ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
                 .with_bind_addr(server_addr)
                 .with_decision_mode(ViewerLiveDecisionMode::Llm)
                 .with_agent_chat_echo_enabled(true),
         )
         .expect("create server");
+        let agent_id = server
+            .world
+            .state()
+            .agents
+            .keys()
+            .next()
+            .cloned()
+            .expect("seed agent");
+        seed_agent_chat_oc(&mut server, agent_id.as_str());
         server.run().expect("run server");
     });
     wait_for_runtime_live_server(addr.to_string().as_str());

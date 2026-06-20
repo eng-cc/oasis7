@@ -1,19 +1,5 @@
 use super::*;
 
-fn seed_agent_chat_oc(server: &mut ViewerRuntimeLiveServer, agent_id: &str) {
-    server
-        .world
-        .set_main_token_supply(crate::runtime::MainTokenSupplyState {
-            total_supply: 1_000_000,
-            circulating_supply: 1_000_000,
-            ..crate::runtime::MainTokenSupplyState::default()
-        });
-    server
-        .world
-        .set_main_token_account_balance(agent_id, 1, 0)
-        .expect("seed agent chat OC");
-}
-
 #[test]
 fn runtime_agent_chat_provider_mode_reports_feedback_failure() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
@@ -384,6 +370,7 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
         .next()
         .cloned()
         .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key, private_key) = test_signer(21);
     let request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
