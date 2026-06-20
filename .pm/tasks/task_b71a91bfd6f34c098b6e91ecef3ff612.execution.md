@@ -277,7 +277,7 @@ Example:
 - Task UID: task_b71a91bfd6f34c098b6e91ecef3ff612
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-2024-edition-migration
 - Source Branch: task/engineering-rust-2024-edition-migration
-- Source Head: 6e5f5b2
+- Source Head: 4c9f8bd5f09aaa19b1a1fb5c70f880a1f09dc77d
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: Rust 2024 edition migration across owned `crates/**`, `tools/**`, wasm templates/fixtures, `scripts/pre-commit.sh`, `doc/scripts/precommit/**`, and current task `.pm` evidence.
 - Role Selection Basis: changed paths and task history require repository health, QA, runtime, and WASM platform boundaries; no product/gameplay/visual/liveops external-message surface changed.
