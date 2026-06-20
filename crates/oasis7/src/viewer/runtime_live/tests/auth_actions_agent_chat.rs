@@ -442,7 +442,10 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
 #[test]
 fn runtime_agent_chat_requires_starter_oc_balance() {
     let _guard = lock_test_llm_env();
-    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    // SAFETY: This test holds the runtime LLM env lock while mutating process env.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    }
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
