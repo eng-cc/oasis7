@@ -1,0 +1,24 @@
+task_uid: task_f440263378b34628a2f0f81c3eaec022
+title: "Fix code health findings 1 and 3"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-code-health-fix-1-3
+execution_log_path: .pm/tasks/task_f440263378b34628a2f0f81c3eaec022.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Fix code health finding 1 doc-governance absolute path blocker and finding 3 runtime_live mapping fallback semantics with role-attributed evidence and fresh verification."
+handoff_to: []
+updated_at: 2026-06-20T11:34:22+08:00
+last_started_at: 2026-06-19T23:26:21+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && env -u RUSTC_WRAPPER cargo test -p oasis7 viewer::runtime_live::mapping::tests:: --lib && env -u RUSTC_WRAPPER cargo fmt -p oasis7 -- --check && git diff --check"
+last_verified_at: 2026-06-20T11:34:20+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-20T11:34:22+08:00

@@ -1,6 +1,6 @@
 # XiaoHongShu Carousel Storyboard: AI Economy Report
 
-Reference material: `/Users/scc/Downloads/deep-research-report.md`
+Reference material: external research notes (not committed; local source path intentionally omitted for repository portability; extraction boundary recorded in `.pm/tasks/task_0745838e8c6546a09faba1ce8c602e33.execution.md`).
 
 Format: 1080x1440 PNG, 8 pages.
 
