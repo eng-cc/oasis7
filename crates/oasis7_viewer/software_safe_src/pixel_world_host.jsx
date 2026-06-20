@@ -1614,7 +1614,7 @@ export function PixelWorldHost(props) {
       <Show when={renderState()}>
         <PixelWorldCommercialHud locale={locale} renderState={renderState} />
       </Show>
-      <Show when={rendererStatus() !== "fallback"}>
+      <Show when={rendererStatus() !== "fallback" && rendererStatus() !== "unavailable"}>
         <PixelWorldCanvasRenderer
           locale={locale}
           renderInput={renderInput}

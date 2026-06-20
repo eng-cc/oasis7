@@ -7353,7 +7353,7 @@ function PixelWorldHost(props) {
     }), _el$216);
     insert(_el$169, createComponent(Show, {
       get when() {
-        return rendererStatus() !== "fallback";
+        return memo(() => rendererStatus() !== "fallback")() && rendererStatus() !== "unavailable";
       },
       get children() {
         return createComponent(PixelWorldCanvasRenderer, {

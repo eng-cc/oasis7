@@ -498,6 +498,88 @@ fn runtime_agent_chat_requires_starter_oc_balance() {
 }
 
 #[test]
+fn runtime_agent_chat_allows_zero_balance_after_starter_oc_claim() {
+    let _guard = lock_test_llm_env();
+    // SAFETY: This test holds the runtime LLM env lock while mutating process env.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    }
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(39);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        38,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    let starter_oc_request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: crate::viewer::ACTION_CLAIM_STARTER_OC.to_string(),
+            target_agent_id: agent_id.clone(),
+            actor_agent_id: None,
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        39,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .handle_gameplay_action(starter_oc_request)
+        .expect("starter OC claim accepted");
+    server.world.step().expect("apply starter OC claim");
+    assert!(
+        server
+            .world
+            .state()
+            .starter_oc_claims
+            .contains_key(agent_id.as_str())
+    );
+    server
+        .world
+        .set_main_token_account_balance(agent_id.as_str(), 0, 0)
+        .expect("simulate spent starter OC");
+
+    let chat_request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello after spent OC".to_string(),
+            intent_tick: Some(40),
+            intent_seq: Some(40),
+        },
+        40,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let ack = server
+        .handle_agent_chat(chat_request)
+        .expect("claimed starter OC should keep chat gate open");
+    assert_eq!(ack.agent_id, agent_id);
+}
+
+#[test]
 fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
     let _guard = lock_test_llm_env();
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
