@@ -10,7 +10,8 @@ source_refs:
   - AGENTS.md
   - .agents/skills/writing-repo-owned-skills/SKILL.md
   - .agents/roles/game_visual_interaction_designer.md
-doc_refs: []
+doc_refs:
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Create repo-owned game interaction and visual design skills under .agents/skills with concise trigger wording, source attribution, role-card integration, and passing skill/governance verification."
