@@ -196,8 +196,9 @@ mod execution_bridge {
 }
 
 const DEFAULT_RECENT_MINT_RECORD_LIMIT: usize = 20;
+const STORAGE_METRICS_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct RuntimePaths {
     runtime_root: PathBuf,
     execution_bridge_state_path: PathBuf,
@@ -209,6 +210,82 @@ struct RuntimePaths {
     reward_runtime_distfs_probe_state_path: PathBuf,
     reward_runtime_report_dir: PathBuf,
     reward_runtime_storage_metrics_path: PathBuf,
+}
+
+#[derive(Debug)]
+struct StorageMetricsWorker {
+    stop_tx: Sender<()>,
+    degraded_reason_tx: Sender<Option<String>>,
+    join_handle: Option<thread::JoinHandle<()>>,
+}
+
+fn start_storage_metrics_worker(
+    metrics: storage_metrics::SharedStorageMetrics,
+    paths: RuntimePaths,
+    profile: StorageProfile,
+) -> StorageMetricsWorker {
+    let (stop_tx, stop_rx) = mpsc::channel::<()>();
+    let (degraded_reason_tx, degraded_reason_rx) = mpsc::channel::<Option<String>>();
+    let join_handle = thread::spawn(move || {
+        let mut current_degraded_reason: Option<String> = None;
+        let mut last_refresh = Instant::now()
+            .checked_sub(STORAGE_METRICS_REFRESH_INTERVAL)
+            .unwrap_or_else(Instant::now);
+        loop {
+            if stop_rx.try_recv().is_ok() {
+                return;
+            }
+            while let Ok(degraded_reason) = degraded_reason_rx.try_recv() {
+                current_degraded_reason = degraded_reason.clone();
+                if let Err(err) = storage_metrics::update_shared_storage_metrics_degraded_reason(
+                    &metrics,
+                    degraded_reason,
+                ) {
+                    emit_stderr_or_event(
+                        Level::WARN,
+                        format!("warning: storage metrics degraded reason update failed: {err}")
+                            .as_str(),
+                        "storage metrics degraded reason update failed",
+                    );
+                }
+            }
+            if last_refresh.elapsed() >= STORAGE_METRICS_REFRESH_INTERVAL {
+                if let Err(err) = storage_metrics::refresh_shared_storage_metrics(
+                    &metrics,
+                    &paths,
+                    profile,
+                    current_degraded_reason.clone(),
+                ) {
+                    emit_stderr_or_event(
+                        Level::WARN,
+                        format!("warning: storage metrics refresh failed: {err}").as_str(),
+                        "storage metrics refresh failed",
+                    );
+                }
+                last_refresh = Instant::now();
+            }
+            thread::sleep(Duration::from_millis(300));
+        }
+    });
+    StorageMetricsWorker {
+        stop_tx,
+        degraded_reason_tx,
+        join_handle: Some(join_handle),
+    }
+}
+
+fn update_storage_metrics_degraded_reason(
+    worker: &StorageMetricsWorker,
+    degraded_reason: Option<String>,
+) {
+    let _ = worker.degraded_reason_tx.send(degraded_reason);
+}
+
+fn stop_storage_metrics_worker(worker: &mut StorageMetricsWorker) {
+    let _ = worker.stop_tx.send(());
+    if let Some(join_handle) = worker.join_handle.take() {
+        let _ = join_handle.join();
+    }
 }
 
 fn main() {
@@ -420,23 +497,16 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     };
     let reward_runtime_metrics = init_shared_metrics(&reward_runtime_config);
     let storage_metrics = storage_metrics::init_shared_storage_metrics(options.storage_profile);
-    if let Err(err) = storage_metrics::refresh_shared_storage_metrics(
-        &storage_metrics,
-        &paths,
-        options.storage_profile,
-        None,
-    ) {
-        emit_stderr_or_event(
-            Level::WARN,
-            format!("warning: initial storage metrics refresh failed: {err}").as_str(),
-            "initial storage metrics refresh failed",
-        );
-    }
     let mut reward_runtime_worker = start_reward_runtime_worker(
         Arc::clone(&runtime),
         reward_runtime_config,
         Arc::clone(&reward_runtime_metrics),
     )?;
+    let mut storage_metrics_worker = start_storage_metrics_worker(
+        Arc::clone(&storage_metrics),
+        paths.clone(),
+        options.storage_profile,
+    );
     let feedback_submit_signer = build_feedback_submit_signer(options.node_id.as_str(), &keypair)?;
     let effective_p2p_policy = build_node_network_policy(&options);
     let (status_host, status_port) =
@@ -467,13 +537,12 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
 
     let mut last_error = String::new();
     let mut current_degraded_reason: Option<String> = None;
-    let mut last_storage_metrics_refresh = Instant::now()
-        .checked_sub(Duration::from_secs(2))
-        .unwrap_or_else(Instant::now);
+    let mut last_storage_metrics_degraded_reason: Option<String> = None;
     loop {
         if let Some(server_err) = poll_chain_status_server_error(&mut status_server)? {
             stop_chain_status_server(&mut status_server);
             stop_reward_runtime_worker(&mut reward_runtime_worker);
+            stop_storage_metrics_worker(&mut storage_metrics_worker);
             stop_runtime(&runtime);
             return Err(server_err);
         }
@@ -481,6 +550,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             if let Some(worker_err) = poll_worker_error(worker)? {
                 stop_chain_status_server(&mut status_server);
                 stop_reward_runtime_worker(&mut reward_runtime_worker);
+                stop_storage_metrics_worker(&mut storage_metrics_worker);
                 stop_runtime(&runtime);
                 return Err(worker_err);
             }
@@ -499,20 +569,12 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
                 }
             }
         }
-        if last_storage_metrics_refresh.elapsed() >= Duration::from_secs(1) {
-            if let Err(err) = storage_metrics::refresh_shared_storage_metrics(
-                &storage_metrics,
-                &paths,
-                options.storage_profile,
+        if current_degraded_reason != last_storage_metrics_degraded_reason {
+            last_storage_metrics_degraded_reason = current_degraded_reason.clone();
+            update_storage_metrics_degraded_reason(
+                &storage_metrics_worker,
                 current_degraded_reason.clone(),
-            ) {
-                emit_stderr_or_event(
-                    Level::WARN,
-                    format!("warning: storage metrics refresh failed: {err}").as_str(),
-                    "storage metrics refresh failed",
-                );
-            }
-            last_storage_metrics_refresh = Instant::now();
+            );
         }
 
         thread::sleep(Duration::from_millis(300));

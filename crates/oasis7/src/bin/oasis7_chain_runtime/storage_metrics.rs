@@ -96,6 +96,8 @@ struct FileStamp {
 pub(super) struct SharedStorageMetricsState {
     snapshot: StorageMetricsSnapshot,
     execution_ref_count_cache: ExecutionRefCountCache,
+    storage_collection_degraded_reason: Option<String>,
+    runtime_degraded_reason: Option<String>,
 }
 
 pub(super) type SharedStorageMetrics = Arc<Mutex<SharedStorageMetricsState>>;
@@ -104,6 +106,8 @@ pub(super) fn init_shared_storage_metrics(profile: StorageProfile) -> SharedStor
     Arc::new(Mutex::new(SharedStorageMetricsState {
         snapshot: StorageMetricsSnapshot::empty(profile),
         execution_ref_count_cache: ExecutionRefCountCache::default(),
+        storage_collection_degraded_reason: None,
+        runtime_degraded_reason: None,
     }))
 }
 
@@ -123,21 +127,48 @@ pub(super) fn refresh_shared_storage_metrics(
     profile: StorageProfile,
     degraded_reason: Option<String>,
 ) -> Result<StorageMetricsSnapshot, String> {
-    let mut locked = metrics
-        .lock()
-        .map_err(|_| "storage metrics lock poisoned".to_string())?;
-    let snapshot = collect_storage_metrics(
-        paths,
-        profile,
-        degraded_reason,
-        &mut locked.execution_ref_count_cache,
+    let mut execution_ref_count_cache = {
+        let mut locked = metrics
+            .lock()
+            .map_err(|_| "storage metrics lock poisoned".to_string())?;
+        std::mem::take(&mut locked.execution_ref_count_cache)
+    };
+    let snapshot = collect_storage_metrics(paths, profile, None, &mut execution_ref_count_cache);
+    let storage_collection_degraded_reason = snapshot.degraded_reason.clone();
+    let mut snapshot = snapshot;
+    snapshot.degraded_reason = merge_degraded_reasons(
+        storage_collection_degraded_reason.clone(),
+        degraded_reason.clone(),
     );
-    locked.snapshot = snapshot.clone();
+    {
+        let mut locked = metrics
+            .lock()
+            .map_err(|_| "storage metrics lock poisoned".to_string())?;
+        locked.execution_ref_count_cache = execution_ref_count_cache;
+        locked.storage_collection_degraded_reason = storage_collection_degraded_reason;
+        locked.runtime_degraded_reason = degraded_reason;
+        locked.snapshot = snapshot.clone();
+    }
     persist_storage_metrics_snapshot(
         paths.reward_runtime_storage_metrics_path.as_path(),
         &snapshot,
     )?;
     Ok(snapshot)
+}
+
+pub(super) fn update_shared_storage_metrics_degraded_reason(
+    metrics: &SharedStorageMetrics,
+    degraded_reason: Option<String>,
+) -> Result<(), String> {
+    let mut locked = metrics
+        .lock()
+        .map_err(|_| "storage metrics lock poisoned".to_string())?;
+    locked.runtime_degraded_reason = degraded_reason;
+    locked.snapshot.degraded_reason = merge_degraded_reasons(
+        locked.storage_collection_degraded_reason.clone(),
+        locked.runtime_degraded_reason.clone(),
+    );
+    Ok(())
 }
 
 pub(super) fn collect_storage_metrics(
@@ -232,6 +263,18 @@ pub(super) fn collect_storage_metrics(
         snapshot.degraded_reason = degraded_reason;
     }
     snapshot
+}
+
+fn merge_degraded_reasons(
+    storage_collection_degraded_reason: Option<String>,
+    runtime_degraded_reason: Option<String>,
+) -> Option<String> {
+    match (storage_collection_degraded_reason, runtime_degraded_reason) {
+        (Some(storage), Some(runtime)) => Some(format!("{storage}; {runtime}")),
+        (Some(storage), None) => Some(storage),
+        (None, Some(runtime)) => Some(runtime),
+        (None, None) => None,
+    }
 }
 
 fn persist_storage_metrics_snapshot(
@@ -574,6 +617,7 @@ mod tests {
     use super::super::RuntimePaths;
     use super::{
         collect_storage_metrics, init_shared_storage_metrics, refresh_shared_storage_metrics,
+        snapshot_storage_metrics, update_shared_storage_metrics_degraded_reason,
         ExecutionRefCountCache,
     };
 
@@ -828,6 +872,34 @@ mod tests {
             Some("runtime degraded".to_string())
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn update_shared_storage_metrics_degraded_reason_updates_cached_snapshot() {
+        let shared = init_shared_storage_metrics(StorageProfile::DevLocal);
+        {
+            let mut locked = shared.lock().expect("lock shared metrics");
+            locked.storage_collection_degraded_reason = Some("storage degraded".to_string());
+            locked.snapshot.degraded_reason = Some("storage degraded".to_string());
+        }
+        update_shared_storage_metrics_degraded_reason(
+            &shared,
+            Some("runtime degraded".to_string()),
+        )
+        .expect("degraded reason update should succeed");
+        let snapshot = snapshot_storage_metrics(&shared);
+        assert_eq!(
+            snapshot.degraded_reason.as_deref(),
+            Some("storage degraded; runtime degraded")
+        );
+
+        update_shared_storage_metrics_degraded_reason(&shared, None)
+            .expect("degraded reason clear should succeed");
+        let snapshot = snapshot_storage_metrics(&shared);
+        assert_eq!(
+            snapshot.degraded_reason.as_deref(),
+            Some("storage degraded")
+        );
     }
 
     #[test]

@@ -11,6 +11,7 @@ fn classify_transport_stability_marks_repeated_transport_errors_unstable() {
             protocol_retry_cooldown_peers: BTreeMap::new(),
             transport_retry_cooldown_peers: Vec::new(),
             request_peer_scores: BTreeMap::new(),
+            connection_events: Vec::new(),
             recent_errors: vec![
                 "libp2p connection closed peer=peer-a".to_string(),
                 "libp2p connection closed peer=peer-a".to_string(),
@@ -57,6 +58,7 @@ fn classify_transport_stability_ignores_reachability_diagnostics() {
             )]),
             transport_retry_cooldown_peers: Vec::new(),
             request_peer_scores: BTreeMap::new(),
+            connection_events: Vec::new(),
             recent_errors: vec![
                 "libp2p autonat event OutboundProbe(Error NoServer)".to_string(),
                 "libp2p autonat event OutboundProbe(Error UnsupportedProtocols)".to_string(),
@@ -98,6 +100,7 @@ fn classify_transport_stability_recovers_when_active_request_peer_is_healthy() {
             protocol_retry_cooldown_peers: BTreeMap::new(),
             transport_retry_cooldown_peers: Vec::new(),
             request_peer_scores: BTreeMap::from([("peer-a".to_string(), 100)]),
+            connection_events: Vec::new(),
             recent_errors: vec![
                 "request failed: Timeout protocol=/aw/node/replication/fetch-commit/1.0.0 peer=peer-b".to_string(),
                 "request failed: Io(Custom { kind: UnexpectedEof, error: Eof { name: \"map\" } }) protocol=/aw/node/replication/fetch-commit/head/1.0.0 peer=peer-b".to_string(),
@@ -130,6 +133,7 @@ fn classify_transport_stability_keeps_request_errors_blocking_without_requestabl
             protocol_retry_cooldown_peers: BTreeMap::new(),
             transport_retry_cooldown_peers: vec!["peer-a".to_string()],
             request_peer_scores: BTreeMap::from([("peer-a".to_string(), 100)]),
+            connection_events: Vec::new(),
             recent_errors: vec![
                 "request failed: Timeout protocol=/aw/node/replication/fetch-commit/1.0.0 peer=peer-a".to_string(),
                 "request failed: Io(Custom { kind: UnexpectedEof, error: Eof { name: \"map\" } }) protocol=/aw/node/replication/fetch-commit/head/1.0.0 peer=peer-a".to_string(),

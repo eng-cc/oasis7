@@ -255,6 +255,7 @@ fn assert_chain_status_payload_consensus_health_metrics() {
         protocol_retry_cooldown_peers: BTreeMap::new(),
         transport_retry_cooldown_peers: vec!["peer-a".to_string()],
         request_peer_scores: BTreeMap::new(),
+        connection_events: Vec::new(),
         recent_errors: vec!["request failed: Timeout".to_string()],
     };
 
@@ -681,6 +682,7 @@ fn build_chain_status_payload_marks_peer_head_unavailable_not_ready() {
             protocol_retry_cooldown_peers: BTreeMap::new(),
             transport_retry_cooldown_peers: Vec::new(),
             request_peer_scores: BTreeMap::new(),
+            connection_events: Vec::new(),
             recent_errors: Vec::new(),
         },
         &network_head,
@@ -874,6 +876,7 @@ fn build_chain_status_payload_marks_validator_unknown_reachability_not_ready() {
             protocol_retry_cooldown_peers: BTreeMap::new(),
             transport_retry_cooldown_peers: Vec::new(),
             request_peer_scores: BTreeMap::new(),
+            connection_events: Vec::new(),
             recent_errors: Vec::new(),
         },
         &network_head,

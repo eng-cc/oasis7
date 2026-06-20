@@ -20,7 +20,21 @@ pub(super) struct ChainReplicationDebugStatus {
     pub(super) protocol_retry_cooldown_peers: BTreeMap<String, Vec<String>>,
     pub(super) transport_retry_cooldown_peers: Vec<String>,
     pub(super) request_peer_scores: BTreeMap<String, u8>,
+    pub(super) connection_events: Vec<ChainConnectionEventStatus>,
     pub(super) recent_errors: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainConnectionEventStatus {
+    pub(super) event: String,
+    pub(super) peer_id: Option<String>,
+    pub(super) direction: Option<String>,
+    pub(super) reason: Option<String>,
+    pub(super) protocol: Option<String>,
+    pub(super) error: Option<String>,
+    pub(super) num_established: Option<u32>,
+    pub(super) active_path: Option<String>,
+    pub(super) raw: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -548,6 +562,9 @@ pub(super) fn build_chain_replication_debug_status(
     transport_retry_cooldown_peers.sort();
     transport_retry_cooldown_peers.dedup();
 
+    let connection_events =
+        build_connection_event_statuses(debug_snapshot.recent_errors.as_slice());
+
     ChainReplicationDebugStatus {
         local_peer_id: debug_snapshot.local_peer_id,
         connected_peers: debug_snapshot.connected_peers,
@@ -556,8 +573,98 @@ pub(super) fn build_chain_replication_debug_status(
         protocol_retry_cooldown_peers,
         transport_retry_cooldown_peers,
         request_peer_scores: debug_snapshot.request_peer_scores.into_iter().collect(),
+        connection_events,
         recent_errors: debug_snapshot.recent_errors,
     }
+}
+
+fn build_connection_event_statuses(recent_errors: &[String]) -> Vec<ChainConnectionEventStatus> {
+    recent_errors
+        .iter()
+        .filter_map(|raw| parse_connection_event_status(raw.as_str()))
+        .collect()
+}
+
+fn parse_connection_event_status(raw: &str) -> Option<ChainConnectionEventStatus> {
+    let event = if raw.contains("libp2p connection established") {
+        "connection_established"
+    } else if raw.contains("libp2p connection closed") {
+        "connection_closed"
+    } else if raw.contains("libp2p redundant connections pruned") {
+        "redundant_connections_pruned"
+    } else if raw.contains("libp2p inbound failure") {
+        "inbound_failure"
+    } else if raw.contains("libp2p dial failed") {
+        "dial_failed"
+    } else if raw.contains("request failed:") {
+        "request_failed"
+    } else if raw.contains("peer record request failed") {
+        "peer_record_request_failed"
+    } else {
+        return None;
+    };
+    let direction = if let Some(direction) = extract_key_value(raw, "direction=") {
+        Some(direction)
+    } else if raw.contains(" inbound ") || raw.contains(" inbound failure") {
+        Some("inbound".to_string())
+    } else if raw.contains(" outbound ") || raw.contains("outbound failure") {
+        Some("outbound".to_string())
+    } else if raw.contains("request failed:") {
+        Some("request".to_string())
+    } else {
+        None
+    };
+    Some(ChainConnectionEventStatus {
+        event: event.to_string(),
+        peer_id: extract_peer_id(raw),
+        direction,
+        reason: extract_key_value(raw, "reason="),
+        protocol: extract_key_value(raw, "protocol="),
+        error: extract_connection_error(raw),
+        num_established: extract_key_value(raw, "num_established=")
+            .and_then(|value| value.parse::<u32>().ok()),
+        active_path: extract_key_value(raw, "active_path="),
+        raw: raw.to_string(),
+    })
+}
+
+fn extract_key_value(raw: &str, key: &str) -> Option<String> {
+    let start = raw.find(key)? + key.len();
+    let value = raw[start..].split_whitespace().next()?;
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.trim_matches('"').to_string())
+    }
+}
+
+fn extract_peer_id(raw: &str) -> Option<String> {
+    extract_key_value(raw, "peer=").or_else(|| {
+        let start = raw.find("PeerId(\"")? + "PeerId(\"".len();
+        let rest = &raw[start..];
+        let end = rest.find("\")")?;
+        Some(rest[..end].to_string())
+    })
+}
+
+fn extract_connection_error(raw: &str) -> Option<String> {
+    if let Some(value) = raw.strip_prefix("request failed: ") {
+        return value
+            .split(" protocol=")
+            .next()
+            .map(|part| part.trim().to_string())
+            .filter(|part| !part.is_empty());
+    }
+    if let Some(start) = raw.find("): ") {
+        return Some(raw[start + 3..].trim().to_string());
+    }
+    if let Some(value) = raw.strip_prefix("libp2p peer record request failed: ") {
+        return Some(value.trim().to_string());
+    }
+    if let Some(value) = raw.strip_prefix("libp2p dial failed: ") {
+        return Some(value.trim().to_string());
+    }
+    None
 }
 
 pub(super) fn poll_chain_status_server_error(

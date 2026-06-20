@@ -7,6 +7,7 @@
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] testnet-five-node-health-remediation (PRD-P2P-001/003/028) [test_tier_required]: 修复五节点 public_testnet 健康检查暴露的 storage metrics 主循环阻塞、peer-head TTL 抖动和 libp2p 连接诊断不足问题；storage metrics 改为后台刷新和缓存快照，public_testnet peer-head TTL 提升至 30s，并补充 per-peer head 与 connection event 状态字段。 Trace: .pm/tasks/task_082d3f35aee2436c97ba2a629ec8437a.yaml
 - [x] p2p-public-testnet-package-release-retention (PRD-P2P-001/003) [test_tier_required]: 清理 ECS storage 节点 package 残留后，把标准 public testnet package upgrade 流程改为保留 current、previous-current 和最新 release 窗口，并补充 operator 上传/tmp 清理职责与受保护路径。 Trace: .pm/tasks/task_f74921a3093843c4bd7ae31232fdbb20.yaml
 - [x] p2p-environment-terminology-guard (PRD-P2P-028) [test_tier_required]: 加强 active 环境 / network-tier 文档中的 legacy `shared_devnet` / shared-network 边界扫描，避免被误读为当前 `public_testnet`、mainnet 或公开上线证据。 Trace: .pm/tasks/task_d5247a8f051443c38a6d551ab75efac8.yaml
 - [x] p2p-replication-transport-gap-sync-recovery (PRD-P2P-001/003/028) [test_tier_required]: 修复 public testnet replication transport / gap-sync / storage challenge 多轮 live degraded 根因，收口 fetch-commit route budget、active transport request fallback、provider publication best-effort、empty-provider lookup generic fallback 与 consensus gossip best-effort publish，并形成多节点健康检查/升级验证链路。 Trace: .pm/tasks/task_c612861fd1fe4187b789ceff61a6d0f7.yaml
