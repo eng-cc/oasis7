@@ -322,3 +322,25 @@ Example:
 - Expected Result: Branch pushes cleanly and a normal PR is created with local preflight summary and passed local role review evidence.
 - Actual Result: Created PR `https://github.com/eng-cc/oasis7/pull/546`; preflight status passed; local role review status passed; recommended required command is the full `./scripts/ci-tests.sh required` matrix for runtime/launcher/consensus/distfs/node/net/viewer/wasm/launcher-web scope.
 - Blocker / Next Action: PR purpose is `normal_pr_ci_watch`; continue watching required checks, mergeability, comments, and review threads, treating `REVIEW_REQUIRED`/`BEHIND` as informational unless GitHub reports an actual gate blocker.
+
+## 2026-06-20 21:43:20 CST / tpm
+- 完成内容: Investigated and patched PR Wasm Determinism Gate failures caused by stale builtin WASM manifests after Rust 2024/rustfmt source changes.
+- 遗留事项: rerun local checks, commit/push the manifest repair, then watch the refreshed PR checks.
+- Action: Parsed GitHub Actions run `27872339873` canonical Docker build logs for PR #546 and updated tracked builtin WASM hash/identity manifests for m1, m4, and m5.
+- Validation Command: `gh pr checks 546 --repo eng-cc/oasis7`; `gh run view 27872339873 --repo eng-cc/oasis7 --log`; generated temporary build receipts from CI log output; `env -u RUSTC_WRAPPER cargo run --quiet -p oasis7_distfs --features sync-builtin-wasm-identity --bin sync_builtin_wasm_identity -- ... --check` for m1, m4, and m5.
+- Expected Result: CI failure signature is explained by stale tracked manifests; updated identity manifests match repo source-hash closure, hash manifest tokens, and the CI canonical build receipts.
+- Actual Result: `collect-wasm-summaries` failed on m1/m5 canonical hash mismatches and m4 identity source-hash mismatch. Local canonical write mode could not run because Docker is not installed in this environment (`error: docker is required; canonical wasm builds no longer support host-native fallback`). The failed CI run logged all 37 module `source_hash`, `build_manifest_hash`, and `wasm_hash_sha256` values; counts matched m1=10, m4=22, m5=5. Updated `m1_builtin_modules.{sha256,identity.json}`, `m4_builtin_modules.identity.json`, and `m5_builtin_modules.{sha256,identity.json}` from that canonical CI evidence. Repo identity check passed for all three module sets using temporary build receipts reconstructed from the same CI log.
+- Blocker / Next Action: local byte-level `sync-m*-builtin-wasm-artifacts.sh --check` remains Docker-blocked; rely on refreshed GitHub Actions canonical Docker runner after push for byte-level WASM manifest verification.
+- CI Failure Evidence:
+  - m1: `module_id=m1.rule.move`, built `50b757d950499030a7bb0eb97b984c0998e6d50982877f64dfef5e515bdcfa97`, manifest `306d0dc0bcb589a85df058e48486fb9538b5ceed4a78dd4e367cbac4e9a29dba`.
+  - m5: `module_id=m5.gameplay.war.core`, built `0acd79ca85152eff6060fe68f948fc98bfa62afff3429cf4a516da436848cdc4`, manifest `7b01a7b90d69211d689cb9260aaac17bd02c8414a2f0880e4e1c2cafbd735fd4`.
+  - m4: `module_id=m4.factory.assembler.mk1`, expected source hash `6c89fc34d4d9ab9d7838c953acd47697fec6d078f61da8c1a8bada7c91223392`, actual manifest source hash `2e2414c507ed53b6cb906bb404c9921f260b171ffe5cf24c3ae2706b5ce3bc29`.
+
+## 2026-06-20 21:46:16 CST / tpm
+- 完成内容: Local verification passed after builtin WASM manifest repair.
+- 遗留事项: commit/push the manifest repair, then watch refreshed GitHub checks and PR comments/review threads.
+- Action: Ran post-repair local checks covering diff hygiene, task workflow evidence, identity manifest consistency, and full Rust workspace compile.
+- Validation Command: `git diff --check`; `./scripts/pm/workflow-lint.sh --task-uid task_b71a91bfd6f34c098b6e91ecef3ff612 --phase current`; `env -u RUSTC_WRAPPER cargo run --quiet -p oasis7_distfs --features sync-builtin-wasm-identity --bin sync_builtin_wasm_identity -- ... --check` for m1/m4/m5 using CI-log-derived temporary receipts; `./scripts/cargo-dev.sh check --workspace --all-targets`.
+- Expected Result: No whitespace/task-evidence regressions; identity manifests are internally consistent with source closure and CI receipts; full Rust workspace check remains green.
+- Actual Result: Pass. `git diff --check` produced no output; workflow lint passed; m1/m4/m5 identity checks passed with module counts 10/22/5; full Rust check passed, `Finished dev profile [unoptimized + debuginfo] target(s) in 53.62s`. Existing unused/dead-code warnings and `block v0.1.6` future-incompat note remain non-blocking.
+- Blocker / Next Action: push to PR #546 and let GitHub canonical Docker `collect-wasm-summaries` revalidate byte-level WASM hashes.
