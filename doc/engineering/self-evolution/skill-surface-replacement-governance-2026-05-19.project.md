@@ -13,7 +13,7 @@
 - [x] workflow-router-skill-reconciliation (PRD-ENGINEERING-032/PRD-ENGINEERING-032E/PRD-ENGINEERING-AWB-009) [test_tier_required]: 将 `using-superpowers` 中可借的 process-skill routing order 收口为本地 `repo-owned-workflow-router` skill，并同步回写 skill inventory 与 root workflow phase order。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
 
 ## Completed Follow-ups
-- [x] `generic-game-skill-mirror-retirement-followup` (`PRD-ENGINEERING-032`, target `test_tier_required`): 2026-06-20 governance decision completed. `asset-optimization`、`audio-systems`、`monetization-systems` retired locally to upstream tracking; `game-design-theory` and `synchronization-algorithms` kept with narrowed domain-triggered entrypoints; `level-design` and `particle-systems` preserved as domain-triggered non-default surfaces with unreferenced supporting files retired. Trace: .pm/tasks/task_382d3fe8d9cc4e2fa60e0425072cf644.yaml
+- [x] generic-game-skill-mirror-retirement-followup (PRD-ENGINEERING-032) [test_tier_required]: 2026-06-20 governance decision completed. `asset-optimization`、`audio-systems`、`monetization-systems` retired locally to upstream tracking; `game-design-theory` and `synchronization-algorithms` kept with narrowed domain-triggered entrypoints; `level-design` and `particle-systems` preserved as domain-triggered non-default surfaces with unreferenced supporting files retired. Trace: .pm/tasks/task_382d3fe8d9cc4e2fa60e0425072cf644.yaml
 
 ## 依赖
 - `doc/engineering/prd.md`
