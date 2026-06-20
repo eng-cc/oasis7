@@ -50,26 +50,53 @@
 - 与当前系统级指令、角色卡或 repo-owned workflow 表面重复
 - 继续保留只会制造“存在即推荐”的误导
 
-### 2.3 Defer
+### 2.3 Generic Game Mirror Follow-up Decision
 
-以下 generic game-skill mirror 先保持 deferred：
+2026-06-20 已收口原 `defer` 桶。治理结论不再是继续观察，而是按真实引用面和 repo-specific 增量拆成三类：
+
+#### 2.3.1 Retired to upstream tracking
+
+以下本地 skill surface 退役为上游跟踪清单，不再作为 `.agents/skills/` 本地可触发 skill：
 
 - `asset-optimization`
 - `audio-systems`
-- `game-architect`
-- `game-design-theory`
-- `gameplay-mechanics`
-- `level-design`
-- `memory-management`
 - `monetization-systems`
-- `optimization-performance`
-- `particle-systems`
+
+共同原因：
+
+- 无当前角色卡强绑定
+- 缺少 oasis7 专属资产/音频/商业化实现契约
+- 入口与 supporting files 主要是通用方法论镜像，继续保留会制造“存在即推荐”的误导
+
+未来若出现正式资产管线、音频系统或商业化/购买/合规 PRD，应由对应专业角色重新提出 repo-owned skill，而不是直接恢复旧镜像。
+
+#### 2.3.2 Maintain with trigger narrowing
+
+以下 skill 保留，但必须压缩入口并绑定专业角色/当前 repo truth：
+
+- `game-design-theory`
 - `synchronization-algorithms`
 
-defer 的含义不是继续推荐，而是：
+治理要求：
 
-- 这批 skill 的删除成本高于当前收益
-- 需要先清真实引用面，再决定是否整体降为“上游跟踪清单”
+- 入口必须是短触发面，不保留大段通用教材
+- 结论必须归属对应专业角色 slice
+- generic reference 只能作为按需 supporting material，不能替代 oasis7 证据
+
+#### 2.3.3 Preserve as domain-triggered non-default
+
+以下 skill 保留为 domain-triggered non-default surface：
+
+- `level-design`
+- `particle-systems`
+
+治理要求：
+
+- 只在匹配场景通过 TPM routing 或专业 slice 触发
+- 不能作为默认 workflow phase
+- 未被 entrypoint 明确承接的 placeholder scripts/assets/old guides 应退役
+
+原 deferred 桶中 `game-architect`、`gameplay-mechanics`、`memory-management`、`optimization-performance` 已有明确 workflow/professional-role 绑定或维护理由，后续按各自维护项处理，不再属于本轮 watch 决策。
 
 ## 3. Replacement Surface
 
@@ -83,7 +110,7 @@ defer 的含义不是继续推荐，而是：
 ## 4. 风险控制
 
 - 被 retire 的 skill 若仍出现在角色卡或活跃文档，视为治理未收口
-- defer 不等于继续推荐；后续如要再删，先清角色卡和活跃引用
+- watch/defer 不得长期停留；一旦真实引用面足够，应收口为 keep、maintain、preserve-non-default 或 retired-to-upstream-tracking
 - repo-owned workflow router 只能保留本地 phase-order 价值，不能回退成外部 bootstrap
 - repo-owned skill authoring surface 只能补强本地 authoring discipline，不能再造第二套 workflow 真值
 
