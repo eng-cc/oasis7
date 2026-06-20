@@ -51,6 +51,7 @@ const STARTER_OC_CLAIM_AMOUNT: u64 = 100_000_000;
 mod action_to_event_core;
 pub(super) mod action_to_event_economy;
 mod action_to_event_gameplay;
+mod action_to_event_gameplay_meta;
 mod action_to_event_policy_contract;
 mod main_token;
 
