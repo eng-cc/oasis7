@@ -1,13 +1,12 @@
 //! Libp2p-based network adapter skeleton (gossipsub + request/response).
-
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-
 mod api;
 mod config;
 mod connection_lifecycle;
 mod constructor_support;
 mod discovery;
+mod drop_support;
 pub(crate) mod error_mapping;
 mod kad_queries;
 mod peer_manager;
@@ -22,7 +21,6 @@ mod traffic_metrics;
 mod transport_paths;
 mod utils;
 mod wire_bytes;
-
 use crate::{error::WorldError, util::to_canonical_cbor};
 pub use config::Libp2pNetworkConfig;
 use connection_lifecycle::{
@@ -853,14 +851,8 @@ impl Libp2pNetwork {
                                         .expect("lock connected peers")
                                         .insert(peer_id);
                                     let (connection_direction, connection_addr) = match &endpoint {
-                                        libp2p::core::connection::ConnectedPoint::Dialer {
-                                            address,
-                                            ..
-                                        } => ("outbound", address.to_string()),
-                                        libp2p::core::connection::ConnectedPoint::Listener {
-                                            send_back_addr,
-                                            ..
-                                        } => ("inbound", send_back_addr.to_string()),
+                                        libp2p::core::connection::ConnectedPoint::Dialer { address, .. } => ("outbound", address),
+                                        libp2p::core::connection::ConnectedPoint::Listener { send_back_addr, .. } => ("inbound", send_back_addr),
                                     };
                                     push_bounded_string_with_keyed_cooldown(
                                         &event_errors,
@@ -1199,11 +1191,6 @@ impl Libp2pNetwork {
             traffic_metrics,
             wire_byte_counters,
         }
-    }
-}
-impl Drop for Libp2pNetwork {
-    fn drop(&mut self) {
-        let _ = self.enqueue_command(Command::Shutdown);
     }
 }
 #[cfg(test)]
