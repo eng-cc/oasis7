@@ -304,3 +304,12 @@ Example:
 - Expected Result: Task branch is current with `origin/main` and the full workspace all-targets check still passes after rebase.
 - Actual Result: Rebase completed without conflicts; post-rebase full check passed, `Finished dev profile [unoptimized + debuginfo] target(s) in 7m 21s`; non-blocking existing warnings and `block v0.1.6` future-incompat note remain.
 - Blocker / Next Action: amend the evidence update into the task commit, then run PR preflight/create.
+
+## 2026-06-20 21:13:58 CST / tpm
+- 完成内容: Claim-ready evidence recorded for PR preflight.
+- 遗留事项: push, PR creation, and GitHub checks/comments/watch remain pending.
+- Action: Ran claim-ready helper for `ready_for_pr` after task closeout, local role review, rebase, and fresh full check.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command './scripts/pm/workflow-lint.sh --task-uid task_b71a91bfd6f34c098b6e91ecef3ff612 --phase current'`
+- Expected Result: Claim-ready helper verifies the current task evidence and allows a ready-for-PR claim.
+- Actual Result: Pass; `workflow-lint: OK (task_b71a91bfd6f34c098b6e91ecef3ff612, phase=current)`; `status: verified`; `allowed_to_claim: true`; `claim_message: Fresh verification passed; the branch can now be claimed ready for PR.`
+- Blocker / Next Action: commit metadata/evidence update, then rerun `./scripts/prepare-task-pr.sh --create`.
