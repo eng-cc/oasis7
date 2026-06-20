@@ -14,6 +14,135 @@ impl World {
         action: &Action,
     ) -> Result<WorldEventBody, WorldError> {
         match action {
+            Action::ClaimStarterOc {
+                agent_id,
+                player_id,
+                public_key,
+            } => {
+                let agent_id = agent_id.trim();
+                if agent_id.is_empty() {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "claim starter OC rejected: agent_id cannot be empty".to_string(),
+                            ],
+                        },
+                    }));
+                }
+                if !self.state.agents.contains_key(agent_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::AgentNotFound {
+                            agent_id: agent_id.to_string(),
+                        },
+                    }));
+                }
+                let player_id = player_id.trim();
+                if player_id.is_empty() {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "claim starter OC rejected: player_id cannot be empty".to_string(),
+                            ],
+                        },
+                    }));
+                }
+                let public_key = public_key
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned);
+                if self.main_token_liquid_balance(agent_id) > 0 {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "claim starter OC rejected: agent already has liquid OC: agent_id={agent_id}"
+                            )],
+                        },
+                    }));
+                }
+                if self.state.starter_oc_claims.contains_key(agent_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "claim starter OC rejected: agent already claimed: agent_id={agent_id}"
+                            )],
+                        },
+                    }));
+                }
+                if self
+                    .state
+                    .starter_oc_claims
+                    .values()
+                    .any(|claim| claim.player_id == player_id)
+                {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "claim starter OC rejected: player already claimed: player_id={player_id}"
+                            )],
+                        },
+                    }));
+                }
+                if let Some(public_key) = public_key.as_deref() {
+                    if self
+                        .state
+                        .starter_oc_claims
+                        .values()
+                        .any(|claim| claim.public_key.as_deref() == Some(public_key))
+                    {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec![
+                                    "claim starter OC rejected: public key already claimed"
+                                        .to_string(),
+                                ],
+                            },
+                        }));
+                    }
+                }
+
+                let source_treasury_bucket_id = if self
+                    .main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL)
+                    >= STARTER_OC_CLAIM_AMOUNT
+                {
+                    Some(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL.to_string())
+                } else if self.state.main_token_supply.total_supply == 0
+                    && self.state.main_token_supply.total_issued == 0
+                    && self.state.main_token_supply.circulating_supply == 0
+                {
+                    None
+                } else {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "claim starter OC rejected: ecosystem pool has insufficient OC: bucket={} balance={} amount={}",
+                                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+                                self.main_token_treasury_balance(
+                                    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL
+                                ),
+                                STARTER_OC_CLAIM_AMOUNT
+                            )],
+                        },
+                    }));
+                };
+
+                Ok(WorldEventBody::Domain(DomainEvent::StarterOcClaimed {
+                    agent_id: agent_id.to_string(),
+                    player_id: player_id.to_string(),
+                    public_key,
+                    amount: STARTER_OC_CLAIM_AMOUNT,
+                    claimed_at: self.state.time,
+                    source_treasury_bucket_id,
+                }))
+            }
             Action::ClaimAgent {
                 claimer_agent_id,
                 target_agent_id,
@@ -1018,132 +1147,27 @@ impl World {
                 crisis_id,
                 strategy,
                 success,
-            } => {
-                if !self.state.agents.contains_key(resolver_agent_id) {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::AgentNotFound {
-                            agent_id: resolver_agent_id.clone(),
-                        },
-                    }));
-                }
-                let crisis_id = crisis_id.trim();
-                if crisis_id.is_empty() {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["crisis_id cannot be empty".to_string()],
-                        },
-                    }));
-                }
-                let Some(crisis) = self.state.crises.get(crisis_id) else {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!("crisis not found: {crisis_id}")],
-                        },
-                    }));
-                };
-                if crisis.status != CrisisStatus::Active {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "crisis is not active and cannot be resolved: {}",
-                                crisis_id
-                            )],
-                        },
-                    }));
-                }
-                if self.state.time > crisis.expires_at {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "crisis expired at {} and cannot be resolved: {}",
-                                crisis.expires_at, crisis_id
-                            )],
-                        },
-                    }));
-                }
-                let strategy = strategy.trim();
-                if strategy.is_empty() {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["crisis strategy cannot be empty".to_string()],
-                        },
-                    }));
-                }
-                let severity = crisis.severity.max(1);
-                let impact = if *success {
-                    i64::from(severity).saturating_mul(CRISIS_BASE_IMPACT_PER_SEVERITY)
-                } else {
-                    -i64::from(severity).saturating_mul(CRISIS_BASE_IMPACT_PER_SEVERITY)
-                };
-                Ok(WorldEventBody::Domain(DomainEvent::CrisisResolved {
-                    resolver_agent_id: resolver_agent_id.clone(),
-                    crisis_id: crisis_id.to_string(),
-                    strategy: strategy.to_string(),
-                    success: *success,
-                    impact,
-                }))
-            }
+            } => self.resolve_crisis_action_to_event(
+                action_id,
+                resolver_agent_id,
+                crisis_id,
+                strategy,
+                *success,
+            ),
             Action::GrantMetaProgress {
                 operator_agent_id,
                 target_agent_id,
                 track,
                 points,
                 achievement_id,
-            } => {
-                if !self.state.agents.contains_key(operator_agent_id) {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::AgentNotFound {
-                            agent_id: operator_agent_id.clone(),
-                        },
-                    }));
-                }
-                if !self.state.agents.contains_key(target_agent_id) {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::AgentNotFound {
-                            agent_id: target_agent_id.clone(),
-                        },
-                    }));
-                }
-                let track = track.trim();
-                if track.is_empty() {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["meta progression track cannot be empty".to_string()],
-                        },
-                    }));
-                }
-                if *points == 0 {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::InvalidAmount { amount: *points },
-                    }));
-                }
-                let normalized_achievement = achievement_id.as_ref().map(|value| value.trim());
-                if normalized_achievement.is_some_and(|value| value.is_empty()) {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["achievement_id cannot be empty".to_string()],
-                        },
-                    }));
-                }
-                Ok(WorldEventBody::Domain(DomainEvent::MetaProgressGranted {
-                    operator_agent_id: operator_agent_id.clone(),
-                    target_agent_id: target_agent_id.clone(),
-                    track: track.to_string(),
-                    points: *points,
-                    achievement_id: normalized_achievement.map(str::to_string),
-                }))
-            }
+            } => self.grant_meta_progress_action_to_event(
+                action_id,
+                operator_agent_id,
+                target_agent_id,
+                track,
+                *points,
+                achievement_id.as_deref(),
+            ),
             _ => unreachable!("action_to_event_gameplay received unsupported action variant"),
         }
     }

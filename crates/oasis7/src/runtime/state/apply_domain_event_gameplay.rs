@@ -20,6 +20,139 @@ impl WorldState {
         now: WorldTime,
     ) -> Result<(), WorldError> {
         match event {
+            DomainEvent::StarterOcClaimed {
+                agent_id,
+                player_id,
+                public_key,
+                amount,
+                claimed_at,
+                source_treasury_bucket_id,
+            } => {
+                if !self.agents.contains_key(agent_id) {
+                    return Err(WorldError::AgentNotFound {
+                        agent_id: agent_id.clone(),
+                    });
+                }
+                if self.starter_oc_claims.contains_key(agent_id) {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!("starter OC already claimed for agent: {agent_id}"),
+                    });
+                }
+                if player_id.trim().is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "starter OC player_id cannot be empty".to_string(),
+                    });
+                }
+                if *amount == 0 {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "starter OC amount must be > 0".to_string(),
+                    });
+                }
+                if let Some(bucket_id) = source_treasury_bucket_id.as_deref() {
+                    let bucket_balance = self
+                        .main_token_treasury_balances
+                        .get(bucket_id)
+                        .copied()
+                        .unwrap_or(0);
+                    if bucket_balance < *amount {
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "starter OC treasury insufficient: bucket={} balance={} amount={}",
+                                bucket_id, bucket_balance, amount
+                            ),
+                        });
+                    }
+                    self.main_token_treasury_balances
+                        .insert(bucket_id.to_string(), bucket_balance - *amount);
+                    self.main_token_supply.circulating_supply = self
+                        .main_token_supply
+                        .circulating_supply
+                        .checked_add(*amount)
+                        .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "starter OC circulating overflow: current={} amount={}",
+                                self.main_token_supply.circulating_supply, amount
+                            ),
+                        })?;
+                } else {
+                    self.main_token_supply.total_supply = self
+                        .main_token_supply
+                        .total_supply
+                        .checked_add(*amount)
+                        .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "starter OC total supply overflow: current={} amount={}",
+                                self.main_token_supply.total_supply, amount
+                            ),
+                        })?;
+                    self.main_token_supply.total_issued = self
+                        .main_token_supply
+                        .total_issued
+                        .checked_add(*amount)
+                        .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "starter OC total issued overflow: current={} amount={}",
+                                self.main_token_supply.total_issued, amount
+                            ),
+                        })?;
+                    self.main_token_supply.circulating_supply = self
+                        .main_token_supply
+                        .circulating_supply
+                        .checked_add(*amount)
+                        .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "starter OC circulating overflow: current={} amount={}",
+                                self.main_token_supply.circulating_supply, amount
+                            ),
+                        })?;
+                }
+                if self.main_token_supply.circulating_supply > self.main_token_supply.total_supply {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "starter OC circulating exceeds total: circulating={} total={}",
+                            self.main_token_supply.circulating_supply,
+                            self.main_token_supply.total_supply
+                        ),
+                    });
+                }
+                let account = self
+                    .main_token_balances
+                    .entry(agent_id.clone())
+                    .or_insert_with(|| MainTokenAccountBalance {
+                        account_id: agent_id.clone(),
+                        ..MainTokenAccountBalance::default()
+                    });
+                if account.account_id != *agent_id {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "starter OC account key mismatch: key={} value={}",
+                            agent_id, account.account_id
+                        ),
+                    });
+                }
+                account.liquid_balance = account.liquid_balance.checked_add(*amount).ok_or_else(
+                    || WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "starter OC liquid balance overflow: account={} current={} amount={}",
+                            agent_id, account.liquid_balance, amount
+                        ),
+                    },
+                )?;
+                self.starter_oc_claims.insert(
+                    agent_id.clone(),
+                    StarterOcClaimState {
+                        agent_id: agent_id.clone(),
+                        player_id: player_id.clone(),
+                        public_key: public_key.clone(),
+                        amount: *amount,
+                        claimed_at: *claimed_at,
+                        source_treasury_bucket_id: source_treasury_bucket_id.clone(),
+                    },
+                );
+                if let Some(cell) = self.agents.get_mut(agent_id) {
+                    cell.last_active = now;
+                }
+            }
             DomainEvent::GameplayPolicyUpdated {
                 operator_agent_id,
                 electricity_tax_bps,

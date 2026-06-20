@@ -7,7 +7,7 @@
 - 想执行 Viewer、走 Web 闭环、看命令或手工步骤：先读 `viewer-manual.manual.md`
 - 想确认正式浏览器主入口、`viewer` / `software_safe` 兼容边界或弱机/CI 默认路径：先读 `viewer-web-software-safe-mode-2026-03-16.prd.md`
 - 想确认 `legacy_core.js` 拆分边界、`viewer.js` / `software_safe.js` canonical/compat 关系，或 `pixel-world-bridge` generated runtime 真值：先读 `viewer-web-single-source-build-truth-2026-05-19.prd.md`
-- 想确认 pixel-world 稀疏快照下的 agent 派生坐标、关系线与 fallback DOM 定位：先读 `viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
+- 想确认 pixel-world 稀疏快照下的 agent 派生坐标、关系线与 rendered DOM 定位：先读 `viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
 - 想确认 pixel-world Fragment terrain、Location 逻辑锚点与缩放 LOD 分层：先读 `viewer-pixel-world-fragment-lod-2026-05-27.prd.md`
 - 想确认 pixel-world 面向商业化游戏首屏如何呈现目标、下一步、玩家杠杆与诊断降噪：先读 `viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
 - 想确认 pixel-world 下一轮如何表达玩家因果、行动反馈、生产可读性与商业化长期循环：先读 `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`

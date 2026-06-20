@@ -44,6 +44,9 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--auto-play" => {
                 options.auto_play = true;
             }
+            "--allow-debug-scenario" => {
+                options.allow_debug_scenario = true;
+            }
             "--agent-decision-source" => {
                 options.agent_decision_source =
                     parse_required_value(&mut iter, "--agent-decision-source")?;
@@ -223,6 +226,7 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
 
     let _ = parse_host_port(options.live_bind.as_str(), "--live-bind")?;
     let _ = parse_host_port(options.web_bind.as_str(), "--web-bind")?;
+    validate_debug_scenario_guardrail(&options)?;
     let deployment_mode = if options.allow_trusted_local_playtest {
         DeploymentMode::parse(options.deployment_mode.as_str(), "--deployment-mode")?
     } else {
@@ -294,6 +298,24 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     }
 
     Ok(options)
+}
+
+fn validate_debug_scenario_guardrail(options: &CliOptions) -> Result<(), String> {
+    let scenario = options.scenario.trim();
+    if scenario.is_empty() || options.allow_debug_scenario {
+        return Ok(());
+    }
+    if matches!(
+        WorldScenario::parse(scenario),
+        Some(WorldScenario::LlmBootstrap)
+    ) {
+        return Err(
+            "`llm_bootstrap` is a seeded debug/LLM scenario, not a normal playtest or testnet entry; \
+rerun with `--allow-debug-scenario` only for targeted diagnostics, or omit `--scenario` for the formal release default world"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 pub(super) fn deployment_mode_from_options(options: &CliOptions) -> DeploymentMode {
@@ -468,6 +490,7 @@ Options:\n\
   --chain-node-validator <v:s> oasis7_chain_runtime validator (repeatable)\n\
   --with-llm                   enable llm mode (default; required for gameplay)\n\
   --auto-play                  start oasis7_viewer_live gameplay/world progression on connect\n\
+  --allow-debug-scenario       allow seeded debug scenarios such as llm_bootstrap\n\
   --agent-decision-source <src>\n\
                                agent decision source: builtin_llm|provider_backed\n\
   --agent-provider-backend <id>\n\

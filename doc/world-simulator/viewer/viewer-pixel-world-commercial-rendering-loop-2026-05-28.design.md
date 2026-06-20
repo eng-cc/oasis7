@@ -11,7 +11,7 @@
 ## Design Decision
 - 把 pixel-world 主舞台定位成低保真商业游戏棋盘，而不是 renderer status panel。
 - 新增 `commercial_surface` 作为 host-only DTO，由现有 gameplay summary 和 render state 派生。
-- WASM bridge 不读取该字段；它服务于 Solid host HUD 和 fallback DOM。
+- WASM bridge/Rust render-state 读取并发布该字段；它服务于 Solid host HUD 和 rendered DOM。
 - renderer diagnostics、raw DTO 与模拟 fatal 控制默认折叠到诊断区。
 
 ## DTO Shape
@@ -46,7 +46,7 @@
 ## Fallback Route Rendering
 - Use the same world-to-percent projection as fragment/location/agent DOM placement.
 - Draw route lines after Fragment terrain and before entity buttons.
-- Route lines are non-interactive; location/agent hit targets remain the only fallback selection points.
+- Route lines are non-interactive; location/agent hit targets remain the only selection points.
 
 ## UI Layout
 - `pixel-world-host__summary`: product title and current objective detail.

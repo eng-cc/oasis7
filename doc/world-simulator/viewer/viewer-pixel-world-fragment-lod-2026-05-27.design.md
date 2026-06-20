@@ -51,7 +51,7 @@
 5. Do not add fragment hit regions in this slice; selection remains location/agent.
 
 ## Fallback DOM
-- Host fallback draws non-interactive terrain cells behind location and agent buttons.
+- Rendered DOM draws non-interactive terrain cells behind location and agent buttons.
 - Terrain cells are absolutely positioned using world coordinate percentages.
 - Location marker remains clickable but visually subdued when `marker_role=logic_anchor`.
 
@@ -60,7 +60,7 @@
   - sample snapshot with fragment blocks produces `fragment_terrain`.
   - fragment terrain carries stable compound color.
   - location marker is `logic_anchor`.
-  - fallback DOM displays terrain cells behind entities.
+  - rendered DOM displays terrain cells behind entities.
 - Rust check:
   - wasm bridge accepts new DTO fields.
   - LOD helper thresholds are unit-covered.

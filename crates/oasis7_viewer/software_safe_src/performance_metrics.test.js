@@ -109,7 +109,7 @@ describe("viewer performance metrics", () => {
     expect(markdown).toContain("http://127.0.0.1/viewer");
   });
 
-  it("fails when the probe finishes on fallback or without the wasm runtime", () => {
+  it("fails when the probe finishes unavailable or without the wasm runtime", () => {
     const summary = summarizeViewerPerformance({
       runId: "renderer-regressed",
       profile: "smoke",
@@ -125,7 +125,7 @@ describe("viewer performance metrics", () => {
       interactionLatencies: [42, 51, 65, 58],
       dom: { nodeCount: 240, panelCount: 3, interactiveElementCount: 18, renderedCanvasCount: 0, fallbackShellCount: 1 },
       finalState: {
-        pixelWorldRuntimeStatus: "fallback",
+        pixelWorldRuntimeStatus: "unavailable",
         pixelWorldRuntimeSource: "detached",
       },
       thresholds: {

@@ -16,6 +16,7 @@ fn runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change() {
         .next()
         .cloned()
         .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key, private_key) = test_signer(22);
     let first = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
@@ -131,6 +132,7 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
         .next()
         .cloned()
         .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key_v1, private_key_v1) = test_signer(31);
     let (public_key_v2, private_key_v2) = test_signer(32);
 

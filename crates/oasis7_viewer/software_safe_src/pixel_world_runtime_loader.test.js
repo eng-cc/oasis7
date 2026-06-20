@@ -49,7 +49,7 @@ describe("pixel world runtime loader", () => {
 
     const mountResult = runtime.bridge.mount(document.createElement("canvas"), {});
     expect(mountResult).toMatchObject({
-      status: "fallback",
+      status: "unavailable",
       fatal: runtime.fatal,
     });
     expect(onFatal).toHaveBeenCalledWith(expect.objectContaining({

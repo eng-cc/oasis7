@@ -5,15 +5,15 @@
 - 对应 `.pm` task: `.pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.yaml`
 
 ## 状态
-- [x] viewer-pixel-world-semantic-positioning-design (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 冻结 sparse snapshot 下 agent 坐标派生、source 标记、关系线与 fallback DOM 定位合同。 Trace: .pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.yaml
-- [x] viewer-pixel-world-location-derived-agent-position (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 在 `pixel_world_host.jsx` 中实现 agent `location_derived` 坐标、DTO source badge、world-coordinate fallback positioning。 Trace: .pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.yaml
-- [x] viewer-pixel-world-semantic-positioning-regression (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 补 sparse snapshot Vitest，验证派生坐标稳定、关系线生成、renderer fallback contract 保持。 Trace: .pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.yaml
+- [x] viewer-pixel-world-semantic-positioning-design (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 冻结 sparse snapshot 下 agent 坐标派生、source 标记、关系线与 Rust render-state DTO 定位合同。 Trace: .pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.yaml
+- [x] viewer-pixel-world-location-derived-agent-position (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 在 Rust bridge render-state 派生中实现 agent `location_derived` 坐标、DTO source badge 与 world-coordinate positioning。 Trace: .pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.yaml
+- [x] viewer-pixel-world-semantic-positioning-regression (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 补 sparse snapshot 回归，验证派生坐标稳定、关系线生成、renderer unavailable contract 保持。 Trace: .pm/tasks/task_4ade083740bc4d9f9f9bb742a7ce153f.yaml
 
 ## 任务拆解
 1. Detailed design: 描述当前 pixel-world pipeline、sparse snapshot 风险、DTO source priority、派生算法和验证计划。
-2. Host DTO implementation: 在 `pixel_world_host.jsx` 中将 agent 坐标解析改为 snapshot-first、location-derived-second、missing-last。
-3. Fallback rendering implementation: 让 host fallback DOM 使用 world-coordinate percentage placement，而不是只按列表 index 排布。
-4. Regression: 用 targeted Vitest 锁定 sparse snapshot 派生坐标、关系线和 explicit fallback surface。
+2. Rust DTO implementation: 在 `pixel_world_bridge` render-state 派生中将 agent 坐标解析改为 snapshot-first、location-derived-second、missing-last。
+3. Renderer unavailable implementation: bridge 不可用时只显示诊断，不生成 JS 世界 DOM。
+4. Regression: 用 targeted tests 锁定 sparse snapshot 派生坐标、关系线和 explicit unavailable state。
 
 ## 依赖
 - 上游输入依赖: runtime snapshot 中已有 `agent.location_id`、`location.pos`、`snapshot.config.space`。

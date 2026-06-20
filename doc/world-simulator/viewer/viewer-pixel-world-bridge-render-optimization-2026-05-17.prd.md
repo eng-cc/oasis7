@@ -22,7 +22,7 @@
   - 与 `pixel_world_bridge` 直接相关的 repo-owned build / runtime regression
   - 对应专题文档、模块主项目追踪与 task execution log
 - 范围外：
-  - `pixel_world_host.jsx` 宿主布局或 fallback 文案改版
+  - `pixel_world_host.jsx` 宿主布局或 unavailable 文案改版
   - `pixel_world_runtime_module_wasm.js` 事件协议调整
   - 新增 world DTO 字段、3D 渲染、shader/material 重写
 
@@ -38,7 +38,7 @@
 
 ## 3. User Stories
 - As a `viewer_engineer`, I want the embedded pixel-world wasm runtime to stop rebuilding the whole Bevy scene every frame, so that the main Web world stage can scale to denser snapshots without wasting CPU on ECS churn.
-- As a `qa_engineer`, I want the optimization to preserve current runtime-visible contracts and explicit fallback behavior, so that existing wasm/runtime regressions stay valid while performance improves.
+- As a `qa_engineer`, I want the optimization to preserve current runtime-visible contracts and explicit unavailable behavior, so that existing wasm/runtime regressions stay valid while performance improves.
 
 ## 4. Technical Specifications
 
@@ -70,7 +70,7 @@
   - `camera_state_changed`
   - `hover_entity`
   - `select_entity`
-  - wasm runtime 仍为唯一渲染内核，不恢复 JS fallback
+  - wasm runtime 仍为唯一渲染内核，不新增第二套 JS 世界渲染
 - `hit_regions` 允许继续每帧重建，但必须从“场景重建副产物”切换为“基于已更新实体的轻量缓存”。
 
 ### 4.4 Out-of-Scope Follow-ups
@@ -93,7 +93,7 @@
   - grid layout key（窗口宽高、zoom、pan）
   - `location_id -> Entity` / `agent_id -> Entity`
   - `hit_regions`
-- 本轮不新增任何 world DTO、宿主事件字段或 JS fallback 协议。
+- 本轮不新增任何 world DTO、宿主事件字段或 JS 世界渲染协议。
 
 ## 5. Risks & Roadmap
 - M1：完成专题 PRD / Project 建模，冻结 P0 优化边界。
@@ -119,7 +119,7 @@
 ## 6. Acceptance Criteria
 - AC-1: `pixel_world_bridge` 不再在每一帧先 `despawn` 再 `spawn` 全部 grid/location/agent 实体。
 - AC-2: grid 实体在相机与窗口参数不变时保持常驻；location / agent 使用实体池或等价增量更新结构复用已有 entity。
-- AC-3: 现有 wasm-only 宿主合同、explicit fallback contract 与 repo-owned runtime loader/host 测试语义保持不变。
+- AC-3: 现有 wasm-only 宿主合同、explicit unavailable contract 与 repo-owned runtime loader/host 测试语义保持不变。
 - AC-4: 本轮完成 `cargo check -p pixel_world_bridge --target wasm32-unknown-unknown` 与相关前端 repo-owned 测试回归。
 
 ## 7. Validation & Decision Record

@@ -2,7 +2,7 @@ use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_
 use oasis7::observability::{
     TRACE_SESSION_ID_ENV, emit_stderr_or_event, init_tracing, resolve_trace_session_id,
 };
-use oasis7::simulator::ProviderExecutionMode;
+use oasis7::simulator::{ProviderExecutionMode, WorldScenario};
 use oasis7_proto::storage_profile::StorageProfile;
 use std::collections::BTreeSet;
 use std::env;
@@ -162,6 +162,7 @@ struct CliOptions {
     viewer_static_dir: String,
     with_llm: bool,
     auto_play: bool,
+    allow_debug_scenario: bool,
     agent_decision_source: String,
     agent_provider_backend: String,
     agent_provider_contract: String,
@@ -206,6 +207,7 @@ impl Default for CliOptions {
             viewer_static_dir: DEFAULT_VIEWER_STATIC_DIR.to_string(),
             with_llm: true,
             auto_play: false,
+            allow_debug_scenario: false,
             agent_decision_source: PROVIDER_BACKED_DECISION_SOURCE.to_string(),
             agent_provider_backend: LOCAL_BRIDGE_PROVIDER_BACKEND.to_string(),
             agent_provider_contract: WORLDSIM_PROVIDER_CONTRACT.to_string(),

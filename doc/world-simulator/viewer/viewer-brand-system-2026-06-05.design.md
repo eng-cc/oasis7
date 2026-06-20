@@ -53,7 +53,7 @@ Preferred label forms:
 - `Objective`, not `Goal DTO`.
 - `Next Move`, not `Pending Handler`.
 - `Action Receipt`, not `Latest Event`.
-- `Renderer Not Attached`, not silent fallback.
+- `Renderer Unavailable`, not silent degradation.
 - `position=location_derived`, not hidden inferred coordinate.
 
 ## 3. Token Taxonomy
@@ -131,7 +131,7 @@ canonical icon vocabulary until an icon library is adopted.
 | completed | success badge/receipt | `completed` / receipt summary | `data-receipt-state=completed` |
 | no receipt | muted receipt state | `No action receipt yet` | `data-receipt-present=false` |
 | derived position | badge/source label | `position=location_derived` | `data-position-source` |
-| fallback renderer | visible callout | `Renderer Not Attached` | `renderer=fallback` text |
+| renderer unavailable | visible diagnostic | `Renderer Unavailable` | `data-renderer-state=unavailable` |
 | diagnostics | muted collapsed surface | `Runtime Diagnostics` | `#viewer-diagnostics-panel` |
 
 ### 4.2 Icon Pack Rule
@@ -142,7 +142,7 @@ not be the only state signal.
 ## 5. Asset Language
 ### 5.1 Current Asset Scope
 The current Viewer brand system relies on CSS, DOM shapes, text badges, canvas
-fallback surfaces, and generated pixel-world screenshots. No new bitmap art pack
+diagnostic surfaces, and generated pixel-world screenshots. No new bitmap art pack
 is required for this task.
 
 ### 5.2 Allowed Asset Types
@@ -154,7 +154,7 @@ is required for this task.
 
 ### 5.3 Asset Acceptance
 An asset is acceptable only if it:
-- makes agent, route, objective, blocker, receipt, or fallback state easier to
+- makes agent, route, objective, blocker, receipt, or unavailable state easier to
   read;
 - does not compete with the world stage;
 - has a text or semantic equivalent;
@@ -173,7 +173,7 @@ large visual-system change must run all required rows.
 | desktop player first screen | 1280x720 or wider | all stage/layout/token changes | screenshot or browser DOM+visual smoke |
 | mobile player first screen | 390x844 or equivalent | navigation, first screen, text density | screenshot or browser DOM+visual smoke |
 | diagnostics demotion | Runtime Diagnostics collapsed | diagnostics, routing, QA surfaces | DOM/test assertion plus screenshot when visual |
-| fallback renderer | host fallback visible | renderer/fallback/pixel-world work | `test:pixel-world:visual` screenshot |
+| renderer unavailable | unavailable diagnostic visible | renderer/pixel-world work | targeted UI/browser evidence |
 | action receipt | present receipt | command/receipt/action work | `action-receipt-visual.png` or equivalent |
 | no receipt | no player-caused receipt | causality/data honesty work | UI test or targeted screenshot |
 | dense pixel-world | agent/location/route/terrain together | layer priority changes | pixel-world visual smoke |
@@ -184,7 +184,7 @@ Blocking findings:
 - horizontal overflow on supported mobile width;
 - clipped primary command or unreadable receipt/blocker;
 - diagnostics louder than command/world surfaces;
-- fallback without explicit fallback label;
+- unavailable renderer without explicit unavailable label;
 - derived position without source label;
 - color-only critical state;
 - focusable product control with no visible focus style.
@@ -198,7 +198,7 @@ Current implementation anchors for this brand system:
 - `.mobile-rail`: mobile route.
 - `.pixel-world-command-strip`: objective/next move/player leverage.
 - `.pixel-world-action-receipt`: player-facing receipt state.
-- `.pixel-world-canvas`: world surface and fallback DOM.
+- `.pixel-world-canvas`: world surface and rendered DOM.
 - `.pixel-world-render-diagnostics`: renderer diagnostics.
 
 These hooks are part of the visual-system contract. Rename or remove them only

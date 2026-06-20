@@ -66,13 +66,13 @@ function createUnavailableBridge({ fatal, onFatal }) {
     mount() {
       emitFatal();
       return {
-        status: "fallback",
+        status: "unavailable",
         fatal,
       };
     },
     update() {
       return {
-        status: "fallback",
+        status: "unavailable",
         fatal,
       };
     },

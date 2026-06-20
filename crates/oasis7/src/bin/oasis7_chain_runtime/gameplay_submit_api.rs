@@ -213,7 +213,9 @@ fn handle_gameplay_submit(
     if let Err(err) = runtime
         .lock()
         .map_err(|_| "failed to lock node runtime for gameplay submit".to_string())?
-        .submit_consensus_action_payload_as_player(verified.player_id, action_id, payload)
+        // The HTTP endpoint has already verified the browser player's gameplay proof.
+        // The node still submits the consensus envelope on its own transport lane.
+        .submit_consensus_action_payload(action_id, payload)
     {
         write_gameplay_submit_error(
             stream,

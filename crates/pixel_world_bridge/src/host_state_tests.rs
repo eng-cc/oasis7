@@ -221,3 +221,144 @@ fn rust_host_state_keeps_no_receipt_ambient_events_out_of_player_progress() {
     );
     assert!(receipt["target_agent_id"].is_null());
 }
+
+#[test]
+fn rust_host_state_suppresses_chain_sync_receipt_for_empty_world_onboarding() {
+    let mut input = sample_input();
+    input["lists"]["agents"] = json!([]);
+    input["lists"]["locations"] = json!([]);
+    input["gameplay"] = json!({
+        "goalTitle": "Recover committed runtime sync",
+        "objective": "Repair the committed runtime feed before retrying the first world-feedback loop.",
+        "progressDetail": "The first-session loop is blocked because the viewer cannot read a committed runtime world yet.",
+        "progressPercent": 0,
+        "blockerKind": "runtime_snapshot_empty_entities",
+        "blockerLabel": "空快照",
+        "blockerDetail": "runtime exposed an empty new-user world with no agents/locations; claim the first Agent to start the onboarding flow",
+        "executionState": "blocked",
+        "executionStateLabel": "Blocked",
+        "availableActions": [
+            {
+                "actionId": "request_snapshot",
+                "label": "Refresh gameplay snapshot",
+                "protocolAction": "request_snapshot",
+                "targetAgentId": Value::Null,
+                "disabledReason": Value::Null
+            },
+            {
+                "actionId": "claim_first_agent",
+                "label": "Claim first Agent",
+                "protocolAction": "gameplay_action.submit",
+                "targetAgentId": "starter-agent-0",
+                "disabledReason": Value::Null
+            }
+        ],
+        "recentFeedback": {
+            "action": "chain_sync",
+            "stage": "blocked",
+            "effect": "committed runtime sync failed before the viewer could observe new world state",
+            "reason": "DistributedValidationFailed { reason: \"latest state root mismatch\" }",
+            "hint": "repair the chain runtime sync path, then refresh gameplay",
+            "deltaLogicalTime": 0,
+            "deltaEventSeq": 0
+        }
+    });
+
+    let state = build_render_state(&input);
+    let receipt = &state["commercial_surface"]["action_receipt"];
+    let blocker_highlight = &state["blocker_highlight"];
+    let blocker = &state["commercial_surface"]["blocker"];
+
+    assert_eq!(receipt["present"], false);
+    assert_eq!(receipt["state"], "waiting_for_intent");
+    assert_eq!(receipt["confidence"], "none");
+    assert_eq!(receipt["title"], "No action receipt yet");
+    assert_eq!(
+        receipt["summary"],
+        "This is a new-user empty world; claim the first Agent first."
+    );
+    assert!(
+        !receipt["summary"]
+            .as_str()
+            .unwrap()
+            .contains("committed runtime sync failed")
+    );
+    assert!(
+        !receipt["detail"]
+            .as_str()
+            .unwrap()
+            .contains("DistributedValidationFailed")
+    );
+    assert_eq!(blocker_highlight["kind"], "runtime_snapshot_empty_entities");
+    assert_eq!(blocker_highlight["label"], "Claim the first Agent");
+    assert_eq!(blocker["label"], "Claim the first Agent");
+    assert!(
+        !blocker_highlight["label"]
+            .as_str()
+            .unwrap()
+            .contains("runtime_snapshot_empty_entities")
+    );
+}
+
+#[test]
+fn rust_host_state_shows_pending_claim_receipt_for_empty_world_onboarding() {
+    let mut input = sample_input();
+    input["lists"]["agents"] = json!([]);
+    input["lists"]["locations"] = json!([]);
+    input["gameplay"] = json!({
+        "goalTitle": "Claim the first Agent",
+        "objective": "Start the new-user onboarding flow.",
+        "progressDetail": "Waiting for committed world sync after submitting the first-Agent claim.",
+        "progressPercent": 0,
+        "blockerKind": "runtime_snapshot_empty_entities",
+        "blockerLabel": "Claim the first Agent",
+        "blockerDetail": "runtime exposed an empty new-user world with no agents/locations; claim the first Agent to start the onboarding flow",
+        "executionState": "accepted",
+        "executionStateLabel": "Accepted",
+        "executionCauseKind": "queued_for_execution",
+        "executionCauseDetail": "Waiting for committed world sync; the Agent will appear after the synced snapshot lands.",
+        "acceptedIntentSummary": "submitted gameplay action claim_first_agent for starter-agent-0 to chain runtime as consensus action 1",
+        "availableActions": [
+            {
+                "actionId": "claim_first_agent",
+                "label": "Claim first Agent",
+                "protocolAction": "gameplay_action.submit",
+                "targetAgentId": "starter-agent-0",
+                "disabledReason": Value::Null
+            }
+        ],
+        "recentFeedback": {
+            "action": "gameplay_action:claim_first_agent",
+            "stage": "submitted",
+            "effect": "submitted gameplay action claim_first_agent for starter-agent-0 to chain runtime as consensus action 1",
+            "reason": Value::Null,
+            "hint": "Waiting for committed world sync; the Agent will appear after the synced snapshot lands.",
+            "deltaLogicalTime": 0,
+            "deltaEventSeq": 0
+        }
+    });
+
+    let state = build_render_state(&input);
+    let receipt = &state["commercial_surface"]["action_receipt"];
+    let blocker_highlight = &state["blocker_highlight"];
+
+    assert_eq!(receipt["present"], true);
+    assert_eq!(receipt["state"], "accepted");
+    assert_eq!(receipt["confidence"], "world_delta");
+    assert_eq!(receipt["title"], "Action accepted");
+    assert!(
+        receipt["summary"]
+            .as_str()
+            .unwrap()
+            .contains("submitted gameplay action claim_first_agent")
+    );
+    assert!(
+        receipt["detail"]
+            .as_str()
+            .unwrap()
+            .contains("Waiting for committed world sync")
+    );
+    assert_eq!(receipt["target_agent_id"], "starter-agent-0");
+    assert_eq!(blocker_highlight["kind"], "runtime_snapshot_empty_entities");
+    assert_eq!(blocker_highlight["label"], "Claim the first Agent");
+}

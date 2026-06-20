@@ -7,6 +7,19 @@ use crate::simulator::ResourceKind;
 
 use super::types::WorldTime;
 
+/// One-time onboarding liquid OC claim used to unlock the first LLM interaction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct StarterOcClaimState {
+    pub agent_id: String,
+    pub player_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<String>,
+    pub amount: u64,
+    pub claimed_at: WorldTime,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_treasury_bucket_id: Option<String>,
+}
+
 /// Persisted alliance relationship.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AllianceState {

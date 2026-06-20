@@ -13,7 +13,8 @@ LIVE_BIND_ADDR="127.0.0.1:5023"
 WEB_BRIDGE_ADDR="127.0.0.1:5011"
 ENABLE_LLM="1"
 AUTO_PLAY="${OASIS7_RUNTIME_AUTO_PLAY:-0}"
-SCENARIO="llm_bootstrap"
+SCENARIO=""
+ALLOW_DEBUG_SCENARIO="0"
 VIEWER_STATIC_DIR="web"
 CHAIN_ENABLED="1"
 DEPLOYMENT_MODE="${OASIS7_DEPLOYMENT_MODE:-hosted_public_join}"
@@ -65,7 +66,8 @@ Development / debugging fallback:
 - source oasis7_game_launcher via cargo run with the same runtime defaults
 
 Options:
-  --scenario <name>        Launcher scenario (default: llm_bootstrap)
+  --scenario <name>        Optional debug scenario; default uses formal release fixed world
+  --allow-debug-scenario   Allow seeded debug scenarios such as llm_bootstrap
   --bundle-dir <path>      Use packaged bundle <path>/run-game.sh (advanced / wrapper path;
                            producer manual play should prefer run-producer-playtest.sh)
   --viewer-host <host>     Viewer HTTP host (default: 127.0.0.1)
@@ -118,6 +120,10 @@ while [[ $# -gt 0 ]]; do
       fi
       SCENARIO="$2"
       shift 2
+      ;;
+    --allow-debug-scenario)
+      ALLOW_DEBUG_SCENARIO="1"
+      shift
       ;;
     --bundle-dir)
       BUNDLE_DIR="${2:-}"
@@ -253,11 +259,6 @@ if [[ -z "$VIEWER_HOST" || -z "$VIEWER_PORT" || -z "$LIVE_BIND_ADDR" || -z "$WEB
   exit 1
 fi
 
-if [[ -z "$SCENARIO" ]]; then
-  echo "error: --scenario cannot be empty" >&2
-  exit 1
-fi
-
 if ! [[ "$VIEWER_PORT" =~ ^[0-9]+$ ]]; then
   echo "error: --viewer-port must be numeric" >&2
   exit 1
@@ -304,7 +305,7 @@ fi
 
 if [[ "$ENABLE_LLM" != "1" ]]; then
   echo "error: ./scripts/run-launcher-stack.sh now wraps oasis7_game_launcher, which requires active LLM access" >&2
-  echo "hint: use env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm ... only for direct observer/debug diagnostics" >&2
+  echo "hint: use env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --no-llm ... only for direct observer/debug diagnostics" >&2
   exit 1
 fi
 
@@ -702,13 +703,18 @@ trap cleanup EXIT INT TERM
 
 WORLD_ARGS=(
   --deployment-mode "$DEPLOYMENT_MODE"
-  --scenario "$SCENARIO"
   --live-bind "$LIVE_BIND_ADDR"
   --web-bind "$WEB_BRIDGE_ADDR"
   --viewer-host "$VIEWER_HOST"
   --viewer-port "$VIEWER_PORT"
   --no-open-browser
 )
+if [[ -n "$SCENARIO" ]]; then
+  WORLD_ARGS+=(--scenario "$SCENARIO")
+fi
+if [[ "$ALLOW_DEBUG_SCENARIO" == "1" ]]; then
+  WORLD_ARGS+=(--allow-debug-scenario)
+fi
 if [[ "$ALLOW_TRUSTED_LOCAL_PLAYTEST" == "1" ]]; then
   WORLD_ARGS+=(--allow-trusted-local-playtest)
 fi

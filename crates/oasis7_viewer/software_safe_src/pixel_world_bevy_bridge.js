@@ -381,7 +381,7 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
         renderCurrentFrame(0);
         scheduleAnimationLoop();
       } catch (error) {
-        return { status: "fallback", fatal: fatal(error) };
+        return { status: "unavailable", fatal: fatal(error) };
       }
       emit({ type: "canvas_ready" });
       emitCameraState();
@@ -395,7 +395,7 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
       try {
         renderCurrentFrame();
       } catch (error) {
-        return { status: "fallback", fatal: fatal(error) };
+        return { status: "unavailable", fatal: fatal(error) };
       }
       return { status: "ready" };
     },

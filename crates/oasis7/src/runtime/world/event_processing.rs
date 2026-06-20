@@ -15,8 +15,9 @@ use super::logistics::{
 };
 use crate::geometry::space_distance_cm;
 use crate::runtime::main_token::{
-    MAIN_TOKEN_BPS_DENOMINATOR, MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
-    main_token_account_id_from_node_public_key, validate_main_token_config_bounds,
+    MAIN_TOKEN_BPS_DENOMINATOR, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD, main_token_account_id_from_node_public_key,
+    validate_main_token_config_bounds,
 };
 use crate::simulator::ResourceKind;
 use std::collections::BTreeSet;
@@ -45,10 +46,12 @@ const ECONOMIC_CONTRACT_PAIR_COOLDOWN_TICKS: u64 = 5;
 const ECONOMIC_CONTRACT_REPUTATION_WINDOW_TICKS: u64 = 20;
 const ECONOMIC_CONTRACT_REPUTATION_WINDOW_CAP: i64 = 24;
 const MAIN_TOKEN_POLICY_UPDATE_DELAY_EPOCHS: u64 = 2;
+const STARTER_OC_CLAIM_AMOUNT: u64 = 100_000_000;
 
 mod action_to_event_core;
 pub(super) mod action_to_event_economy;
 mod action_to_event_gameplay;
+mod action_to_event_gameplay_meta;
 mod action_to_event_policy_contract;
 mod main_token;
 
@@ -189,7 +192,9 @@ impl World {
             | Action::GrantMetaProgress { .. } => {
                 self.action_to_event_gameplay(action_id, &envelope.action)
             }
-            Action::ClaimAgent { .. } | Action::ReleaseAgentClaim { .. } => {
+            Action::ClaimAgent { .. }
+            | Action::ClaimStarterOc { .. }
+            | Action::ReleaseAgentClaim { .. } => {
                 self.action_to_event_gameplay(action_id, &envelope.action)
             }
             Action::UpdateGameplayPolicy { .. }

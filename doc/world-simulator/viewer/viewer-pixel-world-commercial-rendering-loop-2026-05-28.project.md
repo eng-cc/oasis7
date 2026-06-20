@@ -9,7 +9,7 @@
 ## 任务拆解
 - [x] viewer-pixel-world-commercial-design (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 冻结商业化 pixel-world 信息架构、player leverage 口径与非目标。 Trace: .pm/tasks/task_b399bf37eff94c44a300c55f5db739d3.yaml
 - [x] viewer-pixel-world-commercial-host-dto (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 为 host render state 增加 `commercial_surface`，从现有 gameplay summary / agents / links / fragments 派生目标、下一步和玩家杠杆。 Trace: .pm/tasks/task_b399bf37eff94c44a300c55f5db739d3.yaml
-- [x] viewer-pixel-world-commercial-ui (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 重排 PixelWorldHost 首屏 HUD，默认折叠 renderer diagnostics，并补 fallback route 表达。 Trace: .pm/tasks/task_b399bf37eff94c44a300c55f5db739d3.yaml
+- [x] viewer-pixel-world-commercial-ui (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 重排 PixelWorldHost 首屏 HUD，默认折叠 renderer diagnostics，并补 rendered route 表达。 Trace: .pm/tasks/task_b399bf37eff94c44a300c55f5db739d3.yaml
 - [x] viewer-pixel-world-commercial-regression (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 回跑 targeted UI test、software-safe build、PM/doc/diff hygiene，并记录执行证据。 Trace: .pm/tasks/task_b399bf37eff94c44a300c55f5db739d3.yaml
 
 ## 依赖
@@ -43,5 +43,5 @@
 
 ## 进展日志
 - 2026-05-28 16:02 CST: task/worktree 已由 `scripts/new-task-worktree.sh` 建立，owner role 为 `producer_system_designer`。
-- 2026-05-28 16:17 CST: `commercial_surface` host DTO、商业化 HUD、fallback route line 与 renderer diagnostics 折叠已实现；`pixel_world_host` targeted UI tests 通过。
+- 2026-05-28 16:17 CST: `commercial_surface` Rust DTO、商业化 HUD、rendered route line 与 renderer diagnostics 折叠已实现；`pixel_world_host` targeted UI tests 通过。
 - 2026-05-28 16:18 CST: `build:software-safe` 已刷新 checked-in viewer artifact；desktop/mobile browser smoke 通过，移动端无横向溢出且 diagnostics 默认折叠。

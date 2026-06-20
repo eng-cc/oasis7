@@ -1,4 +1,3 @@
-use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::net::TcpListener;
@@ -18,14 +17,11 @@ use super::{
     VIEWER_AGENT_PROVIDER_BACKEND_ENV, VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
     VIEWER_AGENT_PROVIDER_CONTRACT_ENV, VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV,
     VIEWER_AGENT_PROVIDER_MODE_ENV, VIEWER_AGENT_PROVIDER_PROFILE_ENV,
-    VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, VIEWER_AGENT_PROVIDER_URL_ENV,
-    VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
-    VIEWER_PLAYER_ID_ENV, ViewerAuthBootstrap, WORLDSIM_PROVIDER_CONTRACT,
+    VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, VIEWER_AGENT_PROVIDER_URL_ENV, WORLDSIM_PROVIDER_CONTRACT,
     apply_viewer_live_env_overrides, build_game_url, build_oasis7_chain_runtime_args,
-    build_oasis7_viewer_live_command, build_viewer_auth_bootstrap_script, content_type_for_path,
+    build_oasis7_viewer_live_command, content_type_for_path,
     missing_execution_world_persistence_files, parse_host_port, parse_options,
     query_runtime_bound_players, resolve_static_asset_path,
-    resolve_viewer_auth_bootstrap_for_embedded_server, resolve_viewer_auth_bootstrap_from_path,
     resolve_viewer_static_dir_with_override, sanitize_index_html_for_embedded_server,
     sanitize_relative_request_path, start_static_http_server, stop_static_http_server,
     viewer_dev_dist_candidates,
@@ -41,28 +37,8 @@ mod viewer_static_dir_tests;
 use viewer_static_dir_tests::make_temp_dir;
 #[path = "launcher_static_http_tests.rs"]
 mod launcher_static_http_tests;
-
-fn assert_removed_old_brand_viewer_auth_env_absent(text: &str) {
-    assert!(!text.contains(removed_old_brand_viewer_auth_bootstrap_object().as_str()));
-    for key in removed_old_brand_viewer_auth_env_keys() {
-        assert!(!text.contains(key.as_str()));
-    }
-}
-
-fn removed_old_brand_viewer_auth_bootstrap_object() -> String {
-    format!(
-        "__{}",
-        ["AGENT", "WORLD", "VIEWER", "AUTH", "ENV"].join("_")
-    )
-}
-
-fn removed_old_brand_viewer_auth_env_keys() -> [String; 3] {
-    [
-        ["AGENT", "WORLD", "VIEWER", "PLAYER", "ID"].join("_"),
-        ["AGENT", "WORLD", "VIEWER", "AUTH", "PUBLIC", "KEY"].join("_"),
-        ["AGENT", "WORLD", "VIEWER", "AUTH", "PRIVATE", "KEY"].join("_"),
-    ]
-}
+#[path = "launcher_viewer_auth_bootstrap_tests.rs"]
+mod launcher_viewer_auth_bootstrap_tests;
 
 fn command_env_value(command: &Command, key: &str) -> Option<Option<String>> {
     command
@@ -78,6 +54,7 @@ fn parse_options_defaults() {
     assert_eq!(options.live_bind, DEFAULT_LIVE_BIND);
     assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
     assert!(options.with_llm);
+    assert!(!options.allow_debug_scenario);
     assert_eq!(
         options.agent_decision_source,
         PROVIDER_BACKED_DECISION_SOURCE
@@ -133,6 +110,23 @@ fn parse_options_defaults() {
     assert_eq!(options.chain_pos_slot_clock_genesis_unix_ms, None);
     assert_eq!(options.chain_pos_max_past_slot_lag, 256);
     assert_eq!(options.chain_world_id, None);
+}
+
+#[test]
+fn parse_options_rejects_llm_bootstrap_without_debug_opt_in() {
+    let err = parse_options(["--scenario", "llm_bootstrap"].into_iter())
+        .expect_err("debug scenario should require opt-in");
+    assert!(err.contains("seeded debug/LLM scenario"));
+    assert!(err.contains("--allow-debug-scenario"));
+}
+
+#[test]
+fn parse_options_accepts_llm_bootstrap_with_debug_opt_in() {
+    let options =
+        parse_options(["--scenario", "llm_bootstrap", "--allow-debug-scenario"].into_iter())
+            .expect("debug scenario opt-in");
+    assert_eq!(options.scenario, "llm_bootstrap");
+    assert!(options.allow_debug_scenario);
 }
 
 #[test]
@@ -560,6 +554,20 @@ fn build_viewer_live_command_wires_auto_play_flag() {
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
     assert!(args.iter().any(|arg| arg == "--auto-play"));
+}
+
+#[test]
+fn build_viewer_live_command_wires_debug_scenario_opt_in() {
+    let mut options = CliOptions::default();
+    options.scenario = "llm_bootstrap".to_string();
+    options.allow_debug_scenario = true;
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    assert!(args.iter().any(|arg| arg == "llm_bootstrap"));
+    assert!(args.iter().any(|arg| arg == "--allow-debug-scenario"));
 }
 
 #[test]
@@ -1051,123 +1059,4 @@ fn sanitize_index_html_for_embedded_server_keeps_non_index_files_unchanged() {
     let body = b"<script>.well-known/trunk/ws</script>";
     let sanitized = sanitize_index_html_for_embedded_server(Path::new("app.js"), body, None);
     assert_eq!(sanitized, body);
-}
-
-#[test]
-fn sanitize_index_html_for_embedded_server_injects_viewer_auth_bootstrap() {
-    let html = "<html><head></head><body><div id=\"app\"></div></body></html>";
-    let auth = ViewerAuthBootstrap {
-        player_id: "viewer-player".to_string(),
-        public_key: "pub-hex".to_string(),
-        private_key: "priv-hex".to_string(),
-    };
-    let sanitized = sanitize_index_html_for_embedded_server(
-        Path::new("index.html"),
-        html.as_bytes(),
-        Some(&auth),
-    );
-    let sanitized = String::from_utf8(sanitized).expect("utf-8");
-    assert!(sanitized.contains(VIEWER_AUTH_BOOTSTRAP_OBJECT));
-    assert!(sanitized.contains(VIEWER_PLAYER_ID_ENV));
-    assert!(sanitized.contains(VIEWER_AUTH_PUBLIC_KEY_ENV));
-    assert!(sanitized.contains(VIEWER_AUTH_PRIVATE_KEY_ENV));
-    assert_removed_old_brand_viewer_auth_env_absent(&sanitized);
-    assert!(sanitized.contains("viewer-player"));
-    assert!(sanitized.contains("pub-hex"));
-    assert!(sanitized.contains("priv-hex"));
-}
-
-#[test]
-fn sanitize_index_html_for_embedded_server_injects_viewer_auth_bootstrap_into_non_index_html() {
-    let html = "<html><head></head><body><div id=\"safe\"></div></body></html>";
-    let auth = ViewerAuthBootstrap {
-        player_id: "viewer-player".to_string(),
-        public_key: "pub-hex".to_string(),
-        private_key: "priv-hex".to_string(),
-    };
-    let sanitized = sanitize_index_html_for_embedded_server(
-        Path::new("software_safe.html"),
-        html.as_bytes(),
-        Some(&auth),
-    );
-    let sanitized = String::from_utf8(sanitized).expect("utf-8");
-    assert!(sanitized.contains(VIEWER_AUTH_BOOTSTRAP_OBJECT));
-    assert_removed_old_brand_viewer_auth_env_absent(&sanitized);
-    assert!(sanitized.contains("viewer-player"));
-    assert!(sanitized.contains("pub-hex"));
-    assert!(sanitized.contains("priv-hex"));
-}
-
-#[test]
-fn build_viewer_auth_bootstrap_script_contains_expected_window_object() {
-    let auth = ViewerAuthBootstrap {
-        player_id: "viewer-player".to_string(),
-        public_key: "public".to_string(),
-        private_key: "private".to_string(),
-    };
-    let script = build_viewer_auth_bootstrap_script(&auth);
-    assert!(script.contains("window."));
-    assert!(script.contains(VIEWER_AUTH_BOOTSTRAP_OBJECT));
-    assert!(script.contains(VIEWER_PLAYER_ID_ENV));
-    assert!(script.contains(VIEWER_AUTH_PUBLIC_KEY_ENV));
-    assert!(script.contains(VIEWER_AUTH_PRIVATE_KEY_ENV));
-    assert_removed_old_brand_viewer_auth_env_absent(&script);
-}
-
-#[test]
-fn resolve_viewer_auth_bootstrap_from_path_reads_node_keypair() {
-    let temp_dir = make_temp_dir("viewer_auth_bootstrap");
-    let config_path = temp_dir.join("config.toml");
-    fs::write(
-        &config_path,
-        "[node]\nprivate_key = \"private-key-hex\"\npublic_key = \"public-key-hex\"\n",
-    )
-    .expect("write config");
-
-    let auth =
-        resolve_viewer_auth_bootstrap_from_path(config_path.as_path(), None).expect("resolve auth");
-    assert_eq!(auth.public_key, "public-key-hex");
-    assert_eq!(auth.private_key, "private-key-hex");
-    assert!(!auth.player_id.trim().is_empty());
-    let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn resolve_viewer_auth_bootstrap_from_path_uses_chain_node_id_fallback() {
-    let temp_dir = make_temp_dir("viewer_auth_bootstrap_chain_player");
-    let config_path = temp_dir.join("config.toml");
-    fs::write(
-        &config_path,
-        "[node]\nprivate_key = \"private-key-hex\"\npublic_key = \"public-key-hex\"\n",
-    )
-    .expect("write config");
-
-    let auth = resolve_viewer_auth_bootstrap_from_path(config_path.as_path(), Some("chain-a"))
-        .expect("resolve auth");
-    assert_eq!(auth.player_id, "chain-a");
-    assert_eq!(auth.public_key, "public-key-hex");
-    assert_eq!(auth.private_key, "private-key-hex");
-    let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn hosted_public_join_disables_viewer_auth_bootstrap_resolution() {
-    let temp_dir = make_temp_dir("hosted_public_join_no_bootstrap");
-    let config_path = temp_dir.join("config.toml");
-    fs::write(
-        &config_path,
-        "[node]\nprivate_key = \"private-key-hex\"\npublic_key = \"public-key-hex\"\n",
-    )
-    .expect("write config");
-
-    let old_cwd = env::current_dir().expect("cwd");
-    env::set_current_dir(&temp_dir).expect("chdir");
-    let auth = resolve_viewer_auth_bootstrap_for_embedded_server(
-        super::DeploymentMode::HostedPublicJoin,
-        Some("chain-a"),
-    );
-    env::set_current_dir(old_cwd).expect("restore cwd");
-
-    assert!(auth.is_none());
-    let _ = fs::remove_dir_all(temp_dir);
 }

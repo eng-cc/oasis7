@@ -1,6 +1,11 @@
 #[cfg(not(target_arch = "wasm32"))]
 use crate::{
+    geometry::GeoPos,
     runtime::{Action as RuntimeAction, RecipeExecutionPlan},
+    simulator::{
+        AgentSpawnConfig, AsteroidFragmentInitConfig, ChunkCoord, OriginLocationConfig,
+        ResourceKind, ResourceStock, WorldConfig, WorldInitConfig, WorldModel, build_world_model,
+    },
     viewer::{GameplayActionError, GameplayActionRequest},
 };
 #[cfg(not(target_arch = "wasm32"))]
@@ -9,6 +14,8 @@ use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack};
 pub const ACTION_BUILD_SMELTER_MK1: &str = "build_factory_smelter_mk1";
 pub const ACTION_BUILD_ASSEMBLER_MK1: &str = "build_factory_assembler_mk1";
 pub const ACTION_CLAIM_AGENT: &str = "claim_agent";
+pub const ACTION_CLAIM_FIRST_AGENT: &str = "claim_first_agent";
+pub const ACTION_CLAIM_STARTER_OC: &str = "claim_starter_oc";
 pub const ACTION_RELEASE_AGENT_CLAIM: &str = "release_agent_claim";
 pub const ACTION_SCHEDULE_SMELTER_IRON_INGOT: &str = "schedule_recipe_smelter_iron_ingot";
 pub const ACTION_SCHEDULE_SMELTER_COPPER_WIRE: &str = "schedule_recipe_smelter_copper_wire";
@@ -48,6 +55,12 @@ const RECIPE_ASSEMBLER_MODULE_RACK: &str = "recipe.assembler.module_rack";
 #[cfg(not(target_arch = "wasm32"))]
 const RECIPE_ASSEMBLER_FACTORY_CORE: &str = "recipe.assembler.factory_core";
 
+pub const FIRST_AGENT_CLAIM_TARGET_AGENT_ID: &str = "starter-agent-0";
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) const FORMAL_RELEASE_DEFAULT_WORLD_SEED: u64 = 0x0A51_5700_0000_0001;
+#[cfg(not(target_arch = "wasm32"))]
+const FORMAL_RELEASE_DEFAULT_BOOTSTRAP_CHUNK: ChunkCoord = ChunkCoord { x: 0, y: 0, z: 0 };
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn build_runtime_action_from_gameplay_request(
     request: &GameplayActionRequest,
@@ -63,9 +76,30 @@ pub fn build_runtime_action_from_gameplay_request(
     }
 
     let action = match request.action_id.as_str() {
+        ACTION_CLAIM_FIRST_AGENT => Some(RuntimeAction::RegisterAgent {
+            agent_id: require_first_agent_claim_target(request, target_agent_id)?,
+            pos: formal_release_default_first_agent_spawn_pos().map_err(|message| {
+                GameplayActionError {
+                    code: "starter_spawn_location_missing".to_string(),
+                    message,
+                    action_id: Some(request.action_id.clone()),
+                    target_agent_id: Some(request.target_agent_id.clone()),
+                }
+            })?,
+        }),
         ACTION_CLAIM_AGENT => Some(RuntimeAction::ClaimAgent {
             claimer_agent_id: required_actor_agent_id(request)?,
             target_agent_id: target_agent_id.to_string(),
+        }),
+        ACTION_CLAIM_STARTER_OC => Some(RuntimeAction::ClaimStarterOc {
+            agent_id: target_agent_id.to_string(),
+            player_id: required_player_id(request)?,
+            public_key: request
+                .public_key
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned),
         }),
         ACTION_RELEASE_AGENT_CLAIM => Some(RuntimeAction::ReleaseAgentClaim {
             claimer_agent_id: required_actor_agent_id(request)?,
@@ -213,6 +247,93 @@ fn required_actor_agent_id(request: &GameplayActionRequest) -> Result<String, Ga
             target_agent_id: Some(request.target_agent_id.clone()),
         })?;
     Ok(actor_agent_id.to_string())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn required_player_id(request: &GameplayActionRequest) -> Result<String, GameplayActionError> {
+    let player_id = request.player_id.trim();
+    if player_id.is_empty() {
+        return Err(GameplayActionError {
+            code: "player_id_required".to_string(),
+            message: format!(
+                "gameplay_action `{}` requires non-empty player_id",
+                request.action_id
+            ),
+            action_id: Some(request.action_id.clone()),
+            target_agent_id: Some(request.target_agent_id.clone()),
+        });
+    }
+    Ok(player_id.to_string())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn formal_release_default_seed_model() -> Result<(WorldConfig, WorldModel), String> {
+    let config = WorldConfig::default();
+    let mut starter_resources = ResourceStock::new();
+    starter_resources
+        .set(ResourceKind::Electricity, 32)
+        .map_err(|err| format!("formal release starter electricity stock failed: {err:?}"))?;
+    starter_resources
+        .set(ResourceKind::Data, 8)
+        .map_err(|err| format!("formal release starter data stock failed: {err:?}"))?;
+
+    let init = WorldInitConfig {
+        seed: FORMAL_RELEASE_DEFAULT_WORLD_SEED,
+        origin: OriginLocationConfig {
+            enabled: false,
+            ..OriginLocationConfig::default()
+        },
+        asteroid_fragment: AsteroidFragmentInitConfig {
+            enabled: true,
+            bootstrap_chunks: vec![FORMAL_RELEASE_DEFAULT_BOOTSTRAP_CHUNK],
+            ..AsteroidFragmentInitConfig::default()
+        },
+        agents: AgentSpawnConfig {
+            count: 1,
+            id_prefix: "starter-agent-".to_string(),
+            start_index: 0,
+            resources: starter_resources,
+        },
+        ..WorldInitConfig::default()
+    };
+
+    let (model, _) = build_world_model(&config, &init)
+        .map_err(|err| format!("formal release seed model build failed: {err:?}"))?;
+    Ok((config, model))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn formal_release_default_first_agent_spawn_pos() -> Result<GeoPos, String> {
+    let (_, model) = formal_release_default_seed_model()?;
+    model
+        .agents
+        .get(FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+        .map(|agent| agent.pos)
+        .ok_or_else(|| {
+            format!(
+                "formal release seed model missing bootstrap agent {}",
+                FIRST_AGENT_CLAIM_TARGET_AGENT_ID
+            )
+        })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn require_first_agent_claim_target(
+    request: &GameplayActionRequest,
+    target_agent_id: &str,
+) -> Result<String, GameplayActionError> {
+    if target_agent_id != FIRST_AGENT_CLAIM_TARGET_AGENT_ID {
+        return Err(GameplayActionError {
+            code: "invalid_first_agent_claim_target".to_string(),
+            message: format!(
+                "gameplay_action `{}` must target {}",
+                request.action_id, FIRST_AGENT_CLAIM_TARGET_AGENT_ID
+            ),
+            action_id: Some(request.action_id.clone()),
+            target_agent_id: Some(request.target_agent_id.clone()),
+        });
+    }
+    Ok(target_agent_id.to_string())
 }
 
 #[cfg(not(target_arch = "wasm32"))]

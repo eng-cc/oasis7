@@ -10,7 +10,7 @@ use crate::simulator::persist::{
 use crate::viewer::{ControlCompletionAck, ControlCompletionStatus, ViewerControl};
 
 use super::player_gameplay::extend_available_actions;
-use crate::viewer::FACTORY_SMELTER_MK1;
+use crate::viewer::{ACTION_CLAIM_FIRST_AGENT, ACTION_CLAIM_STARTER_OC, FACTORY_SMELTER_MK1};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
@@ -575,7 +575,9 @@ pub(super) fn build_player_gameplay_snapshot(
                 "committed runtime sync is unavailable; refresh the snapshot or repair runtime bootstrap first"
                     .to_string();
             for action in &mut available_actions {
-                if action.protocol_action == "request_snapshot" {
+                if action.protocol_action == "request_snapshot"
+                    || (state.agents.is_empty() && action.action_id == ACTION_CLAIM_FIRST_AGENT)
+                {
                     continue;
                 }
                 action.disabled_reason = Some(disabled_reason.clone());
@@ -1043,10 +1045,10 @@ pub(super) fn apply_runtime_snapshot_empty_entities_blocker(
     gameplay.execution_state = PlayerGameplayExecutionState::Blocked;
     gameplay.blocker_kind = Some("runtime_snapshot_empty_entities".to_string());
     gameplay.blocker_detail = Some(format!(
-        "runtime exposed gameplay progress but no {missing_summary} in the viewer snapshot; primary web entry cannot continue yet"
+        "runtime exposed an empty new-user world with no {missing_summary}; claim the first Agent to start the onboarding flow"
     ));
     gameplay.next_step_hint =
-        "Request a fresh snapshot. If entities stay empty, restart or repair the runtime world bootstrap before retrying gameplay."
+        "Use claim_first_agent if it is available; otherwise request a fresh snapshot and repair runtime bootstrap only if the claim action is missing."
             .to_string();
     gameplay.causality_kind = Some(PlayerGameplayCausalityKind::WorldConstraint);
     gameplay.causality_detail = gameplay.blocker_detail.clone();
@@ -1054,7 +1056,10 @@ pub(super) fn apply_runtime_snapshot_empty_entities_blocker(
     gameplay.primary_blocker = gameplay.blocker_detail.clone();
     gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
     for action in &mut gameplay.available_actions {
-        if action.protocol_action == "request_snapshot" {
+        if action.protocol_action == "request_snapshot"
+            || action.action_id == ACTION_CLAIM_FIRST_AGENT
+            || action.action_id == ACTION_CLAIM_STARTER_OC
+        {
             continue;
         }
         action.disabled_reason = Some(disabled_reason.clone());

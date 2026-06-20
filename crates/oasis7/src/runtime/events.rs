@@ -426,6 +426,12 @@ pub enum Action {
         claimer_agent_id: String,
         target_agent_id: String,
     },
+    ClaimStarterOc {
+        agent_id: String,
+        player_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        public_key: Option<String>,
+    },
     ReleaseAgentClaim {
         claimer_agent_id: String,
         target_agent_id: String,
@@ -756,6 +762,7 @@ impl Action {
             | Action::ReleaseAgentClaim {
                 claimer_agent_id, ..
             } => Some(claimer_agent_id.as_str()),
+            Action::ClaimStarterOc { agent_id, .. } => Some(agent_id.as_str()),
             Action::TransferMaterial {
                 requester_agent_id, ..
             }

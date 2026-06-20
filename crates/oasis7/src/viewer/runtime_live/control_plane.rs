@@ -473,6 +473,19 @@ impl ViewerRuntimeLiveServer {
         {
             return Ok(replay_ack);
         }
+        if self.world.main_token_liquid_balance(agent_id.as_str()) == 0
+            && !self
+                .world
+                .state()
+                .starter_oc_claims
+                .contains_key(agent_id.as_str())
+        {
+            return Err(AgentChatError {
+                code: "starter_oc_required".to_string(),
+                message: "claim starter OC before using LLM/agent chat".to_string(),
+                agent_id: Some(agent_id),
+            });
+        }
         self.llm_sidecar
             .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
             .map_err(|message| AgentChatError {

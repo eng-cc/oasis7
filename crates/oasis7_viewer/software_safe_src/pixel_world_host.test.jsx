@@ -58,14 +58,158 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function numericInlineStyle(element, property) {
-  const value = Number.parseFloat(element.style[property]);
-  expect(Number.isFinite(value)).toBe(true);
-  return value;
+function fieldValue(source, snake, camel, fallback = null) {
+  if (!source || typeof source !== "object") {
+    return fallback;
+  }
+  if (source[snake] != null) {
+    return source[snake];
+  }
+  if (source[camel] != null) {
+    return source[camel];
+  }
+  return fallback;
 }
 
-function elementPrecedes(first, second) {
-  return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+function dominantCompound(block) {
+  const ppm = block?.compounds?.ppm || {};
+  const entries = Object.entries(ppm);
+  if (!entries.length) {
+    return "unknown";
+  }
+  return entries.sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))[0][0];
+}
+
+function locationPos(location) {
+  return location?.pos || { x_cm: 0, y_cm: 0, z_cm: 0 };
+}
+
+function buildTestRustRenderState(input) {
+  const snapshot = input.snapshot || {};
+  const model = snapshot.model || {};
+  const gameplay = snapshot.player_gameplay || {};
+  const locations = Object.values(model.locations || {});
+  const agents = Object.values(model.agents || {});
+  const fragments = locations.flatMap((location) => {
+    const base = locationPos(location);
+    return (location.fragment_profile?.blocks?.blocks || []).map((block, index) => ({
+      id: `fragment:${location.id}:${index}`,
+      locationId: location.id,
+      pos: {
+        x_cm: base.x_cm + Number(block.origin_cm?.x_cm || 0),
+        y_cm: base.y_cm + Number(block.origin_cm?.z_cm || block.origin_cm?.y_cm || 0),
+        z_cm: base.z_cm + Number(block.origin_cm?.y_cm || 0),
+      },
+      dominantCompound: dominantCompound(block),
+      footprintCm: Math.max(Number(block.size_cm?.x_cm || 12_000), Number(block.size_cm?.z_cm || block.size_cm?.y_cm || 12_000)),
+    }));
+  });
+  const firstAction = (gameplay.available_actions || [])[0] || {};
+  const activeAgentId = gameplay.intent_target || agents[0]?.id || null;
+  const receiptPresent = Boolean(gameplay.recent_feedback || gameplay.last_world_change);
+  const blockerLabel = gameplay.blocker_kind === "material_shortage" ? "Missing Material" : gameplay.blocker_kind || null;
+
+  const renderState = {
+    locale: input.locale || "en",
+    worldBounds: snapshot.config?.space || { width_cm: 10_000_000, depth_cm: 5_000_000, height_cm: 1_000_000 },
+    world_bounds: snapshot.config?.space || { width_cm: 10_000_000, depth_cm: 5_000_000, height_cm: 1_000_000 },
+    locations: locations.map((location) => ({
+      id: location.id,
+      label: location.name || location.id,
+      pos: locationPos(location),
+      markerRole: "logic_anchor",
+      markerAlpha: 0.32,
+    })),
+    fragmentTerrain: fragments,
+    fragment_terrain: fragments,
+    agents: agents.map((agent, index) => {
+      const base = locationPos(model.locations?.[agent.location_id]);
+      return {
+        id: agent.id,
+        label: agent.name || agent.id,
+        pos: agent.pos || {
+          x_cm: base.x_cm + 20_000 + index * 15_000,
+          y_cm: base.y_cm + 10_000 + index * 12_000,
+          z_cm: base.z_cm,
+        },
+        positionSource: agent.pos ? "runtime_agent" : "location_derived",
+      };
+    }),
+    links: agents
+      .filter((agent) => agent.location_id && model.locations?.[agent.location_id])
+      .map((agent) => {
+        const from = agent.pos || {
+          x_cm: locationPos(model.locations[agent.location_id]).x_cm + 20_000,
+          y_cm: locationPos(model.locations[agent.location_id]).y_cm + 10_000,
+          z_cm: 0,
+        };
+        return {
+          id: `link:${agent.id}:${agent.location_id}`,
+          kind: "agent_assignment",
+          from,
+          to: locationPos(model.locations[agent.location_id]),
+          emphasis: 0.72,
+        };
+      }),
+    selection: activeAgentId ? { kind: "agent", id: activeAgentId } : null,
+    goalHighlight: {
+      title: gameplay.goal_title || "Current Objective",
+      objective: gameplay.objective || gameplay.progress_detail || "",
+    },
+    blockerHighlight: blockerLabel
+      ? { kind: gameplay.blocker_kind, label: blockerLabel, detail: gameplay.blocker_detail || null }
+      : null,
+    recentEventHotspots: [],
+    visualHotspots: [],
+    commercial_surface: {
+      objective: {
+        title: gameplay.goal_title || "Current Objective",
+        detail: gameplay.objective || gameplay.progress_detail || "No current objective.",
+        progress_percent: gameplay.progress_percent ?? null,
+      },
+      next_action: {
+        label: fieldValue(firstAction, "label", "label", "Unassigned"),
+        detail: gameplay.intent_summary || null,
+        target_agent_id: fieldValue(firstAction, "target_agent_id", "targetAgentId", activeAgentId),
+        execute_kind: fieldValue(firstAction, "execute_kind", "executeKind", "gameplay_action"),
+      },
+      active_agent_id: activeAgentId,
+      player_leverage: {
+        state: gameplay.stage_status || "waiting_for_intent",
+        label: receiptPresent ? "Blocked" : "Waiting for Intent",
+        summary: gameplay.progress_detail || "Waiting",
+        detail: gameplay.next_step_hint || null,
+      },
+      action_receipt: {
+        present: receiptPresent,
+        state: receiptPresent ? "blocked" : "waiting_for_intent",
+        confidence: receiptPresent ? "world_delta" : "none",
+        title: receiptPresent ? "Action blocked" : "No action receipt yet",
+        summary: receiptPresent ? "Action blocked" : "No receipt",
+        detail: gameplay.last_world_change || gameplay.recent_feedback?.effect || "No player-caused world change has been confirmed yet.",
+        target_agent_id: receiptPresent ? activeAgentId : null,
+        effect_kind: gameplay.causality_kind || null,
+        delta_logical_time: gameplay.recent_feedback?.delta_logical_time ?? null,
+        delta_event_seq: gameplay.recent_feedback?.delta_event_seq ?? null,
+      },
+      blocker: {
+        label: blockerLabel,
+        detail: gameplay.next_step_hint || gameplay.blocker_detail || null,
+      },
+      world_read: {
+        agents: agents.length,
+        routes: agents.filter((agent) => agent.location_id).length,
+        fragments: fragments.length,
+        hotspots: 0,
+      },
+    },
+    presentation: input.presentation || { world_bounds_label: "bounds", marker_truth_note: "truth" },
+  };
+  return renderState;
+}
+
+function useTestRustRenderState() {
+  runtimeMock.deriveRenderState = vi.fn((input) => buildTestRustRenderState(input));
 }
 
 function sampleSnapshot() {
@@ -273,308 +417,83 @@ describe("pixel world host", () => {
     expect(html).toContain(".pixel-world-focus-command-tray");
   });
 
-  it("builds richer visual DTO layers from the existing snapshot contract", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
+  it("resolves claim onboarding next moves to executable gameplay actions", async () => {
+    const { resolvePixelWorldDirectNextMoveAction } = await import("./pixel_world_host.jsx");
+    const gameplay = {
+      availableActions: [
+        {
+          actionId: "claim_first_agent",
+          executeKind: "claim_first_agent",
+          label: "Claim First Agent",
+        },
+      ],
+    };
 
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    const snapshot = sampleSnapshot();
-    snapshot.model.agents["agent-0"].pos = { x_cm: 25_000, y_cm: 25_000, z_cm: 0 };
-    core.injectSnapshot(snapshot);
-    core.state.recentEvents = [
-      { eventId: "evt-1", title: "Transfer spike", kind: "resource_transfer" },
-      { eventId: "evt-2", title: "Queue update", kind: "build_queue" },
-    ];
-
-    const renderState = buildPixelWorldRenderState("en");
-    expect(renderState.links).toHaveLength(1);
-    expect(renderState.visual_hotspots).toHaveLength(4);
-    expect(renderState.visual_hotspots.map((entry) => entry.kind)).toEqual([
-      "goal",
-      "blocker",
-      "resource_transfer",
-      "build_queue",
-    ]);
-    expect(renderState.visual_hotspots.every((entry) => entry.pos)).toBe(true);
-    expect(renderState.commercial_surface).toMatchObject({
-      active_agent_id: "agent-0",
-      objective: {
-        title: "Recover sustainable capability",
-      },
-      next_action: {
-        label: "Build smelter mk1",
-        target_agent_id: "agent-0",
-        execute_kind: "gameplay_action",
-      },
-      player_leverage: {
-        state: "blocked",
-        summary: "Queue build_factory_smelter_mk1 for agent-0",
-      },
-      action_receipt: {
-        present: true,
-        state: "blocked",
-        confidence: "world_delta",
-        title: "Action blocked",
-        summary: "Smelter build request reached factory-0; iron shortage blocks construction.",
-        target_agent_id: "agent-0",
-        effect_kind: "world_constraint",
-        delta_logical_time: 1,
-        delta_event_seq: 2,
-      },
-      world_read: {
-        tick: 12,
-        agents: 1,
-        routes: 1,
-        fragments: 2,
-        hotspots: 4,
-      },
-    });
-  }, HEAVY_UI_TEST_TIMEOUT_MS);
-
-  it("surfaces the current snapshot tick in the persistent world readout", async () => {
-    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
-
-    const readout = document.querySelector(".pixel-world-readout");
-    expect(readout).toHaveTextContent("tick=12");
-    expect(readout.querySelector('[data-world-tick="12"]')).toHaveTextContent("tick=12");
-  });
-
-  it("routes executable commercial next moves to gameplay details without executing gameplay", async () => {
-    const { core } = await renderPixelWorldHost(
-      sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    expect(resolvePixelWorldDirectNextMoveAction(gameplay, "claim_first_agent")).toEqual(
+      gameplay.availableActions[0],
     );
-    const sendGameplayAction = vi.spyOn(core, "sendGameplayAction");
-    const gameplayDetails = document.createElement("details");
-    gameplayDetails.id = "viewer-gameplay-details";
-    document.body.appendChild(gameplayDetails);
-
-    const nextMove = document.querySelector(".pixel-world-command-cell--next");
-    expect(nextMove).toHaveAttribute("data-next-move-route", "gameplay_details");
-    expect(nextMove).toHaveAttribute("data-execute-kind", "gameplay_action");
-    expect(nextMove).toHaveTextContent("Build smelter mk1");
-
-    const gameplayRoute = screen.getByRole("link", { name: "Open Gameplay Details" });
-    expect(gameplayRoute).toHaveAttribute("href", "#viewer-gameplay-details");
-    gameplayRoute.click();
-
-    expect(gameplayDetails.open).toBe(true);
-    expect(sendGameplayAction).not.toHaveBeenCalled();
-  }, HEAVY_UI_TEST_TIMEOUT_MS);
-
-  it("localizes command board goal and next-action copy for the selected UI language", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=zh");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
-
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    core.setViewerLocale("zh-CN");
-    core.injectSnapshot(sampleSnapshot());
-
-    const surface = buildPixelWorldRenderState("zh-CN").commercial_surface;
-    expect(surface.objective.title).toBe("恢复可持续能力");
-    expect(surface.objective.detail).toBe("先恢复阻塞点，再确认生产线重新具备可经营能力。");
-    expect(surface.next_action.label).toBe("排队建造一型冶炼炉");
-    expect(surface.next_action.detail).toBe("查看当前回执和阻塞原因，再决定下一步。");
-    expect(surface.objective.title).not.toMatch(/[A-Za-z]/);
-    expect(surface.next_action.label).not.toMatch(/[A-Za-z]/);
-
-    const liveSnapshot = sampleSnapshot();
-    liveSnapshot.player_gameplay.goal_kind = "CreateFirstWorldFeedback";
-    liveSnapshot.player_gameplay.goal_title = "Create the first visible world feedback";
-    liveSnapshot.player_gameplay.objective = "Advance the world once and confirm that your action produces a visible state or event delta.";
-    liveSnapshot.player_gameplay.next_step_hint = "Request a snapshot, advance 1 step, then inspect the new delta and events.";
-    liveSnapshot.player_gameplay.available_actions[0].label = "Queue Smelter MK1 construction";
-    core.injectSnapshot(liveSnapshot);
-
-    const liveRenderState = buildPixelWorldRenderState("zh-CN");
-    const liveSurface = liveRenderState.commercial_surface;
-    expect(liveRenderState.goal_highlight.title).toBe("确认第一条世界反馈");
-    expect(liveRenderState.goal_highlight.title).not.toMatch(/[A-Za-z]/);
-    expect(liveSurface.objective.title).toBe("确认第一条世界反馈");
-    expect(liveSurface.objective.detail).toBe("先拿到一条明确世界反馈，再继续后续工业选择。");
-    expect(liveSurface.next_action.label).toBe("排队建造一型冶炼炉");
-    expect(liveSurface.next_action.detail).toBe("先请求一次快照，推进 1 步，再检查新的世界变化和事件。");
-    expect(liveSurface.objective.title).not.toMatch(/[A-Za-z]/);
-    expect(liveSurface.objective.detail).not.toMatch(/[A-Za-z]/);
-    expect(liveSurface.next_action.label).not.toMatch(/[A-Za-z]/);
   });
 
-  it("classifies action receipt confidence without treating default intent copy as player action", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
+  it("does not directly execute disabled or generic pixel world next moves", async () => {
+    const { resolvePixelWorldDirectNextMoveAction } = await import("./pixel_world_host.jsx");
+    const gameplay = {
+      availableActions: [
+        {
+          actionId: "claim_first_agent",
+          executeKind: "claim_first_agent",
+          disabledReason: "already claimed",
+        },
+        {
+          actionId: "build_factory_smelter_mk1",
+          executeKind: "gameplay_action",
+        },
+      ],
+    };
 
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    core.injectSnapshot(acceptedOnlySnapshot());
-    let receipt = buildPixelWorldRenderState("en").commercial_surface.action_receipt;
-    expect(receipt).toMatchObject({
-      present: true,
-      state: "accepted",
-      confidence: "accepted_intent",
-      title: "Action accepted",
-      summary: "Queue build_factory_smelter_mk1 for agent-0",
-      detail: "Build request queued for agent-0.",
-      target_agent_id: "agent-0",
-      effect_kind: "queued_for_execution",
-      delta_logical_time: 0,
-      delta_event_seq: 1,
-    });
-
-    core.injectSnapshot(noReceiptSnapshot());
-    core.state.recentEvents = [
-      { eventId: "ambient-1", title: "Ambient transfer spike", kind: "resource_transfer" },
-    ];
-    receipt = buildPixelWorldRenderState("en").commercial_surface.action_receipt;
-    expect(receipt).toMatchObject({
-      present: false,
-      state: "waiting_for_intent",
-      confidence: "none",
-      title: "No action receipt yet",
-      target_agent_id: null,
-      effect_kind: null,
-      delta_logical_time: null,
-      delta_event_seq: null,
-    });
-    expect(receipt.summary).toBe("No player-caused world change has been confirmed yet.");
+    expect(resolvePixelWorldDirectNextMoveAction(gameplay, "claim_first_agent")).toBeNull();
+    expect(resolvePixelWorldDirectNextMoveAction(gameplay, "gameplay_action")).toBeNull();
   });
 
-  it("derives fragment terrain from location fragment blocks and de-emphasizes location markers", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
-
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    core.injectSnapshot(sampleSnapshot());
-
-    const renderState = buildPixelWorldRenderState("en");
-    expect(renderState.fragment_terrain).toHaveLength(2);
-    expect(renderState.locations[0]).toMatchObject({
-      marker_role: "logic_anchor",
-      marker_alpha: 0.32,
-      size_hint_px: 10,
-      fragment_terrain_count: 2,
-    });
-    expect(renderState.fragment_terrain.map((patch) => ({
-      id: patch.id,
-      dominant_compound: patch.dominant_compound,
-      footprint_cm: patch.footprint_cm,
-      color: patch.color,
-      emphasis: patch.emphasis,
-    }))).toEqual([
-      {
-        id: "fragment:loc-0:0",
-        dominant_compound: "silicate_matrix",
-        footprint_cm: 12_000,
-        color: [126, 144, 99],
-        emphasis: 0.58,
-      },
-      {
-        id: "fragment:loc-0:1",
-        dominant_compound: "iron_nickel_alloy",
-        footprint_cm: 20_000,
-        color: [176, 184, 196],
-        emphasis: 0.58,
-      },
-    ]);
-
-    const metalPatch = renderState.fragment_terrain.find((patch) => (
-      patch.dominant_compound === "iron_nickel_alloy"
-    ));
-    expect(metalPatch).toMatchObject({
-      id: "fragment:loc-0:1",
-      location_id: "loc-0",
-      footprint_cm: 20_000,
-      color: [176, 184, 196],
-    });
-    expect(metalPatch.pos.x_cm).toBeGreaterThan(renderState.locations[0].pos.x_cm);
-  });
-
-  it("derives deterministic agent positions from assigned locations when snapshots omit agent coordinates", async () => {
-    vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
-    window.localStorage.clear();
-    document.body.innerHTML = "";
-
-    const core = await import("./legacy_core.js");
-    const { buildPixelWorldRenderState } = await import("./pixel_world_host.jsx");
-
-    core.injectSnapshot(sampleSnapshot());
-
-    const firstState = buildPixelWorldRenderState("en");
-    const secondState = buildPixelWorldRenderState("en");
-    const agent = firstState.agents.find((entry) => entry.id === "agent-0");
-
-    expect(agent.position_source).toBe("location_derived");
-    expect(agent.pos).toEqual(secondState.agents.find((entry) => entry.id === "agent-0").pos);
-    expect(agent.status_badges).toContain("position=location_derived");
-    expect(firstState.links).toHaveLength(1);
-    expect(firstState.links[0].from).toEqual(agent.pos);
-    expect(firstState.links[0].to).toEqual(firstState.locations[0].pos);
-  });
-
-  it("shows the explicit fallback surface when renderer deferral is requested", async () => {
+  it("shows the explicit unavailable surface when renderer deferral is requested", async () => {
     const { core } = await renderPixelWorldHost(
       sampleSnapshot(),
       "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+      expect(screen.getByText("Renderer Unavailable")).toBeInTheDocument();
     });
 
     expect(runtimeMock.mountCalls).toBe(0);
     expect(screen.getByText("World Command Board")).toBeInTheDocument();
-    expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
-    expect(screen.getByText("Build smelter mk1")).toBeInTheDocument();
-    expect(screen.getByText("Queue build_factory_smelter_mk1 for agent-0")).toBeInTheDocument();
-    expect(screen.getByText("Action Receipt")).toBeInTheDocument();
-    expect(screen.getByText("Action blocked")).toBeInTheDocument();
-    expect(screen.getByText("Smelter build request reached factory-0; iron shortage blocks construction.")).toBeInTheDocument();
-    expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent("Renderer Not Attached");
-    const receipt = document.querySelector(".pixel-world-action-receipt");
-    expect(receipt).toHaveAttribute("data-receipt-present", "true");
-    expect(receipt).toHaveAttribute("data-receipt-state", "blocked");
-    expect(receipt).toHaveAttribute("data-receipt-confidence", "world_delta");
-    expect(receipt.textContent).toContain("agent=agent-0");
+    expect(screen.getAllByText(/pixel_world_render_state_unavailable/i).length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-renderer-state="unavailable"]')).toHaveTextContent("pixel_world_render_state_unavailable");
+    expect(screen.queryByText("Recover sustainable capability")).not.toBeInTheDocument();
+    expect(screen.queryByText("Build smelter mk1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Action Receipt")).not.toBeInTheDocument();
     const diagnostics = screen.getByText("Renderer Diagnostics").closest("details");
     expect(diagnostics.open).toBe(false);
-    expect(screen.getByText(/using host fallback first/i)).toBeInTheDocument();
+    expect(screen.getByText(/the page no longer keeps a second JS world renderer/i)).toBeInTheDocument();
 
     screen.getByRole("button", { name: "Reattach Embedded Renderer" }).click();
 
     await waitFor(() => {
-      expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/pixel_world_render_state_unavailable/i).length).toBeGreaterThan(0);
     });
-    expect(runtimeMock.mountCalls).toBeGreaterThan(0);
-    expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
-    expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(2);
-    expect(document.querySelector(".pixel-world-entity--location")).toHaveAttribute("data-marker-role", "logic_anchor");
-    expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
+    expect(runtimeMock.mountCalls).toBe(0);
+    expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(0);
+    expect(core.state.lastError).toContain("pixel world Rust render-state derivation is unavailable");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("auto-attaches the embedded renderer for test_api pages unless deferral is explicit", async () => {
     const { core } = await renderPixelWorldHost();
 
     await waitFor(() => {
-      expect(screen.getByText(/pixel_world_renderer_runtime_unavailable/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/pixel_world_render_state_unavailable/i).length).toBeGreaterThan(0);
     });
 
-    expect(runtimeMock.mountCalls).toBe(1);
-    expect(core.state.lastError).toContain("pixel world wasm runtime is unavailable");
+    expect(runtimeMock.mountCalls).toBe(0);
+    expect(core.state.lastError).toContain("pixel world Rust render-state derivation is unavailable");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("uses Rust-derived render state from the runtime module when available", async () => {
@@ -749,10 +668,11 @@ describe("pixel world host", () => {
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders the no-receipt fallback without implying an active agent caused progress", async () => {
+    useTestRustRenderState();
     await renderPixelWorldHost(noReceiptSnapshot());
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+      expect(screen.getByText("No action receipt yet")).toBeInTheDocument();
     });
 
     const receipt = document.querySelector(".pixel-world-action-receipt");
@@ -766,13 +686,14 @@ describe("pixel world host", () => {
   });
 
   it("offers an app-level world focus mode with command and diagnostics drawers", async () => {
+    useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
       "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
     });
 
     const host = document.querySelector(".pixel-world-host");
@@ -781,7 +702,9 @@ describe("pixel world host", () => {
 
     screen.getByRole("button", { name: "Enter World Focus" }).click();
 
-    expect(host).toHaveAttribute("data-world-focus", "true");
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "true");
+    });
     expect(document.body).toHaveClass("pixel-world-focus-active");
     expect(screen.getByText("World Focus")).toBeInTheDocument();
     expect(screen.queryByText("No blocker")).not.toBeInTheDocument();
@@ -795,7 +718,6 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Receipt");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("68%");
-    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Replenish upstream materials, then advance again to confirm the line resumes.");
     expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Next Move");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Routes");
@@ -805,20 +727,19 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
     expect(host).toHaveAttribute("data-focus-comparable", "true");
     expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
-    expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent("Renderer Not Attached");
-    expect(document.querySelector('[data-renderer-state="fallback"]')).toHaveTextContent(/formal gameplay summary/i);
-    expect(elementPrecedes(document.querySelector(".pixel-world-canvas"), document.querySelector('[data-renderer-state="fallback"]'))).toBe(true);
+    expect(document.querySelector('[data-renderer-state="unavailable"]')).toBeNull();
+    expect(document.querySelector(".pixel-world-canvas--rendered")).not.toBeNull();
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Mission Map");
     expect(document.querySelector('[data-focus-minimap="true"]')).not.toHaveTextContent("ref: Factory Anchor");
     expect(document.querySelector(".pixel-world-focus-fallback-map__reference-marker")).toBeNull();
     expect(document.querySelector('[data-focus-minimap="true"] .sr-only')).toHaveTextContent("Reference: Factory Anchor");
-    expect(document.querySelector(".pixel-world-focus-fallback-map__node--target")).not.toHaveTextContent("Anchor");
+    expect(document.querySelector(".pixel-world-focus-minimap__node--target")).not.toHaveTextContent("Anchor");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Build smelter mk1");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agent-0");
-    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("agents=1");
-    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("targets=1");
-    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("routes=1");
-    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("fragments=2");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agents=1");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("targets=1");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=1");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("fragments=2");
     expect(document.querySelector(".pixel-world-focus-controls")).toHaveAttribute("aria-label", "World focus controls");
     expect(document.querySelector(".pixel-world-focus-controls")).toContainElement(screen.getByRole("button", { name: "Command" }));
     expect(document.querySelector(".pixel-world-focus-hud__cell--prompt")).toHaveTextContent("Current Objective");
@@ -828,7 +749,7 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
     expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
     expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
-    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveClass("pixel-world-focus-fallback-map");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveClass("pixel-world-focus-minimap");
 
     const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
     expect(commandDrawer.open).toBe(true);
@@ -879,8 +800,8 @@ describe("pixel world host", () => {
     const diagnosticsDrawer = document.querySelector(".pixel-world-focus-drawer--diagnostics");
     expect(commandDrawer.open).toBe(false);
     expect(diagnosticsDrawer.open).toBe(true);
-    expect(diagnosticsDrawer).toHaveTextContent("renderer=fallback");
-    expect(diagnosticsDrawer).toHaveTextContent("runtime=deferred");
+    expect(diagnosticsDrawer).toHaveTextContent("renderer=ready");
+    expect(diagnosticsDrawer).toHaveTextContent("runtime=test_rust_runtime");
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(host).toHaveAttribute("data-world-focus", "false");
@@ -889,13 +810,14 @@ describe("pixel world host", () => {
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("provides a test-only selected blocker visual fixture for comparable focus screenshots", async () => {
+    useTestRustRenderState();
     await renderPixelWorldHost(
       emptyWorldSnapshot(),
       "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer&pixel_world_visual_fixture=selected_blocker",
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
     });
 
     const host = document.querySelector(".pixel-world-host");
@@ -909,7 +831,9 @@ describe("pixel world host", () => {
 
     screen.getByRole("button", { name: "Enter World Focus" }).click();
 
-    expect(host).toHaveAttribute("data-world-focus", "true");
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "true");
+    });
     expect(host).toHaveAttribute("data-focus-comparable", "true");
     expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
@@ -917,13 +841,14 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
     expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
     expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
-    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("agents=2");
-    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("routes=2");
-    expect(document.querySelector('[data-focus-fallback-map="true"]')).toHaveTextContent("fragments=4");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agents=2");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=2");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("fragments=4");
     expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveTextContent("agent=agent-0");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("demotes raw focus command feedback and chat history behind diagnostics", async () => {
+    useTestRustRenderState();
     const { core } = await renderPixelWorldHost(
       sampleSnapshot(),
       "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
@@ -957,9 +882,12 @@ describe("pixel world host", () => {
     core.requestRender();
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
     });
     screen.getByRole("button", { name: "Enter World Focus" }).click();
+    await waitFor(() => {
+      expect(document.querySelector(".pixel-world-focus-drawer--command")).not.toBeNull();
+    });
 
     const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
     expect(commandDrawer).toHaveTextContent("Message accepted by agent-0.");
@@ -978,31 +906,36 @@ describe("pixel world host", () => {
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps empty focus rail collapsed while preserving fallback world summary", async () => {
+    useTestRustRenderState();
     await renderPixelWorldHost(
       emptyWorldSnapshot(),
       "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+      expect(screen.getByText("No action receipt yet")).toBeInTheDocument();
     });
 
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toBeNull();
 
     screen.getByRole("button", { name: "Enter World Focus" }).click();
+    await waitFor(() => {
+      expect(document.querySelector('[data-focus-minimap="true"]')).not.toBeNull();
+    });
 
     expect(document.querySelector(".pixel-world-focus-rail")).toBeNull();
-    const fallbackMap = document.querySelector('[data-focus-fallback-map="true"]');
-    expect(fallbackMap).not.toBeNull();
-    expect(fallbackMap).toHaveTextContent("agents=0");
-    expect(fallbackMap).toHaveTextContent("targets=0");
-    expect(fallbackMap).toHaveTextContent("routes=0");
-    expect(fallbackMap).toHaveTextContent("fragments=0");
-    expect(fallbackMap).toHaveTextContent("Unassigned");
-    expect(fallbackMap).not.toHaveTextContent("Selected");
+    const minimap = document.querySelector('[data-focus-minimap="true"]');
+    expect(minimap).not.toBeNull();
+    expect(minimap).toHaveTextContent("agents=0");
+    expect(minimap).toHaveTextContent("targets=0");
+    expect(minimap).toHaveTextContent("routes=0");
+    expect(minimap).toHaveTextContent("fragments=0");
+    expect(minimap).toHaveTextContent("Unassigned");
+    expect(minimap).not.toHaveTextContent("Selected");
   });
 
   it("preserves world focus UI state across host remounts", async () => {
+    useTestRustRenderState();
     activeCleanup?.();
     activeCleanup = null;
     vi.resetModules();
@@ -1019,13 +952,16 @@ describe("pixel world host", () => {
     activeCleanup = firstView.unmount;
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
     });
 
+    const firstHost = document.querySelector(".pixel-world-host");
     screen.getByRole("button", { name: "Enter World Focus" }).click();
+    await waitFor(() => {
+      expect(firstHost).toHaveAttribute("data-world-focus", "true");
+    });
     screen.getByRole("button", { name: "Diagnostics" }).click();
 
-    const firstHost = document.querySelector(".pixel-world-host");
     expect(firstHost).toHaveAttribute("data-world-focus", "true");
     expect(document.body).toHaveClass("pixel-world-focus-active");
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")?.open).toBe(true);
@@ -1041,49 +977,33 @@ describe("pixel world host", () => {
     const secondHost = document.querySelector(".pixel-world-host");
     expect(secondHost).toHaveAttribute("data-world-focus", "true");
     expect(document.body).toHaveClass("pixel-world-focus-active");
-    expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")?.open).toBe(true);
+    await waitFor(() => {
+      expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).not.toBeNull();
+    });
+    expect(document.querySelector(".pixel-world-focus-drawer--diagnostics").open).toBe(true);
     expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveProperty("open", false);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("keeps fragment terrain as non-interactive background behind readable agents", async () => {
+  it("keeps the Rust canvas primary while preserving readable agent hit targets", async () => {
+    useTestRustRenderState();
     await renderPixelWorldHost();
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Not Attached")).toBeInTheDocument();
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
     });
 
     const canvas = document.querySelector(".pixel-world-canvas");
     const fragments = Array.from(canvas.querySelectorAll(".pixel-world-fragment-terrain"));
     const route = canvas.querySelector(".pixel-world-route");
     const location = canvas.querySelector(".pixel-world-entity--location");
-    const agent = canvas.querySelector(".pixel-world-entity--agent");
-    const children = Array.from(canvas.children);
+    const agent = screen.getByRole("button", { name: "Select Agent agent-0" });
 
-    expect(fragments).toHaveLength(2);
-    expect(fragments.map((fragment) => fragment.getAttribute("data-compound"))).toEqual([
-      "silicate_matrix",
-      "iron_nickel_alloy",
-    ]);
-    expect(numericInlineStyle(fragments[0], "width")).toBeCloseTo(14.3, 1);
-    expect(numericInlineStyle(fragments[0], "height")).toBeCloseTo(14.3, 1);
-    expect(numericInlineStyle(fragments[1], "width")).toBeCloseTo(23.8, 1);
-    expect(numericInlineStyle(fragments[1], "height")).toBeCloseTo(23.8, 1);
-    expect(route).toHaveAttribute("data-route-kind", "agent_assignment");
-    expect(numericInlineStyle(route, "opacity")).toBeCloseTo(0.5936, 4);
-    expect(numericInlineStyle(route, "width")).toBeCloseTo(4, 1);
-    expect(route.style.transform).toBe("rotate(-111.1deg)");
-    expect(fragments.every((fragment) => fragment.tagName === "DIV")).toBe(true);
-    expect(fragments.every((fragment) => fragment.getAttribute("role") === null)).toBe(true);
-    expect(children.indexOf(fragments[0])).toBeLessThan(children.indexOf(location));
-    expect(children.indexOf(fragments[1])).toBeLessThan(children.indexOf(location));
-    expect(children.indexOf(route)).toBeLessThan(children.indexOf(location));
-    expect(children.indexOf(fragments[0])).toBeLessThan(children.indexOf(route));
-    expect(children.indexOf(fragments[1])).toBeLessThan(children.indexOf(route));
-    expect(children.indexOf(location)).toBeLessThan(children.indexOf(agent));
-    expect(numericInlineStyle(location, "opacity")).toBeCloseTo(0.32, 2);
-    expect(numericInlineStyle(location, "left")).toBeCloseTo(50, 1);
-    expect(numericInlineStyle(location, "top")).toBeCloseTo(49, 1);
-    expect(location).toHaveAttribute("data-marker-role", "logic_anchor");
+    expect(screen.getByRole("img", { name: "World canvas overview" })).toBeInTheDocument();
+    expect(fragments).toHaveLength(0);
+    expect(route).toBeNull();
+    expect(location).toBeNull();
+    expect(agent).toHaveAttribute("data-pixel-world-agent-marker", "true");
     expect(agent).toHaveAttribute("data-position-source", "location_derived");
+    expect(agent).toHaveAttribute("aria-label", "Select Agent agent-0");
   });
 });

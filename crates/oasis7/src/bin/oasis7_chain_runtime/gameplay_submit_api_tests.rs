@@ -189,7 +189,7 @@ fn gameplay_submit_handler_accepts_valid_payload_and_commits_to_runtime() {
     node_runtime.start().expect("start node runtime");
     let runtime = Arc::new(Mutex::new(node_runtime));
 
-    let request = signed_gameplay_submit_request("node-gameplay-submit-ok", 9);
+    let request = signed_gameplay_submit_request("browser-player-gameplay-submit-ok", 9);
     let body = serde_json::to_string(&request).expect("serialize request");
     let http_request = format!(
         "POST /v1/chain/gameplay/submit HTTP/1.1\r\nHost: 127.0.0.1:5121\r\nContent-Length: {}\r\n\r\n{}",

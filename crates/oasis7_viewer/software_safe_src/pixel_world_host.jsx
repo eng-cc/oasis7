@@ -208,43 +208,6 @@ async function waitForRuntimeCanvasAttachment(canvas) {
   return false;
 }
 
-function normalizePosition(pos) {
-  if (!pos || typeof pos !== "object") {
-    return null;
-  }
-  const x = Number(pos.x_cm);
-  const y = Number(pos.y_cm);
-  const z = Number(pos.z_cm);
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
-    return null;
-  }
-  return { x_cm: x, y_cm: y, z_cm: z };
-}
-
-function buildRecentEventHotspots(events) {
-  if (!Array.isArray(events)) {
-    return [];
-  }
-  return events
-    .slice(0, 4)
-    .map((event, index) => ({
-      id: event?.eventId || event?.event_id || `recent-${index}`,
-      title: event?.title || event?.summary || event?.kind || `event-${index}`,
-      kind: event?.kind || "recent_event",
-    }));
-}
-
-function countResourceEntries(summary) {
-  if (!summary || summary === "-") {
-    return 0;
-  }
-  return String(summary)
-    .split(" · ")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .length;
-}
-
 function safeNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -261,212 +224,13 @@ function snapshotTick(snapshot) {
   return Math.max(0, Math.floor(tick));
 }
 
-function worldCenterPosition(worldBounds) {
-  if (!worldBounds) {
-    return null;
-  }
-  return {
-    x_cm: worldBounds.width_cm / 2,
-    y_cm: worldBounds.depth_cm / 2,
-    z_cm: worldBounds.height_cm / 2,
-  };
-}
-
-function clampWorldPosition(pos, worldBounds) {
-  if (!pos || !worldBounds) {
-    return null;
-  }
-  return {
-    x_cm: Math.min(worldBounds.width_cm, Math.max(0, Number(pos.x_cm) || 0)),
-    y_cm: Math.min(worldBounds.depth_cm, Math.max(0, Number(pos.y_cm) || 0)),
-    z_cm: Math.min(worldBounds.height_cm, Math.max(0, Number(pos.z_cm) || 0)),
-  };
-}
-
-function dominantCompound(block) {
-  const ppm = block?.compounds?.ppm;
-  if (!ppm || typeof ppm !== "object") {
-    return "unknown";
-  }
-  const ranked = Object.entries(ppm)
-    .map(([kind, value]) => [kind, safeNumber(value, 0)])
-    .filter(([, value]) => value > 0)
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
-  return ranked[0]?.[0] || "unknown";
-}
-
-function fragmentTerrainColor(compound) {
-  return FRAGMENT_TERRAIN_PALETTE[compound] || FRAGMENT_TERRAIN_PALETTE.unknown;
-}
-
 function colorToCss(color, alpha = 0.36) {
   const [red, green, blue] = Array.isArray(color) ? color : FRAGMENT_TERRAIN_PALETTE.unknown;
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
-function shouldAutoAttachRenderer() {
-  if (typeof window === "undefined" || !window.location) {
-    return true;
-  }
-  const params = new URLSearchParams(window.location.search || "");
-  const value = String(params.get("pixel_world_renderer") || "").trim().toLowerCase();
-  if (value) {
-    return !DEFER_RENDERER_VALUES.has(value);
-  }
-  return true;
-}
-
-function fragmentBlocks(location) {
-  const blocks = location?.fragment_profile?.blocks?.blocks;
-  return Array.isArray(blocks) ? blocks : [];
-}
-
-function estimateFragmentHalfExtentCm(location, blocks) {
-  const explicitRadius = safeNumber(location?.profile?.radius_cm, 0);
-  if (explicitRadius > 0) {
-    return explicitRadius;
-  }
-  const maxExtent = blocks.reduce((value, block) => {
-    const originX = safeNumber(block?.origin_cm?.x_cm, 0);
-    const originZ = safeNumber(block?.origin_cm?.z_cm ?? block?.origin_cm?.y_cm, 0);
-    const sizeX = safeNumber(block?.size_cm?.x_cm, 0);
-    const sizeZ = safeNumber(block?.size_cm?.z_cm ?? block?.size_cm?.y_cm, 0);
-    return Math.max(value, originX + sizeX, originZ + sizeZ);
-  }, 0);
-  return Math.max(1, maxExtent / 2);
-}
-
-function buildFragmentTerrainForLocation(location, worldBounds) {
-  const pos = normalizePosition(location?.pos);
-  const blocks = fragmentBlocks(location);
-  if (!pos || !worldBounds || !blocks.length) {
-    return [];
-  }
-
-  const halfExtentCm = estimateFragmentHalfExtentCm(location, blocks);
-  return blocks
-    .map((block, index) => {
-      const sizeX = safeNumber(block?.size_cm?.x_cm, 0);
-      const sizeZ = safeNumber(block?.size_cm?.z_cm ?? block?.size_cm?.y_cm, 0);
-      const originX = safeNumber(block?.origin_cm?.x_cm, 0);
-      const originZ = safeNumber(block?.origin_cm?.z_cm ?? block?.origin_cm?.y_cm, 0);
-      const footprintCm = Math.max(1, sizeX, sizeZ);
-      if (sizeX <= 0 || sizeZ <= 0) {
-        return null;
-      }
-      const dominant = dominantCompound(block);
-      const localX = originX + (sizeX / 2) - halfExtentCm;
-      const localY = originZ + (sizeZ / 2) - halfExtentCm;
-      return {
-        id: `fragment:${location.id}:${index}`,
-        location_id: location.id,
-        pos: clampWorldPosition({
-          x_cm: pos.x_cm + localX,
-          y_cm: pos.y_cm + localY,
-          z_cm: pos.z_cm,
-        }, worldBounds),
-        footprint_cm: footprintCm,
-        dominant_compound: dominant,
-        color: fragmentTerrainColor(dominant),
-        emphasis: 0.58,
-      };
-    })
-    .filter((entry) => entry?.pos);
-}
-
-function deterministicHash(input) {
-  return String(input || "").split("").reduce((hash, char) => (
-    ((hash * 31) + char.charCodeAt(0)) >>> 0
-  ), 2166136261);
-}
-
 function clampRatio(value) {
   return Math.min(1, Math.max(0, Number(value) || 0));
-}
-
-function offsetWorldPosition(anchor, worldBounds, xRatio, yRatio) {
-  if (!worldBounds) {
-    return null;
-  }
-  const base = anchor || worldCenterPosition(worldBounds);
-  if (!base) {
-    return null;
-  }
-  return clampWorldPosition({
-    x_cm: base.x_cm + (worldBounds.width_cm * xRatio),
-    y_cm: base.y_cm + (worldBounds.depth_cm * yRatio),
-    z_cm: base.z_cm || 0,
-  }, worldBounds);
-}
-
-function deriveAgentPosition(agent, locationById, worldBounds) {
-  if (!agent?.location_id || !worldBounds || !locationById.has(agent.location_id)) {
-    return null;
-  }
-  const location = locationById.get(agent.location_id);
-  if (!location?.pos) {
-    return null;
-  }
-  const hash = deterministicHash(`${agent.id}:${agent.location_id}`);
-  const angle = ((hash % 360) * Math.PI) / 180;
-  const radiusCm = Math.max(
-    10_000,
-    Math.min(
-      Math.max(worldBounds.width_cm, worldBounds.depth_cm) * 0.015,
-      Number(location.radius_cm) || 35_000,
-    ),
-  );
-  return clampWorldPosition({
-    x_cm: location.pos.x_cm + (Math.cos(angle) * radiusCm),
-    y_cm: location.pos.y_cm + (Math.sin(angle) * radiusCm),
-    z_cm: location.pos.z_cm || 0,
-  }, worldBounds);
-}
-
-function resolveAgentPosition(agent, selected, locationById, worldBounds) {
-  const snapshotPosition = normalizePosition(agent.pos || (selected?.id === agent.id ? selected?.pos : null));
-  if (snapshotPosition) {
-    return {
-      pos: snapshotPosition,
-      position_source: "snapshot",
-    };
-  }
-  const derivedPosition = deriveAgentPosition(agent, locationById, worldBounds);
-  if (derivedPosition) {
-    return {
-      pos: derivedPosition,
-      position_source: "location_derived",
-    };
-  }
-  return {
-    pos: null,
-    position_source: "missing",
-  };
-}
-
-function resolveSelectionPosition(selection, agents, locations) {
-  if (!selection) {
-    return null;
-  }
-  if (selection.kind === "agent") {
-    return agents.find((agent) => agent.id === selection.id)?.pos || null;
-  }
-  if (selection.kind === "location") {
-    return locations.find((location) => location.id === selection.id)?.pos || null;
-  }
-  return null;
-}
-
-function buildPixelWorldLinks(agents, locationById) {
-  return agents
-    .filter((agent) => agent.location_id && agent.pos && locationById.has(agent.location_id))
-    .map((agent) => ({
-      id: `link:${agent.id}:${agent.location_id}`,
-      kind: "agent_assignment",
-      from: agent.pos,
-      to: locationById.get(agent.location_id).pos,
-      emphasis: 0.72,
-    }));
 }
 
 function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
@@ -635,337 +399,6 @@ function pixelWorldVisualState(renderState) {
   };
 }
 
-function pickKnownAgentId(candidateIds, agents) {
-  const knownAgentIds = new Set(agents.map((agent) => agent.id));
-  return candidateIds.find((id) => id && knownAgentIds.has(id)) || null;
-}
-
-function normalizeGameplayToken(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replaceAll(/\s+/g, "")
-    .replaceAll("_", "")
-    .replaceAll("-", "");
-}
-
-function containsCjk(value) {
-  return /[\u3400-\u9fff]/u.test(String(value || ""));
-}
-
-function zhOrPublished(locale, published, zhFallback, enFallback) {
-  if (!core.isLocaleZh(locale)) {
-    return published || enFallback;
-  }
-  if (published && containsCjk(published)) {
-    return published;
-  }
-  return zhFallback;
-}
-
-function localizedGoalTitle(locale, gameplay) {
-  const published = gameplay?.goalTitle || null;
-  const goalKind = normalizeGameplayToken(gameplay?.goalKind);
-  switch (goalKind) {
-    case "recovercapability":
-      return zhOrPublished(locale, published, "恢复可持续能力", "Recover sustainable capability");
-    case "stabilizefirstline":
-    case "establishfirstcapability":
-      return zhOrPublished(locale, published, "稳定第一条生产线", "Stabilize the first production line");
-    case "choosefirstexpansiontradeoff":
-    case "choosemidlooppath":
-      return zhOrPublished(locale, published, "选择下一条扩张路径", "Choose the next expansion path");
-    case "createfirstworldfeedback":
-      return zhOrPublished(locale, published, "确认第一条世界反馈", "Confirm the first world feedback");
-    default:
-      return zhOrPublished(
-        locale,
-        published,
-        "进入世界，建立第一条能力链",
-        "Enter the world and build the first capability chain",
-      );
-  }
-}
-
-function localizedObjectiveDetail(locale, gameplay) {
-  const published = gameplay?.objective || gameplay?.progressDetail || null;
-  const goalKind = normalizeGameplayToken(gameplay?.goalKind);
-  switch (goalKind) {
-    case "recovercapability":
-      return zhOrPublished(locale, published, "先恢复阻塞点，再确认生产线重新具备可经营能力。", "Recover the blocker first, then confirm the line is operable again.");
-    case "stabilizefirstline":
-    case "establishfirstcapability":
-      return zhOrPublished(locale, published, "先稳定第一条产线，再决定扩张、恢复或分工。", "Stabilize the first line before choosing expansion, recovery, or specialization.");
-    case "choosefirstexpansiontradeoff":
-    case "choosemidlooppath":
-      return zhOrPublished(locale, published, "比较下一步带来的用途、弹性和分支价值，再推进。", "Compare the next move's use, resilience, and branch value before advancing.");
-    case "createfirstworldfeedback":
-      return zhOrPublished(locale, published, "先拿到一条明确世界反馈，再继续后续工业选择。", "Get one clear world feedback signal before continuing industrial choices.");
-    default:
-      return zhOrPublished(
-        locale,
-        published,
-        "先让 Agent、路线和资源关系变得可读，再推进下一步。",
-        "Read the agent, route, and resource relationship before pushing the next move.",
-      );
-  }
-}
-
-function localizedNextActionLabel(locale, gameplay) {
-  const published = gameplay?.recommendedAction?.label
-    || gameplay?.nextStepHint
-    || gameplay?.narrativeNextStep
-    || null;
-  const executeKind = gameplay?.recommendedAction?.executeKind;
-  const actionId = normalizeGameplayToken(gameplay?.recommendedAction?.actionId);
-  const labelToken = normalizeGameplayToken(gameplay?.recommendedAction?.label);
-  if (core.isLocaleZh(locale) && published && containsCjk(published)) {
-    return published;
-  }
-  if (!core.isLocaleZh(locale) && published) {
-    return published;
-  }
-  if (actionId === "buildfactorysmeltermk1" || labelToken.includes("smeltermk1")) {
-    return tr(locale, "排队建造一型冶炼炉", "Queue Smelter MK1 construction");
-  }
-  switch (executeKind) {
-    case "gameplay_action":
-      return tr(locale, "提交推荐玩法动作", "Submit recommended gameplay action");
-    case "step":
-      return tr(locale, "推进世界一步", "Advance the world one step");
-    case "play":
-      return tr(locale, "继续运行世界", "Keep the world running");
-    case "request_snapshot":
-      return tr(locale, "刷新世界快照", "Refresh world snapshot");
-    case "agent_chat":
-      return tr(locale, "向选中 Agent 发送消息", "Message the selected agent");
-    default:
-      return tr(locale, "选择一个 Agent 或推进世界一步", "Select an agent or advance the world one step");
-  }
-}
-
-function localizedOptionalDetail(locale, published) {
-  if (!published) {
-    return null;
-  }
-  if (!core.isLocaleZh(locale) || containsCjk(published)) {
-    return published;
-  }
-  const token = normalizeGameplayToken(published);
-  if (
-    token.includes("requestasnapshot")
-    || token.includes("advance1step")
-    || token.includes("inspectthenewdelta")
-  ) {
-    return "先请求一次快照，推进 1 步，再检查新的世界变化和事件。";
-  }
-  return tr(locale, "查看当前回执和阻塞原因，再决定下一步。", "Read the current receipt and blocker before choosing the next move.");
-}
-
-function actionReceiptTitle(locale, state, present) {
-  if (!present) {
-    return tr(locale, "暂无行动回执", "No action receipt yet");
-  }
-  switch (state) {
-    case "accepted":
-      return tr(locale, "行动已接受", "Action accepted");
-    case "blocked":
-      return tr(locale, "行动被阻塞", "Action blocked");
-    case "completed":
-      return tr(locale, "世界已改变", "World changed");
-    case "rejected":
-      return tr(locale, "行动被拒绝", "Action rejected");
-    default:
-      return tr(locale, "行动进行中", "Action in progress");
-  }
-}
-
-function buildActionReceipt({ locale, gameplay, activeAgentId }) {
-  const recentFeedback = gameplay?.recentFeedback;
-  const hasWorldDelta = Boolean(gameplay?.lastWorldChange || recentFeedback?.effect);
-  const hasPlayerIntent = Boolean(
-    gameplay?.acceptedIntentId
-    || gameplay?.acceptedIntentScope
-    || gameplay?.acceptedIntentTarget
-    || recentFeedback?.action,
-  );
-  const present = hasWorldDelta || hasPlayerIntent || Boolean(recentFeedback?.reason);
-  const rawState = gameplay?.executionState || recentFeedback?.stage || "waiting_for_intent";
-  const state = present ? rawState : "waiting_for_intent";
-  const confidence = hasWorldDelta
-    ? "world_delta"
-    : hasPlayerIntent
-      ? "accepted_intent"
-      : "none";
-  const summary = present
-    ? gameplay?.lastWorldChange
-      || recentFeedback?.effect
-      || gameplay?.acceptedIntentSummary
-      || recentFeedback?.action
-      || gameplay?.executionSummary
-    : tr(
-      locale,
-      "还没有一条玩家行动产生可确认的世界变化。",
-      "No player-caused world change has been confirmed yet.",
-    );
-  const detail = present
-    ? gameplay?.executionCauseDetail
-      || recentFeedback?.reason
-      || recentFeedback?.hint
-      || gameplay?.acceptedIntentDetail
-      || gameplay?.progressDetail
-      || null
-    : tr(
-      locale,
-      "先提交玩法动作或推进世界，再查看系统确认、阻塞或完成的回执。",
-      "Submit a gameplay action or advance the world, then read whether the system accepted, blocked, or completed it.",
-    );
-
-  return {
-    present,
-    state,
-    confidence,
-    title: actionReceiptTitle(locale, state, present),
-    summary,
-    detail,
-    target_agent_id: present
-      ? gameplay?.acceptedIntentTarget
-        || gameplay?.recommendedAction?.targetAgentId
-        || activeAgentId
-        || null
-      : null,
-    effect_kind: present ? gameplay?.executionCauseKind || recentFeedback?.stage || null : null,
-    delta_logical_time: present ? recentFeedback?.deltaLogicalTime ?? null : null,
-    delta_event_seq: present ? recentFeedback?.deltaEventSeq ?? null : null,
-  };
-}
-
-function buildCommercialSurface({
-  locale,
-  gameplay,
-  worldTick,
-  agents,
-  links,
-  fragmentTerrain,
-  visualHotspots,
-  selection,
-}) {
-  const activeAgentId = pickKnownAgentId([
-    gameplay?.recommendedAction?.targetAgentId,
-    gameplay?.acceptedIntentTarget,
-    selection?.kind === "agent" ? selection.id : null,
-    agents[0]?.id,
-  ], agents);
-  const objectiveTitle = localizedGoalTitle(locale, gameplay);
-  const objectiveDetail = localizedObjectiveDetail(locale, gameplay);
-  const nextActionLabel = localizedNextActionLabel(locale, gameplay);
-  const nextActionDetail = localizedOptionalDetail(
-    locale,
-    gameplay?.recommendedAction?.disabledReason
-      || gameplay?.nextStepHint
-      || gameplay?.executionSummary
-      || null,
-  );
-  const leverageSummary = gameplay?.acceptedIntentSummary
-    || gameplay?.lastWorldChange
-    || tr(locale, "还没有一条被正式接受的玩家意图", "No player-facing accepted intent yet");
-  const leverageDetail = gameplay?.lastWorldChange
-    || gameplay?.executionCauseDetail
-    || gameplay?.acceptedIntentDetail
-    || gameplay?.progressDetail
-    || null;
-  const actionReceipt = buildActionReceipt({
-    locale,
-    gameplay,
-    activeAgentId,
-  });
-
-  return {
-    objective: {
-      title: objectiveTitle,
-      detail: objectiveDetail,
-      progress_percent: gameplay?.progressPercent ?? null,
-    },
-    next_action: {
-      label: nextActionLabel,
-      detail: nextActionDetail,
-      target_agent_id: gameplay?.recommendedAction?.targetAgentId || activeAgentId,
-      execute_kind: gameplay?.recommendedAction?.executeKind || null,
-    },
-    active_agent_id: activeAgentId,
-    player_leverage: {
-      state: gameplay?.executionState || "waiting_for_intent",
-      label: gameplay?.executionStateLabel || tr(locale, "等待玩家意图", "Waiting for Intent"),
-      summary: leverageSummary,
-      detail: leverageDetail,
-    },
-    action_receipt: actionReceipt,
-    blocker: {
-      label: gameplay?.blockerLabel || gameplay?.blockerKind || null,
-      detail: gameplay?.narrativeBlockerDetail || gameplay?.blockerDetail || null,
-    },
-    world_read: {
-      tick: worldTick,
-      agents: agents.length,
-      routes: links.length,
-      fragments: fragmentTerrain.length,
-      hotspots: visualHotspots.length,
-    },
-  };
-}
-
-function buildVisualHotspots({
-  worldBounds,
-  anchor,
-  goalHighlight,
-  blockerHighlight,
-  recentEventHotspots,
-}) {
-  if (!worldBounds) {
-    return [];
-  }
-  const offsets = [
-    [-0.18, -0.14],
-    [0.18, -0.12],
-    [0.22, 0.14],
-    [-0.2, 0.16],
-    [0.0, -0.22],
-    [0.0, 0.22],
-  ];
-  const staged = [];
-  if (goalHighlight?.title) {
-    staged.push({
-      id: "goal-highlight",
-      label: goalHighlight.title,
-      kind: "goal",
-      emphasis: 1,
-      size_hint_px: 14,
-    });
-  }
-  if (blockerHighlight?.kind) {
-    staged.push({
-      id: "blocker-highlight",
-      label: blockerHighlight.kind,
-      kind: "blocker",
-      emphasis: 1,
-      size_hint_px: 16,
-    });
-  }
-  for (const hotspot of recentEventHotspots.slice(0, 4)) {
-    staged.push({
-      id: `recent:${hotspot.id}`,
-      label: hotspot.title,
-      kind: hotspot.kind || "recent_event",
-      emphasis: 0.72,
-      size_hint_px: 10,
-    });
-  }
-  return staged.map((entry, index) => ({
-    ...entry,
-    pos: offsetWorldPosition(anchor, worldBounds, ...(offsets[index % offsets.length] || [0, 0])),
-  })).filter((entry) => entry.pos);
-}
-
 function PixelWorldHostVisualLayer(props) {
   const visualState = () => pixelWorldVisualState(props.renderState());
   if (!props.enabled) {
@@ -1120,28 +553,44 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
     };
   }
 
-  function deriveRenderStateOrFallback(renderInput, fallbackRenderState) {
+  function deriveRenderStateOrUnavailable(renderInput) {
     if (!deriveRenderState || !renderInput) {
-      return fallbackRenderState;
+      return {
+        renderState: null,
+        fatal: {
+          code: "pixel_world_render_state_unavailable",
+          message: "pixel world Rust render-state derivation is unavailable",
+        },
+      };
     }
     try {
       const nextRenderState = deriveRenderState(renderInput);
       if (nextRenderState?.fatal) {
         onFatal?.(nextRenderState.fatal);
-        return fallbackRenderState;
+        return {
+          renderState: null,
+          fatal: nextRenderState.fatal,
+        };
       }
-      return withWorldTickReadout(nextRenderState, renderInput) || fallbackRenderState;
+      return {
+        renderState: withWorldTickReadout(nextRenderState, renderInput) || null,
+        fatal: null,
+      };
     } catch (error) {
-      onFatal?.({
+      const fatal = {
         code: "pixel_world_rust_render_state_failed",
         message: error instanceof Error ? error.message : String(error || "Rust render state derivation failed"),
-      });
-      return fallbackRenderState;
+      };
+      onFatal?.(fatal);
+      return {
+        renderState: null,
+        fatal,
+      };
     }
   }
 
   return {
-    async mount(canvas, renderState, renderInput) {
+    async mount(canvas, renderInput) {
       const runtime = await createPixelWorldRuntimeBridge({
         onEvent(event) {
           if (event?.type === "canvas_ready") {
@@ -1165,7 +614,23 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
       deriveRenderState = runtime.deriveRenderState || null;
       runtimeSource = runtime.source;
       runtimeModuleUrl = runtime.moduleUrl || null;
-      const mountedRenderState = deriveRenderStateOrFallback(renderInput, renderState);
+      const derived = deriveRenderStateOrUnavailable(renderInput);
+      if (!derived.renderState) {
+        const fatal = derived.fatal || runtime.fatal || {
+          code: "pixel_world_render_state_unavailable",
+          message: "pixel world Rust render-state derivation is unavailable",
+        };
+        onFatal?.(fatal);
+        return {
+          status: "unavailable",
+          selection: null,
+          fatal,
+          renderState: null,
+          runtimeSource,
+          runtimeModuleUrl,
+        };
+      }
+      const mountedRenderState = derived.renderState;
       const result = bridge.mount(canvas, mountedRenderState);
       return {
         status: result?.status || "ready",
@@ -1176,8 +641,20 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
         runtimeModuleUrl,
       };
     },
-    update(renderState, renderInput) {
-      const nextRenderState = deriveRenderStateOrFallback(renderInput, renderState);
+    update(renderInput) {
+      const derived = deriveRenderStateOrUnavailable(renderInput);
+      if (!derived.renderState) {
+        const result = bridge?.update(null) || { status: "unavailable", fatal: derived.fatal };
+        return {
+          status: result?.status || "unavailable",
+          selection: null,
+          fatal: result?.fatal || derived.fatal,
+          renderState: null,
+          runtimeSource,
+          runtimeModuleUrl,
+        };
+      }
+      const nextRenderState = derived.renderState;
       const result = bridge?.update(nextRenderState) || { status: "detached" };
       return {
         status: result?.status || "ready",
@@ -1218,7 +695,7 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
       return runtimeModuleUrl;
     },
     deriveRenderState(renderInput) {
-      return deriveRenderStateOrFallback(renderInput, null);
+      return deriveRenderStateOrUnavailable(renderInput).renderState;
     },
   };
 }
@@ -1239,151 +716,6 @@ export function buildPixelWorldRenderInput(locale = core.state.uiLocale) {
       marker_truth_note: worldScaleSurface.presentationScale.markerTruthNote,
     },
   };
-}
-
-export function buildPixelWorldRenderStateFromInput(input) {
-  const locale = input.locale || core.state.uiLocale;
-  const lists = input.lists || { agents: [], locations: [] };
-  const gameplay = input.gameplay;
-  const worldScaleSurface = core.buildWorldScaleSurface(locale);
-  const snapshot = input.snapshot;
-  const worldTick = snapshotTick(snapshot);
-  const selected = input.selected;
-  const space = snapshot?.config?.space || null;
-
-  const worldBounds = space
-    ? {
-        width_cm: Number(space.width_cm) || 0,
-        depth_cm: Number(space.depth_cm) || 0,
-        height_cm: Number(space.height_cm) || 0,
-      }
-    : null;
-  const worldScaleBase = Math.max(1, Math.min(worldBounds?.width_cm || 1, worldBounds?.depth_cm || 1));
-
-  const fragmentTerrain = [];
-  const locations = lists.locations
-    .map((location) => ({
-      raw: location,
-      terrain: buildFragmentTerrainForLocation(location, worldBounds),
-    }))
-    .map(({ raw: location, terrain }) => {
-      fragmentTerrain.push(...terrain);
-      const resourceSummary = core.resourceSummary(location.resources);
-      const hasTerrain = terrain.length > 0;
-      return {
-        id: location.id,
-        label: location.name || location.id,
-        pos: normalizePosition(location.pos),
-        radius_cm: Number(location?.profile?.radius_cm) || 0,
-        resource_summary: resourceSummary,
-        resource_score: countResourceEntries(resourceSummary),
-        fragment_terrain_count: terrain.length,
-        marker_role: hasTerrain ? "logic_anchor" : "primary_marker",
-        marker_alpha: hasTerrain ? 0.32 : 0.72,
-        size_hint_px: hasTerrain
-          ? 10
-          : 16 + Math.min(
-            18,
-            (((Number(location?.profile?.radius_cm) || 0) / worldScaleBase) * 420)
-              + (countResourceEntries(resourceSummary) * 2),
-          ),
-      };
-    })
-    .filter((location) => location.pos);
-  const locationById = new Map(locations.map((location) => [location.id, location]));
-
-  const agents = lists.agents.map((agent) => {
-    const resolvedPosition = resolveAgentPosition(agent, selected, locationById, worldBounds);
-    const resourceSummary = core.resourceSummary(agent.resources);
-    return {
-      id: agent.id,
-      label: agent.name || agent.id,
-      location_id: agent.location_id || null,
-      pos: resolvedPosition.pos,
-      position_source: resolvedPosition.position_source,
-      resource_summary: resourceSummary,
-      resource_score: countResourceEntries(resourceSummary),
-      status_badges: [
-        agent.location_id ? `location=${agent.location_id}` : null,
-        agent.kind ? `kind=${agent.kind}` : null,
-        resolvedPosition.position_source === "location_derived" ? "position=location_derived" : null,
-      ].filter(Boolean),
-      size_hint_px: 12 + Math.min(
-        10,
-        (countResourceEntries(resourceSummary) * 2)
-          + (agent.location_id ? 2 : 0)
-          + (agent.kind ? 1 : 0),
-      ),
-    };
-  });
-
-  const selection = input.selectedKind && input.selectedId
-    ? {
-        kind: input.selectedKind,
-        id: input.selectedId,
-      }
-    : null;
-  const links = buildPixelWorldLinks(agents, locationById);
-  const anchor = resolveSelectionPosition(selection, agents, locations)
-    || agents.find((agent) => agent.pos)?.pos
-    || locations[0]?.pos
-    || worldCenterPosition(worldBounds);
-  const localizedGoal = localizedGoalTitle(locale, gameplay);
-  const localizedGoalDetail = localizedObjectiveDetail(locale, gameplay);
-  const goalHighlight = localizedGoal
-    ? {
-        title: localizedGoal,
-        objective: localizedGoalDetail || null,
-      }
-    : null;
-  const blockerHighlight = gameplay?.blockerKind || gameplay?.blockerDetail
-    ? {
-        kind: gameplay?.blockerKind || "blocked",
-        detail: gameplay?.blockerDetail || null,
-      }
-    : null;
-  const recentEventHotspots = buildRecentEventHotspots(input.recentEvents);
-  const visualHotspots = buildVisualHotspots({
-    worldBounds,
-    anchor,
-    goalHighlight,
-    blockerHighlight,
-    recentEventHotspots,
-  });
-  const commercialSurface = buildCommercialSurface({
-    locale,
-    gameplay,
-    worldTick,
-    agents,
-    links,
-    fragmentTerrain,
-    visualHotspots,
-    selection,
-  });
-
-  return {
-    locale,
-    world_tick: worldTick,
-    world_bounds: worldBounds,
-    locations,
-    fragment_terrain: fragmentTerrain,
-    agents,
-    links,
-    selection,
-    goal_highlight: goalHighlight,
-    blocker_highlight: blockerHighlight,
-    recent_event_hotspots: recentEventHotspots,
-    visual_hotspots: visualHotspots,
-    commercial_surface: commercialSurface,
-    presentation: {
-      world_bounds_label: worldScaleSurface.physicalTruth.worldBoundsLabel,
-      marker_truth_note: worldScaleSurface.presentationScale.markerTruthNote,
-    },
-  };
-}
-
-export function buildPixelWorldRenderState(locale = core.state.uiLocale) {
-  return buildPixelWorldRenderStateFromInput(buildPixelWorldRenderInput(locale));
 }
 
 function PixelWorldCanvasRenderer(props) {
@@ -1446,7 +778,7 @@ function PixelWorldCanvasRenderer(props) {
         </Show>
         <Show when={visualState().blockerHighlight}>
           <div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">
-            {`${tr(props.locale(), "阻塞", "Blocker")}: ${visualState().blockerHighlight.kind}`}
+            {`${tr(props.locale(), "阻塞", "Blocker")}: ${visualState().blockerHighlight.label || visualState().blockerHighlight.kind}`}
           </div>
         </Show>
       </div>
@@ -1494,12 +826,36 @@ function PixelWorldActionReceipt(props) {
   );
 }
 
+const DIRECT_PIXEL_WORLD_NEXT_MOVE_KINDS = new Set(["claim_first_agent", "claim_starter_oc"]);
+
+export function resolvePixelWorldDirectNextMoveAction(gameplay, executeKind) {
+  if (!DIRECT_PIXEL_WORLD_NEXT_MOVE_KINDS.has(executeKind)) {
+    return null;
+  }
+  const actions = Array.isArray(gameplay?.availableActions) ? gameplay.availableActions : [];
+  return actions.find((action) => (
+    action?.executeKind === executeKind
+    && !action?.disabledReason
+  )) || null;
+}
+
 function PixelWorldCommercialHud(props) {
   const surface = () => props.renderState().commercial_surface;
-  const executableNextMoveKinds = new Set(["gameplay_action", "step", "play", "request_snapshot"]);
+  const executableNextMoveKinds = new Set([
+    "gameplay_action",
+    "claim_first_agent",
+    "claim_starter_oc",
+    "step",
+    "play",
+    "request_snapshot",
+  ]);
   const nextMoveRoutesToGameplayDetails = () => executableNextMoveKinds.has(surface().next_action.execute_kind);
   const nextMoveRoute = () => nextMoveRoutesToGameplayDetails() ? "gameplay_details" : "command";
   const nextMoveHref = () => nextMoveRoutesToGameplayDetails() ? "#viewer-gameplay-details" : "#viewer-details-panel";
+  const directNextMoveAction = () => resolvePixelWorldDirectNextMoveAction(
+    core.buildGameplaySummary(props.locale()),
+    surface().next_action.execute_kind,
+  );
   const openGameplayDetails = () => {
     if (!nextMoveRoutesToGameplayDetails()) {
       return;
@@ -1507,6 +863,22 @@ function PixelWorldCommercialHud(props) {
     const details = document.getElementById("viewer-gameplay-details");
     if (details) {
       details.open = true;
+    }
+  };
+  const activateNextMove = (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    openGameplayDetails();
+    const action = directNextMoveAction();
+    if (action) {
+      core.sendGameplayAction(action);
+    } else if (nextMoveHref().startsWith("#")) {
+      window.location.hash = nextMoveHref();
+    }
+  };
+  const activateNextMoveFromKeyboard = (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      activateNextMove(event);
     }
   };
   return (
@@ -1527,6 +899,10 @@ function PixelWorldCommercialHud(props) {
           class="pixel-world-command-cell pixel-world-command-cell--next"
           data-next-move-route={nextMoveRoute()}
           data-execute-kind={surface().next_action.execute_kind || "none"}
+          role="button"
+          tabIndex="0"
+          onClick={activateNextMove}
+          onKeyDown={activateNextMoveFromKeyboard}
         >
           <div class="pixel-world-command-cell__label">
             {tr(props.locale(), "下一步", "Next Move")}
@@ -1535,10 +911,12 @@ function PixelWorldCommercialHud(props) {
           <Show when={surface().next_action.detail}>
             <div class="pixel-world-command-cell__detail">{surface().next_action.detail}</div>
           </Show>
-          <a class="pixel-world-command-cell__action" href={nextMoveHref()} onClick={openGameplayDetails}>
-            {nextMoveRoutesToGameplayDetails()
-              ? tr(props.locale(), "打开玩法明细", "Open Gameplay Details")
-              : tr(props.locale(), "去指挥面板", "Go to Command")}
+          <a class="pixel-world-command-cell__action" href={nextMoveHref()} onClick={activateNextMove}>
+            {directNextMoveAction()
+              ? surface().next_action.label
+              : nextMoveRoutesToGameplayDetails()
+                ? tr(props.locale(), "打开玩法明细", "Open Gameplay Details")
+                : tr(props.locale(), "去指挥面板", "Go to Command")}
           </a>
         </div>
         <div class="pixel-world-command-cell pixel-world-command-cell--leverage">
@@ -1739,11 +1117,10 @@ function PixelWorldFocusMinimapCard(props) {
   return (
     <Show when={surface()}>
       <div
-        class="pixel-world-focus-fallback-map"
-        data-focus-fallback-map={props.variant === "fallback" ? "true" : null}
+        class="pixel-world-focus-minimap"
         data-focus-minimap="true"
       >
-        <div class="pixel-world-focus-fallback-map__label">
+        <div class="pixel-world-focus-minimap__label">
           {tr(props.locale(), "任务地图", "Mission Map")}
         </div>
         <Show when={primaryLocation()}>
@@ -1751,26 +1128,26 @@ function PixelWorldFocusMinimapCard(props) {
             {`${tr(props.locale(), "参照", "Reference")}: ${primaryLocation().label || primaryLocation().id}`}
           </span>
         </Show>
-        <div class="pixel-world-focus-fallback-map__grid" />
-        <div class="pixel-world-focus-fallback-map__route" data-routes={props.renderState().links.length} />
-        <div class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--target">
+        <div class="pixel-world-focus-minimap__grid" />
+        <div class="pixel-world-focus-minimap__route" data-routes={props.renderState().links.length} />
+        <div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target">
           <span>{tr(props.locale(), "目标", "Target")}</span>
           <strong>{surface().next_action.label}</strong>
         </div>
-        <div class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--agent">
+        <div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent">
           <span>{tr(props.locale(), "Agent", "Agent")}</span>
           <strong>{activeAgent() || tr(props.locale(), "待分配", "Unassigned")}</strong>
         </div>
         <Show when={selected()}>
           <div
-            class="pixel-world-focus-fallback-map__node pixel-world-focus-fallback-map__node--selected"
+            class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"
             data-selected="true"
           >
             <span>{tr(props.locale(), "选中", "Selected")}</span>
             <strong>{`${selected().kind}/${selected().id}`}</strong>
           </div>
         </Show>
-        <div class="pixel-world-focus-fallback-map__meta" aria-label={tr(props.locale(), "Fallback 世界摘要", "Fallback world summary")}>
+        <div class="pixel-world-focus-minimap__meta" aria-label={tr(props.locale(), "世界摘要", "World summary")}>
           <span>{`agents=${props.renderState().agents.length}`}</span>
           <span>{`targets=${props.renderState().locations.length}`}</span>
           <span>{`routes=${props.renderState().links.length}`}</span>
@@ -1952,51 +1329,17 @@ function PixelWorldFocusCommandSurface(props) {
   );
 }
 
-function PixelWorldCanvasPlaceholder(props) {
-  const visualState = () => pixelWorldVisualState(props.renderState());
-  return (
-    <div class="pixel-world-canvas" data-renderer-ready={props.ready() ? "true" : "false"}>
-      <PixelWorldHostVisualLayer
-        enabled={true}
-        locale={props.locale}
-        renderState={props.renderState}
-        onSelect={props.onSelect}
-        onHover={props.onHover}
-      />
-      <Show when={visualState().selection}>
-        <div class="pixel-world-canvas__selection">
-          {`${tr(props.locale(), "已选中", "Selected")}: ${visualState().selection.kind}/${visualState().selection.id}`}
-        </div>
-      </Show>
-      <div class="pixel-world-canvas__overlay">
-        <Show when={visualState().goalHighlight}>
-          <div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">
-            {`${tr(props.locale(), "目标", "Goal")}: ${visualState().goalHighlight.title}`}
-          </div>
-        </Show>
-        <Show when={visualState().blockerHighlight}>
-          <div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">
-            {`${tr(props.locale(), "阻塞", "Blocker")}: ${visualState().blockerHighlight.kind}`}
-          </div>
-        </Show>
-      </div>
-    </div>
-  );
-}
-
 export function PixelWorldHost(props) {
   const locale = () => props.locale ?? core.state.uiLocale;
   const visualFixtureName = installPixelWorldVisualFixtureHook();
   const renderInput = createMemo(() => buildPixelWorldRenderInput(locale()));
-  const fallbackRenderState = createMemo(() => buildPixelWorldRenderStateFromInput(renderInput()));
   const [rustRenderState, setRustRenderState] = createSignal(null);
-  const renderState = () => rustRenderState() || fallbackRenderState();
+  const renderState = () => rustRenderState();
   const visualState = () => pixelWorldVisualState(renderState());
-  const autoAttachRenderer = shouldAutoAttachRenderer();
-  const [rendererStatus, setRendererStatus] = createSignal(autoAttachRenderer ? "booting" : "fallback");
+  const [rendererStatus, setRendererStatus] = createSignal("booting");
   const [rendererFatal, setRendererFatal] = createSignal(null);
   const [hoverSelection, setHoverSelection] = createSignal(null);
-  const [runtimeSource, setRuntimeSource] = createSignal(autoAttachRenderer ? "loading" : "deferred");
+  const [runtimeSource, setRuntimeSource] = createSignal("loading");
   const [cameraState, setCameraState] = createSignal(null);
   const [renderDtoOpen, setRenderDtoOpen] = createSignal(false);
   const [focusMode, setFocusMode] = createSignal(pixelWorldFocusUiSessionState.focusMode);
@@ -2076,9 +1419,10 @@ export function PixelWorldHost(props) {
         return;
       }
       setRendererFatal(fatal);
-      setRendererStatus("fallback");
+      setRendererStatus("unavailable");
+      setRustRenderState(null);
       core.updatePixelWorldRuntimeMeta({
-        runtimeStatus: "fallback",
+        runtimeStatus: "unavailable",
         runtimeSource: runtimeSource(),
         runtimeModuleUrl: adapter().runtimeModuleUrl(),
         camera: cameraState(),
@@ -2091,7 +1435,7 @@ export function PixelWorldHost(props) {
   let mountedCanvas = null;
 
   function applyRendererUpdate() {
-    const result = adapter().update(fallbackRenderState(), renderInput());
+    const result = adapter().update(renderInput());
     if (result?.fatal) {
       setRendererFatal(result.fatal);
     }
@@ -2114,10 +1458,11 @@ export function PixelWorldHost(props) {
         message: "pixel world canvas is not mounted yet",
       };
       setRendererFatal(fatal);
-      setRendererStatus("fallback");
+      setRendererStatus("unavailable");
       setRuntimeSource("detached");
+      setRustRenderState(null);
       core.updatePixelWorldRuntimeMeta({
-        runtimeStatus: "fallback",
+        runtimeStatus: "unavailable",
         runtimeSource: "detached",
         runtimeModuleUrl: null,
         camera: null,
@@ -2135,10 +1480,11 @@ export function PixelWorldHost(props) {
         message: "pixel world runtime canvas never became queryable in document",
       };
       setRendererFatal(fatal);
-      setRendererStatus("fallback");
+      setRendererStatus("unavailable");
       setRuntimeSource("detached");
+      setRustRenderState(null);
       core.updatePixelWorldRuntimeMeta({
-        runtimeStatus: "fallback",
+        runtimeStatus: "unavailable",
         runtimeSource: "detached",
         runtimeModuleUrl: null,
         camera: cameraState(),
@@ -2146,7 +1492,7 @@ export function PixelWorldHost(props) {
       });
       return;
     }
-    const result = await adapter().mount(mountedCanvas, fallbackRenderState(), renderInput());
+    const result = await adapter().mount(mountedCanvas, renderInput());
     if (result?.fatal) {
       setRendererFatal(result.fatal);
     }
@@ -2171,23 +1517,8 @@ export function PixelWorldHost(props) {
     }
   }
 
-  function setFallbackMode() {
-    adapter().unmount();
-    setRustRenderState(null);
-    setRendererStatus("fallback");
-    setRuntimeSource("detached");
-    setCameraState(null);
-    core.updatePixelWorldRuntimeMeta({
-      runtimeStatus: "fallback",
-      runtimeSource: "detached",
-      runtimeModuleUrl: null,
-      camera: null,
-      fatal: rendererFatal(),
-    });
-  }
-
   function simulateFatal() {
-    adapter().simulateFatal("simulated embedded renderer fatal fallback");
+    adapter().simulateFatal("simulated embedded renderer fatal");
   }
 
   onMount(() => {
@@ -2235,13 +1566,15 @@ export function PixelWorldHost(props) {
               {tr(locale(), "世界指挥棋盘", "World Command Board")}
             </div>
             <div class="feedback-detail">
-              {renderState().commercial_surface?.objective?.detail}
+              {renderState()?.commercial_surface?.objective?.detail
+                || tr(locale(), "等待 Rust bridge 生成世界显示状态。", "Waiting for the Rust bridge to derive the world display state.")}
             </div>
           </div>
           <div class="pixel-world-focus-entry">
             <button
               type="button"
               class="pixel-world-focus-entry__button"
+              disabled={!renderState()}
               onClick={enterFocusMode}
               aria-pressed={focusMode() ? "true" : "false"}
             >
@@ -2250,7 +1583,7 @@ export function PixelWorldHost(props) {
           </div>
         </div>
       </Show>
-      <Show when={focusMode()}>
+      <Show when={focusMode() && renderState()}>
         <Show when={!maximized() && shouldShowFocusCinematic(renderState())}>
           <PixelWorldFocusCinematicBanner
             locale={locale}
@@ -2278,8 +1611,10 @@ export function PixelWorldHost(props) {
           />
         </Show>
       </Show>
-      <PixelWorldCommercialHud locale={locale} renderState={renderState} />
-      <Show when={rendererStatus() !== "fallback"}>
+      <Show when={renderState()}>
+        <PixelWorldCommercialHud locale={locale} renderState={renderState} />
+      </Show>
+      <Show when={rendererStatus() !== "fallback" && rendererStatus() !== "unavailable"}>
         <PixelWorldCanvasRenderer
           locale={locale}
           renderInput={renderInput}
@@ -2301,27 +1636,22 @@ export function PixelWorldHost(props) {
           }}
         />
       </Show>
-      <Show when={focusMode() && rendererStatus() === "fallback" && !maximized()}>
-        <PixelWorldFocusMinimapCard locale={locale} renderState={renderState} variant="fallback" />
+      <Show when={!renderState()}>
+        <div class="empty pixel-world-render-unavailable" data-renderer-state="unavailable">
+          {rendererFatal()
+            ? `${rendererFatal().code}: ${rendererFatal().message}`
+            : tr(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.")}
+        </div>
       </Show>
-      <Show when={rendererStatus() !== "ready"}>
-        <PixelWorldCanvasPlaceholder
-          locale={locale}
-          renderState={renderState}
-          ready={() => false}
-          onSelect={(selection) => adapter().simulateSelect(selection)}
-          onHover={(selection) => adapter().simulateHover(selection)}
-        />
-      </Show>
-      <Show when={rendererStatus() === "fallback"}>
-        <details class="diagnostic pixel-world-render-fallback" data-renderer-state="fallback">
-          <summary>{tr(locale(), "Renderer 未接管", "Renderer Not Attached")}</summary>
+      <Show when={rendererStatus() === "unavailable"}>
+        <details class="diagnostic pixel-world-render-unavailable" data-renderer-state="unavailable">
+          <summary>{tr(locale(), "Renderer 不可用", "Renderer Unavailable")}</summary>
           <div class="stack flow-top">
             <div class="feedback-summary">
               {tr(
                 locale(),
-                "页面先使用 host fallback；正式玩法摘要、目标和指挥主链继续可用。",
-                "The page is using host fallback first; formal gameplay summary, target, and command flows remain available.",
+                "Rust bridge 未能生成世界显示状态；页面不再保留第二套 JS 世界渲染。",
+                "Rust bridge could not derive the world display state; the page no longer keeps a second JS world renderer.",
               )}
             </div>
             <Show when={rendererFatal()}>
@@ -2330,7 +1660,7 @@ export function PixelWorldHost(props) {
           </div>
         </details>
       </Show>
-      <Show when={focusMode() && renderState().commercial_surface && !maximized()}>
+      <Show when={focusMode() && renderState()?.commercial_surface && !maximized()}>
         <div class="pixel-world-focus-receipt">
           <PixelWorldActionReceipt
             class="pixel-world-action-receipt--focus-compact"
@@ -2358,8 +1688,8 @@ export function PixelWorldHost(props) {
             <span class="badge badge--accent">{`locations=${visualState().locations.length}`}</span>
             <span class="badge badge--accent">{`fragments=${visualState().fragmentTerrain.length}`}</span>
             <span class="badge badge--accent">{`agents=${visualState().agents.length}`}</span>
-            <Show when={renderState().world_tick !== null && renderState().world_tick !== undefined}>
-              <span class="badge badge--accent" data-world-tick={String(renderState().world_tick)}>{`tick=${renderState().world_tick}`}</span>
+            <Show when={renderState()?.world_tick !== null && renderState()?.world_tick !== undefined}>
+              <span class="badge badge--accent" data-world-tick={String(renderState()?.world_tick)}>{`tick=${renderState()?.world_tick}`}</span>
             </Show>
             <span class="badge">{`links=${visualState().links.length}`}</span>
             <span class="badge">{`hotspots=${arrayField(renderState(), "visual_hotspots", "visualHotspots").length}`}</span>
@@ -2382,20 +1712,17 @@ export function PixelWorldHost(props) {
             <button type="button" onClick={simulateFatal}>
               {tr(locale(), "模拟 Renderer Fatal", "Simulate Renderer Fatal")}
             </button>
-            <button type="button" onClick={setFallbackMode}>
-              {tr(locale(), "切回 Host Fallback", "Back To Host Fallback")}
-            </button>
             <div class="feedback-detail">
               {tr(
                 locale(),
-                "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。",
-                "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer.",
+                "当前世界舞台只依赖 wasm/Rust bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。",
+                "The world stage depends only on the wasm/Rust bridge, embedded canvas, light pan-zoom interaction, and event callbacks.",
               )}
             </div>
           </div>
         </details>
       </Show>
-      <Show when={focusMode()}>
+      <Show when={focusMode() && renderState()}>
         <details
           class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"
           open={diagnosticsDrawerOpen()}
@@ -2417,9 +1744,6 @@ export function PixelWorldHost(props) {
             <div class="toolbar toolbar--spaced">
               <button type="button" onClick={requestReadyMode}>
                 {tr(locale(), "重新挂载嵌入式 Renderer", "Reattach Embedded Renderer")}
-              </button>
-              <button type="button" onClick={setFallbackMode}>
-                {tr(locale(), "切回 Host Fallback", "Back To Host Fallback")}
               </button>
             </div>
           </div>

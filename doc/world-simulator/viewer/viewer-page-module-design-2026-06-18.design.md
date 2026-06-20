@@ -84,7 +84,7 @@ The page should behave as a command-table shell:
 - Header identity: compact, task-aware, no large marketing hero.
 - Command band: objective, next move, player leverage.
 - World board: the main visual canvas and route/selection read.
-- Feedback band: action receipt, blocker, no-receipt, or fallback state.
+- Feedback band: action receipt, blocker, no-receipt, or unavailable state.
 - Side context: target list and command panel.
 - Deep context: gameplay details, auth/economy, diagnostics.
 
@@ -129,21 +129,21 @@ Current anchors: `PixelWorldHost`, `.pixel-world-canvas`,
 Role:
 - primary visual subject;
 - shows world, active agent, selected target, route, objective callout, blocker,
-  and fallback honesty;
+  and unavailable-state honesty;
 - gives the player spatial confidence before command or diagnostics detail.
 
 Design contract:
 - occupies the largest center-zone area on desktop;
-- preserves a stable aspect ratio and minimum height across loading, fallback,
+- preserves a stable aspect ratio and minimum height across loading, unavailable,
   rendered, and selected states;
 - active agent, selected target, objective callout, and route must read above
   fragments, terrain, and ambient labels;
-- fallback renderer is valid only when explicitly labeled and visually scoped;
+- renderer unavailable is valid only as an explicit diagnostic state;
 - canvas controls or renderer metadata must never look like the primary action.
 
 State handling:
 - loading: skeleton or reserved board frame with stage label;
-- fallback: clear `Renderer Not Attached` or equivalent, plus honest reason;
+- unavailable: clear renderer unavailable state plus honest reason;
 - blocked: blocker callout near the route or target, paired with receipt;
 - selected: selected entity gets a visible focus callout and details route;
 - long labels/zh: prefer label truncation with details route over shrinking
@@ -259,7 +259,7 @@ State handling:
 
 ### 3.8 Diagnostics
 Current anchors: `#viewer-diagnostics-panel`, `.diagnostic-surface`,
-`.pixel-world-render-diagnostics`, `.pixel-world-render-fallback`.
+`.pixel-world-render-diagnostics`, `.pixel-world-render-unavailable`.
 
 Role:
 - engineering and QA visibility;
@@ -268,14 +268,14 @@ Role:
 
 Design contract:
 - collapsed by default in Player mode;
-- renderer fallback is visible when it affects the world board, but diagnostic
+- renderer unavailable is visible when it affects the world board, but diagnostic
   detail stays in a secondary disclosure;
 - raw JSON never appears before command, board, receipt, or target selection;
 - badges use diagnostic-muted weight unless warning or failure affects player
   recovery.
 
 State handling:
-- fallback: explicit label, reason, and route to details;
+- unavailable: explicit label, reason, and route to details;
 - fatal renderer: warning badge plus diagnostic expansion;
 - no runtime/provider: distinguish player-fixable from system issue;
 - long diagnostic text: scroll or collapse inside diagnostic surface.
@@ -297,7 +297,7 @@ Design contract:
 - exit/maximize controls are visible and keyboard focusable.
 
 State handling:
-- fallback renderer: fallback minimap card is honest and compact;
+- renderer unavailable: minimap is absent and the diagnostic is honest and compact;
 - no selected agent: command surface explains selection requirement;
 - blocked: blocker cell rises above receipt detail;
 - mobile: focus HUD stacks without overlapping the board or controls.
@@ -328,7 +328,7 @@ All modules should map to these player-facing states:
 | --- | --- | --- |
 | empty | explicit empty reason and next observable signal | distinguish empty world, no target, no receipt |
 | loading | reserved layout, `aria-busy` or equivalent where DOM supports it | no stage jump |
-| fallback | clear renderer/fallback label near affected board | raw details stay secondary |
+| unavailable | clear renderer unavailable label near affected board | raw details stay secondary |
 | blocked | blocker reason near next move and receipt | recovery route visible |
 | no receipt | muted receipt surface remains present | prevents false progress |
 | completed | positive receipt state plus next route | do not imply unsupported runtime causality |
@@ -360,7 +360,7 @@ The Image2 target cannot infer:
   labels;
 - mobile stacking behavior;
 - zh locale length and CJK typography;
-- empty, loading, no-receipt, fallback, blocked, completed, and long-text
+- empty, loading, no-receipt, unavailable, blocked, completed, and long-text
   states.
 
 Use the target by comparing real desktop and mobile Viewer screenshots against
@@ -399,12 +399,12 @@ Verification gate:
 - receipt/no-receipt assertions;
 - desktop and mobile screenshot comparison with Image2 target direction.
 
-### Slice 3: Board prominence and fallback honesty
-Goal: make canvas/fallback board the main subject across renderer states.
+### Slice 3: Board prominence and unavailable honesty
+Goal: make the canvas board the main subject across renderer states.
 
 Recommended work:
 - enforce stable board dimensions;
-- keep renderer fallback explicit;
+- keep renderer unavailable explicit;
 - ensure selected/route/objective/blocker layers read above terrain.
 
 Verification gate:
@@ -438,7 +438,7 @@ Recommended screenshot scenarios:
 - desktop first screen, `locale=zh`;
 - mobile first screen, `locale=en`;
 - mobile first screen, `locale=zh`;
-- fallback renderer;
+- renderer unavailable;
 - action receipt present;
 - no receipt;
 - blocked next move;

@@ -2,13 +2,14 @@ use super::*;
 
 use super::super::auth::{VerifiedPlayerAuth, verify_gameplay_action_auth_proof};
 use super::super::gameplay_actions::{
-    ACTION_BUILD_ASSEMBLER_MK1, ACTION_BUILD_SMELTER_MK1, ACTION_RELEASE_AGENT_CLAIM,
-    ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP, ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE,
-    ACTION_SCHEDULE_ASSEMBLER_GEAR, ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE,
-    ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK, ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1,
-    ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK, ACTION_SCHEDULE_SMELTER_ALLOY_PLATE,
-    ACTION_SCHEDULE_SMELTER_COPPER_WIRE, ACTION_SCHEDULE_SMELTER_IRON_INGOT,
-    ACTION_SCHEDULE_SMELTER_POLYMER_RESIN, FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1,
+    ACTION_BUILD_ASSEMBLER_MK1, ACTION_BUILD_SMELTER_MK1, ACTION_CLAIM_FIRST_AGENT,
+    ACTION_CLAIM_STARTER_OC, ACTION_RELEASE_AGENT_CLAIM, ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP,
+    ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE, ACTION_SCHEDULE_ASSEMBLER_GEAR,
+    ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE, ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK,
+    ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1, ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK,
+    ACTION_SCHEDULE_SMELTER_ALLOY_PLATE, ACTION_SCHEDULE_SMELTER_COPPER_WIRE,
+    ACTION_SCHEDULE_SMELTER_IRON_INGOT, ACTION_SCHEDULE_SMELTER_POLYMER_RESIN,
+    FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1, FIRST_AGENT_CLAIM_TARGET_AGENT_ID,
     build_runtime_action_from_gameplay_request, gameplay_action_requires_actor_agent,
 };
 use super::super::protocol::{GameplayActionAck, GameplayActionError, GameplayActionRequest};
@@ -33,8 +34,39 @@ pub(super) fn extend_available_actions(
         return;
     }
     let Some(agent_id) = first_agent_id else {
+        if state.agents.is_empty() {
+            actions.push(PlayerGameplayAction {
+                action_id: ACTION_CLAIM_FIRST_AGENT.to_string(),
+                label: "Claim first Agent".to_string(),
+                protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
+                target_agent_id: Some(FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string()),
+                disabled_reason: None,
+            });
+        }
         return;
     };
+    let starter_oc_required = state
+        .main_token_balances
+        .get(agent_id)
+        .map(|balance| balance.liquid_balance == 0)
+        .unwrap_or(true)
+        && !state.starter_oc_claims.contains_key(agent_id);
+    if starter_oc_required {
+        let disabled_reason =
+            "claim starter OC before using LLM/agent chat for this Agent".to_string();
+        for action in actions.iter_mut() {
+            if action.action_id == "chat_first_agent" {
+                action.disabled_reason = Some(disabled_reason.clone());
+            }
+        }
+        actions.push(PlayerGameplayAction {
+            action_id: ACTION_CLAIM_STARTER_OC.to_string(),
+            label: "Claim starter OC".to_string(),
+            protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
+            target_agent_id: Some(agent_id.to_string()),
+            disabled_reason: None,
+        });
+    }
 
     let empty_materials = BTreeMap::new();
     let world_materials = state
@@ -206,7 +238,36 @@ impl ViewerRuntimeLiveServer {
             })?;
 
         let public_key = normalize_optional_public_key(request.public_key.as_deref());
-        if gameplay_action_requires_actor_agent(request.action_id.as_str()) {
+        let is_first_agent_claim = request.action_id == ACTION_CLAIM_FIRST_AGENT;
+        if is_first_agent_claim {
+            if request.target_agent_id != FIRST_AGENT_CLAIM_TARGET_AGENT_ID {
+                return Err(GameplayActionError {
+                    code: "invalid_first_agent_claim_target".to_string(),
+                    message: format!(
+                        "gameplay_action `{}` must target {}",
+                        request.action_id, FIRST_AGENT_CLAIM_TARGET_AGENT_ID
+                    ),
+                    action_id: Some(request.action_id.clone()),
+                    target_agent_id: Some(request.target_agent_id.clone()),
+                });
+            }
+            if self
+                .world
+                .state()
+                .agents
+                .contains_key(request.target_agent_id.as_str())
+            {
+                return Err(GameplayActionError {
+                    code: "first_agent_already_exists".to_string(),
+                    message: format!(
+                        "gameplay_action `{}` can only run before {} exists",
+                        request.action_id, request.target_agent_id
+                    ),
+                    action_id: Some(request.action_id.clone()),
+                    target_agent_id: Some(request.target_agent_id.clone()),
+                });
+            }
+        } else if gameplay_action_requires_actor_agent(request.action_id.as_str()) {
             let bound_agent_id = self
                 .llm_sidecar
                 .bound_agent_for_player(verified.player_id.as_str())
@@ -270,6 +331,20 @@ impl ViewerRuntimeLiveServer {
                 action_id: Some(request.action_id.clone()),
                 target_agent_id: err.agent_id,
             })?;
+        } else if request.action_id == ACTION_CLAIM_STARTER_OC {
+            ensure_agent_player_access_runtime(
+                &self.world,
+                &self.llm_sidecar,
+                request.target_agent_id.as_str(),
+                verified.player_id.as_str(),
+                public_key.as_deref(),
+            )
+            .map_err(|err| GameplayActionError {
+                code: err.code,
+                message: err.message,
+                action_id: Some(request.action_id.clone()),
+                target_agent_id: err.agent_id,
+            })?;
         } else {
             ensure_agent_player_access_runtime(
                 &self.world,
@@ -317,6 +392,14 @@ impl ViewerRuntimeLiveServer {
             let submitted_action_id = submitted
                 .action_id
                 .expect("chain gameplay submit must include action_id after ok=true validation");
+            if is_first_agent_claim {
+                self.bind_first_agent_claim_player(
+                    request.target_agent_id.as_str(),
+                    verified.player_id.as_str(),
+                    public_key.as_deref(),
+                    &request,
+                )?;
+            }
             self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
                 action: format!("gameplay_action:{}", request.action_id),
                 stage: "submitted".to_string(),
@@ -353,6 +436,14 @@ impl ViewerRuntimeLiveServer {
 
         let runtime_action = build_runtime_action_from_gameplay_request(&request)?;
         let runtime_action_id = self.world.submit_action(runtime_action);
+        if is_first_agent_claim {
+            self.bind_first_agent_claim_player(
+                request.target_agent_id.as_str(),
+                verified.player_id.as_str(),
+                public_key.as_deref(),
+                &request,
+            )?;
+        }
         self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
             action: format!("gameplay_action:{}", request.action_id),
             stage: "accepted".to_string(),
@@ -369,6 +460,10 @@ impl ViewerRuntimeLiveServer {
             hint: Some(match request.action_id.as_str() {
                 ACTION_RELEASE_AGENT_CLAIM => {
                     "advance 1-2 steps to queue the release cooldown for this claim".to_string()
+                }
+                ACTION_CLAIM_STARTER_OC => {
+                    "advance 1-2 steps to credit starter OC, then send your first agent chat"
+                        .to_string()
                 }
                 _ => "advance 1-2 steps to apply the queued gameplay action".to_string(),
             }),
@@ -404,6 +499,28 @@ impl ViewerRuntimeLiveServer {
             action_id: Some(request.action_id.clone()),
             target_agent_id: Some(request.target_agent_id.clone()),
         })
+    }
+
+    fn bind_first_agent_claim_player(
+        &mut self,
+        agent_id: &str,
+        player_id: &str,
+        public_key: Option<&str>,
+        request: &GameplayActionRequest,
+    ) -> Result<(), GameplayActionError> {
+        let events = self
+            .llm_sidecar
+            .bind_agent_player(agent_id, player_id, public_key, false)
+            .map_err(|message| GameplayActionError {
+                code: "player_bind_failed".to_string(),
+                message,
+                action_id: Some(request.action_id.clone()),
+                target_agent_id: Some(request.target_agent_id.clone()),
+            })?;
+        for event in events {
+            self.enqueue_virtual_event(event);
+        }
+        Ok(())
     }
 }
 
