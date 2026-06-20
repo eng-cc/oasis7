@@ -9,30 +9,28 @@ use std::time::{Duration, Instant};
 use super::auth::verify_session_register_auth_proof;
 use super::live::ViewerLiveDecisionMode;
 use super::protocol::{
-    viewer_event_kind_matches, AuthoritativeBatchFinality, AuthoritativeChallengeAck,
-    AuthoritativeChallengeCommand, AuthoritativeChallengeError,
-    AuthoritativeChallengeResolveRequest, AuthoritativeChallengeStatus,
-    AuthoritativeChallengeSubmitRequest, AuthoritativeFinalityState,
+    AuthoritativeBatchFinality, AuthoritativeChallengeAck, AuthoritativeChallengeCommand,
+    AuthoritativeChallengeError, AuthoritativeChallengeResolveRequest,
+    AuthoritativeChallengeStatus, AuthoritativeChallengeSubmitRequest, AuthoritativeFinalityState,
     AuthoritativeReconnectSyncRequest, AuthoritativeRecoveryAck, AuthoritativeRecoveryCommand,
     AuthoritativeRecoveryError, AuthoritativeRecoveryStatus, AuthoritativeRollbackRequest,
     AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
     AuthoritativeSessionRotateRequest, ControlCompletionAck, ControlCompletionStatus,
-    ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse,
-    ViewerStream, VIEWER_PROTOCOL_VERSION,
+    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest,
+    ViewerResponse, ViewerStream, viewer_event_kind_matches,
 };
 use crate::geometry::GeoPos;
 use crate::observability::emit_stderr_or_event;
 use crate::runtime::{
-    blake3_hex, Action as RuntimeAction, DomainEvent as RuntimeDomainEvent,
-    Journal as RuntimeJournal, ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot,
-    World as RuntimeWorld, WorldError as RuntimeWorldError,
-    WorldEventBody as RuntimeWorldEventBody,
+    Action as RuntimeAction, DomainEvent as RuntimeDomainEvent, Journal as RuntimeJournal,
+    ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot, World as RuntimeWorld,
+    WorldError as RuntimeWorldError, WorldEventBody as RuntimeWorldEventBody, blake3_hex,
 };
 use crate::simulator::{
-    build_world_model, AgentDecisionTrace, ChunkRuntimeConfig, PlayerGameplayRecentFeedback,
-    RejectReason as SimulatorRejectReason, ResourceKind, RunnerMetrics, WorldConfig, WorldEvent,
-    WorldInitConfig, WorldScenario, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION,
-    SNAPSHOT_VERSION,
+    AgentDecisionTrace, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
+    PlayerGameplayRecentFeedback, RejectReason as SimulatorRejectReason, ResourceKind,
+    RunnerMetrics, SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldInitConfig, WorldScenario,
+    WorldSnapshot, build_world_model,
 };
 use tracing::Level;
 mod authoritative;
@@ -69,19 +67,19 @@ use control_plane::RuntimeLlmSidecar;
 use control_utils::{control_mode_for_action, control_mode_label, runtime_control_error_details};
 use decision_trace::{append_decision_upstream_trace, decision_trace_provider_error_retryable};
 use gameplay_snapshot::{
-    apply_runtime_snapshot_empty_entities_blocker, build_player_gameplay_snapshot,
-    player_gameplay_causality_from_runtime_events, player_gameplay_feedback_from_control_ack,
-    PlayerGameplayCausalitySignal,
+    PlayerGameplayCausalitySignal, apply_runtime_snapshot_empty_entities_blocker,
+    build_player_gameplay_snapshot, player_gameplay_causality_from_runtime_events,
+    player_gameplay_feedback_from_control_ack,
 };
 use mapping::{map_runtime_event, runtime_state_to_simulator_model};
 use session_policy::{
-    location_id_for_pos, map_session_policy_error_code, normalize_optional_string,
-    session_revoke_metadata_key, RuntimeSessionPolicy, RuntimeSessionRevokeMetadata,
+    RuntimeSessionPolicy, RuntimeSessionRevokeMetadata, location_id_for_pos,
+    map_session_policy_error_code, normalize_optional_string, session_revoke_metadata_key,
 };
 use support::{
+    FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveScript, RuntimeLiveSession,
     bootstrap_formal_release_runtime_world, bootstrap_runtime_world, is_expected_disconnect_error,
     is_timeout_error, latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
-    RuntimeLiveScript, RuntimeLiveSession, FORMAL_RELEASE_DEFAULT_WORLD_ID,
 };
 
 pub use control_plane::runtime_agent_chat_echo_enabled_from_env;
@@ -96,10 +94,8 @@ const MAX_AUTHORITATIVE_CHALLENGE_HISTORY: usize = 512;
 const MAX_AUTHORITATIVE_STABLE_CHECKPOINTS: usize = 64;
 const LLM_GAMEPLAY_REQUIRED_HINT: &str =
     "enable --llm and configure a reachable LLM provider before retrying gameplay controls";
-const LLM_PROVIDER_GATEWAY_TIMEOUT_HINT: &str =
-    "local LLM provider gateway timed out; inspect output/local-letai-game-test/*/local-letai-provider-bridge.log, confirm proxy/upstream LetAI reachability, then rerun scripts/run-local-letai-game-test.sh or its chat probe/bridge smoke before retrying gameplay controls";
-const RUNTIME_CONTROL_REQUIRED_HINT: &str =
-    "inspect the reported runtime failure, repair the broken world/module state, then retry the control";
+const LLM_PROVIDER_GATEWAY_TIMEOUT_HINT: &str = "local LLM provider gateway timed out; inspect output/local-letai-game-test/*/local-letai-provider-bridge.log, confirm proxy/upstream LetAI reachability, then rerun scripts/run-local-letai-game-test.sh or its chat probe/bridge smoke before retrying gameplay controls";
+const RUNTIME_CONTROL_REQUIRED_HINT: &str = "inspect the reported runtime failure, repair the broken world/module state, then retry the control";
 const BACKGROUND_PLAY_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(2);
 
 pub struct ViewerRuntimeLiveServer {

@@ -53,8 +53,8 @@ pub mod distributed_replica_maintenance {
 
 pub mod observer_flow {
     pub use super::head_sync::{
-        compose_head_sync_report, follow_head_sync, HeadFollowReport, HeadSyncReport,
-        HeadSyncResult,
+        HeadFollowReport, HeadSyncReport, HeadSyncResult, compose_head_sync_report,
+        follow_head_sync,
     };
 }
 
@@ -82,8 +82,8 @@ pub use error::WorldError;
 pub use gateway::{ActionGateway, NetworkGateway, SubmitActionReceipt};
 pub use head_tracking::{HeadTracker, HeadUpdateDecision};
 pub use index::{
-    publish_execution_providers, publish_execution_providers_cached, publish_world_head,
-    query_providers, IndexPublishResult,
+    IndexPublishResult, publish_execution_providers, publish_execution_providers_cached,
+    publish_world_head, query_providers,
 };
 pub use index_store::{DistributedIndexStore, HeadIndexRecord, InMemoryIndexStore};
 pub use modules::{ModuleArtifact, ModuleManifest};
@@ -94,22 +94,21 @@ pub use proto_dht::{MembershipDirectorySnapshot, ProviderRecord};
 pub use proto_net::{NetworkMessage, NetworkRequest, NetworkResponse, NetworkSubscription};
 pub use provider_cache::{ProviderCache, ProviderCacheConfig};
 pub use provider_distribution::{
-    audit_provider_distribution, ProviderDistributionAudit, ProviderDistributionPolicy,
+    ProviderDistributionAudit, ProviderDistributionPolicy, audit_provider_distribution,
 };
 pub use provider_selection::ProviderSelectionPolicy;
 pub use replica_maintenance::{
-    execute_replica_maintenance_plan, plan_replica_maintenance, run_replica_maintenance_poll,
     ReplicaMaintenanceFailedTask, ReplicaMaintenancePlan, ReplicaMaintenancePolicy,
     ReplicaMaintenancePollingPolicy, ReplicaMaintenancePollingState, ReplicaMaintenanceReport,
     ReplicaMaintenanceRoundResult, ReplicaTransferExecutor, ReplicaTransferKind,
-    ReplicaTransferTask,
+    ReplicaTransferTask, execute_replica_maintenance_plan, plan_replica_maintenance,
+    run_replica_maintenance_poll,
 };
 
 #[cfg(feature = "libp2p")]
 pub use libp2p_net::error_mapping::{
-    classify_world_error_availability, world_error_is_missing_handler,
+    Libp2pAvailabilityClass, classify_world_error_availability, world_error_is_missing_handler,
     world_error_is_publish_failure, world_error_is_retryable_connection_gap,
-    Libp2pAvailabilityClass,
 };
 
 #[cfg(feature = "libp2p")]

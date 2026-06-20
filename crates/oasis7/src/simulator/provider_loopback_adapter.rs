@@ -117,7 +117,9 @@ impl ProviderLoopbackAdapter {
                 {
                     return Err(DecisionProviderError::new(
                         "action_ref_not_allowed",
-                        format!("action_ref `{action_ref}` is outside ProviderLoopbackAdapter phase-1 whitelist"),
+                        format!(
+                            "action_ref `{action_ref}` is outside ProviderLoopbackAdapter phase-1 whitelist"
+                        ),
                         false,
                     ));
                 }

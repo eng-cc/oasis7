@@ -16,19 +16,19 @@ use super::wasm_status::ChainWasmStatus;
 #[path = "status_payload_network_head.rs"]
 mod status_payload_network_head;
 pub(super) use status_payload_network_head::{
-    applied_slashing_receipt_hashes, build_network_head_status, pending_slashing_intent_count,
-    readiness_policy, ChainConsensusNetworkHeadStatus, ChainReadinessPolicyStatus,
+    ChainConsensusNetworkHeadStatus, ChainReadinessPolicyStatus, applied_slashing_receipt_hashes,
+    build_network_head_status, pending_slashing_intent_count, readiness_policy,
 };
 #[path = "status_payload_observability.rs"]
 mod status_payload_observability;
 #[path = "status_payload_state_sync.rs"]
 mod status_payload_state_sync;
+use status_payload_observability::{
+    ChainP2pPathObservabilityStatus, build_path_observability_status,
+};
 pub(crate) use status_payload_observability::{
     build_liveness_status, classify_transport_stability, observability_status_for_alerts,
     observability_summary_for_alerts, push_observability_alert, reachability_policy_ok,
-};
-use status_payload_observability::{
-    build_path_observability_status, ChainP2pPathObservabilityStatus,
 };
 use status_payload_state_sync::{
     consensus_participation_hold_reason, state_sync_fallback_reason,

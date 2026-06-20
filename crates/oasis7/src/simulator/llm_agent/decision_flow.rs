@@ -1,7 +1,7 @@
 use super::super::agent::AgentDecision;
 use super::super::types::{Action, ResourceKind, ResourceOwner};
-use super::prompt_assembly::{PromptSectionKind, PromptSectionPriority};
 use super::LlmCompletionTurn;
+use super::prompt_assembly::{PromptSectionKind, PromptSectionPriority};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

@@ -40,8 +40,18 @@ impl EnvVarGuard {
 impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         match self.previous.take() {
-            Some(value) => std::env::set_var(self.key.as_str(), value),
-            None => std::env::remove_var(self.key.as_str()),
+            Some(value) => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::set_var(self.key.as_str(), value);
+                }
+            },
+            None => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::remove_var(self.key.as_str());
+                }
+            },
         }
     }
 }
@@ -649,7 +659,10 @@ fn llm_config_agent_scoped_goal_overrides_global_value() {
 fn llm_env_var_reads_oasis7_prefix() {
     let _env_lock = llm_env_lock().lock().expect("env lock");
     let _primary_guard = EnvVarGuard::capture(ENV_LLM_MODEL);
-    std::env::set_var(ENV_LLM_MODEL, "oasis7-model");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(ENV_LLM_MODEL, "oasis7-model");
+    }
 
     assert_eq!(llm_env_var(ENV_LLM_MODEL).as_deref(), Some("oasis7-model"));
 }
@@ -660,8 +673,14 @@ fn llm_env_var_rejects_removed_old_brand_prefix() {
     let _primary_guard = EnvVarGuard::capture(ENV_LLM_MODEL);
     let removed_old_brand_model = removed_old_brand_llm_env("MODEL");
     let _removed_old_brand_guard = EnvVarGuard::capture(removed_old_brand_model.as_str());
-    std::env::remove_var(ENV_LLM_MODEL);
-    std::env::set_var(removed_old_brand_model.as_str(), "removed-old-brand-model");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var(ENV_LLM_MODEL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(removed_old_brand_model.as_str(), "removed-old-brand-model");
+    }
 
     assert!(llm_env_var(ENV_LLM_MODEL).is_none());
 }
@@ -681,22 +700,43 @@ fn llm_config_from_env_for_agent_rejects_removed_old_brand_prefix() {
     let _removed_old_brand_base_url_guard =
         EnvVarGuard::capture(removed_old_brand_base_url.as_str());
     let _removed_old_brand_api_key_guard = EnvVarGuard::capture(removed_old_brand_api_key.as_str());
-    std::env::remove_var(ENV_LLM_MODEL);
-    std::env::remove_var(ENV_LLM_BASE_URL);
-    std::env::remove_var(ENV_LLM_API_KEY);
-    std::env::set_var(removed_old_brand_model.as_str(), "removed-old-brand-model");
-    std::env::set_var(
-        removed_old_brand_base_url.as_str(),
-        "https://removed-old-brand.example.com/v1",
-    );
-    std::env::set_var(
-        removed_old_brand_api_key.as_str(),
-        "removed-old-brand-secret",
-    );
-    std::env::set_var(
-        removed_old_brand_goal.as_str(),
-        "removed-old-brand-agent-short",
-    );
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var(ENV_LLM_MODEL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var(ENV_LLM_BASE_URL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var(ENV_LLM_API_KEY);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(removed_old_brand_model.as_str(), "removed-old-brand-model");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(
+                removed_old_brand_base_url.as_str(),
+                "https://removed-old-brand.example.com/v1",
+            );
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(
+                removed_old_brand_api_key.as_str(),
+                "removed-old-brand-secret",
+            );
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(
+                removed_old_brand_goal.as_str(),
+                "removed-old-brand-agent-short",
+            );
+    }
 
     let error = LlmAgentConfig::from_env_for_agent("agent-1").expect_err("missing oasis7 env");
     assert!(matches!(

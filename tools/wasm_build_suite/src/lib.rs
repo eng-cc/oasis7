@@ -1034,7 +1034,7 @@ mod tests {
         .expect("write workspace manifest");
         fs::write(
             root.join("module/Cargo.toml"),
-            "[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
+            "[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
         )
         .expect("write module manifest");
         fs::write(
@@ -1044,7 +1044,7 @@ mod tests {
         .expect("write module source");
         fs::write(
             root.join("shared/Cargo.toml"),
-            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
         )
         .expect("write shared manifest");
         fs::write(

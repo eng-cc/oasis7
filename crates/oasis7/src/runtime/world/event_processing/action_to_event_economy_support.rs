@@ -111,11 +111,7 @@ pub(super) fn compute_local_scarcity_delay_ticks(
     let deficit_ratio_bps = deficit_total
         .saturating_mul(10_000)
         .saturating_div(requested_total);
-    if deficit_ratio_bps >= 7_000 {
-        2
-    } else {
-        1
-    }
+    if deficit_ratio_bps >= 7_000 { 2 } else { 1 }
 }
 
 fn governance_tax_bps_for_material_quotes(world: &World) -> u16 {

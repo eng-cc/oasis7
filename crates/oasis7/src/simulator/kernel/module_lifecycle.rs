@@ -1,7 +1,7 @@
-use super::super::world_model::{InstalledModuleState, ModuleArtifactState};
 use super::super::ModuleInstallTarget;
-use super::types::{RejectReason, WorldEventKind};
+use super::super::world_model::{InstalledModuleState, ModuleArtifactState};
 use super::WorldKernel;
+use super::types::{RejectReason, WorldEventKind};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
@@ -26,7 +26,7 @@ impl WorldKernel {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::RuleDenied {
                     notes: vec![
-                        "compile module source rejected: module_id cannot be empty".to_string()
+                        "compile module source rejected: module_id cannot be empty".to_string(),
                     ],
                 },
             };
@@ -163,7 +163,7 @@ impl WorldKernel {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::RuleDenied {
                     notes: vec![
-                        "install module rejected: module_version cannot be empty".to_string()
+                        "install module rejected: module_version cannot be empty".to_string(),
                     ],
                 },
             };
@@ -274,7 +274,7 @@ impl WorldKernel {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::RuleDenied {
                     notes: vec![
-                        "deploy module artifact rejected: wasm_hash cannot be empty".to_string()
+                        "deploy module artifact rejected: wasm_hash cannot be empty".to_string(),
                     ],
                 },
             };

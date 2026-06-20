@@ -463,10 +463,12 @@ fn snapshot_runtime_snapshot_accepts_stringified_numeric_map_keys() {
         .expect("restore world snapshot");
 
     let runtime_snapshot = restored.runtime_snapshot.expect("runtime snapshot");
-    assert!(runtime_snapshot
-        .state
-        .pending_factory_builds
-        .contains_key(&6));
+    assert!(
+        runtime_snapshot
+            .state
+            .pending_factory_builds
+            .contains_key(&6)
+    );
 }
 
 #[test]
@@ -946,10 +948,12 @@ fn replay_from_snapshot_applies_fragment_replenished_event() {
     }
 
     let journal = kernel.journal_snapshot();
-    assert!(journal
-        .events
-        .iter()
-        .any(|event| { matches!(event.kind, WorldEventKind::FragmentsReplenished { .. }) }));
+    assert!(
+        journal
+            .events
+            .iter()
+            .any(|event| { matches!(event.kind, WorldEventKind::FragmentsReplenished { .. }) })
+    );
 
     let replayed = WorldKernel::replay_from_snapshot(snapshot, journal).expect("replay");
     assert_eq!(replayed.model(), kernel.model());

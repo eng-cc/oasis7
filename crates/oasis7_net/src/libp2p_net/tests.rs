@@ -4,9 +4,9 @@ use super::peer_manager::{
 use super::peer_record::sign_peer_record;
 use super::runtime_loop::{peer_requires_active_quarantine, refresh_peer_manager_healths};
 use super::transport_paths::{
-    active_transport_path_from_endpoint, peer_record_transport_paths,
-    select_preferred_transport_path, sync_known_transport_paths, PeerReachabilityContract,
-    TransportMuxer, TransportPathKind, TransportSecurity, TransportSessionFlavor,
+    PeerReachabilityContract, TransportMuxer, TransportPathKind, TransportSecurity,
+    TransportSessionFlavor, active_transport_path_from_endpoint, peer_record_transport_paths,
+    select_preferred_transport_path, sync_known_transport_paths,
 };
 use super::utils::push_bounded_vec;
 use super::*;
@@ -63,6 +63,12 @@ fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool
         std::thread::sleep(Duration::from_millis(20));
     }
     panic!("timed out waiting for condition: {what}");
+}
+
+fn has_missing_peer_record_issue(health: &PeerManagerPeerHealth) -> bool {
+    health
+        .issues
+        .contains(&PeerManagerHealthIssue::MissingPeerRecord)
 }
 
 #[test]
@@ -568,10 +574,7 @@ fn refresh_peer_manager_healths_keeps_missing_record_active_peer_soft_blocked_fo
         healths[&unverified_peer].status,
         PeerManagerHealthStatus::Blocked
     );
-    assert!(healths[&unverified_peer]
-        .issues
-        .iter()
-        .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)));
+    assert!(has_missing_peer_record_issue(&healths[&unverified_peer]));
     assert!(quarantined.is_empty());
     assert_eq!(admitted, HashSet::from([healthy_peer, unverified_peer]));
     let event_healths = event_peer_healths.lock().expect("lock peer healths");
@@ -613,10 +616,7 @@ fn refresh_peer_manager_healths_admits_record_exchange_pending_active_peer() {
         32,
     );
 
-    assert!(healths[&bootstrap_peer]
-        .issues
-        .iter()
-        .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)));
+    assert!(has_missing_peer_record_issue(&healths[&bootstrap_peer]));
     assert!(quarantined.is_empty());
     assert_eq!(admitted, HashSet::from([bootstrap_peer]));
     assert!(!peer_requires_active_quarantine(bootstrap_peer, &healths));

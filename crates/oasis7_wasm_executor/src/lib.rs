@@ -3,9 +3,9 @@
 mod metrics;
 
 pub use metrics::{
+    CompileCachePathKind, SharedWasmExecutorMetrics, WasmExecutorMetricsSnapshot,
     global_wasm_executor_metrics, init_shared_wasm_executor_metrics,
-    snapshot_global_wasm_executor_metrics, snapshot_wasm_executor_metrics, CompileCachePathKind,
-    SharedWasmExecutorMetrics, WasmExecutorMetricsSnapshot,
+    snapshot_global_wasm_executor_metrics, snapshot_wasm_executor_metrics,
 };
 
 #[cfg(feature = "wasmtime")]
@@ -26,8 +26,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 #[cfg(feature = "wasmtime")]
 use std::sync::{
+    Mutex,
     atomic::{AtomicU64, Ordering},
-    mpsc, Mutex,
+    mpsc,
 };
 use std::time::Instant;
 

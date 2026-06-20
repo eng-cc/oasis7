@@ -163,10 +163,12 @@ fn install_m4_economy_bootstrap_modules_injects_layered_profiles() {
         .get("recipe.assembler.logistics_drone")
         .expect("recipe profile logistics_drone");
     assert_eq!(drone_recipe.stage_gate, "bootstrap");
-    assert!(drone_recipe
-        .preferred_factory_tags
-        .iter()
-        .any(|tag| tag == "assembler"));
+    assert!(
+        drone_recipe
+            .preferred_factory_tags
+            .iter()
+            .any(|tag| tag == "assembler")
+    );
 }
 
 #[test]

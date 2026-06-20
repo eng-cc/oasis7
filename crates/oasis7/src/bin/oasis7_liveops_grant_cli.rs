@@ -1,8 +1,8 @@
 use oasis7::runtime::{
-    Action, CausedBy, DomainEvent, RejectReason, RestrictedStarterClaimGrantState,
-    RestrictedStarterClaimGrantStatus, World, WorldEvent, WorldEventBody,
-    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
-    MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+    Action, CausedBy, DomainEvent, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL, RejectReason,
+    RestrictedStarterClaimGrantState, RestrictedStarterClaimGrantStatus, World, WorldEvent,
+    WorldEventBody,
 };
 use serde::Serialize;
 use std::env;
@@ -782,8 +782,8 @@ mod tests {
     use super::*;
     use oasis7::runtime::{
         GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy,
-        MainTokenSupplyState, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
-        MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+        MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+        MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL, MainTokenSupplyState,
     };
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
@@ -915,10 +915,12 @@ mod tests {
         assert!(report.persisted);
         assert_eq!(report.beneficiary_restricted_balance_after, 300);
         assert_eq!(report.restricted_claim_liveops_treasury_balance_after, 300);
-        assert!(report
-            .action_events
-            .iter()
-            .any(|event| event.kind == "restricted_grant_issued"));
+        assert!(
+            report
+                .action_events
+                .iter()
+                .any(|event| event.kind == "restricted_grant_issued")
+        );
 
         let restored = World::load_from_dir(world_dir.as_path()).expect("reload world");
         let grant = restored
@@ -955,10 +957,12 @@ mod tests {
         assert!(report.rejection.is_none(), "{report:?}");
         assert!(report.persisted);
         assert_eq!(report.restricted_claim_liveops_treasury_balance_after, 600);
-        assert!(report
-            .action_events
-            .iter()
-            .any(|event| event.kind == "restricted_grant_revoked"));
+        assert!(
+            report
+                .action_events
+                .iter()
+                .any(|event| event.kind == "restricted_grant_revoked")
+        );
 
         let restored = World::load_from_dir(world_dir.as_path()).expect("reload world");
         let grant = restored

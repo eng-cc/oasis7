@@ -3,7 +3,7 @@
 [package]
 name = "oasis7_builtin_wasm_m4_factory_miner_mk1"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 publish = false
 
 [lib]

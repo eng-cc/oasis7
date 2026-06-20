@@ -3,8 +3,8 @@ use super::super::agent_claims::{
     split_agent_claim_upfront_funding,
 };
 use super::super::main_token::{
-    RestrictedStarterClaimGrantStatus, RestrictedStarterClaimRefundSink,
     MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SLASH,
+    RestrictedStarterClaimGrantStatus, RestrictedStarterClaimRefundSink,
 };
 use super::*;
 
@@ -210,15 +210,14 @@ impl WorldState {
                             ),
                         });
                     }
-                    let debit_total =
-                        transfer_amount.checked_add(*tax_amount).ok_or_else(|| {
-                            WorldError::ResourceBalanceInvalid {
-                                reason: format!(
+                    let debit_total = transfer_amount.checked_add(*tax_amount).ok_or_else(
+                        || WorldError::ResourceBalanceInvalid {
+                            reason: format!(
                                 "economic contract settlement debit overflow transfer={} tax={}",
                                 transfer_amount, tax_amount
                             ),
-                            }
-                        })?;
+                        },
+                    )?;
 
                     let creator_current = self
                         .agents

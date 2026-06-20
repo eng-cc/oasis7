@@ -2,8 +2,8 @@ use std::path::Path;
 
 use crate::geometry::space_distance_cm;
 use crate::simulator::{
-    initialize_kernel, Action, PersistError, ResourceKind, ResourceOwner, WorldConfig,
-    WorldInitConfig, WorldInitError, WorldInitReport, WorldKernel, WorldScenario,
+    Action, PersistError, ResourceKind, ResourceOwner, WorldConfig, WorldInitConfig,
+    WorldInitError, WorldInitReport, WorldKernel, WorldScenario, initialize_kernel,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -179,9 +179,11 @@ mod tests {
             .clone();
 
         let actions = plan_demo_actions(&kernel);
-        assert!(actions
-            .iter()
-            .any(|action| matches!(action, Action::MoveAgent { .. })));
+        assert!(
+            actions
+                .iter()
+                .any(|action| matches!(action, Action::MoveAgent { .. }))
+        );
 
         for action in actions {
             kernel.submit_action(action);

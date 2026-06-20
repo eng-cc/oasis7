@@ -1,8 +1,8 @@
 use oasis7::geometry::GeoPos;
 use oasis7::observability::emit_stderr_or_event;
 use oasis7::runtime::{
-    reward_redeem_signature_v1, Action as RuntimeAction, EpochSettlementReport,
-    NodeRewardMintRecord, World as RuntimeWorld, WorldError,
+    Action as RuntimeAction, EpochSettlementReport, NodeRewardMintRecord, World as RuntimeWorld,
+    WorldError, reward_redeem_signature_v1,
 };
 use tracing::Level;
 

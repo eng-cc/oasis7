@@ -1,15 +1,14 @@
 #![allow(improper_ctypes_definitions)]
 
 use oasis7_wasm_sdk::{
-    export_wasm_module,
+    LifecycleStage, WasmModuleLifecycle, export_wasm_module,
     wire::{
-        decode_action, decode_input, empty_output, encode_output, parse_json_geo_pos_cm, GeoPosCm,
-        ModuleCallInput, ModuleEffectIntent, ModuleEmit, ModuleOutput,
+        GeoPosCm, ModuleCallInput, ModuleEffectIntent, ModuleEmit, ModuleOutput, decode_action,
+        decode_input, empty_output, encode_output, parse_json_geo_pos_cm,
     },
-    LifecycleStage, WasmModuleLifecycle,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 const MODULE_ID: &str = "m1.mobility.basic";

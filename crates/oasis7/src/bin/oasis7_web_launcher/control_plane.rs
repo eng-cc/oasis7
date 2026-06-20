@@ -30,7 +30,7 @@ mod support;
 #[path = "control_plane/tests.rs"]
 mod tests;
 use self::chain_requests::{submit_chain_feedback_remote, submit_chain_transfer_remote};
-pub(super) use self::chain_status_probe::{query_chain_status_endpoint, ChainIdentitySnapshot};
+pub(super) use self::chain_status_probe::{ChainIdentitySnapshot, query_chain_status_endpoint};
 #[cfg(test)]
 pub(super) use self::provider_config::build_launcher_args;
 pub(super) use self::provider_config::build_launcher_args_with_launcher_bin;
@@ -371,7 +371,11 @@ fn classify_stale_execution_world(
     suggested_config.chain_status_bind = fresh_chain_status_bind.clone();
     let reason = format!(
         "stale execution world detected for node `{}`: latest state root mismatch from prior persisted chain state",
-        if node_id.is_empty() { DEFAULT_CHAIN_NODE_ID } else { node_id }
+        if node_id.is_empty() {
+            DEFAULT_CHAIN_NODE_ID
+        } else {
+            node_id
+        }
     );
 
     Some(ChainRecoverySnapshot {

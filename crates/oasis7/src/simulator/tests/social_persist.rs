@@ -151,10 +151,12 @@ fn social_replay_from_snapshot_keeps_expired_fact_and_edge() {
             WorldEventKind::SocialFactExpired { fact_id: value, .. } if *value == fact_id
         )
     }));
-    assert!(kernel
-        .journal()
-        .iter()
-        .any(|event| { matches!(&event.kind, WorldEventKind::SocialEdgeExpired { .. }) }));
+    assert!(
+        kernel
+            .journal()
+            .iter()
+            .any(|event| { matches!(&event.kind, WorldEventKind::SocialEdgeExpired { .. }) })
+    );
 
     let journal = kernel.journal_snapshot();
     let replayed = WorldKernel::replay_from_snapshot(snapshot, journal).expect("replay");

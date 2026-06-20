@@ -70,10 +70,12 @@ fn storage_footprint_fixture_baseline_covers_2500_ticks() {
     assert_eq!(fixture.total_record_count, 2_500);
     assert!(fixture.archived_record_count > 0);
     assert!(fixture.snapshot_size_bytes > 0);
-    assert!(fixture
-        .root_dir
-        .join("tick-consensus.archive.index.json")
-        .exists());
+    assert!(
+        fixture
+            .root_dir
+            .join("tick-consensus.archive.index.json")
+            .exists()
+    );
 
     let restored = World::load_from_dir(&fixture.root_dir).expect("restore fixture world");
     assert_eq!(restored.tick_consensus_records().len(), 2_500);
@@ -82,12 +84,16 @@ fn storage_footprint_fixture_baseline_covers_2500_ticks() {
         World::load_tick_consensus_records_from_dir(&fixture.root_dir, Some(2_048), Some(2_500))
             .expect("load retained fixture range");
     assert!(!range_records.is_empty());
-    assert!(range_records
-        .iter()
-        .all(|record| record.block.header.tick >= 2_048));
-    assert!(range_records
-        .iter()
-        .all(|record| record.block.header.tick <= 2_500));
+    assert!(
+        range_records
+            .iter()
+            .all(|record| record.block.header.tick >= 2_048)
+    );
+    assert!(
+        range_records
+            .iter()
+            .all(|record| record.block.header.tick <= 2_500)
+    );
 
     fixture.cleanup();
 }

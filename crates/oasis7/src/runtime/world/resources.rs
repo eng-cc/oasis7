@@ -1,12 +1,11 @@
-use super::super::main_token::main_token_account_id_from_node_public_key;
-use super::super::reward_asset::{
-    reward_mint_signature_v1, reward_mint_signature_v2, verify_reward_mint_signature_v2,
-    verify_reward_redeem_signature_v1, REWARD_MINT_SIGNATURE_V1_PREFIX,
-    REWARD_MINT_SIGNATURE_V2_PREFIX,
-};
-use super::super::util::hash_json;
 use super::super::ResourceDelta;
 use super::super::WorldError;
+use super::super::main_token::main_token_account_id_from_node_public_key;
+use super::super::reward_asset::{
+    REWARD_MINT_SIGNATURE_V1_PREFIX, REWARD_MINT_SIGNATURE_V2_PREFIX, reward_mint_signature_v1,
+    reward_mint_signature_v2, verify_reward_mint_signature_v2, verify_reward_redeem_signature_v1,
+};
+use super::super::util::hash_json;
 use super::super::{
     EpochSettlementReport, FactoryProfileV1, MainTokenAccountBalance, MainTokenConfig,
     MainTokenEpochIssuanceRecord, MainTokenGenesisAllocationBucketState,
@@ -1073,14 +1072,13 @@ impl World {
         let mut planned = Vec::with_capacity(delta.entries.len());
         for (kind, amount) in &delta.entries {
             let current = self.resource_balance(*kind);
-            let next =
-                current
-                    .checked_add(*amount)
-                    .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                        reason: format!(
+            let next = current.checked_add(*amount).ok_or_else(|| {
+                WorldError::ResourceBalanceInvalid {
+                    reason: format!(
                         "resource balance overflow: kind={kind:?} current={current} delta={amount}"
                     ),
-                    })?;
+                }
+            })?;
             planned.push((*kind, next));
         }
 

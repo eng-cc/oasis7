@@ -3,9 +3,9 @@ use oasis7_wasm_abi::{
 };
 
 use super::super::{
-    merge_rule_decisions, ActionEnvelope, ActionOverrideRecord, CausedBy, ModuleSubscriptionStage,
-    ResourceDelta, RuleDecision, RuleDecisionMergeError, RuleDecisionRecord, RuleVerdict,
-    WorldError, WorldEventBody, WorldEventId,
+    ActionEnvelope, ActionOverrideRecord, CausedBy, ModuleSubscriptionStage, ResourceDelta,
+    RuleDecision, RuleDecisionMergeError, RuleDecisionRecord, RuleVerdict, WorldError,
+    WorldEventBody, WorldEventId, merge_rule_decisions,
 };
 use super::World;
 
@@ -134,7 +134,7 @@ impl World {
                     return self.module_output_invalid(
                         output,
                         format!("rule decision decode failed: {err}"),
-                    )
+                    );
                 }
             };
             if parsed.action_id != action_id {

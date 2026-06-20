@@ -1,4 +1,4 @@
-use super::explorer_window_p1::{explorer_mempool_status_filter_text, ExplorerMempoolStatusFilter};
+use super::explorer_window_p1::{ExplorerMempoolStatusFilter, explorer_mempool_status_filter_text};
 use super::*;
 
 impl ClientLauncherApp {

@@ -1,6 +1,6 @@
 use oasis7::simulator::{Action, ActionCatalogEntry, DecisionRequest, ProviderDecision};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::support::{estimated_current_location_id, nearest_reachable_non_current_location_id};
 use super::{AgentInvocation, DEFAULT_PROVIDER_AGENT_PROFILE};
@@ -156,8 +156,7 @@ pub(super) fn build_decision_prompt(
             "Profile guidance:\n{}\n",
             "Do not invent ids. Keep messages short. Context JSON follows:\n{}"
         ),
-        profile_guidance,
-        context
+        profile_guidance, context
     )
 }
 
@@ -422,10 +421,7 @@ pub(super) fn apply_profile_guardrails(
                     )),
                 )
             }
-            _ => (
-                ProviderDecision::Act { action_ref, action },
-                None,
-            ),
+            _ => (ProviderDecision::Act { action_ref, action }, None),
         },
     }
 }

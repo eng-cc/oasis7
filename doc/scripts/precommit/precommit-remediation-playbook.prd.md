@@ -26,7 +26,7 @@
 - 执行顺序：
   1. `env -u RUSTC_WRAPPER cargo fmt --all`
   2. `git add -u`（将已跟踪文件的格式化结果加入暂存区）
-  3. `./scripts/pre-commit.sh`（内部使用 `rustfmt --edition 2021` 处理暂存 Rust 文件，并执行 `./scripts/ci-tests.sh commit`）
+  3. `./scripts/pre-commit.sh`（内部使用 `rustfmt --edition 2024` 处理暂存 Rust 文件，并执行 `./scripts/ci-tests.sh commit`）
   4. 若需要补跑重门禁：`./scripts/ci-tests.sh required`
 
 ## 里程碑

@@ -11,28 +11,28 @@ use libp2p::{Multiaddr, PeerId};
 use crate::error::WorldError;
 use crate::util::to_canonical_cbor;
 use oasis7_proto::distributed::{
-    dht_peer_discovery_key, dht_peer_record_key,
-    rendezvous_namespace as distributed_rendezvous_namespace, DistributedErrorCode, ErrorResponse,
+    DistributedErrorCode, ErrorResponse, dht_peer_discovery_key, dht_peer_record_key,
+    rendezvous_namespace as distributed_rendezvous_namespace,
 };
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord, SignedPeerRecord};
 use oasis7_proto::distributed_net::NetworkRequest;
 
 use super::kad_queries::PendingDhtQuery;
 use super::peer_manager::{
-    recompute_peer_manager_healths, PeerManagerHealthStatus, PeerManagerPolicy,
+    PeerManagerHealthStatus, PeerManagerPolicy, recompute_peer_manager_healths,
 };
 use super::peer_record::{
     build_configured_peer_record, put_record_query, validate_discovered_peer_record,
 };
 use super::reachability::Libp2pReachabilitySnapshot;
-use super::swarm_behaviour::{split_peer_id, Behaviour};
-use super::traffic_metrics::{record_request_outbound, SharedLibp2pTrafficMetrics};
+use super::swarm_behaviour::{Behaviour, split_peer_id};
+use super::traffic_metrics::{SharedLibp2pTrafficMetrics, record_request_outbound};
 use super::transport_paths::{
-    dial_transport_path, peer_record_transport_paths, select_preferred_transport_path,
-    sync_known_transport_paths, TransportPath,
+    TransportPath, dial_transport_path, peer_record_transport_paths,
+    select_preferred_transport_path, sync_known_transport_paths,
 };
 use super::utils::push_bounded_string_with_keyed_cooldown;
-use super::{push_bounded_clone, Handler};
+use super::{Handler, push_bounded_clone};
 
 pub(super) enum PendingPeerRecordRequest {
     ConnectedPeerRecord {

@@ -29,8 +29,18 @@ impl EnvVarGuard {
 impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         match self.previous.take() {
-            Some(value) => std::env::set_var(self.key, value),
-            None => std::env::remove_var(self.key),
+            Some(value) => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::set_var(self.key, value);
+                }
+            }
+            None => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::remove_var(self.key);
+                }
+            }
         }
     }
 }
@@ -341,7 +351,10 @@ fn module_lifecycle_compile_from_source_deploys_artifact() {
     let script_path = temp_root.join("compiler.sh");
     let compiled_text = "sim-compiled-wasm";
     write_fake_source_compiler(script_path.as_path(), compiled_text);
-    std::env::set_var(SOURCE_COMPILER_ENV, script_path.as_os_str());
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, script_path.as_os_str());
+    }
 
     let mut kernel = setup_kernel_with_agent("agent-1");
     kernel.submit_action(Action::CompileModuleArtifactFromSource {
@@ -354,12 +367,12 @@ fn module_lifecycle_compile_from_source_deploys_artifact() {
                 br#"[package]
 name = \"m_sim_compile\"
 version = \"0.1.0\"
-edition = \"2021\""#
+edition = \"2024\""#
                     .to_vec(),
             ),
             (
                 "src/lib.rs".to_string(),
-                b"#[no_mangle] pub extern \"C\" fn tick() {}".to_vec(),
+                b"#[unsafe(no_mangle)] pub extern \"C\" fn tick() {}".to_vec(),
             ),
         ]),
     });
@@ -563,10 +576,12 @@ fn module_market_listing_and_buy_transfers_owner_and_price() {
         .get(&wasm_hash)
         .expect("artifact exists");
     assert_eq!(artifact.publisher_agent_id, "agent-buyer");
-    assert!(!kernel
-        .model()
-        .module_artifact_listings
-        .contains_key(&wasm_hash));
+    assert!(
+        !kernel
+            .model()
+            .module_artifact_listings
+            .contains_key(&wasm_hash)
+    );
     assert_eq!(
         kernel
             .model()
@@ -657,10 +672,12 @@ fn module_market_bid_auto_matches_listing() {
         .get(&wasm_hash)
         .expect("artifact exists");
     assert_eq!(artifact.publisher_agent_id, "agent-bidder");
-    assert!(!kernel
-        .model()
-        .module_artifact_listings
-        .contains_key(&wasm_hash));
+    assert!(
+        !kernel
+            .model()
+            .module_artifact_listings
+            .contains_key(&wasm_hash)
+    );
 }
 
 #[test]
@@ -760,10 +777,12 @@ fn module_market_replay_restores_sale_and_market_counters() {
         .get(&wasm_hash)
         .expect("artifact after replay");
     assert_eq!(artifact.publisher_agent_id, "agent-buyer");
-    assert!(!replayed
-        .model()
-        .module_artifact_listings
-        .contains_key(&wasm_hash));
+    assert!(
+        !replayed
+            .model()
+            .module_artifact_listings
+            .contains_key(&wasm_hash)
+    );
     assert!(
         replayed.model().next_module_market_order_id >= 2,
         "unexpected next order id: {}",

@@ -2,10 +2,10 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::api::HttpRequest;
 use super::model::{
@@ -20,7 +20,7 @@ mod deposit_token_tests;
 #[path = "tests_support.rs"]
 mod tests_support;
 use self::tests_support::{
-    assert_http_status_line, MockChainServer, MockChainState, MockChainTx, MockLetaiServer,
+    MockChainServer, MockChainState, MockChainTx, MockLetaiServer, assert_http_status_line,
 };
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);

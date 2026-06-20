@@ -2,8 +2,8 @@ use super::commit_retention::CommitMessageColdIndex;
 use super::*;
 use crate::NodeExecutionCheckpointBlob;
 use oasis7_proto::storage_cold_index::{
-    storage_cold_index_dir_name, STORAGE_COLD_INDEX_MANIFEST_FILE,
-    STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
+    STORAGE_COLD_INDEX_MANIFEST_FILE, STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
+    storage_cold_index_dir_name,
 };
 use std::path::PathBuf;
 
@@ -740,10 +740,12 @@ fn prune_hot_commit_messages_keeps_pinned_execution_checkpoint_blobs() {
         .expect("build second commit")
         .expect("message");
 
-    assert!(runtime
-        .load_execution_checkpoint_bundle(&descriptor)
-        .expect("load checkpoint bundle after prune")
-        .is_some());
+    assert!(
+        runtime
+            .load_execution_checkpoint_bundle(&descriptor)
+            .expect("load checkpoint bundle after prune")
+            .is_some()
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

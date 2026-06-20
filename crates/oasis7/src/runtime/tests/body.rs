@@ -386,12 +386,14 @@ fn expand_body_interface_consumes_item_and_adds_slot() {
     let agent = world.state().agents.get("agent-1").unwrap();
     assert_eq!(agent.state.body_state.slot_capacity, 8);
     assert_eq!(agent.state.body_state.expansion_level, 1);
-    assert!(agent
-        .state
-        .body_state
-        .slots
-        .iter()
-        .any(|slot| slot.slot_id == "slot-8" && slot.slot_type == BodySlotType::Universal));
+    assert!(
+        agent
+            .state
+            .body_state
+            .slots
+            .iter()
+            .any(|slot| slot.slot_id == "slot-8" && slot.slot_type == BodySlotType::Universal)
+    );
 
     let item = agent
         .state
@@ -503,16 +505,20 @@ fn expanded_body_state_persists_after_restore() {
     let agent = restored.state().agents.get("agent-1").unwrap();
     assert_eq!(agent.state.body_state.slot_capacity, 8);
     assert_eq!(agent.state.body_state.expansion_level, 1);
-    assert!(agent
-        .state
-        .body_state
-        .slots
-        .iter()
-        .any(|slot| slot.slot_id == "slot-8"));
-    assert!(!agent
-        .state
-        .body_state
-        .cargo_entries
-        .iter()
-        .any(|entry| entry.entity_id == "iface-kit-1"));
+    assert!(
+        agent
+            .state
+            .body_state
+            .slots
+            .iter()
+            .any(|slot| slot.slot_id == "slot-8")
+    );
+    assert!(
+        !agent
+            .state
+            .body_state
+            .cargo_entries
+            .iter()
+            .any(|entry| entry.entity_id == "iface-kit-1")
+    );
 }

@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use super::model::{PersistedBridgeState, BRIDGE_STATE_SCHEMA_V1};
+use super::model::{BRIDGE_STATE_SCHEMA_V1, PersistedBridgeState};
 
 #[derive(Debug)]
 pub(super) enum StoreMutateError<E> {

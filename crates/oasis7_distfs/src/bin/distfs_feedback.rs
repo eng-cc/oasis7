@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use oasis7_distfs::{
+    FeedbackAppendRequest, FeedbackAttachment, FeedbackCreateRequest, FeedbackStore,
+    FeedbackStoreConfig, FeedbackTombstoneRequest, LocalCasStore,
     public_key_hex_from_signing_key_hex, sign_feedback_append_request,
-    sign_feedback_create_request, sign_feedback_tombstone_request, FeedbackAppendRequest,
-    FeedbackAttachment, FeedbackCreateRequest, FeedbackStore, FeedbackStoreConfig,
-    FeedbackTombstoneRequest, LocalCasStore,
+    sign_feedback_create_request, sign_feedback_tombstone_request,
 };
 
 #[derive(Debug)]

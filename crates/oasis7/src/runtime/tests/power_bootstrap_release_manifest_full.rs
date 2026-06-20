@@ -31,13 +31,25 @@ fn production_policy_surfaces_fault_signature_when_online_manifest_unreachable()
     let removed_old_brand_compiler = removed_old_brand_builtin_wasm_env("COMPILER");
     let _compat_old_brand_compiler_guard =
         EnvVarGuard::capture(removed_old_brand_compiler.as_str());
-    std::env::set_var(BUILTIN_WASM_DISTFS_ROOT_ENV, &temp_root);
-    std::env::remove_var(removed_old_brand_distfs_root.as_str());
-    std::env::set_var(
-        BUILTIN_WASM_COMPILER_ENV,
-        temp_root.join("missing-builtin-compiler"),
-    );
-    std::env::remove_var(removed_old_brand_compiler.as_str());
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(BUILTIN_WASM_DISTFS_ROOT_ENV, &temp_root);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(removed_old_brand_distfs_root.as_str());
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(
+            BUILTIN_WASM_COMPILER_ENV,
+            temp_root.join("missing-builtin-compiler"),
+        );
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
+    }
 
     let mut world = World::new();
     world.enable_production_release_policy();
@@ -119,8 +131,14 @@ fn production_policy_surfaces_fault_signature_when_manifest_identity_drifts() {
     let removed_old_brand_distfs_root = removed_old_brand_builtin_wasm_env("DISTFS_ROOT");
     let _compat_old_brand_distfs_guard =
         EnvVarGuard::capture(removed_old_brand_distfs_root.as_str());
-    std::env::set_var(BUILTIN_WASM_DISTFS_ROOT_ENV, &temp_root);
-    std::env::remove_var(removed_old_brand_distfs_root.as_str());
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(BUILTIN_WASM_DISTFS_ROOT_ENV, &temp_root);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(removed_old_brand_distfs_root.as_str());
+    }
 
     let mut world = World::new();
     world.enable_production_release_policy();
@@ -224,8 +242,18 @@ impl EnvVarGuard {
 impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         match self.previous.take() {
-            Some(value) => std::env::set_var(self.key.as_str(), value),
-            None => std::env::remove_var(self.key.as_str()),
+            Some(value) => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::set_var(self.key.as_str(), value);
+                }
+            }
+            None => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::remove_var(self.key.as_str());
+                }
+            }
         }
     }
 }

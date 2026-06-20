@@ -1,11 +1,11 @@
 use crate::geometry::{
-    GeoPos, DEFAULT_CLOUD_DEPTH_CM, DEFAULT_CLOUD_HEIGHT_CM, DEFAULT_CLOUD_WIDTH_CM,
+    DEFAULT_CLOUD_DEPTH_CM, DEFAULT_CLOUD_HEIGHT_CM, DEFAULT_CLOUD_WIDTH_CM, GeoPos,
 };
 use serde::{Deserialize, Serialize};
 
 use super::super::power::PowerConfig;
 use super::super::types::{
-    MaterialKind, CM_PER_KM, DEFAULT_MOVE_COST_PER_KM_ELECTRICITY, DEFAULT_VISIBILITY_RANGE_CM,
+    CM_PER_KM, DEFAULT_MOVE_COST_PER_KM_ELECTRICITY, DEFAULT_VISIBILITY_RANGE_CM, MaterialKind,
     PPM_BASE,
 };
 

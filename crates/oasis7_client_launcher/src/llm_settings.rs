@@ -467,7 +467,7 @@ fn string_like_value(value: Option<&toml::Value>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_llm_settings_from_config, save_llm_settings_to_config, LlmSettingsDraft};
+    use super::{LlmSettingsDraft, load_llm_settings_from_config, save_llm_settings_to_config};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};

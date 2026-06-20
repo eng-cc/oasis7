@@ -1,4 +1,4 @@
-use super::hosted_access::{hosted_player_access_contract, DeploymentMode};
+use super::hosted_access::{DeploymentMode, hosted_player_access_contract};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -591,9 +591,11 @@ mod tests {
         assert_eq!(response.deployment_mode, "hosted_public_join");
         let grant = response.grant.expect("grant");
         assert!(grant.player_id.starts_with("hosted-player-"));
-        assert!(grant
-            .device_session_id
-            .starts_with("hosted-device-session-"));
+        assert!(
+            grant
+                .device_session_id
+                .starts_with("hosted-device-session-")
+        );
         assert_eq!(grant.auth_mode, "browser_local_ephemeral_ed25519");
         assert!(grant.release_token.starts_with("hosted-release-"));
         assert_eq!(response.admission.active_player_sessions, 1);

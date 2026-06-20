@@ -29,8 +29,10 @@ impl World {
                         WorldEventBody::Domain(DomainEvent::ActionRejected {
                             action_id,
                             reason: RejectReason::RuleDenied {
-                                notes: vec!["compile module source rejected: module_id is empty"
-                                    .to_string()],
+                                notes: vec![
+                                    "compile module source rejected: module_id is empty"
+                                        .to_string(),
+                                ],
                             },
                         }),
                         Some(CausedBy::Action(action_id)),
@@ -824,7 +826,7 @@ impl World {
                             action_id,
                             reason: RejectReason::RuleDenied {
                                 notes: vec![
-                                    "destroy module artifact rejected: reason is empty".to_string()
+                                    "destroy module artifact rejected: reason is empty".to_string(),
                                 ],
                             },
                         }),

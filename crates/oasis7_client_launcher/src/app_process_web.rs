@@ -656,8 +656,8 @@ async fn post_web_chain_transfer(
         .map_err(|err| format!("decode /api/chain/transfer response failed: {err}"))
 }
 
-async fn fetch_web_transfer_accounts(
-) -> Result<transfer_window::WebTransferAccountsResponse, String> {
+async fn fetch_web_transfer_accounts()
+-> Result<transfer_window::WebTransferAccountsResponse, String> {
     let response = Request::get("/api/chain/transfer/accounts")
         .send()
         .await
@@ -724,8 +724,8 @@ async fn fetch_web_transfer_history(
         .map_err(|err| format!("decode /api/chain/transfer/history response failed: {err}"))
 }
 
-async fn fetch_web_explorer_overview(
-) -> Result<explorer_window::WebExplorerOverviewResponse, String> {
+async fn fetch_web_explorer_overview()
+-> Result<explorer_window::WebExplorerOverviewResponse, String> {
     let response = Request::get("/api/chain/explorer/overview")
         .send()
         .await

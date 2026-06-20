@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use super::types::{
-    ElementComposition, FragmentElementKind, FragmentResourceBudget, MaterialKind,
-    DEFAULT_ELEMENT_RECOVERABILITY_PPM,
+    DEFAULT_ELEMENT_RECOVERABILITY_PPM, ElementComposition, FragmentElementKind,
+    FragmentResourceBudget, MaterialKind,
 };
 
 pub const MIN_BLOCK_EDGE_CM: i64 = 1;

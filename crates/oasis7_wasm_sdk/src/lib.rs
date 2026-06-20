@@ -280,18 +280,18 @@ pub mod wire {
 #[macro_export]
 macro_rules! export_wasm_module {
     ($module_ty:ty) => {
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub extern "C" fn alloc(len: i32) -> i32 {
             let mut module = <$module_ty>::default();
             module.alloc(len)
         }
 
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub extern "C" fn reduce(input_ptr: i32, input_len: i32) -> (i32, i32) {
             $crate::dispatch_reduce::<$module_ty>(input_ptr, input_len)
         }
 
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub extern "C" fn call(input_ptr: i32, input_len: i32) -> (i32, i32) {
             $crate::dispatch_call::<$module_ty>(input_ptr, input_len)
         }
@@ -301,7 +301,7 @@ macro_rules! export_wasm_module {
 #[cfg(test)]
 mod tests {
     use super::{
-        default_alloc, dispatch_call, dispatch_reduce, LifecycleStage, WasmModuleLifecycle,
+        LifecycleStage, WasmModuleLifecycle, default_alloc, dispatch_call, dispatch_reduce,
     };
     use core::sync::atomic::{AtomicUsize, Ordering};
 

@@ -1,5 +1,5 @@
 use oasis7::simulator::{
-    LlmAgentConfig, LlmClientError, OpenAiChatCompletionClient, DEFAULT_CONFIG_FILE_NAME,
+    DEFAULT_CONFIG_FILE_NAME, LlmAgentConfig, LlmClientError, OpenAiChatCompletionClient,
 };
 use serde::Serialize;
 use std::fmt::Write as _;

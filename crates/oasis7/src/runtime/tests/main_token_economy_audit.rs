@@ -71,10 +71,12 @@ fn main_token_economy_audit_report_tracks_source_sink_metrics_and_arbitrage_aler
     assert_eq!(report.net_flow_bps_of_total_supply, 3_333);
     assert_eq!(report.treasury_distribution_bps_of_total_supply, 1_333);
     assert!(!report.gate_passed());
-    assert!(report
-        .alerts
-        .iter()
-        .any(|alert| alert.exploit_signature == "arbitrage:treasury_distribution_pressure"));
+    assert!(
+        report
+            .alerts
+            .iter()
+            .any(|alert| alert.exploit_signature == "arbitrage:treasury_distribution_pressure")
+    );
 }
 
 #[test]

@@ -202,8 +202,10 @@ fn replay_from_snapshot_applies_module_visual_upsert_event() {
     let replayed =
         WorldKernel::replay_from_snapshot(snapshot, kernel.journal_snapshot()).expect("replay");
 
-    assert!(replayed
-        .model()
-        .module_visual_entities
-        .contains_key("mv-replay"));
+    assert!(
+        replayed
+            .model()
+            .module_visual_entities
+            .contains_key("mv-replay")
+    );
 }

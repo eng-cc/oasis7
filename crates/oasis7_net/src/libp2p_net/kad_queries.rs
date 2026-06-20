@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use libp2p::kad;
 use libp2p::PeerId;
+use libp2p::kad;
 
 use crate::error::WorldError;
 use oasis7_proto::distributed::WorldHeadAnnounce;
@@ -9,8 +9,8 @@ use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, ProviderRecord, SignedPeerRecord,
 };
 
-use super::peer_record::decode_peer_record;
 use super::CommandResponseSender;
+use super::peer_record::decode_peer_record;
 
 pub(super) enum PendingDhtQuery {
     PublishProvider {

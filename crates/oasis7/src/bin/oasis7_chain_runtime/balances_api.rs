@@ -3,7 +3,7 @@ use std::path::Path;
 use oasis7::runtime::World as RuntimeWorld;
 
 use super::execution_bridge;
-use super::{now_unix_ms, ChainBalancesResponse, DEFAULT_RECENT_MINT_RECORD_LIMIT};
+use super::{ChainBalancesResponse, DEFAULT_RECENT_MINT_RECORD_LIMIT, now_unix_ms};
 
 pub(super) fn build_chain_balances_payload(
     node_id: &str,

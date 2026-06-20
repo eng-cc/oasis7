@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use super::swarm_behaviour::BehaviourEvent;
 use super::wire_bytes::{
-    snapshot_wire_byte_counters, Libp2pWireByteSnapshot, SharedLibp2pWireByteCounters,
+    Libp2pWireByteSnapshot, SharedLibp2pWireByteCounters, snapshot_wire_byte_counters,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

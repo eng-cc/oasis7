@@ -13,10 +13,10 @@ use crate::simulator::{
 };
 
 use super::protocol::{
-    viewer_event_kind_matches, AgentChatError, AuthoritativeChallengeError,
-    AuthoritativeRecoveryError, ControlCompletionAck, ControlCompletionStatus, PlaybackControl,
-    PromptControlError, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse,
-    ViewerStream, VIEWER_PROTOCOL_VERSION,
+    AgentChatError, AuthoritativeChallengeError, AuthoritativeRecoveryError, ControlCompletionAck,
+    ControlCompletionStatus, PlaybackControl, PromptControlError, VIEWER_PROTOCOL_VERSION,
+    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse, ViewerStream,
+    viewer_event_kind_matches,
 };
 
 #[derive(Debug, Clone)]

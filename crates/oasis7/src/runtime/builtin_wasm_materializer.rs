@@ -5,7 +5,7 @@ use std::process::Command;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
-use super::{util, BlobStore, HashAlgorithm, LocalCasStore, WorldError};
+use super::{BlobStore, HashAlgorithm, LocalCasStore, WorldError, util};
 
 const BUILTIN_WASM_ENV_PREFIX: &str = "OASIS7_BUILTIN_WASM_";
 
@@ -683,7 +683,10 @@ mod tests {
         let _env_lock = BUILTIN_WASM_ENV_LOCK.lock().expect("lock builtin wasm env");
         let primary_key = builtin_wasm_env_key("FETCHER");
         let _primary_guard = TestEnvGuard::capture(primary_key.as_str());
-        std::env::set_var(primary_key.as_str(), "/tmp/oasis7-fetcher");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(primary_key.as_str(), "/tmp/oasis7-fetcher");
+        }
 
         assert_eq!(
             builtin_wasm_env_non_empty("FETCHER").as_deref(),
@@ -698,11 +701,17 @@ mod tests {
         let _primary_guard = TestEnvGuard::capture(primary_key.as_str());
         let removed_old_brand_key = removed_old_brand_builtin_wasm_env("FETCHER");
         let _removed_old_brand_guard = TestEnvGuard::capture(removed_old_brand_key.as_str());
-        std::env::remove_var(primary_key.as_str());
-        std::env::set_var(
-            removed_old_brand_key.as_str(),
-            "/tmp/removed-old-brand-fetcher",
-        );
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(primary_key.as_str());
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(
+                removed_old_brand_key.as_str(),
+                "/tmp/removed-old-brand-fetcher",
+            );
+        }
 
         assert!(builtin_wasm_env_non_empty("FETCHER").is_none());
     }
@@ -712,10 +721,16 @@ mod tests {
         let _env_lock = BUILTIN_WASM_ENV_LOCK.lock().expect("lock builtin wasm env");
         let _guard = TestEnvGuard::capture("CI");
 
-        std::env::set_var("CI", "true");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var("CI", "true");
+        }
         assert!(env_truthy("CI"));
 
-        std::env::set_var("CI", "0");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var("CI", "0");
+        }
         assert!(!env_truthy("CI"));
     }
 
@@ -740,8 +755,18 @@ mod tests {
     impl Drop for TestEnvGuard {
         fn drop(&mut self) {
             match self.previous.take() {
-                Some(value) => std::env::set_var(&self.key, value),
-                None => std::env::remove_var(&self.key),
+                Some(value) => {
+                    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                    unsafe {
+                        oasis7::env_mut::set_var(&self.key, value);
+                    }
+                }
+                None => {
+                    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                    unsafe {
+                        oasis7::env_mut::remove_var(&self.key);
+                    }
+                }
             }
         }
     }

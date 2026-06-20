@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use oasis7::consensus_action_payload::{
-    encode_consensus_action_payload, ConsensusActionPayloadEnvelope,
+    ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
 };
 use oasis7::runtime::Action;
 use oasis7_node::NodeRuntime;

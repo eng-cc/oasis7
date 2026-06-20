@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    explorer_window, main_chain_status::WebChainReplicationStatus, transfer_window, LaunchConfig,
+    LaunchConfig, explorer_window, main_chain_status::WebChainReplicationStatus, transfer_window,
 };
 
 #[derive(Debug, Clone)]

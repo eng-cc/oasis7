@@ -5,10 +5,10 @@ const ONBOARDING_STEP_TOTAL: usize = 3;
 #[path = "self_guided_storage.rs"]
 mod storage;
 
-use self::storage::current_unix_ms;
-pub(super) use self::storage::load_launcher_ux_state;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 pub(super) use self::storage::UX_STATE_PATH;
+use self::storage::current_unix_ms;
+pub(super) use self::storage::load_launcher_ux_state;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]

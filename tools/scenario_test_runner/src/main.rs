@@ -1,4 +1,4 @@
-use scenario_test_runner::{discover_scenario_files, run_scenario_file, ScenarioOutcome};
+use scenario_test_runner::{ScenarioOutcome, discover_scenario_files, run_scenario_file};
 use std::env;
 use std::path::PathBuf;
 use std::process::exit;

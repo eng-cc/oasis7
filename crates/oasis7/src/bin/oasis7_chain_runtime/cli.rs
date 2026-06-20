@@ -17,7 +17,7 @@ use oasis7_proto::storage_profile::StorageProfile;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use super::distfs_probe_runtime::{parse_distfs_probe_runtime_option, DistfsProbeRuntimeConfig};
+use super::distfs_probe_runtime::{DistfsProbeRuntimeConfig, parse_distfs_probe_runtime_option};
 
 pub(super) const DEFAULT_NODE_ID: &str = "viewer-live-node";
 pub(super) const DEFAULT_WORLD_ID: &str = "oasis7-unified-world-v1";

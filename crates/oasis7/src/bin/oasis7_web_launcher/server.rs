@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 #[derive(Debug, Serialize)]
 struct PlaneErrorResponse {
@@ -613,8 +613,8 @@ fn normalize_host_header(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::super::{
-        deployment_mode_from_config, hosted_access::hosted_strong_auth_test_env_lock,
-        public_snapshot_from_state, LauncherConfig, ServiceState,
+        LauncherConfig, ServiceState, deployment_mode_from_config,
+        hosted_access::hosted_strong_auth_test_env_lock, public_snapshot_from_state,
     };
     use super::{is_loopback_peer, path_requires_private_control_plane, private_plane_rejection};
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -627,7 +627,10 @@ mod tests {
             "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY",
             "OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE",
         ] {
-            std::env::remove_var(name);
+            // SAFETY: This test/setup code mutates process environment in a controlled scope.
+            unsafe {
+                oasis7::env_mut::remove_var(name);
+            }
         }
     }
 
@@ -786,15 +789,24 @@ mod tests {
     fn public_snapshot_keeps_asset_lane_blocked_when_prompt_reauth_env_is_ready() {
         let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
         clear_hosted_strong_auth_env();
-        std::env::set_var(
-            "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY",
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        );
-        std::env::set_var(
-            "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY",
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        );
-        std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE", "preview-code");
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(
+                "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            );
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(
+                "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            );
+        }
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var("OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE", "preview-code");
+        }
 
         let mut config = LauncherConfig::default();
         config.deployment_mode = "hosted_public_join".to_string();

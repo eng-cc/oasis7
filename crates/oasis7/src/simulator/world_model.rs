@@ -10,29 +10,29 @@ mod module_market;
 mod world_model_config;
 mod world_model_physics_specs;
 
-use super::chunking::{chunk_coord_of, ChunkCoord};
+use super::ResourceOwner;
+use super::chunking::{ChunkCoord, chunk_coord_of};
 use super::fragment_physics::FragmentPhysicalProfile;
 use super::memory::LongTermMemoryEntry;
 use super::module_visual::ModuleVisualEntity;
 use super::power::{AgentPowerStatus, PowerConfig, PowerPlant};
 use super::social::{
-    default_next_social_edge_id, default_next_social_fact_id, SocialEdgeState, SocialFactState,
+    SocialEdgeState, SocialFactState, default_next_social_edge_id, default_next_social_fact_id,
 };
 use super::types::{
     AgentId, AssetId, ChunkResourceBudget, ElementBudgetError, FacilityId, FragmentElementKind,
     FragmentResourceBudget, LocationId, LocationProfile, PowerOrderSide, ResourceKind,
     ResourceStock, WorldTime,
 };
-use super::ResourceOwner;
-use module_market::{default_next_module_market_order_id, default_next_module_market_sale_id};
 pub use module_market::{
     InstalledModuleState, ModuleArtifactBidState, ModuleArtifactListingState, ModuleArtifactState,
 };
+use module_market::{default_next_module_market_order_id, default_next_module_market_sale_id};
 pub use world_model_config::{
     AsteroidFragmentConfig, EconomyConfig, MaterialDistributionStrategy, MaterialRadiationFactors,
     MaterialWeights, PhysicsConfig, SpaceConfig, ThermalStatus, WorldConfig,
 };
-pub use world_model_physics_specs::{physics_parameter_specs, PhysicsParameterSpec};
+pub use world_model_physics_specs::{PhysicsParameterSpec, physics_parameter_specs};
 
 const DEFAULT_AGENT_SPEED_CM_PER_TICK: i64 = world_model_config::DEFAULT_AGENT_SPEED_CM_PER_TICK;
 

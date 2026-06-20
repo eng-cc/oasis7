@@ -204,9 +204,11 @@ fn reward_asset_settlement_action_rejects_tampered_mint_record() {
     match &world.journal().events.last().expect("event").body {
         WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| note.contains("mint record signature invalid")));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| note.contains("mint record signature invalid"))
+                );
             }
             other => panic!("expected rule denied reject, got {other:?}"),
         },
@@ -252,9 +254,11 @@ fn reward_asset_settlement_action_rejects_when_main_token_bridge_treasury_insuff
     match &world.journal().events.last().expect("event").body {
         WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => match reason {
             RejectReason::RuleDenied { notes } => {
-                assert!(notes
-                    .iter()
-                    .any(|note| { note.contains("main token bridge treasury insufficient") }));
+                assert!(
+                    notes
+                        .iter()
+                        .any(|note| { note.contains("main token bridge treasury insufficient") })
+                );
             }
             other => panic!("expected RuleDenied, got {other:?}"),
         },

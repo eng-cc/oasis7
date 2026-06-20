@@ -177,7 +177,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "deploy_module_artifact requires runtime action loop".to_string()
+                            "deploy_module_artifact requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -199,7 +199,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "install_module_from_artifact requires runtime action loop".to_string()
+                            "install_module_from_artifact requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -222,7 +222,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "upgrade_module_from_artifact requires runtime action loop".to_string()
+                            "upgrade_module_from_artifact requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -233,7 +233,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "rollback_module_instance requires runtime action loop".to_string()
+                            "rollback_module_instance requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -243,7 +243,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "module_release_submit requires runtime action loop".to_string()
+                            "module_release_submit requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -253,7 +253,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "module_release_shadow requires runtime action loop".to_string()
+                            "module_release_shadow requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -263,7 +263,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "module_release_approve_role requires runtime action loop".to_string()
+                            "module_release_approve_role requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -273,7 +273,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "module_release_bind_roles requires runtime action loop".to_string()
+                            "module_release_bind_roles requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -283,7 +283,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "module_release_reject requires runtime action loop".to_string()
+                            "module_release_reject requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -292,7 +292,9 @@ impl World {
                 Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                     action_id,
                     reason: RejectReason::RuleDenied {
-                        notes: vec!["module_release_apply requires runtime action loop".to_string()],
+                        notes: vec![
+                            "module_release_apply requires runtime action loop".to_string(),
+                        ],
                     },
                 }))
             }
@@ -300,8 +302,10 @@ impl World {
                 Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                     action_id,
                     reason: RejectReason::RuleDenied {
-                        notes: vec!["list_module_artifact_for_sale requires runtime action loop"
-                            .to_string()],
+                        notes: vec![
+                            "list_module_artifact_for_sale requires runtime action loop"
+                                .to_string(),
+                        ],
                     },
                 }))
             }
@@ -318,7 +322,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "delist_module_artifact requires runtime action loop".to_string()
+                            "delist_module_artifact requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -328,7 +332,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "destroy_module_artifact requires runtime action loop".to_string()
+                            "destroy_module_artifact requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -338,7 +342,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "place_module_artifact_bid requires runtime action loop".to_string()
+                            "place_module_artifact_bid requires runtime action loop".to_string(),
                         ],
                     },
                 }))
@@ -348,7 +352,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "cancel_module_artifact_bid requires runtime action loop".to_string()
+                            "cancel_module_artifact_bid requires runtime action loop".to_string(),
                         ],
                     },
                 }))

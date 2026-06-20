@@ -6,8 +6,8 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use oasis7::runtime::{
-    measure_directory_storage_bytes, NodePointsConfig, NodePointsRuntimeCollector,
-    NodePointsRuntimeHeuristics,
+    NodePointsConfig, NodePointsRuntimeCollector, NodePointsRuntimeHeuristics,
+    measure_directory_storage_bytes,
 };
 use oasis7_node::{NodeConfig, NodeReplicationConfig, NodeRole, NodeRuntime};
 

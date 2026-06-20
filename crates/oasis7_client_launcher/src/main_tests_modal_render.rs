@@ -35,7 +35,10 @@ fn screenshot_modal_override_seeds_without_opening_real_windows() {
         .lock()
         .expect("screenshot modal env lock");
     let previous = std::env::var(OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL_ENV).ok();
-    std::env::set_var(OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL_ENV, "transfer");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL_ENV, "transfer");
+    }
 
     let mut app = ClientLauncherApp::default();
     app.onboarding_state.open = true;
@@ -43,9 +46,15 @@ fn screenshot_modal_override_seeds_without_opening_real_windows() {
     app.apply_screenshot_modal_override();
 
     if let Some(previous) = previous {
-        std::env::set_var(OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL_ENV, previous);
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::set_var(OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL_ENV, previous);
+        }
     } else {
-        std::env::remove_var(OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL_ENV);
+        // SAFETY: This test/setup code mutates process environment in a controlled scope.
+        unsafe {
+            oasis7::env_mut::remove_var(OASIS7_CLIENT_LAUNCHER_SCREENSHOT_MODAL_ENV);
+        }
     }
 
     assert!(!app.onboarding_state.open);

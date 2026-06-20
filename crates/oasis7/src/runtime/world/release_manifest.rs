@@ -2,9 +2,9 @@ use super::super::m1_builtin_wasm_artifact::m1_builtin_wasm_module_artifact_byte
 use super::super::m4_builtin_wasm_artifact::m4_builtin_wasm_module_artifact_bytes;
 use super::super::m5_builtin_wasm_artifact::m5_builtin_wasm_module_artifact_bytes;
 use super::super::{
-    builtin_wasm_materializer::builtin_wasm_distfs_root, load_builtin_wasm_with_fetch_fallback,
-    m1_builtin_module_artifact_identity, m4_builtin_module_artifact_identity,
-    m5_builtin_module_artifact_identity, ModuleArtifactIdentity, WorldError,
+    ModuleArtifactIdentity, WorldError, builtin_wasm_materializer::builtin_wasm_distfs_root,
+    load_builtin_wasm_with_fetch_fallback, m1_builtin_module_artifact_identity,
+    m4_builtin_module_artifact_identity, m5_builtin_module_artifact_identity,
 };
 use super::{BuiltinReleaseManifestEntry, World};
 const FAULT_SIG_BUILTIN_RELEASE_MANIFEST_UNREACHABLE: &str = "builtin_release_manifest_unreachable";
@@ -177,10 +177,10 @@ impl World {
                 reason: with_fault_signature(
                     FAULT_SIG_BUILTIN_RELEASE_MANIFEST_MISSING_OR_ROLLED_BACK,
                     format!(
-                    "builtin release manifest entry missing module_set={} module_id={} fallback_allowed={}",
-                    module_set,
-                    module_id,
-                    self.release_security_policy.allow_builtin_manifest_fallback
+                        "builtin release manifest entry missing module_set={} module_id={} fallback_allowed={}",
+                        module_set,
+                        module_id,
+                        self.release_security_policy.allow_builtin_manifest_fallback
                     ),
                 ),
             });
@@ -251,11 +251,11 @@ impl World {
             reason: with_fault_signature(
                 FAULT_SIG_BUILTIN_RELEASE_MANIFEST_MISSING_OR_ROLLED_BACK,
                 format!(
-                "builtin release artifact identity missing module_set={} module_id={} wasm_hash={} fallback_allowed={}",
-                module_set,
-                module_id,
-                wasm_hash,
-                self.release_security_policy.allow_builtin_manifest_fallback
+                    "builtin release artifact identity missing module_set={} module_id={} wasm_hash={} fallback_allowed={}",
+                    module_set,
+                    module_id,
+                    wasm_hash,
+                    self.release_security_policy.allow_builtin_manifest_fallback
                 ),
             ),
         })

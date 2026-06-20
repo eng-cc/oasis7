@@ -2,8 +2,8 @@ use super::super::persist::PersistError;
 use super::super::power::PowerEvent;
 use super::super::types::{PowerOrderSide, ResourceKind, ResourceOwner};
 use super::super::world_model::PowerOrderState;
-use super::types::PowerOrderFill;
 use super::WorldKernel;
+use super::types::PowerOrderFill;
 use crate::simulator::WorldTime;
 
 const LOCATION_ELECTRICITY_POOL_REMOVED_NOTE: &str = "location electricity pool removed";

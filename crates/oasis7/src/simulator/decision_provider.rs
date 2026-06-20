@@ -4,7 +4,7 @@ use std::fmt;
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{
     Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace,
@@ -21,8 +21,8 @@ pub const DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION: &str = "oc_dual_obs_v1";
 pub const DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION: &str = "oc_dual_act_v1";
 
 pub use decision_provider_support::{
-    golden_decision_provider_fixtures, GoldenDecisionFixture, MockDecisionProvider,
-    MockDecisionProviderState,
+    GoldenDecisionFixture, MockDecisionProvider, MockDecisionProviderState,
+    golden_decision_provider_fixtures,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

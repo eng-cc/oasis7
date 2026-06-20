@@ -5,19 +5,18 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use oasis7_proto::distributed_pos::{
-    decide_pos_status as shared_decide_pos_status,
+    PosDecisionStatus as SharedPosDecisionStatus, decide_pos_status as shared_decide_pos_status,
     required_supermajority_stake as shared_required_supermajority_stake,
     slot_epoch as shared_slot_epoch, weighted_expected_proposer,
-    PosDecisionStatus as SharedPosDecisionStatus,
 };
 
 use super::distributed::WorldHeadAnnounce;
 use super::distributed_dht::DistributedDht;
 use super::error::WorldError;
 use super::node_pos_core::{
+    NodePosAttestation, NodePosError, NodePosPendingProposal, NodePosStatusAdapter,
     decision_from_proposal as node_decision_from_proposal,
-    insert_attestation as node_insert_attestation, NodePosAttestation, NodePosError,
-    NodePosPendingProposal, NodePosStatusAdapter,
+    insert_attestation as node_insert_attestation,
 };
 use super::util::{read_json_from_path, write_json_to_path};
 

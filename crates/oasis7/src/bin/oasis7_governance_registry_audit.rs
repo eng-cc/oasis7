@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use oasis7::runtime::{
-    World, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE,
-    MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
+    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE,
+    MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD, World,
 };
 use serde::{Deserialize, Serialize};
 
@@ -401,7 +401,7 @@ fn print_help() {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_audit_report, parse_options, validate_audit_report, CliOptions};
+    use super::{CliOptions, build_audit_report, parse_options, validate_audit_report};
     use oasis7::runtime::{
         Action, GovernanceExecutionPolicy, GovernanceFinalitySignerRegistry,
         GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy, World,

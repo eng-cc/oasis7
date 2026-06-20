@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use reqwest::blocking::{Client, RequestBuilder};
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 const DEFAULT_LOG_QUERY_LIMIT: usize = 50;
 

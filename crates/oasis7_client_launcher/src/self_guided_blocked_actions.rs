@@ -76,9 +76,9 @@ impl ClientLauncherApp {
             (ChainRuntimeStatus::StaleExecutionWorld(_), UiLanguage::ZhCn) => {
                 Some("检测到旧执行世界冲突：建议使用 fresh node 恢复后重试。")
             }
-            (ChainRuntimeStatus::StaleExecutionWorld(_), UiLanguage::EnUs) => Some(
-                "Stale execution world detected: recover with a fresh node, then retry.",
-            ),
+            (ChainRuntimeStatus::StaleExecutionWorld(_), UiLanguage::EnUs) => {
+                Some("Stale execution world detected: recover with a fresh node, then retry.")
+            }
             (ChainRuntimeStatus::Unreachable(_), UiLanguage::ZhCn) => {
                 Some("区块链当前不可达：可先重试状态探测，再决定是否重新启动。")
             }
@@ -94,9 +94,9 @@ impl ClientLauncherApp {
             (ChainRuntimeStatus::ConfigError(_), UiLanguage::ZhCn) => {
                 Some("区块链配置异常：建议先修复配置，再重试状态探测。")
             }
-            (ChainRuntimeStatus::ConfigError(_), UiLanguage::EnUs) => Some(
-                "Blockchain has config errors: fix config first, then retry status probe.",
-            ),
+            (ChainRuntimeStatus::ConfigError(_), UiLanguage::EnUs) => {
+                Some("Blockchain has config errors: fix config first, then retry status probe.")
+            }
             _ => None,
         }
     }

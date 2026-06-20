@@ -17,17 +17,17 @@ use oasis7::runtime::{
     NodeAssetBalance, NodeRewardMintRecord, ReleaseSecurityPolicy, RewardAssetConfig,
 };
 use oasis7_node::{
-    derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
-    NodeConfig, NodeConsensusSlashingReceiptSnapshot, NodeNetworkPolicy, NodePosConfig,
-    NodeReplicationConfig, NodeReplicationNetworkHandle, NodeRole, NodeRuntime, PosConsensusStatus,
-    PosValidator,
+    Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig, NodeConfig,
+    NodeConsensusSlashingReceiptSnapshot, NodeNetworkPolicy, NodePosConfig, NodeReplicationConfig,
+    NodeReplicationNetworkHandle, NodeRole, NodeRuntime, PosConsensusStatus, PosValidator,
+    derive_libp2p_identity_keypair,
 };
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use runtime_status_util::now_unix_ms;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tracing::{error, info, Level};
+use tracing::{Level, error, info};
 #[path = "oasis7_chain_runtime/agent_claim_api.rs"]
 mod agent_claim_api;
 #[path = "oasis7_chain_runtime/balances_api.rs"]
@@ -79,43 +79,43 @@ mod transfer_submit_api;
 #[path = "oasis7_chain_runtime/wasm_status.rs"]
 mod wasm_status;
 #[cfg(test)]
-use self::cli::{parse_validator_spec, DEFAULT_NODE_ID, DEFAULT_STATUS_BIND, DEFAULT_WORLD_ID};
+use self::cli::{DEFAULT_NODE_ID, DEFAULT_STATUS_BIND, DEFAULT_WORLD_ID, parse_validator_spec};
 use balances_api::build_chain_balances_payload;
 #[cfg(test)]
 use balances_api::build_chain_balances_payload_from_world;
 use cli::{
-    parse_host_port, parse_options, print_help, CliOptions, DEFAULT_REPLICATION_NETWORK_LISTEN,
-    DEFAULT_REWARD_RUNTIME_DISTFS_PROBE_STATE_FILE, DEFAULT_REWARD_RUNTIME_REPORT_DIR,
-    DEFAULT_REWARD_RUNTIME_STATE_FILE, DEFAULT_REWARD_RUNTIME_STORAGE_METRICS_FILE,
+    CliOptions, DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_REWARD_RUNTIME_DISTFS_PROBE_STATE_FILE,
+    DEFAULT_REWARD_RUNTIME_REPORT_DIR, DEFAULT_REWARD_RUNTIME_STATE_FILE,
+    DEFAULT_REWARD_RUNTIME_STORAGE_METRICS_FILE, parse_host_port, parse_options, print_help,
 };
 use execution_bridge::NodeRuntimeExecutionDriver;
 use feedback_submit_api::{
-    build_feedback_create_request, extract_http_json_body, parse_feedback_submit_request,
-    write_feedback_submit_error, ChainFeedbackSubmitResponse, FeedbackSubmitSigner,
+    ChainFeedbackSubmitResponse, FeedbackSubmitSigner, build_feedback_create_request,
+    extract_http_json_body, parse_feedback_submit_request, write_feedback_submit_error,
 };
 use p2p_status::{
     applied_runtime_user_mode_label, build_live_node_network_policy_recommendation,
     build_node_network_policy,
 };
 use reward_runtime_worker::{
-    init_shared_metrics, poll_worker_error, snapshot_metrics, start_reward_runtime_worker,
-    stop_reward_runtime_worker, RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics,
+    RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics, init_shared_metrics, poll_worker_error,
+    snapshot_metrics, start_reward_runtime_worker, stop_reward_runtime_worker,
 };
 use status_payload::build_chain_status_payload;
 #[cfg(test)]
 use status_server_support::ChainPeerHealthStatus;
 use status_server_support::{
-    poll_chain_status_server_error, start_chain_status_server, stop_chain_status_server,
-    write_json_response, ChainBalancesResponse, ChainReplicationDebugStatus,
+    ChainBalancesResponse, ChainReplicationDebugStatus, poll_chain_status_server_error,
+    start_chain_status_server, stop_chain_status_server, write_json_response,
 };
 #[cfg(test)]
 use traffic_profile::feedback_p2p_config_for_role;
 use traffic_profile::{
     apply_traffic_profile_to_node_config, apply_traffic_profile_to_replication_network_config,
 };
-use traffic_status::build_chain_traffic_status;
 #[cfg(test)]
 use traffic_status::ChainTrafficStatus;
+use traffic_status::build_chain_traffic_status;
 use wasm_status::build_chain_wasm_status;
 
 fn node_role_requires_execution_commit(role: NodeRole) -> bool {

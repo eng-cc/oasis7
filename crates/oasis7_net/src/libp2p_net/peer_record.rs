@@ -14,7 +14,7 @@ use oasis7_proto::distributed_dht::{PeerRecord, SignedPeerRecord};
 
 use super::kad_queries::PendingDhtQuery;
 use super::reachability::{
-    is_loopback_direct_addr, is_public_direct_addr, snapshot_clone, Libp2pReachabilitySnapshot,
+    Libp2pReachabilitySnapshot, is_loopback_direct_addr, is_public_direct_addr, snapshot_clone,
 };
 use super::{Behaviour, CommandResponseSender};
 

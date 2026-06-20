@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{blake3_hex, FileMetadata, FileStore};
+use crate::{FileMetadata, FileStore, blake3_hex};
 use oasis7_proto::world_error::WorldError;
 
 fn default_writer_epoch() -> u64 {
@@ -91,7 +91,10 @@ impl SingleWriterReplicationGuard {
                     return Err(WorldError::DistributedValidationFailed {
                         reason: format!(
                             "replication sequence must reset to 1 when writer_epoch advances for writer {}: epoch {} -> {}, got sequence {}",
-                            existing_writer, self.writer_epoch, record.writer_epoch, record.sequence
+                            existing_writer,
+                            self.writer_epoch,
+                            record.writer_epoch,
+                            record.sequence
                         ),
                     });
                 }
@@ -100,7 +103,10 @@ impl SingleWriterReplicationGuard {
                     return Err(WorldError::DistributedValidationFailed {
                         reason: format!(
                             "replication writer conflict requires writer_epoch advance: expected writer={} epoch={}, got writer={} epoch={}",
-                            existing_writer, self.writer_epoch, record.writer_id, record.writer_epoch
+                            existing_writer,
+                            self.writer_epoch,
+                            record.writer_id,
+                            record.writer_epoch
                         ),
                     });
                 }

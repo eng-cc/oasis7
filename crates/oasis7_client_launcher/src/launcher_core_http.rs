@@ -1,7 +1,7 @@
 use super::*;
 #[cfg(not(target_arch = "wasm32"))]
 use oasis7::simulator::{
-    evaluate_provider_compatibility, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
+    ProviderLoopbackHttpClient, ProviderLoopbackHttpError, evaluate_provider_compatibility,
 };
 #[cfg(all(not(target_arch = "wasm32"), test))]
 use std::io::{Read, Write};

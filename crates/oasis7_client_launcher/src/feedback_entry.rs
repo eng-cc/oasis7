@@ -390,9 +390,9 @@ fn civil_from_days(days_since_unix_epoch: i64) -> (i32, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_recent_logs, format_filename_timestamp, parse_host_port, parse_http_json_response,
+        FeedbackDraft, FeedbackDraftIssue, FeedbackKind, FeedbackSubmitResult, collect_recent_logs,
+        format_filename_timestamp, parse_host_port, parse_http_json_response,
         submit_feedback_report, submit_feedback_with_fallback, validate_feedback_draft,
-        FeedbackDraft, FeedbackDraftIssue, FeedbackKind, FeedbackSubmitResult,
     };
     use std::collections::VecDeque;
     use std::time::{Duration, UNIX_EPOCH};

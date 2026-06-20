@@ -40,12 +40,14 @@ fn golden_decision_provider_fixture_round_trips() {
     let encoded = serde_json::to_string_pretty(&fixtures[0]).expect("encode fixture");
     let decoded: GoldenDecisionFixture = serde_json::from_str(encoded.as_str()).expect("decode");
     assert_eq!(decoded, fixtures[0]);
-    assert!(decoded
-        .request
-        .observation
-        .action_catalog
-        .iter()
-        .any(|entry| entry.action_ref == "move_agent"));
+    assert!(
+        decoded
+            .request
+            .observation
+            .action_catalog
+            .iter()
+            .any(|entry| entry.action_ref == "move_agent")
+    );
     assert_eq!(
         decoded.request.observation.mode,
         ProviderExecutionMode::HeadlessAgent
@@ -138,11 +140,13 @@ fn provider_backed_agent_behavior_executes_mocked_move_and_records_feedback() {
         trace.llm_diagnostics.and_then(|value| value.latency_ms),
         Some(42)
     );
-    assert!(trace
-        .llm_output
-        .as_deref()
-        .unwrap_or_default()
-        .contains("move_agent"));
+    assert!(
+        trace
+            .llm_output
+            .as_deref()
+            .unwrap_or_default()
+            .contains("move_agent")
+    );
 
     let agent = kernel.model().agents.get("agent-1").expect("agent exists");
     assert_eq!(agent.location_id, "loc-2");
@@ -159,11 +163,13 @@ fn provider_backed_agent_behavior_executes_mocked_move_and_records_feedback() {
         snapshot.recorded_requests[0].agent_profile.as_deref(),
         Some("oasis7_p0_low_freq_npc")
     );
-    assert!(snapshot.recorded_requests[0]
-        .observation
-        .action_catalog
-        .iter()
-        .any(|entry| entry.action_ref == "move_agent"));
+    assert!(
+        snapshot.recorded_requests[0]
+            .observation
+            .action_catalog
+            .iter()
+            .any(|entry| entry.action_ref == "move_agent")
+    );
     assert_eq!(
         snapshot.recorded_requests[0].observation.mode,
         ProviderExecutionMode::PlayerParity
@@ -224,11 +230,13 @@ fn provider_backed_agent_behavior_downgrades_provider_error_to_wait() {
     assert!(matches!(tick.decision, AgentDecision::Wait));
     assert!(tick.action_result.is_none());
     let trace = tick.decision_trace.expect("error trace emitted");
-    assert!(trace
-        .llm_error
-        .as_deref()
-        .unwrap_or_default()
-        .contains("provider_timeout"));
+    assert!(
+        trace
+            .llm_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("provider_timeout")
+    );
 }
 
 #[test]
@@ -269,11 +277,13 @@ fn provider_backed_agent_behavior_rejects_unknown_action_ref() {
     assert!(matches!(tick.decision, AgentDecision::Wait));
     assert!(tick.action_result.is_none());
     let trace = tick.decision_trace.expect("trace emitted");
-    assert!(trace
-        .parse_error
-        .as_deref()
-        .unwrap_or_default()
-        .contains("unknown action_ref"));
+    assert!(
+        trace
+            .parse_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("unknown action_ref")
+    );
 }
 
 #[test]
@@ -325,26 +335,34 @@ fn provider_backed_agent_behavior_builds_mode_differentiated_observation_payload
         headless_request.observation.mode,
         ProviderExecutionMode::HeadlessAgent
     );
-    assert!(parity_request
-        .observation
-        .observation
-        .local_navigation_graph
-        .is_empty());
-    assert!(parity_request
-        .observation
-        .observation
-        .interaction_targets
-        .is_empty());
-    assert!(!headless_request
-        .observation
-        .observation
-        .local_navigation_graph
-        .is_empty());
-    assert!(!headless_request
-        .observation
-        .observation
-        .interaction_targets
-        .is_empty());
+    assert!(
+        parity_request
+            .observation
+            .observation
+            .local_navigation_graph
+            .is_empty()
+    );
+    assert!(
+        parity_request
+            .observation
+            .observation
+            .interaction_targets
+            .is_empty()
+    );
+    assert!(
+        !headless_request
+            .observation
+            .observation
+            .local_navigation_graph
+            .is_empty()
+    );
+    assert!(
+        !headless_request
+            .observation
+            .observation
+            .interaction_targets
+            .is_empty()
+    );
     assert_ne!(
         parity_request.observation.observation.self_state.pose_hint,
         headless_request

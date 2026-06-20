@@ -9,7 +9,7 @@ use tungstenite::handshake::HandshakeError;
 use tungstenite::protocol::Message;
 #[cfg(test)]
 use tungstenite::stream::MaybeTlsStream;
-use tungstenite::{accept, Error as WsError};
+use tungstenite::{Error as WsError, accept};
 
 use crate::observability::emit_stderr_or_event;
 

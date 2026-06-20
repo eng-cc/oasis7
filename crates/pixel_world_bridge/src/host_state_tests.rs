@@ -185,10 +185,12 @@ fn rust_host_state_localizes_command_board_surface_for_zh_locale() {
         surface["next_action"]["label"].as_str().unwrap(),
         surface["next_action"]["detail"].as_str().unwrap()
     );
-    assert!(!state["goal_highlight"]["title"]
-        .as_str()
-        .unwrap()
-        .contains("Create the first visible world feedback"));
+    assert!(
+        !state["goal_highlight"]["title"]
+            .as_str()
+            .unwrap()
+            .contains("Create the first visible world feedback")
+    );
     assert!(!board_text.contains("Create the first visible world feedback"));
     assert!(!board_text.contains("Queue Smelter"));
     assert!(!board_text.contains("Request a snapshot"));

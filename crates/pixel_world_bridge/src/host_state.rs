@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 const FRAGMENT_TERRAIN_PALETTE: &[(&str, [u8; 3])] = &[
     ("silicate_matrix", [126, 144, 99]),

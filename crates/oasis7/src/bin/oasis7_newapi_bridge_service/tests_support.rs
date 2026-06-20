@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use super::super::api::{read_http_request, write_http_response, HttpRequest};
+use super::super::api::{HttpRequest, read_http_request, write_http_response};
 
 #[derive(Debug, Clone)]
 pub(super) struct MockChainTx {
@@ -55,22 +55,25 @@ impl MockChainServer {
         let stop = Arc::new(AtomicBool::new(false));
         let state_for_thread = Arc::clone(&state);
         let stop_for_thread = Arc::clone(&stop);
-        thread::spawn(move || loop {
-            if stop_for_thread.load(Ordering::Relaxed) {
-                break;
-            }
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    stream
-                        .set_nonblocking(false)
-                        .expect("set mock chain stream blocking");
-                    let request = read_http_request(&mut stream).expect("read mock chain request");
-                    handle_mock_chain_request(&mut stream, &state_for_thread, request);
+        thread::spawn(move || {
+            loop {
+                if stop_for_thread.load(Ordering::Relaxed) {
+                    break;
                 }
-                Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(5));
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream
+                            .set_nonblocking(false)
+                            .expect("set mock chain stream blocking");
+                        let request =
+                            read_http_request(&mut stream).expect("read mock chain request");
+                        handle_mock_chain_request(&mut stream, &state_for_thread, request);
+                    }
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(err) => panic!("mock chain accept failed: {err}"),
                 }
-                Err(err) => panic!("mock chain accept failed: {err}"),
             }
         });
         Self {
@@ -196,22 +199,25 @@ impl MockLetaiServer {
         let stop = Arc::new(AtomicBool::new(false));
         let state_for_thread = Arc::clone(&state);
         let stop_for_thread = Arc::clone(&stop);
-        thread::spawn(move || loop {
-            if stop_for_thread.load(Ordering::Relaxed) {
-                break;
-            }
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    stream
-                        .set_nonblocking(false)
-                        .expect("set mock letai stream blocking");
-                    let request = read_http_request(&mut stream).expect("read mock letai request");
-                    handle_mock_letai_request(&mut stream, &state_for_thread, request);
+        thread::spawn(move || {
+            loop {
+                if stop_for_thread.load(Ordering::Relaxed) {
+                    break;
                 }
-                Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(5));
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream
+                            .set_nonblocking(false)
+                            .expect("set mock letai stream blocking");
+                        let request =
+                            read_http_request(&mut stream).expect("read mock letai request");
+                        handle_mock_letai_request(&mut stream, &state_for_thread, request);
+                    }
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(err) => panic!("mock letai accept failed: {err}"),
                 }
-                Err(err) => panic!("mock letai accept failed: {err}"),
             }
         });
         Self {

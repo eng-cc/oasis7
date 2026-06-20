@@ -1,21 +1,22 @@
-use super::cli::parse_validator_signer_public_key_spec;
 use super::cli::TrafficProfile;
+use super::cli::parse_validator_signer_public_key_spec;
 use super::status_server_support::status_http_request_is_complete;
 use super::{
-    apply_traffic_profile_to_node_config, build_chain_balances_payload_from_world,
-    build_default_peer_record, build_default_replication_network_config,
-    build_live_node_network_policy_recommendation, build_node_replication_config,
-    build_replication_fetch_requester_allowlist, build_replication_remote_writer_allowlist,
-    build_validator_signer_public_keys, derive_node_consensus_signer_keypair,
-    derive_node_libp2p_identity_keypair_config, network_tier_allows_open_observer_fetch,
-    node_keypair_config, parse_options, parse_validator_spec, CliOptions, DEFAULT_NODE_ID,
-    DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND, DEFAULT_WORLD_ID,
+    CliOptions, DEFAULT_NODE_ID, DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
+    DEFAULT_WORLD_ID, apply_traffic_profile_to_node_config,
+    build_chain_balances_payload_from_world, build_default_peer_record,
+    build_default_replication_network_config, build_live_node_network_policy_recommendation,
+    build_node_replication_config, build_replication_fetch_requester_allowlist,
+    build_replication_remote_writer_allowlist, build_validator_signer_public_keys,
+    derive_node_consensus_signer_keypair, derive_node_libp2p_identity_keypair_config,
+    network_tier_allows_open_observer_fetch, node_keypair_config, parse_options,
+    parse_validator_spec,
 };
 use ed25519_dalek::SigningKey;
 use oasis7::network_tier_manifest::{
-    LoadedNetworkTierManifest, NetworkTierClaimsPolicy, NetworkTierEndpointPolicy,
-    NetworkTierManifest, NetworkTierPromotionPolicy, NetworkTierRuntimeRefs,
-    NetworkTierTokenPolicy, NetworkTierValidatorPolicy, NETWORK_TIER_MANIFEST_SCHEMA_V1,
+    LoadedNetworkTierManifest, NETWORK_TIER_MANIFEST_SCHEMA_V1, NetworkTierClaimsPolicy,
+    NetworkTierEndpointPolicy, NetworkTierManifest, NetworkTierPromotionPolicy,
+    NetworkTierRuntimeRefs, NetworkTierTokenPolicy, NetworkTierValidatorPolicy,
 };
 use oasis7::runtime::World as RuntimeWorld;
 use oasis7_node::{
@@ -385,18 +386,24 @@ fn default_runtime_paths_depend_on_node_id() {
         ..CliOptions::default()
     };
     let paths = super::resolve_runtime_paths(&options);
-    assert!(paths
-        .execution_world_dir
-        .to_string_lossy()
-        .contains("output/chain-runtime/node-z"));
-    assert!(paths
-        .runtime_root
-        .to_string_lossy()
-        .contains("output/chain-runtime/node-z"));
-    assert!(paths
-        .replication_root
-        .to_string_lossy()
-        .contains("output/node-distfs/node-z"));
+    assert!(
+        paths
+            .execution_world_dir
+            .to_string_lossy()
+            .contains("output/chain-runtime/node-z")
+    );
+    assert!(
+        paths
+            .runtime_root
+            .to_string_lossy()
+            .contains("output/chain-runtime/node-z")
+    );
+    assert!(
+        paths
+            .replication_root
+            .to_string_lossy()
+            .contains("output/node-distfs/node-z")
+    );
 }
 
 #[test]

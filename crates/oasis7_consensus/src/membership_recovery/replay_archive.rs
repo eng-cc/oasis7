@@ -14,7 +14,7 @@ use super::replay_audit::{
     MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillReport,
     MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore,
 };
-use super::{normalized_schedule_key, MembershipSyncClient};
+use super::{MembershipSyncClient, normalized_schedule_key};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionPolicy {
@@ -476,9 +476,11 @@ impl MembershipSyncClient {
         node_id: &str,
         pruned_at_ms: i64,
         retention_policy: &MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionPolicy,
-        rollback_governance_audit_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
-              + Send
-              + Sync),
+        rollback_governance_audit_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
+                 + Send
+                 + Sync
+         ),
     ) -> Result<MembershipRevocationDeadLetterReplayRollbackGovernanceAuditPruneReport, WorldError>
     {
         validate_governance_audit_retention_policy(retention_policy)?;
@@ -511,15 +513,15 @@ impl MembershipSyncClient {
         schedule_state_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillScheduleStateStore
               + Send
               + Sync),
-        rollback_alert_state_store: &(dyn MembershipRevocationDeadLetterReplayRollbackAlertStateStore
-              + Send
-              + Sync),
-        rollback_governance_state_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore
-              + Send
-              + Sync),
-        rollback_governance_audit_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditStore
-              + Send
-              + Sync),
+        rollback_alert_state_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackAlertStateStore + Send + Sync
+         ),
+        rollback_governance_state_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore + Send + Sync
+         ),
+        rollback_governance_audit_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditStore + Send + Sync
+         ),
     ) -> Result<
         MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillScheduledRunReport,
         WorldError,
@@ -607,21 +609,23 @@ impl MembershipSyncClient {
         scheduled_at_ms: i64,
         retention_policy: &MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionPolicy,
         drill_schedule_policy: &MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillSchedulePolicy,
-        rollback_governance_audit_retention_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
-              + Send
-              + Sync),
+        rollback_governance_audit_retention_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
+                 + Send
+                 + Sync
+         ),
         schedule_state_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillScheduleStateStore
               + Send
               + Sync),
-        rollback_alert_state_store: &(dyn MembershipRevocationDeadLetterReplayRollbackAlertStateStore
-              + Send
-              + Sync),
-        rollback_governance_state_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore
-              + Send
-              + Sync),
-        rollback_governance_audit_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditStore
-              + Send
-              + Sync),
+        rollback_alert_state_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackAlertStateStore + Send + Sync
+         ),
+        rollback_governance_state_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore + Send + Sync
+         ),
+        rollback_governance_audit_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditStore + Send + Sync
+         ),
     ) -> Result<
         MembershipRevocationDeadLetterReplayRollbackGovernanceArchiveDrillScheduledRunReport,
         WorldError,

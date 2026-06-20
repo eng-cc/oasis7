@@ -391,14 +391,16 @@ fn validate_product_with_module_rejects_when_module_denies() {
 
     let rejected = world.journal().events.last().expect("rejection event");
     match &rejected.body {
-        WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => match reason {
-            RejectReason::RuleDenied { notes } => {
-                assert!(notes
+        WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => {
+            match reason {
+                RejectReason::RuleDenied { notes } => {
+                    assert!(notes
                     .iter()
                     .any(|note| note.contains("product module denied: stack exceeds limit")));
+                }
+                other => panic!("expected RuleDenied, got {other:?}"),
             }
-            other => panic!("expected RuleDenied, got {other:?}"),
-        },
+        }
         other => panic!("expected ActionRejected, got {other:?}"),
     }
 }

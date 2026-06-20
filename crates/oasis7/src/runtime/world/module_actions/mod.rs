@@ -6,9 +6,9 @@ use super::super::{
     ModuleActivation, ModuleChangeSet, ModuleProfileChanges, ModuleUpgrade, ProposalDecision,
     ProposalId, RejectReason, WorldError, WorldEventBody,
 };
+use super::World;
 use super::event_processing::action_to_event_economy::ensure_profile_field_whitelist;
 use super::governance::governance_finality_signed_stake_bps;
-use super::World;
 use crate::simulator::{ModuleInstallTarget, ResourceKind};
 use std::collections::BTreeSet;
 

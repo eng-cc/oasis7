@@ -1,7 +1,7 @@
 use super::super::power::{AgentPowerState, ConsumeReason, PlantStatus, PowerEvent};
 use super::super::types::{AgentId, FacilityId, ResourceKind};
-use super::types::WorldEvent;
 use super::WorldKernel;
+use super::types::WorldEvent;
 
 const FACTORY_KIND_RADIATION_POWER_MK1: &str = "factory.power.radiation.mk1";
 

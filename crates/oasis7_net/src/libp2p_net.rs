@@ -33,18 +33,18 @@ use constructor_support::{
     schedule_periodic_discovery_refresh, schedule_periodic_republish,
 };
 use discovery::{
-    handle_peer_record_outbound_failure, handle_peer_record_response, handle_rendezvous_discovered,
-    handle_request_response_request, handle_routing_updated, maybe_discover_rendezvous_namespace,
-    maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
-    maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
-    maybe_request_connected_peer_record, peer_record_enables_rendezvous, peer_record_world_id,
-    process_discovered_peer_record, publish_discovery_provider, start_peer_discovery_query,
-    PendingPeerRecordRequest,
+    PendingPeerRecordRequest, handle_peer_record_outbound_failure, handle_peer_record_response,
+    handle_rendezvous_discovered, handle_request_response_request, handle_routing_updated,
+    maybe_discover_rendezvous_namespace, maybe_queue_discovery_peer_record,
+    maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers,
+    maybe_request_cached_peer_record, maybe_request_connected_peer_record,
+    peer_record_enables_rendezvous, peer_record_world_id, process_discovered_peer_record,
+    publish_discovery_provider, start_peer_discovery_query,
 };
 use error_mapping::error_response_from_world_error;
 use futures::channel::mpsc;
 use futures::{FutureExt, StreamExt};
-use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
+use kad_queries::{DhtProgressAction, PendingDhtQuery, handle_dht_progress};
 use libp2p::gossipsub::{self, TopicHash};
 use libp2p::identity::Keypair;
 use libp2p::kad::{self};
@@ -58,8 +58,8 @@ use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
 };
 use oasis7_proto::distributed_net::{
-    classify_network_protocol, classify_network_topic, push_bounded_inbox_message, NetworkMessage,
-    NetworkRequest, NetworkResponse, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, NetworkMessage, NetworkRequest, NetworkResponse,
+    classify_network_protocol, classify_network_topic, push_bounded_inbox_message,
 };
 pub use peer_manager::{
     PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
@@ -67,46 +67,46 @@ pub use peer_manager::{
 };
 use peer_record::{publish_configured_peer_record, put_record_query};
 use peer_record_republish::{
-    log_external_addr_confirmed_and_republish, log_external_addr_expired_and_republish,
-    LocalPeerRecordRepublisher,
+    LocalPeerRecordRepublisher, log_external_addr_confirmed_and_republish,
+    log_external_addr_expired_and_republish,
 };
-use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snapshot_clone};
 pub use reachability::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
     LiveTransportKind, LiveTransportTransition, LiveTransportTransitionCounters,
+};
+use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snapshot_clone};
+use runtime_loop::{
+    Command, CommandContext, CommandOutcome, CommandStateRefs, PendingResponse,
+    fail_pending_request, handle_command,
 };
 #[cfg(test)]
 use runtime_loop::{
     admitted_active_transport_paths, collect_quarantined_active_peers,
     filter_request_peers_by_health, filter_request_peers_by_lane,
 };
-use runtime_loop::{
-    fail_pending_request, handle_command, Command, CommandContext, CommandOutcome,
-    CommandStateRefs, PendingResponse,
-};
-use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
+use swarm_behaviour::{Behaviour, BehaviourEvent, build_swarm, dial_addr_with_optional_peer_id};
 use swarm_reachability_events::{
     handle_autonat_event, handle_expired_listen_addr, handle_external_addr_candidate,
     handle_listener_closed, handle_new_listen_addr,
-};
-use traffic_metrics::{
-    classify_control_plane_event, init_shared_traffic_metrics, record_control_plane_event,
-    record_gossip_inbound, record_request_inbound, record_response_inbound,
-    record_response_outbound, snapshot_traffic_metrics, SharedLibp2pTrafficMetrics,
 };
 pub use traffic_metrics::{
     Libp2pControlPlaneMetricsSnapshot, Libp2pTrafficMetricsSnapshot,
     TrafficDirectionMetricsSnapshot, TrafficLaneMetricsSnapshot, WireByteDirectionMetricsSnapshot,
     WireByteLaneMetricsSnapshot,
 };
+use traffic_metrics::{
+    SharedLibp2pTrafficMetrics, classify_control_plane_event, init_shared_traffic_metrics,
+    record_control_plane_event, record_gossip_inbound, record_request_inbound,
+    record_response_inbound, record_response_outbound, snapshot_traffic_metrics,
+};
 use transport_paths::{
-    bootstrap_transport_path_state, retry_transport_path_after_error, TransportPath,
+    TransportPath, bootstrap_transport_path_state, retry_transport_path_after_error,
 };
 use utils::{
     decode_membership_directory, decode_world_head, now_ms, push_bounded_clone,
     push_bounded_string_with_keyed_cooldown, should_republish, try_send_command,
 };
-use wire_bytes::{init_shared_wire_byte_counters, SharedLibp2pWireByteCounters};
+use wire_bytes::{SharedLibp2pWireByteCounters, init_shared_wire_byte_counters};
 const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
 const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
 const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_peers";

@@ -784,7 +784,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "rollback module rejected: target_module_version is empty".to_string()
+                            "rollback module rejected: target_module_version is empty".to_string(),
                         ],
                     },
                 }),

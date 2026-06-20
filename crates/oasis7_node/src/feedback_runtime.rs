@@ -1,14 +1,14 @@
 use std::sync::Mutex;
 
 use oasis7_distfs::{
-    blake3_hex, ingest_feedback_announce_with_fetcher, FeedbackAnnounce, FeedbackAnnounceBridge,
-    FeedbackStore,
+    FeedbackAnnounce, FeedbackAnnounceBridge, FeedbackStore, blake3_hex,
+    ingest_feedback_announce_with_fetcher,
 };
 use oasis7_proto::world_error::WorldError as ProtoWorldError;
 
 use crate::network_bridge::ReplicationNetworkEndpoint;
 use crate::replication::{
-    FetchBlobRequest, FetchBlobResponse, ReplicationRuntime, REPLICATION_FETCH_BLOB_PROTOCOL,
+    FetchBlobRequest, FetchBlobResponse, REPLICATION_FETCH_BLOB_PROTOCOL, ReplicationRuntime,
 };
 use crate::{NodeError, NodeFeedbackP2pConfig};
 

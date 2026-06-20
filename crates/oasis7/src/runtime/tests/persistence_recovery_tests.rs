@@ -30,15 +30,19 @@ fn load_from_dir_falls_back_to_json_when_distfs_sidecar_is_invalid() {
         audit_value.get("status").and_then(|value| value.as_str()),
         Some("fallback_json")
     );
-    assert!(audit_value
-        .get("reason")
-        .and_then(|value| value.as_str())
-        .map(|reason| reason.contains("distfs_restore_failed"))
-        .unwrap_or(false));
-    assert!(audit_value
-        .get("timestamp_ms")
-        .and_then(|value| value.as_i64())
-        .is_some());
+    assert!(
+        audit_value
+            .get("reason")
+            .and_then(|value| value.as_str())
+            .map(|reason| reason.contains("distfs_restore_failed"))
+            .unwrap_or(false)
+    );
+    assert!(
+        audit_value
+            .get("timestamp_ms")
+            .and_then(|value| value.as_i64())
+            .is_some()
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }

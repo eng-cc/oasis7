@@ -1,10 +1,10 @@
 use aliyun_tablestore_rs::{
+    OtsClient,
     data::{GetRowRequest, PutRowRequest, UpdateRowRequest},
     error::OtsError,
     model::{ColumnValue, Row},
     protos::{ReturnType, RowExistenceExpectation},
     table::CreateTableRequest,
-    OtsClient,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;

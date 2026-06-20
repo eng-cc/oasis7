@@ -1,7 +1,7 @@
 use std::net::TcpStream;
 
 use oasis7_distfs::{
-    blake3_hex, sign_feedback_create_request, FeedbackCreateRequest, FeedbackMutationReceipt,
+    FeedbackCreateRequest, FeedbackMutationReceipt, blake3_hex, sign_feedback_create_request,
 };
 use serde::{Deserialize, Serialize};
 
@@ -292,11 +292,11 @@ fn truncate_utf8_by_bytes(raw: &str, max_bytes: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
+        ChainFeedbackSubmitRequest, ChainFeedbackSubmitResponse, FeedbackSubmitSigner,
         build_feedback_create_request, build_feedback_id, extract_http_json_body,
-        parse_feedback_submit_request, ChainFeedbackSubmitRequest, ChainFeedbackSubmitResponse,
-        FeedbackSubmitSigner,
+        parse_feedback_submit_request,
     };
-    use oasis7_distfs::{public_key_hex_from_signing_key_hex, FeedbackActionKind};
+    use oasis7_distfs::{FeedbackActionKind, public_key_hex_from_signing_key_hex};
 
     const TEST_SIGNING_KEY_HEX: &str =
         "0101010101010101010101010101010101010101010101010101010101010101";

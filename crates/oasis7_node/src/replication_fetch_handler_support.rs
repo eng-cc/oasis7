@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::execution_hook::NodeExecutionHook;
 use crate::replication::{
-    load_latest_commit_message_from_root, GossipReplicationMessage, NodeReplicationConfig,
-    ReplicationRuntime,
+    GossipReplicationMessage, NodeReplicationConfig, ReplicationRuntime,
+    load_latest_commit_message_from_root,
 };
 use crate::replication_state_reconcile::parse_replication_commit_payload;
 use crate::{NodeError, REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL};

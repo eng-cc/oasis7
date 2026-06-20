@@ -1,9 +1,9 @@
-use super::{maybe_handle_main_token_submit_request, ChainMainTokenSubmitResponse};
+use super::{ChainMainTokenSubmitResponse, maybe_handle_main_token_submit_request};
 use ed25519_dalek::SigningKey;
 use oasis7::consensus_action_payload::{
     sign_main_token_runtime_action_auth, sign_threshold_main_token_runtime_action_auth,
 };
-use oasis7::runtime::{main_token_account_id_from_node_public_key, Action};
+use oasis7::runtime::{Action, main_token_account_id_from_node_public_key};
 use oasis7_node::{NodeConfig, NodeRole, NodeRuntime};
 use std::io::Read;
 use std::net::{TcpListener, TcpStream};

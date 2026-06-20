@@ -94,26 +94,25 @@ pub use governance::{
 
 // Manifest
 pub use manifest::{
-    apply_manifest_patch, diff_manifest, merge_manifest_patches,
-    merge_manifest_patches_with_conflicts, ConflictKind, Manifest, ManifestPatch, ManifestPatchOp,
-    ManifestUpdate, PatchConflict, PatchMergeResult, PatchOpKind, PatchOpSummary,
+    ConflictKind, Manifest, ManifestPatch, ManifestPatchOp, ManifestUpdate, PatchConflict,
+    PatchMergeResult, PatchOpKind, PatchOpSummary, apply_manifest_patch, diff_manifest,
+    merge_manifest_patches, merge_manifest_patches_with_conflicts,
 };
 
 // Modules
 pub(crate) use agent_claims::auto_restricted_starter_claim_amount;
 pub use agent_claims::{
-    agent_claim_cap_for_tier, agent_claim_quote, agent_claim_reputation_tier, AgentClaimCostQuote,
+    AgentClaimCostQuote, agent_claim_cap_for_tier, agent_claim_quote, agent_claim_reputation_tier,
 };
 pub use gameplay::{
-    ActiveGameplayModule, GameplayKindCoverage, GameplayModeReadiness, GAMEPLAY_BASELINE_KINDS,
+    ActiveGameplayModule, GAMEPLAY_BASELINE_KINDS, GameplayKindCoverage, GameplayModeReadiness,
 };
 pub use gameplay_state::{
     AgentClaimState, AllianceState, CrisisState, CrisisStatus, EconomicContractState,
-    EconomicContractStatus, GameplayPolicyState, GovernanceIdentityProfileState,
-    GovernanceIdentityStatus, GovernanceProposalState, GovernanceProposalStatus,
-    GovernanceVoteBallotState, GovernanceVoteState, GovernanceVoteWeightSnapshotState,
-    MetaProgressState, WarParticipantOutcome, WarState,
-    GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT,
+    EconomicContractStatus, GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT, GameplayPolicyState,
+    GovernanceIdentityProfileState, GovernanceIdentityStatus, GovernanceProposalState,
+    GovernanceProposalStatus, GovernanceVoteBallotState, GovernanceVoteState,
+    GovernanceVoteWeightSnapshotState, MetaProgressState, WarParticipantOutcome, WarState,
 };
 pub use modules::{
     EconomyModuleKind, FactoryBuildDecision, FactoryBuildRequest, FactoryModuleApi,
@@ -129,45 +128,44 @@ pub use modules::{
 
 // Node points
 pub use main_token::{
-    main_token_account_id_from_node_public_key, main_token_bucket_unlocked_amount,
-    production_hardened_main_token_config, MainTokenAccountBalance, MainTokenBurnPolicy,
+    FROZEN_MAIN_TOKEN_INITIAL_SUPPLY, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE, MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE,
+    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
+    MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+    MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_SLASH,
+    MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD, MainTokenAccountBalance, MainTokenBurnPolicy,
     MainTokenConfig, MainTokenEconomyAnomalyAlert, MainTokenEconomyAuditReport,
     MainTokenEconomyAuditThresholds, MainTokenEpochIssuanceRecord,
     MainTokenGenesisAllocationBucketState, MainTokenGenesisAllocationPlan,
     MainTokenInflationPolicy, MainTokenIssuanceSplitPolicy, MainTokenNodePointsBridgeDistribution,
     MainTokenNodePointsBridgeEpochRecord, MainTokenScheduledPolicyUpdate, MainTokenSupplyState,
     MainTokenTreasuryDistribution, MainTokenTreasuryDistributionRecord,
-    RestrictedStarterClaimGrantState, RestrictedStarterClaimGrantStatus,
-    RestrictedStarterClaimLiveopsPoolTopUpRecord, RestrictedStarterClaimRefundSink,
-    FROZEN_MAIN_TOKEN_INITIAL_SUPPLY, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
-    MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE, MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE,
-    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
-    MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
-    MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_SLASH,
-    MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
-    RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY,
+    RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY, RestrictedStarterClaimGrantState,
+    RestrictedStarterClaimGrantStatus, RestrictedStarterClaimLiveopsPoolTopUpRecord,
+    RestrictedStarterClaimRefundSink, main_token_account_id_from_node_public_key,
+    main_token_bucket_unlocked_amount, production_hardened_main_token_config,
 };
 pub use node_points::{
     EpochSettlementReport, NodeContributionSample, NodePointsConfig, NodePointsError,
     NodePointsLedger, NodePointsLedgerSnapshot, NodeSettlement,
 };
 pub use node_points_runtime::{
-    measure_directory_storage_bytes, NodePointsRuntimeAccumulatorSnapshot,
-    NodePointsRuntimeCollector, NodePointsRuntimeCollectorSnapshot,
-    NodePointsRuntimeCursorSnapshot, NodePointsRuntimeHeuristics, NodePointsRuntimeObservation,
+    NodePointsRuntimeAccumulatorSnapshot, NodePointsRuntimeCollector,
+    NodePointsRuntimeCollectorSnapshot, NodePointsRuntimeCursorSnapshot,
+    NodePointsRuntimeHeuristics, NodePointsRuntimeObservation, measure_directory_storage_bytes,
 };
 pub use operability::{
     LongRunOperabilityGateViolation, LongRunOperabilityReleaseGateReport,
     LongRunOperabilityReleaseGateThresholds, LongRunReleaseStage,
 };
 pub use reward_asset::{
-    reward_redeem_signature_v1, NodeAssetBalance, NodeRewardMintRecord, ProtocolPowerReserve,
-    RewardAssetConfig, RewardAssetInvariantReport, RewardAssetInvariantViolation,
-    RewardSignatureGovernancePolicy, SystemOrderPoolBudget,
+    NodeAssetBalance, NodeRewardMintRecord, ProtocolPowerReserve, RewardAssetConfig,
+    RewardAssetInvariantReport, RewardAssetInvariantViolation, RewardSignatureGovernancePolicy,
+    SystemOrderPoolBudget, reward_redeem_signature_v1,
 };
 
 // Blob store
-pub use blob_store::{blake3_hex, BlobStore, HashAlgorithm, LocalCasStore};
+pub use blob_store::{BlobStore, HashAlgorithm, LocalCasStore, blake3_hex};
 pub(crate) use builtin_wasm_materializer::load_builtin_wasm_with_fetch_fallback;
 
 #[cfg(test)]
@@ -219,15 +217,15 @@ pub(crate) use module_source_compiler::compile_module_artifact_from_source;
 pub use module_store::ModuleStore;
 
 // Segmenter
-pub use segmenter::{segment_journal, segment_snapshot, JournalSegmentRef, SegmentConfig};
+pub use segmenter::{JournalSegmentRef, SegmentConfig, segment_journal, segment_snapshot};
 
 // Policy
 pub use policy::{PolicyDecision, PolicyDecisionRecord, PolicyRule, PolicySet, PolicyWhen};
 
 // Rules
 pub use rules::{
-    merge_rule_decisions, ActionOverrideRecord, ResourceBalanceError, ResourceDelta, RuleDecision,
-    RuleDecisionMergeError, RuleDecisionRecord, RuleVerdict,
+    ActionOverrideRecord, ResourceBalanceError, ResourceDelta, RuleDecision,
+    RuleDecisionMergeError, RuleDecisionRecord, RuleVerdict, merge_rule_decisions,
 };
 
 // Signer

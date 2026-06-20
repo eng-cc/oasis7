@@ -4,8 +4,9 @@ use crate::{
 };
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use oasis7_distfs::{
-    apply_replication_record, blake3_hex, build_replication_record_with_epoch, BlobStore as _,
-    FileReplicationRecord, FileStore as _, LocalCasStore, SingleWriterReplicationGuard,
+    BlobStore as _, FileReplicationRecord, FileStore as _, LocalCasStore,
+    SingleWriterReplicationGuard, apply_replication_record, blake3_hex,
+    build_replication_record_with_epoch,
 };
 use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
@@ -37,10 +38,9 @@ mod replication_sampling;
 mod support;
 
 use self::commit_retention::{
-    build_commit_message_retention_plan, has_commit_message_cold_index,
+    CommitMessageColdEntry, build_commit_message_retention_plan, has_commit_message_cold_index,
     load_commit_message_cold_index_from_root, prune_unreferenced_commit_message_pack_files,
     write_commit_message_cold_index_to_root, write_commit_message_pack_entry,
-    CommitMessageColdEntry,
 };
 use self::support::{
     distfs_error_to_node_error, fetch_blob_request_signing_bytes,

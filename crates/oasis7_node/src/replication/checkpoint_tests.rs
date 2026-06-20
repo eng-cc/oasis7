@@ -110,9 +110,11 @@ fn attach_execution_checkpoint_descriptor_resigns_remote_writer_legacy_message()
         .expect("observer allowlist");
     let observer_runtime =
         ReplicationRuntime::new(&observer_config, "node-observer").expect("observer runtime");
-    assert!(observer_runtime
-        .validate_remote_message_for_apply("node-observer", world_id, &augmented)
-        .expect("augmented message validates"));
+    assert!(
+        observer_runtime
+            .validate_remote_message_for_apply("node-observer", world_id, &augmented)
+            .expect("augmented message validates")
+    );
 
     let _ = std::fs::remove_dir_all(&dir_a);
     let _ = std::fs::remove_dir_all(&dir_b);
@@ -147,10 +149,12 @@ fn attach_execution_checkpoint_descriptor_pins_augmented_payload_blob() {
         .attach_execution_checkpoint_descriptor_to_message("node-a", &message, &checkpoint)
         .expect("attach checkpoint descriptor");
     assert_ne!(augmented.record.content_hash, message.record.content_hash);
-    assert!(runtime
-        .load_blob_by_hash(augmented.record.content_hash.as_str())
-        .expect("load augmented payload before prune")
-        .is_some());
+    assert!(
+        runtime
+            .load_blob_by_hash(augmented.record.content_hash.as_str())
+            .expect("load augmented payload before prune")
+            .is_some()
+    );
 
     runtime
         .build_local_commit_message(
@@ -164,10 +168,12 @@ fn attach_execution_checkpoint_descriptor_pins_augmented_payload_blob() {
         .expect("build second commit")
         .expect("message");
 
-    assert!(runtime
-        .load_blob_by_hash(augmented.record.content_hash.as_str())
-        .expect("load pinned augmented payload after prune")
-        .is_some());
+    assert!(
+        runtime
+            .load_blob_by_hash(augmented.record.content_hash.as_str())
+            .expect("load pinned augmented payload after prune")
+            .is_some()
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

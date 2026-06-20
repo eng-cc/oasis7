@@ -2,8 +2,8 @@ use super::super::types::{ModuleInstallTarget, ResourceKind, ResourceOwner};
 use super::super::world_model::{
     InstalledModuleState, ModuleArtifactBidState, ModuleArtifactListingState, ModuleArtifactState,
 };
-use super::types::WorldEventKind;
 use super::WorldKernel;
+use super::types::WorldEventKind;
 use sha2::{Digest, Sha256};
 
 impl WorldKernel {

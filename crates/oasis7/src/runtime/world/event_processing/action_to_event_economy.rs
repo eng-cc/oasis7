@@ -165,7 +165,7 @@ impl World {
                         action_id,
                         reason: RejectReason::RuleDenied {
                             notes: vec![
-                                "data access grant requires distinct owner and grantee".to_string()
+                                "data access grant requires distinct owner and grantee".to_string(),
                             ],
                         },
                     }));
@@ -199,8 +199,10 @@ impl World {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
                         reason: RejectReason::RuleDenied {
-                            notes: vec!["data access revoke requires distinct owner and grantee"
-                                .to_string()],
+                            notes: vec![
+                                "data access revoke requires distinct owner and grantee"
+                                    .to_string(),
+                            ],
                         },
                     }));
                 }
@@ -298,7 +300,9 @@ impl World {
                 Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                     action_id,
                     reason: RejectReason::RuleDenied {
-                        notes: vec!["build_factory_with_module requires module runtime".to_string()],
+                        notes: vec![
+                            "build_factory_with_module requires module runtime".to_string(),
+                        ],
                     },
                 }))
             }
@@ -693,7 +697,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "schedule_recipe_with_module requires module runtime".to_string()
+                            "schedule_recipe_with_module requires module runtime".to_string(),
                         ],
                     },
                 }))
@@ -777,7 +781,7 @@ impl World {
                     action_id,
                     reason: RejectReason::RuleDenied {
                         notes: vec![
-                            "validate_product_with_module requires module runtime".to_string()
+                            "validate_product_with_module requires module runtime".to_string(),
                         ],
                     },
                 }))

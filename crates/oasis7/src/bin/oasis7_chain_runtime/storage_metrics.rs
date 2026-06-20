@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
-use oasis7::runtime::{measure_directory_storage_bytes, LocalCasStore};
+use oasis7::runtime::{LocalCasStore, measure_directory_storage_bytes};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -616,9 +616,9 @@ mod tests {
 
     use super::super::RuntimePaths;
     use super::{
-        collect_storage_metrics, init_shared_storage_metrics, refresh_shared_storage_metrics,
-        snapshot_storage_metrics, update_shared_storage_metrics_degraded_reason,
-        ExecutionRefCountCache,
+        ExecutionRefCountCache, collect_storage_metrics, init_shared_storage_metrics,
+        refresh_shared_storage_metrics, snapshot_storage_metrics,
+        update_shared_storage_metrics_degraded_reason,
     };
 
     fn temp_dir(label: &str) -> PathBuf {

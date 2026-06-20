@@ -611,10 +611,11 @@ mod tests {
         .expect("plan");
 
         assert!(!plan.repair_tasks.is_empty());
-        assert!(plan
-            .repair_tasks
-            .iter()
-            .any(|task| task.content_hash == "hash-b"));
+        assert!(
+            plan.repair_tasks
+                .iter()
+                .any(|task| task.content_hash == "hash-b")
+        );
         assert!(plan.rebalance_tasks.is_empty());
     }
 
@@ -665,10 +666,11 @@ mod tests {
 
         assert!(plan.repair_tasks.is_empty());
         assert!(!plan.rebalance_tasks.is_empty());
-        assert!(plan
-            .rebalance_tasks
-            .iter()
-            .all(|task| task.kind == ReplicaTransferKind::Rebalance));
+        assert!(
+            plan.rebalance_tasks
+                .iter()
+                .all(|task| task.kind == ReplicaTransferKind::Rebalance)
+        );
     }
 
     #[test]

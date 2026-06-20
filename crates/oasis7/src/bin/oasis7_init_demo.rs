@@ -1,6 +1,6 @@
 use oasis7::simulator::WorldScenarioSpec;
 use oasis7::simulator::{
-    build_world_model, ResourceKind, WorldConfig, WorldInitConfig, WorldScenario,
+    ResourceKind, WorldConfig, WorldInitConfig, WorldScenario, build_world_model,
 };
 use std::collections::BTreeMap;
 use std::path::Path;

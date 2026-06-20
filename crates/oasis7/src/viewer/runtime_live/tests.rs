@@ -1,8 +1,8 @@
 use super::*;
 use crate::simulator::{AgentDecision, ResourceOwner};
 use crate::simulator::{
-    ProviderExecutionMode, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    ProviderExecutionMode,
 };
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -356,10 +356,22 @@ fn runtime_live_run_accepts_probe_while_viewer_session_is_open() {
 fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    std::env::remove_var(RUNTIME_AGENT_CHAT_ECHO_ENV);
-    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
-    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(RUNTIME_AGENT_CHAT_ECHO_ENV);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_MODEL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_BASE_URL);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_API_KEY);
+    }
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("reserve port");
     let addr = listener.local_addr().expect("local addr");

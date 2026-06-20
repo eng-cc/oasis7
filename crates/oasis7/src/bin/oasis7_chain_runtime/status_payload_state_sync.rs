@@ -122,8 +122,10 @@ mod tests {
             state_sync_trusted_checkpoint_required_height(&snapshot, 0, 3, 2),
             Some(13)
         );
-        assert!(state_sync_fallback_reason(&snapshot, 0, 3, 2)
-            .as_deref()
-            .is_some_and(|reason| reason.contains("network_height_lag=3")));
+        assert!(
+            state_sync_fallback_reason(&snapshot, 0, 3, 2)
+                .as_deref()
+                .is_some_and(|reason| reason.contains("network_height_lag=3"))
+        );
     }
 }

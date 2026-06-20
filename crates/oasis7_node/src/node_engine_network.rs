@@ -253,7 +253,7 @@ impl PosNodeEngine {
             Ok(false) => {
                 return Ok(GapSyncHeightOutcome::NotFound {
                     repair_summary: "commit validation rejected apply".to_string(),
-                })
+                });
             }
             Err(err) => return Err(err),
         }

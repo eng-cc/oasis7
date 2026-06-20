@@ -1,8 +1,8 @@
 use super::pos;
 use crate::runtime::{
-    util, Action, CapabilityGrant, MaterialLedgerId, ModuleAbiContract, ModuleActivation,
+    Action, CapabilityGrant, MaterialLedgerId, ModuleAbiContract, ModuleActivation,
     ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRegistry, ModuleRole,
-    PolicySet, ProposalDecision, World,
+    PolicySet, ProposalDecision, World, util,
 };
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{

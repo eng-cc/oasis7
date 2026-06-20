@@ -4,7 +4,7 @@ use super::hosted_player_session::{
     HostedPlayerSessionAdmissionSnapshot, HostedPlayerSessionIssueGrant,
     HostedPlayerSessionIssueResponse, HostedPlayerSessionIssuer,
 };
-use super::{emit_stderr_or_event, Level};
+use super::{Level, emit_stderr_or_event};
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};

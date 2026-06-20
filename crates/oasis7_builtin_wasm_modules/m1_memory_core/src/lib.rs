@@ -1,12 +1,11 @@
 #![allow(improper_ctypes_definitions)]
 
 use oasis7_wasm_sdk::{
-    export_wasm_module,
+    LifecycleStage, WasmModuleLifecycle, export_wasm_module,
     wire::{
-        decode_action, decode_input, empty_output, encode_output, ModuleCallInput,
-        ModuleEffectIntent, ModuleEmit, ModuleOutput,
+        ModuleCallInput, ModuleEffectIntent, ModuleEmit, ModuleOutput, decode_action, decode_input,
+        empty_output, encode_output,
     },
-    LifecycleStage, WasmModuleLifecycle,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

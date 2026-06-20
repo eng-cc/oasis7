@@ -1,4 +1,4 @@
-use super::cli::{p2p_auto_detection_from_options, CliOptions};
+use super::cli::{CliOptions, p2p_auto_detection_from_options};
 use oasis7_node::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
     NodeAutoNatStatus, NodeNetworkPolicy, NodePublicPortReachability,

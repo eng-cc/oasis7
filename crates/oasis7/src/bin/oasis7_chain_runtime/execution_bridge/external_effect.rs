@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use oasis7::runtime::{
-    blake3_hex, BlobStore, LocalCasStore, ModuleRegistry, World as RuntimeWorld,
+    BlobStore, LocalCasStore, ModuleRegistry, World as RuntimeWorld, blake3_hex,
 };
 use oasis7_node::NodeExecutionCommitContext;
 
@@ -14,10 +14,11 @@ use super::checkpoint::{
     load_latest_execution_checkpoint_manifest,
 };
 use super::{
+    EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS,
+    EXECUTION_EXTERNAL_EFFECT_CONTRACT_CLOSED_WORLD_V1, EXECUTION_EXTERNAL_EFFECT_SCHEMA_V1,
     ExecutionBridgeRecord, ExecutionCheckpointManifest, ExecutionCommittedActionAnchor,
     ExecutionExternalEffectMaterialization, ExecutionModuleResolutionAnchor, ExecutionReplayPlan,
-    ExecutionReplayRecordInput, EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS,
-    EXECUTION_EXTERNAL_EFFECT_CONTRACT_CLOSED_WORLD_V1, EXECUTION_EXTERNAL_EFFECT_SCHEMA_V1,
+    ExecutionReplayRecordInput,
 };
 
 impl ExecutionExternalEffectMaterialization {

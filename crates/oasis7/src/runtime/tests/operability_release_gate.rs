@@ -67,18 +67,24 @@ fn longrun_operability_release_gate_blocks_stage_and_economy_pressure() {
         thresholds.clone(),
     );
     assert!(!report.gate_passed());
-    assert!(report
-        .violations
-        .iter()
-        .any(|item| item.gate == "rollout.stage"));
-    assert!(report
-        .violations
-        .iter()
-        .any(|item| item.gate == "drill.rollback"));
-    assert!(report
-        .violations
-        .iter()
-        .any(|item| item.gate == "economy.epoch_issued_bps_of_total_supply"));
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|item| item.gate == "rollout.stage")
+    );
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|item| item.gate == "drill.rollback")
+    );
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|item| item.gate == "economy.epoch_issued_bps_of_total_supply")
+    );
 
     let err = world
         .enforce_longrun_operability_release_gate(LongRunReleaseStage::Canary, 5, thresholds)

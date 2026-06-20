@@ -27,7 +27,7 @@ use super::replay_audit::{
     MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillReport,
     MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore,
 };
-use super::{normalized_schedule_key, MembershipSyncClient};
+use super::{MembershipSyncClient, normalized_schedule_key};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MembershipRevocationDeadLetterReplayRollbackGovernanceAuditTieredOffloadPolicy {
@@ -258,12 +258,16 @@ impl MembershipSyncClient {
         node_id: &str,
         offloaded_at_ms: i64,
         offload_policy: &MembershipRevocationDeadLetterReplayRollbackGovernanceAuditTieredOffloadPolicy,
-        hot_archive_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
-              + Send
-              + Sync),
-        cold_archive_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
-              + Send
-              + Sync),
+        hot_archive_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
+                 + Send
+                 + Sync
+         ),
+        cold_archive_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
+                 + Send
+                 + Sync
+         ),
     ) -> Result<
         MembershipRevocationDeadLetterReplayRollbackGovernanceAuditTieredOffloadReport,
         WorldError,
@@ -337,9 +341,11 @@ impl MembershipSyncClient {
         evaluated_at_ms: i64,
         drill_run_report: &MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillScheduledRunReport,
         alert_policy: &MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertPolicy,
-        alert_state_store: &(dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertStateStore
-              + Send
-              + Sync),
+        alert_state_store: &(
+             dyn MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertStateStore
+                 + Send
+                 + Sync
+         ),
         alert_sink: &(dyn MembershipRevocationAlertSink + Send + Sync),
     ) -> Result<
         MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertRunReport,

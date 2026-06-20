@@ -1,13 +1,13 @@
+use super::super::ChunkState;
 use super::super::init::{
-    generate_chunk_fragments, summarize_chunk_generation, AsteroidFragmentInitConfig,
-    WorldInitConfig,
+    AsteroidFragmentInitConfig, WorldInitConfig, generate_chunk_fragments,
+    summarize_chunk_generation,
 };
 use super::super::persist::PersistError;
 use super::super::types::{ResourceKind, ResourceOwner, StockError};
 use super::super::world_model::{Factory, Location};
-use super::super::ChunkState;
-use super::types::{WorldEvent, WorldEventKind};
 use super::WorldKernel;
+use super::types::{WorldEvent, WorldEventKind};
 
 const LOCATION_ELECTRICITY_POOL_REMOVED_NOTE: &str = "location electricity pool removed";
 const FACTORY_KIND_RADIATION_POWER_MK1: &str = "factory.power.radiation.mk1";

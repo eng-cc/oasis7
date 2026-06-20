@@ -3,9 +3,9 @@ use crate::simulator::social::{
     SocialFactLifecycleState, SocialFactState, SocialStake,
 };
 
-use super::super::types::{ResourceOwner, WorldEventId, WorldTime, PPM_BASE};
-use super::types::{RejectReason, WorldEventKind};
+use super::super::types::{PPM_BASE, ResourceOwner, WorldEventId, WorldTime};
 use super::WorldKernel;
+use super::types::{RejectReason, WorldEventKind};
 
 const EDGE_EXPIRE_REASON_TTL: &str = "ttl_expired";
 const EDGE_EXPIRE_REASON_BACKING_FACT_INACTIVE: &str = "backing_fact_inactive";

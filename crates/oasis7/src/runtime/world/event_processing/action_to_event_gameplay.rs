@@ -3,8 +3,8 @@ use crate::runtime::agent_claims::{
     auto_restricted_starter_claim_amount, split_agent_claim_upfront_funding,
 };
 use crate::runtime::{
-    RestrictedStarterClaimGrantStatus,
     MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+    RestrictedStarterClaimGrantStatus,
 };
 
 impl World {
@@ -684,7 +684,7 @@ impl World {
                         action_id,
                         reason: RejectReason::RuleDenied {
                             notes: vec![
-                                "aggressor and defender alliances cannot share members".to_string()
+                                "aggressor and defender alliances cannot share members".to_string(),
                             ],
                         },
                     }));
@@ -727,8 +727,10 @@ impl World {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
                         reason: RejectReason::RuleDenied {
-                            notes: vec!["aggressor or defender alliance already has an active war"
-                                .to_string()],
+                            notes: vec![
+                                "aggressor or defender alliance already has an active war"
+                                    .to_string(),
+                            ],
                         },
                     }));
                 }
@@ -880,8 +882,10 @@ impl World {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
                         reason: RejectReason::RuleDenied {
-                            notes: vec!["governance proposal requires at least 2 unique options"
-                                .to_string()],
+                            notes: vec![
+                                "governance proposal requires at least 2 unique options"
+                                    .to_string(),
+                            ],
                         },
                     }));
                 }

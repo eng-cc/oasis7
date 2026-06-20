@@ -533,9 +533,9 @@ pub fn measure_directory_storage_bytes(path: &Path) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        measure_directory_storage_bytes, DistFsChallengeFailureReason, DistFsChallengeSampleSource,
-        NodePointsRuntimeCollector, NodePointsRuntimeCollectorSnapshot,
-        NodePointsRuntimeHeuristics, NodePointsRuntimeObservation,
+        DistFsChallengeFailureReason, DistFsChallengeSampleSource, NodePointsRuntimeCollector,
+        NodePointsRuntimeCollectorSnapshot, NodePointsRuntimeHeuristics,
+        NodePointsRuntimeObservation, measure_directory_storage_bytes,
     };
     use crate::runtime::NodePointsConfig;
     use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot};

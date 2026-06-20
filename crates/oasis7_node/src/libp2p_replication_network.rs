@@ -6,9 +6,8 @@ use std::time::{Duration, Instant};
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
 use oasis7_net::{
-    world_error_is_missing_handler, world_error_is_retryable_connection_gap, Libp2pNetwork,
-    Libp2pNetworkConfig, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
-    PeerManagerPolicy,
+    Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
+    PeerManagerPolicy, world_error_is_missing_handler, world_error_is_retryable_connection_gap,
 };
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse};
@@ -18,8 +17,8 @@ use oasis7_proto::distributed_dht::{
 };
 use oasis7_proto::world_error::WorldError;
 
-use crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL;
 use crate::NodeError;
+use crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL;
 
 mod net_impl;
 

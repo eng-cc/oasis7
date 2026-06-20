@@ -3,7 +3,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Cursor, Write};
 use std::path::Path;
 
-use oasis7_distfs::{blake3_hex, BlobStore as _, LocalCasStore};
+use oasis7_distfs::{BlobStore as _, LocalCasStore, blake3_hex};
 use serde::{Deserialize, Serialize};
 
 use crate::error::WorldError;

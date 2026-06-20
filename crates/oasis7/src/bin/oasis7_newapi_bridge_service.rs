@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use oasis7::observability::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
 use serde::Serialize;
 use serde_json::json;
-use tracing::{error, info, Level};
+use tracing::{Level, error, info};
 
 #[path = "oasis7_newapi_bridge_service/api.rs"]
 mod api;
@@ -26,7 +26,7 @@ mod store;
 #[path = "oasis7_newapi_bridge_service/tests.rs"]
 mod tests;
 
-use api::{read_http_request, write_http_response, HttpRequest};
+use api::{HttpRequest, read_http_request, write_http_response};
 use model::{BindBridgeUserRequest, CreateDepositRouteRequest, OperatorReviewRequest};
 use service::{BridgePricingRuleConfig, BridgeService, BridgeServiceConfig, BridgeServiceError};
 use store::BridgeStateStore;
@@ -117,13 +117,15 @@ fn run() -> Result<(), String> {
     if options.reconcile_interval_seconds > 0 {
         let service = Arc::clone(&service);
         let interval = options.reconcile_interval_seconds;
-        thread::spawn(move || loop {
-            thread::sleep(Duration::from_secs(interval));
-            if let Err(err) = service.reconcile_once(now_unix_ms()) {
-                eprintln!(
-                    "warning: bridge-service reconcile loop failed: {}",
-                    err.message
-                );
+        thread::spawn(move || {
+            loop {
+                thread::sleep(Duration::from_secs(interval));
+                if let Err(err) = service.reconcile_once(now_unix_ms()) {
+                    eprintln!(
+                        "warning: bridge-service reconcile loop failed: {}",
+                        err.message
+                    );
+                }
             }
         });
     }

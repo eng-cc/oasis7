@@ -11,7 +11,7 @@ use oasis7::consensus_action_payload::{
     sign_main_token_runtime_action_auth, sign_threshold_main_token_runtime_action_auth,
 };
 use oasis7::runtime::{
-    main_token_account_id_from_node_public_key, Action, MainTokenGenesisAllocationPlan,
+    Action, MainTokenGenesisAllocationPlan, main_token_account_id_from_node_public_key,
 };
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 mod faucet_support;
 
 use faucet_support::{
-    faucet_claim_status_code, prune_faucet_state_trackers, prune_tracker_map,
-    rollback_claim_reservation, ClaimReservation,
+    ClaimReservation, faucet_claim_status_code, prune_faucet_state_trackers, prune_tracker_map,
+    rollback_claim_reservation,
 };
 
 const DEFAULT_CLAIM_PATH: &str = "/claim";

@@ -35,7 +35,7 @@ mod viewer_auth_bootstrap;
 
 use control_plane::*;
 use gui_agent_api::{execute_gui_agent_action, gui_agent_capabilities_response};
-use hosted_access::{hosted_player_access_contract, DeploymentMode, DEFAULT_DEPLOYMENT_MODE};
+use hosted_access::{DEFAULT_DEPLOYMENT_MODE, DeploymentMode, hosted_player_access_contract};
 use http_codec::{read_http_request, write_http_response, write_json_response};
 use parse_utils::{
     next_value, parse_chain_replication_bootstrap_peers, parse_chain_role, parse_chain_validators,
@@ -48,7 +48,7 @@ use runtime_paths::{
 #[cfg(test)]
 use server::remap_transfer_runtime_target;
 use server::run_server;
-use static_files::{load_console_static_asset, StaticAsset};
+use static_files::{StaticAsset, load_console_static_asset};
 use transfer_query_proxy::query_chain_transfer_json;
 use viewer_auth_bootstrap::{
     inject_viewer_auth_bootstrap_if_html, resolve_optional_viewer_auth_bootstrap,

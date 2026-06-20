@@ -8,12 +8,12 @@ use oasis7_net::{world_error_is_publish_failure, world_error_is_retryable_connec
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
-    classify_network_protocol, DistributedNetwork, NetworkLane, NetworkLaneOperation,
-    NetworkSubscription,
+    DistributedNetwork, NetworkLane, NetworkLaneOperation, NetworkSubscription,
+    classify_network_protocol,
 };
 use oasis7_proto::world_error::WorldError;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use crate::gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipMessage, GossipProposalMessage,
@@ -30,9 +30,9 @@ pub(crate) use crate::network_error_classification::{
     replication_network_error_mentions_protocol,
 };
 use crate::replication::{
-    load_blob_from_root, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
-    FetchHeadResponse, GossipReplicationMessage, REPLICATION_FETCH_COMMIT_PROTOCOL,
-    REPLICATION_GET_HEAD_PROTOCOL,
+    FetchCommitRequest, FetchCommitResponse, FetchHeadRequest, FetchHeadResponse,
+    GossipReplicationMessage, REPLICATION_FETCH_COMMIT_PROTOCOL, REPLICATION_GET_HEAD_PROTOCOL,
+    load_blob_from_root,
 };
 use crate::{NodeError, NodeExecutionCheckpointDescriptor, NodeNetworkPolicy};
 

@@ -331,7 +331,7 @@ fn collect_files_recursively(dir: &Path, output: &mut Vec<PathBuf>) -> Result<()
             return Err(SourceHashError::Io {
                 path: Some(dir.to_path_buf()),
                 source,
-            })
+            });
         }
     };
     for entry in entries {
@@ -422,7 +422,7 @@ mod tests {
         );
         write_file(
             &root.join("module/Cargo.toml"),
-            "[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
+            "[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
         );
         write_file(
             &root.join("module/src/lib.rs"),
@@ -433,7 +433,7 @@ mod tests {
         }
         write_file(
             &root.join("shared/Cargo.toml"),
-            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
         );
         write_file(&root.join("shared/src/lib.rs"), shared_body);
         root.join("module/Cargo.toml")
@@ -442,7 +442,7 @@ mod tests {
     fn write_fixture_split_workspace(root: &Path) -> PathBuf {
         write_file(
             &root.join("module/Cargo.toml"),
-            "[workspace]\n\n[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
+            "[workspace]\n\n[package]\nname = \"fixture_module\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nfixture_shared = { path = \"../shared\" }\n",
         );
         write_file(
             &root.join("module/src/lib.rs"),
@@ -450,7 +450,7 @@ mod tests {
         );
         write_file(
             &root.join("shared/Cargo.toml"),
-            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+            "[package]\nname = \"fixture_shared\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
         );
         write_file(
             &root.join("shared/src/lib.rs"),

@@ -242,7 +242,7 @@ pub(super) fn execute_gui_agent_action(
             let config = match parse_action_config(request.payload.as_ref(), state, action) {
                 Ok(config) => config,
                 Err(err) => {
-                    return action_error(state, action, request_host, "invalid_request", err, None)
+                    return action_error(state, action, request_host, "invalid_request", err, None);
                 }
             };
             let outcome = start_process(state, config);
@@ -281,7 +281,7 @@ pub(super) fn execute_gui_agent_action(
             let config = match parse_action_config(request.payload.as_ref(), state, action) {
                 Ok(config) => config,
                 Err(err) => {
-                    return action_error(state, action, request_host, "invalid_request", err, None)
+                    return action_error(state, action, request_host, "invalid_request", err, None);
                 }
             };
             let outcome = start_chain_process(state, config);
@@ -366,7 +366,7 @@ pub(super) fn execute_gui_agent_action(
             ) {
                 Ok(payload) => payload,
                 Err(err) => {
-                    return action_error(state, action, request_host, "invalid_request", err, None)
+                    return action_error(state, action, request_host, "invalid_request", err, None);
                 }
             };
             let mut config = state.config.clone();
@@ -404,7 +404,7 @@ pub(super) fn execute_gui_agent_action(
             ) {
                 Ok(payload) => payload,
                 Err(err) => {
-                    return action_error(state, action, request_host, "invalid_request", err, None)
+                    return action_error(state, action, request_host, "invalid_request", err, None);
                 }
             };
             let response = submit_chain_transfer(state, &submit_request);
@@ -433,7 +433,7 @@ pub(super) fn execute_gui_agent_action(
             ) {
                 Ok(payload) => payload,
                 Err(err) => {
-                    return action_error(state, action, request_host, "invalid_request", err, None)
+                    return action_error(state, action, request_host, "invalid_request", err, None);
                 }
             };
             let response = submit_chain_feedback(state, &submit_request);

@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 
 use super::super::util::{hash_json, read_json_from_path, write_json_to_path};
 use super::super::{
-    segment_journal, segment_snapshot, Journal, JournalSegmentRef, LocalCasStore, ModuleCache,
-    ModuleStore, RollbackEvent, SegmentConfig, Snapshot, TickConsensusRecord, WorldError,
-    WorldEvent, WorldTime,
+    Journal, JournalSegmentRef, LocalCasStore, ModuleCache, ModuleStore, RollbackEvent,
+    SegmentConfig, Snapshot, TickConsensusRecord, WorldError, WorldEvent, WorldTime,
+    segment_journal, segment_snapshot,
 };
 use super::World;
 #[path = "persistence_support.rs"]
@@ -362,8 +362,7 @@ fn load_tick_consensus_archive_records_from_index(
                 return Err(WorldError::DistributedValidationFailed {
                     reason: format!(
                         "tick consensus archive segment ordering invalid: previous_to_tick={} current_from_tick={}",
-                        previous_to_tick,
-                        segment.from_tick,
+                        previous_to_tick, segment.from_tick,
                     ),
                 });
             }

@@ -2,11 +2,11 @@ use super::super::checkpoint::{
     execution_bridge_record_path, execution_checkpoint_manifest_rel_path,
     load_execution_bridge_record,
 };
-use super::super::driver::{load_execution_bridge_state, NodeRuntimeExecutionDriver};
+use super::super::driver::{NodeRuntimeExecutionDriver, load_execution_bridge_state};
 use super::*;
 use oasis7_node::{
-    compute_consensus_action_root, NodeExecutionCheckpointInstallContext,
-    NodeExecutionCommitContext, NodeExecutionHook,
+    NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionHook,
+    compute_consensus_action_root,
 };
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 

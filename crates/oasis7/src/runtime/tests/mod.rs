@@ -2,7 +2,7 @@
 
 use ed25519_dalek::{Signer, SigningKey};
 
-use crate::runtime::{util, ModuleArtifactIdentity};
+use crate::runtime::{ModuleArtifactIdentity, util};
 
 pub(super) fn pos(x: i64, y: i64) -> crate::geometry::GeoPos {
     crate::geometry::GeoPos {

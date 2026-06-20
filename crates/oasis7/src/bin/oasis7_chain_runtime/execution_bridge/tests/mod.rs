@@ -348,12 +348,16 @@ fn execution_bridge_retention_maintenance_skips_aggressive_sweep_for_legacy_reco
     assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V1);
     assert!(record.snapshot_ref.is_some());
     assert!(record.journal_ref.is_some());
-    assert!(store
-        .has(record.snapshot_ref.as_deref().expect("legacy snapshot ref"))
-        .expect("legacy snapshot still exists"));
-    assert!(store
-        .has(record.journal_ref.as_deref().expect("legacy journal ref"))
-        .expect("legacy journal still exists"));
+    assert!(
+        store
+            .has(record.snapshot_ref.as_deref().expect("legacy snapshot ref"))
+            .expect("legacy snapshot still exists")
+    );
+    assert!(
+        store
+            .has(record.journal_ref.as_deref().expect("legacy journal ref"))
+            .expect("legacy journal still exists")
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

@@ -20,9 +20,9 @@ use oasis7::simulator::{
 };
 use reqwest::blocking::Client;
 use serde::Deserialize;
-use serde_json::json;
 use serde_json::Value;
-use tracing::{error, info, Level};
+use serde_json::json;
+use tracing::{Level, error, info};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:5841";
 const DEFAULT_PROVIDER_AGENT_ID: &str = "main";
@@ -99,7 +99,7 @@ mod api {
 mod tests;
 
 use self::auth_support::{
-    load_cached_newapi_bridge_state, parse_newapi_bridge_bearer_selector, NewapiBridgeStateCache,
+    NewapiBridgeStateCache, load_cached_newapi_bridge_state, parse_newapi_bridge_bearer_selector,
 };
 #[path = "oasis7_provider_local_bridge/agent_decision.rs"]
 mod agent_decision;
@@ -111,8 +111,9 @@ use self::agent_decision::{
 use self::http_bridge_support::handle_connection;
 #[cfg(test)]
 use self::letai_direct::{
-    decode_letai_completion_payload, decode_letai_sse_reader, load_letai_chat_config,
-    maybe_auto_topup_letai_user, quota_from_usd, should_auto_topup_letai_error, LetaiChatConfig,
+    LetaiChatConfig, decode_letai_completion_payload, decode_letai_sse_reader,
+    load_letai_chat_config, maybe_auto_topup_letai_user, quota_from_usd,
+    should_auto_topup_letai_error,
 };
 use self::letai_direct::{error_diagnostics_json, invoke_rust_direct_letai};
 use self::support::{

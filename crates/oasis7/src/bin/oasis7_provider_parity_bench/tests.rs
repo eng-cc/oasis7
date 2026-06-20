@@ -139,9 +139,10 @@ fn builtin_parity_guardrail_reroutes_passive_patrol_decision_to_move() {
             to: "loc-2".to_string(),
         })
     );
-    assert!(note
-        .unwrap_or_default()
-        .contains("builtin_parity_guardrail"));
+    assert!(
+        note.unwrap_or_default()
+            .contains("builtin_parity_guardrail")
+    );
 }
 
 #[test]

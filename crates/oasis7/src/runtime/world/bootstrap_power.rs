@@ -1,10 +1,10 @@
 use super::super::{
-    util, Manifest, ModuleAbiContract, ModuleActivation, ModuleArtifactIdentity, ModuleChangeSet,
-    ModuleKind, ModuleLimits, ModuleManifest, ModuleRegistry, ModuleRole, ModuleSubscription,
-    ModuleSubscriptionStage, ProposalDecision, WorldError, M1_AGENT_DEFAULT_MODULE_VERSION,
-    M1_MEMORY_MAX_ENTRIES, M1_MEMORY_MODULE_ID, M1_MOBILITY_MODULE_ID, M1_POWER_MODULE_VERSION,
-    M1_RADIATION_POWER_MODULE_ID, M1_SENSOR_MODULE_ID, M1_STORAGE_CARGO_MODULE_ID,
-    M1_STORAGE_POWER_MODULE_ID,
+    M1_AGENT_DEFAULT_MODULE_VERSION, M1_MEMORY_MAX_ENTRIES, M1_MEMORY_MODULE_ID,
+    M1_MOBILITY_MODULE_ID, M1_POWER_MODULE_VERSION, M1_RADIATION_POWER_MODULE_ID,
+    M1_SENSOR_MODULE_ID, M1_STORAGE_CARGO_MODULE_ID, M1_STORAGE_POWER_MODULE_ID, Manifest,
+    ModuleAbiContract, ModuleActivation, ModuleArtifactIdentity, ModuleChangeSet, ModuleKind,
+    ModuleLimits, ModuleManifest, ModuleRegistry, ModuleRole, ModuleSubscription,
+    ModuleSubscriptionStage, ProposalDecision, WorldError, util,
 };
 use super::World;
 

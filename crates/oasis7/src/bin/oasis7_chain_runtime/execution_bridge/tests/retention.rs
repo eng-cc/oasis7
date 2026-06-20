@@ -5,14 +5,14 @@ use super::super::checkpoint::{
     persist_execution_bridge_record, persist_execution_checkpoint_manifest,
     run_execution_bridge_retention_maintenance, sync_execution_bridge_pin_set,
 };
-use super::super::driver::{bridge_committed_heights, NodeRuntimeExecutionDriver};
+use super::super::driver::{NodeRuntimeExecutionDriver, bridge_committed_heights};
 use super::super::external_effect::build_execution_replay_plan;
 use super::*;
 use std::collections::BTreeSet;
 
 use oasis7::runtime::BlobStore;
 use oasis7::runtime::{LocalCasStore, World as RuntimeWorld};
-use oasis7_node::{compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionHook};
+use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use oasis7_wasm_abi::ModuleOutput;
 use oasis7_wasm_executor::FixedSandbox;
@@ -205,30 +205,36 @@ fn execution_bridge_retention_maintenance_clears_archive_refs_and_prunes_orphans
     assert!(record_6.snapshot_ref.is_some());
     assert!(record_6.journal_ref.is_some());
 
-    assert!(!store
-        .has(
-            records[0]
-                .snapshot_ref
-                .as_deref()
-                .expect("record1 snapshot ref")
-        )
-        .expect("check archive snapshot"));
-    assert!(store
-        .has(
-            records[3]
-                .snapshot_ref
-                .as_deref()
-                .expect("record4 snapshot ref")
-        )
-        .expect("check checkpoint snapshot"));
-    assert!(store
-        .has(
-            records[4]
-                .journal_ref
-                .as_deref()
-                .expect("record5 journal ref")
-        )
-        .expect("check hot journal"));
+    assert!(
+        !store
+            .has(
+                records[0]
+                    .snapshot_ref
+                    .as_deref()
+                    .expect("record1 snapshot ref")
+            )
+            .expect("check archive snapshot")
+    );
+    assert!(
+        store
+            .has(
+                records[3]
+                    .snapshot_ref
+                    .as_deref()
+                    .expect("record4 snapshot ref")
+            )
+            .expect("check checkpoint snapshot")
+    );
+    assert!(
+        store
+            .has(
+                records[4]
+                    .journal_ref
+                    .as_deref()
+                    .expect("record5 journal ref")
+            )
+            .expect("check hot journal")
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -269,12 +275,16 @@ fn execution_bridge_retention_maintenance_tolerates_missing_archive_external_eff
     .expect("load record 1");
     assert!(record_1.snapshot_ref.is_none());
     assert!(record_1.journal_ref.is_none());
-    assert!(!store
-        .is_pinned(missing_external_effect_ref.as_str())
-        .expect("check missing external effect pin"));
-    assert!(!store
-        .has(missing_external_effect_ref.as_str())
-        .expect("check missing external effect blob"));
+    assert!(
+        !store
+            .is_pinned(missing_external_effect_ref.as_str())
+            .expect("check missing external effect pin")
+    );
+    assert!(
+        !store
+            .has(missing_external_effect_ref.as_str())
+            .expect("check missing external effect blob")
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -369,31 +379,37 @@ fn bridge_committed_heights_sweeps_archive_refs_outside_default_hot_window() {
     assert!(record_hot.snapshot_ref.is_some());
     assert!(record_hot.journal_ref.is_some());
 
-    assert!(!store
-        .has(
-            records[0]
-                .snapshot_ref
-                .as_deref()
-                .expect("record1 snapshot ref")
-        )
-        .expect("check archive snapshot"));
+    assert!(
+        !store
+            .has(
+                records[0]
+                    .snapshot_ref
+                    .as_deref()
+                    .expect("record1 snapshot ref")
+            )
+            .expect("check archive snapshot")
+    );
     let checkpoint_index = checkpoint_height.saturating_sub(1) as usize;
-    assert!(store
-        .has(
-            records[checkpoint_index]
-                .snapshot_ref
-                .as_deref()
-                .expect("checkpoint snapshot ref"),
-        )
-        .expect("check checkpoint snapshot"));
-    assert!(store
-        .has(
-            records[checkpoint_index + 1]
-                .journal_ref
-                .as_deref()
-                .expect("hot journal ref"),
-        )
-        .expect("check hot journal"));
+    assert!(
+        store
+            .has(
+                records[checkpoint_index]
+                    .snapshot_ref
+                    .as_deref()
+                    .expect("checkpoint snapshot ref"),
+            )
+            .expect("check checkpoint snapshot")
+    );
+    assert!(
+        store
+            .has(
+                records[checkpoint_index + 1]
+                    .journal_ref
+                    .as_deref()
+                    .expect("hot journal ref"),
+            )
+            .expect("check hot journal")
+    );
 
     let plan = build_execution_replay_plan(records_dir.as_path(), &store, checkpoint_height + 8)
         .expect("build replay plan from sparse checkpoint");
@@ -517,14 +533,18 @@ fn execution_bridge_pin_set_keeps_latest_head_and_hot_window_refs() {
         }
     }
     assert_eq!(actual_pins, expected_pins);
-    assert!(!records[0]
-        .snapshot_ref
-        .as_ref()
-        .is_some_and(|snapshot_ref| actual_pins.contains(snapshot_ref)));
-    assert!(!records[1]
-        .journal_ref
-        .as_ref()
-        .is_some_and(|journal_ref| actual_pins.contains(journal_ref)));
+    assert!(
+        !records[0]
+            .snapshot_ref
+            .as_ref()
+            .is_some_and(|snapshot_ref| actual_pins.contains(snapshot_ref))
+    );
+    assert!(
+        !records[1]
+            .journal_ref
+            .as_ref()
+            .is_some_and(|journal_ref| actual_pins.contains(journal_ref))
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

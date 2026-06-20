@@ -4,8 +4,8 @@ use oasis7_distfs::{StorageChallengeProbeConfig, StorageChallengeProbeReport};
 
 use crate::NodeError;
 
-use super::support::distfs_error_to_node_error;
 use super::ReplicationRuntime;
+use super::support::distfs_error_to_node_error;
 
 impl ReplicationRuntime {
     pub(crate) fn probe_storage_challenges(

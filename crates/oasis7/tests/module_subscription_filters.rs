@@ -2,12 +2,12 @@
 
 mod common;
 
+use oasis7::GeoPos;
 use oasis7::runtime::{
     Action, CapabilityGrant, Manifest, ModuleAbiContract, ModuleActivation, ModuleChangeSet,
     ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription, PolicySet,
     ProposalDecision, World, WorldEventBody,
 };
-use oasis7::GeoPos;
 use oasis7_wasm_abi::{ModuleEmit, ModuleOutput};
 use oasis7_wasm_executor::FixedSandbox;
 use serde_json::json;

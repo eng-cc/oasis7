@@ -7,19 +7,11 @@ use std::process::Command;
 use std::thread;
 
 use super::{
-    apply_viewer_live_env_overrides, build_game_url, build_oasis7_chain_runtime_args,
-    build_oasis7_viewer_live_command, build_viewer_auth_bootstrap_script, content_type_for_path,
-    missing_execution_world_persistence_files, parse_host_port, parse_options,
-    query_runtime_bound_players, resolve_static_asset_path,
-    resolve_viewer_auth_bootstrap_for_embedded_server, resolve_viewer_auth_bootstrap_from_path,
-    resolve_viewer_static_dir_with_override, sanitize_index_html_for_embedded_server,
-    sanitize_relative_request_path, start_static_http_server, stop_static_http_server,
-    viewer_dev_dist_candidates, CliOptions, DeploymentMode, ViewerAuthBootstrap,
-    BUILTIN_LLM_DECISION_SOURCE, DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS,
+    BUILTIN_LLM_DECISION_SOURCE, CliOptions, DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS,
     DEFAULT_AGENT_PROVIDER_PROFILE, DEFAULT_AGENT_PROVIDER_URL, DEFAULT_CHAIN_LINK_POLICY,
     DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND, DEFAULT_DEPLOYMENT_MODE,
     DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, DEFAULT_LIVE_BIND, DEFAULT_SCENARIO,
-    DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV, LLM_TIMEOUT_MS_ENV,
+    DEFAULT_VIEWER_STATIC_DIR, DeploymentMode, GAME_STATIC_DIR_ENV, LLM_TIMEOUT_MS_ENV,
     LOCAL_BRIDGE_PROVIDER_BACKEND, LOCAL_MOCK_PROVIDER_BACKEND, LOOPBACK_HTTP_PROVIDER_TRANSPORT,
     PROVIDER_BACKED_DECISION_SOURCE, VIEWER_AGENT_DECISION_SOURCE_ENV,
     VIEWER_AGENT_EXECUTION_LANE_ENV, VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
@@ -28,12 +20,20 @@ use super::{
     VIEWER_AGENT_PROVIDER_MODE_ENV, VIEWER_AGENT_PROVIDER_PROFILE_ENV,
     VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, VIEWER_AGENT_PROVIDER_URL_ENV,
     VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
-    VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
+    VIEWER_PLAYER_ID_ENV, ViewerAuthBootstrap, WORLDSIM_PROVIDER_CONTRACT,
+    apply_viewer_live_env_overrides, build_game_url, build_oasis7_chain_runtime_args,
+    build_oasis7_viewer_live_command, build_viewer_auth_bootstrap_script, content_type_for_path,
+    missing_execution_world_persistence_files, parse_host_port, parse_options,
+    query_runtime_bound_players, resolve_static_asset_path,
+    resolve_viewer_auth_bootstrap_for_embedded_server, resolve_viewer_auth_bootstrap_from_path,
+    resolve_viewer_static_dir_with_override, sanitize_index_html_for_embedded_server,
+    sanitize_relative_request_path, start_static_http_server, stop_static_http_server,
+    viewer_dev_dist_candidates,
 };
 use oasis7::launcher_bootstrap_peers::DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS;
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7::simulator::{WorldConfig, WorldModel, WorldSnapshot};
-use oasis7::viewer::{ViewerRequest, ViewerResponse, VIEWER_PROTOCOL_VERSION};
+use oasis7::viewer::{VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse};
 use oasis7_proto::storage_profile::StorageProfile;
 
 #[path = "viewer_static_dir_tests.rs"]
@@ -110,9 +110,11 @@ fn parse_options_defaults() {
     assert!(!options.chain_enabled);
     assert_eq!(options.chain_status_bind, DEFAULT_CHAIN_STATUS_BIND);
     assert_eq!(options.chain_link_policy, DEFAULT_CHAIN_LINK_POLICY);
-    assert!(options
-        .chain_node_id
-        .starts_with(&format!("{DEFAULT_CHAIN_NODE_ID}-fresh-")));
+    assert!(
+        options
+            .chain_node_id
+            .starts_with(&format!("{DEFAULT_CHAIN_NODE_ID}-fresh-"))
+    );
     assert_eq!(options.chain_storage_profile, StorageProfile::DevLocal);
     assert_eq!(options.chain_node_role, "sequencer");
     assert_eq!(options.chain_p2p_user_mode, "auto_join");
@@ -527,7 +529,10 @@ fn provider_backed_viewer_live_env_preserves_local_mock_backend() {
 
 #[test]
 fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
-    env::set_var("OASIS7_RUNTIME_AGENT_CHAT_ECHO", "1");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var("OASIS7_RUNTIME_AGENT_CHAT_ECHO", "1");
+    }
     let command = build_oasis7_viewer_live_command(
         Path::new("/bin/echo"),
         &CliOptions::default(),
@@ -539,7 +544,10 @@ fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
     assert!(args.iter().any(|arg| arg == "--agent-chat-echo"));
-    env::remove_var("OASIS7_RUNTIME_AGENT_CHAT_ECHO");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var("OASIS7_RUNTIME_AGENT_CHAT_ECHO");
+    }
 }
 
 #[test]

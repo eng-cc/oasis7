@@ -1,7 +1,7 @@
 use super::{
+    ChainFeedbackSubmitRequest, ChainTransferSubmitRequest, LauncherConfig, ServiceState,
     parse_chain_feedback_request, parse_chain_transfer_request, start_chain_process,
     submit_chain_feedback_remote, submit_chain_transfer, submit_chain_transfer_remote,
-    ChainFeedbackSubmitRequest, ChainTransferSubmitRequest, LauncherConfig, ServiceState,
 };
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -210,14 +210,17 @@ fn submit_chain_transfer_requires_strong_auth_for_hosted_public_join() {
 
     assert!(!response.ok);
     assert_eq!(response.error_code.as_deref(), Some("strong_auth_required"));
-    assert!(response
-        .error
-        .as_deref()
-        .is_some_and(|message| message.contains("hosted public join blocks main token transfer")));
-    assert!(state
-        .logs
-        .iter()
-        .any(|line| line.contains("strong_auth/private plane")));
+    assert!(
+        response.error.as_deref().is_some_and(
+            |message| message.contains("hosted public join blocks main token transfer")
+        )
+    );
+    assert!(
+        state
+            .logs
+            .iter()
+            .any(|line| line.contains("strong_auth/private plane"))
+    );
 }
 
 #[test]
@@ -263,10 +266,11 @@ fn start_chain_process_rejects_invalid_deployment_mode_as_most_restrictive() {
     .expect_err("invalid deployment mode should still block local chain runtime");
 
     assert!(err.contains("deployment_mode=hosted-public-join-typo is invalid"));
-    assert!(state
-        .logs
-        .iter()
-        .any(|line| { line.contains("chain runtime start rejected") && line.contains("invalid") }));
+    assert!(
+        state.logs.iter().any(|line| {
+            line.contains("chain runtime start rejected") && line.contains("invalid")
+        })
+    );
 }
 
 #[test]

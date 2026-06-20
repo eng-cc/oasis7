@@ -260,7 +260,7 @@ fn sample_module_source_package() -> ModuleSourcePackage {
                 br#"[package]
 name = "sample_module"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
@@ -269,7 +269,7 @@ crate-type = ["cdylib"]
             ),
             (
                 "src/lib.rs".to_string(),
-                b"#[no_mangle] pub extern \"C\" fn reduce() {}".to_vec(),
+                b"#[unsafe(no_mangle)] pub extern \"C\" fn reduce() {}".to_vec(),
             ),
         ]),
     }
@@ -321,8 +321,18 @@ impl EnvVarGuard {
 impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         match self.previous.take() {
-            Some(value) => std::env::set_var(self.key.as_str(), value),
-            None => std::env::remove_var(self.key.as_str()),
+            Some(value) => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::set_var(self.key.as_str(), value);
+                }
+            },
+            None => {
+                // SAFETY: This test/setup code mutates process environment in a controlled scope.
+                unsafe {
+                    oasis7::env_mut::remove_var(self.key.as_str());
+                }
+            },
         }
     }
 }
@@ -389,8 +399,14 @@ fn compile_module_artifact_from_source_registers_compiled_artifact() {
     let compiler_script = temp_root.join("compiler.sh");
     let produced_wasm_bytes = "compiled-from-source-runtime";
     write_fake_source_compiler(compiler_script.as_path(), produced_wasm_bytes);
-    std::env::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
-    std::env::remove_var(removed_old_brand_compiler.as_str());
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
+    }
 
     let mut world = World::new();
     register_agent(&mut world, "publisher-1");
@@ -444,11 +460,17 @@ fn compile_module_artifact_from_source_rejects_removed_old_brand_compiler_env() 
         removed_old_brand_script.as_path(),
         "compiled-from-removed-old-brand-env",
     );
-    std::env::set_var(SOURCE_COMPILER_ENV, primary_script.as_os_str());
-    std::env::set_var(
-        removed_old_brand_compiler.as_str(),
-        removed_old_brand_script.as_os_str(),
-    );
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, primary_script.as_os_str());
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(
+                removed_old_brand_compiler.as_str(),
+                removed_old_brand_script.as_os_str(),
+            );
+    }
 
     let mut world = World::new();
     register_agent(&mut world, "publisher-1");
@@ -486,8 +508,14 @@ fn compile_module_artifact_from_source_rejects_in_production_release_policy() {
     fs::create_dir_all(&temp_root).expect("create temp dir");
     let compiler_script = temp_root.join("compiler.sh");
     write_fake_source_compiler(compiler_script.as_path(), "compiled-in-production");
-    std::env::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
-    std::env::remove_var(removed_old_brand_compiler.as_str());
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
+    }
 
     let mut world = World::new();
     world.enable_production_release_policy();
@@ -523,7 +551,7 @@ fn compile_module_artifact_from_source_rejects_when_manifest_path_missing_in_fil
             manifest_path: "Cargo.toml".to_string(),
             files: BTreeMap::from([(
                 "src/lib.rs".to_string(),
-                b"#[no_mangle] pub extern \"C\" fn reduce() {}".to_vec(),
+                b"#[unsafe(no_mangle)] pub extern \"C\" fn reduce() {}".to_vec(),
             )]),
         },
     });
@@ -538,8 +566,14 @@ fn compile_module_artifact_from_source_rejects_when_file_count_exceeds_limit() {
     let _env_guard = EnvVarGuard::capture(SOURCE_MAX_FILES_ENV);
     let removed_old_brand_max_files = removed_old_brand_module_source_env("MAX_FILES");
     let _removed_old_brand_env_guard = EnvVarGuard::capture(removed_old_brand_max_files.as_str());
-    std::env::set_var(SOURCE_MAX_FILES_ENV, "1");
-    std::env::remove_var(removed_old_brand_max_files.as_str());
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(SOURCE_MAX_FILES_ENV, "1");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var(removed_old_brand_max_files.as_str());
+    }
 
     let mut world = World::new();
     register_agent(&mut world, "publisher-1");
@@ -570,9 +604,18 @@ fn compile_module_artifact_from_source_rejects_when_compiler_times_out() {
         compiler_script.as_path(),
         "#!/usr/bin/env bash\nset -euo pipefail\nsleep 1\nprintf '%s' 'late-module' > \"$4\"\n",
     );
-    std::env::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
-    std::env::remove_var(removed_old_brand_compiler.as_str());
-    std::env::set_var(SOURCE_COMPILE_TIMEOUT_MS_ENV, "20");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(SOURCE_COMPILE_TIMEOUT_MS_ENV, "20");
+    }
 
     let mut world = World::new();
     register_agent(&mut world, "publisher-1");
@@ -607,9 +650,18 @@ fn compile_module_artifact_from_source_sanitizes_env_and_isolates_tmpdir() {
         )
         .as_str(),
     );
-    std::env::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
-    std::env::remove_var(removed_old_brand_compiler.as_str());
-    std::env::set_var(SOURCE_SANDBOX_SECRET_ENV, "must-not-leak");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+            oasis7::env_mut::set_var(SOURCE_SANDBOX_SECRET_ENV, "must-not-leak");
+    }
 
     let mut world = World::new();
     register_agent(&mut world, "publisher-1");

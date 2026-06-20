@@ -1,5 +1,31 @@
 use super::*;
 use std::env;
+use std::ffi::OsStr;
+
+fn set_env_var<K, V>(key: K, value: V)
+where
+    K: AsRef<OsStr>,
+    V: AsRef<OsStr>,
+{
+    // SAFETY: These tests mutate process environment in a scoped guard setup.
+    // They must not run concurrently with code that reads or writes the same
+    // environment variables.
+    unsafe {
+        env::set_var(key, value);
+    }
+}
+
+fn remove_env_var<K>(key: K)
+where
+    K: AsRef<OsStr>,
+{
+    // SAFETY: These tests mutate process environment in a scoped guard setup.
+    // They must not run concurrently with code that reads or writes the same
+    // environment variables.
+    unsafe {
+        env::remove_var(key);
+    }
+}
 
 struct EnvVarGuard {
     key: String,
@@ -19,9 +45,9 @@ impl EnvVarGuard {
 impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         if let Some(value) = self.previous.take() {
-            env::set_var(&self.key, value);
+            set_env_var(&self.key, value);
         } else {
-            env::remove_var(&self.key);
+            remove_env_var(&self.key);
         }
     }
 }
@@ -31,8 +57,8 @@ fn compile_time_guard_rejects_workspace_build_script_target() {
     let _guard = EnvVarGuard::capture(wasm_env_key("VALIDATE_WORKSPACE_COMPILETIME"));
     let removed_old_brand_key = removed_old_brand_wasm_env("VALIDATE_WORKSPACE_COMPILETIME");
     let _removed_old_brand_guard = EnvVarGuard::capture(removed_old_brand_key.as_str());
-    env::set_var(wasm_env_key("VALIDATE_WORKSPACE_COMPILETIME"), "1");
-    env::remove_var(removed_old_brand_key.as_str());
+    set_env_var(wasm_env_key("VALIDATE_WORKSPACE_COMPILETIME"), "1");
+    remove_env_var(removed_old_brand_key.as_str());
 
     let metadata = CargoMetadata {
         workspace_root: "/workspace".to_string(),
@@ -65,8 +91,8 @@ fn compile_time_guard_allows_external_proc_macro_package() {
     let _guard = EnvVarGuard::capture(wasm_env_key("VALIDATE_WORKSPACE_COMPILETIME"));
     let removed_old_brand_key = removed_old_brand_wasm_env("VALIDATE_WORKSPACE_COMPILETIME");
     let _removed_old_brand_guard = EnvVarGuard::capture(removed_old_brand_key.as_str());
-    env::set_var(wasm_env_key("VALIDATE_WORKSPACE_COMPILETIME"), "1");
-    env::remove_var(removed_old_brand_key.as_str());
+    set_env_var(wasm_env_key("VALIDATE_WORKSPACE_COMPILETIME"), "1");
+    remove_env_var(removed_old_brand_key.as_str());
 
     let metadata = CargoMetadata {
         workspace_root: "/workspace".to_string(),
@@ -92,8 +118,8 @@ fn wasm_env_value_or_default_reads_oasis7_prefix() {
     let _primary = EnvVarGuard::capture(wasm_env_key("BUILD_STD"));
     let removed_old_brand_key = removed_old_brand_wasm_env("BUILD_STD");
     let _removed_old_brand = EnvVarGuard::capture(removed_old_brand_key.as_str());
-    env::set_var(wasm_env_key("BUILD_STD"), "1");
-    env::set_var(removed_old_brand_key.as_str(), "0");
+    set_env_var(wasm_env_key("BUILD_STD"), "1");
+    set_env_var(removed_old_brand_key.as_str(), "0");
 
     assert_eq!(wasm_env_value_or_default("BUILD_STD", "missing"), "1");
 }
@@ -103,8 +129,8 @@ fn wasm_env_value_or_default_rejects_removed_old_brand_prefix() {
     let _primary = EnvVarGuard::capture(wasm_env_key("BUILD_STD_COMPONENTS"));
     let removed_old_brand_key = removed_old_brand_wasm_env("BUILD_STD_COMPONENTS");
     let _removed_old_brand = EnvVarGuard::capture(removed_old_brand_key.as_str());
-    env::remove_var(wasm_env_key("BUILD_STD_COMPONENTS"));
-    env::set_var(removed_old_brand_key.as_str(), "std,panic_abort");
+    remove_env_var(wasm_env_key("BUILD_STD_COMPONENTS"));
+    set_env_var(removed_old_brand_key.as_str(), "std,panic_abort");
 
     assert_eq!(
         wasm_env_value_or_default("BUILD_STD_COMPONENTS", "missing"),

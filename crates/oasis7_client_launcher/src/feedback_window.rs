@@ -1,7 +1,7 @@
 use super::*;
 use crate::feedback_entry::{
-    collect_recent_logs, submit_feedback_with_fallback, validate_feedback_draft,
-    FeedbackDraftIssue, FeedbackKind, FeedbackSubmitResult,
+    FeedbackDraftIssue, FeedbackKind, FeedbackSubmitResult, collect_recent_logs,
+    submit_feedback_with_fallback, validate_feedback_draft,
 };
 
 fn sanitized_launch_config_snapshot(config: &LaunchConfig) -> Result<serde_json::Value, String> {

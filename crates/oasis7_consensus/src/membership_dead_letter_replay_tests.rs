@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::distributed_net::{DistributedNetwork, InMemoryNetwork};
 
 use crate::{
-    error::WorldError, FileMembershipRevocationDeadLetterReplayStateStore,
+    FileMembershipRevocationDeadLetterReplayStateStore,
     InMemoryMembershipRevocationAlertDeadLetterStore,
     InMemoryMembershipRevocationAlertRecoveryStore,
     InMemoryMembershipRevocationCoordinatorStateStore,
@@ -18,7 +18,7 @@ use crate::{
     MembershipRevocationDeadLetterReplayPolicy, MembershipRevocationDeadLetterReplayScheduleState,
     MembershipRevocationDeadLetterReplayStateStore, MembershipRevocationPendingAlert,
     MembershipRevocationScheduleCoordinator, MembershipSyncClient,
-    StoreBackedMembershipRevocationScheduleCoordinator,
+    StoreBackedMembershipRevocationScheduleCoordinator, error::WorldError,
 };
 
 fn sample_client() -> MembershipSyncClient {
@@ -336,9 +336,11 @@ fn run_replay_schedule_coordinated_with_state_store_respects_lease() {
         .expect("append dead letter");
 
     let coordination_world_id = "w1::revocation-dead-letter-replay::node-target";
-    assert!(coordinator_a
-        .acquire(coordination_world_id, "node-a", 1000, 500)
-        .expect("acquire lease with node-a"));
+    assert!(
+        coordinator_a
+            .acquire(coordination_world_id, "node-a", 1000, 500)
+            .expect("acquire lease with node-a")
+    );
 
     let blocked = client
         .run_revocation_dead_letter_replay_schedule_coordinated_with_state_store(

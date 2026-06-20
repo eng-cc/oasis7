@@ -1,9 +1,9 @@
 use super::{
-    maybe_handle_gameplay_submit_request, parse_gameplay_submit_request,
-    reset_gameplay_submit_state_for_tests, ChainGameplaySubmitResponse,
+    ChainGameplaySubmitResponse, maybe_handle_gameplay_submit_request,
+    parse_gameplay_submit_request, reset_gameplay_submit_state_for_tests,
 };
 use ed25519_dalek::SigningKey;
-use oasis7::viewer::{sign_gameplay_action_auth_proof, GameplayActionRequest};
+use oasis7::viewer::{GameplayActionRequest, sign_gameplay_action_auth_proof};
 use oasis7_node::{
     NodeConfig, NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook, NodeRole,
     NodeRuntime,

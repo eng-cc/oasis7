@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::geometry::GeoPos;
 
 use super::asteroid_fragment::generate_fragments;
-use super::chunking::{chunk_coord_of, chunk_coords, ChunkCoord};
-use super::frag_spawn::{fragment_spawn_pos, FRAGMENT_LOCATION_PREFIX};
+use super::chunking::{ChunkCoord, chunk_coord_of, chunk_coords};
+use super::frag_spawn::{FRAGMENT_LOCATION_PREFIX, fragment_spawn_pos};
 use super::fragment_physics::{
     synthesize_fragment_budget, synthesize_fragment_profile, truncate_fragment_profile_blocks,
 };

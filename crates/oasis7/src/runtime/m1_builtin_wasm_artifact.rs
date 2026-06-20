@@ -1,8 +1,8 @@
 #[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
 use super::world::World;
 use super::{
-    builtin_wasm_materializer::builtin_wasm_distfs_root, load_builtin_wasm_with_fetch_fallback,
-    ModuleArtifactIdentity, WorldError,
+    ModuleArtifactIdentity, WorldError, builtin_wasm_materializer::builtin_wasm_distfs_root,
+    load_builtin_wasm_with_fetch_fallback,
 };
 
 const M1_BUILTIN_HASH_MANIFEST: &str = include_str!("world/artifacts/m1_builtin_modules.sha256");
@@ -24,11 +24,7 @@ fn hash_value_from_manifest_token(token: &'static str) -> Option<&'static str> {
         .map(|(_, hash)| hash)
         .unwrap_or(token)
         .trim();
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
-    }
+    if value.is_empty() { None } else { Some(value) }
 }
 
 fn hash_manifest_for_module(module_id: &str) -> Option<Vec<&'static str>> {

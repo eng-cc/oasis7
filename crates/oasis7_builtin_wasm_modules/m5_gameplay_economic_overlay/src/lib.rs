@@ -1,12 +1,11 @@
 #![allow(improper_ctypes_definitions)]
 
 use oasis7_wasm_sdk::{
-    export_wasm_module,
+    LifecycleStage, WasmModuleLifecycle, export_wasm_module,
     wire::{
-        decode_input, empty_output, encode_output, ModuleCallInput, ModuleEmit, ModuleOutput,
-        ModuleTickLifecycleDirective,
+        ModuleCallInput, ModuleEmit, ModuleOutput, ModuleTickLifecycleDirective, decode_input,
+        empty_output, encode_output,
     },
-    LifecycleStage, WasmModuleLifecycle,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
