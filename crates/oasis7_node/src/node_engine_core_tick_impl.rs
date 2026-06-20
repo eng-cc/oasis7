@@ -194,14 +194,20 @@ impl PosNodeEngine {
                 .map(|proposal| proposal.proposer_id.as_str() != node_id)
                 .unwrap_or(false)
         {
-            let has_remote_replication = match replication.as_deref() {
+            let has_matching_remote_replication = match replication.as_deref() {
                 Some(replication_runtime) => replication_runtime
                     .load_commit_message_by_height(world_id, decision.height)?
-                    .is_some(),
+                    .and_then(|message| parse_replication_commit_payload(message.payload.as_slice()))
+                    .is_some_and(|payload| {
+                        payload.world_id == world_id
+                            && payload.height == decision.height
+                            && payload.block_hash == decision.block_hash
+                            && payload.action_root == decision.action_root
+                            && payload.actions == decision.committed_actions
+                    }),
                 None => true,
             };
-            if !has_remote_replication {
-                self.pending = None;
+            if !has_matching_remote_replication {
                 self.last_inbound_timing_reject_reason = Some(format!(
                     "drop remote committed height {} without matching persisted replication commit",
                     decision.height
