@@ -61,7 +61,7 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 Specialist skills are not mandatory workflow phases. They become reachable through TPM routing or professional subagent slice planning when the task domain matches their trigger.
 
 - Product/planning docs: `prd`, `game-architect`; these may create planning artifacts, but the route, TODOs, and downstream handoff must still be recorded in `.pm/tasks/<TASK-UID>.execution.md`.
-- Game/domain implementation: `game-design-theory`, `gameplay-mechanics`, `level-design`, `audio-systems`, `particle-systems`, `optimization-performance`, `memory-management`, `asset-optimization`, `synchronization-algorithms`, `monetization-systems`.
+- Game/domain implementation: `game-design-theory`, `gameplay-mechanics`, `level-design`, `particle-systems`, `optimization-performance`, `memory-management`, `synchronization-algorithms`.
 - Narrative/community/content: `epic-story-orchestrator-zh`, `content-creation`, `humanizer-zh`.
 - Browser/visual/content tools: `agent-browser`, `gpt-image-2`, `xiaohongshu-note-analyzer`.
 - Visual companion / Image2 target workflows are optional evidence, not universal gates. They may be used inside an existing task/worktree as visual target and screenshot-comparison evidence, but cannot replace implementation, real native/browser screenshots, interaction smoke, QA evidence, or PR review. Screenshot-only previews count as stable visual-comparison evidence, not real interaction coverage.

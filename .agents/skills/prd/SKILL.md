@@ -17,6 +17,8 @@ In oasis7, this skill is a specialist planning surface, not a standalone workflo
 - Write PRD outputs to repo-owned docs such as `doc/<module>/prd.md` or `doc/**/**.prd.md`.
 - Record the PRD route, TODOs, and downstream handoff in `.pm/tasks/<TASK-UID>.execution.md`.
 - Do not treat PRD-only output as implementation-ready unless the workflow router has also confirmed project/task execution truth and verification entry.
+- Check existing `.pm` task truth, module `prd.md`, `project.md`, handoff, and source-of-truth docs before asking the user for more information. If those sources already answer discovery questions, cite or summarize them instead of re-asking.
+- Ask the user only for unresolved product decisions or acceptance gaps that cannot be answered from repo truth and would materially change the PRD.
 
 ## When to Use
 
@@ -32,11 +34,14 @@ Use this skill when:
 
 ## Operational Workflow
 
-### Phase 1: Discovery (The Interview)
+### Phase 1: Discovery (Repo Truth First)
 
-Before writing a single line of the PRD, you **MUST** interrogate the user to fill knowledge gaps. Do not assume context.
+Before writing or changing PRD content, inspect the bound task and relevant repo
+truth to fill known context. Do not assume missing product intent, but do not
+re-ask questions already answered by `.pm`, PRD, project, handoff, or
+source-of-truth evidence.
 
-**Ask about:**
+**Check, then ask only if still unresolved:**
 
 - **The Core Problem**: Why are we building this now?
 - **Success Metrics**: How do we know it worked?
@@ -164,7 +169,7 @@ You **MUST** follow this exact structure for the output:
 
 ### DON'T (Avoid)
 
-- **Skip Discovery**: Never write a PRD without asking at least 2 clarifying questions first.
+- **Skip Discovery**: Never write a PRD without checking repo truth first; ask concise clarifying questions only when material gaps remain.
 - **Hallucinate Constraints**: If the user didn't specify a tech stack, ask or label it as `TBD`.
 - **Ship Ambiguous Specs**: If implementation still needs oral clarification, PRD is incomplete.
 

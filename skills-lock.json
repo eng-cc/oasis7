@@ -1,11 +1,6 @@
 {
   "version": 1,
   "skills": {
-    "content-creation": {
-      "source": "anthropics/knowledge-work-plugins",
-      "sourceType": "github",
-      "computedHash": "012ed09d491de22ef3d2697e7f268597353711b8c17d72ce013c4a6e396df970"
-    },
     "gpt-image-2": {
       "source": "agentspace-so/agent-skills",
       "sourceType": "github",

@@ -13,7 +13,7 @@
 ## 范围
 - 覆盖 `.agents/skills/` 当前本地 inventory 的治理分桶。
 - 覆盖首批低耦合 skill surface 的文件级退役与角色卡回写。
-- 不覆盖全部 generic game-skill mirror 的一次性清理。
+- 首轮不覆盖全部 generic game-skill mirror 的一次性清理；2026-06-20 follow-up 已完成该 watch bucket 的治理裁定与局部收口。
 
 ## 接口 / 数据
 - skill inventory 入口: `.agents/skills/*/SKILL.md`
@@ -24,7 +24,7 @@
 ## 里程碑
 - M1 (2026-05-19): 建立 skill rationalization 专题三件套并冻结首批 keep/replace/retire/defer 矩阵。
 - M2: 退役首批低耦合 skill surface，并清理角色卡与活跃文档引用。
-- M3: 视维护成本继续评估 generic game-skill mirror 簇是否转成上游跟踪清单。
+- M3 (2026-06-20): 完成 generic game-skill mirror watch bucket follow-up；`asset-optimization`、`audio-systems`、`monetization-systems` 退成本地上游跟踪决策，`game-design-theory`、`synchronization-algorithms` 收窄触发，`level-design`、`particle-systems` 保留为 domain-triggered non-default surface。
 
 ## 风险
 - 若角色卡未同步回写，删除 skill 后会留下悬空推荐。
@@ -55,7 +55,7 @@
   - PRD-ENGINEERING-032E: As a workflow owner, I want the repo-owned workflow-router skill kept in the local inventory as the default entrypoint for non-trivial workflow chaining, so that upstream `using-superpowers` routing value is preserved without importing its external bootstrap.
 - Critical User Flows:
   1. `盘点当前 .agents/skills inventory -> 读取角色卡/工程入口/活跃文档引用 -> 判断 skill 是否 repo-owned、generic-but-compatible、generic-and-conflicting`
-  2. `对每个 skill 冻结 keep / replace / retire / defer -> 只对 low-coupling retire/replacement 执行本轮文件面收口 -> 其余高耦合 generic mirror 先保留并记录 deferred`
+  2. `对每个 skill 冻结 keep / replace / retire / defer -> 只对 low-coupling retire/replacement 执行首轮文件面收口 -> generic game-skill mirror follow-up 在 2026-06-20 收口为 retired-to-upstream-tracking / trigger-narrowing / domain-triggered non-default`
   3. `若 skill 被 retire -> 同步更新角色卡、活跃文档与工程入口 -> 复跑文档/PM 门禁，确保没有残留悬空引用`
   4. `若 upstream skill 只适合局部借鉴 -> 先抽出 repo-owned authoring/template/checklist surface -> 明确哪些内容 adopted、哪些仍 deferred/rejected -> 再把本地 skill inventory 和角色卡接回真值`
   5. `若 upstream workflow routing 被收口为 repo-owned local skill -> 将该 skill 接回 README / AGENTS phase order / topic project trace -> 明确“保留的是本地入口，不是上游 bootstrap”`
@@ -64,17 +64,17 @@
 | --- | --- | --- | --- | --- | --- |
 | Skill inventory matrix | `skill_name`、`bucket=keep|replace|retire|defer`、`rationale`、`replacement_surface`、`followup_ref` | 对当前本地 skill 逐项归类，只有 `retire`/`replace` 才允许进入文件改动 | `unreviewed -> keep|replace|retire|defer` | 先按是否 repo-owned，再按与当前 workflow 冲突程度排序 | `producer_system_designer` 冻结结论，相关 owner 参与联审 |
 | Low-coupling retirement | `local_skill_path`、`role_refs`、`active_doc_refs`、`replacement_surface` | 删除或退役低耦合 skill surface，并同步角色卡/文档引用 | `planned -> retired` | 优先处理无脚本依赖、无代码耦合、引用面最小者 | engineering owner 执行，相关 role 卡同步 |
-| Deferred upstream mirrors | `skill_name`、`upstream_source`、`reason_deferred` | 暂不删除，只记录其 generic mirror 身份与未来替换条件 | `unreviewed -> deferred` | 优先保留高耦合、批量删除成本大的 generic mirrors | `producer_system_designer` 决定 reopen 时机 |
+| Deferred upstream mirrors | `skill_name`、`upstream_source`、`reason_deferred` | 首轮暂不删除，只记录其 generic mirror 身份与未来替换条件；2026-06-20 follow-up 已把原 generic game-skill mirror watch bucket 裁定为 retired-to-upstream-tracking / trigger-narrowing / domain-triggered non-default | `unreviewed -> deferred -> retired|maintain|preserve-non-default` | 优先保留高耦合、批量删除成本大的 generic mirrors；follow-up 以真实引用面和 repo-specific 增量重新裁定 | `producer_system_designer` 决定 reopen 时机，相关 domain role 参与复核 |
 | Skill authoring surface | `authoring_entrypoint`、`template_path`、`checklist_path`、`bounded_borrowing_note` | 将 upstream `writing-skills` 中可复用的 authoring discipline 翻译成 repo-owned 入口、模板、自检清单与本地 skill | `deferred idea -> repo-owned surface` | 先保 trigger wording 和结构纪律，再决定是否需要更强验证机制 | `producer_system_designer` 冻结边界，skill maintainer 执行 |
 - Acceptance Criteria:
   - AC-1: 当前 skill inventory 中必须明确写出至少一批 `retire` 项，并给出对应 replacement surface。
   - AC-2: 本轮至少完成 1 组以上低耦合 skill surface 的正式退役，并清理角色卡中的直接引用。
   - AC-3: `agent-browser`、`prd`、`xiaohongshu-note-analyzer`、`gpt-image-2`、`humanizer-zh`，以及后续新增的 `verification-before-completion`、`systematic-debugging`、`receiving-code-review`、`finishing-a-development-branch`、`tdd-test-writer`、`bounded-brainstorming`，其保留理由都必须显式记录为 repo-owned 或明确场景专属。
-  - AC-4: 对 generic game-skill 镜像簇若未本轮删除，必须标记为 `defer` 并说明“为何先不动”。
+  - AC-4: 对 generic game-skill 镜像簇若未首轮删除，必须标记为 `defer` 并说明“为何先不动”；2026-06-20 follow-up 完成后不得继续把已裁定项保留为悬空 defer。
   - AC-5: 本轮必须为 `.agents/skills` 增加 repo-owned authoring surface，至少包含本地 skill、template、checklist 与入口说明，并明确 upstream `writing-skills` 哪些部分仍未采纳。
   - AC-6: `repo-owned-workflow-router` 必须被显式记录为保留的 repo-owned workflow surface，并在 `.agents/skills/README.md`、root `AGENTS.md` 和相关治理文档中保持同一默认 phase-order 口径。
 - Non-Goals:
-  - 不在本轮重写全部 generic game-skill 内容。
+  - 不在首轮重写全部 generic game-skill 内容；后续 watch bucket 收口必须通过单独 task / role review / PR gate 完成。
   - 不把所有 skill 能力迁回系统提示词。
   - 不改变 `agent-browser`、`.pm`、`prepare-task-pr` 等现有 repo-owned workflow 主链。
 
@@ -115,12 +115,13 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-SKILL-001 | 先退役低耦合通用 skill，再处理 generic game-skill 镜像簇 | 一次性批量删除全部 generic skill | 引用面和角色卡同步风险太高，应先做低风险收缩。 |
+| DEC-SKILL-001 | 先退役低耦合通用 skill，再以 follow-up 处理 generic game-skill 镜像簇 | 一次性批量删除全部 generic skill | 引用面和角色卡同步风险太高，应先做低风险收缩；2026-06-20 follow-up 已完成原 watch bucket 裁定。 |
 | DEC-SKILL-002 | repo-owned/场景专属 skill 保留，本轮不动 | 统一要求所有 skill 都改成上游安装 | `agent-browser`、`prd`、`xiaohongshu-note-analyzer` 等仍与当前仓库工作流或内容评审场景绑定。 |
 | DEC-SKILL-003 | 对与当前默认流程冲突的通用 skill 直接 retire | 保留 skill 但继续在角色卡中推荐 | 会继续制造“存在即推荐”的误导。 |
 | DEC-SKILL-004 | 对已在 borrowing 专题中裁定为可借鉴、且能直接绑定 repo-owned helper / workflow truth 的 skill，允许新增为本地 repo-owned skill | 只在 borrowing 文档里记录 adopted 结论，不把 skill surface 真正落盘 | 若 adopted 项始终不进入 `.agents/skills/`，角色层就无法稳定触发这些 repo-native 工作流。 |
 | DEC-SKILL-005 | 将 `writing-skills` 只收敛为 repo-owned authoring surface，不引入其完整 TDD/subagent gate | 要么完全不借，要么整套照搬 upstream skill | 当前真正缺的是本地 skill 作者入口与结构纪律，不是再造一条与主链竞争的 skill deployment 流程。 |
 | DEC-SKILL-006 | 将 `using-superpowers` 里唯一值得保留的 process-skill routing order 收口为本地 `repo-owned-workflow-router` skill | 完全不落本地 skill，或把 `using-superpowers` 整体 bootstrap 直接保留 | 当前角色真正需要的是本地 workflow 总入口；若不落本地 skill，路由只会继续散落在 borrowing 说明里；若整体保留 upstream bootstrap，又会重新制造第二套默认流程真值。 |
+| DEC-SKILL-007 | `content-creation` 经 2026-06-20 维护项转为 oasis7 liveops/community/channel copy aid 后，从 `skills-lock.json` 外部镜像追踪中移除 | 继续把已本地化 entrypoint 作为 `anthropics/knowledge-work-plugins` mirror 锁定 | `.agents/skills/README.md` 规定 repo-owned skill 不写入 `skills-lock.json`；继续锁定会让未来同步误判或覆盖本地角色边界。 |
 
 ## 结论
 - 🟢 Ready
