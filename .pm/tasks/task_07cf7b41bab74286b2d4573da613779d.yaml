@@ -1,0 +1,27 @@
+task_uid: task_07cf7b41bab74286b2d4573da613779d
+title: "Audit game content docs for design clarity"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-game-game-content-doc-trim-audit
+execution_log_path: .pm/tasks/task_07cf7b41bab74286b2d4573da613779d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/game/project.md
+doc_refs:
+  - doc/game/prd.md
+  - doc/game/project.md
+related_prd: []
+acceptance:
+  - "Identify game-content documentation surfaces that need consolidation, slimming, or archival from a game-design perspective"
+  - "Record gameplay_designer slice evidence and TPM integration summary in the task execution log"
+handoff_to: []
+updated_at: 2026-06-21T11:13:35+08:00
+last_started_at: 2026-06-21T10:45:10+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && git diff --check && rg -n 'TASK-GAME-036|TASK-GAME-037|TASK-GAME-038' doc/game/project.md doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md doc/game/gameplay && ! rg -n 'User Experience & Functionality|Functional Specification Matrix|阶段收口角色交接' doc/game/prd.md doc/game/project.md"
+last_verified_at: 2026-06-21T11:13:34+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-21T11:13:35+08:00
