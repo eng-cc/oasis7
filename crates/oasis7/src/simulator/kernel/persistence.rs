@@ -5,7 +5,9 @@ use std::path::Path;
 use super::super::persist::{PersistError, WorldJournal, WorldSnapshot};
 use super::super::types::{CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION};
 use super::WorldKernel;
-use crate::runtime::{ChainResourceDelta, ChainResourceDerivationContext, ChainResourceManifest};
+use crate::chain_resource_schema::{
+    ChainResourceDelta, ChainResourceDerivationContext, ChainResourceManifest,
+};
 
 impl WorldKernel {
     fn restore_persisted_state(

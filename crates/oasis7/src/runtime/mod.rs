@@ -14,7 +14,6 @@ mod audit;
 mod blob_store;
 mod builtin_wasm_identity_manifest;
 mod builtin_wasm_materializer;
-mod chain_resource_schema;
 mod consensus;
 mod effect;
 mod error;
@@ -59,7 +58,7 @@ pub use types::{
 pub use agent_cell::AgentCell;
 
 // Chain resource schema
-pub use chain_resource_schema::{
+pub use crate::chain_resource_schema::{
     CHAIN_RESOURCE_DELTA_SCHEMA_V1, CHAIN_RESOURCE_MANIFEST_SCHEMA_V1, CHUNK_GENERATION_SCHEMA_V1,
     ChainChunkResourceManifestEntry, ChainChunkResourceStatus, ChainFragmentResourceRef,
     ChainResourceCommitRef, ChainResourceDelta, ChainResourceDeltaEntry, ChainResourceDeltaSource,

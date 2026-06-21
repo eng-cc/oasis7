@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use super::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::error::WorldError;
@@ -18,6 +17,7 @@ use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
 use super::util::{deserialize_btreemap_u64_keys, read_json_from_path, write_json_to_path};
 use super::world::{WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits};
 use super::world_event::WorldEvent;
+use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 
 /// Policy for how many snapshots to retain.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

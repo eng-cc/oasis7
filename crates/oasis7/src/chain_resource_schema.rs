@@ -1,21 +1,111 @@
 //! Chain-side resource manifest and delta schema.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+#[cfg(target_arch = "wasm32")]
+use std::fmt;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::geometry::DEFAULT_CLOUD_WIDTH_CM;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::runtime::WorldState;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::runtime::{ActionId, MaterialLedgerId, WorldEventId, WorldTime};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::simulator::SpaceConfig;
 use crate::simulator::{
     ChunkCoord, ChunkGenerationCause, ChunkRuntimeConfig, ChunkState, FragmentElementKind,
-    ResourceKind, SpaceConfig, WorldConfig, WorldEvent, WorldEventKind, WorldModel, chunk_coord_of,
-    chunk_seed,
+    ResourceKind, WorldConfig, WorldEvent, WorldEventKind, WorldModel, chunk_coord_of, chunk_seed,
 };
 
-use super::state::WorldState;
-use super::{ActionId, MaterialLedgerId, WorldEventId, WorldTime};
+#[cfg(target_arch = "wasm32")]
+pub type WorldTime = u64;
+#[cfg(target_arch = "wasm32")]
+pub type WorldEventId = u64;
+#[cfg(target_arch = "wasm32")]
+pub type ActionId = u64;
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[serde(try_from = "String", into = "String")]
+pub enum MaterialLedgerId {
+    World,
+    Agent(String),
+    Site(String),
+    Factory(String),
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Default for MaterialLedgerId {
+    fn default() -> Self {
+        Self::World
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl fmt::Display for MaterialLedgerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MaterialLedgerId::World => write!(f, "world"),
+            MaterialLedgerId::Agent(agent_id) => write!(f, "agent:{agent_id}"),
+            MaterialLedgerId::Site(site_id) => write!(f, "site:{site_id}"),
+            MaterialLedgerId::Factory(factory_id) => write!(f, "factory:{factory_id}"),
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl From<MaterialLedgerId> for String {
+    fn from(value: MaterialLedgerId) -> Self {
+        value.to_string()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl TryFrom<String> for MaterialLedgerId {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value == "world" {
+            return Ok(MaterialLedgerId::World);
+        }
+        if let Some(rest) = value.strip_prefix("agent:") {
+            if rest.trim().is_empty() {
+                return Err("agent ledger id cannot be empty".to_string());
+            }
+            return Ok(MaterialLedgerId::Agent(rest.to_string()));
+        }
+        if let Some(rest) = value.strip_prefix("site:") {
+            if rest.trim().is_empty() {
+                return Err("site ledger id cannot be empty".to_string());
+            }
+            return Ok(MaterialLedgerId::Site(rest.to_string()));
+        }
+        if let Some(rest) = value.strip_prefix("factory:") {
+            if rest.trim().is_empty() {
+                return Err("factory ledger id cannot be empty".to_string());
+            }
+            return Ok(MaterialLedgerId::Factory(rest.to_string()));
+        }
+        Err(format!("invalid material ledger id: {value}"))
+    }
+}
 
 pub const CHAIN_RESOURCE_MANIFEST_SCHEMA_V1: &str = "oasis7.world_resource_manifest.v1";
 pub const CHAIN_RESOURCE_DELTA_SCHEMA_V1: &str = "oasis7.world_resource_delta.v1";
 pub const CHUNK_GENERATION_SCHEMA_V1: &str = "oasis7.chunk_generation.v1";
+
+fn hash_json<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
+    let bytes = serde_json::to_vec(value)?;
+    Ok(sha256_hex(&bytes))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChainResourceManifest {
@@ -70,7 +160,7 @@ impl ChainResourceManifest {
     pub fn canonical_hash(&self) -> String {
         let mut clone = self.clone();
         clone.manifest_hash.clear();
-        super::util::hash_json(&clone).unwrap_or_else(|_| String::new())
+        hash_json(&clone).unwrap_or_else(|_| String::new())
     }
 
     pub fn refresh_hashes(&mut self) {
@@ -93,9 +183,8 @@ impl ChainResourceManifest {
         journal: &[WorldEvent],
     ) -> Self {
         let world_seed = chunk_runtime.world_seed;
-        let world_config_hash = super::util::hash_json(config).unwrap_or_default();
-        let generation_algorithm_hash =
-            super::util::hash_json(&(config, chunk_runtime)).unwrap_or_default();
+        let world_config_hash = hash_json(config).unwrap_or_default();
+        let generation_algorithm_hash = hash_json(&(config, chunk_runtime)).unwrap_or_default();
         let mut generated_chunks = BTreeMap::new();
         for (coord, state) in &model.chunks {
             if !matches!(state, ChunkState::Generated | ChunkState::Exhausted) {
@@ -120,21 +209,16 @@ impl ChainResourceManifest {
                 fragment_refs.push(ChainFragmentResourceRef {
                     fragment_id: location.id.clone(),
                     location_id: location.id.clone(),
-                    profile_hash: super::util::hash_json(fragment_profile).unwrap_or_default(),
+                    profile_hash: hash_json(fragment_profile).unwrap_or_default(),
                     budget_total_hash: location
                         .fragment_budget
                         .as_ref()
-                        .map(|budget| {
-                            super::util::hash_json(&budget.total_by_element_g).unwrap_or_default()
-                        })
+                        .map(|budget| hash_json(&budget.total_by_element_g).unwrap_or_default())
                         .unwrap_or_default(),
                     budget_remaining_hash: location
                         .fragment_budget
                         .as_ref()
-                        .map(|budget| {
-                            super::util::hash_json(&budget.remaining_by_element_g)
-                                .unwrap_or_default()
-                        })
+                        .map(|budget| hash_json(&budget.remaining_by_element_g).unwrap_or_default())
                         .unwrap_or_default(),
                 });
             }
@@ -165,12 +249,10 @@ impl ChainResourceManifest {
                 fragment_count: fragment_refs.len() as u32,
                 block_count,
                 fragment_refs,
-                chunk_budget_total_hash: super::util::hash_json(&chunk_budget.total_by_element_g)
+                chunk_budget_total_hash: hash_json(&chunk_budget.total_by_element_g)
                     .unwrap_or_default(),
-                chunk_budget_remaining_hash: super::util::hash_json(
-                    &chunk_budget.remaining_by_element_g,
-                )
-                .unwrap_or_default(),
+                chunk_budget_remaining_hash: hash_json(&chunk_budget.remaining_by_element_g)
+                    .unwrap_or_default(),
                 total_by_element_g: chunk_budget.total_by_element_g.clone(),
                 remaining_by_element_g: chunk_budget.remaining_by_element_g.clone(),
                 commit_ref,
@@ -201,6 +283,7 @@ impl ChainResourceManifest {
         manifest
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_runtime_state(
         context: ChainResourceDerivationContext<'_>,
         world_config_hash: impl Into<String>,
@@ -225,10 +308,9 @@ impl ChainResourceManifest {
                 fragment_refs.push(ChainFragmentResourceRef {
                     fragment_id: format!("runtime-agent:{agent_id}"),
                     location_id: format!("runtime-agent:{agent_id}"),
-                    profile_hash: super::util::hash_json(agent_id).unwrap_or_default(),
-                    budget_total_hash: super::util::hash_json(&state.resources).unwrap_or_default(),
-                    budget_remaining_hash: super::util::hash_json(&state.resources)
-                        .unwrap_or_default(),
+                    profile_hash: hash_json(agent_id).unwrap_or_default(),
+                    budget_total_hash: hash_json(&state.resources).unwrap_or_default(),
+                    budget_remaining_hash: hash_json(&state.resources).unwrap_or_default(),
                 });
             }
             let mut entry = ChainChunkResourceManifestEntry {
@@ -243,10 +325,8 @@ impl ChainResourceManifest {
                 fragment_count: fragment_refs.len() as u32,
                 block_count: fragment_refs.len() as u32,
                 fragment_refs,
-                chunk_budget_total_hash: super::util::hash_json(&state.resources)
-                    .unwrap_or_default(),
-                chunk_budget_remaining_hash: super::util::hash_json(&state.resources)
-                    .unwrap_or_default(),
+                chunk_budget_total_hash: hash_json(&state.resources).unwrap_or_default(),
+                chunk_budget_remaining_hash: hash_json(&state.resources).unwrap_or_default(),
                 total_by_element_g: BTreeMap::new(),
                 remaining_by_element_g: BTreeMap::new(),
                 commit_ref: ChainResourceCommitRef {
@@ -319,7 +399,7 @@ impl ChainChunkResourceManifestEntry {
     pub fn canonical_hash(&self) -> String {
         let mut clone = self.clone();
         clone.manifest_hash.clear();
-        super::util::hash_json(&clone).unwrap_or_default()
+        hash_json(&clone).unwrap_or_default()
     }
 }
 
@@ -574,6 +654,7 @@ fn aggregate_agent_resource_balances(model: &WorldModel) -> BTreeMap<ResourceKin
     balances
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn aggregate_runtime_resource_balances(state: &WorldState) -> BTreeMap<ResourceKind, i64> {
     let mut balances = state.resources.clone();
     for agent in state.agents.values() {
@@ -585,6 +666,7 @@ fn aggregate_runtime_resource_balances(state: &WorldState) -> BTreeMap<ResourceK
     balances
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn runtime_agents_by_chunk(state: &WorldState) -> BTreeMap<String, Vec<(&String, ChunkCoord)>> {
     let mut out: BTreeMap<String, Vec<(&String, ChunkCoord)>> = BTreeMap::new();
     let space = runtime_chunk_space_for_state(state);
@@ -598,6 +680,7 @@ fn runtime_agents_by_chunk(state: &WorldState) -> BTreeMap<String, Vec<(&String,
     out
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn runtime_chunk_space_for_state(state: &WorldState) -> SpaceConfig {
     let mut space = SpaceConfig::default();
     for agent in state.agents.values() {
@@ -614,9 +697,9 @@ fn runtime_chunk_space_for_state(state: &WorldState) -> SpaceConfig {
     space
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn runtime_world_seed(world_id: &str, chain_id: &str, world_config_hash: &str) -> u64 {
-    let hash =
-        super::util::sha256_hex(format!("{world_id}:{chain_id}:{world_config_hash}").as_bytes());
+    let hash = sha256_hex(format!("{world_id}:{chain_id}:{world_config_hash}").as_bytes());
     u64::from_str_radix(hash.get(0..16).unwrap_or("1"), 16)
         .unwrap_or(1)
         .max(1)
@@ -643,14 +726,10 @@ fn delta_from_simulator_event(
                     total_delta_g: *total,
                     remaining_delta_g: remaining,
                     resulting_remaining_g: remaining,
-                    remaining_after_hash: super::util::hash_json(
-                        &chunk_budget.remaining_by_element_g,
-                    )
-                    .unwrap_or_default(),
-                    chunk_remaining_after_hash: super::util::hash_json(
-                        &chunk_budget.remaining_by_element_g,
-                    )
-                    .unwrap_or_default(),
+                    remaining_after_hash: hash_json(&chunk_budget.remaining_by_element_g)
+                        .unwrap_or_default(),
+                    chunk_remaining_after_hash: hash_json(&chunk_budget.remaining_by_element_g)
+                        .unwrap_or_default(),
                 });
             }
             match cause {
@@ -676,10 +755,8 @@ fn delta_from_simulator_event(
                         total_delta_g: *total,
                         remaining_delta_g: remaining,
                         resulting_remaining_g: remaining,
-                        remaining_after_hash: super::util::hash_json(
-                            &fragment_budget.remaining_by_element_g,
-                        )
-                        .unwrap_or_default(),
+                        remaining_after_hash: hash_json(&fragment_budget.remaining_by_element_g)
+                            .unwrap_or_default(),
                         chunk_remaining_after_hash: manifest
                             .generated_chunks
                             .get(&chunk_key(replenished_entry.coord))

@@ -13,9 +13,9 @@ use super::types::{
     WorldEventId, WorldTime,
 };
 use super::world_model::{WorldConfig, WorldModel};
+use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::Snapshot as RuntimeSnapshot;
-use crate::runtime::{ChainResourceDelta, ChainResourceManifest};
 #[cfg(target_arch = "wasm32")]
 use serde_json::Value as RuntimeSnapshot;
 
