@@ -35,7 +35,7 @@
 | `viewer-economic-readability-first-capability-surface` | `software_safe` 正式玩家 surface 已显式展示投入、产出、新用途、修复动作和下一步价值。 | `.pm/tasks/task_b23cd4919b4c481490777293b556cc70.yaml` |
 | `agent-claim-slot-1-auto-starter-grant` | slot-1 启动金可由专用池自动补足并原子认领，仍保持首个 claim 非免费。 | `.pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml` |
 | `viewer-immersive-blue-gradient-line` / `immersive-command-panel-spacing` | 近期 player-facing viewer polish 已收口，不改变 game 根 PRD 的玩法承诺。 | `.pm/tasks/task_834078a49c334891a3193e4f303f939a.yaml`, `.pm/tasks/task_b5440afc520648ffa963803c93da43f2.yaml` |
-| `game-content-doc-trim-audit` | 根 PRD / project 已瘦身为 active gameplay baseline 与当前执行看板；专题细节、历史证据和执行流水改由专题 project、evidence 与 `.pm` trace 承接。 | Trace: `.pm/tasks/task_07cf7b41bab74286b2d4573da613779d.yaml` |
+| `game-content-doc-trim-audit` | 根 PRD / project 已瘦身为 active gameplay baseline 与当前执行看板；专题细节、历史证据和执行流水改由专题 project、evidence 与 `.pm` trace 承接。 | Trace: .pm/tasks/task_07cf7b41bab74286b2d4573da613779d.yaml |
 
 ## 追踪与归档规则
 - 本文件只保留当前开放任务、近期仍影响判断的收口项、当前阶段和下一步。
