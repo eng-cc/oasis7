@@ -40,7 +40,7 @@ fn check_provider_loopback_http_provider_accepts_info_and_health_responses() {
             let bytes = stream.read(&mut request).expect("read request");
             let request_text = String::from_utf8_lossy(&request[..bytes]);
             let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"provider-local","name":"Local Provider","version":"0.1.0","protocol_version":"v1","capabilities":["decision","feedback"],"supported_action_sets":["phase1_low_frequency"]}"#
+                r#"{"provider_id":"provider-local","name":"Local Provider","version":"0.1.0","protocol_version":"v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["phase1_low_frequency"]}"#
             } else {
                 r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
             };
@@ -92,7 +92,7 @@ fn check_provider_loopback_http_provider_reports_incompatible_supported_actions(
             let bytes = stream.read(&mut request).expect("read request");
             let request_text = String::from_utf8_lossy(&request[..bytes]);
             let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"provider-local","name":"Local Provider","version":"0.1.0","protocol_version":"v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","move_agent"]}"#
+                r#"{"provider_id":"provider-local","name":"Local Provider","version":"0.1.0","protocol_version":"v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","move_agent"]}"#
             } else {
                 r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
             };
@@ -130,7 +130,7 @@ fn check_provider_loopback_http_provider_marks_unhealthy_provider_as_degraded() 
             let bytes = stream.read(&mut request).expect("read request");
             let request_text = String::from_utf8_lossy(&request[..bytes]);
             let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"provider-local","name":"Local Provider","version":"0.1.0","protocol_version":"v1","capabilities":["decision","feedback"],"supported_action_sets":["phase1_low_frequency"]}"#
+                r#"{"provider_id":"provider-local","name":"Local Provider","version":"0.1.0","protocol_version":"v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["phase1_low_frequency"]}"#
             } else {
                 r#"{"ok":false,"status":null,"uptime_ms":42,"last_error":null,"queue_depth":0}"#
             };

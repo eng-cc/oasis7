@@ -6,9 +6,9 @@ use oasis7::consensus_action_payload::{
     ConsensusActionPayloadBody, decode_consensus_action_payload,
 };
 use oasis7::runtime::{
-    BlobStore, Journal as RuntimeJournal, LocalCasStore, MainTokenConfig, MainTokenSupplyState,
-    ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
-    production_hardened_main_token_config,
+    BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal, LocalCasStore,
+    MainTokenConfig, MainTokenSupplyState, ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot,
+    World as RuntimeWorld, blake3_hex, production_hardened_main_token_config,
 };
 use oasis7::simulator::{
     Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldJournal as SimulatorJournal,
@@ -128,6 +128,7 @@ impl NodeRuntimeExecutionDriver {
             persist_simulator_execution_world(
                 driver.simulator_world_dir.as_path(),
                 &driver.simulator_mirror,
+                None,
             )?;
         }
         Ok(driver)
@@ -164,9 +165,10 @@ impl NodeRuntimeExecutionDriver {
 
     fn apply_simulator_actions(
         &mut self,
-        height: u64,
+        context: &NodeExecutionCommitContext,
         simulator_actions: &[(SimulatorAction, ActionSubmitter)],
     ) -> Result<Option<ExecutionSimulatorMirrorRecord>, String> {
+        let height = context.height;
         if simulator_actions.is_empty() {
             return Ok(None);
         }
@@ -198,7 +200,18 @@ impl NodeRuntimeExecutionDriver {
             }
         }
 
-        let snapshot_value = self.simulator_mirror.snapshot();
+        let resource_context = ChainResourceDerivationContext {
+            world_id: context.world_id.as_str(),
+            chain_id: context.world_id.as_str(),
+            genesis_ref: None,
+            created_at_height: 0,
+            manifest_height: context.height,
+            commit_block_hash: Some(context.node_block_hash.as_str()),
+            tick: self.simulator_mirror.time(),
+        };
+        let snapshot_value = self
+            .simulator_mirror
+            .snapshot_with_chain_resource_context(resource_context);
         let journal_value = self.simulator_mirror.journal_snapshot();
         let snapshot_bytes = super::to_cbor(snapshot_value)?;
         let journal_bytes = super::to_cbor(journal_value)?;
@@ -225,6 +238,7 @@ impl NodeRuntimeExecutionDriver {
         persist_simulator_execution_world(
             self.simulator_world_dir.as_path(),
             &self.simulator_mirror,
+            Some(resource_context),
         )?;
 
         Ok(Some(ExecutionSimulatorMirrorRecord {
@@ -402,6 +416,7 @@ impl NodeRuntimeExecutionDriver {
             persist_simulator_execution_world(
                 self.simulator_world_dir.as_path(),
                 &restored_simulator,
+                None,
             )?;
             self.simulator_mirror = restored_simulator;
         }
@@ -555,7 +570,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 )
             })?;
         let simulator_mirror =
-            self.apply_simulator_actions(context.height, decoded_simulator_actions.as_slice())?;
+            self.apply_simulator_actions(&context, decoded_simulator_actions.as_slice())?;
 
         let snapshot_value = self.execution_world.snapshot();
         let journal_value = self.execution_world.journal().clone();
@@ -1007,8 +1022,15 @@ fn load_simulator_execution_world(world_dir: &Path) -> Result<WorldKernel, Strin
 fn persist_simulator_execution_world(
     world_dir: &Path,
     simulator_world: &WorldKernel,
+    resource_context: Option<ChainResourceDerivationContext<'_>>,
 ) -> Result<(), String> {
-    simulator_world.save_to_dir(world_dir).map_err(|err| {
+    let result = match resource_context {
+        Some(context) => {
+            simulator_world.save_to_dir_with_chain_resource_context(world_dir, context)
+        }
+        None => simulator_world.save_to_dir(world_dir),
+    };
+    result.map_err(|err| {
         format!(
             "save simulator execution mirror to {} failed: {:?}",
             world_dir.display(),

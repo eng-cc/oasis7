@@ -17,6 +17,7 @@ use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
 use super::util::{deserialize_btreemap_u64_keys, read_json_from_path, write_json_to_path};
 use super::world::{WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits};
 use super::world_event::WorldEvent;
+use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 
 /// Policy for how many snapshots to retain.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,6 +61,10 @@ impl Default for SnapshotCatalog {
 pub struct Snapshot {
     pub snapshot_catalog: SnapshotCatalog,
     pub manifest: Manifest,
+    #[serde(default)]
+    pub chain_resource_manifest: ChainResourceManifest,
+    #[serde(default)]
+    pub latest_chain_resource_delta: Option<ChainResourceDelta>,
     #[serde(default)]
     pub module_registry: ModuleRegistry,
     #[serde(default)]

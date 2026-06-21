@@ -848,10 +848,19 @@ export function createViewerFeedbackModule({
     const wantsSnapshotProof = emptyEntityBlocker || /\b(refresh|snapshot|fresh state|world state)\b/.test(recoveryCueText);
     const wantsAdvanceProof = /\b(advance|step|apply|confirm|prove|verify|check)\b/.test(recoveryCueText);
     const wantsResumeProof = /\b(resume|recover|restore|replenish|repair)\b/.test(recoveryCueText);
+    const starterOcClaimAvailable = availableActions.some((action) => (
+      action.executeKind === "claim_starter_oc"
+      && !action.disabledReason
+    ));
+    const starterOcBlocksChat = starterOcClaimAvailable && availableActions.some((action) => (
+      action.executeKind === "agent_chat"
+      && String(action.disabledReason || "").toLowerCase().includes("starter oc")
+    ));
     const recommendedAction = availableActions
       .filter((action) => !action.disabledReason)
       .sort((left, right) => {
         const priority = (action) => {
+          if (starterOcBlocksChat && action.executeKind === "claim_starter_oc") return -1;
           if (isRecoveryChoiceState) {
             if (action.executeKind === "request_snapshot") return wantsSnapshotProof ? 0 : 2;
             if (action.executeKind === "step") return wantsAdvanceProof ? 0 : 1;

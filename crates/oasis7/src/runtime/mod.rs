@@ -57,6 +57,15 @@ pub use types::{
 // Agent cell
 pub use agent_cell::AgentCell;
 
+// Chain resource schema
+pub use crate::chain_resource_schema::{
+    CHAIN_RESOURCE_DELTA_SCHEMA_V1, CHAIN_RESOURCE_MANIFEST_SCHEMA_V1, CHUNK_GENERATION_SCHEMA_V1,
+    ChainChunkResourceManifestEntry, ChainChunkResourceStatus, ChainFragmentResourceRef,
+    ChainResourceCommitRef, ChainResourceDelta, ChainResourceDeltaEntry, ChainResourceDeltaSource,
+    ChainResourceDerivationContext, ChainResourceManifest, ChainResourceOrderingKey,
+    ChainResourceReplayStatus,
+};
+
 // Audit
 pub use audit::{AuditCausedBy, AuditEventKind, AuditFilter};
 

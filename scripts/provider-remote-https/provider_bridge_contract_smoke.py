@@ -13,6 +13,8 @@ import urllib.request
 
 
 DEFAULT_TIMEOUT_MS = 15000
+CHAIN_RESOURCE_MANIFEST_SCHEMA_V1 = "oasis7.world_resource_manifest.v1"
+CHAIN_RESOURCE_DELTA_SCHEMA_V1 = "oasis7.world_resource_delta.v1"
 
 
 @dataclass(frozen=True)
@@ -147,6 +149,21 @@ def provider_version(response: dict) -> str:
     return ""
 
 
+def require_provider_resource_schema(info: dict) -> None:
+    manifest_schema = str(info.get("chain_resource_manifest_schema_version") or "").strip()
+    delta_schema = str(info.get("chain_resource_delta_schema_version") or "").strip()
+    if manifest_schema != CHAIN_RESOURCE_MANIFEST_SCHEMA_V1:
+        raise RuntimeError(
+            "provider resource manifest schema mismatch: "
+            f"expected {CHAIN_RESOURCE_MANIFEST_SCHEMA_V1}, got {manifest_schema or '<missing>'}"
+        )
+    if delta_schema != CHAIN_RESOURCE_DELTA_SCHEMA_V1:
+        raise RuntimeError(
+            "provider resource delta schema mismatch: "
+            f"expected {CHAIN_RESOURCE_DELTA_SCHEMA_V1}, got {delta_schema or '<missing>'}"
+        )
+
+
 def run_smoke(options: SmokeOptions) -> dict:
     base_url = normalize_base_url(options.base_url)
     info_status, info, info_elapsed = request_json(
@@ -161,6 +178,7 @@ def run_smoke(options: SmokeOptions) -> dict:
         auth_token=options.auth_token,
         timeout_ms=options.timeout_ms,
     )
+    require_provider_resource_schema(info)
     if options.require_health_ok and health.get("ok") is not True:
         raise RuntimeError(f"provider health is not ok: {json.dumps(health, ensure_ascii=False)}")
 
@@ -214,6 +232,10 @@ def run_smoke(options: SmokeOptions) -> dict:
         "status": "pass",
         "base_url": base_url,
         "provider_id": info.get("provider_id"),
+        "chain_resource_manifest_schema_version": info.get(
+            "chain_resource_manifest_schema_version"
+        ),
+        "chain_resource_delta_schema_version": info.get("chain_resource_delta_schema_version"),
         "info_http_status": info_status,
         "info_elapsed_ms": int(info_elapsed * 1000),
         "health_http_status": health_status,

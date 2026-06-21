@@ -375,6 +375,8 @@ mod tests {
             model,
             runtime_snapshot: None,
             player_gameplay: None,
+            chain_resource_manifest: Default::default(),
+            latest_chain_resource_delta: Default::default(),
             chunk_runtime: Default::default(),
             intel_ttl_ticks: 0,
             next_event_id: 0,

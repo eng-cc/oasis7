@@ -93,6 +93,8 @@ fn provider_loopback_http_client_round_trips_info_health_decision_and_feedback()
                         "name": "Provider Local Bridge",
                         "version": "0.1.0",
                         "protocol_version": "world-simulator-provider-loopback-http-v1",
+                        "chain_resource_manifest_schema_version": "oasis7.world_resource_manifest.v1",
+                        "chain_resource_delta_schema_version": "oasis7.world_resource_delta.v1",
                         "capabilities": ["decision", "feedback"],
                         "supported_action_sets": ["phase1_low_frequency"]
                     })
@@ -191,6 +193,8 @@ fn provider_loopback_http_client_bypasses_proxy_env_for_loopback_transport() {
         status_code: 200,
         body: serde_json::json!({
             "provider_id": "provider_local_bridge",
+            "chain_resource_manifest_schema_version": "oasis7.world_resource_manifest.v1",
+            "chain_resource_delta_schema_version": "oasis7.world_resource_delta.v1",
             "capabilities": ["decision", "feedback"],
             "supported_action_sets": ["phase1_low_frequency"]
         })
@@ -214,6 +218,8 @@ fn provider_loopback_http_client_bypasses_proxy_env_for_trimmed_loopback_transpo
         status_code: 200,
         body: serde_json::json!({
             "provider_id": "provider_local_bridge",
+            "chain_resource_manifest_schema_version": "oasis7.world_resource_manifest.v1",
+            "chain_resource_delta_schema_version": "oasis7.world_resource_delta.v1",
             "capabilities": ["decision", "feedback"],
             "supported_action_sets": ["phase1_low_frequency"]
         })

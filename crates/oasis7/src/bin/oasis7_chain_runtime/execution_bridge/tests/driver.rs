@@ -17,7 +17,10 @@ use oasis7::runtime::{
     ModuleSubscriptionStage, ReleaseSecurityPolicy, WorldEventBody,
     production_hardened_main_token_config,
 };
-use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
+use oasis7::simulator::{
+    Action as SimulatorAction, ActionSubmitter, ChunkCoord, WorldConfig, WorldInitConfig,
+    WorldScenario, WorldSnapshot, initialize_kernel,
+};
 use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
 use oasis7_proto::storage_profile::StorageProfile;
 use oasis7_proto::storage_profile::StorageProfileConfig;
@@ -1088,6 +1091,13 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         storage_root,
     )
     .expect("driver");
+    let config = WorldConfig::default();
+    let mut init =
+        WorldInitConfig::from_scenario(WorldScenario::AsteroidFragmentBootstrap, &config);
+    init.seed = 91;
+    init.asteroid_fragment.bootstrap_chunks = vec![ChunkCoord { x: 0, y: 0, z: 0 }];
+    let (kernel, _) = initialize_kernel(config, init).expect("simulator init");
+    driver.simulator_mirror = kernel;
 
     let payload =
         encode_consensus_action_payload(&ConsensusActionPayloadEnvelope::from_simulator_action(
@@ -1134,14 +1144,9 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         record
             .snapshot_ref
             .as_deref()
-            .is_some_and(|snapshot_ref| !snapshot_ref.is_empty())
+            .is_some_and(|r| !r.is_empty())
     );
-    assert!(
-        record
-            .journal_ref
-            .as_deref()
-            .is_some_and(|journal_ref| !journal_ref.is_empty())
-    );
+    assert!(record.journal_ref.as_deref().is_some_and(|r| !r.is_empty()));
     let external_effect_ref = record
         .external_effect_ref
         .as_deref()
@@ -1165,10 +1170,25 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         .simulator_mirror
         .expect("simulator mirror record should exist");
     assert_eq!(simulator.action_count, 1);
-    assert_eq!(simulator.rejected_action_count, 1);
+    assert_eq!(simulator.rejected_action_count, 0);
     assert!(!simulator.snapshot_ref.is_empty());
     assert!(!simulator.journal_ref.is_empty());
     assert!(!simulator.state_root.is_empty());
+    let simulator_snapshot_bytes = store
+        .get_verified(simulator.snapshot_ref.as_str())
+        .expect("load simulator snapshot");
+    let simulator_snapshot: WorldSnapshot =
+        serde_cbor::from_slice(simulator_snapshot_bytes.as_slice())
+            .expect("decode simulator snapshot");
+    let manifest = &simulator_snapshot.chain_resource_manifest;
+    let delta = &simulator_snapshot.latest_chain_resource_delta;
+    assert_eq!(
+        (manifest.world_id.as_str(), manifest.chain_id.as_str()),
+        ("w1", "w1")
+    );
+    assert_eq!(delta.commit_block_hash.as_deref(), Some("node-h1"));
+    assert!(!manifest.generated_chunks.is_empty());
+    assert!(!delta.entries.is_empty());
     assert!(simulator_world_dir.join("snapshot.json").exists());
     assert!(simulator_world_dir.join("journal.json").exists());
     let _ = fs::remove_dir_all(dir);

@@ -13,6 +13,7 @@ use super::types::{
     WorldEventId, WorldTime,
 };
 use super::world_model::{WorldConfig, WorldModel};
+use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::Snapshot as RuntimeSnapshot;
 #[cfg(target_arch = "wasm32")]
@@ -395,6 +396,10 @@ pub struct WorldSnapshot {
     pub runtime_snapshot: Option<RuntimeSnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub player_gameplay: Option<PlayerGameplaySnapshot>,
+    #[serde(default)]
+    pub chain_resource_manifest: ChainResourceManifest,
+    #[serde(default)]
+    pub latest_chain_resource_delta: ChainResourceDelta,
     #[serde(default)]
     pub chunk_runtime: ChunkRuntimeConfig,
     #[serde(default)]

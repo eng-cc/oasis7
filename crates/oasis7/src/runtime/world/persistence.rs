@@ -601,9 +601,26 @@ impl World {
     // ---------------------------------------------------------------------
 
     pub fn snapshot(&self) -> Snapshot {
+        let chain_resource_manifest = self.chain_resource_manifest_snapshot();
+        let latest_chain_resource_delta = Some(
+            super::super::ChainResourceDelta::latest_from_runtime_manifest(
+                super::super::ChainResourceDerivationContext {
+                    world_id: chain_resource_manifest.world_id.as_str(),
+                    chain_id: chain_resource_manifest.chain_id.as_str(),
+                    genesis_ref: chain_resource_manifest.genesis_ref.as_deref(),
+                    created_at_height: chain_resource_manifest.created_at_height,
+                    manifest_height: chain_resource_manifest.manifest_height,
+                    commit_block_hash: chain_resource_manifest.created_at_block_hash.as_deref(),
+                    tick: self.state.time,
+                },
+                &chain_resource_manifest,
+            ),
+        );
         Snapshot {
             snapshot_catalog: self.snapshot_catalog.clone(),
             manifest: self.manifest.clone(),
+            chain_resource_manifest,
+            latest_chain_resource_delta,
             module_registry: self.module_registry.clone(),
             module_artifacts: self.module_artifacts.clone(),
             module_limits_max: self.module_limits_max.clone(),
@@ -647,6 +664,24 @@ impl World {
             governance_identity_penalties: self.governance_identity_penalties.clone(),
             next_governance_identity_penalty_id: self.next_governance_identity_penalty_id,
         }
+    }
+
+    fn chain_resource_manifest_snapshot(&self) -> super::super::ChainResourceManifest {
+        let manifest_hash = super::super::util::hash_json(&self.manifest).unwrap_or_default();
+        super::super::ChainResourceManifest::from_runtime_state(
+            super::super::ChainResourceDerivationContext {
+                world_id: DISTFS_WORLD_ID_FALLBACK,
+                chain_id: "runtime-chain",
+                genesis_ref: None,
+                created_at_height: self.journal.len() as u64,
+                manifest_height: self.journal.len() as u64,
+                commit_block_hash: None,
+                tick: self.state.time,
+            },
+            manifest_hash.clone(),
+            manifest_hash,
+            &self.state,
+        )
     }
 
     pub fn save_to_dir(&self, dir: impl AsRef<Path>) -> Result<(), WorldError> {

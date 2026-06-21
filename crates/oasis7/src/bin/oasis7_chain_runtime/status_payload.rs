@@ -34,6 +34,9 @@ use status_payload_state_sync::{
     consensus_participation_hold_reason, state_sync_fallback_reason,
     state_sync_trusted_checkpoint_required_height,
 };
+#[path = "status_payload_world_resource.rs"]
+mod status_payload_world_resource;
+use status_payload_world_resource::{ChainWorldResourceStatus, build_world_resource_status};
 
 const TRANSPORT_STABILITY_MIN_SCORE: u8 = 70;
 
@@ -100,6 +103,7 @@ pub(super) struct ChainStatusResponse {
     pub(super) last_error: Option<String>,
     pub(super) execution_world_dir: String,
     pub(super) network_tier: Option<ChainNetworkTierStatus>,
+    pub(super) world_resource: ChainWorldResourceStatus,
     pub(super) p2p: ChainP2pStatus,
     pub(super) observability: ChainNodeObservabilityStatus,
     pub(super) release_security_policy: ReleaseSecurityPolicy,
@@ -985,6 +989,8 @@ pub(super) fn build_chain_status_payload(
         .sum::<u64>();
     let pending_slashing_intent_count = pending_slashing_intent_count(&snapshot);
     let applied_slashing_receipt_count = applied_slashing_receipt_hashes(&snapshot).len();
+    let world_resource =
+        build_world_resource_status(&snapshot, execution_world_dir, loaded_network_tier_manifest);
     let pending_proposal = snapshot
         .consensus
         .pending_proposal
@@ -1045,6 +1051,7 @@ pub(super) fn build_chain_status_payload(
             allowed_claims: loaded.manifest.claims_policy.allowed_claims.clone(),
             denied_claims: loaded.manifest.claims_policy.denied_claims.clone(),
         }),
+        world_resource,
         consensus: ChainConsensusStatus {
             slot: snapshot.consensus.slot,
             epoch: snapshot.consensus.epoch,

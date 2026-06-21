@@ -462,7 +462,7 @@ describe("viewer web ui automation baseline", () => {
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("disables first-agent claim buttons while committed snapshot sync is pending", async () => {
-    const { container } = await renderViewerApp({
+    const { container, core } = await renderViewerApp({
       snapshot: sampleSnapshot({
         model: {
           agents: {},
@@ -532,7 +532,7 @@ describe("viewer web ui automation baseline", () => {
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("prefers recovery proof controls over generic gameplay actions when blocked", async () => {
-    const { container } = await renderViewerApp({
+    const { container, core } = await renderViewerApp({
       snapshot: sampleSnapshot({
         player_gameplay: {
           ...sampleSnapshot().player_gameplay,
@@ -1039,11 +1039,17 @@ describe("viewer web ui automation baseline", () => {
 
   it("surfaces starter OC claim before first agent chat", async () => {
     let sendGameplayAction;
-    const { container } = await renderViewerApp({
+    const { container, core } = await renderViewerApp({
       snapshot: sampleSnapshot({
         player_gameplay: {
           ...sampleSnapshot().player_gameplay,
           available_actions: [
+            {
+              action_id: "advance_step",
+              label: "Advance 1 step",
+              protocol_action: "live_control.step",
+              disabled_reason: null,
+            },
             {
               action_id: "claim_starter_oc",
               label: "Claim starter OC",
@@ -1070,6 +1076,10 @@ describe("viewer web ui automation baseline", () => {
     expect(stagePanel).toBeTruthy();
     expect(within(stagePanel).getAllByText("Claim starter OC").length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText(/one-time starter OC/i).length).toBeGreaterThan(0);
+    expect(core.buildGameplaySummary().recommendedAction).toMatchObject({
+      actionId: "claim_starter_oc",
+      executeKind: "claim_starter_oc",
+    });
     const claimButton = within(stagePanel).getAllByRole("button", { name: "Claim Starter OC" })[0];
     expect(claimButton).toBeInTheDocument();
     fireEvent.click(claimButton);
