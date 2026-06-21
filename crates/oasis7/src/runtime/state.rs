@@ -424,7 +424,7 @@ pub struct WorldState {
     pub economic_contracts: BTreeMap<String, EconomicContractState>,
     #[serde(default)]
     pub agent_claims: BTreeMap<String, AgentClaimState>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub starter_oc_claims: BTreeMap<String, StarterOcClaimState>,
     #[serde(default)]
     pub agent_claim_last_processed_epoch: u64,
