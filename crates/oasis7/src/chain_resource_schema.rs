@@ -739,62 +739,8 @@ fn delta_from_simulator_event(
                 }
             }
         }
-        WorldEventKind::FragmentsReplenished {
-            entries: replenished,
-        } => {
-            for replenished_entry in replenished {
-                let Some(fragment_budget) = replenished_entry.location.fragment_budget.as_ref()
-                else {
-                    continue;
-                };
-                for (element, total) in &fragment_budget.total_by_element_g {
-                    let remaining = fragment_budget.get_remaining(*element);
-                    entries.push(ChainResourceDeltaEntry::ChunkResource {
-                        coord: replenished_entry.coord,
-                        element: *element,
-                        total_delta_g: *total,
-                        remaining_delta_g: remaining,
-                        resulting_remaining_g: remaining,
-                        remaining_after_hash: hash_json(&fragment_budget.remaining_by_element_g)
-                            .unwrap_or_default(),
-                        chunk_remaining_after_hash: manifest
-                            .generated_chunks
-                            .get(&chunk_key(replenished_entry.coord))
-                            .map(|entry| entry.chunk_budget_remaining_hash.clone())
-                            .unwrap_or_default(),
-                    });
-                }
-            }
-            ChainResourceDeltaSource::Replenish
-        }
-        WorldEventKind::CompoundMined {
-            location_id,
-            extracted_elements,
-            ..
-        } => {
-            let chunk = manifest.generated_chunks.values().find(|entry| {
-                entry
-                    .fragment_refs
-                    .iter()
-                    .any(|fragment_ref| fragment_ref.location_id == *location_id)
-            })?;
-            for (element, amount) in extracted_elements {
-                let resulting_remaining = chunk
-                    .remaining_by_element_g
-                    .get(element)
-                    .copied()
-                    .unwrap_or(0);
-                entries.push(ChainResourceDeltaEntry::ChunkResource {
-                    coord: chunk.coord,
-                    element: *element,
-                    total_delta_g: 0,
-                    remaining_delta_g: amount.saturating_neg(),
-                    resulting_remaining_g: resulting_remaining,
-                    remaining_after_hash: chunk.chunk_budget_remaining_hash.clone(),
-                    chunk_remaining_after_hash: chunk.chunk_budget_remaining_hash.clone(),
-                });
-            }
-            ChainResourceDeltaSource::MineCompound
+        WorldEventKind::FragmentsReplenished { .. } | WorldEventKind::CompoundMined { .. } => {
+            return None;
         }
         _ => return None,
     };
@@ -816,7 +762,7 @@ fn delta_from_simulator_event(
             event_sequence: event.id,
             action_sequence: 0,
         },
-        base_manifest_hash: event_base_manifest_hash(manifest, event),
+        base_manifest_hash: chunk_generation_base_manifest_hash(manifest, event),
         resulting_manifest_hash: manifest.manifest_hash.clone(),
         block_height: context.manifest_height,
         commit_block_hash: context.commit_block_hash.map(ToOwned::to_owned),
@@ -827,14 +773,14 @@ fn delta_from_simulator_event(
     })
 }
 
-fn event_base_manifest_hash(manifest: &ChainResourceManifest, event: &WorldEvent) -> String {
-    if matches!(
-        event.kind,
-        WorldEventKind::ChunkGenerated {
-            cause: ChunkGenerationCause::Init,
-            ..
-        }
-    ) {
+fn chunk_generation_base_manifest_hash(
+    manifest: &ChainResourceManifest,
+    event: &WorldEvent,
+) -> String {
+    let WorldEventKind::ChunkGenerated { coord, cause, .. } = &event.kind else {
+        return manifest.manifest_hash.clone();
+    };
+    if matches!(cause, ChunkGenerationCause::Init) {
         return ChainResourceManifest::empty_at_height(
             manifest.world_id.clone(),
             manifest.world_seed,
@@ -843,8 +789,9 @@ fn event_base_manifest_hash(manifest: &ChainResourceManifest, event: &WorldEvent
         .canonical_hash();
     }
     let mut base = manifest.clone();
+    base.generated_chunks.remove(&chunk_key(*coord));
     base.manifest_height = manifest.manifest_height.saturating_sub(1);
-    base.manifest_hash = base.canonical_hash();
+    base.refresh_hashes();
     base.manifest_hash
 }
 
@@ -915,5 +862,86 @@ mod tests {
         assert_eq!(delta.chain_id, "unbound");
         assert_eq!(delta.ordering_key.height, 9);
         assert!(delta.is_schema_current());
+    }
+
+    #[test]
+    fn chunk_generation_delta_base_hash_uses_pre_event_manifest() {
+        let coord = ChunkCoord { x: 1, y: 2, z: 3 };
+        let mut budget = crate::simulator::ChunkResourceBudget::default();
+        budget
+            .total_by_element_g
+            .insert(FragmentElementKind::Iron, 100);
+        budget
+            .remaining_by_element_g
+            .insert(FragmentElementKind::Iron, 80);
+
+        let mut manifest = ChainResourceManifest::empty_at_height("world-a", 42, 3);
+        manifest.chain_id = "chain-a".to_string();
+        manifest.manifest_height = 3;
+        manifest.generated_chunks.insert(
+            chunk_key(coord),
+            ChainChunkResourceManifestEntry {
+                schema_version: CHAIN_RESOURCE_MANIFEST_SCHEMA_V1.to_string(),
+                world_id: "world-a".to_string(),
+                chain_id: "chain-a".to_string(),
+                world_seed: 42,
+                chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_V1.to_string(),
+                coord,
+                seed: 99,
+                chunk_status: ChainChunkResourceStatus::Committed,
+                fragment_count: 0,
+                block_count: 0,
+                fragment_refs: Vec::new(),
+                chunk_budget_total_hash: hash_json(&budget.total_by_element_g).unwrap(),
+                chunk_budget_remaining_hash: hash_json(&budget.remaining_by_element_g).unwrap(),
+                total_by_element_g: budget.total_by_element_g.clone(),
+                remaining_by_element_g: budget.remaining_by_element_g.clone(),
+                commit_ref: ChainResourceCommitRef {
+                    height: 3,
+                    block_hash: Some("block-3".to_string()),
+                    event_id: Some(7),
+                    action_id: None,
+                },
+                manifest_hash: String::new(),
+            },
+        );
+        manifest.refresh_hashes();
+
+        let mut expected_base = manifest.clone();
+        expected_base.generated_chunks.remove(&chunk_key(coord));
+        expected_base.manifest_height = 2;
+        expected_base.refresh_hashes();
+
+        let event = WorldEvent {
+            id: 7,
+            time: 9,
+            kind: WorldEventKind::ChunkGenerated {
+                coord,
+                seed: 99,
+                fragment_count: 0,
+                block_count: 0,
+                chunk_budget: budget,
+                cause: ChunkGenerationCause::Action,
+            },
+            runtime_event: None,
+        };
+        let delta = delta_from_simulator_event(
+            ChainResourceDerivationContext {
+                world_id: "world-a",
+                chain_id: "chain-a",
+                genesis_ref: None,
+                created_at_height: 0,
+                manifest_height: 3,
+                commit_block_hash: Some("block-3"),
+                tick: 9,
+            },
+            &manifest,
+            &event,
+        )
+        .expect("chunk delta");
+
+        assert_eq!(delta.base_manifest_hash, expected_base.manifest_hash);
+        assert_ne!(delta.base_manifest_hash, manifest.manifest_hash);
+        assert_eq!(delta.resulting_manifest_hash, manifest.manifest_hash);
     }
 }
