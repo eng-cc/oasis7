@@ -45,6 +45,8 @@ class MockProviderHandler(BaseHTTPRequestHandler):
                     "version": "0.1.0",
                     "protocol_version": "world-simulator-provider-loopback-http-v1",
                     "capabilities": ["decision", "feedback"],
+                    "chain_resource_manifest_schema_version": "oasis7.world_resource_manifest.v1",
+                    "chain_resource_delta_schema_version": "oasis7.world_resource_delta.v1",
                     "supported_action_sets": ["wait", "move_agent"],
                 }
             )
@@ -184,6 +186,14 @@ class ProviderBridgeContractSmokeTests(unittest.TestCase):
 
         self.assertEqual(summary["status"], "pass")
         self.assertEqual(summary["health_status"], "degraded")
+        self.assertEqual(
+            summary["chain_resource_manifest_schema_version"],
+            "oasis7.world_resource_manifest.v1",
+        )
+        self.assertEqual(
+            summary["chain_resource_delta_schema_version"],
+            "oasis7.world_resource_delta.v1",
+        )
         self.assertEqual(summary["decision_successes"], 1)
         self.assertEqual(summary["decisions"][0]["provider_error_code"], None)
         self.assertTrue(

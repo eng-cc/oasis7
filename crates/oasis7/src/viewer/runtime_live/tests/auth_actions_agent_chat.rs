@@ -94,6 +94,8 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
                     body: serde_json::json!({
                         "provider_id": "provider_local_bridge",
                         "capabilities": ["decision", "feedback", "agent_chat"],
+                        "chain_resource_manifest_schema_version": "oasis7.world_resource_manifest.v1",
+                        "chain_resource_delta_schema_version": "oasis7.world_resource_delta.v1",
                         "supported_action_sets": ["phase1_low_frequency"]
                     })
                     .to_string(),
@@ -240,6 +242,8 @@ fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() 
                     body: serde_json::json!({
                         "provider_id": "phase1_provider",
                         "capabilities": ["decision", "feedback"],
+                        "chain_resource_manifest_schema_version": "oasis7.world_resource_manifest.v1",
+                        "chain_resource_delta_schema_version": "oasis7.world_resource_delta.v1",
                         "supported_action_sets": ["phase1_low_frequency"]
                     })
                     .to_string(),

@@ -111,6 +111,9 @@ active_required_lanes = [
     "reset_policy_announced",
     "runtime_bootstrap",
     "claims_boundary_review",
+    "world_resource_provenance_ready",
+    "provider_resource_provenance_ready",
+    "resource_delta_replay_ready",
 ]
 required_lanes = list(active_required_lanes)
 status_rank = {"pass": 0, "partial": 1, "block": 2}

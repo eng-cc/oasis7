@@ -12,7 +12,7 @@ use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn temp_dir(label: &str) -> PathBuf {
@@ -384,9 +384,10 @@ fn status_payload_exposes_loaded_network_tier_manifest() {
         false,
     )
     .expect("recommendation");
+    let execution_world_dir = dir.join("execution-world");
     let payload = build_chain_status_payload(
         snapshot,
-        Path::new("/tmp/execution-world"),
+        execution_world_dir.as_path(),
         Some(&loaded),
         &recommendation,
         None,
@@ -446,6 +447,27 @@ fn status_payload_exposes_loaded_network_tier_manifest() {
     assert_eq!(tier.tier, "public_testnet");
     assert_eq!(tier.bootstrap_peer_count, 2);
     assert_eq!(tier.token_symbol, "OC");
+    assert_eq!(
+        payload.world_resource.schema_version,
+        oasis7::runtime::CHAIN_RESOURCE_MANIFEST_SCHEMA_V1
+    );
+    assert_eq!(
+        payload.world_resource.delta_schema_version,
+        oasis7::runtime::CHAIN_RESOURCE_DELTA_SCHEMA_V1
+    );
+    assert_eq!(
+        payload.world_resource.chunk_generation_schema_version,
+        oasis7::runtime::CHUNK_GENERATION_SCHEMA_V1
+    );
+    assert_eq!(payload.world_resource.chain_id, "oasis7-public_testnet");
+    assert_eq!(payload.world_resource.readiness_status, "not_ready");
+    assert!(
+        payload
+            .world_resource
+            .failed_gates
+            .iter()
+            .any(|gate| gate.starts_with("world_resource_snapshot_unavailable"))
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

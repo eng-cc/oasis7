@@ -582,6 +582,49 @@ fn initialize_kernel_records_chunk_generated_init_events() {
         .count();
 
     assert!(init_chunk_events > 0);
+    let snapshot = kernel.snapshot();
+    assert!(snapshot.chain_resource_manifest.is_schema_current());
+    assert!(!snapshot.chain_resource_manifest.generated_chunks.is_empty());
+    assert!(snapshot.latest_chain_resource_delta.is_schema_current());
+    assert!(!snapshot.latest_chain_resource_delta.entries.is_empty());
+    assert_eq!(
+        snapshot.latest_chain_resource_delta.resulting_manifest_hash,
+        snapshot.chain_resource_manifest.manifest_hash
+    );
+}
+
+#[test]
+fn chain_resource_snapshot_records_generated_chunk_and_latest_delta() {
+    let mut config = WorldConfig::default();
+    config.asteroid_fragment.base_density_per_km3 = 0.0;
+
+    let mut init = WorldInitConfig::default();
+    init.seed = 73;
+    init.agents.count = 1;
+
+    let (kernel, _) = initialize_kernel(config, init).expect("kernel init");
+    let snapshot = kernel.snapshot();
+    let journal = kernel.journal_snapshot();
+    let restored = WorldKernel::from_snapshot(snapshot.clone(), journal).expect("restore ok");
+    let restored_snapshot = restored.snapshot();
+
+    assert_eq!(
+        snapshot.chain_resource_manifest.generated_chunks,
+        restored_snapshot.chain_resource_manifest.generated_chunks
+    );
+    assert_eq!(
+        snapshot.latest_chain_resource_delta.entries,
+        restored_snapshot.latest_chain_resource_delta.entries
+    );
+    assert!(
+        snapshot
+            .chain_resource_manifest
+            .generated_chunks
+            .values()
+            .all(|entry| !entry.chunk_budget_total_hash.is_empty()
+                && !entry.chunk_budget_remaining_hash.is_empty()
+                && entry.commit_ref.event_id.is_some())
+    );
 }
 
 #[test]

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use super::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::error::WorldError;
@@ -60,6 +61,10 @@ impl Default for SnapshotCatalog {
 pub struct Snapshot {
     pub snapshot_catalog: SnapshotCatalog,
     pub manifest: Manifest,
+    #[serde(default)]
+    pub chain_resource_manifest: ChainResourceManifest,
+    #[serde(default)]
+    pub latest_chain_resource_delta: Option<ChainResourceDelta>,
     #[serde(default)]
     pub module_registry: ModuleRegistry,
     #[serde(default)]

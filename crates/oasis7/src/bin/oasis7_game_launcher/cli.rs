@@ -156,6 +156,17 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 }
                 options.chain_replication_bootstrap_peers.push(value);
             }
+            "--chain-local-standalone-test" => {
+                options.chain_local_standalone_test = true;
+                options.chain_p2p_user_mode = "private_safe".to_string();
+                options.chain_p2p_accept_public_entry = false;
+                options.chain_replication_bootstrap_peers.clear();
+                explicit_chain_replication_bootstrap_peers = true;
+                options.chain_node_auto_attest_all_validators = true;
+                options.chain_pos_slot_duration_ms = 1_000;
+                options.chain_pos_ticks_per_slot = 1;
+                options.chain_pos_proposal_tick_phase = 0;
+            }
             "--chain-node-tick-ms" => {
                 let raw = parse_required_value(&mut iter, "--chain-node-tick-ms")?;
                 options.chain_node_tick_ms = raw.parse::<u64>().map_err(|_| {
@@ -220,6 +231,12 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 validate_chain_node_validator(value.as_str())?;
                 options.chain_node_validators.push(value);
             }
+            "--chain-node-auto-attest-all" => {
+                options.chain_node_auto_attest_all_validators = true;
+            }
+            "--chain-node-no-auto-attest-all" => {
+                options.chain_node_auto_attest_all_validators = false;
+            }
             _ => return Err(format!("unknown option: {arg}")),
         }
     }
@@ -266,6 +283,11 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
         let _ = parse_chain_link_policy(options.chain_link_policy.as_str())?;
         if options.chain_node_id.trim().is_empty() {
             return Err("--chain-node-id requires a non-empty value".to_string());
+        }
+        if options.chain_local_standalone_test && options.chain_node_validators.is_empty() {
+            options
+                .chain_node_validators
+                .push(format!("{}:100", options.chain_node_id.trim()));
         }
         parse_chain_node_role(options.chain_node_role.as_str())?;
         if options.chain_network_tier_manifest.trim().is_empty()
@@ -472,6 +494,8 @@ Options:\n\
                                keep conservative fallback when auto mode suggests public entry (default)\n\
   --chain-replication-network-peer <multiaddr>\n\
                                oasis7_chain_runtime replication bootstrap peer multiaddr (repeatable; first explicit value replaces bundled defaults)\n\
+  --chain-local-standalone-test\n\
+                               do not join external testnet peers; configure a self-validating single-node local commit loop\n\
   --chain-node-tick-ms <n>     oasis7_chain_runtime worker poll/fallback interval ms (default: {DEFAULT_CHAIN_NODE_TICK_MS})\n\
   --chain-pos-slot-duration-ms <n>\n\
                                oasis7_chain_runtime PoS slot duration ms (default: {DEFAULT_CHAIN_POS_SLOT_DURATION_MS})\n\
@@ -488,6 +512,9 @@ Options:\n\
   --chain-pos-max-past-slot-lag <n>\n\
                                oasis7_chain_runtime max accepted stale slot lag (default: {DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG})\n\
   --chain-node-validator <v:s> oasis7_chain_runtime validator (repeatable)\n\
+  --chain-node-auto-attest-all enable local auto-attestation for configured validators\n\
+  --chain-node-no-auto-attest-all\n\
+                               disable local auto-attestation (default)\n\
   --with-llm                   enable llm mode (default; required for gameplay)\n\
   --auto-play                  start oasis7_viewer_live gameplay/world progression on connect\n\
   --allow-debug-scenario       allow seeded debug scenarios such as llm_bootstrap\n\

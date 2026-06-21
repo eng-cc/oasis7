@@ -41,6 +41,8 @@ pub(crate) struct ProviderSnapshot {
     pub(crate) name: String,
     pub(crate) version: String,
     pub(crate) protocol_version: String,
+    pub(crate) chain_resource_manifest_schema_version: Option<String>,
+    pub(crate) chain_resource_delta_schema_version: Option<String>,
     pub(crate) capabilities: Vec<String>,
     pub(crate) supported_action_sets: Vec<String>,
     pub(crate) compatibility_status: ProviderCompatibilityStatus,
@@ -112,11 +114,19 @@ impl ProviderCheckStatus {
         match self {
             Self::Ready(snapshot) | Self::Degraded(snapshot) | Self::Incompatible(snapshot) => {
                 Some(format!(
-                    "provider_id={} name={} version={} protocol={} compatibility_status={} status={} queue_depth={} capabilities={} supported_action_sets={} check_latency_ms={{info:{}, health:{}, total:{}}} last_error={} fallback_reason={}",
+                    "provider_id={} name={} version={} protocol={} world_resource_manifest_schema={} world_resource_delta_schema={} compatibility_status={} status={} queue_depth={} capabilities={} supported_action_sets={} check_latency_ms={{info:{}, health:{}, total:{}}} last_error={} fallback_reason={}",
                     snapshot.provider_id,
                     snapshot.name,
                     snapshot.version,
                     snapshot.protocol_version,
+                    snapshot
+                        .chain_resource_manifest_schema_version
+                        .as_deref()
+                        .unwrap_or("none"),
+                    snapshot
+                        .chain_resource_delta_schema_version
+                        .as_deref()
+                        .unwrap_or("none"),
                     snapshot.compatibility_status.as_str(),
                     snapshot.status,
                     snapshot

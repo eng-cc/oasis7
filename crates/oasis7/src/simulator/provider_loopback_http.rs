@@ -16,6 +16,8 @@ pub const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 pub const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
 pub const PROVIDER_PHASE1_ACTION_SET_ALIAS: &str = "phase1_low_frequency";
 const PROVIDER_PHASE1_REQUIRED_CAPABILITIES: &[&str] = &["decision", "feedback"];
+const PROVIDER_WORLD_RESOURCE_MANIFEST_SCHEMA_V1: &str = "oasis7.world_resource_manifest.v1";
+const PROVIDER_WORLD_RESOURCE_DELTA_SCHEMA_V1: &str = "oasis7.world_resource_delta.v1";
 const PROVIDER_PHASE1_REQUIRED_ACTIONS: &[&str] = &[
     "wait",
     "wait_ticks",
@@ -38,6 +40,10 @@ pub struct ProviderInfo {
     pub capabilities: Vec<String>,
     #[serde(default)]
     pub supported_action_sets: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_resource_manifest_schema_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_resource_delta_schema_version: Option<String>,
 }
 
 impl ProviderInfo {
@@ -78,6 +84,8 @@ pub struct ProviderCompatibilityReport {
     pub missing_capabilities: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub missing_supported_actions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_schema_errors: Vec<String>,
 }
 
 pub fn provider_phase1_required_capabilities() -> &'static [&'static str] {
@@ -92,6 +100,20 @@ pub fn evaluate_provider_compatibility(
     info: &ProviderInfo,
     health: Option<&ProviderHealth>,
 ) -> ProviderCompatibilityReport {
+    let resource_schema_errors = provider_resource_schema_errors(info);
+    if !resource_schema_errors.is_empty() {
+        return ProviderCompatibilityReport {
+            status: ProviderCompatibilityStatus::Incompatible,
+            fallback_reason: Some(format!(
+                "unsupported_world_resource_schema:{}",
+                resource_schema_errors.join(",")
+            )),
+            missing_capabilities: Vec::new(),
+            missing_supported_actions: Vec::new(),
+            resource_schema_errors,
+        };
+    }
+
     let missing_capabilities = PROVIDER_PHASE1_REQUIRED_CAPABILITIES
         .iter()
         .filter(|required| !contains_trimmed_value(info.capabilities.as_slice(), required))
@@ -106,6 +128,7 @@ pub fn evaluate_provider_compatibility(
             )),
             missing_capabilities,
             missing_supported_actions: Vec::new(),
+            resource_schema_errors: Vec::new(),
         };
     }
 
@@ -132,6 +155,7 @@ pub fn evaluate_provider_compatibility(
             )),
             missing_capabilities: Vec::new(),
             missing_supported_actions,
+            resource_schema_errors: Vec::new(),
         };
     }
 
@@ -177,7 +201,27 @@ pub fn evaluate_provider_compatibility(
         fallback_reason,
         missing_capabilities: Vec::new(),
         missing_supported_actions: Vec::new(),
+        resource_schema_errors: Vec::new(),
     }
+}
+
+fn provider_resource_schema_errors(info: &ProviderInfo) -> Vec<String> {
+    let mut errors = Vec::new();
+    match info.chain_resource_manifest_schema_version.as_deref() {
+        Some(PROVIDER_WORLD_RESOURCE_MANIFEST_SCHEMA_V1) => {}
+        Some(value) if !value.trim().is_empty() => {
+            errors.push(format!("world_resource_manifest_schema={value}"))
+        }
+        _ => errors.push("missing_world_resource_manifest_schema".to_string()),
+    }
+    match info.chain_resource_delta_schema_version.as_deref() {
+        Some(PROVIDER_WORLD_RESOURCE_DELTA_SCHEMA_V1) => {}
+        Some(value) if !value.trim().is_empty() => {
+            errors.push(format!("world_resource_delta_schema={value}"))
+        }
+        _ => errors.push("missing_world_resource_delta_schema".to_string()),
+    }
+    errors
 }
 
 fn contains_trimmed_value(values: &[String], expected: &str) -> bool {

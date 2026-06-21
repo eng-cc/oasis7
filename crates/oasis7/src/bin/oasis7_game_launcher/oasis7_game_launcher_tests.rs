@@ -110,6 +110,8 @@ fn parse_options_defaults() {
     assert_eq!(options.chain_pos_slot_clock_genesis_unix_ms, None);
     assert_eq!(options.chain_pos_max_past_slot_lag, 256);
     assert_eq!(options.chain_world_id, None);
+    assert!(!options.chain_local_standalone_test);
+    assert!(!options.chain_node_auto_attest_all_validators);
 }
 
 #[test]
@@ -181,6 +183,7 @@ fn parse_options_accepts_overrides() {
             "32",
             "--chain-node-validator",
             "chain-a:55",
+            "--chain-node-auto-attest-all",
             "--with-llm",
             "--auto-play",
             "--agent-decision-source",
@@ -245,6 +248,7 @@ fn parse_options_accepts_overrides() {
         options.chain_node_validators,
         vec!["chain-a:55".to_string()]
     );
+    assert!(options.chain_node_auto_attest_all_validators);
     assert!(options.with_llm);
     assert_eq!(
         options.agent_decision_source,
@@ -785,6 +789,8 @@ fn query_runtime_bound_players_reads_snapshot_bindings() {
             model,
             runtime_snapshot: None,
             player_gameplay: None,
+            chain_resource_manifest: Default::default(),
+            latest_chain_resource_delta: Default::default(),
             chunk_runtime: Default::default(),
             intel_ttl_ticks: 0,
             next_event_id: 0,
@@ -925,6 +931,44 @@ fn build_oasis7_chain_runtime_args_derives_world_id_from_explicit_scenario() {
     let args = build_oasis7_chain_runtime_args(&options);
     assert!(args.contains(&"--world-id".to_string()));
     assert!(args.contains(&"live-sandbox".to_string()));
+}
+
+#[test]
+fn parse_options_local_standalone_test_builds_self_validating_private_chain() {
+    let options = parse_options(
+        [
+            "--chain-node-id",
+            "local-node-a",
+            "--deployment-mode",
+            "trusted_local_only",
+            "--allow-trusted-local-playtest",
+            "--chain-local-standalone-test",
+            "--no-open-browser",
+        ]
+        .into_iter(),
+    )
+    .expect("local standalone profile should parse");
+
+    assert!(options.chain_local_standalone_test);
+    assert_eq!(options.chain_p2p_user_mode, "private_safe");
+    assert!(!options.chain_p2p_accept_public_entry);
+    assert!(options.chain_replication_bootstrap_peers.is_empty());
+    assert!(options.chain_node_auto_attest_all_validators);
+    assert_eq!(options.chain_pos_slot_duration_ms, 1_000);
+    assert_eq!(options.chain_pos_ticks_per_slot, 1);
+    assert_eq!(options.chain_pos_proposal_tick_phase, 0);
+    assert_eq!(
+        options.chain_node_validators,
+        vec!["local-node-a:100".to_string()]
+    );
+
+    let args = build_oasis7_chain_runtime_args(&options);
+    assert!(args.contains(&"--node-auto-attest-all".to_string()));
+    assert!(args.contains(&"--node-validator".to_string()));
+    assert!(args.contains(&"local-node-a:100".to_string()));
+    assert!(args.contains(&"--config".to_string()));
+    assert!(args.contains(&"output/chain-runtime/local-node-a/config.toml".to_string()));
+    assert!(!args.contains(&"--replication-network-peer".to_string()));
 }
 
 #[test]

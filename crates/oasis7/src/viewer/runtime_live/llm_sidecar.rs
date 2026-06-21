@@ -887,6 +887,8 @@ impl RuntimeLlmSidecar {
             model,
             runtime_snapshot: Some(runtime_snapshot),
             player_gameplay: None,
+            chain_resource_manifest: Default::default(),
+            latest_chain_resource_delta: Default::default(),
             chunk_runtime: ChunkRuntimeConfig::default(),
             intel_ttl_ticks: 0,
             next_event_id,

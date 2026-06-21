@@ -685,6 +685,40 @@ fn persist_writes_sidecar_generation_index_and_pinset() {
 }
 
 #[test]
+fn persist_runtime_snapshot_records_committed_resource_chunk_and_delta() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-resource-chunk".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register agent");
+
+    let dir = temp_dir("persist-runtime-resource-chunk");
+    world.save_to_dir(&dir).expect("save world");
+
+    let snapshot = Snapshot::load_json(dir.join("snapshot.json")).expect("load snapshot");
+    assert!(snapshot.chain_resource_manifest.is_schema_current());
+    assert_eq!(snapshot.chain_resource_manifest.generated_chunks.len(), 1);
+    assert!(
+        snapshot
+            .chain_resource_manifest
+            .generated_chunks
+            .values()
+            .any(|chunk| chunk.chunk_status == ChainChunkResourceStatus::Committed)
+    );
+    let delta = snapshot
+        .latest_chain_resource_delta
+        .expect("resource delta");
+    assert!(delta.is_schema_current());
+    assert!(
+        !delta.entries.is_empty(),
+        "runtime resource delta should expose a non-empty chunk commit stream"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn persist_sidecar_generation_record_points_to_generation_local_payloads() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {

@@ -1,0 +1,28 @@
+task_uid: task_a0e15f2d5d0547a3a13c93caab49b611
+title: "chain-side manifest delta runtime readiness"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-world-simulator-chain-manifest-delta-readiness
+execution_log_path: .pm/tasks/task_a0e15f2d5d0547a3a13c93caab49b611.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/world-simulator.prd.md
+  - doc/world-runtime.prd.md
+  - doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md
+related_prd: []
+acceptance:
+  - "Define canonical chain-side manifest/delta schema for world resources."
+  - "Wire runtime snapshot/provider/testnet readiness to the new chain-side schema without ambiguous fallback modes."
+  - "Add focused tests or docs proving schema/readiness behavior."
+handoff_to: []
+updated_at: 2026-06-22T01:01:03+08:00
+last_started_at: 2026-06-21T10:08:10+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/ci-tests.sh required"
+last_verified_at: 2026-06-22T01:00:59+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-22T01:01:02+08:00

@@ -5,6 +5,7 @@ use std::path::Path;
 use super::super::persist::{PersistError, WorldJournal, WorldSnapshot};
 use super::super::types::{CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION};
 use super::WorldKernel;
+use crate::runtime::{ChainResourceDelta, ChainResourceDerivationContext, ChainResourceManifest};
 
 impl WorldKernel {
     fn restore_persisted_state(
@@ -29,6 +30,27 @@ impl WorldKernel {
     }
 
     pub fn snapshot(&self) -> WorldSnapshot {
+        self.snapshot_with_chain_resource_context(
+            ChainResourceDerivationContext::simulator_default(self.time),
+        )
+    }
+
+    pub fn snapshot_with_chain_resource_context(
+        &self,
+        context: ChainResourceDerivationContext<'_>,
+    ) -> WorldSnapshot {
+        let chain_resource_manifest = ChainResourceManifest::from_simulator_state(
+            context,
+            &self.model,
+            &self.config,
+            &self.chunk_runtime,
+            &self.journal,
+        );
+        let latest_chain_resource_delta = ChainResourceDelta::latest_from_simulator_journal(
+            context,
+            &chain_resource_manifest,
+            &self.journal,
+        );
         WorldSnapshot {
             version: SNAPSHOT_VERSION,
             chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
@@ -37,6 +59,8 @@ impl WorldKernel {
             model: self.model.clone(),
             runtime_snapshot: None,
             player_gameplay: None,
+            chain_resource_manifest,
+            latest_chain_resource_delta,
             chunk_runtime: self.chunk_runtime.clone(),
             intel_ttl_ticks: self.intel_ttl_ticks,
             next_event_id: self.next_event_id,
@@ -103,11 +127,23 @@ impl WorldKernel {
     }
 
     pub fn save_to_dir(&self, dir: impl AsRef<Path>) -> Result<(), PersistError> {
+        self.save_to_dir_with_chain_resource_context(
+            dir,
+            ChainResourceDerivationContext::simulator_default(self.time),
+        )
+    }
+
+    pub fn save_to_dir_with_chain_resource_context(
+        &self,
+        dir: impl AsRef<Path>,
+        context: ChainResourceDerivationContext<'_>,
+    ) -> Result<(), PersistError> {
         let dir = dir.as_ref();
         fs::create_dir_all(dir)?;
         let snapshot_path = dir.join("snapshot.json");
         let journal_path = dir.join("journal.json");
-        self.snapshot().save_json(&snapshot_path)?;
+        self.snapshot_with_chain_resource_context(context)
+            .save_json(&snapshot_path)?;
         self.journal_snapshot().save_json(&journal_path)?;
         Ok(())
     }

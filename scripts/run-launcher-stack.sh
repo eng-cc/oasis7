@@ -22,6 +22,9 @@ ALLOW_TRUSTED_LOCAL_PLAYTEST="${OASIS7_ALLOW_TRUSTED_LOCAL_PLAYTEST:-0}"
 CHAIN_LINK_POLICY="${OASIS7_CHAIN_LINK_POLICY:-}"
 CHAIN_NODE_ID=""
 CHAIN_STATUS_BIND_ADDR=""
+CHAIN_LOCAL_STANDALONE_TEST="${OASIS7_CHAIN_LOCAL_STANDALONE_TEST:-0}"
+CHAIN_NODE_AUTO_ATTEST_ALL="${OASIS7_CHAIN_NODE_AUTO_ATTEST_ALL:-0}"
+CHAIN_NODE_VALIDATORS=()
 BUNDLE_DIR=""
 VIEWER_STATIC_DIR_EXPLICIT="0"
 ALLOW_STALE_BUNDLE="0"
@@ -84,6 +87,14 @@ Options:
   --chain-node-id <id>     Override chain node id (default: fresh per run)
   --chain-status-bind <a:p> Override chain status HTTP bind (default: web-bind port + 110)
   --chain-link-policy <p>  enforcing or shadow (default: shadow for trusted local playtest, otherwise enforcing)
+  --chain-local-standalone-test
+                           Start a no-testnet single-node chain profile for local submit/commit/snapshot testing
+  --chain-node-validator <v:s>
+                           Add a local validator for oasis7_chain_runtime (repeatable)
+  --chain-node-auto-attest-all
+                           Enable local auto-attestation for configured validators
+  --chain-node-no-auto-attest-all
+                           Disable local auto-attestation
   --output-dir <path>      Override runtime log/artifact output directory
   --run-id <id>            Override logical run id used for output dir / chain node id defaults
   --meta-file <path>       Override metadata file path (default: <output-dir>/session.meta)
@@ -230,6 +241,23 @@ while [[ $# -gt 0 ]]; do
       CHAIN_LINK_POLICY="${2:-}"
       shift 2
       ;;
+    --chain-local-standalone-test)
+      CHAIN_LOCAL_STANDALONE_TEST="1"
+      CHAIN_NODE_AUTO_ATTEST_ALL="1"
+      shift
+      ;;
+    --chain-node-validator)
+      CHAIN_NODE_VALIDATORS+=("${2:-}")
+      shift 2
+      ;;
+    --chain-node-auto-attest-all)
+      CHAIN_NODE_AUTO_ATTEST_ALL="1"
+      shift
+      ;;
+    --chain-node-no-auto-attest-all)
+      CHAIN_NODE_AUTO_ATTEST_ALL="0"
+      shift
+      ;;
     --with-llm)
       ENABLE_LLM="1"
       shift
@@ -368,7 +396,9 @@ case "$AGENT_CHAT_ECHO_NORMALIZED" in
 esac
 
 if [[ -z "$CHAIN_LINK_POLICY" ]]; then
-  if [[ "$DEPLOYMENT_MODE" == "trusted_local_only" && "$ALLOW_TRUSTED_LOCAL_PLAYTEST" == "1" ]]; then
+  if [[ "$CHAIN_LOCAL_STANDALONE_TEST" == "1" ]]; then
+    CHAIN_LINK_POLICY="enforcing"
+  elif [[ "$DEPLOYMENT_MODE" == "trusted_local_only" && "$ALLOW_TRUSTED_LOCAL_PLAYTEST" == "1" ]]; then
     CHAIN_LINK_POLICY="shadow"
   else
     CHAIN_LINK_POLICY="enforcing"
@@ -728,6 +758,19 @@ if [[ "$CHAIN_ENABLED" == "1" ]]; then
     --chain-status-bind "$CHAIN_STATUS_BIND_ADDR"
     --chain-link-policy "$CHAIN_LINK_POLICY"
   )
+  if [[ "$CHAIN_LOCAL_STANDALONE_TEST" == "1" ]]; then
+    WORLD_ARGS+=(--chain-local-standalone-test)
+  fi
+  if [[ "$CHAIN_NODE_AUTO_ATTEST_ALL" == "1" ]]; then
+    WORLD_ARGS+=(--chain-node-auto-attest-all)
+  else
+    WORLD_ARGS+=(--chain-node-no-auto-attest-all)
+  fi
+  if [[ "${#CHAIN_NODE_VALIDATORS[@]}" -gt 0 ]]; then
+    for validator in "${CHAIN_NODE_VALIDATORS[@]}"; do
+      WORLD_ARGS+=(--chain-node-validator "$validator")
+    done
+  fi
 else
   WORLD_ARGS+=(--chain-disable)
 fi

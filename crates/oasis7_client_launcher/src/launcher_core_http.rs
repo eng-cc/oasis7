@@ -105,6 +105,8 @@ pub(crate) fn check_provider_http_provider(
         protocol_version: info
             .protocol_version
             .unwrap_or_else(|| "unknown".to_string()),
+        chain_resource_manifest_schema_version: info.chain_resource_manifest_schema_version,
+        chain_resource_delta_schema_version: info.chain_resource_delta_schema_version,
         capabilities: info.capabilities,
         supported_action_sets: info.supported_action_sets,
         compatibility_status: compatibility.status.into(),

@@ -15,6 +15,7 @@ use super::types::{
 use super::world_model::{WorldConfig, WorldModel};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::Snapshot as RuntimeSnapshot;
+use crate::runtime::{ChainResourceDelta, ChainResourceManifest};
 #[cfg(target_arch = "wasm32")]
 use serde_json::Value as RuntimeSnapshot;
 
@@ -395,6 +396,10 @@ pub struct WorldSnapshot {
     pub runtime_snapshot: Option<RuntimeSnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub player_gameplay: Option<PlayerGameplaySnapshot>,
+    #[serde(default)]
+    pub chain_resource_manifest: ChainResourceManifest,
+    #[serde(default)]
+    pub latest_chain_resource_delta: ChainResourceDelta,
     #[serde(default)]
     pub chunk_runtime: ChunkRuntimeConfig,
     #[serde(default)]

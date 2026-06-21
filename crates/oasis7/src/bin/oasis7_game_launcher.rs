@@ -184,6 +184,7 @@ struct CliOptions {
     chain_p2p_user_mode: String,
     chain_p2p_accept_public_entry: bool,
     chain_replication_bootstrap_peers: Vec<String>,
+    chain_local_standalone_test: bool,
     chain_node_tick_ms: u64,
     chain_pos_slot_duration_ms: u64,
     chain_pos_ticks_per_slot: u64,
@@ -191,6 +192,7 @@ struct CliOptions {
     chain_pos_adaptive_tick_scheduler_enabled: bool,
     chain_pos_slot_clock_genesis_unix_ms: Option<i64>,
     chain_pos_max_past_slot_lag: u64,
+    chain_node_auto_attest_all_validators: bool,
     chain_node_validators: Vec<String>,
 }
 
@@ -229,6 +231,7 @@ impl Default for CliOptions {
             chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
             chain_p2p_accept_public_entry: false,
             chain_replication_bootstrap_peers: default_chain_replication_bootstrap_peers_vec(),
+            chain_local_standalone_test: false,
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS,
             chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS,
             chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT,
@@ -236,6 +239,7 @@ impl Default for CliOptions {
             chain_pos_adaptive_tick_scheduler_enabled: false,
             chain_pos_slot_clock_genesis_unix_ms: None,
             chain_pos_max_past_slot_lag: DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG,
+            chain_node_auto_attest_all_validators: false,
             chain_node_validators: Vec::new(),
         }
     }
@@ -470,6 +474,15 @@ fn chain_execution_world_dir(node_id: &str) -> String {
         .into_owned()
 }
 
+fn chain_config_path(node_id: &str) -> String {
+    Path::new("output")
+        .join("chain-runtime")
+        .join(node_id)
+        .join("config.toml")
+        .to_string_lossy()
+        .into_owned()
+}
+
 fn missing_execution_world_persistence_files(world_dir: &Path) -> Vec<PathBuf> {
     ["snapshot.json", "journal.json"]
         .into_iter()
@@ -487,6 +500,8 @@ fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
         chain_world_id(options),
         "--status-bind".to_string(),
         options.chain_status_bind.clone(),
+        "--config".to_string(),
+        chain_config_path(options.chain_node_id.as_str()),
         "--execution-world-dir".to_string(),
         execution_world_dir,
         "--node-role".to_string(),
@@ -509,6 +524,11 @@ fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
         "--pos-max-past-slot-lag".to_string(),
         options.chain_pos_max_past_slot_lag.to_string(),
     ];
+    if options.chain_node_auto_attest_all_validators {
+        args.push("--node-auto-attest-all".to_string());
+    } else {
+        args.push("--node-no-auto-attest-all".to_string());
+    }
     if options.chain_network_tier_manifest.trim().is_empty() {
         args.push("--storage-profile".to_string());
         args.push(options.chain_storage_profile.as_str().to_string());

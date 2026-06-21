@@ -206,6 +206,12 @@ impl ProviderState {
                 "inspect_target".to_string(),
                 "simple_interact".to_string(),
             ],
+            chain_resource_manifest_schema_version: Some(
+                oasis7::runtime::CHAIN_RESOURCE_MANIFEST_SCHEMA_V1.to_string(),
+            ),
+            chain_resource_delta_schema_version: Some(
+                oasis7::runtime::CHAIN_RESOURCE_DELTA_SCHEMA_V1.to_string(),
+            ),
         }
     }
 

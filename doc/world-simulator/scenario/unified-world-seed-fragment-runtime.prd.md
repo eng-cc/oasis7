@@ -19,9 +19,10 @@
 - Out of scope: 新经济数值平衡、新资源品类、完整删除兼容坐标锚点、非 testnet/正式世界的调试 fixture 迁移。
 
 ## 接口 / 数据
-- `SeedManifest`: `world_id`、`world_seed`、`chunk_generation_schema_version`、`world_config_hash`、`genesis_ref` / `chain_id`。
-- `ChunkResourceManifest`: chunk coord、fragment ids、profile hash、budget total hash、budget remaining hash、commit ref。
-- `ResourceDelta`: action id、fragment id、material/resource key、delta amount、commit height/hash、replay ordering key。
+- `SeedManifest` / `oasis7.world_resource_manifest.v1`: `world_id`、`chain_id`、`genesis_ref`、`world_seed`、`chunk_generation_schema_version`、`world_config_hash`、`generation_algorithm_id/hash`、`created_at_height/block_hash`。
+- `ChunkResourceManifest` / `oasis7.world_resource_manifest.v1.generated_chunks`: chunk coord、`chunk_seed`、`chunk_status`（`committed` / `chain_pending` / `provisional` / `exhausted`）、fragment ids、profile hash、budget total hash、budget remaining hash、commit ref。
+- `ResourceDelta` / `oasis7.world_resource_delta.v1`: delta id、action/event id、ordering key、fragment/location/chunk ref、material/resource key、delta amount、commit height/hash、base/result manifest hash、actor/source/replay status。
+- `/v1/chain/status.world_resource`: testnet readiness 必须暴露 `schema_version`、`delta_schema_version`、`world_id`、`chain_id`、`world_seed`、`chunk_generation_schema_version`、seed/starter/latest commit hash、committed/provisional/pending delta counters、`readiness_status` 与 `failed_gates[]`。
 
 ## 里程碑
 - M1: 文档合同冻结，明确资源生成必须链上化。
