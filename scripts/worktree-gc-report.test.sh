@@ -16,6 +16,7 @@ CURRENT_WORKTREE="$TMPDIR/current task worktree"
 CLEAN_WORKTREE="$TMPDIR/task worktree with spaces"
 BROKEN_WORKTREE="$TMPDIR/broken-worktree"
 PRUNABLE_WORKTREE="$TMPDIR/prunable-worktree"
+PRUNABLE_MAIN_WORKTREE="$TMPDIR/prunable-main-worktree"
 
 mkdir -p "$TEST_REPO/.pm/tasks" "$TEST_REPO/.git" "$TMPDIR/bin" "$CURRENT_WORKTREE/scripts" "$CLEAN_WORKTREE/target" "$CLEAN_WORKTREE/crates/oasis7_viewer/node_modules" "$BROKEN_WORKTREE"
 cp "$ROOT_DIR/scripts/worktree-gc-report.sh" "$CURRENT_WORKTREE/scripts/worktree-gc-report.sh"
@@ -50,6 +51,7 @@ current_worktree="$CURRENT_WORKTREE"
 clean_worktree="$CLEAN_WORKTREE"
 broken_worktree="$BROKEN_WORKTREE"
 prunable_worktree="$PRUNABLE_WORKTREE"
+prunable_main_worktree="$PRUNABLE_MAIN_WORKTREE"
 
 if [[ "\${1:-}" == "--git-dir="* ]]; then
   shift
@@ -71,6 +73,7 @@ if [[ "\${1:-}" == "worktree" && "\${2:-}" == "list" && "\${3:-}" == "--porcelai
   printf 'worktree %s\nHEAD 2222222\nbranch refs/heads/task/review\$(rm)\n\n' "\$clean_worktree"
   printf 'worktree %s\nHEAD 3333333\nbranch refs/heads/task/broken\n\n' "\$broken_worktree"
   printf 'worktree %s\nHEAD 4444444\nbranch refs/heads/task/prunable\nprunable gitdir file points to non-existent location\n\n' "\$prunable_worktree"
+  printf 'worktree %s\nHEAD 6666666\nbranch refs/heads/main\nprunable gitdir file points to non-existent location\n\n' "\$prunable_main_worktree"
   exit 0
 fi
 
@@ -99,10 +102,11 @@ NO_FOOTPRINT_REPORT_FILE="$TMPDIR/worktree-gc-report-no-footprint.json"
 (cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json --footprint > "$REPORT_FILE")
 (cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json > "$NO_FOOTPRINT_REPORT_FILE")
 
-python3 - "$REPORT_FILE" "$NO_FOOTPRINT_REPORT_FILE" "$TEST_REPO" "$CURRENT_WORKTREE" "$CLEAN_WORKTREE" "$BROKEN_WORKTREE" "$PRUNABLE_WORKTREE" <<'PY'
+python3 - "$REPORT_FILE" "$NO_FOOTPRINT_REPORT_FILE" "$TEST_REPO" "$CURRENT_WORKTREE" "$CLEAN_WORKTREE" "$BROKEN_WORKTREE" "$PRUNABLE_WORKTREE" "$PRUNABLE_MAIN_WORKTREE" <<'PY'
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 
@@ -113,6 +117,7 @@ current_worktree = str(Path(sys.argv[4]).resolve())
 clean_worktree = str(Path(sys.argv[5]).resolve())
 broken_worktree = str(Path(sys.argv[6]).resolve())
 prunable_worktree = str(Path(sys.argv[7]).resolve())
+prunable_main_worktree = str(Path(sys.argv[8]).resolve())
 
 payload = json.loads(report_path.read_text(encoding="utf-8"))
 no_footprint_payload = json.loads(no_footprint_report_path.read_text(encoding="utf-8"))
@@ -121,10 +126,10 @@ if "footprint_included" in no_footprint_payload["summary"]:
 if any("footprint" in entry for entry in no_footprint_payload["entries"]):
     raise SystemExit("non-footprint entries should not gain footprint keys")
 expected_summary = {
-    "total_worktrees": 5,
-    "prunable_worktrees": 1,
+    "total_worktrees": 6,
+    "prunable_worktrees": 2,
     "dirty_worktrees": 0,
-    "cleanup_candidates": 2,
+    "cleanup_candidates": 3,
     "footprint_included": True,
 }
 for key, value in expected_summary.items():
@@ -172,6 +177,22 @@ if prunable_entry["cleanup_reasons"] != ["prunable_worktree"]:
     raise SystemExit(f"expected prunable cleanup reason: {prunable_entry}")
 if not prunable_entry["branch_delete_candidate"]:
     raise SystemExit(f"expected branch delete candidate for prunable worktree: {prunable_entry}")
+
+prunable_main_entry = entries[prunable_main_worktree]
+if prunable_main_entry["cleanup_reasons"] != ["prunable_worktree"]:
+    raise SystemExit(f"expected prunable main cleanup reason: {prunable_main_entry}")
+if prunable_main_entry["protected_cleanup_reasons"] != ["main_branch"]:
+    raise SystemExit(f"expected main branch protection reason: {prunable_main_entry}")
+if not prunable_main_entry["cleanup_candidate"]:
+    raise SystemExit(f"expected prunable main worktree to stay visible for cleanup: {prunable_main_entry}")
+if prunable_main_entry["branch_delete_candidate"]:
+    raise SystemExit(f"prunable main must not delete the main branch: {prunable_main_entry}")
+expected_prunable_main_remove = "git -C {} worktree remove -f {}".format(
+    shlex.quote(repo_root),
+    shlex.quote(prunable_main_worktree),
+)
+if prunable_main_entry["cleanup_commands"] != [expected_prunable_main_remove]:
+    raise SystemExit(f"unexpected prunable main cleanup commands: {prunable_main_entry['cleanup_commands']}")
 PY
 
 echo "worktree-gc-report.test: OK"

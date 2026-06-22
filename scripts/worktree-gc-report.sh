@@ -268,7 +268,7 @@ for record in records:
     ):
         cleanup_reasons.append("closed_pm_task")
 
-    cleanup_candidate = bool(cleanup_reasons) and not protected_cleanup_reasons
+    cleanup_candidate = bool(cleanup_reasons)
     if cleanup_candidate:
         cleanup_commands.append(
             shell_command(
@@ -281,7 +281,12 @@ for record in records:
                 str(resolved_path),
             )
         )
-        if branch and branch_attached_counts.get(branch, 0) == 1 and not is_current:
+        if (
+            branch
+            and branch_attached_counts.get(branch, 0) == 1
+            and not is_current
+            and not protected_cleanup_reasons
+        ):
             branch_delete_candidate = True
             cleanup_commands.append(
                 shell_command("git", "-C", str(repo_root), "branch", "-d", branch)
