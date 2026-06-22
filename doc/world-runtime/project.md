@@ -8,6 +8,7 @@
 - [x] viewer-live-integration-flake-burn-down (PRD-WORLD_RUNTIME-001) [test_tier_full]: 移除 `scripts/ci-tests.sh` 对 `live_server_accepts_client_and_emits_snapshot_and_event` 的历史 `skip + 单测重跑 + retry` 特殊路径，确认该 full-tier 集成回归在当前代码上已可直接并入 `cargo test -p oasis7 --tests --features "test_tier_full,wasmtime,viewer_live_integration"` 单次入口。 Trace: .pm/tasks/task_0a012bf9b85b417bb56d591969a07d36.yaml
 - [x] first-agent-claim-auto-grant (PRD-WORLD_RUNTIME-040) [test_tier_required]: 将首个 agent `slot-1` claim 从“申请/审核/批准后再发 grant”改为“专用池余额足够时在 `ClaimAgent` 路径自动补足 restricted starter funding 并原子完成认领”；viewer / API 同步移除旧审批 surface，只保留 dedicated pool auto-funding 直连 claim 真值。 Trace: .pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml
 - [x] local-testnet-onboarding-unified-world (PRD-WORLD_RUNTIME-027/040) [test_tier_required]: 收口本地 testnet onboarding 链路，移除 viewer JS fallback，补齐新用户首个 Agent / starter OC claim、身份展示、动作反馈、pixel-world Rust bridge 静态产物恢复，并将 formal-release 默认大世界启动和 claim spawn 对齐到 simulator seed -> chunk -> fragment 生成路径；资源链上权威化已进入 follow-up 合同。 Trace: .pm/tasks/task_212396995cf3409eb34c8e9bec563ca3.yaml
+- [x] execution-resource-determinism (PRD-WORLD_RUNTIME-027/039) [test_tier_required]: 修复 chain runtime execution bridge 将链上 provenance 写入 canonical runtime/simulator snapshot 导致多节点执行状态根分叉的问题，保留 bridge record 审计 block hash，并补不同 node provenance 下 execution hash 一致的回归。 Trace: .pm/tasks/task_9392f48717004517b509515e4e3a0dbc.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`
     - `doc/world-runtime/project.md`
