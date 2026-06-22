@@ -123,14 +123,14 @@ Example:
 - Task UID: task_198cdd132d3e4fda9f5fc9b4f46f412e
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-cc-connect-cleanup
 - Source Branch: task/engineering-cc-connect-cleanup
-- Source Head: 347e1c77ca373b4f12ac3750571f56cbf8abf736
+- Source Head: c5851e71d0bb90ba3d1e8dac78ffc7f497072743
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/tasks/task_198cdd132d3e4fda9f5fc9b4f46f412e.execution.md; .pm/tasks/task_198cdd132d3e4fda9f5fc9b4f46f412e.yaml; AGENTS.md; PR.md; doc/engineering/governance/repository-health-scheduled-inspection.runbook.md; doc/engineering/project.md
 - Role Selection Basis: changed paths touch active agent guidance, engineering governance runbook/project docs, stale PR evidence, and `.pm` task truth; selected repository_health_engineer for docs/contract and evidence-boundary review, qa_engineer for verification sufficiency and merge-blocker assessment; no gameplay, runtime, viewer, wasm, blockchain, agent behavior, visual/interaction, or liveops messaging surface changed.
 - Review Roles: repository_health_engineer, qa_engineer
-- Review Evidence: repository_health_engineer `no_findings` at 2026-06-22 20:50:00 CST; qa_engineer low/non-blocking evidence wording finding at 2026-06-22 20:50:00 CST.
+- Review Evidence: repository_health_engineer `no_findings` at 2026-06-22 20:50:00 CST; qa_engineer low/non-blocking evidence wording finding at 2026-06-22 20:50:00 CST; qa_engineer refresh `no_findings` at 2026-06-22 20:57:48 CST for post-review `doc/engineering/project.md` Trace repair.
 - Review Findings Disposition: addressed
-- Finding Disposition Evidence: QA wording finding addressed by updating the 2026-06-22 20:45:03 CST closeout entry to classify full repo `pm lint` as broad `.pm` evidence strictness debt including historical task evidence and current-task narrative entries, not purely unrelated historical debt.
+- Finding Disposition Evidence: QA wording finding addressed by updating the 2026-06-22 20:45:03 CST closeout entry to classify full repo `pm lint` as broad `.pm` evidence strictness debt including historical task evidence and current-task narrative entries, not purely unrelated historical debt; QA refresh confirmed the later scheduler-neutral `doc/engineering/project.md` Trace repair is non-blocking.
 - Residual Risk: Active cc-connect guidance is removed from non-`.pm` repository surfaces. `.pm` current and historical task evidence intentionally retains cc-connect mentions as audit/task truth. Full repo `./scripts/pm/lint.sh` remains noisy from broad `.pm` evidence strictness debt, but task-scoped workflow lint and docs/governance verification pass for this cleanup.
 
 ## 2026-06-22 20:52:55 CST / tpm
