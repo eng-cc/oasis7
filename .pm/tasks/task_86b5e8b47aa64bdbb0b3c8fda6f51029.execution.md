@@ -212,3 +212,41 @@ Example:
 - Expected Result: ready_for_pr claim-ready evidence is persisted, or the helper reports the closed-task immutability boundary while existing task-complete closeout verification remains authoritative; closeout provenance is visible to workflow-lint.
 - Actual Result: `claim-ready.sh` returned `claim-ready: closed task claim evidence is immutable for non-completion claims: task_86b5e8b47aa64bdbb0b3c8fda6f51029 status=done claim_type=ready_for_pr`. Existing task YAML records `last_claim_type: task_complete`, `last_verification_exit_code: 0`, `last_verification_status: verified`, `last_verified_at: 2026-06-22T23:13:39+08:00`, and `last_closed_at: 2026-06-22T23:13:40+08:00`; the closeout command exited 0 and reported `final_status: done`.
 - Blocker / Next Action: Rerun `./scripts/pm/workflow-lint.sh --task-uid task_86b5e8b47aa64bdbb0b3c8fda6f51029 --phase pr-ready`, commit preflight evidence, then rerun `./scripts/prepare-task-pr.sh`.
+
+## 2026-06-22 23:26:24 CST / repository_health_engineer
+- 完成内容: Final narrow pre-PR review returned `no_findings` after project Trace and PR-readiness evidence repairs.
+- 遗留事项: full repository-health manual inspection remains out of scope; repo-wide `./scripts/pm/lint.sh` remains known-red on unrelated historical task evidence debt.
+- Scope/spec compliance verdict: Pass. Current scoped diff at `acac85fe41fcb44a61068273ccacd05d992fe037` matches the four-file review surface; `doc/engineering/prd.md` states always-bootstrap for any user request, including read-only/chat/fact handling, and `Flow-ENG-016` keeps later repo edits on the same canonical task/worktree.
+- Repository-health quality/risk verdict: Pass. `doc/engineering/project.md` preserves the historical `readonly-specialist-routing` trace while explicitly marking the old non-forced task/worktree wording as superseded. The new `repository-health-kickoff-doc-sync` row is narrow and trace-linked. `.pm` evidence repair is acceptable: closed-task immutability is recorded, task-complete verification remains authoritative, `doc_refs` includes `doc/engineering/project.md`, and `workflow-lint --phase pr-ready` passes.
+- Review Findings Disposition: no_findings.
+- Residual Risk: full repository-health manual inspection remains out of scope; repo-wide PM lint historical debt remains unrelated residual risk.
+- Action: Integrated final review result from subagent `019eefed-cef2-71c1-bab8-89a88bab1447` (`Kepler`).
+- Validation Command: subagent completed review result; `./scripts/pm/workflow-lint.sh --task-uid task_86b5e8b47aa64bdbb0b3c8fda6f51029 --phase pr-ready`; `./scripts/doc-governance-check.sh`; `./scripts/lint-skills.sh`; `git diff --check`.
+- Expected Result: Fresh final repository-health review returns findings or no_findings against current scoped diff.
+- Actual Result: `no_findings`; scope/spec and repository-health quality/risk verdicts both pass; observed checks passed.
+- Blocker / Next Action: Record updated pre-PR passed packet for current head and rerun PR preflight/create.
+
+## 2026-06-22 23:26:24 CST / tpm
+- 完成内容: Updated Pre-PR Local Role Review passed packet for current source head.
+- 遗留事项: commit this final review evidence and run `./scripts/prepare-task-pr.sh --create`.
+- Pre-PR Local Role Review: passed
+- Task UID: task_86b5e8b47aa64bdbb0b3c8fda6f51029
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-kickoff
+- Source Branch: task/engineering-repository-health-kickoff
+- Source Head: acac85fe41fcb44a61068273ccacd05d992fe037
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.execution.md; .pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.yaml; doc/engineering/prd.md; doc/engineering/project.md
+- Review Package: .pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/review-packages/review-5ce155e1f..acac85fe4.diff
+- Role Selection Basis: changed paths are engineering governance docs plus task evidence; task slice history involved `repository_health_engineer`; no runtime/viewer/QA/liveops/gameplay/UI paths touched.
+- Review Roles: repository_health_engineer
+- Review Evidence: `repository_health_engineer` final narrow pre-PR review by subagent `019eefed-cef2-71c1-bab8-89a88bab1447` returned `no_findings`.
+- Review Verdicts: repository_health_engineer scope/spec compliance verdict pass; repository-health quality/risk verdict pass.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: n/a, no findings.
+- Residual Risk: full repository-health manual inspection and repo-wide `.pm` historical evidence cleanup were out of scope; current task PR-ready workflow lint and docs checks passed.
+- Slice Ledger: .pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/slice-ledger.jsonl
+- Action: Recorded updated passed packet after final narrow review.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_86b5e8b47aa64bdbb0b3c8fda6f51029 --phase pr-ready`
+- Expected Result: PR-ready workflow lint accepts metadata and pre-PR evidence.
+- Actual Result: `workflow-lint: OK (task_86b5e8b47aa64bdbb0b3c8fda6f51029, phase=pr-ready)`.
+- Blocker / Next Action: Commit evidence and run `./scripts/prepare-task-pr.sh --create`.
