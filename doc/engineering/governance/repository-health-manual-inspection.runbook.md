@@ -45,6 +45,14 @@ For code-health sampling that may be expensive, choose the narrowest tier that m
 - Upgrade and style triage: create one focused task per coherent upgrade, prune, or style-drift surface. Include the owner role, affected crates/packages, expected compatibility checks, rollback plan, and whether the work needs `runtime_engineer`, `wasm_platform_engineer`, `viewer_engineer`, `agent_engineer`, or `qa_engineer`.
 - Evidence rule: record report paths such as `output/rust-governance/.../summary.md`, command exit status, and the role-attributed verdict in the inspection task log. Report-only findings are not automatically blockers.
 
+## Code Evidence Sampling Model
+Code-style and code-health conclusions need code evidence, but the inspection should not default to manually reading every code file.
+
+- Full-repository coverage comes from automated scans and reports: required formatting/lint/test outputs, warning signatures, oversized-file checks, unsafe/dependency reports, targeted searches such as `unwrap()` and `unsafe`, and changed-path planners.
+- Human review samples the code that the reports or current task make risky: changed diffs, report-hit files, near-limit or oversized Rust files, repeated warning/fmt/clippy hotspots, unsafe blocks and their `// SAFETY:` comments, public API boundaries, dependency-upgrade impact surfaces, and modules with missing or stale tests.
+- Escalate from sampling to path-level deep reading when a finding cannot be classified from the report, a required/release blocker has unclear ownership, security or dependency-closure impact is uncertain, unsafe or workflow source-of-truth drift appears systemic, or the same pattern repeats across multiple modules.
+- Do not claim repository-wide style conformance from reports alone. Record the sampled paths, why they were selected, what code evidence was read, and whether the result is a follow-up candidate or acceptable residual risk.
+
 ## Evidence Sink
 The canonical inspection evidence is the `.pm` task execution log:
 
