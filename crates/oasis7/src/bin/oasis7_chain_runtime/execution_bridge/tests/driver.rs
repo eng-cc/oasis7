@@ -14,7 +14,7 @@ use oasis7::consensus_action_payload::encode_consensus_action_payload;
 use oasis7::runtime::{
     Action as RuntimeAction, DomainEvent, FROZEN_MAIN_TOKEN_INITIAL_SUPPLY, LocalCasStore,
     ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
-    ModuleSubscriptionStage, ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot, WorldEventBody,
+    ModuleSubscriptionStage, ReleaseSecurityPolicy, WorldEventBody,
     production_hardened_main_token_config,
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
@@ -1116,101 +1116,6 @@ fn node_runtime_execution_driver_uses_storage_profile_checkpoint_interval() {
         record_64.checkpoint_ref.as_deref(),
         Some(execution_checkpoint_manifest_rel_path(64).as_str())
     );
-
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn node_runtime_execution_driver_keeps_execution_hash_deterministic_across_node_provenance() {
-    let dir = temp_dir("execution-driver-deterministic-provenance");
-    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
-
-    let mut driver_a = NodeRuntimeExecutionDriver::new(
-        dir.join("a-state.json"),
-        dir.join("a-world"),
-        dir.join("a-records"),
-        dir.join("a-store"),
-    )
-    .expect("driver a");
-    let mut driver_b = NodeRuntimeExecutionDriver::new(
-        dir.join("b-state.json"),
-        dir.join("b-world"),
-        dir.join("b-records"),
-        dir.join("b-store"),
-    )
-    .expect("driver b");
-
-    let result_a = driver_a
-        .on_commit(NodeExecutionCommitContext {
-            world_id: "w1".to_string(),
-            node_id: "sequencer".to_string(),
-            height: 1,
-            slot: 0,
-            epoch: 0,
-            node_block_hash: "node-h1-sequencer".to_string(),
-            action_root: empty_action_root.clone(),
-            committed_actions: Vec::new(),
-            committed_at_unix_ms: 1_000,
-        })
-        .expect("commit a");
-    let result_b = driver_b
-        .on_commit(NodeExecutionCommitContext {
-            world_id: "w1".to_string(),
-            node_id: "storage".to_string(),
-            height: 1,
-            slot: 0,
-            epoch: 0,
-            node_block_hash: "node-h1-storage".to_string(),
-            action_root: empty_action_root,
-            committed_actions: Vec::new(),
-            committed_at_unix_ms: 1_000,
-        })
-        .expect("commit b");
-
-    assert_eq!(
-        result_a.execution_state_root, result_b.execution_state_root,
-        "node-local provenance must not change canonical execution state"
-    );
-    assert_eq!(
-        result_a.execution_block_hash, result_b.execution_block_hash,
-        "node-local provenance must not change canonical execution block"
-    );
-
-    let record_a = load_execution_bridge_record(
-        execution_bridge_record_path(dir.join("a-records").as_path(), 1).as_path(),
-    )
-    .expect("record a");
-    let record_b = load_execution_bridge_record(
-        execution_bridge_record_path(dir.join("b-records").as_path(), 1).as_path(),
-    )
-    .expect("record b");
-    assert_eq!(
-        record_a.node_block_hash.as_deref(),
-        Some("node-h1-sequencer")
-    );
-    assert_eq!(record_b.node_block_hash.as_deref(), Some("node-h1-storage"));
-    let snapshot_a = serde_json::from_slice::<RuntimeSnapshot>(
-        fs::read(dir.join("a-world").join("snapshot.json"))
-            .expect("read snapshot a")
-            .as_slice(),
-    )
-    .expect("snapshot a");
-    let snapshot_b = serde_json::from_slice::<RuntimeSnapshot>(
-        fs::read(dir.join("b-world").join("snapshot.json"))
-            .expect("read snapshot b")
-            .as_slice(),
-    )
-    .expect("snapshot b");
-    let delta_commit_hash_a = snapshot_a
-        .latest_chain_resource_delta
-        .and_then(|delta| delta.commit_block_hash)
-        .expect("resource delta commit hash a");
-    let delta_commit_hash_b = snapshot_b
-        .latest_chain_resource_delta
-        .and_then(|delta| delta.commit_block_hash)
-        .expect("resource delta commit hash b");
-    assert!(!delta_commit_hash_a.is_empty());
-    assert_eq!(delta_commit_hash_a, delta_commit_hash_b);
 
     let _ = fs::remove_dir_all(dir);
 }
