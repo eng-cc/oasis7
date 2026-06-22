@@ -14,7 +14,7 @@ use oasis7::consensus_action_payload::encode_consensus_action_payload;
 use oasis7::runtime::{
     Action as RuntimeAction, DomainEvent, FROZEN_MAIN_TOKEN_INITIAL_SUPPLY, LocalCasStore,
     ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
-    ModuleSubscriptionStage, ReleaseSecurityPolicy, WorldEventBody,
+    ModuleSubscriptionStage, ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot, WorldEventBody,
     production_hardened_main_token_config,
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
@@ -1189,6 +1189,28 @@ fn node_runtime_execution_driver_keeps_execution_hash_deterministic_across_node_
         Some("node-h1-sequencer")
     );
     assert_eq!(record_b.node_block_hash.as_deref(), Some("node-h1-storage"));
+    let snapshot_a = serde_json::from_slice::<RuntimeSnapshot>(
+        fs::read(dir.join("a-world").join("snapshot.json"))
+            .expect("read snapshot a")
+            .as_slice(),
+    )
+    .expect("snapshot a");
+    let snapshot_b = serde_json::from_slice::<RuntimeSnapshot>(
+        fs::read(dir.join("b-world").join("snapshot.json"))
+            .expect("read snapshot b")
+            .as_slice(),
+    )
+    .expect("snapshot b");
+    let delta_commit_hash_a = snapshot_a
+        .latest_chain_resource_delta
+        .and_then(|delta| delta.commit_block_hash)
+        .expect("resource delta commit hash a");
+    let delta_commit_hash_b = snapshot_b
+        .latest_chain_resource_delta
+        .and_then(|delta| delta.commit_block_hash)
+        .expect("resource delta commit hash b");
+    assert!(!delta_commit_hash_a.is_empty());
+    assert_eq!(delta_commit_hash_a, delta_commit_hash_b);
 
     let _ = fs::remove_dir_all(dir);
 }

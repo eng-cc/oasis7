@@ -66,6 +66,10 @@ fn execution_resource_context_hash(world_id: &str) -> String {
     format!("execution_bridge_runtime_context_v1:{world_id}")
 }
 
+fn execution_resource_commit_hash(world_id: &str, height: u64) -> String {
+    blake3_hex(format!("execution_bridge_resource_commit_v1:{world_id}:{height}").as_bytes())
+}
+
 pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) state_path: std::path::PathBuf,
     pub(super) world_dir: std::path::PathBuf,
@@ -221,13 +225,14 @@ impl NodeRuntimeExecutionDriver {
             }
         }
 
+        let resource_commit_hash = execution_resource_commit_hash(&context.world_id, height);
         let resource_context = ChainResourceDerivationContext {
             world_id: context.world_id.as_str(),
             chain_id: context.world_id.as_str(),
             genesis_ref: None,
             created_at_height: 0,
             manifest_height: context.height,
-            commit_block_hash: None,
+            commit_block_hash: Some(resource_commit_hash.as_str()),
             tick: self.simulator_mirror.time(),
         };
         let snapshot_value = self
@@ -630,13 +635,15 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         let simulator_mirror =
             self.apply_simulator_actions(&context, decoded_simulator_actions.as_slice())?;
 
+        let runtime_resource_commit_hash =
+            execution_resource_commit_hash(&context.world_id, context.height);
         let runtime_resource_context = ChainResourceDerivationContext {
             world_id: context.world_id.as_str(),
             chain_id: context.world_id.as_str(),
             genesis_ref: None,
             created_at_height: execution_resource_created_at_height(context.height),
             manifest_height: context.height,
-            commit_block_hash: None,
+            commit_block_hash: Some(runtime_resource_commit_hash.as_str()),
             tick: self.execution_world.state().time,
         };
         let runtime_resource_context_hash = execution_resource_context_hash(&context.world_id);
@@ -1091,13 +1098,15 @@ fn bridge_committed_heights_with_policy(
         } else {
             None
         };
+        let runtime_resource_commit_hash =
+            execution_resource_commit_hash(&snapshot.world_id, height);
         let runtime_resource_context = ChainResourceDerivationContext {
             world_id: snapshot.world_id.as_str(),
             chain_id: snapshot.world_id.as_str(),
             genesis_ref: None,
             created_at_height: execution_resource_created_at_height(height),
             manifest_height: height,
-            commit_block_hash: None,
+            commit_block_hash: Some(runtime_resource_commit_hash.as_str()),
             tick: execution_world.state().time,
         };
         let runtime_resource_context_hash = execution_resource_context_hash(&snapshot.world_id);
