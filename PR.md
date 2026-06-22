@@ -16,9 +16,13 @@
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 - `./scripts/pm/task-closeout.sh --role tpm --task-uid task_4fb500e6782e4eac916f6846e01542af --verify-command './scripts/pm/workflow-lint.sh --task-uid task_4fb500e6782e4eac916f6846e01542af --phase current && ./scripts/doc-governance-check.sh && git diff --check' --json`
+- `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command './scripts/pm/workflow-lint.sh --task-uid task_4fb500e6782e4eac916f6846e01542af --phase current && ./scripts/doc-governance-check.sh && git diff --check'`
+- `./scripts/pm/workflow-lint.sh --task-uid task_4fb500e6782e4eac916f6846e01542af --phase pr-ready --allow-unbound`
+- `./scripts/prepare-task-pr.sh --body-file PR.md --title "Add repository health code sampling guidance" --json`
 
 ## Local Role Review
-- Pending pre-PR local role review.
+- repository_health_engineer: no findings; scope/spec compliance passed and role quality/risk acceptable.
+- qa_engineer: found stale review-package base, pending local-review evidence, and missing PR-readiness evidence; addressed before PR creation by rebasing/regenerating the package and adding claim-ready/pr-ready/preflight evidence.
 
 ## Residual Risk
 - This PR documents the sampling model only; it does not add a new automated code-style gate or sampling threshold.
