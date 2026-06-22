@@ -78,7 +78,7 @@
 - `crates/oasis7_viewer/src/*`
 - 历史上的 `scripts/validate-viewer-theme-pack.py`
 - 历史上的 `scripts/viewer-texture-inspector*.sh`
-- 历史上的 `historical removed standard_3d viewer doc set: visual-review-score-card`
+- 历史上的 `retired legacy viewer doc set: visual-review-score-card`
 - `doc/ui_review_result/*.md`
 
 ### Edge Cases & Error Handling

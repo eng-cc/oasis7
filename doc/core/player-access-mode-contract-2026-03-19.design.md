@@ -12,7 +12,7 @@
 - 保留两种玩家访问模式：
   - `software_safe`：默认 Web 正式入口。
   - `pure_api`：无 UI、自动化、长稳与集成入口。
-- 删除 `standard_3d` 的现行模式地位：
+- 删除旧第二 Viewer 入口的现行模式地位：
   - 不再作为玩家入口。
   - 不再作为 release / QA / playability 的当前 claim 目标。
   - 若历史文档仍提到它，只能按归档理解。
@@ -41,4 +41,4 @@
 ## 5. 失败与降级语义
 - Web 缺 LLM 或命中 blocker：记为 `software_safe blocked`
 - 纯接口缺 canonical gameplay 语义：记为 `pure_api observer_only`
-- 旧 `standard_3d` 文案：视为历史残留，需清理
+- 旧第二 Viewer 入口文案：视为历史残留，需清理

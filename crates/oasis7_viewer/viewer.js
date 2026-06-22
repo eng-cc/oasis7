@@ -1786,8 +1786,8 @@ function createViewerFeedbackModule({
       if (!isRecoveryChoiceState) {
         return localeText2(
           locale,
-          "无需打开可视化质检观察器，也可以直接从正式网页入口执行。",
-          "Playable from the formal Web entry without opening the visual QA viewer."
+          "可以直接从正式网页入口执行。",
+          "Playable directly from the formal Web entry."
         );
       }
       if (action.executeKind === "request_snapshot") {
@@ -2333,7 +2333,7 @@ function createViewerWorldScaleModule({
     const presentationScale = {
       markerTruthNote: isZh ? "3D marker、2D overview map 和 halo 允许为了可读性被放大；请把距离/半径标签当成真值，不要把屏幕上的直径当成真实几何尺寸。" : "3D markers, the 2D overview map, and halos may be enlarged for readability. Treat the distance/radius labels as truth; do not read on-screen diameter as real geometry size.",
       zoomTruthNote: isZh ? "overview/detail 的 zoom tier 只切换表现语义，不会改写世界的厘米真值。" : "Overview/detail zoom tiers only switch presentation semantics; they do not rewrite centimeter truth in the world model.",
-      softwareSafeNote: isZh ? "viewer 主入口优先给出文字和数值真值；更底层的 visual QA viewer 可以更夸张，但不应覆盖这里的物理标签。" : "The viewer entry prioritizes textual and numeric truth. Lower-level visual QA surfaces may exaggerate more aggressively, but they should not override the physical labels here."
+      softwareSafeNote: isZh ? "viewer 主入口优先给出文字和数值真值；诊断层可以为可读性放大标记，但不应覆盖这里的物理标签。" : "The viewer entry prioritizes textual and numeric truth. Diagnostic layers may enlarge markers for readability, but they should not override the physical labels here."
     };
     return {
       physicalTruth,
@@ -8574,7 +8574,7 @@ function gameplayActionDetail(action, gameplay, locale) {
   if (action?.actionId === "claim_starter_oc") {
     return action?.disabledReason || tr(locale, "领取一次性初始 OC，解锁第一次 LLM/Agent chat。", "Claim one-time starter OC to unlock the first LLM/Agent chat.");
   }
-  return action?.playerDetail || action?.disabledReason || gameplay?.economicSurface?.repairAction || gameplay?.narrativeNextStep || tr(locale, "无需打开可视化质检观察器，也可以直接从正式网页入口执行。", "Playable from the formal Web entry without opening the visual QA viewer.");
+  return action?.playerDetail || action?.disabledReason || gameplay?.economicSurface?.repairAction || gameplay?.narrativeNextStep || tr(locale, "可以直接从正式网页入口执行。", "Playable directly from the formal Web entry.");
 }
 function renderGameplayAction(action) {
   if (action.executeKind === "agent_chat") {

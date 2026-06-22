@@ -34,7 +34,7 @@
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 - `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
-- `rg -n "主要正式 Web 入口|formal Web gameplay|visual QA|一等公民" doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/core/{prd,project}.md doc/world-simulator/{prd,project}.md doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.{prd,design,project}.md`
+- `rg -n "主要正式 Web 入口|formal Web gameplay|一等公民" doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/core/{prd,project}.md doc/world-simulator/{prd,project}.md doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.{prd,design,project}.md`
 - `rg -n "main_token_transfer|handoff|专门动作|not_exposed" doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.{prd,design,project}.md`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_gameplay_action_script_mode_requires_llm_mode -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_step_control_reports_blocked_without_llm_mode -- --nocapture`
@@ -49,7 +49,7 @@
 - 下一任务: T10
 - 最新完成: `T1/T2/T3/T4/T5/T6/T7`（历史上已完成三模式总契约建模与下游术语收口；当前仓库真值已进一步收口为 `viewer / pure_api` 双模式，其中 `software_safe` 仅保留兼容 alias，并同步完成 core 主入口挂载、`pure_api` 的 LLM-required 正式游玩口径收口、`agent_direct_connect` / `provider_loopback_http` / execution lane 的多层术语收口，以及 `non-3D` / `software_safe` 的 priority-vs-mode 边界澄清。）
 - 最新完成: `T8`（已将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_* + agent_execution_lane` 结构化 taxonomy，并把 `agent_direct_connect/provider_loopback_http` 降为兼容 alias。）
-- 最新完成: `T9`（历史上已将唯一正式 Web 入口从旧命名收口到当前 `viewer` canonical 名称、将 `standard_3d` 收口为 visual QA 模式；当前仓库真值进一步收口为 `viewer / pure_api` 双模式，`software_safe` 仅保留兼容 alias。）
+- 最新完成: `T9`（历史上已将唯一正式 Web 入口从旧命名收口到当前 `viewer` canonical 名称、并将退役第二 Viewer 路线移出当前入口集合；当前仓库真值进一步收口为 `viewer / pure_api` 双模式，`software_safe` 仅保留兼容 alias。）
 - 备注:
   - 本专题只冻结 taxonomy 与 claim contract，不替代下游专题实现。
   - 后续若新增同层玩家访问模式，必须先更新本专题再更新模块文档。

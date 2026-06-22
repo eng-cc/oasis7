@@ -49,7 +49,7 @@
   - AC-3: 手册与专题文档反映新启动口径与暂不可执行边界。
   - AC-4: 未重构的长跑多节点闭环不在本轮硬实现范围。
   - AC-5: 文档与任务状态可在项目文档/devlog 追溯。
-  - AC-6: 历史上的 `viewer-release-qa-loop.sh` 已支持 `--viewer-static-dir` 并传递到 `oasis7_game_launcher`；当前仓库已删除该旧 visual QA 脚本，但保留这条历史迁移记录。
+  - AC-6: 历史上的 `viewer-release-qa-loop.sh` 已支持 `--viewer-static-dir` 并传递到 `oasis7_game_launcher`；当前仓库已删除该旧 visual diagnostics 脚本，但保留这条历史迁移记录。
 - Non-Goals:
   - 不在本轮重写 S10/P2P 为完整 `oasis7_chain_runtime` 多节点闭环。
   - 不恢复 `oasis7_viewer_live` 内嵌节点参数兼容。

@@ -10,7 +10,7 @@
 ## 目标
 - 提供 `viewer` Viewer Web 主入口的统一操作手册，并说明 `software_safe` 兼容 alias。
 - 统一 live server、Web 静态入口、agent-browser 闭环与常见排查步骤。
-- 明确当前仓库已不再提供旧 3D / native / 视觉专项工具链。
+- 明确当前仓库已不再提供退役的第二 Viewer 工具链。
 
 ## 适用范围
 - live server：`crates/oasis7 --bin oasis7_viewer_live`
@@ -64,7 +64,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 - 在 `hosted_public_join` 路径下，页面支持获取/释放 hosted `player_session`、`reconnect_sync` 恢复，以及 `prompt_control` 的 preview-grade `strong_auth`（需 `Backend Approval Code`）。
 - 面向普通用户的启动入口现在默认且只暴露 `hosted_public_join`。旧的 `trusted_local_only` 本地可信预览不再作为可选用户流程；本地旧配置应迁移到 hosted join，并走邮箱 hosted account / player session 登录链路。
 - `main_token_transfer` 仍保持阻断，页面只显示 lane verdict，不提供资产转账表单。
-- 页面不再提供 `standard Viewer` 跳转，也不再承担材质/theme/3D 视觉 QA 职责。
+- 页面不再提供第二 Viewer 跳转，也不再承担退役视觉专项工具职责。
 
 ## 证据边界
 - 当前 formal gameplay PASS 证据以 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 为准。
@@ -135,9 +135,9 @@ agent-browser close
 - 如果只看到 `--no-llm` 截图证据：不要把它当成 formal gameplay PASS；回到 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 看 LLM-enabled follow-up 结论。
 
 ## 已移除能力
-- 原生 Viewer crate 启动路径
-- 旧 3D / visual QA surface
-- 旧材质、theme、抓帧与视觉专项工具链
+- 退役的第二 Viewer 启动路径
+- 退役的辅助可视化检视 surface
+- 退役的视觉资产、抓帧与专项检视工具链
 
 ## 参考文档
 - `testing-manual.md`

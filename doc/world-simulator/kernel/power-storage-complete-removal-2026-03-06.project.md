@@ -19,7 +19,7 @@
 - 历史上的 `scripts/validate-viewer-theme-pack.py`
 - 历史上的 `scripts/viewer-texture-inspector.sh`
 - 历史上的 `scripts/viewer-texture-inspector-lib.sh`
-- 历史上的 `historical removed standard_3d viewer doc set: visual-review-score-card`
+- 历史上的 `retired legacy viewer doc set: visual-review-score-card`
 - `doc/ui_review_result/card_2026_03_06_11_50_29.md`
 
 ## 状态

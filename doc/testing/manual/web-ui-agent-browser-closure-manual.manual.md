@@ -10,7 +10,7 @@
 ## 适用范围
 - 适用于 `oasis7_viewer_live` + `software_safe` Viewer Web 页面闭环。
 - 不适用于 `oasis7_web_launcher` / launcher Web 控制面产品动作；后者默认先走 GUI Agent，再用页面校验状态与字段。
-- 本手册只覆盖当前仍存在的 Web 链路，不再覆盖历史 3D/native/visual-QA 工具。
+- 本手册只覆盖当前仍存在的 Web 链路，不再覆盖历史第二 Viewer 或退役视觉专项工具。
 - 若目标是本地真实 LetAI provider-backed 游戏试玩或复现 `agent_chat`，先使用 `./scripts/run-local-letai-game-test.sh` 启动完整 bridge + runtime/game 栈；下方 live server + `run-viewer-web.sh` 步骤只作为 Viewer/debug 闭环。
 
 ## 前置条件

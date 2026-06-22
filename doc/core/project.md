@@ -263,7 +263,7 @@
     - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
     - `.pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.execution.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/prd.md doc/core/project.md doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md historical removed standard_3d viewer doc set: viewer-3d-pause-user-interaction-hold-2026-04-01.prd`
+    - `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/prd.md doc/core/project.md doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md retired legacy viewer doc set: viewer-3d-pause-user-interaction-hold-2026-04-01.prd`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-CORE-052 (PRD-CORE-009) [test_tier_required]: 将 `agent_direct_connect/provider_loopback_http` 从用户主配置模型降为兼容 alias，把 agent provider 正式配置收口为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，并同步回写 core/world-simulator/testing 文档与 launcher/client launcher 透传口径。

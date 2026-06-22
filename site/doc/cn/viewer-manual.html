@@ -70,7 +70,7 @@
         <h3>2) 启动 Web Viewer</h3>
         <pre><code>env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173</code></pre>
         <p>访问：<code>http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011</code></p>
-        <p>当前只保留 <code>viewer</code> 单一正式入口；<code>software_safe</code> 只保留兼容别名，不再维护其他 Viewer surface 或 native Viewer。</p>
+        <p>当前只保留 <code>viewer</code> 单一正式入口；<code>software_safe</code> 只保留兼容别名，不再维护其他 Viewer surface 或旧本地 Viewer 入口。</p>
       </section>
 
       <section id="web-loop" class="section" data-reveal>
@@ -99,8 +99,8 @@ agent-browser close</code></pre>
         <h2>当前能力边界</h2>
         <ul>
           <li>支持中英文切换、实时观察、formal gameplay summary、最小 prompt/chat 控制面。</li>
-          <li>不再提供 <code>standard Viewer</code> 跳转。</li>
-          <li>不再维护 3D/native 抓帧、theme pack、texture inspector、visual QA 脚本。</li>
+          <li>不再提供第二 Viewer 跳转。</li>
+          <li>不再维护退役抓帧、theme pack、texture inspector 或视觉专项检视脚本。</li>
         </ul>
       </section>
 
