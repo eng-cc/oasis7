@@ -1,6 +1,6 @@
 # Add code and dependency health to repository inspection
 
-- PR URL: pending
+- PR URL: https://github.com/eng-cc/oasis7/pull/564
 - Task UID: task_b0a770d8447340f6844e1cff07f99a37
 - Source Branch: task/engineering-repo-health-code-dependency-inspection
 - Base Branch: main
