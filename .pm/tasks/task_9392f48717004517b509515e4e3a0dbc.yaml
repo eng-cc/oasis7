@@ -9,7 +9,8 @@ source_signal: null
 source_refs:
   - crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs
   - crates/oasis7/src/runtime/world/persistence.rs
-doc_refs: []
+doc_refs:
+  - doc/world-runtime/project.md
 related_prd: []
 acceptance:
   - "Execution resource manifest/delta provenance does not make committed execution state roots diverge across nodes."
