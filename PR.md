@@ -2,13 +2,13 @@
 
 - PR URL: https://github.com/eng-cc/oasis7/pull/561
 - Task UID: task_198cdd132d3e4fda9f5fc9b4f46f412e
-- Source Branch: task/engineering-cc-connect-cleanup
+- Source Branch: PR #561 head branch
 - Base Branch: main
 - Purpose: normal_pr_ci_watch
 
 ## Summary
 - Remove the active legacy messaging bridge instructions from `AGENTS.md`.
-- Replace scheduler-specific repository-health runbook guidance with scheduler-neutral reminder text.
+- Keep the repository-health inspection path on the manual-trigger runbook introduced on `main`.
 - Keep historical `.pm` task evidence intact as audit truth while removing active non-`.pm` guidance.
 
 ## Verification
