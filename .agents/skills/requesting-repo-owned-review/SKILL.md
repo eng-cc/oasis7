@@ -54,10 +54,14 @@ The formal path is:
    - changed files or path set
    - exact question to answer
    - evidence already available
+   - review package path from `./scripts/pm/review-package.sh --base <ref> --head <ref> --task-uid <TASK-UID>`, or explicit `n/a` with reason when the review target is not a git diff
+   - slice ledger path from `./scripts/pm/slice-ledger.sh --task-uid <TASK-UID> --print`, or explicit `n/a` with reason for one-shot reviews without reusable slice state
 3. Spawn or dispatch a fresh subagent for each involved role.
 4. State the expected output contract:
    - `findings`
    - `no_findings`
+   - scope/spec compliance verdict
+   - role quality/risk verdict
    - `residual_risk`
 5. Write the review request into a formal sink before or while dispatching:
    - `.pm/tasks/<TASK-UID>.execution.md`
@@ -76,10 +80,12 @@ The formal path is:
 ## YYYY-MM-DD HH:MM:SS CST / <role_name>
 - Review Trigger: pre-PR local role review
 - Review Scope: <paths / diff summary>
+- Review Package: <path or n/a with reason>
 - Review Roles: <comma-separated roles>
 - Review Question: <what must this review confirm or challenge>
 - Evidence Available: <tests / docs / screenshots / logs>
-- Expected Return Contract: <findings | no_findings | residual_risk>
+- Expected Return Contract: <findings | no_findings | scope/spec compliance verdict | role quality/risk verdict | residual_risk>
+- Slice Ledger: <path or n/a with reason>
 - Formal Sink: <execution log | PR evidence | handoff>
 ```
 
@@ -96,17 +102,21 @@ role reviews and addressing findings:
 - Source Head: <reviewed git sha; must be current source head or an ancestor whose later changes are only the task review evidence files>
 - Comparison Ref: <base ref>
 - Reviewed Changed Paths: <semicolon-separated paths or diff summary ref>
+- Review Package: <path to review package or n/a with reason>
 - Role Selection Basis: <changed paths + task slice history + explicit includes/skips>
 - Review Roles: <comma-separated roles>
 - Review Evidence: <per-role section or handoff refs>
+- Review Verdicts: <per-role scope/spec compliance verdict + role quality/risk verdict>
 - Review Findings Disposition: <addressed | no_findings>
 - Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>
 - Residual Risk: <text>
+- Slice Ledger: <path to slice ledger or n/a with reason>
 ```
 
 ## Output Rules
 
 - Findings must be categorized by severity or merge risk.
+- Each involved role should return two explicit verdicts: scope/spec compliance and role quality/risk. This is a review packet shape, not a replacement for role-specific professional ownership.
 - `no_findings` still needs a short residual-risk statement when risk is not literally zero.
 - If the review is stale or wrong, answer with concrete repo truth instead of silently ignoring it.
 - Always separate:
@@ -126,3 +136,5 @@ role reviews and addressing findings:
 - Do not claim that repo-owned review makes GitHub review unnecessary.
 - Do not leave the review request or outcome as chat-only context.
 - Do not resolve GitHub threads based solely on this local review packet.
+- Do not paste large diffs into the task execution log when a review package can be linked instead.
+- Do not rely on the slice ledger as the only task truth; `.pm/tasks/<TASK-UID>.execution.md` remains the mandatory sink.

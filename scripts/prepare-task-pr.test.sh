@@ -141,12 +141,15 @@ write_role_review_packet() {
 - Source Head: $source_head
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
+- Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
 - Role Selection Basis: changed paths include PR helper workflow; roles tpm,qa_engineer.
 - Review Roles: tpm,qa_engineer
 - Review Evidence: qa_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture
+- Review Verdicts: qa_engineer scope/spec compliance=approved; role quality/risk=approved
 - Review Findings Disposition: $disposition
 - Finding Disposition Evidence: fixture evidence
 - Residual Risk: fixture residual risk
+- Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl
 - Blocker / Next Action: none.
 EOF
 }
@@ -190,12 +193,15 @@ write_shadowed_role_review_packet() {
 - Source Head: $source_head
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
+- Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
 - Role Selection Basis: changed paths include PR helper workflow; roles tpm,qa_engineer.
 - Review Roles: tpm,qa_engineer
 - Review Evidence: qa_engineer: 2026-06-03 00:01:00 CST; no_findings; fixture
+- Review Verdicts: qa_engineer scope/spec compliance=approved; role quality/risk=approved
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: fixture evidence
 - Residual Risk: final fixture residual risk
+- Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl
 - Blocker / Next Action: none.
 EOF
 }
@@ -226,12 +232,15 @@ write_prefix_mismatch_role_review_packet() {
 - Source Head: $source_head
 - Comparison Ref: refs/remotes/origin/main-old
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
+- Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
 - Role Selection Basis: changed paths include PR helper workflow; roles tpm,qa_engineer.
 - Review Roles: tpm,qa_engineer
 - Review Evidence: qa_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture
+- Review Verdicts: qa_engineer scope/spec compliance=approved; role quality/risk=approved
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: fixture evidence
 - Residual Risk: fixture residual risk
+- Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl
 - Blocker / Next Action: none.
 EOF
 }
@@ -383,6 +392,12 @@ if "Created PR:" not in stdout or "https://github.com/example/oasis7/pull/999" n
     raise SystemExit("expected created PR output")
 if "Pre-PR Local Role Review:" not in stdout or "- status: passed" not in stdout:
     raise SystemExit("expected local role review status in output")
+if "- review package: .pm/scratch/" not in stdout:
+    raise SystemExit("expected review package path in local role review output")
+if "- review verdicts: qa_engineer scope/spec compliance=approved; role quality/risk=approved" not in stdout:
+    raise SystemExit("expected dual review verdicts in local role review output")
+if "- slice ledger: .pm/scratch/" not in stdout:
+    raise SystemExit("expected slice ledger path in local role review output")
 if stderr:
     raise SystemExit(f"did not expect stderr on success path: {stderr}")
 PY

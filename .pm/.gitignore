@@ -1,2 +1,3 @@
 /registry/tasks.yaml
 /roles/*/backlog/*.yaml
+/scratch/

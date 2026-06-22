@@ -50,12 +50,15 @@ Use the same role-selection rule as `requesting-repo-owned-review`, including:
 - Source Head: <reviewed git sha; must be current source head or an ancestor whose later changes are only the task review evidence files>
 - Comparison Ref: <base ref>
 - Reviewed Changed Paths: <semicolon-separated paths or diff summary ref>
+- Review Package: <path to review package or n/a with reason>
 - Role Selection Basis: <changed paths + task slice history + explicit includes/skips>
 - Review Roles: <comma-separated roles>
 - Review Evidence: <per-role section or handoff refs>
+- Review Verdicts: <per-role scope/spec compliance verdict + role quality/risk verdict>
 - Review Findings Disposition: <addressed | no_findings>
 - Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>
 - Residual Risk: <text>
+- Slice Ledger: <path to slice ledger or n/a with reason>
 ```
 
 6. Run PR preflight / create:

@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.22**
-Last Updated: **2026-06-18**
+Version: **v1.4.23**
+Last Updated: **2026-06-22**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -215,12 +215,18 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - `Source Head: <reviewed git sha; must be current source head or an ancestor whose later changes are only the task review evidence files>`
   - `Comparison Ref: <base ref>`
   - `Reviewed Changed Paths: <semicolon-separated paths or diff summary ref>`
+  - `Review Package: <path to review package or n/a with reason>`
   - `Role Selection Basis: <changed paths + task slice history + explicit includes/skips>`
   - `Review Roles: <comma-separated roles>`
   - `Review Evidence: <per-role section or handoff refs>`
+  - `Review Verdicts: <per-role scope/spec compliance verdict + role quality/risk verdict>`
   - `Review Findings Disposition: addressed` or `Review Findings Disposition: no_findings`
   - `Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>`
   - `Residual Risk: <text>`
+  - `Slice Ledger: <path to slice ledger or n/a with reason>`
+- Pre-PR local role review should use file-based review packages for non-trivial diffs. `./scripts/pm/review-package.sh --base <ref> --head <ref> --task-uid <TASK-UID>` writes the commit list, stat summary, and contextual diff under ignored `.pm/scratch/<TASK-UID>/review-packages/`; the execution log records only the path and summary. Use `n/a` only when the diff is empty or the review target is not a git diff, and record the reason.
+- Pre-PR local role review verdicts must distinguish scope/spec compliance from role quality/risk for each reviewer role. The role remains the professional owner; this dual-verdict structure is a packet format, not permission to replace involved-role review with a generic reviewer.
+- Long multi-slice tasks should maintain a lightweight slice ledger with `./scripts/pm/slice-ledger.sh --task-uid <TASK-UID> ...`. The ledger is an ignored JSONL resume map for slice status, artifact paths, verdicts, residual risk, and next action. `.pm/tasks/<TASK-UID>.execution.md` remains canonical task truth and must link to the ledger rather than relying on it as the only sink.
 - Before merge, explicitly check PR comments and review threads. If any actionable comments or unresolved blocking threads exist, fix + re-verify + resolve or answer them before the merge claim.
 - After PR creation, TPM must record the PR purpose decision:
   - `normal_pr_ci_watch`: default. Use this unless the user or task truth says the PR was opened only to access manual-trigger packaging/release CI jobs.
@@ -236,10 +242,14 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Planning/Dispatch: TPM TODO decomposition and subagent slice contracts in `.pm/tasks/<TASK-UID>.execution.md`.
 - Execution: atomic evidence records per risky step.
 - Verification: claim-ready command + output evidence.
-- Pre-PR local role review: involved-role subagent review packet, finding disposition, and residual risk.
+- Pre-PR local role review: involved-role subagent review packet, review package path or explicit `n/a`, per-role dual verdicts, finding disposition, residual risk, and slice ledger path or explicit `n/a`.
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.23 (2026-06-22)**
+  - Added file-based review package and lightweight slice ledger artifacts for pre-PR local role review, while keeping `.pm/tasks/<TASK-UID>.execution.md` canonical.
+  - Required pre-PR role review packets to record `Review Package`, per-role dual `Review Verdicts`, and `Slice Ledger` fields.
+  - Clarified that dual verdicts strengthen involved-role review and do not replace oasis7 professional role ownership with a generic reviewer.
 - **v1.4.22 (2026-06-18)**
   - Removed the retired `xiaohongshu` automation skill from the specialist skill reachability list while keeping `xiaohongshu-note-analyzer`.
 - **v1.4.21 (2026-06-11)**
