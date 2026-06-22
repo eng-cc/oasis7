@@ -168,3 +168,12 @@ Example:
 - Expected Result: PR exists; required checks start; `REVIEW_REQUIRED` and approval-only `BLOCKED` are tracked as informational unless checks, requested changes, comments, conflicts, or merge API rejection create a real blocker.
 - Actual Result: PR #561 created at `https://github.com/eng-cc/oasis7/pull/561`; `required-gate` and `plan-wasm-determinism-scope` started; `newapi-bridge-linux-x86-64` skipped; PR state open; mergeStateStatus `BLOCKED`; reviewDecision `REVIEW_REQUIRED`; no comments or reviews at creation check.
 - Blocker / Next Action: Push this PR purpose evidence, watch required checks and comments/review threads, then merge when gates allow.
+
+## 2026-06-22 21:09:08 CST / tpm
+- 完成内容: Addressed PR review thread PRRT_kwDORHhWec6LRCgY.
+- 遗留事项: Commit and push review fix, resolve the review thread, re-check PR checks/mergeability, merge, and cleanup.
+- Action: Verified review comment against repo truth: post-pr workflow-lint failed because deleting stale PR.md removed the accepted PR evidence chain. Added a new current PR.md evidence file for PR #561 without reintroducing the removed legacy tool name into active non-.pm surfaces.
+- Validation Command: if git grep -n -I -e 'cc-connect' -e 'cc_connect' -e 'CC_PROJECT' -e 'CC_SESSION_KEY' -- . ':(exclude).pm/**' ':(exclude).git' ':(exclude)third_party/**'; then exit 1; else echo NO_ACTIVE_MATCHES; fi; ./scripts/pm/workflow-lint.sh --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --phase post-pr --allow-unbound; ./scripts/doc-governance-check.sh && ./scripts/lint-skills.sh && git diff --check
+- Expected Result: Active non-.pm surfaces still have no removed-tool references; post-pr workflow-lint finds PR evidence; docs/skill/diff checks pass.
+- Actual Result: NO_ACTIVE_MATCHES; workflow-lint OK phase=post-pr with evidence PR.md; doc-governance-check OK; lint-skills OK; git diff --check OK.
+- Blocker / Next Action: Commit and push review fix, then resolve PRRT_kwDORHhWec6LRCgY.
