@@ -22,11 +22,11 @@ The scheduled prompt must still enter the standard `oasis7` workflow: create or 
 Run the checks from the task worktree and record the command outputs or summaries in `.pm/tasks/<TASK-UID>.execution.md`.
 
 ```bash
-rtk bash scripts/doc-inventory-report.sh
-rtk bash scripts/doc-governance-check.sh
-rtk bash scripts/lint-skills.sh
-rtk bash scripts/worktree-gc-report.sh --prunable-only
-rtk bash scripts/pm/lint.sh
+./scripts/doc-inventory-report.sh
+./scripts/doc-governance-check.sh
+./scripts/lint-skills.sh
+./scripts/worktree-gc-report.sh --prunable-only
+./scripts/pm/lint.sh
 ```
 
 ## Interpretation
