@@ -15,6 +15,14 @@
 - `./scripts/pm/workflow-lint.sh --task-uid task_b0a770d8447340f6844e1cff07f99a37 --phase current`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
+- `./scripts/pm/task-closeout.sh --role tpm --task-uid task_b0a770d8447340f6844e1cff07f99a37 --verify-command './scripts/pm/workflow-lint.sh --task-uid task_b0a770d8447340f6844e1cff07f99a37 --phase current && ./scripts/doc-governance-check.sh && git diff --check' --json`
+- `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command './scripts/pm/workflow-lint.sh --task-uid task_b0a770d8447340f6844e1cff07f99a37 --phase current && ./scripts/doc-governance-check.sh && git diff --check'`
+- `./scripts/pm/workflow-lint.sh --task-uid task_b0a770d8447340f6844e1cff07f99a37 --phase pr-ready --allow-unbound`
+
+## Local Role Review
+- repository_health_engineer: no findings; scope/spec compliance passed and risk acceptable.
+- qa_engineer: found missing pre-PR/claim-ready evidence and incomplete PR verification evidence; fixed before PR creation.
 
 ## Residual Risk
 - The runbook now references existing report/gate commands; it does not add a new automated dependency-upgrade tool or schedule.
+- `ci-rust-governance-report` was not run for this docs-only change; it is documented as an inspection command, not a validation requirement for this PR.
