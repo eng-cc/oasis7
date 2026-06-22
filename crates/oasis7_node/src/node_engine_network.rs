@@ -406,6 +406,7 @@ impl PosNodeEngine {
             ),
         };
         if let Err(err) = apply_result {
+            let peer_mismatch = execution_error_is_peer_mismatch(&err);
             self.last_execution_height = previous_execution_height;
             self.last_execution_block_hash = previous_execution_block_hash;
             self.last_execution_state_root = previous_execution_state_root;
@@ -429,6 +430,9 @@ impl PosNodeEngine {
                         ),
                     });
                 }
+            }
+            if !peer_mismatch {
+                return Err(err);
             }
             return Err(NodeError::Replication {
                 reason: format!(
@@ -991,6 +995,14 @@ impl PosNodeEngine {
         })?;
         Ok(blake3_hex(bytes.as_slice()))
     }
+}
+
+fn execution_error_is_peer_mismatch(err: &NodeError) -> bool {
+    matches!(
+        err,
+        NodeError::Execution { reason }
+            if reason.contains("execution hook returned peer mismatch")
+    )
 }
 
 fn peer_commit_heads_conflict(left: &PeerCommittedHead, right: &PeerCommittedHead) -> bool {
