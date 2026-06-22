@@ -1,0 +1,25 @@
+task_uid: task_9392f48717004517b509515e4e3a0dbc
+title: "fix execution resource determinism"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-runtime-execution-resource-determinism
+execution_log_path: .pm/tasks/task_9392f48717004517b509515e4e3a0dbc.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs
+  - crates/oasis7/src/runtime/world/persistence.rs
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Execution resource manifest/delta provenance does not make committed execution state roots diverge across nodes."
+  - "Focused execution bridge regression tests pass."
+handoff_to: []
+updated_at: 2026-06-22T22:35:02+08:00
+last_started_at: 2026-06-22T22:14:23+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime execution_bridge_real_tests::real_execution_bridge::tests::driver -- --nocapture"
+last_verified_at: 2026-06-22T22:35:00+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-22T22:35:02+08:00

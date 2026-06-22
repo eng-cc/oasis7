@@ -212,9 +212,13 @@ fn node_runtime_execution_driver_persists_v2_committed_tick_context() {
     let world_dir = dir.join("world");
     let records_dir = dir.join("records");
     let storage_root = dir.join("store");
-    let mut driver =
-        NodeRuntimeExecutionDriver::new(state_path, world_dir.clone(), records_dir, storage_root)
-            .expect("driver");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path,
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root,
+    )
+    .expect("driver");
     let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
 
     driver
@@ -241,7 +245,8 @@ fn node_runtime_execution_driver_persists_v2_committed_tick_context() {
     assert_eq!(record.block.header.chain_epoch, Some(3));
     assert_eq!(
         record.block.header.node_block_hash.as_deref(),
-        Some("node-h1")
+        None,
+        "runtime snapshot must not include chain provenance in canonical tick records"
     );
     assert_eq!(
         record.block.header.action_root.as_deref(),
@@ -252,6 +257,11 @@ fn node_runtime_execution_driver_persists_v2_committed_tick_context() {
         record.block.execution_digest.action_batch_hash,
         empty_action_root
     );
+    let bridge_record = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 1).as_path(),
+    )
+    .expect("load bridge record");
+    assert_eq!(bridge_record.node_block_hash.as_deref(), Some("node-h1"));
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -1105,6 +1115,82 @@ fn node_runtime_execution_driver_uses_storage_profile_checkpoint_interval() {
     assert_eq!(
         record_64.checkpoint_ref.as_deref(),
         Some(execution_checkpoint_manifest_rel_path(64).as_str())
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_keeps_execution_hash_deterministic_across_node_provenance() {
+    let dir = temp_dir("execution-driver-deterministic-provenance");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+
+    let mut driver_a = NodeRuntimeExecutionDriver::new(
+        dir.join("a-state.json"),
+        dir.join("a-world"),
+        dir.join("a-records"),
+        dir.join("a-store"),
+    )
+    .expect("driver a");
+    let mut driver_b = NodeRuntimeExecutionDriver::new(
+        dir.join("b-state.json"),
+        dir.join("b-world"),
+        dir.join("b-records"),
+        dir.join("b-store"),
+    )
+    .expect("driver b");
+
+    let result_a = driver_a
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "sequencer".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1-sequencer".to_string(),
+            action_root: empty_action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("commit a");
+    let result_b = driver_b
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "storage".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1-storage".to_string(),
+            action_root: empty_action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("commit b");
+
+    assert_eq!(
+        result_a.execution_state_root, result_b.execution_state_root,
+        "node-local provenance must not change canonical execution state"
+    );
+    assert_eq!(
+        result_a.execution_block_hash, result_b.execution_block_hash,
+        "node-local provenance must not change canonical execution block"
+    );
+
+    let record_a = load_execution_bridge_record(
+        execution_bridge_record_path(dir.join("a-records").as_path(), 1).as_path(),
+    )
+    .expect("record a");
+    let record_b = load_execution_bridge_record(
+        execution_bridge_record_path(dir.join("b-records").as_path(), 1).as_path(),
+    )
+    .expect("record b");
+    assert_eq!(
+        record_a.node_block_hash.as_deref(),
+        Some("node-h1-sequencer")
+    );
+    assert_eq!(
+        record_b.node_block_hash.as_deref(),
+        Some("node-h1-storage")
     );
 
     let _ = fs::remove_dir_all(dir);
