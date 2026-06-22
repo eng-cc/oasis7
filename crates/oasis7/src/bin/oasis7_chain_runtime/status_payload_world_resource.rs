@@ -96,7 +96,7 @@ pub(super) fn build_world_resource_status(
         .unwrap_or_default();
     let pending_delta_count = latest_delta
         .as_ref()
-        .map(|delta| u64::from(delta.entries.is_empty() || !delta.is_schema_current()))
+        .map(|delta| u64::from(!delta.is_schema_current()))
         .unwrap_or(1);
     if committed_chunk_count == 0 {
         failed_gates.push("world_resource_committed_chunk_missing".to_string());
@@ -125,9 +125,10 @@ pub(super) fn build_world_resource_status(
     }) {
         failed_gates.push("world_resource_delta_height_mismatch".to_string());
     }
-    if latest_delta
-        .as_ref()
-        .is_none_or(|delta| !delta_has_nonzero_resource_effect(delta))
+    if committed_chunk_count == 0
+        && latest_delta
+            .as_ref()
+            .is_none_or(|delta| !delta_has_nonzero_resource_effect(delta))
     {
         failed_gates.push("world_resource_delta_zero_effect".to_string());
     }
@@ -273,7 +274,7 @@ fn delta_has_nonzero_resource_effect(delta: &ChainResourceDelta) -> bool {
 mod tests {
     use super::*;
     use oasis7::geometry::GeoPos;
-    use oasis7::runtime::{Action, World as RuntimeWorld};
+    use oasis7::runtime::{Action, ChainResourceDerivationContext, World as RuntimeWorld};
     use oasis7_node::{NodeConsensusSnapshot, NodeRole};
     use std::fs;
     use std::path::PathBuf;
@@ -334,13 +335,6 @@ mod tests {
         assert!(
             status
                 .failed_gates
-                .contains(&"world_resource_delta_zero_effect".to_string()),
-            "{:?}",
-            status.failed_gates
-        );
-        assert!(
-            status
-                .failed_gates
                 .contains(&"world_resource_world_id_mismatch".to_string()),
             "{:?}",
             status.failed_gates
@@ -353,6 +347,64 @@ mod tests {
             status.failed_gates
         );
         assert!(status.starter_chunk_manifest_hash.is_some());
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn status_ready_for_empty_runtime_snapshot_with_chain_resource_context() {
+        let dir = temp_dir("empty-runtime-context-ready");
+        let world = RuntimeWorld::new();
+        world
+            .save_to_dir_with_chain_resource_context(
+                dir.as_path(),
+                ChainResourceDerivationContext {
+                    world_id: "world-a",
+                    chain_id: "world-a",
+                    genesis_ref: None,
+                    created_at_height: 0,
+                    manifest_height: 3,
+                    commit_block_hash: Some("block-h3"),
+                    tick: world.state().time,
+                },
+                "world-a-config",
+                "world-a-generation",
+            )
+            .expect("save runtime world with chain context");
+
+        let snapshot = NodeSnapshot {
+            node_id: "node-a".to_string(),
+            player_id: "player-a".to_string(),
+            world_id: "world-a".to_string(),
+            role: NodeRole::Sequencer,
+            replication_enabled: false,
+            running: true,
+            tick_count: 3,
+            last_tick_unix_ms: None,
+            consensus: NodeConsensusSnapshot {
+                committed_height: 3,
+                last_block_hash: Some("block-h3".to_string()),
+                ..NodeConsensusSnapshot::default()
+            },
+            last_error: None,
+        };
+
+        let status = build_world_resource_status(&snapshot, dir.as_path(), None);
+
+        assert_eq!(status.readiness_status, "ready");
+        assert!(status.failed_gates.is_empty(), "{:?}", status.failed_gates);
+        assert_eq!(status.world_id, "world-a");
+        assert_eq!(status.chain_id, "world-a");
+        assert_ne!(status.world_seed, 0);
+        assert_eq!(status.committed_chunk_count, 1);
+        assert_eq!(status.provisional_chunk_count, 0);
+        assert_eq!(status.pending_delta_count, 0);
+        assert_eq!(status.last_delta_commit_height, Some(3));
+        assert!(status.starter_chunk_manifest_hash.is_some());
+        assert_eq!(
+            status.latest_resource_commit_hash.as_deref(),
+            Some("block-h3")
+        );
 
         let _ = fs::remove_dir_all(dir);
     }

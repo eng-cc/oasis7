@@ -32,6 +32,7 @@
 | Performance coverage and baselines | `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`testing-manual.md` 的 required-gate / Viewer performance probe 段落 |
 
 ## 最近高价值完成摘要
+- `starter-resource-genesis-for-empty-testnet-worlds` (Trace: .pm/tasks/task_656a707a4de145e0b1a8600160866889.yaml): Fresh testnet runtime snapshots now publish deterministic starter resource chunks from committed execution context, preserve starter resources after first Agent claim, and keep later committed heights schema-current without replaying genesis resource deltas.
 - `local-letai-playtest-flow-stability` (Trace: .pm/tasks/task_4af42b4abe9b4e2fb2c2cc1881ad3e74.yaml; Trace: .pm/tasks/task_43f78174f0904eaf95e3b99dde0509a7.yaml): 本地真实 LetAI provider-backed 试玩链路已收口为 wrapper-first / detached-safe / provider-backed chat 默认路径，补齐 auto-topup settlement retry、provider diagnostics、loopback proxy 稳定性、viewer loading/tick/chat 反馈与回归证据；并补强一键启动诊断、真实 UI 输入到 provider 回复的 Playwright 回归入口。
 - `testing-doc-default-surface-slimming` (Trace: .pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.yaml): 默认 testing 文档阅读面已压缩为当前执行窗口、历史追溯索引与 canonical redirect；Viewer perf smoke 当前态同步为 required-gate report-only scoped 行为。
 - `engineering-code-quality-performance-baselines` (Trace: `.pm/tasks/task_35657c5f0a5543dda5d57f51fc4b8841.execution.md`): Viewer changed-path perf smoke 已接入 required-gate report-only scope；runtime module routing perf harness 已有首个 dev/release baseline。

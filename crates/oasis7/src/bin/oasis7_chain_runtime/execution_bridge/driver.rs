@@ -7,9 +7,7 @@ use oasis7::consensus_action_payload::{
 };
 use oasis7::runtime::{
     BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal, LocalCasStore,
-    MainTokenConfig, MainTokenSupplyState, ReleaseSecurityPolicy, RuntimeCommittedTickContext,
-    Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
-    production_hardened_main_token_config,
+    RuntimeCommittedTickContext, Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
 };
 use oasis7::simulator::{
     Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldJournal as SimulatorJournal,
@@ -33,6 +31,11 @@ use super::checkpoint::{
     persist_execution_bridge_record, persist_execution_bridge_record_only,
     persist_execution_checkpoint_manifest, run_execution_bridge_retention_maintenance,
 };
+pub(crate) use super::driver_persistence::{
+    load_execution_bridge_state, load_execution_world, load_execution_world_with_policy,
+    persist_execution_bridge_state, persist_execution_world,
+    persist_execution_world_with_chain_resource_context,
+};
 use super::external_effect::{
     build_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
@@ -54,6 +57,14 @@ struct ExecutionHashPayload<'a> {
     journal_len: usize,
 }
 
+fn execution_resource_created_at_height(height: u64) -> u64 {
+    if height == 0 { 0 } else { 1 }
+}
+
+fn execution_resource_context_hash(world_id: &str) -> String {
+    format!("execution_bridge_runtime_context_v1:{world_id}")
+}
+
 pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) state_path: std::path::PathBuf,
     pub(super) world_dir: std::path::PathBuf,
@@ -69,10 +80,28 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) checkpoint_keep_latest: usize,
 }
 
-fn execution_world_persistence_files_missing(world_dir: &Path) -> bool {
+fn remove_partial_execution_world_persistence_files(world_dir: &Path) -> Result<(), String> {
     let snapshot_path = world_dir.join("snapshot.json");
     let journal_path = world_dir.join("journal.json");
-    !snapshot_path.exists() || !journal_path.exists()
+    let snapshot_exists = snapshot_path.exists();
+    let journal_exists = journal_path.exists();
+    if snapshot_exists == journal_exists {
+        return Ok(());
+    }
+    for path in [snapshot_path, journal_path] {
+        match fs::remove_file(path.as_path()) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(format!(
+                    "remove partial execution world persistence file {} failed: {}",
+                    path.display(),
+                    err
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 impl NodeRuntimeExecutionDriver {
@@ -101,8 +130,7 @@ impl NodeRuntimeExecutionDriver {
         let state = load_execution_bridge_state(state_path.as_path())?;
         let release_security_policy =
             release_security_policy_for_storage_profile(storage_profile.profile);
-        let execution_world_bootstrap_required =
-            execution_world_persistence_files_missing(world_dir.as_path());
+        remove_partial_execution_world_persistence_files(world_dir.as_path())?;
         let execution_world =
             load_execution_world_with_policy(world_dir.as_path(), release_security_policy)?;
         let execution_sandbox: Box<dyn ModuleSandbox + Send> = Box::new(
@@ -120,20 +148,9 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_interval,
             storage_profile.execution_checkpoint_keep as usize,
         );
-        let simulator_world_bootstrap_required =
-            execution_world_persistence_files_missing(driver.simulator_world_dir.as_path());
+        remove_partial_execution_world_persistence_files(driver.simulator_world_dir.as_path())?;
         driver.simulator_mirror =
             load_simulator_execution_world(driver.simulator_world_dir.as_path())?;
-        if execution_world_bootstrap_required {
-            persist_execution_world(driver.world_dir.as_path(), &driver.execution_world)?;
-        }
-        if simulator_world_bootstrap_required {
-            persist_simulator_execution_world(
-                driver.simulator_world_dir.as_path(),
-                &driver.simulator_mirror,
-                None,
-            )?;
-        }
         Ok(driver)
     }
 
@@ -357,6 +374,8 @@ impl NodeRuntimeExecutionDriver {
                 (journal, Some(recovered_ref))
             }
         };
+        let restored_resource_manifest = snapshot.chain_resource_manifest.clone();
+        let restored_resource_delta = snapshot.latest_chain_resource_delta.clone();
         let mut restored_world = RuntimeWorld::from_snapshot(snapshot, journal).map_err(|err| {
             format!(
                 "execution driver rebuild runtime world failed at height {}: {:?}",
@@ -364,7 +383,28 @@ impl NodeRuntimeExecutionDriver {
             )
         })?;
         restored_world.set_release_security_policy(world_policy);
-        persist_execution_world(self.world_dir.as_path(), &restored_world)?;
+        let restored_commit_block_hash = restored_resource_delta
+            .as_ref()
+            .and_then(|delta| delta.commit_block_hash.as_deref())
+            .or(restored_resource_manifest.created_at_block_hash.as_deref());
+        let restored_resource_context = ChainResourceDerivationContext {
+            world_id: restored_resource_manifest.world_id.as_str(),
+            chain_id: restored_resource_manifest.chain_id.as_str(),
+            genesis_ref: restored_resource_manifest.genesis_ref.as_deref(),
+            created_at_height: restored_resource_manifest.created_at_height,
+            manifest_height: restored_resource_manifest.manifest_height,
+            commit_block_hash: restored_commit_block_hash,
+            tick: restored_world.state().time,
+        };
+        persist_execution_world_with_chain_resource_context(
+            self.world_dir.as_path(),
+            &restored_world,
+            restored_resource_context,
+            restored_resource_manifest.world_config_hash.as_str(),
+            restored_resource_manifest
+                .generation_algorithm_hash
+                .as_str(),
+        )?;
         self.execution_world = restored_world;
 
         if let Some(simulator_mirror) = record.simulator_mirror.as_ref() {
@@ -589,7 +629,21 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         let simulator_mirror =
             self.apply_simulator_actions(&context, decoded_simulator_actions.as_slice())?;
 
-        let snapshot_value = self.execution_world.snapshot();
+        let runtime_resource_context = ChainResourceDerivationContext {
+            world_id: context.world_id.as_str(),
+            chain_id: context.world_id.as_str(),
+            genesis_ref: None,
+            created_at_height: execution_resource_created_at_height(context.height),
+            manifest_height: context.height,
+            commit_block_hash: Some(context.node_block_hash.as_str()),
+            tick: self.execution_world.state().time,
+        };
+        let runtime_resource_context_hash = execution_resource_context_hash(&context.world_id);
+        let snapshot_value = self.execution_world.snapshot_with_chain_resource_context(
+            runtime_resource_context,
+            runtime_resource_context_hash.clone(),
+            runtime_resource_context_hash.clone(),
+        );
         let journal_value = self.execution_world.journal().clone();
         let snapshot_bytes = super::to_cbor(snapshot_value)?;
         let journal_bytes = super::to_cbor(journal_value)?;
@@ -684,7 +738,13 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         self.state.last_node_block_hash = node_block_hash;
 
         persist_execution_bridge_state(self.state_path.as_path(), &self.state)?;
-        persist_execution_world(self.world_dir.as_path(), &self.execution_world)?;
+        persist_execution_world_with_chain_resource_context(
+            self.world_dir.as_path(),
+            &self.execution_world,
+            runtime_resource_context,
+            runtime_resource_context_hash.as_str(),
+            runtime_resource_context_hash.as_str(),
+        )?;
         if let Err(err) = run_execution_bridge_retention_maintenance(
             self.records_dir.as_path(),
             &self.execution_store,
@@ -893,6 +953,8 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 )
             })?;
         let world_policy = self.execution_world.release_security_policy().clone();
+        let restored_resource_manifest = snapshot.chain_resource_manifest.clone();
+        let restored_resource_delta = snapshot.latest_chain_resource_delta.clone();
         let mut restored_world =
             RuntimeWorld::from_snapshot(snapshot.clone(), journal).map_err(|err| {
                 format!(
@@ -901,7 +963,28 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 )
             })?;
         restored_world.set_release_security_policy(world_policy);
-        persist_execution_world(self.world_dir.as_path(), &restored_world)?;
+        let restored_commit_block_hash = restored_resource_delta
+            .as_ref()
+            .and_then(|delta| delta.commit_block_hash.as_deref())
+            .or(restored_resource_manifest.created_at_block_hash.as_deref());
+        let restored_resource_context = ChainResourceDerivationContext {
+            world_id: restored_resource_manifest.world_id.as_str(),
+            chain_id: restored_resource_manifest.chain_id.as_str(),
+            genesis_ref: restored_resource_manifest.genesis_ref.as_deref(),
+            created_at_height: restored_resource_manifest.created_at_height,
+            manifest_height: restored_resource_manifest.manifest_height,
+            commit_block_hash: restored_commit_block_hash,
+            tick: restored_world.state().time,
+        };
+        persist_execution_world_with_chain_resource_context(
+            self.world_dir.as_path(),
+            &restored_world,
+            restored_resource_context,
+            restored_resource_manifest.world_config_hash.as_str(),
+            restored_resource_manifest
+                .generation_algorithm_hash
+                .as_str(),
+        )?;
         self.execution_world = restored_world;
         persist_execution_checkpoint_manifest(self.records_dir.as_path(), &manifest)?;
 
@@ -941,117 +1024,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             execution_state_root: context.execution_state_root,
         })
     }
-}
-
-pub(crate) fn load_execution_bridge_state(path: &Path) -> Result<ExecutionBridgeState, String> {
-    if !path.exists() {
-        return Ok(ExecutionBridgeState::default());
-    }
-    let bytes = fs::read(path).map_err(|err| {
-        format!(
-            "read execution bridge state {} failed: {}",
-            path.display(),
-            err
-        )
-    })?;
-    serde_json::from_slice::<ExecutionBridgeState>(bytes.as_slice()).map_err(|err| {
-        format!(
-            "parse execution bridge state {} failed: {}",
-            path.display(),
-            err
-        )
-    })
-}
-
-pub(crate) fn persist_execution_bridge_state(
-    path: &Path,
-    state: &ExecutionBridgeState,
-) -> Result<(), String> {
-    let bytes = serde_json::to_vec_pretty(state)
-        .map_err(|err| format!("serialize execution bridge state failed: {}", err))?;
-    super::write_bytes_atomic(path, bytes.as_slice())
-}
-
-pub(crate) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, String> {
-    load_execution_world_with_policy(world_dir, ReleaseSecurityPolicy::production_hardened())
-}
-
-fn execution_world_has_pristine_main_token_state(world: &RuntimeWorld) -> bool {
-    let state = world.state();
-    state.main_token_supply == MainTokenSupplyState::default()
-        && state.main_token_balances.is_empty()
-        && state.main_token_genesis_buckets.is_empty()
-        && state.main_token_epoch_issuance_records.is_empty()
-        && state.main_token_treasury_balances.is_empty()
-        && state.main_token_claim_nonces.is_empty()
-        && state.main_token_transfer_nonces.is_empty()
-        && state.main_token_scheduled_policy_updates.is_empty()
-        && state.main_token_treasury_distribution_records.is_empty()
-        && state.main_token_node_points_bridge_records.is_empty()
-        && state
-            .restricted_starter_claim_liveops_pool_top_up_records
-            .is_empty()
-}
-
-fn normalize_execution_world_main_token_config_for_policy(
-    world: &mut RuntimeWorld,
-    release_security_policy: ReleaseSecurityPolicy,
-) {
-    if release_security_policy.is_production_hardened() {
-        if world.main_token_config() == &MainTokenConfig::default() {
-            world.set_main_token_config(production_hardened_main_token_config());
-        }
-        return;
-    }
-
-    if execution_world_has_pristine_main_token_state(world)
-        && world.main_token_config() == &production_hardened_main_token_config()
-    {
-        world.set_main_token_config(MainTokenConfig::default());
-    }
-}
-
-pub(crate) fn load_execution_world_with_policy(
-    world_dir: &Path,
-    release_security_policy: ReleaseSecurityPolicy,
-) -> Result<RuntimeWorld, String> {
-    let snapshot_path = world_dir.join("snapshot.json");
-    let journal_path = world_dir.join("journal.json");
-    if !snapshot_path.exists() || !journal_path.exists() {
-        let mut world = RuntimeWorld::new_production_hardened()
-            .with_release_security_policy(release_security_policy.clone());
-        normalize_execution_world_main_token_config_for_policy(&mut world, release_security_policy);
-        return Ok(world);
-    }
-    RuntimeWorld::load_from_dir(world_dir)
-        .map_err(|err| {
-            format!(
-                "load execution world from {} failed: {:?}",
-                world_dir.display(),
-                err
-            )
-        })
-        .map(|world| {
-            let mut world = world.with_release_security_policy(release_security_policy.clone());
-            normalize_execution_world_main_token_config_for_policy(
-                &mut world,
-                release_security_policy,
-            );
-            world
-        })
-}
-
-pub(crate) fn persist_execution_world(
-    world_dir: &Path,
-    execution_world: &RuntimeWorld,
-) -> Result<(), String> {
-    execution_world.save_to_dir(world_dir).map_err(|err| {
-        format!(
-            "save execution world to {} failed: {:?}",
-            world_dir.display(),
-            err
-        )
-    })
 }
 
 pub(crate) fn bridge_committed_heights(
@@ -1113,7 +1085,26 @@ fn bridge_committed_heights_with_policy(
                 )
             })?;
 
-        let snapshot_value = execution_world.snapshot();
+        let node_block_hash = if height == target_height {
+            snapshot.consensus.last_block_hash.clone()
+        } else {
+            None
+        };
+        let runtime_resource_context = ChainResourceDerivationContext {
+            world_id: snapshot.world_id.as_str(),
+            chain_id: snapshot.world_id.as_str(),
+            genesis_ref: None,
+            created_at_height: execution_resource_created_at_height(height),
+            manifest_height: height,
+            commit_block_hash: node_block_hash.as_deref(),
+            tick: execution_world.state().time,
+        };
+        let runtime_resource_context_hash = execution_resource_context_hash(&snapshot.world_id);
+        let snapshot_value = execution_world.snapshot_with_chain_resource_context(
+            runtime_resource_context,
+            runtime_resource_context_hash.clone(),
+            runtime_resource_context_hash.clone(),
+        );
         let journal_value = execution_world.journal().clone();
         let snapshot_bytes = super::to_cbor(snapshot_value)?;
         let journal_bytes = super::to_cbor(journal_value)?;
@@ -1138,12 +1129,6 @@ fn bridge_committed_heights_with_policy(
             journal_len: execution_world.journal().len(),
         };
         let execution_block_hash = blake3_hex(super::to_cbor(hash_payload)?.as_slice());
-        let node_block_hash = if height == target_height {
-            snapshot.consensus.last_block_hash.clone()
-        } else {
-            None
-        };
-
         let mut record = ExecutionBridgeRecord::new_v2(
             snapshot.world_id.clone(),
             height,

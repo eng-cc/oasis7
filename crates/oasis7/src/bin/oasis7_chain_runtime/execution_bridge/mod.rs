@@ -293,10 +293,13 @@ fn to_cbor<T: Serialize>(value: T) -> Result<Vec<u8>, String> {
 
 mod checkpoint;
 mod driver;
+mod driver_persistence;
 mod external_effect;
 mod simulator_mirror;
 #[cfg(test)]
 mod tests;
 
 #[allow(unused_imports)]
-pub(super) use self::driver::{NodeRuntimeExecutionDriver, load_execution_world};
+pub(super) use self::driver::NodeRuntimeExecutionDriver;
+#[allow(unused_imports)]
+pub(super) use self::driver_persistence::load_execution_world;
