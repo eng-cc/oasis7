@@ -26,8 +26,10 @@ use sha2::{Digest, Sha256};
 
 mod driver;
 mod driver_checkpoint;
+mod driver_storage_profile;
 mod replay;
 mod retention;
+mod simulator_driver;
 
 const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
 
