@@ -159,3 +159,12 @@ Example:
 - Expected Result: Pre-PR local role review remains passed for current HEAD because later changes are review evidence and scheduler-neutral project trace repair.
 - Actual Result: repository_health_engineer had `no_findings` on the cleanup diff; qa_engineer refresh returned `no_findings` for current HEAD and confirmed verification sufficiency for PR creation.
 - Blocker / Next Action: Rerun fresh PR-ready verification and prepare-task-pr.
+
+## 2026-06-22 21:00:47 CST / tpm
+- 完成内容: Created GitHub PR #561 and recorded PR purpose decision.
+- 遗留事项: Required checks, mergeability, PR comments/review threads, merge, and cleanup remain.
+- Action: Ran `./scripts/prepare-task-pr.sh --create`; PR purpose decision: `normal_pr_ci_watch` because this is a normal docs/governance cleanup PR, not a manual packaging/release CI trigger.
+- Validation Command: `./scripts/prepare-task-pr.sh --create`; `gh pr view 561 --json url,number,title,state,mergeStateStatus,reviewDecision,isDraft,headRefName,baseRefName,statusCheckRollup,comments,reviews`
+- Expected Result: PR exists; required checks start; `REVIEW_REQUIRED` and approval-only `BLOCKED` are tracked as informational unless checks, requested changes, comments, conflicts, or merge API rejection create a real blocker.
+- Actual Result: PR #561 created at `https://github.com/eng-cc/oasis7/pull/561`; `required-gate` and `plan-wasm-determinism-scope` started; `newapi-bridge-linux-x86-64` skipped; PR state open; mergeStateStatus `BLOCKED`; reviewDecision `REVIEW_REQUIRED`; no comments or reviews at creation check.
+- Blocker / Next Action: Push this PR purpose evidence, watch required checks and comments/review threads, then merge when gates allow.
