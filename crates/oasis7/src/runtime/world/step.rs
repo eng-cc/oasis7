@@ -5,8 +5,8 @@ use super::super::{
     ModuleSubscriptionStage, RejectReason, RuleVerdict, WorldError, WorldEvent, WorldEventBody,
     WorldTime,
 };
-use super::economy::EconomyActionResolution;
 use super::World;
+use super::economy::EconomyActionResolution;
 use crate::runtime::RuntimeCommittedTickContext;
 use crate::simulator::ResourceKind;
 
