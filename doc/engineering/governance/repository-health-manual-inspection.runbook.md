@@ -20,7 +20,7 @@ Run the checks from the task worktree and record the command outputs or summarie
 ./scripts/lint-skills.sh
 ./scripts/worktree-gc-report.sh --prunable-only
 ./scripts/pm/lint.sh
-./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance/repository-health-<YYYYMMDD>
+./scripts/ci-rust-governance-report.sh --out-dir "output/rust-governance/repository-health-$(date +%Y%m%d)"
 ```
 
 For code-health sampling that may be expensive, choose the narrowest tier that matches the finding and record why it was selected:
