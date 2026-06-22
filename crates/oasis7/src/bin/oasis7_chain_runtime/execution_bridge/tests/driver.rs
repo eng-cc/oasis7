@@ -1188,10 +1188,7 @@ fn node_runtime_execution_driver_keeps_execution_hash_deterministic_across_node_
         record_a.node_block_hash.as_deref(),
         Some("node-h1-sequencer")
     );
-    assert_eq!(
-        record_b.node_block_hash.as_deref(),
-        Some("node-h1-storage")
-    );
+    assert_eq!(record_b.node_block_hash.as_deref(), Some("node-h1-storage"));
 
     let _ = fs::remove_dir_all(dir);
 }
