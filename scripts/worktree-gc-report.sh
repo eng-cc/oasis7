@@ -244,21 +244,31 @@ for record in records:
             known_node_modules_bytes += node_modules_bytes
 
     cleanup_reasons: list[str] = []
+    protected_cleanup_reasons: list[str] = []
     cleanup_commands: list[str] = []
     branch_delete_candidate = False
 
     latest_status = latest_task.get("status") if latest_task else None
     if prunable:
         cleanup_reasons.append("prunable_worktree")
+    is_canonical_repo_root = resolved_path == repo_root
+    is_main_branch = branch == "main"
+
+    if is_canonical_repo_root:
+        protected_cleanup_reasons.append("canonical_repo_root")
+    if is_main_branch:
+        protected_cleanup_reasons.append("main_branch")
+
     if (
         latest_status in {"done", "deferred"}
         and exists
         and not is_current
         and dirty is False
+        and not protected_cleanup_reasons
     ):
         cleanup_reasons.append("closed_pm_task")
 
-    cleanup_candidate = bool(cleanup_reasons)
+    cleanup_candidate = bool(cleanup_reasons) and not protected_cleanup_reasons
     if cleanup_candidate:
         cleanup_commands.append(
             shell_command(
@@ -294,6 +304,7 @@ for record in records:
         "pm_task_updated_at": latest_task.get("updated_at") if latest_task else None,
         "cleanup_candidate": cleanup_candidate,
         "cleanup_reasons": cleanup_reasons,
+        "protected_cleanup_reasons": protected_cleanup_reasons,
         "branch_delete_candidate": branch_delete_candidate,
         "cleanup_commands": cleanup_commands,
     }
@@ -397,5 +408,10 @@ for entry in shown:
         for command in entry["cleanup_commands"]:
             print(f"      - {command}")
     elif not prunable_only:
+        if entry["protected_cleanup_reasons"]:
+            print(
+                "    protected_cleanup_reasons: "
+                f"{', '.join(entry['protected_cleanup_reasons'])}"
+            )
         print("    cleanup_reasons: none")
 PY
