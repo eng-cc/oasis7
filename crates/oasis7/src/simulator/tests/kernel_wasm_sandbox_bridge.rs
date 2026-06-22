@@ -352,6 +352,7 @@ fn micro_depot_output_for(proposal: MicroDepotProposal) -> ModuleOutput {
 #[derive(Clone, Default)]
 struct DynamicMicroDepotSandbox {
     requests: Vec<ModuleCallRequest>,
+    consumed_resource_classes: Option<Vec<MicroDepotConsumedResourceClass>>,
 }
 
 impl ModuleSandbox for DynamicMicroDepotSandbox {
@@ -370,10 +371,14 @@ impl ModuleSandbox for DynamicMicroDepotSandbox {
             risk_delta_class: MicroDepotDeltaClass::None,
             wait_delta_class: MicroDepotDeltaClass::MinorDecrease,
             blocker_change: Some("repair_parts_gap_reduced".to_string()),
-            consumed_resource_classes: vec![MicroDepotConsumedResourceClass {
-                resource_kind: "data".to_string(),
-                amount_class: MicroDepotPressureClass::Low,
-            }],
+            consumed_resource_classes: self.consumed_resource_classes.clone().unwrap_or_else(
+                || {
+                    vec![MicroDepotConsumedResourceClass {
+                        resource_kind: "data".to_string(),
+                        amount_class: MicroDepotPressureClass::Low,
+                    }]
+                },
+            ),
             explanation_code: "depot_reserved_local_parts".to_string(),
             proposal_hash: String::new(),
         };
@@ -856,6 +861,93 @@ fn micro_depot_service_rejects_non_owner_module_mismatch_and_unsupported_resourc
             .resources
             .get(ResourceKind::Data),
         6
+    );
+}
+
+#[test]
+fn micro_depot_service_preflights_all_debits_before_mutating_stock() {
+    let mut kernel = WorldKernel::new();
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-hub".to_string(),
+        name: "Hub".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.step().expect("register location");
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-builder".to_string(),
+        location_id: "loc-hub".to_string(),
+    });
+    kernel.step().expect("register builder");
+    seed_owner_resource(
+        &mut kernel,
+        ResourceOwner::Agent {
+            agent_id: "agent-builder".to_string(),
+        },
+        ResourceKind::Data,
+        5,
+    );
+
+    let sandbox = Arc::new(Mutex::new(DynamicMicroDepotSandbox {
+        requests: Vec::new(),
+        consumed_resource_classes: Some(vec![
+            MicroDepotConsumedResourceClass {
+                resource_kind: "data".to_string(),
+                amount_class: MicroDepotPressureClass::Low,
+            },
+            MicroDepotConsumedResourceClass {
+                resource_kind: "electricity".to_string(),
+                amount_class: MicroDepotPressureClass::High,
+            },
+        ]),
+    }));
+    kernel.set_micro_depot_wasm_module_evaluator(
+        "regional.micro_depot",
+        "hash-micro-depot",
+        "evaluate_quote",
+        vec![0x00, 0x61, 0x73, 0x6d],
+        ModuleLimits::unbounded(),
+        Arc::clone(&sandbox),
+    );
+    kernel.submit_action(Action::InstallMicroDepot {
+        installer_agent_id: "agent-builder".to_string(),
+        facility_id: "depot-alpha".to_string(),
+        location_id: "loc-hub".to_string(),
+        owner_claim_id: "claim-1".to_string(),
+        regional_blocker_receipt_id: "repair-logistics:loc-hub:1".to_string(),
+        module_id: "regional.micro_depot".to_string(),
+        module_version: "0.1.0".to_string(),
+        wasm_hash: "hash-micro-depot".to_string(),
+        entrypoint: "evaluate_quote".to_string(),
+        service_radius_cm: 250_000,
+        supported_resource_kinds: vec!["data".to_string(), "electricity".to_string()],
+    });
+    kernel.step().expect("install depot");
+
+    kernel.submit_action(Action::ServiceMicroDepotRepair {
+        agent_id: "agent-builder".to_string(),
+        facility_id: "depot-alpha".to_string(),
+        target_id: "loc-hub".to_string(),
+        base_cost_class: MicroDepotPressureClass::High,
+        base_risk_class: MicroDepotPressureClass::Medium,
+        blocker_type: Some("repair_parts_gap".to_string()),
+    });
+    assert!(matches!(
+        kernel
+            .step()
+            .expect("insufficient second debit rejects")
+            .kind,
+        WorldEventKind::ActionRejected { .. }
+    ));
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-builder")
+            .expect("builder")
+            .resources
+            .get(ResourceKind::Data),
+        3
     );
 }
 

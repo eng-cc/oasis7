@@ -773,6 +773,9 @@ impl WorldKernel {
             };
         }
         let owner = facility.owner.clone();
+        if let Err(reason) = self.ensure_micro_depot_debits_available(&owner, &consumed_resources) {
+            return WorldEventKind::ActionRejected { reason };
+        }
         for debit in &consumed_resources {
             if let Err(reason) = self.remove_from_owner(&owner, debit.kind, debit.amount) {
                 return WorldEventKind::ActionRejected { reason };
@@ -908,6 +911,39 @@ impl WorldKernel {
                 )],
             }),
         }
+    }
+
+    fn ensure_micro_depot_debits_available(
+        &self,
+        owner: &ResourceOwner,
+        debits: &[MicroDepotResourceDebit],
+    ) -> Result<(), RejectReason> {
+        let mut required = std::collections::BTreeMap::<ResourceKind, i64>::new();
+        for debit in debits {
+            *required.entry(debit.kind).or_default() += debit.amount;
+        }
+        let Some(stock) = self.owner_stock(owner) else {
+            return match owner {
+                ResourceOwner::Agent { agent_id } => Err(RejectReason::AgentNotFound {
+                    agent_id: agent_id.clone(),
+                }),
+                ResourceOwner::Location { location_id } => Err(RejectReason::LocationNotFound {
+                    location_id: location_id.clone(),
+                }),
+            };
+        };
+        for (kind, requested) in required {
+            let available = stock.get(kind);
+            if available < requested {
+                return Err(RejectReason::InsufficientResource {
+                    owner: owner.clone(),
+                    kind,
+                    requested,
+                    available,
+                });
+            }
+        }
+        Ok(())
     }
 
     fn micro_depot_distance_to_target(
