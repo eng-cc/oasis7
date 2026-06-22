@@ -525,6 +525,7 @@ fn micro_depot_full_chain_installs_services_and_records_receipt() {
         facility_id: "depot-alpha".to_string(),
         location_id: "loc-hub".to_string(),
         owner_claim_id: "claim-1".to_string(),
+        regional_blocker_receipt_id: "repair-logistics:loc-hub:1".to_string(),
         module_id: "regional.micro_depot".to_string(),
         module_version: "0.1.0".to_string(),
         wasm_hash: "hash-micro-depot".to_string(),
@@ -538,11 +539,19 @@ fn micro_depot_full_chain_installs_services_and_records_receipt() {
             facility_id,
             installer_agent_id,
             location_id,
+            install_cost_resources,
             ..
         } => {
             assert_eq!(facility_id, "depot-alpha");
             assert_eq!(installer_agent_id, "agent-builder");
             assert_eq!(location_id, "loc-hub");
+            assert_eq!(
+                install_cost_resources,
+                vec![MicroDepotResourceDebit {
+                    kind: ResourceKind::Data,
+                    amount: MICRO_DEPOT_INSTALL_DATA_COST,
+                }]
+            );
         }
         other => panic!("unexpected install event: {other:?}"),
     }
@@ -613,7 +622,7 @@ fn micro_depot_full_chain_installs_services_and_records_receipt() {
             .expect("agent")
             .resources
             .get(ResourceKind::Data),
-        4
+        2
     );
     assert_eq!(sandbox.lock().expect("lock sandbox").requests.len(), 1);
 
@@ -667,6 +676,7 @@ fn micro_depot_registry_logistics_and_player_snapshot_close_loop() {
         facility_id: "depot-alpha".to_string(),
         location_id: "loc-hub".to_string(),
         owner_claim_id: "claim-1".to_string(),
+        regional_blocker_receipt_id: "repair-logistics:loc-hub:1".to_string(),
         module_id: "regional.micro_depot".to_string(),
         module_version: "0.1.0".to_string(),
         wasm_hash: "hash-micro-depot".to_string(),
@@ -730,6 +740,126 @@ fn micro_depot_registry_logistics_and_player_snapshot_close_loop() {
 }
 
 #[test]
+fn micro_depot_service_rejects_non_owner_module_mismatch_and_unsupported_resource() {
+    let mut kernel = WorldKernel::new();
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-hub".to_string(),
+        name: "Hub".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.step().expect("register location");
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-builder".to_string(),
+        location_id: "loc-hub".to_string(),
+    });
+    kernel.step().expect("register builder");
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-other".to_string(),
+        location_id: "loc-hub".to_string(),
+    });
+    kernel.step().expect("register other");
+    seed_owner_resource(
+        &mut kernel,
+        ResourceOwner::Agent {
+            agent_id: "agent-builder".to_string(),
+        },
+        ResourceKind::Data,
+        8,
+    );
+
+    let sandbox = Arc::new(Mutex::new(DynamicMicroDepotSandbox::default()));
+    kernel.set_micro_depot_wasm_module_evaluator(
+        "regional.micro_depot",
+        "hash-micro-depot",
+        "evaluate_quote",
+        vec![0x00, 0x61, 0x73, 0x6d],
+        ModuleLimits::unbounded(),
+        Arc::clone(&sandbox),
+    );
+    kernel.submit_action(Action::InstallMicroDepot {
+        installer_agent_id: "agent-builder".to_string(),
+        facility_id: "depot-alpha".to_string(),
+        location_id: "loc-hub".to_string(),
+        owner_claim_id: "claim-1".to_string(),
+        regional_blocker_receipt_id: "repair-logistics:loc-hub:1".to_string(),
+        module_id: "regional.micro_depot".to_string(),
+        module_version: "0.1.0".to_string(),
+        wasm_hash: "hash-micro-depot".to_string(),
+        entrypoint: "evaluate_quote".to_string(),
+        service_radius_cm: 250_000,
+        supported_resource_kinds: vec!["electricity".to_string()],
+    });
+    kernel.step().expect("install depot");
+
+    kernel.submit_action(Action::ServiceMicroDepotRepair {
+        agent_id: "agent-other".to_string(),
+        facility_id: "depot-alpha".to_string(),
+        target_id: "loc-hub".to_string(),
+        base_cost_class: MicroDepotPressureClass::High,
+        base_risk_class: MicroDepotPressureClass::Medium,
+        blocker_type: Some("repair_parts_gap".to_string()),
+    });
+    assert!(matches!(
+        kernel.step().expect("non-owner service rejection").kind,
+        WorldEventKind::ActionRejected { .. }
+    ));
+
+    kernel.set_micro_depot_wasm_module_evaluator(
+        "regional.micro_depot",
+        "hash-other",
+        "evaluate_quote",
+        vec![0x00, 0x61, 0x73, 0x6d, 0x02],
+        ModuleLimits::unbounded(),
+        Arc::clone(&sandbox),
+    );
+    kernel.submit_action(Action::ServiceMicroDepotRepair {
+        agent_id: "agent-builder".to_string(),
+        facility_id: "depot-alpha".to_string(),
+        target_id: "loc-hub".to_string(),
+        base_cost_class: MicroDepotPressureClass::High,
+        base_risk_class: MicroDepotPressureClass::Medium,
+        blocker_type: Some("repair_parts_gap".to_string()),
+    });
+    assert!(matches!(
+        kernel.step().expect("module mismatch rejection").kind,
+        WorldEventKind::ActionRejected { .. }
+    ));
+
+    kernel.set_micro_depot_wasm_module_evaluator(
+        "regional.micro_depot",
+        "hash-micro-depot",
+        "evaluate_quote",
+        vec![0x00, 0x61, 0x73, 0x6d],
+        ModuleLimits::unbounded(),
+        Arc::clone(&sandbox),
+    );
+    kernel.submit_action(Action::ServiceMicroDepotRepair {
+        agent_id: "agent-builder".to_string(),
+        facility_id: "depot-alpha".to_string(),
+        target_id: "loc-hub".to_string(),
+        base_cost_class: MicroDepotPressureClass::High,
+        base_risk_class: MicroDepotPressureClass::Medium,
+        blocker_type: Some("repair_parts_gap".to_string()),
+    });
+    assert!(matches!(
+        kernel.step().expect("unsupported resource rejection").kind,
+        WorldEventKind::ActionRejected { .. }
+    ));
+
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-builder")
+            .expect("builder")
+            .resources
+            .get(ResourceKind::Data),
+        6
+    );
+}
+
+#[test]
 fn micro_depot_lifecycle_suspend_pay_and_reclaim_replays() {
     let mut kernel = WorldKernel::new();
     kernel.submit_action(Action::RegisterLocation {
@@ -744,6 +874,14 @@ fn micro_depot_lifecycle_suspend_pay_and_reclaim_replays() {
         location_id: "loc-hub".to_string(),
     });
     kernel.step().expect("register agent");
+    seed_owner_resource(
+        &mut kernel,
+        ResourceOwner::Agent {
+            agent_id: "agent-builder".to_string(),
+        },
+        ResourceKind::Data,
+        3,
+    );
     let replay_base_snapshot = kernel.snapshot();
 
     kernel.submit_action(Action::InstallMicroDepot {
@@ -751,6 +889,7 @@ fn micro_depot_lifecycle_suspend_pay_and_reclaim_replays() {
         facility_id: "depot-alpha".to_string(),
         location_id: "loc-hub".to_string(),
         owner_claim_id: "claim-1".to_string(),
+        regional_blocker_receipt_id: "repair-logistics:loc-hub:1".to_string(),
         module_id: "regional.micro_depot".to_string(),
         module_version: "0.1.0".to_string(),
         wasm_hash: "hash-micro-depot".to_string(),
@@ -786,10 +925,18 @@ fn micro_depot_lifecycle_suspend_pay_and_reclaim_replays() {
         facility_id: "depot-alpha".to_string(),
     });
     let upkeep_event = kernel.step().expect("pay upkeep");
-    assert!(matches!(
-        upkeep_event.kind,
-        WorldEventKind::MicroDepotUpkeepPaid { .. }
-    ));
+    match upkeep_event.kind {
+        WorldEventKind::MicroDepotUpkeepPaid {
+            consumed_resources, ..
+        } => assert_eq!(
+            consumed_resources,
+            vec![MicroDepotResourceDebit {
+                kind: ResourceKind::Data,
+                amount: MICRO_DEPOT_UPKEEP_DATA_COST,
+            }]
+        ),
+        other => panic!("unexpected upkeep event: {other:?}"),
+    }
     assert_eq!(
         kernel
             .model()

@@ -19,6 +19,8 @@ pub const MICRO_DEPOT_DEBIT_AMOUNT_LOW: i64 = 1;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_MEDIUM: i64 = 3;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_HIGH: i64 = 5;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_CRITICAL: i64 = 8;
+pub const MICRO_DEPOT_INSTALL_DATA_COST: i64 = 2;
+pub const MICRO_DEPOT_UPKEEP_DATA_COST: i64 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MicroDepotEvalInput {
@@ -388,6 +390,7 @@ impl WorldKernel {
         facility_id: FacilityId,
         location_id: LocationId,
         owner_claim_id: String,
+        regional_blocker_receipt_id: String,
         module_id: String,
         module_version: String,
         wasm_hash: String,
@@ -417,30 +420,55 @@ impl WorldKernel {
             };
         }
         if owner_claim_id.trim().is_empty()
+            || regional_blocker_receipt_id.trim().is_empty()
             || module_id.trim().is_empty()
             || module_version.trim().is_empty()
             || wasm_hash.trim().is_empty()
             || entrypoint.trim().is_empty()
             || service_radius_cm <= 0
+            || supported_resource_kinds.is_empty()
         {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::RuleDenied {
                     notes: vec![
-                        "install_micro_depot requires owner claim, module identity, entrypoint, and positive radius"
+                        "install_micro_depot requires owner claim, regional blocker receipt, module identity, entrypoint, positive radius, and supported resources"
                             .to_string(),
                     ],
+                },
+            };
+        }
+        if self.model.regional_infrastructure.values().any(|facility| {
+            facility.kind == "micro_depot"
+                && facility.location_id == location_id
+                && facility.owner_claim_id == owner_claim_id
+        }) {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "micro_depot already exists for claim {owner_claim_id} at location {location_id}"
+                    )],
                 },
             };
         }
         let owner = ResourceOwner::Agent {
             agent_id: installer_agent_id.clone(),
         };
+        let install_cost_resources = vec![MicroDepotResourceDebit {
+            kind: ResourceKind::Data,
+            amount: MICRO_DEPOT_INSTALL_DATA_COST,
+        }];
+        for debit in &install_cost_resources {
+            if let Err(reason) = self.remove_from_owner(&owner, debit.kind, debit.amount) {
+                return WorldEventKind::ActionRejected { reason };
+            }
+        }
         let facility = RegionalInfrastructure {
             facility_id: facility_id.clone(),
             kind: "micro_depot".to_string(),
             location_id: location_id.clone(),
             owner: owner.clone(),
             owner_claim_id: owner_claim_id.clone(),
+            regional_blocker_receipt_id: regional_blocker_receipt_id.clone(),
             status: "active".to_string(),
             module_id: module_id.clone(),
             module_version: module_version.clone(),
@@ -462,12 +490,14 @@ impl WorldKernel {
             location_id,
             owner,
             owner_claim_id,
+            regional_blocker_receipt_id,
             module_id,
             module_version,
             wasm_hash,
             entrypoint,
             service_radius_cm,
             supported_resource_kinds,
+            install_cost_resources,
         }
     }
 
@@ -555,6 +585,10 @@ impl WorldKernel {
                 },
             };
         }
+        match self.ensure_micro_depot_owner(&facility_id, &agent_id) {
+            Ok(()) => {}
+            Err(reason) => return WorldEventKind::ActionRejected { reason },
+        }
         if facility.status != "active" || !facility.upkeep_paid {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::RuleDenied {
@@ -616,6 +650,19 @@ impl WorldKernel {
                 };
             }
         };
+        if preview.module_id != facility.module_id
+            || preview.wasm_hash != facility.wasm_hash
+            || preview.entrypoint != facility.entrypoint
+        {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "micro_depot wasm identity mismatch for facility {}",
+                        facility_id
+                    )],
+                },
+            };
+        }
         if preview.proposal.decision != MicroDepotDecision::Applicable {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::RuleDenied {
@@ -634,6 +681,14 @@ impl WorldKernel {
                 };
             }
         };
+        if let Err(note) = ensure_micro_depot_supported_resources(
+            &facility.supported_resource_kinds,
+            &consumed_resources,
+        ) {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied { notes: vec![note] },
+            };
+        }
         let owner = facility.owner.clone();
         for debit in &consumed_resources {
             if let Err(reason) = self.remove_from_owner(&owner, debit.kind, debit.amount) {
@@ -653,6 +708,11 @@ impl WorldKernel {
             agent_id,
             target_id,
             action_kind: micro_depot_action_kind_label(action_kind).to_string(),
+            schema_version: input.schema_version,
+            module_id: preview.module_id,
+            module_version: facility.module_version,
+            wasm_hash: preview.wasm_hash,
+            entrypoint: preview.entrypoint,
             proposal_hash: preview.proposal.proposal_hash,
             receipt_id,
             cost_delta_class: micro_depot_delta_class_label(preview.effect.cost_delta_class)
@@ -676,6 +736,18 @@ impl WorldKernel {
             Ok(()) => {}
             Err(reason) => return WorldEventKind::ActionRejected { reason },
         }
+        let owner = ResourceOwner::Agent {
+            agent_id: agent_id.clone(),
+        };
+        let consumed_resources = vec![MicroDepotResourceDebit {
+            kind: ResourceKind::Data,
+            amount: MICRO_DEPOT_UPKEEP_DATA_COST,
+        }];
+        for debit in &consumed_resources {
+            if let Err(reason) = self.remove_from_owner(&owner, debit.kind, debit.amount) {
+                return WorldEventKind::ActionRejected { reason };
+            }
+        }
         let Some(facility) = self.model.regional_infrastructure.get_mut(&facility_id) else {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::FacilityNotFound { facility_id },
@@ -689,6 +761,7 @@ impl WorldKernel {
             facility_id,
             agent_id,
             receipt_id,
+            consumed_resources,
         }
     }
 
@@ -790,6 +863,28 @@ fn micro_depot_resource_kind(value: &str) -> Result<ResourceKind, String> {
         "data" => Ok(ResourceKind::Data),
         "electricity" => Ok(ResourceKind::Electricity),
         other => Err(format!("unsupported micro_depot resource kind: {other}")),
+    }
+}
+
+fn ensure_micro_depot_supported_resources(
+    supported_resource_kinds: &[String],
+    debits: &[MicroDepotResourceDebit],
+) -> Result<(), String> {
+    for debit in debits {
+        let required = micro_depot_resource_kind_label(debit.kind);
+        if !supported_resource_kinds.iter().any(|kind| kind == required) {
+            return Err(format!(
+                "micro_depot resource kind {required} is not supported by facility"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn micro_depot_resource_kind_label(kind: ResourceKind) -> &'static str {
+    match kind {
+        ResourceKind::Data => "data",
+        ResourceKind::Electricity => "electricity",
     }
 }
 

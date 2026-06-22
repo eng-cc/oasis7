@@ -255,6 +255,7 @@ pub enum WorldEventKind {
         location_id: LocationId,
         owner: ResourceOwner,
         owner_claim_id: String,
+        regional_blocker_receipt_id: String,
         module_id: String,
         module_version: String,
         wasm_hash: String,
@@ -262,6 +263,8 @@ pub enum WorldEventKind {
         service_radius_cm: i64,
         #[serde(default)]
         supported_resource_kinds: Vec<String>,
+        #[serde(default)]
+        install_cost_resources: Vec<MicroDepotResourceDebit>,
     },
     MicroDepotServiceApplied {
         facility_id: FacilityId,
@@ -269,6 +272,11 @@ pub enum WorldEventKind {
         agent_id: AgentId,
         target_id: String,
         action_kind: String,
+        schema_version: String,
+        module_id: String,
+        module_version: String,
+        wasm_hash: String,
+        entrypoint: String,
         proposal_hash: String,
         receipt_id: String,
         cost_delta_class: String,
@@ -284,6 +292,8 @@ pub enum WorldEventKind {
         facility_id: FacilityId,
         agent_id: AgentId,
         receipt_id: String,
+        #[serde(default)]
+        consumed_resources: Vec<MicroDepotResourceDebit>,
     },
     MicroDepotSuspended {
         facility_id: FacilityId,

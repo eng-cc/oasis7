@@ -246,6 +246,7 @@ pub struct RegionalInfrastructure {
     pub location_id: LocationId,
     pub owner: ResourceOwner,
     pub owner_claim_id: String,
+    pub regional_blocker_receipt_id: String,
     pub status: String,
     pub module_id: String,
     pub module_version: String,

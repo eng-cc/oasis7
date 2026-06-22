@@ -62,6 +62,15 @@ WASM proposes, runtime validates / applies / signs.
 6. 系统通过 regional pressure card、repair 失败反馈或 logistics bottleneck 暴露部署建议。
 7. Runtime 在 `InstallMicroDepot` 前再次校验 owner、claim scope、资源、upkeep 初始化、重复设施、module hash / schema allowlist。
 
+当前内核 first slice 的硬约束：
+
+- `InstallMicroDepot` 必须携带 `regional_blocker_receipt_id`，它代表前置 repair / logistics blocker 闭环产出的 receipt；没有这个 receipt，runtime 直接拒绝创建。
+- 同一 `owner_claim_id + location_id` 只能存在一个 `micro_depot`，避免把它变成自由堆叠建造物。
+- 安装会扣固定 `Data` 成本，upkeep 会扣固定 `Data` 成本；数值先作为 kernel 常量落地，后续再迁入平衡表。
+- 服务动作必须由 depot owner agent 提交；非 owner 不能触发服务，也不能消耗 owner 资源。
+- 服务 quote 必须与 facility pinned 的 `module_id / wasm_hash / entrypoint` 匹配，且 WASM 提议消耗的资源必须属于 facility 的 `supported_resource_kinds`。
+- `MicroDepotServiceApplied` receipt 记录 `schema_version / module_id / module_version / wasm_hash / entrypoint / proposal_hash`，保证玩家可见 receipt 和治理审计能追溯到模块证据。
+
 玩家不应该从全局菜单直接“建一个 depot”。推荐入口是：
 
 ```text

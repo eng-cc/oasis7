@@ -721,12 +721,14 @@ impl WorldKernel {
                 location_id,
                 owner,
                 owner_claim_id,
+                regional_blocker_receipt_id,
                 module_id,
                 module_version,
                 wasm_hash,
                 entrypoint,
                 service_radius_cm,
                 supported_resource_kinds,
+                install_cost_resources,
             } => {
                 if self.model.regional_infrastructure.contains_key(facility_id) {
                     return Err(PersistError::ReplayConflict {
@@ -747,6 +749,9 @@ impl WorldKernel {
                     .map_err(|reason| PersistError::ReplayConflict {
                         message: format!("invalid micro_depot owner: {reason:?}"),
                     })?;
+                for debit in install_cost_resources {
+                    self.remove_from_owner_for_replay(owner, debit.kind, debit.amount)?;
+                }
                 self.model.regional_infrastructure.insert(
                     facility_id.clone(),
                     RegionalInfrastructure {
@@ -755,6 +760,7 @@ impl WorldKernel {
                         location_id: location_id.clone(),
                         owner: owner.clone(),
                         owner_claim_id: owner_claim_id.clone(),
+                        regional_blocker_receipt_id: regional_blocker_receipt_id.clone(),
                         status: "active".to_string(),
                         module_id: module_id.clone(),
                         module_version: module_version.clone(),
@@ -803,8 +809,21 @@ impl WorldKernel {
             WorldEventKind::MicroDepotUpkeepPaid {
                 facility_id,
                 receipt_id,
+                consumed_resources,
                 ..
             } => {
+                let owner = self
+                    .model
+                    .regional_infrastructure
+                    .get(facility_id)
+                    .ok_or_else(|| PersistError::ReplayConflict {
+                        message: format!("micro_depot not found: {facility_id}"),
+                    })?
+                    .owner
+                    .clone();
+                for debit in consumed_resources {
+                    self.remove_from_owner_for_replay(&owner, debit.kind, debit.amount)?;
+                }
                 let depot = self
                     .model
                     .regional_infrastructure

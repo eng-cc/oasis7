@@ -545,6 +545,7 @@ pub enum Action {
         facility_id: FacilityId,
         location_id: LocationId,
         owner_claim_id: String,
+        regional_blocker_receipt_id: String,
         module_id: String,
         module_version: String,
         wasm_hash: String,

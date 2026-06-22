@@ -58,12 +58,13 @@ impl ChunkRuntimeConfig {
 
 pub use micro_depot::{
     MICRO_DEPOT_DEBIT_AMOUNT_CRITICAL, MICRO_DEPOT_DEBIT_AMOUNT_HIGH, MICRO_DEPOT_DEBIT_AMOUNT_LOW,
-    MICRO_DEPOT_DEBIT_AMOUNT_MEDIUM, MICRO_DEPOT_DEBIT_AMOUNT_NONE, MICRO_DEPOT_PROPOSAL_EMIT_KIND,
-    MicroDepotActionContext, MicroDepotActionKind, MicroDepotConsumedResourceClass,
-    MicroDepotDecision, MicroDepotDeltaClass, MicroDepotEffectPreview, MicroDepotEvalInput,
-    MicroDepotFacilityContext, MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot,
-    MicroDepotPressureClass, MicroDepotProposal, MicroDepotQuotePreview, MicroDepotRegionContext,
-    MicroDepotStatus, compute_micro_depot_proposal_hash, evaluate_micro_depot_quote_with_module,
+    MICRO_DEPOT_DEBIT_AMOUNT_MEDIUM, MICRO_DEPOT_DEBIT_AMOUNT_NONE, MICRO_DEPOT_INSTALL_DATA_COST,
+    MICRO_DEPOT_PROPOSAL_EMIT_KIND, MICRO_DEPOT_UPKEEP_DATA_COST, MicroDepotActionContext,
+    MicroDepotActionKind, MicroDepotConsumedResourceClass, MicroDepotDecision,
+    MicroDepotDeltaClass, MicroDepotEffectPreview, MicroDepotEvalInput, MicroDepotFacilityContext,
+    MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot, MicroDepotPressureClass,
+    MicroDepotProposal, MicroDepotQuotePreview, MicroDepotRegionContext, MicroDepotStatus,
+    compute_micro_depot_proposal_hash, evaluate_micro_depot_quote_with_module,
 };
 #[allow(unused_imports)]
 pub use step::{IntentBatchReport, IntentConflictResolution};
