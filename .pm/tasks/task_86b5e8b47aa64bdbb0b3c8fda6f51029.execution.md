@@ -275,3 +275,13 @@ Example:
 - Expected Result: Branch rebases cleanly and review package points to current head/base.
 - Actual Result: Rebase succeeded; review package generated at `.pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/review-packages/review-5ce155e1f..a0c7ddcdf.diff`.
 - Blocker / Next Action: Rerun PR-ready checks and commit evidence refresh.
+
+## 2026-06-22 23:31:30 CST / tpm
+- 完成内容: Created GitHub PR and recorded PR purpose decision.
+- 遗留事项: commit and push this PR evidence append; continue normal PR checks/comments/mergeability watch.
+- Action: Ran `./scripts/prepare-task-pr.sh --json`, then attempted `./scripts/prepare-task-pr.sh --create --title "Align engineering docs with always-bootstrap workflow"`; helper pushed the branch but `gh pr create` required a non-interactive body. Created PR directly with `gh pr create --base main --head task/engineering-repository-health-kickoff --title "Align engineering docs with always-bootstrap workflow" --body <summary/verification>`.
+- Validation Command: `./scripts/prepare-task-pr.sh --json`; `gh pr create --base main --head task/engineering-repository-health-kickoff --title "Align engineering docs with always-bootstrap workflow" --body <summary/verification>`.
+- Expected Result: PR preflight passes, branch is pushed, and GitHub PR is created.
+- Actual Result: preflight passed with `pre_pr_local_role_review.status=passed`; branch pushed to `origin/task/engineering-repository-health-kickoff`; PR created: https://github.com/eng-cc/oasis7/pull/569.
+- PR Purpose Decision: `normal_pr_ci_watch`. This is an ordinary engineering documentation/governance PR, not a manual packaging/release CI hold. TPM must continue watching required checks, mergeability, PR comments, and unresolved review threads until merge/cleanup or a real blocker appears.
+- Blocker / Next Action: Commit and push this evidence append, then inspect PR #569 checks/comments/mergeability.
