@@ -89,6 +89,13 @@
   - 不在本轮为 claim 成本拍死绝对 token 数值；v1 先冻结公式、状态机和不可突破的边界。
   - 不把 `restricted starter claim balance` 扩展成通用的“全游戏不可转账 main token”体系。
 
+### 2.1 Cold-Start Resource Boundary
+
+- `restricted starter claim balance`: 只服务 `slot-1` claim / upkeep 的受限 main-token bucket；它可以通过 dedicated pool 自动补足首个 `slot-1` upfront 缺口，但不能转账、提现、用于普通资产动作，refund 也必须保留 restricted provenance。
+- `starter OC`: 玩家完成 `claim_first_agent` 后，为首次 LLM/agent chat 提供的一次性 liquid OC 前置预算 gate；当前 cold-start 动作链是 `claim_first_agent -> claim_starter_oc -> first agent chat`。
+- 两者不得混写：`restricted starter claim balance` 解决“能否付出首个 agent claim 承诺成本”，`starter OC` 解决“首个 agent 已存在后，能否启动 LLM/agent agency 对话”。starter OC 不是免费 agent claim、不是通用补贴，也不是 `slot-1` claim/upkeep 的 restricted bucket。
+- 平衡口径仍未冻结：`starter OC` 额度、可支撑的有效 chat 次数、耗尽后的恢复/赚取路径和防刷边界，需要后续基于真实 cold-start 样本单独复核；当前文档只冻结资源边界和首读路由。
+
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 不适用（本专题不新增 AI 模型能力，仅涉及 gameplay 规则、账本 bucket 与状态机）。
 - Evaluation Strategy: 不适用。

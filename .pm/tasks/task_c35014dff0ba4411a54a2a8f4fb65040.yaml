@@ -1,0 +1,25 @@
+task_uid: task_c35014dff0ba4411a54a2a8f4fb65040
+title: "Audit game design goals against recent progress"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-game-design-goal-refresh-audit
+execution_log_path: .pm/tasks/task_c35014dff0ba4411a54a2a8f4fb65040.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/project.md
+doc_refs:
+  - doc/game/prd.md
+related_prd: []
+acceptance:
+  - "Review recent development progress against current game design and target docs"
+  - "Identify whether game design goals require updates, with specialist-attributed findings"
+handoff_to: []
+updated_at: 2026-06-22T12:00:40+08:00
+last_started_at: 2026-06-22T11:27:29+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/doc-governance-check.sh
+last_verified_at: 2026-06-22T12:00:34+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-22T12:00:39+08:00

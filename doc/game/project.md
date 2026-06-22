@@ -34,6 +34,7 @@
 | `gameplay-high-risk-design-hardening` | bounded-response、anti-passive fallback、economic readability 与 mature-world anti-grind/anti-forced-dependency 约束已回写。 | `.pm/tasks/task_b23cd4919b4c481490777293b556cc70.yaml` |
 | `viewer-economic-readability-first-capability-surface` | `software_safe` 正式玩家 surface 已显式展示投入、产出、新用途、修复动作和下一步价值。 | `.pm/tasks/task_b23cd4919b4c481490777293b556cc70.yaml` |
 | `agent-claim-slot-1-auto-starter-grant` | slot-1 启动金可由专用池自动补足并原子认领，仍保持首个 claim 非免费。 | `.pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml` |
+| `local-standalone-submit-flow` / `chain-side-manifest-delta-runtime-readiness` | PR #547 / `a39a8d224` 后，cold-start 已形成 `claim_first_agent -> claim_starter_oc -> first agent chat` 的资源与动作链路；该进展支持 PRD-GAME-002/011 的可验证语义和 chain resource readiness，但不改变当前阶段或 claim envelope。 | `.pm/tasks/task_212396995cf3409eb34c8e9bec563ca3.yaml`, `.pm/tasks/task_a0e15f2d5d0547a3a13c93caab49b611.yaml` |
 | `viewer-immersive-blue-gradient-line` / `immersive-command-panel-spacing` | 近期 player-facing viewer polish 已收口，不改变 game 根 PRD 的玩法承诺。 | `.pm/tasks/task_834078a49c334891a3193e4f303f939a.yaml`, `.pm/tasks/task_b5440afc520648ffa963803c93da43f2.yaml` |
 | `game-content-doc-trim-audit` | 根 PRD / project 已瘦身为 active gameplay baseline 与当前执行看板；专题细节、历史证据和执行流水改由专题 project、evidence 与 `.pm` trace 承接。 | Trace: .pm/tasks/task_07cf7b41bab74286b2d4573da613779d.yaml |
 
