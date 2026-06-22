@@ -7,8 +7,9 @@ use oasis7::consensus_action_payload::{
 };
 use oasis7::runtime::{
     BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal, LocalCasStore,
-    MainTokenConfig, MainTokenSupplyState, ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot,
-    World as RuntimeWorld, blake3_hex, production_hardened_main_token_config,
+    MainTokenConfig, MainTokenSupplyState, ReleaseSecurityPolicy, RuntimeCommittedTickContext,
+    Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
+    production_hardened_main_token_config,
 };
 use oasis7::simulator::{
     Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldJournal as SimulatorJournal,
@@ -452,6 +453,15 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         &mut self,
         context: NodeExecutionCommitContext,
     ) -> Result<NodeExecutionCommitResult, String> {
+        self.on_commit_with_expected(context, None, None)
+    }
+
+    fn on_commit_with_expected(
+        &mut self,
+        context: NodeExecutionCommitContext,
+        expected_execution_block_hash: Option<&str>,
+        expected_execution_state_root: Option<&str>,
+    ) -> Result<NodeExecutionCommitResult, String> {
         if context.height < self.state.last_applied_committed_height {
             let stale_state_height = self.state.last_applied_committed_height;
             if !self
@@ -526,10 +536,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
 
         let external_effect =
             build_execution_external_effect_materialization(&self.execution_world, &context)?;
-        let external_effect_ref = persist_execution_external_effect_materialization(
-            &self.execution_store,
-            &external_effect,
-        )?;
 
         let mut decoded_runtime_actions = Vec::with_capacity(context.committed_actions.len());
         let mut decoded_simulator_actions = Vec::with_capacity(context.committed_actions.len());
@@ -558,11 +564,25 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             )
         })?;
 
+        let previous_execution_world = self.execution_world.clone();
+        let previous_simulator_mirror = self.simulator_mirror.clone();
         for action in decoded_runtime_actions {
             self.execution_world.submit_action(action);
         }
+        let committed_tick_context = RuntimeCommittedTickContext {
+            height: context.height,
+            slot: context.slot,
+            epoch: context.epoch,
+            node_block_hash: context.node_block_hash.clone(),
+            action_root: context.action_root.clone(),
+            authority_node_id: context.node_id.clone(),
+            committed_at_unix_ms: context.committed_at_unix_ms,
+        };
         self.execution_world
-            .step_with_modules(&mut *self.execution_sandbox)
+            .step_with_modules_for_committed_context(
+                &mut *self.execution_sandbox,
+                &committed_tick_context,
+            )
             .map_err(|err| {
                 format!(
                     "execution driver world.step failed at height {}: {:?}",
@@ -600,6 +620,28 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             journal_len: self.execution_world.journal().len(),
         };
         let execution_block_hash = blake3_hex(super::to_cbor(hash_payload)?.as_slice());
+        if let (Some(expected_block_hash), Some(expected_state_root)) =
+            (expected_execution_block_hash, expected_execution_state_root)
+        {
+            if execution_block_hash != expected_block_hash
+                || execution_state_root != expected_state_root
+            {
+                self.execution_world = previous_execution_world;
+                self.simulator_mirror = previous_simulator_mirror;
+                return Err(format!(
+                    "execution driver peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
+                    context.height,
+                    execution_block_hash,
+                    expected_block_hash,
+                    execution_state_root,
+                    expected_state_root
+                ));
+            }
+        }
+        let external_effect_ref = persist_execution_external_effect_materialization(
+            &self.execution_store,
+            &external_effect,
+        )?;
         let node_block_hash = Some(context.node_block_hash.clone());
 
         let mut record = ExecutionBridgeRecord::new_v2(
@@ -659,6 +701,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 .clone()
                 .ok_or_else(|| "execution driver missing execution_state_root".to_string())?,
         })
+    }
+
+    fn restore_to_height(&mut self, world_id: &str, height: u64) -> Result<bool, String> {
+        self.restore_execution_head_from_record(world_id, height)
     }
 
     fn export_checkpoint_bundle(

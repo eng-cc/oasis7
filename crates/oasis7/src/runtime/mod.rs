@@ -80,8 +80,10 @@ pub use error::WorldError;
 
 // Consensus
 pub use consensus::{
-    TickBlock, TickBlockHeader, TickCertificate, TickConsensusDriftReport, TickConsensusRecord,
-    TickConsensusRejectionAuditEvent, TickConsensusSubmissionRole, TickExecutionDigest,
+    RuntimeCommittedTickContext, TickBlock, TickBlockHeader, TickCertificate,
+    TickConsensusDriftReport, TickConsensusRecord, TickConsensusRejectionAuditEvent,
+    TickConsensusSubmissionRole, TickExecutionDigest, TICK_BLOCK_HEADER_SCHEMA_V1,
+    TICK_BLOCK_HEADER_SCHEMA_V2,
 };
 
 // Events

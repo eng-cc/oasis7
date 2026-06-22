@@ -348,7 +348,7 @@ impl PosNodeEngine {
         &mut self,
         world_id: &str,
         payload: &ReplicationCommitPayload,
-        execution_hook: Option<&mut dyn NodeExecutionHook>,
+        mut execution_hook: Option<&mut dyn NodeExecutionHook>,
     ) -> Result<(String, i64), NodeError> {
         if payload.execution_block_hash.is_some() != payload.execution_state_root.is_some() {
             return Err(NodeError::Replication {
@@ -358,6 +358,20 @@ impl PosNodeEngine {
                 ),
             });
         }
+        self.validate_peer_commit_execution_binding(
+            payload.height,
+            payload.execution_block_hash.as_deref(),
+            payload.execution_state_root.as_deref(),
+        )
+        .map_err(|err| NodeError::Replication {
+            reason: format!(
+                "synced replication height {} execution hash validation failed before replay: {}",
+                payload.height, err
+            ),
+        })?;
+        let previous_execution_height = self.last_execution_height;
+        let previous_execution_block_hash = self.last_execution_block_hash.clone();
+        let previous_execution_state_root = self.last_execution_state_root.clone();
         let decision = PosDecision {
             height: payload.height,
             slot: payload.slot,
@@ -371,25 +385,58 @@ impl PosNodeEngine {
             required_stake: self.required_stake,
             total_stake: self.total_stake,
         };
-        let local_node_id = self.local_validator_id.clone();
-        self.apply_committed_execution(
-            local_node_id.as_str(),
-            world_id,
-            payload.committed_at_ms,
-            &decision,
-            execution_hook,
-        )?;
-        self.validate_peer_commit_execution_binding(
-            payload.height,
-            payload.execution_block_hash.as_deref(),
-            payload.execution_state_root.as_deref(),
-        )
-        .map_err(|err| NodeError::Replication {
-            reason: format!(
-                "synced replication height {} execution hash validation failed: {}",
-                payload.height, err
+        let apply_result = match execution_hook {
+            Some(ref mut hook) => self.apply_committed_execution_with_expected(
+                payload.node_id.as_str(),
+                world_id,
+                payload.committed_at_ms,
+                &decision,
+                Some(&mut **hook),
+                payload.execution_block_hash.as_deref(),
+                payload.execution_state_root.as_deref(),
             ),
-        })?;
+            None => self.apply_committed_execution_with_expected(
+                payload.node_id.as_str(),
+                world_id,
+                payload.committed_at_ms,
+                &decision,
+                None,
+                payload.execution_block_hash.as_deref(),
+                payload.execution_state_root.as_deref(),
+            ),
+        };
+        if let Err(err) = apply_result {
+            self.last_execution_height = previous_execution_height;
+            self.last_execution_block_hash = previous_execution_block_hash;
+            self.last_execution_state_root = previous_execution_state_root;
+            if payload.height > 0 {
+                self.execution_bindings.remove(&payload.height);
+            }
+            if let Some(ref mut hook) = execution_hook {
+                let restored = hook.restore_to_height(world_id, previous_execution_height).map_err(
+                    |restore_err| NodeError::Replication {
+                        reason: format!(
+                            "synced replication height {} execution hash validation failed: {}; rollback to height {} failed: {}",
+                            payload.height, err, previous_execution_height, restore_err
+                        ),
+                    },
+                )?;
+                if previous_execution_height > 0 && !restored {
+                    return Err(NodeError::Replication {
+                        reason: format!(
+                            "synced replication height {} execution hash validation failed: {}; rollback record for height {} is unavailable",
+                            payload.height, err, previous_execution_height
+                        ),
+                    });
+                }
+            }
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "synced replication height {} execution hash validation failed: {}",
+                    payload.height, err
+                ),
+            });
+        }
         if self.last_execution_height == payload.height
             && self.execution_binding_for_height(payload.height).is_none()
         {

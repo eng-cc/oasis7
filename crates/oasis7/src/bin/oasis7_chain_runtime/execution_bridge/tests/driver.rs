@@ -81,6 +81,107 @@ fn load_execution_world_defaults_to_hardened_release_policy() {
 }
 
 #[test]
+fn node_runtime_execution_driver_rejects_expected_hash_mismatch_before_persisting_record() {
+    let dir = temp_dir("execution-driver-expected-hash-mismatch");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root,
+    )
+    .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+
+    let err = driver
+        .on_commit_with_expected(
+            NodeExecutionCommitContext {
+                world_id: "w1".to_string(),
+                node_id: "node-a".to_string(),
+                height: 1,
+                slot: 0,
+                epoch: 0,
+                node_block_hash: "node-h1".to_string(),
+                action_root: empty_action_root,
+                committed_actions: Vec::new(),
+                committed_at_unix_ms: 1_000,
+            },
+            Some("peer-block"),
+            Some("peer-state"),
+        )
+        .expect_err("expected hash mismatch");
+
+    assert!(
+        err.contains("peer mismatch at height 1"),
+        "unexpected error: {err}"
+    );
+    assert!(!execution_bridge_record_path(records_dir.as_path(), 1).exists());
+    assert!(!records_dir.join("latest.json").exists());
+    let state = load_execution_bridge_state(state_path.as_path()).expect("load state");
+    assert_eq!(state.last_applied_committed_height, 0);
+    assert!(state.last_execution_block_hash.is_none());
+    assert!(state.last_execution_state_root.is_none());
+    let world = load_execution_world(world_dir.as_path()).expect("load world");
+    assert_eq!(world.state().time, 0);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_persists_v2_committed_tick_context() {
+    let dir = temp_dir("execution-driver-v2-committed-tick-context");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir.clone(), records_dir, storage_root)
+            .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            height: 1,
+            slot: 42,
+            epoch: 3,
+            node_block_hash: "node-h1".to_string(),
+            action_root: empty_action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("commit");
+
+    let world = load_execution_world(world_dir.as_path()).expect("load committed world");
+    let record = world
+        .latest_tick_consensus_record()
+        .expect("latest tick consensus record");
+    assert_eq!(record.block.header.schema_version, 2);
+    assert_eq!(record.block.header.chain_height, Some(1));
+    assert_eq!(record.block.header.chain_slot, Some(42));
+    assert_eq!(record.block.header.chain_epoch, Some(3));
+    assert_eq!(
+        record.block.header.node_block_hash.as_deref(),
+        Some("node-h1")
+    );
+    assert_eq!(
+        record.block.header.action_root.as_deref(),
+        Some(empty_action_root.as_str())
+    );
+    assert_eq!(record.block.header.committed_at_unix_ms, Some(1_000));
+    assert_eq!(
+        record.block.execution_digest.action_batch_hash,
+        empty_action_root
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn load_execution_world_with_dev_local_policy_keeps_generic_supply_for_missing_world() {
     let dir = temp_dir("execution-world-dev-local-policy");
     let missing_world =

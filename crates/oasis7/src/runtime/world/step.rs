@@ -5,8 +5,9 @@ use super::super::{
     ModuleSubscriptionStage, RejectReason, RuleVerdict, WorldError, WorldEvent, WorldEventBody,
     WorldTime,
 };
-use super::World;
 use super::economy::EconomyActionResolution;
+use super::World;
+use crate::runtime::RuntimeCommittedTickContext;
 use crate::simulator::ResourceKind;
 
 #[derive(Debug, Clone, Default)]
@@ -246,6 +247,49 @@ impl World {
 
     pub fn step_with_modules(&mut self, sandbox: &mut dyn ModuleSandbox) -> Result<(), WorldError> {
         self.state.time = self.state.time.saturating_add(1);
+        self.run_modules_for_current_tick(sandbox, None)
+    }
+
+    pub fn step_with_modules_for_committed_height(
+        &mut self,
+        sandbox: &mut dyn ModuleSandbox,
+        committed_height: u64,
+    ) -> Result<(), WorldError> {
+        let context = RuntimeCommittedTickContext {
+            height: committed_height,
+            slot: committed_height.saturating_sub(1),
+            epoch: 0,
+            node_block_hash: String::new(),
+            action_root: String::new(),
+            authority_node_id: self.tick_consensus_authority_source().to_string(),
+            committed_at_unix_ms: 0,
+        };
+        self.step_with_modules_for_committed_context(sandbox, &context)
+    }
+
+    pub fn step_with_modules_for_committed_context(
+        &mut self,
+        sandbox: &mut dyn ModuleSandbox,
+        context: &RuntimeCommittedTickContext,
+    ) -> Result<(), WorldError> {
+        let committed_height = context.height;
+        if committed_height <= self.state.time {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "committed execution height must advance runtime time: current={} incoming={}",
+                    self.state.time, committed_height
+                ),
+            });
+        }
+        self.state.time = committed_height;
+        self.run_modules_for_current_tick(sandbox, Some(context))
+    }
+
+    fn run_modules_for_current_tick(
+        &mut self,
+        sandbox: &mut dyn ModuleSandbox,
+        committed_context: Option<&RuntimeCommittedTickContext>,
+    ) -> Result<(), WorldError> {
         for event in self.process_factory_depreciation()? {
             self.route_event_to_modules(&event, sandbox)?;
         }
@@ -402,7 +446,11 @@ impl World {
             self.route_event_to_modules(&event, sandbox)?;
         }
         self.refresh_threat_heatmap();
-        self.record_tick_consensus()?;
+        if let Some(context) = committed_context {
+            self.record_tick_consensus_for_committed_context(context)?;
+        } else {
+            self.record_tick_consensus()?;
+        }
         Ok(())
     }
 }

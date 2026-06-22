@@ -493,6 +493,27 @@ impl PosNodeEngine {
         decision: &PosDecision,
         execution_hook: Option<&mut dyn NodeExecutionHook>,
     ) -> Result<(), NodeError> {
+        self.apply_committed_execution_with_expected(
+            node_id,
+            world_id,
+            now_ms,
+            decision,
+            execution_hook,
+            None,
+            None,
+        )
+    }
+
+    pub(super) fn apply_committed_execution_with_expected(
+        &mut self,
+        node_id: &str,
+        world_id: &str,
+        now_ms: i64,
+        decision: &PosDecision,
+        execution_hook: Option<&mut dyn NodeExecutionHook>,
+        expected_execution_block_hash: Option<&str>,
+        expected_execution_state_root: Option<&str>,
+    ) -> Result<(), NodeError> {
         if !matches!(decision.status, PosConsensusStatus::Committed) {
             return Ok(());
         }
@@ -511,17 +532,21 @@ impl PosNodeEngine {
             return Ok(());
         };
 
-        let result = match execution_hook.on_commit(NodeExecutionCommitContext {
-            world_id: world_id.to_string(),
-            node_id: node_id.to_string(),
-            height: decision.height,
-            slot: decision.slot,
-            epoch: decision.epoch,
-            node_block_hash: decision.block_hash.clone(),
-            action_root: decision.action_root.clone(),
-            committed_actions: decision.committed_actions.clone(),
-            committed_at_unix_ms: now_ms,
-        }) {
+        let result = match execution_hook.on_commit_with_expected(
+            NodeExecutionCommitContext {
+                world_id: world_id.to_string(),
+                node_id: node_id.to_string(),
+                height: decision.height,
+                slot: decision.slot,
+                epoch: decision.epoch,
+                node_block_hash: decision.block_hash.clone(),
+                action_root: decision.action_root.clone(),
+                committed_actions: decision.committed_actions.clone(),
+                committed_at_unix_ms: now_ms,
+            },
+            expected_execution_block_hash,
+            expected_execution_state_root,
+        ) {
             Ok(result) => result,
             Err(reason)
                 if execution_error_waits_for_gap_sync(reason.as_str())
@@ -549,6 +574,24 @@ impl PosNodeEngine {
             return Err(NodeError::Execution {
                 reason: "execution hook returned empty execution_state_root".to_string(),
             });
+        }
+        if let (Some(expected_block), Some(expected_state)) =
+            (expected_execution_block_hash, expected_execution_state_root)
+        {
+            if result.execution_block_hash != expected_block
+                || result.execution_state_root != expected_state
+            {
+                return Err(NodeError::Execution {
+                    reason: format!(
+                        "execution hook returned peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
+                        decision.height,
+                        result.execution_block_hash,
+                        expected_block,
+                        result.execution_state_root,
+                        expected_state
+                    ),
+                });
+            }
         }
 
         self.last_execution_height = result.execution_height;

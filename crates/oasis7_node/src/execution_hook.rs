@@ -73,6 +73,19 @@ pub trait NodeExecutionHook: Send {
         context: NodeExecutionCommitContext,
     ) -> Result<NodeExecutionCommitResult, String>;
 
+    fn on_commit_with_expected(
+        &mut self,
+        context: NodeExecutionCommitContext,
+        _expected_execution_block_hash: Option<&str>,
+        _expected_execution_state_root: Option<&str>,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        self.on_commit(context)
+    }
+
+    fn restore_to_height(&mut self, _world_id: &str, _height: u64) -> Result<bool, String> {
+        Ok(false)
+    }
+
     fn export_checkpoint_bundle(
         &mut self,
         _height: u64,

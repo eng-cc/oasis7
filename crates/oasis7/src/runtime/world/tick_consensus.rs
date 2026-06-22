@@ -1,8 +1,9 @@
 use super::super::util::{hash_json, sha256_hex};
 use super::super::{
-    CausedBy, TickBlock, TickBlockHeader, TickCertificate, TickConsensusDriftReport,
-    TickConsensusRecord, TickConsensusRejectionAuditEvent, TickConsensusSubmissionRole,
-    TickExecutionDigest, WorldError, WorldEvent, WorldEventBody, WorldEventId, WorldTime,
+    CausedBy, RuntimeCommittedTickContext, TickBlock, TickBlockHeader, TickCertificate,
+    TickConsensusDriftReport, TickConsensusRecord, TickConsensusRejectionAuditEvent,
+    TickConsensusSubmissionRole, TickExecutionDigest, WorldError, WorldEvent, WorldEventBody,
+    WorldEventId, WorldTime, TICK_BLOCK_HEADER_SCHEMA_V1, TICK_BLOCK_HEADER_SCHEMA_V2,
 };
 use super::World;
 use serde::Serialize;
@@ -183,17 +184,46 @@ impl World {
         )
     }
 
+    pub(super) fn record_tick_consensus_for_committed_context(
+        &mut self,
+        context: &RuntimeCommittedTickContext,
+    ) -> Result<(), WorldError> {
+        let authority_source = self.tick_consensus_authority_source.clone();
+        self.record_tick_consensus_submission_for_tick_with_context(
+            context.height,
+            authority_source.as_str(),
+            TickConsensusSubmissionRole::Authority,
+            Some(context),
+        )
+    }
+
     fn record_tick_consensus_submission_for_tick(
         &mut self,
         tick: WorldTime,
         source_node_id: &str,
         submission_role: TickConsensusSubmissionRole,
     ) -> Result<(), WorldError> {
+        self.record_tick_consensus_submission_for_tick_with_context(
+            tick,
+            source_node_id,
+            submission_role,
+            None,
+        )
+    }
+
+    fn record_tick_consensus_submission_for_tick_with_context(
+        &mut self,
+        tick: WorldTime,
+        source_node_id: &str,
+        submission_role: TickConsensusSubmissionRole,
+        committed_context: Option<&RuntimeCommittedTickContext>,
+    ) -> Result<(), WorldError> {
         let source_node_id = self.validate_tick_consensus_source_node(source_node_id)?;
         let record = self.build_tick_consensus_record_for_submission(
             tick,
             source_node_id.as_str(),
             submission_role,
+            committed_context,
         )?;
         self.commit_tick_consensus_record_submission(record)?;
         self.verify_latest_tick_consensus_record()
@@ -204,6 +234,7 @@ impl World {
         tick: WorldTime,
         source_node_id: &str,
         submission_role: TickConsensusSubmissionRole,
+        committed_context: Option<&RuntimeCommittedTickContext>,
     ) -> Result<TickConsensusRecord, WorldError> {
         let tick_events: Vec<WorldEvent> = self
             .journal
@@ -222,6 +253,9 @@ impl World {
         let randomness_seed = Self::derive_tick_randomness_seed(parent_hash.as_str(), tick);
         let consensus_height = self.consensus_height_for_tick(tick);
         let header = TickBlockHeader {
+            schema_version: committed_context
+                .map(|_| TICK_BLOCK_HEADER_SCHEMA_V2)
+                .unwrap_or(TICK_BLOCK_HEADER_SCHEMA_V1),
             epoch: tick / TICK_CONSENSUS_EPOCH_LEN,
             tick,
             parent_hash,
@@ -229,9 +263,17 @@ impl World {
             state_root: state_root.clone(),
             executor_version,
             randomness_seed,
+            chain_height: committed_context.map(|context| context.height),
+            chain_slot: committed_context.map(|context| context.slot),
+            chain_epoch: committed_context.map(|context| context.epoch),
+            node_block_hash: committed_context.map(|context| context.node_block_hash.clone()),
+            action_root: committed_context.map(|context| context.action_root.clone()),
+            committed_at_unix_ms: committed_context.map(|context| context.committed_at_unix_ms),
         };
         let execution_digest = TickExecutionDigest {
-            action_batch_hash: hash_json(&ordered_action_ids)?,
+            action_batch_hash: committed_context
+                .map(|context| Ok(context.action_root.clone()))
+                .unwrap_or_else(|| hash_json(&ordered_action_ids))?,
             domain_events_hash: Self::hash_tick_domain_events(&tick_events)?,
             state_projection_hash: state_root,
         };
