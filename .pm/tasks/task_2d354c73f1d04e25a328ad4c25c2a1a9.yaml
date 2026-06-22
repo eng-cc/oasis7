@@ -1,0 +1,25 @@
+task_uid: task_2d354c73f1d04e25a328ad4c25c2a1a9
+title: "Add repository health scheduled inspection workflow"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-scheduled-inspection
+execution_log_path: .pm/tasks/task_2d354c73f1d04e25a328ad4c25c2a1a9.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "Define a periodic repository health inspection workflow for engineering governance owners."
+  - "Record repository_health_engineer slice findings and TPM integration evidence in the task execution log."
+handoff_to: []
+updated_at: 2026-06-22T17:35:42+08:00
+last_started_at: 2026-06-22T17:21:49+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.sh --task-uid task_2d354c73f1d04e25a328ad4c25c2a1a9 --phase current && ./scripts/doc-governance-check.sh && ./scripts/lint-skills.sh && git diff --check"
+last_verified_at: 2026-06-22T17:35:36+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-22T17:35:41+08:00
