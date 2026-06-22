@@ -311,3 +311,12 @@ Example:
 - Expected Result: PR exists with task UID, verification summary, and normal PR CI/watch purpose.
 - Actual Result: PR URL: https://github.com/eng-cc/oasis7/pull/557; branch pushed to `origin/task/viewer-visualization-routes-readonly`; PR Purpose Decision: `normal_pr_ci_watch`.
 - Blocker / Next Action: push PR evidence commit, then watch required checks, comments, review threads, and mergeability.
+
+## 2026-06-22 13:48:06 CST / tpm
+- 完成内容: Addressed actionable PR review thread.
+- 遗留事项: re-check GitHub review threads after push; required checks will rerun on the new commit.
+- Action: rephrased `doc/world-simulator/project.md` recent-completed trace to avoid exact retired-route tokens in the active project page.
+- Validation Command: targeted residual grep for retired route tokens in active/current scope; `./scripts/site-manual-sync-check.sh && ./scripts/doc-governance-check.sh && git diff --check && ./scripts/pm/workflow-lint.sh --task-uid task_e6edcb09bd774941bdcbde32bb9ea007 --phase post-pr`.
+- Expected Result: no active/current old-token hits; site/doc/workflow gates remain green.
+- Actual Result: targeted grep returned no output; site manual sync OK, doc-governance OK, `git diff --check` OK, post-pr workflow-lint OK.
+- Blocker / Next Action: commit and push review fix, then confirm review thread/checks/mergeability again.
