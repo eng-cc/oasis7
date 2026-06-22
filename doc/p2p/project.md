@@ -7,6 +7,7 @@
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] testnet-execution-hash-replay-readiness (PRD-P2P-001/003) [test_tier_required]: 修复 synced replication 执行哈希回放的 expected-hash 校验、回滚安全与 committed tick v2 schema，避免拒绝的 peer mismatch 污染 runtime/simulator 持久状态。 Trace: .pm/tasks/task_41f5ad97727c4641b65241d4141601b9.yaml
 - [x] testnet-five-node-health-remediation (PRD-P2P-001/003/028) [test_tier_required]: 修复五节点 public_testnet 健康检查暴露的 storage metrics 主循环阻塞、peer-head TTL 抖动和 libp2p 连接诊断不足问题；storage metrics 改为后台刷新和缓存快照，public_testnet peer-head TTL 提升至 30s，并补充 per-peer head 与 connection event 状态字段。 Trace: .pm/tasks/task_082d3f35aee2436c97ba2a629ec8437a.yaml
 - [x] p2p-public-testnet-package-release-retention (PRD-P2P-001/003) [test_tier_required]: 清理 ECS storage 节点 package 残留后，把标准 public testnet package upgrade 流程改为保留 current、previous-current 和最新 release 窗口，并补充 operator 上传/tmp 清理职责与受保护路径。 Trace: .pm/tasks/task_f74921a3093843c4bd7ae31232fdbb20.yaml
 - [x] testnet-package-upgrade-script (PRD-P2P-001/003) [test_tier_required]: 标准化 public testnet package version replacement helper，覆盖 plan-only、多平台 BUILDINFO/SHA256SUMS 校验、Linux local/remote plan、Windows governed bundle 更新脚本和 operator runbook 入口。 Trace: .pm/tasks/task_f0d884daaa044f3a896aa2a9121acbc5.yaml
