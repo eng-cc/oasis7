@@ -5,7 +5,7 @@ use super::super::init::{
 };
 use super::super::persist::PersistError;
 use super::super::types::{ResourceKind, ResourceOwner, StockError};
-use super::super::world_model::{Factory, Location};
+use super::super::world_model::{Factory, Location, RegionalInfrastructure};
 use super::WorldKernel;
 use super::types::{WorldEvent, WorldEventKind};
 
@@ -712,6 +712,149 @@ impl WorldKernel {
                 {
                     return Err(PersistError::ReplayConflict {
                         message: format!("module visual entity not found: {entity_id}"),
+                    });
+                }
+            }
+            WorldEventKind::MicroDepotInstalled {
+                facility_id,
+                installer_agent_id,
+                location_id,
+                owner,
+                owner_claim_id,
+                regional_blocker_receipt_id,
+                module_id,
+                module_version,
+                wasm_hash,
+                entrypoint,
+                service_radius_cm,
+                supported_resource_kinds,
+                install_cost_resources,
+            } => {
+                if self.model.regional_infrastructure.contains_key(facility_id) {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!("micro_depot already exists: {facility_id}"),
+                    });
+                }
+                if !self.model.agents.contains_key(installer_agent_id) {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!("installer agent not found: {installer_agent_id}"),
+                    });
+                }
+                if !self.model.locations.contains_key(location_id) {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!("micro_depot location not found: {location_id}"),
+                    });
+                }
+                self.ensure_owner_exists(owner)
+                    .map_err(|reason| PersistError::ReplayConflict {
+                        message: format!("invalid micro_depot owner: {reason:?}"),
+                    })?;
+                for debit in install_cost_resources {
+                    self.remove_from_owner_for_replay(owner, debit.kind, debit.amount)?;
+                }
+                self.model.regional_infrastructure.insert(
+                    facility_id.clone(),
+                    RegionalInfrastructure {
+                        facility_id: facility_id.clone(),
+                        kind: "micro_depot".to_string(),
+                        location_id: location_id.clone(),
+                        owner: owner.clone(),
+                        owner_claim_id: owner_claim_id.clone(),
+                        regional_blocker_receipt_id: regional_blocker_receipt_id.clone(),
+                        status: "active".to_string(),
+                        module_id: module_id.clone(),
+                        module_version: module_version.clone(),
+                        wasm_hash: wasm_hash.clone(),
+                        entrypoint: entrypoint.clone(),
+                        service_radius_cm: *service_radius_cm,
+                        supported_resource_kinds: supported_resource_kinds.clone(),
+                        upkeep_paid: true,
+                        last_proposal_hash: None,
+                        last_receipt_id: None,
+                        last_serviced_target_id: None,
+                    },
+                );
+            }
+            WorldEventKind::MicroDepotServiceApplied {
+                facility_id,
+                target_id,
+                proposal_hash,
+                receipt_id,
+                consumed_resources,
+                ..
+            } => {
+                let owner = self
+                    .model
+                    .regional_infrastructure
+                    .get(facility_id)
+                    .ok_or_else(|| PersistError::ReplayConflict {
+                        message: format!("micro_depot not found: {facility_id}"),
+                    })?
+                    .owner
+                    .clone();
+                for debit in consumed_resources {
+                    self.remove_from_owner_for_replay(&owner, debit.kind, debit.amount)?;
+                }
+                let depot = self
+                    .model
+                    .regional_infrastructure
+                    .get_mut(facility_id)
+                    .ok_or_else(|| PersistError::ReplayConflict {
+                        message: format!("micro_depot not found: {facility_id}"),
+                    })?;
+                depot.last_proposal_hash = Some(proposal_hash.clone());
+                depot.last_receipt_id = Some(receipt_id.clone());
+                depot.last_serviced_target_id = Some(target_id.clone());
+            }
+            WorldEventKind::MicroDepotUpkeepPaid {
+                facility_id,
+                receipt_id,
+                consumed_resources,
+                ..
+            } => {
+                let owner = self
+                    .model
+                    .regional_infrastructure
+                    .get(facility_id)
+                    .ok_or_else(|| PersistError::ReplayConflict {
+                        message: format!("micro_depot not found: {facility_id}"),
+                    })?
+                    .owner
+                    .clone();
+                for debit in consumed_resources {
+                    self.remove_from_owner_for_replay(&owner, debit.kind, debit.amount)?;
+                }
+                let depot = self
+                    .model
+                    .regional_infrastructure
+                    .get_mut(facility_id)
+                    .ok_or_else(|| PersistError::ReplayConflict {
+                        message: format!("micro_depot not found: {facility_id}"),
+                    })?;
+                depot.status = "active".to_string();
+                depot.upkeep_paid = true;
+                depot.last_receipt_id = Some(receipt_id.clone());
+            }
+            WorldEventKind::MicroDepotSuspended { facility_id, .. } => {
+                let depot = self
+                    .model
+                    .regional_infrastructure
+                    .get_mut(facility_id)
+                    .ok_or_else(|| PersistError::ReplayConflict {
+                        message: format!("micro_depot not found: {facility_id}"),
+                    })?;
+                depot.status = "suspended".to_string();
+                depot.upkeep_paid = false;
+            }
+            WorldEventKind::MicroDepotReclaimed { facility_id, .. } => {
+                if self
+                    .model
+                    .regional_infrastructure
+                    .remove(facility_id)
+                    .is_none()
+                {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!("micro_depot not found: {facility_id}"),
                     });
                 }
             }

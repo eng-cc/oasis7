@@ -138,6 +138,12 @@ pub struct PowerOrderFill {
     pub settlement_amount: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MicroDepotResourceDebit {
+    pub kind: ResourceKind,
+    pub amount: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum WorldEventKind {
@@ -242,6 +248,61 @@ pub enum WorldEventKind {
         #[serde(default)]
         install_target: ModuleInstallTarget,
         active: bool,
+    },
+    MicroDepotInstalled {
+        facility_id: FacilityId,
+        installer_agent_id: AgentId,
+        location_id: LocationId,
+        owner: ResourceOwner,
+        owner_claim_id: String,
+        regional_blocker_receipt_id: String,
+        module_id: String,
+        module_version: String,
+        wasm_hash: String,
+        entrypoint: String,
+        service_radius_cm: i64,
+        #[serde(default)]
+        supported_resource_kinds: Vec<String>,
+        #[serde(default)]
+        install_cost_resources: Vec<MicroDepotResourceDebit>,
+    },
+    MicroDepotServiceApplied {
+        facility_id: FacilityId,
+        action_id: ActionId,
+        agent_id: AgentId,
+        target_id: String,
+        action_kind: String,
+        schema_version: String,
+        module_id: String,
+        module_version: String,
+        wasm_hash: String,
+        entrypoint: String,
+        proposal_hash: String,
+        receipt_id: String,
+        cost_delta_class: String,
+        risk_delta_class: String,
+        wait_delta_class: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blocker_change: Option<String>,
+        #[serde(default)]
+        consumed_resources: Vec<MicroDepotResourceDebit>,
+        explanation_code: String,
+    },
+    MicroDepotUpkeepPaid {
+        facility_id: FacilityId,
+        agent_id: AgentId,
+        receipt_id: String,
+        #[serde(default)]
+        consumed_resources: Vec<MicroDepotResourceDebit>,
+    },
+    MicroDepotSuspended {
+        facility_id: FacilityId,
+        agent_id: AgentId,
+        reason: String,
+    },
+    MicroDepotReclaimed {
+        facility_id: FacilityId,
+        agent_id: AgentId,
     },
     ModuleArtifactListed {
         seller_agent_id: AgentId,

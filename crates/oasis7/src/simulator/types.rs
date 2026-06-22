@@ -540,6 +540,50 @@ pub enum Action {
         activate: bool,
         install_target: ModuleInstallTarget,
     },
+    InstallMicroDepot {
+        installer_agent_id: AgentId,
+        facility_id: FacilityId,
+        location_id: LocationId,
+        owner_claim_id: String,
+        regional_blocker_receipt_id: String,
+        module_id: String,
+        module_version: String,
+        wasm_hash: String,
+        entrypoint: String,
+        service_radius_cm: i64,
+        #[serde(default)]
+        supported_resource_kinds: Vec<String>,
+    },
+    ServiceMicroDepotRepair {
+        agent_id: AgentId,
+        facility_id: FacilityId,
+        target_id: String,
+        base_cost_class: crate::simulator::MicroDepotPressureClass,
+        base_risk_class: crate::simulator::MicroDepotPressureClass,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blocker_type: Option<String>,
+    },
+    ServiceMicroDepotLogistics {
+        agent_id: AgentId,
+        facility_id: FacilityId,
+        target_id: String,
+        base_cost_class: crate::simulator::MicroDepotPressureClass,
+        base_risk_class: crate::simulator::MicroDepotPressureClass,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blocker_type: Option<String>,
+    },
+    PayMicroDepotUpkeep {
+        agent_id: AgentId,
+        facility_id: FacilityId,
+    },
+    SuspendMicroDepot {
+        agent_id: AgentId,
+        facility_id: FacilityId,
+    },
+    ReclaimMicroDepot {
+        agent_id: AgentId,
+        facility_id: FacilityId,
+    },
     ListModuleArtifactForSale {
         seller_agent_id: AgentId,
         wasm_hash: String,

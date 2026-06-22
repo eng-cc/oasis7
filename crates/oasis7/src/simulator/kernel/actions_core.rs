@@ -1,5 +1,5 @@
 impl WorldKernel {
-    pub(super) fn apply_action(&mut self, action: Action) -> WorldEventKind {
+    pub(super) fn apply_action(&mut self, action_id: super::super::types::ActionId, action: Action) -> WorldEventKind {
         match action {
             Action::RegisterLocation {
                 location_id,
@@ -944,6 +944,12 @@ impl WorldKernel {
                 activate,
                 install_target,
             ),
+            action @ (Action::InstallMicroDepot { .. }
+            | Action::ServiceMicroDepotRepair { .. }
+            | Action::ServiceMicroDepotLogistics { .. }
+            | Action::PayMicroDepotUpkeep { .. }
+            | Action::SuspendMicroDepot { .. }
+            | Action::ReclaimMicroDepot { .. }) => self.apply_micro_depot_action(action_id, action),
             Action::ListModuleArtifactForSale {
                 seller_agent_id,
                 wasm_hash,

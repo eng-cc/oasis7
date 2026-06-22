@@ -49,10 +49,12 @@
   - `gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
   - `gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
   - `gameplay-small-player-progression-lane-2026-05-17.prd.md`
+  - `gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md`
 - 适合问题:
   - 间接控制如何保留玩家主因果感
   - 1cm 物理世界和表现层夸张的边界是什么
   - 小玩家在成熟世界里如何继续产生 leverage
+  - 可编程区域设施如何作为中后期区域专业化能力落地，而不变成新手期自由建造或任意脚本
 
 ### 4. Preview / beta / release gate
 - 首读入口:
