@@ -1,6 +1,7 @@
 # Add repository health code sampling guidance
 
 - Task UID: task_4fb500e6782e4eac916f6846e01542af
+- PR URL: https://github.com/eng-cc/oasis7/pull/567
 - Source Branch: task/engineering-repo-health-file-coverage-guidance
 - Base Branch: main
 - Purpose: normal_pr_ci_watch
