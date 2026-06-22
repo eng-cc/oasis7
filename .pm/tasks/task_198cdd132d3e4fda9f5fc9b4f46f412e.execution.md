@@ -141,3 +141,21 @@ Example:
 - Expected Result: claim-ready evidence or guard outcome is recorded; fresh PR-ready verification passes; project trace resolves for prepare-task-pr.
 - Actual Result: claim-ready helper refused with closed task claim evidence is immutable for non-completion claims, status=done claim_type=ready_for_pr; task yaml already records last_claim_type=task_complete, last_verification_status=verified, and last_verification_exit_code=0 from closeout; project trace added; fresh PR-ready verification will be rerun before prepare-task-pr.
 - Blocker / Next Action: Rerun fresh PR-ready verification and prepare-task-pr preflight.
+
+## 2026-06-22 20:57:48 CST / qa_engineer
+- 完成内容: Pre-PR local role review refresh returned `no_findings` for current HEAD `957b6367b4d3a6fc55af38c253eb1f13cd35b117`.
+- 遗留事项: `.pm` evidence intentionally still contains removed-tool mentions for current task truth and historical audit records; full repo `./scripts/pm/lint.sh` remains broad/noisy and is tracked as residual risk rather than a blocker for this narrow docs/governance cleanup.
+- Action: Reviewed the post-review `doc/engineering/project.md` Trace line that uses scheduler-neutral/messaging-bridge wording after prepare-task-pr requested a project trace.
+- Validation Command: active grep outside `.pm`; `./scripts/pm/workflow-lint.sh --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --phase current`; `./scripts/pm/workflow-lint.sh --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --phase pr-ready`; `./scripts/doc-governance-check.sh`; `./scripts/lint-skills.sh`; `git diff --check`; claim-ready helper guard inspection.
+- Expected Result: Current HEAD verification is sufficient for PR creation, and the scheduler-neutral `project.md` Trace line does not reintroduce the removed active tool guidance or create a PR blocker.
+- Actual Result: `no_findings`. Current HEAD verification is sufficient for PR creation. The `project.md` Trace line does not create a blocker because it uses scheduler-neutral/messaging-bridge wording and preserves active grep `NO_ACTIVE_MATCHES` outside `.pm`.
+- Blocker / Next Action: Update the integrated pre-PR packet to current reviewed HEAD, rerun fresh PR-ready verification, and create the PR.
+
+## 2026-06-22 20:57:48 CST / tpm
+- 完成内容: Integrated QA refresh for the post-review project trace repair.
+- 遗留事项: Fresh PR-ready verification, prepare-task-pr creation, CI/comment watch, merge, and cleanup remain.
+- Action: Updated local review evidence boundary from the earlier committed diff to current HEAD after QA confirmed the Trace line is non-blocking.
+- Validation Command: qa_engineer refresh return for current HEAD `957b6367b4d3a6fc55af38c253eb1f13cd35b117`.
+- Expected Result: Pre-PR local role review remains passed for current HEAD because later changes are review evidence and scheduler-neutral project trace repair.
+- Actual Result: repository_health_engineer had `no_findings` on the cleanup diff; qa_engineer refresh returned `no_findings` for current HEAD and confirmed verification sufficiency for PR creation.
+- Blocker / Next Action: Rerun fresh PR-ready verification and prepare-task-pr.
