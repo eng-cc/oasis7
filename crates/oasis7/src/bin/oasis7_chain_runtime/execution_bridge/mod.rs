@@ -294,6 +294,7 @@ fn to_cbor<T: Serialize>(value: T) -> Result<Vec<u8>, String> {
 mod checkpoint;
 mod driver;
 mod external_effect;
+mod simulator_mirror;
 #[cfg(test)]
 mod tests;
 

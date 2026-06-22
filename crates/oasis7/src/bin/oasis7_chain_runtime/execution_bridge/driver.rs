@@ -7,8 +7,9 @@ use oasis7::consensus_action_payload::{
 };
 use oasis7::runtime::{
     BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal, LocalCasStore,
-    MainTokenConfig, MainTokenSupplyState, ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot,
-    World as RuntimeWorld, blake3_hex, production_hardened_main_token_config,
+    MainTokenConfig, MainTokenSupplyState, ReleaseSecurityPolicy, RuntimeCommittedTickContext,
+    Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
+    production_hardened_main_token_config,
 };
 use oasis7::simulator::{
     Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldJournal as SimulatorJournal,
@@ -36,6 +37,8 @@ use super::external_effect::{
     build_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
 };
+pub(crate) use super::simulator_mirror::simulator_world_dir_from_execution_world_dir;
+use super::simulator_mirror::{load_simulator_execution_world, persist_simulator_execution_world};
 use super::{
     EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_INTERVAL_HEIGHTS,
     EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_KEEP_LATEST, EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS,
@@ -235,11 +238,6 @@ impl NodeRuntimeExecutionDriver {
                 )
             })?;
         let state_root = blake3_hex(snapshot_bytes.as_slice());
-        persist_simulator_execution_world(
-            self.simulator_world_dir.as_path(),
-            &self.simulator_mirror,
-            Some(resource_context),
-        )?;
 
         Ok(Some(ExecutionSimulatorMirrorRecord {
             action_count: simulator_actions.len(),
@@ -452,6 +450,15 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         &mut self,
         context: NodeExecutionCommitContext,
     ) -> Result<NodeExecutionCommitResult, String> {
+        self.on_commit_with_expected(context, None, None)
+    }
+
+    fn on_commit_with_expected(
+        &mut self,
+        context: NodeExecutionCommitContext,
+        expected_execution_block_hash: Option<&str>,
+        expected_execution_state_root: Option<&str>,
+    ) -> Result<NodeExecutionCommitResult, String> {
         if context.height < self.state.last_applied_committed_height {
             let stale_state_height = self.state.last_applied_committed_height;
             if !self
@@ -526,10 +533,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
 
         let external_effect =
             build_execution_external_effect_materialization(&self.execution_world, &context)?;
-        let external_effect_ref = persist_execution_external_effect_materialization(
-            &self.execution_store,
-            &external_effect,
-        )?;
 
         let mut decoded_runtime_actions = Vec::with_capacity(context.committed_actions.len());
         let mut decoded_simulator_actions = Vec::with_capacity(context.committed_actions.len());
@@ -558,11 +561,25 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             )
         })?;
 
+        let previous_execution_world = self.execution_world.clone();
+        let previous_simulator_mirror = self.simulator_mirror.clone();
         for action in decoded_runtime_actions {
             self.execution_world.submit_action(action);
         }
+        let committed_tick_context = RuntimeCommittedTickContext {
+            height: context.height,
+            slot: context.slot,
+            epoch: context.epoch,
+            node_block_hash: context.node_block_hash.clone(),
+            action_root: context.action_root.clone(),
+            authority_node_id: context.node_id.clone(),
+            committed_at_unix_ms: context.committed_at_unix_ms,
+        };
         self.execution_world
-            .step_with_modules(&mut *self.execution_sandbox)
+            .step_with_modules_for_committed_context(
+                &mut *self.execution_sandbox,
+                &committed_tick_context,
+            )
             .map_err(|err| {
                 format!(
                     "execution driver world.step failed at height {}: {:?}",
@@ -600,6 +617,44 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             journal_len: self.execution_world.journal().len(),
         };
         let execution_block_hash = blake3_hex(super::to_cbor(hash_payload)?.as_slice());
+        if let (Some(expected_block_hash), Some(expected_state_root)) =
+            (expected_execution_block_hash, expected_execution_state_root)
+        {
+            if execution_block_hash != expected_block_hash
+                || execution_state_root != expected_state_root
+            {
+                self.execution_world = previous_execution_world;
+                self.simulator_mirror = previous_simulator_mirror;
+                return Err(format!(
+                    "execution driver peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
+                    context.height,
+                    execution_block_hash,
+                    expected_block_hash,
+                    execution_state_root,
+                    expected_state_root
+                ));
+            }
+        }
+        if simulator_mirror.is_some() {
+            let resource_context = ChainResourceDerivationContext {
+                world_id: context.world_id.as_str(),
+                chain_id: context.world_id.as_str(),
+                genesis_ref: None,
+                created_at_height: 0,
+                manifest_height: context.height,
+                commit_block_hash: Some(context.node_block_hash.as_str()),
+                tick: self.simulator_mirror.time(),
+            };
+            persist_simulator_execution_world(
+                self.simulator_world_dir.as_path(),
+                &self.simulator_mirror,
+                Some(resource_context),
+            )?;
+        }
+        let external_effect_ref = persist_execution_external_effect_materialization(
+            &self.execution_store,
+            &external_effect,
+        )?;
         let node_block_hash = Some(context.node_block_hash.clone());
 
         let mut record = ExecutionBridgeRecord::new_v2(
@@ -659,6 +714,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 .clone()
                 .ok_or_else(|| "execution driver missing execution_state_root".to_string())?,
         })
+    }
+
+    fn restore_to_height(&mut self, world_id: &str, height: u64) -> Result<bool, String> {
+        self.restore_execution_head_from_record(world_id, height)
     }
 
     fn export_checkpoint_bundle(
@@ -989,50 +1048,6 @@ pub(crate) fn persist_execution_world(
     execution_world.save_to_dir(world_dir).map_err(|err| {
         format!(
             "save execution world to {} failed: {:?}",
-            world_dir.display(),
-            err
-        )
-    })
-}
-
-pub(crate) fn simulator_world_dir_from_execution_world_dir(world_dir: &Path) -> std::path::PathBuf {
-    match world_dir.file_name().and_then(|name| name.to_str()) {
-        Some(name) if !name.is_empty() => {
-            world_dir.with_file_name(format!("{name}-simulator-mirror"))
-        }
-        _ => world_dir.join("simulator-mirror"),
-    }
-}
-
-fn load_simulator_execution_world(world_dir: &Path) -> Result<WorldKernel, String> {
-    let snapshot_path = world_dir.join("snapshot.json");
-    let journal_path = world_dir.join("journal.json");
-    if !snapshot_path.exists() || !journal_path.exists() {
-        return Ok(WorldKernel::new());
-    }
-    WorldKernel::load_from_dir(world_dir).map_err(|err| {
-        format!(
-            "load simulator execution mirror from {} failed: {:?}",
-            world_dir.display(),
-            err
-        )
-    })
-}
-
-fn persist_simulator_execution_world(
-    world_dir: &Path,
-    simulator_world: &WorldKernel,
-    resource_context: Option<ChainResourceDerivationContext<'_>>,
-) -> Result<(), String> {
-    let result = match resource_context {
-        Some(context) => {
-            simulator_world.save_to_dir_with_chain_resource_context(world_dir, context)
-        }
-        None => simulator_world.save_to_dir(world_dir),
-    };
-    result.map_err(|err| {
-        format!(
-            "save simulator execution mirror to {} failed: {:?}",
             world_dir.display(),
             err
         )

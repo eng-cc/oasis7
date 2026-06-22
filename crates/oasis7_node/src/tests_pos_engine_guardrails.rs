@@ -28,6 +28,52 @@ impl NodeExecutionHook for GapWaitingExecutionHook {
     }
 }
 
+struct RecordingExecutionHook {
+    contexts: Arc<Mutex<Vec<NodeExecutionCommitContext>>>,
+}
+
+impl NodeExecutionHook for RecordingExecutionHook {
+    fn on_commit(
+        &mut self,
+        context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        self.contexts
+            .lock()
+            .expect("recording execution contexts")
+            .push(context.clone());
+        Ok(NodeExecutionCommitResult {
+            execution_height: context.height,
+            execution_block_hash: format!("exec-block-{}", context.height),
+            execution_state_root: format!("exec-state-{}", context.height),
+        })
+    }
+}
+
+struct MismatchingRollbackExecutionHook {
+    restores: Arc<Mutex<Vec<(String, u64)>>>,
+}
+
+impl NodeExecutionHook for MismatchingRollbackExecutionHook {
+    fn on_commit(
+        &mut self,
+        context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        Ok(NodeExecutionCommitResult {
+            execution_height: context.height,
+            execution_block_hash: format!("local-exec-block-{}", context.height),
+            execution_state_root: format!("local-exec-state-{}", context.height),
+        })
+    }
+
+    fn restore_to_height(&mut self, world_id: &str, height: u64) -> Result<bool, String> {
+        self.restores
+            .lock()
+            .expect("record restore calls")
+            .push((world_id.to_string(), height));
+        Ok(true)
+    }
+}
+
 #[test]
 fn pos_engine_commits_single_validator_head() {
     let config = NodeConfig::new("node-a", "world-a", NodeRole::Observer).expect("config");
@@ -574,6 +620,149 @@ fn synced_non_sequencer_commit_does_not_create_binding_without_local_execution()
     assert_eq!(engine.last_execution_height, 0);
     assert_eq!(engine.commit_execution_binding_for_height(8).expect("binding"), (None, None));
     assert!(engine.execution_binding_for_height(8).is_none());
+}
+
+#[test]
+fn synced_replication_commit_executes_with_payload_node_id() {
+    let config = NodeConfig::new("node-b", "world-synced-exec-producer", NodeRole::Storage)
+        .expect("config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let payload = super::replication_state_reconcile::ReplicationCommitPayload {
+        world_id: config.world_id.clone(),
+        node_id: "node-a".to_string(),
+        height: 1,
+        slot: 1,
+        epoch: 0,
+        block_hash: "block-1".to_string(),
+        action_root: empty_action_root(),
+        actions: Vec::new(),
+        committed_at_ms: 1_000,
+        execution_block_hash: Some("exec-block-1".to_string()),
+        execution_state_root: Some("exec-state-1".to_string()),
+        execution_checkpoint: None,
+    };
+    let contexts = Arc::new(Mutex::new(Vec::new()));
+    let mut hook = RecordingExecutionHook {
+        contexts: Arc::clone(&contexts),
+    };
+
+    engine
+        .apply_synced_replication_commit(&config.world_id, &payload, Some(&mut hook))
+        .expect("apply synced replication commit");
+
+    let contexts = contexts.lock().expect("recorded contexts");
+    assert_eq!(contexts.len(), 1);
+    assert_eq!(contexts[0].node_id, "node-a");
+    assert_ne!(contexts[0].node_id, config.node_id);
+}
+
+#[test]
+fn synced_replication_commit_rolls_back_execution_on_peer_hash_mismatch() {
+    let config = NodeConfig::new("node-b", "world-synced-exec-rollback", NodeRole::Storage)
+        .expect("config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.last_execution_height = 7;
+    engine.last_execution_block_hash = Some("exec-block-7".to_string());
+    engine.last_execution_state_root = Some("exec-state-7".to_string());
+    engine.remember_execution_binding_for_height(7);
+    let payload = super::replication_state_reconcile::ReplicationCommitPayload {
+        world_id: config.world_id.clone(),
+        node_id: "node-a".to_string(),
+        height: 8,
+        slot: 8,
+        epoch: 0,
+        block_hash: "block-8".to_string(),
+        action_root: empty_action_root(),
+        actions: Vec::new(),
+        committed_at_ms: 8_000,
+        execution_block_hash: Some("peer-exec-block-8".to_string()),
+        execution_state_root: Some("peer-exec-state-8".to_string()),
+        execution_checkpoint: None,
+    };
+    let restores = Arc::new(Mutex::new(Vec::new()));
+    let mut hook = MismatchingRollbackExecutionHook {
+        restores: Arc::clone(&restores),
+    };
+
+    let err = engine
+        .apply_synced_replication_commit(&config.world_id, &payload, Some(&mut hook))
+        .expect_err("peer execution mismatch should fail");
+
+    assert!(
+        matches!(err, NodeError::Replication { ref reason } if reason.contains("execution hash validation failed")),
+        "unexpected error: {err:?}"
+    );
+    assert_eq!(engine.last_execution_height, 7);
+    assert_eq!(
+        engine.last_execution_block_hash.as_deref(),
+        Some("exec-block-7")
+    );
+    assert_eq!(
+        engine.last_execution_state_root.as_deref(),
+        Some("exec-state-7")
+    );
+    assert!(engine.execution_binding_for_height(8).is_none());
+    assert_eq!(
+        restores.lock().expect("restore calls").as_slice(),
+        &[(config.world_id.clone(), 7)]
+    );
+}
+
+#[test]
+fn synced_replication_commit_rolls_back_execution_when_peer_hashes_missing_after_replay() {
+    let config = NodeConfig::new(
+        "node-b",
+        "world-synced-exec-missing-peer-hashes",
+        NodeRole::Storage,
+    )
+    .expect("config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.last_execution_height = 7;
+    engine.last_execution_block_hash = Some("exec-block-7".to_string());
+    engine.last_execution_state_root = Some("exec-state-7".to_string());
+    engine.remember_execution_binding_for_height(7);
+    let payload = super::replication_state_reconcile::ReplicationCommitPayload {
+        world_id: config.world_id.clone(),
+        node_id: "node-a".to_string(),
+        height: 8,
+        slot: 8,
+        epoch: 0,
+        block_hash: "block-8".to_string(),
+        action_root: empty_action_root(),
+        actions: Vec::new(),
+        committed_at_ms: 8_000,
+        execution_block_hash: None,
+        execution_state_root: None,
+        execution_checkpoint: None,
+    };
+    let restores = Arc::new(Mutex::new(Vec::new()));
+    let mut hook = MismatchingRollbackExecutionHook {
+        restores: Arc::clone(&restores),
+    };
+
+    let err = engine
+        .apply_synced_replication_commit(&config.world_id, &payload, Some(&mut hook))
+        .expect_err("missing peer execution hashes after replay should fail");
+
+    assert!(
+        matches!(err, NodeError::Replication { ref reason } if reason.contains("execution hash validation failed after replay")
+            && reason.contains("missing execution hashes")),
+        "unexpected error: {err:?}"
+    );
+    assert_eq!(engine.last_execution_height, 7);
+    assert_eq!(
+        engine.last_execution_block_hash.as_deref(),
+        Some("exec-block-7")
+    );
+    assert_eq!(
+        engine.last_execution_state_root.as_deref(),
+        Some("exec-state-7")
+    );
+    assert!(engine.execution_binding_for_height(8).is_none());
+    assert_eq!(
+        restores.lock().expect("restore calls").as_slice(),
+        &[(config.world_id.clone(), 7)]
+    );
 }
 
 #[test]
