@@ -1,6 +1,6 @@
 # Switch repository health inspection to manual trigger
 
-- PR URL: pending
+- PR URL: https://github.com/eng-cc/oasis7/pull/562
 - Task UID: task_ef87a7a54b764b13ae8be86dd6f54a77
 - Source Branch: task/engineering-repo-health-manual-inspection-trigger
 - Base Branch: main
