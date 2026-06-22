@@ -76,9 +76,59 @@ Example:
 
 ## 2026-06-22 20:45:03 CST / tpm
 - 完成内容: Task closeout status is done and current-task verification is recorded.
-- 遗留事项: Full repo pm lint remains blocked by unrelated historical execution-log debt; pre-PR local role review, PR creation, CI watch, and merge remain.
+- 遗留事项: Full repo pm lint remains blocked by broad `.pm` evidence strictness debt, including historical execution-log debt and current-task narrative entries that are accepted by task-scoped workflow lint; pre-PR local role review, PR creation, CI watch, and merge remain.
 - Action: Ran task-closeout with fresh verification; inspected resulting task yaml and current workflow lint; retried with --no-lint and confirmed task was already closed.
 - Validation Command: ./scripts/pm/task-closeout.sh --role tpm --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --verify-command '<fresh cc-connect cleanup verification>'; ./scripts/pm/workflow-lint.sh --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --phase current; ./scripts/pm/task-closeout.sh ... --no-lint
-- Expected Result: Current task closes to done with fresh verification; any unrelated full-repo pm lint debt is recorded as non-task-local blocker.
-- Actual Result: Task yaml status is done with last_verification_status=verified and last_verification_exit_code=0; workflow-lint OK for current task; task-closeout final full-repo pm lint failed on unrelated historical task evidence; --no-lint retry reported task already closed with status=done.
+- Expected Result: Current task closes to done with fresh verification; full-repo pm lint debt is recorded without treating it as a blocker for this narrow cleanup.
+- Actual Result: Task yaml status is done with last_verification_status=verified and last_verification_exit_code=0; workflow-lint OK for current task; task-closeout final full-repo pm lint failed on broad `.pm` lint noise including historical task evidence and current-task narrative entries; --no-lint retry reported task already closed with status=done.
 - Blocker / Next Action: Proceed to commit current task slice, then dispatch pre-PR local role review on the committed diff.
+
+## 2026-06-22 20:46:03 CST / tpm
+- 完成内容: Pre-PR local role review requested for committed diff 347e1c77ca373b4f12ac3750571f56cbf8abf736.
+- 遗留事项: Await repository_health_engineer and qa_engineer review returns before recording passed packet or creating PR.
+- Action: Review Trigger: pre-PR local role review. Review Scope: .pm task evidence files; AGENTS.md; PR.md deletion; repository-health scheduled inspection runbook; engineering project status wording. Review Roles: repository_health_engineer, qa_engineer. Review Question: confirm active cc-connect guidance has been removed without rewriting historical .pm evidence, and confirm verification evidence is sufficient for a docs/governance cleanup PR.
+- Validation Command: git diff --name-only origin/main...HEAD; git rev-parse HEAD; prior verification: active grep NO_ACTIVE_MATCHES, doc-governance-check OK, lint-skills OK, git diff --check OK, workflow-lint current OK
+- Expected Result: Each role returns findings/no_findings/residual_risk; valid findings are fixed before PR creation.
+- Actual Result: Review requests recorded; subagent dispatch pending.
+- Blocker / Next Action: Dispatch repository_health_engineer and qa_engineer bounded review slices.
+
+## 2026-06-22 20:50:00 CST / repository_health_engineer
+- 完成内容: Pre-PR local role review returned `no_findings` for committed diff `347e1c77ca373b4f12ac3750571f56cbf8abf736`.
+- 遗留事项: Low residual risk only: working tree contains later execution-log review evidence, but the reviewed committed diff remains stable.
+- Action: Reviewed active guidance removal and historical `.pm` evidence boundary for `AGENTS.md`, deleted `PR.md`, `doc/engineering/governance/repository-health-scheduled-inspection.runbook.md`, `doc/engineering/project.md`, and current task evidence.
+- Validation Command: `git diff --stat refs/remotes/origin/main...347e1c77ca373b4f12ac3750571f56cbf8abf736`; `git diff --name-status refs/remotes/origin/main...347e1c77ca373b4f12ac3750571f56cbf8abf736`; `git diff refs/remotes/origin/main...347e1c77ca373b4f12ac3750571f56cbf8abf736 -- AGENTS.md doc/engineering/governance/repository-health-scheduled-inspection.runbook.md doc/engineering/project.md PR.md`; active-surface `git grep` at review commit; `git diff --check refs/remotes/origin/main...347e1c77ca373b4f12ac3750571f56cbf8abf736`.
+- Expected Result: Active cc-connect repository guidance is removed without documentation/contract drift; historical `.pm` evidence is retained.
+- Actual Result: `no_findings`. Active `cc-connect Integration` block removed from `AGENTS.md`; scheduler-specific runbook command replaced by scheduler-neutral reminder text; project wording changed to `weekly reminder`; stale root `PR.md` deleted; historical `.pm` entries retained as audit truth.
+- Blocker / Next Action: No repository-health blocker; integrate QA review before PR packet.
+
+## 2026-06-22 20:50:00 CST / qa_engineer
+- 完成内容: Pre-PR local role review returned one low/non-blocking evidence wording finding and no release/merge blocker for the docs/governance cleanup.
+- 遗留事项: Full repo `./scripts/pm/lint.sh` remains red/noisy and includes both historical task debt and current task execution-log strictness findings; this is a repo-health signal, not a functional blocker for removing active cc-connect guidance.
+- Action: Reviewed verification sufficiency for active cc-connect cleanup and corrected the PR/closeout residual-risk wording requirement.
+- Validation Command: `git rev-parse HEAD`; `git diff --name-status refs/remotes/origin/main...HEAD`; active-surface `git grep`; hidden `rg`; `git diff --check`; `./scripts/doc-governance-check.sh`; `./scripts/lint-skills.sh`; `./scripts/pm/workflow-lint.sh --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --phase current`; `./scripts/pm/lint.sh`.
+- Expected Result: Verification is sufficient for a docs/governance cleanup PR or any blocker is named.
+- Actual Result: Verification is sufficient for this PR scope: active cc-connect surfaces are gone outside `.pm`, doc governance passes, skill lint passes, whitespace diff check passes, and task-scoped workflow lint passes. Low finding addressed by changing closeout wording from purely unrelated historical debt to broad `.pm` evidence strictness debt including historical and current-task narrative entries.
+- Blocker / Next Action: No QA release/merge blocker; record passed packet and continue to PR creation.
+
+## 2026-06-22 20:50:00 CST / tpm
+- 完成内容: Pre-PR local role review integrated and low QA wording finding addressed.
+- 遗留事项: PR creation, CI/comment watch, merge, and cleanup remain.
+- Action: Integrated repository_health_engineer `no_findings`; integrated qa_engineer low/non-blocking finding by correcting closeout residual-risk wording; prepared passed evidence packet.
+- Validation Command: Review returns from repository_health_engineer and qa_engineer; execution-log wording patch.
+- Expected Result: All valid review findings are addressed or dispositioned before PR creation.
+- Actual Result: Repository-health returned `no_findings`; QA returned one low/non-blocking evidence issue, addressed in this execution log. No release/merge blocker remains for this docs/governance cleanup.
+- Blocker / Next Action: Run prepare-task-pr preflight and create PR.
+
+- Pre-PR Local Role Review: passed
+- Task UID: task_198cdd132d3e4fda9f5fc9b4f46f412e
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-cc-connect-cleanup
+- Source Branch: task/engineering-cc-connect-cleanup
+- Source Head: 347e1c77ca373b4f12ac3750571f56cbf8abf736
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_198cdd132d3e4fda9f5fc9b4f46f412e.execution.md; .pm/tasks/task_198cdd132d3e4fda9f5fc9b4f46f412e.yaml; AGENTS.md; PR.md; doc/engineering/governance/repository-health-scheduled-inspection.runbook.md; doc/engineering/project.md
+- Role Selection Basis: changed paths touch active agent guidance, engineering governance runbook/project docs, stale PR evidence, and `.pm` task truth; selected repository_health_engineer for docs/contract and evidence-boundary review, qa_engineer for verification sufficiency and merge-blocker assessment; no gameplay, runtime, viewer, wasm, blockchain, agent behavior, visual/interaction, or liveops messaging surface changed.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Evidence: repository_health_engineer `no_findings` at 2026-06-22 20:50:00 CST; qa_engineer low/non-blocking evidence wording finding at 2026-06-22 20:50:00 CST.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: QA wording finding addressed by updating the 2026-06-22 20:45:03 CST closeout entry to classify full repo `pm lint` as broad `.pm` evidence strictness debt including historical task evidence and current-task narrative entries, not purely unrelated historical debt.
+- Residual Risk: Active cc-connect guidance is removed from non-`.pm` repository surfaces. `.pm` current and historical task evidence intentionally retains cc-connect mentions as audit/task truth. Full repo `./scripts/pm/lint.sh` remains noisy from broad `.pm` evidence strictness debt, but task-scoped workflow lint and docs/governance verification pass for this cleanup.
