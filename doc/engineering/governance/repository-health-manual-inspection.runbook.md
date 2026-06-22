@@ -40,8 +40,9 @@ For code-health sampling that may be expensive, choose the narrowest tier that m
 
 ## Code And Dependency Health Focus
 - Code health: look for oversized Rust files, repeated warning/fmt/clippy signatures, unsafe usage growth, duplicate logic hotspots, stale generated artifacts, and modules whose tests are missing from the required/support gate.
+- Rust style guide: include `third_party/rust-skills/AGENTS.md` as a read-only inspection input for owned Rust code. In a fresh task worktree, initialize the submodule first with `git submodule update --init -- third_party/rust-skills`; if the file is still unavailable, record the missing input as inspection evidence and capture a focused workflow follow-up instead of silently skipping the check. Check for drift against its Rust 2024/rust-version/lint defaults, 100-character style guidance, `?` over `unwrap()` in library code, and required `// SAFETY:` comments around unsafe blocks.
 - Dependency health: review `Cargo.toml`, `Cargo.lock`, cargo-deny output, duplicate dependency output, and release/build workflow version pins. Separate security/advisory upgrades from routine version refreshes and from dependency-prune opportunities.
-- Upgrade triage: create one focused task per coherent upgrade or prune surface. Include the owner role, affected crates/packages, expected compatibility checks, rollback plan, and whether the work needs `runtime_engineer`, `wasm_platform_engineer`, `viewer_engineer`, `agent_engineer`, or `qa_engineer`.
+- Upgrade and style triage: create one focused task per coherent upgrade, prune, or style-drift surface. Include the owner role, affected crates/packages, expected compatibility checks, rollback plan, and whether the work needs `runtime_engineer`, `wasm_platform_engineer`, `viewer_engineer`, `agent_engineer`, or `qa_engineer`.
 - Evidence rule: record report paths such as `output/rust-governance/.../summary.md`, command exit status, and the role-attributed verdict in the inspection task log. Report-only findings are not automatically blockers.
 
 ## Evidence Sink
@@ -73,7 +74,7 @@ When the owner chooses to run a quarterly review, compare recent manual inspecti
 - repeated `doc-inventory-report` hotspots
 - repeated worktree cleanup candidates
 - `pm lint` historical-debt burn-down or growth
-- repeated Rust governance report findings, duplicate dependency clusters, unsafe-usage hotspots, and dependency-upgrade backlog growth
+- repeated Rust governance report findings, Rust style-guide drift, duplicate dependency clusters, unsafe-usage hotspots, and dependency-upgrade backlog growth
 - recurring `doc-governance-check` or `lint-skills` failure signatures
 - whether any reflection signals should become committed `.pm` tasks
 
