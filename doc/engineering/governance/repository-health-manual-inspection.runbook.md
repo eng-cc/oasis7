@@ -7,7 +7,7 @@ The inspection is a human-triaged health review. It does not add a GitHub Action
 
 ## Trigger
 
-The inspection is started manually by the engineering governance owner. There is no `cc-connect`, cron, GitHub Actions schedule, or other automatic trigger for this workflow.
+The inspection is started manually by the engineering governance owner. There is no repository-managed scheduler, GitHub Actions schedule, or other automatic trigger for this workflow.
 
 When the owner starts an inspection, still enter the standard `oasis7` workflow: create or enter one task worktree, bind one `.pm` task, and dispatch `repository_health_engineer` for professional repository-health judgment.
 

@@ -1,0 +1,25 @@
+task_uid: task_198cdd132d3e4fda9f5fc9b4f46f412e
+title: "Remove cc-connect historical instructions"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-cc-connect-cleanup
+execution_log_path: .pm/tasks/task_198cdd132d3e4fda9f5fc9b4f46f412e.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "cc-connect-specific instructions are removed from active repository guidance"
+  - "No tracked cc-connect references remain unless justified as historical evidence"
+handoff_to: []
+updated_at: 2026-06-22T20:44:13+08:00
+last_started_at: 2026-06-22T20:14:57+08:00
+last_claim_type: task_complete
+last_verify_command: "if git grep -n -I -e 'cc-connect' -e 'cc_connect' -e 'CC_PROJECT' -e 'CC_SESSION_KEY' -- . ':(exclude).pm/**' ':(exclude).git' ':(exclude)third_party/**'; then exit 1; else echo NO_ACTIVE_MATCHES; fi && ./scripts/pm/workflow-lint.sh --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --phase current && ./scripts/doc-governance-check.sh && ./scripts/lint-skills.sh && git diff --check"
+last_verified_at: 2026-06-22T20:44:12+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-22T20:44:13+08:00
