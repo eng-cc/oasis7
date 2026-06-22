@@ -146,3 +146,60 @@ Example:
 - Expected Result: Workflow behavior, skill lint, doc governance, and diff whitespace checks pass; current task has no PM lint findings.
 - Actual Result: `workflow behavior eval: OK`; `lint-skills: OK (28 skill entrypoints checked)`; `doc-governance-check: OK`; `git diff --check` produced no output and exit 0; current-task PM lint grep produced no matches. Full `./scripts/pm/lint.sh` still fails on unrelated historical task execution-log debt, with first observed failure at `.pm/tasks/task_04d61dc5778e4b1683a61056daf454e3.execution.md:168`.
 - Blocker / Next Action: Proceed to pre-PR local role review for `repository_health_engineer`; do not expand this task into repo-wide historical PM lint cleanup.
+
+## 2026-06-22 23:15:00 CST / tpm
+- 完成内容: Pre-PR local role review requested.
+- 遗留事项: wait for `repository_health_engineer` review result, address findings if any, then record passed packet.
+- Review Trigger: pre-PR local role review.
+- Review Scope: `.pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.execution.md`; `.pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.yaml`; `doc/engineering/prd.md`; `doc/engineering/project.md`.
+- Review Package: `.pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/review-packages/review-9fb3ddd4b..e7022dd39.diff`.
+- Review Roles: `repository_health_engineer`.
+- Review Question: Confirm the docs-sync patch accurately aligns active engineering docs with the current always-bootstrap workflow, preserves historical trace appropriately, and does not introduce repository-health ambiguity or overbroad scope.
+- Evidence Available: Fresh closeout verification passed at 2026-06-22 23:13:39 CST with `./scripts/pm/workflow-behavior-eval.sh && ./scripts/lint-skills.sh && ./scripts/doc-governance-check.sh && git diff --check && ! (./scripts/pm/lint.sh 2>&1 | rg 'task_86b5e8b47aa64bdbb0b3c8fda6f51029')`; commit `e7022dd39e8ade91ddaba942be50e488c6bf406d`.
+- Expected Return Contract: findings or no_findings; scope/spec compliance verdict; repository-health quality/risk verdict; residual_risk.
+- Slice Ledger: `.pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/slice-ledger.jsonl`.
+- Formal Sink: `.pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.execution.md`.
+- Action: Generated review package and recorded review request.
+- Validation Command: `./scripts/pm/review-package.sh --base origin/main --head HEAD --task-uid task_86b5e8b47aa64bdbb0b3c8fda6f51029`; `./scripts/pm/slice-ledger.sh --task-uid task_86b5e8b47aa64bdbb0b3c8fda6f51029 --print`.
+- Expected Result: Review package and slice ledger path exist for pre-PR review.
+- Actual Result: Review package generated at `.pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/review-packages/review-9fb3ddd4b..e7022dd39.diff`; slice ledger path printed.
+- Blocker / Next Action: Dispatch review subagent.
+
+## 2026-06-22 23:19:10 CST / repository_health_engineer
+- 完成内容: Pre-PR local role review returned `no_findings`.
+- 遗留事项: full repository-health manual inspection remains out of scope; repo-wide `./scripts/pm/lint.sh` remains known-blocked by unrelated historical task evidence debt.
+- Review Trigger: pre-PR local role review.
+- Scope/spec compliance verdict: Pass. The patch is narrow and matches the docs-sync scope: `doc/engineering/prd.md` now makes `default-workflow-bootstrap` the entry for any user request, requires task/worktree truth before read-only/chat routing, and keeps later repository edits on the same canonical task/worktree.
+- Repository-health quality/risk verdict: Pass. `doc/engineering/project.md` preserves the historical task trace while explicitly marking the old non-forced task/worktree wording as superseded. The patch does not broaden into unrelated historical rewrites.
+- Review Findings Disposition: no_findings.
+- Residual Risk: full repository-health manual inspection was out of scope; full repo-wide `.pm` lint remains blocked by unrelated historical task evidence debt, but no current-task PM lint finding was observed.
+- Action: Integrated review result from subagent `019eefe6-174f-7a93-b4a2-d5fb7381ed73` (`Nietzsche`).
+- Validation Command: subagent completed review result.
+- Expected Result: Fresh involved-role review returns findings or no_findings with residual risk.
+- Actual Result: `no_findings`; scope/spec and repository-health quality/risk verdicts both pass.
+- Blocker / Next Action: Record pre-PR local role review passed packet and continue to PR preflight.
+
+## 2026-06-22 23:19:10 CST / tpm
+- 完成内容: Pre-PR local role review passed packet recorded.
+- 遗留事项: run PR preflight/create, then continue normal PR CI/comment watch path.
+- Pre-PR Local Role Review: passed
+- Task UID: task_86b5e8b47aa64bdbb0b3c8fda6f51029
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-kickoff
+- Source Branch: task/engineering-repository-health-kickoff
+- Source Head: e7022dd39e8ade91ddaba942be50e488c6bf406d
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.execution.md; .pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.yaml; doc/engineering/prd.md; doc/engineering/project.md
+- Review Package: .pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/review-packages/review-9fb3ddd4b..e7022dd39.diff
+- Role Selection Basis: changed paths are engineering governance docs plus task evidence; task slice history involved `repository_health_engineer`; no runtime/viewer/QA/liveops/gameplay/UI paths touched.
+- Review Roles: repository_health_engineer
+- Review Evidence: `repository_health_engineer` pre-PR review by subagent `019eefe6-174f-7a93-b4a2-d5fb7381ed73` returned `no_findings`.
+- Review Verdicts: repository_health_engineer scope/spec compliance verdict pass; repository-health quality/risk verdict pass.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: n/a, no findings.
+- Residual Risk: full repository-health manual inspection and repo-wide `.pm` historical evidence cleanup were out of scope; current task PM lint grep and docs/workflow checks passed.
+- Slice Ledger: .pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/slice-ledger.jsonl
+- Action: Recorded required passed packet after integrating role review.
+- Validation Command: inspect `.pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.execution.md` for `Pre-PR Local Role Review: passed` packet.
+- Expected Result: Passed packet is present before PR preflight/create.
+- Actual Result: Packet recorded in this entry.
+- Blocker / Next Action: Commit review evidence and run `./scripts/prepare-task-pr.sh`.
