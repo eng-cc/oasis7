@@ -1,27 +1,28 @@
-# Remove legacy messaging bridge guidance
+# Add code and dependency health to repository inspection
 
-- PR URL: https://github.com/eng-cc/oasis7/pull/561
-- Task UID: task_198cdd132d3e4fda9f5fc9b4f46f412e
-- Source Branch: PR #561 head branch
+- PR URL: https://github.com/eng-cc/oasis7/pull/564
+- Task UID: task_b0a770d8447340f6844e1cff07f99a37
+- Source Branch: task/engineering-repo-health-code-dependency-inspection
 - Base Branch: main
 - Purpose: normal_pr_ci_watch
 
 ## Summary
-- Remove the active legacy messaging bridge instructions from `AGENTS.md`.
-- Keep the repository-health inspection path on the manual-trigger runbook introduced on `main`.
-- Keep historical `.pm` task evidence intact as audit truth while removing active non-`.pm` guidance.
+- Extend the manual repository-health inspection runbook with code-health and dependency-health checks.
+- Point the checklist at the existing Rust governance report and required-gate surfaces.
+- Record that dependency upgrades should become focused follow-up tasks instead of being performed inside the inspection task.
 
 ## Verification
-- `NO_ACTIVE_MATCHES` from active-surface grep outside `.pm`, `.git`, and `third_party`.
+- `./scripts/pm/workflow-lint.sh --task-uid task_b0a770d8447340f6844e1cff07f99a37 --phase current`
 - `./scripts/doc-governance-check.sh`
-- `./scripts/lint-skills.sh`
 - `git diff --check`
-- `./scripts/pm/workflow-lint.sh --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --phase pr-ready`
-- `./scripts/pm/workflow-lint.sh --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --phase post-pr --allow-unbound`
+- `./scripts/pm/task-closeout.sh --role tpm --task-uid task_b0a770d8447340f6844e1cff07f99a37 --verify-command './scripts/pm/workflow-lint.sh --task-uid task_b0a770d8447340f6844e1cff07f99a37 --phase current && ./scripts/doc-governance-check.sh && git diff --check' --json`
+- `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command './scripts/pm/workflow-lint.sh --task-uid task_b0a770d8447340f6844e1cff07f99a37 --phase current && ./scripts/doc-governance-check.sh && git diff --check'`
+- `./scripts/pm/workflow-lint.sh --task-uid task_b0a770d8447340f6844e1cff07f99a37 --phase pr-ready --allow-unbound`
 
-## Review Follow-Up
-- Addressed review thread `PRRT_kwDORHhWec6LRCgY` by replacing the stale root `PR.md` with this task's PR evidence chain.
+## Local Role Review
+- repository_health_engineer: no findings; scope/spec compliance passed and risk acceptable.
+- qa_engineer: found missing pre-PR/claim-ready evidence and incomplete PR verification evidence; fixed before PR creation.
 
 ## Residual Risk
-- `.pm` current and historical task evidence intentionally retains removed-tool mentions as task/audit truth.
-- Full repo `./scripts/pm/lint.sh` remains noisy from broad `.pm` evidence strictness debt; task-scoped workflow lint and docs/governance checks pass for this cleanup.
+- The runbook now references existing report/gate commands; it does not add a new automated dependency-upgrade tool or schedule.
+- `ci-rust-governance-report` was not run for this docs-only change; it is documented as an inspection command, not a validation requirement for this PR.
