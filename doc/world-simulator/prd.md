@@ -50,7 +50,7 @@
 | --- | --- | --- |
 | 场景与世界契约 | `PRD-WORLD_SIMULATOR-001/002/003` | 场景初始化、资源变化、关键交互和发布证据必须可复现，并通过统一验收清单映射到测试证据。 |
 | runtime live / LLM / provider authority | `PRD-WORLD_SIMULATOR-016-019`, `036-040` | runtime live 是主驱动方向；provider 决策层保持 provider advisory / runtime authoritative；LLM 失败按硬失败或显式阻断处理，不回退启发式。 |
-| primary Web viewer | `PRD-WORLD_SIMULATOR-039/041/046` | `viewer` 是低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias；旧 3D / visual-QA surface 已退出 active delivery。 |
+| primary Web viewer | `PRD-WORLD_SIMULATOR-039/041/046` | `viewer` 是低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias；退役第二 Viewer surface 已退出 active delivery。 |
 | launcher transfer / explorer / control plane | `PRD-WORLD_SIMULATOR-020-031`, `033/034/044` | native/web launcher 共享控制面与前端语义；转账、explorer、链状态、GUI Agent 和 stale execution-world 恢复必须结构化、可诊断、可回归。 |
 | slot-1 onboarding | `PRD-WORLD_SIMULATOR-045` | 新账号玩家读取 canonical quote 并显式确认后直接进入 `ClaimAgent`；dedicated pool 足够时自动补足 restricted starter amount，不生成 operator-review 审批状态。 |
 | release asset entrypoints | `PRD-WORLD_SIMULATOR-042/043` | 三平台公开资产必须提供平台原生安装或启动入口，并通过 bundle/installer 入口验证；普通用户发行仍包含 Windows codesigning trust chain 与 macOS notarized `.app + .dmg` blocker。 |
@@ -62,7 +62,7 @@
 - 启动器玩家需要在同一入口内完成链状态查看、资产查询、转账、explorer 与反馈，不依赖命令行。
 - 新账号玩家需要可解释的 `slot-1` direct claim：quote、auto-funding amount、资金缺口、claim result 与 provenance 必须玩家可见。
 
-模式分层按 `PRD-CORE-009` 执行：`viewer` 承接低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias / 历史入口名保留；仓库已删除旧 3D / visual-QA Viewer surface，不再保留独立 `standard_3d` taxonomy。Local Provider 当前路径使用 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`；`player_parity` 与 `headless_agent` 是 execution lane，不是新的玩家访问模式。
+模式分层按 `PRD-CORE-009` 执行：`viewer` 承接低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias / 历史入口名保留；仓库已删除旧第二 Viewer surface，不再保留独立第二 Viewer taxonomy。Local Provider 当前路径使用 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`；`player_parity` 与 `headless_agent` 是 execution lane，不是新的玩家访问模式。
 
 ## Critical Flows
 1. Web-first 闭环：选择场景 -> 启动 Viewer Web -> 执行关键交互 -> 采集日志/截图/指标 -> 产出 `test_tier_required` 结论。

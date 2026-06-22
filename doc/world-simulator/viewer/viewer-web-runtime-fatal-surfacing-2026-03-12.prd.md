@@ -26,7 +26,7 @@
 - 不修改 `third_party` 或 Bevy 上游实现。
 - 不修改 `third_party` 或 Bevy 上游实现。
 - 不承诺本轮内彻底消除所有 SwiftShader/WebGL2 渲染差异。
-- 不改变 native Viewer、runtime 协议或 GUI Agent 接口语义。
+- 不改变本地 Viewer 配置回退、runtime 协议或 GUI Agent 接口语义。
 
 ## 3. AI System Requirements (If Applicable)
 - N/A: 本专题不新增 AI 专属要求。

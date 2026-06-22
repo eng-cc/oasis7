@@ -24,7 +24,7 @@
   - 启动器体验验证者：希望业务失败与链路断连在 UI 上可区分，降低误判成本。
 - User Scenarios & Frequency:
   - 启动器打开 Web Viewer：每次本地调试或演示均会触发。
-  - native Viewer 回归：测试链路验证回退解析。
+  - 本地 Viewer 回归：测试链路验证回退解析。
   - CI/脚本场景：通过环境变量覆盖 player/keypair。
 - User Stories:
   - PRD-TESTING-LAUNCHER-AUTH-001: As a 开发者, I want viewer auth keys auto-inherited from node config, so that chat/prompt controls work without manual env setup.
@@ -34,7 +34,7 @@
 - Critical User Flows:
   1. Flow-AUTH-001: `oasis7_game_launcher 读取 config.toml[node] -> 注入 __OASIS7_VIEWER_AUTH_ENV -> Web Viewer 使用鉴权`
   2. Flow-AUTH-002: `wasm Viewer 优先读注入 -> 注入缺失时回退进程环境变量`
-  3. Flow-AUTH-003: `native Viewer 读取环境变量 -> 无环境变量时回退 config.toml[node]`
+  3. Flow-AUTH-003: `本地 Viewer 读取环境变量 -> 无环境变量时回退 config.toml[node]`
   4. Flow-AUTH-004: `玩家发送 agent_chat -> runtime 返回 AgentChatError -> Viewer 显示聊天失败原因但保持连接状态`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |

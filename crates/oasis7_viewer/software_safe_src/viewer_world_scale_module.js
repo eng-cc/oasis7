@@ -157,8 +157,8 @@ export function createViewerWorldScaleModule({
         ? "overview/detail 的 zoom tier 只切换表现语义，不会改写世界的厘米真值。"
         : "Overview/detail zoom tiers only switch presentation semantics; they do not rewrite centimeter truth in the world model.",
       softwareSafeNote: isZh
-        ? "viewer 主入口优先给出文字和数值真值；更底层的 visual QA viewer 可以更夸张，但不应覆盖这里的物理标签。"
-        : "The viewer entry prioritizes textual and numeric truth. Lower-level visual QA surfaces may exaggerate more aggressively, but they should not override the physical labels here.",
+        ? "viewer 主入口优先给出文字和数值真值；诊断层可以为可读性放大标记，但不应覆盖这里的物理标签。"
+        : "The viewer entry prioritizes textual and numeric truth. Diagnostic layers may enlarge markers for readability, but they should not override the physical labels here.",
     };
 
     return {

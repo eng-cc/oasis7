@@ -25,7 +25,7 @@
 ### 范围外
 - 不改动 `ViewerRequest::AgentChat` / `ViewerResponse::AgentChat*` 协议定义。
 - 不改动 Agent 决策内核和 trace 结构。
-- 不改动 native viewer 交互设计。
+- 不改动本地 Viewer 交互设计。
 
 ## 3. AI System Requirements (If Applicable)
 - N/A: 本专题不新增 AI 专属要求。

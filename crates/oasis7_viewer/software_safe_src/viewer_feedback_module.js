@@ -897,8 +897,8 @@ export function createViewerFeedbackModule({
       if (!isRecoveryChoiceState) {
         return localeText(
           locale,
-          "无需打开可视化质检观察器，也可以直接从正式网页入口执行。",
-          "Playable from the formal Web entry without opening the visual QA viewer.",
+          "可以直接从正式网页入口执行。",
+          "Playable directly from the formal Web entry.",
         );
       }
       if (action.executeKind === "request_snapshot") {

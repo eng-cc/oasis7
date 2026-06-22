@@ -6,11 +6,11 @@
 审计轮次: 3
 
 ## 1. 设计定位
-`viewer` 是唯一正式 Web Viewer / UI 入口；`software_safe` 只保留为兼容 alias。设计目标不再是“主入口 + 标准 Viewer 分流”，而是围绕单一静态入口维护稳定浏览器玩法与观测闭环。
+`viewer` 是唯一正式 Web Viewer / UI 入口；`software_safe` 只保留为兼容 alias。设计目标不再是“主入口 + 第二 Viewer 分流”，而是围绕单一静态入口维护稳定浏览器玩法与观测闭环。
 
 ## 2. 核心设计决策
 - 保留 `software_safe.html` + `software_safe_src/**` 作为源码入口，generated bundle 以 `viewer.js` 为 canonical，并保留 `software_safe.js` 作为 compat alias；dist / bundle / release 同步产出 `viewer.html` + `viewer.js` 与 compat 副本。
-- 删除标准 Viewer 跳转、3D 模式入口与相关 UI 文案。
+- 删除第二 Viewer 跳转、退役模式入口与相关 UI 文案。
 - 保留 `__AW_TEST__` 作为统一自动化契约。
 - 保留 freshness gate，防止 stale dist。
 
@@ -28,6 +28,6 @@
 - `viewer-software-safe-step-regression*.sh` 验证 gameplay/blocked 契约
 
 ## 4. 关键约束
-- 不再暴露标准 Viewer 跳转
+- 不再暴露第二 Viewer 跳转
 - 不再维护 `render_mode=standard` 的当前产品语义
 - 不再维护 texture/theme/capture 工具链

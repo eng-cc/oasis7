@@ -895,7 +895,7 @@ function gameplayActionDetail(action, gameplay, locale) {
     || action?.disabledReason
     || gameplay?.economicSurface?.repairAction
     || gameplay?.narrativeNextStep
-    || tr(locale, "无需打开可视化质检观察器，也可以直接从正式网页入口执行。", "Playable from the formal Web entry without opening the visual QA viewer.");
+    || tr(locale, "可以直接从正式网页入口执行。", "Playable directly from the formal Web entry.");
 }
 
 function renderGameplayAction(action) {
