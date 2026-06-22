@@ -250,3 +250,28 @@ Example:
 - Expected Result: PR-ready workflow lint accepts metadata and pre-PR evidence.
 - Actual Result: `workflow-lint: OK (task_86b5e8b47aa64bdbb0b3c8fda6f51029, phase=pr-ready)`.
 - Blocker / Next Action: Commit evidence and run `./scripts/prepare-task-pr.sh --create`.
+
+## 2026-06-22 23:29:00 CST / tpm
+- 完成内容: Refreshed pre-PR evidence after rebasing onto `origin/main`.
+- 遗留事项: commit rebase evidence refresh, rerun PR preflight, and create PR if clean.
+- Pre-PR Local Role Review: passed
+- Task UID: task_86b5e8b47aa64bdbb0b3c8fda6f51029
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-kickoff
+- Source Branch: task/engineering-repository-health-kickoff
+- Source Head: a0c7ddcdff1647c3e659612eb06addbab690c7d1
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.execution.md; .pm/tasks/task_86b5e8b47aa64bdbb0b3c8fda6f51029.yaml; doc/engineering/prd.md; doc/engineering/project.md
+- Review Package: .pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/review-packages/review-5ce155e1f..a0c7ddcdf.diff
+- Role Selection Basis: changed paths are engineering governance docs plus task evidence; task slice history involved `repository_health_engineer`; no runtime/viewer/QA/liveops/gameplay/UI paths touched.
+- Review Roles: repository_health_engineer
+- Review Evidence: prior final narrow repository_health_engineer review returned `no_findings`; rebase was conflict-free and changed only commit SHAs/review package base, not scoped file content intent.
+- Review Verdicts: repository_health_engineer scope/spec compliance verdict pass; repository-health quality/risk verdict pass.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: n/a, no findings; rebase completed without conflicts.
+- Residual Risk: full repository-health manual inspection and repo-wide `.pm` historical evidence cleanup were out of scope; current task PR-ready workflow lint and docs checks must be rerun after this evidence refresh.
+- Slice Ledger: .pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/slice-ledger.jsonl
+- Action: Ran `git fetch origin main && git rebase origin/main`, regenerated review package, and recorded updated passed packet for rebased head.
+- Validation Command: `git fetch origin main && git rebase origin/main`; `./scripts/pm/review-package.sh --base origin/main --head HEAD --task-uid task_86b5e8b47aa64bdbb0b3c8fda6f51029`.
+- Expected Result: Branch rebases cleanly and review package points to current head/base.
+- Actual Result: Rebase succeeded; review package generated at `.pm/scratch/task_86b5e8b47aa64bdbb0b3c8fda6f51029/review-packages/review-5ce155e1f..a0c7ddcdf.diff`.
+- Blocker / Next Action: Rerun PR-ready checks and commit evidence refresh.
