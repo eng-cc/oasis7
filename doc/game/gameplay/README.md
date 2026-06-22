@@ -1,6 +1,6 @@
 # `game/gameplay` 热点子域入口
 
-更新时间: 2026-06-20
+更新时间: 2026-06-22
 
 ## 从这里开始
 - 想快速理解核心玩法骨架：先读 `gameplay-top-level-design.prd.md`
@@ -9,7 +9,7 @@
 - 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `gameplay-small-player-progression-lane-2026-05-17.prd.md`
 - 想确认 1cm 物理世界、动作粒度和表现夸张边界：先读 `gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
 - 想确认 limited preview、closed beta 或 release readiness：先读 `gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `gameplay-closed-beta-readiness-2026-03-21.prd.md`
-- 想确认 agent claim token cost、claim bond、upkeep、reclaim 或 restricted grant：先读 `gameplay-agent-claim-token-cost-2026-03-27.prd.md`，再按需读 `gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
+- 想确认 agent claim token cost、claim bond、upkeep、reclaim、restricted grant、starter OC 或 first chat gate：先读 `gameplay-agent-claim-token-cost-2026-03-27.prd.md`，再按需读 `gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
 - 想精确找某份 gameplay 专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -72,6 +72,7 @@
 - 适合问题:
   - agent claim 的 token cost、bond、upkeep、reclaim 如何组织
   - restricted grant 如何发放、撤销、过期和 incident 处理
+  - starter OC / first chat gate 如何与 restricted starter claim balance 区分
   - economy / longrun hardening 何时需要 QA 或 LiveOps 参与
 
 ## 定向检索边界
