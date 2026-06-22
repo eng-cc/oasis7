@@ -131,6 +131,80 @@ fn node_runtime_execution_driver_rejects_expected_hash_mismatch_before_persistin
 }
 
 #[test]
+fn rejected_expected_hash_does_not_persist_simulator_mirror() {
+    let dir = temp_dir("execution-driver-expected-hash-mismatch-simulator");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let simulator_world_dir = simulator_world_dir_from_execution_world_dir(world_dir.as_path());
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let payload =
+        encode_consensus_action_payload(&ConsensusActionPayloadEnvelope::from_simulator_action(
+            SimulatorAction::HarvestRadiation {
+                agent_id: "agent-0".to_string(),
+                max_amount: 1,
+            },
+            ActionSubmitter::System,
+        ))
+        .expect("encode simulator payload");
+    let committed_action = oasis7_node::NodeConsensusAction::from_payload(1, "node-a", payload)
+        .expect("consensus action");
+    let action_root =
+        compute_consensus_action_root(std::slice::from_ref(&committed_action)).expect("root");
+
+    let err = driver
+        .on_commit_with_expected(
+            NodeExecutionCommitContext {
+                world_id: "w1".to_string(),
+                node_id: "node-a".to_string(),
+                height: 1,
+                slot: 0,
+                epoch: 0,
+                node_block_hash: "node-h1".to_string(),
+                action_root,
+                committed_actions: vec![committed_action],
+                committed_at_unix_ms: 1_000,
+            },
+            Some("peer-block"),
+            Some("peer-state"),
+        )
+        .expect_err("expected hash mismatch");
+
+    assert!(
+        err.contains("peer mismatch at height 1"),
+        "unexpected error: {err}"
+    );
+    assert!(!execution_bridge_record_path(records_dir.as_path(), 1).exists());
+
+    drop(driver);
+    let restored_simulator =
+        oasis7::simulator::WorldKernel::load_from_dir(simulator_world_dir.as_path())
+            .expect("load simulator mirror after rejected commit");
+    assert_eq!(
+        restored_simulator.journal().len(),
+        0,
+        "rejected simulator action must not advance durable simulator mirror"
+    );
+    let restarted =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root)
+            .expect("restarted driver");
+    assert_eq!(
+        restarted.simulator_mirror.journal().len(),
+        0,
+        "restart must not observe simulator state from rejected replay"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn node_runtime_execution_driver_persists_v2_committed_tick_context() {
     let dir = temp_dir("execution-driver-v2-committed-tick-context");
     let state_path = dir.join("state.json");

@@ -236,11 +236,6 @@ impl NodeRuntimeExecutionDriver {
                 )
             })?;
         let state_root = blake3_hex(snapshot_bytes.as_slice());
-        persist_simulator_execution_world(
-            self.simulator_world_dir.as_path(),
-            &self.simulator_mirror,
-            Some(resource_context),
-        )?;
 
         Ok(Some(ExecutionSimulatorMirrorRecord {
             action_count: simulator_actions.len(),
@@ -637,6 +632,22 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     expected_state_root
                 ));
             }
+        }
+        if simulator_mirror.is_some() {
+            let resource_context = ChainResourceDerivationContext {
+                world_id: context.world_id.as_str(),
+                chain_id: context.world_id.as_str(),
+                genesis_ref: None,
+                created_at_height: 0,
+                manifest_height: context.height,
+                commit_block_hash: Some(context.node_block_hash.as_str()),
+                tick: self.simulator_mirror.time(),
+            };
+            persist_simulator_execution_world(
+                self.simulator_world_dir.as_path(),
+                &self.simulator_mirror,
+                Some(resource_context),
+            )?;
         }
         let external_effect_ref = persist_execution_external_effect_materialization(
             &self.execution_store,
