@@ -104,3 +104,12 @@ Example:
 - Expected Result: Preflight passes, branch pushes to origin, and GitHub PR is created.
 - Actual Result: Preflight passed with local required validation scope `minimal`, pre-PR local role review `passed`, branch pushed to `origin/task/engineering-repo-health-rust-style-guide-check`, and PR created at https://github.com/eng-cc/oasis7/pull/566.
 - Blocker / Next Action: Update PR evidence with the real PR URL, push it, then watch PR checks/comments/mergeability.
+
+## 2026-06-22 22:41:00 CST / tpm
+- 完成内容: POST-PR REVIEW COMMENT ADDRESSED. Fixed the valid Codex review finding about fresh-worktree submodule initialization.
+- 遗留事项: Need push the review fix, resolve the GitHub review thread, and re-check required checks/mergeability/comments.
+- Action: Inventoried unresolved review threads with `./scripts/pr-review-thread-closeout.sh --unresolved-only` and verified one actionable P2 comment on `doc/engineering/governance/repository-health-manual-inspection.runbook.md`. Updated the Rust style-guide checklist to tell operators to run `git submodule update --init -- third_party/rust-skills` in fresh task worktrees before reading `third_party/rust-skills/AGENTS.md`; if the input remains unavailable, the runbook now requires recording that as inspection evidence and capturing a focused workflow follow-up instead of silently skipping the check. Updated `PR.md` with the post-review fix evidence.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f --phase current`; `./scripts/doc-governance-check.sh`; `git diff --check`.
+- Expected Result: Current task workflow lint, docs governance, and diff hygiene pass after the review fix.
+- Actual Result: `workflow-lint: OK (task_3fcca9c7548f47d9be1d79a06ffcb59f, phase=current)`; `doc-governance-check: OK`; `git diff --check` exited 0.
+- Blocker / Next Action: Commit/push the review fix, resolve the GitHub review thread after push, then continue PR checks/comments/mergeability watch.
