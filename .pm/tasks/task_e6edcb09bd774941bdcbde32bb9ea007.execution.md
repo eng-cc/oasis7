@@ -302,3 +302,12 @@ Example:
 - Expected Result: PR-ready evidence mentions claim-ready attempt, project trace resolves, and direct verification passes.
 - Actual Result: claim-ready helper rejected non-completion claim on already closed task (`closed task claim evidence is immutable`); direct verification passed: site manual sync OK, doc-governance OK, `git diff --check` OK, focused workflow-lint OK.
 - Blocker / Next Action: amend evidence changes into commit and rerun `./scripts/prepare-task-pr.sh --json`.
+
+## 2026-06-22 13:40:18 CST / tpm
+- 完成内容: Created GitHub PR for normal CI/watch/merge path.
+- 遗留事项: GitHub required checks, comments/review threads, and mergeability still need watch before merge.
+- Action: ran PR helper preflight, pushed branch, and created PR with explicit `gh pr create` body after helper create path failed to provide a non-interactive body.
+- Validation Command: `./scripts/prepare-task-pr.sh --json`; `./scripts/prepare-task-pr.sh --create --title 'Clean retired viewer visualization routes'`; `gh pr create --base main --head task/viewer-visualization-routes-readonly --title 'Clean retired viewer visualization routes' --body ...`
+- Expected Result: PR exists with task UID, verification summary, and normal PR CI/watch purpose.
+- Actual Result: PR URL: https://github.com/eng-cc/oasis7/pull/557; branch pushed to `origin/task/viewer-visualization-routes-readonly`; PR Purpose Decision: `normal_pr_ci_watch`.
+- Blocker / Next Action: push PR evidence commit, then watch required checks, comments, review threads, and mergeability.
