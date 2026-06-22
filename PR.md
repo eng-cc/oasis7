@@ -1,6 +1,6 @@
 # Add Rust style guide to repository inspection
 
-- PR URL: pending
+- PR URL: https://github.com/eng-cc/oasis7/pull/566
 - Task UID: task_3fcca9c7548f47d9be1d79a06ffcb59f
 - Source Branch: task/engineering-repo-health-rust-style-guide-check
 - Base Branch: main

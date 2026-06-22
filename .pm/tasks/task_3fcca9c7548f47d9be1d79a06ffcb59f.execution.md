@@ -95,3 +95,12 @@ Example:
 - Finding Disposition Evidence: Added the passed packet, expanded `PR.md` verification evidence with closeout/claim-ready/pr-ready lint, ran claim-ready plus pr-ready lint, and regenerated the review package over the current PR evidence commit.
 - Residual Risk: Operators still need judgment for style-drift sampling thresholds; full repo `pm lint` still has unrelated historical execution-log debt outside this task.
 - Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/slice-ledger.jsonl
+
+## 2026-06-22 22:32:00 CST / tpm
+- 完成内容: PR CREATED. Opened the GitHub PR for adding Rust style-guide inspection coverage.
+- 遗留事项: Need watch required checks, mergeability, PR comments, and review threads; `REVIEW_REQUIRED` alone is informational under the project workflow.
+- Action: Ran `./scripts/prepare-task-pr.sh --create --body-file PR.md --title "Add Rust style guide to repository inspection"`.
+- Validation Command: `./scripts/prepare-task-pr.sh --body-file PR.md --title "Add Rust style guide to repository inspection" --json`; `./scripts/prepare-task-pr.sh --create --body-file PR.md --title "Add Rust style guide to repository inspection"`.
+- Expected Result: Preflight passes, branch pushes to origin, and GitHub PR is created.
+- Actual Result: Preflight passed with local required validation scope `minimal`, pre-PR local role review `passed`, branch pushed to `origin/task/engineering-repo-health-rust-style-guide-check`, and PR created at https://github.com/eng-cc/oasis7/pull/566.
+- Blocker / Next Action: Update PR evidence with the real PR URL, push it, then watch PR checks/comments/mergeability.
