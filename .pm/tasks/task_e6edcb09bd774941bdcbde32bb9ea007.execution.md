@@ -279,7 +279,7 @@ Example:
 - Task UID: task_e6edcb09bd774941bdcbde32bb9ea007
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-viewer-visualization-routes-readonly
 - Source Branch: task/viewer-visualization-routes-readonly
-- Source Head: 7213c186faf01e2687a7a34d1ccd2aac15b1abe3
+- Source Head: 41bf8bd0167312272303c59c15f455f9c03755e0
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/tasks/task_e6edcb09bd774941bdcbde32bb9ea007.*`; `crates/oasis7_viewer/software_safe_src/*`; `crates/oasis7_viewer/viewer.js`; `doc/core/player-access-mode-contract-2026-03-19.*`; `doc/core/project.md`; `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`; `doc/testing/**`; `doc/ui_review_result/README.md`; `doc/world-simulator/**`; `site/doc/{cn,en}/viewer-manual.html`
 - Role Selection Basis: visible Viewer copy and player-facing docs require `game_visual_interaction_designer`; Viewer source/generated bundle and route contracts require `viewer_engineer`; verification readiness requires `qa_engineer`; cross-doc terminology/provenance/task truth requires `repository_health_engineer`.
