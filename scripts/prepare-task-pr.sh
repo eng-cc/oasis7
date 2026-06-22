@@ -282,8 +282,11 @@ def emit(
     reason: str = "",
     missing_markers: list[str] | None = None,
     review_roles: str = "",
+    review_package: str = "",
+    review_verdicts: str = "",
     findings_disposition: str = "",
     residual_risk: str = "",
+    slice_ledger: str = "",
 ) -> None:
     print(f"status={status}")
     print(f"task_uid={task_uid}")
@@ -291,8 +294,11 @@ def emit(
     print(f"reason={reason}")
     print(f"missing_markers={';'.join(missing_markers or [])}")
     print(f"review_roles={review_roles}")
+    print(f"review_package={review_package}")
+    print(f"review_verdicts={review_verdicts}")
     print(f"findings_disposition={findings_disposition}")
     print(f"residual_risk={residual_risk}")
+    print(f"slice_ledger={slice_ledger}")
     raise SystemExit(0)
 
 if not tasks_dir.is_dir():
@@ -384,11 +390,14 @@ elif reviewed_source_head != source_head:
 
 for key in (
     "Reviewed Changed Paths",
+    "Review Package",
     "Role Selection Basis",
     "Review Roles",
     "Review Evidence",
+    "Review Verdicts",
     "Finding Disposition Evidence",
     "Residual Risk",
+    "Slice Ledger",
 ):
     if not parse_field(selected_block, key):
         missing.append(key)
@@ -398,7 +407,10 @@ if findings_disposition not in {"addressed", "no_findings"}:
     missing.append("Review Findings Disposition: addressed|no_findings")
 
 review_roles = parse_field(selected_block, "Review Roles")
+review_package = parse_field(selected_block, "Review Package")
+review_verdicts = parse_field(selected_block, "Review Verdicts")
 residual_risk = parse_field(selected_block, "Residual Risk")
+slice_ledger = parse_field(selected_block, "Slice Ledger")
 
 if missing:
     emit(
@@ -408,8 +420,11 @@ if missing:
         reason="missing required pre-PR local role review markers",
         missing_markers=missing,
         review_roles=review_roles,
+        review_package=review_package,
+        review_verdicts=review_verdicts,
         findings_disposition=findings_disposition,
         residual_risk=residual_risk,
+        slice_ledger=slice_ledger,
     )
 
 emit(
@@ -418,8 +433,11 @@ emit(
     log_path=log_path_rel,
     reason="matched source worktree, branch, head, and comparison ref",
     review_roles=review_roles,
+    review_package=review_package,
+    review_verdicts=review_verdicts,
     findings_disposition=findings_disposition,
     residual_risk=residual_risk,
+    slice_ledger=slice_ledger,
 )
 PY
 }
@@ -523,8 +541,11 @@ LOCAL_ROLE_REVIEW_LOG_PATH="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "execution
 LOCAL_ROLE_REVIEW_REASON="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "reason")"
 LOCAL_ROLE_REVIEW_MISSING_MARKERS="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "missing_markers")"
 LOCAL_ROLE_REVIEW_ROLES="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_roles")"
+LOCAL_ROLE_REVIEW_PACKAGE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_package")"
+LOCAL_ROLE_REVIEW_VERDICTS="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_verdicts")"
 LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "findings_disposition")"
 LOCAL_ROLE_REVIEW_RESIDUAL_RISK="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "residual_risk")"
+LOCAL_ROLE_REVIEW_SLICE_LEDGER="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "slice_ledger")"
 
 if [[ "$CREATE_PR" == "1" && "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
   die "missing passed pre-PR local role review evidence for $SOURCE_BRANCH at $SOURCE_HEAD ($LOCAL_ROLE_REVIEW_REASON; log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-unknown}; missing: ${LOCAL_ROLE_REVIEW_MISSING_MARKERS:-unknown})"
@@ -601,7 +622,7 @@ fi
 
 LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED="$(printf '%s;' ${LOCAL_REQUIRED_EXTRA_COMMANDS[@]+"${LOCAL_REQUIRED_EXTRA_COMMANDS[@]}"})"
 SUMMARY_JSON="$(
-python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED" "$LOCAL_ROLE_REVIEW_STATUS" "$LOCAL_ROLE_REVIEW_TASK_UID" "$LOCAL_ROLE_REVIEW_LOG_PATH" "$LOCAL_ROLE_REVIEW_REASON" "$LOCAL_ROLE_REVIEW_MISSING_MARKERS" "$LOCAL_ROLE_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" <<'PY'
+python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED" "$LOCAL_ROLE_REVIEW_STATUS" "$LOCAL_ROLE_REVIEW_TASK_UID" "$LOCAL_ROLE_REVIEW_LOG_PATH" "$LOCAL_ROLE_REVIEW_REASON" "$LOCAL_ROLE_REVIEW_MISSING_MARKERS" "$LOCAL_ROLE_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_PACKAGE" "$LOCAL_ROLE_REVIEW_VERDICTS" "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" <<'PY'
 from __future__ import annotations
 
 import json
@@ -648,8 +669,11 @@ payload = {
         "reason": sys.argv[29] or None,
         "missing_markers": missing_markers,
         "review_roles": sys.argv[31] or None,
-        "findings_disposition": sys.argv[32] or None,
-        "residual_risk": sys.argv[33] or None,
+        "review_package": sys.argv[32] or None,
+        "review_verdicts": sys.argv[33] or None,
+        "findings_disposition": sys.argv[34] or None,
+        "residual_risk": sys.argv[35] or None,
+        "slice_ledger": sys.argv[36] or None,
     },
 }
 print(json.dumps(payload, ensure_ascii=False))
@@ -718,11 +742,20 @@ fi
 if [[ -n "$LOCAL_ROLE_REVIEW_ROLES" ]]; then
   echo "- review roles: $LOCAL_ROLE_REVIEW_ROLES"
 fi
+if [[ -n "$LOCAL_ROLE_REVIEW_PACKAGE" ]]; then
+  echo "- review package: $LOCAL_ROLE_REVIEW_PACKAGE"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_VERDICTS" ]]; then
+  echo "- review verdicts: $LOCAL_ROLE_REVIEW_VERDICTS"
+fi
 if [[ -n "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" ]]; then
   echo "- findings disposition: $LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION"
 fi
 if [[ -n "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" ]]; then
   echo "- residual risk: $LOCAL_ROLE_REVIEW_RESIDUAL_RISK"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" ]]; then
+  echo "- slice ledger: $LOCAL_ROLE_REVIEW_SLICE_LEDGER"
 fi
 
 if [[ "$REBASE_REQUIRED" == "1" ]]; then
