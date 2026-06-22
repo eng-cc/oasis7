@@ -10,13 +10,17 @@ The inspection is a human-triaged health review. It does not add a GitHub Action
 - Quarterly review: first engineering-governance window of each quarter, using the weekly findings to decide whether thresholds, follow-up tasks, or checks need to change.
 
 ## Scheduler
-Use `cc-connect cron` to create the weekly reminder when operator setup is available:
+No repository-managed scheduler is configured for this runbook. When an
+operator or user initiates the weekly reminder, the prompt must still enter the
+standard `oasis7` workflow: create or enter one task worktree, bind one `.pm`
+task, and dispatch `repository_health_engineer` for professional
+repository-health judgment.
 
-```bash
-cc-connect cron add --cron "0 10 * * 1" --prompt "按 oasis7 workflow bootstrap 创建/进入 repo-health 巡检 task，由 repository_health_engineer bounded slice 执行每周仓库健康巡检：运行 doc inventory、doc governance、skill lint、worktree GC 摘要，复核 PM lint 是否仍为历史债噪音，输出 findings / follow-up task 建议 / evidence sink 摘要。" --desc "Weekly Repo Health Inspection"
+Suggested reminder prompt:
+
+```text
+按 oasis7 workflow bootstrap 创建/进入 repo-health 巡检 task，由 repository_health_engineer bounded slice 执行每周仓库健康巡检：运行 doc inventory、doc governance、skill lint、worktree GC 摘要，复核 PM lint 是否仍为历史债噪音，输出 findings / follow-up task 建议 / evidence sink 摘要。
 ```
-
-The scheduled prompt must still enter the standard `oasis7` workflow: create or enter one task worktree, bind one `.pm` task, and dispatch `repository_health_engineer` for professional repository-health judgment.
 
 ## Weekly Checklist
 Run the checks from the task worktree and record the command outputs or summaries in `.pm/tasks/<TASK-UID>.execution.md`.
