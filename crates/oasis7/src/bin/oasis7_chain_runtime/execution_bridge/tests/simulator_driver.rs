@@ -125,7 +125,12 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         (manifest.world_id.as_str(), manifest.chain_id.as_str()),
         ("w1", "w1")
     );
-    assert_eq!(delta.commit_block_hash.as_deref(), Some("node-h1"));
+    let commit_hash = delta
+        .commit_block_hash
+        .as_deref()
+        .expect("simulator resource commit hash");
+    assert!(!commit_hash.is_empty());
+    assert_ne!(commit_hash, "node-h1");
     assert!(!manifest.generated_chunks.is_empty());
     assert!(!delta.entries.is_empty());
     assert!(simulator_world_dir.join("snapshot.json").exists());

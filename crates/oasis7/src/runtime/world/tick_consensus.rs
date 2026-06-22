@@ -267,7 +267,10 @@ impl World {
             chain_height: committed_context.map(|context| context.height),
             chain_slot: committed_context.map(|context| context.slot),
             chain_epoch: committed_context.map(|context| context.epoch),
-            node_block_hash: committed_context.map(|context| context.node_block_hash.clone()),
+            node_block_hash: committed_context.and_then(|context| {
+                let node_block_hash = context.node_block_hash.trim();
+                (!node_block_hash.is_empty()).then(|| node_block_hash.to_string())
+            }),
             action_root: committed_context.map(|context| context.action_root.clone()),
             committed_at_unix_ms: committed_context.map(|context| context.committed_at_unix_ms),
         };
