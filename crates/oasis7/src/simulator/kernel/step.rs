@@ -241,7 +241,7 @@ impl WorldKernel {
                 },
             },
             KernelRuleVerdict::Modify => match merged_decision.override_action {
-                Some(override_action) => self.apply_action(override_action),
+                Some(override_action) => self.apply_action(action_id, override_action),
                 None => WorldEventKind::ActionRejected {
                     reason: RejectReason::RuleDenied {
                         notes: vec![format!(
@@ -250,7 +250,7 @@ impl WorldKernel {
                     },
                 },
             },
-            KernelRuleVerdict::Allow => self.apply_action(action.clone()),
+            KernelRuleVerdict::Allow => self.apply_action(action_id, action.clone()),
         };
         let event = self.append_event_at_time(event_time, kind);
         for hook in &self.rule_hooks.post_action {
@@ -329,6 +329,17 @@ fn intent_conflict_key(action: &Action) -> Option<String> {
         Action::MineCompound { location_id, .. } => Some(format!("mine:{location_id}")),
         Action::BuildFactory { location_id, .. } => Some(format!("build_factory:{location_id}")),
         Action::ScheduleRecipe { factory_id, .. } => Some(format!("schedule_recipe:{factory_id}")),
+        Action::ServiceMicroDepotRepair { facility_id, .. } => {
+            Some(format!("service_micro_depot:{facility_id}"))
+        }
+        Action::ServiceMicroDepotLogistics { facility_id, .. } => {
+            Some(format!("service_micro_depot:{facility_id}"))
+        }
+        Action::PayMicroDepotUpkeep { facility_id, .. }
+        | Action::SuspendMicroDepot { facility_id, .. }
+        | Action::ReclaimMicroDepot { facility_id, .. } => {
+            Some(format!("lifecycle_micro_depot:{facility_id}"))
+        }
         _ => None,
     }
 }
@@ -429,6 +440,26 @@ fn reject_reason_for_agent_submitter(agent_id: &str, action: &Action) -> Option<
             ..
         }
         | Action::HarvestRadiation {
+            agent_id: action_agent_id,
+            ..
+        }
+        | Action::ServiceMicroDepotRepair {
+            agent_id: action_agent_id,
+            ..
+        }
+        | Action::ServiceMicroDepotLogistics {
+            agent_id: action_agent_id,
+            ..
+        }
+        | Action::PayMicroDepotUpkeep {
+            agent_id: action_agent_id,
+            ..
+        }
+        | Action::SuspendMicroDepot {
+            agent_id: action_agent_id,
+            ..
+        }
+        | Action::ReclaimMicroDepot {
             agent_id: action_agent_id,
             ..
         } => {
@@ -592,6 +623,9 @@ fn reject_reason_for_agent_submitter(agent_id: &str, action: &Action) -> Option<
             installer_agent_id, ..
         }
         | Action::InstallModuleToTargetFromArtifact {
+            installer_agent_id, ..
+        }
+        | Action::InstallMicroDepot {
             installer_agent_id, ..
         } => {
             if installer_agent_id == agent_id {

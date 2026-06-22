@@ -145,7 +145,8 @@ pub use world_model::{
     FragmentResourceError, InstalledModuleState, Location, MaterialDistributionStrategy,
     MaterialRadiationFactors, MaterialWeights, ModuleArtifactBidState, ModuleArtifactListingState,
     ModuleArtifactState, PhysicsConfig, PhysicsParameterSpec, PowerOrderBookState, PowerOrderState,
-    SpaceConfig, ThermalStatus, WorldConfig, WorldModel, physics_parameter_specs,
+    RegionalInfrastructure, SpaceConfig, ThermalStatus, WorldConfig, WorldModel,
+    physics_parameter_specs,
 };
 
 // Re-export power system types
@@ -161,6 +162,13 @@ pub use runtime_perf::{
 pub use kernel::{
     ChunkGenerationCause, KernelRuleCost, KernelRuleDecision, KernelRuleDecisionMergeError,
     KernelRuleModuleContext, KernelRuleModuleInput, KernelRuleModuleOutput, KernelRuleVerdict,
-    PowerOrderFill, PromptUpdateOperation, RejectReason, WorldEvent, WorldEventKind,
-    merge_kernel_rule_decisions,
+    MICRO_DEPOT_DEBIT_AMOUNT_CRITICAL, MICRO_DEPOT_DEBIT_AMOUNT_HIGH, MICRO_DEPOT_DEBIT_AMOUNT_LOW,
+    MICRO_DEPOT_DEBIT_AMOUNT_MEDIUM, MICRO_DEPOT_DEBIT_AMOUNT_NONE, MICRO_DEPOT_PROPOSAL_EMIT_KIND,
+    MicroDepotActionContext, MicroDepotActionKind, MicroDepotConsumedResourceClass,
+    MicroDepotDecision, MicroDepotDeltaClass, MicroDepotEffectPreview, MicroDepotEvalInput,
+    MicroDepotFacilityContext, MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot,
+    MicroDepotPressureClass, MicroDepotProposal, MicroDepotQuotePreview, MicroDepotRegionContext,
+    MicroDepotResourceDebit, MicroDepotStatus, PowerOrderFill, PromptUpdateOperation, RejectReason,
+    WorldEvent, WorldEventKind, compute_micro_depot_proposal_hash,
+    evaluate_micro_depot_quote_with_module, merge_kernel_rule_decisions,
 };

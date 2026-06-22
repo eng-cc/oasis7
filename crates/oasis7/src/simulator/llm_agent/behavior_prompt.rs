@@ -185,6 +185,12 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             Action::InstallModuleToTargetFromArtifact { .. } => {
                 "install_module_to_target_from_artifact"
             }
+            Action::InstallMicroDepot { .. } => "install_micro_depot",
+            Action::ServiceMicroDepotRepair { .. } => "service_micro_depot_repair",
+            Action::ServiceMicroDepotLogistics { .. } => "service_micro_depot_logistics",
+            Action::PayMicroDepotUpkeep { .. } => "pay_micro_depot_upkeep",
+            Action::SuspendMicroDepot { .. } => "suspend_micro_depot",
+            Action::ReclaimMicroDepot { .. } => "reclaim_micro_depot",
             Action::ListModuleArtifactForSale { .. } => "list_module_artifact_for_sale",
             Action::BuyModuleArtifact { .. } => "buy_module_artifact",
             Action::DelistModuleArtifact { .. } => "delist_module_artifact",

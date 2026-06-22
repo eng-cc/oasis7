@@ -239,6 +239,30 @@ pub struct Factory {
     pub kind: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RegionalInfrastructure {
+    pub facility_id: FacilityId,
+    pub kind: String,
+    pub location_id: LocationId,
+    pub owner: ResourceOwner,
+    pub owner_claim_id: String,
+    pub status: String,
+    pub module_id: String,
+    pub module_version: String,
+    pub wasm_hash: String,
+    pub entrypoint: String,
+    pub service_radius_cm: i64,
+    #[serde(default)]
+    pub supported_resource_kinds: Vec<String>,
+    pub upkeep_paid: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_proposal_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_receipt_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_serviced_target_id: Option<String>,
+}
+
 fn default_next_power_order_id() -> u64 {
     1
 }
@@ -307,6 +331,8 @@ pub struct WorldModel {
     pub next_module_market_sale_id: u64,
     #[serde(default)]
     pub power_plants: BTreeMap<FacilityId, PowerPlant>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub regional_infrastructure: BTreeMap<FacilityId, RegionalInfrastructure>,
     #[serde(default)]
     pub power_order_book: PowerOrderBookState,
     #[serde(default = "default_next_social_fact_id")]
