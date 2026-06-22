@@ -601,7 +601,33 @@ impl World {
     // ---------------------------------------------------------------------
 
     pub fn snapshot(&self) -> Snapshot {
-        let chain_resource_manifest = self.chain_resource_manifest_snapshot();
+        let manifest_hash = super::super::util::hash_json(&self.manifest).unwrap_or_default();
+        self.snapshot_with_chain_resource_context(
+            super::super::ChainResourceDerivationContext {
+                world_id: DISTFS_WORLD_ID_FALLBACK,
+                chain_id: "runtime-chain",
+                genesis_ref: None,
+                created_at_height: self.journal.len() as u64,
+                manifest_height: self.journal.len() as u64,
+                commit_block_hash: None,
+                tick: self.state.time,
+            },
+            manifest_hash.clone(),
+            manifest_hash,
+        )
+    }
+
+    pub fn snapshot_with_chain_resource_context(
+        &self,
+        chain_resource_context: super::super::ChainResourceDerivationContext<'_>,
+        world_config_hash: impl Into<String>,
+        generation_algorithm_hash: impl Into<String>,
+    ) -> Snapshot {
+        let chain_resource_manifest = self.chain_resource_manifest_snapshot_with_context(
+            chain_resource_context,
+            world_config_hash,
+            generation_algorithm_hash,
+        );
         let latest_chain_resource_delta = Some(
             super::super::ChainResourceDelta::latest_from_runtime_manifest(
                 super::super::ChainResourceDerivationContext {
@@ -666,20 +692,16 @@ impl World {
         }
     }
 
-    fn chain_resource_manifest_snapshot(&self) -> super::super::ChainResourceManifest {
-        let manifest_hash = super::super::util::hash_json(&self.manifest).unwrap_or_default();
+    fn chain_resource_manifest_snapshot_with_context(
+        &self,
+        context: super::super::ChainResourceDerivationContext<'_>,
+        world_config_hash: impl Into<String>,
+        generation_algorithm_hash: impl Into<String>,
+    ) -> super::super::ChainResourceManifest {
         super::super::ChainResourceManifest::from_runtime_state(
-            super::super::ChainResourceDerivationContext {
-                world_id: DISTFS_WORLD_ID_FALLBACK,
-                chain_id: "runtime-chain",
-                genesis_ref: None,
-                created_at_height: self.journal.len() as u64,
-                manifest_height: self.journal.len() as u64,
-                commit_block_hash: None,
-                tick: self.state.time,
-            },
-            manifest_hash.clone(),
-            manifest_hash,
+            context,
+            world_config_hash,
+            generation_algorithm_hash,
             &self.state,
         )
     }
@@ -688,6 +710,31 @@ impl World {
         let dir = dir.as_ref();
         fs::create_dir_all(dir)?;
         let snapshot = self.snapshot();
+        self.persist_snapshot_files_to_dir(dir, snapshot)
+    }
+
+    pub fn save_to_dir_with_chain_resource_context(
+        &self,
+        dir: impl AsRef<Path>,
+        chain_resource_context: super::super::ChainResourceDerivationContext<'_>,
+        world_config_hash: impl Into<String>,
+        generation_algorithm_hash: impl Into<String>,
+    ) -> Result<(), WorldError> {
+        let dir = dir.as_ref();
+        fs::create_dir_all(dir)?;
+        let snapshot = self.snapshot_with_chain_resource_context(
+            chain_resource_context,
+            world_config_hash,
+            generation_algorithm_hash,
+        );
+        self.persist_snapshot_files_to_dir(dir, snapshot)
+    }
+
+    fn persist_snapshot_files_to_dir(
+        &self,
+        dir: &Path,
+        snapshot: Snapshot,
+    ) -> Result<(), WorldError> {
         let (persisted_snapshot, tick_consensus_archive) =
             split_tick_consensus_snapshot_for_persistence(&snapshot);
         let journal_path = dir.join(JOURNAL_FILE);

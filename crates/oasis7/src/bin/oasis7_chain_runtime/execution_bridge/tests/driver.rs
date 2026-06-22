@@ -181,14 +181,18 @@ fn rejected_expected_hash_does_not_persist_simulator_mirror() {
     assert!(!execution_bridge_record_path(records_dir.as_path(), 1).exists());
 
     drop(driver);
-    let restored_simulator =
-        oasis7::simulator::WorldKernel::load_from_dir(simulator_world_dir.as_path())
-            .expect("load simulator mirror after rejected commit");
-    assert_eq!(
-        restored_simulator.journal().len(),
-        0,
-        "rejected simulator action must not advance durable simulator mirror"
-    );
+    let simulator_snapshot_path = simulator_world_dir.join("snapshot.json");
+    let simulator_journal_path = simulator_world_dir.join("journal.json");
+    if simulator_snapshot_path.exists() || simulator_journal_path.exists() {
+        let restored_simulator =
+            oasis7::simulator::WorldKernel::load_from_dir(simulator_world_dir.as_path())
+                .expect("load simulator mirror after rejected commit");
+        assert_eq!(
+            restored_simulator.journal().len(),
+            0,
+            "rejected simulator action must not advance durable simulator mirror"
+        );
+    }
     let restarted =
         NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root)
             .expect("restarted driver");

@@ -64,7 +64,7 @@ fn dev_local_storage_profile_keeps_generic_supply_for_missing_execution_world() 
 }
 
 #[test]
-fn new_driver_bootstraps_fresh_execution_world_persistence_files() {
+fn new_driver_keeps_fresh_execution_world_persistence_unpublished_until_commit() {
     let dir = temp_dir("execution-driver-bootstrap-persistence");
     let state_path = dir.join("state.json");
     let world_dir = dir.join("world");
@@ -81,10 +81,10 @@ fn new_driver_bootstraps_fresh_execution_world_persistence_files() {
     )
     .expect("driver");
 
-    assert!(world_dir.join("snapshot.json").exists());
-    assert!(world_dir.join("journal.json").exists());
-    assert!(driver.simulator_world_dir.join("snapshot.json").exists());
-    assert!(driver.simulator_world_dir.join("journal.json").exists());
+    assert!(!world_dir.join("snapshot.json").exists());
+    assert!(!world_dir.join("journal.json").exists());
+    assert!(!driver.simulator_world_dir.join("snapshot.json").exists());
+    assert!(!driver.simulator_world_dir.join("journal.json").exists());
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -110,10 +110,10 @@ fn new_driver_repairs_partial_execution_world_persistence_files() {
     )
     .expect("driver");
 
-    assert!(world_dir.join("snapshot.json").exists());
-    assert!(world_dir.join("journal.json").exists());
-    assert!(driver.simulator_world_dir.join("snapshot.json").exists());
-    assert!(driver.simulator_world_dir.join("journal.json").exists());
+    assert!(!world_dir.join("snapshot.json").exists());
+    assert!(!world_dir.join("journal.json").exists());
+    assert!(!driver.simulator_world_dir.join("snapshot.json").exists());
+    assert!(!driver.simulator_world_dir.join("journal.json").exists());
 
     let _ = fs::remove_dir_all(dir);
 }
