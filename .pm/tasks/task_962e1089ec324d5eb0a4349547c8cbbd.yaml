@@ -8,7 +8,8 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/engineering/workflow/source-of-truth.md
-doc_refs: []
+doc_refs:
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Compare latest obra/Superpowers with oasis7 and identify borrowable patterns with role-attributed evidence"
