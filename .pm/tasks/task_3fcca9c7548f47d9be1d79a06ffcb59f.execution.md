@@ -59,11 +59,11 @@ Example:
 - Action: Generated review package and slice ledger, then dispatched bounded review slices for repository-health governance semantics and QA verification/readiness risk.
 - Validation Command: `./scripts/pm/review-package.sh --base refs/remotes/origin/main --head HEAD --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f`; `./scripts/pm/slice-ledger.sh --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f --print`.
 - Expected Result: Review target is frozen to the current committed diff and review contract is formalized in the task execution log.
-- Actual Result: Review package `/Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/review-packages/review-314525ce5..5b4d33d3e.diff`; slice ledger `/Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/slice-ledger.jsonl`; source head `5b4d33d3e1d2202251be391839e0534487824373`.
+- Actual Result: Review package `/Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/review-packages/review-314525ce5..d722a3b8b.diff`; slice ledger `/Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/slice-ledger.jsonl`; source head `d722a3b8b8ce9a5c7bd20e845f1cd8a0178a3439`.
 - Blocker / Next Action: Integrate findings/no_findings/verdicts/residual_risk, apply valid fixes, then record `Pre-PR Local Role Review: passed`.
 - Review Trigger: pre-PR local role review
 - Review Scope: `doc/engineering/governance/repository-health-manual-inspection.runbook.md`; `doc/engineering/project.md`; `PR.md`; current task evidence.
-- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/review-packages/review-314525ce5..5b4d33d3e.diff
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/review-packages/review-314525ce5..d722a3b8b.diff
 - Review Roles: repository_health_engineer, qa_engineer
 - Review Question: Confirm the manual repository-health inspection now appropriately includes the third_party Rust style guide as a read-only inspection input for owned Rust code, preserves third_party as read-only, and routes style drift into focused follow-up tasks without creating a new hard gate.
 - Evidence Available: `workflow-lint --phase current`; `doc-governance-check`; `git diff --check`; task-closeout current-task verification; review package and slice ledger; `third_party/rust-skills/AGENTS.md`.
@@ -83,15 +83,15 @@ Example:
 - Task UID: task_3fcca9c7548f47d9be1d79a06ffcb59f
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check
 - Source Branch: task/engineering-repo-health-rust-style-guide-check
-- Source Head: 5b4d33d3e1d2202251be391839e0534487824373
+- Source Head: d722a3b8b8ce9a5c7bd20e845f1cd8a0178a3439
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/tasks/task_3fcca9c7548f47d9be1d79a06ffcb59f.execution.md; .pm/tasks/task_3fcca9c7548f47d9be1d79a06ffcb59f.yaml; PR.md; doc/engineering/governance/repository-health-manual-inspection.runbook.md; doc/engineering/project.md
-- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/review-packages/review-314525ce5..5b4d33d3e.diff
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/review-packages/review-314525ce5..d722a3b8b.diff
 - Role Selection Basis: Changed repository-health governance checklist, Rust style-guide inspection guidance, engineering project trace, task evidence, and PR evidence; included repository_health_engineer for governance/code-health semantics and qa_engineer for verification/readiness risk.
 - Review Roles: repository_health_engineer, qa_engineer
 - Review Evidence: repository_health_engineer returned no findings and confirmed the third-party Rust style guide is read-only input for owned Rust code, with no new hard gate or scheduler. qa_engineer confirmed the docs/governance change is in scope, found missing pre-PR/claim-ready evidence and incomplete PR verification evidence, and classified the remaining risk as workflow-local.
 - Review Verdicts: repository_health_engineer scope/spec compliance verdict pass and role quality/risk verdict acceptable; qa_engineer scope/spec compliance verdict not PR-ready until evidence completion and role quality/risk verdict workflow-local risk before this fix.
 - Review Findings Disposition: addressed
-- Finding Disposition Evidence: Added the passed packet, expanded `PR.md` verification evidence with closeout/claim-ready/pr-ready lint, and will run claim-ready plus pr-ready lint before PR creation.
+- Finding Disposition Evidence: Added the passed packet, expanded `PR.md` verification evidence with closeout/claim-ready/pr-ready lint, ran claim-ready plus pr-ready lint, and regenerated the review package over the current PR evidence commit.
 - Residual Risk: Operators still need judgment for style-drift sampling thresholds; full repo `pm lint` still has unrelated historical execution-log debt outside this task.
 - Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/slice-ledger.jsonl
