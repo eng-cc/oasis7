@@ -8,7 +8,8 @@ priority: P2
 source_signal: null
 source_refs:
   - AGENTS.md
-doc_refs: []
+doc_refs:
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "cc-connect-specific instructions are removed from active repository guidance"

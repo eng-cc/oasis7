@@ -132,3 +132,12 @@ Example:
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: QA wording finding addressed by updating the 2026-06-22 20:45:03 CST closeout entry to classify full repo `pm lint` as broad `.pm` evidence strictness debt including historical task evidence and current-task narrative entries, not purely unrelated historical debt.
 - Residual Risk: Active cc-connect guidance is removed from non-`.pm` repository surfaces. `.pm` current and historical task evidence intentionally retains cc-connect mentions as audit/task truth. Full repo `./scripts/pm/lint.sh` remains noisy from broad `.pm` evidence strictness debt, but task-scoped workflow lint and docs/governance verification pass for this cleanup.
+
+## 2026-06-22 20:52:55 CST / tpm
+- 完成内容: PR-ready claim evidence recorded after prepare-task-pr preflight repair.
+- 遗留事项: Commit metadata/evidence repair, rerun prepare-task-pr, create PR, watch CI/comments, merge, and cleanup.
+- Action: Ran ./scripts/pm/claim-ready.sh --claim-type ready_for_pr with the fresh PR-ready verification command; helper refused to mutate closed task claim metadata because task status is already done, so recorded the guard outcome and retained task yaml completion verification. Added doc/engineering/project.md Trace for this task as requested by workflow-lint.
+- Validation Command: ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --verify-command '<fresh PR-ready verification>'; if git grep -n -I -e 'cc-connect' -e 'cc_connect' -e 'CC_PROJECT' -e 'CC_SESSION_KEY' -- . ':(exclude).pm/**' ':(exclude).git' ':(exclude)third_party/**'; then exit 1; else echo NO_ACTIVE_MATCHES; fi && ./scripts/pm/workflow-lint.sh --task-uid task_198cdd132d3e4fda9f5fc9b4f46f412e --phase current && ./scripts/doc-governance-check.sh && ./scripts/lint-skills.sh && git diff --check
+- Expected Result: claim-ready evidence or guard outcome is recorded; fresh PR-ready verification passes; project trace resolves for prepare-task-pr.
+- Actual Result: claim-ready helper refused with closed task claim evidence is immutable for non-completion claims, status=done claim_type=ready_for_pr; task yaml already records last_claim_type=task_complete, last_verification_status=verified, and last_verification_exit_code=0 from closeout; project trace added; fresh PR-ready verification will be rerun before prepare-task-pr.
+- Blocker / Next Action: Rerun fresh PR-ready verification and prepare-task-pr preflight.
