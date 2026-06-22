@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex};
 
 use crate::geometry::space_distance_cm;
 
-use super::super::types::{ActionId, AgentId, FacilityId, LocationId, ResourceKind, ResourceOwner};
+use super::super::types::{
+    Action, ActionId, AgentId, FacilityId, LocationId, ResourceKind, ResourceOwner,
+};
 use super::super::world_model::RegionalInfrastructure;
 use super::types::{MicroDepotResourceDebit, RejectReason, WorldEventKind};
 use super::{WorldKernel, to_canonical_cbor};
@@ -268,6 +270,87 @@ where
 }
 
 impl WorldKernel {
+    pub(super) fn apply_micro_depot_action(
+        &mut self,
+        action_id: ActionId,
+        action: Action,
+    ) -> WorldEventKind {
+        match action {
+            Action::InstallMicroDepot {
+                installer_agent_id,
+                facility_id,
+                location_id,
+                owner_claim_id,
+                regional_blocker_receipt_id,
+                module_id,
+                module_version,
+                wasm_hash,
+                entrypoint,
+                service_radius_cm,
+                supported_resource_kinds,
+            } => self.apply_install_micro_depot(
+                installer_agent_id,
+                facility_id,
+                location_id,
+                owner_claim_id,
+                regional_blocker_receipt_id,
+                module_id,
+                module_version,
+                wasm_hash,
+                entrypoint,
+                service_radius_cm,
+                supported_resource_kinds,
+            ),
+            Action::ServiceMicroDepotRepair {
+                agent_id,
+                facility_id,
+                target_id,
+                base_cost_class,
+                base_risk_class,
+                blocker_type,
+            } => self.apply_service_micro_depot_repair(
+                action_id,
+                agent_id,
+                facility_id,
+                target_id,
+                base_cost_class,
+                base_risk_class,
+                blocker_type,
+            ),
+            Action::ServiceMicroDepotLogistics {
+                agent_id,
+                facility_id,
+                target_id,
+                base_cost_class,
+                base_risk_class,
+                blocker_type,
+            } => self.apply_service_micro_depot_logistics(
+                action_id,
+                agent_id,
+                facility_id,
+                target_id,
+                base_cost_class,
+                base_risk_class,
+                blocker_type,
+            ),
+            Action::PayMicroDepotUpkeep {
+                agent_id,
+                facility_id,
+            } => self.apply_pay_micro_depot_upkeep(agent_id, facility_id),
+            Action::SuspendMicroDepot {
+                agent_id,
+                facility_id,
+            } => {
+                self.apply_suspend_micro_depot(agent_id, facility_id, "manual_suspend".to_string())
+            }
+            Action::ReclaimMicroDepot {
+                agent_id,
+                facility_id,
+            } => self.apply_reclaim_micro_depot(agent_id, facility_id),
+            _ => unreachable!("micro_depot action dispatcher received non-micro_depot action"),
+        }
+    }
+
     pub fn set_micro_depot_wasm_module_evaluator<S>(
         &mut self,
         module_id: impl Into<String>,

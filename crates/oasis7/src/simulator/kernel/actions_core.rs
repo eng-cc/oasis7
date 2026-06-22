@@ -944,75 +944,12 @@ impl WorldKernel {
                 activate,
                 install_target,
             ),
-            Action::InstallMicroDepot {
-                installer_agent_id,
-                facility_id,
-                location_id,
-                owner_claim_id,
-                regional_blocker_receipt_id,
-                module_id,
-                module_version,
-                wasm_hash,
-                entrypoint,
-                service_radius_cm,
-                supported_resource_kinds,
-            } => self.apply_install_micro_depot(
-                installer_agent_id,
-                facility_id,
-                location_id,
-                owner_claim_id,
-                regional_blocker_receipt_id,
-                module_id,
-                module_version,
-                wasm_hash,
-                entrypoint,
-                service_radius_cm,
-                supported_resource_kinds,
-            ),
-            Action::ServiceMicroDepotRepair {
-                agent_id,
-                facility_id,
-                target_id,
-                base_cost_class,
-                base_risk_class,
-                blocker_type,
-            } => self.apply_service_micro_depot_repair(
-                action_id,
-                agent_id,
-                facility_id,
-                target_id,
-                base_cost_class,
-                base_risk_class,
-                blocker_type,
-            ),
-            Action::ServiceMicroDepotLogistics {
-                agent_id,
-                facility_id,
-                target_id,
-                base_cost_class,
-                base_risk_class,
-                blocker_type,
-            } => self.apply_service_micro_depot_logistics(
-                action_id,
-                agent_id,
-                facility_id,
-                target_id,
-                base_cost_class,
-                base_risk_class,
-                blocker_type,
-            ),
-            Action::PayMicroDepotUpkeep {
-                agent_id,
-                facility_id,
-            } => self.apply_pay_micro_depot_upkeep(agent_id, facility_id),
-            Action::SuspendMicroDepot {
-                agent_id,
-                facility_id,
-            } => self.apply_suspend_micro_depot(agent_id, facility_id, "manual_suspend".to_string()),
-            Action::ReclaimMicroDepot {
-                agent_id,
-                facility_id,
-            } => self.apply_reclaim_micro_depot(agent_id, facility_id),
+            action @ (Action::InstallMicroDepot { .. }
+            | Action::ServiceMicroDepotRepair { .. }
+            | Action::ServiceMicroDepotLogistics { .. }
+            | Action::PayMicroDepotUpkeep { .. }
+            | Action::SuspendMicroDepot { .. }
+            | Action::ReclaimMicroDepot { .. }) => self.apply_micro_depot_action(action_id, action),
             Action::ListModuleArtifactForSale {
                 seller_agent_id,
                 wasm_hash,
