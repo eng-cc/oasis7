@@ -52,3 +52,46 @@ Example:
 - Expected Result: Current task records verified closeout; any repo-wide lint failure is separated from task-local verification.
 - Actual Result: Task yaml now has `status: done`, `last_claim_type: task_complete`, `last_verification_status: verified`, `last_verification_exit_code: 0`, and `last_verify_command` matching the requested verification chain. The helper exited 1 only after `pm lint` reported historical failures in other task logs.
 - Blocker / Next Action: Treat repo-wide `pm lint` as unrelated historical debt for this scoped docs/governance PR; run pre-PR local role review.
+
+## 2026-06-22 22:18:00 CST / tpm
+- 完成内容: PRE-PR REVIEW REQUESTED. Wrote the formal review contract for local role subagent review before PR creation.
+- 遗留事项: Await repository_health_engineer and qa_engineer review results; valid findings must be addressed before recording the passed packet.
+- Action: Generated review package and slice ledger, then dispatched bounded review slices for repository-health governance semantics and QA verification/readiness risk.
+- Validation Command: `./scripts/pm/review-package.sh --base refs/remotes/origin/main --head HEAD --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f`; `./scripts/pm/slice-ledger.sh --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f --print`.
+- Expected Result: Review target is frozen to the current committed diff and review contract is formalized in the task execution log.
+- Actual Result: Review package `/Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/review-packages/review-314525ce5..5b4d33d3e.diff`; slice ledger `/Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/slice-ledger.jsonl`; source head `5b4d33d3e1d2202251be391839e0534487824373`.
+- Blocker / Next Action: Integrate findings/no_findings/verdicts/residual_risk, apply valid fixes, then record `Pre-PR Local Role Review: passed`.
+- Review Trigger: pre-PR local role review
+- Review Scope: `doc/engineering/governance/repository-health-manual-inspection.runbook.md`; `doc/engineering/project.md`; `PR.md`; current task evidence.
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/review-packages/review-314525ce5..5b4d33d3e.diff
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Question: Confirm the manual repository-health inspection now appropriately includes the third_party Rust style guide as a read-only inspection input for owned Rust code, preserves third_party as read-only, and routes style drift into focused follow-up tasks without creating a new hard gate.
+- Evidence Available: `workflow-lint --phase current`; `doc-governance-check`; `git diff --check`; task-closeout current-task verification; review package and slice ledger; `third_party/rust-skills/AGENTS.md`.
+- Expected Return Contract: findings | no_findings | scope/spec compliance verdict | role quality/risk verdict | residual_risk
+- Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/slice-ledger.jsonl
+- Formal Sink: `.pm/tasks/task_3fcca9c7548f47d9be1d79a06ffcb59f.execution.md`
+
+## 2026-06-22 22:25:00 CST / tpm
+- 完成内容: PRE-PR LOCAL ROLE REVIEW PASSED. Integrated repository_health_engineer and qa_engineer review results and addressed valid workflow-evidence findings.
+- 遗留事项: The runbook does not define quantitative sampling thresholds for style drift; operators will need judgment during manual inspections.
+- Action: Integrated repository_health_engineer no-findings review. Addressed qa_engineer P1/P2 findings by recording this passed packet and expanding `PR.md` verification evidence to include closeout, claim-ready, and pr-ready lint.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f --phase current`; `./scripts/doc-governance-check.sh`; `git diff --check`.
+- Expected Result: Review findings are addressed; task-local current gate, docs governance, and diff hygiene pass before claim-ready.
+- Actual Result: Prior fresh verification passed: `workflow-lint: OK (task_3fcca9c7548f47d9be1d79a06ffcb59f, phase=current)`; `doc-governance-check: OK`; `git diff --check` exited 0. `PR.md` now includes closeout/claim-ready/pr-ready verification evidence.
+- Blocker / Next Action: Run claim-ready, then pr-ready workflow lint and prepare-task-pr.
+- Pre-PR Local Role Review: passed
+- Task UID: task_3fcca9c7548f47d9be1d79a06ffcb59f
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check
+- Source Branch: task/engineering-repo-health-rust-style-guide-check
+- Source Head: 5b4d33d3e1d2202251be391839e0534487824373
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_3fcca9c7548f47d9be1d79a06ffcb59f.execution.md; .pm/tasks/task_3fcca9c7548f47d9be1d79a06ffcb59f.yaml; PR.md; doc/engineering/governance/repository-health-manual-inspection.runbook.md; doc/engineering/project.md
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/review-packages/review-314525ce5..5b4d33d3e.diff
+- Role Selection Basis: Changed repository-health governance checklist, Rust style-guide inspection guidance, engineering project trace, task evidence, and PR evidence; included repository_health_engineer for governance/code-health semantics and qa_engineer for verification/readiness risk.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Evidence: repository_health_engineer returned no findings and confirmed the third-party Rust style guide is read-only input for owned Rust code, with no new hard gate or scheduler. qa_engineer confirmed the docs/governance change is in scope, found missing pre-PR/claim-ready evidence and incomplete PR verification evidence, and classified the remaining risk as workflow-local.
+- Review Verdicts: repository_health_engineer scope/spec compliance verdict pass and role quality/risk verdict acceptable; qa_engineer scope/spec compliance verdict not PR-ready until evidence completion and role quality/risk verdict workflow-local risk before this fix.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: Added the passed packet, expanded `PR.md` verification evidence with closeout/claim-ready/pr-ready lint, and will run claim-ready plus pr-ready lint before PR creation.
+- Residual Risk: Operators still need judgment for style-drift sampling thresholds; full repo `pm lint` still has unrelated historical execution-log debt outside this task.
+- Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-rust-style-guide-check/.pm/scratch/task_3fcca9c7548f47d9be1d79a06ffcb59f/slice-ledger.jsonl

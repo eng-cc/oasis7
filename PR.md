@@ -15,6 +15,14 @@
 - `./scripts/pm/workflow-lint.sh --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f --phase current`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
+- `./scripts/pm/task-closeout.sh --role tpm --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f --verify-command './scripts/pm/workflow-lint.sh --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f --phase current && ./scripts/doc-governance-check.sh && git diff --check' --json`
+- `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command './scripts/pm/workflow-lint.sh --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f --phase current && ./scripts/doc-governance-check.sh && git diff --check'`
+- `./scripts/pm/workflow-lint.sh --task-uid task_3fcca9c7548f47d9be1d79a06ffcb59f --phase pr-ready --allow-unbound`
+
+## Local Role Review
+- repository_health_engineer: no findings; scope/spec compliance passed and risk acceptable.
+- qa_engineer: found missing pre-PR/claim-ready evidence and incomplete PR verification evidence; fixed before PR creation.
 
 ## Residual Risk
 - This PR documents the style-guide inspection input only; it does not add a new automated Rust style gate.
+- The runbook does not define quantitative sampling thresholds for style drift; operators use judgment during manual inspection.
