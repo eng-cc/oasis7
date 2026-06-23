@@ -248,6 +248,7 @@
 - [x] research-ai-native-sandbox-open-world (PRD-GAME-014/015) [test_tier_required]: 将近期 AI native / sandbox / open-world 调研收束为 WASM-backed regional infrastructure `micro_depot` 设计与 simulator kernel first slice，覆盖中后期创建准入、安装/upkeep 成本、runtime-owned service receipt、module evidence、replay 与 targeted verification。 Trace: .pm/tasks/task_3c55fc4c17ea44aa850adf7a6a4463f4.yaml
 - [x] engineering-inventory-status-drift-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 修正 engineering 根项目状态区对 near-limit active project docs 的过期下一任务指向，改回按当前 `doc-inventory-report` 的 module density / hotspot action_required 结果做 bounded repository-health 分类巡检。 Trace: .pm/tasks/task_74eabae048e74ca09bd4cb9ffbe5fdc1.yaml
 - [x] world-simulator-inventory-count-sync (PRD-ENGINEERING-024/025) [test_tier_required]: 收口下一轮 repository health 巡检发现的 world-simulator 入口计数漂移，将 Viewer / module density 从旧“近 300 / 297 / 550”口径同步到 2026-06-23 `doc-inventory-report` 当前值，同时保留热点 landing 分流语义。 Trace: .pm/tasks/task_5a38ecfbcc394836b524614180c702eb.yaml
+- [x] module-readme-inventory-count-sync (PRD-ENGINEERING-024/025) [test_tier_required]: 继续收口 repository health 巡检发现的非 `world-simulator` 模块 README 当前库存计数漂移，将 core/readme/game/site/world-runtime 入口计数同步到 2026-06-23 `doc-inventory-report` 当前值，同时保留既有热点快照语义。 Trace: .pm/tasks/task_eb88fef35227402bbc3fd3f7b7924e37.yaml
 
 ## File Structure / Affected Paths
 - `local-cargo-cache-script-convergence`: 预计改动 `scripts/cargo-dev-lib.sh`、`scripts/cargo-dev-lib.test.sh`、本地 smoke / playtest / prewarm 脚本、`scripts/prepare-task-pr.sh` 的 preflight 修复、`testing-manual.md`、`doc/scripts/{README.md,prd.md}`、`AGENTS.md` 与本 task execution log；只读依赖 `scripts/cargo-dev.sh`、`scripts/ci-tests.sh`、`scripts/build-wasm-module.sh`、release workflow；验证入口为 `bash -n ...`、`./scripts/cargo-dev-lib.test.sh`、相关脚本 `--help`/`--dry-run` smoke、`./scripts/prepare-task-pr.test.sh`、`./scripts/pm/lint.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check`。 Trace: .pm/tasks/task_46ea1c81166043e3a1e3d5899b618ae6.yaml
@@ -316,7 +317,7 @@
 - 更新日期: 2026-06-23
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `world-simulator-inventory-count-sync`（已把 world-simulator 入口文档中的 Viewer / module density 旧计数同步到 2026-06-23 inventory truth，保留后续按 action_required 热点做 bounded 分类巡检的口径。）
+- 最新完成: `module-readme-inventory-count-sync`（已把 core/readme/game/site/world-runtime 模块 README 当前库存计数同步到 2026-06-23 inventory truth，保留后续按 action_required 热点做 bounded 分类巡检的口径。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
