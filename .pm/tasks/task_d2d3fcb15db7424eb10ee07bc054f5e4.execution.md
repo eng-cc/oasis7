@@ -136,3 +136,12 @@ Example:
 - Expected Result: all involved roles return findings/no_findings with explicit verdicts and residual risk.
 - Actual Result: all involved roles returned `no_findings` with passed verdicts and low residual risk.
 - Blocker / Next Action: run final local verification, commit, update Source Head evidence, then prepare PR.
+
+## 2026-06-23 22:47:01 CST / tpm
+- 完成内容: Final committed Source Head and review package evidence recorded.
+- 遗留事项: PR helper / PR creation pending.
+- Action: Re-ran the review package helper after committing the scoped fix.
+- Validation Command: `git rev-parse HEAD && ./scripts/pm/review-package.sh --base refs/remotes/origin/main --head HEAD --task-uid task_d2d3fcb15db7424eb10ee07bc054f5e4`.
+- Expected Result: committed Source Head exists and review package captures the actual diff against `origin/main`.
+- Actual Result: Source Head `20d187e8b9b705766966841f9e615d2f390fdec4`; review package `/Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623k/.pm/scratch/task_d2d3fcb15db7424eb10ee07bc054f5e4/review-packages/review-994a7e990..20d187e8b.diff`; commits `1`; bytes `32922`.
+- Blocker / Next Action: commit this evidence update, then run prepare-task-pr.
