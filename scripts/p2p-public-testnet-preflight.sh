@@ -35,8 +35,11 @@ Usage:
 Description:
   Orchestrate the governed public_testnet preflight:
     1. capture deployment truth
-    2. refresh observer bootstrap peer ids from live validator peer ids
-    3. verify optional seed/state-sync closure roots
+    2. verify optional seed/state-sync closure roots
+
+  Formal testnet deployment derives replication bootstrap peers from the
+  network-tier manifest bootstrap_peer_ref. This preflight does not rewrite
+  REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV.
 
   Outputs:
     <out-dir>/deployment-truth.json
@@ -203,30 +206,7 @@ capture_args+=(--out "$truth_json")
 
 ./scripts/p2p-public-testnet-capture-truth.sh "${capture_args[@]}"
 
-if [[ ${#OBSERVER_ENVS[@]} -gt 0 ]]; then
-  refresh_args=(
-    --sequencer-ip "$SEQUENCER_IP"
-    --sequencer-port "$SEQUENCER_PORT"
-    --storage-ip "$STORAGE_IP"
-    --storage-port "$STORAGE_PORT"
-  )
-  if [[ -n "$SEQUENCER_STATUS_URL" ]]; then
-    refresh_args+=(--sequencer-status-url "$SEQUENCER_STATUS_URL")
-  else
-    refresh_args+=(--sequencer-status-json "$SEQUENCER_STATUS_JSON")
-  fi
-  if [[ -n "$STORAGE_STATUS_URL" ]]; then
-    refresh_args+=(--storage-status-url "$STORAGE_STATUS_URL")
-  else
-    refresh_args+=(--storage-status-json "$STORAGE_STATUS_JSON")
-  fi
-  for env_file in "${OBSERVER_ENVS[@]}"; do
-    refresh_args+=(--env-file "$env_file")
-  done
-  bootstrap_csv=$(./scripts/p2p-public-testnet-refresh-bootstrap-peers.sh "${refresh_args[@]}")
-else
-  bootstrap_csv=""
-fi
+bootstrap_csv=""
 
 seed_reports=()
 if (( ${#SEED_ROOTS[@]} > 0 )); then
@@ -251,12 +231,16 @@ jq -n \
   --arg out_dir "$OUT_DIR" \
   --arg deployment_truth "$truth_json" \
   --arg bootstrap_csv "$bootstrap_csv" \
+  --argjson observer_env_count "${#OBSERVER_ENVS[@]}" \
   --argjson seed_reports "$seed_reports_json" \
   '{
     ok: true,
     out_dir: $out_dir,
     deployment_truth_path: $deployment_truth,
     refreshed_bootstrap_peers_csv: (if $bootstrap_csv == "" then null else $bootstrap_csv end),
+    replication_bootstrap_source: "network_tier_manifest",
+    observer_env_refresh_skipped: true,
+    observer_env_count: $observer_env_count,
     seed_closure_reports: $seed_reports
   }' >"$OUT_DIR/preflight-summary.json"
 

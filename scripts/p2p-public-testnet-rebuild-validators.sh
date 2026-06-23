@@ -310,7 +310,56 @@ reset_host() {
   local control_path=$2
   local service=$3
   ssh_run "$host" "$control_path" \
-    "systemctl stop '$service' || true; rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
+    "systemctl stop '$service' || true; STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
+import os
+import signal
+import subprocess
+import time
+
+stack_root = os.environ['STACK_ROOT']
+needles = (
+    f'{stack_root}/current/bin/oasis7_chain_runtime',
+    f'{stack_root}/bin/start-node.sh',
+)
+
+def matching_pids():
+    current = os.getpid()
+    parent = os.getppid()
+    out = subprocess.run(['ps', '-eo', 'pid=,args='], text=True, stdout=subprocess.PIPE, check=False).stdout
+    pids = []
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        raw_pid, _, args = line.partition(' ')
+        try:
+            pid = int(raw_pid)
+        except ValueError:
+            continue
+        if pid in (current, parent):
+            continue
+        if any(needle in args for needle in needles):
+            pids.append(pid)
+    return pids
+
+deadline = time.monotonic() + 10
+while time.monotonic() < deadline:
+    if not matching_pids():
+        break
+    time.sleep(0.25)
+
+for sig in (signal.SIGTERM, signal.SIGKILL):
+    pids = matching_pids()
+    if not pids:
+        break
+    for pid in pids:
+        try:
+            os.kill(pid, sig)
+        except ProcessLookupError:
+            pass
+    time.sleep(1)
+PY
+rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
 }
 
 start_host() {
