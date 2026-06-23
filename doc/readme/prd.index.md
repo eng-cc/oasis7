@@ -2,7 +2,7 @@
 
 审计轮次: 14
 
-更新时间：2026-06-18
+更新时间：2026-06-23
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -16,11 +16,11 @@
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-06-18）
-- `doc/readme/`：120 份文件
+## 密度快照（2026-06-23）
+- `doc/readme/`：123 份文件
 - `doc/readme/governance/`：76 份文件
 - `doc/readme/gap/`：27 份文件
-- `doc/readme/production/`：12 份文件
+- `doc/readme/production/`：15 份文件
 - `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）
 - 正式专题三件套：30 组
 - 当前默认活跃专题三件套：27 组
@@ -31,7 +31,7 @@
 | --- | --- | --- |
 | `governance/` | 76 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
 | `gap/` | 27 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口 |
-| `production/` | 12 | 生产收口、阶段边界、readiness 与对外承诺约束 |
+| `production/` | 15 | 生产收口、阶段边界、readiness 与对外承诺约束 |
 
 ## 活跃补充文档
 - `doc/readme/governance/README.md`：`governance/` 热点子域 landing page，按治理控制、release communication、Moltbook、limited preview/reward、小红书与公开定位分流读者。
