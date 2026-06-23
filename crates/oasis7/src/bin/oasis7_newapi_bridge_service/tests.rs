@@ -846,6 +846,26 @@ fn parse_cli_options_accepts_bridge_automation_flags() {
 }
 
 #[test]
+fn parse_cli_options_accepts_letai_platform_key_env() {
+    const ENV_NAME: &str = "OASIS7_TEST_NEWAPI_BRIDGE_PLATFORM_KEY_ENV";
+    unsafe {
+        env::set_var(ENV_NAME, "platform-key-from-env");
+    }
+    let options = parse_cli_options(vec![
+        "--letai-platform-key-env".to_string(),
+        ENV_NAME.to_string(),
+    ])
+    .expect("parse env platform key");
+    assert_eq!(
+        options.letai_platform_key.as_deref(),
+        Some("platform-key-from-env")
+    );
+    unsafe {
+        env::remove_var(ENV_NAME);
+    }
+}
+
+#[test]
 fn reconcile_requires_chain_base_url_configuration() {
     let test_service = test_service("chain-config-missing", 900);
     issue_default_route(&test_service);

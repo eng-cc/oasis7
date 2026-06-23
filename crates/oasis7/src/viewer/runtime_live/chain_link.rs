@@ -219,11 +219,11 @@ impl ViewerRuntimeLiveServer {
 }
 
 pub(super) fn submit_chain_linked_gameplay_action(
-    chain_status_bind: &str,
+    chain_submit_bind: &str,
     request: &GameplayActionRequest,
 ) -> Result<ChainGameplaySubmitResponse, GameplayActionError> {
     let response =
-        post_chain_linked_gameplay_action(chain_status_bind, request).map_err(|err| {
+        post_chain_linked_gameplay_action(chain_submit_bind, request).map_err(|err| {
             gameplay_chain_submit_error(
                 request,
                 "chain_submit_unavailable",
@@ -302,17 +302,17 @@ fn fetch_chain_status_snapshot(
 }
 
 fn post_chain_linked_gameplay_action(
-    chain_status_bind: &str,
+    chain_submit_bind: &str,
     request: &GameplayActionRequest,
 ) -> Result<ChainGameplaySubmitResponse, ViewerRuntimeLiveServerError> {
     let mut stream = connect_chain_status_stream(
-        chain_status_bind,
+        chain_submit_bind,
         Duration::from_millis(CHAIN_LINK_TIMEOUT_MS),
     )?;
     let payload = serde_json::to_vec(request)
         .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
     let request_head = format!(
-        "POST {CHAIN_GAMEPLAY_SUBMIT_PATH} HTTP/1.1\r\nHost: {chain_status_bind}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "POST {CHAIN_GAMEPLAY_SUBMIT_PATH} HTTP/1.1\r\nHost: {chain_submit_bind}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         payload.len()
     );
     stream.write_all(request_head.as_bytes())?;

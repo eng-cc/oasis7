@@ -21,6 +21,7 @@ impl ViewerRuntimeLiveServerConfig {
             auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
         }
@@ -37,6 +38,7 @@ impl ViewerRuntimeLiveServerConfig {
             auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
         }
@@ -98,6 +100,11 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn with_chain_status_bind(mut self, addr: impl Into<String>) -> Self {
         self.chain_status_bind = Some(addr.into());
+        self
+    }
+
+    pub fn with_chain_submit_bind(mut self, addr: impl Into<String>) -> Self {
+        self.chain_submit_bind = Some(addr.into());
         self
     }
 
