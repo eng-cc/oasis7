@@ -44,8 +44,8 @@
 - 承接 agent 认领的 token 成本、claim bond、upkeep 与 reclaim 规则。
 - 承接 agent claim restricted grant 的运营发放、撤销、过期与 incident runbook。
 
-## 热点子域导航（2026-05-17 快照）
-- `gameplay/`（82）：先看 `gameplay/README.md`，再按簇进入玩法骨架、留存修复、preview/beta gate、claim economy、长稳治理、agency 合同与 mature-world 小玩家承接。
+## 热点子域导航（2026-06-23 快照）
+- `gameplay/`（83）：先看 `gameplay/README.md`，再按簇进入玩法骨架、留存修复、preview/beta gate、claim economy、长稳治理、agency 合同与 mature-world 小玩家承接。
 - `gameplay/` 正式专题三件套（63）：用于已知专题后的精确下钻。
 - `gameplay/` 补充材料（18）：runbook、evidence、checklist、handoff 与跨角色执行留痕。
 - 模块根入口（5）：`README.md`、`prd.md`、`project.md`、`design.md`、`prd.index.md`。

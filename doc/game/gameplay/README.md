@@ -20,9 +20,9 @@
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-06-20）:
-  - `doc/game/gameplay/`: 82 份 Markdown
-  - `doc/game/`: 87 份 Markdown
+- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-06-23）:
+  - `doc/game/gameplay/`: 83 份 Markdown
+  - `doc/game/`: 88 份 Markdown
 - 该子域已经达到热点阈值；本页目标是降低首读扫描成本，不在本批直接减少文件数。
 
 ## 首读主题簇
