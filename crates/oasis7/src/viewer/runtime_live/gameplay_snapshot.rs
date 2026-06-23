@@ -1,5 +1,5 @@
 use crate::runtime::{
-    FactoryProductionStatus, FactoryState, IndustryStage, WorldEvent as RuntimeWorldEvent,
+    FactoryProductionStatus, IndustryStage, WorldEvent as RuntimeWorldEvent,
     WorldEventBody as RuntimeWorldEventBody, WorldState,
 };
 use crate::simulator::persist::{
@@ -9,8 +9,13 @@ use crate::simulator::persist::{
 };
 use crate::viewer::{ControlCompletionAck, ControlCompletionStatus, ViewerControl};
 
+pub(super) use super::gameplay_snapshot_helpers::apply_runtime_snapshot_empty_entities_blocker;
+use super::gameplay_snapshot_helpers::{
+    base_available_actions, blocker_next_step, primary_factory_for_player_gameplay,
+};
+use super::gameplay_snapshot_lane::apply_small_player_lane_truth;
 use super::player_gameplay::extend_available_actions;
-use crate::viewer::{ACTION_CLAIM_FIRST_AGENT, ACTION_CLAIM_STARTER_OC, FACTORY_SMELTER_MK1};
+use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
@@ -420,119 +425,6 @@ fn derive_player_gameplay_causality(
         ),
         PlayerGameplayExecutionState::Executing => (None, None),
     }
-}
-
-fn apply_small_player_lane_truth(gameplay: &mut PlayerGameplaySnapshot) {
-    if gameplay.small_player_lane_id.is_none() {
-        gameplay.small_player_lane_id = Some(
-            match gameplay.goal_kind {
-                PlayerGameplayGoalKind::CreateFirstWorldFeedback => "unclassified",
-                PlayerGameplayGoalKind::ChooseMidLoopPath => "regional_specialist",
-                _ => "local_operator",
-            }
-            .to_string(),
-        );
-    }
-
-    if gameplay.leverage_class.is_none() {
-        gameplay.leverage_class = Some(
-            match gameplay.goal_kind {
-                PlayerGameplayGoalKind::RecoverCapability => "repair_elasticity",
-                PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff => {
-                    "regional_specialization_option"
-                }
-                PlayerGameplayGoalKind::ChooseMidLoopPath => "local_bargaining_position",
-                PlayerGameplayGoalKind::CreateFirstWorldFeedback => "unclassified",
-                _ => "throughput_only",
-            }
-            .to_string(),
-        );
-    }
-
-    if gameplay.major_power_dependency_status.is_none() {
-        gameplay.major_power_dependency_status = Some(
-            match gameplay.goal_kind {
-                PlayerGameplayGoalKind::CreateFirstWorldFeedback => "unverified",
-                PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
-                | PlayerGameplayGoalKind::ChooseMidLoopPath => "independent_path_available",
-                PlayerGameplayGoalKind::RecoverCapability => "sponsor_helpful_not_required",
-                _ => "unverified",
-            }
-            .to_string(),
-        );
-    }
-
-    if gameplay.recovery_path_kind.is_none() {
-        gameplay.recovery_path_kind = Some(
-            match gameplay.goal_kind {
-                PlayerGameplayGoalKind::RecoverCapability
-                | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
-                | PlayerGameplayGoalKind::ChooseMidLoopPath => "repair_rebuild_or_pivot",
-                _ => "unverified",
-            }
-            .to_string(),
-        );
-    }
-
-    if gameplay.recovery_path_detail.is_none() {
-        gameplay.recovery_path_detail = match gameplay.goal_kind {
-            PlayerGameplayGoalKind::RecoverCapability => Some(
-                "Repair the blocked line, rebuild the local site, or pivot to a lower-pressure specialization without requiring major-power sponsorship."
-                    .to_string(),
-            ),
-            PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff => Some(
-                "The next branch can repair upstream inputs, rebuild for more resilient throughput, or pivot toward logistics reach."
-                    .to_string(),
-            ),
-            PlayerGameplayGoalKind::ChooseMidLoopPath => Some(
-                "Regional branches remain available without making global governance or major-power membership the entry requirement."
-                    .to_string(),
-            ),
-            _ => None,
-        };
-    }
-
-    if gameplay.requires_major_power_sponsorship.is_none() {
-        gameplay.requires_major_power_sponsorship = Some(
-            match gameplay.goal_kind {
-                PlayerGameplayGoalKind::CreateFirstWorldFeedback => "unverified",
-                PlayerGameplayGoalKind::RecoverCapability
-                | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
-                | PlayerGameplayGoalKind::ChooseMidLoopPath => "no",
-                _ => "unverified",
-            }
-            .to_string(),
-        );
-    }
-
-    if gameplay.repair_available.is_none() {
-        gameplay.repair_available = match gameplay.goal_kind {
-            PlayerGameplayGoalKind::RecoverCapability
-            | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
-            | PlayerGameplayGoalKind::ChooseMidLoopPath => Some(true),
-            _ => None,
-        };
-    }
-    if gameplay.rebuild_available.is_none() {
-        gameplay.rebuild_available = match gameplay.goal_kind {
-            PlayerGameplayGoalKind::RecoverCapability
-            | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
-            | PlayerGameplayGoalKind::ChooseMidLoopPath => Some(true),
-            _ => None,
-        };
-    }
-    if gameplay.pivot_available.is_none() {
-        gameplay.pivot_available = match gameplay.goal_kind {
-            PlayerGameplayGoalKind::RecoverCapability
-            | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
-            | PlayerGameplayGoalKind::ChooseMidLoopPath => Some(true),
-            _ => None,
-        };
-    }
-
-    let leverage_class = gameplay.leverage_class.as_deref().unwrap_or("unclassified");
-    gameplay.grind_only_flag = gameplay.same_loop_repeat_count >= 3
-        && matches!(leverage_class, "throughput_only" | "unclassified");
 }
 
 fn finalize_player_gameplay_snapshot(
@@ -1258,132 +1150,4 @@ pub(super) fn build_player_gameplay_snapshot(
         rebuild_available: None,
         pivot_available: None,
     })
-}
-
-pub(super) fn apply_runtime_snapshot_empty_entities_blocker(
-    gameplay: &mut PlayerGameplaySnapshot,
-    missing_agents: bool,
-    missing_locations: bool,
-) {
-    if !missing_agents && !missing_locations {
-        return;
-    }
-    let mut missing_parts = Vec::new();
-    if missing_agents {
-        missing_parts.push("agents");
-    }
-    if missing_locations {
-        missing_parts.push("locations");
-    }
-    let missing_summary = missing_parts.join("/");
-    let disabled_reason = format!(
-        "runtime snapshot is missing {missing_summary}; refresh snapshot or repair runtime bootstrap first"
-    );
-    gameplay.stage_status = PlayerGameplayStageStatus::Blocked;
-    gameplay.execution_state = PlayerGameplayExecutionState::Blocked;
-    gameplay.blocker_kind = Some("runtime_snapshot_empty_entities".to_string());
-    gameplay.blocker_detail = Some(format!(
-        "runtime exposed an empty new-user world with no {missing_summary}; claim the first Agent to start the onboarding flow"
-    ));
-    gameplay.next_step_hint =
-        "Use claim_first_agent if it is available; otherwise request a fresh snapshot and repair runtime bootstrap only if the claim action is missing."
-            .to_string();
-    gameplay.causality_kind = Some(PlayerGameplayCausalityKind::WorldConstraint);
-    gameplay.causality_detail = gameplay.blocker_detail.clone();
-    gameplay.status_reason = gameplay.blocker_detail.clone();
-    gameplay.primary_blocker = gameplay.blocker_detail.clone();
-    gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
-    for action in &mut gameplay.available_actions {
-        if action.protocol_action == "request_snapshot"
-            || action.action_id == ACTION_CLAIM_FIRST_AGENT
-            || action.action_id == ACTION_CLAIM_STARTER_OC
-        {
-            continue;
-        }
-        action.disabled_reason = Some(disabled_reason.clone());
-    }
-}
-
-fn base_available_actions(
-    first_agent_id: Option<&str>,
-    gameplay_enabled: bool,
-    gameplay_disabled_reason: Option<&str>,
-    supports_agent_chat: bool,
-) -> Vec<PlayerGameplayAction> {
-    let disabled_reason = (!gameplay_enabled).then(|| {
-        gameplay_disabled_reason
-            .unwrap_or("gameplay requires runtime live server running with --llm")
-            .to_string()
-    });
-    let mut actions = vec![
-        PlayerGameplayAction {
-            action_id: "request_snapshot".to_string(),
-            label: "Refresh gameplay snapshot".to_string(),
-            protocol_action: "request_snapshot".to_string(),
-            target_agent_id: None,
-            disabled_reason: None,
-        },
-        PlayerGameplayAction {
-            action_id: "advance_step".to_string(),
-            label: "Advance 1 step".to_string(),
-            protocol_action: "live_control.step".to_string(),
-            target_agent_id: None,
-            disabled_reason: disabled_reason.clone(),
-        },
-        PlayerGameplayAction {
-            action_id: "resume_play".to_string(),
-            label: "Resume live play".to_string(),
-            protocol_action: "live_control.play".to_string(),
-            target_agent_id: None,
-            disabled_reason,
-        },
-    ];
-    if supports_agent_chat {
-        if let Some(agent_id) = first_agent_id {
-            actions.push(PlayerGameplayAction {
-                action_id: "chat_first_agent".to_string(),
-                label: "Send one chat/command to the first available agent".to_string(),
-                protocol_action: "agent_chat".to_string(),
-                target_agent_id: Some(agent_id.to_string()),
-                disabled_reason: None,
-            });
-        }
-    }
-    actions
-}
-
-fn blocker_next_step(kind: &str, detail: &str) -> String {
-    let haystack = format!("{kind} {detail}");
-    if haystack.contains("power") || haystack.contains("energy") {
-        return "Restore energy first, then advance again to verify recovery.".to_string();
-    }
-    if haystack.contains("material") || haystack.contains("iron") || haystack.contains("input") {
-        return "Replenish upstream materials, then advance again to confirm the line resumes."
-            .to_string();
-    }
-    if haystack.contains("logistics") || haystack.contains("transit") {
-        return "Repair the transport path or re-route the ledger flow before stepping again."
-            .to_string();
-    }
-    "Inspect the blocker details, recover the line, then advance again to confirm progress."
-        .to_string()
-}
-
-fn primary_factory_for_player_gameplay(state: &WorldState) -> Option<&FactoryState> {
-    state
-        .factories
-        .values()
-        .max_by_key(|factory| primary_factory_priority(factory))
-}
-
-fn primary_factory_priority(factory: &FactoryState) -> (bool, bool, bool, bool, u64, u64) {
-    let production = &factory.production;
-    (
-        production.completed_jobs > 0 || production.last_completed_at.is_some(),
-        production.status != FactoryProductionStatus::Blocked,
-        production.status == FactoryProductionStatus::Running,
-        factory.factory_id == FACTORY_SMELTER_MK1,
-        production.completed_jobs,
-        production.last_completed_at.unwrap_or(0),
-    )
 }
