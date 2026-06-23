@@ -91,7 +91,7 @@ Example:
 - Review Trigger: pre-PR local role review
 - Review Scope: `doc/world-simulator/launcher/README.md` inventory snapshot date/parent count sync; `doc/engineering/project.md` formal trace/latest-complete update; `.pm` task evidence/backlog files for task truth.
 - Review Package: n/a for uncommitted live diff; `./scripts/pm/review-package.sh --base origin/main --head HEAD --task-uid task_61d9adfc0059495c9efdfe7ed073ae1b` produced an empty package because `HEAD` is still equal to base before the review/commit boundary. Reviewers must inspect current worktree diff directly with `git diff`.
-- Review Roles: repository_health_engineer, qa_engineer, producer_system_designer
+- Review Roles: repository_health_engineer, qa_engineer, producer_system_designer, viewer_engineer, gameplay_designer
 - Review Question: Confirm the launcher inventory snapshot remediation is scoped, non-duplicative, verified, and does not alter product/system promises or require broader tests.
 - Evidence Available: Mendel repository-health finding; targeted inventory verification with 87 / 475 direct counts; `./scripts/doc-governance-check.sh` OK; `./scripts/pm/workflow-lint.sh --task-uid task_61d9adfc0059495c9efdfe7ed073ae1b --phase current` OK; clean targeted `rg`; `git diff --check` OK.
 - Expected Return Contract: `findings` or `no_findings`; scope/spec compliance verdict; role quality/risk verdict; residual_risk.
@@ -154,3 +154,45 @@ Example:
 - Expected Result: Current task records verified `done`; task-local workflow lint passes; any repo-wide lint debt is not treated as current task content failure.
 - Actual Result: Task YAML is `status: done`, `last_verification_exit_code: 0`, `last_verification_status: verified`, `last_closed_at: 2026-06-23T17:57:13+08:00`; task-local `workflow-lint: OK`; closeout helper non-zero came from unrelated repo-wide historical `pm-lint` failures.
 - Blocker / Next Action: proceed to commit and PR preparation; record repo-wide pm-lint debt as pre-existing closeout helper limitation for this task.
+
+## 2026-06-23 18:19:28 CST / tpm
+- 完成内容: Prepare-task-pr mechanical backstop requested additional `viewer_engineer` and `gameplay_designer` coverage for changed paths, so TPM dispatched supplemental read-only pre-PR reviewers.
+- 遗留事项: first `gameplay_designer` supplemental reviewer did not return after repeated waits and one checkpoint prompt; TPM closed it as a stuck slice and will retry with a narrower review question.
+- Action: Integrate supplemental viewer review and retry supplemental gameplay applicability review.
+- Validation Command: supplemental subagent reviews.
+- Expected Result: `viewer_engineer` and `gameplay_designer` return findings/no_findings or clear applicability exemption before PR creation.
+- Actual Result: `viewer_engineer` Pauli returned `no_findings`; scope/spec pass; Viewer/Launcher/Web quality/risk pass; no visual/UI/browser/launcher runtime verification required because this is docs-only inventory metadata. First `gameplay_designer` Dirac was closed while still running after multiple waits.
+- Blocker / Next Action: dispatch a new narrow `gameplay_designer` review focused only on playability/economy/motivation-loop applicability for this docs-only inventory sync.
+
+## 2026-06-23 18:22:21 CST / tpm
+- 完成内容: Integrated supplemental viewer/gameplay pre-PR review results requested by prepare-task-pr mechanical backstop.
+- 遗留事项: none; supplemental roles returned `no_findings`.
+- Action: Update Pre-PR Local Role Review evidence to include all required changed-path roles and gameplay applicability.
+- Validation Command: supplemental role subagent reviews by Pauli (`viewer_engineer`) and Banach (`gameplay_designer`).
+- Expected Result: Viewer and gameplay reviewers confirm no blocking findings or request focused fixes/evidence.
+- Actual Result:
+  - `viewer_engineer` Pauli: `no_findings`; scope/spec pass; Viewer/Launcher/Web quality/risk pass; no visual/UI/browser/launcher runtime verification required because the diff only syncs docs inventory metadata and does not touch launcher behavior/UI/Web/runtime.
+  - `gameplay_designer` Banach: `no_findings`; scope/spec pass; gameplay quality/risk pass; gameplay playability/economy/motivation-loop applicability is n/a because changed lines only sync inventory date/count and governance trace evidence, with no gameplay rules, player actions, loops, economy, progression, motivation, playability, or player-facing mechanic promise changed.
+- Blocker / Next Action: update passed review packet and rerun prepare-task-pr preflight.
+
+- Pre-PR Local Role Review: passed
+- Task UID: task_61d9adfc0059495c9efdfe7ed073ae1b
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623g
+- Source Branch: task/engineering-repository-health-inspection-20260623g
+- Source Head: 65636c91f347862dcc5248fb3b468e7191db56c5
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_61d9adfc0059495c9efdfe7ed073ae1b.execution.md`; `.pm/tasks/task_61d9adfc0059495c9efdfe7ed073ae1b.yaml`; `doc/engineering/project.md`; `doc/world-simulator/launcher/README.md`
+- Review Package: n/a; live/uncommitted review for first packet, then committed diff review for supplemental changed-path roles.
+- Role Selection Basis: changed paths and task history require repository-health review for governance/doc alignment, QA review for verification sufficiency, producer/system review for hotspot entrypoint wording/operator-promise safety, viewer review for `doc/world-simulator/launcher/*`, and gameplay applicability evidence for broad changed-path semantics.
+- Review Roles: repository_health_engineer, qa_engineer, producer_system_designer, viewer_engineer, gameplay_designer
+- Review Evidence: Singer/Bernoulli/Lovelace/Pauli/Banach subagent results recorded above.
+- Review Verdicts: repository_health_engineer scope/spec pass and quality/risk pass; qa_engineer scope/spec pass and quality/risk pass; producer_system_designer scope/spec pass and quality/risk pass; viewer_engineer scope/spec pass and quality/risk pass; gameplay_designer scope/spec pass and quality/risk pass.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: n/a
+- Verification Matrix: launcher README inventory snapshot -> targeted inventory/rg/direct counts 87 and 475 observed; docs/project trace -> doc-governance-check OK; task truth -> workflow-lint current OK; formatting -> git diff --check OK; gameplay playability/economy/motivation-loop applicability -> n/a because only docs inventory date/count and governance trace evidence changed, with no gameplay semantics or player-facing mechanic change.
+- Visual Evidence: n/a; docs-only inventory metadata sync with no UI/visual/browser/launcher runtime surface.
+- WASM Evidence: n/a; no WASM paths touched.
+- Ops Evidence: n/a; no operator runbook or deployment behavior changed.
+- LiveOps Evidence: n/a; no external messaging, player promise, release note, or community channel surface touched.
+- Residual Risk: ordinary static snapshot drift may still exist elsewhere; this scoped launcher snapshot drift is resolved and verified.
+- Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623g/.pm/scratch/task_61d9adfc0059495c9efdfe7ed073ae1b/slice-ledger.jsonl
