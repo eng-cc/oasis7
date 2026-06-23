@@ -752,10 +752,12 @@ fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync()
         .expect("persist initial execution world");
 
     let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    let chain_submit = TestChainStatusServer::start(execution_world_dir.clone());
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_submit_bind(chain_submit.addr.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -808,7 +810,11 @@ fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync()
         "chain-linked submit must not mutate local viewer state before committed sync"
     );
 
-    let submitted = chain_status.submitted_gameplay_requests();
+    assert!(
+        chain_status.submitted_gameplay_requests().is_empty(),
+        "chain status endpoint should remain read-only for gameplay submits"
+    );
+    let submitted = chain_submit.submitted_gameplay_requests();
     assert_eq!(submitted.len(), 1);
     assert_eq!(submitted[0].action_id, "build_factory_smelter_mk1");
     assert_eq!(submitted[0].target_agent_id, agent_id);

@@ -41,6 +41,7 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub auto_play_on_connect: bool,
     pub hosted_public_join_mode: bool,
     pub chain_status_bind: Option<String>,
+    pub chain_submit_bind: Option<String>,
     pub chain_link_policy: ChainLinkPolicy,
     pub agent_chat_echo_enabled: bool,
 }
