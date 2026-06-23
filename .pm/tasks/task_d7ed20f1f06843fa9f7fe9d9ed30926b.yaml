@@ -10,16 +10,17 @@ source_refs:
   - AGENTS.md
   - testing-manual.md
   - doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md
-doc_refs: []
+doc_refs:
+  - doc/testing/project.md
 related_prd: []
 acceptance:
   - "Start a local game entry only if formal public_testnet manifest/world/chain/genesis/bootstrap peer evidence and synced node/API/viewer world-state alignment can be proven; also start a local provider bridge as the LLM provider, then report runnable URLs and evidence."
 handoff_to: []
-updated_at: 2026-06-23T17:27:45+08:00
+updated_at: 2026-06-23T18:01:26+08:00
 last_started_at: 2026-06-23T09:07:52+08:00
 last_claim_type: task_complete
-last_verify_command: "git diff --check && bash -n scripts/run-local-public-testnet-letai-test-environment.sh && ./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_viewer_live parse_options -- --nocapture && ./scripts/cargo-dev.sh test -p oasis7 chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync -- --nocapture"
-last_verified_at: 2026-06-23T17:27:41+08:00
+last_verify_command: "git diff --check && bash -n scripts/run-local-public-testnet-letai-test-environment.sh && bash -n scripts/newapi-bridge-service/start-newapi-bridge-service.sh && ./scripts/pm/workflow-lint.sh --task-uid task_d7ed20f1f06843fa9f7fe9d9ed30926b --phase current"
+last_verified_at: 2026-06-23T18:01:26+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
 last_closed_at: 2026-06-23T17:27:45+08:00
