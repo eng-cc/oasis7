@@ -308,11 +308,11 @@ observer env 刷新建议直接使用：
   --world-dir .tmp/public-testnet-ci-rebuild-stage/generated-world-from-rotated-signers/world \
   --sequencer-ssh-host root@39.104.204.172 \
   --sequencer-sshpass-env PUBLIC_TESTNET_SEQUENCER_SSHPASS \
-  --sequencer-service oasis7-testnet-sequencer.service \
+  --sequencer-service oasis7-triad-sequencer.service \
   --sequencer-status-url http://39.104.204.172:6631/v1/chain/status \
   --storage-ssh-host root@39.104.205.67 \
   --storage-sshpass-env PUBLIC_TESTNET_STORAGE_SSHPASS \
-  --storage-service oasis7-testnet-storage.service \
+  --storage-service oasis7-triad-storage.service \
   --storage-status-url http://39.104.205.67:6632/v1/chain/status \
   --out-dir .tmp/public-testnet-validator-rebuild
 ```
@@ -321,8 +321,8 @@ observer env 刷新建议直接使用：
 停止服务并 destructive reset 旧链状态：
 
 ```bash
-systemctl stop oasis7-testnet-sequencer.service
-systemctl stop oasis7-testnet-storage.service
+systemctl stop oasis7-triad-sequencer.service
+systemctl stop oasis7-triad-storage.service
 ```
 
 必须清理旧链数据目录，但保留受保护的 `config/node-keypair.toml`，除非本轮明确要轮换 key。
@@ -466,8 +466,12 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 
 ### Required checks
 ```bash
-curl -s http://127.0.0.1:19082/v1/chain/status | jq '{running,last_error,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
-curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
+ssh <linux-lan-observer> 'curl -fsS http://127.0.0.1:6633/v1/chain/status' \
+  | jq '{node_id,running,last_error,readiness:.readiness.status,failed_gates:.readiness.failed_gates,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
+ssh <windows-observer> 'powershell -NoProfile -Command "Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status | ConvertTo-Json -Compress -Depth 8"' \
+  | jq '{node_id,running,last_error,readiness:.readiness.status,failed_gates:.readiness.failed_gates,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
+curl -fsS http://127.0.0.1:19083/v1/chain/status \
+  | jq '{node_id,running,last_error,readiness:.readiness.status,failed_gates:.readiness.failed_gates,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
 ```
 
 Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differs from the legacy examples above.

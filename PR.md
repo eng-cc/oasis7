@@ -1,30 +1,29 @@
-# Add repository health code sampling guidance
+# Harden public testnet readiness and rollout docs
 
-- Task UID: task_4fb500e6782e4eac916f6846e01542af
-- PR URL: https://github.com/eng-cc/oasis7/pull/567
-- Source Branch: task/engineering-repo-health-file-coverage-guidance
+- Task UID: task_bdb48338fac544849d8c681e9a7dd441
+- Source Branch: task/world-runtime-testnet-health-status
 - Base Branch: main
 - Purpose: normal_pr_ci_watch
 
 ## Summary
-- Add a `Code Evidence Sampling Model` section to the manual repository-health inspection runbook.
-- Clarify that code-style and code-health conclusions need code evidence, but the default inspection model is automated full-repository scans plus high-risk code sampling, not manual all-file reading.
-- Document when to escalate from sampling to path-level deep reading.
-- Record the task trace in `doc/engineering/project.md`.
+- Treat noisy external public-testnet replication peer churn as diagnostic-only when the validator/request path and network head are healthy, while keeping request-path failures blocking.
+- Update validator rebuild and observer reseed scripts to clear/read the current replication/runtime state paths.
+- Record the five-node testnet rollout, catch-up, and operator inventory docs, including Windows artifact scope and reseed recovery rules.
 
 ## Verification
-- `./scripts/pm/workflow-lint.sh --task-uid task_4fb500e6782e4eac916f6846e01542af --phase current`
+- `env -u RUSTC_WRAPPER cargo fmt --check`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime observability_transport_tests -- --nocapture`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime observability_tests -- --nocapture`
+- `bash -n scripts/p2p-public-testnet-rebuild-validators.sh scripts/p2p-public-testnet-local-observer-sync.sh scripts/p2p-public-testnet-rebuild-validators.test.sh scripts/p2p-public-testnet-local-observer-sync.test.sh`
+- `bash scripts/p2p-public-testnet-local-observer-sync.test.sh`
+- `bash scripts/p2p-public-testnet-rebuild-validators.test.sh`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
-- `./scripts/pm/task-closeout.sh --role tpm --task-uid task_4fb500e6782e4eac916f6846e01542af --verify-command './scripts/pm/workflow-lint.sh --task-uid task_4fb500e6782e4eac916f6846e01542af --phase current && ./scripts/doc-governance-check.sh && git diff --check' --json`
-- `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command './scripts/pm/workflow-lint.sh --task-uid task_4fb500e6782e4eac916f6846e01542af --phase current && ./scripts/doc-governance-check.sh && git diff --check'`
-- `./scripts/pm/workflow-lint.sh --task-uid task_4fb500e6782e4eac916f6846e01542af --phase pr-ready --allow-unbound`
-- `./scripts/prepare-task-pr.sh --body-file PR.md --title "Add repository health code sampling guidance" --json`
+- `./scripts/pm/workflow-lint.sh --task-uid task_bdb48338fac544849d8c681e9a7dd441 --phase current`
 
 ## Local Role Review
-- repository_health_engineer: no findings; scope/spec compliance passed and role quality/risk acceptable.
-- qa_engineer: found stale review-package base, pending local-review evidence, and missing PR-readiness evidence; addressed before PR creation by rebasing/regenerating the package and adding claim-ready/pr-ready/preflight evidence.
+- Pending pre-PR local role review packet in `.pm/tasks/task_bdb48338fac544849d8c681e9a7dd441.execution.md`.
 
 ## Residual Risk
-- This PR documents the sampling model only; it does not add a new automated code-style gate or sampling threshold.
-- Operators still need judgment when deciding whether repeated findings justify path-level deep reading.
+- Windows observer reset/reseed is documented as SOP but is not yet a fully reusable repo-owned PowerShell script.
+- Repo-wide `.pm` lint still has unrelated historical task-log debt; current task workflow lint passes.

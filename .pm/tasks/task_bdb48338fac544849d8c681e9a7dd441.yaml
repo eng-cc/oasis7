@@ -1,5 +1,5 @@
 task_uid: task_bdb48338fac544849d8c681e9a7dd441
-title: "Check testnet health status"
+title: "Harden public testnet readiness and five-node rollout docs"
 owner_role: tpm
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-world-runtime-testnet-health-status
 execution_log_path: .pm/tasks/task_bdb48338fac544849d8c681e9a7dd441.execution.md
@@ -11,8 +11,12 @@ source_refs:
 doc_refs: []
 related_prd: []
 acceptance:
-  - "Collect current testnet/node health evidence without modifying production state"
-  - "Record blockchain_ops health judgment and return concise status summary"
+  - "Classify noisy external public-testnet replication peer churn as diagnostic-only when the core validator/request path, network head, sync, reachability, and replication state are healthy"
+  - "Keep request-path/fetch failures, stale peer heads, execution mismatch, missing providers, and storage degradation blocking readiness"
+  - "Verify the runtime readiness behavior with targeted oasis7_chain_runtime tests"
+  - "Update public_testnet validator rebuild/local observer sync scripts so resets clear current replication/runtime state and observer reseed reads the live remote REPLICATION_ROOT"
+  - "Build CI testnet packages and redeploy/reseed the requested five-node fleet without recording secrets"
+  - "Document the current five-node operator inventory, CI package_scope selection, safe update/reseed order, and final health acceptance fields"
 handoff_to: []
-updated_at: 2026-06-23T09:35:01+08:00
+updated_at: 2026-06-23T18:34:00+08:00
 last_started_at: 2026-06-23T09:35:01+08:00
