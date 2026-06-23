@@ -164,3 +164,14 @@ Example:
 - Expected Result: helper returns `allowed_to_claim: true` only after the fresh verification command succeeds.
 - Actual Result: `{"claim_type":"ready_for_pr","verify_command":"./scripts/pm/workflow-lint.sh --task-uid task_d2d3fcb15db7424eb10ee07bc054f5e4 --phase current && git diff --check","verified_at":"2026-06-23T22:50:24+08:00","verification_exit_code":0,"status":"verified","allowed_to_claim":true,"claim_message":"Fresh verification passed; the branch can now be claimed ready for PR.","task_uid":null}`.
 - Blocker / Next Action: commit claim-ready evidence, then rerun `./scripts/prepare-task-pr.sh --create`.
+
+## 2026-06-23 22:51:05 CST / tpm
+- 完成内容: PR #585 created and classified as normal PR CI/watch flow.
+- 遗留事项: GitHub required checks, comments/review threads, mergeability, merge, and cleanup pending.
+- Action: Ran `prepare-task-pr.sh --create`, pushed the task branch, and created the GitHub PR.
+- PR Purpose Decision: `normal_pr_ci_watch`; this is an ordinary documentation/PM governance PR, not a manual packaging or release-CI hold.
+- PR URL: https://github.com/eng-cc/oasis7/pull/585
+- Validation Command: `./scripts/prepare-task-pr.sh --create`.
+- Expected Result: branch preflight passes, source branch pushes, and PR is created against `main`.
+- Actual Result: PR #585 created from `task/engineering-repository-health-inspection-20260623k` to `main`; source head `a1ded613508cb3aa8c7247a587a587a12c23bcad`; pre-PR local role review status `passed`; planner reported `no_required_gate_inputs_changed`.
+- Blocker / Next Action: commit/push this PR-purpose evidence, then watch PR checks/comments/threads/mergeability.
