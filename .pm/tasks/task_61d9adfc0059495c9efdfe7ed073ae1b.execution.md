@@ -189,7 +189,7 @@ Example:
 - Review Verdicts: repository_health_engineer scope/spec pass and quality/risk pass; qa_engineer scope/spec pass and quality/risk pass; producer_system_designer scope/spec pass and quality/risk pass; viewer_engineer scope/spec pass and quality/risk pass; gameplay_designer scope/spec pass and quality/risk pass.
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: n/a
-- Verification Matrix: launcher README inventory snapshot -> targeted inventory/rg/direct counts 87 and 475 observed; docs/project trace -> doc-governance-check OK; task truth -> workflow-lint current OK; formatting -> git diff --check OK; gameplay playability/economy/motivation-loop applicability -> n/a because only docs inventory date/count and governance trace evidence changed, with no gameplay semantics or player-facing mechanic change.
+- Verification Matrix: launcher README inventory snapshot -> targeted inventory/rg/direct counts 87 and 475 observed; docs/project trace -> doc-governance-check OK; task truth -> workflow-lint current OK; formatting -> git diff --check OK; gameplay playability/economy/motivation-loop applicability -> n/a; exemption reason: no player-facing change, because only docs inventory date/count and governance trace evidence changed, with no gameplay semantics or player-facing mechanic change.
 - Visual Evidence: n/a; docs-only inventory metadata sync with no UI/visual/browser/launcher runtime surface.
 - WASM Evidence: n/a; no WASM paths touched.
 - Ops Evidence: n/a; no operator runbook or deployment behavior changed.
