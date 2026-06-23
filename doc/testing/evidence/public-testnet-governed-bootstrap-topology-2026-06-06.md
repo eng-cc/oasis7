@@ -16,8 +16,8 @@
 ## Node matrix
 | node_id | planned role | validator set | bootstrap source | concrete truth |
 | --- | --- | --- | --- | --- |
-| `triad-testnet-sequencer` | validator | yes | yes | public ECS peer `/ip4/39.104.204.172/tcp/6831/p2p/12D3KooWEW92HgYzyCBw1xHWB9MqTWeDx2XAL48XKPJfM6UZM7K3`; genesis finality signer `e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690` |
-| `triad-testnet-storage` | validator | yes | yes | public ECS peer `/ip4/39.104.205.67/tcp/6832/p2p/12D3KooWL6Lyw6KtnsD6WxqZUy3suZfiqNXXAcjzKTBSQvTCupJs`; genesis finality signer `1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33` |
+| `triad-testnet-sequencer` | validator | yes | yes | public ECS peer `/ip4/39.104.204.172/tcp/6831/p2p/12D3KooWMyPapumCaTABq27umWdHqXDr8AoTse21eMVnXeJEsbNp`; current deployment finality signer `65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16` |
+| `triad-testnet-storage` | validator | yes | yes | public ECS peer `/ip4/39.104.205.67/tcp/6832/p2p/12D3KooWAuNCCEDu7CdUUDwALuAhuLekZHgVWxAYp4Ag5ti79fJj`; current deployment finality signer `858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6` |
 | `triad-testnet-local` | observer | no | no | existing local observer peer id `12D3KooWNphsGixZxpqmZf9RSVhCWHH7hWFYZBN8izmWfXQYAXTQ`; joins after validator pair is live |
 | `triad-testnet-fourth-local` | observer | no | no | fourth-node peer id `12D3KooWAkDbJby8wGRhnESJYFR7q6DWfNXQ7Ea2ZrZvehezj47s`; joins after validator pair is live |
 

@@ -20,6 +20,7 @@
 - 把纯本地测试或 local-only playtest 说成“本地启动 test 环境”。
 - 把 `127.0.0.1:5841` 的 LetAI provider bridge auto-topup 当成 testnet OC 充值链路；真实 OC -> NewAPI 充值必须经过 `oasis7_newapi_bridge_service`。
 - 把发到本机 observer 的 pending gameplay action 当成“已广播链上交易”。玩家认领/玩法 action 必须广播到 submit-capable public_testnet endpoint，并随后从本机 observer 的 committed snapshot 同步回来，才算类似主流 DApp 的完整提交路径。
+- 把手工复制 checkpoint、手工拷 validator `data/`、或从一台 validator 覆盖另一台 validator 的状态当成“testnet 已同步”。testnet 节点恢复只能来自自动 replication/head exchange 追平，或按 governed bootstrap runbook 从当前 deployment truth 从零重建。
 
 ## 2. 与其他 manual 的分工
 
@@ -178,6 +179,13 @@ rtk curl -sS http://127.0.0.1:19083/v1/chain/status | jq '{
 - `network_height_lag=0`
 - `connected_peer_count >= 1`
 - manifest 有 `runtime_refs.genesis_ref` 和 `runtime_refs.bootstrap_peer_ref`
+
+若 public_testnet submit endpoint 或本机 observer 不是 `ready`，不要通过手工 checkpoint/data copy “修同步”。允许的恢复判断只有两种：
+
+1. 等待或修复自动恢复路径：manifest bootstrap peers、runtime 进程、端口、provider discovery、replication/head exchange 正常后，让节点自己追平。
+2. 若自动恢复被 deployment truth 漂移或本地状态污染阻断，按 `doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md` 从当前 deployment truth 从零重建 validator pair。
+
+在这两种路径之外得到的状态，不能作为本 runbook 的 readiness 证据。
 
 ## 7. 启动 NewAPI quota bridge
 
@@ -587,6 +595,10 @@ rtk curl -sSI 'http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011&t
 ### 5852 没有监听
 
 不能宣称“完整链路测试环境已就绪”。这时最多只能说本地 public_testnet world state + provider consumer 路径部分可用；OC -> NewAPI/LetAI 充值链路尚未启动。
+
+### public_testnet 节点 `readiness=not_ready`
+
+不要用手工 checkpoint/data copy 修本地或远端 testnet 同步。先判断是否能通过自动 replication/head exchange 恢复；若不能，按 governed bootstrap runbook 重新生成 deployment truth 并从零重建。只有最终节点通过自动同步或重建后返回 `readiness=ready`、`failed_gates=[]`，才能继续本 runbook 的 viewer/API/provider/充值验证。
 
 ### `run-launcher-stack.sh` 能不能替代本 runbook
 

@@ -111,6 +111,10 @@ Credential files may be used by an operator as local access aids, but this runbo
 5. 当 validator 高度超过低高度阈值后，observer 不得使用空 world 从 genesis replay 追链；正常 attach 必须依赖自动 high-head checkpoint catch-up 与 tail gap sync。
 6. 自动 high-head checkpoint catch-up 只覆盖 observer/light-node 边界；execution-required 节点不能用它跳过历史执行，也不能把它当作完整 snapshot state-sync。
 7. `seed-from-remote` / state-sync 产物只用于自动 checkpoint catch-up 失败后的 recovery；产物必须包含 execution restore 所需 blob 闭包，否则 observer 会在 restore snapshot/journal 时落入 `BlobNotFound`。
+8. 禁止把手工复制 validator 数据目录、手工拷 checkpoint、或从一台 validator 直接覆盖另一台 validator 的 `data/` 目录当作 testnet 同步/恢复流程。validator 恢复只能走两条路径：
+   - 先让节点按 manifest bootstrap peers、replication fetch、peer-head exchange 自动恢复同步。
+   - 自动恢复失败且根因是 deployment truth 漂移或本地状态污染时，从当前 deployment truth 从零重建 validator pair。
+9. 若曾经执行过手工 checkpoint/data copy，该状态只能作为被隔离的故障现场或无效恢复尝试记录；不能作为 readiness 证据、不能继续接在正式 testnet world state 上运行，也不能对外宣称为“已同步”。
 
 ### 4.1 Runtime high-state sync contract
 `public_testnet` observer 的标准 attach 设计是不要求操作者预先提供 seed/state-sync 目录。新 observer 在发现远端链头远高于本地高度时，必须先尝试从 P2P replication 网络拉取一个受验证的高位 execution checkpoint，再从该 checkpoint 后继续 tail gap sync。
@@ -242,27 +246,23 @@ ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status | jq -r .r
 1. 若 key rotation 发生，先从 host 当前 `node-keypair.toml` 派生 signer truth。
 2. 用新的 signer truth 生成 deployment-only validator registry。
 3. 用新的 registry 重建 deployment-only governed bootstrap world。
-4. 读取 validator 实际 `local_peer_id`，更新 observer 的 `REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV`。
+4. 读取 validator 实际 `local_peer_id`，更新当前 deployment truth 中的 manifest/bootstrap peer artifact；manifest-backed public_testnet 启动不再要求 observer env 维护 `REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV`。
 5. 更新 observer 的 `REPLICATION_REMOTE_WRITERS_CSV`，对齐当前 deployment truth 中所有 authorized replication writers；除 validator signer 外，必须包含会提供 retained execution checkpoint 的 storage/full-storage provider signer。
 
 ### Pass criteria
 1. deployment-only registry 与 host 当前 signer truth 一致
 2. deployment-only bootstrap world 已重新生成并验证
-3. observer env 里的 bootstrap peer ids 与 validator live `local_peer_id` 一致
+3. manifest/bootstrap peer artifact 里的 peer ids 与 validator live `local_peer_id` 一致
 
-observer env 刷新建议直接使用：
+manifest/bootstrap peer truth 刷新应写回 deployment artifact，例如：
 
 ```bash
-./scripts/p2p-public-testnet-refresh-bootstrap-peers.sh \
-  --sequencer-status-url http://39.104.204.172:6631/v1/chain/status \
-  --sequencer-ip 39.104.204.172 \
-  --sequencer-port 6831 \
-  --storage-status-url http://39.104.205.67:6632/v1/chain/status \
-  --storage-ip 39.104.205.67 \
-  --storage-port 6832 \
-  --env-file <current-linux-lan-observer-node.env> \
-  --env-file <current-macos-observer-node.env>
+curl -fsS http://39.104.204.172:6631/v1/chain/status | jq -r '.replication.local_peer_id'
+curl -fsS http://39.104.205.67:6632/v1/chain/status | jq -r '.replication.local_peer_id'
+$EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt
 ```
+
+`scripts/p2p-public-testnet-refresh-bootstrap-peers.sh` 只适用于 legacy/non-manifest observer env 维护；不得把它作为 formal manifest-backed public_testnet 的必要同步路径。
 
 ## 8.5 Phase C0 - Routine CI Package Update
 ### Goal
@@ -326,6 +326,17 @@ systemctl stop oasis7-triad-storage.service
 ```
 
 必须清理旧链数据目录，但保留受保护的 `config/node-keypair.toml`，除非本轮明确要轮换 key。
+
+标准重建脚本必须清理以下运行态，以保证“从零重建”不会继承旧 peerstore、旧 runtime root 或未释放端口：
+
+- `data/execution-records`
+- `data/storage`
+- `data/runtime-root`
+- `data/replication-root`
+- `output/chain-runtime`
+- `output/node-distfs`
+
+在删除目录前，脚本必须等待或终止 stack-local 残留 `start-node.sh` / `oasis7_chain_runtime` 进程，避免旧进程继续占用 gossip/status/replication 端口。若 `systemctl stop` 后端口仍被旧 runtime 占用，本轮 rebuild 必须视为未清干净，不能继续把后续 readiness 失败归因于链同步慢。
 
 ### Start order
 固定顺序：
@@ -449,10 +460,10 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 把当前 operator inventory 中的 observers 接进 validator 网络，或在旧状态分叉后从恢复好的 validator/storage fresh state 重新 seed。
 
 ### Required prep
-1. observer env 使用当前 deployment truth bootstrap peer ids
+1. observer manifest 使用当前 deployment truth bootstrap peer ids；legacy/non-manifest observer env 若仍存在，必须标记为旁路兼容信息而不是 formal startup source
 2. observer env 使用当前 deployment truth writer allowlist；除 validator signer 外，必须包含会提供 retained execution checkpoint 的 storage/full-storage provider signer。fetch requester 不再需要逐个 observer 手动加 allowlist，只要 providers 运行的 runtime 对 `public_testnet` + `allow_observer_nodes=true` 开启开放签名读取策略
 3. observer manifest 指向当前 deployment truth genesis/manifest
-4. observer env 的 `WORLD_ID`、governed registry/manifest、bootstrap peers、remote writer allowlist、node identity、listen/status ports 必须全部来自当前 deployment truth
+4. observer 的 `WORLD_ID`、governed registry/manifest、manifest bootstrap peers、remote writer allowlist、node identity、listen/status ports 必须全部来自当前 deployment truth
 5. systemd service unit 必须是当前 testnet observer unit；不得让旧 devnet/triad observer service 继续占用状态端口或被误当作 public testnet 节点
 6. observer state 可先 reset；正常路径不导入 seed bundle，启动后由 runtime 自动拉取受验证的 high-head replication checkpoint boundary，再执行 tail gap sync
 7. local observer 使用的 runtime/package hash 必须对齐当前本机 runtime 真值；不要直接复用 validator Linux package hash 去校验本地 macOS debug/release binary
@@ -544,6 +555,15 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 1. 不要为 observer attach 问题去修改 validator registry 真值
 2. 不要在 peer id 已变的情况下继续使用旧 bootstrap peer list
 3. 不要在缺少完整 blob 闭包时宣布 state-sync 已可用
+4. 不要手工把 sequencer 的 checkpoint、execution world、execution records、storage 或 replication root 拷到 storage validator 上来“同步”。这种做法绕过了 manifest/bootstrap peer/replication 协议和 validator signer binding，不能作为 testnet 恢复路径。
+5. 不要在一次手工 copy 后继续等待它“自然变 ready”并把结果记为自动同步；必须隔离该状态，回到自动恢复或从零重建。
+
+### Allowed recovery choices
+当 validator pair 出现 `readiness=not_ready`、peer-head stale、state-sync fallback 或 replication transport degraded 时，operator 只能按下面顺序处理：
+
+1. **自动恢复**：保持 current deployment truth 不变，修复 manifest bootstrap peers、端口占用、runtime 进程残留、network reachability 或 provider discovery 后，让节点通过 replication/head exchange 自己追平。
+2. **从零重建**：如果自动恢复被 signer drift、runtime bundle hash drift、stale bootstrap peer id、stale peerstore 或本地链状态污染阻断，则重新生成 deployment truth，清空 validator runtime data/root，按 Phase C 重建 validator pair。
+3. **受验证的 state-sync/seed recovery**：只适用于 runbook 明确允许的 observer/light-node recovery 或经验证的 break-glass restore drill；必须有签名 checkpoint、validator-set proof、bundle manifest 和闭包校验。它不是 validator-to-validator 手工同步。
 
 ## 15. Standard Command Checklist
 ### Preflight
@@ -599,15 +619,9 @@ For each output, record `CURRENT_VERSION`, runtime hash or artifact lineage, `ru
 
 ### Peer id truth
 ```bash
-./scripts/p2p-public-testnet-refresh-bootstrap-peers.sh \
-  --sequencer-status-url http://39.104.204.172:6631/v1/chain/status \
-  --sequencer-ip 39.104.204.172 \
-  --sequencer-port 6831 \
-  --storage-status-url http://39.104.205.67:6632/v1/chain/status \
-  --storage-ip 39.104.205.67 \
-  --storage-port 6832 \
-  --env-file <current-linux-lan-observer-node.env> \
-  --env-file <current-macos-observer-node.env>
+curl -fsS http://39.104.204.172:6631/v1/chain/status | jq -r '.replication.local_peer_id'
+curl -fsS http://39.104.205.67:6632/v1/chain/status | jq -r '.replication.local_peer_id'
+cat doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt
 ```
 
 ### Seed closure

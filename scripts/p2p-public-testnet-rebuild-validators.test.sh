@@ -136,6 +136,21 @@ case "$cmd" in
     cp -R "$root$stack_root/staged-world/." "$root$stack_root/data/execution-world/"
     ;;
   systemctl\ stop*)
+    if [[ "$cmd" == *"rm -rf"* ]]; then
+      stack_root=$(printf '%s\n' "$cmd" | sed -n "s/.*rm -rf '\([^']*\)\/data\/execution-records'.*/\1/p")
+      rm -rf "$root$stack_root/data/execution-records" \
+        "$root$stack_root/data/storage" \
+        "$root$stack_root/data/runtime-root" \
+        "$root$stack_root/data/replication-root" \
+        "$root$stack_root/output/chain-runtime" \
+        "$root$stack_root/output/node-distfs"
+      mkdir -p "$root$stack_root/data/execution-records" \
+        "$root$stack_root/data/storage" \
+        "$root$stack_root/data/runtime-root" \
+        "$root$stack_root/data/replication-root" \
+        "$root$stack_root/output/chain-runtime" \
+        "$root$stack_root/output/node-distfs"
+    fi
     ;;
   systemctl\ start*)
     ;;
@@ -214,3 +229,7 @@ jq -e '
 test -f "$TMP_DIR/out/rebuild-summary.json"
 test -f "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
 test -f "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world/snapshot.json"
+test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/runtime-root"
+test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/replication-root"
+test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/runtime-root"
+test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/replication-root"

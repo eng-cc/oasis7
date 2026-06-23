@@ -62,6 +62,7 @@
 - 六条 lane 任一没有 owner 或 evidence ref。
 - 公开 RPC/explorer/faucet 仍是私网、单机 localhost 或 placeholder。
 - 本机 hosted-login 形态入口没有证明背后 chain/world state 已接入 formal `public_testnet`，或仍指向本地新建 execution world。
+- 任一 validator / observer 的同步证据来自手工复制 checkpoint、手工覆盖 `data/`、或 validator-to-validator 数据目录拷贝，而不是 runtime 自动 replication/head exchange 追平或 governed bootstrap runbook 的从零重建。
 - reset policy 只存在口头说明，没有正式 announcement/evidence。
 - runtime bootstrap 只有 template，没有真实运行证据。
 - claims boundary review 缺失，或 visible claim 越过 `testnet/resettable/guarded faucet` 边界。
@@ -131,6 +132,7 @@
 - 本机节点健康、已连接 testnet peers，且 height/head 持续推进。
 - hosted-login / launcher / viewer / pure API 指向该节点 world state。
 - 若只完成账号登录 smoke 或本地 hosted-public-join UI smoke，不得写成已接入 `public_testnet` 大世界。
+- 若节点曾通过手工 checkpoint/data copy 恢复，必须先隔离该状态，并重新走自动恢复或从当前 deployment truth 从零重建；否则不得作为 live-candidate、hosted-login 或 local test environment evidence。
 
 辅助检查：
 - `rg -n "public_testnet|ready_for_live_candidate|specified_skeleton_only" testing-manual.md doc/p2p/prd.md doc/p2p/project.md`
