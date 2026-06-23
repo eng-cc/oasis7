@@ -133,6 +133,10 @@ pub struct FactoryProductionState {
     pub current_blocker_detail: Option<String>,
     #[serde(default)]
     pub completed_jobs: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_completed_recipe_id: Option<String>,
+    #[serde(default)]
+    pub same_recipe_repeat_count: u32,
 }
 
 impl Default for FactoryProductionState {
@@ -149,6 +153,8 @@ impl Default for FactoryProductionState {
             current_blocker_kind: None,
             current_blocker_detail: None,
             completed_jobs: 0,
+            last_completed_recipe_id: None,
+            same_recipe_repeat_count: 0,
         }
     }
 }

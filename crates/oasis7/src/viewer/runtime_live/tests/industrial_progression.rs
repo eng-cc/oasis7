@@ -276,6 +276,23 @@ fn runtime_gameplay_action_promotes_first_output_into_resilient_production_goal(
 }
 
 #[test]
+fn runtime_gameplay_snapshot_surfaces_same_loop_repeat_count_before_new_leverage() {
+    let _guard = lock_test_llm_env();
+    let mut server = setup_industrial_gameplay_with_completed_jobs(32, 2);
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay after repeated first-line output",
+    );
+    assert_eq!(
+        gameplay.goal_id,
+        "post_onboarding.stabilize_first_line_after_output"
+    );
+    assert_eq!(gameplay.same_loop_repeat_count, 1);
+    assert_eq!(gameplay.leverage_class.as_deref(), Some("throughput_only"));
+    assert!(!gameplay.grind_only_flag);
+}
+
+#[test]
 fn runtime_gameplay_actions_allow_assembler_build_from_agent_ledger_fallback() {
     let _guard = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) =
@@ -390,6 +407,30 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
             .available_actions
             .iter()
             .any(|action| action.action_id == "build_factory_assembler_mk1")
+    );
+    assert_eq!(
+        gameplay.small_player_lane_id.as_deref(),
+        Some("local_operator")
+    );
+    assert_eq!(
+        gameplay.leverage_class.as_deref(),
+        Some("regional_specialization_option")
+    );
+    assert_eq!(gameplay.same_loop_repeat_count, 0);
+    assert!(!gameplay.grind_only_flag);
+    assert_eq!(
+        gameplay.major_power_dependency_status.as_deref(),
+        Some("independent_path_available")
+    );
+    assert_eq!(
+        gameplay.recovery_path_kind.as_deref(),
+        Some("repair_rebuild_or_pivot")
+    );
+    assert!(
+        gameplay
+            .recovery_path_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("repair"))
     );
 }
 

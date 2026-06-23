@@ -252,6 +252,28 @@ pub struct PlayerGameplaySnapshot {
     pub recent_feedback: Option<PlayerGameplayRecentFeedback>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_claim: Option<PlayerAgentClaimSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub small_player_lane_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leverage_class: Option<String>,
+    #[serde(default)]
+    pub same_loop_repeat_count: u32,
+    #[serde(default)]
+    pub grind_only_flag: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub major_power_dependency_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_path_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_path_detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requires_major_power_sponsorship: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repair_available: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rebuild_available: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pivot_available: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -312,6 +334,28 @@ struct PlayerGameplaySnapshotSerde {
     recent_feedback: Option<PlayerGameplayRecentFeedback>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     agent_claim: Option<PlayerAgentClaimSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    small_player_lane_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    leverage_class: Option<String>,
+    #[serde(default)]
+    same_loop_repeat_count: u32,
+    #[serde(default)]
+    grind_only_flag: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    major_power_dependency_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recovery_path_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recovery_path_detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    requires_major_power_sponsorship: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    repair_available: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rebuild_available: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pivot_available: Option<bool>,
 }
 
 fn derive_legacy_execution_state(
@@ -379,6 +423,27 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             available_actions: legacy.available_actions,
             recent_feedback: legacy.recent_feedback,
             agent_claim: legacy.agent_claim,
+            small_player_lane_id: legacy
+                .small_player_lane_id
+                .or_else(|| Some("unclassified".to_string())),
+            leverage_class: legacy
+                .leverage_class
+                .or_else(|| Some("unclassified".to_string())),
+            same_loop_repeat_count: legacy.same_loop_repeat_count,
+            grind_only_flag: legacy.grind_only_flag,
+            major_power_dependency_status: legacy
+                .major_power_dependency_status
+                .or_else(|| Some("unverified".to_string())),
+            recovery_path_kind: legacy
+                .recovery_path_kind
+                .or_else(|| Some("unverified".to_string())),
+            recovery_path_detail: legacy.recovery_path_detail,
+            requires_major_power_sponsorship: legacy
+                .requires_major_power_sponsorship
+                .or_else(|| Some("unverified".to_string())),
+            repair_available: legacy.repair_available,
+            rebuild_available: legacy.rebuild_available,
+            pivot_available: legacy.pivot_available,
         })
     }
 }

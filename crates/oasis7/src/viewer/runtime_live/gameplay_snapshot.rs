@@ -422,6 +422,119 @@ fn derive_player_gameplay_causality(
     }
 }
 
+fn apply_small_player_lane_truth(gameplay: &mut PlayerGameplaySnapshot) {
+    if gameplay.small_player_lane_id.is_none() {
+        gameplay.small_player_lane_id = Some(
+            match gameplay.goal_kind {
+                PlayerGameplayGoalKind::CreateFirstWorldFeedback => "unclassified",
+                PlayerGameplayGoalKind::ChooseMidLoopPath => "regional_specialist",
+                _ => "local_operator",
+            }
+            .to_string(),
+        );
+    }
+
+    if gameplay.leverage_class.is_none() {
+        gameplay.leverage_class = Some(
+            match gameplay.goal_kind {
+                PlayerGameplayGoalKind::RecoverCapability => "repair_elasticity",
+                PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff => {
+                    "regional_specialization_option"
+                }
+                PlayerGameplayGoalKind::ChooseMidLoopPath => "local_bargaining_position",
+                PlayerGameplayGoalKind::CreateFirstWorldFeedback => "unclassified",
+                _ => "throughput_only",
+            }
+            .to_string(),
+        );
+    }
+
+    if gameplay.major_power_dependency_status.is_none() {
+        gameplay.major_power_dependency_status = Some(
+            match gameplay.goal_kind {
+                PlayerGameplayGoalKind::CreateFirstWorldFeedback => "unverified",
+                PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
+                | PlayerGameplayGoalKind::ChooseMidLoopPath => "independent_path_available",
+                PlayerGameplayGoalKind::RecoverCapability => "sponsor_helpful_not_required",
+                _ => "unverified",
+            }
+            .to_string(),
+        );
+    }
+
+    if gameplay.recovery_path_kind.is_none() {
+        gameplay.recovery_path_kind = Some(
+            match gameplay.goal_kind {
+                PlayerGameplayGoalKind::RecoverCapability
+                | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
+                | PlayerGameplayGoalKind::ChooseMidLoopPath => "repair_rebuild_or_pivot",
+                _ => "unverified",
+            }
+            .to_string(),
+        );
+    }
+
+    if gameplay.recovery_path_detail.is_none() {
+        gameplay.recovery_path_detail = match gameplay.goal_kind {
+            PlayerGameplayGoalKind::RecoverCapability => Some(
+                "Repair the blocked line, rebuild the local site, or pivot to a lower-pressure specialization without requiring major-power sponsorship."
+                    .to_string(),
+            ),
+            PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff => Some(
+                "The next branch can repair upstream inputs, rebuild for more resilient throughput, or pivot toward logistics reach."
+                    .to_string(),
+            ),
+            PlayerGameplayGoalKind::ChooseMidLoopPath => Some(
+                "Regional branches remain available without making global governance or major-power membership the entry requirement."
+                    .to_string(),
+            ),
+            _ => None,
+        };
+    }
+
+    if gameplay.requires_major_power_sponsorship.is_none() {
+        gameplay.requires_major_power_sponsorship = Some(
+            match gameplay.goal_kind {
+                PlayerGameplayGoalKind::CreateFirstWorldFeedback => "unverified",
+                PlayerGameplayGoalKind::RecoverCapability
+                | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
+                | PlayerGameplayGoalKind::ChooseMidLoopPath => "no",
+                _ => "unverified",
+            }
+            .to_string(),
+        );
+    }
+
+    if gameplay.repair_available.is_none() {
+        gameplay.repair_available = match gameplay.goal_kind {
+            PlayerGameplayGoalKind::RecoverCapability
+            | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
+            | PlayerGameplayGoalKind::ChooseMidLoopPath => Some(true),
+            _ => None,
+        };
+    }
+    if gameplay.rebuild_available.is_none() {
+        gameplay.rebuild_available = match gameplay.goal_kind {
+            PlayerGameplayGoalKind::RecoverCapability
+            | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
+            | PlayerGameplayGoalKind::ChooseMidLoopPath => Some(true),
+            _ => None,
+        };
+    }
+    if gameplay.pivot_available.is_none() {
+        gameplay.pivot_available = match gameplay.goal_kind {
+            PlayerGameplayGoalKind::RecoverCapability
+            | PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
+            | PlayerGameplayGoalKind::ChooseMidLoopPath => Some(true),
+            _ => None,
+        };
+    }
+
+    let leverage_class = gameplay.leverage_class.as_deref().unwrap_or("unclassified");
+    gameplay.grind_only_flag = gameplay.same_loop_repeat_count >= 3
+        && matches!(leverage_class, "throughput_only" | "unclassified");
+}
+
 fn finalize_player_gameplay_snapshot(
     mut gameplay: PlayerGameplaySnapshot,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
@@ -455,6 +568,7 @@ fn finalize_player_gameplay_snapshot(
     gameplay.fallback_action_id = fallback_action.as_ref().map(|(id, _)| id.clone());
     gameplay.fallback_action_label = fallback_action.map(|(_, label)| label);
     gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
+    apply_small_player_lane_truth(&mut gameplay);
     gameplay
 }
 
@@ -522,6 +636,17 @@ pub(super) fn build_player_gameplay_snapshot(
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
+            small_player_lane_id: None,
+            leverage_class: None,
+            same_loop_repeat_count: 0,
+            grind_only_flag: false,
+            major_power_dependency_status: None,
+            recovery_path_kind: None,
+            recovery_path_detail: None,
+            requires_major_power_sponsorship: None,
+            repair_available: None,
+            rebuild_available: None,
+            pivot_available: None,
         });
     }
     let primary_factory = primary_factory_for_player_gameplay(state);
@@ -559,6 +684,9 @@ pub(super) fn build_player_gameplay_snapshot(
         primary_factory.is_some_and(|factory| factory.production.last_blocked_at.is_some());
     let has_recovery_history =
         primary_factory.is_some_and(|factory| factory.production.last_resumed_at.is_some());
+    let same_loop_repeat_count = primary_factory
+        .map(|factory| factory.production.same_recipe_repeat_count)
+        .unwrap_or(0);
     let industry_stage = state.industry_progress.stage;
 
     if !has_confirmed_world_progress
@@ -617,6 +745,17 @@ pub(super) fn build_player_gameplay_snapshot(
                 available_actions,
                 recent_feedback: recent_feedback.cloned(),
                 agent_claim,
+                small_player_lane_id: None,
+                leverage_class: None,
+                same_loop_repeat_count: 0,
+                grind_only_flag: false,
+                major_power_dependency_status: None,
+                recovery_path_kind: None,
+                recovery_path_detail: None,
+                requires_major_power_sponsorship: None,
+                repair_available: None,
+                rebuild_available: None,
+                pivot_available: None,
             });
         }
     }
@@ -667,6 +806,17 @@ pub(super) fn build_player_gameplay_snapshot(
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
+            small_player_lane_id: None,
+            leverage_class: None,
+            same_loop_repeat_count: 0,
+            grind_only_flag: false,
+            major_power_dependency_status: None,
+            recovery_path_kind: None,
+            recovery_path_detail: None,
+            requires_major_power_sponsorship: None,
+            repair_available: None,
+            rebuild_available: None,
+            pivot_available: None,
         });
     }
 
@@ -728,6 +878,17 @@ pub(super) fn build_player_gameplay_snapshot(
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
+            small_player_lane_id: None,
+            leverage_class: None,
+            same_loop_repeat_count: 0,
+            grind_only_flag: false,
+            major_power_dependency_status: None,
+            recovery_path_kind: None,
+            recovery_path_detail: None,
+            requires_major_power_sponsorship: None,
+            repair_available: None,
+            rebuild_available: None,
+            pivot_available: None,
         });
     }
 
@@ -792,6 +953,17 @@ pub(super) fn build_player_gameplay_snapshot(
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
                     agent_claim,
+                    small_player_lane_id: None,
+                    leverage_class: None,
+                    same_loop_repeat_count,
+                    grind_only_flag: false,
+                    major_power_dependency_status: None,
+                    recovery_path_kind: None,
+                    recovery_path_detail: None,
+                    requires_major_power_sponsorship: None,
+                    repair_available: None,
+                    rebuild_available: None,
+                    pivot_available: None,
                 });
             }
             IndustryStage::ScaleOut => {
@@ -831,6 +1003,17 @@ pub(super) fn build_player_gameplay_snapshot(
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
                     agent_claim,
+                    small_player_lane_id: None,
+                    leverage_class: None,
+                    same_loop_repeat_count: 0,
+                    grind_only_flag: false,
+                    major_power_dependency_status: None,
+                    recovery_path_kind: None,
+                    recovery_path_detail: None,
+                    requires_major_power_sponsorship: None,
+                    repair_available: None,
+                    rebuild_available: None,
+                    pivot_available: None,
                 });
             }
             IndustryStage::Governance => {
@@ -870,6 +1053,17 @@ pub(super) fn build_player_gameplay_snapshot(
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
                     agent_claim,
+                    small_player_lane_id: None,
+                    leverage_class: None,
+                    same_loop_repeat_count: 0,
+                    grind_only_flag: false,
+                    major_power_dependency_status: None,
+                    recovery_path_kind: None,
+                    recovery_path_detail: None,
+                    requires_major_power_sponsorship: None,
+                    repair_available: None,
+                    rebuild_available: None,
+                    pivot_available: None,
                 });
             }
         }
@@ -909,6 +1103,17 @@ pub(super) fn build_player_gameplay_snapshot(
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
+            small_player_lane_id: None,
+            leverage_class: None,
+            same_loop_repeat_count,
+            grind_only_flag: false,
+            major_power_dependency_status: None,
+            recovery_path_kind: None,
+            recovery_path_detail: None,
+            requires_major_power_sponsorship: None,
+            repair_available: None,
+            rebuild_available: None,
+            pivot_available: None,
         });
     }
 
@@ -946,6 +1151,17 @@ pub(super) fn build_player_gameplay_snapshot(
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
+            small_player_lane_id: None,
+            leverage_class: None,
+            same_loop_repeat_count,
+            grind_only_flag: false,
+            major_power_dependency_status: None,
+            recovery_path_kind: None,
+            recovery_path_detail: None,
+            requires_major_power_sponsorship: None,
+            repair_available: None,
+            rebuild_available: None,
+            pivot_available: None,
         });
     }
 
@@ -983,6 +1199,17 @@ pub(super) fn build_player_gameplay_snapshot(
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
+            small_player_lane_id: None,
+            leverage_class: None,
+            same_loop_repeat_count: 0,
+            grind_only_flag: false,
+            major_power_dependency_status: None,
+            recovery_path_kind: None,
+            recovery_path_detail: None,
+            requires_major_power_sponsorship: None,
+            repair_available: None,
+            rebuild_available: None,
+            pivot_available: None,
         });
     }
 
@@ -1019,6 +1246,17 @@ pub(super) fn build_player_gameplay_snapshot(
         available_actions,
         recent_feedback: recent_feedback.cloned(),
         agent_claim,
+        small_player_lane_id: None,
+        leverage_class: None,
+        same_loop_repeat_count: 0,
+        grind_only_flag: false,
+        major_power_dependency_status: None,
+        recovery_path_kind: None,
+        recovery_path_detail: None,
+        requires_major_power_sponsorship: None,
+        repair_available: None,
+        rebuild_available: None,
+        pivot_available: None,
     })
 }
 

@@ -38,6 +38,16 @@
 - 对 `forced_major_power_dependency`：
   - 下一步应优先在 small-player lane runtime/sample truth 中补 `major_power_dependency_status` 与 `repair/rebuild/pivot` 样本，否则 mature-world `pass` 仍然会被这一项卡住。
 
+## 2026-06-22 runtime truth implementation trace
+- 任务: `.pm/tasks/task_96b6823495f44ef39c80f3c8b1a74421.yaml`
+- 本轮补齐 canonical `snapshot.player_gameplay` 字段：`small_player_lane_id`、`leverage_class`、`same_loop_repeat_count`、`grind_only_flag`、`major_power_dependency_status`、`recovery_path_kind`、`recovery_path_detail`、`requires_major_power_sponsorship`、`repair_available`、`rebuild_available`、`pivot_available`。
+- `same_loop_repeat_count` 不是 viewer 文案推导；runtime `FactoryProductionState` 已记录 `last_completed_recipe_id` 与 `same_recipe_repeat_count`，再由 gameplay snapshot 发布为 small-player lane truth。
+- 当前验证证明：
+  - legacy `WorldSnapshot.player_gameplay` 缺 small-player lane 字段时会 backfill 为 `unclassified` / `unverified` / `0` / `false`，不破坏旧样本读取。
+  - 连续同 recipe 输出会在 snapshot 暴露 `same_loop_repeat_count`，但在尚未达到 mature-world block 阈值前不误报 `grind_only_flag`。
+  - 进入 `post_onboarding.choose_first_expansion_tradeoff` 后，snapshot 发布 `leverage_class=regional_specialization_option`、`major_power_dependency_status=independent_path_available` 与 `recovery_path_kind=repair_rebuild_or_pivot`。
+- 边界: 本 trace 只说明 runtime/sample truth surface 已开始可测；本文件顶部 `watch` 结论不因本实现自动改为 `pass`。若要升级 verdict，仍需 `qa_engineer` 使用新字段重跑 mature-world small-player lane sample，并归档 pass/watch/block 结论。
+
 ## 执行命令
 - `rtk env -u RUSTC_WRAPPER cargo test -p oasis7 viewer::runtime_live::tests::snapshot_progress::compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedback -- --nocapture`
 - `rtk env -u RUSTC_WRAPPER cargo test -p oasis7 viewer::runtime_live::tests::snapshot_progress::compat_snapshot_keeps_post_onboarding_no_progress_after_confirmed_progress -- --nocapture`
