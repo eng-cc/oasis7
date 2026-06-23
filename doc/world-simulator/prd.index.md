@@ -2,7 +2,7 @@
 
 审计轮次: 8
 
-更新时间：2026-05-18
+更新时间：2026-06-23
 
 ## 用途
 - 本页是 `world-simulator` 的文件级索引，优先用于按文件名精确检索、确认配对关系与维持互链可达性。
@@ -16,7 +16,7 @@
 ## 快速分流
 - 想先回答模块在做什么、能力边界是什么：先读 `doc/world-simulator/prd.md`
 - 想先回答当前在推进什么、谁在负责、哪里被阻断：先读 `doc/world-simulator/project.md`
-- 想先进入 Viewer 热点子域，而不是直接面对近 300 份 Viewer 文档：先读 `doc/world-simulator/viewer/README.md`
+- 想先进入 Viewer 热点子域，而不是直接面对 216 份 Viewer Markdown：先读 `doc/world-simulator/viewer/README.md`
 - 想先进入 Launcher 热点子域，而不是直接面对 80+ 份启动器文档：先读 `doc/world-simulator/launcher/README.md`
 - 想直接执行 Viewer / Web 闭环 / 操作步骤：先读 `doc/world-simulator/viewer/viewer-manual.manual.md`
 - 想继续按文件名或子域精确下钻：直接使用下方完整清单
