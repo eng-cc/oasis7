@@ -155,3 +155,12 @@ Example:
 - Expected Result: current task is marked done/verified when the scoped verify command passes; any repo-wide lint failure is identified as unrelated historical debt.
 - Actual Result: current task YAML is `status: done`, `last_verification_status: verified`, `last_verification_exit_code: 0`, `last_verify_command` is the scoped workflow-lint/diff-check command, and the committed backlog entry was removed. `task-closeout.sh` exited non-zero only after repo-wide `pm-lint` reported many pre-existing execution-log format failures in unrelated historical task files such as `task_04d61dc5778e4b1683a61056daf454e3`, `task_060e9de147ba4757ac29cf0fb7a15210`, and others. A direct rerun of current-task `workflow-lint` plus `git diff --check` passed.
 - Blocker / Next Action: commit closeout metadata/evidence, then run PR preparation despite unrelated historical repo-wide lint debt.
+
+## 2026-06-23 22:50:24 CST / tpm
+- 完成内容: Fresh `ready_for_pr` claim-ready evidence recorded.
+- 遗留事项: rerun PR helper and create PR.
+- Action: Ran claim-ready helper without task YAML writeback because the task was already closed/done; recorded the successful JSON result in the execution log.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command './scripts/pm/workflow-lint.sh --task-uid task_d2d3fcb15db7424eb10ee07bc054f5e4 --phase current && git diff --check' --json`.
+- Expected Result: helper returns `allowed_to_claim: true` only after the fresh verification command succeeds.
+- Actual Result: `{"claim_type":"ready_for_pr","verify_command":"./scripts/pm/workflow-lint.sh --task-uid task_d2d3fcb15db7424eb10ee07bc054f5e4 --phase current && git diff --check","verified_at":"2026-06-23T22:50:24+08:00","verification_exit_code":0,"status":"verified","allowed_to_claim":true,"claim_message":"Fresh verification passed; the branch can now be claimed ready for PR.","task_uid":null}`.
+- Blocker / Next Action: commit claim-ready evidence, then rerun `./scripts/prepare-task-pr.sh --create`.
