@@ -116,12 +116,13 @@ Example:
 - Task UID: task_d2d3fcb15db7424eb10ee07bc054f5e4
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623k
 - Source Branch: task/engineering-repository-health-inspection-20260623k
-- Source Head: pending final commit; reviewed working-tree diff based on `994a7e990686ea175bbc31d79893cc6cbb7b1ed2`
+- Source Head: 1640278138724aedffdc5e2c57b61cf91698c581
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_d2d3fcb15db7424eb10ee07bc054f5e4.yaml`; `.pm/tasks/task_d2d3fcb15db7424eb10ee07bc054f5e4.execution.md`; `doc/core/README.md`; `doc/core/prd.index.md`; `doc/engineering/project.md`
-- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623k/.pm/scratch/task_d2d3fcb15db7424eb10ee07bc054f5e4/review-packages/review-994a7e990..994a7e990.diff` (helper limitation: committed-range package was empty before commit; review target was current working-tree diff and changed paths listed above)
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623k/.pm/scratch/task_d2d3fcb15db7424eb10ee07bc054f5e4/review-packages/review-994a7e990..164027813.diff`
 - Role Selection Basis: changed paths include core module docs, engineering project/task truth, and PM task metadata; task slice history includes a repository_health_engineer finding; QA included for verification sufficiency; producer_system_designer included because core README/prd.index wording touches system-doc routing.
 - Review Roles: repository_health_engineer, qa_engineer, producer_system_designer
+- Review Evidence: repository_health_engineer returned no_findings with passed scope/spec and repository-health quality/risk verdict; qa_engineer returned no_findings with passed scope/spec and QA quality/risk verdict; producer_system_designer returned no_findings with passed scope/spec and product/system-doc quality/risk verdict.
 - Review Verdicts: repository_health_engineer scope/spec=passed and quality/risk=passed; qa_engineer scope/spec=passed and quality/risk=passed; producer_system_designer scope/spec=passed and quality/risk=passed.
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: n/a; no review findings were raised.
