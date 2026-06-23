@@ -227,7 +227,7 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
         parse_socket_addr(web_bind_addr, "--web-bind")?;
     }
     if let Some(chain_status_bind) = options.chain_status_bind.as_deref() {
-        parse_socket_addr(chain_status_bind, "--chain-status-bind")?;
+        parse_resolvable_socket_addr(chain_status_bind, "--chain-status-bind")?;
     }
     if let Some(chain_submit_bind) = options.chain_submit_bind.as_deref() {
         parse_resolvable_socket_addr(chain_submit_bind, "--chain-submit-bind")?;
@@ -446,6 +446,13 @@ mod tests {
         )
         .expect("resolvable hostname submit bind");
         assert_eq!(options.chain_submit_bind.as_deref(), Some("localhost:7124"));
+    }
+
+    #[test]
+    fn parse_options_accepts_resolvable_status_hostname() {
+        let options = parse_options(["--chain-status-bind", "localhost:7123"].into_iter())
+            .expect("resolvable hostname status bind");
+        assert_eq!(options.chain_status_bind.as_deref(), Some("localhost:7123"));
     }
 
     #[test]

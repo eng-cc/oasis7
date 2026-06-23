@@ -433,10 +433,10 @@ if readiness.get("status") != "ready":
     errors.append(f"readiness={readiness.get('status')!r}")
 if failed:
     errors.append(f"failed_gates={failed!r}")
-if role in {"observer", "observer_light"}:
-    errors.append(f"role={role!r} is observer-only")
-if not role and "sequencer" not in node_id and "validator" not in node_id:
-    errors.append(f"role missing and node_id={node_id!r} is not clearly submit-capable")
+if role and role != "sequencer":
+    errors.append(f"role={role!r} is not sequencer")
+if not role and "sequencer" not in node_id:
+    errors.append(f"role missing and node_id={node_id!r} is not clearly sequencer")
 
 print(json.dumps({
     "node_id": node_id,
@@ -453,7 +453,7 @@ print(json.dumps({
 }, ensure_ascii=True))
 
 if errors:
-    raise SystemExit("public_testnet submit endpoint is not ready/submit-capable: " + "; ".join(errors))
+    raise SystemExit("public_testnet submit endpoint is not ready/sequencer-capable: " + "; ".join(errors))
 PY
 }
 
