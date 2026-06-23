@@ -10,15 +10,16 @@
   - `doc/testing/evidence/public-testnet-governed-bootstrap-world-2026-06-06/world`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md`
+  - `doc/testing/evidence/public-testnet-five-node-inventory-2026-06-23.md`
 
 审计轮次: 2
 
 ## 1. Purpose
-这份 runbook 的目标不是描述理念，而是定义一条可以重复执行的四节点 `public_testnet` 重建流程：
+这份 runbook 的目标不是描述理念，而是定义一条可以重复执行的 `public_testnet` 部署、补更、重建和恢复流程：
 
 1. 从冻结的 governed bootstrap truth 出发。
 2. 先拉起 2 个 validator。
-3. 再以 observer 身份接入 2 个本地节点。
+3. 再以 observer 身份接入当前 operator inventory 中的非 validator 节点。
 4. 将每一步的失败边界压缩为可判定的 gate，而不是运行中再猜。
 
 这份 runbook 明确吸收了本轮 live rebuild 的几个教训：
@@ -30,21 +31,38 @@
 5. verified seed/state-sync bundle 只作为自动 checkpoint catch-up 失败时的 break-glass/recovery 或离线加速路径；一旦使用，artifact 必须是闭包完整的，不能只拷 `world/` 和 `execution-records/`，遗漏 `store/blobs/`。
 
 ## 2. Scope and Topology
-固定目标拓扑:
+冻结的 governed bootstrap 拓扑仍是两台 validator 加两台 observer；当前 operator 部署清单在此基础上扩展为五个受管节点。部署/补更时必须以本节的当前 operator inventory 为准，不能从旧 `.tmp` bootstrap 目录推断节点数量。
+
+### 2.1 Governed bootstrap topology
 
 | node_id | role | location | in validator set |
 | --- | --- | --- | --- |
 | `triad-testnet-sequencer` | validator / sequencer | ECS `39.104.204.172` | yes |
 | `triad-testnet-storage` | validator / storage | ECS `39.104.205.67` | yes |
-| `triad-testnet-local` | observer | local | no |
-| `triad-testnet-fourth-local` | observer | local | no |
+| `triad-testnet-local` | observer | Linux LAN / local observer family | no |
+| `triad-testnet-fourth-local` | observer | macOS local observer family | no |
 
-固定 stack root:
+### 2.2 Current operator inventory
+
+| node_id | role | host / lane | stack root | service manager | status endpoint |
+| --- | --- | --- | --- | --- | --- |
+| `triad-testnet-sequencer` | validator / sequencer | `root@39.104.204.172` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-sequencer.service` | `http://127.0.0.1:6631/v1/chain/status` |
+| `triad-testnet-storage` | validator / storage | `root@39.104.205.67` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-storage.service` | `http://127.0.0.1:6632/v1/chain/status` |
+| `triad-testnet-local` | observer | Linux LAN observer | `/opt/oasis7/p2p-testnet-local` | `oasis7-testnet-observer.service` | `http://127.0.0.1:6633/v1/chain/status` |
+| `triad-testnet-windows-observer` | observer | Windows observer | `C:\oasis7-deploy` | scheduled task `Oasis7Observer` | `http://127.0.0.1:5121/v1/chain/status` |
+| `triad-testnet-fourth-local` | observer | macOS local observer | `$OASIS7_TESTNET_FOURTH_ROOT` | launchd `oasis7.testnet.fourth` | `http://127.0.0.1:19083/v1/chain/status` |
+
+Credential files may be used by an operator as local access aids, but this runbook only records target identities and never records secret values.
+
+### 2.3 Stack roots and deprecated bootstrap dirs
 
 - ECS validator stack root: `/opt/oasis7/p2p-testnet`
-- local observer stack roots:
-  - `.tmp/testnet-local-node-bootstrap`
-  - `.tmp/testnet-fourth-node-bootstrap`
+- Linux LAN observer stack root: `/opt/oasis7/p2p-testnet-local`
+- Windows observer stack root: `C:\oasis7-deploy`
+- macOS observer stack root: `$OASIS7_TESTNET_FOURTH_ROOT`
+- Old `.tmp/testnet-local-node-bootstrap` and `.tmp/testnet-fourth-node-bootstrap` directories are bootstrap staging artifacts only. If they have no runtime binary, `CURRENT_VERSION`, and service definition, they are not managed installs and must not be counted as deploy targets.
+
+`$OASIS7_TESTNET_FOURTH_ROOT` is the operator-local path for the managed macOS observer root; do not hard-code a user home path in repo docs.
 
 ## 3. Truth Model
 必须先区分两类真值：
@@ -138,12 +156,13 @@
 
 1. Phase A: Preflight and truth capture
 2. Phase B: Build deployment truth
-3. Phase C: Stage and rebuild validators
-4. Phase D: Verify validator pair
-5. Phase E: Optional recovery seed/state-sync bundle
-6. Phase F: Attach observers with automatic high-head checkpoint catch-up
-7. Phase G: Final health verification
-8. Phase H: Failure handling and rollback
+3. Phase C0: Routine CI package update
+4. Phase C: Stage and rebuild validators when state or signer truth requires it
+5. Phase D: Verify validator pair
+6. Phase E: Optional recovery seed/state-sync bundle
+7. Phase F: Attach or reseed observers
+8. Phase G: Final health verification
+9. Phase H: Failure handling and rollback
 
 任何 phase 未通过，不进入下一 phase。
 
@@ -241,9 +260,31 @@ observer env 刷新建议直接使用：
   --storage-status-url http://39.104.205.67:6632/v1/chain/status \
   --storage-ip 39.104.205.67 \
   --storage-port 6832 \
-  --env-file .tmp/testnet-local-node-bootstrap/node.env \
-  --env-file .tmp/testnet-fourth-node-bootstrap/node.env
+  --env-file <current-linux-lan-observer-node.env> \
+  --env-file <current-macos-observer-node.env>
 ```
+
+## 8.5 Phase C0 - Routine CI Package Update
+### Goal
+在不需要重建 signer/genesis/world 的情况下，把当前五节点升级到同一代码线的 CI artifact，并保留可回滚 release。
+
+### CI package scope selection
+1. 只升级 ECS Linux validators 和 Linux LAN observer 时，可使用 `Testnet Packages` 的 Linux artifact。
+2. 同时升级 macOS local observer 时，使用包含 Linux/macOS 的 package run，并分别校验 Linux 与 macOS runtime hash。
+3. 需要升级 Windows observer 时，必须使用包含 Windows artifact 的 CI scope；如果先前 run 只有 Linux/macOS，不得把 Linux artifact 复制到 Windows。
+4. 最终 fleet 允许存在 package version 后缀差异，但必须说明原因。例如 Windows 可能来自后续 `all_existing` run，而 Linux/macOS 来自前一个 Linux/macOS run；验收以 runtime hash、commit lineage、status health 和高度对齐为准。
+
+### Safe update order
+1. 记录五节点 `CURRENT_VERSION`、runtime hash、service manager、status endpoint。
+2. 先升级两个 validators，并确认 validator pair `ready`、高度推进、互相有 fresh peer head。
+3. 再升级 observers；每个 observer 升级后单独验证，不要把上一个 observer 的 ready 当作整个 fleet ready。
+4. 如果 observer 从空状态或旧高度启动后报告 `replication no connected providers`、`consensus_peer_head_unavailable`、`execution driver peer mismatch` 或长期不追高，使用 Phase E/F 的 recovery seed 路径。
+5. 如果 validator pair 自身出现 `execution driver peer mismatch`，不要继续 reseed observers；先恢复 validator pair，再用恢复后的 storage/sequencer fresh state 重新 reseed observers。
+
+### Platform-specific update entrypoints
+1. Linux nodes use `scripts/p2p-public-testnet-package-node-upgrade.sh` with the node root and Linux bundle.
+2. macOS local observer uses the local observer install/upgrade path and launchd label `oasis7.testnet.fourth`; do not verify it with the Linux runtime hash.
+3. Windows observer uses the Windows installer artifact, updates `C:\oasis7-deploy\CURRENT_VERSION` and deploy metadata, and restarts scheduled task `Oasis7Observer`.
 
 ## 9. Phase C - Stage and Rebuild Validators
 ### Goal
@@ -267,11 +308,11 @@ observer env 刷新建议直接使用：
   --world-dir .tmp/public-testnet-ci-rebuild-stage/generated-world-from-rotated-signers/world \
   --sequencer-ssh-host root@39.104.204.172 \
   --sequencer-sshpass-env PUBLIC_TESTNET_SEQUENCER_SSHPASS \
-  --sequencer-service oasis7-testnet-sequencer.service \
+  --sequencer-service oasis7-triad-sequencer.service \
   --sequencer-status-url http://39.104.204.172:6631/v1/chain/status \
   --storage-ssh-host root@39.104.205.67 \
   --storage-sshpass-env PUBLIC_TESTNET_STORAGE_SSHPASS \
-  --storage-service oasis7-testnet-storage.service \
+  --storage-service oasis7-triad-storage.service \
   --storage-status-url http://39.104.205.67:6632/v1/chain/status \
   --out-dir .tmp/public-testnet-validator-rebuild
 ```
@@ -280,8 +321,8 @@ observer env 刷新建议直接使用：
 停止服务并 destructive reset 旧链状态：
 
 ```bash
-systemctl stop oasis7-testnet-sequencer.service
-systemctl stop oasis7-testnet-storage.service
+systemctl stop oasis7-triad-sequencer.service
+systemctl stop oasis7-triad-storage.service
 ```
 
 必须清理旧链数据目录，但保留受保护的 `config/node-keypair.toml`，除非本轮明确要轮换 key。
@@ -392,7 +433,7 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 ### Pass criteria
 1. snapshot state-sync bundle 通过 `p2p-upgrade-preflight.sh --require-state-sync-bundle --verify-state-sync-bundle-semantics`
 2. 若使用完整 seed/restore artifact，对单个 observer 恢复后 runtime 不报 `BlobNotFound`
-3. 若使用完整 seed/restore artifact，可被两个 observer 重复消费
+3. 若使用完整 seed/restore artifact，可被所有当前 observers 重复消费
 
 在 observer 启动前，完整 seed/restore artifact 必须执行闭包校验：
 
@@ -405,7 +446,7 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 
 ## 12. Phase F - Attach Observers with Automatic High-Head Checkpoint Catch-Up
 ### Goal
-把两个 observer 接进 validator 网络。
+把当前 operator inventory 中的 observers 接进 validator 网络，或在旧状态分叉后从恢复好的 validator/storage fresh state 重新 seed。
 
 ### Required prep
 1. observer env 使用当前 deployment truth bootstrap peer ids
@@ -417,21 +458,27 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 7. local observer 使用的 runtime/package hash 必须对齐当前本机 runtime 真值；不要直接复用 validator Linux package hash 去校验本地 macOS debug/release binary
 8. detached local observer 启动时不要让 `start-node.sh` 自己作为长期父进程驻留；若需要后台常驻，应直接启动 `logs/last-command.sh` 里展开后的 runtime binary 命令
 
-### Start order
-1. `triad-testnet-local`
-2. verify
-3. `triad-testnet-fourth-local`
-4. verify
+### Start / reseed order
+1. `triad-testnet-local` on Linux LAN, then verify.
+2. `triad-testnet-windows-observer` on Windows, then verify.
+3. `triad-testnet-fourth-local` on macOS, then verify.
+4. If all observers were seeded before a validator recovery, reseed all affected observers again from the recovered storage/sequencer state.
 
 ### Required checks
 ```bash
-curl -s http://127.0.0.1:19082/v1/chain/status | jq '{running,last_error,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
-curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
+ssh <linux-lan-observer> 'curl -fsS http://127.0.0.1:6633/v1/chain/status' \
+  | jq '{node_id,running,last_error,readiness:.readiness.status,failed_gates:.readiness.failed_gates,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
+ssh <windows-observer> 'powershell -NoProfile -Command "Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status | ConvertTo-Json -Compress -Depth 8"' \
+  | jq '{node_id,running,last_error,readiness:.readiness.status,failed_gates:.readiness.failed_gates,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
+curl -fsS http://127.0.0.1:19083/v1/chain/status \
+  | jq '{node_id,running,last_error,readiness:.readiness.status,failed_gates:.readiness.failed_gates,committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers}'
 ```
+
+Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differs from the legacy examples above.
 
 ### Pass criteria
 1. `running=true`
-2. 两个 observer 都能看到 validator peer
+2. 所有当前 observers 都能看到 validator peer
 3. `last_error=null`
 4. `committed_height` 和 `last_execution_height` 向 validator 高度收敛
 
@@ -446,10 +493,10 @@ curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committ
 
 ## 13. Phase G - Final Health Verification
 ### Goal
-确认“四节点已跑起来”和“四节点真正 ready”不是一回事，并分别打结论。
+确认“节点已跑起来”和“整个 fleet 真正 ready”不是一回事，并分别打结论。
 
 ### Required final snapshot
-需要同时保留 validator 和 observer 四个状态快照，至少包括：
+需要同时保留所有 current operator inventory 节点的状态快照，至少包括：
 
 1. `running`
 2. `last_error`
@@ -461,16 +508,20 @@ curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committ
 8. `readiness.failed_gates`
 
 ### Verdict rules
-1. **Four-node live**
-   - 四个节点都在跑
+1. **Fleet live**
+   - 当前 operator inventory 中所有节点都在跑
    - validator 与 observer 都已接入
    - 高度在收敛或已收敛
 
-2. **Four-node healthy**
-   - 在满足 four-node live 的基础上
+2. **Fleet healthy**
+   - 在满足 fleet live 的基础上
    - `last_error=null`
    - 不存在阻断性 gate
    - observer 不再依赖缺失 blob / 缺失 state-sync artifact
+   - `readiness.status=ready`
+   - `readiness.failed_gates=[]`
+   - `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height` 与 validator head 对齐或在允许 lag 内
+   - `consensus.network_head.decision=ready`
 
 如果只满足第一条，不得对外宣称“完全健康”。
 
@@ -496,6 +547,8 @@ curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committ
 
 ## 15. Standard Command Checklist
 ### Preflight
+For current five-node fleet preflight, first load each managed node's real env/deploy metadata and use its actual status bind. The legacy `.tmp/testnet-*-bootstrap/node.env` paths below are only valid when intentionally rebuilding those bootstrap staging directories.
+
 ```bash
 ./scripts/p2p-public-testnet-preflight.sh \
   --bundle doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json \
@@ -509,8 +562,8 @@ curl -s http://127.0.0.1:19083/v1/chain/status | jq '{running,last_error,committ
   --sequencer-sshpass-env PUBLIC_TESTNET_SEQUENCER_SSHPASS \
   --storage-ssh-host root@39.104.205.67 \
   --storage-sshpass-env PUBLIC_TESTNET_STORAGE_SSHPASS \
-  --observer-env .tmp/testnet-local-node-bootstrap/node.env \
-  --observer-env .tmp/testnet-fourth-node-bootstrap/node.env \
+  --observer-env <current-linux-lan-observer-node.env> \
+  --observer-env <current-macos-observer-node.env> \
   --out-dir .tmp/public-testnet-preflight
 ```
 
@@ -533,11 +586,16 @@ ssh root@39.104.204.172 'curl -s http://127.0.0.1:6631/v1/chain/status'
 ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status'
 ```
 
-### Observer status
+### Current five-node status
 ```bash
-curl -s http://127.0.0.1:19082/v1/chain/status
-curl -s http://127.0.0.1:19083/v1/chain/status
+ssh root@39.104.204.172 'curl -fsS http://127.0.0.1:6631/v1/chain/status'
+ssh root@39.104.205.67 'curl -fsS http://127.0.0.1:6632/v1/chain/status'
+ssh <linux-lan-observer> 'curl -fsS http://127.0.0.1:6633/v1/chain/status'
+ssh <windows-observer> 'powershell -NoProfile -Command "Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status | ConvertTo-Json -Compress -Depth 8"'
+curl -fsS http://127.0.0.1:19083/v1/chain/status
 ```
+
+For each output, record `CURRENT_VERSION`, runtime hash or artifact lineage, `running`, `last_error`, `readiness.status`, `readiness.failed_gates`, `consensus.committed_height`, `consensus.network_committed_height`, `consensus.last_execution_height`, and `consensus.network_head.decision`.
 
 ### Peer id truth
 ```bash
@@ -548,8 +606,8 @@ curl -s http://127.0.0.1:19083/v1/chain/status
   --storage-status-url http://39.104.205.67:6632/v1/chain/status \
   --storage-ip 39.104.205.67 \
   --storage-port 6832 \
-  --env-file .tmp/testnet-local-node-bootstrap/node.env \
-  --env-file .tmp/testnet-fourth-node-bootstrap/node.env
+  --env-file <current-linux-lan-observer-node.env> \
+  --env-file <current-macos-observer-node.env>
 ```
 
 ### Seed closure
@@ -580,4 +638,4 @@ curl -s http://127.0.0.1:19083/v1/chain/status
 2. 当前 validator signer truth
 3. 当前 validator live peer ids
 4. 自动 high-head checkpoint catch-up 状态快照；若使用 recovery path，再记录 observer seed bundle 来源与 hash
-5. 最终四节点状态快照
+5. 最终 current operator inventory 全节点状态快照

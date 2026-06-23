@@ -96,7 +96,7 @@
 5. `mainnet` 只有在 genesis、bootstrap、public RPC/explorer、claims boundary、custody/signing、rollback/incident runbook 全部过 gate 后才能声明。
 
 ## 7. 当前云上清单
-以下是 2026-05-29 只读核查与部署后的当前清单。
+以下是 2026-05-29 只读核查与部署后的云上服务清单；`public_testnet` 当前节点清单见 7.1。
 
 | 主机 | 当前职责 | Hosted Login | Network / Chain | 对外检查 |
 | --- | --- | --- | --- | --- |
@@ -107,6 +107,28 @@
 1. 主机上存在 testnet/triad 服务，不自动意味着 `public_testnet` 已达到 live candidate，也不意味着 mainnet 已上线。
 2. `public_testnet` readiness 仍以 `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 的 six-lane checklist 为准。
 3. hosted-login 的 test/prod 两套已经分开部署，但仍建议补完整 `login/complete` 自动 smoke，以便把 OTP 收件箱验证也纳入日常 gate。
+
+### 7.1 当前 public_testnet operator 节点清单
+Last Verified: 2026-06-23 Asia/Shanghai, task `task_bdb48338fac544849d8c681e9a7dd441`.
+
+当前受管 `public_testnet` 部署是五节点 fleet：两台 ECS validator、两台文档列出的 observer 机器、加本机 macOS observer。旧 `.tmp/testnet-local-node-bootstrap` 和 `.tmp/testnet-fourth-node-bootstrap` 这类 bootstrap staging 目录若没有 runtime binary、`CURRENT_VERSION` 与 service definition，不计为当前受管节点。
+
+| node_id | 角色 | host / lane | stack root | service manager | status endpoint |
+| --- | --- | --- | --- | --- | --- |
+| `triad-testnet-sequencer` | validator / sequencer | `root@39.104.204.172` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-sequencer.service` | `http://127.0.0.1:6631/v1/chain/status` |
+| `triad-testnet-storage` | validator / storage | `root@39.104.205.67` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-storage.service` | `http://127.0.0.1:6632/v1/chain/status` |
+| `triad-testnet-local` | observer | Linux LAN observer | `/opt/oasis7/p2p-testnet-local` | `oasis7-testnet-observer.service` | `http://127.0.0.1:6633/v1/chain/status` |
+| `triad-testnet-windows-observer` | observer | Windows observer | `C:\oasis7-deploy` | scheduled task `Oasis7Observer` | `http://127.0.0.1:5121/v1/chain/status` |
+| `triad-testnet-fourth-local` | observer | macOS local observer | `$OASIS7_TESTNET_FOURTH_ROOT` | launchd `oasis7.testnet.fourth` | `http://127.0.0.1:19083/v1/chain/status` |
+
+节点更新/补更规则：
+1. CI artifact scope 必须覆盖目标平台；Linux/macOS package 不得用于 Windows observer。
+2. 五节点补更时先确认或恢复 validator pair，再逐个 observer 升级和验证。
+3. 若 observer 从旧高度或空状态启动后出现 `replication no connected providers`、`consensus_peer_head_unavailable` 或 `execution driver peer mismatch`，先以健康 storage/sequencer fresh state reseed observer，再验收。
+4. 若 validator pair 自身出现 execution mismatch，先恢复 validator pair；不要继续用旧 validator state seed observers。
+5. 最终验收必须逐节点记录 `CURRENT_VERSION`、runtime hash 或 artifact lineage、`running=true`、`last_error=null`、`readiness.status=ready`、`readiness.failed_gates=[]`、`committed_height`、`network_committed_height`、`last_execution_height`。
+6. 本文件不记录任何密码、private key、token 或完整 secret env value。
+7. `$OASIS7_TESTNET_FOURTH_ROOT` 是 operator 本机 macOS observer root；非归档文档不得硬编码个人 home path。
 
 ## 8. Hosted Login 环境矩阵
 | 项 | 测试环境 | 正式环境 |

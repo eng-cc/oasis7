@@ -828,3 +828,5 @@
 - 模块进展补充（2026-03-11 / T7.4 收口）: `viewer_engineer` 已通过 bundle 产物与 `bash -x` trace 确认 `OASIS7_CHAIN_STORAGE_PROFILE` 在 `run-game.sh` / `run-web-launcher.sh` / `run-chain-runtime.sh` 中分别映射到 `--chain-storage-profile` / `--storage-profile`，T7.4 已完成。
 
 - 模块进展补充（2026-03-11 / T7.5 收口）: `TASK-WORLD_RUNTIME-033` 已随 T7.2~T7.4 的 runtime / qa / viewer 证据链闭环完成；当前专题后续仅保留更大范围的 soak/版本迭代，不再作为未完成任务阻断。
+
+- 模块进展补充（2026-06-23 / public testnet readiness and rollout）: 已将 public-testnet replication readiness 调整为主流公链式外部噪音容忍：健康 validator/request path、fresh network head、sync/reachability 正常时，外部 observer/client inbound timeout/invalid-message churn 保留为 diagnostics，不再单独阻断 readiness；request/fetch path 失败、stale peer heads、execution mismatch、storage degradation 等仍保持阻断。同步更新 validator rebuild/local observer reseed scripts、五节点 operator inventory、CI package scope/runbook、live deployment/reseed 证据与 PR 准备材料。Trace: .pm/tasks/task_bdb48338fac544849d8c681e9a7dd441.yaml。

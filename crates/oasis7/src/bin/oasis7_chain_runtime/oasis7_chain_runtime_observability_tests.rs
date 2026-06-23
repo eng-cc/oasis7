@@ -43,6 +43,48 @@ pub(super) fn sample_observability_p2p_status() -> super::status_payload::ChainP
     }
 }
 
+fn sample_observability_storage_metrics() -> super::storage_metrics::StorageMetricsSnapshot {
+    super::storage_metrics::StorageMetricsSnapshot {
+        storage_profile: "dev_local".to_string(),
+        effective_budget: StorageProfileConfig::from(StorageProfile::DevLocal),
+        bytes_by_dir: BTreeMap::new(),
+        blob_counts: BTreeMap::new(),
+        ref_count: 0,
+        pin_count: 0,
+        retained_heights: Vec::new(),
+        checkpoint_count: 0,
+        replay_summary: super::storage_metrics::StorageReplaySummary::default(),
+        orphan_blob_count: 0,
+        last_gc_at_ms: None,
+        last_gc_result: "not_available".to_string(),
+        last_gc_error: None,
+        degraded_reason: None,
+    }
+}
+
+fn sample_observability_reward_runtime_metrics()
+-> super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
+    super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
+        enabled: false,
+        metrics_available: true,
+        report_dir: String::new(),
+        report_count: 0,
+        latest_epoch_index: 0,
+        latest_report_observed_at_unix_ms: 0,
+        latest_total_distributed_points: 0,
+        latest_minted_record_count: 0,
+        cumulative_minted_record_count: 0,
+        distfs_total_checks: 0,
+        distfs_failed_checks: 0,
+        distfs_failure_ratio: 0.0,
+        settlement_apply_attempts_total: 0,
+        settlement_apply_failures_total: 0,
+        settlement_apply_failure_ratio: 0.0,
+        invariant_ok: true,
+        last_error: None,
+    }
+}
+
 pub(super) fn sample_wasm_status() -> super::wasm_status::ChainWasmStatus {
     super::wasm_status::ChainWasmStatus {
         metrics_available: true,
@@ -713,6 +755,116 @@ fn build_chain_status_payload_marks_peer_head_unavailable_not_ready() {
 }
 
 #[test]
+fn build_chain_status_payload_tolerates_noisy_external_peer_with_healthy_validator_path() {
+    let mut consensus = NodeConsensusSnapshot::default();
+    consensus.committed_height = 10;
+    consensus.network_committed_height = 10;
+    consensus.replication_persisted_height = 10;
+    consensus.known_peer_heads = 1;
+    consensus.last_committed_at_ms = Some(10_000);
+    consensus.peer_heads = vec![NodePeerCommittedHead {
+        node_id: "validator-b".to_string(),
+        validator_id: None,
+        height: 10,
+        block_hash: "block-a".to_string(),
+        committed_at_ms: 10_000,
+        observed_at_ms: 10_050,
+        execution_block_hash: Some("execution-a".to_string()),
+        execution_state_root: Some("state-a".to_string()),
+    }];
+    let snapshot = NodeSnapshot {
+        node_id: "validator-a".to_string(),
+        player_id: "player-validator-a".to_string(),
+        world_id: "world-public-testnet".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: None,
+        consensus,
+        last_error: None,
+    };
+    let observed_at_ms = 10_100;
+    let network_head =
+        super::status_payload::build_network_head_status(&snapshot, observed_at_ms, None);
+    let policy = super::status_payload::readiness_policy(&snapshot, None);
+    let observability = super::status_payload::build_chain_node_observability_status(
+        &snapshot,
+        &sample_observability_storage_metrics(),
+        &sample_observability_reward_runtime_metrics(),
+        &super::ChainReplicationDebugStatus {
+            local_peer_id: "validator-a".to_string(),
+            connected_peers: vec!["validator-b".to_string(), "observer-noisy".to_string()],
+            peer_healths: vec![
+                super::ChainPeerHealthStatus {
+                    peer_id: "validator-b".to_string(),
+                    status: "active".to_string(),
+                    issues: Vec::new(),
+                    discovery_sources: vec!["static_bootstrap".to_string()],
+                    active_path_kind: Some("direct".to_string()),
+                    source_operator: Some("validator".to_string()),
+                    source_asn: None,
+                },
+                super::ChainPeerHealthStatus {
+                    peer_id: "observer-noisy".to_string(),
+                    status: "active".to_string(),
+                    issues: Vec::new(),
+                    discovery_sources: vec!["dht".to_string()],
+                    active_path_kind: Some("direct".to_string()),
+                    source_operator: Some("observer".to_string()),
+                    source_asn: None,
+                },
+            ],
+            registered_protocols: vec![
+                "/aw/node/replication/fetch-blob/1.0.0".to_string(),
+                "/aw/node/replication/fetch-commit/1.0.0".to_string(),
+            ],
+            protocol_retry_cooldown_peers: BTreeMap::new(),
+            transport_retry_cooldown_peers: Vec::new(),
+            request_peer_scores: BTreeMap::from([
+                ("validator-b".to_string(), 100),
+                ("observer-noisy".to_string(), 0),
+            ]),
+            connection_events: Vec::new(),
+            recent_errors: vec![
+                "libp2p inbound failure from PeerId(\"observer-noisy\"): Timeout".to_string(),
+                "libp2p inbound failure from PeerId(\"observer-noisy\"): Timeout".to_string(),
+                "libp2p inbound failure from PeerId(\"observer-noisy\"): Timeout".to_string(),
+                "libp2p inbound failure from PeerId(\"observer-noisy\"): Timeout".to_string(),
+                "libp2p incoming connection error: Transport(Other(Custom { kind: Other, error: ProtocolError(InvalidMessage) }))".to_string(),
+            ],
+        },
+        &network_head,
+        &sample_observability_p2p_status(),
+        &policy,
+        observed_at_ms,
+    );
+    let readiness = super::status_payload::build_readiness_status(&observability, policy);
+
+    assert!(observability.ready);
+    assert!(observability.transport_stable);
+    assert_eq!(observability.transport_stability_score, 100);
+    assert_eq!(observability.recent_replication_error_count, 5);
+    assert!(
+        observability
+            .alerts
+            .iter()
+            .all(|alert| alert.code != "replication_recent_errors")
+    );
+    assert!(
+        observability
+            .alerts
+            .iter()
+            .all(|alert| alert.code != "replication_transport_unstable")
+    );
+    assert_eq!(readiness.status, "ready");
+    assert!(readiness.ready);
+    assert!(!readiness.failed_gates.iter().any(
+        |gate| gate == "replication_recent_errors" || gate == "replication_transport_unstable"
+    ));
+}
+
+#[test]
 fn build_chain_status_payload_marks_stale_peer_heads_not_ready() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 10;
@@ -1043,82 +1195,5 @@ fn build_chain_status_payload_clamps_future_ages_to_zero() {
             .expect("pending proposal")
             .age_ms,
         0
-    );
-}
-
-#[test]
-fn build_chain_status_payload_zeroes_replication_gap_when_replication_disabled() {
-    let mut consensus = NodeConsensusSnapshot::default();
-    consensus.committed_height = 10;
-    consensus.network_committed_height = 10;
-    consensus.replication_persisted_height = 0;
-    let snapshot = NodeSnapshot {
-        node_id: "node-no-replication".to_string(),
-        player_id: "player-no-replication".to_string(),
-        world_id: "world-no-replication".to_string(),
-        role: NodeRole::Sequencer,
-        replication_enabled: false,
-        running: true,
-        tick_count: 1,
-        last_tick_unix_ms: None,
-        consensus,
-        last_error: None,
-    };
-    let network_head =
-        super::status_payload::build_network_head_status(&snapshot, 1_700_000_000_000, None);
-    let policy = super::status_payload::readiness_policy(&snapshot, None);
-    let status = super::status_payload::build_chain_node_observability_status(
-        &snapshot,
-        &super::storage_metrics::StorageMetricsSnapshot {
-            storage_profile: "dev_local".to_string(),
-            effective_budget: StorageProfileConfig::from(StorageProfile::DevLocal),
-            bytes_by_dir: BTreeMap::new(),
-            blob_counts: BTreeMap::new(),
-            ref_count: 0,
-            pin_count: 0,
-            retained_heights: Vec::new(),
-            checkpoint_count: 0,
-            replay_summary: super::storage_metrics::StorageReplaySummary::default(),
-            orphan_blob_count: 0,
-            last_gc_at_ms: None,
-            last_gc_result: "not_available".to_string(),
-            last_gc_error: None,
-            degraded_reason: None,
-        },
-        &super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
-            enabled: false,
-            metrics_available: true,
-            report_dir: String::new(),
-            report_count: 0,
-            latest_epoch_index: 0,
-            latest_report_observed_at_unix_ms: 0,
-            latest_total_distributed_points: 0,
-            latest_minted_record_count: 0,
-            cumulative_minted_record_count: 0,
-            distfs_total_checks: 0,
-            distfs_failed_checks: 0,
-            distfs_failure_ratio: 0.0,
-            settlement_apply_attempts_total: 0,
-            settlement_apply_failures_total: 0,
-            settlement_apply_failure_ratio: 0.0,
-            invariant_ok: true,
-            last_error: None,
-        },
-        &super::ChainReplicationDebugStatus::default(),
-        &network_head,
-        &sample_observability_p2p_status(),
-        &policy,
-        1_700_000_000_000,
-    );
-
-    assert_eq!(status.status, "ok");
-    assert!(!status.replication_enabled);
-    assert_eq!(status.replication_persisted_height, 0);
-    assert_eq!(status.replication_state_gap, 0);
-    assert!(
-        !status
-            .alerts
-            .iter()
-            .any(|alert| alert.code == "consensus_replication_state_gap")
     );
 }

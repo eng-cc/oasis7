@@ -115,6 +115,104 @@ fn classify_transport_stability_recovers_when_active_request_peer_is_healthy() {
 }
 
 #[test]
+fn classify_transport_stability_tolerates_noisy_external_peer_with_healthy_validator_path() {
+    let stability =
+        super::status_payload::classify_transport_stability(&super::ChainReplicationDebugStatus {
+            local_peer_id: "validator-a".to_string(),
+            connected_peers: vec!["validator-b".to_string(), "observer-noisy".to_string()],
+            peer_healths: vec![
+                super::ChainPeerHealthStatus {
+                    peer_id: "validator-b".to_string(),
+                    status: "active".to_string(),
+                    issues: Vec::new(),
+                    discovery_sources: vec!["static_bootstrap".to_string()],
+                    active_path_kind: Some("direct".to_string()),
+                    source_operator: Some("validator".to_string()),
+                    source_asn: None,
+                },
+                super::ChainPeerHealthStatus {
+                    peer_id: "observer-noisy".to_string(),
+                    status: "active".to_string(),
+                    issues: Vec::new(),
+                    discovery_sources: vec!["dht".to_string()],
+                    active_path_kind: Some("direct".to_string()),
+                    source_operator: Some("observer".to_string()),
+                    source_asn: None,
+                },
+            ],
+            registered_protocols: Vec::new(),
+            protocol_retry_cooldown_peers: BTreeMap::new(),
+            transport_retry_cooldown_peers: Vec::new(),
+            request_peer_scores: BTreeMap::from([
+                ("validator-b".to_string(), 100),
+                ("observer-noisy".to_string(), 0),
+            ]),
+            connection_events: Vec::new(),
+            recent_errors: vec![
+                "libp2p inbound failure from PeerId(\"observer-noisy\"): Timeout".to_string(),
+                "libp2p inbound failure from PeerId(\"observer-noisy\"): Timeout".to_string(),
+                "libp2p inbound failure from PeerId(\"observer-noisy\"): Timeout".to_string(),
+                "libp2p inbound failure from PeerId(\"observer-noisy\"): Timeout".to_string(),
+                "libp2p incoming connection error: Transport(Other(Custom { kind: Other, error: ProtocolError(InvalidMessage) }))".to_string(),
+            ],
+        });
+
+    assert!(stability.stable);
+    assert_eq!(stability.score, 100);
+    assert_eq!(stability.blocking_error_count, 0);
+    assert_eq!(stability.timeout_count, 0);
+    assert_eq!(stability.protocol_error_count, 0);
+}
+
+#[test]
+fn classify_transport_stability_keeps_degraded_core_peer_inbound_errors_blocking() {
+    let stability =
+        super::status_payload::classify_transport_stability(&super::ChainReplicationDebugStatus {
+            local_peer_id: "validator-a".to_string(),
+            connected_peers: vec!["validator-b".to_string(), "validator-c".to_string()],
+            peer_healths: vec![
+                super::ChainPeerHealthStatus {
+                    peer_id: "validator-b".to_string(),
+                    status: "active".to_string(),
+                    issues: Vec::new(),
+                    discovery_sources: vec!["static_bootstrap".to_string()],
+                    active_path_kind: Some("direct".to_string()),
+                    source_operator: Some("validator".to_string()),
+                    source_asn: None,
+                },
+                super::ChainPeerHealthStatus {
+                    peer_id: "validator-c".to_string(),
+                    status: "active".to_string(),
+                    issues: Vec::new(),
+                    discovery_sources: vec!["static_bootstrap".to_string()],
+                    active_path_kind: Some("direct".to_string()),
+                    source_operator: Some("validator".to_string()),
+                    source_asn: None,
+                },
+            ],
+            registered_protocols: Vec::new(),
+            protocol_retry_cooldown_peers: BTreeMap::new(),
+            transport_retry_cooldown_peers: Vec::new(),
+            request_peer_scores: BTreeMap::from([
+                ("validator-b".to_string(), 100),
+                ("validator-c".to_string(), 0),
+            ]),
+            connection_events: Vec::new(),
+            recent_errors: vec![
+                "libp2p inbound failure from PeerId(\"validator-c\"): Timeout".to_string(),
+                "libp2p inbound failure from PeerId(\"validator-c\"): Timeout".to_string(),
+                "libp2p inbound failure from PeerId(\"validator-c\"): Timeout".to_string(),
+                "libp2p inbound failure from PeerId(\"validator-c\"): Timeout".to_string(),
+            ],
+        });
+
+    assert!(!stability.stable);
+    assert!(stability.score < 70);
+    assert_eq!(stability.blocking_error_count, 4);
+    assert_eq!(stability.timeout_count, 4);
+}
+
+#[test]
 fn classify_transport_stability_keeps_request_errors_blocking_without_requestable_peer() {
     let stability =
         super::status_payload::classify_transport_stability(&super::ChainReplicationDebugStatus {

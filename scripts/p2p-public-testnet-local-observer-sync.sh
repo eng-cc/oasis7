@@ -256,6 +256,7 @@ stage_remote_seed_tree() {
   local remote_replication_root=$6
   local remote_simulator_dir=$7
   local remote_execution_bridge_state_path=$8
+  local remote_execution_bridge_state_required=$9
   local remote_script remote_cmd
 
   remote_script=$(cat <<'PY'
@@ -273,6 +274,7 @@ storage_root = os.environ["REMOTE_STORAGE_ROOT"]
 replication_root = os.environ["REMOTE_REPLICATION_ROOT"]
 simulator_dir = os.environ["REMOTE_SIMULATOR_DIR"]
 bridge_state_path = os.environ["REMOTE_EXECUTION_BRIDGE_STATE_PATH"]
+bridge_state_required = os.environ["REMOTE_EXECUTION_BRIDGE_STATE_REQUIRED"] == "1"
 stage_root = os.path.join(stack_root, "tmp")
 os.makedirs(stage_root, exist_ok=True)
 
@@ -397,18 +399,28 @@ for attempt in range(1, 6):
             copy_function=link_or_copy,
         )
 
-        copy_file(
-            os.path.join(simulator_dir, "snapshot.json"),
-            os.path.join(simulator_stage, "snapshot.json"),
-        )
-        copy_file(
-            os.path.join(simulator_dir, "journal.json"),
-            os.path.join(simulator_stage, "journal.json"),
-        )
-        copy_file(
-            bridge_state_path,
-            os.path.join(bridge_stage_dir, os.path.basename(bridge_state_path)),
-        )
+        simulator_snapshot_path = os.path.join(simulator_dir, "snapshot.json")
+        if os.path.isfile(simulator_snapshot_path):
+            copy_file(
+                simulator_snapshot_path,
+                os.path.join(simulator_stage, "snapshot.json"),
+            )
+        simulator_journal_path = os.path.join(simulator_dir, "journal.json")
+        if os.path.isfile(simulator_journal_path):
+            copy_file(
+                simulator_journal_path,
+                os.path.join(simulator_stage, "journal.json"),
+            )
+        if bridge_state_required:
+            copy_file(
+                bridge_state_path,
+                os.path.join(bridge_stage_dir, os.path.basename(bridge_state_path)),
+            )
+        elif os.path.isfile(bridge_state_path):
+            copy_file(
+                bridge_state_path,
+                os.path.join(bridge_stage_dir, os.path.basename(bridge_state_path)),
+            )
 
         print(stage_dir, end="")
         sys.exit(0)
@@ -424,7 +436,7 @@ PY
 )
 
   remote_cmd=$(cat <<EOF
-env REMOTE_STACK_ROOT=$(printf '%q' "$remote_stack_root") REMOTE_EXECUTION_WORLD_DIR=$(printf '%q' "$remote_execution_world_dir") REMOTE_EXECUTION_RECORDS_DIR=$(printf '%q' "$remote_execution_records_dir") REMOTE_STORAGE_ROOT=$(printf '%q' "$remote_storage_root") REMOTE_REPLICATION_ROOT=$(printf '%q' "$remote_replication_root") REMOTE_SIMULATOR_DIR=$(printf '%q' "$remote_simulator_dir") REMOTE_EXECUTION_BRIDGE_STATE_PATH=$(printf '%q' "$remote_execution_bridge_state_path") python3 - <<'PY'
+env REMOTE_STACK_ROOT=$(printf '%q' "$remote_stack_root") REMOTE_EXECUTION_WORLD_DIR=$(printf '%q' "$remote_execution_world_dir") REMOTE_EXECUTION_RECORDS_DIR=$(printf '%q' "$remote_execution_records_dir") REMOTE_STORAGE_ROOT=$(printf '%q' "$remote_storage_root") REMOTE_REPLICATION_ROOT=$(printf '%q' "$remote_replication_root") REMOTE_SIMULATOR_DIR=$(printf '%q' "$remote_simulator_dir") REMOTE_EXECUTION_BRIDGE_STATE_PATH=$(printf '%q' "$remote_execution_bridge_state_path") REMOTE_EXECUTION_BRIDGE_STATE_REQUIRED=$(printf '%q' "$remote_execution_bridge_state_required") python3 - <<'PY'
 $remote_script
 PY
 EOF
@@ -467,6 +479,31 @@ remote_resolved_env_value() {
     'source "$REMOTE_ENV" && value="${!KEY_NAME:-}" && [[ -n "$value" ]] && printf "%s" "$value"'
   sshpass_ssh "$remote_host" "$remote_cmd" \
     || die "missing or unresolved remote $key in $remote_env via $remote_host"
+}
+
+remote_optional_resolved_env_value() {
+  local remote_host=$1
+  local remote_env=$2
+  local key=$3
+  local remote_cmd
+  printf -v remote_cmd \
+    'env REMOTE_ENV=%q KEY_NAME=%q bash -lc %q' \
+    "$remote_env" \
+    "$key" \
+    'source "$REMOTE_ENV" && value="${!KEY_NAME:-}" && [[ -n "$value" ]] && printf "%s" "$value"'
+  sshpass_ssh "$remote_host" "$remote_cmd" 2>/dev/null || true
+}
+
+execution_bridge_state_path_for_root() {
+  local stack_root=$1
+  local node_id=$2
+  local runtime_root=${3:-}
+
+  if [[ -n "$runtime_root" ]]; then
+    printf '%s/reward-runtime-execution-bridge-state.json' "$runtime_root"
+  else
+    printf '%s/output/chain-runtime/%s/reward-runtime-execution-bridge-state.json' "$stack_root" "$node_id"
+  fi
 }
 
 repo_root=$(cd "$script_dir/.." && pwd)
@@ -694,7 +731,7 @@ reset_local_state() {
     replication_root="$local_stack_root/output/node-distfs/$node_id"
   fi
   runtime_root=$(optional_resolved_env_value "$local_env" RUNTIME_ROOT)
-  execution_bridge_state_path="$local_stack_root/output/chain-runtime/$node_id/reward-runtime-execution-bridge-state.json"
+  execution_bridge_state_path=$(execution_bridge_state_path_for_root "$local_stack_root" "$node_id" "$runtime_root")
 
   if [[ -z "$backup_dir" ]]; then
     backup_dir="$local_stack_root/backups/local-observer-state-reset-$(date +%Y%m%d-%H%M%S)"
@@ -726,7 +763,7 @@ seed_local_state_from_remote() {
   local local_storage_root local_replication_root local_runtime_root local_execution_bridge_state_path
   local local_simulator_dir
   local remote_stack_root remote_node_id remote_execution_world_dir remote_execution_records_dir
-  local remote_storage_root remote_replication_root remote_execution_bridge_state_path
+  local remote_storage_root remote_replication_root remote_runtime_root remote_execution_bridge_state_path
   local remote_simulator_dir
   local remote_stage_dir
 
@@ -740,7 +777,7 @@ seed_local_state_from_remote() {
     local_replication_root="$local_stack_root/output/node-distfs/$local_node_id"
   fi
   local_runtime_root=$(optional_resolved_env_value "$local_env" RUNTIME_ROOT)
-  local_execution_bridge_state_path="$local_stack_root/output/chain-runtime/$local_node_id/reward-runtime-execution-bridge-state.json"
+  local_execution_bridge_state_path=$(execution_bridge_state_path_for_root "$local_stack_root" "$local_node_id" "$local_runtime_root")
   local_simulator_dir="${local_execution_world_dir}-simulator-mirror"
 
   remote_stack_root=$(remote_resolved_env_value "$remote_host" "$remote_env" STACK_ROOT)
@@ -748,8 +785,12 @@ seed_local_state_from_remote() {
   remote_execution_world_dir=$(remote_resolved_env_value "$remote_host" "$remote_env" EXECUTION_WORLD_DIR)
   remote_execution_records_dir=$(remote_resolved_env_value "$remote_host" "$remote_env" EXECUTION_RECORDS_DIR)
   remote_storage_root=$(remote_resolved_env_value "$remote_host" "$remote_env" STORAGE_ROOT)
-  remote_replication_root="$remote_stack_root/output/node-distfs/$remote_node_id"
-  remote_execution_bridge_state_path="$remote_stack_root/output/chain-runtime/$remote_node_id/reward-runtime-execution-bridge-state.json"
+  remote_replication_root=$(remote_optional_resolved_env_value "$remote_host" "$remote_env" REPLICATION_ROOT)
+  if [[ -z "$remote_replication_root" ]]; then
+    remote_replication_root="$remote_stack_root/output/node-distfs/$remote_node_id"
+  fi
+  remote_runtime_root=$(remote_optional_resolved_env_value "$remote_host" "$remote_env" RUNTIME_ROOT)
+  remote_execution_bridge_state_path=$(execution_bridge_state_path_for_root "$remote_stack_root" "$remote_node_id" "$remote_runtime_root")
   remote_simulator_dir="${remote_execution_world_dir}-simulator-mirror"
 
   [[ "$remote_execution_world_dir" == "$remote_stack_root"/data/* ]] \
@@ -788,7 +829,8 @@ seed_local_state_from_remote() {
     "$remote_storage_root" \
     "$remote_replication_root" \
     "$remote_simulator_dir" \
-    "$remote_execution_bridge_state_path")
+    "$remote_execution_bridge_state_path" \
+    "$([[ -n "$remote_runtime_root" ]] && printf 1 || printf 0)")
 
   sshpass_scp_from_remote \
     "$remote_host:$remote_stage_dir/execution-world/snapshot.json" \
@@ -843,15 +885,21 @@ seed_local_state_from_remote() {
       -r
   fi
 
-  sshpass_scp_from_remote \
-    "$remote_host:$remote_stage_dir/execution-world-simulator-mirror/snapshot.json" \
-    "$local_simulator_dir/snapshot.json"
-  sshpass_scp_from_remote \
-    "$remote_host:$remote_stage_dir/execution-world-simulator-mirror/journal.json" \
-    "$local_simulator_dir/journal.json"
-  sshpass_scp_from_remote \
-    "$remote_host:$remote_stage_dir/chain-runtime/$(basename "$local_execution_bridge_state_path")" \
-    "$local_execution_bridge_state_path"
+  if sshpass_ssh "$remote_host" test -f "$remote_stage_dir/execution-world-simulator-mirror/snapshot.json"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/execution-world-simulator-mirror/snapshot.json" \
+      "$local_simulator_dir/snapshot.json"
+  fi
+  if sshpass_ssh "$remote_host" test -f "$remote_stage_dir/execution-world-simulator-mirror/journal.json"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/execution-world-simulator-mirror/journal.json" \
+      "$local_simulator_dir/journal.json"
+  fi
+  if sshpass_ssh "$remote_host" test -f "$remote_stage_dir/chain-runtime/$(basename "$local_execution_bridge_state_path")"; then
+    sshpass_scp_from_remote \
+      "$remote_host:$remote_stage_dir/chain-runtime/$(basename "$local_execution_bridge_state_path")" \
+      "$local_execution_bridge_state_path"
+  fi
 
   cleanup_remote_seed_tree "$remote_host" "$remote_stage_dir"
 
