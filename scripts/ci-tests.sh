@@ -262,6 +262,7 @@ case "$tier" in
     run_required_component "viewer performance smoke (report-only)" "${OASIS7_CI_RUN_VIEWER_PERF_SMOKE:-false}" "report_only_scope_not_selected" run_oasis7_viewer_performance_smoke_report_only
     run_required_component "hosted account local smoke" "${OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE:-false}" "not_in_local_required_baseline_or_scope_disabled" run_hosted_account_local_smoke
     run_required_component "launcher web build" "${OASIS7_CI_RUN_LAUNCHER_WEB_BUILD:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_client_launcher_web_build
+    run_required_component "workspace support crate tests" "${OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_workspace_support_crate_tests
     run_required_component "oasis7 required clippy" "${OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:-}" "disabled_by_scope_planner" run_oasis7_required_tier_clippy
     run_required_component "oasis7_consensus clippy" "${OASIS7_CI_RUN_CONSENSUS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_consensus_clippy
     run_required_component "oasis7_distfs clippy" "${OASIS7_CI_RUN_DISTFS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_distfs_clippy

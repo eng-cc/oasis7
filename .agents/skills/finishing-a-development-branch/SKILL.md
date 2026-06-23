@@ -1,6 +1,6 @@
 ---
 name: finishing-a-development-branch
-description: "Use when implementation is done and the work needs to be closed out, committed, prepared for PR, and eventually cleaned up. Follows the oasis7 default path: task closeout, commit, pre-PR local role review, PR preflight/create, review handling, merge, and worktree cleanup."
+description: "Use when implementation is done and the work needs final verification, pre-PR local role review, closeout, commit, PR creation, review handling, merge, and worktree cleanup."
 ---
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
@@ -14,8 +14,9 @@ Use this skill when code and docs are already updated and you are moving into br
 
 - close the task
 - verify the final diff
-- commit
 - collect fresh local involved-role subagent review
+- close the task after review findings are resolved
+- commit
 - prepare or create the PR
 - decide whether the PR is a normal CI/review PR or a manual packaging CI hold
 - watch required checks/review and merge normal PRs
@@ -26,21 +27,30 @@ Use this skill when code and docs are already updated and you are moving into br
 
 1. Confirm the task has its own worktree and `.pm` task.
 2. Run the final local checks for the changed surface.
-3. Close the task:
+3. Dispatch fresh local subagent review for every involved relevant role, address valid findings, and record the passed evidence packet before final closeout or commit.
+
+Use the same role-selection rule as `requesting-repo-owned-review`, including:
+- `producer_system_designer` when scope, product contract, user promise, acceptance, or system-level semantics change
+- `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched
+- `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, accessibility/readability, or UI-heavy claims are touched
+- `runtime_engineer` when runtime/server/simulation/gameplay enforcement, replay, recovery, checkpoint, long-run behavior, or `crates/oasis7*` runtime paths are touched
+- `blockchain_ops_engineer` when deployment, node ops, topology/inventory, service/host contracts, health baselines, upgrade/rollback/restore drills, packaging/release ops, or operator-facing runbooks are touched
+- `wasm_platform_engineer` when `crates/oasis7_wasm_*`, builtin wasm modules, ABI/schema, manifest/hash, wasm build/receipt, wasm determinism workflows, or `doc/world-runtime/wasm/*` are touched
+- `agent_engineer` when agent behavior, prompts, provider contracts, model/runtime config, subagent dispatch contracts, or agent tooling are touched
+- `viewer_engineer` when Viewer/Web/UI/WebGPU/browser validation paths are touched
+- `qa_engineer` when the claim depends on verification, release readiness, test strategy, or evidence sufficiency
+- `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, or known technical-debt boundaries
+- `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched
+
+4. Close the task:
 
 ```bash
 ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"
 ```
 
-4. Commit exactly this task slice.
-5. Dispatch fresh local subagent review for every involved relevant role, address valid findings, and record the passed evidence packet:
+5. Commit exactly this task slice.
 
-Use the same role-selection rule as `requesting-repo-owned-review`, including:
-- `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched
-- `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, or UI-heavy claims are touched
-- `qa_engineer` when the claim depends on verification or release readiness
-- `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, or known technical-debt boundaries
-- `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched
+The pre-PR local role review packet is recorded before final closeout/commit and uses this shape:
 
 ```markdown
 - Pre-PR Local Role Review: passed
@@ -57,6 +67,11 @@ Use the same role-selection rule as `requesting-repo-owned-review`, including:
 - Review Verdicts: <per-role scope/spec compliance verdict + role quality/risk verdict>
 - Review Findings Disposition: <addressed | no_findings>
 - Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>
+- Verification Matrix: <changed surface -> required evidence -> observed evidence or explicit deferral>
+- Visual Evidence: <screenshot/model visual review paths or n/a with exemption reason>
+- WASM Evidence: <support crate/determinism evidence or n/a with reason>
+- Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>
+- LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>
 - Residual Risk: <text>
 - Slice Ledger: <path to slice ledger or n/a with reason>
 ```
@@ -69,7 +84,7 @@ Use the same role-selection rule as `requesting-repo-owned-review`, including:
 
 7. Record the PR purpose decision:
    - `normal_pr_ci_watch`: default for ordinary implementation/documentation PRs. Keep watching required checks, mergeability, review decisions, comments, and unresolved review threads. Treat `REVIEW_REQUIRED` as informational, not as a blocker. Treat `mergeStateStatus=BEHIND` as informational too unless GitHub actually requires a branch update or reports a conflict; if the PR is otherwise mergeable and the repository merge path accepts it, merge can proceed without a local rebase. If `mergeStateStatus=BLOCKED` is only missing review approval and user/task policy explicitly allows skipping it, use the repository admin merge path as normal flow after re-checking gates.
-   - `manual_packaging_ci_hold`: only when the user/task says the PR exists specifically to run manual-trigger packaging/release CI jobs. Record the manual job/purpose and stop before auto-merge until the operator/user resumes.
+   - `manual_packaging_ci_hold`: only when the user/task says the PR exists specifically to run manual-trigger packaging/release CI jobs. Record the manual job/purpose, responsible operator/role, expected success signal, stale-date/timeout escalation, ops readiness/rollback/runbook evidence when release ops are implicated, external/status messaging evidence when player- or community-facing, and the exact resume criterion. Stop before auto-merge until the operator/user resumes.
 
 8. For `normal_pr_ci_watch`, keep the loop moving without waiting for another prompt:
    - if checks fail, inspect the failing job, fix, rerun local verification, push, and continue watching

@@ -33,7 +33,7 @@ Read-only caveat:
 
 - Read-only and chat-only requests do not skip this bootstrap. They still need
   task/worktree truth before TPM answers, gathers evidence, or dispatches slices.
-- If a read-only question requires product/design/game-visual-interaction/runtime/WASM/agent/viewer/QA/repository-health
+- If a read-only question requires product/design/gameplay/game-visual-interaction/runtime/blockchain-ops/WASM/agent/viewer/QA/repository-health
   or liveops judgment, route to the matching bounded professional slice after
   task/worktree bootstrap.
 - Pure fact lookup, path lookup, command-output restatement, or mechanical

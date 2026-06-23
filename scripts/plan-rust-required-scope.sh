@@ -23,6 +23,7 @@ run_viewer_contract_tests=0
 run_viewer_wasm_check=0
 run_viewer_perf_smoke=0
 run_launcher_web_build=0
+run_oasis7_workspace_support_crate_tests=0
 
 usage() {
   cat <<'USAGE'
@@ -67,6 +68,7 @@ mark_full() {
   run_viewer_wasm_check=1
   run_viewer_perf_smoke=1
   run_launcher_web_build=1
+  run_oasis7_workspace_support_crate_tests=1
   append_reason "$1"
 }
 
@@ -105,6 +107,11 @@ mark_viewer() {
 
 mark_launcher_web_build() {
   run_launcher_web_build=1
+  append_reason "$1"
+}
+
+mark_wasm_support() {
+  run_oasis7_workspace_support_crate_tests=1
   append_reason "$1"
 }
 
@@ -191,7 +198,19 @@ classify_changed_path() {
       mark_launcher_web_build "launcher_proto:${path}"
       ;;
     crates/oasis7_wasm_abi|crates/oasis7_wasm_abi/*|crates/oasis7_wasm_abi/**/*)
+      mark_wasm_support "wasm_abi_support:${path}"
       mark_launcher_web_build "launcher_wasm_abi:${path}"
+      ;;
+    crates/oasis7_wasm_build|crates/oasis7_wasm_build/*|crates/oasis7_wasm_build/**/*|\
+    crates/oasis7_builtin_wasm_modules|crates/oasis7_builtin_wasm_modules/*|crates/oasis7_builtin_wasm_modules/**/*|\
+    crates/oasis7_wasm_sdk|crates/oasis7_wasm_sdk/*|crates/oasis7_wasm_sdk/**/*)
+      mark_wasm_support "wasm_support:${path}"
+      ;;
+    crates/oasis7_wasm_router|crates/oasis7_wasm_router/*|crates/oasis7_wasm_router/**/*|\
+    crates/oasis7_wasm_store|crates/oasis7_wasm_store/*|crates/oasis7_wasm_store/**/*|\
+    crates/oasis7_wasm_executor|crates/oasis7_wasm_executor/*|crates/oasis7_wasm_executor/**/*)
+      mark_wasm_support "wasm_support:${path}"
+      mark_runtime "runtime_wasm_support:${path}"
       ;;
     crates/oasis7_consensus|crates/oasis7_consensus/*|crates/oasis7_consensus/**/*)
       mark_consensus "consensus:${path}"
@@ -278,7 +297,8 @@ elif [[ \
   "$run_viewer_contract_tests" -eq 1 || \
   "$run_viewer_wasm_check" -eq 1 || \
   "$run_viewer_perf_smoke" -eq 1 || \
-  "$run_launcher_web_build" -eq 1 \
+  "$run_launcher_web_build" -eq 1 || \
+  "$run_oasis7_workspace_support_crate_tests" -eq 1 \
   ]]; then
   scope="targeted"
 else
@@ -287,7 +307,13 @@ fi
 
 reason_summary="$(printf '%s\n' "${reasons[@]-}" | paste -sd ';' -)"
 changed_paths_summary="$(printf '%s\n' "${changed_paths[@]-}" | paste -sd ';' -)"
-needs_system_deps=false
+needs_system_deps="$([[ \
+  "$run_oasis7_required_tests" -eq 1 || \
+  "$run_viewer_contract_tests" -eq 1 || \
+  "$run_viewer_wasm_check" -eq 1 || \
+  "$run_viewer_perf_smoke" -eq 1 || \
+  "$run_launcher_web_build" -eq 1 \
+  ]] && echo true || echo false)"
 needs_wasm_target="$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
 needs_node=true
 needs_trunk="$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
@@ -306,6 +332,7 @@ emit_output() {
     echo "run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_perf_smoke=$([[ "$run_viewer_perf_smoke" -eq 1 ]] && echo true || echo false)"
     echo "run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
+    echo "run_oasis7_workspace_support_crate_tests=$([[ "$run_oasis7_workspace_support_crate_tests" -eq 1 ]] && echo true || echo false)"
     echo "needs_node=$needs_node"
     echo "needs_system_deps=$needs_system_deps"
     echo "needs_wasm_target=$needs_wasm_target"
@@ -331,6 +358,7 @@ run_viewer_contract_tests=$([[ "$run_viewer_contract_tests" -eq 1 ]] && echo tru
 run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)
 run_viewer_perf_smoke=$([[ "$run_viewer_perf_smoke" -eq 1 ]] && echo true || echo false)
 run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)
+run_oasis7_workspace_support_crate_tests=$([[ "$run_oasis7_workspace_support_crate_tests" -eq 1 ]] && echo true || echo false)
 needs_node=$needs_node
 needs_system_deps=$needs_system_deps
 needs_wasm_target=$needs_wasm_target

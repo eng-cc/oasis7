@@ -28,7 +28,7 @@ Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- standard path: commit -> local role-subagent review -> prepare-task-pr -> GitHub PR watch/fix/merge
+- standard path: local role-subagent review -> closeout -> commit -> prepare-task-pr -> GitHub PR watch/fix/merge
 
 Options:
   --base <branch>         Base branch for the PR (default: main)
@@ -231,6 +231,208 @@ plan_kv_get_default() {
   printf '%s\n' "${value:-$default_value}"
 }
 
+append_unique_token() {
+  local list="$1"
+  local token="$2"
+  if [[ -z "$list" ]]; then
+    printf '%s' "$token"
+    return 0
+  fi
+  case ",$list," in
+    *",$token,"*) printf '%s' "$list" ;;
+    *) printf '%s,%s' "$list" "$token" ;;
+  esac
+}
+
+required_review_roles_from_paths() {
+  local changed_paths_raw="$1"
+  local roles=""
+  local path=""
+
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    case "$path" in
+      doc/engineering/workflow/*|.agents/skills/*|.agents/roles/*|.github/workflows/*|scripts/ci-tests.sh|scripts/plan-rust-required-scope.sh|scripts/plan-rust-required-scope.test.sh|scripts/prepare-task-pr.sh|scripts/pm/*|scripts/doc-governance-check.sh|scripts/lint-skills.sh)
+        roles="$(append_unique_token "$roles" "repository_health_engineer")"
+        ;;
+    esac
+    case "$path" in
+      doc/engineering/workflow/*|.agents/skills/*|doc/core/*|doc/core/**/*|doc/game/*|doc/game/**/*|doc/*prd*|doc/**/*prd*|doc/*project*|doc/**/*project*|doc/*acceptance*|doc/**/*acceptance*)
+        roles="$(append_unique_token "$roles" "producer_system_designer")"
+        ;;
+    esac
+    case "$path" in
+      crates/oasis7|crates/oasis7/*|crates/oasis7/**/*|crates/oasis7_node|crates/oasis7_node/*|crates/oasis7_node/**/*|doc/world-runtime/*|doc/world-runtime/**/*)
+        roles="$(append_unique_token "$roles" "runtime_engineer")"
+        ;;
+    esac
+    case "$path" in
+      crates/oasis7_wasm_*|crates/oasis7_wasm_*/*|crates/oasis7_wasm_*/**/*|crates/oasis7_builtin_wasm_modules|crates/oasis7_builtin_wasm_modules/*|crates/oasis7_builtin_wasm_modules/**/*|doc/world-runtime/wasm/*|doc/world-runtime/wasm/**/*|.github/workflows/wasm-determinism-gate.yml|scripts/plan-wasm-determinism-scope.sh)
+        roles="$(append_unique_token "$roles" "wasm_platform_engineer")"
+        ;;
+    esac
+    case "$path" in
+      crates/oasis7_viewer|crates/oasis7_viewer/*|crates/oasis7_viewer/**/*|crates/oasis7/src/viewer/*|crates/oasis7/src/viewer/**/*|testing-manual.md|doc/testing/*|doc/testing/**/*|doc/world-simulator/viewer/*|doc/world-simulator/viewer/**/*|doc/world-simulator/launcher/*|doc/world-simulator/launcher/**/*|doc/*viewer*|doc/**/*viewer*|doc/*launcher*|doc/**/*launcher*|scripts/*viewer*|scripts/**/*viewer*|scripts/*launcher*|scripts/**/*launcher*)
+        roles="$(append_unique_token "$roles" "viewer_engineer")"
+      ;;
+    esac
+    case "$path" in
+      crates/oasis7_viewer/*|crates/oasis7_viewer/**/*|testing-manual.md|doc/testing/*|doc/testing/**/*|doc/testing/templates/model-visual-review-card-template.md)
+        roles="$(append_unique_token "$roles" "game_visual_interaction_designer")"
+        ;;
+    esac
+    case "$path" in
+      doc/game/*|doc/game/**/*|doc/world-simulator/*|doc/world-simulator/**/*|doc/playability_test_result/*|doc/playability_test_result/**/*)
+        roles="$(append_unique_token "$roles" "gameplay_designer")"
+        ;;
+    esac
+    case "$path" in
+      doc/liveops/*|doc/liveops/**/*|doc/community/*|doc/community/**/*|doc/readme/*|doc/readme/**/*|doc/*incident*|doc/**/*incident*|doc/*runbook*|doc/**/*runbook*|doc/*release*|doc/**/*release*|doc/*changelog*|doc/**/*changelog*|doc/*announcement*|doc/**/*announcement*|doc/*status*|doc/**/*status*)
+        roles="$(append_unique_token "$roles" "liveops_community")"
+        ;;
+    esac
+    case "$path" in
+      doc/*ops*|doc/**/*ops*|doc/*deploy*|doc/**/*deploy*|doc/*rollback*|doc/**/*rollback*|doc/*runbook*|doc/**/*runbook*|doc/*topology*|doc/**/*topology*|doc/*inventory*|doc/**/*inventory*|doc/*health*|doc/**/*health*|doc/*readiness*|doc/**/*readiness*|doc/*preflight*|doc/**/*preflight*|doc/*service*|doc/**/*service*|doc/*host*|doc/**/*host*|doc/*packaging*|doc/**/*packaging*|doc/*release*|doc/**/*release*|scripts/*deploy*|scripts/*rollback*|scripts/*preflight*|scripts/*packaging*|scripts/*release*)
+        roles="$(append_unique_token "$roles" "blockchain_ops_engineer")"
+        ;;
+    esac
+    case "$path" in
+      .codex/config.toml|.agents/*|.agents/**/*|scripts/*agent*|scripts/**/*agent*|scripts/pm/workflow-behavior-eval.sh|doc/engineering/workflow/*|doc/*agent*|doc/**/*agent*)
+        roles="$(append_unique_token "$roles" "agent_engineer")"
+        ;;
+    esac
+  done < <(printf '%s\n' "$changed_paths_raw" | tr ';' '\n')
+
+  if [[ -n "$changed_paths_raw" ]]; then
+    roles="$(append_unique_token "$roles" "qa_engineer")"
+  fi
+
+  printf '%s' "$roles"
+}
+
+missing_required_review_roles() {
+  local required_roles="$1"
+  local actual_roles="$2"
+  local missing=""
+  local role=""
+  local normalized_actual=",${actual_roles// /},"
+
+  while IFS= read -r role; do
+    [[ -n "$role" ]] || continue
+    if [[ "$normalized_actual" != *",$role,"* ]]; then
+      missing="$(append_unique_token "$missing" "$role")"
+    fi
+  done < <(printf '%s\n' "$required_roles" | tr ',' '\n')
+
+  printf '%s' "$missing"
+}
+
+contains_role() {
+  local roles="$1"
+  local role="$2"
+  [[ ",${roles// /}," == *",$role,"* ]]
+}
+
+text_has_any_keyword() {
+  local text
+  text="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  shift
+  local keyword=""
+  for keyword in "$@"; do
+    if [[ "$text" == *"$keyword"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+text_has_explicit_exemption() {
+  local text
+  text="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$text" != *"n/a"* && "$text" != *"not applicable"* ]]; then
+    return 1
+  fi
+  [[ "$text" == *"exemption reason"* \
+    || "$text" == *"deferral reason"* \
+    || "$text" == *"explicit exemption"* \
+    || "$text" == *"explicit deferral"* \
+    || "$text" == *"no rendered ui changed"* \
+    || "$text" == *"no player-facing change"* \
+    || "$text" == *"no deployment change"* \
+    || "$text" == *"no release change"* \
+    || "$text" == *"no public-facing change"* ]]
+}
+
+append_missing_marker() {
+  local list="$1"
+  local marker="$2"
+  if [[ -z "$list" ]]; then
+    printf '%s' "$marker"
+  else
+    printf '%s;%s' "$list" "$marker"
+  fi
+}
+
+semantic_review_evidence_missing() {
+  local required_roles="$1"
+  local verification_matrix="$2"
+  local visual_evidence="$3"
+  local wasm_evidence="$4"
+  local ops_evidence="$5"
+  local liveops_evidence="$6"
+  local missing=""
+
+  if contains_role "$required_roles" "game_visual_interaction_designer"; then
+    if text_has_explicit_exemption "$visual_evidence"; then
+      :
+    elif text_has_any_keyword "$visual_evidence" "n/a" "no visible surface" "not applicable"; then
+      missing="$(append_missing_marker "$missing" "Visual Evidence must include screenshot/model-review evidence or a specific exemption for visual/UI paths")"
+    elif ! text_has_any_keyword "$visual_evidence" "screenshot" "visual review" "model visual" "viewport" "s6"; then
+      missing="$(append_missing_marker "$missing" "Visual Evidence missing screenshot/model-review/viewport/S6 evidence")"
+    fi
+  fi
+
+  if contains_role "$required_roles" "wasm_platform_engineer"; then
+    if ! text_has_any_keyword "$wasm_evidence" "support crate" "determinism" "wasm" "abi" "receipt" "hash" "n/a"; then
+      missing="$(append_missing_marker "$missing" "WASM Evidence missing WASM support/determinism/ABI evidence or explicit n/a reason")"
+    fi
+  fi
+
+  if contains_role "$required_roles" "blockchain_ops_engineer"; then
+    if text_has_any_keyword "$ops_evidence" "n/a" "not applicable" && ! text_has_explicit_exemption "$ops_evidence"; then
+      missing="$(append_missing_marker "$missing" "Ops Evidence must include readiness/rollback/runbook/operator/health evidence or an explicit exemption reason")"
+    elif ! text_has_any_keyword "$ops_evidence" "readiness" "rollback" "runbook" "operator" "health" "preflight" && ! text_has_explicit_exemption "$ops_evidence"; then
+      missing="$(append_missing_marker "$missing" "Ops Evidence missing readiness/rollback/runbook/operator/health evidence or explicit n/a reason")"
+    fi
+  fi
+
+  if contains_role "$required_roles" "liveops_community"; then
+    if text_has_any_keyword "$liveops_evidence" "n/a" "not applicable" && ! text_has_explicit_exemption "$liveops_evidence"; then
+      missing="$(append_missing_marker "$missing" "LiveOps Evidence must include messaging/release-note/player/community evidence or an explicit exemption reason")"
+    elif ! text_has_any_keyword "$liveops_evidence" "message" "release note" "player" "community" "announcement" "status" && ! text_has_explicit_exemption "$liveops_evidence"; then
+      missing="$(append_missing_marker "$missing" "LiveOps Evidence missing messaging/release-note/player/community evidence or explicit n/a reason")"
+    fi
+  fi
+
+  if contains_role "$required_roles" "runtime_engineer"; then
+    if text_has_any_keyword "$verification_matrix" "n/a" "not applicable" && ! text_has_explicit_exemption "$verification_matrix"; then
+      missing="$(append_missing_marker "$missing" "Verification Matrix must include runtime replay/recovery/checkpoint/long-run applicability or an explicit deferral reason")"
+    elif ! text_has_any_keyword "$verification_matrix" "replay" "recovery" "checkpoint" "long-run" "longrun" "runtime" && ! text_has_explicit_exemption "$verification_matrix"; then
+      missing="$(append_missing_marker "$missing" "Verification Matrix missing runtime replay/recovery/checkpoint/long-run applicability")"
+    fi
+  fi
+
+  if contains_role "$required_roles" "gameplay_designer"; then
+    if text_has_any_keyword "$verification_matrix" "n/a" "not applicable" && ! text_has_explicit_exemption "$verification_matrix"; then
+      missing="$(append_missing_marker "$missing" "Verification Matrix must include gameplay playability/economy/motivation-loop applicability or an explicit deferral reason")"
+    elif ! text_has_any_keyword "$verification_matrix" "playability" "economy" "motivation" "loop" "progression" "gameplay" && ! text_has_explicit_exemption "$verification_matrix"; then
+      missing="$(append_missing_marker "$missing" "Verification Matrix missing gameplay playability/economy/motivation-loop applicability")"
+    fi
+  fi
+
+  printf '%s' "$missing"
+}
+
 local_role_review_status() {
   local source_worktree="$1"
   local source_branch="$2"
@@ -287,6 +489,11 @@ def emit(
     findings_disposition: str = "",
     residual_risk: str = "",
     slice_ledger: str = "",
+    verification_matrix: str = "",
+    visual_evidence: str = "",
+    wasm_evidence: str = "",
+    ops_evidence: str = "",
+    liveops_evidence: str = "",
 ) -> None:
     print(f"status={status}")
     print(f"task_uid={task_uid}")
@@ -299,6 +506,11 @@ def emit(
     print(f"findings_disposition={findings_disposition}")
     print(f"residual_risk={residual_risk}")
     print(f"slice_ledger={slice_ledger}")
+    print(f"verification_matrix={verification_matrix}")
+    print(f"visual_evidence={visual_evidence}")
+    print(f"wasm_evidence={wasm_evidence}")
+    print(f"ops_evidence={ops_evidence}")
+    print(f"liveops_evidence={liveops_evidence}")
     raise SystemExit(0)
 
 if not tasks_dir.is_dir():
@@ -367,6 +579,7 @@ elif reviewed_source_head != source_head:
     allowed_evidence_paths = {
         log_path_rel,
         f".pm/tasks/{task_uid}.yaml",
+        ".pm/registry/tasks.yaml",
     }
     try:
         subprocess.check_call(
@@ -384,6 +597,7 @@ elif reviewed_source_head != source_head:
         disallowed = [
             path for path in changed_since_review
             if path not in allowed_evidence_paths
+            and not (path.startswith(".pm/roles/") and "/backlog/" in path)
         ]
         if disallowed:
             missing.append("Source Head has post-review non-evidence changes: " + ",".join(disallowed))
@@ -396,6 +610,11 @@ for key in (
     "Review Evidence",
     "Review Verdicts",
     "Finding Disposition Evidence",
+    "Verification Matrix",
+    "Visual Evidence",
+    "WASM Evidence",
+    "Ops Evidence",
+    "LiveOps Evidence",
     "Residual Risk",
     "Slice Ledger",
 ):
@@ -411,6 +630,11 @@ review_package = parse_field(selected_block, "Review Package")
 review_verdicts = parse_field(selected_block, "Review Verdicts")
 residual_risk = parse_field(selected_block, "Residual Risk")
 slice_ledger = parse_field(selected_block, "Slice Ledger")
+verification_matrix = parse_field(selected_block, "Verification Matrix")
+visual_evidence = parse_field(selected_block, "Visual Evidence")
+wasm_evidence = parse_field(selected_block, "WASM Evidence")
+ops_evidence = parse_field(selected_block, "Ops Evidence")
+liveops_evidence = parse_field(selected_block, "LiveOps Evidence")
 
 if missing:
     emit(
@@ -425,6 +649,11 @@ if missing:
         findings_disposition=findings_disposition,
         residual_risk=residual_risk,
         slice_ledger=slice_ledger,
+        verification_matrix=verification_matrix,
+        visual_evidence=visual_evidence,
+        wasm_evidence=wasm_evidence,
+        ops_evidence=ops_evidence,
+        liveops_evidence=liveops_evidence,
     )
 
 emit(
@@ -438,6 +667,11 @@ emit(
     findings_disposition=findings_disposition,
     residual_risk=residual_risk,
     slice_ledger=slice_ledger,
+    verification_matrix=verification_matrix,
+    visual_evidence=visual_evidence,
+    wasm_evidence=wasm_evidence,
+    ops_evidence=ops_evidence,
+    liveops_evidence=liveops_evidence,
 )
 PY
 }
@@ -514,6 +748,7 @@ if [[ -x "./scripts/plan-rust-required-scope.sh" ]]; then
       RUN_VIEWER_CONTRACT_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_viewer_contract_tests" "false")"
       RUN_VIEWER_WASM_CHECK="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_viewer_wasm_check" "false")"
       RUN_LAUNCHER_WEB_BUILD="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_launcher_web_build" "false")"
+      RUN_WORKSPACE_SUPPORT_CRATE_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_workspace_support_crate_tests" "false")"
       LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=$RUN_OASIS7_REQUIRED_TESTS \
 OASIS7_CI_RUN_CONSENSUS_TESTS=$RUN_CONSENSUS_TESTS \
 OASIS7_CI_RUN_DISTFS_TESTS=$RUN_DISTFS_TESTS \
@@ -523,6 +758,7 @@ OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=$RUN_OASIS7_NET_LIBP2P_TESTS \
 OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=$RUN_VIEWER_CONTRACT_TESTS \
 OASIS7_CI_RUN_VIEWER_WASM_CHECK=$RUN_VIEWER_WASM_CHECK \
 OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=$RUN_LAUNCHER_WEB_BUILD \
+OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS=$RUN_WORKSPACE_SUPPORT_CRATE_TESTS \
 ./scripts/ci-tests.sh required"
     fi
     CLAIM_READY_COMMAND="$(render_cmd "./scripts/pm/claim-ready.sh" "--claim-type" "ready_for_pr" "--verify-command" "$LOCAL_REQUIRED_COMMAND")"
@@ -546,9 +782,25 @@ LOCAL_ROLE_REVIEW_VERDICTS="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_ve
 LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "findings_disposition")"
 LOCAL_ROLE_REVIEW_RESIDUAL_RISK="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "residual_risk")"
 LOCAL_ROLE_REVIEW_SLICE_LEDGER="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "slice_ledger")"
+LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "verification_matrix")"
+LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "visual_evidence")"
+LOCAL_ROLE_REVIEW_WASM_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "wasm_evidence")"
+LOCAL_ROLE_REVIEW_OPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "ops_evidence")"
+LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "liveops_evidence")"
+REQUIRED_REVIEW_ROLES="$(required_review_roles_from_paths "$LOCAL_REQUIRED_CHANGED_PATHS")"
+MISSING_REQUIRED_REVIEW_ROLES="$(missing_required_review_roles "$REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_ROLES")"
+MISSING_SEMANTIC_REVIEW_EVIDENCE="$(semantic_review_evidence_missing "$REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX" "$LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE" "$LOCAL_ROLE_REVIEW_WASM_EVIDENCE" "$LOCAL_ROLE_REVIEW_OPS_EVIDENCE" "$LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE")"
 
 if [[ "$CREATE_PR" == "1" && "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
   die "missing passed pre-PR local role review evidence for $SOURCE_BRANCH at $SOURCE_HEAD ($LOCAL_ROLE_REVIEW_REASON; log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-unknown}; missing: ${LOCAL_ROLE_REVIEW_MISSING_MARKERS:-unknown})"
+fi
+
+if [[ "$CREATE_PR" == "1" && -n "$MISSING_REQUIRED_REVIEW_ROLES" ]]; then
+  die "pre-PR local role review is missing required role(s) inferred from changed paths: $MISSING_REQUIRED_REVIEW_ROLES (present: ${LOCAL_ROLE_REVIEW_ROLES:-none}; required: $REQUIRED_REVIEW_ROLES)"
+fi
+
+if [[ "$CREATE_PR" == "1" && -n "$MISSING_SEMANTIC_REVIEW_EVIDENCE" ]]; then
+  die "pre-PR local role review is missing required semantic evidence for inferred roles: $MISSING_SEMANTIC_REVIEW_EVIDENCE"
 fi
 
 WORKFLOW_LINT_ARGS=("--phase" "pr-ready" "--allow-unbound")
@@ -622,7 +874,7 @@ fi
 
 LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED="$(printf '%s;' ${LOCAL_REQUIRED_EXTRA_COMMANDS[@]+"${LOCAL_REQUIRED_EXTRA_COMMANDS[@]}"})"
 SUMMARY_JSON="$(
-python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED" "$LOCAL_ROLE_REVIEW_STATUS" "$LOCAL_ROLE_REVIEW_TASK_UID" "$LOCAL_ROLE_REVIEW_LOG_PATH" "$LOCAL_ROLE_REVIEW_REASON" "$LOCAL_ROLE_REVIEW_MISSING_MARKERS" "$LOCAL_ROLE_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_PACKAGE" "$LOCAL_ROLE_REVIEW_VERDICTS" "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" <<'PY'
+python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED" "$LOCAL_ROLE_REVIEW_STATUS" "$LOCAL_ROLE_REVIEW_TASK_UID" "$LOCAL_ROLE_REVIEW_LOG_PATH" "$LOCAL_ROLE_REVIEW_REASON" "$LOCAL_ROLE_REVIEW_MISSING_MARKERS" "$LOCAL_ROLE_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_PACKAGE" "$LOCAL_ROLE_REVIEW_VERDICTS" "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" "$REQUIRED_REVIEW_ROLES" "$MISSING_REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX" "$LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE" "$LOCAL_ROLE_REVIEW_WASM_EVIDENCE" "$LOCAL_ROLE_REVIEW_OPS_EVIDENCE" "$LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE" "$MISSING_SEMANTIC_REVIEW_EVIDENCE" <<'PY'
 from __future__ import annotations
 
 import json
@@ -632,6 +884,7 @@ changed_paths = [path for path in sys.argv[21].split(";") if path]
 reason_items = [reason for reason in sys.argv[22].split(";") if reason]
 extra_commands = [cmd for cmd in sys.argv[25].split(";") if cmd]
 missing_markers = [marker for marker in sys.argv[30].split(";") if marker]
+missing_semantic_evidence = [marker for marker in sys.argv[44].split(";") if marker]
 
 payload = {
     "source_branch": sys.argv[1],
@@ -674,6 +927,14 @@ payload = {
         "findings_disposition": sys.argv[34] or None,
         "residual_risk": sys.argv[35] or None,
         "slice_ledger": sys.argv[36] or None,
+        "required_roles_from_changed_paths": sys.argv[37] or None,
+        "missing_required_roles": sys.argv[38] or None,
+        "verification_matrix": sys.argv[39] or None,
+        "visual_evidence": sys.argv[40] or None,
+        "wasm_evidence": sys.argv[41] or None,
+        "ops_evidence": sys.argv[42] or None,
+        "liveops_evidence": sys.argv[43] or None,
+        "missing_semantic_evidence": missing_semantic_evidence,
     },
 }
 print(json.dumps(payload, ensure_ascii=False))
@@ -742,6 +1003,15 @@ fi
 if [[ -n "$LOCAL_ROLE_REVIEW_ROLES" ]]; then
   echo "- review roles: $LOCAL_ROLE_REVIEW_ROLES"
 fi
+if [[ -n "$REQUIRED_REVIEW_ROLES" ]]; then
+  echo "- required roles from changed paths: $REQUIRED_REVIEW_ROLES"
+fi
+if [[ -n "$MISSING_REQUIRED_REVIEW_ROLES" ]]; then
+  echo "- missing required roles: $MISSING_REQUIRED_REVIEW_ROLES"
+fi
+if [[ -n "$MISSING_SEMANTIC_REVIEW_EVIDENCE" ]]; then
+  echo "- missing semantic evidence: $MISSING_SEMANTIC_REVIEW_EVIDENCE"
+fi
 if [[ -n "$LOCAL_ROLE_REVIEW_PACKAGE" ]]; then
   echo "- review package: $LOCAL_ROLE_REVIEW_PACKAGE"
 fi
@@ -750,6 +1020,21 @@ if [[ -n "$LOCAL_ROLE_REVIEW_VERDICTS" ]]; then
 fi
 if [[ -n "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" ]]; then
   echo "- findings disposition: $LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX" ]]; then
+  echo "- verification matrix: $LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE" ]]; then
+  echo "- visual evidence: $LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_WASM_EVIDENCE" ]]; then
+  echo "- wasm evidence: $LOCAL_ROLE_REVIEW_WASM_EVIDENCE"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_OPS_EVIDENCE" ]]; then
+  echo "- ops evidence: $LOCAL_ROLE_REVIEW_OPS_EVIDENCE"
+fi
+if [[ -n "$LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE" ]]; then
+  echo "- liveops evidence: $LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE"
 fi
 if [[ -n "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" ]]; then
   echo "- residual risk: $LOCAL_ROLE_REVIEW_RESIDUAL_RISK"

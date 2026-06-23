@@ -36,6 +36,9 @@
 | Action feedback / blocker / next step is visible when required |  |  |
 | Diagnostics or debug panels do not dominate the primary player path |  |  |
 | Desktop and mobile preserve the same priority order |  |  |
+| Keyboard focus order and visible focus state are usable when relevant |  |  |
+| Text contrast and target/touch sizes are acceptable for the viewport |  |  |
+| Reduced-motion / animation intensity assumptions are explicit when motion is present |  |  |
 
 ## Findings
 1.

@@ -81,6 +81,7 @@ jobs:
           echo "run_viewer_perf_smoke=${{ steps.scope.outputs.run_viewer_perf_smoke }}"
           echo "run_launcher_web_build=${{ steps.scope.outputs.run_launcher_web_build }}"
           echo "needs_node=${{ steps.scope.outputs.needs_node }}"
+          echo "needs_system_deps=${{ steps.scope.outputs.needs_system_deps }}"
           echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
       - name: Install pinned Rust toolchains
         run: |
@@ -108,7 +109,7 @@ jobs:
         if: ${{ steps.scope.outputs.needs_trunk == 'true' }}
         run: cargo install trunk --locked
       - name: Install system deps
-        if: ${{ steps.scope.outputs.needs_system_deps == 'true' }}
+        if: ${{ steps.scope.outputs.needs_system_deps == 'true' || steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_perf_smoke == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -135,6 +136,7 @@ jobs:
           OASIS7_CI_RUN_VIEWER_WASM_CHECK: ${{ steps.scope.outputs.run_viewer_wasm_check }}
           OASIS7_CI_RUN_VIEWER_PERF_SMOKE: ${{ steps.scope.outputs.run_viewer_perf_smoke }}
           OASIS7_CI_RUN_LAUNCHER_WEB_BUILD: ${{ steps.scope.outputs.run_launcher_web_build }}
+          OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS: ${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh required
 
   full-regression:
