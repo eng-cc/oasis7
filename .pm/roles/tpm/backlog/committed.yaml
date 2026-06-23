@@ -88,3 +88,13 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_81577d7e86df4cd0b7bbb1c4d08ad019.yaml
+  - task_uid: task_b7b231c0f8c244f382757499d955f2b6
+    title: "Check public testnet node health"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "Report current local observer and public testnet submit endpoint health with raw evidence"
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_b7b231c0f8c244f382757499d955f2b6.yaml
