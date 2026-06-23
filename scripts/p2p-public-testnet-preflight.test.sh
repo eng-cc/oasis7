@@ -36,9 +36,30 @@ NODE_ID=test
 REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/old/tcp/1/p2p/oldpeer
 EOF
 
-jq '.track = "public_testnet_rehearsal"' \
-  "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
-  >"$TMP_DIR/rehearsal-bundle.json"
+mkdir -p "$TMP_DIR/bundle/world" "$TMP_DIR/bundle/evidence"
+printf 'runtime\n' >"$TMP_DIR/bundle/oasis7_chain_runtime"
+cat >"$TMP_DIR/bundle/world/snapshot.json" <<'JSON'
+{"state":{}}
+JSON
+cat >"$TMP_DIR/bundle/world/journal.json" <<'JSON'
+[]
+JSON
+cat >"$TMP_DIR/bundle/validator-registry.json" <<'JSON'
+{"validators":[]}
+JSON
+cat >"$TMP_DIR/bundle/evidence/topology.md" <<'EOF'
+# test topology
+EOF
+
+"$ROOT_DIR/scripts/release-candidate-bundle.sh" create \
+  --bundle "$TMP_DIR/rehearsal-bundle.json" \
+  --candidate-id public-testnet-preflight-test \
+  --track public_testnet_rehearsal \
+  --runtime-build-ref "$TMP_DIR/bundle/oasis7_chain_runtime" \
+  --world-snapshot-ref "$TMP_DIR/bundle/world" \
+  --governance-manifest-ref "$TMP_DIR/bundle/validator-registry.json" \
+  --evidence-ref "$TMP_DIR/bundle/evidence/topology.md" \
+  --allow-dirty-worktree >/dev/null
 
 mkdir -p "$TMP_DIR/seed/world" "$TMP_DIR/seed/execution-records" "$TMP_DIR/seed/store/blobs"
 cat >"$TMP_DIR/seed/world/snapshot.json" <<'JSON'
