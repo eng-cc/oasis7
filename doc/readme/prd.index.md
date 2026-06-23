@@ -20,7 +20,7 @@
 - `doc/readme/`：123 份文件
 - `doc/readme/governance/`：76 份文件
 - `doc/readme/gap/`：27 份文件
-- `doc/readme/production/`：12 份文件
+- `doc/readme/production/`：15 份文件
 - `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）
 - 正式专题三件套：30 组
 - 当前默认活跃专题三件套：27 组
@@ -31,7 +31,7 @@
 | --- | --- | --- |
 | `governance/` | 76 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
 | `gap/` | 27 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口 |
-| `production/` | 12 | 生产收口、阶段边界、readiness 与对外承诺约束 |
+| `production/` | 15 | 生产收口、阶段边界、readiness 与对外承诺约束 |
 
 ## 活跃补充文档
 - `doc/readme/governance/README.md`：`governance/` 热点子域 landing page，按治理控制、release communication、Moltbook、limited preview/reward、小红书与公开定位分流读者。
