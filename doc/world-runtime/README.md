@@ -36,12 +36,12 @@
 - 汇总 runtime / wasm / module / governance / integration / testing 六类专题。
 - 承接候选级证据、发布门禁指标与跨模块 runtime 收口事项。
 
-## 热点子域导航（2026-04-20 快照）
-- `runtime/`（55）：运行时主链路、数值正确性、存储治理、retention 与 replay contract。
+## 热点子域导航（2026-06-23 快照）
+- `runtime/`（57）：运行时主链路、数值正确性、存储治理、retention 与 replay contract。
 - `wasm/`（25）：Docker canonical build、执行器、观测指标、模块级 observe runner、SDK、sandbox 与 ABI 治理。
 - `module/`（16）：模块生命周期、线上发布合法性、模块存储与订阅过滤专题。
 - 根目录入口与 handoff（9）：模块主入口与 runtime 候选/验证交接留痕。
-- `evidence/`（6）：候选级指标、soak、storage gate 与 profile consistency 采证。
+- `evidence/`（7）：候选级指标、soak、storage gate 与 profile consistency 采证。
 - `governance/`（5）：治理事件与收据安全专题。
 
 ## 高密度提示
