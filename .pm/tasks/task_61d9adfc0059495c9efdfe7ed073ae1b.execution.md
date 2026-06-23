@@ -119,7 +119,7 @@ Example:
 - Task UID: task_61d9adfc0059495c9efdfe7ed073ae1b
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623g
 - Source Branch: task/engineering-repository-health-inspection-20260623g
-- Source Head: 3f5bc9eb697e74f8f7227c99478eba32545a3fbd
+- Source Head: b39eeef4146a6e5b6e16d7d8c3fc1e4b741f524f
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_61d9adfc0059495c9efdfe7ed073ae1b.execution.md`; `.pm/tasks/task_61d9adfc0059495c9efdfe7ed073ae1b.yaml`; `doc/engineering/project.md`; `doc/world-simulator/launcher/README.md`
 - Review Package: n/a; uncommitted live diff review, because `review-package.sh --base origin/main --head HEAD` is empty before the review/commit boundary.
