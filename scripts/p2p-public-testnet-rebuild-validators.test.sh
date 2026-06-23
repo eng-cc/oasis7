@@ -193,11 +193,11 @@ json=$("$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --world-dir "$TMP_DIR/world" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
-  --sequencer-service oasis7-testnet-sequencer.service \
+  --sequencer-service oasis7-triad-sequencer.service \
   --sequencer-status-url http://sequencer/status \
   --storage-ssh-host root@storage \
   --storage-sshpass-env STO_PASS \
-  --storage-service oasis7-testnet-storage.service \
+  --storage-service oasis7-triad-storage.service \
   --storage-status-url http://storage/status \
   --stack-root /opt/oasis7/p2p-testnet \
   --out-dir "$TMP_DIR/out" \
