@@ -46,8 +46,8 @@
 - `llm/`（54）：provider、loopback、本地桥接、体验等价和 direct-connect 相关口径。
 - `kernel/`（36）：规则桥接、WASM 执行、资源与 runtime 约束。
 - `m4/`（36）：M4 方案与配套设计。
-- `scenario/`（30）：场景初始化、配置与模板。
-- `prd/`（9）：验收模板、质量趋势与补充附件。
+- `scenario/`（33）：场景初始化、配置与模板。
+- `prd/`（8）：验收模板、质量趋势与补充附件。
 
 ## 高密度提示
 - `doc/world-simulator/` 当前共有 475 份 Markdown；这一层入口不再尝试把热点专题直接摊平展示。
