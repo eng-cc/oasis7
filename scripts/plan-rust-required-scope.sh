@@ -202,11 +202,15 @@ classify_changed_path() {
       mark_launcher_web_build "launcher_wasm_abi:${path}"
       ;;
     crates/oasis7_wasm_build|crates/oasis7_wasm_build/*|crates/oasis7_wasm_build/**/*|\
+    crates/oasis7_builtin_wasm_modules|crates/oasis7_builtin_wasm_modules/*|crates/oasis7_builtin_wasm_modules/**/*|\
+    crates/oasis7_wasm_sdk|crates/oasis7_wasm_sdk/*|crates/oasis7_wasm_sdk/**/*)
+      mark_wasm_support "wasm_support:${path}"
+      ;;
     crates/oasis7_wasm_router|crates/oasis7_wasm_router/*|crates/oasis7_wasm_router/**/*|\
-    crates/oasis7_wasm_sdk|crates/oasis7_wasm_sdk/*|crates/oasis7_wasm_sdk/**/*|\
     crates/oasis7_wasm_store|crates/oasis7_wasm_store/*|crates/oasis7_wasm_store/**/*|\
     crates/oasis7_wasm_executor|crates/oasis7_wasm_executor/*|crates/oasis7_wasm_executor/**/*)
       mark_wasm_support "wasm_support:${path}"
+      mark_runtime "runtime_wasm_support:${path}"
       ;;
     crates/oasis7_consensus|crates/oasis7_consensus/*|crates/oasis7_consensus/**/*)
       mark_consensus "consensus:${path}"

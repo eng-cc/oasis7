@@ -48,9 +48,30 @@ assert_reason_contains "$wasm_build_output" "wasm_support:crates/oasis7_wasm_bui
 
 wasm_store_output="$(plan_for_path crates/oasis7_wasm_store/src/lib.rs)"
 assert_key_equals "$wasm_store_output" scope targeted
+assert_key_equals "$wasm_store_output" run_oasis7_required_tests true
 assert_key_equals "$wasm_store_output" run_oasis7_workspace_support_crate_tests true
 assert_key_equals "$wasm_store_output" run_launcher_web_build false
+assert_reason_contains "$wasm_store_output" "runtime_wasm_support:crates/oasis7_wasm_store/src/lib.rs"
 assert_reason_contains "$wasm_store_output" "wasm_support:crates/oasis7_wasm_store/src/lib.rs"
+
+wasm_router_output="$(plan_for_path crates/oasis7_wasm_router/src/lib.rs)"
+assert_key_equals "$wasm_router_output" scope targeted
+assert_key_equals "$wasm_router_output" run_oasis7_required_tests true
+assert_key_equals "$wasm_router_output" run_oasis7_workspace_support_crate_tests true
+assert_reason_contains "$wasm_router_output" "runtime_wasm_support:crates/oasis7_wasm_router/src/lib.rs"
+assert_reason_contains "$wasm_router_output" "wasm_support:crates/oasis7_wasm_router/src/lib.rs"
+
+wasm_executor_output="$(plan_for_path crates/oasis7_wasm_executor/src/lib.rs)"
+assert_key_equals "$wasm_executor_output" scope targeted
+assert_key_equals "$wasm_executor_output" run_oasis7_required_tests true
+assert_key_equals "$wasm_executor_output" run_oasis7_workspace_support_crate_tests true
+assert_reason_contains "$wasm_executor_output" "runtime_wasm_support:crates/oasis7_wasm_executor/src/lib.rs"
+assert_reason_contains "$wasm_executor_output" "wasm_support:crates/oasis7_wasm_executor/src/lib.rs"
+
+builtin_wasm_output="$(plan_for_path crates/oasis7_builtin_wasm_modules/src/lib.rs)"
+assert_key_equals "$builtin_wasm_output" scope targeted
+assert_key_equals "$builtin_wasm_output" run_oasis7_workspace_support_crate_tests true
+assert_reason_contains "$builtin_wasm_output" "wasm_support:crates/oasis7_builtin_wasm_modules/src/lib.rs"
 
 wasm_abi_output="$(plan_for_path crates/oasis7_wasm_abi/src/lib.rs)"
 assert_key_equals "$wasm_abi_output" scope targeted

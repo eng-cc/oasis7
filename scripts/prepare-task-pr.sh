@@ -252,7 +252,7 @@ required_review_roles_from_paths() {
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
     case "$path" in
-      doc/engineering/workflow/*|.agents/skills/*|.agents/roles/*|scripts/prepare-task-pr.sh|scripts/pm/*|scripts/doc-governance-check.sh|scripts/lint-skills.sh)
+      doc/engineering/workflow/*|.agents/skills/*|.agents/roles/*|.github/workflows/*|scripts/ci-tests.sh|scripts/plan-rust-required-scope.sh|scripts/plan-rust-required-scope.test.sh|scripts/prepare-task-pr.sh|scripts/pm/*|scripts/doc-governance-check.sh|scripts/lint-skills.sh)
         roles="$(append_unique_token "$roles" "repository_health_engineer")"
         ;;
     esac
@@ -267,7 +267,7 @@ required_review_roles_from_paths() {
         ;;
     esac
     case "$path" in
-      crates/oasis7_wasm_*|crates/oasis7_wasm_*/*|crates/oasis7_wasm_*/**/*|doc/world-runtime/wasm/*|doc/world-runtime/wasm/**/*|.github/workflows/wasm-determinism-gate.yml|scripts/plan-wasm-determinism-scope.sh)
+      crates/oasis7_wasm_*|crates/oasis7_wasm_*/*|crates/oasis7_wasm_*/**/*|crates/oasis7_builtin_wasm_modules|crates/oasis7_builtin_wasm_modules/*|crates/oasis7_builtin_wasm_modules/**/*|doc/world-runtime/wasm/*|doc/world-runtime/wasm/**/*|.github/workflows/wasm-determinism-gate.yml|scripts/plan-wasm-determinism-scope.sh)
         roles="$(append_unique_token "$roles" "wasm_platform_engineer")"
         ;;
     esac
@@ -579,6 +579,7 @@ elif reviewed_source_head != source_head:
     allowed_evidence_paths = {
         log_path_rel,
         f".pm/tasks/{task_uid}.yaml",
+        ".pm/registry/tasks.yaml",
     }
     try:
         subprocess.check_call(
@@ -596,6 +597,7 @@ elif reviewed_source_head != source_head:
         disallowed = [
             path for path in changed_since_review
             if path not in allowed_evidence_paths
+            and not (path.startswith(".pm/roles/") and "/backlog/" in path)
         ]
         if disallowed:
             missing.append("Source Head has post-review non-evidence changes: " + ",".join(disallowed))

@@ -324,6 +324,9 @@ assert_roles_for_path() {
 }
 
 assert_roles_for_path "doc/engineering/workflow/source-of-truth.md" "producer_system_designer"
+assert_roles_for_path ".github/workflows/rust.yml" "repository_health_engineer"
+assert_roles_for_path "scripts/ci-tests.sh" "repository_health_engineer"
+assert_roles_for_path "scripts/plan-rust-required-scope.sh" "repository_health_engineer"
 assert_roles_for_path "doc/core/economy.md" "producer_system_designer"
 assert_roles_for_path "doc/game/rules.md" "producer_system_designer"
 assert_roles_for_path "doc/world-runtime/checkpoints.md" "runtime_engineer"
@@ -337,6 +340,7 @@ assert_roles_for_path "scripts/pm/workflow-behavior-eval.sh" "agent_engineer"
 assert_roles_for_path "doc/readme/release-note.md" "liveops_community"
 assert_roles_for_path "doc/health/node-readiness.md" "blockchain_ops_engineer"
 assert_roles_for_path "crates/oasis7_wasm_abi/src/lib.rs" "wasm_platform_engineer"
+assert_roles_for_path "crates/oasis7_builtin_wasm_modules/src/lib.rs" "wasm_platform_engineer"
 
 visual_semantic_missing="$(
   semantic_review_evidence_missing "game_visual_interaction_designer" \
@@ -702,6 +706,35 @@ if [[ -s "$json_err" ]]; then
   cat "$json_err" >&2
   exit 1
 fi
+
+post_review_views_log="$TMPDIR/post-review-views.log"
+post_review_views_git_log="$TMPDIR/post-review-views.git.log"
+post_review_views_json="$TMPDIR/post-review-views.json"
+write_role_review_packet "$SOURCE_HEAD" "no_findings"
+commit_fixture_evidence
+mkdir -p "$SMOKE_WORKTREE/.pm/registry" "$SMOKE_WORKTREE/.pm/roles/tpm/backlog"
+printf 'version: 2\nidentity_key: task_uid\ngenerated_from: .pm/tasks/*.yaml\ntasks: []\n' > "$SMOKE_WORKTREE/.pm/registry/tasks.yaml"
+printf 'version: 1\nrole: tpm\nstatus: done\ntasks: []\n' > "$SMOKE_WORKTREE/.pm/roles/tpm/backlog/done.yaml"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/registry/tasks.yaml" ".pm/roles/tpm/backlog/done.yaml"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: post-review generated pm views" >/dev/null
+run_prepare "$post_review_views_log" "$post_review_views_git_log" --json >"$post_review_views_json"
+
+python3 - "$post_review_views_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+review = payload["pre_pr_local_role_review"]
+if review["status"] != "passed":
+    raise SystemExit(f"expected generated PM views to be allowed after review, got: {review}")
+PY
 
 reset_smoke_branch_to_base
 write_changed_path_fixture "crates/oasis7_node/src/network_bridge.rs"

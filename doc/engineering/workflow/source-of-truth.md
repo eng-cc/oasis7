@@ -216,7 +216,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - `Task UID: <task_uid>`
   - `Source Worktree: <absolute path>`
   - `Source Branch: <branch>`
-  - `Source Head: <reviewed git sha; must be current source head or an ancestor whose later changes are only the task review evidence files>`
+  - `Source Head: <reviewed git sha; must be current source head or an ancestor whose later changes are only the task review evidence files or generated PM task registry/backlog views>`
   - `Comparison Ref: <base ref>`
   - `Reviewed Changed Paths: <semicolon-separated paths or diff summary ref>`
   - `Review Package: <path to review package or n/a with reason>`
@@ -261,6 +261,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - Added regression coverage for role inference drift, generic `n/a` rejection, and explicit visual/ops/liveops deferral acceptance.
 - **v1.4.25 (2026-06-23)**
   - Added first-class `Ops Evidence` and `LiveOps Evidence` pre-PR review packet fields and required semantic evidence checks for inferred professional roles.
+  - Tightened PR helper backstops for CI workflow/shared scope planner repository-health review, builtin WASM module platform review, runtime gates for core WASM dependencies, and generated PM task-view post-review allowlisting.
   - Expanded changed-path role inference coverage for producer/product-system, runtime world docs, gameplay simulator docs, visual testing docs, liveops/readme/release/status docs, and ops topology/readiness/preflight/packaging surfaces.
   - Synced manual packaging CI hold requirements across failure/rollback and PR sections so stale/timeout, ops readiness, rollback/runbook, resume, and external/status messaging evidence are consistently required.
 - **v1.4.24 (2026-06-22)**
