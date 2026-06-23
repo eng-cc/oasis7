@@ -44,14 +44,14 @@
 - 承接 agent 认领的 token 成本、claim bond、upkeep 与 reclaim 规则。
 - 承接 agent claim restricted grant 的运营发放、撤销、过期与 incident runbook。
 
-## 热点子域导航（2026-05-17 快照）
-- `gameplay/`（82）：先看 `gameplay/README.md`，再按簇进入玩法骨架、留存修复、preview/beta gate、claim economy、长稳治理、agency 合同与 mature-world 小玩家承接。
+## 热点子域导航（2026-06-23 快照）
+- `gameplay/`（83）：先看 `gameplay/README.md`，再按簇进入玩法骨架、留存修复、preview/beta gate、claim economy、长稳治理、agency 合同与 mature-world 小玩家承接。
 - `gameplay/` 正式专题三件套（63）：用于已知专题后的精确下钻。
 - `gameplay/` 补充材料（18）：runbook、evidence、checklist、handoff 与跨角色执行留痕。
 - 模块根入口（5）：`README.md`、`prd.md`、`project.md`、`design.md`、`prd.index.md`。
 
 ## 高密度提示
-- `doc/game/` 当前共有 87 份 Markdown，其中 `doc/game/gameplay/` 占 82 份；默认入口只负责把你送到 `gameplay/README.md`，不再尝试把 gameplay 长表直接摊平到模块首页。
+- `doc/game/` 当前共有 88 份 Markdown，其中 `doc/game/gameplay/` 占 83 份；默认入口只负责把你送到 `gameplay/README.md`，不再尝试把 gameplay 长表直接摊平到模块首页。
 - 需要完整活跃专题清单时，进入 `doc/game/prd.index.md`；需要 runbook、evidence、handoff 或 checklist 时，再按 `gameplay/` 中的补充文件精确进入。
 
 ## 共享约定

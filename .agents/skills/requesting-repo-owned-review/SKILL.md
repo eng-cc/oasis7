@@ -45,11 +45,18 @@ The formal path is:
 
 1. Define the involved roles:
    - infer from changed paths, role ownership, task slice history, and user-facing claim
+   - include `producer_system_designer` when scope, product contract, user promise, acceptance, or system-level semantics change
    - include `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched
-   - include `qa_engineer` when the PR claim depends on verification or release readiness
-   - include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, or UI-heavy claims are touched
+   - include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, accessibility/readability, or UI-heavy claims are touched
+   - include `runtime_engineer` when runtime/server/simulation/gameplay enforcement, replay, recovery, checkpoint, long-run behavior, or `crates/oasis7*` runtime paths are touched
+   - include `blockchain_ops_engineer` when deployment, node ops, topology/inventory, service/host contracts, health baselines, upgrade/rollback/restore drills, packaging/release ops, or operator-facing runbooks are touched
+   - include `wasm_platform_engineer` when `crates/oasis7_wasm_*`, builtin wasm modules, ABI/schema, manifest/hash, wasm build/receipt, wasm determinism workflows, or `doc/world-runtime/wasm/*` are touched
+   - include `agent_engineer` when agent behavior, prompts, provider contracts, model/runtime config, subagent dispatch contracts, or agent tooling are touched
+   - include `viewer_engineer` when Viewer/Web/UI/WebGPU/browser validation paths are touched
+   - include `qa_engineer` when the PR claim depends on verification, release readiness, test strategy, or evidence sufficiency
    - include `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, or known technical-debt boundaries
-   - include `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched
+   - include `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched
+   - treat `scripts/prepare-task-pr.sh --create` required-role inference as the minimum mechanical backstop, not as a replacement for task-history or claim-based role selection
 2. Freeze the review target:
    - changed files or path set
    - exact question to answer
@@ -109,6 +116,11 @@ role reviews and addressing findings:
 - Review Verdicts: <per-role scope/spec compliance verdict + role quality/risk verdict>
 - Review Findings Disposition: <addressed | no_findings>
 - Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>
+- Verification Matrix: <changed surface -> required evidence -> observed evidence or explicit deferral>
+- Visual Evidence: <screenshot/model visual review paths or n/a with exemption reason>
+- WASM Evidence: <support crate/determinism evidence or n/a with reason>
+- Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>
+- LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>
 - Residual Risk: <text>
 - Slice Ledger: <path to slice ledger or n/a with reason>
 ```
@@ -132,7 +144,7 @@ role reviews and addressing findings:
 
 ## Guardrails
 
-- Do not leave PR creation without a passed pre-PR local role review packet.
+- Do not leave PR creation without a passed pre-PR local role review packet that includes required-role coverage and verification-matrix evidence.
 - Do not claim that repo-owned review makes GitHub review unnecessary.
 - Do not leave the review request or outcome as chat-only context.
 - Do not resolve GitHub threads based solely on this local review packet.

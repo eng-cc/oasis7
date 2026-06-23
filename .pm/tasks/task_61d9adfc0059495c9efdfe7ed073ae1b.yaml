@@ -1,0 +1,24 @@
+task_uid: task_61d9adfc0059495c9efdfe7ed073ae1b
+title: "Run next repository health inspection slice"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623g
+execution_log_path: .pm/tasks/task_61d9adfc0059495c9efdfe7ed073ae1b.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Dispatch a bounded repository_health_engineer inspection slice and record its findings/no_findings in the task execution log."
+  - "If a valid governance issue is found, apply a focused fix with verification and prepare it for the normal PR watch/merge path."
+handoff_to: []
+updated_at: 2026-06-23T17:57:13+08:00
+last_started_at: 2026-06-23T17:27:49+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_61d9adfc0059495c9efdfe7ed073ae1b --phase current && bash scripts/doc-inventory-report.sh >/tmp/task_61d9_doc_inventory.txt && rg -n 'launcher-inventory-snapshot-sync|doc/world-simulator/.+475|doc/world-simulator/launcher/.+87|2026-06-23' doc/world-simulator/launcher/README.md doc/world-simulator/README.md doc/world-simulator/viewer/README.md doc/engineering/project.md && /usr/bin/find doc/world-simulator/launcher -type f -name '*.md' | wc -l && /usr/bin/find doc/world-simulator -type f -name '*.md' | wc -l && git diff --check"
+last_verified_at: 2026-06-23T17:57:11+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-23T17:57:13+08:00

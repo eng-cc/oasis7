@@ -44,7 +44,7 @@
 - `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/task_<32hex>.yaml` 与对应 `.pm/tasks/task_<32hex>.execution.md`，并重建 task registry 与 owner 的 `backlog/candidate.yaml` 视图。
 - `./scripts/new-task-worktree.sh --pm-owner-role ... --pm-title ... --pm-source-ref ...`：在创建 task worktree 的同时，切到目标 worktree 内原子完成 `new-task -> move-task committed -> workflow-report start`，避免 `.pm` task 误写回 source worktree。
 - `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done(deferred)` 之间同步迁移 task file、task registry 与 owner backlog 条目。
-- `./scripts/pm/task-closeout.sh`：默认 close-phase helper；在 task 已 start 且 execution log 已回写后，若目标状态是 `done`，必须先执行当前回合 fresh verification，然后才统一执行 `workflow-report close -> move-task done|deferred -> pm lint`，再进入 commit / `prepare-task-pr.sh`。
+- `./scripts/pm/task-closeout.sh`：默认 close-phase helper；在 task 已 start、execution log 已回写、fresh verification 已通过、且 PR 路径任务的 pre-PR local role review findings 已处理后，才统一执行 `workflow-report close -> move-task done|deferred -> pm lint`，再进入 commit / `prepare-task-pr.sh`。
 - `./scripts/pm/claim-ready.sh`：在宣称“完成 / 测试通过 / 可提 PR / 可合并”前，立即执行 fresh verification command；只有本次运行成功，才允许输出 claim-ready 结论。
 - `./scripts/pm/append-execution-log.sh`：结构化追加 `.pm/tasks/<TASK-UID>.execution.md` 条目，要求显式 task_uid、role、完成内容、遗留事项、动作与验证结果，避免手写漏字段。
 - `./scripts/pm/task-execution-log-lint.sh`：校验 task execution log 的路径、标题格式、角色名和条目完整性。

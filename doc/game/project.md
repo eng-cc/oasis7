@@ -36,6 +36,7 @@
 | `agent-claim-slot-1-auto-starter-grant` | slot-1 启动金可由专用池自动补足并原子认领，仍保持首个 claim 非免费。 | `.pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml` |
 | `local-standalone-submit-flow` / `chain-side-manifest-delta-runtime-readiness` | PR #547 / `a39a8d224` 后，cold-start 已形成 `claim_first_agent -> claim_starter_oc -> first agent chat` 的资源与动作链路；该进展支持 PRD-GAME-002/011 的可验证语义和 chain resource readiness，但不改变当前阶段或 claim envelope。 | `.pm/tasks/task_212396995cf3409eb34c8e9bec563ca3.yaml`, `.pm/tasks/task_a0e15f2d5d0547a3a13c93caab49b611.yaml` |
 | `game-design-goal-refresh-audit` | 本轮只做根 PRD / project / gameplay README / claim 专题的冷启动链路文档刷新，明确 starter OC 与 restricted starter claim balance 的边界，不升级阶段或 claim envelope。 | Trace: .pm/tasks/task_c35014dff0ba4411a54a2a8f4fb65040.yaml |
+| `game-small-player-lane-runtime-truth` | small-player lane / anti-grind runtime truth 已落到 canonical snapshot、runtime_live 派生和正向回归；这只证明 runtime/sample truth 可测，不直接升级 mature-world QA lane verdict。 | Trace: .pm/tasks/task_96b6823495f44ef39c80f3c8b1a74421.yaml |
 | `viewer-immersive-blue-gradient-line` / `immersive-command-panel-spacing` | 近期 player-facing viewer polish 已收口，不改变 game 根 PRD 的玩法承诺。 | `.pm/tasks/task_834078a49c334891a3193e4f303f939a.yaml`, `.pm/tasks/task_b5440afc520648ffa963803c93da43f2.yaml` |
 | `game-content-doc-trim-audit` | 根 PRD / project 已瘦身为 active gameplay baseline 与当前执行看板；专题细节、历史证据和执行流水改由专题 project、evidence 与 `.pm` trace 承接。 | Trace: .pm/tasks/task_07cf7b41bab74286b2d4573da613779d.yaml |
 

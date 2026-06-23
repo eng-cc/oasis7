@@ -1,0 +1,28 @@
+task_uid: task_96b6823495f44ef39c80f3c8b1a74421
+title: "Add small-player lane runtime truth for anti-grind checks"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-game-small-player-lane-runtime-truth
+execution_log_path: .pm/tasks/task_96b6823495f44ef39c80f3c8b1a74421.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/evidence/gameplay-control-feeling-and-anti-grind-matrix-2026-05-23.md
+doc_refs:
+  - doc/game/prd.md
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md
+related_prd: []
+acceptance:
+  - "Expose canonical runtime/sample truth for small-player lane anti-grind and major-power-dependency state."
+  - "Add focused automated coverage proving grind-only and forced-major-power-dependency surfaces are observable."
+  - "Update current evidence or docs so the watch-to-pass/block boundary is traceable."
+handoff_to: []
+updated_at: 2026-06-23T09:36:41+08:00
+last_started_at: 2026-06-22T23:45:53+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_gameplay_snapshot_surfaces_same_loop_repeat_count_before_new_leverage -- --nocapture"
+last_verified_at: 2026-06-23T09:36:40+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-23T09:36:41+08:00

@@ -142,12 +142,17 @@ write_role_review_packet() {
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
 - Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
-- Role Selection Basis: changed paths include PR helper workflow; roles tpm,qa_engineer.
-- Review Roles: tpm,qa_engineer
-- Review Evidence: qa_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture
-- Review Verdicts: qa_engineer scope/spec compliance=approved; role quality/risk=approved
+- Role Selection Basis: changed paths include PR helper workflow and project trace; roles producer_system_designer,repository_health_engineer,qa_engineer.
+- Review Roles: producer_system_designer,repository_health_engineer,qa_engineer
+- Review Evidence: producer_system_designer: 2026-06-03 00:00:00 CST; no_findings; fixture; repository_health_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture; qa_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture
+- Review Verdicts: producer_system_designer scope/spec compliance=approved; role quality/risk=approved; repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved
 - Review Findings Disposition: $disposition
 - Finding Disposition Evidence: fixture evidence
+- Verification Matrix: workflow helper -> prepare-task-pr smoke -> observed
+- Visual Evidence: n/a; no visible surface
+- WASM Evidence: n/a; no WASM surface
+- Ops Evidence: n/a; no ops surface
+- LiveOps Evidence: n/a; no liveops surface
 - Residual Risk: fixture residual risk
 - Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl
 - Blocker / Next Action: none.
@@ -194,12 +199,17 @@ write_shadowed_role_review_packet() {
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
 - Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
-- Role Selection Basis: changed paths include PR helper workflow; roles tpm,qa_engineer.
-- Review Roles: tpm,qa_engineer
-- Review Evidence: qa_engineer: 2026-06-03 00:01:00 CST; no_findings; fixture
-- Review Verdicts: qa_engineer scope/spec compliance=approved; role quality/risk=approved
+- Role Selection Basis: changed paths include PR helper workflow and project trace; roles producer_system_designer,repository_health_engineer,qa_engineer.
+- Review Roles: producer_system_designer,repository_health_engineer,qa_engineer
+- Review Evidence: producer_system_designer: 2026-06-03 00:01:00 CST; no_findings; fixture; repository_health_engineer: 2026-06-03 00:01:00 CST; no_findings; fixture; qa_engineer: 2026-06-03 00:01:00 CST; no_findings; fixture
+- Review Verdicts: producer_system_designer scope/spec compliance=approved; role quality/risk=approved; repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: fixture evidence
+- Verification Matrix: workflow helper -> prepare-task-pr smoke -> observed
+- Visual Evidence: n/a; no visible surface
+- WASM Evidence: n/a; no WASM surface
+- Ops Evidence: n/a; no ops surface
+- LiveOps Evidence: n/a; no liveops surface
 - Residual Risk: final fixture residual risk
 - Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl
 - Blocker / Next Action: none.
@@ -233,12 +243,17 @@ write_prefix_mismatch_role_review_packet() {
 - Comparison Ref: refs/remotes/origin/main-old
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
 - Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
-- Role Selection Basis: changed paths include PR helper workflow; roles tpm,qa_engineer.
-- Review Roles: tpm,qa_engineer
-- Review Evidence: qa_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture
-- Review Verdicts: qa_engineer scope/spec compliance=approved; role quality/risk=approved
+- Role Selection Basis: changed paths include PR helper workflow and project trace; roles producer_system_designer,repository_health_engineer,qa_engineer.
+- Review Roles: producer_system_designer,repository_health_engineer,qa_engineer
+- Review Evidence: producer_system_designer: 2026-06-03 00:00:00 CST; no_findings; fixture; repository_health_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture; qa_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture
+- Review Verdicts: producer_system_designer scope/spec compliance=approved; role quality/risk=approved; repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: fixture evidence
+- Verification Matrix: workflow helper -> prepare-task-pr smoke -> observed
+- Visual Evidence: n/a; no visible surface
+- WASM Evidence: n/a; no WASM surface
+- Ops Evidence: n/a; no ops surface
+- LiveOps Evidence: n/a; no liveops surface
 - Residual Risk: fixture residual risk
 - Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl
 - Blocker / Next Action: none.
@@ -266,6 +281,183 @@ run_prepare() {
     TEST_GIT_LOG="$git_log" \
     "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "$@"
 }
+
+reset_smoke_branch_to_base() {
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" reset --hard refs/remotes/origin/main >/dev/null
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" clean -fd >/dev/null
+}
+
+write_changed_path_fixture() {
+  local changed_path="$1"
+  printf '\n// prepare-task-pr local required command fixture\n' >> "$SMOKE_WORKTREE/$changed_path"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add "$changed_path"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+    -c user.name="oasis7 smoke" \
+    -c user.email="smoke@example.invalid" \
+    -c commit.gpgsign=false \
+    commit --no-verify -m "test: local required command fixture" >/dev/null
+  SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  write_task_binding
+  write_project_trace
+  write_role_review_packet "$SOURCE_HEAD" "no_findings"
+  commit_fixture_evidence
+}
+
+helper_functions="$(
+  sed -n '/^append_unique_token()/,/^local_role_review_status()/p' "$ROOT_DIR/scripts/prepare-task-pr.sh" | sed '$d'
+)"
+eval "$helper_functions"
+
+assert_roles_for_path() {
+  local path="$1"
+  local expected_role="$2"
+  local roles
+  roles="$(required_review_roles_from_paths "$path")"
+  if [[ ",$roles," != *",$expected_role,"* ]]; then
+    echo "expected $path to require $expected_role, got $roles" >&2
+    exit 1
+  fi
+  if [[ ",$roles," != *",qa_engineer,"* ]]; then
+    echo "expected $path to require qa_engineer, got $roles" >&2
+    exit 1
+  fi
+}
+
+assert_roles_for_path "doc/engineering/workflow/source-of-truth.md" "producer_system_designer"
+assert_roles_for_path ".github/workflows/rust.yml" "repository_health_engineer"
+assert_roles_for_path "scripts/ci-tests.sh" "repository_health_engineer"
+assert_roles_for_path "scripts/plan-rust-required-scope.sh" "repository_health_engineer"
+assert_roles_for_path "doc/core/economy.md" "producer_system_designer"
+assert_roles_for_path "doc/game/rules.md" "producer_system_designer"
+assert_roles_for_path "doc/world-runtime/checkpoints.md" "runtime_engineer"
+assert_roles_for_path "doc/world-simulator/economy.md" "gameplay_designer"
+assert_roles_for_path "testing-manual.md" "game_visual_interaction_designer"
+assert_roles_for_path "crates/oasis7/src/viewer/server.rs" "viewer_engineer"
+assert_roles_for_path "scripts/run-viewer-web.sh" "viewer_engineer"
+assert_roles_for_path "doc/world-simulator/viewer/readme.md" "viewer_engineer"
+assert_roles_for_path "doc/viewer-manual.md" "viewer_engineer"
+assert_roles_for_path "scripts/pm/workflow-behavior-eval.sh" "agent_engineer"
+assert_roles_for_path "doc/readme/release-note.md" "liveops_community"
+assert_roles_for_path "doc/health/node-readiness.md" "blockchain_ops_engineer"
+assert_roles_for_path "crates/oasis7_wasm_abi/src/lib.rs" "wasm_platform_engineer"
+assert_roles_for_path "crates/oasis7_builtin_wasm_modules/src/lib.rs" "wasm_platform_engineer"
+
+visual_semantic_missing="$(
+  semantic_review_evidence_missing "game_visual_interaction_designer" \
+    "ui -> screenshot -> observed" \
+    "n/a; no visible surface" \
+    "n/a; no wasm surface" \
+    "n/a; no ops surface" \
+    "n/a; no liveops surface"
+)"
+if [[ "$visual_semantic_missing" != *"Visual Evidence must include screenshot/model-review evidence"* ]]; then
+  echo "expected visual n/a to be rejected for visual role, got $visual_semantic_missing" >&2
+  exit 1
+fi
+
+visual_exemption_missing="$(
+  semantic_review_evidence_missing "game_visual_interaction_designer" \
+    "ui docs -> explicit exemption -> observed" \
+    "n/a with exemption reason: documentation-only accessibility wording; no rendered UI changed" \
+    "n/a; no wasm surface" \
+    "n/a; no ops surface" \
+    "n/a; no liveops surface"
+)"
+if [[ -n "$visual_exemption_missing" ]]; then
+  echo "expected explicit visual exemption to pass, got $visual_exemption_missing" >&2
+  exit 1
+fi
+
+runtime_semantic_missing="$(
+  semantic_review_evidence_missing "runtime_engineer" \
+    "n/a; no runtime surface" \
+    "n/a; no visual surface" \
+    "n/a; no wasm surface" \
+    "n/a; no ops surface" \
+    "n/a; no liveops surface"
+)"
+if [[ "$runtime_semantic_missing" != *"runtime replay/recovery/checkpoint/long-run"* ]]; then
+  echo "expected runtime matrix semantics to be enforced, got $runtime_semantic_missing" >&2
+  exit 1
+fi
+
+runtime_exemption_missing="$(
+  semantic_review_evidence_missing "runtime_engineer" \
+    "n/a with deferral reason: docs-only workflow text; no runtime replay/recovery/checkpoint path changed" \
+    "n/a; no visual surface" \
+    "n/a; no wasm surface" \
+    "n/a; no ops surface" \
+    "n/a; no liveops surface"
+)"
+if [[ -n "$runtime_exemption_missing" ]]; then
+  echo "expected explicit runtime deferral to pass, got $runtime_exemption_missing" >&2
+  exit 1
+fi
+
+gameplay_semantic_missing="$(
+  semantic_review_evidence_missing "gameplay_designer" \
+    "n/a; no gameplay surface" \
+    "n/a; no visual surface" \
+    "n/a; no wasm surface" \
+    "n/a; no ops surface" \
+    "n/a; no liveops surface"
+)"
+if [[ "$gameplay_semantic_missing" != *"gameplay playability/economy/motivation-loop"* ]]; then
+  echo "expected gameplay matrix semantics to be enforced, got $gameplay_semantic_missing" >&2
+  exit 1
+fi
+
+ops_semantic_missing="$(
+  semantic_review_evidence_missing "blockchain_ops_engineer" \
+    "ops -> smoke -> observed" \
+    "n/a; no visual surface" \
+    "n/a; no wasm surface" \
+    "n/a; no ops surface" \
+    "n/a; no liveops surface"
+)"
+if [[ "$ops_semantic_missing" != *"Ops Evidence must include readiness/rollback/runbook/operator/health evidence"* ]]; then
+  echo "expected generic ops n/a to be rejected, got $ops_semantic_missing" >&2
+  exit 1
+fi
+
+liveops_semantic_missing="$(
+  semantic_review_evidence_missing "liveops_community" \
+    "liveops -> smoke -> observed" \
+    "n/a; no visual surface" \
+    "n/a; no wasm surface" \
+    "n/a; no ops surface" \
+    "n/a; no liveops surface"
+)"
+if [[ "$liveops_semantic_missing" != *"LiveOps Evidence must include messaging/release-note/player/community evidence"* ]]; then
+  echo "expected generic liveops n/a to be rejected, got $liveops_semantic_missing" >&2
+  exit 1
+fi
+
+ops_exemption_missing="$(
+  semantic_review_evidence_missing "blockchain_ops_engineer" \
+    "ops docs -> explicit exemption -> observed" \
+    "n/a; no visual surface" \
+    "n/a; no wasm surface" \
+    "n/a with exemption reason: docs-only governance wording; no deployment change" \
+    "n/a; no liveops surface"
+)"
+if [[ -n "$ops_exemption_missing" ]]; then
+  echo "expected explicit ops exemption to pass, got $ops_exemption_missing" >&2
+  exit 1
+fi
+
+liveops_exemption_missing="$(
+  semantic_review_evidence_missing "liveops_community" \
+    "liveops docs -> explicit exemption -> observed" \
+    "n/a; no visual surface" \
+    "n/a; no wasm surface" \
+    "n/a; no ops surface" \
+    "n/a with exemption reason: internal workflow wording; no public-facing change"
+)"
+if [[ -n "$liveops_exemption_missing" ]]; then
+  echo "expected explicit liveops exemption to pass, got $liveops_exemption_missing" >&2
+  exit 1
+fi
 
 missing_log="$TMPDIR/gh-missing.log"
 missing_git_log="$TMPDIR/git-missing.log"
@@ -394,8 +586,8 @@ if "Pre-PR Local Role Review:" not in stdout or "- status: passed" not in stdout
     raise SystemExit("expected local role review status in output")
 if "- review package: .pm/scratch/" not in stdout:
     raise SystemExit("expected review package path in local role review output")
-if "- review verdicts: qa_engineer scope/spec compliance=approved; role quality/risk=approved" not in stdout:
-    raise SystemExit("expected dual review verdicts in local role review output")
+if "- review verdicts: producer_system_designer scope/spec compliance=approved; role quality/risk=approved; repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved" not in stdout:
+    raise SystemExit("expected multi-role dual review verdicts in local role review output")
 if "- slice ledger: .pm/scratch/" not in stdout:
     raise SystemExit("expected slice ledger path in local role review output")
 if stderr:
@@ -514,5 +706,94 @@ if [[ -s "$json_err" ]]; then
   cat "$json_err" >&2
   exit 1
 fi
+
+post_review_views_log="$TMPDIR/post-review-views.log"
+post_review_views_git_log="$TMPDIR/post-review-views.git.log"
+post_review_views_json="$TMPDIR/post-review-views.json"
+write_role_review_packet "$SOURCE_HEAD" "no_findings"
+commit_fixture_evidence
+mkdir -p "$SMOKE_WORKTREE/.pm/registry" "$SMOKE_WORKTREE/.pm/roles/tpm/backlog"
+printf 'version: 2\nidentity_key: task_uid\ngenerated_from: .pm/tasks/*.yaml\ntasks: []\n' > "$SMOKE_WORKTREE/.pm/registry/tasks.yaml"
+printf 'version: 1\nrole: tpm\nstatus: done\ntasks: []\n' > "$SMOKE_WORKTREE/.pm/roles/tpm/backlog/done.yaml"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/registry/tasks.yaml" ".pm/roles/tpm/backlog/done.yaml"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: post-review generated pm views" >/dev/null
+run_prepare "$post_review_views_log" "$post_review_views_git_log" --json >"$post_review_views_json"
+
+python3 - "$post_review_views_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+review = payload["pre_pr_local_role_review"]
+if review["status"] != "passed":
+    raise SystemExit(f"expected generated PM views to be allowed after review, got: {review}")
+PY
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "crates/oasis7_node/src/network_bridge.rs"
+node_required_json="$TMPDIR/node-required.json"
+run_prepare "$TMPDIR/gh-node-required.log" "$TMPDIR/git-node-required.log" --json >"$node_required_json"
+
+python3 - "$node_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+required = payload["local_required_validation"]
+command = required["recommended_required_command"] or ""
+reason = required["reason_summary"] or ""
+expected_present = [
+    "OASIS7_CI_RUN_OASIS7_NODE_TESTS=true",
+    "OASIS7_CI_RUN_OASIS7_NET_TESTS=false",
+    "OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=false",
+]
+missing = [item for item in expected_present if item not in command]
+if missing:
+    raise SystemExit(f"node required command missing {missing}: {command}")
+if required["scope"] != "targeted":
+    raise SystemExit(f"expected targeted node scope, got: {required}")
+if "node:crates/oasis7_node/src/network_bridge.rs" not in reason:
+    raise SystemExit(f"expected node reason, got: {reason}")
+PY
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "crates/oasis7_net/src/lib.rs"
+net_required_json="$TMPDIR/net-required.json"
+run_prepare "$TMPDIR/gh-net-required.log" "$TMPDIR/git-net-required.log" --json >"$net_required_json"
+
+python3 - "$net_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+required = payload["local_required_validation"]
+command = required["recommended_required_command"] or ""
+reason = required["reason_summary"] or ""
+expected_present = [
+    "OASIS7_CI_RUN_OASIS7_NODE_TESTS=false",
+    "OASIS7_CI_RUN_OASIS7_NET_TESTS=true",
+    "OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=true",
+]
+missing = [item for item in expected_present if item not in command]
+if missing:
+    raise SystemExit(f"net required command missing {missing}: {command}")
+if required["scope"] != "targeted":
+    raise SystemExit(f"expected targeted net scope, got: {required}")
+if "net:crates/oasis7_net/src/lib.rs" not in reason:
+    raise SystemExit(f"expected net reason, got: {reason}")
+PY
 
 echo "prepare-task-pr.test: OK"

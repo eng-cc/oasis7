@@ -1,6 +1,12 @@
 use super::*;
-use crate::runtime::{Action, IndustryStage};
-use crate::simulator::{PlayerGameplayGoalKind, PlayerGameplayStageStatus};
+use crate::runtime::{
+    Action, FactoryModuleSpec, FactoryProductionState, FactoryState, IndustryStage,
+    MaterialLedgerId, MaterialStack, WorldState,
+};
+use crate::simulator::{
+    PlayerGameplayGoalKind, PlayerGameplayRecentFeedback, PlayerGameplayStageStatus,
+};
+use crate::viewer::FACTORY_SMELTER_MK1;
 
 fn setup_runtime_industrial_gameplay_session(
     signer_seed: u8,
@@ -258,6 +264,21 @@ fn expect_player_gameplay(
     server.compat_snapshot().player_gameplay.expect(context)
 }
 
+fn small_player_test_factory_spec(factory_id: &str) -> FactoryModuleSpec {
+    FactoryModuleSpec {
+        factory_id: factory_id.to_string(),
+        display_name: "Test Smelter MK1".to_string(),
+        tier: 2,
+        tags: vec!["smelter".to_string(), "thermal".to_string()],
+        build_cost: vec![MaterialStack::new("structural_frame", 12)],
+        build_time_ticks: 1,
+        base_power_draw: 20,
+        recipe_slots: 2,
+        throughput_bps: 10_000,
+        maintenance_per_tick: 1,
+    }
+}
+
 #[test]
 fn runtime_gameplay_action_promotes_first_output_into_resilient_production_goal() {
     let _guard = lock_test_llm_env();
@@ -273,6 +294,114 @@ fn runtime_gameplay_action_promotes_first_output_into_resilient_production_goal(
     );
     assert_eq!(gameplay.progress_percent, 80);
     assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Active);
+}
+
+#[test]
+fn runtime_gameplay_snapshot_flags_grind_only_after_repeating_same_loop_without_new_leverage() {
+    let mut state = WorldState::default();
+    state.industry_progress.stage = IndustryStage::Bootstrap;
+    state.industry_progress.completed_recipe_jobs = 4;
+    state.factories.insert(
+        FACTORY_SMELTER_MK1.to_string(),
+        FactoryState {
+            factory_id: FACTORY_SMELTER_MK1.to_string(),
+            site_id: "runtime:10:20:0".to_string(),
+            builder_agent_id: "agent-1".to_string(),
+            spec: small_player_test_factory_spec(FACTORY_SMELTER_MK1),
+            input_ledger: MaterialLedgerId::world(),
+            output_ledger: MaterialLedgerId::world(),
+            durability_ppm: 1_000_000,
+            production: FactoryProductionState {
+                completed_jobs: 4,
+                last_completed_at: Some(12),
+                last_completed_recipe_id: Some("recipe.smelter.iron_ingot".to_string()),
+                same_recipe_repeat_count: 3,
+                ..FactoryProductionState::default()
+            },
+            built_at: 1,
+        },
+    );
+
+    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        &state, true, None, None, true, None, false, None,
+    );
+
+    assert_eq!(
+        gameplay.goal_id,
+        "post_onboarding.stabilize_first_line_after_output"
+    );
+    assert_eq!(gameplay.same_loop_repeat_count, 3);
+    assert_eq!(gameplay.leverage_class.as_deref(), Some("throughput_only"));
+    assert!(gameplay.grind_only_flag);
+}
+
+#[test]
+fn runtime_gameplay_snapshot_surfaces_same_loop_repeat_count_before_new_leverage() {
+    let _guard = lock_test_llm_env();
+    let mut server = setup_industrial_gameplay_with_completed_jobs(32, 2);
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay after repeated first-line output",
+    );
+    assert_eq!(
+        gameplay.goal_id,
+        "post_onboarding.stabilize_first_line_after_output"
+    );
+    assert_eq!(gameplay.same_loop_repeat_count, 1);
+    assert_eq!(gameplay.leverage_class.as_deref(), Some("throughput_only"));
+    assert!(!gameplay.grind_only_flag);
+}
+
+#[test]
+fn runtime_gameplay_snapshot_marks_forced_major_power_dependency_when_no_local_recovery_path_exists()
+ {
+    let feedback = PlayerGameplayRecentFeedback {
+        action: "step".to_string(),
+        stage: "blocked".to_string(),
+        effect: "no committed recovery".to_string(),
+        intent_summary: Some("advance the blocked line".to_string()),
+        target_agent_id: None,
+        reason: Some(
+            "only viable continuation requires major power sponsorship; no independent path remains"
+                .to_string(),
+        ),
+        hint: Some("secure a major-power sponsor before continuing".to_string()),
+        delta_logical_time: 0,
+        delta_event_seq: 0,
+    };
+    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        &WorldState::default(),
+        true,
+        Some(&feedback),
+        None,
+        true,
+        None,
+        false,
+        None,
+    );
+
+    assert_eq!(
+        gameplay.goal_kind,
+        PlayerGameplayGoalKind::RecoverCapability
+    );
+    assert_eq!(
+        gameplay.major_power_dependency_status.as_deref(),
+        Some("forced")
+    );
+    assert_eq!(
+        gameplay.requires_major_power_sponsorship.as_deref(),
+        Some("yes")
+    );
+    assert_eq!(gameplay.recovery_path_kind.as_deref(), Some("none"));
+    assert_eq!(gameplay.repair_available, Some(false));
+    assert_eq!(gameplay.rebuild_available, Some(false));
+    assert_eq!(gameplay.pivot_available, Some(false));
+    assert!(
+        gameplay
+            .recovery_path_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("no repair, rebuild, or pivot path"))
+    );
 }
 
 #[test]
@@ -355,7 +484,7 @@ fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_acr
 #[test]
 fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
     let _guard = lock_test_llm_env();
-    let mut server = setup_industrial_gameplay_with_completed_jobs(41, 3);
+    let mut server = setup_industrial_gameplay_with_completed_jobs(41, 4);
     let gameplay = expect_player_gameplay(&mut server, "player gameplay after scale-out");
     assert_eq!(
         gameplay.goal_id,
@@ -390,6 +519,30 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
             .available_actions
             .iter()
             .any(|action| action.action_id == "build_factory_assembler_mk1")
+    );
+    assert_eq!(
+        gameplay.small_player_lane_id.as_deref(),
+        Some("local_operator")
+    );
+    assert_eq!(
+        gameplay.leverage_class.as_deref(),
+        Some("regional_specialization_option")
+    );
+    assert_eq!(gameplay.same_loop_repeat_count, 3);
+    assert!(!gameplay.grind_only_flag);
+    assert_eq!(
+        gameplay.major_power_dependency_status.as_deref(),
+        Some("independent_path_available")
+    );
+    assert_eq!(
+        gameplay.recovery_path_kind.as_deref(),
+        Some("repair_rebuild_or_pivot")
+    );
+    assert!(
+        gameplay
+            .recovery_path_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("repair"))
     );
 }
 
@@ -599,10 +752,12 @@ fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync()
         .expect("persist initial execution world");
 
     let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    let chain_submit = TestChainStatusServer::start(execution_world_dir.clone());
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_submit_bind(chain_submit.addr.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -655,7 +810,11 @@ fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync()
         "chain-linked submit must not mutate local viewer state before committed sync"
     );
 
-    let submitted = chain_status.submitted_gameplay_requests();
+    assert!(
+        chain_status.submitted_gameplay_requests().is_empty(),
+        "chain status endpoint should remain read-only for gameplay submits"
+    );
+    let submitted = chain_submit.submitted_gameplay_requests();
     assert_eq!(submitted.len(), 1);
     assert_eq!(submitted[0].action_id, "build_factory_smelter_mk1");
     assert_eq!(submitted[0].target_agent_id, agent_id);

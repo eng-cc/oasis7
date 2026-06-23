@@ -386,9 +386,19 @@ impl ViewerRuntimeLiveServer {
             .map(str::trim)
             .filter(|value| !value.is_empty());
         if let Some(chain_status_bind) = chain_status_bind {
+            let chain_submit_bind = self
+                .config
+                .chain_submit_bind
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or(chain_status_bind)
+                .to_string();
             let _ = build_runtime_action_from_gameplay_request(&request)?;
-            let submitted =
-                chain_link::submit_chain_linked_gameplay_action(chain_status_bind, &request)?;
+            let submitted = chain_link::submit_chain_linked_gameplay_action(
+                chain_submit_bind.as_str(),
+                &request,
+            )?;
             let submitted_action_id = submitted
                 .action_id
                 .expect("chain gameplay submit must include action_id after ok=true validation");
@@ -404,8 +414,8 @@ impl ViewerRuntimeLiveServer {
                 action: format!("gameplay_action:{}", request.action_id),
                 stage: "submitted".to_string(),
                 effect: format!(
-                    "submitted gameplay action {} for {} to chain runtime as consensus action {}",
-                    request.action_id, request.target_agent_id, submitted_action_id
+                    "submitted gameplay action {} for {} to chain submit endpoint {} as consensus action {}",
+                    request.action_id, request.target_agent_id, chain_submit_bind, submitted_action_id
                 ),
                 intent_summary: Some(format!(
                     "submit gameplay action {} for {}",

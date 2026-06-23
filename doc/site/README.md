@@ -46,7 +46,7 @@
 - 公开 raw skill 入口（可直接抓取）：`site/skills/oasis7.md`。
 
 ## 高密度提示
-- `doc/site/` 当前共有 67 份文件，其中 `doc/site/github-pages/` 占 56 份；默认入口不再尝试把 github-pages 长表直接摊平到模块首页。
+- `doc/site/` 当前共有 71 份文件，其中 `doc/site/github-pages/` 占 58 份；默认入口不再尝试把 github-pages 长表直接摊平到模块首页。
 - 需要完整活跃专题清单时，进入 `doc/site/prd.index.md`；需要公开 docs hub、下载页或手册镜像时，再按 `site/**` 的公开页面定向进入。
 
 ## 共享约定

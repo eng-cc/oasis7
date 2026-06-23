@@ -251,6 +251,20 @@ fn parse_cli_options(args: Vec<String>) -> Result<CliOptions, String> {
                 options.letai_platform_key = Some(value.to_string());
                 index += 2;
             }
+            "--letai-platform-key-env" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--letai-platform-key-env requires a value".to_string())?;
+                let env_name = value.trim();
+                if env_name.is_empty() {
+                    return Err("--letai-platform-key-env requires a non-empty value".to_string());
+                }
+                let env_value = env::var(env_name).map_err(|_| {
+                    format!("--letai-platform-key-env variable `{env_name}` is not set")
+                })?;
+                options.letai_platform_key = Some(env_value);
+                index += 2;
+            }
             "--letai-parent-channel-id" => {
                 let value = args
                     .get(index + 1)
@@ -333,6 +347,7 @@ fn print_help() {
     println!("  --pricing-rule <version:oc:credit[:bonus]>  repeatable exact-match pricing rule");
     println!("  --letai-base-url <url>               optional LetAI OpenAPI base URL");
     println!("  --letai-platform-key <token>         optional LetAI platform management key");
+    println!("  --letai-platform-key-env <name>      read LetAI platform management key from env");
     println!("  --letai-parent-channel-id <id>       optional LetAI parent channel identifier");
     println!("  --letai-timeout-ms <ms>              default: {DEFAULT_LETAI_TIMEOUT_MS}");
     println!("  --max-credit-attempts <n>            default: {DEFAULT_MAX_CREDIT_ATTEMPTS}");

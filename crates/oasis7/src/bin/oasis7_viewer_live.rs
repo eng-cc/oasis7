@@ -1,4 +1,5 @@
 use std::env;
+use std::net::ToSocketAddrs;
 use std::process;
 use std::thread;
 
@@ -25,6 +26,7 @@ struct CliOptions {
     llm_mode: bool,
     deployment_mode: String,
     chain_status_bind: Option<String>,
+    chain_submit_bind: Option<String>,
     chain_link_policy: ChainLinkPolicy,
     auto_play: bool,
     allow_debug_scenario: bool,
@@ -40,6 +42,7 @@ impl Default for CliOptions {
             llm_mode: true,
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
             chain_status_bind: None,
+            chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             auto_play: false,
             allow_debug_scenario: false,
@@ -80,6 +83,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         llm_mode = options.llm_mode,
         deployment_mode = %options.deployment_mode,
         chain_status_bind = ?options.chain_status_bind,
+        chain_submit_bind = ?options.chain_submit_bind,
         chain_link_policy = %options.chain_link_policy.as_str(),
         auto_play = options.auto_play,
         allow_debug_scenario = options.allow_debug_scenario,
@@ -120,6 +124,11 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         });
     let config = if let Some(chain_status_bind) = options.chain_status_bind {
         config.with_chain_status_bind(chain_status_bind)
+    } else {
+        config
+    };
+    let config = if let Some(chain_submit_bind) = options.chain_submit_bind {
+        config.with_chain_submit_bind(chain_submit_bind)
     } else {
         config
     };
@@ -169,6 +178,10 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                 options.chain_status_bind =
                     Some(parse_required_value(&mut iter, "--chain-status-bind")?);
             }
+            "--chain-submit-bind" => {
+                options.chain_submit_bind =
+                    Some(parse_required_value(&mut iter, "--chain-submit-bind")?);
+            }
             "--chain-link-policy" => {
                 let raw = parse_required_value(&mut iter, "--chain-link-policy")?;
                 options.chain_link_policy = parse_chain_link_policy(raw.as_str())?;
@@ -214,7 +227,13 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
         parse_socket_addr(web_bind_addr, "--web-bind")?;
     }
     if let Some(chain_status_bind) = options.chain_status_bind.as_deref() {
-        parse_socket_addr(chain_status_bind, "--chain-status-bind")?;
+        parse_resolvable_socket_addr(chain_status_bind, "--chain-status-bind")?;
+    }
+    if let Some(chain_submit_bind) = options.chain_submit_bind.as_deref() {
+        parse_resolvable_socket_addr(chain_submit_bind, "--chain-submit-bind")?;
+        if options.chain_status_bind.is_none() {
+            return Err("--chain-submit-bind requires --chain-status-bind; submit-only mode would not enable chain-linked gameplay".to_string());
+        }
     }
     let _ = parse_deployment_mode(options.deployment_mode.as_str())?;
     validate_debug_scenario_guardrail(&options)?;
@@ -277,6 +296,19 @@ fn parse_socket_addr(raw: &str, label: &str) -> Result<std::net::SocketAddr, Str
         .map_err(|_| format!("{label} must be in <host:port> format"))
 }
 
+fn parse_resolvable_socket_addr(raw: &str, label: &str) -> Result<(), String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(format!("{label} must be in <host:port> format"));
+    }
+    trimmed
+        .to_socket_addrs()
+        .map_err(|_| format!("{label} must be in resolvable <host:port> format"))?
+        .next()
+        .ok_or_else(|| format!("{label} resolved to no addresses"))?;
+    Ok(())
+}
+
 fn parse_world_scenario(raw: &str) -> Result<WorldScenario, String> {
     let normalized = raw.trim();
     if normalized.is_empty() {
@@ -302,6 +334,7 @@ Options:\n\
   --llm                     enable llm mode (default; required for gameplay)\n\
   --no-llm                  disable llm mode (observer/debug only; gameplay blocked)\n\
   --chain-status-bind <addr> follow committed chain world from oasis7_chain_runtime status bind\n\
+  --chain-submit-bind <addr> broadcast chain-linked gameplay actions to a submit-capable endpoint (defaults to chain-status-bind)\n\
   --chain-link-policy <mode> chain sync policy: enforcing|shadow (default: enforcing)\n\
   --deployment-mode <mode>  trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
   --auto-play               advance gameplay/world on each connected session without pressing Play\n\
@@ -327,6 +360,7 @@ mod tests {
         assert!(options.llm_mode);
         assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
         assert_eq!(options.chain_status_bind, None);
+        assert_eq!(options.chain_submit_bind, None);
         assert_eq!(options.chain_link_policy, ChainLinkPolicy::Enforcing);
         assert!(!options.auto_play);
         assert!(!options.allow_debug_scenario);
@@ -344,6 +378,8 @@ mod tests {
                 "--llm",
                 "--chain-status-bind",
                 "127.0.0.1:7123",
+                "--chain-submit-bind",
+                "127.0.0.1:7124",
                 "--chain-link-policy",
                 "shadow",
                 "--auto-play",
@@ -364,6 +400,7 @@ mod tests {
         assert!(options.llm_mode);
         assert_eq!(options.deployment_mode, "hosted_public_join");
         assert_eq!(options.chain_status_bind.as_deref(), Some("127.0.0.1:7123"));
+        assert_eq!(options.chain_submit_bind.as_deref(), Some("127.0.0.1:7124"));
         assert_eq!(options.chain_link_policy, ChainLinkPolicy::Shadow);
         assert!(options.auto_play);
         assert!(options.allow_debug_scenario);
@@ -380,6 +417,42 @@ mod tests {
     fn parse_options_rejects_invalid_bind() {
         let err = parse_options(["--bind", "bad-bind"].into_iter()).expect_err("invalid bind");
         assert!(err.contains("--bind"));
+    }
+
+    #[test]
+    fn parse_options_rejects_invalid_chain_submit_bind() {
+        let err = parse_options(["--chain-submit-bind", "bad-bind"].into_iter())
+            .expect_err("invalid submit bind");
+        assert!(err.contains("--chain-submit-bind"));
+    }
+
+    #[test]
+    fn parse_options_rejects_submit_bind_without_status_bind() {
+        let err = parse_options(["--chain-submit-bind", "127.0.0.1:7124"].into_iter())
+            .expect_err("submit bind requires status bind");
+        assert!(err.contains("--chain-status-bind"));
+    }
+
+    #[test]
+    fn parse_options_accepts_resolvable_submit_hostname() {
+        let options = parse_options(
+            [
+                "--chain-status-bind",
+                "127.0.0.1:7123",
+                "--chain-submit-bind",
+                "localhost:7124",
+            ]
+            .into_iter(),
+        )
+        .expect("resolvable hostname submit bind");
+        assert_eq!(options.chain_submit_bind.as_deref(), Some("localhost:7124"));
+    }
+
+    #[test]
+    fn parse_options_accepts_resolvable_status_hostname() {
+        let options = parse_options(["--chain-status-bind", "localhost:7123"].into_iter())
+            .expect("resolvable hostname status bind");
+        assert_eq!(options.chain_status_bind.as_deref(), Some("localhost:7123"));
     }
 
     #[test]

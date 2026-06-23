@@ -54,7 +54,7 @@ cmd=(
   --route-ttl-seconds "$ROUTE_TTL_SECONDS"
   --deposit-account-prefix "$DEPOSIT_ACCOUNT_PREFIX"
   --letai-base-url "$LETAI_BASE_URL"
-  --letai-platform-key "$LETAI_PLATFORM_KEY"
+  --letai-platform-key-env OASIS7_NEWAPI_BRIDGE_LETAI_PLATFORM_KEY
   --letai-timeout-ms "$LETAI_TIMEOUT_MS"
   --max-credit-attempts "$MAX_CREDIT_ATTEMPTS"
   --chain-timeout-ms "$CHAIN_TIMEOUT_MS"
