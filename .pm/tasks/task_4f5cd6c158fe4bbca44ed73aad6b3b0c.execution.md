@@ -104,3 +104,12 @@ Example:
 - Expected Result: pr-ready workflow lint recognizes the passed packet.
 - Actual Result: pending rerun.
 - Blocker / Next Action: No blocker. Rerun pr-ready workflow lint.
+
+## 2026-06-23 11:10:22 CST / tpm
+- 完成内容: Created GitHub PR #572 and recorded PR purpose decision.
+- 遗留事项: Commit and push this PR evidence append, then continue normal PR checks/comments/mergeability watch.
+- Action: Pushed origin/task/engineering-repository-health-inspection-20260623b and created PR #572 with title 'Cover prepare-task-pr support shard command'. PR URL: https://github.com/eng-cc/oasis7/pull/572. PR Purpose Decision: normal_pr_ci_watch; this is a standard repository-health workflow/test PR, not a manual packaging/release CI hold.
+- Validation Command: git push -u origin task/engineering-repository-health-inspection-20260623b; gh pr create --base main --head task/engineering-repository-health-inspection-20260623b --title 'Cover prepare-task-pr support shard command' --body '<summary/verification>'
+- Expected Result: Branch is pushed and GitHub PR is created with normal PR CI/comment/mergeability watch responsibility.
+- Actual Result: Branch pushed and set to track origin/task/engineering-repository-health-inspection-20260623b; PR created: https://github.com/eng-cc/oasis7/pull/572.
+- Blocker / Next Action: No blocker. Commit/push this evidence append and inspect PR #572 checks/comments/threads.
