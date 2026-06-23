@@ -145,3 +145,12 @@ Example:
 - Expected Result: committed Source Head exists and review package captures the actual diff against `origin/main`.
 - Actual Result: Source Head `20d187e8b9b705766966841f9e615d2f390fdec4`; review package `/Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623k/.pm/scratch/task_d2d3fcb15db7424eb10ee07bc054f5e4/review-packages/review-994a7e990..20d187e8b.diff`; commits `1`; bytes `32922`.
 - Blocker / Next Action: commit this evidence update, then run prepare-task-pr.
+
+## 2026-06-23 22:48:06 CST / tpm
+- 完成内容: Task closeout helper updated current task metadata to `done` with verified closeout evidence.
+- 遗留事项: repo-wide historical `.pm` lint debt still exists outside this task; PR preparation pending.
+- Action: Ran task closeout and inspected the resulting task metadata.
+- Validation Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_d2d3fcb15db7424eb10ee07bc054f5e4 --verify-command './scripts/pm/workflow-lint.sh --task-uid task_d2d3fcb15db7424eb10ee07bc054f5e4 --phase current && git diff --check'`; `./scripts/pm/workflow-lint.sh --task-uid task_d2d3fcb15db7424eb10ee07bc054f5e4 --phase current && git diff --check`; `sed -n '1,220p' .pm/tasks/task_d2d3fcb15db7424eb10ee07bc054f5e4.yaml`; `rg -n "task_d2d3fcb15db7424eb10ee07bc054f5e4" .pm/roles .pm/tasks`.
+- Expected Result: current task is marked done/verified when the scoped verify command passes; any repo-wide lint failure is identified as unrelated historical debt.
+- Actual Result: current task YAML is `status: done`, `last_verification_status: verified`, `last_verification_exit_code: 0`, `last_verify_command` is the scoped workflow-lint/diff-check command, and the committed backlog entry was removed. `task-closeout.sh` exited non-zero only after repo-wide `pm-lint` reported many pre-existing execution-log format failures in unrelated historical task files such as `task_04d61dc5778e4b1683a61056daf454e3`, `task_060e9de147ba4757ac29cf0fb7a15210`, and others. A direct rerun of current-task `workflow-lint` plus `git diff --check` passed.
+- Blocker / Next Action: commit closeout metadata/evidence, then run PR preparation despite unrelated historical repo-wide lint debt.
