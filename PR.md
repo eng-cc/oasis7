@@ -20,9 +20,10 @@
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 - `./scripts/pm/workflow-lint.sh --task-uid task_bdb48338fac544849d8c681e9a7dd441 --phase current`
+- `./scripts/pm/workflow-lint.sh --task-uid task_bdb48338fac544849d8c681e9a7dd441 --phase pr-ready --allow-unbound`
 
 ## Local Role Review
-- Pending pre-PR local role review packet in `.pm/tasks/task_bdb48338fac544849d8c681e9a7dd441.execution.md`.
+- Passed: `blockchain_ops_engineer`, `runtime_engineer`, `qa_engineer`, and `repository_health_engineer` findings are fixed or dispositioned in `.pm/tasks/task_bdb48338fac544849d8c681e9a7dd441.execution.md`.
 
 ## Residual Risk
 - Windows observer reset/reseed is documented as SOP but is not yet a fully reusable repo-owned PowerShell script.
