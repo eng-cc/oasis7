@@ -79,3 +79,28 @@ Example:
 - Expected Result: Task completion verification and closeout are persisted; ready_for_pr claim-ready either records or reports the closed-task immutability boundary; pr-ready evidence remains readable in the execution log.
 - Actual Result: task-closeout.sh exited 0 earlier with final_status=done, last_verified_at=2026-06-23T11:01:40+08:00, last_verification_exit_code=0, last_closed_at=2026-06-23T11:01:42+08:00. claim-ready.sh returned: closed task claim evidence is immutable for non-completion claims: task_4f5cd6c158fe4bbca44ed73aad6b3b0c status=done claim_type=ready_for_pr.
 - Blocker / Next Action: No blocker. Rerun ./scripts/pm/workflow-lint.sh --task-uid task_4f5cd6c158fe4bbca44ed73aad6b3b0c --phase pr-ready.
+
+## 2026-06-23 11:09:30 CST / tpm
+- 完成内容: Pre-PR local role review passed packet normalized for preflight parsing.
+- 遗留事项: Rerun pr-ready workflow lint and prepare-task-pr.
+- Pre-PR Local Role Review: passed
+- Task UID: task_4f5cd6c158fe4bbca44ed73aad6b3b0c
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-inspection-20260623b
+- Source Branch: task/engineering-repository-health-inspection-20260623b
+- Source Head: f35b9ac4455df39f97aa784f5e8015fa1dacadb8
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/tasks/task_4f5cd6c158fe4bbca44ed73aad6b3b0c.execution.md; .pm/tasks/task_4f5cd6c158fe4bbca44ed73aad6b3b0c.yaml; doc/engineering/project.md; scripts/prepare-task-pr.test.sh
+- Review Package: .pm/scratch/task_4f5cd6c158fe4bbca44ed73aad6b3b0c/review-packages/review-eddf82936..f35b9ac44.diff
+- Role Selection Basis: changed paths are engineering governance task evidence, project closure for required-gate-runtime-support-coverage, and prepare-task-pr helper smoke coverage; initial task slice and finding were owned by repository_health_engineer; no runtime/viewer/QA/liveops/gameplay/UI product semantics changed.
+- Review Roles: repository_health_engineer
+- Review Evidence: repository_health_engineer pre-PR review by subagent 019ef26e-2c99-72c0-9d7b-04318a9f8044 returned no_findings.
+- Review Verdicts: repository_health_engineer scope/spec compliance verdict pass; repository-health quality/risk verdict pass.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: n/a, no findings.
+- Residual Risk: actual oasis7_node / oasis7_net cargo shards and full GitHub required-gate were not run locally; GitHub PR required checks remain the merge gate.
+- Slice Ledger: .pm/scratch/task_4f5cd6c158fe4bbca44ed73aad6b3b0c/slice-ledger.jsonl
+- Action: Rewrote the passed review packet as standalone template fields instead of embedding it in an Action line.
+- Validation Command: ./scripts/pm/workflow-lint.sh --task-uid task_4f5cd6c158fe4bbca44ed73aad6b3b0c --phase pr-ready
+- Expected Result: pr-ready workflow lint recognizes the passed packet.
+- Actual Result: pending rerun.
+- Blocker / Next Action: No blocker. Rerun pr-ready workflow lint.
