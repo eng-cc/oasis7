@@ -484,7 +484,7 @@ fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_acr
 #[test]
 fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
     let _guard = lock_test_llm_env();
-    let mut server = setup_industrial_gameplay_with_completed_jobs(41, 3);
+    let mut server = setup_industrial_gameplay_with_completed_jobs(41, 4);
     let gameplay = expect_player_gameplay(&mut server, "player gameplay after scale-out");
     assert_eq!(
         gameplay.goal_id,
@@ -528,7 +528,7 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
         gameplay.leverage_class.as_deref(),
         Some("regional_specialization_option")
     );
-    assert_eq!(gameplay.same_loop_repeat_count, 0);
+    assert_eq!(gameplay.same_loop_repeat_count, 3);
     assert!(!gameplay.grind_only_flag);
     assert_eq!(
         gameplay.major_power_dependency_status.as_deref(),

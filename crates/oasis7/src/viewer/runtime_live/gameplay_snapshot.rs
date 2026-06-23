@@ -897,7 +897,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     agent_claim,
                     small_player_lane_id: None,
                     leverage_class: None,
-                    same_loop_repeat_count: 0,
+                    same_loop_repeat_count,
                     grind_only_flag: false,
                     major_power_dependency_status: None,
                     recovery_path_kind: None,
