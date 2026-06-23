@@ -61,4 +61,18 @@ assert_key_equals "$viewer_output" run_viewer_wasm_check true
 assert_key_equals "$viewer_output" run_viewer_perf_smoke true
 assert_reason_contains "$viewer_output" "viewer:crates/oasis7_viewer/src/lib.rs"
 
+node_output="$(plan_for_path crates/oasis7_node/src/network_bridge.rs)"
+assert_key_equals "$node_output" scope targeted
+assert_key_equals "$node_output" run_oasis7_node_tests true
+assert_key_equals "$node_output" run_oasis7_net_tests false
+assert_key_equals "$node_output" run_oasis7_net_libp2p_tests false
+assert_reason_contains "$node_output" "node:crates/oasis7_node/src/network_bridge.rs"
+
+net_output="$(plan_for_path crates/oasis7_net/src/lib.rs)"
+assert_key_equals "$net_output" scope targeted
+assert_key_equals "$net_output" run_oasis7_node_tests false
+assert_key_equals "$net_output" run_oasis7_net_tests true
+assert_key_equals "$net_output" run_oasis7_net_libp2p_tests true
+assert_reason_contains "$net_output" "net:crates/oasis7_net/src/lib.rs"
+
 echo "plan-rust-required-scope.test: OK"
