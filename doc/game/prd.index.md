@@ -1,7 +1,7 @@
 # game PRD 文件级索引
 审计轮次: 12
 
-更新时间：2026-05-17
+更新时间：2026-06-23
 
 ## 入口
 - 模块 PRD：`doc/game/prd.md`
@@ -22,9 +22,9 @@
 - 想先看试玩放行与 beta 边界：先读 `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
 - 想继续按文件名、专题或补充材料下钻：使用下方密度快照、热点子域导航与补充入口
 
-## 密度快照（2026-05-17）
-- `doc/game/`：87 份文件
-- `doc/game/gameplay/`：82 份文件
+## 密度快照（2026-06-23）
+- `doc/game/`：88 份文件
+- `doc/game/gameplay/`：83 份文件
 - `doc/game/gameplay/` 正式专题三件套：63 份文件
 - `doc/game/gameplay/` 补充材料：18 份文件
 - 模块根入口：5 份文件
