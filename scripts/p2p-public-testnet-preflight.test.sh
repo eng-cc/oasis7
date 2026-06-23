@@ -36,6 +36,10 @@ NODE_ID=test
 REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/old/tcp/1/p2p/oldpeer
 EOF
 
+jq '.track = "public_testnet_rehearsal"' \
+  "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+  >"$TMP_DIR/rehearsal-bundle.json"
+
 mkdir -p "$TMP_DIR/seed/world" "$TMP_DIR/seed/execution-records" "$TMP_DIR/seed/store/blobs"
 cat >"$TMP_DIR/seed/world/snapshot.json" <<'JSON'
 {"state":{}}
@@ -53,7 +57,7 @@ printf 'a\n' >"$TMP_DIR/seed/store/blobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 printf 'b\n' >"$TMP_DIR/seed/store/blobs/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.blob"
 
 "$ROOT_DIR/scripts/p2p-public-testnet-preflight.sh" \
-  --bundle "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+  --bundle "$TMP_DIR/rehearsal-bundle.json" \
   --sequencer-status-json "$TMP_DIR/sequencer-status.json" \
   --sequencer-ip 39.104.204.172 \
   --sequencer-port 6831 \
@@ -70,4 +74,5 @@ test -f "$TMP_DIR/out/preflight-summary.json"
 test -f "$TMP_DIR/out/seed-closure-seed.json"
 
 jq -e '.ok == true' "$TMP_DIR/out/preflight-summary.json" >/dev/null
-grep -q '^REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/39.104.204.172/tcp/6831/p2p/12D3KooWMyPapumCaTABq27umWdHqXDr8AoTse21eMVnXeJEsbNp,/ip4/39.104.205.67/tcp/6832/p2p/12D3KooWAuNCCEDu7CdUUDwALuAhuLekZHgVWxAYp4Ag5ti79fJj$' "$TMP_DIR/node.env"
+jq -e '.replication_bootstrap_source == "network_tier_manifest" and .observer_env_refresh_skipped == true and .refreshed_bootstrap_peers_csv == null' "$TMP_DIR/out/preflight-summary.json" >/dev/null
+grep -q '^REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/old/tcp/1/p2p/oldpeer$' "$TMP_DIR/node.env"

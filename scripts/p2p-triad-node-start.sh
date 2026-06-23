@@ -43,6 +43,11 @@ IFS="," read -r -a peers <<< "${NODE_GOSSIP_PEERS_CSV:-}"
 IFS="," read -r -a replication_listens <<< "${REPLICATION_NETWORK_LISTEN_ADDRS_CSV:-}"
 IFS="," read -r -a replication_peers <<< "${REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV:-}"
 IFS="," read -r -a replication_remote_writers <<< "${REPLICATION_REMOTE_WRITERS_CSV:-}"
+network_tier_manifest_path="${NETWORK_TIER_MANIFEST_PATH:-}"
+
+if [[ -n "$network_tier_manifest_path" && "${ALLOW_NETWORK_TIER_REPLICATION_PEER_ENV_OVERRIDE:-0}" != "1" ]]; then
+  replication_peers=()
+fi
 
 cmd=(
   "$BIN"
@@ -175,7 +180,6 @@ if [[ -n "$traffic_profile" ]]; then
   cmd+=(--traffic-profile "$traffic_profile")
 fi
 
-network_tier_manifest_path="${NETWORK_TIER_MANIFEST_PATH:-}"
 if [[ -n "$network_tier_manifest_path" ]]; then
   cmd+=(--network-tier-manifest "$network_tier_manifest_path")
 fi
