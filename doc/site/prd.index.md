@@ -2,7 +2,7 @@
 
 审计轮次: 7
 
-更新时间：2026-06-18
+更新时间：2026-06-23
 
 ## 入口
 - 模块 PRD：`doc/site/prd.md`
@@ -18,9 +18,9 @@
 - 想先看“正式公告仍在准备中”的公开口径占位：先读 `doc/site/github-pages/github-pages-release-communication-placeholder-2026-03-11.prd.md`
 - 想继续按子域或文件名下钻：使用下方密度快照、热点子域导航与补充入口
 
-## 密度快照（2026-06-18）
-- `doc/site/`：67 份文件
-- `doc/site/github-pages/`：56 份文件
+## 密度快照（2026-06-23）
+- `doc/site/`：71 份文件
+- `doc/site/github-pages/`：58 份文件
 - `doc/site/manual/`：6 份文件
 - 模块根入口：5 份文件
 - `doc/site/` 正式专题三件套：60 份文件
