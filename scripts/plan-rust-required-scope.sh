@@ -307,7 +307,13 @@ fi
 
 reason_summary="$(printf '%s\n' "${reasons[@]-}" | paste -sd ';' -)"
 changed_paths_summary="$(printf '%s\n' "${changed_paths[@]-}" | paste -sd ';' -)"
-needs_system_deps=false
+needs_system_deps="$([[ \
+  "$run_oasis7_required_tests" -eq 1 || \
+  "$run_viewer_contract_tests" -eq 1 || \
+  "$run_viewer_wasm_check" -eq 1 || \
+  "$run_viewer_perf_smoke" -eq 1 || \
+  "$run_launcher_web_build" -eq 1 \
+  ]] && echo true || echo false)"
 needs_wasm_target="$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
 needs_node=true
 needs_trunk="$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"

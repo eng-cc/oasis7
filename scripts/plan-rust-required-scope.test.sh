@@ -51,6 +51,7 @@ assert_key_equals "$wasm_store_output" scope targeted
 assert_key_equals "$wasm_store_output" run_oasis7_required_tests true
 assert_key_equals "$wasm_store_output" run_oasis7_workspace_support_crate_tests true
 assert_key_equals "$wasm_store_output" run_launcher_web_build false
+assert_key_equals "$wasm_store_output" needs_system_deps true
 assert_reason_contains "$wasm_store_output" "runtime_wasm_support:crates/oasis7_wasm_store/src/lib.rs"
 assert_reason_contains "$wasm_store_output" "wasm_support:crates/oasis7_wasm_store/src/lib.rs"
 
@@ -77,6 +78,7 @@ wasm_abi_output="$(plan_for_path crates/oasis7_wasm_abi/src/lib.rs)"
 assert_key_equals "$wasm_abi_output" scope targeted
 assert_key_equals "$wasm_abi_output" run_oasis7_workspace_support_crate_tests true
 assert_key_equals "$wasm_abi_output" run_launcher_web_build true
+assert_key_equals "$wasm_abi_output" needs_system_deps true
 assert_key_equals "$wasm_abi_output" needs_wasm_target true
 assert_reason_contains "$wasm_abi_output" "wasm_abi_support:crates/oasis7_wasm_abi/src/lib.rs"
 assert_reason_contains "$wasm_abi_output" "launcher_wasm_abi:crates/oasis7_wasm_abi/src/lib.rs"
@@ -92,7 +94,15 @@ assert_key_equals "$viewer_output" scope targeted
 assert_key_equals "$viewer_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_output" run_viewer_wasm_check true
 assert_key_equals "$viewer_output" run_viewer_perf_smoke true
+assert_key_equals "$viewer_output" needs_system_deps true
 assert_reason_contains "$viewer_output" "viewer:crates/oasis7_viewer/src/lib.rs"
+
+shared_required_output="$(plan_for_path .github/workflows/rust.yml)"
+assert_key_equals "$shared_required_output" scope full
+assert_key_equals "$shared_required_output" run_oasis7_required_tests true
+assert_key_equals "$shared_required_output" run_launcher_web_build true
+assert_key_equals "$shared_required_output" needs_system_deps true
+assert_reason_contains "$shared_required_output" "shared_required_gate:.github/workflows/rust.yml"
 
 node_output="$(plan_for_path crates/oasis7_node/src/network_bridge.rs)"
 assert_key_equals "$node_output" scope targeted
