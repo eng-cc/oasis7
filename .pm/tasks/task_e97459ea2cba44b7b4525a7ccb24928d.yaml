@@ -3,7 +3,7 @@ title: "Sync prepare-task-pr viewer perf smoke recommendation"
 owner_role: tpm
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-code-health-inspection-20260623a
 execution_log_path: .pm/tasks/task_e97459ea2cba44b7b4525a7ccb24928d.execution.md
-status: committed
+status: done
 priority: P2
 source_signal: null
 source_refs:
@@ -19,5 +19,11 @@ acceptance:
   - "Dispatch a bounded repository_health_engineer code-health inspection slice and record findings/no_findings in the task execution log."
   - "If a valid code-level governance issue is found, apply a focused fix with verification and prepare it for the normal PR watch/merge path."
 handoff_to: []
-updated_at: 2026-06-23T23:00:26+08:00
+updated_at: 2026-06-23T23:18:54+08:00
 last_started_at: 2026-06-23T23:00:26+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/plan-rust-required-scope.test.sh && ./scripts/prepare-task-pr.test.sh && git diff --check && ./scripts/pm/workflow-lint.sh --task-uid task_e97459ea2cba44b7b4525a7ccb24928d --phase current"
+last_verified_at: 2026-06-23T23:18:53+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-23T23:18:54+08:00
