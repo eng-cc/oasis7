@@ -822,8 +822,8 @@ fn runner_metrics_default() {
 #[test]
 fn runner_runtime_perf_snapshot_tracks_tick_and_decision_samples() {
     let mut kernel = setup_kernel_with_wait_agent("agent-1");
-    let mut runner: AgentRunner<WaitingAgent> = AgentRunner::new();
-    runner.register(WaitingAgent::new("agent-1", 0));
+    let mut runner: AgentRunner<LlmLatencyTraceAgent> = AgentRunner::new();
+    runner.register(LlmLatencyTraceAgent::new("agent-1", 2, 6));
 
     let _ = runner.tick(&mut kernel).expect("tick result");
     let perf = runner.runtime_perf_snapshot();

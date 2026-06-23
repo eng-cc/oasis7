@@ -519,6 +519,17 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
             delta_event_seq: 0,
         }),
         agent_claim: None,
+        small_player_lane_id: None,
+        leverage_class: None,
+        same_loop_repeat_count: 0,
+        grind_only_flag: false,
+        major_power_dependency_status: None,
+        recovery_path_kind: None,
+        recovery_path_detail: None,
+        requires_major_power_sponsorship: None,
+        repair_available: None,
+        rebuild_available: None,
+        pivot_available: None,
     });
 
     let mut value: serde_json::Value =
@@ -548,6 +559,18 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         gameplay.causality_kind,
         Some(PlayerGameplayCausalityKind::WorldConstraint)
     );
+    assert_eq!(
+        gameplay.small_player_lane_id.as_deref(),
+        Some("unclassified")
+    );
+    assert_eq!(gameplay.leverage_class.as_deref(), Some("unclassified"));
+    assert_eq!(gameplay.same_loop_repeat_count, 0);
+    assert!(!gameplay.grind_only_flag);
+    assert_eq!(
+        gameplay.major_power_dependency_status.as_deref(),
+        Some("unverified")
+    );
+    assert_eq!(gameplay.recovery_path_kind.as_deref(), Some("unverified"));
 }
 
 #[test]

@@ -301,6 +301,7 @@ impl WorldState {
                 job_id,
                 requester_agent_id,
                 factory_id,
+                recipe_id,
                 produce,
                 byproducts,
                 output_ledger,
@@ -343,6 +344,18 @@ impl WorldState {
                     factory.production.last_completed_at = Some(now);
                     factory.production.completed_jobs =
                         factory.production.completed_jobs.saturating_add(1);
+                    factory.production.same_recipe_repeat_count =
+                        if factory.production.last_completed_recipe_id.as_deref()
+                            == Some(recipe_id.as_str())
+                        {
+                            factory
+                                .production
+                                .same_recipe_repeat_count
+                                .saturating_add(1)
+                        } else {
+                            0
+                        };
+                    factory.production.last_completed_recipe_id = Some(recipe_id.clone());
                     if factory.production.active_jobs == 0 {
                         factory.production.status = FactoryProductionStatus::Idle;
                     }
