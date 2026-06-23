@@ -267,6 +267,27 @@ run_prepare() {
     "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "$@"
 }
 
+reset_smoke_branch_to_base() {
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" reset --hard refs/remotes/origin/main >/dev/null
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" clean -fd >/dev/null
+}
+
+write_changed_path_fixture() {
+  local changed_path="$1"
+  printf '\n// prepare-task-pr local required command fixture\n' >> "$SMOKE_WORKTREE/$changed_path"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add "$changed_path"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+    -c user.name="oasis7 smoke" \
+    -c user.email="smoke@example.invalid" \
+    -c commit.gpgsign=false \
+    commit --no-verify -m "test: local required command fixture" >/dev/null
+  SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  write_task_binding
+  write_project_trace
+  write_role_review_packet "$SOURCE_HEAD" "no_findings"
+  commit_fixture_evidence
+}
+
 missing_log="$TMPDIR/gh-missing.log"
 missing_git_log="$TMPDIR/git-missing.log"
 missing_out="$TMPDIR/missing.out"
@@ -514,5 +535,65 @@ if [[ -s "$json_err" ]]; then
   cat "$json_err" >&2
   exit 1
 fi
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "crates/oasis7_node/src/network_bridge.rs"
+node_required_json="$TMPDIR/node-required.json"
+run_prepare "$TMPDIR/gh-node-required.log" "$TMPDIR/git-node-required.log" --json >"$node_required_json"
+
+python3 - "$node_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+required = payload["local_required_validation"]
+command = required["recommended_required_command"] or ""
+reason = required["reason_summary"] or ""
+expected_present = [
+    "OASIS7_CI_RUN_OASIS7_NODE_TESTS=true",
+    "OASIS7_CI_RUN_OASIS7_NET_TESTS=false",
+    "OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=false",
+]
+missing = [item for item in expected_present if item not in command]
+if missing:
+    raise SystemExit(f"node required command missing {missing}: {command}")
+if required["scope"] != "targeted":
+    raise SystemExit(f"expected targeted node scope, got: {required}")
+if "node:crates/oasis7_node/src/network_bridge.rs" not in reason:
+    raise SystemExit(f"expected node reason, got: {reason}")
+PY
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "crates/oasis7_net/src/lib.rs"
+net_required_json="$TMPDIR/net-required.json"
+run_prepare "$TMPDIR/gh-net-required.log" "$TMPDIR/git-net-required.log" --json >"$net_required_json"
+
+python3 - "$net_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+required = payload["local_required_validation"]
+command = required["recommended_required_command"] or ""
+reason = required["reason_summary"] or ""
+expected_present = [
+    "OASIS7_CI_RUN_OASIS7_NODE_TESTS=false",
+    "OASIS7_CI_RUN_OASIS7_NET_TESTS=true",
+    "OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=true",
+]
+missing = [item for item in expected_present if item not in command]
+if missing:
+    raise SystemExit(f"net required command missing {missing}: {command}")
+if required["scope"] != "targeted":
+    raise SystemExit(f"expected targeted net scope, got: {required}")
+if "net:crates/oasis7_net/src/lib.rs" not in reason:
+    raise SystemExit(f"expected net reason, got: {reason}")
+PY
 
 echo "prepare-task-pr.test: OK"
