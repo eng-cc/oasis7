@@ -131,3 +131,12 @@ Example:
 - Expected Result: Passed packet is present before PR preflight/create.
 - Actual Result: Packet recorded in this entry.
 - Blocker / Next Action: No blocker. Run pr-ready workflow lint and prepare-task-pr.
+
+## 2026-06-23 13:58:08 CST / tpm
+- 完成内容: Created GitHub PR #575 and recorded PR purpose decision.
+- 遗留事项: Commit and push this PR evidence append, then continue normal PR checks/comments/mergeability watch.
+- Action: Ran `./scripts/prepare-task-pr.sh --json`; preflight passed and recognized the pre-PR local role review packet. Then ran `./scripts/prepare-task-pr.sh --create --title "Sync engineering inventory status"`; it pushed the branch but `gh pr create` failed because the helper invocation did not provide PR body/fill in this non-interactive context. TPM then created the PR with explicit title/body via `gh pr create --base main --head task/engineering-repository-health-inspection-20260623c --title "Sync engineering inventory status" --body "<summary/verification>"`. PR Purpose Decision: normal_pr_ci_watch; this is a standard repository-health documentation/status truth PR, not a manual packaging/release CI hold.
+- Validation Command: ./scripts/prepare-task-pr.sh --json; ./scripts/prepare-task-pr.sh --create --title "Sync engineering inventory status"; gh pr create --base main --head task/engineering-repository-health-inspection-20260623c --title "Sync engineering inventory status" --body "<summary/verification>"
+- Expected Result: Branch is pushed and GitHub PR is created with normal PR CI/comment/mergeability watch responsibility.
+- Actual Result: prepare-task-pr preflight passed; branch pushed and set to track origin/task/engineering-repository-health-inspection-20260623c; helper PR create path failed with GitHub CLI body/fill requirement; explicit gh pr create succeeded: https://github.com/eng-cc/oasis7/pull/575.
+- Blocker / Next Action: No blocker. Commit/push this evidence append and inspect PR #575 checks/comments/threads.
