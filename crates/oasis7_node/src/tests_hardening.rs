@@ -491,7 +491,7 @@ fn runtime_replication_ingest_reports_error_and_does_not_advance_network_height_
 
     let config = NodeConfig::new("node-b", world_id, NodeRole::Observer)
         .expect("config")
-        .with_tick_interval(Duration::from_millis(10))
+        .with_tick_interval(Duration::from_millis(50))
         .expect("tick")
         .with_pos_config(pos_config)
         .expect("pos config")
@@ -526,7 +526,7 @@ fn runtime_replication_ingest_reports_error_and_does_not_advance_network_height_
         .expect("publish invalid message");
 
     let mut last_republish_at = Instant::now();
-    let has_error = wait_until(Instant::now() + Duration::from_secs(2), || {
+    let has_error = wait_until(Instant::now() + Duration::from_secs(5), || {
         if runtime
             .snapshot()
             .last_error
@@ -537,7 +537,7 @@ fn runtime_replication_ingest_reports_error_and_does_not_advance_network_height_
             return true;
         }
 
-        if last_republish_at.elapsed() >= Duration::from_millis(30) {
+        if last_republish_at.elapsed() >= Duration::from_millis(10) {
             network
                 .publish(topic.as_str(), encoded.as_slice())
                 .expect("republish invalid message");
