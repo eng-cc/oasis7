@@ -1,6 +1,6 @@
 # `readme/governance` 热点子域入口
 
-更新时间: 2026-06-18
+更新时间: 2026-06-23
 
 ## 从这里开始
 - 想先用一份长说明快速看懂“项目是什么、为什么要做、当前做到哪一步”：先读 `readme-project-overview-whitepaper-2026-04-25.md`
@@ -18,9 +18,9 @@
 - `../prd.index.md` 是 `readme` 模块完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 快照（2026-04-25）:
+- 快照（2026-06-23）:
   - `doc/readme/governance/`: 76 份 Markdown
-  - `doc/readme/`: 120 份 Markdown
+  - `doc/readme/`: 123 份 Markdown
   - `site/social/xiaohongshu/`: 128 份文件（小红书内容包、视觉源与导出图）
 - 当前子域属于 `readme` 模块最高密度热点路径；小红书素材包已迁入 `site/social/xiaohongshu/`，本页保留渠道 runbook 与簇级入口。
 

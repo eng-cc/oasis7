@@ -2,7 +2,7 @@
 
 审计轮次: 14
 
-更新时间：2026-06-18
+更新时间：2026-06-23
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -16,8 +16,8 @@
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-06-18）
-- `doc/readme/`：120 份文件
+## 密度快照（2026-06-23）
+- `doc/readme/`：123 份文件
 - `doc/readme/governance/`：76 份文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：12 份文件
