@@ -310,7 +310,7 @@ reset_host() {
   local control_path=$2
   local service=$3
   ssh_run "$host" "$control_path" \
-    "systemctl stop '$service' || true; rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
+    "systemctl stop '$service' || true; rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
 }
 
 start_host() {

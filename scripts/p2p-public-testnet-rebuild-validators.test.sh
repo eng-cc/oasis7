@@ -27,9 +27,16 @@ cat >"$TMP_DIR/status/sequencer.json" <<'JSON'
 {
   "running": true,
   "last_error": null,
+  "readiness": {
+    "status": "ready"
+  },
+  "observability": {
+    "storage_challenge_network_degraded": false
+  },
   "consensus": {
     "committed_height": 1,
-    "last_execution_height": 1
+    "last_execution_height": 1,
+    "storage_challenge_network_degraded_height": null
   },
   "replication": {
     "local_peer_id": "12D3KooWSequencer",
@@ -42,9 +49,16 @@ cat >"$TMP_DIR/status/storage.json" <<'JSON'
 {
   "running": true,
   "last_error": null,
+  "readiness": {
+    "status": "ready"
+  },
+  "observability": {
+    "storage_challenge_network_degraded": false
+  },
   "consensus": {
     "committed_height": 1,
     "last_execution_height": 0,
+    "storage_challenge_network_degraded_height": null,
     "network_head": {
       "height": 1
     }
