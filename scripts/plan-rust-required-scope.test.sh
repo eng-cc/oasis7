@@ -41,12 +41,24 @@ assert_reason_contains() {
 }
 
 wasm_build_output="$(plan_for_path crates/oasis7_wasm_build/src/lib.rs)"
-assert_key_equals "$wasm_build_output" scope full
-assert_reason_contains "$wasm_build_output" "unclassified_code_or_ci:crates/oasis7_wasm_build/src/lib.rs"
+assert_key_equals "$wasm_build_output" scope targeted
+assert_key_equals "$wasm_build_output" run_oasis7_workspace_support_crate_tests true
+assert_key_equals "$wasm_build_output" run_launcher_web_build false
+assert_reason_contains "$wasm_build_output" "wasm_support:crates/oasis7_wasm_build/src/lib.rs"
 
 wasm_store_output="$(plan_for_path crates/oasis7_wasm_store/src/lib.rs)"
-assert_key_equals "$wasm_store_output" scope full
-assert_reason_contains "$wasm_store_output" "unclassified_code_or_ci:crates/oasis7_wasm_store/src/lib.rs"
+assert_key_equals "$wasm_store_output" scope targeted
+assert_key_equals "$wasm_store_output" run_oasis7_workspace_support_crate_tests true
+assert_key_equals "$wasm_store_output" run_launcher_web_build false
+assert_reason_contains "$wasm_store_output" "wasm_support:crates/oasis7_wasm_store/src/lib.rs"
+
+wasm_abi_output="$(plan_for_path crates/oasis7_wasm_abi/src/lib.rs)"
+assert_key_equals "$wasm_abi_output" scope targeted
+assert_key_equals "$wasm_abi_output" run_oasis7_workspace_support_crate_tests true
+assert_key_equals "$wasm_abi_output" run_launcher_web_build true
+assert_key_equals "$wasm_abi_output" needs_wasm_target true
+assert_reason_contains "$wasm_abi_output" "wasm_abi_support:crates/oasis7_wasm_abi/src/lib.rs"
+assert_reason_contains "$wasm_abi_output" "launcher_wasm_abi:crates/oasis7_wasm_abi/src/lib.rs"
 
 proto_output="$(plan_for_path crates/oasis7_proto/src/lib.rs)"
 assert_key_equals "$proto_output" scope targeted

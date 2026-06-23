@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.23**
-Last Updated: **2026-06-22**
+Version: **v1.4.26**
+Last Updated: **2026-06-23**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -82,7 +82,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - Viewer/Web/UI work by `viewer_engineer`
   - verification strategy, test evidence, and release blocking judgment by `qa_engineer`
   - repository health stewardship, documentation/code alignment, semantic clarity, bug-risk surfacing, and technical-debt triage by `repository_health_engineer`
-  - external messaging, community feedback, incidents, player promises, and channel runbooks by `liveops_community`
+  - external messaging, community feedback, incidents, player promises, release notes, and channel runbooks by `liveops_community`
 - professional role subagents provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the TPM owner chain.
 - TPM may perform mechanical orchestration edits to workflow governance surfaces, task logs, integration notes, and PR plumbing. If the work requires a professional conclusion, TPM must dispatch the matching role slice first and attribute the conclusion to that slice/evidence.
 - For every request, TPM planning, TODO decomposition when needed, subagent slice contracts, and integration order are task execution truth and must be written to `.pm/tasks/<TASK-UID>.execution.md` before the delegated work begins.
@@ -132,6 +132,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 
 ### 4.3.1 Manual packaging CI hold
 - If the PR exists specifically to run manual-trigger packaging/release CI jobs, record that purpose in the task execution log and do not auto-watch-to-merge.
+- The hold record must include the manual job(s) or packaging purpose, responsible operator/role, expected success signal, stale-date/timeout escalation, ops readiness/rollback/runbook evidence when deployment or release ops are implicated, exact resume criterion, and external/status messaging evidence when the change is player- or community-facing.
 - Resume the normal PR watch/fix/merge path only after the operator/user says the manual packaging CI purpose is complete and the PR should proceed to merge readiness.
 
 ### 4.4 Workflow governance drift
@@ -199,13 +200,16 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 
 ### 5.4 Claim / closeout chain
 - Before completion claims, run fresh verification (prefer `./scripts/pm/claim-ready.sh --claim-type <type> --verify-command "<cmd>"` when applicable).
-- Closeout should run `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh cmd>"` (or equivalent manual chain).
-- For `done` closeout, fresh verification must be from the current round.
+- Do not move the task to final closeout / `done` before pre-PR local role review has passed when the task is on a PR path. The order is: fresh verification -> pre-PR local role review -> address findings -> final closeout/status packet -> commit -> PR preflight/create.
+- Closeout should run `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh cmd>"` (or equivalent manual chain) after valid local role-review findings are resolved. If a helper must be run earlier for a readiness packet, the execution log must label that packet as readiness evidence rather than final done state.
+- For `done` closeout, fresh verification must be from the current round and post-review findings must be addressed or explicitly rejected with evidence.
 
 ### 5.5 PR and review chain
 - Standard path is local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability.
 - The workflow no longer requests Copilot review as a PR helper step.
-- Before PR creation, TPM must create or dispatch fresh local review subagents for every involved relevant professional role in the diff scope. At minimum, use changed paths, role ownership, and task slice history to select roles; include `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched; include `qa_engineer` when the claim involves verification or release readiness; include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, or UI-heavy claims are touched; include `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, or known technical-debt boundaries; include `liveops_community` when external messaging, incidents, player promises, or channel runbooks are touched.
+- Before PR creation, TPM must create or dispatch fresh local review subagents for every involved relevant professional role in the diff scope. At minimum, use changed paths, role ownership, task slice history, user-facing claims, and verification claims to select roles; include `producer_system_designer` when scope, product contract, user promise, acceptance, or system-level semantics change; include `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched; include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, accessibility/readability, or UI-heavy claims are touched; include `runtime_engineer` when runtime/server/simulation/gameplay enforcement, replay, recovery, checkpoint, long-run behavior, or `crates/oasis7*` runtime paths are touched; include `blockchain_ops_engineer` when deployment, node ops, topology/inventory, service/host contracts, health baselines, upgrade/rollback/restore drills, packaging/release ops, or operator-facing runbooks are touched; include `wasm_platform_engineer` when `crates/oasis7_wasm_*`, builtin wasm modules, ABI/schema, manifest/hash, wasm build/receipt, wasm determinism workflows, or `doc/world-runtime/wasm/*` are touched; include `agent_engineer` when agent behavior, prompts, provider contracts, model/runtime config, subagent dispatch contracts, or agent tooling are touched; include `viewer_engineer` when Viewer/Web/UI/WebGPU/browser validation paths are touched; include `qa_engineer` when the claim involves verification, release readiness, test strategy, or evidence sufficiency; include `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, workflow scripts/skills, or known technical-debt boundaries; include `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched.
+- `scripts/prepare-task-pr.sh --create` must mechanically reject a passed review packet when changed-path inference identifies required roles that are missing from `Review Roles`. This script check is a minimum backstop; TPM remains responsible for adding roles implied by task history and user-facing claims that path inference cannot see.
+- Verification must map to the changed surface, not only to one generic command. Gameplay changes need playability/economy/motivation-loop evidence tied to `doc/game` truth; runtime changes need the relevant cargo checks/tests plus replay/recovery/checkpoint/long-run evidence where applicable; WASM ABI/platform changes need support-crate/executor tests and, for publishable or builtin module pipeline changes, deterministic build/gate evidence or an explicit defer-to-GitHub/manual evidence packet; UI/player-facing changes need S6 screenshot/model-visual-review evidence or an explicit visual-evidence exemption; release/manual packaging changes need first-class Ops Evidence covering readiness, rollback/runbook, and success/resume evidence; player- or community-facing changes need first-class LiveOps Evidence covering messaging, release-note/status, and audience impact.
 - Each local role review must return `findings` or `no_findings` plus `residual_risk`. TPM must fix valid findings or record why a finding is stale/rejected with code or doc evidence before PR creation.
 - `scripts/prepare-task-pr.sh --create` must refuse to create the PR unless the task execution log contains a passed pre-PR local role review packet for the source worktree. The packet marker is:
   - `Pre-PR Local Role Review: passed`
@@ -222,15 +226,20 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - `Review Verdicts: <per-role scope/spec compliance verdict + role quality/risk verdict>`
   - `Review Findings Disposition: addressed` or `Review Findings Disposition: no_findings`
   - `Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>`
+  - `Verification Matrix: <changed surface -> required evidence -> observed evidence or explicit deferral>`
+  - `Visual Evidence: <screenshot/model visual review paths or n/a with exemption reason>`
+  - `WASM Evidence: <support crate/determinism evidence or n/a with reason>`
+  - `Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>`
+  - `LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>`
   - `Residual Risk: <text>`
   - `Slice Ledger: <path to slice ledger or n/a with reason>`
 - Pre-PR local role review should use file-based review packages for non-trivial diffs. `./scripts/pm/review-package.sh --base <ref> --head <ref> --task-uid <TASK-UID>` writes the commit list, stat summary, and contextual diff under ignored `.pm/scratch/<TASK-UID>/review-packages/`; the execution log records only the path and summary. Use `n/a` only when the diff is empty or the review target is not a git diff, and record the reason.
 - Pre-PR local role review verdicts must distinguish scope/spec compliance from role quality/risk for each reviewer role. The role remains the professional owner; this dual-verdict structure is a packet format, not permission to replace involved-role review with a generic reviewer.
-- Long multi-slice tasks should maintain a lightweight slice ledger with `./scripts/pm/slice-ledger.sh --task-uid <TASK-UID> ...`. The ledger is an ignored JSONL resume map for slice status, artifact paths, verdicts, residual risk, and next action. `.pm/tasks/<TASK-UID>.execution.md` remains canonical task truth and must link to the ledger rather than relying on it as the only sink.
+- Long multi-slice tasks should maintain a lightweight slice ledger with `./scripts/pm/slice-ledger.sh --task-uid <TASK-UID> ...`. The ledger is an ignored JSONL resume map for slice status, artifact paths, verdicts, residual risk, and next action. `.pm/tasks/<TASK-UID>.execution.md` remains canonical task truth and must link to the ledger rather than relying on it as the only sink. When a review dispatch needs more roles than the current subagent runtime can run concurrently, TPM must batch the roles, record batch order and priority, record timeout/no-payload policy before dispatch, and distinguish partial results from all-role completion.
 - Before merge, explicitly check PR comments and review threads. If any actionable comments or unresolved blocking threads exist, fix + re-verify + resolve or answer them before the merge claim.
 - After PR creation, TPM must record the PR purpose decision:
   - `normal_pr_ci_watch`: default. Use this unless the user or task truth says the PR was opened only to access manual-trigger packaging/release CI jobs.
-  - `manual_packaging_ci_hold`: allowed only when the PR is explicitly created for manual-trigger packaging/release CI. Record which manual job(s) or packaging purpose need the PR and stop before auto-merge until the operator/user resumes the normal path.
+  - `manual_packaging_ci_hold`: allowed only when the PR is explicitly created for manual-trigger packaging/release CI. Record manual job(s) or packaging purpose, responsible operator/role, expected success signal, stale-date/timeout escalation, ops readiness/rollback/runbook evidence when deployment or release ops are implicated, external/status messaging evidence when player- or community-facing, and the exact resume criterion. Stop before auto-merge until the operator/user resumes the normal path.
 - For `normal_pr_ci_watch`, TPM continues without waiting for another user prompt: watch the PR's normal required checks, mergeability, review decisions, and PR comments/review threads. `REVIEW_REQUIRED` is a status signal to report, not a blocker. If checks fail, review requests changes, actionable comments appear, unresolved blocking review threads remain, or the merge API/branch protection rejects the merge for reasons other than review approval, route through the fix loop, rerun fresh verification, push fixes or answer/resolve comments, and continue watching.
 - If GitHub reports `mergeStateStatus=BEHIND`, treat it as a branch-sync signal, not an automatic blocker. When the PR is still mergeable and the repository/GitHub merge path accepts the merge without requiring a local branch sync, TPM may merge directly after the same checks/comments/thread closeout steps. If GitHub refuses because the branch must be updated first or because a conflict/non-mergeable state exists, sync the branch to the current base, rerun fresh verification as needed, push, and continue watching.
 - If GitHub reports `mergeStateStatus=BLOCKED` / `REVIEW_REQUIRED` only because review approval is missing, and the current user request or task truth explicitly authorizes skipping review approval, TPM may use the repository's admin merge path as part of the normal PR watch/merge flow. Before doing so, TPM must re-check that required checks pass, the PR is mergeable, no requested changes remain, PR comments/review threads have been checked, and no actionable comments or unresolved blocking review threads remain. Admin merge must not be used for failed checks, non-mergeable code state, requested changes, unresolved actionable comments/threads, manual packaging CI holds, or unrelated branch-protection failures.
@@ -242,10 +251,23 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Planning/Dispatch: TPM TODO decomposition and subagent slice contracts in `.pm/tasks/<TASK-UID>.execution.md`.
 - Execution: atomic evidence records per risky step.
 - Verification: claim-ready command + output evidence.
-- Pre-PR local role review: involved-role subagent review packet, review package path or explicit `n/a`, per-role dual verdicts, finding disposition, residual risk, and slice ledger path or explicit `n/a`.
+- Pre-PR local role review: involved-role subagent review packet, review package path or explicit `n/a`, required-role coverage, per-role dual verdicts, finding disposition, verification matrix, visual/WASM/ops evidence or explicit exemptions, residual risk, and slice ledger path or explicit `n/a`.
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.26 (2026-06-23)**
+  - Tightened pre-PR role inference backstops for producer product/system docs, viewer/launcher implementation/docs/scripts, and agent/subagent workflow contract surfaces.
+  - Clarified semantic review evidence behavior by distinguishing generic `n/a` from explicit deferral/exemption reasons across runtime, gameplay, visual, ops, and liveops evidence.
+  - Added regression coverage for role inference drift, generic `n/a` rejection, and explicit visual/ops/liveops deferral acceptance.
+- **v1.4.25 (2026-06-23)**
+  - Added first-class `Ops Evidence` and `LiveOps Evidence` pre-PR review packet fields and required semantic evidence checks for inferred professional roles.
+  - Expanded changed-path role inference coverage for producer/product-system, runtime world docs, gameplay simulator docs, visual testing docs, liveops/readme/release/status docs, and ops topology/readiness/preflight/packaging surfaces.
+  - Synced manual packaging CI hold requirements across failure/rollback and PR sections so stale/timeout, ops readiness, rollback/runbook, resume, and external/status messaging evidence are consistently required.
+- **v1.4.24 (2026-06-22)**
+  - Clarified pre-PR local role review before final closeout/commit/PR creation to avoid done-before-review churn.
+  - Expanded involved-role selection triggers across all professional roles and required `prepare-task-pr.sh --create` to reject missing required roles inferred from changed paths.
+  - Added surface-specific verification matrix expectations for gameplay, runtime, WASM, UI/visual, and manual packaging/release ops evidence.
+  - Added batching/timeout policy for large all-role review dispatches and stronger manual packaging hold ownership/resume criteria.
 - **v1.4.23 (2026-06-22)**
   - Added file-based review package and lightweight slice ledger artifacts for pre-PR local role review, while keeping `.pm/tasks/<TASK-UID>.execution.md` canonical.
   - Required pre-PR role review packets to record `Review Package`, per-role dual `Review Verdicts`, and `Slice Ledger` fields.

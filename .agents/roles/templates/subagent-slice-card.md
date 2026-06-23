@@ -16,6 +16,7 @@
   - task truth: `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + canonical worktree/branch/base ref + PR link/status if present
   - user intent: request summary + current TODO + non-goals + done/verification expectations
   - scoped repo context: relevant `prd.md` / `project.md` / handoff + changed paths + current diff/evidence summary + constraints
+    - gameplay-sensitive slices must explicitly include `doc/game/prd.md`, `doc/game/project.md`, `doc/game/gameplay/README.md`, relevant topic PRD/project docs, and fresh playability/QA evidence expectations or an explicit non-applicability reason
   - collaboration boundary: sibling slices + write-scope conflicts + integration order + allowed commands + return contract + formal sink
 - write scope:
 - return contract:
@@ -39,7 +40,7 @@
 - actual dispatched model/reasoning: requested default runtime, or `inherited/unverified` with reason if the connector cannot select/report the model or actual dispatch cannot be verified
 - context delivery mode: full-thread/full-history fork
 - mandatory context packet: see mandatory context checklist/packet
-- mandatory context checklist/packet: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/<module>/project.md` task `<task slug>` + `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + current branch/diff summary
+- mandatory context checklist/packet: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/game/prd.md` + `doc/game/project.md` + relevant `doc/world-simulator/**` and playability evidence + `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）
 - return contract: patch + test evidence
 - validation command: `./scripts/cargo-dev.sh test -p foo`
