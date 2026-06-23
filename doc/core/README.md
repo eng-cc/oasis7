@@ -41,7 +41,7 @@
 - `checklists/`（1）：跨模块影响检查清单。
 
 ## 高密度提示
-- `doc/core/` 当前共有 81 份文件，其中 `reviews/` 占 45 份；默认入口不再尝试把 review / audit 材料直接摊平展示。
+- `doc/core/` 当前共有 82 份文件，其中 `reviews/` 占 45 份；默认入口不再尝试把 review / audit 材料直接摊平展示。
 - 需要完整活跃专题清单时，进入 `doc/core/prd.index.md`；需要 round 审查、采证或模板时，再按子域进入。
 
 ## 共享约定

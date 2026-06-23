@@ -51,7 +51,7 @@
 - 模块根入口（5）：`README.md`、`prd.md`、`project.md`、`design.md`、`prd.index.md`。
 
 ## 高密度提示
-- `doc/game/` 当前共有 87 份 Markdown，其中 `doc/game/gameplay/` 占 82 份；默认入口只负责把你送到 `gameplay/README.md`，不再尝试把 gameplay 长表直接摊平到模块首页。
+- `doc/game/` 当前共有 88 份 Markdown，其中 `doc/game/gameplay/` 占 83 份；默认入口只负责把你送到 `gameplay/README.md`，不再尝试把 gameplay 长表直接摊平到模块首页。
 - 需要完整活跃专题清单时，进入 `doc/game/prd.index.md`；需要 runbook、evidence、handoff 或 checklist 时，再按 `gameplay/` 中的补充文件精确进入。
 
 ## 共享约定
