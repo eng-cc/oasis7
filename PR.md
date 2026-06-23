@@ -17,6 +17,7 @@
 - `bash -n scripts/p2p-public-testnet-rebuild-validators.sh scripts/p2p-public-testnet-local-observer-sync.sh scripts/p2p-public-testnet-rebuild-validators.test.sh scripts/p2p-public-testnet-local-observer-sync.test.sh`
 - `bash scripts/p2p-public-testnet-local-observer-sync.test.sh`
 - `bash scripts/p2p-public-testnet-rebuild-validators.test.sh`
+- `./scripts/check-rust-file-size.sh`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 - `./scripts/pm/workflow-lint.sh --task-uid task_bdb48338fac544849d8c681e9a7dd441 --phase current`

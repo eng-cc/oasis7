@@ -963,6 +963,9 @@ mod execution_bridge_real_tests;
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_network_tier_tests.rs"]
 mod network_tier_tests;
 #[cfg(test)]
+#[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_replication_tests.rs"]
+mod observability_replication_tests;
+#[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_slashing_tests.rs"]
 mod observability_slashing_tests;
 #[cfg(test)]
