@@ -249,6 +249,9 @@ fn replication_error_is_blocking(
     if recovered_request_path && replication_error_is_recovered_request_path_failure(&lower) {
         return false;
     }
+    if recovered_request_path && replication_error_is_public_inbound_noise(replication, &lower) {
+        return false;
+    }
     let active_peer_available = replication
         .peer_healths
         .iter()
@@ -311,6 +314,88 @@ fn replication_error_is_recovered_request_path_failure(lower: &str) -> bool {
             || lower.contains("connectionclosed")
             || lower.contains("connection closed")
             || lower.contains("connection reset"))
+}
+
+fn replication_error_is_public_inbound_noise(
+    replication: &super::super::ChainReplicationDebugStatus,
+    lower: &str,
+) -> bool {
+    if lower.contains("request failed")
+        || lower.contains("outbound request failed")
+        || lower.contains("network request failed")
+        || lower.contains("fetch-commit")
+        || lower.contains("fetch-blob")
+    {
+        return false;
+    }
+
+    let inbound_noise = (lower.contains("libp2p inbound failure")
+        && (lower.contains("timeout")
+            || lower.contains("connectionclosed")
+            || lower.contains("connection closed")))
+        || (lower.contains("libp2p incoming connection error")
+            && (lower.contains("invalidmessage")
+                || lower.contains("unsupportedprotocol")
+                || lower.contains("protocolerror")
+                || lower.contains("timeout")));
+    if !inbound_noise {
+        return false;
+    }
+
+    match extract_peer_id_from_error_lower(lower) {
+        Some(peer_id) => replication_peer_is_non_core_public_noise(replication, peer_id),
+        None => true,
+    }
+}
+
+fn extract_peer_id_from_error_lower(error: &str) -> Option<&str> {
+    if let Some(start) = error.find("peerid(\"") {
+        let rest = &error[start + "peerid(\"".len()..];
+        return rest.split('"').next().filter(|peer_id| !peer_id.is_empty());
+    }
+    if let Some(start) = error.find("peer=") {
+        let rest = &error[start + "peer=".len()..];
+        let end = rest
+            .find(|ch: char| ch.is_whitespace() || ch == ',' || ch == ')' || ch == ']')
+            .unwrap_or(rest.len());
+        return (!rest[..end].is_empty()).then_some(&rest[..end]);
+    }
+    None
+}
+
+fn replication_peer_is_non_core_public_noise(
+    replication: &super::super::ChainReplicationDebugStatus,
+    peer_id: &str,
+) -> bool {
+    if replication
+        .request_peer_scores
+        .iter()
+        .any(|(scored_peer, score)| scored_peer.eq_ignore_ascii_case(peer_id) && *score == 0)
+    {
+        return true;
+    }
+
+    replication.peer_healths.iter().any(|health| {
+        health.peer_id.eq_ignore_ascii_case(peer_id)
+            && health.status == "active"
+            && (health
+                .source_operator
+                .as_deref()
+                .map(|operator| {
+                    let operator = operator.to_ascii_lowercase();
+                    operator.contains("observer")
+                        || operator.contains("client")
+                        || operator.contains("public")
+                        || operator.contains("external")
+                })
+                .unwrap_or(false)
+                || health.discovery_sources.iter().any(|source| {
+                    matches!(
+                        source.as_str(),
+                        "dht" | "mdns" | "discovered" | "peer_exchange"
+                    )
+                }))
+    })
 }
 
 fn replication_error_is_diagnostic(error: &str) -> bool {

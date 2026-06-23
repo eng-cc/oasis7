@@ -25,6 +25,7 @@
 - [ ] `oasis7_chain_runtime --network-tier-manifest <path>` boots successfully
 - [ ] `/v1/chain/status` reports `network_tier.tier=public_testnet`
 - [ ] bootstrap peers resolve from `bootstrap_peer_ref`
+- [ ] noisy external observer/client peers remain diagnostic-only when core validator/request path, network head, sync, reachability, and replication state are healthy
 
 ## Evidence refs
 - [ ] public RPC smoke

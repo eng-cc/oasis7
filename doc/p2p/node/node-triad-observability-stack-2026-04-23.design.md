@@ -79,6 +79,16 @@
 - 不导出 unbounded peer-id labels；peer 细节只允许 bounded debug artifact 或 top-N snapshot。
 - byte split 必须保留现有 traffic scope 说明，不能声明 NIC-level overhead。
 
+## Public Peer Noise vs Core Readiness
+`public_testnet` 与 `mainnet` 的 runtime readiness 采用公链式容错边界：外部 observer/client peer 的 inbound timeout、invalid-message handshake、connection churn 是预期噪声，不得在核心 validator/request path 健康时单独触发 `not_ready`。
+
+分类规则：
+- Core blockers: no healthy requestable validator/core peer path; fetch-commit/fetch-head request failures without a recovered request path; peer-head quorum unavailable/stale/conflicting; replication state gap; sync stall or height lag beyond policy; validator quarantine/misbehavior; role reachability policy failure.
+- Public peer noise: inbound-only `libp2p inbound failure ... Timeout` and `libp2p incoming connection error ... ProtocolError(InvalidMessage)` from non-core observer/client/public/discovered peers while at least one active requestable core path exists.
+- Diagnostic retention: raw `replication.recent_errors` and `recent_replication_error_count` remain visible for ops triage, rate limiting, firewalling, or client compatibility follow-up.
+- Readiness boundary: public peer noise may produce diagnostic/warn evidence, but it must not increment blocking transport error counters, lower transport stability below threshold, or populate readiness `failed_gates` with `replication_recent_errors` / `replication_transport_unstable`.
+- Escalation boundary: the same noisy source becomes readiness relevant if it exhausts host/process resources, removes all requestable paths, causes protocol mismatch on the core request path, or correlates with stale/conflicting network head or replication state gap.
+
 ## 输出目录约定
 - `<out-dir>/<run-id>/snapshot/`
 - `<out-dir>/<run-id>/host/`

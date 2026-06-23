@@ -88,3 +88,14 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_81577d7e86df4cd0b7bbb1c4d08ad019.yaml
+  - task_uid: task_bdb48338fac544849d8c681e9a7dd441
+    title: "Check testnet health status"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "Collect current testnet/node health evidence without modifying production state"
+      - "Record blockchain_ops health judgment and return concise status summary"
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_bdb48338fac544849d8c681e9a7dd441.yaml
