@@ -102,4 +102,9 @@ grep -q '^NODE_GOSSIP_PEERS_CSV=39.104.204.172:6731,39.104.205.67:6732$' "$rende
 grep -q '^REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/39.104.205.67/tcp/6832/p2p/12D3KooWAuNCCEDu7CdUUDwALuAhuLekZHgVWxAYp4Ag5ti79fJj,/ip4/39.104.204.172/tcp/6831/p2p/12D3KooWMyPapumCaTABq27umWdHqXDr8AoTse21eMVnXeJEsbNp$' "$rendered_env"
 grep -q '^REPLICATION_REMOTE_WRITERS_CSV=bb,cc,aa$' "$rendered_env"
 
+grep -q 'remote_optional_resolved_env_value.*REPLICATION_ROOT' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'remote_replication_root="$remote_stack_root/output/node-distfs/$remote_node_id"' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'REMOTE_EXECUTION_BRIDGE_STATE_REQUIRED' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'execution_bridge_state_path_for_root "$remote_stack_root" "$remote_node_id" "$remote_runtime_root"' scripts/p2p-public-testnet-local-observer-sync.sh
+
 echo "ok: local observer sync accepts sequencer/storage validator env pair"

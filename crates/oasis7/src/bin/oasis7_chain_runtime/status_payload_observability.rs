@@ -367,15 +367,7 @@ fn replication_peer_is_non_core_public_noise(
     replication: &super::super::ChainReplicationDebugStatus,
     peer_id: &str,
 ) -> bool {
-    if replication
-        .request_peer_scores
-        .iter()
-        .any(|(scored_peer, score)| scored_peer.eq_ignore_ascii_case(peer_id) && *score == 0)
-    {
-        return true;
-    }
-
-    replication.peer_healths.iter().any(|health| {
+    let is_non_core_public_peer = replication.peer_healths.iter().any(|health| {
         health.peer_id.eq_ignore_ascii_case(peer_id)
             && health.status == "active"
             && (health
@@ -395,7 +387,17 @@ fn replication_peer_is_non_core_public_noise(
                         "dht" | "mdns" | "discovered" | "peer_exchange"
                     )
                 }))
-    })
+    });
+
+    if !is_non_core_public_peer {
+        return false;
+    }
+
+    replication
+        .request_peer_scores
+        .iter()
+        .any(|(scored_peer, score)| scored_peer.eq_ignore_ascii_case(peer_id) && *score == 0)
+        || is_non_core_public_peer
 }
 
 fn replication_error_is_diagnostic(error: &str) -> bool {
