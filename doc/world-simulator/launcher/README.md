@@ -1,6 +1,6 @@
 # `world-simulator/launcher` 热点子域入口
 
-更新时间: 2026-06-20
+更新时间: 2026-06-23
 
 ## 从这里开始
 - 想确认 launcher 当前面向玩家/开发者的整体可用性、分发与 release readiness：先读 `game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md`
@@ -19,9 +19,9 @@
 - 本页只维护簇级入口；当某个专题退化为历史执行证据时，继续让它通过 `../prd.index.md` 可检索，而不是回到默认首读路径。
 
 ## 密度快照
-- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-06-20）:
+- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-06-23）:
   - `doc/world-simulator/launcher/`: 87 份 Markdown
-  - `doc/world-simulator/`: 472 份 Markdown
+  - `doc/world-simulator/`: 475 份 Markdown
 - 该子域已经超过热点阈值；本页目标是降低首读扫描成本，不在本批直接减少文件数。
 
 ## 首读主题簇
