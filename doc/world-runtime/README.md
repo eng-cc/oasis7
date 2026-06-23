@@ -45,7 +45,7 @@
 - `governance/`（5）：治理事件与收据安全专题。
 
 ## 高密度提示
-- `doc/world-runtime/` 当前共有 121 份文件，其中 `runtime/` 占 55 份；默认入口不再尝试把 runtime/wasm/module 长表直接摊平展示。
+- `doc/world-runtime/` 当前共有 124 份文件，其中 `runtime/` 占 57 份；默认入口不再尝试把 runtime/wasm/module 长表直接摊平展示。
 - 需要完整活跃专题清单时，进入 `doc/world-runtime/prd.index.md`；需要 evidence / template / checklist / handoff 时，再按子域定向进入。
 
 ## 兼容跳转
