@@ -289,6 +289,7 @@ reset_smoke_branch_to_base() {
 
 write_changed_path_fixture() {
   local changed_path="$1"
+  mkdir -p "$SMOKE_WORKTREE/$(dirname "$changed_path")"
   printf '\n// prepare-task-pr local required command fixture\n' >> "$SMOKE_WORKTREE/$changed_path"
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add "$changed_path"
   "$REAL_GIT" -C "$SMOKE_WORKTREE" \
@@ -794,6 +795,36 @@ if required["scope"] != "targeted":
     raise SystemExit(f"expected targeted net scope, got: {required}")
 if "net:crates/oasis7_net/src/lib.rs" not in reason:
     raise SystemExit(f"expected net reason, got: {reason}")
+PY
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "crates/oasis7_viewer/src/lib.rs"
+viewer_required_json="$TMPDIR/viewer-required.json"
+run_prepare "$TMPDIR/gh-viewer-required.log" "$TMPDIR/git-viewer-required.log" --json >"$viewer_required_json"
+
+python3 - "$viewer_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+required = payload["local_required_validation"]
+command = required["recommended_required_command"] or ""
+reason = required["reason_summary"] or ""
+expected_present = [
+    "OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=true",
+    "OASIS7_CI_RUN_VIEWER_WASM_CHECK=true",
+    "OASIS7_CI_RUN_VIEWER_PERF_SMOKE=true",
+]
+missing = [item for item in expected_present if item not in command]
+if missing:
+    raise SystemExit(f"viewer required command missing {missing}: {command}")
+if required["scope"] != "targeted":
+    raise SystemExit(f"expected targeted viewer scope, got: {required}")
+if "viewer:crates/oasis7_viewer/src/lib.rs" not in reason:
+    raise SystemExit(f"expected viewer reason, got: {reason}")
 PY
 
 echo "prepare-task-pr.test: OK"

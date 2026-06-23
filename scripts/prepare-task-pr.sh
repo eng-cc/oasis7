@@ -747,6 +747,7 @@ if [[ -x "./scripts/plan-rust-required-scope.sh" ]]; then
       RUN_OASIS7_NET_LIBP2P_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_net_libp2p_tests" "false")"
       RUN_VIEWER_CONTRACT_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_viewer_contract_tests" "false")"
       RUN_VIEWER_WASM_CHECK="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_viewer_wasm_check" "false")"
+      RUN_VIEWER_PERF_SMOKE="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_viewer_perf_smoke" "false")"
       RUN_LAUNCHER_WEB_BUILD="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_launcher_web_build" "false")"
       RUN_WORKSPACE_SUPPORT_CRATE_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_workspace_support_crate_tests" "false")"
       LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=$RUN_OASIS7_REQUIRED_TESTS \
@@ -757,6 +758,7 @@ OASIS7_CI_RUN_OASIS7_NET_TESTS=$RUN_OASIS7_NET_TESTS \
 OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=$RUN_OASIS7_NET_LIBP2P_TESTS \
 OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=$RUN_VIEWER_CONTRACT_TESTS \
 OASIS7_CI_RUN_VIEWER_WASM_CHECK=$RUN_VIEWER_WASM_CHECK \
+OASIS7_CI_RUN_VIEWER_PERF_SMOKE=$RUN_VIEWER_PERF_SMOKE \
 OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=$RUN_LAUNCHER_WEB_BUILD \
 OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS=$RUN_WORKSPACE_SUPPORT_CRATE_TESTS \
 ./scripts/ci-tests.sh required"

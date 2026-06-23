@@ -88,3 +88,16 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_81577d7e86df4cd0b7bbb1c4d08ad019.yaml
+  - task_uid: task_e97459ea2cba44b7b4525a7ccb24928d
+    title: "Sync prepare-task-pr viewer perf smoke recommendation"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-ENGINEERING-021
+      - PRD-ENGINEERING-025
+    acceptance:
+      - "Dispatch a bounded repository_health_engineer code-health inspection slice and record findings/no_findings in the task execution log."
+      - "If a valid code-level governance issue is found, apply a focused fix with verification and prepare it for the normal PR watch/merge path."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_e97459ea2cba44b7b4525a7ccb24928d.yaml

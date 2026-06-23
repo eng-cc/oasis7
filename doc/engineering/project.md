@@ -240,6 +240,7 @@
 - [x] doc-hotspot-path-aftercare (PRD-ENGINEERING-025/033) [test_tier_required]: 按 2026-06-20 inventory 重新暴露的热点路径执行轻量 aftercare，新增 `doc/world-simulator/launcher/README.md` 与 `doc/game/gameplay/README.md` 子目录级首读分流，并同步模块 README / `prd.index.md` 与 task execution log，避免把下一轮治理扩大成全仓机械改写。 Trace: .pm/tasks/task_04d61dc5778e4b1683a61056daf454e3.yaml
 - [x] historical-doc-skill-surface-governance (PRD-ENGINEERING-025/032) [test_tier_required]: 收口 stale-file 抽样后的治理落地，把历史 project/handoff/evidence 与 skill placeholder 表面纳入 batch compaction/retirement 口径，并先退役一个未被入口承接的 `gameplay-mechanics` placeholder helper。 Trace: .pm/tasks/task_ba86c4d2de4349a8941ef5bfafe15d74.yaml
 - [x] required-gate-runtime-support-coverage (PRD-ENGINEERING-021) [test_tier_required]: 让 GitHub `required-gate` 在 planner 命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时实际执行 `oasis7_node`、`oasis7_net` 与 `oasis7_net --features libp2p` support tests，并同步对齐 `prepare-task-pr` 推荐命令与 `testing-manual` 口径。 Trace: .pm/tasks/task_4f5cd6c158fe4bbca44ed73aad6b3b0c.yaml
+- [x] prepare-task-pr-viewer-perf-smoke-env-sync (PRD-ENGINEERING-021) [test_tier_required]: 收口代码层面治理巡检发现的 PR preflight 推荐命令漂移，将 `prepare-task-pr` 本地 required 推荐命令补齐 `OASIS7_CI_RUN_VIEWER_PERF_SMOKE`，并新增 viewer-path smoke 覆盖，确保本地建议与 GitHub required-gate planner 契约一致。 Trace: .pm/tasks/task_e97459ea2cba44b7b4525a7ccb24928d.yaml
 - [x] rust-governance-ci-metrics (PRD-ENGINEERING-021) [test_tier_required]: 将 Rust 工程治理指标调研中确认的 P0/P1 CI 信号接入 required/full workflow，覆盖 scoped Clippy、RustSec advisory gate、cargo-deny/duplicate dependency/unsafe usage report，并保留 PR CI residual risk。 Trace: .pm/tasks/task_a13b76fa56f64e4ebd7af333425bb8dc.yaml
 - [x] code-health-findings-1-3-fix (PRD-ENGINEERING-021/025) [test_tier_required]: 收口代码健康检查 finding 1 与 finding 3，移除生产 readme 中本机绝对路径来源表述，并补清 runtime-live fallback semantics 的 contract 注释与单测覆盖。 Trace: .pm/tasks/task_f440263378b34628a2f0f81c3eaec022.yaml
 - [x] rust-2024-edition-migration (PRD-ENGINEERING-021) [test_tier_required]: 将 owned Rust crates/tools、WASM 模板与 Rust pre-commit edition tooling 迁移到 edition 2024，并收口 Rust 2024 unsafe env mutation 显式化、local role review 与 full workspace check 证据。 Trace: .pm/tasks/task_b71a91bfd6f34c098b6e91ecef3ff612.yaml
@@ -323,7 +324,7 @@
 - 更新日期: 2026-06-23
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `core-prd-index-inventory-snapshot-sync`（已把 `doc/core/prd.index.md` 与 README 热点导航库存快照同步到 2026-06-23 inventory truth，保留后续按 action_required 热点做 bounded 分类巡检的口径。）
+- 最新完成: `prepare-task-pr-viewer-perf-smoke-env-sync`（已把 `prepare-task-pr` 本地 required 推荐命令补齐 viewer perf smoke env，并用 viewer-path fixture 覆盖 GitHub required-gate planner 契约漂移。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
