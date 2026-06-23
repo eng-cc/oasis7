@@ -113,3 +113,33 @@ Example:
 - Expected Result: Branch is pushed and GitHub PR is created with normal PR CI/comment/mergeability watch responsibility.
 - Actual Result: Branch pushed and set to track origin/task/engineering-repository-health-inspection-20260623b; PR created: https://github.com/eng-cc/oasis7/pull/572.
 - Blocker / Next Action: No blocker. Commit/push this evidence append and inspect PR #572 checks/comments/threads.
+
+## 2026-06-23 11:20:55 CST / tpm
+- 完成内容: PR #572 required-gate failed; blocker triage started.
+- 遗留事项: Dispatch runtime_engineer slice for the failing oasis7_node runtime test, reproduce locally, and apply the smallest valid fix if confirmed.
+- Action: Inspected PR #572 status and required-gate job log. All wasm determinism checks succeeded or skipped as expected, but Rust required-gate failed in `oasis7_node --lib` at `tests::runtime_gossip_replication_persists_guard_across_restart`. Failure signature: after restart, `replication guard did not advance after restart`; before and after guard had the same writer id, writer_epoch, and `last_sequence: 3` even after the test's wait window. This is a PR merge blocker even though it is outside the originally changed prepare-task-pr smoke file.
+- Slice Contract: role=runtime_engineer; trigger=PR required-gate failure; scope=`crates/oasis7_node/src/tests_storage_replication.rs` and immediate replication restart behavior only; mandatory context checklist=PR #572 head `7db4f42ac92e64c106fb6475a9660e31e1ae3d5c`, required-gate run `27999490616`, failing job `82868577853`, task UID `task_4f5cd6c158fe4bbca44ed73aad6b3b0c`, failing test `tests::runtime_gossip_replication_persists_guard_across_restart`, original task changed prepare-task-pr smoke coverage only; intended model=default subagent runtime; actual model=inherited/unverified; return contract=findings/no_findings, root-cause hypothesis, minimal patch recommendation if any, verification command.
+- Validation Command: gh pr view 572 --json headRefOid,mergeStateStatus,mergeable,reviewDecision,statusCheckRollup,comments,reviews; gh run view 27999490616 --job 82868577853 --log
+- Expected Result: Exact required-gate blocker is identified before any fix.
+- Actual Result: required-gate failed because `tests::runtime_gossip_replication_persists_guard_across_restart` panicked at `crates/oasis7_node/src/tests_storage_replication.rs:972` with unchanged guard sequence after restart.
+- Blocker / Next Action: Dispatch runtime_engineer slice and run the exact failing test locally.
+
+## 2026-06-23 11:28:40 CST / tpm
+- 完成内容: Local minimal reproduction did not reproduce the CI failure; GitHub failed-job rerun requested.
+- 遗留事项: Wait for runtime_engineer slice and GitHub rerun result before merge decision.
+- Action: Ran the exact failing test locally with the repo development cargo wrapper. The test passed once locally, which makes the first CI result consistent with an intermittent runtime timing failure rather than the prepare-task-pr smoke patch itself. Attempted a second raw `env -u RUSTC_WRAPPER cargo test` probe for CI parity, but it remained blocked on the shared build directory lock and was interrupted without changing state. Triggered `gh run rerun 27999490616 --failed` to rerun the failed required-gate job.
+- Validation Command: ./scripts/cargo-dev.sh test -p oasis7_node --lib tests::runtime_gossip_replication_persists_guard_across_restart -- --exact --nocapture; env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib tests::runtime_gossip_replication_persists_guard_across_restart -- --exact --nocapture; gh run rerun 27999490616 --failed
+- Expected Result: Confirm whether the failure reproduces locally or can be cleared by a GitHub failed-job rerun.
+- Actual Result: cargo-dev exact test passed locally: 1 passed, 0 failed, 343 filtered out, finished in 0.51s after compile. Raw cargo probe was interrupted while waiting on build directory lock. GitHub failed-job rerun command exited 0.
+- Blocker / Next Action: PR remains blocked until rerun required-gate succeeds or fails with a stable signature.
+
+## 2026-06-23 11:52:12 CST / runtime_engineer
+- 完成内容: Investigated and patched the PR #572 required-gate runtime blocker.
+- 遗留事项: TPM should commit/push the patch, rerun PR checks, and refresh role review if required by the expanded changed-path set.
+- Findings: finding. The failing test covered restart guard persistence but relied on a best-effort UDP replication message to advance the remote guard after restart. The GitHub failure snapshot showed observer `committed_height=4` and `network_committed_height=4`, but `replication_persisted_height=3` and an unchanged remote guard at `last_sequence=3`; this matches a lost or missed one-shot full replication payload while periodic commit-head gossip still advanced consensus visibility.
+- Root Cause / Strongest Hypothesis: test flake caused by asserting reliable delivery over UDP gossip for the second post-restart replication message. Runtime state did restart and consensus advanced; the guard did not advance because the complete replication message did not arrive on the best-effort UDP path. Waiting longer cannot repair a dropped one-shot packet.
+- Minimal Patch: changed only `crates/oasis7_node/src/tests_storage_replication.rs` so `runtime_gossip_replication_persists_guard_across_restart` keeps its restart/guard assertions but uses the existing in-memory `TestInMemoryNetwork` replication endpoint for both runtime instances across both start phases. This removes UDP packet-loss sensitivity from the guard persistence assertion without changing runtime logic.
+- Validation Command: env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib tests::runtime_gossip_replication_persists_guard_across_restart -- --nocapture; bash -lc 'for i in 1 2 3 4 5; do env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib tests::runtime_gossip_replication_persists_guard_across_restart -- --nocapture || exit $?; done'
+- Expected Result: Targeted failing test passes consistently after removing best-effort UDP delivery from the guard-advance condition.
+- Actual Result: Targeted single run passed: 1 passed, 0 failed, 343 filtered out, finished in 0.42s after compile. Five-run loop passed 5/5 with each run reporting 1 passed, 0 failed, 343 filtered out.
+- Blocker / Next Action: No runtime_engineer blocker remains for the targeted failure. Recommended PR verification after push: full `oasis7_node --lib` required-gate rerun on GitHub, because local full lib run was not executed in this bounded slice.

@@ -856,6 +856,9 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
     ];
     let pos_config =
         signed_pos_config_with_signer_seeds(validators, &[("node-a", 55), ("node-b", 66)]);
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
 
     let build_config_a = || {
         NodeConfig::new("node-a", "world-restart", NodeRole::Sequencer)
@@ -879,8 +882,10 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
             .with_replication(signed_replication_config(dir_b.clone(), 66))
     };
 
-    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(build_config_a()));
-    let mut runtime_b = NodeRuntime::new(build_config_b());
+    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(build_config_a()))
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    let mut runtime_b = NodeRuntime::new(build_config_b())
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
     runtime_b.start().expect("start b first");
     let observer_ready = wait_until(Instant::now() + Duration::from_secs(2), || {
         let snapshot = runtime_b.snapshot();
@@ -923,8 +928,10 @@ fn runtime_gossip_replication_persists_guard_across_restart() {
     .expect("remote guard before");
     assert!(guard_before.last_sequence >= 1);
 
-    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(build_config_a()));
-    let mut runtime_b = NodeRuntime::new(build_config_b());
+    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(build_config_a()))
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    let mut runtime_b = NodeRuntime::new(build_config_b())
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
     runtime_b.start().expect("start b second");
     let observer_ready = wait_until(Instant::now() + Duration::from_secs(2), || {
         let snapshot = runtime_b.snapshot();
