@@ -34,9 +34,9 @@
 - 维护跨模块治理基线、候选级 readiness / go-no-go 入口与文档总入口同步。
 - 维护项目级设计阅读顺序、下一轮优先级与 ROUND 台账入口。
 
-## 热点子域导航（2026-04-10 快照）
+## 热点子域导航（2026-06-23 快照）
 - `reviews/`（45）：ROUND 审查、go/no-go、readiness board 与 audit-progress 留痕；默认按需进入。
-- 根目录活跃专题（28）：下一轮优先级、release candidate readiness / version / go-no-go、docs hub 同步、player access mode contract 等正式 cross-module 入口。
+- 根目录活跃专题（29）：下一轮优先级、release candidate readiness / version / go-no-go、docs hub 同步、player access mode contract、统一持久大世界术语迁移等正式 cross-module 入口。
 - `templates/`（2）：阶段收口和 PRD-ID 追踪模板。
 - `checklists/`（1）：跨模块影响检查清单。
 

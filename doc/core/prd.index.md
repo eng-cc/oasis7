@@ -2,7 +2,7 @@
 
 审计轮次: 7
 
-更新时间：2026-04-10
+更新时间：2026-06-23
 
 ## 入口
 - 模块 PRD：`doc/core/prd.md`
@@ -19,10 +19,10 @@
 - 想直接进入版本候选 readiness / go-no-go：先读 `doc/core/release-candidate-readiness-entry-2026-03-11.prd.md` 与 `doc/core/release-candidate-go-no-go-entry-2026-03-11.prd.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-10）
-- `doc/core/`：81 份文件
+## 密度快照（2026-06-23）
+- `doc/core/`：82 份文件
 - `doc/core/reviews/`：45 份文件
-- 根目录活跃专题与 handoff：28 份文件
+- 根目录活跃专题与 handoff：29 份文件
 - `doc/core/templates/`：2 份文件
 - `doc/core/checklists/`：1 份文件
 
@@ -30,7 +30,7 @@
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `reviews/` | 45 | ROUND 审查、候选级 readiness/go-no-go、audit progress 与历史评审留痕；默认按需进入 |
-| 根目录活跃专题 | 28 | 项目级总览、下一轮优先级、release candidate readiness/version/go-no-go、docs hub 同步、player access mode contract |
+| 根目录活跃专题 | 29 | 项目级总览、下一轮优先级、release candidate readiness/version/go-no-go、docs hub 同步、player access mode contract、统一持久大世界术语迁移 |
 | `templates/` | 2 | 阶段收口与 PRD-ID 追踪模板 |
 | `checklists/` | 1 | 跨模块影响检查清单 |
 
