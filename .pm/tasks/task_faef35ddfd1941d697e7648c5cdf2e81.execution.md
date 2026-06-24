@@ -131,7 +131,7 @@ Example:
 ## 2026-06-24 17:00:00 CST / repository_health_engineer
 - Review Trigger: pre-PR local role review
 - Review Scope: `scripts/ci-rust-governance-report.sh`; `doc/engineering/governance/repository-health-manual-inspection.runbook.md`; task evidence
-- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-e06f91e0c..e269b4b2b.diff`
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-132847bdd..838724ec9.diff`
 - Review Roles: `repository_health_engineer`
 - Review Question: Confirm whether the duplicate dependency report ratchet correctly addresses the selected repository-health issue while preserving report-only behavior and avoiding dependency/version changes.
 - Evidence Available: `summary.json` and `summary.md` from `output/rust-governance/duplicate-ratchet-smoke`; script syntax check; workflow lint; doc governance check; whitespace check.
@@ -145,7 +145,7 @@ Example:
 ## 2026-06-24 17:00:00 CST / qa_engineer
 - Review Trigger: pre-PR local role review
 - Review Scope: `scripts/ci-rust-governance-report.sh`; `doc/engineering/governance/repository-health-manual-inspection.runbook.md`; task evidence
-- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-e06f91e0c..e269b4b2b.diff`
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-132847bdd..838724ec9.diff`
 - Review Roles: `qa_engineer`
 - Review Question: Confirm verification sufficiency, generated report behavior, JSON/Markdown stability, and closeout risk for this report-only script/runbook change.
 - Evidence Available: `bash -n scripts/ci-rust-governance-report.sh`; `git diff --check`; `./scripts/pm/workflow-lint.sh --task-uid task_faef35ddfd1941d697e7648c5cdf2e81 --phase current`; generated `summary.json` and `summary.md`; cargo-deny duplicate warning count.
@@ -161,10 +161,10 @@ Example:
 - Task UID: task_faef35ddfd1941d697e7648c5cdf2e81
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2
 - Source Branch: task/engineering-rust-governance-next-issue-2
-- Source Head: e269b4b2b6a10a9daaa2ac982dc30be70fbc60eb
+- Source Head: 838724ec9eb2125acb7543455bf4a25178f363cd
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/roles/repository_health_engineer/backlog/done.yaml`; `.pm/tasks/task_faef35ddfd1941d697e7648c5cdf2e81.execution.md`; `.pm/tasks/task_faef35ddfd1941d697e7648c5cdf2e81.yaml`; `doc/engineering/governance/repository-health-manual-inspection.runbook.md`; `scripts/ci-rust-governance-report.sh`
-- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-e06f91e0c..e269b4b2b.diff
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-132847bdd..838724ec9.diff
 - Role Selection Basis: changed paths include Rust governance reporting script, repository-health runbook, and task workflow evidence; selected `repository_health_engineer` for cross-cutting dependency governance/report semantics and `qa_engineer` for verification sufficiency and PR readiness; added `blockchain_ops_engineer` and `liveops_community` because `prepare-task-pr.sh --create` inferred them from changed paths as required mechanical backstop roles. Skipped runtime/WASM/viewer/gameplay roles because no runtime code, WASM surface, viewer UI, gameplay behavior, dependency manifests, lockfiles, deny policy, or version changes were touched.
 - Review Roles: repository_health_engineer, qa_engineer, blockchain_ops_engineer, liveops_community
 - Review Evidence: `repository_health_engineer` returned `no_findings`, scope/spec compliance passed, role quality/risk passed; `qa_engineer` returned `no_findings`, scope/spec compliance passed, role quality/risk passed; `blockchain_ops_engineer` returned `no_findings`, ops scope/spec compliance passed, role quality/risk passed; `liveops_community` returned `no_findings`, liveops/community scope compliance passed, role quality/risk passed.
@@ -232,7 +232,7 @@ Example:
 ## 2026-06-24 17:23:00 CST / blockchain_ops_engineer
 - Review Trigger: prepare-task-pr inferred required-role pre-PR review
 - Review Scope: `scripts/ci-rust-governance-report.sh`; `doc/engineering/governance/repository-health-manual-inspection.runbook.md`; `.pm` task evidence
-- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-e06f91e0c..e269b4b2b.diff`
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-132847bdd..838724ec9.diff`
 - Review Roles: `blockchain_ops_engineer`
 - Review Question: Confirm whether the governance report/runbook change introduces any node ops, operator-facing deployment, rollback, service/host, inventory, topology, chain status, or blockchain operations concern before PR.
 - Evidence Available: Current diff, generated governance report fields, runbook wording, and prior repository-health/QA review evidence.
@@ -246,7 +246,7 @@ Example:
 ## 2026-06-24 17:23:00 CST / liveops_community
 - Review Trigger: prepare-task-pr inferred required-role pre-PR review
 - Review Scope: `scripts/ci-rust-governance-report.sh`; `doc/engineering/governance/repository-health-manual-inspection.runbook.md`; `.pm` task evidence
-- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-e06f91e0c..e269b4b2b.diff`
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-132847bdd..838724ec9.diff`
 - Review Roles: `liveops_community`
 - Review Question: Confirm whether the governance report/runbook change creates any external messaging, community, player promise, channel runbook, release note, status-page language, or liveops response obligation before PR.
 - Evidence Available: Current diff, runbook wording, and prior repository-health/QA review evidence.
