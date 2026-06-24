@@ -168,7 +168,7 @@ jobs:
           APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
           APPIMAGE_RUNTIME_FILENAME="runtime-x86_64"
           APPIMAGE_RUNTIME_URL="https://github.com/AppImage/type2-runtime/releases/download/continuous/${APPIMAGE_RUNTIME_FILENAME}"
-          APPIMAGE_RUNTIME_SHA256="a2419dce47568395ae79c01ffa9a5a341dd339581352ff104d073527543177e5"
+          APPIMAGE_RUNTIME_SHA256="1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf"
 
           mkdir -p "${RUNNER_TEMP}/appimagetool"
           curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "${APPIMAGETOOL_URL}" \
