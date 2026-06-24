@@ -119,7 +119,7 @@ Example:
 - Task UID: task_0b89a0662ac94e9aa4b6de7214b6becb
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-frontend-code-governance-next-20260624
 - Source Branch: task/engineering-frontend-code-governance-next-20260624
-- Source Head: 981f7704aeba9643c1872527e062e85c24ee35ad
+- Source Head: 2811d5c06596d08039dcfd431a8758aaad3d72a9
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/tasks/task_0b89a0662ac94e9aa4b6de7214b6becb.execution.md; .pm/tasks/task_0b89a0662ac94e9aa4b6de7214b6becb.yaml; doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md; scripts/viewer-primary-web-entry-regression.sh
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-frontend-code-governance-next-20260624/.pm/scratch/task_0b89a0662ac94e9aa4b6de7214b6becb/review-packages/review-origin-main..HEAD.diff
