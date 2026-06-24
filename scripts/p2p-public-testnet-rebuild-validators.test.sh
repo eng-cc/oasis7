@@ -8,11 +8,51 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 mkdir -p "$TMP_DIR/bin" "$TMP_DIR/config" "$TMP_DIR/world" "$TMP_DIR/remote" "$TMP_DIR/status"
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" <<'EOF'
-{"ok":true}
+{
+  "ok": true,
+  "runtime_build": {
+    "sha256": "old-runtime-sha",
+    "size_bytes": 1
+  }
+}
 EOF
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" <<'EOF'
 {"manifest":true}
+EOF
+
+cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" <<'EOF'
+{
+  "validators": [
+    {
+      "node_id": "triad-testnet-sequencer",
+      "stake": 100,
+      "finality_signer_public_key": "new-sequencer-signer"
+    },
+    {
+      "node_id": "triad-testnet-storage",
+      "stake": 100,
+      "finality_signer_public_key": "new-storage-signer"
+    }
+  ]
+}
+EOF
+
+cat >"$TMP_DIR/config/000-old-validator-registry.json" <<'EOF'
+{
+  "validators": [
+    {
+      "node_id": "triad-testnet-sequencer",
+      "stake": 100,
+      "finality_signer_public_key": "wrong-sorted-first-sequencer-signer"
+    },
+    {
+      "node_id": "triad-testnet-storage",
+      "stake": 100,
+      "finality_signer_public_key": "wrong-sorted-first-storage-signer"
+    }
+  ]
+}
 EOF
 
 cat >"$TMP_DIR/world/snapshot.json" <<'EOF'
@@ -135,6 +175,11 @@ case "$cmd" in
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)\/staged-world\/.' '\([^']*\)\/data\/execution-world\/'.*/\1/p")
     cp -R "$root$stack_root/staged-world/." "$root$stack_root/data/execution-world/"
     ;;
+  STACK_ROOT=*python3*)
+    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/STACK_ROOT='\([^']*\)'.*/\1/p")
+    mapped_cmd=${cmd//STACK_ROOT=\'$stack_root\'/STACK_ROOT=\'$root$stack_root\'}
+    bash -c "$mapped_cmd"
+    ;;
   systemctl\ stop*)
     if [[ "$cmd" == *"rm -rf"* ]]; then
       stack_root=$(printf '%s\n' "$cmd" | sed -n "s/.*rm -rf '\([^']*\)\/data\/execution-records'.*/\1/p")
@@ -203,6 +248,25 @@ export TEST_STATUS_ROOT="$TMP_DIR/status"
 export SEQ_PASS="sequencer-pass"
 export STO_PASS="storage-pass"
 
+for host in root@sequencer root@storage; do
+  host_root="$TMP_DIR/remote/$host/opt/oasis7/p2p-testnet"
+  mkdir -p "$host_root/config" "$host_root/current/bin"
+  cat >"$host_root/config/node.env" <<'EOF'
+NODE_ID=triad-testnet-sequencer
+NODE_VALIDATORS_CSV=triad-testnet-sequencer:100,triad-testnet-storage:100
+NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:old-sequencer-signer,triad-testnet-storage:old-storage-signer
+EOF
+  printf 'GENESIS_VALIDATOR_REGISTRY_PATH=%s\n' \
+    "$host_root/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" \
+    >>"$host_root/config/node.env"
+  printf 'runtime-v2' >"$host_root/current/bin/oasis7_chain_runtime"
+  cat >"$host_root/DEPLOYED_BUILDINFO" <<'EOF'
+commit=test-commit
+package_version=0.0.0+testnet.test
+run_id=test-run
+EOF
+done
+
 json=$("$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
@@ -229,6 +293,24 @@ jq -e '
 test -f "$TMP_DIR/out/rebuild-summary.json"
 test -f "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
 test -f "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world/snapshot.json"
+grep -q '^NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:new-sequencer-signer,triad-testnet-storage:new-storage-signer$' \
+  "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/node.env"
+grep -q '^NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:new-sequencer-signer,triad-testnet-storage:new-storage-signer$' \
+  "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/config/node.env"
+expected_runtime_sha=$(printf 'runtime-v2' | shasum -a 256 | awk '{print $1}')
+for host in root@sequencer root@storage; do
+  for bundle in \
+    "$TMP_DIR/remote/$host/opt/oasis7/p2p-testnet/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+    "$TMP_DIR/remote/$host/opt/oasis7/p2p-testnet/config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json"; do
+    jq -e --arg expected "$expected_runtime_sha" '
+      .runtime_build.sha256 == $expected
+      and .runtime_build.size_bytes == 10
+      and .runtime_build.git_commit == "test-commit"
+      and .runtime_build.package_version == "0.0.0+testnet.test"
+      and .runtime_build.run_id == "test-run"
+    ' "$bundle" >/dev/null
+  done
+done
 test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/runtime-root"
 test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/replication-root"
 test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/runtime-root"

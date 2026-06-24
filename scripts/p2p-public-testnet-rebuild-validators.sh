@@ -303,6 +303,129 @@ stage_host() {
     | ssh_run "$host" "$control_path" "tar -C '$STACK_ROOT/staged-world' -xf -"
   ssh_run "$host" "$control_path" \
     "cp -R '$STACK_ROOT/staged-world/.' '$STACK_ROOT/data/execution-world/'"
+
+  sync_staged_deployment_truth "$host" "$control_path" >&2
+}
+
+sync_staged_deployment_truth() {
+  local host=$1
+  local control_path=$2
+  ssh_run "$host" "$control_path" \
+    "STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from pathlib import Path
+
+stack_root = Path(os.environ['STACK_ROOT'])
+config_dir = stack_root / 'config'
+env_path = config_dir / 'node.env'
+runtime_path = stack_root / 'current' / 'bin' / 'oasis7_chain_runtime'
+
+if not env_path.is_file():
+    raise SystemExit(f'missing node env: {env_path}')
+if not runtime_path.is_file():
+    raise SystemExit(f'missing installed runtime: {runtime_path}')
+
+env_values = {}
+for raw in env_path.read_text(encoding='utf-8').splitlines():
+    stripped = raw.strip()
+    if not stripped or stripped.startswith('#') or '=' not in stripped:
+        continue
+    key, value = stripped.split('=', 1)
+    env_values[key] = value
+
+registry_raw = env_values.get('GENESIS_VALIDATOR_REGISTRY_PATH')
+if not registry_raw:
+    raise SystemExit(f'missing GENESIS_VALIDATOR_REGISTRY_PATH in {env_path}')
+registry_path = Path(registry_raw)
+if not registry_path.is_absolute():
+    registry_path = stack_root / registry_path
+try:
+    registry_path.resolve(strict=False).relative_to(stack_root.resolve(strict=False))
+except ValueError:
+    raise SystemExit(f'GENESIS_VALIDATOR_REGISTRY_PATH must stay under stack root: {registry_path}')
+if not registry_path.is_file():
+    raise SystemExit(f'GENESIS_VALIDATOR_REGISTRY_PATH does not exist after staging: {registry_path}')
+
+registry_data = json.loads(registry_path.read_text(encoding='utf-8'))
+validators = registry_data.get('validators')
+if not isinstance(validators, list) or not validators:
+    raise SystemExit(f'GENESIS_VALIDATOR_REGISTRY_PATH has no validators: {registry_path}')
+
+signer_pairs = []
+for validator in validators:
+    node_id = validator.get('node_id')
+    public_key = validator.get('finality_signer_public_key')
+    if not node_id or not public_key:
+        raise SystemExit(f'validator registry entry is missing node_id/finality_signer_public_key in {registry_path}')
+    signer_pairs.append(f'{node_id}:{public_key}')
+signers_csv = ','.join(signer_pairs)
+
+lines = env_path.read_text(encoding='utf-8').splitlines()
+rewrote_signers = False
+rendered = []
+for line in lines:
+    if line.startswith('NODE_VALIDATOR_SIGNERS_CSV='):
+        rendered.append(f'NODE_VALIDATOR_SIGNERS_CSV={signers_csv}')
+        rewrote_signers = True
+    else:
+        rendered.append(line)
+if not rewrote_signers:
+    rendered.append(f'NODE_VALIDATOR_SIGNERS_CSV={signers_csv}')
+env_path.write_text('\\n'.join(rendered) + '\\n', encoding='utf-8')
+
+digest = hashlib.sha256()
+with runtime_path.open('rb') as fh:
+    for chunk in iter(lambda: fh.read(1024 * 1024), b''):
+        digest.update(chunk)
+runtime_sha = digest.hexdigest()
+runtime_size = runtime_path.stat().st_size
+
+buildinfo = {}
+buildinfo_path = stack_root / 'DEPLOYED_BUILDINFO'
+if buildinfo_path.is_file():
+    for raw in buildinfo_path.read_text(encoding='utf-8').splitlines():
+        key, sep, value = raw.partition('=')
+        if sep:
+            buildinfo[key] = value
+
+bundle_paths = sorted(config_dir.rglob('public-testnet-governed-bootstrap-bundle-2026-06-06.json'))
+if not bundle_paths:
+    raise SystemExit(f'no governed bootstrap bundle found under {config_dir}')
+
+updated_by = 'p2p-public-testnet-rebuild-validators staged deployment truth sync'
+if buildinfo.get('package_version') or buildinfo.get('run_id'):
+    updated_by += f\" package={buildinfo.get('package_version', 'unknown')} run={buildinfo.get('run_id', 'unknown')}\"
+
+for bundle_path in bundle_paths:
+    data = json.loads(bundle_path.read_text(encoding='utf-8'))
+    runtime = data.setdefault('runtime_build', {})
+    runtime['kind'] = 'file'
+    runtime['path'] = str(runtime_path)
+    runtime['resolved_path'] = str(runtime_path)
+    runtime['sha256'] = runtime_sha
+    runtime['size_bytes'] = runtime_size
+    runtime['updated_by'] = updated_by
+    if buildinfo.get('commit'):
+        runtime['git_commit'] = buildinfo['commit']
+        data['git_commit'] = buildinfo['commit']
+    if buildinfo.get('package_version'):
+        runtime['package_version'] = buildinfo['package_version']
+    if buildinfo.get('run_id'):
+        runtime['run_id'] = buildinfo['run_id']
+    data['updated_by'] = updated_by
+    bundle_path.write_text(
+        json.dumps(data, ensure_ascii=True, indent=2, sort_keys=True) + '\\n',
+        encoding='utf-8',
+    )
+
+print(f'synced_validator_signer_count={len(signer_pairs)}')
+print(f'synced_runtime_sha256={runtime_sha}')
+print(f'synced_bundle_count={len(bundle_paths)}')
+PY"
 }
 
 reset_host() {
