@@ -99,3 +99,17 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
+  - task_uid: task_e2876312c5b54aa99e9ef5aa6f8d2c85
+    title: "Find next engineering governance issue 4"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-ENGINEERING-021
+      - PRD-ENGINEERING-025
+    acceptance:
+      - "Find one next actionable engineering governance issue from repository-health evidence."
+      - "Apply the smallest safe governance remediation in the task worktree."
+      - "Record professional role evidence, verification, and PR closeout in the .pm task log."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_e2876312c5b54aa99e9ef5aa6f8d2c85.yaml
