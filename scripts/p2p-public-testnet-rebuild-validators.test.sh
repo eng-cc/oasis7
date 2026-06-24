@@ -203,6 +203,21 @@ case "$cmd" in
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/STACK_ROOT='\([^']*\)'.*/\1/p")
     cleanup_cmd="STACK_ROOT=${cmd#*STACK_ROOT=}"
     mapped_cmd=${cleanup_cmd//STACK_ROOT=\'$stack_root\'/STACK_ROOT=\'$root$stack_root\'}
+    if [[ "${TEST_SPAWN_DELAYED_CLEANUP_PROCESS_HOST:-}" == "$host" ]]; then
+      mkdir -p "$root$stack_root/bin"
+      (
+        sleep 0.4
+        exec -a "$root$stack_root/bin/start-node.sh" sleep 30
+      ) &
+    fi
+    if [[ "${TEST_SPAWN_LATE_CLEANUP_PROCESS_HOST:-}" == "$host" ]]; then
+      mapped_cmd="CLEANUP_DEADLINE_SECONDS=1 CLEANUP_QUIET_SECONDS=2 $mapped_cmd"
+      mkdir -p "$root$stack_root/bin"
+      (
+        sleep 0.8
+        exec -a "$root$stack_root/bin/start-node.sh" sleep 30
+      ) &
+    fi
     bash -c "$mapped_cmd"
     ;;
   systemctl\ stop*)
@@ -399,6 +414,73 @@ if not start_indexes:
 if not any(index > start_indexes[-1] for index in cleanup_indexes):
     raise SystemExit("missing post-start cleanup after failed sequencer readiness")
 PY
+
+: >"$TEST_SSH_LOG"
+rm -f "$TEST_REMOTE_ROOT"/started-*
+if TEST_SPAWN_DELAYED_CLEANUP_PROCESS_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-delayed-cleanup" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-delayed-cleanup.out 2>&1; then
+  :
+fi
+
+if pgrep -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-node.sh" >/dev/null; then
+  pkill -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-node.sh" || true
+  echo "delayed cleanup process survived stable quiet cleanup" >&2
+  exit 1
+fi
+
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+log_path = pathlib.Path(sys.argv[1])
+lines = log_path.read_text(encoding="utf-8").splitlines()
+sequencer_commands = [line.split("\t", 1)[1] for line in lines if line.startswith("root@sequencer\t")]
+if not any(
+    "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
+    and "oasis7_chain_runtime" in command
+    and "start-node.sh" in command
+    for command in sequencer_commands
+):
+    raise SystemExit("missing sequencer cleanup command for delayed cleanup process test")
+PY
+
+: >"$TEST_SSH_LOG"
+rm -f "$TEST_REMOTE_ROOT"/started-*
+if TEST_SPAWN_LATE_CLEANUP_PROCESS_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-late-cleanup" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-late-cleanup.out 2>&1; then
+  echo "expected rebuild cleanup to fail when stable quiet window is not observed" >&2
+  exit 1
+fi
+grep -q "cleanup failed: stable quiet window was not observed before deadline" \
+  /tmp/oasis7-rebuild-validators-late-cleanup.out
+pkill -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-node.sh" || true
 
 : >"$TEST_SSH_LOG"
 if TEST_FAIL_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
