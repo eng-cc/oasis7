@@ -142,3 +142,15 @@ Example:
 - Expected Result: Preflight passes with required local role review coverage; branch is pushed; GitHub PR exists.
 - Actual Result: Preflight passed; branch `task/engineering-frontend-code-governance-followup-20260624` pushed; PR #615 created at https://github.com/eng-cc/oasis7/pull/615.
 - Blocker / Next Action: Push PR evidence commit, then inspect PR checks/comments/mergeability.
+
+## 2026-06-24 21:10:53 CST / viewer_engineer
+- 完成内容: CI BLOCKER ROOT CAUSE FIX INTEGRATED.
+- 遗留事项: Commit/push fix and watch rerun required-gate.
+- CI Blocker: PR #615 `required-gate` failed after 11m39s in `oasis7_client_launcher` with `tests::apply_web_snapshot_clears_dirty_flag_when_snapshot_matches_local_config` at `crates/oasis7_client_launcher/src/main_tests.rs:931`, assertion `!app.config_dirty`.
+- Root Cause: `apply_web_snapshot` normalized `snapshot.config` but, when `config_dirty == true`, compared it to unnormalized `self.config`; `LaunchConfig::normalize()` can fill derived fields such as `chain_network_tier_manifest`, so equivalent local and snapshot configs could compare unequal and leave the dirty flag set.
+- Action: In both native and wasm launcher `apply_web_snapshot` paths, clone and normalize local config before comparing it to normalized snapshot config in the dirty branch.
+- Changed Files: `crates/oasis7_client_launcher/src/app_process.rs`; `crates/oasis7_client_launcher/src/app_process_web.rs`.
+- Validation Command: `rtk env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher --bin oasis7_client_launcher tests::apply_web_snapshot_clears_dirty_flag_when_snapshot_matches_local_config -- --nocapture`; `rtk env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher --bin oasis7_client_launcher -- --nocapture`; `rtk cargo fmt --check --package oasis7_client_launcher`; `rtk ./scripts/bundle-freshness-lib.test.sh && ./scripts/copy-viewer-web-dist.test.sh && ./scripts/agent-browser-viewer-dist-freshness-test.sh && git diff --check`.
+- Expected Result: Exact failing test and full client launcher bin suite pass locally; formatting/diff and original freshness governance checks remain clean.
+- Actual Result: Exact test passed; full `oasis7_client_launcher` bin suite passed with 138 tests; `cargo fmt --check --package oasis7_client_launcher` passed; bundle freshness smoke, copy dist smoke, agent-browser dist freshness smoke, and `git diff --check` passed. Existing `oasis7_node` warnings were observed during Rust test compilation and are unrelated to this fix.
+- Blocker / Next Action: Commit and push CI fix, then continue normal PR watch.
