@@ -42,3 +42,15 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_faef35ddfd1941d697e7648c5cdf2e81.yaml
+  - task_uid: task_d3474ab9cb2b46f29409b3bd575c8c2d
+    title: "Find next Rust dependency governance issue"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-ENGINEERING-021
+      - PRD-ENGINEERING-025
+    acceptance:
+      - "Identify the next actionable Rust dependency governance issue with evidence, scope, risk, and verification commands."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_d3474ab9cb2b46f29409b3bd575c8c2d.yaml

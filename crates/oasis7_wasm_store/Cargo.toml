@@ -8,6 +8,6 @@ license = "MIT"
 path = "src/lib.rs"
 
 [dependencies]
-oasis7_wasm_abi = { path = "../oasis7_wasm_abi" }
+oasis7_wasm_abi = { version = "0.1.0", path = "../oasis7_wasm_abi" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
