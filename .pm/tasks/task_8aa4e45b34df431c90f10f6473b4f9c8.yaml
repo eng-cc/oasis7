@@ -10,6 +10,7 @@ source_refs:
   - AGENTS.md
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/viewer/project.md
 related_prd: []
 acceptance:
   - "repository_health_engineer slice identifies one next actionable frontend code governance issue with evidence"
