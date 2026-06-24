@@ -205,6 +205,53 @@ fn peer_world_head_probe_continues_after_connected_peer_timeout() {
 }
 
 #[test]
+fn peer_world_head_probe_continues_after_protocol_omitted_libp2p_timeout() {
+    let world_id = "world-peer-head-libp2p-timeout-fallback";
+    let peer_heads = Arc::new(Mutex::new(HashMap::new()));
+    peer_heads.lock().expect("lock peer heads").insert(
+        "peer-b".to_string(),
+        super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: 1133,
+                block_hash: "block-1133".to_string(),
+                state_root: "state-1133".to_string(),
+                timestamp_ms: 4_133,
+            }),
+        },
+    );
+    let head_request_errors = Arc::new(Mutex::new(HashMap::new()));
+    head_request_errors.lock().expect("lock head errors").insert(
+        "peer-a".to_string(),
+        WorldError::NetworkProtocolUnavailable {
+            protocol: "libp2p-replication outbound request failed: request failed: Timeout"
+                .to_string(),
+        },
+    );
+    let (endpoint, provider_attempts) = peer_directed_head_endpoint(
+        world_id,
+        vec!["peer-a".to_string(), "peer-b".to_string()],
+        peer_heads,
+        head_request_errors,
+    );
+
+    let head = endpoint
+        .lookup_world_head(world_id)
+        .expect("protocol-omitted libp2p timeout should fall back to later peer")
+        .expect("later peer head");
+
+    assert_eq!(head.height, 1133);
+    assert_eq!(
+        provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .as_slice(),
+        &[vec!["peer-a".to_string()], vec!["peer-b".to_string()]]
+    );
+}
+
+#[test]
 fn peer_world_head_probe_rejects_mismatched_world_without_fallback() {
     let world_id = "world-peer-head-mismatch-fail-closed";
     let peer_heads = Arc::new(Mutex::new(HashMap::new()));

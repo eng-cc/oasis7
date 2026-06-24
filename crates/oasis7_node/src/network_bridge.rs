@@ -1153,6 +1153,14 @@ fn world_head_lookup_can_fallback(err: &NodeError) -> bool {
         || replication_network_error_is_unsupported_protocol(err, REPLICATION_GET_HEAD_PROTOCOL)
         || replication_network_error_is_protocol_unavailable(err, REPLICATION_GET_HEAD_PROTOCOL)
         || replication_network_error_is_timeout_protocol(err, REPLICATION_GET_HEAD_PROTOCOL)
+        || replication_network_error_is_libp2p_outbound_timeout(err)
+}
+
+fn replication_network_error_is_libp2p_outbound_timeout(err: &NodeError) -> bool {
+    let NodeError::Replication { reason } = err else {
+        return false;
+    };
+    reason.contains("libp2p-replication outbound request failed") && reason.contains("Timeout")
 }
 
 fn validate_world_head_world_id(world_id: &str, head: &WorldHeadAnnounce) -> Result<(), NodeError> {

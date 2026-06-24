@@ -203,6 +203,93 @@ fn replicated_commit_head_network_rebroadcast_rejects_same_height_conflict() {
 }
 
 #[test]
+fn replicated_commit_head_network_rebroadcast_allows_legacy_restored_local_hash() {
+    let world_id = "world-replicated-head-legacy-local";
+    let dir = temp_dir("replicated-head-legacy-local");
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 92)],
+    );
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Storage)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_network_policy(NodeNetworkPolicy {
+            deployment_mode: oasis7_proto::distributed_dht::PeerDeploymentMode::Private,
+            node_role_claim: oasis7_proto::distributed_dht::PeerNodeRole::ValidatorCore,
+        })
+        .expect("validator-core policy")
+        .with_replication(signed_replication_config(dir.clone(), 92));
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let mut replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-a")
+            .expect("replication runtime");
+    let replicated_decision = PosDecision {
+        height: 3,
+        slot: 3,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "real-replicated-block-3".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    replication
+        .build_local_commit_message(
+            "node-a",
+            world_id,
+            4_303,
+            &replicated_decision,
+            Some("real-replicated-exec-block-3"),
+            Some("real-replicated-exec-state-3"),
+        )
+        .expect("build replicated commit")
+        .expect("replicated commit");
+    engine.committed_height = 3;
+    engine.replication_persisted_height = 3;
+    engine.last_committed_block_hash = Some("legacy-height-3".to_string());
+
+    let network = Arc::new(TestInMemoryNetwork::default());
+    let handle = NodeReplicationNetworkHandle::new(network.clone());
+    let endpoint = ConsensusNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+        .expect("consensus endpoint");
+
+    engine
+        .broadcast_replicated_commit_head_network(
+            &endpoint,
+            "node-a",
+            world_id,
+            5_300,
+            Some(&replication),
+        )
+        .expect("legacy synthetic local hash should not reject real persisted commit head");
+
+    let commit_topic = super::network_bridge::default_consensus_commit_topic(world_id);
+    let payloads = network
+        .retained
+        .lock()
+        .expect("lock retained")
+        .get(commit_topic.as_str())
+        .cloned()
+        .unwrap_or_default();
+    let commits = payloads
+        .iter()
+        .filter_map(|payload| serde_json::from_slice::<GossipCommitMessage>(payload).ok())
+        .map(|commit| commit.block_hash)
+        .collect::<Vec<_>>();
+
+    assert_eq!(commits, vec!["real-replicated-block-3".to_string()]);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn replicated_commit_head_gossip_rebroadcast_is_independent_from_local_commit_broadcast() {
     let world_id = "world-replicated-head-independent-gossip";
     let dir = temp_dir("replicated-head-independent-gossip");

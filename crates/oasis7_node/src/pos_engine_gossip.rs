@@ -449,7 +449,11 @@ impl PosNodeEngine {
         if commit.height != self.committed_height {
             return Ok(());
         }
-        if let Some(local_block_hash) = self.last_committed_block_hash.as_deref() {
+        if let Some(local_block_hash) = self
+            .last_committed_block_hash
+            .as_deref()
+            .filter(|hash| !hash.starts_with("legacy-height-"))
+        {
             if commit.block_hash != local_block_hash {
                 return Err(NodeError::Replication {
                     reason: format!(
