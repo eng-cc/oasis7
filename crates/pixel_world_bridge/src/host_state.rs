@@ -50,10 +50,10 @@ fn zh_or_published(
     if !is_zh_locale(locale) {
         return published.unwrap_or(en_fallback).to_string();
     }
-    if let Some(published) = published {
-        if contains_cjk(published) {
-            return published.to_string();
-        }
+    if let Some(published) = published
+        && contains_cjk(published)
+    {
+        return published.to_string();
     }
     zh_fallback.to_string()
 }
@@ -689,10 +689,10 @@ fn localized_next_action_label(locale: &str, gameplay: &Value) -> String {
     if is_zh_locale(locale) && published.map(contains_cjk).unwrap_or(false) {
         return published.unwrap_or_default().to_string();
     }
-    if !is_zh_locale(locale) {
-        if let Some(published) = published {
-            return published.to_string();
-        }
+    if !is_zh_locale(locale)
+        && let Some(published) = published
+    {
+        return published.to_string();
     }
     let action_id = normalize_gameplay_token(str_key(recommended_action, "actionId"));
     let label_token = normalize_gameplay_token(str_key(recommended_action, "label"));
@@ -729,10 +729,10 @@ fn localized_blocker_label(locale: &str, gameplay: &Value) -> Option<String> {
     if str_key(gameplay, "blockerKind") == Some("runtime_snapshot_empty_entities") {
         return Some(tr(locale, "认领第一个 Agent", "Claim the first Agent"));
     }
-    if let Some(published) = str_key(gameplay, "blockerLabel") {
-        if !is_zh_locale(locale) || contains_cjk(published) {
-            return Some(published.to_string());
-        }
+    if let Some(published) = str_key(gameplay, "blockerLabel")
+        && (!is_zh_locale(locale) || contains_cjk(published))
+    {
+        return Some(published.to_string());
     }
     match str_key(gameplay, "blockerKind") {
         Some("material_shortage") => Some(tr(locale, "物料不足", "Missing Material")),
@@ -965,8 +965,8 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         .or_else(|| world_center_position(&world_bounds));
     let gameplay = obj(input, "gameplay");
     let goal_highlight = json!({
-        "title": localized_goal_title(&locale, gameplay),
-        "objective": localized_objective_detail(&locale, gameplay),
+        "title": localized_goal_title(locale, gameplay),
+        "objective": localized_objective_detail(locale, gameplay),
     });
     let blocker_highlight = if str_key(gameplay, "blockerKind").is_some()
         || str_key(gameplay, "blockerDetail").is_some()
