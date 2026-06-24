@@ -129,6 +129,7 @@ def hash_exact(rel_path: str) -> tuple[str | None, str | None]:
     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
     return candidate.relative_to(bundle_dir).as_posix(), digest
 
+viewer_index_path, viewer_index_sha256 = hash_exact("web/index.html")
 viewer_js_path, viewer_js_sha256 = hash_exact("web/viewer.js")
 viewer_wasm_path, viewer_wasm_sha256 = hash_first("web/*.wasm")
 pixel_world_runtime_module_path, pixel_world_runtime_module_sha256 = hash_exact(
@@ -143,6 +144,7 @@ pixel_world_webgl2_bindgen_js_path, pixel_world_webgl2_bindgen_js_sha256 = hash_
 pixel_world_webgl2_bindgen_wasm_path, pixel_world_webgl2_bindgen_wasm_sha256 = hash_exact(
     "web/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 )
+launcher_index_path, launcher_index_sha256 = hash_exact("web-launcher/index.html")
 launcher_js_path, launcher_js_sha256 = hash_first("web-launcher/*.js")
 launcher_wasm_path, launcher_wasm_sha256 = hash_first("web-launcher/*.wasm")
 
@@ -151,6 +153,8 @@ manifest = {
     "generatedAtUnixMs": int(time.time() * 1000),
     **source_metadata,
     "assets": {
+        "viewerIndexPath": viewer_index_path,
+        "viewerIndexSha256": viewer_index_sha256,
         "viewerJsPath": viewer_js_path,
         "viewerJsSha256": viewer_js_sha256,
         "viewerWasmPath": viewer_wasm_path,
@@ -163,6 +167,8 @@ manifest = {
         "pixelWorldWebgl2BindgenJsSha256": pixel_world_webgl2_bindgen_js_sha256,
         "pixelWorldWebgl2BindgenWasmPath": pixel_world_webgl2_bindgen_wasm_path,
         "pixelWorldWebgl2BindgenWasmSha256": pixel_world_webgl2_bindgen_wasm_sha256,
+        "launcherIndexPath": launcher_index_path,
+        "launcherIndexSha256": launcher_index_sha256,
         "launcherJsPath": launcher_js_path,
         "launcherJsSha256": launcher_js_sha256,
         "launcherWasmPath": launcher_wasm_path,

@@ -26,7 +26,9 @@ printf 'console.log("viewer");\n' > "$tmp_repo/crates/oasis7_viewer/viewer.js"
 printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.js"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n' > "$tmp_repo/scripts/copy-viewer-web-dist.sh"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n' > "$tmp_repo/scripts/viewer-web-dist-contract.sh"
+printf '<!doctype html><script type="module" src="./viewer.js"></script>\n' > "$tmp_repo/bundle/web/index.html"
 printf 'console.log("bundle viewer");\n' > "$tmp_repo/bundle/web/viewer.js"
+printf '<!doctype html><script type="module" src="./app.js"></script>\n' > "$tmp_repo/bundle/web-launcher/index.html"
 printf 'console.log("launcher app");\n' > "$tmp_repo/bundle/web-launcher/app.js"
 
 required_scope_entries=(
@@ -72,20 +74,43 @@ expect_asset_drift() {
 }
 
 bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
+printf '<!doctype html>mutated viewer entry\n' > "$tmp_repo/bundle/web/index.html"
+expect_asset_drift "mutating bundle/web/index.html"
+
+printf '<!doctype html><script type="module" src="./viewer.js"></script>\n' > "$tmp_repo/bundle/web/index.html"
+bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
+rm -f "$tmp_repo/bundle/web/index.html"
+expect_asset_drift "deleting bundle/web/index.html"
+
+printf '<!doctype html><script type="module" src="./viewer.js"></script>\n' > "$tmp_repo/bundle/web/index.html"
+bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
 printf 'console.log("mutated viewer");\n' > "$tmp_repo/bundle/web/viewer.js"
 expect_asset_drift "mutating bundle/web/viewer.js"
 
+printf '<!doctype html><script type="module" src="./viewer.js"></script>\n' > "$tmp_repo/bundle/web/index.html"
 printf 'console.log("bundle viewer");\n' > "$tmp_repo/bundle/web/viewer.js"
 bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
 rm -f "$tmp_repo/bundle/web/viewer.js"
 expect_asset_drift "deleting bundle/web/viewer.js"
 
 printf 'console.log("bundle viewer");\n' > "$tmp_repo/bundle/web/viewer.js"
+printf '<!doctype html><script type="module" src="./app.js"></script>\n' > "$tmp_repo/bundle/web-launcher/index.html"
 printf 'console.log("launcher app");\n' > "$tmp_repo/bundle/web-launcher/app.js"
+bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
+printf '<!doctype html>mutated launcher entry\n' > "$tmp_repo/bundle/web-launcher/index.html"
+expect_asset_drift "mutating bundle/web-launcher/index.html"
+
+printf '<!doctype html><script type="module" src="./app.js"></script>\n' > "$tmp_repo/bundle/web-launcher/index.html"
+bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
+rm -f "$tmp_repo/bundle/web-launcher/index.html"
+expect_asset_drift "deleting bundle/web-launcher/index.html"
+
+printf '<!doctype html><script type="module" src="./app.js"></script>\n' > "$tmp_repo/bundle/web-launcher/index.html"
 bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
 printf 'console.log("mutated launcher");\n' > "$tmp_repo/bundle/web-launcher/app.js"
 expect_asset_drift "mutating bundle/web-launcher/app.js"
 
+printf '<!doctype html><script type="module" src="./app.js"></script>\n' > "$tmp_repo/bundle/web-launcher/index.html"
 printf 'console.log("launcher app");\n' > "$tmp_repo/bundle/web-launcher/app.js"
 bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
 rm -f "$tmp_repo/bundle/web-launcher/app.js"
