@@ -16,11 +16,11 @@ acceptance:
   - "Validator rebuild cleanup keeps scanning after transient no-process windows and requires a stable quiet period before success."
   - "Focused test covers a delayed stack-root process appearing during cleanup."
 handoff_to: []
-updated_at: 2026-06-24T23:11:57+08:00
+updated_at: 2026-06-24T23:13:07+08:00
 last_started_at: 2026-06-24T22:58:57+08:00
 last_claim_type: task_complete
-last_verify_command: "bash scripts/p2p-public-testnet-rebuild-validators.test.sh"
-last_verified_at: 2026-06-24T23:11:56+08:00
+last_verify_command: "bash scripts/p2p-public-testnet-rebuild-validators.test.sh && bash -n scripts/p2p-public-testnet-rebuild-validators.sh scripts/p2p-public-testnet-rebuild-validators.test.sh && git diff --check && ./scripts/check-rust-file-size.sh && ./scripts/pm/workflow-lint.sh --task-uid task_b0a073c3b7fd44549767d9540e8e6ec9 --phase current"
+last_verified_at: 2026-06-24T23:13:05+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
-last_closed_at: 2026-06-24T23:11:57+08:00
+last_closed_at: 2026-06-24T23:13:07+08:00
