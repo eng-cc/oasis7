@@ -1,0 +1,19 @@
+task_uid: task_b442769f7ef74d01894f4b8405c21301
+title: "Find next Rust dependency governance issue"
+owner_role: tpm
+worktree_hint: superseded_by_task_d1eac391d57b48dd926a33eeafde29d0
+execution_log_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+related_prd: []
+acceptance:
+  - "Repository health slice identifies the next actionable Rust dependency governance issue with evidence."
+  - "Task execution log records slice contract, findings, recommended owner, and follow-up path."
+handoff_to: []
+updated_at: 2026-06-24T09:46:53+08:00
+last_started_at: 2026-06-24T09:46:53+08:00

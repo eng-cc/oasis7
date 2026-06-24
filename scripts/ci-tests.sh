@@ -148,6 +148,7 @@ run_oasis7_workspace_support_crate_tests() {
 }
 
 run_rustsec_advisory_check() {
+  run ./scripts/check-rustsec-ignore-baseline.sh
   run ./scripts/ensure-cargo-deny.sh
   run cargo deny check advisories
 }

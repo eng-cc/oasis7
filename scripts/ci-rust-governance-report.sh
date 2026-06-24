@@ -11,6 +11,7 @@ usage() {
 Usage: ./scripts/ci-rust-governance-report.sh [--out-dir <dir>]
 
 Produce report-only Rust governance artifacts:
+- RustSec ignored-advisory baseline metadata/ratchet report
 - cargo-deny full policy report
 - duplicate dependency report
 - unsafe usage distribution
@@ -82,6 +83,7 @@ else
   } >"$out_dir/cargo-deny.log"
   printf '%s\n' 127 >"$out_dir/cargo-deny.log.rc"
 fi
+run_report "RustSec ignore baseline" "$out_dir/rustsec-ignore-baseline.log" ./scripts/check-rustsec-ignore-baseline.sh
 run_report "duplicate dependencies" "$out_dir/cargo-tree-duplicates.log" cargo tree -d
 run_report "unsafe usage" "$out_dir/unsafe-usage.log" rg -n --glob '*.rs' '\bunsafe\b' .
 
@@ -113,6 +115,7 @@ if unsafe_log.exists():
             unsafe_counts[bucket] += 1
 
 summary = {
+    "rustsec_ignore_baseline_rc": read_rc("rustsec-ignore-baseline.log"),
     "cargo_deny_rc": read_rc("cargo-deny.log"),
     "duplicate_dependencies_rc": read_rc("cargo-tree-duplicates.log"),
     "unsafe_usage_rc": read_rc("unsafe-usage.log"),
@@ -132,6 +135,7 @@ lines = [
     "",
     "| Check | Status | Artifact |",
     "| --- | ---: | --- |",
+    f"| RustSec ignore baseline | {summary['rustsec_ignore_baseline_rc']} | `rustsec-ignore-baseline.log` |",
     f"| cargo deny check | {summary['cargo_deny_rc']} | `cargo-deny.log` |",
     f"| cargo tree -d | {summary['duplicate_dependencies_rc']} | `cargo-tree-duplicates.log` |",
     f"| unsafe usage scan | {summary['unsafe_usage_rc']} | `unsafe-usage.log` |",

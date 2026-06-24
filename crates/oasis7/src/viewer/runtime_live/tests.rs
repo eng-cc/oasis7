@@ -136,10 +136,24 @@ fn read_test_http_request(stream: &mut TcpStream) -> Vec<u8> {
     let mut request = Vec::new();
     let mut buffer = [0_u8; 4096];
     let mut expected_len = None;
+    let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let bytes = stream
-            .read(&mut buffer)
-            .expect("read test http request chunk");
+        let bytes = match stream.read(&mut buffer) {
+            Ok(bytes) => bytes,
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                if Instant::now() >= deadline {
+                    panic!("timed out reading test http request chunk: {err}");
+                }
+                thread::sleep(Duration::from_millis(5));
+                continue;
+            }
+            Err(err) => panic!("read test http request chunk: {err}"),
+        };
         if bytes == 0 {
             break;
         }

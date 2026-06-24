@@ -1,4 +1,19 @@
 version: 1
 role: repository_health_engineer
 status: done
-tasks: []
+tasks:
+  - task_uid: task_d1eac391d57b48dd926a33eeafde29d0
+    title: "Burn down RustSec advisory baseline for libp2p network closure"
+    priority: P1
+    source_signal: SIG-PM-0070
+    related_prd: []
+    acceptance:
+      - "Identify which ignored RustSec advisories are still present in the oasis7_net libp2p closure and remove or justify each ignore with owner, expiry, and validation evidence."
+      - "Reduce the ignored advisory baseline or add a ratchet that prevents the ignored set from growing without explicit repository-health review."
+      - "Validate with cargo deny advisories plus targeted cargo tree checks for ring 0.16, rustls-webpki 0.101, hickory-proto 0.24, and oasis7_net libp2p tests."
+    handoff_to:
+      - blockchain_ops_engineer
+      - runtime_engineer
+      - qa_engineer
+    status: done
+    task_path: .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.yaml
