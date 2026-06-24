@@ -158,6 +158,9 @@ pub struct NetworkResponse {
     pub payload: Vec<u8>,
 }
 
+pub type NetworkHandler<E> = Box<dyn Fn(&[u8]) -> Result<Vec<u8>, E> + Send + Sync>;
+pub type SubscriptionInbox = Arc<Mutex<HashMap<String, Vec<Vec<u8>>>>>;
+
 pub trait DistributedNetwork<E> {
     fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), E>;
     fn publish_best_effort(&self, topic: &str, payload: &[u8]) -> Result<(), E> {
@@ -192,28 +195,24 @@ pub trait DistributedNetwork<E> {
         }
         self.request_with_providers(protocol, payload, providers)
     }
-    fn register_handler(
-        &self,
-        protocol: &str,
-        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, E> + Send + Sync>,
-    ) -> Result<(), E>;
+    fn register_handler(&self, protocol: &str, handler: NetworkHandler<E>) -> Result<(), E>;
 }
 
 #[derive(Debug, Clone)]
 pub struct NetworkSubscription {
     topic: String,
-    inbox: Arc<Mutex<HashMap<String, Vec<Vec<u8>>>>>,
+    inbox: SubscriptionInbox,
     max_inbox_messages: usize,
 }
 
 impl NetworkSubscription {
-    pub fn new(topic: String, inbox: Arc<Mutex<HashMap<String, Vec<Vec<u8>>>>>) -> Self {
+    pub fn new(topic: String, inbox: SubscriptionInbox) -> Self {
         Self::with_max_inbox_messages(topic, inbox, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES)
     }
 
     pub fn with_max_inbox_messages(
         topic: String,
-        inbox: Arc<Mutex<HashMap<String, Vec<Vec<u8>>>>>,
+        inbox: SubscriptionInbox,
         max_inbox_messages: usize,
     ) -> Self {
         Self {
@@ -238,7 +237,7 @@ impl NetworkSubscription {
 }
 
 pub fn push_bounded_inbox_message(
-    inbox: &Arc<Mutex<HashMap<String, Vec<Vec<u8>>>>>,
+    inbox: &SubscriptionInbox,
     topic: &str,
     payload: Vec<u8>,
     max_inbox_messages: usize,

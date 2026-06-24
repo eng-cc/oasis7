@@ -62,7 +62,7 @@ pub enum ViewerRequest {
         request_id: Option<u64>,
     },
     PromptControl {
-        command: PromptControlCommand,
+        command: Box<PromptControlCommand>,
     },
     AgentChat {
         request: AgentChatRequest,
@@ -735,7 +735,7 @@ mod tests {
     #[test]
     fn viewer_prompt_control_request_round_trip() {
         let request = ViewerRequest::PromptControl {
-            command: PromptControlCommand::Apply {
+            command: Box::new(PromptControlCommand::Apply {
                 request: PromptControlApplyRequest {
                     agent_id: "agent-0".to_string(),
                     player_id: "player-1".to_string(),
@@ -754,9 +754,14 @@ mod tests {
                     short_term_goal_override: Some(None),
                     long_term_goal_override: None,
                 },
-            },
+            }),
         };
         let json = serde_json::to_string(&request).expect("serialize request");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("serialized request should be json");
+        assert_eq!(value["type"], "prompt_control");
+        assert_eq!(value["command"]["mode"], "apply");
+        assert_eq!(value["command"]["request"]["agent_id"], "agent-0");
         let parsed: ViewerRequest = serde_json::from_str(&json).expect("deserialize request");
         assert_eq!(parsed, request);
     }
@@ -860,7 +865,7 @@ mod tests {
         let ViewerRequest::PromptControl { command } = parsed else {
             panic!("expected prompt_control request");
         };
-        let PromptControlCommand::Apply { request } = command else {
+        let PromptControlCommand::Apply { request } = *command else {
             panic!("expected apply command");
         };
         assert_eq!(request.public_key, None);

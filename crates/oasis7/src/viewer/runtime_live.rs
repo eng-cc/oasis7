@@ -509,14 +509,16 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::Control { mode, request_id } => {
                 self.apply_control_mode(mode, request_id, session, writer)?;
             }
-            ViewerRequest::PromptControl { command } => match self.handle_prompt_control(command) {
-                Ok(ack) => {
-                    send_response(writer, &ViewerResponse::PromptControlAck { ack })?;
+            ViewerRequest::PromptControl { command } => {
+                match self.handle_prompt_control(*command) {
+                    Ok(ack) => {
+                        send_response(writer, &ViewerResponse::PromptControlAck { ack })?;
+                    }
+                    Err(error) => {
+                        send_response(writer, &ViewerResponse::PromptControlError { error })?;
+                    }
                 }
-                Err(error) => {
-                    send_response(writer, &ViewerResponse::PromptControlError { error })?;
-                }
-            },
+            }
             ViewerRequest::AgentChat { request } => match self.handle_agent_chat(request) {
                 Ok(ack) => {
                     send_response(writer, &ViewerResponse::AgentChatAck { ack })?;

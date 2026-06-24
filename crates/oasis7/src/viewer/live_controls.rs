@@ -535,7 +535,7 @@ impl ViewerLiveSession {
                 );
             }
             ViewerRequest::PromptControl { command } => {
-                let (result, wake_llm) = match command {
+                let (result, wake_llm) = match *command {
                     PromptControlCommand::Preview { request } => {
                         (world.prompt_control_preview(request), false)
                     }
