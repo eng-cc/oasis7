@@ -1152,6 +1152,7 @@ fn world_head_lookup_can_fallback(err: &NodeError) -> bool {
         || replication_network_error_is_not_found(err)
         || replication_network_error_is_unsupported_protocol(err, REPLICATION_GET_HEAD_PROTOCOL)
         || replication_network_error_is_protocol_unavailable(err, REPLICATION_GET_HEAD_PROTOCOL)
+        || replication_network_error_is_timeout_protocol(err, REPLICATION_GET_HEAD_PROTOCOL)
 }
 
 fn validate_world_head_world_id(world_id: &str, head: &WorldHeadAnnounce) -> Result<(), NodeError> {

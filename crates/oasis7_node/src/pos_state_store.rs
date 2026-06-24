@@ -253,6 +253,10 @@ impl PosNodeEngine {
             restored_last_broadcast_local_attestation_height;
         self.last_broadcast_gossip_committed_height = restored_last_broadcast_committed_height;
         self.last_broadcast_network_committed_height = restored_last_broadcast_committed_height;
+        self.last_broadcast_gossip_replicated_committed_height =
+            restored_last_broadcast_committed_height;
+        self.last_broadcast_network_replicated_committed_height =
+            restored_last_broadcast_committed_height;
         self.last_committed_block_hash = restored_committed_hash;
         self.last_execution_height = last_execution_height;
         self.last_execution_block_hash = last_execution_block_hash;
