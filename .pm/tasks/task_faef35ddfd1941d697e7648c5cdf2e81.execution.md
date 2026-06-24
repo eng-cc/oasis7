@@ -165,10 +165,10 @@ Example:
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/roles/repository_health_engineer/backlog/done.yaml`; `.pm/tasks/task_faef35ddfd1941d697e7648c5cdf2e81.execution.md`; `.pm/tasks/task_faef35ddfd1941d697e7648c5cdf2e81.yaml`; `doc/engineering/governance/repository-health-manual-inspection.runbook.md`; `scripts/ci-rust-governance-report.sh`
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-132847bdd..838724ec9.diff
-- Role Selection Basis: changed paths include Rust governance reporting script, repository-health runbook, and task workflow evidence; selected `repository_health_engineer` for cross-cutting dependency governance/report semantics and `qa_engineer` for verification sufficiency and PR readiness; added `blockchain_ops_engineer` and `liveops_community` because `prepare-task-pr.sh --create` inferred them from changed paths as required mechanical backstop roles. Skipped runtime/WASM/viewer/gameplay roles because no runtime code, WASM surface, viewer UI, gameplay behavior, dependency manifests, lockfiles, deny policy, or version changes were touched.
-- Review Roles: repository_health_engineer, qa_engineer, blockchain_ops_engineer, liveops_community
-- Review Evidence: `repository_health_engineer` returned `no_findings`, scope/spec compliance passed, role quality/risk passed; `qa_engineer` returned `no_findings`, scope/spec compliance passed, role quality/risk passed; `blockchain_ops_engineer` returned `no_findings`, ops scope/spec compliance passed, role quality/risk passed; `liveops_community` returned `no_findings`, liveops/community scope compliance passed, role quality/risk passed.
-- Review Verdicts: repository_health_engineer: proceed to PR from repository-health perspective; qa_engineer: proceed to PR from QA perspective; blockchain_ops_engineer: proceed to PR from blockchain-ops perspective; liveops_community: proceed to PR from liveops/community perspective.
+- Role Selection Basis: changed paths include Rust governance reporting script, repository-health runbook, engineering project Trace, and task workflow evidence; selected `repository_health_engineer` for cross-cutting dependency governance/report semantics and `qa_engineer` for verification sufficiency and PR readiness; added `blockchain_ops_engineer`, `liveops_community`, and `producer_system_designer` because `prepare-task-pr.sh --create` inferred them from changed paths as required mechanical backstop roles. Skipped runtime/WASM/viewer/gameplay roles because no runtime code, WASM surface, viewer UI, gameplay behavior, dependency manifests, lockfiles, deny policy, or version changes were touched.
+- Review Roles: repository_health_engineer, qa_engineer, blockchain_ops_engineer, liveops_community, producer_system_designer
+- Review Evidence: `repository_health_engineer` returned `no_findings`, scope/spec compliance passed, role quality/risk passed; `qa_engineer` returned `no_findings`, scope/spec compliance passed, role quality/risk passed; `blockchain_ops_engineer` returned `no_findings`, ops scope/spec compliance passed, role quality/risk passed; `liveops_community` returned `no_findings`, liveops/community scope compliance passed, role quality/risk passed; `producer_system_designer` returned `no_findings`, product/system scope compliance passed, role quality/risk passed.
+- Review Verdicts: repository_health_engineer: proceed to PR from repository-health perspective; qa_engineer: proceed to PR from QA perspective; blockchain_ops_engineer: proceed to PR from blockchain-ops perspective; liveops_community: proceed to PR from liveops/community perspective; producer_system_designer: proceed to PR from producer/system perspective.
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: n/a; all review slices returned no actionable findings.
 - Verification Matrix: `scripts/ci-rust-governance-report.sh` -> syntax/report behavior/JSON/Markdown evidence -> `bash -n` passed, report smoke passed, `summary.json` parsed, duplicate fields matched; `doc/engineering/governance/repository-health-manual-inspection.runbook.md` -> governance doc evidence -> `./scripts/doc-governance-check.sh` passed; task workflow evidence -> `./scripts/pm/workflow-lint.sh --task-uid task_faef35ddfd1941d697e7648c5cdf2e81 --phase current` passed; whole diff hygiene -> `git diff --check` passed.
@@ -265,3 +265,37 @@ Example:
 - Expected Result: Fresh PR-readiness verification succeeds and emits claim-ready evidence.
 - Actual Result: Passed with JSON status `verified`, `verification_exit_code: 0`, and `allowed_to_claim: true`; verified at `2026-06-24T17:33:00+08:00`.
 - Blocker / Next Action: No claim-ready blocker. Commit Trace/evidence update and rerun PR creation helper.
+
+### Subagent Slice Contract: producer_system_designer prepare-task-pr required-role review
+- role: `producer_system_designer`
+- slice type: `pre_pr_local_role_review`
+- intended model configuration: workflow source-of-truth Default subagent runtime; no override requested
+- actual dispatched model/reasoning: inherited/unverified, because the available subagent tool inherits parent context/model and does not report a concrete model id
+- context delivery mode: full-thread/full-history fork requested; mandatory context checklist recorded here
+- mandatory context checklist/packet:
+  - identity and authority: assigned role `producer_system_designer`; role card `.agents/roles/producer_system_designer.md`; TPM integration owner
+  - trigger: `./scripts/prepare-task-pr.sh --create` inferred `producer_system_designer` from changed paths after `doc/engineering/project.md` Trace update
+  - task truth: `.pm/tasks/task_faef35ddfd1941d697e7648c5cdf2e81.yaml`, this execution log, worktree `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2`, branch `task/engineering-rust-governance-next-issue-2`
+  - review target head: `3093db63ee0ccd3137913efcf68ccb408ca8831e`
+  - review package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-132847bdd..838724ec9.diff`
+  - changed surface: internal Rust governance report script, repository-health manual inspection runbook, engineering project Trace, `.pm` task evidence
+  - review boundary: read-only; confirm whether this internal governance observability task changes project/product/system requirements, player capability promises, world rules, or version scope
+- write scope: none
+- return contract: findings or explicit `no_findings`; product/system scope verdict; residual risk; whether PR can proceed from producer/system perspective
+- formal sink / writeback surface: TPM records returned findings in this execution log
+- integration owner: `tpm`
+- integration order: merge with existing role reviews, update passed packet, then rerun PR helper
+
+## 2026-06-24 17:37:00 CST / producer_system_designer
+- Review Trigger: prepare-task-pr inferred required-role pre-PR review
+- Review Scope: `scripts/ci-rust-governance-report.sh`; `doc/engineering/governance/repository-health-manual-inspection.runbook.md`; `doc/engineering/project.md`; `.pm` task evidence
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/review-packages/review-132847bdd..838724ec9.diff`
+- Review Roles: `producer_system_designer`
+- Review Question: Confirm whether the internal dependency governance observability/reporting task changes any product/system requirement, project promise, player capability boundary, world rule, version scope, or PRD acceptance semantics before PR.
+- Evidence Available: Current diff, `doc/engineering/project.md` Trace, runbook wording, generated governance report fields, and prior role review evidence.
+- Expected Return Contract: findings or `no_findings`; product/system scope verdict; residual risk; PR proceed verdict.
+- Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-2/.pm/scratch/task_faef35ddfd1941d697e7648c5cdf2e81/slice-ledger.jsonl`
+- Formal Sink: this execution log
+- Actual Result: `no_findings`. Producer/system review confirmed the change is internal engineering governance observability only, and the `doc/engineering/project.md` Trace records the task under existing `PRD-ENGINEERING-021/025` governance scope.
+- Review Verdicts: product/system scope compliance: passed; role quality/risk: passed; PR can proceed from producer/system perspective.
+- Residual Risk: None from producer/system scope; the known parser-format risk remains repository-health/reporting only, not product or system-design scope.
