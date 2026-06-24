@@ -284,3 +284,18 @@ Example:
 - Expected Result: branch no longer DIRTY and preflight accepts the updated review packet.
 - Actual Result: rebase and focused verification passed; review packet Source Head/Review Package updated to current head `112efb349791c5d31fc4085583a67ddc5266c018`.
 - Blocker / Next Action: amend evidence commit, rerun preflight, force-push with lease.
+
+## 2026-06-24 15:28:40 CST / tpm
+- 完成内容: GitHub required-gate failure triaged and bounded CI fix applied.
+- 遗留事项: push CI fix, rerun GitHub checks, review-thread closeout, merge, and cleanup.
+- Failure Signature: PR #601 Rust `required-gate` failed while running `cargo test -p oasis7_client_launcher --bin oasis7_client_launcher`; `wayland-sys v0.31.11` build script panicked because `pkg-config --libs --cflags wayland-client` could not find `wayland-client.pc`.
+- Root Cause: `.github/workflows/rust.yml` installed Linux Wayland/X11 system deps for `needs_system_deps`, viewer, launcher web, or full oasis7 required scopes, but not for `run_oasis7_workspace_support_crate_tests == true`; this PR selected only workspace support crate tests, which still compile `oasis7_client_launcher`.
+- Fix Applied: `.github/workflows/rust.yml` now reports `run_oasis7_workspace_support_crate_tests`, includes it in the `rust-cache` condition, and includes it in `Install system deps` so `pkg-config`, `libwayland-dev`, and related libs are installed before workspace-support crate tests.
+- Local Verification: `.github/workflows/rust.yml` YAML parse/check passed; `./scripts/plan-rust-required-scope.test.sh` passed; `git diff --check` passed.
+- Review Evidence: repository_health_engineer narrow review returned `no_findings`, confirming bounded CI governance fix and no source-of-truth/doc update required; qa_engineer narrow review returned `no_findings`, confirming local verification sufficient before push and GitHub rerun is final truth.
+- Residual Risk: low; `needs_system_deps` still reports false for workspace-support-only planning, but workflow explicitly gates system deps on `run_oasis7_workspace_support_crate_tests == true`.
+- Action: inspect failed GitHub job, identify missing apt dependency condition, patch workflow, and collect narrow role reviews.
+- Validation Command: `gh run view 28081815150 --job 83138306014 --log-failed`; YAML parse/check; `./scripts/plan-rust-required-scope.test.sh`; `git diff --check`.
+- Expected Result: targeted CI setup patch addresses missing `wayland-client.pc` for workspace-support crate required-gate scope.
+- Actual Result: local checks and role reviews passed; ready to push for GitHub verification.
+- Blocker / Next Action: commit and push CI fix, then watch PR checks.
