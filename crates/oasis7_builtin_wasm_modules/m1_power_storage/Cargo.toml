@@ -4,6 +4,7 @@
 name = "oasis7_builtin_wasm_m1_power_storage"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 publish = false
 
 [lib]

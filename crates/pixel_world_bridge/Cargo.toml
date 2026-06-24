@@ -2,6 +2,7 @@
 name = "pixel_world_bridge"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [features]
 default = ["webgl2_runtime"]
