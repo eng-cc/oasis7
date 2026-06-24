@@ -79,7 +79,8 @@ pub(crate) fn build_network_head_status(
             .saturating_sub(peer_head.observed_at_ms)
             .max(0);
         let fresh = age_ms <= policy.peer_head_ttl_ms
-            || peer_head_matches_current_local_head(snapshot, peer_head);
+            || (policy.tier == "public_testnet"
+                && peer_head_matches_current_local_head(snapshot, peer_head));
         peer_heads.push(ChainConsensusPeerHeadStatus {
             node_id: peer_head.node_id.clone(),
             validator_id: peer_head.validator_id.clone(),
