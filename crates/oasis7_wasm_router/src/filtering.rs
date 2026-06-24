@@ -331,22 +331,20 @@ pub(super) fn validate_rule(rule: &MatchRule, module_id: &str) -> Result<(), Str
         ));
     }
 
-    for candidate in [rule.gt, rule.gte, rule.lt, rule.lte] {
-        if let Some(number) = candidate {
-            if !number.is_finite() {
-                return Err(format!(
-                    "module {module_id} subscription filter numeric value must be finite"
-                ));
-            }
+    for number in [rule.gt, rule.gte, rule.lt, rule.lte].into_iter().flatten() {
+        if !number.is_finite() {
+            return Err(format!(
+                "module {module_id} subscription filter numeric value must be finite"
+            ));
         }
     }
 
-    if let Some(pattern) = &rule.re {
-        if regex::Regex::new(pattern).is_err() {
-            return Err(format!(
-                "module {module_id} subscription filter regex invalid"
-            ));
-        }
+    if let Some(pattern) = &rule.re
+        && regex::Regex::new(pattern).is_err()
+    {
+        return Err(format!(
+            "module {module_id} subscription filter regex invalid"
+        ));
     }
 
     Ok(())

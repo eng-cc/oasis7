@@ -78,7 +78,9 @@ pub(crate) fn build_network_head_status(
         let age_ms = observed_at_unix_ms
             .saturating_sub(peer_head.observed_at_ms)
             .max(0);
-        let fresh = age_ms <= policy.peer_head_ttl_ms;
+        let fresh = age_ms <= policy.peer_head_ttl_ms
+            || (policy.tier == "public_testnet"
+                && peer_head_matches_current_local_head(snapshot, peer_head));
         peer_heads.push(ChainConsensusPeerHeadStatus {
             node_id: peer_head.node_id.clone(),
             validator_id: peer_head.validator_id.clone(),
@@ -199,6 +201,34 @@ pub(crate) fn build_network_head_status(
         peer_heads,
         decision: decision.to_string(),
     }
+}
+
+fn peer_head_matches_current_local_head(
+    snapshot: &NodeSnapshot,
+    peer_head: &NodePeerCommittedHead,
+) -> bool {
+    if snapshot.consensus.committed_height == 0
+        || snapshot.consensus.committed_height != snapshot.consensus.network_committed_height
+        || peer_head.height != snapshot.consensus.committed_height
+    {
+        return false;
+    }
+    if snapshot.consensus.last_block_hash.as_deref() != Some(peer_head.block_hash.as_str()) {
+        return false;
+    }
+    if let Some(local_execution_block_hash) =
+        snapshot.consensus.last_execution_block_hash.as_deref()
+        && Some(local_execution_block_hash) != peer_head.execution_block_hash.as_deref()
+    {
+        return false;
+    }
+    if let Some(local_execution_state_root) =
+        snapshot.consensus.last_execution_state_root.as_deref()
+        && Some(local_execution_state_root) != peer_head.execution_state_root.as_deref()
+    {
+        return false;
+    }
+    true
 }
 
 fn compare_peer_head_buckets(

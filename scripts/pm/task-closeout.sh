@@ -15,7 +15,7 @@ Default conventions:
 - final task status: done
 - when closing to `done`, fresh verification is mandatory before any close-phase writeback
 - verify PM structure: yes
-- standard path: append execution log -> task-closeout.sh -> commit -> prepare-task-pr
+- standard path: fresh verification -> pre-PR local role review -> address findings -> task-closeout.sh -> commit -> prepare-task-pr
 
 Options:
   --role <role>           Owner role for `workflow-report --phase close`

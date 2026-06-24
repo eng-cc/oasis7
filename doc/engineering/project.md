@@ -244,6 +244,7 @@
 - [x] rust-governance-ci-metrics (PRD-ENGINEERING-021) [test_tier_required]: 将 Rust 工程治理指标调研中确认的 P0/P1 CI 信号接入 required/full workflow，覆盖 scoped Clippy、RustSec advisory gate、cargo-deny/duplicate dependency/unsafe usage report，并保留 PR CI residual risk。 Trace: .pm/tasks/task_a13b76fa56f64e4ebd7af333425bb8dc.yaml
 - [x] code-health-findings-1-3-fix (PRD-ENGINEERING-021/025) [test_tier_required]: 收口代码健康检查 finding 1 与 finding 3，移除生产 readme 中本机绝对路径来源表述，并补清 runtime-live fallback semantics 的 contract 注释与单测覆盖。 Trace: .pm/tasks/task_f440263378b34628a2f0f81c3eaec022.yaml
 - [x] rust-2024-edition-migration (PRD-ENGINEERING-021) [test_tier_required]: 将 owned Rust crates/tools、WASM 模板与 Rust pre-commit edition tooling 迁移到 edition 2024，并收口 Rust 2024 unsafe env mutation 显式化、local role review 与 full workspace check 证据。 Trace: .pm/tasks/task_b71a91bfd6f34c098b6e91ecef3ff612.yaml
+- [x] pr-review-workflow-order-doc-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 repository health 在 doc 层发现的 PR review/closeout 顺序口径漂移，将 engineering PRD、`.pm/README` 与 `task-closeout.sh` help 同步到 fresh verification -> pre-PR local role review -> findings 处置 -> closeout -> commit -> prepare-task-pr 的当前真值。 Trace: .pm/tasks/task_24307edaa0e54122a31217723b3d048a.yaml
 - [x] superpowers-review-package-workflow (PRD-ENGINEERING-021/025) [test_tier_required]: 借鉴 Superpowers v6.0.3 的 review package、双 verdict review 与 slice ledger 思路，落入 oasis7 source-of-truth、pre-PR local role review packet、PM helper 与 smoke/eval gate，同时保留角色归因与 `.pm` canonical task truth。 Trace: .pm/tasks/task_962e1089ec324d5eb0a4349547c8cbbd.yaml
 - [x] all-role-workflow-review (PRD-ENGINEERING-021/025) [test_tier_required]: 对当前工程工作流执行全角色 repo-owned review，收口 role inference、semantic evidence gates、review packet、WASM support-crate lane、manual hold 与确认 review 证据，保留 `.pm` task truth 和 PR preflight gate 覆盖。 Trace: .pm/tasks/task_8f68e90644284834be96d4df4887e1e0.yaml
 - [x] research-ai-native-sandbox-open-world (PRD-GAME-014/015) [test_tier_required]: 将近期 AI native / sandbox / open-world 调研收束为 WASM-backed regional infrastructure `micro_depot` 设计与 simulator kernel first slice，覆盖中后期创建准入、安装/upkeep 成本、runtime-owned service receipt、module evidence、replay 与 targeted verification。 Trace: .pm/tasks/task_3c55fc4c17ea44aa850adf7a6a4463f4.yaml
@@ -257,6 +258,7 @@
 - [x] site-inventory-snapshot-sync (PRD-ENGINEERING-024/025) [test_tier_required]: 继续收口 repository health 巡检发现的 `doc/site` 模块入口与文件级索引库存快照漂移，将 site/github-pages 计数同步到 2026-06-23 `doc-inventory-report` 当前值，同时保留 public docs hub / manual / raw skill 分流语义。 Trace: .pm/tasks/task_f2c996cf0450436cbf4f51486d3996e4.yaml
 - [x] core-prd-index-inventory-snapshot-sync (PRD-ENGINEERING-024/025) [test_tier_required]: 继续收口 repository health 巡检发现的 `doc/core/prd.index.md` 库存快照漂移，将 core 文件级索引和 README 热点导航同步到 2026-06-23 `doc-inventory-report` 当前值，同时保留 core 首读分流语义。 Trace: .pm/tasks/task_d2d3fcb15db7424eb10ee07bc054f5e4.yaml
 - [x] wasm-abi-focused-clippy-debt-cleanup (PRD-ENGINEERING-001/021) [test_tier_required]: 继续收口 repository health 巡检发现的 Rust 代码层治理点，使 `oasis7_wasm_abi` focused Clippy `-D warnings` 通过，并保留 ABI 默认值语义不变。 Trace: .pm/tasks/task_d800ad6e8de1473b8019f3eeb028f820.yaml
+- [x] wasm-router-focused-clippy-debt-cleanup (PRD-ENGINEERING-001/021) [test_tier_required]: 继续收口 repository health 巡检发现的 Rust 代码层治理点，使 `oasis7_wasm_router` focused Clippy `-D warnings` 通过，并保留订阅过滤校验与 router metrics 快照语义不变。 Trace: .pm/tasks/task_eb30491fb20e4cf9abaf95dd57b47228.yaml
 - [x] rustsec-advisory-ignore-baseline-ratchet (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Rust 依赖层治理点，为 libp2p network closure 的 RustSec advisory ignore baseline 补 owner/expiry/validation 元数据、CI ratchet 与 governance report 证据，阻止 ignored advisory 集合静默增长，并保留后续依赖 burn-down 风险边界。 Trace: .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.yaml
 
 ## File Structure / Affected Paths
@@ -323,10 +325,10 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-06-23
+- 更新日期: 2026-06-24
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `wasm-abi-focused-clippy-debt-cleanup`（已清理 `oasis7_wasm_abi` focused Clippy `-D warnings` 债务，保持 ABI-facing 默认值语义不变并通过 focused package tests。）
+- 最新完成: `wasm-router-focused-clippy-debt-cleanup`（已清理 `oasis7_wasm_router` focused Clippy `-D warnings` 债务，保持订阅过滤校验与 router metrics 快照语义不变并通过 focused package tests。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
