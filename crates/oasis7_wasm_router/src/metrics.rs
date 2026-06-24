@@ -57,15 +57,14 @@ pub type SharedWasmRouterMetrics = Arc<Mutex<WasmRouterMetricsSnapshot>>;
 
 pub fn snapshot_global_wasm_router_metrics() -> WasmRouterMetricsSnapshot {
     let shared = global_wasm_router_metrics();
-    let snapshot = match shared.lock() {
+    match shared.lock() {
         Ok(locked) => locked.clone(),
         Err(_) => WasmRouterMetricsSnapshot {
             metrics_available: false,
             degraded_reason: Some("wasm router metrics lock poisoned".to_string()),
             ..WasmRouterMetricsSnapshot::empty()
         },
-    };
-    snapshot
+    }
 }
 
 pub fn observe_wasm_router_prepare(prepare_ms: u64) {
