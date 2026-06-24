@@ -207,3 +207,14 @@ Example:
 - Expected Result: Review package is generated for the committed branch diff against `origin/main`.
 - Actual Result: Generated `.pm/scratch/task_3e0e254e5aa844589cfe6eb6bed3a7e4/review-packages/review-e4e7d6365..046028923.diff`; base `e4e7d63656be7e192b8d6593cb3af521b5f1fd03`; head `046028923e4c4ef4337d3b6a0e8dcb8925e13439`; commits `1`.
 - Blocker / Next Action: Run current lint/diff checks, commit packet update, then create PR.
+
+## 2026-06-24 20:49:00 CST / tpm
+- 完成内容: Created the PR and classified it as a normal CI/review PR.
+- 遗留事项: Push this PR-purpose evidence update, then watch required checks, mergeability, review/comments, and unresolved threads through merge.
+- Action: Create PR.
+- Validation Command: `./scripts/prepare-task-pr.sh --create`
+- Expected Result: PR is created only after preflight confirms the pre-PR local role review packet and branch state.
+- Actual Result: Created PR https://github.com/eng-cc/oasis7/pull/613. Preflight confirmed source head `4775eeca3abe45c9e7283eb63eb2c69c7560b9ab`, base `main`, comparison ref `refs/remotes/origin/main`, ahead `2`, behind `2`, branch sync suggested `suggested`, changed paths `3`, and pre-PR local role review `passed`.
+- PR Purpose Decision: `normal_pr_ci_watch`.
+- PR Watch Contract: Continue watching required checks, mergeability, review decision, PR comments, and unresolved review threads. Treat `REVIEW_REQUIRED` and `BEHIND` as informational unless GitHub/repo merge path reports a real blocker; merge may use the authorized admin path if the only block is missing review approval after checks/comments/threads are clean.
+- Blocker / Next Action: Push this evidence update and enter PR watch-fix-merge loop.
