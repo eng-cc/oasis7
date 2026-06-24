@@ -256,6 +256,7 @@
 - [x] world-runtime-inventory-snapshot-sync (PRD-ENGINEERING-024/025) [test_tier_required]: 继续收口 repository health 巡检发现的 `doc/world-runtime` 模块入口与文件级索引库存快照漂移，将 world-runtime/runtime/evidence 计数同步到 2026-06-23 `doc-inventory-report` 当前值，同时保留 runtime / wasm / module 热点分流语义。 Trace: .pm/tasks/task_5da43be9aa8f4bb39b6635d4b147d54f.yaml
 - [x] site-inventory-snapshot-sync (PRD-ENGINEERING-024/025) [test_tier_required]: 继续收口 repository health 巡检发现的 `doc/site` 模块入口与文件级索引库存快照漂移，将 site/github-pages 计数同步到 2026-06-23 `doc-inventory-report` 当前值，同时保留 public docs hub / manual / raw skill 分流语义。 Trace: .pm/tasks/task_f2c996cf0450436cbf4f51486d3996e4.yaml
 - [x] core-prd-index-inventory-snapshot-sync (PRD-ENGINEERING-024/025) [test_tier_required]: 继续收口 repository health 巡检发现的 `doc/core/prd.index.md` 库存快照漂移，将 core 文件级索引和 README 热点导航同步到 2026-06-23 `doc-inventory-report` 当前值，同时保留 core 首读分流语义。 Trace: .pm/tasks/task_d2d3fcb15db7424eb10ee07bc054f5e4.yaml
+- [x] wasm-abi-focused-clippy-debt-cleanup (PRD-ENGINEERING-001/021) [test_tier_required]: 继续收口 repository health 巡检发现的 Rust 代码层治理点，使 `oasis7_wasm_abi` focused Clippy `-D warnings` 通过，并保留 ABI 默认值语义不变。 Trace: .pm/tasks/task_d800ad6e8de1473b8019f3eeb028f820.yaml
 
 ## File Structure / Affected Paths
 - `local-cargo-cache-script-convergence`: 预计改动 `scripts/cargo-dev-lib.sh`、`scripts/cargo-dev-lib.test.sh`、本地 smoke / playtest / prewarm 脚本、`scripts/prepare-task-pr.sh` 的 preflight 修复、`testing-manual.md`、`doc/scripts/{README.md,prd.md}`、`AGENTS.md` 与本 task execution log；只读依赖 `scripts/cargo-dev.sh`、`scripts/ci-tests.sh`、`scripts/build-wasm-module.sh`、release workflow；验证入口为 `bash -n ...`、`./scripts/cargo-dev-lib.test.sh`、相关脚本 `--help`/`--dry-run` smoke、`./scripts/prepare-task-pr.test.sh`、`./scripts/pm/lint.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check`。 Trace: .pm/tasks/task_46ea1c81166043e3a1e3d5899b618ae6.yaml
@@ -324,7 +325,7 @@
 - 更新日期: 2026-06-23
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `prepare-task-pr-viewer-perf-smoke-env-sync`（已把 `prepare-task-pr` 本地 required 推荐命令补齐 viewer perf smoke env，并用 viewer-path fixture 覆盖 GitHub required-gate planner 契约漂移。）
+- 最新完成: `wasm-abi-focused-clippy-debt-cleanup`（已清理 `oasis7_wasm_abi` focused Clippy `-D warnings` 债务，保持 ABI-facing 默认值语义不变并通过 focused package tests。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
