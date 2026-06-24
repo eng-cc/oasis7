@@ -1,0 +1,26 @@
+task_uid: task_3bed17701b1943d7a9556f588d1830e4
+title: "stabilize testnet rebuild cleanup across systemd restart loops"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-p2p-testnet-rebuild-cleanup-systemd-restart
+execution_log_path: .pm/tasks/task_3bed17701b1943d7a9556f588d1830e4.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/project.md
+doc_refs:
+  - doc/p2p/project.md
+related_prd: []
+acceptance:
+  - "validator rebuild cleanup disables pending systemd restart loops before sweeping stack-root processes"
+  - "regression test covers delayed detached runtime after service failure/restart"
+  - "public testnet rebuild rerun no longer leaves orphan runtime on readiness failure"
+handoff_to: []
+updated_at: 2026-06-25T00:04:58+08:00
+last_started_at: 2026-06-24T23:44:33+08:00
+last_claim_type: task_complete
+last_verify_command: "bash scripts/p2p-public-testnet-rebuild-validators.test.sh"
+last_verified_at: 2026-06-25T00:04:57+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-25T00:04:58+08:00

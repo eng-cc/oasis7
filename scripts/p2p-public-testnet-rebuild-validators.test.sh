@@ -122,6 +122,40 @@ exec "$@"
 EOF
 chmod +x "$TMP_DIR/bin/sshpass"
 
+cat >"$TMP_DIR/bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'systemctl\t%s\n' "$*" >>"${TEST_SYSTEMCTL_LOG:?}"
+effective_host="${TEST_SSH_HOST:-${TEST_SYSTEMD_RESTART_LOOP_HOST:-}}"
+if [[ "${TEST_SYSTEMD_RESTART_LOOP_HOST:-}" == "$effective_host" ]]; then
+  service=${*: -1}
+  state_dir="${TEST_REMOTE_ROOT:?}/systemd-${effective_host//[^A-Za-z0-9_.-]/_}-${service//[^A-Za-z0-9_.-]/_}"
+  case "$1" in
+    start)
+      mkdir -p "$state_dir"
+      rm -f "$state_dir/killed"
+      touch "$state_dir/armed"
+      ;;
+    stop|reset-failed)
+      if [[ -f "$state_dir/armed" && ! -f "$state_dir/killed" ]]; then
+        stack_root="${TEST_SYSTEMD_RESTART_LOOP_STACK_ROOT:?}"
+        mkdir -p "${TEST_REMOTE_ROOT:?}/${effective_host}${stack_root}/bin"
+        printf 'spawned\t%s\t%s\n' "$effective_host" "$service" >>"${TEST_SYSTEMCTL_LOG:?}"
+        (
+          exec -a "${TEST_REMOTE_ROOT:?}/${effective_host}${stack_root}/bin/start-node.sh" sleep 30
+        ) &
+      fi
+      ;;
+    kill)
+      mkdir -p "$state_dir"
+      touch "$state_dir/killed"
+      ;;
+  esac
+fi
+exit 0
+EOF
+chmod +x "$TMP_DIR/bin/systemctl"
+
 cat >"$TMP_DIR/bin/ssh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -195,13 +229,17 @@ case "$cmd" in
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)\/staged-world\/.' '\([^']*\)\/data\/execution-world\/'.*/\1/p")
     cp -R "$root$stack_root/staged-world/." "$root$stack_root/data/execution-world/"
     ;;
-  systemctl\ stop*\;*\ STACK_ROOT=*python3*|STACK_ROOT=*python3*)
+  SERVICE_NAME=*STACK_ROOT=*python3*|systemctl\ stop*\;*\ STACK_ROOT=*python3*|STACK_ROOT=*python3*)
     if [[ "${TEST_FAIL_CLEANUP_AFTER_START_HOST:-}" == "$host" ]] \
       && [[ -f "${TEST_REMOTE_ROOT:?}/started-${host//[^A-Za-z0-9_.-]/_}" ]]; then
       exit 43
     fi
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/STACK_ROOT='\([^']*\)'.*/\1/p")
-    cleanup_cmd="STACK_ROOT=${cmd#*STACK_ROOT=}"
+    if [[ "$cmd" == SERVICE_NAME=* ]]; then
+      cleanup_cmd="$cmd"
+    else
+      cleanup_cmd="STACK_ROOT=${cmd#*STACK_ROOT=}"
+    fi
     mapped_cmd=${cleanup_cmd//STACK_ROOT=\'$stack_root\'/STACK_ROOT=\'$root$stack_root\'}
     if [[ "${TEST_SPAWN_DELAYED_CLEANUP_PROCESS_HOST:-}" == "$host" ]]; then
       mkdir -p "$root$stack_root/bin"
@@ -218,12 +256,18 @@ case "$cmd" in
         exec -a "$root$stack_root/bin/start-node.sh" sleep 30
       ) &
     fi
-    bash -c "$mapped_cmd"
+    TEST_SSH_HOST="$host" bash -c "$mapped_cmd"
     ;;
   systemctl\ stop*)
     ;;
   systemctl\ reset-failed*\;*\ systemctl\ start*|systemctl\ start*)
     touch "${TEST_REMOTE_ROOT:?}/started-${host//[^A-Za-z0-9_.-]/_}"
+    if [[ "${TEST_SYSTEMD_RESTART_LOOP_HOST:-}" == "$host" ]]; then
+      service=$(printf '%s\n' "$cmd" | sed -n "s/.*systemctl start '\([^']*\)'.*/\1/p")
+      if [[ -n "$service" ]]; then
+        TEST_SSH_HOST="$host" systemctl start "$service"
+      fi
+    fi
     if [[ "${TEST_FAIL_START_HOST:-}" == "$host" ]]; then
       exit 42
     fi
@@ -279,6 +323,7 @@ export PATH="$TMP_DIR/bin:$PATH"
 export TEST_REMOTE_ROOT="$TMP_DIR/remote"
 export TEST_STATUS_ROOT="$TMP_DIR/status"
 export TEST_SSH_LOG="$TMP_DIR/ssh.log"
+export TEST_SYSTEMCTL_LOG="$TMP_DIR/systemctl.log"
 export SEQ_PASS="sequencer-pass"
 export STO_PASS="storage-pass"
 
@@ -404,7 +449,10 @@ start_indexes = [
 cleanup_indexes = [
     index
     for index, command in enumerate(sequencer_commands)
-    if "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    if (
+        "SERVICE_NAME='oasis7-triad-sequencer.service'" in command
+        or "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    )
     and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
     and "oasis7_chain_runtime" in command
     and "start-node.sh" in command
@@ -416,8 +464,11 @@ if not any(index > start_indexes[-1] for index in cleanup_indexes):
 PY
 
 : >"$TEST_SSH_LOG"
+: >"$TEST_SYSTEMCTL_LOG"
 rm -f "$TEST_REMOTE_ROOT"/started-*
-if TEST_SPAWN_DELAYED_CLEANUP_PROCESS_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+if TEST_SYSTEMD_RESTART_LOOP_HOST=root@sequencer \
+  TEST_SYSTEMD_RESTART_LOOP_STACK_ROOT=/opt/oasis7/p2p-testnet \
+  "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
   --sequencer-ssh-host root@sequencer \
@@ -437,7 +488,7 @@ fi
 
 if pgrep -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-node.sh" >/dev/null; then
   pkill -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-node.sh" || true
-  echo "delayed cleanup process survived stable quiet cleanup" >&2
+  echo "systemd restart-loop cleanup process survived stable quiet cleanup" >&2
   exit 1
 fi
 
@@ -449,13 +500,45 @@ log_path = pathlib.Path(sys.argv[1])
 lines = log_path.read_text(encoding="utf-8").splitlines()
 sequencer_commands = [line.split("\t", 1)[1] for line in lines if line.startswith("root@sequencer\t")]
 if not any(
-    "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    (
+        "SERVICE_NAME='oasis7-triad-sequencer.service'" in command
+        or "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    )
     and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
     and "oasis7_chain_runtime" in command
     and "start-node.sh" in command
     for command in sequencer_commands
 ):
     raise SystemExit("missing sequencer cleanup command for delayed cleanup process test")
+PY
+
+python3 - "$TEST_SYSTEMCTL_LOG" <<'PY'
+import pathlib
+import sys
+
+log_path = pathlib.Path(sys.argv[1])
+lines = log_path.read_text(encoding="utf-8").splitlines()
+stop_count = sum(
+    1
+    for line in lines
+    if line == "systemctl\tstop oasis7-triad-sequencer.service"
+)
+kill_count = sum(
+    1
+    for line in lines
+    if line == "systemctl\tkill --kill-who=all --signal=SIGKILL oasis7-triad-sequencer.service"
+)
+reset_count = sum(
+    1
+    for line in lines
+    if line == "systemctl\treset-failed oasis7-triad-sequencer.service"
+)
+if stop_count < 2 or kill_count < 2 or reset_count < 2:
+    raise SystemExit(
+        "cleanup did not repeatedly quiesce systemd while waiting for a stable quiet window"
+    )
+if not any(line == "spawned\troot@sequencer\toasis7-triad-sequencer.service" for line in lines):
+    raise SystemExit("fake systemd restart-loop did not spawn a detached child")
 PY
 
 : >"$TEST_SSH_LOG"
@@ -517,7 +600,10 @@ start_indexes = [
 cleanup_indexes = [
     index
     for index, command in enumerate(sequencer_commands)
-    if "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    if (
+        "SERVICE_NAME='oasis7-triad-sequencer.service'" in command
+        or "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    )
     and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
     and "oasis7_chain_runtime" in command
     and "start-node.sh" in command
@@ -621,7 +707,10 @@ for host, service in (
     cleanup_indexes = [
         index
         for index, command in enumerate(commands)
-        if f"systemctl stop '{service}'" in command
+        if (
+            f"SERVICE_NAME='{service}'" in command
+            or f"systemctl stop '{service}'" in command
+        )
         and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
         and "oasis7_chain_runtime" in command
         and "start-node.sh" in command
