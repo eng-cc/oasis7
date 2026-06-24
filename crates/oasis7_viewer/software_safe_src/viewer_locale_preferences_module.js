@@ -8,8 +8,16 @@ export function createViewerLocalePreferencesModule({
   uiLocaleStoragePrefix,
   windowRef,
 }) {
+  function viewerEntryStorageSegment() {
+    const pathname = windowRef.location.pathname || "/viewer.html";
+    if (pathname === "/" || pathname === "/viewer.html" || pathname === "/software_safe.html") {
+      return "viewer";
+    }
+    return pathname;
+  }
+
   function uiLocaleStorageKey() {
-    return `${uiLocaleStoragePrefix}:${windowRef.location.pathname || "viewer.html"}`;
+    return `${uiLocaleStoragePrefix}:${viewerEntryStorageSegment()}`;
   }
 
   function persistUiLocale(locale) {
@@ -35,7 +43,7 @@ export function createViewerLocalePreferencesModule({
   }
 
   function promptOverridesVisibilityStorageKey() {
-    return `${promptOverridesVisibilityStoragePrefix}:${windowRef.location.pathname || "viewer.html"}`;
+    return `${promptOverridesVisibilityStoragePrefix}:${viewerEntryStorageSegment()}`;
   }
 
   function persistPromptOverridesVisibility(visible) {
