@@ -77,3 +77,16 @@ Example:
 - Expected Result: Fresh verification passes and allows a ready-for-PR claim.
 - Actual Result: passed; `task-closeout.sh` also recorded `task_complete` verification and updated task metadata to `status: done`, then reported unrelated repo-wide historical `.pm` lint debt outside this task.
 - Blocker / Next Action: Commit and create PR; current task-specific workflow lint remains the authoritative task-local gate.
+
+## 2026-06-24 18:34:00 CST / tpm
+- 完成内容: Recorded focused producer/system wording review for the project trace and task evidence.
+- Review Trigger: focused producer_system_designer review requested for `doc/p2p/project.md` recent-completed trace line plus task evidence.
+- Review Evidence: producer_system_designer focused review returned `no_findings`; verdict: the wording avoids claiming the public testnet is already healthy, does not treat an ops restart/reset as the fix, and accurately states the deployment-script root-cause fix as startup signer truth plus package runtime_build truth synchronization before node start.
+- Residual Risk: Low. The trace remains intentionally scoped to the deployment-script correction; live testnet health must still be proven by the subsequent clean rebuild and node health checks.
+- 遗留事项: Refresh task-local workflow lint after adding review evidence, commit the doc trace/evidence, create PR, watch checks/comments, merge, and rerun clean validator rebuild.
+
+## 2026-06-24 18:42:00 CST / tpm
+- 完成内容: Rebased the task branch onto latest `origin/main` and refreshed the ready-for-PR verification matrix.
+- Validation Command: `bash -n scripts/p2p-public-testnet-rebuild-validators.sh scripts/p2p-public-testnet-rebuild-validators.test.sh && bash scripts/p2p-public-testnet-rebuild-validators.test.sh && ./scripts/cargo-dev.sh fmt --check && ./scripts/check-rust-file-size.sh && git diff --check && ./scripts/pm/workflow-lint.sh --task-uid task_f357c2c7e2b64dfeb2be2bdc498762bb --phase current`
+- Expected Result: Script syntax, regression test, formatting, file-size, diff hygiene, and task-local workflow lint pass on the rebased branch.
+- Actual Result: passed.
