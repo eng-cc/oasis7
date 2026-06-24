@@ -126,13 +126,13 @@ Notes:
 - Review Trigger: pre-PR local role review
 - Review Scope: RustSec advisory ignore baseline metadata/ratchet; CI advisory baseline hook; governance report baseline check; incidental viewer test HTTP read helper flake unblock; `.pm` task truth updates.
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-governance-next/.pm/scratch/task_d1eac391d57b48dd926a33eeafde29d0/review-packages/review-415fdb08a..dee59a4e2.diff
-- Review Roles: repository_health_engineer, qa_engineer, viewer_engineer
+- Review Roles: repository_health_engineer, runtime_engineer, qa_engineer, viewer_engineer
 - Review Question: confirm the patch is scoped, governance-safe, testable, and ready for PR after required gate pass; identify any merge-blocking findings.
 - Evidence Available: required gate passed with `OASIS7_CI_RUN_OASIS7_NET_TESTS=true OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=true ./scripts/ci-tests.sh required`; targeted RustSec baseline checks; targeted oasis7_net libp2p tree checks; viewer exact tests passed; governance report smoke passed.
 - Expected Return Contract: findings | no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk.
 - Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-governance-next/.pm/scratch/task_d1eac391d57b48dd926a33eeafde29d0/slice-ledger.jsonl
 - Formal Sink: .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.execution.md
-- Role Selection Basis: repository_health_engineer for Rust dependency/security baseline governance and cross-cutting CI/report scripts; qa_engineer for verification sufficiency and PR readiness evidence; viewer_engineer for test-only viewer runtime live helper modification. Explicit skips: runtime_engineer/blockchain_ops_engineer because no product runtime, node ops, topology, protocol, or deployment contract changed; prior exploratory slices informed the ratchet-only patch boundary.
+- Role Selection Basis: repository_health_engineer for Rust dependency/security baseline governance and cross-cutting CI/report scripts; runtime_engineer for `crates/oasis7/src/...` test helper path touched by mechanical role inference; qa_engineer for verification sufficiency and PR readiness evidence; viewer_engineer for test-only viewer runtime live helper modification. Explicit skip: blockchain_ops_engineer because no node ops, topology, protocol, deployment, or operator contract changed; prior exploratory blockchain slice informed the ratchet-only patch boundary.
 
 ## Pre-PR local role review results - 2026-06-24
 
@@ -149,6 +149,7 @@ Corrected slice ledger:
 
 Review outcomes:
 - repository_health_engineer: no_findings; scope/spec compliant; repository-health quality acceptable. Residual risk low: advisory debt remains intentionally ratcheted for follow-up burn-down.
+- runtime_engineer: no_findings; scope/spec compliant; runtime quality/risk acceptable. Residual risk low: missing test request may take up to 5s to fail, and no runtime semantics changed.
 - qa_engineer: no_findings; scope/spec compliant; verification sufficient; no missing release-blocking verification. Residual risk low: advisory debt remains by design and viewer helper timeout can add up to 5s on true missing request.
 - viewer_engineer: no_findings; test-only helper scope pass; viewer quality/risk acceptable. Residual risk low: genuine missing request now waits up to 5s before explicit panic.
 
@@ -160,10 +161,10 @@ Review outcomes:
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/inbox/signals.jsonl; .pm/roles/repository_health_engineer/backlog/committed.yaml; .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.execution.md; .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml; .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.execution.md; .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.yaml; crates/oasis7/src/viewer/runtime_live/tests.rs; deny.toml; scripts/check-rustsec-ignore-baseline.sh; scripts/check-rustsec-ignore-baseline.test.sh; scripts/ci-rust-governance-report.sh; scripts/ci-tests.sh
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-governance-next/.pm/scratch/task_d1eac391d57b48dd926a33eeafde29d0/review-packages/review-working-tree-rustsec-ratchet.diff
-- Role Selection Basis: repository_health_engineer selected for Rust dependency/security baseline governance, CI/report scripts, and cross-cutting task truth; qa_engineer selected for verification sufficiency and PR readiness evidence; viewer_engineer selected for the incidental test-only viewer runtime live helper change. runtime_engineer and blockchain_ops_engineer were not included in pre-PR review because this patch does not change product runtime, node ops, protocol, topology, or deployment contracts; earlier exploratory runtime/blockchain slices constrained the ratchet-only patch boundary.
-- Review Roles: repository_health_engineer, qa_engineer, viewer_engineer
-- Review Evidence: repository_health_engineer no_findings after corrected working-tree package; qa_engineer no_findings after corrected working-tree package; viewer_engineer no_findings for actual worktree viewer helper diff.
-- Review Verdicts: repository_health_engineer scope/spec compliant and repository-health quality acceptable; qa_engineer scope/spec compliant and QA quality acceptable; viewer_engineer scope/spec compliant and viewer quality acceptable.
+- Role Selection Basis: repository_health_engineer selected for Rust dependency/security baseline governance, CI/report scripts, and cross-cutting task truth; runtime_engineer selected because `crates/oasis7/src/...` test helper path changed and `prepare-task-pr.sh` infers runtime review mechanically; qa_engineer selected for verification sufficiency and PR readiness evidence; viewer_engineer selected for the incidental test-only viewer runtime live helper change. blockchain_ops_engineer was not included in pre-PR review because this patch does not change node ops, protocol, topology, or deployment contracts; earlier blockchain slice constrained the ratchet-only patch boundary.
+- Review Roles: repository_health_engineer, runtime_engineer, qa_engineer, viewer_engineer
+- Review Evidence: repository_health_engineer no_findings after corrected working-tree package; runtime_engineer no_findings after focused runtime review and confirmed no runtime semantics changed; qa_engineer no_findings after corrected working-tree package; viewer_engineer no_findings for actual worktree viewer helper diff.
+- Review Verdicts: repository_health_engineer scope/spec compliant and repository-health quality acceptable; runtime_engineer scope/spec compliant and runtime quality acceptable; qa_engineer scope/spec compliant and QA quality acceptable; viewer_engineer scope/spec compliant and viewer quality acceptable.
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: stale commit-range package finding addressed by `review-working-tree-rustsec-ratchet.diff` and slice-ledger entries; implementation findings none.
 - Verification Matrix: RustSec ignore metadata/ratchet -> `./scripts/check-rustsec-ignore-baseline.sh`, `.test.sh`, `cargo deny check advisories`, required gate; CI hook -> `OASIS7_CI_RUN_OASIS7_NET_TESTS=true OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=true ./scripts/ci-tests.sh required`; governance report -> `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-ratchet-smoke`; libp2p advisory closure evidence -> targeted `cargo tree -p oasis7_net -i ... --features libp2p`; viewer helper unblock -> exact viewer tests and required gate; formatting -> `git diff --check`.
