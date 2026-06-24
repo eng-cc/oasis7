@@ -126,3 +126,21 @@ Example:
 - Expected Result: Fresh focused formatter, Clippy, lib tests, wasm target check, and whitespace check all pass.
 - Actual Result: Verification command exited 0 and was recorded by task closeout as verified. The subsequent repo-wide `.pm` lint phase failed on pre-existing unrelated historical task-log entries outside this task; task-scoped `./scripts/pm/workflow-lint.sh --task-uid task_31ee2a7dc18e4f578f2fd5ebcc87800d --phase current` passed.
 - Blocker / Next Action: Commit the final closeout/review evidence and continue to `prepare-task-pr.sh --create`.
+
+## 2026-06-24 20:57:21 CST / tpm
+- 完成内容: Added engineering project Trace and explicit claim-ready evidence required by PR preflight for `task_31ee2a7dc18e4f578f2fd5ebcc87800d`.
+- 遗留事项: Refresh local role review coverage for the project Trace wording, update reviewed source head/package if needed, then re-run PR preflight/create.
+- Action: Ran `claim-ready` after `prepare-task-pr.sh --create` reported missing project Trace and missing claim-ready evidence; added `doc/engineering/project.md` status line mapping this task to PRD-ENGINEERING-001/021/025.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_31ee2a7dc18e4f578f2fd5ebcc87800d --phase current"`
+- Expected Result: Task-scoped workflow lint passes and claim-ready allows PR creation claim.
+- Actual Result: Passed; verification exit code 0, status `verified`, `allowed_to_claim: true`.
+- Blocker / Next Action: Dispatch bounded `producer_system_designer` review for the `doc/engineering/project.md` Trace wording because project status text now participates in the PR diff.
+
+## 2026-06-24 21:00:07 CST / tpm
+- Review Trigger: supplemental pre-PR local role review for project Trace wording
+- Review Scope: `doc/engineering/project.md` added status/Trace line for `pixel-world-bridge-focused-clippy-cleanup`
+- Review Roles: producer_system_designer
+- Review Question: Does the project status line accurately describe the bounded repository-health Rust/viewer cleanup without unsupported product/system design claims, and are `PRD-ENGINEERING-001/021/025` plus `[test_tier_required]` supportable from task evidence?
+- Evidence Available: focused fmt/clippy/lib-test/wasm-check/git-diff evidence passed; claim-ready workflow lint passed; viewer/runtime/wasm/QA/repository-health pre-PR reviews returned no findings.
+- Actual Result: producer_system_designer `019ef9b7-4262-7e22-b8d5-f8883940dbd9` returned no_findings. Scope/spec compliance passed; PRD mapping and `[test_tier_required]` are supportable; no wording changes required; residual risk low with the note that PRD-ENGINEERING-025 is broad but consistent with surrounding repository-health code governance entries.
+- Blocker / Next Action: Commit the project Trace/claim-ready evidence, regenerate review package against the new source head, and update the formal pre-PR review packet.
