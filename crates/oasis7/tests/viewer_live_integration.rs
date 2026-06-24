@@ -53,7 +53,7 @@ fn live_server_accepts_client_and_emits_snapshot_and_event() {
     send_request(
         &mut writer,
         &ViewerRequest::PromptControl {
-            command: PromptControlCommand::Apply {
+            command: Box::new(PromptControlCommand::Apply {
                 request: PromptControlApplyRequest {
                     agent_id: "agent-0".to_string(),
                     player_id: "integration-player".to_string(),
@@ -66,7 +66,7 @@ fn live_server_accepts_client_and_emits_snapshot_and_event() {
                     short_term_goal_override: None,
                     long_term_goal_override: None,
                 },
-            },
+            }),
         },
     );
     send_request(

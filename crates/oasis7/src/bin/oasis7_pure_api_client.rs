@@ -223,7 +223,9 @@ fn run() -> Result<(), String> {
             } else {
                 PromptControlCommand::Apply { request }
             };
-            conn.send(&ViewerRequest::PromptControl { command })?;
+            conn.send(&ViewerRequest::PromptControl {
+                command: Box::new(command),
+            })?;
             let mut responses = conn.collect_until(
                 timeout,
                 terminal_prompt_control,
@@ -254,7 +256,7 @@ fn run() -> Result<(), String> {
                 updated_by,
             )?;
             conn.send(&ViewerRequest::PromptControl {
-                command: PromptControlCommand::Rollback { request },
+                command: Box::new(PromptControlCommand::Rollback { request }),
             })?;
             let mut responses = conn.collect_until(
                 timeout,
