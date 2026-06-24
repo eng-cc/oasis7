@@ -2,7 +2,7 @@
 
 审计轮次: 10
 
-更新时间：2026-06-16
+更新时间：2026-06-24
 
 ## 入口
 - 模块 PRD：`doc/testing/prd.md`
@@ -26,7 +26,7 @@
 
 ## 密度说明
 - 本索引不维护静态文件数量；数量快照容易漂移，只能作为历史审计材料，不作为默认阅读顺序或覆盖完整性的依据。
-- 需要重新统计时，使用 `find doc/testing -type f` / `rg --files doc/testing` 等当前命令输出，并把结果写入具体审计任务，而不是手工更新本页。
+- 需要重新统计时，以 `./scripts/doc-inventory-report.sh` 的 module density / hotspot 状态为准，并把正式报告结果写入具体审计任务；`find doc/testing -type f` / `rg --files doc/testing` 只可作为本地探索辅助，不能替代正式 inventory 状态。
 
 ## 热点子域导航
 | 子域 | 适合回答的问题 |

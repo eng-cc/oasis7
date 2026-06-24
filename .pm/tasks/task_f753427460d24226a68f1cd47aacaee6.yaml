@@ -1,0 +1,26 @@
+task_uid: task_f753427460d24226a68f1cd47aacaee6
+title: "Find and remediate next engineering governance issue"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-next-governance-issue-9
+execution_log_path: .pm/tasks/task_f753427460d24226a68f1cd47aacaee6.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-025
+acceptance:
+  - "Find one bounded actionable engineering governance issue through repository-health evidence; remediate the selected issue only; record task execution evidence and project trace; pass relevant local governance checks; complete local role review before PR; create, watch, merge, and clean up the PR if checks/comments allow."
+handoff_to: []
+updated_at: 2026-06-24T22:25:48+08:00
+last_started_at: 2026-06-24T21:28:08+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/doc-governance-check.sh
+last_verified_at: 2026-06-24T22:25:45+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-24T22:25:48+08:00
