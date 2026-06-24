@@ -66,6 +66,7 @@ python3 - "$COMMON_GIT_DIR" "$CANONICAL_REPO_ROOT" "$CURRENT_WORKTREE" "$PRUNABL
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -79,6 +80,11 @@ current_worktree = Path(sys.argv[3]).resolve()
 prunable_only = sys.argv[4] == "1"
 output_json = sys.argv[5] == "1"
 include_footprint = sys.argv[6] == "1"
+
+try:
+    gh_pr_list_timeout_seconds = float(os.environ.get("WORKTREE_GC_REPORT_GH_TIMEOUT_SECONDS", "10"))
+except ValueError:
+    gh_pr_list_timeout_seconds = 10.0
 
 
 def run(*args: str) -> str:
@@ -177,25 +183,28 @@ def load_task_index() -> dict[str, list[dict[str, str]]]:
 def load_open_pr_branches() -> tuple[set[str], bool]:
     if shutil.which("gh") is None:
         return set(), False
-    result = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "list",
-            "--state",
-            "open",
-            "--json",
-            "headRefName",
-            "--limit",
-            "1000",
-        ],
-        cwd=repo_root,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        timeout=10,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "open",
+                "--json",
+                "headRefName",
+                "--limit",
+                "1000",
+            ],
+            cwd=repo_root,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=gh_pr_list_timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return set(), False
     if result.returncode != 0 or not result.stdout.strip():
         return set(), False
     try:

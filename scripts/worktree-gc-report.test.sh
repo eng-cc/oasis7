@@ -140,6 +140,7 @@ chmod +x "$TMPDIR/bin/gh"
 REPORT_FILE="$TMPDIR/worktree-gc-report.json"
 NO_FOOTPRINT_REPORT_FILE="$TMPDIR/worktree-gc-report-no-footprint.json"
 UNKNOWN_PR_STATE_REPORT_FILE="$TMPDIR/worktree-gc-report-unknown-pr-state.json"
+TIMEOUT_PR_STATE_REPORT_FILE="$TMPDIR/worktree-gc-report-timeout-pr-state.json"
 (cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json --footprint > "$REPORT_FILE")
 (cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json > "$NO_FOOTPRINT_REPORT_FILE")
 
@@ -150,6 +151,14 @@ exit 1
 EOF
 chmod +x "$TMPDIR/bin/gh"
 (cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json > "$UNKNOWN_PR_STATE_REPORT_FILE")
+
+cat > "$TMPDIR/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+sleep 2
+EOF
+chmod +x "$TMPDIR/bin/gh"
+(cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" WORKTREE_GC_REPORT_GH_TIMEOUT_SECONDS=0.1 ./scripts/worktree-gc-report.sh --json > "$TIMEOUT_PR_STATE_REPORT_FILE")
 
 python3 - "$REPORT_FILE" "$NO_FOOTPRINT_REPORT_FILE" "$UNKNOWN_PR_STATE_REPORT_FILE" "$TEST_REPO" "$CURRENT_WORKTREE" "$CLEAN_WORKTREE" "$OPEN_PR_WORKTREE" "$BROKEN_WORKTREE" "$PRUNABLE_WORKTREE" "$PRUNABLE_MAIN_WORKTREE" <<'PY'
 from __future__ import annotations
@@ -279,30 +288,34 @@ if prunable_main_entry["cleanup_commands"] != [expected_prunable_main_remove]:
     raise SystemExit(f"unexpected prunable main cleanup commands: {prunable_main_entry['cleanup_commands']}")
 PY
 
-python3 - "$UNKNOWN_PR_STATE_REPORT_FILE" "$CLEAN_WORKTREE" "$OPEN_PR_WORKTREE" <<'PY'
+python3 - "$UNKNOWN_PR_STATE_REPORT_FILE" "$TIMEOUT_PR_STATE_REPORT_FILE" "$CLEAN_WORKTREE" "$OPEN_PR_WORKTREE" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
 
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-clean_worktree = str(Path(sys.argv[2]).resolve())
-open_pr_worktree = str(Path(sys.argv[3]).resolve())
-entries = {entry["path"]: entry for entry in payload["entries"]}
+payloads = [
+    json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")),
+    json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")),
+]
+clean_worktree = str(Path(sys.argv[3]).resolve())
+open_pr_worktree = str(Path(sys.argv[4]).resolve())
 
-for path in (clean_worktree, open_pr_worktree):
-    entry = entries[path]
-    if entry["cleanup_candidate"]:
-        raise SystemExit(f"closed task worktree must fail closed when PR state is unknown: {entry}")
-    if entry["cleanup_commands"]:
-        raise SystemExit(f"closed task worktree must not emit cleanup commands when PR state is unknown: {entry}")
-    if entry["branch_delete_candidate"]:
-        raise SystemExit(f"closed task branch must not be a delete candidate when PR state is unknown: {entry}")
-    if "open_pr_state_unknown" not in entry["protected_cleanup_reasons"]:
-        raise SystemExit(f"expected PR-state protection reason: {entry}")
-    if entry["pr_state_known"] is not False:
-        raise SystemExit(f"expected PR state to be unknown: {entry}")
+for payload in payloads:
+    entries = {entry["path"]: entry for entry in payload["entries"]}
+    for path in (clean_worktree, open_pr_worktree):
+        entry = entries[path]
+        if entry["cleanup_candidate"]:
+            raise SystemExit(f"closed task worktree must fail closed when PR state is unknown: {entry}")
+        if entry["cleanup_commands"]:
+            raise SystemExit(f"closed task worktree must not emit cleanup commands when PR state is unknown: {entry}")
+        if entry["branch_delete_candidate"]:
+            raise SystemExit(f"closed task branch must not be a delete candidate when PR state is unknown: {entry}")
+        if "open_pr_state_unknown" not in entry["protected_cleanup_reasons"]:
+            raise SystemExit(f"expected PR-state protection reason: {entry}")
+        if entry["pr_state_known"] is not False:
+            raise SystemExit(f"expected PR state to be unknown: {entry}")
 PY
 
 echo "worktree-gc-report.test: OK"
