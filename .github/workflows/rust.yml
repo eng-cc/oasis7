@@ -80,6 +80,7 @@ jobs:
           echo "run_viewer_wasm_check=${{ steps.scope.outputs.run_viewer_wasm_check }}"
           echo "run_viewer_perf_smoke=${{ steps.scope.outputs.run_viewer_perf_smoke }}"
           echo "run_launcher_web_build=${{ steps.scope.outputs.run_launcher_web_build }}"
+          echo "run_oasis7_workspace_support_crate_tests=${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}"
           echo "needs_node=${{ steps.scope.outputs.needs_node }}"
           echo "needs_system_deps=${{ steps.scope.outputs.needs_system_deps }}"
           echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
@@ -102,14 +103,14 @@ jobs:
         if: ${{ steps.scope.outputs.needs_node == 'true' }}
         run: npm ci --prefix crates/oasis7_viewer
       - uses: Swatinem/rust-cache@v2
-        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_oasis7_node_tests == 'true' || steps.scope.outputs.run_oasis7_net_tests == 'true' || steps.scope.outputs.run_oasis7_net_libp2p_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' }}
+        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_oasis7_node_tests == 'true' || steps.scope.outputs.run_oasis7_net_tests == 'true' || steps.scope.outputs.run_oasis7_net_libp2p_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' }}
         with:
           shared-key: ci-required-gate-v1
       - name: Install trunk
         if: ${{ steps.scope.outputs.needs_trunk == 'true' }}
         run: cargo install trunk --locked
       - name: Install system deps
-        if: ${{ steps.scope.outputs.needs_system_deps == 'true' || steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_perf_smoke == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' }}
+        if: ${{ steps.scope.outputs.needs_system_deps == 'true' || steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_perf_smoke == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y \
