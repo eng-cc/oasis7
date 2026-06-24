@@ -146,6 +146,10 @@ fi
 cmd="$*"
 root="${TEST_REMOTE_ROOT:?}/$host"
 mkdir -p "$root"
+if [[ -n "${TEST_SSH_LOG:-}" ]]; then
+  logged_cmd=${cmd//$'\n'/\\n}
+  printf '%s\t%s\n' "$host" "$logged_cmd" >>"$TEST_SSH_LOG"
+fi
 case "$cmd" in
   mkdir\ -p*)
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/.*mkdir -p '\([^']*\)\/config\/doc\/testing\/evidence'.*/\1/p")
@@ -163,25 +167,11 @@ case "$cmd" in
     cp "$root$src" "$root$dest"
     ;;
   rm\ -rf*)
-    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/.*rm -rf '\([^']*\)\/staged-world'.*/\1/p")
-    rm -rf "$root$stack_root/staged-world" "$root$stack_root/data/execution-world"
-    mkdir -p "$root$stack_root/staged-world" "$root$stack_root/data/execution-world"
-    ;;
-  tar\ -C*)
-    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/tar -C '\([^']*\)\/staged-world'.*/\1/p")
-    tar -C "$root$stack_root/staged-world" -xf -
-    ;;
-  cp\ -R*)
-    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)\/staged-world\/.' '\([^']*\)\/data\/execution-world\/'.*/\1/p")
-    cp -R "$root$stack_root/staged-world/." "$root$stack_root/data/execution-world/"
-    ;;
-  STACK_ROOT=*python3*)
-    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/STACK_ROOT='\([^']*\)'.*/\1/p")
-    mapped_cmd=${cmd//STACK_ROOT=\'$stack_root\'/STACK_ROOT=\'$root$stack_root\'}
-    bash -c "$mapped_cmd"
-    ;;
-  systemctl\ stop*)
-    if [[ "$cmd" == *"rm -rf"* ]]; then
+    if [[ "$cmd" == *"/staged-world"* ]]; then
+      stack_root=$(printf '%s\n' "$cmd" | sed -n "s/.*rm -rf '\([^']*\)\/staged-world'.*/\1/p")
+      rm -rf "$root$stack_root/staged-world" "$root$stack_root/data/execution-world"
+      mkdir -p "$root$stack_root/staged-world" "$root$stack_root/data/execution-world"
+    else
       stack_root=$(printf '%s\n' "$cmd" | sed -n "s/.*rm -rf '\([^']*\)\/data\/execution-records'.*/\1/p")
       rm -rf "$root$stack_root/data/execution-records" \
         "$root$stack_root/data/storage" \
@@ -197,7 +187,25 @@ case "$cmd" in
         "$root$stack_root/output/node-distfs"
     fi
     ;;
-  systemctl\ start*)
+  tar\ -C*)
+    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/tar -C '\([^']*\)\/staged-world'.*/\1/p")
+    tar -C "$root$stack_root/staged-world" -xf -
+    ;;
+  cp\ -R*)
+    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)\/staged-world\/.' '\([^']*\)\/data\/execution-world\/'.*/\1/p")
+    cp -R "$root$stack_root/staged-world/." "$root$stack_root/data/execution-world/"
+    ;;
+  STACK_ROOT=*python3*)
+    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/STACK_ROOT='\([^']*\)'.*/\1/p")
+    mapped_cmd=${cmd//STACK_ROOT=\'$stack_root\'/STACK_ROOT=\'$root$stack_root\'}
+    bash -c "$mapped_cmd"
+    ;;
+  systemctl\ stop*)
+    ;;
+  systemctl\ reset-failed*\;*\ systemctl\ start*|systemctl\ start*)
+    if [[ "${TEST_FAIL_START_HOST:-}" == "$host" ]]; then
+      exit 42
+    fi
     ;;
   *)
     echo "unhandled ssh command: $cmd" >&2
@@ -245,6 +253,7 @@ chmod +x "$TMP_DIR/bin/curl"
 export PATH="$TMP_DIR/bin:$PATH"
 export TEST_REMOTE_ROOT="$TMP_DIR/remote"
 export TEST_STATUS_ROOT="$TMP_DIR/status"
+export TEST_SSH_LOG="$TMP_DIR/ssh.log"
 export SEQ_PASS="sequencer-pass"
 export STO_PASS="storage-pass"
 
@@ -313,3 +322,116 @@ test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/runtime-root
 test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/replication-root"
 test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/runtime-root"
 test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/replication-root"
+
+cat >"$TMP_DIR/status/sequencer.json" <<'JSON'
+{
+  "running": true,
+  "last_error": null,
+  "readiness": {
+    "status": "not_ready"
+  },
+  "observability": {
+    "storage_challenge_network_degraded": false
+  },
+  "consensus": {
+    "committed_height": 0,
+    "last_execution_height": 0,
+    "storage_challenge_network_degraded_height": null
+  },
+  "replication": {
+    "connected_peers": []
+  }
+}
+JSON
+
+: >"$TEST_SSH_LOG"
+if "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-fail" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-fail.out 2>&1; then
+  echo "expected rebuild to fail when sequencer readiness stays not_ready" >&2
+  exit 1
+fi
+
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+log_path = pathlib.Path(sys.argv[1])
+lines = log_path.read_text(encoding="utf-8").splitlines()
+sequencer_commands = [line.split("\t", 1)[1] for line in lines if line.startswith("root@sequencer\t")]
+start_indexes = [
+    index
+    for index, command in enumerate(sequencer_commands)
+    if "systemctl start 'oasis7-triad-sequencer.service'" in command
+]
+cleanup_indexes = [
+    index
+    for index, command in enumerate(sequencer_commands)
+    if "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
+    and "oasis7_chain_runtime" in command
+    and "start-node.sh" in command
+]
+if not start_indexes:
+    raise SystemExit("missing sequencer start command")
+if not any(index > start_indexes[-1] for index in cleanup_indexes):
+    raise SystemExit("missing post-start cleanup after failed sequencer readiness")
+PY
+
+: >"$TEST_SSH_LOG"
+if TEST_FAIL_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-start-fail" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-start-fail.out 2>&1; then
+  echo "expected rebuild to fail when sequencer systemctl start fails" >&2
+  exit 1
+fi
+
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+log_path = pathlib.Path(sys.argv[1])
+lines = log_path.read_text(encoding="utf-8").splitlines()
+sequencer_commands = [line.split("\t", 1)[1] for line in lines if line.startswith("root@sequencer\t")]
+start_indexes = [
+    index
+    for index, command in enumerate(sequencer_commands)
+    if "systemctl start 'oasis7-triad-sequencer.service'" in command
+]
+cleanup_indexes = [
+    index
+    for index, command in enumerate(sequencer_commands)
+    if "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
+    and "oasis7_chain_runtime" in command
+    and "start-node.sh" in command
+]
+if not start_indexes:
+    raise SystemExit("missing sequencer start command for start-failure path")
+if not any(index > start_indexes[-1] for index in cleanup_indexes):
+    raise SystemExit("missing post-start cleanup after failed sequencer systemctl start")
+PY

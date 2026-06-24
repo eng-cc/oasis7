@@ -279,7 +279,7 @@ poll_status_with_check() {
   if [[ -f "$out_path.tmp" ]]; then
     mv "$out_path.tmp" "$out_path"
   fi
-  die "$label failed checks after restart; see $out_path"
+  return 1
 }
 
 stage_host() {
@@ -449,12 +449,12 @@ print(f'synced_bundle_count={len(bundle_paths)}')
 PY"
 }
 
-reset_host() {
+cleanup_host_processes() {
   local host=$1
   local control_path=$2
   local service=$3
   ssh_run "$host" "$control_path" \
-    "systemctl stop '$service' || true; STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
+    "systemctl stop '$service' || true; systemctl reset-failed '$service' || true; STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
 import os
 import signal
 import subprocess
@@ -503,14 +503,33 @@ for sig in (signal.SIGTERM, signal.SIGKILL):
             pass
     time.sleep(1)
 PY
-rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
+"
+}
+
+reset_host() {
+  local host=$1
+  local control_path=$2
+  local service=$3
+  cleanup_host_processes "$host" "$control_path" "$service"
+  ssh_run "$host" "$control_path" \
+    "rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
 }
 
 start_host() {
   local host=$1
   local control_path=$2
   local service=$3
-  ssh_run "$host" "$control_path" "systemctl start '$service'"
+  ssh_run "$host" "$control_path" "systemctl reset-failed '$service' || true; systemctl start '$service'"
+}
+
+cleanup_after_failed_start() {
+  local host=$1
+  local control_path=$2
+  local service=$3
+  local label=$4
+  local out_path=$5
+  cleanup_host_processes "$host" "$control_path" "$service" || true
+  die "$label failed checks after restart; see $out_path"
 }
 
 stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH"
@@ -519,12 +538,19 @@ stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH"
 reset_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"
 reset_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"
 
-start_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"
-poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok
+if ! start_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"; then
+  cleanup_after_failed_start "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE" "sequencer start" "$OUT_DIR/sequencer-liveness.json"
+fi
+poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
+  || cleanup_after_failed_start "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE" "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
 
-start_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"
-poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-status.json" "sequencer readiness" json_sequencer_ok
-poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-status.json" "storage readiness" json_storage_ok
+if ! start_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"; then
+  cleanup_after_failed_start "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE" "storage start" "$OUT_DIR/storage-status.json"
+fi
+poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-status.json" "sequencer readiness" json_sequencer_ok \
+  || cleanup_after_failed_start "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE" "sequencer readiness" "$OUT_DIR/sequencer-status.json"
+poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-status.json" "storage readiness" json_storage_ok \
+  || cleanup_after_failed_start "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE" "storage readiness" "$OUT_DIR/storage-status.json"
 
 jq -n \
   --arg config_dir "$CONFIG_DIR" \
