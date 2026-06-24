@@ -56,7 +56,10 @@
 - `chaos-plans/`：专项 chaos plan 入口。
 
 ## 高密度提示
-- 本页不维护静态文件数量；这些数字容易随任务流转漂移，不能作为默认阅读面的判断依据。
+- `./scripts/doc-inventory-report.sh`（2026-06-24）将 `doc/testing/` 统计为 235 份 Markdown，状态为 `action_required`。
+- 当前 testing 高密度子域前三为 `doc/testing/evidence/` 79 份、`doc/testing/ci/` 33 份、`doc/testing/governance/` 28 份；其中 `evidence/` 已有 `doc/testing/evidence/README.md` 作为热点子域入口。
+- 子域数量只用于选择下一轮 focused follow-up；不要在本页扩展全量专题长表。
+- 需要当前数量和 `action_required` 状态时，以 `./scripts/doc-inventory-report.sh` 为准；`find` / `rg --files` 只可作为本地探索辅助，不能替代正式报告状态。
 - 需要完整活跃专题清单时，进入 `doc/testing/prd.index.md`；进入 `evidence/` 时，优先先读 `doc/testing/evidence/README.md` 再继续下钻；需要 template / blocker 留痕时，再按具体子域进入。
 
 ## 共享约定
