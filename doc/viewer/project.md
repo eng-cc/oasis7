@@ -2,8 +2,7 @@
 
 ## Active / Recent Tasks
 
-- [x] Govern Viewer preference aliases and primary Web entry regression
-  - Trace: .pm/tasks/task_8aa4e45b34df431c90f10f6473b4f9c8.yaml
+- [x] viewer-preference-alias-governance (PRD-VIEWER/GOVERNANCE) [test_tier_required]: Govern Viewer preference aliases and primary Web entry regression. Trace: .pm/tasks/task_8aa4e45b34df431c90f10f6473b4f9c8.yaml
   - Status: done
   - Owner role: tpm
   - Evidence: repository-health finding, Viewer/Web implementation, focused UI tests, generated bundle sync, primary Web entry browser regression, QA/repository-health reviews, and closeout verification are recorded in `.pm/tasks/task_8aa4e45b34df431c90f10f6473b4f9c8.execution.md`.

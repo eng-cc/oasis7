@@ -2132,15 +2132,26 @@ function createViewerLocalePreferencesModule({
   uiLocaleStoragePrefix,
   windowRef
 }) {
+  const viewerEntryAliasSegments = ["/viewer.html", "/software_safe.html", "/"];
   function viewerEntryStorageSegment() {
     const pathname = windowRef.location.pathname || "/viewer.html";
-    if (pathname === "/" || pathname === "/viewer.html" || pathname === "/software_safe.html") {
+    if (viewerEntryAliasSegments.includes(pathname)) {
       return "viewer";
     }
     return pathname;
   }
+  function legacyViewerEntryStorageSegments() {
+    const pathname = windowRef.location.pathname || "/viewer.html";
+    if (viewerEntryStorageSegment() !== "viewer") {
+      return [pathname];
+    }
+    return [pathname, ...viewerEntryAliasSegments].filter((segment, index, segments) => segment !== "viewer" && segments.indexOf(segment) === index);
+  }
   function uiLocaleStorageKey() {
     return `${uiLocaleStoragePrefix}:${viewerEntryStorageSegment()}`;
+  }
+  function legacyUiLocaleStorageKeys() {
+    return legacyViewerEntryStorageSegments().map((segment) => `${uiLocaleStoragePrefix}:${segment}`);
   }
   function persistUiLocale(locale) {
     try {
@@ -2150,7 +2161,19 @@ function createViewerLocalePreferencesModule({
   }
   function resolveStoredUiLocale() {
     try {
-      return normalizeUiLocale2(windowRef.localStorage?.getItem(uiLocaleStorageKey()));
+      const storage = windowRef.localStorage;
+      const storedLocale = normalizeUiLocale2(storage?.getItem(uiLocaleStorageKey()));
+      if (storedLocale) {
+        return storedLocale;
+      }
+      for (const legacyKey of legacyUiLocaleStorageKeys()) {
+        const legacyLocale = normalizeUiLocale2(storage?.getItem(legacyKey));
+        if (legacyLocale) {
+          storage?.setItem(uiLocaleStorageKey(), legacyLocale);
+          return legacyLocale;
+        }
+      }
+      return null;
     } catch (_) {
       return null;
     }
@@ -2162,6 +2185,9 @@ function createViewerLocalePreferencesModule({
   function promptOverridesVisibilityStorageKey() {
     return `${promptOverridesVisibilityStoragePrefix}:${viewerEntryStorageSegment()}`;
   }
+  function legacyPromptOverridesVisibilityStorageKeys() {
+    return legacyViewerEntryStorageSegments().map((segment) => `${promptOverridesVisibilityStoragePrefix}:${segment}`);
+  }
   function persistPromptOverridesVisibility(visible) {
     try {
       windowRef.localStorage?.setItem(promptOverridesVisibilityStorageKey(), visible ? "1" : "0");
@@ -2170,7 +2196,19 @@ function createViewerLocalePreferencesModule({
   }
   function resolveStoredPromptOverridesVisibility2() {
     try {
-      return windowRef.localStorage?.getItem(promptOverridesVisibilityStorageKey()) === "1";
+      const storage = windowRef.localStorage;
+      const storedValue = storage?.getItem(promptOverridesVisibilityStorageKey());
+      if (storedValue !== null && storedValue !== void 0) {
+        return storedValue === "1";
+      }
+      for (const legacyKey of legacyPromptOverridesVisibilityStorageKeys()) {
+        const legacyValue = storage?.getItem(legacyKey);
+        if (legacyValue !== null && legacyValue !== void 0) {
+          storage?.setItem(promptOverridesVisibilityStorageKey(), legacyValue);
+          return legacyValue === "1";
+        }
+      }
+      return false;
     } catch (_) {
       return false;
     }
