@@ -433,6 +433,23 @@ if pgrep -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-n
   exit 1
 fi
 
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+log_path = pathlib.Path(sys.argv[1])
+lines = log_path.read_text(encoding="utf-8").splitlines()
+sequencer_commands = [line.split("\t", 1)[1] for line in lines if line.startswith("root@sequencer\t")]
+if not any(
+    "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
+    and "oasis7_chain_runtime" in command
+    and "start-node.sh" in command
+    for command in sequencer_commands
+):
+    raise SystemExit("missing sequencer cleanup command for delayed cleanup process test")
+PY
+
 : >"$TEST_SSH_LOG"
 if TEST_FAIL_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
