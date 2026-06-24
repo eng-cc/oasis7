@@ -14,7 +14,7 @@
 ## Verification
 - `env -u RUSTC_WRAPPER cargo metadata --locked --format-version 1`
 - `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance/internal-path-version-ratchet-smoke`
-- `! rg -n "warning\\[wildcard\\]" output/rust-governance/internal-path-version-ratchet-smoke/cargo-deny.log`
+- `test -s output/rust-governance/internal-path-version-ratchet-smoke/cargo-deny.log && ! rg -n "warning\\[wildcard\\]" output/rust-governance/internal-path-version-ratchet-smoke/cargo-deny.log`
 - `python3 -m json.tool output/rust-governance/internal-path-version-ratchet-smoke/summary.json`
 - `./scripts/doc-governance-check.sh`
 - `./scripts/pm/workflow-lint.sh --task-uid task_d3474ab9cb2b46f29409b3bd575c8c2d --phase current`
