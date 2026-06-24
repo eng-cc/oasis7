@@ -4,6 +4,7 @@
 name = "oasis7_builtin_wasm_m4_recipe_assembler_gear"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 publish = false
 
 [lib]
