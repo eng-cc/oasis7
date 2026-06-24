@@ -129,6 +129,7 @@ def hash_exact(rel_path: str) -> tuple[str | None, str | None]:
     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
     return candidate.relative_to(bundle_dir).as_posix(), digest
 
+viewer_index_path, viewer_index_sha256 = hash_exact("web/index.html")
 viewer_js_path, viewer_js_sha256 = hash_exact("web/viewer.js")
 viewer_wasm_path, viewer_wasm_sha256 = hash_first("web/*.wasm")
 pixel_world_runtime_module_path, pixel_world_runtime_module_sha256 = hash_exact(
@@ -143,6 +144,7 @@ pixel_world_webgl2_bindgen_js_path, pixel_world_webgl2_bindgen_js_sha256 = hash_
 pixel_world_webgl2_bindgen_wasm_path, pixel_world_webgl2_bindgen_wasm_sha256 = hash_exact(
     "web/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 )
+launcher_index_path, launcher_index_sha256 = hash_exact("web-launcher/index.html")
 launcher_js_path, launcher_js_sha256 = hash_first("web-launcher/*.js")
 launcher_wasm_path, launcher_wasm_sha256 = hash_first("web-launcher/*.wasm")
 
@@ -151,6 +153,8 @@ manifest = {
     "generatedAtUnixMs": int(time.time() * 1000),
     **source_metadata,
     "assets": {
+        "viewerIndexPath": viewer_index_path,
+        "viewerIndexSha256": viewer_index_sha256,
         "viewerJsPath": viewer_js_path,
         "viewerJsSha256": viewer_js_sha256,
         "viewerWasmPath": viewer_wasm_path,
@@ -163,6 +167,8 @@ manifest = {
         "pixelWorldWebgl2BindgenJsSha256": pixel_world_webgl2_bindgen_js_sha256,
         "pixelWorldWebgl2BindgenWasmPath": pixel_world_webgl2_bindgen_wasm_path,
         "pixelWorldWebgl2BindgenWasmSha256": pixel_world_webgl2_bindgen_wasm_sha256,
+        "launcherIndexPath": launcher_index_path,
+        "launcherIndexSha256": launcher_index_sha256,
         "launcherJsPath": launcher_js_path,
         "launcherJsSha256": launcher_js_sha256,
         "launcherWasmPath": launcher_wasm_path,
@@ -186,11 +192,13 @@ bundle_check_freshness() {
   python3 - "$manifest_path" "$current_json" <<'PY'
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
 
 manifest_path = Path(sys.argv[1])
+bundle_dir = manifest_path.parent
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 current = json.loads(sys.argv[2])
 errors: list[str] = []
@@ -204,6 +212,25 @@ if manifest.get("viewerProtocolVersion") != current.get("viewerProtocolVersion")
         "viewer protocol version drift "
         f"(bundle={manifest.get('viewerProtocolVersion')}, current={current.get('viewerProtocolVersion')})"
     )
+assets = manifest.get("assets") or {}
+for path_key, rel_path in sorted(assets.items()):
+    if not path_key.endswith("Path") or not rel_path:
+        continue
+    sha_key = path_key[:-4] + "Sha256"
+    expected_sha = assets.get(sha_key)
+    if not expected_sha:
+        errors.append(f"bundle asset drift: {rel_path} missing manifest {sha_key}")
+        continue
+    asset_path = bundle_dir / rel_path
+    if not asset_path.is_file():
+        errors.append(f"bundle asset drift: {rel_path} missing")
+        continue
+    actual_sha = hashlib.sha256(asset_path.read_bytes()).hexdigest()
+    if actual_sha != expected_sha:
+        errors.append(
+            f"bundle asset drift: {rel_path} sha256 mismatch "
+            f"(bundle={expected_sha}, current={actual_sha})"
+        )
 if errors:
     print("bundle is stale relative to current workspace: " + "; ".join(errors))
     sys.exit(1)

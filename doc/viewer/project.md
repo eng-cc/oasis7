@@ -2,6 +2,11 @@
 
 ## Active / Recent Tasks
 
+- [x] launcher-bundle-asset-freshness-governance (PRD-VIEWER/GOVERNANCE) [test_tier_required]: Enforce manifest-recorded launcher bundle asset path/SHA-256 integrity so stale source fingerprints cannot mask mutated or missing packaged Web assets. Trace: .pm/tasks/task_0ad144b805d84ee5b7b0f248385acd45.yaml
+  - Status: done
+  - Owner role: tpm
+  - Evidence: repository-health finding, Viewer/Web implementation, QA verification, focused bundle freshness smoke, adjacent Viewer dist regression, and pre-PR local role review are recorded in `.pm/tasks/task_0ad144b805d84ee5b7b0f248385acd45.execution.md`.
+
 - [x] viewer-bundle-freshness-contract-scope (PRD-VIEWER/GOVERNANCE) [test_tier_required]: Align launcher bundle freshness fingerprinting with the Viewer Web dist contract so changes to compat JS and dist helper scripts stale packaged bundles. Trace: .pm/tasks/task_e90a10e12a4b4f498ad5691fe3aeefa8.yaml
   - Status: done
   - Owner role: tpm

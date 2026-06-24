@@ -1,3 +1,10 @@
+## Current PR Evidence
+
+- PR: https://github.com/eng-cc/oasis7/pull/622
+- Task UID: task_0ad144b805d84ee5b7b0f248385acd45
+- Branch: task/engineering-frontend-code-governance-next-20260624
+- Purpose: normal_pr_ci_watch
+
 ## Summary
 
 - Add explicit `version = "0.1.0"` metadata to 37 builtin WASM module `oasis7_wasm_sdk` internal path dependencies.
