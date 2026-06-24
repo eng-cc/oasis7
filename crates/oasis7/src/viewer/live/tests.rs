@@ -112,6 +112,25 @@ fn read_control_completion_ack(
     None
 }
 
+#[test]
+fn live_loop_disconnect_error_normalizes_to_stop() {
+    let result = normalize_live_loop_action_result(Err(ViewerLiveServerError::Io(
+        std::io::Error::from(std::io::ErrorKind::BrokenPipe),
+    )))
+    .expect("disconnect is a clean stop");
+
+    assert_eq!(result, LiveLoopIterationAction::Stop);
+}
+
+#[test]
+fn live_loop_non_disconnect_error_is_preserved() {
+    let result = normalize_live_loop_action_result(Err(ViewerLiveServerError::Io(
+        std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+    )));
+
+    assert!(matches!(result, Err(ViewerLiveServerError::Io(_))));
+}
+
 fn signed_prompt_control_apply_request(
     mut request: PromptControlApplyRequest,
     intent: PromptControlAuthIntent,
