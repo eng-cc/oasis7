@@ -1,0 +1,26 @@
+task_uid: task_8aa4e45b34df431c90f10f6473b4f9c8
+title: "frontend code governance audit"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-frontend-code-governance-audit-20260624
+execution_log_path: .pm/tasks/task_8aa4e45b34df431c90f10f6473b4f9c8.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/viewer/project.md
+related_prd: []
+acceptance:
+  - "repository_health_engineer slice identifies one next actionable frontend code governance issue with evidence"
+  - "TPM records slice contract, findings, owner recommendation, and next action in the task execution log"
+handoff_to: []
+updated_at: 2026-06-24T12:07:00+08:00
+last_started_at: 2026-06-24T09:47:03+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/viewer_locale_preferences_module.test.js && npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/main.test.jsx && bash -n scripts/viewer-primary-web-entry-regression.sh scripts/release-gate-web-strict.sh && git diff --check && ./scripts/viewer-primary-web-entry-regression.sh --headless --live-bind 127.0.0.1:5523 --web-bind 127.0.0.1:5511 --chain-status-bind 127.0.0.1:5621 --viewer-port 4673 --out-dir output/playwright/viewer-primary-web-entry-closeout-verify"
+last_verified_at: 2026-06-24T12:06:58+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-24T12:07:00+08:00

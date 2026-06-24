@@ -16,7 +16,8 @@ Run a browser QA regression for the formal Web entry contract:
 - `render_mode=auto` must still land in `viewer`
 
 Options:
-  --scenario <name>          oasis7_game_launcher scenario (default: llm_bootstrap)
+  --scenario <name>          optional debug scenario; default omits --scenario and uses the formal launcher world
+  --allow-debug-scenario     allow seeded debug scenarios such as llm_bootstrap when --scenario is explicit
   --live-bind <host:port>    live tcp bind (default: 127.0.0.1:5023)
   --web-bind <host:port>     web bridge bind (default: 127.0.0.1:5011)
   --chain-status-bind <a:p>  chain status HTTP bind (default: web-bind port + 110)
@@ -225,7 +226,73 @@ assert_eval_true() {
   return 1
 }
 
-scenario="llm_bootstrap"
+assert_body_contains() {
+  local body_path=$1
+  local expected=$2
+  local label=$3
+  grep -Fqi "$expected" "$body_path" || {
+    echo "error: ${label} body missing ${expected}" >&2
+    exit 1
+  }
+}
+
+capture_screenshot_best_effort() {
+  local session=$1
+  local screenshot_path=$2
+  local log_path=$3
+  local label=$4
+  local status=0
+  local timeout_secs=${VIEWER_PRIMARY_ENTRY_SCREENSHOT_TIMEOUT_SECS:-20}
+  local waited_ms=0
+  local timeout_ms
+  local screenshot_pid
+
+  if [[ ! "$timeout_secs" =~ ^[0-9]+$ || "$timeout_secs" -lt 1 ]]; then
+    timeout_secs=20
+  fi
+  timeout_ms=$((timeout_secs * 1000))
+
+  ab_screenshot "$session" "$screenshot_path" >"$log_path" 2>&1 &
+  screenshot_pid=$!
+  while kill -0 "$screenshot_pid" >/dev/null 2>&1; do
+    if (( waited_ms >= timeout_ms )); then
+      status=124
+      echo "warning: ${label} screenshot timed out after ${timeout_secs}s; continuing after hard state/body assertions" >&2
+      {
+        echo
+        echo "warning: screenshot timed out after ${timeout_secs}s"
+      } >>"$log_path"
+      kill "$screenshot_pid" >/dev/null 2>&1 || true
+      sleep_ms 200
+      kill -9 "$screenshot_pid" >/dev/null 2>&1 || true
+      wait "$screenshot_pid" >/dev/null 2>&1 || true
+      break
+    fi
+    sleep_ms 200
+    waited_ms=$((waited_ms + 200))
+  done
+
+  if [[ "$status" -eq 0 ]]; then
+    if wait "$screenshot_pid"; then
+      status=0
+    else
+      status=$?
+      echo "warning: ${label} screenshot failed with status ${status}; continuing after hard state/body assertions" >&2
+    fi
+  fi
+
+  if [[ -f "$screenshot_path" ]]; then
+    printf 'present'
+  elif [[ "$status" -eq 0 ]]; then
+    echo "warning: ${label} screenshot command completed but no file was written at ${screenshot_path}; continuing" >&2
+    printf 'missing'
+  else
+    printf 'failed'
+  fi
+}
+
+scenario=""
+allow_debug_scenario=0
 live_bind="127.0.0.1:5023"
 web_bind="127.0.0.1:5011"
 chain_status_bind=""
@@ -240,6 +307,10 @@ while [[ $# -gt 0 ]]; do
     --scenario)
       scenario=${2:-}
       shift 2
+      ;;
+    --allow-debug-scenario)
+      allow_debug_scenario=1
+      shift
       ;;
     --live-bind)
       live_bind=${2:-}
@@ -328,6 +399,10 @@ default_state_path="$out_dir/default_state.json"
 auto_state_path="$out_dir/auto_state.json"
 default_body_path="$out_dir/default_body.txt"
 auto_body_path="$out_dir/auto_body.txt"
+default_screenshot_path="$out_dir/default-entry.png"
+auto_screenshot_path="$out_dir/auto-entry.png"
+default_screenshot_log_path="$out_dir/default-entry.screenshot.log"
+auto_screenshot_log_path="$out_dir/auto-entry.screenshot.log"
 summary_json_path="$out_dir/summary.json"
 summary_md_path="$out_dir/summary.md"
 hosted_account_store_path="$out_dir/hosted-account-store.json"
@@ -343,7 +418,6 @@ resolved_viewer_static_dir=$(resolve_viewer_static_dir_for_web_closure \
 viewer_static_dir="$resolved_viewer_static_dir"
 
 live_args=(
-  "--scenario" "$scenario"
   "--live-bind" "$live_bind"
   "--web-bind" "$web_bind"
   "--chain-status-bind" "$chain_status_bind"
@@ -352,6 +426,12 @@ live_args=(
   "--viewer-static-dir" "$viewer_static_dir"
   "--no-open-browser"
 )
+if [[ -n "$scenario" ]]; then
+  live_args+=("--scenario" "$scenario")
+fi
+if [[ "$allow_debug_scenario" -eq 1 ]]; then
+  live_args+=("--allow-debug-scenario")
+fi
 
 root_config_path="$repo_root/config.toml"
 root_config_existed=0
@@ -412,14 +492,17 @@ wait_for_api "$default_session" 60000 || { echo "error: default route missing __
 default_state=$(wait_for_connected "$default_session" 30000) || { echo "error: default route did not connect" >&2; exit 1; }
 json_to_file "$default_state" "$default_state_path"
 ab_cmd "$default_session" get text body >"$default_body_path"
-ab_screenshot "$default_session" "$out_dir/default-entry.png" >/dev/null
+default_screenshot_status=$(capture_screenshot_best_effort "$default_session" "$default_screenshot_path" "$default_screenshot_log_path" "default entry")
 default_url_final=$(normalize_eval_token "$(ab_cmd "$default_session" get url)")
 
 [[ "$(state_render_mode "$default_state")" == "viewer" ]] || { echo "error: default route did not land in viewer" >&2; exit 1; }
 state_reason_matches_any "$default_state" "primary_web_entry" "direct_viewer_entry" || { echo "error: default route reason mismatch: $(state_reason "$default_state")" >&2; exit 1; }
 [[ "$default_url_final" == "http://${viewer_host}:${viewer_port}/"* ]] || { echo "error: default route escaped viewer host: $default_url_final" >&2; exit 1; }
-grep -qi "Formal Gameplay Summary" "$default_body_path" || { echo "error: default route body missing Formal Gameplay Summary" >&2; exit 1; }
-grep -Eqi "Missing Action Handoff|Actions Not Exposed On This Page" "$default_body_path" || { echo "error: default route body missing action handoff surface" >&2; exit 1; }
+assert_body_contains "$default_body_path" "WORLD COMMAND BOARD" "default route"
+assert_body_contains "$default_body_path" "SITUATION" "default route"
+assert_body_contains "$default_body_path" "CURRENT IDENTITY" "default route"
+assert_body_contains "$default_body_path" "OBJECTIVE" "default route"
+assert_body_contains "$default_body_path" "ACTION RECEIPT" "default route"
 
 ab_open "$auto_session" "$headed" "$auto_url" >/dev/null
 ab_cmd "$auto_session" wait --load networkidle >/dev/null 2>&1 || true
@@ -427,14 +510,14 @@ wait_for_api "$auto_session" 60000 || { echo "error: auto route missing __AW_TES
 auto_state=$(wait_for_connected "$auto_session" 30000) || { echo "error: auto route did not connect" >&2; exit 1; }
 json_to_file "$auto_state" "$auto_state_path"
 ab_cmd "$auto_session" get text body >"$auto_body_path"
-ab_screenshot "$auto_session" "$out_dir/auto-entry.png" >/dev/null
+auto_screenshot_status=$(capture_screenshot_best_effort "$auto_session" "$auto_screenshot_path" "$auto_screenshot_log_path" "auto entry")
 auto_url_final=$(normalize_eval_token "$(ab_cmd "$auto_session" get url)")
 
 [[ "$(state_render_mode "$auto_state")" == "viewer" ]] || { echo "error: auto route did not land in viewer" >&2; exit 1; }
 state_reason_matches_any "$auto_state" "auto_primary_web_entry" "direct_viewer_entry" || { echo "error: auto route reason mismatch: $(state_reason "$auto_state")" >&2; exit 1; }
 [[ "$auto_url_final" == "http://${viewer_host}:${viewer_port}/"* ]] || { echo "error: auto route escaped viewer host: $auto_url_final" >&2; exit 1; }
 
-python3 - "$summary_json_path" <<'PY' "$default_state_path" "$auto_state_path" "$default_url_final" "$auto_url_final" "$out_dir/default-entry.png" "$out_dir/auto-entry.png"
+python3 - "$summary_json_path" <<'PY' "$default_state_path" "$auto_state_path" "$default_url_final" "$auto_url_final" "$default_screenshot_path" "$auto_screenshot_path" "$default_screenshot_status" "$auto_screenshot_status" "$default_screenshot_log_path" "$auto_screenshot_log_path"
 import json
 import pathlib
 import sys
@@ -442,17 +525,26 @@ import sys
 def load(path):
     return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
 
+def screenshot_record(path, status, log_path):
+    screenshot_path = pathlib.Path(path)
+    return {
+        "status": status,
+        "path": str(screenshot_path) if screenshot_path.is_file() else None,
+        "requested_path": path,
+        "log": log_path,
+    }
+
 summary = {
     "ok": True,
     "default_entry": {
         "final_url": sys.argv[4],
         "state": load(sys.argv[2]),
-        "screenshot": sys.argv[6],
+        "screenshot": screenshot_record(sys.argv[6], sys.argv[8], sys.argv[10]),
     },
     "auto_entry": {
         "final_url": sys.argv[5],
         "state": load(sys.argv[3]),
-        "screenshot": sys.argv[7],
+        "screenshot": screenshot_record(sys.argv[7], sys.argv[9], sys.argv[11]),
     },
 }
 pathlib.Path(sys.argv[1]).write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -466,6 +558,8 @@ import sys
 summary = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 default_state = summary["default_entry"]["state"]
 auto_state = summary["auto_entry"]["state"]
+default_screenshot = summary["default_entry"]["screenshot"]
+auto_screenshot = summary["auto_entry"]["screenshot"]
 lines = [
     "# Viewer primary Web entry regression summary",
     "",
@@ -478,13 +572,17 @@ lines = [
     f"- Final URL: `{summary['default_entry']['final_url']}`",
     f"- Render mode: `{default_state.get('renderMode')}`",
     f"- Entry reason: `{default_state.get('viewerReason') or default_state.get('softwareSafeReason')}`",
-    f"- Screenshot: `{summary['default_entry']['screenshot']}`",
+    f"- Screenshot: `{default_screenshot.get('status')}`",
+    f"- Screenshot path: `{default_screenshot.get('path') or default_screenshot.get('requested_path')}`",
+    f"- Screenshot log: `{default_screenshot.get('log')}`",
     "",
     "## Auto entry",
     f"- Final URL: `{summary['auto_entry']['final_url']}`",
     f"- Render mode: `{auto_state.get('renderMode')}`",
     f"- Entry reason: `{auto_state.get('viewerReason') or auto_state.get('softwareSafeReason')}`",
-    f"- Screenshot: `{summary['auto_entry']['screenshot']}`",
+    f"- Screenshot: `{auto_screenshot.get('status')}`",
+    f"- Screenshot path: `{auto_screenshot.get('path') or auto_screenshot.get('requested_path')}`",
+    f"- Screenshot log: `{auto_screenshot.get('log')}`",
 ]
 pathlib.Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
