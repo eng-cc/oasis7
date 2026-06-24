@@ -17,11 +17,11 @@ acceptance:
   - "Deployment stage generation uses a supported release-candidate bundle track and no longer fails on the default public testnet path."
   - "The deployment-stage smoke test covers the default track contract."
 handoff_to: []
-updated_at: 2026-06-24T20:36:29+08:00
+updated_at: 2026-06-24T20:44:43+08:00
 last_started_at: 2026-06-24T20:28:03+08:00
 last_claim_type: task_complete
 last_verify_command: "bash scripts/p2p-public-testnet-build-deployment-stage.test.sh"
-last_verified_at: 2026-06-24T20:36:28+08:00
+last_verified_at: 2026-06-24T20:44:43+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
 last_closed_at: 2026-06-24T20:36:29+08:00
