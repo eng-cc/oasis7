@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.26**
-Last Updated: **2026-06-23**
+Version: **v1.4.27**
+Last Updated: **2026-06-24**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -68,6 +68,69 @@ Specialist skills are not mandatory workflow phases. They become reachable throu
 
 If a specialist skill is used, TPM must still bind it to the same owner, `.pm` task, canonical worktree, and PR chain through the subagent slice contract. TPM may route to specialist skills, but the specialist role owns the professional conclusion.
 
+### 1.3 Parent Initiative + Domain Child Tasks
+Use this pattern when one user-level initiative contains multiple independently
+mergeable domain tracks, such as game strategy, visualization/player-facing UI,
+and P2P infrastructure. It exists to preserve repo truth while avoiding one
+oversized task/PR that serializes unrelated module feedback loops.
+
+Parent initiative task:
+- has one owner role, usually `tpm`, and one `.pm` task/worktree/PR chain for
+  coordination artifacts only
+- owns north-star intent, child track list, dependency contracts, integration
+  checkpoints, and the verification contract matrix
+- does not own mixed-domain implementation, release claims, or professional
+  conclusions that belong to child tasks or role slices
+- may edit workflow/planning docs or templates only when those are the parent
+  task's own scoped deliverable
+
+Domain child task:
+- has exactly one owner role, one `.pm` task, one canonical worktree, and one PR
+  chain
+- must be independently mergeable, with explicit acceptance criteria and a
+  module-local verification gate
+- records dependency inputs consumed from the parent or sibling children, and
+  dependency outputs exposed back to them
+- may use mocks, fixtures, fake services, or local simulations only with an
+  explicit proof boundary and drift/expiry condition
+- escalates to integration or release gates when it changes or claims behavior
+  outside its module-local contract
+
+Dependency contracts must record:
+- producer and consumer child task or role
+- covered schema, event vocabulary, rule, status surface, fixture, runbook, or
+  acceptance boundary
+- source of truth and expiry/drift condition
+- required integration checkpoint and owner
+
+Verification contract matrix:
+```text
+child task -> module_required -> module_full trigger -> integration_required trigger -> release_full owner/evidence
+```
+
+- `module_required`: per-child PR fast loop proving the module closes inside
+  its own contract. Examples: unit tests, contract tests, schema/golden fixture
+  checks, deterministic replay, small smoke tests, and module-local failure
+  signature regression.
+- `module_full`: risk-triggered module-local expansion. Examples: long-run,
+  property/fuzz, stress/recovery, larger fixture corpus, historical failure
+  signature sweep, slower browser/UI checks, or local multi-node simulation.
+- `integration_required`: required when another module consumes the child
+  contract, a PR claims cross-module behavior, a parent checkpoint is reached,
+  or a shared schema/protocol/event vocabulary/resource semantic/world rule is
+  changed.
+- `release_full`: required for release or large merge confidence. It uses real
+  services, real browsers, real nodes, or the closest production-like
+  environment, plus long-run, rollback/recovery, player-visible path, Ops
+  Evidence, and LiveOps Evidence where applicable.
+
+Mocks, fixtures, and fake services can prove module contract handling; they
+cannot prove real cross-module timing, network/storage/browser/node topology,
+player release readiness, runtime consensus/replay/recovery, absence of
+provider drift, or permission to skip release gates. Each mock/fixture contract
+must record owner, source of truth, covered contract, uncovered risk, and
+expiry/drift condition.
+
 ## 2. Responsibility Boundary
 - `tpm`: default main Agent / workflow coordinator / canonical integrator only; owns phase decision, role allocation, subagent dispatch, integration order, task-truth writeback, fresh-verification gate coordination, completion-claim coordination, and PR chain coordination.
 - TPM is not a professional execution role. TPM must not be the source of domain/professional analysis, implementation, verification judgment, code review judgment, product/design judgment, runtime/wasm/viewer/agent/QA/repository-health judgment, or liveops/community messaging.
@@ -94,16 +157,19 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - Read-only professional/domain questions must be dispatched to the matching bounded professional role slice before the answer is presented as authoritative. Examples: "does viewer have a performance collection/evaluation mechanism", "is this QA evidence release-blocking", "what runtime design risk is present", "is this gameplay loop balanced/readable", "is this documentation/code contract drifting", "what node-ops risk is present in this rollout", or "how should LiveOps message this incident".
   - Such read-only professional slices require the same `.pm` task and canonical task worktree as any other request. Their required sink is `.pm/tasks/<TASK-UID>.execution.md`, plus the role-tagged user-facing answer.
   - TPM may gather raw files, commands, or repo context before dispatch only after bootstrap; the final user-facing answer must label TPM synthesis separately from professional role conclusions and cite the role/evidence that owns each professional conclusion.
-- Canonical truth per user request must remain single-threaded:
+- Canonical truth per ordinary user request or domain child task must remain single-threaded:
   - one owner role
   - one `.pm` task
   - one canonical worktree
   - one PR chain
+- Parent initiatives do not weaken this invariant. They create coordination
+  truth for multiple child tasks, while each child still satisfies the
+  single-threaded invariant independently.
 
 ## 3. Gates
 ### 3.1 Required Gates (must pass)
 1. **Task truth gate**: isolated worktree + bound `.pm` task + owner role confirmed.
-2. **Planning gate**: PRD/project/execution truth aligned for scope and verification entry; TPM TODOs and any subagent slice plan are recorded in `.pm/tasks/<TASK-UID>.execution.md` before execution.
+2. **Planning gate**: PRD/project/execution truth aligned for scope and verification entry; TPM TODOs and any subagent slice plan are recorded in `.pm/tasks/<TASK-UID>.execution.md` before execution. Parent initiatives must also record child tracks, dependency contracts, integration checkpoints, and the verification contract matrix before child work depends on them.
 3. **Execution gate**: atomic step evidence captured (`Action`, `Validation Command`, `Expected Result`, `Actual Result`, plus blocker fields when needed).
 4. **Fresh verification gate**: current-round verification success before completion claims.
 5. **Pre-PR local role review gate**: fresh local subagent review by all involved relevant roles, with actionable findings addressed or explicitly rejected with evidence.
@@ -148,6 +214,9 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Do not edit any files from the `main` branch/worktree; create or enter the relevant task worktree before making changes.
 - Entering implementation requires owner role selection and `.pm` task binding.
 - Cross-role collaboration must converge to one owner / one `.pm` task / one canonical worktree / one PR chain.
+- Cross-domain initiatives may use the parent initiative + domain child task
+  pattern in section 1.3. The parent carries coordination truth only; each child
+  remains one owner / one `.pm` task / one canonical worktree / one PR chain.
 - Task worktrees created through `./scripts/new-task-worktree.sh` must create a git-ignored `target` symlink to the repo-family shared cargo target cache resolved by `./scripts/cargo-dev.sh --print-target-dir`, so direct cargo and the development wrapper share local build artifacts by default.
 - When Rust commands encounter Cargo package-cache or build-directory locks, wait for the shared repo-family cache to become available; do not switch ad hoc to a fresh temporary `CARGO_TARGET_DIR` just to bypass the lock.
 
@@ -172,6 +241,9 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - TPM read-only exploration is allowed only to gather routing context, inspect task truth, or integrate returned evidence. It must not be reported as a professional finding unless a matching professional role slice owns or verifies that finding.
 - TPM user-facing summaries must distinguish procedural synthesis from professional conclusions. Professional conclusions must be traceable to subagent artifacts, execution evidence, handoff, project/prd records, or PR evidence.
 - Project docs, handoff files, signals, memory, and PR evidence may supplement the `.pm` execution log, but they do not replace it for task execution truth.
+- Parent initiative records, child task packets, dependency contracts, fixture
+  contracts, and verification contract matrices may supplement `.pm` task truth,
+  but each active parent or child still needs its own `.pm` execution log sink.
 - If the plan changes during execution, TPM must append an execution-log update before continuing the changed work.
 - Pre-task discoveries, loose TODOs, and follow-up ideas found before an owner decides to create a `.pm` task should be captured with `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`. This records a `source_type=reflection` signal by default and must not be treated as committed task truth until explicitly promoted with `--create-task` or another task-creation path.
 
@@ -210,6 +282,12 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Before PR creation, TPM must create or dispatch fresh local review subagents for every involved relevant professional role in the diff scope. At minimum, use changed paths, role ownership, task slice history, user-facing claims, and verification claims to select roles; include `producer_system_designer` when scope, product contract, user promise, acceptance, or system-level semantics change; include `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched; include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, accessibility/readability, or UI-heavy claims are touched; include `runtime_engineer` when runtime/server/simulation/gameplay enforcement, replay, recovery, checkpoint, long-run behavior, or `crates/oasis7*` runtime paths are touched; include `blockchain_ops_engineer` when deployment, node ops, topology/inventory, service/host contracts, health baselines, upgrade/rollback/restore drills, packaging/release ops, or operator-facing runbooks are touched; include `wasm_platform_engineer` when `crates/oasis7_wasm_*`, builtin wasm modules, ABI/schema, manifest/hash, wasm build/receipt, wasm determinism workflows, or `doc/world-runtime/wasm/*` are touched; include `agent_engineer` when agent behavior, prompts, provider contracts, model/runtime config, subagent dispatch contracts, or agent tooling are touched; include `viewer_engineer` when Viewer/Web/UI/WebGPU/browser validation paths are touched; include `qa_engineer` when the claim involves verification, release readiness, test strategy, or evidence sufficiency; include `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, workflow scripts/skills, or known technical-debt boundaries; include `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched.
 - `scripts/prepare-task-pr.sh --create` must mechanically reject a passed review packet when changed-path inference identifies required roles that are missing from `Review Roles`. This script check is a minimum backstop; TPM remains responsible for adding roles implied by task history and user-facing claims that path inference cannot see.
 - Verification must map to the changed surface, not only to one generic command. Gameplay changes need playability/economy/motivation-loop evidence tied to `doc/game` truth; runtime changes need the relevant cargo checks/tests plus replay/recovery/checkpoint/long-run evidence where applicable; WASM ABI/platform changes need support-crate/executor tests and, for publishable or builtin module pipeline changes, deterministic build/gate evidence or an explicit defer-to-GitHub/manual evidence packet; UI/player-facing changes need S6 screenshot/model-visual-review evidence or an explicit visual-evidence exemption; release/manual packaging changes need first-class Ops Evidence covering readiness, rollback/runbook, and success/resume evidence; player- or community-facing changes need first-class LiveOps Evidence covering messaging, release-note/status, and audience impact.
+- Domain child tasks in a parent initiative must state their
+  `module_required` verification command or evidence, the `module_full` trigger,
+  and the conditions that escalate to `integration_required` or `release_full`.
+  A module-local pass is not release-ready evidence unless the corresponding
+  integration/release gates are also satisfied or explicitly deferred with a
+  named owner and resume criterion.
 - Each local role review must return `findings` or `no_findings` plus `residual_risk`. TPM must fix valid findings or record why a finding is stale/rejected with code or doc evidence before PR creation.
 - `scripts/prepare-task-pr.sh --create` must refuse to create the PR unless the task execution log contains a passed pre-PR local role review packet for the source worktree. The packet marker is:
   - `Pre-PR Local Role Review: passed`
@@ -227,6 +305,8 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
   - `Review Findings Disposition: addressed` or `Review Findings Disposition: no_findings`
   - `Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>`
   - `Verification Matrix: <changed surface -> required evidence -> observed evidence or explicit deferral>`
+  - `Parent/Child Evidence: <parent initiative packet / child task packet / verification contract matrix or n/a with reason>`
+  - `Mock/Fixture Evidence: <contract paths or n/a with reason>`
   - `Visual Evidence: <screenshot/model visual review paths or n/a with exemption reason>`
   - `WASM Evidence: <support crate/determinism evidence or n/a with reason>`
   - `Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>`
@@ -249,12 +329,19 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 ## 6. Required Artifacts by Phase
 - Bootstrap/Router: decision record in `.pm/tasks/<TASK-UID>.execution.md`; project or handoff records may supplement it.
 - Planning/Dispatch: TPM TODO decomposition and subagent slice contracts in `.pm/tasks/<TASK-UID>.execution.md`.
+- Parent initiative planning: parent initiative packet, child task packet list,
+  dependency contracts, integration checkpoints, verification contract matrix,
+  and mock/fixture proof boundaries when local substitutes are used.
 - Execution: atomic evidence records per risky step.
 - Verification: claim-ready command + output evidence.
 - Pre-PR local role review: involved-role subagent review packet, review package path or explicit `n/a`, required-role coverage, per-role dual verdicts, finding disposition, verification matrix, visual/WASM/ops evidence or explicit exemptions, residual risk, and slice ledger path or explicit `n/a`.
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.27 (2026-06-24)**
+  - Added the parent initiative + domain child task pattern for multi-track initiatives that need independently mergeable strategy, visualization, P2P, or other domain work while preserving one owner/task/worktree/PR chain per child.
+  - Added dependency contracts, integration checkpoints, and the verification contract matrix with `module_required`, `module_full`, `integration_required`, and `release_full` tiers.
+  - Clarified mock/fixture/fake-service proof boundaries and drift/expiry requirements so module-local green tests cannot be mistaken for release-ready evidence.
 - **v1.4.26 (2026-06-23)**
   - Tightened pre-PR role inference backstops for producer product/system docs, viewer/launcher implementation/docs/scripts, and agent/subagent workflow contract surfaces.
   - Clarified semantic review evidence behavior by distinguishing generic `n/a` from explicit deferral/exemption reasons across runtime, gameplay, visual, ops, and liveops evidence.
@@ -375,6 +462,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 This checklist records whether key legacy `AGENTS.md` workflow semantics were preserved here to avoid policy loss during deduplication.
 
 - [x] Single owner / single `.pm` task / single worktree / single PR chain.
+- [x] Parent initiative + domain child tasks preserve the single-chain invariant per child while allowing coordination truth for independently mergeable multi-track work.
 - [x] Standard task worktree flow for every user request, with explicit-reuse-only policy.
 - [x] Owner role selection and `.pm` task binding before implementation.
 - [x] TPM planning/TODO decomposition and subagent slice contracts written to `.pm` execution log before delegated execution.
@@ -389,5 +477,6 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] Local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability as formal review/merge boundary; `REVIEW_REQUIRED` is informational, not a blocker.
 - [x] PR review fix loop: fix -> re-verify -> resolve threads -> merge claim.
 - [x] Workflow phase-to-skill map preserves required, conditional, optional, and specialist skill reachability.
+- [x] Verification contract matrix distinguishes module-local gates from integration/release gates, and mock/fixture evidence records proof boundaries.
 
 If any item above changes, update this file first and then sync downstream docs/skills/scripts.

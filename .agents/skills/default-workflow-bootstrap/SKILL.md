@@ -107,6 +107,10 @@ WORKFLOW BOOTSTRAP DECIDED
   - `./scripts/pm/task-closeout.sh`
 - Core workflow routing:
   - `./.agents/skills/repo-owned-workflow-router/SKILL.md`
+- Parent initiative / child task templates:
+  - `./.agents/roles/templates/parent-initiative.md`
+  - `./.agents/roles/templates/domain-child-task.md`
+  - `./.agents/roles/templates/mock-fixture-contract.md`
 - Formal truth:
   - `AGENTS.md`
   - `doc/<module>/prd.md`
@@ -124,6 +128,7 @@ WORKFLOW BOOTSTRAP DECIDED
 - Do not treat this skill as permission to bypass `repo-owned-workflow-router`, verification, or GitHub PR review.
 - Do force this bootstrap onto chat-only or read-only requests, even when they do not change repository state.
 - Do not treat read-only professional/domain questions as TPM-owned conclusions just because bootstrap has completed; the matching professional slice still owns the conclusion.
+- Do not collapse a multi-track initiative into one mixed-domain implementation task when the tracks are independently mergeable. Bootstrap the parent coordination task first, then route child domain tasks through their own owner/task/worktree/PR chain as defined by `doc/engineering/workflow/source-of-truth.md#13-parent-initiative--domain-child-tasks`.
 
 ## Known Failure Modes
 
@@ -131,6 +136,7 @@ WORKFLOW BOOTSTRAP DECIDED
 - Creating a task from an invalid external `source_ref`; use a repository path as the PM source and record external URLs in the execution log evidence instead.
 - Reusing a dirty or unrelated worktree because it is convenient; reuse needs explicit user authorization and matching task truth.
 - Stopping after worktree creation; this skill's job includes routing into the next workflow surface and recording the decision.
+- Treating a parent initiative as permission to put several implementation owners into one task. The parent is coordination truth only; each domain child keeps the single-chain invariant.
 
 ## Verification
 

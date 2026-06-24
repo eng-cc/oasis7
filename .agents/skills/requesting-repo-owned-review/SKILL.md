@@ -61,6 +61,8 @@ The formal path is:
    - changed files or path set
    - exact question to answer
    - evidence already available
+   - parent initiative / child task packet and verification contract matrix when the diff changes or uses that workflow pattern
+   - mock/fixture contract proof boundaries when local substitutes support the claim
    - review package path from `./scripts/pm/review-package.sh --base <ref> --head <ref> --task-uid <TASK-UID>`, or explicit `n/a` with reason when the review target is not a git diff
    - slice ledger path from `./scripts/pm/slice-ledger.sh --task-uid <TASK-UID> --print`, or explicit `n/a` with reason for one-shot reviews without reusable slice state
 3. Spawn or dispatch a fresh subagent for each involved role.
@@ -117,6 +119,8 @@ role reviews and addressing findings:
 - Review Findings Disposition: <addressed | no_findings>
 - Finding Disposition Evidence: <fix refs or rejected/stale evidence refs>
 - Verification Matrix: <changed surface -> required evidence -> observed evidence or explicit deferral>
+- Parent/Child Evidence: <parent initiative packet / child task packet / verification contract matrix or n/a with reason>
+- Mock/Fixture Evidence: <contract paths or n/a with reason>
 - Visual Evidence: <screenshot/model visual review paths or n/a with exemption reason>
 - WASM Evidence: <support crate/determinism evidence or n/a with reason>
 - Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>

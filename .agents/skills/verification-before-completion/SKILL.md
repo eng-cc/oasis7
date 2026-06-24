@@ -53,6 +53,15 @@ If the claim depends on multiple checks, run each check explicitly and summarize
 - what failed
 - what remains blocked
 
+For parent initiative or domain child task claims, also distinguish:
+
+- `module_required`: module-local fast-loop evidence
+- `module_full`: risk-triggered broader module evidence, or why it was not triggered
+- `integration_required`: cross-module evidence, or the explicit checkpoint/owner that defers it
+- `release_full`: release confidence evidence, or the explicit non-release scope
+
+Do not call a module-local pass release-ready unless the integration/release gates are also satisfied or explicitly deferred with an owner and resume criterion.
+
 Do not collapse multi-check state into a blanket "ready" claim unless every required check passed.
 
 ## Output Rules
@@ -68,6 +77,7 @@ Do not collapse multi-check state into a blanket "ready" claim unless every requ
 - Repo-wide PM governance: `./scripts/pm/lint.sh`
 - Task closeout readiness: `./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`
 - PR readiness: passed pre-PR local role review packet in `.pm/tasks/<TASK-UID>.execution.md`, then `./scripts/prepare-task-pr.sh`
+- Parent/child workflow readiness: parent initiative packet, child task packet, dependency contracts, verification contract matrix, and mock/fixture proof boundaries where local substitutes were used
 
 ## Guardrails
 
