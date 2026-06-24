@@ -148,10 +148,10 @@ Example:
 - Task UID: task_fcaaa076df8b41f5985661f6ef27a5ce
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-next-governance-issue-8
 - Source Branch: task/engineering-next-governance-issue-8
-- Source Head: pending-first-commit
+- Source Head: f72868157057b4bd4d1e38f30dab2ac55fd9f0e0
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_fcaaa076df8b41f5985661f6ef27a5ce.yaml; .pm/tasks/task_fcaaa076df8b41f5985661f6ef27a5ce.execution.md; doc/engineering/project.md; doc/p2p/README.md
-- Review Package: pending committed package generation after this evidence update.
+- Review Package: .pm/scratch/task_fcaaa076df8b41f5985661f6ef27a5ce/review-packages/review-577d5a41a..f72868157.diff
 - Role Selection Basis: changed paths and task history touch repository-health doc/report contract evidence, `.pm` workflow state, and engineering project Trace; roles selected were repository_health_engineer for doc/report contract boundary, qa_engineer for verification sufficiency, and producer_system_designer for project Trace/product-scope boundary.
 - Review Roles: repository_health_engineer,qa_engineer,producer_system_designer
 - Review Evidence: repository_health_engineer 2026-06-24 21:24 CST no_findings; qa_engineer 2026-06-24 21:26 CST no_findings; producer_system_designer 2026-06-24 21:25 CST no_findings; all results are recorded in this execution log.
@@ -183,3 +183,12 @@ Example:
 - Expected Result: No current-task `.pm` lint failures and no diff whitespace errors.
 - Actual Result: Passed; current-task filter returned no matches and `git diff --check` emitted no errors.
 - Blocker / Next Action: Commit evidence, generate final review package, update the review packet, and create PR.
+
+## 2026-06-24 21:18:00 CST / tpm
+- 完成内容: Generated the committed review package and replaced pending pre-PR packet fields with stable evidence.
+- 遗留事项: Commit this metadata-only packet update, then create PR and enter PR watch/merge chain.
+- Action: Generate final review package from committed head.
+- Validation Command: `./scripts/pm/review-package.sh --base refs/remotes/origin/main --head HEAD --task-uid task_fcaaa076df8b41f5985661f6ef27a5ce`
+- Expected Result: Review package is generated for the committed branch diff against `origin/main`.
+- Actual Result: Generated `.pm/scratch/task_fcaaa076df8b41f5985661f6ef27a5ce/review-packages/review-577d5a41a..f72868157.diff`; base `577d5a41aca4f87434d8a340e0d164218ef741a3`; head `f72868157057b4bd4d1e38f30dab2ac55fd9f0e0`; commits `1`.
+- Blocker / Next Action: Run current lint/diff checks, commit packet update, then create PR.
