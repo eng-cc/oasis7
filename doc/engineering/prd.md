@@ -117,7 +117,7 @@
   - PRD-ENGINEERING-031: As a `producer_system_designer`, I want external agent workflow patterns benchmarked against oasis7's repo-native execution chain, so that we only adopt the parts that strengthen evidence, workflow verification, or UI ideation without replacing `.pm`, owner roles, or GitHub PR review.
   - PRD-ENGINEERING-032: As a repo workflow owner, I want the current local skill inventory frozen into keep/replace/retire/defer buckets, so that role cards and engineering docs no longer recommend low-value or workflow-conflicting skill surfaces.
 - Critical User Flows:
-  1. Flow-ENG-001: `提交前执行必要测试/门禁 -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> normal PR 进入 required checks + mergeability + comments watch（REVIEW_REQUIRED 仅回报不阻塞；review-approval-only BLOCKED 可按授权 admin merge）-> 失败修复重推 -> comments 处理/resolve -> 通过后合入与清理`
+  1. Flow-ENG-001: `fresh verification / 必要测试门禁 -> pre-PR local role subagent review -> findings 处置 -> closeout -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> normal PR 进入 required checks + mergeability + comments watch（REVIEW_REQUIRED 仅回报不阻塞；review-approval-only BLOCKED 可按授权 admin merge）-> 失败修复重推 -> comments 处理/resolve -> 通过后合入与清理`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
   3. Flow-ENG-003: `季度复盘 -> 汇总违规趋势 -> 调整门禁阈值 -> 发布新治理基线`
   4. Flow-ENG-004: `逐篇阅读旧文档 -> 按 strict schema 重写 -> 内容保真复核 -> 更新任务与执行日志追踪`
