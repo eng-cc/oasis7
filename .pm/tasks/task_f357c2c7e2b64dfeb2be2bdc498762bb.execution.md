@@ -54,7 +54,7 @@ Example:
 - Task UID: task_f357c2c7e2b64dfeb2be2bdc498762bb
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-runtime-testnet-rebuild-sync-validator-signers
 - Source Branch: task/runtime-testnet-rebuild-sync-validator-signers
-- Source Head: ce020b7f251f2bb3eae29c97d8c83fd889d42d52
+- Source Head: 5d92f3aec85938f39684aa752c83c553f265d00c
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `scripts/p2p-public-testnet-rebuild-validators.sh`; `scripts/p2p-public-testnet-rebuild-validators.test.sh`; `.pm/tasks/task_f357c2c7e2b64dfeb2be2bdc498762bb.yaml`; `.pm/tasks/task_f357c2c7e2b64dfeb2be2bdc498762bb.execution.md`
 - Review Package: n/a; full changed files reviewed in task worktree by bounded subagent slices.
