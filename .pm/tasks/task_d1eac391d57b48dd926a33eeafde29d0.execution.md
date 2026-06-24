@@ -196,3 +196,10 @@ Result:
 - Current task was closed: `.pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.yaml` now has `status: done`, `last_verification_status: verified`, `last_verification_exit_code: 0`, and `last_closed_at: 2026-06-24T11:44:12+08:00`.
 - The command exited 1 after closeout because repo-wide `.pm lint` found unrelated historical task execution-log debt across many older `.pm/tasks/task_*.execution.md` files.
 - Attribution boundary: this is repo-wide historical `.pm` debt, not a failure of this RustSec ratchet task. The current task-specific verification and closeout metadata are verified.
+
+## PR evidence - 2026-06-24
+
+- prepare-task-pr.sh preflight: passed through branch push; `gh pr create` fallback was needed because the helper invoked GitHub CLI without a body in non-interactive mode.
+- PR URL: https://github.com/eng-cc/oasis7/pull/593
+- PR purpose decision: normal_pr_ci_watch.
+- Watch scope: required checks, mergeability, PR comments, and review threads; `REVIEW_REQUIRED` and `BEHIND` remain informational unless GitHub reports a concrete merge/update blocker.
