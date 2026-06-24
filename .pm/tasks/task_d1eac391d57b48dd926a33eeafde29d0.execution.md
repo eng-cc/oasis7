@@ -158,7 +158,7 @@ Review outcomes:
 - Task UID: task_d1eac391d57b48dd926a33eeafde29d0
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-governance-next
 - Source Branch: task/engineering-rust-dependency-governance-next
-- Source Head: 463379dc7b59cf79610a612621e015f607ae085b
+- Source Head: 0bc8305014f80acdd4e30ab9f232adda6b0501ba
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/inbox/signals.jsonl; .pm/roles/repository_health_engineer/backlog/committed.yaml; .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.execution.md; .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml; .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.execution.md; .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.yaml; crates/oasis7/src/viewer/runtime_live/tests.rs; deny.toml; doc/engineering/project.md; scripts/check-rustsec-ignore-baseline.sh; scripts/check-rustsec-ignore-baseline.test.sh; scripts/ci-rust-governance-report.sh; scripts/ci-tests.sh
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-governance-next/.pm/scratch/task_d1eac391d57b48dd926a33eeafde29d0/review-packages/review-full-branch-plus-project-trace.diff
