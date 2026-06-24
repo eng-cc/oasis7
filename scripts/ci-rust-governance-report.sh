@@ -93,6 +93,7 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 import json
+import re
 import sys
 
 out_dir = Path(sys.argv[1])
@@ -114,10 +115,56 @@ if unsafe_log.exists():
             bucket = "/".join(parts[:3]) if len(parts) >= 3 else path
             unsafe_counts[bucket] += 1
 
+duplicate_warning_re = re.compile(
+    r"warning\[duplicate\]: found (\d+) duplicate entries for crate '([^']+)'"
+)
+duplicate_warning_entries: list[tuple[str, int]] = []
+duplicate_crate_counts: Counter[str] = Counter()
+cargo_deny_log = out_dir / "cargo-deny.log"
+if cargo_deny_log.exists():
+    for line in cargo_deny_log.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = duplicate_warning_re.search(line)
+        if not match:
+            continue
+        duplicate_count = int(match.group(1))
+        crate_name = match.group(2)
+        duplicate_warning_entries.append((crate_name, duplicate_count))
+        duplicate_crate_counts[crate_name] = max(
+            duplicate_crate_counts[crate_name],
+            duplicate_count,
+        )
+
+duplicate_tree_output_lines = 0
+duplicate_tree_log = out_dir / "cargo-tree-duplicates.log"
+if duplicate_tree_log.exists():
+    duplicate_tree_output_lines = sum(
+        1
+        for line in duplicate_tree_log.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines()
+        if line.strip()
+    )
+
+duplicate_top_crates = [
+    {"crate": crate_name, "duplicate_entries": duplicate_count}
+    for crate_name, duplicate_count in sorted(
+        duplicate_crate_counts.items(),
+        key=lambda item: (-item[1], item[0]),
+    )[:20]
+]
+
 summary = {
     "rustsec_ignore_baseline_rc": read_rc("rustsec-ignore-baseline.log"),
     "cargo_deny_rc": read_rc("cargo-deny.log"),
     "duplicate_dependencies_rc": read_rc("cargo-tree-duplicates.log"),
+    "duplicate_dependency_tree_output_lines": duplicate_tree_output_lines,
+    "duplicate_dependency_cluster_count": len(duplicate_warning_entries),
+    "duplicate_dependency_unique_crates": len(duplicate_crate_counts),
+    "duplicate_dependency_entry_total": sum(
+        duplicate_count for _, duplicate_count in duplicate_warning_entries
+    ),
+    "duplicate_dependency_top_crates": duplicate_top_crates,
     "unsafe_usage_rc": read_rc("unsafe-usage.log"),
     "unsafe_usage_total": sum(unsafe_counts.values()),
     "unsafe_usage_top_buckets": unsafe_counts.most_common(20),
@@ -140,8 +187,19 @@ lines = [
     f"| cargo tree -d | {summary['duplicate_dependencies_rc']} | `cargo-tree-duplicates.log` |",
     f"| unsafe usage scan | {summary['unsafe_usage_rc']} | `unsafe-usage.log` |",
     "",
+    f"- Duplicate dependency clusters: `{summary['duplicate_dependency_cluster_count']}`",
+    f"- Duplicate dependency unique crates: `{summary['duplicate_dependency_unique_crates']}`",
+    f"- Duplicate dependency entries: `{summary['duplicate_dependency_entry_total']}`",
+    f"- Duplicate dependency tree output lines: `{summary['duplicate_dependency_tree_output_lines']}`",
     f"- Unsafe usage matches: `{summary['unsafe_usage_total']}`",
 ]
+
+if summary["duplicate_dependency_top_crates"]:
+    lines.append("")
+    lines.append("## Top Duplicate Dependency Crates")
+    lines.append("")
+    for entry in summary["duplicate_dependency_top_crates"]:
+        lines.append(f"- `{entry['crate']}`: {entry['duplicate_entries']} entries")
 
 if summary["unsafe_usage_top_buckets"]:
     lines.append("")
