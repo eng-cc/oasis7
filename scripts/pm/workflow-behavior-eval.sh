@@ -646,6 +646,8 @@ scenarios = [
             "Review Package: <path to review package or n/a with reason>",
             "Review Verdicts: <per-role scope/spec compliance verdict + role quality/risk verdict>",
             "Verification Matrix: <changed surface -> required evidence -> observed evidence or explicit deferral>",
+            "Parent/Child Evidence: <parent initiative packet / child task packet / verification contract matrix or n/a with reason>",
+            "Mock/Fixture Evidence: <contract paths or n/a with reason>",
             "Visual Evidence: <screenshot/model visual review paths or n/a with exemption reason>",
             "WASM Evidence: <support crate/determinism evidence or n/a with reason>",
             "Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>",
