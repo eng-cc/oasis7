@@ -342,3 +342,48 @@ Example:
 - Expected Result: verification sufficiency verdict.
 - Actual Result: `no_findings`.
 - Blocker / Next Action: none from QA before push.
+
+## 2026-06-24 16:10:04 CST / tpm
+- 完成内容: GitHub Wasm Determinism Gate source-hash identity mismatch triaged and bounded identity ratchet applied.
+- 遗留事项: WASM platform/QA review, commit, push, GitHub checks, review-thread closeout, merge, and cleanup pending.
+- Failure Signature: PR #601 Wasm Determinism Gate run `28083756830` failed `collect-wasm-summaries` for m1/m4/m5; each failed in `sync_builtin_wasm_identity --check` with `identity manifest mismatch: source_hash mismatch`.
+- Representative Errors: m1 `module_id=m1.body.core expected=c59bdd02df3abf3414c2ca071421261249e463d2bc78c2939982df742b4acee9 actual=49486e86e855954fb907e470d79388b10a48e45f3e2100301a7ebc1639b62f1b`; m4 `module_id=m4.factory.assembler.mk1 expected=b3d3f043368e6a5de33f4af1758c25274b579fd0ef74cd4facda478bf3d70f1c actual=1667df0814174eedbb5e9aa1dfd29532b70d358bf569471c4847d247db49f0dd`; m5 `module_id=m5.gameplay.crisis.cycle expected=45fa48d5f27faa58f33b1359d77214130e619de7e44b71e6d5e969d5d70842da actual=daaaed86b24724580a6b934b3cf594487e1a138f78288d34d60cc2cff43ee9c5`.
+- Root Cause: the source-hash lockfile fix intentionally changes canonical receipt/source identity inputs, so tracked m1/m4/m5 identity manifests must ratchet to the new canonical `source_hash` values; wasm `hash_tokens`/binary hashes are unchanged.
+- Local Limitation: local `scripts/sync-m1-builtin-wasm-artifacts.sh` write path could not run because Docker is unavailable (`error: docker is required; canonical wasm builds no longer support host-native fallback`); TPM did not use host-native source-hash values because they did not match GitHub canonical Docker values.
+- Fix Applied: extracted canonical `source_hash` values from GitHub job logs for all 37 builtin modules and updated only `crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.identity.json`, `m4_builtin_modules.identity.json`, and `m5_builtin_modules.identity.json` `source_hash` plus derived `identity_hash`.
+- Local Verification: Python check confirmed every updated `source_hash` matches the corresponding GitHub canonical log entry and every `identity_hash` equals `sha256(module_id:source_hash:build_manifest_hash)`; `git diff --check` passed; `./scripts/plan-wasm-determinism-scope.test.sh` passed; `./scripts/plan-rust-required-scope.test.sh` passed.
+- Boundary: no `.sha256` hash manifest or DistFS blob update was made because wasm binary hashes did not change; final end-to-end truth remains the next GitHub Wasm Determinism Gate rerun.
+- Slice Contract: wasm_platform_engineer review of canonical identity manifest ratchet; validate source-hash/identity correctness, no wasm hash-token drift, and residual risk.
+- Slice Contract: qa_engineer review of identity update verification sufficiency; validate CI-log extraction, formula check, and required rerun boundary.
+- Mandatory Context Checklist: source-hash lockfile fix, PR #601 P1 review fix routing `crates/oasis7_wasm_build/**` through wasm gate, failed run `28083756830`, local Docker unavailable, canonical log extraction checks, and changed identity manifest paths.
+- Attribution Boundary: TPM handled evidence extraction and generated manifest update; professional conclusions must come from wasm_platform_engineer and qa_engineer slices.
+- Action: remediate deterministic wasm gate failure by syncing tracked identity manifests to canonical source-hash values.
+- Validation Command: GitHub failed-job log extraction; Python source_hash/log + identity_hash formula verification; `git diff --check`; planner tests.
+- Expected Result: tracked identity manifests match canonical source-hash receipt values after lockfile source-hash ratchet.
+- Actual Result: local structural checks passed; role review and GitHub rerun pending.
+- Blocker / Next Action: collect role reviews, commit/push, then watch GitHub required and Wasm Determinism gates.
+
+## 2026-06-24 16:17:20 CST / wasm_platform_engineer
+- 完成内容: canonical builtin wasm identity ratchet review returned `no_findings`.
+- 遗留事项: push branch and use GitHub Wasm Determinism Gate as final end-to-end truth because Docker is unavailable locally.
+- Verdict: this is the correct wasm identity ratchet; the source-hash lockfile fix changes canonical receipt/source identity input, not wasm binary output.
+- Evidence: m1/m4/m5 module counts `10/22/5`; diffs only update `source_hash` and derived `identity_hash`; `hash_tokens` and `build_manifest_hash` are unchanged; every `identity_hash` follows `sha256(module_id:source_hash:build_manifest_hash)`; GitHub failed run `28083756830` canonical `source_hash` values cover all 37 modules and match the updated manifests.
+- Residual Risk: low; next CI canonical environment may still reveal downstream determinism issues, and that rerun remains required.
+- Action: bounded WASM platform review of m1/m4/m5 identity manifest ratchet.
+- Validation Command: role review of diff, GitHub log extraction, identity formula, and whitespace evidence.
+- Expected Result: WASM identity correctness verdict.
+- Actual Result: `no_findings`.
+- Blocker / Next Action: none from WASM platform before push.
+
+## 2026-06-24 16:17:30 CST / qa_engineer
+- 完成内容: canonical builtin wasm identity ratchet QA review returned `no_findings`.
+- 遗留事项: push branch and wait for GitHub Wasm Determinism Gate rerun.
+- Verdict: verification is sufficient before push for this narrow identity-manifest ratchet.
+- Evidence: QA rechecked 37 log source hashes against 37 JSON source hashes with 0 missing and 0 mismatches; identity formula passed for all m1/m4/m5 entries; module counts were m1 `10`, m4 `22`, m5 `5`; `git diff --check`, `./scripts/plan-wasm-determinism-scope.test.sh`, and `./scripts/plan-rust-required-scope.test.sh` passed.
+- Missing Test/Gate: local Docker unavailable, so canonical end-to-end check cannot be reproduced locally; GitHub Wasm Determinism Gate rerun is authoritative.
+- Residual Risk: low; if the next canonical Docker rerun computes different source hashes, CI will catch it.
+- Action: bounded QA review of m1/m4/m5 identity manifest ratchet.
+- Validation Command: role review with extraction-vs-JSON check, identity formula, diff check, and planner tests.
+- Expected Result: verification sufficiency verdict.
+- Actual Result: `no_findings`.
+- Blocker / Next Action: none from QA before push.
