@@ -212,3 +212,16 @@ Result:
   - `./scripts/check-rustsec-ignore-baseline.test.sh` -> passed.
   - `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-ratchet-after-merge` -> passed; RustSec ignore baseline rc=0; cargo deny report remains report-only rc=4.
   - `OASIS7_CI_RUN_OASIS7_NET_TESTS=true OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=true ./scripts/ci-tests.sh required` -> passed.
+
+## PR review feedback handling - 2026-06-24
+
+- Inventory: PR #593 had two unresolved Codex review threads on `scripts/check-rustsec-ignore-baseline.sh`.
+- Thread `PRRT_kwDORHhWec6LyYUg` / `scripts/check-rustsec-ignore-baseline.sh:75`: valid correctness finding. Comment-only advisory ID strings could be counted as active ignores. Fix: skip comment-only lines before advisory ID extraction; added regression where a commented `RUSTSEC-2025-0009` line is treated as missing from the TOML ignore array.
+- Thread `PRRT_kwDORHhWec6LyYUc` / `scripts/check-rustsec-ignore-baseline.sh:101`: valid governance finding. The script recorded `validation=` but did not execute dependency scope checks. Fix: validation metadata now must be a `cargo tree -i ...` command, the script executes those checks, and `-p` scoped validations compare scoped and workspace reverse-dependency trees so unapproved third-party/local dependency-scope expansion fails.
+- Verification:
+  - `bash -n scripts/check-rustsec-ignore-baseline.sh scripts/check-rustsec-ignore-baseline.test.sh scripts/ci-tests.sh scripts/ci-rust-governance-report.sh` -> passed.
+  - `./scripts/check-rustsec-ignore-baseline.sh` -> passed.
+  - `./scripts/check-rustsec-ignore-baseline.test.sh` -> passed.
+  - `cargo deny check advisories` -> passed.
+  - `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-ratchet-review-fix` -> passed; RustSec ignore baseline rc=0; cargo deny report-only rc=4.
+  - `env -u RUSTC_WRAPPER cargo test -p oasis7_net --features libp2p --lib` -> passed, 166 tests.

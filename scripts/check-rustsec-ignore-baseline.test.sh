@@ -40,6 +40,26 @@ if run_check "$missing_metadata" >"$tmp_dir/missing.out" 2>&1; then
 fi
 grep -q "missing rustsec-ignore metadata" "$tmp_dir/missing.out"
 
+commented_id="$tmp_dir/commented-id.toml"
+python3 - deny.toml "$commented_id" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+out = []
+for line in source:
+    if '"RUSTSEC-2025-0009"' in line and not line.lstrip().startswith("#"):
+        out.append("  # " + line.strip() + " # test-only commented debt note")
+    else:
+        out.append(line)
+Path(sys.argv[2]).write_text("\n".join(out) + "\n", encoding="utf-8")
+PY
+if run_check "$commented_id" >"$tmp_dir/commented.out" 2>&1; then
+  echo "expected commented advisory id case to fail" >&2
+  exit 1
+fi
+grep -q "approved RustSec ignore id(s) missing" "$tmp_dir/commented.out"
+
 extra_id="$tmp_dir/extra-id.toml"
 python3 - deny.toml "$extra_id" <<'PY'
 from pathlib import Path
@@ -73,5 +93,22 @@ if run_check "$expired" >"$tmp_dir/expired.out" 2>&1; then
   exit 1
 fi
 grep -q "metadata expired" "$tmp_dir/expired.out"
+
+bad_validation="$tmp_dir/bad-validation.toml"
+python3 - deny.toml "$bad_validation" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+Path(sys.argv[2]).write_text(
+    text.replace("validation=cargo tree -i serde_cbor", "validation=echo not-a-scope-check"),
+    encoding="utf-8",
+)
+PY
+if run_check "$bad_validation" >"$tmp_dir/bad-validation.out" 2>&1; then
+  echo "expected unsupported validation command case to fail" >&2
+  exit 1
+fi
+grep -q 'validation must be a `cargo tree -i ...` command' "$tmp_dir/bad-validation.out"
 
 echo "check-rustsec-ignore-baseline.test: OK"

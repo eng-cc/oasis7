@@ -12,7 +12,7 @@ ignore = [
   # Each ignore must keep a `rustsec-ignore` metadata line immediately above it.
   # `scripts/check-rustsec-ignore-baseline.sh` fails on missing metadata, expired
   # metadata, or unreviewed changes to the approved ignore set.
-  # rustsec-ignore: owner=repository_health_engineer; scope=workspace serde_cbor serialization debt; reason=legacy serde_cbor remains in protocol/runtime data paths pending serialization migration; expiry=2026-09-30; validation=cargo deny check advisories
+  # rustsec-ignore: owner=repository_health_engineer; scope=workspace serde_cbor serialization debt; reason=legacy serde_cbor remains in protocol/runtime data paths pending serialization migration; expiry=2026-09-30; validation=cargo tree -i serde_cbor
   "RUSTSEC-2021-0127", # serde_cbor unmaintained
   # rustsec-ignore: owner=repository_health_engineer; scope=transitive UI/time compatibility debt; reason=instant is pulled transitively by existing UI/network dependency closure and needs upstream modernization rather than local patching; expiry=2026-09-30; validation=cargo tree -i instant
   "RUSTSEC-2024-0384", # instant unmaintained
