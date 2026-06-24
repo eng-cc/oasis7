@@ -330,17 +330,38 @@ if not runtime_path.is_file():
     raise SystemExit(f'missing installed runtime: {runtime_path}')
 
 env_values = {}
+env_values['STACK_ROOT'] = str(stack_root)
 for raw in env_path.read_text(encoding='utf-8').splitlines():
     stripped = raw.strip()
     if not stripped or stripped.startswith('#') or '=' not in stripped:
         continue
     key, value = stripped.split('=', 1)
+    if (
+        len(value) >= 2
+        and value[0] == value[-1]
+        and value[0] in (chr(34), chr(39))
+    ):
+        value = value[1:-1]
     env_values[key] = value
+
+def expand_env_value(value: str) -> str:
+    previous = value
+    for _ in range(8):
+        expanded = previous
+        for name, replacement in sorted(env_values.items(), key=lambda item: len(item[0]), reverse=True):
+            expanded = expanded.replace(chr(36) + '{' + name + '}', replacement)
+            expanded = expanded.replace(chr(36) + name, replacement)
+        if chr(36) in expanded:
+            raise SystemExit(f'unsupported variable in GENESIS_VALIDATOR_REGISTRY_PATH: {expanded}')
+        if expanded == previous:
+            return expanded
+        previous = expanded
+    raise SystemExit('GENESIS_VALIDATOR_REGISTRY_PATH variable expansion did not converge')
 
 registry_raw = env_values.get('GENESIS_VALIDATOR_REGISTRY_PATH')
 if not registry_raw:
     raise SystemExit(f'missing GENESIS_VALIDATOR_REGISTRY_PATH in {env_path}')
-registry_path = Path(registry_raw)
+registry_path = Path(expand_env_value(registry_raw))
 if not registry_path.is_absolute():
     registry_path = stack_root / registry_path
 try:

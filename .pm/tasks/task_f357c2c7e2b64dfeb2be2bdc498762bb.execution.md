@@ -113,3 +113,13 @@ Example:
 - Expected Result: Task-local workflow lint passes with replacement review evidence.
 - Actual Result: pending.
 - Blocker / Next Action: Run task-local lint and PR helper.
+
+## 2026-06-24 20:00:00 CST / tpm
+- 完成内容: Addressed PR #608 review thread about preserving startup-style env expansion for `GENESIS_VALIDATOR_REGISTRY_PATH`.
+- Review Thread: `scripts/p2p-public-testnet-rebuild-validators.sh:337`, `Preserve shell expansion when reading node.env`.
+- Action: Added controlled env expansion for `GENESIS_VALIDATOR_REGISTRY_PATH`, supporting `STACK_ROOT` / already parsed env values without sourcing or executing `node.env`; unsupported variables still fail closed. Updated the regression fixture to use `${STACK_ROOT}/config/...`.
+- 遗留事项: Commit/push the review fix, recheck unresolved threads and required checks, then merge when gates are clean.
+- Validation Command: `bash -n scripts/p2p-public-testnet-rebuild-validators.sh scripts/p2p-public-testnet-rebuild-validators.test.sh && bash scripts/p2p-public-testnet-rebuild-validators.test.sh && ./scripts/cargo-dev.sh fmt --check && ./scripts/check-rust-file-size.sh && git diff --check && ./scripts/pm/workflow-lint.sh --task-uid task_f357c2c7e2b64dfeb2be2bdc498762bb --phase current`
+- Expected Result: Script syntax, regression, formatting, file-size, diff hygiene, and task-local workflow lint pass after review fix.
+- Actual Result: passed.
+- Blocker / Next Action: Push update and resolve/recheck PR thread.

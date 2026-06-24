@@ -255,10 +255,8 @@ for host in root@sequencer root@storage; do
 NODE_ID=triad-testnet-sequencer
 NODE_VALIDATORS_CSV=triad-testnet-sequencer:100,triad-testnet-storage:100
 NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:old-sequencer-signer,triad-testnet-storage:old-storage-signer
+GENESIS_VALIDATOR_REGISTRY_PATH=${STACK_ROOT}/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json
 EOF
-  printf 'GENESIS_VALIDATOR_REGISTRY_PATH=%s\n' \
-    "$host_root/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" \
-    >>"$host_root/config/node.env"
   printf 'runtime-v2' >"$host_root/current/bin/oasis7_chain_runtime"
   cat >"$host_root/DEPLOYED_BUILDINFO" <<'EOF'
 commit=test-commit
