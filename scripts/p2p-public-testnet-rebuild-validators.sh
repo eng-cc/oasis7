@@ -458,12 +458,14 @@ cleanup_host_processes() {
 import os
 import signal
 import subprocess
+import sys
 import time
 
 stack_root = os.environ['STACK_ROOT']
 needles = (
     f'{stack_root}/current/bin/oasis7_chain_runtime',
     f'{stack_root}/bin/start-node.sh',
+    f'{stack_root}/releases/',
 )
 
 def matching_pids():
@@ -502,6 +504,11 @@ for sig in (signal.SIGTERM, signal.SIGKILL):
         except ProcessLookupError:
             pass
     time.sleep(1)
+
+remaining = matching_pids()
+if remaining:
+    print(f'cleanup failed: stack-root processes remain after SIGKILL: {remaining}', file=sys.stderr)
+    raise SystemExit(1)
 PY
 "
 }
@@ -523,13 +530,26 @@ start_host() {
 }
 
 cleanup_after_failed_start() {
-  local host=$1
-  local control_path=$2
-  local service=$3
-  local label=$4
-  local out_path=$5
-  cleanup_host_processes "$host" "$control_path" "$service" || true
+  local label=$1
+  local out_path=$2
+  if ! cleanup_started_hosts; then
+    die "$label failed checks after restart and cleanup failed; see $out_path"
+  fi
   die "$label failed checks after restart; see $out_path"
+}
+
+SEQUENCER_STARTED=0
+STORAGE_STARTED=0
+
+cleanup_started_hosts() {
+  local ok=0
+  if [[ "$SEQUENCER_STARTED" == 1 ]]; then
+    cleanup_host_processes "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE" || ok=1
+  fi
+  if [[ "$STORAGE_STARTED" == 1 ]]; then
+    cleanup_host_processes "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE" || ok=1
+  fi
+  return "$ok"
 }
 
 stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH"
@@ -538,19 +558,21 @@ stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH"
 reset_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"
 reset_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"
 
+SEQUENCER_STARTED=1
 if ! start_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"; then
-  cleanup_after_failed_start "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE" "sequencer start" "$OUT_DIR/sequencer-liveness.json"
+  cleanup_after_failed_start "sequencer start" "$OUT_DIR/sequencer-liveness.json"
 fi
 poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
-  || cleanup_after_failed_start "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE" "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
+  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
 
+STORAGE_STARTED=1
 if ! start_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"; then
-  cleanup_after_failed_start "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE" "storage start" "$OUT_DIR/storage-status.json"
+  cleanup_after_failed_start "storage start" "$OUT_DIR/storage-status.json"
 fi
 poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-status.json" "sequencer readiness" json_sequencer_ok \
-  || cleanup_after_failed_start "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE" "sequencer readiness" "$OUT_DIR/sequencer-status.json"
+  || cleanup_after_failed_start "sequencer readiness" "$OUT_DIR/sequencer-status.json"
 poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-status.json" "storage readiness" json_storage_ok \
-  || cleanup_after_failed_start "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE" "storage readiness" "$OUT_DIR/storage-status.json"
+  || cleanup_after_failed_start "storage readiness" "$OUT_DIR/storage-status.json"
 
 jq -n \
   --arg config_dir "$CONFIG_DIR" \
