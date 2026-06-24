@@ -83,3 +83,46 @@ Example:
 - Expected Result: No whitespace errors.
 - Actual Result: Passed.
 - Blocker / Next Action: Generate review package, dispatch pre-PR local role review for involved roles, then closeout and create PR.
+
+## 2026-06-24 20:50:30 CST / tpm
+- Review Trigger: pre-PR local role review
+- Review Scope: `crates/pixel_world_bridge/src/host_state.rs`; `crates/pixel_world_bridge/src/lib.rs`; `crates/pixel_world_bridge/src/lib_tests.rs`; `crates/pixel_world_bridge/src/render.rs`; task evidence files for `task_31ee2a7dc18e4f578f2fd5ebcc87800d`
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-next-governance-20260624g/.pm/scratch/task_31ee2a7dc18e4f578f2fd5ebcc87800d/review-packages/review-e4e7d6365..e7d147fb7.diff`
+- Review Roles: viewer_engineer, runtime_engineer, wasm_platform_engineer, qa_engineer, repository_health_engineer
+- Review Question: Confirm the `pixel_world_bridge` focused Clippy cleanup is behavior-preserving, keeps Bevy `render_scene` system registration valid, does not change viewer wire/API/visual semantics, and has sufficient verification for PR creation.
+- Evidence Available: `cargo fmt --check -p pixel_world_bridge` passed; `cargo clippy -p pixel_world_bridge --lib --tests -- -D warnings` passed; `cargo test -p pixel_world_bridge --lib -- --nocapture` passed with 21 tests; `cargo check -p pixel_world_bridge --target wasm32-unknown-unknown` passed; `git diff --check` passed.
+- Expected Return Contract: findings or no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk
+- Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-next-governance-20260624g/.pm/scratch/task_31ee2a7dc18e4f578f2fd5ebcc87800d/slice-ledger.jsonl`
+- Formal Sink: this execution log
+
+## 2026-06-24 20:54:59 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_31ee2a7dc18e4f578f2fd5ebcc87800d
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-next-governance-20260624g
+- Source Branch: task/engineering-repository-health-next-governance-20260624g
+- Source Head: e7d147fb7909e1b5e24ab20e8548c31fe0d518de
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_31ee2a7dc18e4f578f2fd5ebcc87800d.yaml; .pm/tasks/task_31ee2a7dc18e4f578f2fd5ebcc87800d.execution.md; crates/pixel_world_bridge/src/host_state.rs; crates/pixel_world_bridge/src/lib.rs; crates/pixel_world_bridge/src/lib_tests.rs; crates/pixel_world_bridge/src/render.rs
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-next-governance-20260624g/.pm/scratch/task_31ee2a7dc18e4f578f2fd5ebcc87800d/review-packages/review-e4e7d6365..e7d147fb7.diff
+- Role Selection Basis: changed `crates/pixel_world_bridge` viewer bridge Rust code, including Bevy render system parameters and WASM-facing bridge compile surface; task is repository-health governance; PR readiness claim depends on focused verification. Included viewer_engineer, runtime_engineer, wasm_platform_engineer, qa_engineer, repository_health_engineer.
+- Review Roles: viewer_engineer, runtime_engineer, wasm_platform_engineer, qa_engineer, repository_health_engineer
+- Review Evidence: viewer_engineer `019ef9af-7963-7571-ad64-0ac64d8aa64d` no_findings; runtime_engineer `019ef9af-88e5-72a3-aa1e-a232b8832deb` no_findings; wasm_platform_engineer `019ef9af-c8cf-7a02-803b-af84c31b9bcd` no_findings; qa_engineer `019ef9af-eff2-7a20-af4b-c5063811d7e2` no_findings; repository_health_engineer `019ef9b0-09bf-7732-acc5-56bab0ca6e8a` no_findings.
+- Review Verdicts: viewer scope/spec passed and no wire/API/visual semantic change found; runtime scope/spec passed and replay/recovery/checkpoint/long-run exemption accepted; WASM scope/spec passed and wasm target compile/API surface evidence sufficient; QA verification matrix sufficient for PR creation; repository-health scope bounded and evidence acceptable.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no review findings required code changes; broader follow-up candidates remain separate: unsafe usage ratchet and WASM determinism/pre-PR role-selection drift.
+- Verification Matrix: pixel_world_bridge formatting -> `env -u RUSTC_WRAPPER cargo fmt --check -p pixel_world_bridge` passed; focused Clippy gate -> `env -u RUSTC_WRAPPER cargo clippy -p pixel_world_bridge --lib --tests -- -D warnings` passed; viewer bridge behavior/registerability -> `env -u RUSTC_WRAPPER cargo test -p pixel_world_bridge --lib -- --nocapture` passed with 21 tests; WASM-facing compile surface -> `env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown` passed; whitespace -> `git diff --check` passed; runtime/replay/recovery/checkpoint/long-run -> not applicable; explicit exemption reason: cleanup is viewer bridge lint refactor and does not alter authoritative runtime state, replay, recovery, checkpoint, persistence, or long-run scheduling.
+- Visual Evidence: n/a with exemption reason: no UI layout, art asset, screenshot, browser rendering output, or player-visible visual design changed; existing render tests covered system registration and rasterization behavior.
+- WASM Evidence: `env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown` passed; no generated bindings or WASM package artifacts changed.
+- Ops Evidence: n/a with reason: no deployment, node ops, packaging, rollback, health baseline, or operator runbook changed.
+- LiveOps Evidence: n/a with reason: no external messaging, incident response, release note, player promise, or community channel surface changed.
+- Residual Risk: Low; `SystemParam` grouping changes the Rust function signature but keeps query types, filters, iteration order, and direct Bevy system registration covered by tests. Full browser/WebGL smoke is deferred because this task does not change JS packaging or browser runtime behavior.
+- Slice Ledger: n/a with reason: `slice-ledger.sh --print` returned the intended path, but the file did not exist during review; execution log remains the formal sink.
+
+## 2026-06-24 20:56:25 CST / tpm
+- 完成内容: Task closeout ran and marked task `task_31ee2a7dc18e4f578f2fd5ebcc87800d` done after fresh verification succeeded.
+- 遗留事项: Commit closeout evidence, run PR preflight/create, then watch PR checks/comments/mergeability through merge and cleanup.
+- Action: Ran `./scripts/pm/task-closeout.sh --role tpm --task-uid task_31ee2a7dc18e4f578f2fd5ebcc87800d --verify-command "<focused verification chain>"`. The task yaml now records `last_verification_exit_code: 0`, `last_verification_status: verified`, and `last_closed_at: 2026-06-24T20:55:57+08:00`; the tpm committed backlog entry was removed.
+- Validation Command: `env -u RUSTC_WRAPPER cargo fmt --check -p pixel_world_bridge && env -u RUSTC_WRAPPER cargo clippy -p pixel_world_bridge --lib --tests -- -D warnings && env -u RUSTC_WRAPPER cargo test -p pixel_world_bridge --lib -- --nocapture && env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown && git diff --check`
+- Expected Result: Fresh focused formatter, Clippy, lib tests, wasm target check, and whitespace check all pass.
+- Actual Result: Verification command exited 0 and was recorded by task closeout as verified. The subsequent repo-wide `.pm` lint phase failed on pre-existing unrelated historical task-log entries outside this task; task-scoped `./scripts/pm/workflow-lint.sh --task-uid task_31ee2a7dc18e4f578f2fd5ebcc87800d --phase current` passed.
+- Blocker / Next Action: Commit the final closeout/review evidence and continue to `prepare-task-pr.sh --create`.
