@@ -10,6 +10,7 @@ source_refs:
   - doc/engineering/workflow/source-of-truth.md
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Record bootstrap and route decisions in the task execution log."
