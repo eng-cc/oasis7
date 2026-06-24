@@ -1,0 +1,22 @@
+task_uid: task_d800ad6e8de1473b8019f3eeb028f820
+title: "Clean oasis7_wasm_abi focused Clippy debt"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-code-health-inspection-20260624a
+execution_log_path: .pm/tasks/task_d800ad6e8de1473b8019f3eeb028f820.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/project.md
+  - crates/oasis7_wasm_abi/src/lib.rs
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-025
+acceptance:
+  - "Dispatch a bounded repository_health_engineer Rust code-health inspection slice and record findings/no_findings in the task execution log."
+  - "If a valid Rust code-level governance issue is found, apply a focused fix with verification and prepare it for the normal PR watch/merge path."
+handoff_to: []
+updated_at: 2026-06-24T08:59:27+08:00
+last_started_at: 2026-06-24T08:59:27+08:00

@@ -23,7 +23,7 @@ impl ModuleKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModuleLimits {
     pub max_mem_bytes: u64,
     pub max_gas: u64,
@@ -39,7 +39,7 @@ pub struct ModuleArtifact {
     pub bytes: Arc<[u8]>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ModuleArtifactIdentity {
     pub source_hash: String,
     pub build_manifest_hash: String,
@@ -84,18 +84,6 @@ impl ModuleArtifactIdentity {
     }
 }
 
-impl Default for ModuleArtifactIdentity {
-    fn default() -> Self {
-        Self {
-            source_hash: String::new(),
-            build_manifest_hash: String::new(),
-            signer_node_id: String::new(),
-            signature_scheme: String::new(),
-            artifact_signature: String::new(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleCache {
     max_cached_modules: usize,
@@ -118,6 +106,10 @@ impl ModuleCache {
 
     pub fn len(&self) -> usize {
         self.cache.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.cache.is_empty()
     }
 
     pub fn set_max_cached_modules(&mut self, max_cached_modules: usize) {
@@ -165,19 +157,6 @@ impl Default for ModuleCache {
     }
 }
 
-impl Default for ModuleLimits {
-    fn default() -> Self {
-        Self {
-            max_mem_bytes: 0,
-            max_gas: 0,
-            max_call_rate: 0,
-            max_output_bytes: 0,
-            max_effects: 0,
-            max_emits: 0,
-        }
-    }
-}
-
 impl ModuleLimits {
     pub fn unbounded() -> Self {
         Self {
@@ -205,45 +184,33 @@ pub struct ModuleSubscription {
 
 impl ModuleSubscription {
     pub fn resolved_stage(&self) -> ModuleSubscriptionStage {
-        self.stage.unwrap_or_else(|| {
-            if !self.event_kinds.is_empty() {
-                ModuleSubscriptionStage::PostEvent
-            } else {
-                ModuleSubscriptionStage::PreAction
-            }
+        self.stage.unwrap_or(if !self.event_kinds.is_empty() {
+            ModuleSubscriptionStage::PostEvent
+        } else {
+            ModuleSubscriptionStage::PreAction
         })
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ModuleSubscriptionStage {
     PreAction,
     PostAction,
+    #[default]
     PostEvent,
     Tick,
 }
 
-impl Default for ModuleSubscriptionStage {
-    fn default() -> Self {
-        ModuleSubscriptionStage::PostEvent
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ModuleRole {
     Rule,
+    #[default]
     Domain,
     Gameplay,
     Body,
     AgentInternal,
-}
-
-impl Default for ModuleRole {
-    fn default() -> Self {
-        ModuleRole::Domain
-    }
 }
 
 #[derive(
