@@ -1,0 +1,28 @@
+task_uid: task_83f1958990ca4796bea3d3a6ff3266aa
+title: "Find and remediate next engineering governance issue"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-next-governance-issue-5
+execution_log_path: .pm/tasks/task_83f1958990ca4796bea3d3a6ff3266aa.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-025
+acceptance:
+  - "Repository-health slice identifies one current actionable engineering governance issue with evidence."
+  - "The bounded remediation is applied in the task worktree and traced in doc/engineering/project.md when repository state changes."
+  - "Verification, local role review, PR creation, CI watch, merge, and cleanup complete under the repo-owned workflow."
+handoff_to: []
+updated_at: 2026-06-24T17:04:30+08:00
+last_started_at: 2026-06-24T16:43:58+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/doc-governance-check.sh
+last_verified_at: 2026-06-24T17:04:28+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-24T17:04:29+08:00
