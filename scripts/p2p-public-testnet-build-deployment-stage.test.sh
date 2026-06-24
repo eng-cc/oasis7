@@ -30,6 +30,9 @@ jq -e '
 jq -e '.runtime_build.sha256 != null and .governance_manifest.sha256 != null' \
   "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
 
+jq -e '.track == "public_testnet_rehearsal"' \
+  "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
+
 jq -e '
   .runtime_refs.release_candidate_bundle_ref == "public-testnet-governed-bootstrap-bundle-2026-06-06.json"
   and .runtime_refs.genesis_ref == "public-testnet-governed-bootstrap-genesis-2026-06-06.json"

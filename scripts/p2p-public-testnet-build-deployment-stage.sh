@@ -9,14 +9,16 @@ Usage:
     --bootstrap-peers-file <path> \
     --sequencer-node-keypair <path> \
     --storage-node-keypair <path> \
-    --out-dir <path>
+    --out-dir <path> \
+    [--track public_testnet_rehearsal|staging|canary]
 
   ./scripts/p2p-public-testnet-build-deployment-stage.sh \
     --runtime-build-ref <path> \
     --bootstrap-peers-file <path> \
     --sequencer-public-key <hex> \
     --storage-public-key <hex> \
-    --out-dir <path>
+    --out-dir <path> \
+    [--track public_testnet_rehearsal|staging|canary]
 
 Description:
   Build a deployment-only public_testnet stage from the current validator
@@ -69,7 +71,7 @@ out_dir=""
 base_genesis="doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json"
 base_manifest="doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json"
 candidate_id="public-testnet-governed-bootstrap-20260606"
-track="public_testnet"
+track="public_testnet_rehearsal"
 sequencer_node_id="triad-testnet-sequencer"
 storage_node_id="triad-testnet-storage"
 stake="100"
