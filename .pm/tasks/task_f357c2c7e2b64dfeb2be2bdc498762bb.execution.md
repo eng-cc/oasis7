@@ -58,10 +58,10 @@ Example:
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `scripts/p2p-public-testnet-rebuild-validators.sh`; `scripts/p2p-public-testnet-rebuild-validators.test.sh`; `doc/p2p/project.md`; `.pm/tasks/task_f357c2c7e2b64dfeb2be2bdc498762bb.yaml`; `.pm/tasks/task_f357c2c7e2b64dfeb2be2bdc498762bb.execution.md`
 - Review Package: n/a; full changed files reviewed in task worktree by bounded subagent slices.
-- Role Selection Basis: public-testnet deployment/rebuild script changed; runtime startup signer/hash binding contract changed; verification/test coverage changed; project trace wording changed.
-- Review Roles: blockchain_ops_engineer, runtime_engineer, qa_engineer, producer_system_designer
-- Review Evidence: blockchain_ops_engineer `019ef90b-4631-7a42-b84d-56999c115021` returned `no_findings`; runtime_engineer initial `019ef90b-611b-7430-8410-cbbbde1ba2ad` findings were fixed and focused re-review `019ef911-22d6-7333-b5b3-de8aeb3c6f22` returned `no_findings`; qa_engineer initial `019ef90b-7aa8-75d3-9e86-ed41a7bb4e13` findings were fixed and focused re-review `019ef911-3b91-7f83-b9d5-43f4d6adcc55` returned `no_findings`; producer_system_designer focused wording review returned `no_findings`.
-- Review Verdicts: blockchain ops scope/spec passed and rollout risk acceptable; runtime previous startup-truth finding resolved with low-to-medium residual risk; QA previous test adequacy findings resolved with low residual risk; producer/system wording avoids claiming public testnet health, avoids treating ops restart/reset as the fix, and accurately states the deployment-script root-cause fix.
+- Role Selection Basis: public-testnet deployment/rebuild script changed; runtime startup signer/hash binding contract changed; verification/test coverage changed; module project trace was added after helper preflight required a one-hop task trace.
+- Review Roles: blockchain_ops_engineer, runtime_engineer, qa_engineer
+- Review Evidence: blockchain_ops_engineer `019ef90b-4631-7a42-b84d-56999c115021` returned `no_findings`; runtime_engineer initial `019ef90b-611b-7430-8410-cbbbde1ba2ad` findings were fixed and focused re-review `019ef911-22d6-7333-b5b3-de8aeb3c6f22` returned `no_findings`; qa_engineer initial `019ef90b-7aa8-75d3-9e86-ed41a7bb4e13` findings were fixed and focused re-review `019ef911-3b91-7f83-b9d5-43f4d6adcc55` returned `no_findings`.
+- Review Verdicts: blockchain ops scope/spec passed and rollout risk acceptable; runtime previous startup-truth finding resolved with low-to-medium residual risk; QA previous test adequacy findings resolved with low residual risk.
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: `sync_staged_deployment_truth` now parses exact `GENESIS_VALIDATOR_REGISTRY_PATH` from `config/node.env`; regression test executes the real remote Python heredoc, includes a sorted-first stale registry decoy, and checks sequencer/storage top-level plus `config/doc/testing/evidence` governed bundles.
 - Verification Matrix: rebuild script syntax -> `bash -n scripts/p2p-public-testnet-rebuild-validators.sh scripts/p2p-public-testnet-rebuild-validators.test.sh` passed; stale signer/runtime hash regression -> `bash scripts/p2p-public-testnet-rebuild-validators.test.sh` passed; formatting -> `./scripts/cargo-dev.sh fmt --check` passed; file size -> `./scripts/check-rust-file-size.sh` passed; diff hygiene -> `git diff --check` passed; workflow packet -> `./scripts/pm/workflow-lint.sh --task-uid task_f357c2c7e2b64dfeb2be2bdc498762bb --phase current` passed.
@@ -79,14 +79,37 @@ Example:
 - Blocker / Next Action: Commit and create PR; current task-specific workflow lint remains the authoritative task-local gate.
 
 ## 2026-06-24 18:34:00 CST / tpm
-- 完成内容: Recorded focused producer/system wording review for the project trace and task evidence.
+- 完成内容: Recorded the project-trace review dispatch limitation after the first producer/system subagent did not return.
 - Review Trigger: focused producer_system_designer review requested for `doc/p2p/project.md` recent-completed trace line plus task evidence.
-- Review Evidence: producer_system_designer focused review returned `no_findings`; verdict: the wording avoids claiming the public testnet is already healthy, does not treat an ops restart/reset as the fix, and accurately states the deployment-script root-cause fix as startup signer truth plus package runtime_build truth synchronization before node start.
-- Residual Risk: Low. The trace remains intentionally scoped to the deployment-script correction; live testnet health must still be proven by the subsequent clean rebuild and node health checks.
-- 遗留事项: Refresh task-local workflow lint after adding review evidence, commit the doc trace/evidence, create PR, watch checks/comments, merge, and rerun clean validator rebuild.
+- Intended Dispatch: producer_system_designer wording review for no overclaim/no ops-only-fix semantics.
+- Actual Limitation: subagent `019ef96d-38af-72f3-aa75-bff20a42c3fb` timed out twice and was closed while still running; no producer_system_designer conclusion is attributed from that slice.
+- Attribution Boundary: TPM only records mechanical trace evidence here; this entry does not claim a professional producer/system verdict.
+- 遗留事项: Await replacement focused producer/system review, refresh task-local workflow lint, commit the doc trace/evidence, create PR, watch checks/comments, merge, and rerun clean validator rebuild.
+- Action: Spawned replacement focused producer/system review with minimal context.
+- Validation Command: n/a
+- Expected Result: Replacement review returns findings/no_findings, or any limitation is recorded before PR creation.
+- Actual Result: pending replacement review.
+- Blocker / Next Action: Integrate replacement producer/system review result.
 
 ## 2026-06-24 18:42:00 CST / tpm
 - 完成内容: Rebased the task branch onto latest `origin/main` and refreshed the ready-for-PR verification matrix.
+- 遗留事项: Need replacement producer/system review result and PR helper rerun.
+- Action: Ran the verification matrix after rebase/doc trace changes.
 - Validation Command: `bash -n scripts/p2p-public-testnet-rebuild-validators.sh scripts/p2p-public-testnet-rebuild-validators.test.sh && bash scripts/p2p-public-testnet-rebuild-validators.test.sh && ./scripts/cargo-dev.sh fmt --check && ./scripts/check-rust-file-size.sh && git diff --check && ./scripts/pm/workflow-lint.sh --task-uid task_f357c2c7e2b64dfeb2be2bdc498762bb --phase current`
 - Expected Result: Script syntax, regression test, formatting, file-size, diff hygiene, and task-local workflow lint pass on the rebased branch.
 - Actual Result: passed.
+- Blocker / Next Action: Await replacement producer/system review.
+
+## 2026-06-24 19:52:00 CST / tpm
+- 完成内容: Integrated replacement producer/system review result for the project trace wording.
+- Review Trigger: replacement focused producer_system_designer review for `doc/p2p/project.md` recent-completed trace line plus task evidence.
+- Review Evidence: producer_system_designer `019ef977-bc8c-7ee0-9023-150481b2b67e` returned `no_findings`.
+- Review Verdicts: Wording is acceptable; it does not claim public testnet is already healthy, does not treat restart/reset as the fix, and accurately frames the durable deployment-script correction as deriving startup signer truth from `GENESIS_VALIDATOR_REGISTRY_PATH`, rewriting `NODE_VALIDATOR_SIGNERS_CSV`, and updating governed bundle `runtime_build` from installed runtime/buildinfo before node start.
+- Review Findings Disposition: no_findings
+- Residual Risk: Low; actual post-merge/package/rebuild health validation remains a separate live validation step.
+- 遗留事项: Refresh task-local workflow lint, commit doc trace/evidence, create PR, watch checks/comments, merge, and rerun clean validator rebuild.
+- Action: Record producer/system review result and continue PR creation.
+- Validation Command: pending.
+- Expected Result: Task-local workflow lint passes with replacement review evidence.
+- Actual Result: pending.
+- Blocker / Next Action: Run task-local lint and PR helper.
