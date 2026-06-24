@@ -88,3 +88,14 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_81577d7e86df4cd0b7bbb1c4d08ad019.yaml
+  - task_uid: task_b442769f7ef74d01894f4b8405c21301
+    title: "Find next Rust dependency governance issue"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "Repository health slice identifies the next actionable Rust dependency governance issue with evidence."
+      - "Task execution log records slice contract, findings, recommended owner, and follow-up path."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml

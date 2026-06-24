@@ -9,16 +9,30 @@ yanked = "deny"
 ignore = [
   # Baseline existing dependency advisories; required CI should block net-new advisories
   # while these are burned down in follow-up dependency modernization tasks.
+  # Each ignore must keep a `rustsec-ignore` metadata line immediately above it.
+  # `scripts/check-rustsec-ignore-baseline.sh` fails on missing metadata, expired
+  # metadata, or unreviewed changes to the approved ignore set.
+  # rustsec-ignore: owner=repository_health_engineer; scope=workspace serde_cbor serialization debt; reason=legacy serde_cbor remains in protocol/runtime data paths pending serialization migration; expiry=2026-09-30; validation=cargo deny check advisories
   "RUSTSEC-2021-0127", # serde_cbor unmaintained
+  # rustsec-ignore: owner=repository_health_engineer; scope=transitive UI/time compatibility debt; reason=instant is pulled transitively by existing UI/network dependency closure and needs upstream modernization rather than local patching; expiry=2026-09-30; validation=cargo tree -i instant
   "RUSTSEC-2024-0384", # instant unmaintained
+  # rustsec-ignore: owner=repository_health_engineer; scope=transitive macro dependency debt; reason=paste remains in the current dependency closure and should be removed by upstream crate modernization; expiry=2026-09-30; validation=cargo tree -i paste
   "RUSTSEC-2024-0436", # paste unmaintained
+  # rustsec-ignore: owner=repository_health_engineer; scope=oasis7_net libp2p TLS/QUIC closure; reason=ring 0.16.20 arrives through libp2p-tls/quic and requires coordinated libp2p upgrade validation; expiry=2026-08-31; validation=cargo tree -p oasis7_net -i ring@0.16.20 --features libp2p
   "RUSTSEC-2025-0009", # ring <0.17 vulnerability via libp2p TLS stack
+  # rustsec-ignore: owner=repository_health_engineer; scope=oasis7_net libp2p TLS/QUIC closure; reason=ring 0.16.20 arrives through libp2p-tls/quic and requires coordinated libp2p upgrade validation; expiry=2026-08-31; validation=cargo tree -p oasis7_net -i ring@0.16.20 --features libp2p
   "RUSTSEC-2025-0010", # ring <0.17 unmaintained via libp2p TLS stack
+  # rustsec-ignore: owner=repository_health_engineer; scope=async-openai retry dependency closure; reason=backoff is pulled by async-openai and should be burned down with provider/client dependency modernization; expiry=2026-09-30; validation=cargo tree -i backoff
   "RUSTSEC-2025-0012", # backoff unmaintained via async-openai
+  # rustsec-ignore: owner=repository_health_engineer; scope=oasis7_net libp2p executor closure; reason=async-std is used by current libp2p async-std executor path and removal is a runtime migration; expiry=2026-08-31; validation=cargo tree -p oasis7_net -i async-std --features libp2p
   "RUSTSEC-2025-0052", # async-std discontinued via libp2p stack
+  # rustsec-ignore: owner=repository_health_engineer; scope=oasis7_net libp2p TLS/QUIC closure; reason=rustls-webpki 0.101.7 arrives through libp2p-tls/quic and requires coordinated libp2p upgrade validation; expiry=2026-08-31; validation=cargo tree -p oasis7_net -i rustls-webpki@0.101.7 --features libp2p
   "RUSTSEC-2026-0098", # rustls-webpki via libp2p TLS stack
+  # rustsec-ignore: owner=repository_health_engineer; scope=oasis7_net libp2p TLS/QUIC closure; reason=rustls-webpki 0.101.7 arrives through libp2p-tls/quic and requires coordinated libp2p upgrade validation; expiry=2026-08-31; validation=cargo tree -p oasis7_net -i rustls-webpki@0.101.7 --features libp2p
   "RUSTSEC-2026-0099", # rustls-webpki via libp2p TLS stack
+  # rustsec-ignore: owner=repository_health_engineer; scope=oasis7_net libp2p TLS/QUIC closure; reason=rustls-webpki 0.101.7 arrives through libp2p-tls/quic and requires coordinated libp2p upgrade validation; expiry=2026-08-31; validation=cargo tree -p oasis7_net -i rustls-webpki@0.101.7 --features libp2p
   "RUSTSEC-2026-0104", # rustls-webpki via libp2p TLS stack
+  # rustsec-ignore: owner=repository_health_engineer; scope=oasis7_net libp2p DNS closure; reason=hickory-proto 0.24.4 arrives through libp2p-dns and libp2p 0.55/0.56 migration needs runtime and ops validation; expiry=2026-08-31; validation=cargo tree -p oasis7_net -i hickory-proto@0.24.4 --features libp2p
   "RUSTSEC-2026-0119", # hickory-proto via libp2p DNS stack
 ]
 
