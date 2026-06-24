@@ -716,7 +716,9 @@ impl ClientLauncherApp {
         self.control_plane_snapshot_received = true;
         self.web_game_url = Some(snapshot.game_url);
         if self.config_dirty {
-            if self.config == snapshot_config {
+            let mut local_config = self.config.clone();
+            local_config.normalize();
+            if local_config == snapshot_config {
                 self.config_dirty = false;
             }
         } else {
