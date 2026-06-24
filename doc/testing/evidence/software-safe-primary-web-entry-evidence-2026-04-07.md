@@ -23,6 +23,7 @@
   - 复采链路使用 `config.toml` 中的 `base_url=https://api.letai.run/v1` 与 `model=gpt-5.4-mini`
   - 首次复采先暴露出 provider 兼容性缺口：该兼容层要求 list-shaped `Responses API input`、必须走 stream，而且完整 function call 只出现在 `response.output_item.done`，`response.completed.response.output` 会保持空数组
   - 对 `crates/oasis7/src/simulator/llm_agent/openai_payload.rs` 与 `crates/oasis7/src/simulator/llm_agent.rs` 补齐 stream/output-item 聚合后，再次复采已通过
+- 2026-06-24 addendum：Viewer entry reason contract 已统一到 `direct_viewer_entry`；本证据文件不再复述旧 artifact URL 中的 obsolete reason query label，避免后续治理继续把旧 label 当作当前模式，同时也不把 2026-04-07 采集结果改写成新 contract。
 - 因此当前可确认的真实状态是:
   - `software_safe` 已是低保真但正式可玩的主要 Web 入口的正确目标 surface
   - `software_safe` formal gameplay 已取得 release-grade PASS 证据；后续剩余工作主要是同步 README/current-entry/release claim 口径，而不是继续补主入口或 LLM provider 可达性
@@ -43,10 +44,9 @@
   - Overall: `pass`
   - Formal gameplay entry (`/`): `software_safe`
   - Auto entry (`?render_mode=auto`): `software_safe`
-- 默认 `/` 最终 URL:
-  - `http://127.0.0.1:4273/software_safe.html?...&render_mode=software_safe&software_safe_reason=primary_web_entry`
-- `render_mode=auto` 最终 URL:
-  - `http://127.0.0.1:4273/software_safe.html?...&render_mode=software_safe&software_safe_reason=auto_primary_web_entry`
+- 2026-04-07 artifact 中的最终 URL:
+  - 仍以 `output/playwright/viewer-primary-web-entry/viewer-primary-web-entry-20260407-235000` 的 archived summary / trace 为历史证据真值。
+  - 当前文档不再复述其中的 obsolete reason query label；2026-06-24 之后的当前 reason contract 见 task `task_0b89a0662ac94e9aa4b6de7214b6becb` 与 fresh regression evidence。
 - 对应截图:
   - `output/playwright/viewer-primary-web-entry/viewer-primary-web-entry-20260407-235000/default-entry.png`
   - `output/playwright/viewer-primary-web-entry/viewer-primary-web-entry-20260407-235000/auto-entry.png`
