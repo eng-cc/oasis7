@@ -1,0 +1,28 @@
+task_uid: task_6b2fff9186a844a4b427f21ecf90822a
+title: "Clean up wasm executor focused Clippy debt"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-next-issue-20260624c
+execution_log_path: .pm/tasks/task_6b2fff9186a844a4b427f21ecf90822a.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-001
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-025
+acceptance:
+  - "Dispatch a bounded repository_health_engineer inspection slice and record findings/no_findings in the task execution log."
+  - "If a valid focused governance issue is found, apply the smallest safe fix with verification and prepare it for the normal PR watch/merge path."
+handoff_to: []
+updated_at: 2026-06-24T12:47:37+08:00
+last_started_at: 2026-06-24T12:01:46+08:00
+last_claim_type: task_complete
+last_verify_command: "env -u RUSTC_WRAPPER cargo fmt --check && env -u RUSTC_WRAPPER cargo clippy -p oasis7_wasm_executor --lib -- -D warnings && env -u RUSTC_WRAPPER cargo clippy -p oasis7_wasm_executor --lib --features wasmtime -- -D warnings && env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --lib && env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --lib --features wasmtime && ./scripts/check-rust-file-size.sh && ./scripts/pm/workflow-lint.sh --task-uid task_6b2fff9186a844a4b427f21ecf90822a --phase current && git diff --check"
+last_verified_at: 2026-06-24T12:47:36+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-24T12:47:37+08:00

@@ -629,9 +629,7 @@ impl ModuleSandbox for WasmExecutor {
         #[cfg(feature = "wasmtime")]
         {
             let result = (|| {
-                if let Err(failure) = self.validate_request_limits(request) {
-                    return Err(failure);
-                }
+                self.validate_request_limits(request)?;
 
                 if request.wasm_bytes.is_empty() {
                     return Err(self.failure(
@@ -773,11 +771,11 @@ impl ModuleSandbox for WasmExecutor {
                 }
                 if input_len > 0 {
                     const WASM_PAGE_SIZE: u64 = 65_536;
-                    let current_pages = memory.size(&store) as u64;
+                    let current_pages = memory.size(&store);
                     let current_size = current_pages.saturating_mul(WASM_PAGE_SIZE);
                     let needed_size = (input_ptr as u64).saturating_add(input_len as u64);
                     if needed_size > current_size {
-                        let required_pages = (needed_size + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
+                        let required_pages = needed_size.div_ceil(WASM_PAGE_SIZE);
                         let delta = required_pages.saturating_sub(current_pages);
                         if delta > 0 {
                             memory.grow(&mut store, delta).map_err(|err| {
@@ -913,7 +911,7 @@ impl ModuleSandbox for WasmExecutor {
                 elapsed_ms(total_started),
                 result.as_ref().err().map(|failure| failure.code.clone()),
             );
-            return result;
+            result
         }
 
         #[cfg(not(feature = "wasmtime"))]
@@ -929,7 +927,7 @@ impl ModuleSandbox for WasmExecutor {
                 elapsed_ms(total_started),
                 result.as_ref().err().map(|failure| failure.code.clone()),
             );
-            return result;
+            result
         }
     }
 }

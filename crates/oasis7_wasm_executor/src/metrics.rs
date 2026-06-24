@@ -118,6 +118,7 @@ pub fn snapshot_global_wasm_executor_metrics() -> WasmExecutorMetricsSnapshot {
     snapshot_wasm_executor_metrics(&shared)
 }
 
+#[cfg(feature = "wasmtime")]
 pub fn observe_wasm_executor_compile(
     metrics: &SharedWasmExecutorMetrics,
     cache_path: CompileCachePathKind,
@@ -142,6 +143,7 @@ pub fn observe_wasm_executor_compile(
     locked.deserialize_ms_total = locked.deserialize_ms_total.saturating_add(deserialize_ms);
 }
 
+#[cfg(feature = "wasmtime")]
 pub fn observe_wasm_executor_instantiate(metrics: &SharedWasmExecutorMetrics, instantiate_ms: u64) {
     let Ok(mut locked) = metrics.lock() else {
         return;
@@ -149,6 +151,7 @@ pub fn observe_wasm_executor_instantiate(metrics: &SharedWasmExecutorMetrics, in
     locked.instantiate_ms_total = locked.instantiate_ms_total.saturating_add(instantiate_ms);
 }
 
+#[cfg(feature = "wasmtime")]
 pub fn observe_wasm_executor_entrypoint_call(
     metrics: &SharedWasmExecutorMetrics,
     entrypoint_call_ms: u64,
@@ -161,6 +164,7 @@ pub fn observe_wasm_executor_entrypoint_call(
         .saturating_add(entrypoint_call_ms);
 }
 
+#[cfg(feature = "wasmtime")]
 pub fn observe_wasm_executor_decode(metrics: &SharedWasmExecutorMetrics, decode_ms: u64) {
     let Ok(mut locked) = metrics.lock() else {
         return;
