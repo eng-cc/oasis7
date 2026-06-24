@@ -14,7 +14,7 @@ related_prd: []
 acceptance:
   - "validator rebuild cleanup disables pending systemd restart loops before sweeping stack-root processes"
   - "regression test covers delayed detached runtime after service failure/restart"
-  - "public testnet rebuild rerun no longer leaves orphan runtime on readiness failure"
+  - "validator rebuild cleanup fails closed or quiesces restart-loop detached runtime in regression coverage; live public testnet rerun remains a post-merge validation gate"
 handoff_to: []
 updated_at: 2026-06-25T00:04:58+08:00
 last_started_at: 2026-06-24T23:44:33+08:00
