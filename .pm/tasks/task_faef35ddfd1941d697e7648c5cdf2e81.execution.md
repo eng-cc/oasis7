@@ -256,3 +256,12 @@ Example:
 - Actual Result: `no_findings`. LiveOps/community review confirmed the changed surface is internal repository-health governance reporting and manual inspection guidance only, with no external messaging, community-facing commitments, player promises, release-note obligations, channel runbooks, status-page language, or liveops response work.
 - Review Verdicts: liveops/community scope compliance: passed; role quality/risk: passed; PR can proceed from liveops/community perspective.
 - Residual Risk: Low indirect risk only; future governance findings could inform external comms if they reveal release-impacting dependency/security work, but this PR itself does not publish or promise anything externally.
+
+## 2026-06-24 17:33:00 CST / tpm
+- 完成内容: Added project Trace and claim-ready evidence required by PR preflight.
+- 遗留事项: Commit the evidence update and rerun `./scripts/prepare-task-pr.sh --create`.
+- Action: Added `rust-governance-duplicate-report-ratchet` to `doc/engineering/project.md` with Trace to `.pm/tasks/task_faef35ddfd1941d697e7648c5cdf2e81.yaml`. Ran claim-ready helper for the ready-for-PR assertion.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_faef35ddfd1941d697e7648c5cdf2e81 --phase current && ./scripts/doc-governance-check.sh && git diff --check" --json`
+- Expected Result: Fresh PR-readiness verification succeeds and emits claim-ready evidence.
+- Actual Result: Passed with JSON status `verified`, `verification_exit_code: 0`, and `allowed_to_claim: true`; verified at `2026-06-24T17:33:00+08:00`.
+- Blocker / Next Action: No claim-ready blocker. Commit Trace/evidence update and rerun PR creation helper.
