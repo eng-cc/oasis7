@@ -171,6 +171,15 @@ enum LiveLoopIterationAction {
     Stop,
 }
 
+fn normalize_live_loop_action_result(
+    result: Result<LiveLoopIterationAction, ViewerLiveServerError>,
+) -> Result<LiveLoopIterationAction, ViewerLiveServerError> {
+    match result {
+        Err(err) if err.is_disconnect() => Ok(LiveLoopIterationAction::Stop),
+        result => result,
+    }
+}
+
 const LIVE_LOOP_QUEUE_CAPACITY: usize = 256;
 const STEP_REQUEST_CONSENSUS_RETRY_MAX_ATTEMPTS: usize = 100;
 const STEP_REQUEST_CONSENSUS_RETRY_SLEEP: Duration = Duration::from_millis(20);
@@ -277,128 +286,124 @@ impl ViewerLiveServer {
             };
             let signal_kind = signal.kind();
             let signal_started_at = Instant::now();
-            let action_result: Result<LiveLoopIterationAction, ViewerLiveServerError> = match signal
-            {
-                LiveLoopSignal::Request(command) => {
-                    let was_emitting = session.should_emit_event();
-                    let outcome = session.handle_request(
-                        command,
-                        &mut writer,
-                        &mut self.world,
-                        &self.config.world_id,
-                    )?;
-                    if outcome.request_llm_decision {
-                        enqueue_coalesced_signal(
-                            &loop_tx,
-                            LiveLoopSignal::LlmDecisionRequested,
-                            &llm_signal_queued,
-                            CoalescedSignalKind::LlmDecisionRequested,
-                            backpressure.as_ref(),
-                        );
-                    }
-                    if let Some(control) = outcome.deferred_control {
-                        let ViewerLiveDeferredControl::Step { count, request_id } = control;
-                        if loop_tx
-                            .send(LiveLoopSignal::StepRequested { count, request_id })
-                            .is_ok()
+            let action_result: Result<LiveLoopIterationAction, ViewerLiveServerError> = (|| {
+                match signal {
+                    LiveLoopSignal::Request(command) => {
+                        let was_emitting = session.should_emit_event();
+                        let outcome = session.handle_request(
+                            command,
+                            &mut writer,
+                            &mut self.world,
+                            &self.config.world_id,
+                        )?;
+                        if outcome.request_llm_decision {
+                            enqueue_coalesced_signal(
+                                &loop_tx,
+                                LiveLoopSignal::LlmDecisionRequested,
+                                &llm_signal_queued,
+                                CoalescedSignalKind::LlmDecisionRequested,
+                                backpressure.as_ref(),
+                            );
+                        }
+                        if let Some(control) = outcome.deferred_control {
+                            let ViewerLiveDeferredControl::Step { count, request_id } = control;
+                            if loop_tx
+                                .send(LiveLoopSignal::StepRequested { count, request_id })
+                                .is_ok()
+                            {
+                                backpressure.record_enqueued(LiveLoopSignalKind::StepRequested);
+                            }
+                        }
+                        let now_emitting = session.should_emit_event();
+                        if self.world.uses_consensus_bridge()
+                            && now_emitting
+                            && (!was_emitting || outcome.request_llm_decision)
                         {
-                            backpressure.record_enqueued(LiveLoopSignalKind::StepRequested);
+                            enqueue_coalesced_signal(
+                                &loop_tx,
+                                LiveLoopSignal::ConsensusDriveRequested,
+                                &consensus_drive_signal_queued,
+                                CoalescedSignalKind::ConsensusDriveRequested,
+                                backpressure.as_ref(),
+                            );
+                        } else if self.world.uses_non_consensus_event_drive()
+                            && now_emitting
+                            && (!was_emitting || outcome.request_llm_decision)
+                        {
+                            enqueue_coalesced_signal(
+                                &loop_tx,
+                                LiveLoopSignal::NonConsensusDriveRequested,
+                                &non_consensus_drive_signal_queued,
+                                CoalescedSignalKind::NonConsensusDriveRequested,
+                                backpressure.as_ref(),
+                            );
+                        }
+                        if outcome.continue_running {
+                            Ok(LiveLoopIterationAction::Continue)
+                        } else {
+                            Ok(LiveLoopIterationAction::Stop)
                         }
                     }
-                    let now_emitting = session.should_emit_event();
-                    if self.world.uses_consensus_bridge()
-                        && now_emitting
-                        && (!was_emitting || outcome.request_llm_decision)
-                    {
-                        enqueue_coalesced_signal(
-                            &loop_tx,
-                            LiveLoopSignal::ConsensusDriveRequested,
-                            &consensus_drive_signal_queued,
-                            CoalescedSignalKind::ConsensusDriveRequested,
-                            backpressure.as_ref(),
-                        );
-                    } else if self.world.uses_non_consensus_event_drive()
-                        && now_emitting
-                        && (!was_emitting || outcome.request_llm_decision)
-                    {
-                        enqueue_coalesced_signal(
-                            &loop_tx,
-                            LiveLoopSignal::NonConsensusDriveRequested,
-                            &non_consensus_drive_signal_queued,
-                            CoalescedSignalKind::NonConsensusDriveRequested,
-                            backpressure.as_ref(),
-                        );
-                    }
-                    if outcome.continue_running {
+                    LiveLoopSignal::LlmDecisionRequested => {
+                        llm_signal_queued.store(false, Ordering::SeqCst);
+                        self.world.request_llm_decision();
+                        if self.world.uses_consensus_bridge() && session.should_emit_event() {
+                            enqueue_coalesced_signal(
+                                &loop_tx,
+                                LiveLoopSignal::ConsensusDriveRequested,
+                                &consensus_drive_signal_queued,
+                                CoalescedSignalKind::ConsensusDriveRequested,
+                                backpressure.as_ref(),
+                            );
+                        } else if self.world.uses_non_consensus_event_drive()
+                            && session.should_emit_event()
+                        {
+                            enqueue_coalesced_signal(
+                                &loop_tx,
+                                LiveLoopSignal::NonConsensusDriveRequested,
+                                &non_consensus_drive_signal_queued,
+                                CoalescedSignalKind::NonConsensusDriveRequested,
+                                backpressure.as_ref(),
+                            );
+                        }
                         Ok(LiveLoopIterationAction::Continue)
-                    } else {
-                        Ok(LiveLoopIterationAction::Stop)
+                    }
+                    LiveLoopSignal::ConsensusCommitted => {
+                        self.handle_consensus_committed(&mut session, &mut writer)?;
+                        consensus_signal_queued.store(false, Ordering::SeqCst);
+                        Ok(LiveLoopIterationAction::Continue)
+                    }
+                    LiveLoopSignal::ConsensusDriveRequested => {
+                        consensus_drive_signal_queued.store(false, Ordering::SeqCst);
+                        self.handle_consensus_drive_requested(&mut session, &mut writer)?;
+                        Ok(LiveLoopIterationAction::Continue)
+                    }
+                    LiveLoopSignal::NonConsensusDriveRequested => {
+                        non_consensus_drive_signal_queued.store(false, Ordering::SeqCst);
+                        let should_requeue =
+                            self.handle_non_consensus_drive_requested(&mut session, &mut writer)?;
+                        if should_requeue {
+                            enqueue_coalesced_signal(
+                                &loop_tx,
+                                LiveLoopSignal::NonConsensusDriveRequested,
+                                &non_consensus_drive_signal_queued,
+                                CoalescedSignalKind::NonConsensusDriveRequested,
+                                backpressure.as_ref(),
+                            );
+                        }
+                        Ok(LiveLoopIterationAction::Continue)
+                    }
+                    LiveLoopSignal::StepRequested { count, request_id } => {
+                        self.handle_step_request(&mut session, &mut writer, count, request_id)?;
+                        Ok(LiveLoopIterationAction::Continue)
                     }
                 }
-                LiveLoopSignal::LlmDecisionRequested => {
-                    llm_signal_queued.store(false, Ordering::SeqCst);
-                    self.world.request_llm_decision();
-                    if self.world.uses_consensus_bridge() && session.should_emit_event() {
-                        enqueue_coalesced_signal(
-                            &loop_tx,
-                            LiveLoopSignal::ConsensusDriveRequested,
-                            &consensus_drive_signal_queued,
-                            CoalescedSignalKind::ConsensusDriveRequested,
-                            backpressure.as_ref(),
-                        );
-                    } else if self.world.uses_non_consensus_event_drive()
-                        && session.should_emit_event()
-                    {
-                        enqueue_coalesced_signal(
-                            &loop_tx,
-                            LiveLoopSignal::NonConsensusDriveRequested,
-                            &non_consensus_drive_signal_queued,
-                            CoalescedSignalKind::NonConsensusDriveRequested,
-                            backpressure.as_ref(),
-                        );
-                    }
-                    Ok(LiveLoopIterationAction::Continue)
-                }
-                LiveLoopSignal::ConsensusCommitted => {
-                    self.handle_consensus_committed(&mut session, &mut writer)?;
-                    consensus_signal_queued.store(false, Ordering::SeqCst);
-                    Ok(LiveLoopIterationAction::Continue)
-                }
-                LiveLoopSignal::ConsensusDriveRequested => {
-                    consensus_drive_signal_queued.store(false, Ordering::SeqCst);
-                    self.handle_consensus_drive_requested(&mut session, &mut writer)?;
-                    Ok(LiveLoopIterationAction::Continue)
-                }
-                LiveLoopSignal::NonConsensusDriveRequested => {
-                    non_consensus_drive_signal_queued.store(false, Ordering::SeqCst);
-                    let should_requeue =
-                        self.handle_non_consensus_drive_requested(&mut session, &mut writer)?;
-                    if should_requeue {
-                        enqueue_coalesced_signal(
-                            &loop_tx,
-                            LiveLoopSignal::NonConsensusDriveRequested,
-                            &non_consensus_drive_signal_queued,
-                            CoalescedSignalKind::NonConsensusDriveRequested,
-                            backpressure.as_ref(),
-                        );
-                    }
-                    Ok(LiveLoopIterationAction::Continue)
-                }
-                LiveLoopSignal::StepRequested { count, request_id } => {
-                    self.handle_step_request(&mut session, &mut writer, count, request_id)?;
-                    Ok(LiveLoopIterationAction::Continue)
-                }
-            };
+            })();
             backpressure.record_handled(signal_kind, signal_started_at.elapsed());
-            match action_result {
+            match normalize_live_loop_action_result(action_result) {
                 Ok(LiveLoopIterationAction::Continue) => {}
                 Ok(LiveLoopIterationAction::Stop) => break Ok(()),
-                Err(err) => {
-                    if err.is_disconnect() {
-                        break Ok(());
-                    }
-                    break Err(err);
-                }
+                Err(err) => break Err(err),
             }
         };
         loop_running.store(false, Ordering::SeqCst);
