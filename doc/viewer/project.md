@@ -2,6 +2,11 @@
 
 ## Active / Recent Tasks
 
+- [x] viewer-bundle-freshness-contract-scope (PRD-VIEWER/GOVERNANCE) [test_tier_required]: Align launcher bundle freshness fingerprinting with the Viewer Web dist contract so changes to compat JS and dist helper scripts stale packaged bundles. Trace: .pm/tasks/task_e90a10e12a4b4f498ad5691fe3aeefa8.yaml
+  - Status: done
+  - Owner role: tpm
+  - Evidence: repository-health finding, focused bundle freshness smoke, Viewer dist regression tests, and closeout verification are recorded in `.pm/tasks/task_e90a10e12a4b4f498ad5691fe3aeefa8.execution.md`.
+
 - [x] viewer-post-onboarding-qa-evidence-contract (PRD-VIEWER/GOVERNANCE) [test_tier_required]: Govern PostOnboarding headed Web QA summary pass/block semantics so required failed checks block artifacts and software-renderer evidence is not rescued by compatibility render-mode labels. Trace: .pm/tasks/task_a7fd5298520c4166958898edaae63238.yaml
   - Status: done
   - Owner role: tpm
