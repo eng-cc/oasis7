@@ -205,3 +205,82 @@ Example:
 - Expected Result: governance fit and unrelated-churn verdict.
 - Actual Result: `no_findings`; ready to proceed after TPM records required packet.
 - Blocker / Next Action: sync/rebase before PR preflight if needed.
+
+## 2026-06-24 14:55:50 CST / producer_system_designer
+- 完成内容: pre-PR producer/system-trace review returned `no_findings`.
+- 遗留事项: PR summary should call out identity/source-hash ratchet rather than user-visible feature change.
+- Verdict: `doc/engineering/project.md` trace row/status accurately describes a bounded engineering-governance task and does not overstate product promise, gameplay/world-rule behavior, or system contract.
+- Evidence: reviewed project row, status summary, current code diff in `crates/oasis7_wasm_build/src/lib.rs`, and existing WASM deterministic-build traceability goal.
+- Residual Risk: low; existing receipts/source hashes may intentionally change for modules whose metadata-selected lockfile was previously omitted.
+- Action: bounded producer/system-designer review slice.
+- Validation Command: review of project trace, task evidence, and current diff.
+- Expected Result: product/system trace and PRD-update verdict.
+- Actual Result: `no_findings`; no PRD update required.
+- Blocker / Next Action: record passed pre-PR local role review packet.
+
+## 2026-06-24 14:56:20 CST / tpm
+- 完成内容: Pre-PR Local Role Review: passed
+- 遗留事项: closeout, PR preflight/create, CI watch, merge, and cleanup still pending.
+- Pre-PR Local Role Review: passed
+- Task UID: task_efe5ecba45cd4dc59cb2494c7edc438b
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-next-issue-20260624d
+- Source Branch: task/engineering-repository-health-next-issue-20260624d
+- Source Head: a35a56aec6e87df7bf948515ec3c85fdd407511c
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml;.pm/tasks/task_efe5ecba45cd4dc59cb2494c7edc438b.execution.md;.pm/tasks/task_efe5ecba45cd4dc59cb2494c7edc438b.yaml;crates/oasis7_wasm_build/src/lib.rs;doc/engineering/project.md
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-next-issue-20260624d/.pm/scratch/task_efe5ecba45cd4dc59cb2494c7edc438b/review-packages/review-7296675ad..112efb349.diff
+- Role Selection Basis: changed paths include `crates/oasis7_wasm_build/src/lib.rs` requiring `wasm_platform_engineer`; task claim and verification evidence require `qa_engineer`; governance/code-contract and `.pm` evidence require `repository_health_engineer`; `doc/engineering/project.md` trace update requires `producer_system_designer`; no viewer/UI/runtime/gameplay/ops/liveops surface changed.
+- Review Roles: wasm_platform_engineer, qa_engineer, repository_health_engineer, producer_system_designer
+- Review Evidence: wasm_platform_engineer no_findings: source-hash now includes metadata-selected ancestor lockfile with stable label and focused tests/clippy/fmt passed; qa_engineer no_findings: RED/GREEN and focused verification matrix sufficient, no viewer/UI/determinism-suite check required; repository_health_engineer no_findings: bounded scope, non-duplicative with PR #596, governance evidence clean; producer_system_designer no_findings: project trace accurate, no product promise overstated, no PRD update required.
+- Review Verdicts: wasm_platform_engineer scope/spec compliance pass and role quality/risk pass; qa_engineer verification sufficiency pass and role quality/risk pass; repository_health_engineer governance scope pass and role quality/risk pass; producer_system_designer project trace/system promise pass and role quality/risk pass.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: all required role review slices returned `no_findings`; no code/doc finding required remediation.
+- Verification Matrix: `crates/oasis7_wasm_build/src/lib.rs` source-hash behavior -> RED regression then GREEN `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_build source_hash -- --nocapture` passed 4 tests after rebase; crate safety -> `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_build --lib` passed 5 tests; lint -> `env -u RUSTC_WRAPPER cargo clippy -p oasis7_wasm_build --lib -- -D warnings` passed; format -> `env -u RUSTC_WRAPPER cargo fmt --check` passed; governance -> `./scripts/check-rust-file-size.sh`, `git diff --check`, and `./scripts/pm/workflow-lint.sh --task-uid task_efe5ecba45cd4dc59cb2494c7edc438b --phase current` passed.
+- Visual Evidence: n/a; explicit exemption: no visible UI, viewer, screenshot, viewport, or player-facing visual surface changed.
+- WASM Evidence: `oasis7_wasm_build` support crate source-hash regression, crate lib tests, and focused Clippy passed; no wasm binary determinism run required because no module build output or canonicalizer changed.
+- Ops Evidence: n/a; explicit exemption: no deployment, node ops, release packaging, operator runbook, topology, or service-health surface changed.
+- LiveOps Evidence: n/a; explicit exemption: no external messaging, incident, player promise, release note, channel, or community-facing surface changed.
+- Residual Risk: existing source hashes/receipts for modules whose metadata-selected lockfile was previously omitted may intentionally change; PR summary must call this out as an identity/source-hash ratchet.
+- Slice Ledger: n/a; explicit reason: one-shot bounded review slices recorded directly in this execution log.
+- Action: integrate all role review verdicts into required pre-PR packet.
+- Validation Command: review packet field audit against `requesting-repo-owned-review` / `prepare-task-pr.sh` required markers.
+- Expected Result: pre-PR local role review packet is complete for PR preflight.
+- Actual Result: passed packet recorded with required roles and evidence.
+- Blocker / Next Action: run claim-ready/task-closeout and PR preflight.
+
+## 2026-06-24 14:55:53 CST / tpm
+- 完成内容: task closeout command/result recorded.
+- 遗留事项: PR preflight/create, CI watch, merge, and cleanup still pending.
+- Closeout Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_efe5ecba45cd4dc59cb2494c7edc438b --verify-command "env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_build source_hash -- --nocapture && env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_build --lib && env -u RUSTC_WRAPPER cargo clippy -p oasis7_wasm_build --lib -- -D warnings && env -u RUSTC_WRAPPER cargo fmt --check && ./scripts/check-rust-file-size.sh && git diff --check && ./scripts/pm/workflow-lint.sh --task-uid task_efe5ecba45cd4dc59cb2494c7edc438b --phase current"`
+- Closeout Result: task yaml moved to `status: done`; `last_claim_type: task_complete`; `last_verification_status: verified`; `last_closed_at: 2026-06-24T14:55:53+08:00`.
+- Closeout Helper Boundary: helper exited non-zero only after closeout because repo-wide `.pm` lint hit unrelated historical working-memory debt: `.pm/working_memory/task_8aa4e45b34df431c90f10f6473b4f9c8-pr.yaml` filename/task_uid mismatch and unknown role `None`; current task workflow-lint stayed OK.
+- Action: run task closeout helper after passed pre-PR review and fresh verification.
+- Validation Command: closeout verify command plus `./scripts/pm/workflow-lint.sh --task-uid task_efe5ecba45cd4dc59cb2494c7edc438b --phase current`.
+- Expected Result: current task moves to done with verified closeout truth.
+- Actual Result: current task moved to done and workflow-lint passed; repo-wide historical working-memory lint remains unrelated.
+- Blocker / Next Action: record this helper boundary for preflight and continue PR path.
+
+## 2026-06-24 15:08:30 CST / tpm
+- 完成内容: prepare-task-pr recommended targeted required gate passed.
+- 遗留事项: PR creation, CI watch, merge, and cleanup pending.
+- Required Gate Command: `OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=false OASIS7_CI_RUN_CONSENSUS_TESTS=false OASIS7_CI_RUN_DISTFS_TESTS=false OASIS7_CI_RUN_OASIS7_NODE_TESTS=false OASIS7_CI_RUN_OASIS7_NET_TESTS=false OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=false OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=false OASIS7_CI_RUN_VIEWER_WASM_CHECK=false OASIS7_CI_RUN_VIEWER_PERF_SMOKE=false OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=false OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS=true ./scripts/ci-tests.sh required`
+- Required Gate Result: PASS; observed `doc-governance-check`, `lint-skills`, Windows path/script executable checks, cargo-dev-lib and planner smokes, RustSec advisory gate, support crate lib tests including `oasis7_wasm_build` 5 passed, `oasis7_wasm_executor --features wasmtime` 21 passed / 1 ignored, and `oasis7_client_launcher` bin tests 138 passed.
+- Scope Boundary: planner-disabled non-target required tests/clippy were skipped with explicit scope messages.
+- Action: run prepare-task-pr recommended targeted required gate after local preflight passed.
+- Validation Command: targeted `./scripts/ci-tests.sh required` command above.
+- Expected Result: required gate passes for changed support-crate scope.
+- Actual Result: required gate passed with no failures.
+- Blocker / Next Action: amend evidence commit and create PR.
+
+## 2026-06-24 15:19:40 CST / tpm
+- 完成内容: PR branch rebased after GitHub reported mergeStateStatus `DIRTY`.
+- 遗留事项: force-push rebased branch, watch CI/review, merge, and cleanup.
+- Rebase Result: rebased onto `origin/main` at `7296675adcc4e801355ad2f15d0f2f8ad8ea51b8`; conflict was limited to `doc/engineering/project.md` completed-task row area.
+- Conflict Resolution: preserved main's `worktree-cleanup-bounded-batch-2` row and retained this task's `wasm-build-source-hash-lockfile-ratchet` row; latest-complete status remains this task.
+- Updated Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-repository-health-next-issue-20260624d/.pm/scratch/task_efe5ecba45cd4dc59cb2494c7edc438b/review-packages/review-7296675ad..112efb349.diff`.
+- Fresh Post-Rebase Verification: `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_build source_hash -- --nocapture` passed 4 tests; `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_build --lib` passed 5 tests; `env -u RUSTC_WRAPPER cargo clippy -p oasis7_wasm_build --lib -- -D warnings` passed; `env -u RUSTC_WRAPPER cargo fmt --check`, `./scripts/check-rust-file-size.sh`, `git diff --check`, and `./scripts/pm/workflow-lint.sh --task-uid task_efe5ecba45cd4dc59cb2494c7edc438b --phase current` passed.
+- Action: rebase branch, resolve project row conflict, regenerate review package, and rerun focused verification.
+- Validation Command: `git rebase origin/main`; focused verification matrix above; `./scripts/prepare-task-pr.sh --json`.
+- Expected Result: branch no longer DIRTY and preflight accepts the updated review packet.
+- Actual Result: rebase and focused verification passed; review packet Source Head/Review Package updated to current head `112efb349791c5d31fc4085583a67ddc5266c018`.
+- Blocker / Next Action: amend evidence commit, rerun preflight, force-push with lease.
