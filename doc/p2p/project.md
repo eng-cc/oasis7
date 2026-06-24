@@ -7,6 +7,7 @@
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] runtime-testnet-startup-reconcile-bind-failure (PRD-P2P-001/003/028) [test_tier_required]: 修复 public_testnet 重复/失败启动在端口 bind 失败前已写入 startup reconcile 持久头状态的问题；runtime 在 reconcile 前预占 status/gossip/replication endpoint，package upgrade live path 在切换 bundle 前 stop 服务并拒绝同 node-root 残留进程，避免故障启动推进共识/执行状态。 Trace: .pm/tasks/task_3203bec287cc43919a32e5e82b1d28b2.yaml
 - [x] fix-replication-peer-head-freshness (PRD-P2P-001/003/028) [test_tier_required]: 修复 public_testnet 节点同高但 peer head 长期停旧的问题；head request timeout 可继续尝试后续 peer，storage/validator-core 的 replicated commit head 与 local commit head 使用独立 rebroadcast 账本，同时同高度冲突 head 在发布前 fail-closed，避免扩散分叉状态。 Trace: .pm/tasks/task_49ae72ce192c4151b0f150e12bb95605.yaml
 - [x] fix-public-testnet-peer-head-readiness (PRD-P2P-001/003/028) [test_tier_required]: 修复 public_testnet 低提交频率下 peer head age 超 TTL 导致 readiness 误判的问题；旧 peer head 仅在 committed/network height、block hash 与 execution binding 均匹配当前本地头时可作为有效 fresh，同时补充分叉/追块负向测试并记录多节点状态不一致必须根因修复后 redeploy/rebuild 的 runbook 原则。 Trace: .pm/tasks/task_06b409262b4846618e6cc9a0867de99c.yaml
 - [x] testnet-execution-hash-replay-readiness (PRD-P2P-001/003) [test_tier_required]: 修复 synced replication 执行哈希回放的 expected-hash 校验、回滚安全与 committed tick v2 schema，避免拒绝的 peer mismatch 污染 runtime/simulator 持久状态。 Trace: .pm/tasks/task_41f5ad97727c4641b65241d4141601b9.yaml

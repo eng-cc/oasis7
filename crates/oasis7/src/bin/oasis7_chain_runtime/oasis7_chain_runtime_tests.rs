@@ -10,7 +10,7 @@ use super::{
     build_replication_remote_writer_allowlist, build_validator_signer_public_keys,
     derive_node_consensus_signer_keypair, derive_node_libp2p_identity_keypair_config,
     network_tier_allows_open_observer_fetch, node_keypair_config, parse_options,
-    parse_validator_spec,
+    parse_validator_spec, reserve_startup_reconcile_bind_guard,
 };
 use ed25519_dalek::SigningKey;
 use oasis7::network_tier_manifest::{
@@ -29,7 +29,13 @@ use oasis7_proto::distributed_dht::{
 };
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use std::collections::BTreeMap;
+use std::net::{TcpListener, UdpSocket};
 use std::path::Path;
+
+fn unused_loopback_tcp_addr() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("reserve unused tcp port");
+    listener.local_addr().expect("tcp addr").to_string()
+}
 
 #[test]
 fn status_http_request_waits_for_full_content_length_body() {
@@ -210,6 +216,82 @@ fn parse_options_rejects_peer_without_bind() {
     let err = parse_options(["--node-gossip-peer", "127.0.0.1:9001"].into_iter())
         .expect_err("should reject peer without bind");
     assert!(err.contains("requires --node-gossip-bind"));
+}
+
+#[test]
+fn startup_reconcile_bind_guard_rejects_occupied_status_bind() {
+    let occupied = TcpListener::bind("127.0.0.1:0").expect("reserve status port");
+    let status_addr = occupied.local_addr().expect("status addr").to_string();
+    let mut options =
+        parse_options(["--status-bind", status_addr.as_str()].into_iter()).expect("parse options");
+    options.replication_network_listen_addrs = vec!["/ip4/127.0.0.1/tcp/0".to_string()];
+
+    let err = reserve_startup_reconcile_bind_guard(&options)
+        .expect_err("occupied status bind must fail before startup reconcile");
+    assert!(err.contains("startup reconcile preflight failed: status bind"));
+}
+
+#[test]
+fn startup_reconcile_bind_guard_rejects_occupied_gossip_bind() {
+    let occupied = UdpSocket::bind("127.0.0.1:0").expect("reserve gossip port");
+    let gossip_addr = occupied.local_addr().expect("gossip addr").to_string();
+    let mut options = parse_options(
+        [
+            "--status-bind",
+            unused_loopback_tcp_addr().as_str(),
+            "--node-gossip-bind",
+            gossip_addr.as_str(),
+        ]
+        .into_iter(),
+    )
+    .expect("parse options");
+    options.replication_network_listen_addrs = vec!["/ip4/127.0.0.1/tcp/0".to_string()];
+
+    let err = reserve_startup_reconcile_bind_guard(&options)
+        .expect_err("occupied gossip bind must fail before startup reconcile");
+    assert!(err.contains("startup reconcile preflight failed: gossip bind"));
+}
+
+#[test]
+fn startup_reconcile_bind_guard_rejects_occupied_replication_tcp_listen() {
+    let occupied = TcpListener::bind("127.0.0.1:0").expect("reserve replication port");
+    let port = occupied.local_addr().expect("replication addr").port();
+    let status_addr = unused_loopback_tcp_addr();
+    let mut options =
+        parse_options(["--status-bind", status_addr.as_str()].into_iter()).expect("parse options");
+    options.replication_network_listen_addrs = vec![format!("/ip4/127.0.0.1/tcp/{port}")];
+
+    let err = reserve_startup_reconcile_bind_guard(&options)
+        .expect_err("occupied replication listen must fail before startup reconcile");
+    assert!(err.contains("startup reconcile preflight failed: replication tcp listen"));
+}
+
+#[test]
+fn startup_reconcile_bind_guard_rejects_occupied_replication_ipv6_tcp_listen() {
+    let Ok(occupied) = TcpListener::bind("[::1]:0") else {
+        return;
+    };
+    let port = occupied.local_addr().expect("replication addr").port();
+    let status_addr = unused_loopback_tcp_addr();
+    let mut options =
+        parse_options(["--status-bind", status_addr.as_str()].into_iter()).expect("parse options");
+    options.replication_network_listen_addrs = vec![format!("/ip6/::1/tcp/{port}")];
+
+    let err = reserve_startup_reconcile_bind_guard(&options)
+        .expect_err("occupied ipv6 replication listen must fail before startup reconcile");
+    assert!(err.contains("startup reconcile preflight failed: replication tcp listen"));
+}
+
+#[test]
+fn startup_reconcile_bind_guard_rejects_unsupported_replication_listen_addr() {
+    let status_addr = unused_loopback_tcp_addr();
+    let mut options =
+        parse_options(["--status-bind", status_addr.as_str()].into_iter()).expect("parse options");
+    options.replication_network_listen_addrs = vec!["/dns4/example.test/tcp/30333".to_string()];
+
+    let err = reserve_startup_reconcile_bind_guard(&options)
+        .expect_err("unsupported replication listen must fail closed before startup reconcile");
+    assert!(err.contains("unsupported replication listen address"));
 }
 
 #[test]
