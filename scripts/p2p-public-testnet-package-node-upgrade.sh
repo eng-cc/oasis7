@@ -66,6 +66,39 @@ for index, token in enumerate(tokens):
 PY
 }
 
+cleanup_upgrade_lock() {
+  if [[ -n "${upgrade_lock_dir:-}" && -d "$upgrade_lock_dir" ]]; then
+    rmdir "$upgrade_lock_dir" 2>/dev/null || true
+  fi
+}
+
+assert_no_node_processes() {
+  local root=$1
+  local matches
+  matches="$(
+    ps -eo pid=,ppid=,args= | awk -v root="$root" '
+      index($0, root) > 0 && ($0 ~ /oasis7_chain_runtime/ || $0 ~ /start-node[.]sh/) {
+        print
+      }
+    ' || true
+  )"
+  if [[ -n "$matches" ]]; then
+    printf '%s\n' "$matches" >&2
+    die "node-root still has running oasis7 process after stop: $root"
+  fi
+}
+
+ensure_governed_bootstrap_bundle_exists() {
+  local root=$1
+  local first_bundle
+  first_bundle="$(
+    find "$root/config" -type f \
+      -name "public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+      -print -quit 2>/dev/null || true
+  )"
+  [[ -n "$first_bundle" ]] || die "no governed bootstrap bundle found under $root/config"
+}
+
 migrate_legacy_replication_root() {
   local root=$1
   local node_id=$2
@@ -279,6 +312,11 @@ node_root=$(abs_path "$node_root")
 bundle_tar=$(abs_path "$bundle_tar")
 artifact_ref=${artifact_ref:-"oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime"}
 node_id=$(parse_node_id "$node_root/bin/start-node.sh")
+upgrade_lock_dir="$node_root/.package-upgrade.lock"
+if ! mkdir "$upgrade_lock_dir" 2>/dev/null; then
+  die "another package upgrade is already running for $node_root"
+fi
+trap cleanup_upgrade_lock EXIT
 
 release_dir="$node_root/releases/$package_version"
 tmp_dir="$node_root/releases/.${package_version}.tmp.$$"
@@ -291,6 +329,14 @@ tar -xzf "$bundle_tar" -C "$tmp_dir"
 bundle_root="$tmp_dir/oasis7-linux-x64"
 runtime_bin="$bundle_root/bin/oasis7_chain_runtime"
 [[ -x "$runtime_bin" ]] || die "bundle missing executable runtime: $runtime_bin"
+ensure_governed_bootstrap_bundle_exists "$node_root"
+
+if [[ "$restart_service" -eq 1 ]]; then
+  systemctl daemon-reload
+  systemctl stop "$systemd_service"
+  sleep 2
+  assert_no_node_processes "$node_root"
+fi
 
 python3 - "$node_root" "$bundle_root" "$package_version" "$commit" "$run_id" "$artifact_ref" <<'PY'
 from __future__ import annotations
@@ -392,7 +438,7 @@ prune_old_releases "$node_root/releases" "$current_path" "$release_retention_cou
 
 if [[ "$restart_service" -eq 1 ]]; then
   systemctl daemon-reload
-  systemctl restart "$systemd_service"
+  systemctl start "$systemd_service"
   sleep 3
   systemctl is-active --quiet "$systemd_service"
   systemctl --no-pager --full status "$systemd_service" | sed -n '1,18p'

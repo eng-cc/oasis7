@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -414,6 +414,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         replication_fetch_requester_allowlist.as_slice(),
         allow_any_signed_fetch_requester,
     )?);
+    let startup_reconcile_bind_guard = reserve_startup_reconcile_bind_guard(&options)?;
     if let Some(report) = startup_reconcile::reconcile_startup_state_from_execution_latest(
         &paths,
         options.world_id.as_str(),
@@ -428,6 +429,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             "startup reconciled node pos state from execution latest",
         );
     }
+    drop(startup_reconcile_bind_guard);
 
     let mut runtime = NodeRuntime::new(config);
     if materialize_execution {
@@ -579,6 +581,99 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
 
         thread::sleep(Duration::from_millis(300));
     }
+}
+
+#[derive(Debug)]
+struct StartupReconcileBindGuard {
+    _tcp_listeners: Vec<TcpListener>,
+    _udp_sockets: Vec<UdpSocket>,
+}
+
+fn reserve_startup_reconcile_bind_guard(
+    options: &CliOptions,
+) -> Result<StartupReconcileBindGuard, String> {
+    let mut tcp_listeners = Vec::new();
+    let mut udp_sockets = Vec::new();
+    let (status_host, status_port) =
+        parse_host_port(options.status_bind.as_str(), "--status-bind")?;
+    tcp_listeners.push(
+        TcpListener::bind((status_host.as_str(), status_port)).map_err(|err| {
+            format!(
+                "startup reconcile preflight failed: status bind {} unavailable: {err}",
+                options.status_bind
+            )
+        })?,
+    );
+    if let Some(gossip_bind) = options.node_gossip_bind {
+        udp_sockets.push(UdpSocket::bind(gossip_bind).map_err(|err| {
+            format!(
+                "startup reconcile preflight failed: gossip bind {} unavailable: {err}",
+                gossip_bind
+            )
+        })?);
+    }
+    let listen_addrs = if options.replication_network_listen_addrs.is_empty() {
+        vec![DEFAULT_REPLICATION_NETWORK_LISTEN.to_string()]
+    } else {
+        options.replication_network_listen_addrs.clone()
+    };
+    for listen_addr in listen_addrs {
+        reserve_replication_listen_addr_for_startup_reconcile(
+            listen_addr.as_str(),
+            &mut tcp_listeners,
+            &mut udp_sockets,
+        )?;
+    }
+    Ok(StartupReconcileBindGuard {
+        _tcp_listeners: tcp_listeners,
+        _udp_sockets: udp_sockets,
+    })
+}
+
+fn reserve_replication_listen_addr_for_startup_reconcile(
+    listen_addr: &str,
+    tcp_listeners: &mut Vec<TcpListener>,
+    udp_sockets: &mut Vec<UdpSocket>,
+) -> Result<(), String> {
+    let segments = listen_addr
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    let Some(ip_index) = segments.iter().position(|segment| *segment == "ip4") else {
+        return Ok(());
+    };
+    let Some(host) = segments.get(ip_index + 1) else {
+        return Ok(());
+    };
+    if let Some(tcp_index) = segments.iter().position(|segment| *segment == "tcp") {
+        let Some(port) = segments
+            .get(tcp_index + 1)
+            .and_then(|raw| raw.parse::<u16>().ok())
+        else {
+            return Ok(());
+        };
+        tcp_listeners
+            .push(TcpListener::bind((*host, port)).map_err(|err| {
+                format!(
+                    "startup reconcile preflight failed: replication tcp listen {listen_addr} unavailable: {err}"
+                )
+            })?);
+        return Ok(());
+    }
+    if let Some(udp_index) = segments.iter().position(|segment| *segment == "udp") {
+        let Some(port) = segments
+            .get(udp_index + 1)
+            .and_then(|raw| raw.parse::<u16>().ok())
+        else {
+            return Ok(());
+        };
+        udp_sockets.push(UdpSocket::bind((*host, port)).map_err(|err| {
+            format!(
+                "startup reconcile preflight failed: replication udp listen {listen_addr} unavailable: {err}"
+            )
+        })?);
+    }
+    Ok(())
 }
 
 fn resolve_runtime_paths(options: &CliOptions) -> RuntimePaths {
