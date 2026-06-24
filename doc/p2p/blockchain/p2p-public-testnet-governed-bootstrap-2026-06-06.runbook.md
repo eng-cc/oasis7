@@ -115,6 +115,11 @@ Credential files may be used by an operator as local access aids, but this runbo
    - 先让节点按 manifest bootstrap peers、replication fetch、peer-head exchange 自动恢复同步。
    - 自动恢复失败且根因是 deployment truth 漂移或本地状态污染时，从当前 deployment truth 从零重建 validator pair。
 9. 若曾经执行过手工 checkpoint/data copy，该状态只能作为被隔离的故障现场或无效恢复尝试记录；不能作为 readiness 证据、不能继续接在正式 testnet world state 上运行，也不能对外宣称为“已同步”。
+10. 遇到多节点分叉、execution/resource 状态不一致、peer head 长期 stale、validator pair 互相拒绝 commit、或类似状态不对的问题，不得把临时运维动作当作最终修复结论。标准处理顺序必须是：
+   - 先保留现场并查清根因，至少覆盖代码路径、deployment truth、world/resource snapshot、replication/head exchange 和节点身份。
+   - 修复根因对应的代码、配置、包、manifest、部署产物或重建脚本。
+   - 再按修复后的 canonical deployment truth 重新部署或从零重建受影响节点。
+   - 重启服务、清理端口、手工 reseed、复制数据、或等待自愈只能作为取证/验证手段，不能替代根因修复，也不能作为“分叉已解决”的对外口径。
 
 ### 4.1 Runtime high-state sync contract
 `public_testnet` observer 的标准 attach 设计是不要求操作者预先提供 seed/state-sync 目录。新 observer 在发现远端链头远高于本地高度时，必须先尝试从 P2P replication 网络拉取一个受验证的高位 execution checkpoint，再从该 checkpoint 后继续 tail gap sync。

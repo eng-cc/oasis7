@@ -562,6 +562,187 @@ fn public_testnet_validator_network_head_prefers_highest_quorum_bucket() {
 }
 
 #[test]
+fn public_testnet_validator_accepts_old_peer_heads_that_match_current_local_head() {
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
+    let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
+    let mut consensus = NodeConsensusSnapshot::default();
+    consensus.committed_height = 10;
+    consensus.network_committed_height = 10;
+    consensus.replication_persisted_height = 10;
+    consensus.last_block_hash = Some("block-10".to_string());
+    consensus.last_execution_block_hash = Some("execution-10".to_string());
+    consensus.last_execution_state_root = Some("state-10".to_string());
+    consensus.known_peer_heads = 2;
+    consensus.peer_heads = vec![
+        peer_head("node-b", None, 10, 1_000),
+        peer_head("node-c", None, 10, 1_000),
+    ];
+    let snapshot = NodeSnapshot {
+        node_id: "node-a".to_string(),
+        player_id: "player-a".to_string(),
+        world_id: "live-a".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus,
+        last_error: None,
+    };
+
+    let network_head = super::status_payload::build_network_head_status(
+        &snapshot,
+        1_700_000_000_000,
+        Some(&loaded),
+    );
+
+    assert_eq!(network_head.required_peer_count, 2);
+    assert_eq!(network_head.fresh_peer_count, 2);
+    assert_eq!(network_head.stale_peer_count, 0);
+    assert_eq!(network_head.source, "peer_quorum");
+    assert_eq!(network_head.decision, "ready");
+    assert_eq!(network_head.height, Some(10));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn public_testnet_validator_keeps_old_peer_heads_stale_when_local_head_differs() {
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
+    let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
+    let mut consensus = NodeConsensusSnapshot::default();
+    consensus.committed_height = 10;
+    consensus.network_committed_height = 10;
+    consensus.replication_persisted_height = 10;
+    consensus.last_block_hash = Some("different-block-10".to_string());
+    consensus.last_execution_block_hash = Some("execution-10".to_string());
+    consensus.last_execution_state_root = Some("state-10".to_string());
+    consensus.known_peer_heads = 2;
+    consensus.peer_heads = vec![
+        peer_head("node-b", None, 10, 1_000),
+        peer_head("node-c", None, 10, 1_000),
+    ];
+    let snapshot = NodeSnapshot {
+        node_id: "node-a".to_string(),
+        player_id: "player-a".to_string(),
+        world_id: "live-a".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus,
+        last_error: None,
+    };
+
+    let network_head = super::status_payload::build_network_head_status(
+        &snapshot,
+        1_700_000_000_000,
+        Some(&loaded),
+    );
+
+    assert_eq!(network_head.required_peer_count, 2);
+    assert_eq!(network_head.fresh_peer_count, 0);
+    assert_eq!(network_head.stale_peer_count, 2);
+    assert_eq!(network_head.source, "unknown");
+    assert_eq!(network_head.decision, "degraded");
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn public_testnet_validator_keeps_old_peer_heads_stale_when_execution_binding_differs() {
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
+    let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
+    let mut consensus = NodeConsensusSnapshot::default();
+    consensus.committed_height = 10;
+    consensus.network_committed_height = 10;
+    consensus.replication_persisted_height = 10;
+    consensus.last_block_hash = Some("block-10".to_string());
+    consensus.last_execution_block_hash = Some("different-execution-10".to_string());
+    consensus.last_execution_state_root = Some("different-state-10".to_string());
+    consensus.known_peer_heads = 2;
+    consensus.peer_heads = vec![
+        peer_head("node-b", None, 10, 1_000),
+        peer_head("node-c", None, 10, 1_000),
+    ];
+    let snapshot = NodeSnapshot {
+        node_id: "node-a".to_string(),
+        player_id: "player-a".to_string(),
+        world_id: "live-a".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus,
+        last_error: None,
+    };
+
+    let network_head = super::status_payload::build_network_head_status(
+        &snapshot,
+        1_700_000_000_000,
+        Some(&loaded),
+    );
+
+    assert_eq!(network_head.required_peer_count, 2);
+    assert_eq!(network_head.fresh_peer_count, 0);
+    assert_eq!(network_head.stale_peer_count, 2);
+    assert_eq!(network_head.source, "unknown");
+    assert_eq!(network_head.decision, "degraded");
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn public_testnet_validator_keeps_old_peer_heads_stale_while_local_node_is_catching_up() {
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
+    let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
+    let mut consensus = NodeConsensusSnapshot::default();
+    consensus.committed_height = 9;
+    consensus.network_committed_height = 10;
+    consensus.replication_persisted_height = 9;
+    consensus.last_block_hash = Some("block-9".to_string());
+    consensus.last_execution_block_hash = Some("execution-9".to_string());
+    consensus.last_execution_state_root = Some("state-9".to_string());
+    consensus.known_peer_heads = 2;
+    consensus.peer_heads = vec![
+        peer_head("node-b", None, 10, 1_000),
+        peer_head("node-c", None, 10, 1_000),
+    ];
+    let snapshot = NodeSnapshot {
+        node_id: "node-a".to_string(),
+        player_id: "player-a".to_string(),
+        world_id: "live-a".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus,
+        last_error: None,
+    };
+
+    let network_head = super::status_payload::build_network_head_status(
+        &snapshot,
+        1_700_000_000_000,
+        Some(&loaded),
+    );
+
+    assert_eq!(network_head.required_peer_count, 2);
+    assert_eq!(network_head.fresh_peer_count, 0);
+    assert_eq!(network_head.stale_peer_count, 2);
+    assert_eq!(network_head.source, "unknown");
+    assert_eq!(network_head.decision, "degraded");
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn local_devnet_network_head_honors_zero_peer_quorum() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) =
@@ -639,6 +820,61 @@ fn mainnet_validator_network_head_uses_stake_weighted_quorum() {
     assert_eq!(network_head.observed_stake, 60);
     assert_eq!(network_head.required_stake, 67);
     assert!(!network_head.stake_quorum_met);
+    assert_eq!(network_head.decision, "degraded");
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn mainnet_validator_keeps_old_peer_heads_stale_even_when_they_match_current_local_head() {
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) =
+        write_test_network_tier_manifest_for_tier(runtime_sha256.as_str(), "mainnet");
+    let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
+    let mut consensus = NodeConsensusSnapshot::default();
+    consensus.committed_height = 10;
+    consensus.network_committed_height = 10;
+    consensus.replication_persisted_height = 10;
+    consensus.last_block_hash = Some("block-10".to_string());
+    consensus.last_execution_block_hash = Some("execution-10".to_string());
+    consensus.last_execution_state_root = Some("state-10".to_string());
+    consensus.known_peer_heads = 2;
+    consensus.validator_stakes = BTreeMap::from([
+        ("validator-a".to_string(), 40),
+        ("validator-b".to_string(), 34),
+        ("validator-c".to_string(), 26),
+    ]);
+    consensus.required_stake = 67;
+    consensus.total_stake = 100;
+    add_test_stake_proof_chain(&mut consensus);
+    consensus.peer_heads = vec![
+        peer_head("node-b", Some("validator-b"), 10, 1_000),
+        peer_head("node-c", Some("validator-c"), 10, 1_000),
+    ];
+    let snapshot = NodeSnapshot {
+        node_id: "validator-a".to_string(),
+        player_id: "player-a".to_string(),
+        world_id: "mainnet-a".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus,
+        last_error: None,
+    };
+
+    let network_head = super::status_payload::build_network_head_status(
+        &snapshot,
+        1_700_000_000_000,
+        Some(&loaded),
+    );
+
+    assert_eq!(network_head.quorum_mode, "stake_weighted");
+    assert_eq!(network_head.fresh_peer_count, 0);
+    assert_eq!(network_head.stale_peer_count, 2);
+    assert_eq!(network_head.observed_stake, 0);
+    assert_eq!(network_head.source, "unknown");
     assert_eq!(network_head.decision, "degraded");
 
     let _ = fs::remove_dir_all(dir);
