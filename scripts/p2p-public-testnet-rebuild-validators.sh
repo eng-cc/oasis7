@@ -488,8 +488,11 @@ def matching_pids():
             pids.append(pid)
     return pids
 
-deadline = time.monotonic() + 10
+cleanup_deadline_seconds = float(os.environ.get('CLEANUP_DEADLINE_SECONDS', '10'))
+cleanup_quiet_seconds = float(os.environ.get('CLEANUP_QUIET_SECONDS', '2'))
+deadline = time.monotonic() + cleanup_deadline_seconds
 quiet_since = None
+quiet_window_observed = False
 while time.monotonic() < deadline:
     pids = matching_pids()
     if pids:
@@ -504,13 +507,17 @@ while time.monotonic() < deadline:
     else:
         if quiet_since is None:
             quiet_since = time.monotonic()
-        if time.monotonic() - quiet_since >= 2:
+        if time.monotonic() - quiet_since >= cleanup_quiet_seconds:
+            quiet_window_observed = True
             break
         time.sleep(0.25)
 
 remaining = matching_pids()
 if remaining:
     print(f'cleanup failed: stack-root processes remain after SIGKILL: {remaining}', file=sys.stderr)
+    raise SystemExit(1)
+if not quiet_window_observed:
+    print('cleanup failed: stable quiet window was not observed before deadline', file=sys.stderr)
     raise SystemExit(1)
 PY
 "
