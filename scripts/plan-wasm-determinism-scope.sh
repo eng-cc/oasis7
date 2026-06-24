@@ -144,6 +144,7 @@ classify_changed_path() {
     scripts/sync-m1-builtin-wasm-artifacts.sh|\
     scripts/wasm-release-evidence-report.sh|\
     scripts/wasm-summary-bundle-smoke.sh|\
+    crates/oasis7_wasm_build|crates/oasis7_wasm_build/*|crates/oasis7_wasm_build/**/*|\
     crates/oasis7/src/runtime/world/artifacts/builtin_module_manifest_map.txt|\
     crates/oasis7_wasm_sdk|crates/oasis7_wasm_sdk/*|crates/oasis7_wasm_sdk/**/*|\
     crates/oasis7_wasm_abi|crates/oasis7_wasm_abi/*|crates/oasis7_wasm_abi/**/*|\

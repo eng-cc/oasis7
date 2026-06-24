@@ -299,3 +299,46 @@ Example:
 - Expected Result: targeted CI setup patch addresses missing `wayland-client.pc` for workspace-support crate required-gate scope.
 - Actual Result: local checks and role reviews passed; ready to push for GitHub verification.
 - Blocker / Next Action: commit and push CI fix, then watch PR checks.
+
+## 2026-06-24 15:48:20 CST / tpm
+- 完成内容: actionable PR review thread triaged and bounded planner fix applied.
+- 遗留事项: role review, commit, push, CI/rerun closeout, merge, and cleanup pending.
+- Review Thread: PR #601 unresolved P1 at `crates/oasis7_wasm_build/src/lib.rs:110`: "Route hash-input changes through the wasm gate".
+- Finding: the main source-hash fix changes `tools/wasm_build_suite` receipt/source identity inputs, but `scripts/plan-wasm-determinism-scope.sh` previously returned `scope=skip` for `crates/oasis7_wasm_build/src/lib.rs`, allowing a helper-only source-hash input change to bypass m1/m4/m5 wasm determinism checks.
+- Fix Applied: `scripts/plan-wasm-determinism-scope.sh` now classifies `crates/oasis7_wasm_build/**` as `shared_wasm_pipeline`, forcing `scope=all` and `run_m1/run_m4/run_m5=true`.
+- Test Added: `scripts/plan-wasm-determinism-scope.test.sh` covers the `oasis7_wasm_build` all-module-set trigger, existing `oasis7_wasm_sdk` shared trigger, and unrelated skip behavior.
+- Local Verification: `./scripts/plan-wasm-determinism-scope.test.sh` passed; `./scripts/plan-rust-required-scope.test.sh` passed; direct planner check for `crates/oasis7_wasm_build/src/lib.rs` returned `scope=all`, `run_all=true`, and `selected_module_sets=m1,m4,m5`.
+- Slice Contract: repository_health_engineer review of `scripts/plan-wasm-determinism-scope.sh` and `scripts/plan-wasm-determinism-scope.test.sh`; validate governance scope, review-thread disposition, and no unintended planner expansion.
+- Slice Contract: qa_engineer review of the same planner/test patch; validate verification sufficiency and identify any missing gate/test before push.
+- Mandatory Context Checklist: PR #601 P1 review comment, current task UID/worktree/branch, existing wasm source-hash fix, GitHub checks now green before this review fix, and local planner test outputs above.
+- Attribution Boundary: TPM applied the bounded patch and records facts; final professional verdicts must come from repository_health_engineer and qa_engineer slices.
+- Action: remediate actionable PR review thread with bounded planner/test update.
+- Validation Command: `./scripts/plan-wasm-determinism-scope.test.sh`; `./scripts/plan-rust-required-scope.test.sh`; direct `./scripts/plan-wasm-determinism-scope.sh --event-name pull_request --changed-path crates/oasis7_wasm_build/src/lib.rs`.
+- Expected Result: helper crate source-hash input changes now force all builtin wasm determinism module-set checks.
+- Actual Result: local planner tests passed; role review and GitHub rerun pending.
+- Blocker / Next Action: collect role reviews, commit/push, then confirm review thread and checks close.
+
+## 2026-06-24 15:55:30 CST / repository_health_engineer
+- 完成内容: PR review-thread planner fix review returned `no_findings`.
+- 遗留事项: push branch and use GitHub Wasm Determinism Gate as final end-to-end truth.
+- Verdict: the P1 review thread is resolved by adding `crates/oasis7_wasm_build/**` to existing `shared_wasm_pipeline`, forcing `scope=all` and m1/m4/m5 for helper crate source-hash/build-suite identity input changes.
+- Evidence: reviewed `scripts/plan-wasm-determinism-scope.sh`, `scripts/plan-wasm-determinism-scope.test.sh`, and this execution-log entry; reran planner test, required-scope test, direct `crates/oasis7_wasm_build/src/lib.rs` check, and unrelated `doc/engineering/project.md` skip check.
+- Residual Risk: conservative expansion means all future `crates/oasis7_wasm_build/**` changes run the full Wasm Determinism Gate, acceptable because the crate owns source-hash/build-suite identity inputs.
+- Action: bounded repository-health review of actionable PR thread fix.
+- Validation Command: role review plus planner tests/direct checks above.
+- Expected Result: governance scope and thread disposition verdict.
+- Actual Result: `no_findings`.
+- Blocker / Next Action: none from repository-health before push.
+
+## 2026-06-24 15:55:40 CST / qa_engineer
+- 完成内容: PR review-thread planner fix QA review returned `no_findings`.
+- 遗留事项: push branch and wait for GitHub checks.
+- Verdict: local verification is sufficient before push for this narrow planner fix.
+- Evidence: QA reran `./scripts/plan-wasm-determinism-scope.test.sh`, direct planner output for `crates/oasis7_wasm_build/src/lib.rs`, and diff whitespace check; output confirmed `scope=all`, `run_all=true`, `run_m1=true`, `run_m4=true`, `run_m5=true`, `selected_module_sets=m1,m4,m5`, reason `shared_wasm_pipeline:crates/oasis7_wasm_build/src/lib.rs`.
+- Missing Test/Gate: none before push; downstream determinism build remains GitHub Wasm Determinism Gate truth.
+- Residual Risk: low; local checks validate routing logic, not the full downstream determinism build.
+- Action: bounded QA verification review of actionable PR thread fix.
+- Validation Command: role review plus planner test/direct output/diff whitespace check.
+- Expected Result: verification sufficiency verdict.
+- Actual Result: `no_findings`.
+- Blocker / Next Action: none from QA before push.
