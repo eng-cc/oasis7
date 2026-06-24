@@ -66,7 +66,9 @@ python3 - "$COMMON_GIT_DIR" "$CANONICAL_REPO_ROOT" "$CURRENT_WORKTREE" "$PRUNABL
 from __future__ import annotations
 
 import json
+import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -78,6 +80,11 @@ current_worktree = Path(sys.argv[3]).resolve()
 prunable_only = sys.argv[4] == "1"
 output_json = sys.argv[5] == "1"
 include_footprint = sys.argv[6] == "1"
+
+try:
+    gh_pr_list_timeout_seconds = float(os.environ.get("WORKTREE_GC_REPORT_GH_TIMEOUT_SECONDS", "10"))
+except ValueError:
+    gh_pr_list_timeout_seconds = 10.0
 
 
 def run(*args: str) -> str:
@@ -173,6 +180,47 @@ def load_task_index() -> dict[str, list[dict[str, str]]]:
     return index
 
 
+def load_open_pr_branches() -> tuple[set[str], bool]:
+    if shutil.which("gh") is None:
+        return set(), False
+    try:
+        result = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "open",
+                "--json",
+                "headRefName",
+                "--limit",
+                "1000",
+            ],
+            cwd=repo_root,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=gh_pr_list_timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return set(), False
+    if result.returncode != 0 or not result.stdout.strip():
+        return set(), False
+    try:
+        rows = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return set(), False
+    return (
+        {
+            row["headRefName"]
+            for row in rows
+            if isinstance(row, dict) and isinstance(row.get("headRefName"), str)
+        },
+        True,
+    )
+
+
 def worktree_status(path: Path) -> tuple[bool | None, int | None]:
     if not path.exists():
         return None, None
@@ -189,8 +237,26 @@ def worktree_status(path: Path) -> tuple[bool | None, int | None]:
     return bool(lines), len(lines)
 
 
+def is_ancestor(commit: str | None, ref: str) -> bool | None:
+    if not commit:
+        return None
+    result = subprocess.run(
+        ["git", f"--git-dir={common_git_dir}", "merge-base", "--is-ancestor", commit, ref],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    return None
+
+
 records = parse_porcelain()
 task_index = load_task_index()
+open_pr_branches, pr_state_known = load_open_pr_branches()
 
 branch_attached_counts: dict[str, int] = {}
 for record in records:
@@ -213,6 +279,7 @@ for record in records:
     resolved_path = path_obj.resolve(strict=False)
     branch_ref = record.get("branch")
     branch = branch_ref.removeprefix("refs/heads/") if isinstance(branch_ref, str) else None
+    head = record.get("HEAD") if isinstance(record.get("HEAD"), str) else None
     detached = bool(record.get("detached"))
     prunable_reason = record.get("prunable")
     prunable = prunable_reason is not None
@@ -253,11 +320,28 @@ for record in records:
         cleanup_reasons.append("prunable_worktree")
     is_canonical_repo_root = resolved_path == repo_root
     is_main_branch = branch == "main"
+    has_open_pr = branch in open_pr_branches if branch and pr_state_known else False
+    merged_to_main = is_ancestor(head, "refs/heads/main") if branch and branch != "main" else None
+    needs_pr_state_guard = (
+        branch is not None
+        and branch != "main"
+        and latest_status in {"done", "deferred"}
+        and exists
+        and not is_current
+        and dirty is False
+        and not pr_state_known
+    )
 
     if is_canonical_repo_root:
         protected_cleanup_reasons.append("canonical_repo_root")
     if is_main_branch:
         protected_cleanup_reasons.append("main_branch")
+    if has_open_pr:
+        protected_cleanup_reasons.append("open_pr")
+    if branch and branch != "main" and merged_to_main is False:
+        protected_cleanup_reasons.append("branch_not_merged_to_main")
+    if needs_pr_state_guard:
+        protected_cleanup_reasons.append("open_pr_state_unknown")
 
     if (
         latest_status in {"done", "deferred"}
@@ -295,6 +379,7 @@ for record in records:
     entry = {
         "path": str(resolved_path),
         "branch": branch,
+        "head": head,
         "detached": detached,
         "current": is_current,
         "exists": exists,
@@ -303,6 +388,9 @@ for record in records:
         "prunable": prunable,
         "prunable_reason": prunable_reason,
         "locked_reason": locked_reason,
+        "pr_state_known": pr_state_known,
+        "open_pr": has_open_pr,
+        "merged_to_main": merged_to_main,
         "pm_task_uid": latest_task.get("task_uid") if latest_task else None,
         "pm_task_status": latest_status,
         "pm_task_title": latest_task.get("title") if latest_task else None,

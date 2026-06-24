@@ -278,6 +278,7 @@
     - `./scripts/worktree-gc-report.test.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] worktree-gc-open-pr-guard (PRD-SCRIPTS-008/PRD-ENGINEERING-025) [test_tier_required]: 为 `worktree-gc-report.sh` 补 open PR 与未并入 `main` 的 branch HEAD 保护，避免 clean/done worktree 仍承载活跃 PR 时被误报为 cleanup candidate；无法验证 GitHub PR 状态时仍保留本地 merged-to-main fail-closed 保护。 Trace: .pm/tasks/task_1936ae26167a45088aaee9cae64a8a7c.yaml
 - [x] task-closeout-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pm/task-closeout.sh`，把“fresh verification（done closeout 必填）-> `workflow-report --phase close` -> `move-task --to-status done|deferred` -> `.pm` 结构校验”收成一个单命令 close-phase helper，并补一条 `scripts/pm/workflow-behavior-eval.sh` 统一回归 task-worktree/closeout/PR/review-thread 主链。 Trace: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.yaml
   - 产物文件:
     - `scripts/pm/task-closeout.sh`
