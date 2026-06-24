@@ -262,6 +262,7 @@
 - [x] doc-inventory-report-executable-mode (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 repository health 巡检发现的 operator-facing doc/script contract drift，恢复 `scripts/doc-inventory-report.sh` 可直接执行的 Git mode，使手动巡检 runbook 首条命令与脚本 usage 可复制执行。 Trace: .pm/tasks/task_71d621935d414158b95df9d88dd5278a.yaml
 - [x] rustsec-advisory-ignore-baseline-ratchet (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Rust 依赖层治理点，为 libp2p network closure 的 RustSec advisory ignore baseline 补 owner/expiry/validation 元数据、CI ratchet 与 governance report 证据，阻止 ignored advisory 集合静默增长，并保留后续依赖 burn-down 风险边界。 Trace: .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.yaml
 - [x] worktree-cleanup-bounded-batch (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 repository health 巡检发现的 worktree lifecycle cleanup backlog，按 `worktree-gc-report --prunable-only` 确认 clean / closed-task / non-main 边界后移除首批 10 个本地 worktree，并保留 safe branch delete 拒绝的未 fully merged 分支。 Trace: .pm/tasks/task_1b0ed1997b82438381e8578e6b71215c.yaml
+- [x] wasm-executor-focused-clippy-debt-cleanup (PRD-ENGINEERING-001/021) [test_tier_required]: 继续收口 repository health 巡检发现的 Rust 代码层治理点，使 `oasis7_wasm_executor` focused Clippy `-D warnings` 在默认与 `wasmtime` 特性下通过，并保留 executor metrics 与 sandbox fallback 语义不变。 Trace: .pm/tasks/task_6b2fff9186a844a4b427f21ecf90822a.yaml
 
 ## File Structure / Affected Paths
 - `local-cargo-cache-script-convergence`: 预计改动 `scripts/cargo-dev-lib.sh`、`scripts/cargo-dev-lib.test.sh`、本地 smoke / playtest / prewarm 脚本、`scripts/prepare-task-pr.sh` 的 preflight 修复、`testing-manual.md`、`doc/scripts/{README.md,prd.md}`、`AGENTS.md` 与本 task execution log；只读依赖 `scripts/cargo-dev.sh`、`scripts/ci-tests.sh`、`scripts/build-wasm-module.sh`、release workflow；验证入口为 `bash -n ...`、`./scripts/cargo-dev-lib.test.sh`、相关脚本 `--help`/`--dry-run` smoke、`./scripts/prepare-task-pr.test.sh`、`./scripts/pm/lint.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check`。 Trace: .pm/tasks/task_46ea1c81166043e3a1e3d5899b618ae6.yaml
@@ -330,7 +331,7 @@
 - 更新日期: 2026-06-24
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `wasm-router-focused-clippy-debt-cleanup`（已清理 `oasis7_wasm_router` focused Clippy `-D warnings` 债务，保持订阅过滤校验与 router metrics 快照语义不变并通过 focused package tests。）
+- 最新完成: `wasm-executor-focused-clippy-debt-cleanup`（已清理 `oasis7_wasm_executor` focused Clippy `-D warnings` 债务，保持 executor metrics 与 sandbox fallback 语义不变，并通过默认 / `wasmtime` focused package tests。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
