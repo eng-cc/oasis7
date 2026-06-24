@@ -53,6 +53,7 @@ out_root="output/playwright/playability"
 startup_timeout_secs=240
 feedback_timeout_ms=10000
 session_prefix="post-onboarding-qa"
+summary_fixture_dir=""
 stack_args=()
 
 while [[ $# -gt 0 ]]; do
@@ -77,6 +78,10 @@ while [[ $# -gt 0 ]]; do
       session_prefix="${2:-}"
       shift 2
       ;;
+    --summary-fixture)
+      summary_fixture_dir="${2:-}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -98,10 +103,6 @@ done
   exit 2
 }
 
-ab_require
-require_cmd rg
-require_cmd stdbuf
-
 stamp=$(date +%Y%m%d-%H%M%S)
 run_id="post-onboarding-${stamp}"
 out_dir="$out_root/$run_id"
@@ -122,6 +123,226 @@ shot_initial="$out_dir/00-initial.png"
 shot_entry="$out_dir/01-post-onboarding-entry.png"
 shot_followup="$out_dir/02-post-onboarding-followup.png"
 session="${session_prefix}-${stamp}"
+
+write_summary() {
+  local summary_json_path_arg=$1
+  local summary_md_path_arg=$2
+  local game_url_arg=$3
+  local browser_env_path_arg=$4
+  local initial_state_path_arg=$5
+  local feedback_state_path_arg=$6
+  local entry_state_path_arg=$7
+  local followup_state_path_arg=$8
+  local shot_initial_arg=$9
+  local shot_entry_arg=${10}
+  local shot_followup_arg=${11}
+  local console_log_arg=${12}
+  local console_errors_log_arg=${13}
+  local stack_logs_dir_arg=${14}
+
+  python3 - \
+    "$summary_json_path_arg" \
+    "$summary_md_path_arg" \
+    "$game_url_arg" \
+    "$browser_env_path_arg" \
+    "$initial_state_path_arg" \
+    "$feedback_state_path_arg" \
+    "$entry_state_path_arg" \
+    "$followup_state_path_arg" \
+    "$shot_initial_arg" \
+    "$shot_entry_arg" \
+    "$shot_followup_arg" \
+    "$console_log_arg" \
+    "$console_errors_log_arg" \
+    "$stack_logs_dir_arg" <<'PY'
+import json
+import pathlib
+import sys
+
+summary_json_path = pathlib.Path(sys.argv[1])
+summary_md_path = pathlib.Path(sys.argv[2])
+game_url = sys.argv[3]
+browser_env_path = pathlib.Path(sys.argv[4])
+initial_state_path = pathlib.Path(sys.argv[5])
+feedback_state_path = pathlib.Path(sys.argv[6])
+entry_state_path = pathlib.Path(sys.argv[7])
+followup_state_path = pathlib.Path(sys.argv[8])
+shot_initial = pathlib.Path(sys.argv[9])
+shot_entry = pathlib.Path(sys.argv[10])
+shot_followup = pathlib.Path(sys.argv[11])
+console_log = pathlib.Path(sys.argv[12])
+console_errors_log = pathlib.Path(sys.argv[13])
+stack_logs_dir = sys.argv[14]
+
+
+def load_json(path: pathlib.Path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+browser_env = load_json(browser_env_path)
+initial_state = load_json(initial_state_path)
+feedback_state = load_json(feedback_state_path)
+entry_state = load_json(entry_state_path)
+followup_state = load_json(followup_state_path)
+
+feedback = feedback_state.get("lastControlFeedback") or {}
+followup_feedback = followup_state.get("lastControlFeedback") or {}
+feedback_recent = ((feedback_state.get("gameplaySummary") or {}).get("recentFeedback")) or {}
+followup_recent = ((followup_state.get("gameplaySummary") or {}).get("recentFeedback")) or {}
+renderer = browser_env.get("renderer") or ""
+render_mode = (browser_env.get("state") or {}).get("renderMode")
+is_software_renderer = "SwiftShader" in renderer or "Software" in renderer
+
+checks = {
+    "connected": initial_state.get("connectionStatus") == "connected",
+    "hardwareRendererOrSafeMode": not is_software_renderer,
+    "feedbackAdvanced": (
+        feedback.get("stage") == "completed_advanced"
+        or feedback_recent.get("stage") == "completed_advanced"
+    ),
+    "feedbackProducedWorldDelta": (
+        (feedback.get("deltaLogicalTime") or 0) > 0
+        or (feedback.get("deltaEventSeq") or 0) > 0
+        or (feedback_recent.get("deltaLogicalTime") or 0) > 0
+        or (feedback_recent.get("deltaEventSeq") or 0) > 0
+    ),
+    "selectedAgentAfterFeedback": entry_state.get("selectedKind") == "agent" and bool(entry_state.get("selectedId")),
+    "followupAdvanced": (
+        followup_feedback.get("stage") == "completed_advanced"
+        or followup_recent.get("stage") == "completed_advanced"
+    ),
+    "noRuntimeError": not bool(followup_state.get("lastError")),
+}
+failed_checks = [name for name, passed in checks.items() if not passed]
+
+summary = {
+    "result": "pass" if not failed_checks else "block",
+    "gameUrl": game_url,
+    "stackLogsDir": stack_logs_dir or None,
+    "artifacts": {
+        "browserEnv": str(browser_env_path),
+        "initialState": str(initial_state_path),
+        "feedbackState": str(feedback_state_path),
+        "postOnboardingEntryState": str(entry_state_path),
+        "postOnboardingFollowupState": str(followup_state_path),
+        "initialScreenshot": str(shot_initial),
+        "postOnboardingEntryScreenshot": str(shot_entry),
+        "postOnboardingFollowupScreenshot": str(shot_followup),
+        "consoleLog": str(console_log),
+        "consoleErrorsLog": str(console_errors_log),
+    },
+    "checks": checks,
+    "failedChecks": failed_checks,
+    "failed_checks": failed_checks,
+    "manualReviewChecklist": [
+        "确认 4/4 完成后左侧 Mission HUD 已切换为 PostOnboarding，而不是继续停留在 onboarding。",
+        "确认顶部首次总结卡显示已进入下一阶段 / PostOnboarding unlocked 语义。",
+        "确认 onboarding 卡与轻提示不再持续占据主视图。",
+    ],
+    "notes": {
+        "initialTick": initial_state.get("tick"),
+        "feedbackTick": feedback_state.get("tick"),
+        "entryTick": entry_state.get("tick"),
+        "followupTick": followup_state.get("tick"),
+        "feedbackEffect": feedback.get("effect") or feedback_recent.get("effect"),
+        "followupEffect": followup_feedback.get("effect") or followup_recent.get("effect"),
+        "renderer": renderer,
+        "renderMode": render_mode,
+    },
+}
+
+summary_json_path.write_text(
+    json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+
+lines = [
+    "# Viewer PostOnboarding QA Summary",
+    "",
+    f"- Result: `{summary['result']}`",
+    f"- URL: `{summary['gameUrl']}`",
+]
+if summary.get("stackLogsDir"):
+    lines.append(f"- Stack logs: `{summary['stackLogsDir']}`")
+lines.extend(
+    [
+        f"- Renderer: `{summary['notes']['renderer']}`",
+        f"- Render mode: `{summary['notes']['renderMode']}`",
+        "",
+        "## Checks",
+    ]
+)
+for key, value in checks.items():
+    lines.append(f"- {key}: `{'pass' if value else 'block'}`")
+if failed_checks:
+    lines.extend(
+        [
+            "",
+            "## Failed Checks",
+        ]
+    )
+    for name in failed_checks:
+        lines.append(f"- `{name}`")
+lines.extend(
+    [
+        "",
+        "## Manual Review Checklist",
+    ]
+)
+for item in summary["manualReviewChecklist"]:
+    lines.append(f"- {item}")
+lines.extend(
+    [
+        "",
+        "## Artifacts",
+    ]
+)
+for key, value in summary["artifacts"].items():
+    lines.append(f"- {key}: `{value}`")
+summary_md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+if failed_checks:
+    raise SystemExit("post-onboarding QA failed checks: " + ", ".join(failed_checks))
+PY
+}
+
+if [[ -n "$summary_fixture_dir" ]]; then
+  [[ -d "$summary_fixture_dir" ]] || {
+    echo "error: --summary-fixture not found: $summary_fixture_dir" >&2
+    exit 2
+  }
+  for fixture_name in browser-env.json state-initial.json state-feedback.json state-post-onboarding-entry.json state-post-onboarding-followup.json; do
+    [[ -f "$summary_fixture_dir/$fixture_name" ]] || {
+      echo "error: --summary-fixture missing $fixture_name" >&2
+      exit 2
+    }
+  done
+  touch "$console_log" "$console_errors_log" "$shot_initial" "$shot_entry" "$shot_followup"
+  write_summary \
+    "$summary_json_path" \
+    "$summary_md_path" \
+    "${game_url:-fixture://viewer-post-onboarding}" \
+    "$summary_fixture_dir/browser-env.json" \
+    "$summary_fixture_dir/state-initial.json" \
+    "$summary_fixture_dir/state-feedback.json" \
+    "$summary_fixture_dir/state-post-onboarding-entry.json" \
+    "$summary_fixture_dir/state-post-onboarding-followup.json" \
+    "$shot_initial" \
+    "$shot_entry" \
+    "$shot_followup" \
+    "$console_log" \
+    "$console_errors_log" \
+    "" || {
+      printf 'PostOnboarding QA fixture summary blocked.\n- Summary JSON: %s\n- Summary MD: %s\n' "$summary_json_path" "$summary_md_path" >&2
+      exit 1
+    }
+  printf 'PostOnboarding QA fixture summary passed.\n- Summary JSON: %s\n- Summary MD: %s\n' "$summary_json_path" "$summary_md_path"
+  exit 0
+fi
+
+ab_require
+require_cmd rg
+require_cmd stdbuf
 
 # Ensure the polling loop can read the log file before tee opens it.
 touch "$run_log"
@@ -360,8 +581,10 @@ ab_screenshot "$session" "$shot_followup" >>"$ab_log" 2>&1
 ab_cmd "$session" console >"$console_log" 2>&1 || true
 ab_cmd "$session" errors >"$console_errors_log" 2>&1 || true
 
-python3 - \
+summary_status=0
+write_summary \
   "$summary_json_path" \
+  "$summary_md_path" \
   "$game_url" \
   "$browser_env_path" \
   "$initial_state_path" \
@@ -373,147 +596,7 @@ python3 - \
   "$shot_followup" \
   "$console_log" \
   "$console_errors_log" \
-  "$stack_logs_dir" <<'PY'
-import json
-import pathlib
-import sys
-
-summary_json_path = pathlib.Path(sys.argv[1])
-game_url = sys.argv[2]
-browser_env_path = pathlib.Path(sys.argv[3])
-initial_state_path = pathlib.Path(sys.argv[4])
-feedback_state_path = pathlib.Path(sys.argv[5])
-entry_state_path = pathlib.Path(sys.argv[6])
-followup_state_path = pathlib.Path(sys.argv[7])
-shot_initial = pathlib.Path(sys.argv[8])
-shot_entry = pathlib.Path(sys.argv[9])
-shot_followup = pathlib.Path(sys.argv[10])
-console_log = pathlib.Path(sys.argv[11])
-console_errors_log = pathlib.Path(sys.argv[12])
-stack_logs_dir = sys.argv[13]
-
-def load_json(path: pathlib.Path):
-    return json.loads(path.read_text(encoding="utf-8"))
-
-browser_env = load_json(browser_env_path)
-initial_state = load_json(initial_state_path)
-feedback_state = load_json(feedback_state_path)
-entry_state = load_json(entry_state_path)
-followup_state = load_json(followup_state_path)
-
-feedback = feedback_state.get("lastControlFeedback") or {}
-followup_feedback = followup_state.get("lastControlFeedback") or {}
-feedback_recent = ((feedback_state.get("gameplaySummary") or {}).get("recentFeedback")) or {}
-followup_recent = ((followup_state.get("gameplaySummary") or {}).get("recentFeedback")) or {}
-renderer = browser_env.get("renderer") or ""
-render_mode = (browser_env.get("state") or {}).get("renderMode")
-
-summary = {
-    "result": "pass",
-    "gameUrl": game_url,
-    "stackLogsDir": stack_logs_dir or None,
-    "artifacts": {
-        "browserEnv": str(browser_env_path),
-        "initialState": str(initial_state_path),
-        "feedbackState": str(feedback_state_path),
-        "postOnboardingEntryState": str(entry_state_path),
-        "postOnboardingFollowupState": str(followup_state_path),
-        "initialScreenshot": str(shot_initial),
-        "postOnboardingEntryScreenshot": str(shot_entry),
-        "postOnboardingFollowupScreenshot": str(shot_followup),
-        "consoleLog": str(console_log),
-        "consoleErrorsLog": str(console_errors_log),
-    },
-    "checks": {
-        "connected": initial_state.get("connectionStatus") == "connected",
-        "hardwareRendererOrSafeMode": ("SwiftShader" not in renderer and "Software" not in renderer) or render_mode == "software_safe",
-        "feedbackAdvanced": (
-            feedback.get("stage") == "completed_advanced"
-            or feedback_recent.get("stage") == "completed_advanced"
-        ),
-        "feedbackProducedWorldDelta": (
-            (feedback.get("deltaLogicalTime") or 0) > 0
-            or (feedback.get("deltaEventSeq") or 0) > 0
-            or (feedback_recent.get("deltaLogicalTime") or 0) > 0
-            or (feedback_recent.get("deltaEventSeq") or 0) > 0
-        ),
-        "selectedAgentAfterFeedback": entry_state.get("selectedKind") == "agent" and bool(entry_state.get("selectedId")),
-        "followupAdvanced": (
-            followup_feedback.get("stage") == "completed_advanced"
-            or followup_recent.get("stage") == "completed_advanced"
-        ),
-        "noRuntimeError": not bool(followup_state.get("lastError")),
-    },
-    "manualReviewChecklist": [
-        "确认 4/4 完成后左侧 Mission HUD 已切换为 PostOnboarding，而不是继续停留在 onboarding。",
-        "确认顶部首次总结卡显示已进入下一阶段 / PostOnboarding unlocked 语义。",
-        "确认 onboarding 卡与轻提示不再持续占据主视图。",
-    ],
-    "notes": {
-        "initialTick": initial_state.get("tick"),
-        "feedbackTick": feedback_state.get("tick"),
-        "entryTick": entry_state.get("tick"),
-        "followupTick": followup_state.get("tick"),
-        "feedbackEffect": feedback.get("effect") or feedback_recent.get("effect"),
-        "followupEffect": followup_feedback.get("effect") or followup_recent.get("effect"),
-        "renderer": renderer,
-        "renderMode": render_mode,
-    },
-}
-
-summary_json_path.write_text(
-    json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
-    encoding="utf-8",
-)
-PY
-
-python3 - "$summary_json_path" "$summary_md_path" <<'PY'
-import json
-import pathlib
-import sys
-
-summary = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-out = pathlib.Path(sys.argv[2])
-checks = summary["checks"]
-artifacts = summary["artifacts"]
-notes = summary["notes"]
-
-lines = [
-    "# Viewer PostOnboarding QA Summary",
-    "",
-    f"- Result: `{summary['result']}`",
-    f"- URL: `{summary['gameUrl']}`",
-]
-if summary.get("stackLogsDir"):
-    lines.append(f"- Stack logs: `{summary['stackLogsDir']}`")
-lines.extend(
-    [
-        f"- Renderer: `{notes['renderer']}`",
-        f"- Render mode: `{notes['renderMode']}`",
-        "",
-        "## Checks",
-    ]
-)
-for key, value in checks.items():
-    lines.append(f"- {key}: `{str(value).lower()}`")
-lines.extend(
-    [
-        "",
-        "## Manual Review Checklist",
-    ]
-)
-for item in summary["manualReviewChecklist"]:
-    lines.append(f"- {item}")
-lines.extend(
-    [
-        "",
-        "## Artifacts",
-    ]
-)
-for key, value in artifacts.items():
-    lines.append(f"- {key}: `{value}`")
-out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-PY
+  "$stack_logs_dir" || summary_status=$?
 
 cat <<INFO
 PostOnboarding QA artifacts ready.
@@ -525,3 +608,5 @@ PostOnboarding QA artifacts ready.
 - Follow-up screenshot: $shot_followup
 - Stack logs: ${stack_logs_dir:-n/a}
 INFO
+
+exit "$summary_status"

@@ -1,0 +1,24 @@
+task_uid: task_a7fd5298520c4166958898edaae63238
+title: "frontend code governance next issue"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-frontend-code-governance-next-issue-20260624
+execution_log_path: .pm/tasks/task_a7fd5298520c4166958898edaae63238.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/viewer/project.md
+  - doc/testing/project.md
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-24T19:53:21+08:00
+last_started_at: 2026-06-24T16:45:49+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/viewer-post-onboarding-qa.sh scripts/public-testnet-rehearsal.sh scripts/viewer-post-onboarding-qa-summary-smoke.sh && ./scripts/viewer-post-onboarding-qa-summary-smoke.sh && git diff --check && ./scripts/doc-governance-check.sh"
+last_verified_at: 2026-06-24T19:53:19+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-24T19:53:20+08:00
