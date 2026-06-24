@@ -179,4 +179,35 @@ grep -q "systemctl stop oasis7-testnet-orphan.service" "$TMP_DIR/fake-systemctl.
 orphan_current=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$orphan_node_abs/current")
 test "$orphan_current" = "$orphan_node_abs/releases/old"
 
+scanner_node="$TMP_DIR/scanner-node"
+mkdir -p "$scanner_node/releases/old/bin" "$scanner_node/config/doc/testing/evidence"
+printf 'runtime-v1\n' >"$scanner_node/releases/old/bin/oasis7_chain_runtime"
+chmod +x "$scanner_node/releases/old/bin/oasis7_chain_runtime"
+ln -s "$scanner_node/releases/old" "$scanner_node/current"
+cp \
+  "$node_root_abs/config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+  "$scanner_node/config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+scanner_node_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$scanner_node")
+cat >"$TMP_DIR/fake-bin/ps" <<SH
+#!/usr/bin/env bash
+printf '888 1 awk -v root=${scanner_node_abs} index root /oasis7_chain_runtime/ /start-node[.]sh/\\n'
+SH
+set +e
+FAKE_SYSTEMCTL_LOG="$TMP_DIR/fake-systemctl.log" \
+PATH="$TMP_DIR/fake-bin:$PATH" \
+"$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
+  --node-root "$scanner_node" \
+  --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
+  --package-version "$package_version-scanner" \
+  --commit "$commit" \
+  --run-id "$run_id" \
+  --systemd-service oasis7-testnet-scanner.service \
+  --restart-service \
+  >/tmp/oasis7-package-node-upgrade-scanner.out 2>&1
+scanner_status=$?
+set -e
+test "$scanner_status" -eq 0
+scanner_current=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$scanner_node_abs/current")
+test "$scanner_current" = "$scanner_node_abs/releases/$package_version-scanner"
+
 echo "ok: package node upgrade pins current runtime hash into governed bootstrap bundle"

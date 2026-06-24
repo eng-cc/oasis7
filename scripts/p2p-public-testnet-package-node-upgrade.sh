@@ -76,11 +76,15 @@ assert_no_node_processes() {
   local root=$1
   local matches
   matches="$(
-    ps -eo pid=,ppid=,args= | awk -v root="$root" '
-      index($0, root) > 0 && ($0 ~ /oasis7_chain_runtime/ || $0 ~ /start-node[.]sh/) {
-        print
-      }
-    ' || true
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^[[:space:]]*([0-9]+)[[:space:]]+([0-9]+)[[:space:]]+(.*)$ ]]; then
+        args="${BASH_REMATCH[3]}"
+        if [[ "$args" == *"$root"/* ]] \
+          && { [[ "$args" == *"/oasis7_chain_runtime"* ]] || [[ "$args" == *"/start-node.sh"* ]]; }; then
+          printf '%s\n' "$line"
+        fi
+      fi
+    done < <(ps -eo pid=,ppid=,args=) || true
   )"
   if [[ -n "$matches" ]]; then
     printf '%s\n' "$matches" >&2

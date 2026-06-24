@@ -267,6 +267,34 @@ fn startup_reconcile_bind_guard_rejects_occupied_replication_tcp_listen() {
 }
 
 #[test]
+fn startup_reconcile_bind_guard_rejects_occupied_replication_ipv6_tcp_listen() {
+    let Ok(occupied) = TcpListener::bind("[::1]:0") else {
+        return;
+    };
+    let port = occupied.local_addr().expect("replication addr").port();
+    let status_addr = unused_loopback_tcp_addr();
+    let mut options =
+        parse_options(["--status-bind", status_addr.as_str()].into_iter()).expect("parse options");
+    options.replication_network_listen_addrs = vec![format!("/ip6/::1/tcp/{port}")];
+
+    let err = reserve_startup_reconcile_bind_guard(&options)
+        .expect_err("occupied ipv6 replication listen must fail before startup reconcile");
+    assert!(err.contains("startup reconcile preflight failed: replication tcp listen"));
+}
+
+#[test]
+fn startup_reconcile_bind_guard_rejects_unsupported_replication_listen_addr() {
+    let status_addr = unused_loopback_tcp_addr();
+    let mut options =
+        parse_options(["--status-bind", status_addr.as_str()].into_iter()).expect("parse options");
+    options.replication_network_listen_addrs = vec!["/dns4/example.test/tcp/30333".to_string()];
+
+    let err = reserve_startup_reconcile_bind_guard(&options)
+        .expect_err("unsupported replication listen must fail closed before startup reconcile");
+    assert!(err.contains("unsupported replication listen address"));
+}
+
+#[test]
 fn parse_options_reads_validator_signer_public_key_overrides() {
     let options = parse_options(
         [
