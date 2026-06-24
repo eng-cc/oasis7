@@ -186,11 +186,13 @@ bundle_check_freshness() {
   python3 - "$manifest_path" "$current_json" <<'PY'
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
 
 manifest_path = Path(sys.argv[1])
+bundle_dir = manifest_path.parent
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 current = json.loads(sys.argv[2])
 errors: list[str] = []
@@ -204,6 +206,25 @@ if manifest.get("viewerProtocolVersion") != current.get("viewerProtocolVersion")
         "viewer protocol version drift "
         f"(bundle={manifest.get('viewerProtocolVersion')}, current={current.get('viewerProtocolVersion')})"
     )
+assets = manifest.get("assets") or {}
+for path_key, rel_path in sorted(assets.items()):
+    if not path_key.endswith("Path") or not rel_path:
+        continue
+    sha_key = path_key[:-4] + "Sha256"
+    expected_sha = assets.get(sha_key)
+    if not expected_sha:
+        errors.append(f"bundle asset drift: {rel_path} missing manifest {sha_key}")
+        continue
+    asset_path = bundle_dir / rel_path
+    if not asset_path.is_file():
+        errors.append(f"bundle asset drift: {rel_path} missing")
+        continue
+    actual_sha = hashlib.sha256(asset_path.read_bytes()).hexdigest()
+    if actual_sha != expected_sha:
+        errors.append(
+            f"bundle asset drift: {rel_path} sha256 mismatch "
+            f"(bundle={expected_sha}, current={actual_sha})"
+        )
 if errors:
     print("bundle is stale relative to current workspace: " + "; ".join(errors))
     sys.exit(1)
