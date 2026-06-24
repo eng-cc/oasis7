@@ -489,21 +489,24 @@ def matching_pids():
     return pids
 
 deadline = time.monotonic() + 10
+quiet_since = None
 while time.monotonic() < deadline:
-    if not matching_pids():
-        break
-    time.sleep(0.25)
-
-for sig in (signal.SIGTERM, signal.SIGKILL):
     pids = matching_pids()
-    if not pids:
-        break
-    for pid in pids:
-        try:
-            os.kill(pid, sig)
-        except ProcessLookupError:
-            pass
-    time.sleep(1)
+    if pids:
+        quiet_since = None
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            for pid in matching_pids():
+                try:
+                    os.kill(pid, sig)
+                except ProcessLookupError:
+                    pass
+            time.sleep(0.25)
+    else:
+        if quiet_since is None:
+            quiet_since = time.monotonic()
+        if time.monotonic() - quiet_since >= 2:
+            break
+        time.sleep(0.25)
 
 remaining = matching_pids()
 if remaining:

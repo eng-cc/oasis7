@@ -7,6 +7,7 @@
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] testnet-rebuild-cleanup-stable-quiet (PRD-P2P-001/003/028) [test_tier_required]: 补强 public_testnet validator rebuild cleanup 的 race 防护；cleanup 不再因瞬时无匹配进程提前成功，必须持续扫描并达到稳定 quiet window，覆盖 stop 后延迟脱离/重现的 stack-root runtime/start-node 进程。 Trace: .pm/tasks/task_b0a073c3b7fd44549767d9540e8e6ec9.yaml
 - [x] testnet-rebuild-cleanup-verifies-orphans (PRD-P2P-001/003/028) [test_tier_required]: 补强 public_testnet validator rebuild 失败清理合同；cleanup 在 SIGKILL 后必须复查 stack-root runtime/start-node 进程并非零暴露残留，失败路径不再吞掉 cleanup command failure，fake ssh 测试也真正执行 cleanup heredoc 而不是只匹配命令字符串。 Trace: .pm/tasks/task_3b25db6324f14489adaa95eba13bb32a.yaml
 - [x] testnet-rebuild-fail-cleanup (PRD-P2P-028) [test_tier_required]: 修复 public_testnet validator clean rebuild 在服务 start/readiness 失败后没有清理 node-root 残留 runtime/start-node 进程的问题；rebuild 现在在失败路径复用服务 stop、reset-failed 和 orphan process cleanup，避免失败启动留下端口占用并触发后续 bind 冲突。 Trace: .pm/tasks/task_540dc25f45af4065b58ab8e45a121075.yaml
 - [x] testnet-stage-track-contract (PRD-P2P-028) [test_tier_required]: 修复 public_testnet deployment-stage 生成器默认 release-candidate bundle track 漂移到不受支持的 `public_testnet`，导致 clean validator redeploy 无法生成 stage 的问题；默认 track 重新对齐到受支持的 `public_testnet_rehearsal`，并在 stage smoke 中断言 bundle track 契约。 Trace: .pm/tasks/task_e479687218a94f698ef7715458543fc9.yaml
