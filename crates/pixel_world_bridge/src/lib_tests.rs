@@ -105,8 +105,10 @@ fn assert_fragment_lod_keeps_blocks_background_at_agent_readable_scale() {
         depth_cm: 2_000_000.0,
         height_cm: 0.0,
     };
-    let mut camera = CameraState::default();
-    camera.zoom = 3.0;
+    let camera = CameraState {
+        zoom: 3.0,
+        ..Default::default()
+    };
 
     let screen_size = fragment_screen_size_px(12_000.0, &bounds, 960.0, 540.0, &camera);
     assert!(screen_size < 10.0);
@@ -122,8 +124,10 @@ fn assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents() 
         depth_cm: 2_000_000.0,
         height_cm: 0.0,
     };
-    let mut camera = CameraState::default();
-    camera.zoom = 3.0;
+    let camera = CameraState {
+        zoom: 3.0,
+        ..Default::default()
+    };
     let fragment = FragmentTerrainPatch {
         id: "fragment:loc-0:0".to_string(),
         location_id: "loc-0".to_string(),

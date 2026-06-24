@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use super::*;
+use bevy::ecs::system::SystemParam;
 
 const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
 const AGENT_HIT_HALF_SIZE: f64 = 8.0;
@@ -104,10 +105,10 @@ fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64
         }
     }
     for agent in &render_state.agents {
-        if let Some(pos) = agent.pos.as_ref() {
-            if let Some(point) = to_canvas_point(pos, world_bounds, width, height, &base_camera) {
-                points.push(point);
-            }
+        if let Some(pos) = agent.pos.as_ref()
+            && let Some(point) = to_canvas_point(pos, world_bounds, width, height, &base_camera)
+        {
+            points.push(point);
         }
     }
     for hotspot in &render_state.visual_hotspots {
@@ -794,63 +795,68 @@ fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState
     runtime.hover_key = None;
 }
 
+#[derive(SystemParam)]
+pub(crate) struct RenderSceneQueries<'w, 's> {
+    windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
+    current_grid: Query<'w, 's, Entity, With<PixelWorldGridVisual>>,
+    fragment_visuals: Query<'w, 's, (Entity, &'static PixelWorldFragmentVisual)>,
+    location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
+    agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
+    link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
+    hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
+}
+
 pub(crate) fn render_scene(
     mut commands: Commands,
     mut runtime: ResMut<BevyRuntimeState>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    current_grid: Query<Entity, With<PixelWorldGridVisual>>,
-    fragment_visuals: Query<(Entity, &PixelWorldFragmentVisual)>,
-    location_visuals: Query<(Entity, &PixelWorldLocationVisual)>,
-    agent_visuals: Query<(Entity, &PixelWorldAgentVisual)>,
-    link_visuals: Query<(Entity, &PixelWorldLinkVisual)>,
-    hotspot_visuals: Query<(Entity, &PixelWorldHotspotVisual)>,
+    queries: RenderSceneQueries,
     time: Res<Time>,
 ) {
     if !runtime.mounted {
         clear_runtime_visuals(&mut commands, &mut runtime);
-        for entity in current_grid.iter() {
+        for entity in queries.current_grid.iter() {
             commands.entity(entity).despawn();
         }
         return;
     }
 
-    for (entity, visual) in location_visuals.iter() {
+    for (entity, visual) in queries.location_visuals.iter() {
         runtime
             .location_entities
             .entry(visual.id.clone())
             .or_insert(entity);
     }
-    for (entity, visual) in fragment_visuals.iter() {
+    for (entity, visual) in queries.fragment_visuals.iter() {
         runtime
             .fragment_entities
             .entry(visual.id.clone())
             .or_insert(entity);
     }
-    for (entity, visual) in agent_visuals.iter() {
+    for (entity, visual) in queries.agent_visuals.iter() {
         runtime
             .agent_entities
             .entry(visual.id.clone())
             .or_insert(entity);
     }
-    for (entity, visual) in link_visuals.iter() {
+    for (entity, visual) in queries.link_visuals.iter() {
         runtime
             .link_entities
             .entry(visual.id.clone())
             .or_insert(entity);
     }
-    for (entity, visual) in hotspot_visuals.iter() {
+    for (entity, visual) in queries.hotspot_visuals.iter() {
         runtime
             .hotspot_entities
             .entry(visual.id.clone())
             .or_insert(entity);
     }
 
-    let Ok(window) = windows.single() else {
+    let Ok(window) = queries.windows.single() else {
         return;
     };
     let Some(_) = runtime.render_state.as_ref() else {
         clear_runtime_visuals(&mut commands, &mut runtime);
-        for entity in current_grid.iter() {
+        for entity in queries.current_grid.iter() {
             commands.entity(entity).despawn();
         }
         return;
@@ -863,7 +869,13 @@ pub(crate) fn render_scene(
 
     maybe_auto_fit_camera(&mut runtime, width, height);
     maybe_focus_selected_entity(&mut runtime, width, height);
-    reconcile_grid(&mut commands, &mut runtime, &current_grid, width, height);
+    reconcile_grid(
+        &mut commands,
+        &mut runtime,
+        &queries.current_grid,
+        width,
+        height,
+    );
     reconcile_fragments(&mut commands, &mut runtime, width, height);
     reconcile_links(&mut commands, &mut runtime, width, height);
     reconcile_locations(&mut commands, &mut runtime, width, height, animation_ms);

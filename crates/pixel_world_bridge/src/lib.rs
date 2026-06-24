@@ -274,7 +274,7 @@ fn render_state_fatal_value(code: &str, message: &str) -> JsValue {
 }
 
 fn status_value(status: &str) -> JsValue {
-    js_value_from_serializable(&json!({ "status": status })).unwrap_or_else(|_| JsValue::NULL)
+    js_value_from_serializable(&json!({ "status": status })).unwrap_or(JsValue::NULL)
 }
 
 fn parse_render_state(raw: JsValue) -> Result<RenderState, JsValue> {
@@ -541,10 +541,8 @@ fn apply_external_render_snapshot(runtime: &mut BevyRuntimeState, snapshot: Shar
             .as_ref()
             .filter(|target| target.kind == "agent")
             .cloned();
-    } else if content_changed {
-        if let Some(follow_target) = runtime.active_follow_target.clone() {
-            runtime.pending_focus_target = Some(follow_target);
-        }
+    } else if content_changed && let Some(follow_target) = runtime.active_follow_target.clone() {
+        runtime.pending_focus_target = Some(follow_target);
     }
     runtime.render_version = snapshot.render_version;
     runtime.render_state = snapshot.render_state;
@@ -712,12 +710,12 @@ impl PixelWorldBridge {
 
         let mount_result = BRIDGE_SHARED.with(|shared| {
             let mut shared = shared.borrow_mut();
-            if let Some(existing_selector) = &shared.canvas_selector {
-                if existing_selector != &canvas_selector {
-                    return Err(format!(
-                        "bevy runtime already bound to {existing_selector}, cannot rebind to {canvas_selector}"
-                    ));
-                }
+            if let Some(existing_selector) = &shared.canvas_selector
+                && existing_selector != &canvas_selector
+            {
+                return Err(format!(
+                    "bevy runtime already bound to {existing_selector}, cannot rebind to {canvas_selector}"
+                ));
             }
             shared.canvas_selector = Some(canvas_selector.clone());
             shared.render_state = Some(parsed_state);
