@@ -203,3 +203,12 @@ Result:
 - PR URL: https://github.com/eng-cc/oasis7/pull/593
 - PR purpose decision: normal_pr_ci_watch.
 - Watch scope: required checks, mergeability, PR comments, and review threads; `REVIEW_REQUIRED` and `BEHIND` remain informational unless GitHub reports a concrete merge/update blocker.
+
+## PR conflict resolution and revalidation - 2026-06-24
+
+- PR watch found `mergeable=CONFLICTING` / `mergeStateStatus=DIRTY` on https://github.com/eng-cc/oasis7/pull/593.
+- Resolution: merged `origin/main` into `task/engineering-rust-dependency-governance-next`; the only content conflict was `doc/engineering/project.md` completed-task Trace ordering. Kept both the upstream `wasm-router-focused-clippy-debt-cleanup` trace and this task's `rustsec-advisory-ignore-baseline-ratchet` trace.
+- Revalidation after merge:
+  - `./scripts/check-rustsec-ignore-baseline.test.sh` -> passed.
+  - `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-ratchet-after-merge` -> passed; RustSec ignore baseline rc=0; cargo deny report remains report-only rc=4.
+  - `OASIS7_CI_RUN_OASIS7_NET_TESTS=true OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=true ./scripts/ci-tests.sh required` -> passed.
