@@ -146,6 +146,10 @@ impl PosNodeEngine {
             last_broadcast_gossip_committed_at_ms: None,
             last_broadcast_network_committed_height: 0,
             last_broadcast_network_committed_at_ms: None,
+            last_broadcast_gossip_replicated_committed_height: 0,
+            last_broadcast_gossip_replicated_committed_at_ms: None,
+            last_broadcast_network_replicated_committed_height: 0,
+            last_broadcast_network_replicated_committed_at_ms: None,
             replicate_local_commits: config.replication.is_some()
                 && (matches!(config.role, NodeRole::Sequencer)
                     || matches!(

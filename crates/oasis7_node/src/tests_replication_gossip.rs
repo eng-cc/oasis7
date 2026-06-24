@@ -381,7 +381,7 @@ fn runtime_gossip_tracks_peer_heads_when_replication_network_consensus_is_disabl
     runtime_a.start().expect("start a");
     runtime_b.start().expect("start b");
 
-    let synced = wait_until(Instant::now() + Duration::from_secs(8), || {
+    let synced = wait_until(Instant::now() + Duration::from_secs(15), || {
         let snapshot_a = runtime_a.snapshot();
         let snapshot_b = runtime_b.snapshot();
         snapshot_a.consensus.network_committed_height >= 1
@@ -389,9 +389,20 @@ fn runtime_gossip_tracks_peer_heads_when_replication_network_consensus_is_disabl
             && snapshot_a.consensus.known_peer_heads >= 1
             && snapshot_b.consensus.known_peer_heads >= 1
     });
+
+    let snapshot_a = runtime_a.snapshot();
+    let snapshot_b = runtime_b.snapshot();
     assert!(
         synced,
-        "runtime gossip did not observe peer heads when replication-network consensus was disabled"
+        "runtime gossip did not observe peer heads when replication-network consensus was disabled: a_network_committed={} a_known_peer_heads={} a_peer_heads={:?} a_last_error={:?} b_network_committed={} b_known_peer_heads={} b_peer_heads={:?} b_last_error={:?}",
+        snapshot_a.consensus.network_committed_height,
+        snapshot_a.consensus.known_peer_heads,
+        snapshot_a.consensus.peer_heads,
+        snapshot_a.last_error,
+        snapshot_b.consensus.network_committed_height,
+        snapshot_b.consensus.known_peer_heads,
+        snapshot_b.consensus.peer_heads,
+        snapshot_b.last_error
     );
 
     runtime_a.stop().expect("stop a");

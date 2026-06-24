@@ -435,10 +435,55 @@ impl PosNodeEngine {
             public_key_hex: None,
             signature_hex: None,
         };
+        self.validate_replicated_commit_head_matches_local(&commit)?;
         if let Some(signer) = self.consensus_signer.as_ref() {
             sign_commit_message(&mut commit, signer)?;
         }
         Ok(Some((height, commit)))
+    }
+
+    fn validate_replicated_commit_head_matches_local(
+        &self,
+        commit: &GossipCommitMessage,
+    ) -> Result<(), NodeError> {
+        if commit.height != self.committed_height {
+            return Ok(());
+        }
+        if let Some(local_block_hash) = self
+            .last_committed_block_hash
+            .as_deref()
+            .filter(|hash| !hash.starts_with("legacy-height-"))
+        {
+            if commit.block_hash != local_block_hash {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "replicated commit head conflicts with local committed head at height {}: local_block={} replicated_block={}",
+                        commit.height, local_block_hash, commit.block_hash
+                    ),
+                });
+            }
+        }
+        if let Some((local_execution_block_hash, local_execution_state_root)) =
+            self.execution_binding_for_height(commit.height)
+        {
+            match (
+                commit.execution_block_hash.as_deref(),
+                commit.execution_state_root.as_deref(),
+            ) {
+                (Some(replicated_execution_block_hash), Some(replicated_execution_state_root))
+                    if replicated_execution_block_hash == local_execution_block_hash
+                        && replicated_execution_state_root == local_execution_state_root => {}
+                _ => {
+                    return Err(NodeError::Replication {
+                        reason: format!(
+                            "replicated commit head execution binding conflicts with local committed head at height {}",
+                            commit.height
+                        ),
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn broadcast_replicated_commit_head_network(
@@ -459,15 +504,15 @@ impl PosNodeEngine {
         };
         if !self.should_broadcast_height(
             height,
-            self.last_broadcast_network_committed_height,
-            self.last_broadcast_network_committed_at_ms,
+            self.last_broadcast_network_replicated_committed_height,
+            self.last_broadcast_network_replicated_committed_at_ms,
             now_ms,
         ) {
             return Ok(());
         }
         endpoint.publish_commit(&commit)?;
-        self.last_broadcast_network_committed_height = height;
-        self.last_broadcast_network_committed_at_ms = Some(now_ms);
+        self.last_broadcast_network_replicated_committed_height = height;
+        self.last_broadcast_network_replicated_committed_at_ms = Some(now_ms);
         Ok(())
     }
 
@@ -486,15 +531,15 @@ impl PosNodeEngine {
         };
         if !self.should_broadcast_height(
             height,
-            self.last_broadcast_gossip_committed_height,
-            self.last_broadcast_gossip_committed_at_ms,
+            self.last_broadcast_gossip_replicated_committed_height,
+            self.last_broadcast_gossip_replicated_committed_at_ms,
             now_ms,
         ) {
             return Ok(());
         }
         endpoint.broadcast_commit(&commit)?;
-        self.last_broadcast_gossip_committed_height = height;
-        self.last_broadcast_gossip_committed_at_ms = Some(now_ms);
+        self.last_broadcast_gossip_replicated_committed_height = height;
+        self.last_broadcast_gossip_replicated_committed_at_ms = Some(now_ms);
         Ok(())
     }
 }
