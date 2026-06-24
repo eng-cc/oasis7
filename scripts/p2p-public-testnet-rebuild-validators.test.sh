@@ -195,14 +195,20 @@ case "$cmd" in
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)\/staged-world\/.' '\([^']*\)\/data\/execution-world\/'.*/\1/p")
     cp -R "$root$stack_root/staged-world/." "$root$stack_root/data/execution-world/"
     ;;
-  STACK_ROOT=*python3*)
+  systemctl\ stop*\;*\ STACK_ROOT=*python3*|STACK_ROOT=*python3*)
+    if [[ "${TEST_FAIL_CLEANUP_AFTER_START_HOST:-}" == "$host" ]] \
+      && [[ -f "${TEST_REMOTE_ROOT:?}/started-${host//[^A-Za-z0-9_.-]/_}" ]]; then
+      exit 43
+    fi
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/STACK_ROOT='\([^']*\)'.*/\1/p")
-    mapped_cmd=${cmd//STACK_ROOT=\'$stack_root\'/STACK_ROOT=\'$root$stack_root\'}
+    cleanup_cmd="STACK_ROOT=${cmd#*STACK_ROOT=}"
+    mapped_cmd=${cleanup_cmd//STACK_ROOT=\'$stack_root\'/STACK_ROOT=\'$root$stack_root\'}
     bash -c "$mapped_cmd"
     ;;
   systemctl\ stop*)
     ;;
   systemctl\ reset-failed*\;*\ systemctl\ start*|systemctl\ start*)
+    touch "${TEST_REMOTE_ROOT:?}/started-${host//[^A-Za-z0-9_.-]/_}"
     if [[ "${TEST_FAIL_START_HOST:-}" == "$host" ]]; then
       exit 42
     fi
@@ -240,7 +246,11 @@ case "$url" in
     cp "${TEST_STATUS_ROOT:?}/sequencer.json" "$out"
     ;;
   http://storage/status)
-    cp "${TEST_STATUS_ROOT:?}/storage.json" "$out"
+    if [[ -n "${TEST_STORAGE_STATUS_OVERRIDE:-}" ]]; then
+      cp "$TEST_STORAGE_STATUS_OVERRIDE" "$out"
+    else
+      cp "${TEST_STATUS_ROOT:?}/storage.json" "$out"
+    fi
     ;;
   *)
     echo "unexpected url: $url" >&2
@@ -434,4 +444,108 @@ if not start_indexes:
     raise SystemExit("missing sequencer start command for start-failure path")
 if not any(index > start_indexes[-1] for index in cleanup_indexes):
     raise SystemExit("missing post-start cleanup after failed sequencer systemctl start")
+PY
+
+: >"$TEST_SSH_LOG"
+rm -f "$TEST_REMOTE_ROOT"/started-*
+if TEST_FAIL_CLEANUP_AFTER_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-cleanup-fail" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-cleanup-fail.out 2>&1; then
+  echo "expected rebuild to fail when post-start cleanup command fails" >&2
+  exit 1
+fi
+
+grep -q "sequencer readiness failed checks after restart and cleanup failed" \
+  /tmp/oasis7-rebuild-validators-cleanup-fail.out
+
+cat >"$TMP_DIR/status/storage-not-ready.json" <<'JSON'
+{
+  "running": true,
+  "last_error": null,
+  "readiness": {
+    "status": "not_ready"
+  },
+  "observability": {
+    "storage_challenge_network_degraded": false
+  },
+  "consensus": {
+    "committed_height": 0,
+    "last_execution_height": 0,
+    "storage_challenge_network_degraded_height": null,
+    "network_head": {
+      "height": null
+    }
+  },
+  "replication": {
+    "connected_peers": []
+  }
+}
+JSON
+
+: >"$TEST_SSH_LOG"
+rm -f "$TEST_REMOTE_ROOT"/started-*
+if TEST_STORAGE_STATUS_OVERRIDE="$TMP_DIR/status/storage-not-ready.json" "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-storage-fail" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-storage-fail.out 2>&1; then
+  echo "expected rebuild to fail when storage readiness stays not_ready" >&2
+  exit 1
+fi
+
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+log_path = pathlib.Path(sys.argv[1])
+lines = log_path.read_text(encoding="utf-8").splitlines()
+
+def commands_for(host: str) -> list[str]:
+    prefix = f"{host}\t"
+    return [line.split("\t", 1)[1] for line in lines if line.startswith(prefix)]
+
+for host, service in (
+    ("root@sequencer", "oasis7-triad-sequencer.service"),
+    ("root@storage", "oasis7-triad-storage.service"),
+):
+    commands = commands_for(host)
+    start_indexes = [
+        index
+        for index, command in enumerate(commands)
+        if f"systemctl start '{service}'" in command
+    ]
+    cleanup_indexes = [
+        index
+        for index, command in enumerate(commands)
+        if f"systemctl stop '{service}'" in command
+        and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
+        and "oasis7_chain_runtime" in command
+        and "start-node.sh" in command
+    ]
+    if not start_indexes:
+        raise SystemExit(f"missing {host} start command for storage-failure path")
+    if not any(index > start_indexes[-1] for index in cleanup_indexes):
+        raise SystemExit(f"missing post-start cleanup for {host} after storage readiness failure")
 PY
