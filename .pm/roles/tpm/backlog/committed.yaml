@@ -99,3 +99,14 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
+  - task_uid: task_efe5ecba45cd4dc59cb2494c7edc438b
+    title: "Find next Rust code governance issue"
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "Identify one bounded Rust code governance issue with evidence and role-slice attribution."
+      - "If a safe implementation is selected, complete focused fix, verification, review, PR follow-through, and cleanup."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_efe5ecba45cd4dc59cb2494c7edc438b.yaml
