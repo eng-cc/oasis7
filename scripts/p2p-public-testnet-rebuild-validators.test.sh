@@ -203,6 +203,9 @@ case "$cmd" in
   systemctl\ stop*)
     ;;
   systemctl\ reset-failed*\;*\ systemctl\ start*|systemctl\ start*)
+    if [[ "${TEST_FAIL_START_HOST:-}" == "$host" ]]; then
+      exit 42
+    fi
     ;;
   *)
     echo "unhandled ssh command: $cmd" >&2
@@ -385,4 +388,50 @@ if not start_indexes:
     raise SystemExit("missing sequencer start command")
 if not any(index > start_indexes[-1] for index in cleanup_indexes):
     raise SystemExit("missing post-start cleanup after failed sequencer readiness")
+PY
+
+: >"$TEST_SSH_LOG"
+if TEST_FAIL_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-start-fail" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-start-fail.out 2>&1; then
+  echo "expected rebuild to fail when sequencer systemctl start fails" >&2
+  exit 1
+fi
+
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+log_path = pathlib.Path(sys.argv[1])
+lines = log_path.read_text(encoding="utf-8").splitlines()
+sequencer_commands = [line.split("\t", 1)[1] for line in lines if line.startswith("root@sequencer\t")]
+start_indexes = [
+    index
+    for index, command in enumerate(sequencer_commands)
+    if "systemctl start 'oasis7-triad-sequencer.service'" in command
+]
+cleanup_indexes = [
+    index
+    for index, command in enumerate(sequencer_commands)
+    if "systemctl stop 'oasis7-triad-sequencer.service'" in command
+    and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
+    and "oasis7_chain_runtime" in command
+    and "start-node.sh" in command
+]
+if not start_indexes:
+    raise SystemExit("missing sequencer start command for start-failure path")
+if not any(index > start_indexes[-1] for index in cleanup_indexes):
+    raise SystemExit("missing post-start cleanup after failed sequencer systemctl start")
 PY
