@@ -64,8 +64,14 @@
 - `viewer-live/`：viewer-live 发行、开关与观察服务边界。
 - `consensus/`：共识实现与内建 wasm 身份口径。
 
+## 当前 inventory 快照
+- `./scripts/doc-inventory-report.sh`（2026-06-24）将 `doc/p2p/` 统计为 290 份 Markdown，状态为 `action_required`。
+- 当前 p2p 高密度子域前三为 `doc/p2p/node/` 72 份、`doc/p2p/blockchain/` 70 份、`doc/p2p/distfs/` 67 份。
+- 子域数量只用于选择下一轮 focused follow-up；不要在本页扩展全量专题长表。
+
 ## 高密度提示
-- `doc/p2p/` 的文件数会随专题推进变化；需要当前数量时，以 `find doc/p2p -type f | wc -l` 或 `git ls-files 'doc/p2p/**'` 为准。
+- `doc/p2p/` 的文件数会随专题推进变化；需要当前数量和 `action_required` 状态时，以 `./scripts/doc-inventory-report.sh` 为准。
+- `find` / `git ls-files` 只可作为本地探索辅助；它们不携带 inventory 状态，且可能因统计口径不同与正式报告不一致。
 - 需要完整专题检索清单时，进入 `doc/p2p/prd.index.md`；进入 `node/`、`distfs/`、`observer/` 时，优先先读对应子域 README 再继续下钻；需要 runbook / release 补充材料时，再按具体专题路径进入。
 
 ## 共享约定
