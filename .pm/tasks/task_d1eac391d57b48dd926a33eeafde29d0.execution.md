@@ -156,7 +156,7 @@ Review outcomes:
 - Task UID: task_d1eac391d57b48dd926a33eeafde29d0
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-governance-next
 - Source Branch: task/engineering-rust-dependency-governance-next
-- Source Head: dee59a4e2ef7edeb13f0b9fe6c13665dd14e4a08 plus working-tree diff; later changes after review are limited to review evidence records and this passed packet.
+- Source Head: 463379dc7b59cf79610a612621e015f607ae085b
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/inbox/signals.jsonl; .pm/roles/repository_health_engineer/backlog/committed.yaml; .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.execution.md; .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml; .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.execution.md; .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.yaml; crates/oasis7/src/viewer/runtime_live/tests.rs; deny.toml; scripts/check-rustsec-ignore-baseline.sh; scripts/check-rustsec-ignore-baseline.test.sh; scripts/ci-rust-governance-report.sh; scripts/ci-tests.sh
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-governance-next/.pm/scratch/task_d1eac391d57b48dd926a33eeafde29d0/review-packages/review-working-tree-rustsec-ratchet.diff
@@ -164,7 +164,7 @@ Review outcomes:
 - Review Roles: repository_health_engineer, qa_engineer, viewer_engineer
 - Review Evidence: repository_health_engineer no_findings after corrected working-tree package; qa_engineer no_findings after corrected working-tree package; viewer_engineer no_findings for actual worktree viewer helper diff.
 - Review Verdicts: repository_health_engineer scope/spec compliant and repository-health quality acceptable; qa_engineer scope/spec compliant and QA quality acceptable; viewer_engineer scope/spec compliant and viewer quality acceptable.
-- Review Findings Disposition: addressed | no_findings
+- Review Findings Disposition: addressed
 - Finding Disposition Evidence: stale commit-range package finding addressed by `review-working-tree-rustsec-ratchet.diff` and slice-ledger entries; implementation findings none.
 - Verification Matrix: RustSec ignore metadata/ratchet -> `./scripts/check-rustsec-ignore-baseline.sh`, `.test.sh`, `cargo deny check advisories`, required gate; CI hook -> `OASIS7_CI_RUN_OASIS7_NET_TESTS=true OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=true ./scripts/ci-tests.sh required`; governance report -> `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-ratchet-smoke`; libp2p advisory closure evidence -> targeted `cargo tree -p oasis7_net -i ... --features libp2p`; viewer helper unblock -> exact viewer tests and required gate; formatting -> `git diff --check`.
 - Visual Evidence: n/a; no player-visible UI/visual behavior changed.
