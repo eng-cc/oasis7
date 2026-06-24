@@ -131,3 +131,14 @@ Example:
 - Expected Result: Fresh focused verification passes; task has closeout evidence; PR-ready workflow lint can locate claim-ready and task-closeout evidence markers.
 - Actual Result: Fresh focused verification passed. `claim-ready.sh` reported closed task claim evidence is immutable for non-completion claims after closeout; task yaml already records successful `task_complete` verification and `last_closed_at`. `task-closeout.sh` had written task status `done`, `last_verification_exit_code: 0`, and `last_closed_at`, then failed only on repo-wide historical `pm-lint` debt in unrelated old tasks.
 - Blocker / Next Action: Run task-local workflow lint again; if clean, commit `.pm` evidence and create PR.
+
+## 2026-06-24 20:46:20 CST / tpm
+- 完成内容: PR CREATED.
+- 遗留事项: Watch GitHub required checks, PR comments/review threads, and mergeability; merge and clean up when gates are green.
+- PR URL: https://github.com/eng-cc/oasis7/pull/615
+- PR Purpose Decision: normal_pr_ci_watch.
+- Action: Ran PR preflight and created PR #615 with `prepare-task-pr.sh --create`.
+- Validation Command: `rtk ./scripts/prepare-task-pr.sh`; `rtk ./scripts/prepare-task-pr.sh --create`.
+- Expected Result: Preflight passes with required local role review coverage; branch is pushed; GitHub PR exists.
+- Actual Result: Preflight passed; branch `task/engineering-frontend-code-governance-followup-20260624` pushed; PR #615 created at https://github.com/eng-cc/oasis7/pull/615.
+- Blocker / Next Action: Push PR evidence commit, then inspect PR checks/comments/mergeability.
