@@ -119,7 +119,7 @@ Example:
 - Task UID: task_0b89a0662ac94e9aa4b6de7214b6becb
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-frontend-code-governance-next-20260624
 - Source Branch: task/engineering-frontend-code-governance-next-20260624
-- Source Head: 2811d5c06596d08039dcfd431a8758aaad3d72a9
+- Source Head: 89c533443f9d88c4a21046fe9177f1e22c57e73c
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/tasks/task_0b89a0662ac94e9aa4b6de7214b6becb.execution.md; .pm/tasks/task_0b89a0662ac94e9aa4b6de7214b6becb.yaml; doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md; scripts/viewer-primary-web-entry-regression.sh
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-frontend-code-governance-next-20260624/.pm/scratch/task_0b89a0662ac94e9aa4b6de7214b6becb/review-packages/review-origin-main..HEAD.diff
@@ -154,6 +154,15 @@ Example:
 - Expected Result: No visual or interaction regression from the scoped reason-label cleanup.
 - Actual Result: no_findings. Scope/spec compliance compliant; visual/interaction quality/risk low. No player-visible UI, layout, styling, copy, interaction flow, or accessibility behavior changed; body evidence still shows the same Viewer command surface content and auto screenshot renders the expected command-board layout without obvious visual regression.
 - Blocker / Next Action: Amend review evidence and rerun prepare-task-pr.
+
+## 2026-06-24 15:28:00 CST / pr review feedback
+- Action: Addressed GitHub automated review comment `discussion_r3465264252`.
+- Review Comment Summary: The reviewer correctly noted that rewriting 2026-04-07 archived final URL examples to `direct_viewer_entry` made the historical artifact appear to have produced the new 2026-06-24 reason contract.
+- Resolution: Updated `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` to avoid falsifying the 2026-04-07 artifact while still not reintroducing obsolete reason labels into current docs. The historical URL truth is now delegated to the archived artifact path, and the current reason contract is pointed to this task and fresh regression evidence.
+- Validation Command: `rtk rg -n "primary_web_entry|auto_primary_web_entry" crates/oasis7 scripts doc -g '!target' >/tmp/oasis7-stale-entry-reasons.txt 2>&1; test ! -s /tmp/oasis7-stale-entry-reasons.txt && rtk bash -n scripts/viewer-primary-web-entry-regression.sh && rtk git diff --check && rtk ./scripts/doc-governance-check.sh`
+- Expected Result: obsolete reason labels remain absent from current docs/scripts/crates, script syntax and diff hygiene pass, and doc governance passes.
+- Actual Result: passed; `doc-governance-check: OK`.
+- Blocker / Next Action: Commit evidence update, push, and continue PR check/comment watch.
 
 ## 2026-06-24 15:08:00 CST / producer_system_designer
 - Review Trigger: pre-PR local role review
