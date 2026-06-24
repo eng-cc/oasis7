@@ -99,18 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_d82150a949bf4b3488de3423b3d1622e
-    title: "Find next repository health governance issue"
-    priority: P2
-    source_signal: null
-    related_prd:
-      - PRD-ENGINEERING-001
-      - PRD-ENGINEERING-021
-      - PRD-ENGINEERING-025
-    acceptance:
-      - "Identify one bounded repository health governance issue with professional role evidence"
-      - "Implement the selected fix in the canonical task worktree with minimal scope"
-      - "Run focused verification and carry the branch through review, PR checks, merge, and cleanup"
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_d82150a949bf4b3488de3423b3d1622e.yaml
