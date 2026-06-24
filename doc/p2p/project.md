@@ -7,6 +7,7 @@
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] fix-replication-peer-head-freshness (PRD-P2P-001/003/028) [test_tier_required]: 修复 public_testnet 节点同高但 peer head 长期停旧的问题；head request timeout 可继续尝试后续 peer，storage/validator-core 的 replicated commit head 与 local commit head 使用独立 rebroadcast 账本，同时同高度冲突 head 在发布前 fail-closed，避免扩散分叉状态。 Trace: .pm/tasks/task_49ae72ce192c4151b0f150e12bb95605.yaml
 - [x] fix-public-testnet-peer-head-readiness (PRD-P2P-001/003/028) [test_tier_required]: 修复 public_testnet 低提交频率下 peer head age 超 TTL 导致 readiness 误判的问题；旧 peer head 仅在 committed/network height、block hash 与 execution binding 均匹配当前本地头时可作为有效 fresh，同时补充分叉/追块负向测试并记录多节点状态不一致必须根因修复后 redeploy/rebuild 的 runbook 原则。 Trace: .pm/tasks/task_06b409262b4846618e6cc9a0867de99c.yaml
 - [x] testnet-execution-hash-replay-readiness (PRD-P2P-001/003) [test_tier_required]: 修复 synced replication 执行哈希回放的 expected-hash 校验、回滚安全与 committed tick v2 schema，避免拒绝的 peer mismatch 污染 runtime/simulator 持久状态。 Trace: .pm/tasks/task_41f5ad97727c4641b65241d4141601b9.yaml
 - [x] testnet-five-node-health-remediation (PRD-P2P-001/003/028) [test_tier_required]: 修复五节点 public_testnet 健康检查暴露的 storage metrics 主循环阻塞、peer-head TTL 抖动和 libp2p 连接诊断不足问题；storage metrics 改为后台刷新和缓存快照，public_testnet peer-head TTL 提升至 30s，并补充 per-peer head 与 connection event 状态字段。 Trace: .pm/tasks/task_082d3f35aee2436c97ba2a629ec8437a.yaml
