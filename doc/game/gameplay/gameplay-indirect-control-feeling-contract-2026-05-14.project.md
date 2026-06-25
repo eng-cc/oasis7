@@ -108,3 +108,4 @@
   - 本专题当前已完成合同冻结与 canonical runtime surface 对齐，不等于 active-LLM formal lane 的 trust/capability gate 已恢复。
   - 本专题不改动当前“间接控制文明模拟”主路线，也不把 issue #164 解释成 direct-control 立项。
   - `viewer-control-feeling-surface-alignment` 已在 `crates/oasis7_viewer/software_safe_src/{legacy_core.js,main.jsx}` 与回归测试中落地：当前正式 Web 入口会先回答“我刚刚让系统做什么”，再回答“系统为什么这样”，最后给出推荐动作，而不是把目标、阻塞、下一步和 diagnostics 平铺成工具面。
+  - 2026-06-25 follow-up: `software_safe` 的 `Agency Moves` 已把 interrupt / reprioritize / correction / handoff 作为 viewer-derived surface 展示；这只证明玩家可见层能读到这些语义，不等于 `agent-control-feeling-reprioritize-contract` 已完成。

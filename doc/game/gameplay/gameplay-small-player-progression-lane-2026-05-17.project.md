@@ -13,9 +13,9 @@
 
 | topic slug | owner role | status | 目标 |
 | --- | --- | --- | --- |
-| `runtime-small-player-lane-state-contract` | `runtime_engineer` | `planned` | 把 small-player lane 的 entry gate、checkpoint、failure signature 与 repair/rebuild/pivot recovery 下沉到 canonical truth。 |
+| `runtime-small-player-lane-state-contract` | `runtime_engineer` | `completed` | 已由 `game-small-player-lane-runtime-truth` 下沉 small-player lane / anti-grind runtime truth、持久化 backfill、viewer runtime_live 派生与正向回归；QA mature-world verdict 仍未因此自动升级。 Trace: `.pm/tasks/task_96b6823495f44ef39c80f3c8b1a74421.yaml` |
 | `viewer-economic-readability-first-capability-surface` | `viewer_engineer` | `completed` | 已在 headed Web/UI 正式玩家入口新增 `Capability Economics` surface，明确展示 `投入 / 产出 / 新用途 / 修复动作 / 下一步价值`，并用 UI/summary 定向测试回归首个持续能力与 small-player lane 的经济可读性。 |
-| `viewer-small-player-lane-surface-alignment` | `viewer_engineer` | `planned` | 在 headed Web/UI 与 pure API 明确展示当前 lane、首个胜利、专业化价值、区域影响与恢复路径。 |
+| `viewer-small-player-lane-surface-alignment` | `viewer_engineer` | `partial` | Headed Web/UI 已新增 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 和 `Share Replay` surface；pure API / runtime canonical lane truth 仍按后续任务收口。 |
 | `agent-small-player-specialization-contract` | `agent_engineer` | `planned` | 对齐 specialization / recovery / org-independence 行为合同，避免默认把玩家推向 major-power dependency。 |
 | `qa-control-feeling-and-anti-grind-matrix` | `qa_engineer` | `completed` | 已建立跨专题矩阵，用 `player leverage` / `world_activity_only` / `grind_only` / `silent wait` blocker 联审 lane 是否真的成立，并明确 `grind_only` / `forced dependency` 当前仍为 `watch`。 |
 | `qa-mature-world-small-player-fresh-sample` | `qa_engineer` | `todo` | 在 runtime lane truth、viewer lane surface 与 agent specialization contract 完成后，重新采集 mature-world 小玩家样本；只有 `grind_only` 与 `forced_major_power_dependency` 从 `watch` 收口后，才能把 small-player lane 判为 `pass`。 |
@@ -105,11 +105,12 @@
 
 ## 状态
 
-- 更新日期: 2026-05-17
+- 更新日期: 2026-06-25
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
-- 下一任务: `runtime-small-player-lane-state-contract`
+- 下一任务: `agent-small-player-specialization-contract` / `qa-mature-world-small-player-fresh-sample`
 - 说明:
-  - 本专题当前只完成合同冻结，不等于 runtime / viewer / agent / QA 已全部落地。
+  - 本专题当前已完成合同冻结与 runtime truth follow-up，但不等于 viewer/pure API parity、agent specialization 或 QA mature-world verdict 已全部落地。
+  - 2026-06-25 follow-up: `software_safe` viewer 已把 P1/P2 制作人落点呈现为 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`，并由 `software-safe-feedback-contract.test.mjs` / `main.test.jsx` 锁定；该变更只消费或派生既有 `player_gameplay` 字段，不宣称 runtime canonical lane truth、agent 行为或 QA mature-world verdict 已完成。
   - 本专题不改写当前 `PRD-GAME-012` 的 early-retention 主优先级，也不把 `#165` 当作 stage / preview claim envelope 升级依据。
   - 高风险设计修补后，viewer / QA follow-up 优先新增的是经济可读性与 anti-grind/blocker matrix，而不是继续扩大高风险对抗/治理展示面。

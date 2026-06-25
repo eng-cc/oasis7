@@ -77,6 +77,23 @@ function sampleSnapshot(overrides = {}) {
       blocker_supplemental_detail: null,
       next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
       branch_hint: null,
+      can_interrupt: true,
+      can_reprioritize: true,
+      replacement_intent_summary: "Switch from stalled smelter build to material recovery.",
+      handoff_result: "Old build intent stays paused until recovery proves material input.",
+      first_win_goal_id: "small_player.first_industrial_win",
+      player_action: "queued build_factory_smelter_mk1 and inspected the material blocker",
+      world_change_due_to_player: "factory-0 exposed a recoverable iron shortage instead of silent waiting",
+      player_leverage_verdict: "watch: recovery can restore the first capability",
+      leverage_class: "repair_elasticity",
+      same_loop_repeat_count: 2,
+      grind_only_flag: false,
+      major_power_dependency_status: "independent_path_available",
+      repair_available: true,
+      rebuild_available: true,
+      pivot_available: true,
+      recovery_path_kind: "repair_rebuild_or_pivot",
+      recovery_path_detail: "replenish iron, rebuild the local line, or pivot to a lower-input branch",
       available_actions: [
         {
           action_id: "build_factory_smelter_mk1",
@@ -302,6 +319,24 @@ describe("viewer web ui automation baseline", () => {
     expect(within(targetsPanel).getByText("Targets")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Industrial World Command Desk")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("Control Proof")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Player Intent")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("World Consequence")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Recovery Move")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("Next Move").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("Agency Moves")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Interrupt")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Reprioritize")).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/Switch from stalled smelter build to material recovery/i)).toBeInTheDocument();
+    expect(within(stagePanel).getByText("First Win & Anti-Grind")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("First Win")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("small_player.first_industrial_win")).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/repair_elasticity/i)).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Mature-World Continuation")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Recovery Options")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("repair / rebuild / pivot")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Share Replay")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText(/queued build_factory_smelter_mk1/i).length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText("Accepted Intent").length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText("Queue build_factory_smelter_mk1 for agent-0").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();

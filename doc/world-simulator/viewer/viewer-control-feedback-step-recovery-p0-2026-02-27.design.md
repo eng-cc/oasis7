@@ -3,6 +3,8 @@
 - 对应需求文档: `doc/world-simulator/viewer/viewer-control-feedback-step-recovery-p0-2026-02-27.prd.md`
 - 对应项目管理文档: `doc/world-simulator/viewer/viewer-control-feedback-step-recovery-p0-2026-02-27.project.md`
 
+> 2026-06-25 状态说明：本文保留为历史 P0 step 恢复方案与失败样本锚点；当前正式玩家控制反馈 surface 以 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md`、`PRD-GAME-014` 和 `software_safe` 的 `Control Proof` / `Agency Moves` 测试为准。本文不再单独代表当前 canonical viewer 方案。
+
 ## 1. 设计定位
 定义 `step` 出现 accepted 但无推进时的 P0 恢复方案：在不改 runtime 规则的前提下，用 `seek(tick+1)` 自动补救，并把 Cause/Next 强反馈直接暴露给玩家。
 

@@ -305,7 +305,7 @@ oasis7 的世界不是无尺度表格。
 - `10-minute trust gate` 负责回答“是否已经值得继续玩”。
 - `first capability gate` 负责回答“首个持续能力是否已经闭环”，并继续与 `PostOnboarding` 的 `15~45` 分钟里程碑口径对齐。
 
-## 2.9 间接控制下的 control-feeling 合同
+## 2.10 间接控制下的 control-feeling 合同
 
 oasis7 当前正式主路线不是 direct control，而是 indirect control。
 
@@ -341,7 +341,7 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 
 专题口径见 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`。
 
-## 2.8 纯 API 客户端等价
+## 2.11 纯 API 客户端等价
 
 纯 API 客户端不应该只是“能看日志、能发 step”的调试通道，而应是正式玩家入口之一。
 

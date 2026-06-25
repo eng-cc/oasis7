@@ -99,6 +99,11 @@
   - `player leverage` / `world_activity_only` 抽样。
   - failure -> repair/rebuild/pivot 代表性样本。
 
+## 2026-06-25 Follow-up: P1/P2 Viewer Surface
+- `software_safe` 已把本设计合同中的玩家能动性、首个工业胜利、anti-grind leverage 与 repair/rebuild/pivot 承接，呈现为 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`。
+- 该 follow-up 是 headed Web/UI 的呈现层对齐：它可以让制作人快速看到 `player_action`、`world_change_due_to_player`、`leverage_class`、`major_power_dependency_status` 与恢复选项，但不替代 runtime lane truth、pure API parity、agent specialization contract 或 QA mature-world verdict。
+- 当字段缺失时，viewer 必须显示 `unverified` / `not_published` / waiting-state，而不是把小玩家 lane 误包装为 pass。
+
 ## 风险
 - 如果只定义“更多工业”，而不定义区域性 usefulness，小玩家路线会退化成 grind。
 - 如果把局部影响力定义得太强，会抢占 mature-world 大组织路线并引发 claim drift。
