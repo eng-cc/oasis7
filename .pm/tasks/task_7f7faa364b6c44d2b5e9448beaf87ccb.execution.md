@@ -164,10 +164,10 @@ Example:
 - Task UID: task_7f7faa364b6c44d2b5e9448beaf87ccb
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-governance-next-issue-20260625
 - Source Branch: task/engineering-governance-next-issue-20260625
-- Source Head: pending-commit-backfill
+- Source Head: ca439571605da9404e8eead58f86409d4eae4007
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_7f7faa364b6c44d2b5e9448beaf87ccb.execution.md; .pm/tasks/task_7f7faa364b6c44d2b5e9448beaf87ccb.yaml; doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md; doc/engineering/project.md
-- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-governance-next-issue-20260625/.pm/scratch/task_7f7faa364b6c44d2b5e9448beaf87ccb/review-packages/review-dirty-doc-corpus-next-action.diff
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-governance-next-issue-20260625/.pm/scratch/task_7f7faa364b6c44d2b5e9448beaf87ccb/review-packages/review-65632e37f..ca4395716.diff
 - Role Selection Basis: repository_health_engineer for documentation governance truth drift; qa_engineer for verification and parseability sufficiency; producer_system_designer for scope/current-next-action semantics.
 - Review Roles: repository_health_engineer,qa_engineer,producer_system_designer
 - Review Evidence: repository_health_engineer no_findings at 2026-06-25 09:03:10 CST; qa_engineer no_findings at 2026-06-25 09:03:20 CST; producer_system_designer no_findings at 2026-06-25 09:03:30 CST.
