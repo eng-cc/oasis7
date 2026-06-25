@@ -85,3 +85,12 @@ Example:
 - LiveOps Evidence: n/a, no external messaging/release/community surface changed.
 - Residual Risk: Low. Old P2PFS titles remain for provenance and search continuity, but first-screen notes demote them and route current aggregate claims to S9A / `PRD-P2P-031`.
 - Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit/.pm/scratch/task_17ae7ffcdc5d4c6c9c371777a33dd02b/slice-ledger.jsonl`
+
+## 2026-06-25 16:09:00 CST / tpm
+- 完成内容: Ran task closeout and recorded the repository-wide lint limitation.
+- 遗留事项: Continue PR creation with current-task verification evidence; do not merge after PR creation per user instruction.
+- Action: Executed `./scripts/pm/task-closeout.sh --role tpm --task-uid task_17ae7ffcdc5d4c6c9c371777a33dd02b --verify-command "./scripts/doc-governance-check.sh"`. The command wrote this task's `status: done`, `last_claim_type: task_complete`, and `last_verification_status: verified`, but exited non-zero after invoking repo-wide pm lint.
+- Validation Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_17ae7ffcdc5d4c6c9c371777a33dd02b --verify-command "./scripts/doc-governance-check.sh"`; `./scripts/pm/workflow-lint.sh --task-uid task_17ae7ffcdc5d4c6c9c371777a33dd02b --phase current`
+- Expected Result: Current task closes after doc governance verification; unrelated historical task lint debt does not change the current task evidence.
+- Actual Result: Closeout command failed only at repo-wide pm lint, with failures in unrelated historical `.pm/tasks/task_*.execution.md` entries. Current-task workflow lint had already passed, and this task yaml now records verified/done status.
+- Blocker / Next Action: Treat repo-wide pm lint as unrelated historical debt for this PR; proceed to `prepare-task-pr.sh --create` and report the closeout caveat in PR evidence/final summary.
