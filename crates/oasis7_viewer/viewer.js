@@ -2397,7 +2397,7 @@ function createViewerWorldScaleModule({
       canonicalUnitLabel: formatPhysicalDistanceCm2(1, locale),
       canonicalUnitDetail: isZh ? "世界位置、距离、半径和尺寸的正式真值都按整数厘米存储。" : "World positions, distances, radii, and sizes are stored as integer centimeters.",
       worldBoundsLabel: space ? `${formatPhysicalDistanceCm2(space.width_cm, locale)} × ${formatPhysicalDistanceCm2(space.depth_cm, locale)} × ${formatPhysicalDistanceCm2(space.height_cm, locale)}` : null,
-      worldBoundsDetail: space ? isZh ? "来自 snapshot.config.space 的真实世界边界。" : "Physical world bounds from snapshot.config.space; anchor selection fallback is handled separately." : isZh ? "当前快照没有发布 world bounds。" : "The current snapshot does not publish world bounds yet.",
+      worldBoundsDetail: space ? isZh ? "真实世界边界来自 snapshot.config.space；锚点选择 fallback 另行处理。" : "Physical world bounds from snapshot.config.space; anchor selection fallback is handled separately." : isZh ? "当前快照没有发布 world bounds。" : "The current snapshot does not publish world bounds yet.",
       anchor: anchor ? {
         kind: anchor.kind,
         id: anchor.id,
