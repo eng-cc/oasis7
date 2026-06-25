@@ -231,10 +231,22 @@ json_sequencer_ok() {
     .running == true
     and (.last_error == null or .last_error == "null")
     and (.readiness.status // null) == "ready"
+    and (((.readiness.failed_gates // []) | length) == 0)
     and (.consensus.storage_challenge_network_degraded_height // null) == null
     and ((.observability.storage_challenge_network_degraded // false) | not)
-    and ((.consensus.committed_height // 0) > 0)
-    and ((.consensus.last_execution_height // 0) > 0)
+    and (
+      (
+        ((.consensus.committed_height // 0) > 0)
+        and ((.consensus.last_execution_height // 0) > 0)
+      )
+      or (
+        ((.consensus.committed_height // .committed_height // 0) == 0)
+        and ((.consensus.last_execution_height // 0) == 0)
+        and ((.consensus.network_head.source // null) == "self_only")
+        and ((.consensus.network_head.required_peer_count // 0) == 0)
+        and ((.consensus.network_head.decision // null) == "ready")
+      )
+    )
   ' "$path" >/dev/null 2>&1
 }
 
@@ -252,11 +264,22 @@ json_storage_ok() {
     .running == true
     and (.last_error == null or .last_error == "null")
     and (.readiness.status // null) == "ready"
+    and (((.readiness.failed_gates // []) | length) == 0)
     and (.consensus.storage_challenge_network_degraded_height // null) == null
     and ((.observability.storage_challenge_network_degraded // false) | not)
-    and ((.consensus.committed_height // 0) > 0)
-    and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
     and (.replication.connected_peers | length) >= 1
+    and (
+      (
+        ((.consensus.committed_height // 0) > 0)
+        and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
+      )
+      or (
+        ((.consensus.committed_height // .committed_height // 0) == 0)
+        and ((.consensus.network_head.source // null) == "self_only")
+        and ((.consensus.network_head.required_peer_count // 0) == 0)
+        and ((.consensus.network_head.decision // null) == "ready")
+      )
+    )
   ' "$path" >/dev/null 2>&1
 }
 
