@@ -85,7 +85,21 @@ pub(crate) fn replication_network_error_is_timeout_protocol(
     };
     reason.contains(protocol)
         && (network_request_reason_has_kind(reason, "timeout")
-            || reason.contains("request failed: Timeout"))
+            || reason.contains("request failed: Timeout")
+            || reason.contains("timed out"))
+}
+
+pub(crate) fn replication_network_error_should_keep_timeout_over_provider_gap(
+    current: Option<&NodeError>,
+    candidate: &NodeError,
+    protocol: &str,
+) -> bool {
+    let Some(current) = current else {
+        return false;
+    };
+    replication_network_error_is_timeout_protocol(current, protocol)
+        && (replication_network_error_is_protocol_unavailable(candidate, protocol)
+            || replication_network_error_is_availability_gap(candidate))
 }
 
 #[cfg(feature = "libp2p")]
@@ -118,4 +132,23 @@ fn network_request_reason_detail_mentions_protocol(reason: &str, protocol: &str)
     reason
         .split_once(" detail=")
         .is_some_and(|(_, detail)| detail.contains(protocol))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timeout_protocol_matches_libp2p_command_timeout_shape() {
+        let protocol = "/aw/node/replication/fetch-commit/1.0.0";
+        let err = NodeError::Replication {
+            reason: format!(
+                "libp2p command request_to_peer protocol={protocol} timed out after 1500ms"
+            ),
+        };
+
+        assert!(replication_network_error_is_timeout_protocol(
+            &err, protocol
+        ));
+    }
 }

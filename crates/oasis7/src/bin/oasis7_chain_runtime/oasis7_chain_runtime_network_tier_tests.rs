@@ -557,6 +557,38 @@ fn public_testnet_validator_genesis_cold_start_uses_self_head() {
 }
 
 #[test]
+fn public_testnet_observer_clean_start_waits_for_peer_head() {
+    let runtime_sha256 = current_test_binary_sha256();
+    let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
+    let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
+    let snapshot = NodeSnapshot {
+        node_id: "observer-a".to_string(),
+        player_id: "player-observer-a".to_string(),
+        world_id: "live-a".to_string(),
+        role: NodeRole::Observer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus: NodeConsensusSnapshot::default(),
+        last_error: None,
+    };
+
+    let network_head = super::status_payload::build_network_head_status(
+        &snapshot,
+        1_700_000_000_000,
+        Some(&loaded),
+    );
+
+    assert_eq!(network_head.required_peer_count, 1);
+    assert_eq!(network_head.fresh_peer_count, 0);
+    assert_eq!(network_head.source, "unknown");
+    assert_eq!(network_head.decision, "degraded");
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn public_testnet_validator_network_head_prefers_highest_quorum_bucket() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());

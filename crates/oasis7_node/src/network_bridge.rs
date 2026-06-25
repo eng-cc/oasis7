@@ -19,7 +19,7 @@ use crate::gossip_udp::{
 };
 use crate::network_bridge_gap_sync_budget::{
     gap_sync_fetch_commit_probe_route_budget, gap_sync_fetch_commit_route_budget,
-    gap_sync_fetch_commit_route_budget_exhausted,
+    gap_sync_fetch_commit_route_budget_exhausted, short_node_error, summarize_fetch_commit_routes,
 };
 pub(crate) use crate::network_error_classification::{
     network_world_error_is_publish_failure, network_world_error_is_retryable_connection_gap,
@@ -28,6 +28,7 @@ pub(crate) use crate::network_error_classification::{
     replication_network_error_is_route_unavailable, replication_network_error_is_timeout_protocol,
     replication_network_error_is_unsupported_protocol, replication_network_error_kind_label,
     replication_network_error_mentions_protocol,
+    replication_network_error_should_keep_timeout_over_provider_gap,
 };
 use crate::replication::{
     FetchCommitRequest, FetchCommitResponse, FetchHeadRequest, FetchHeadResponse,
@@ -640,7 +641,13 @@ impl ReplicationNetworkEndpoint {
                             peer_id,
                             short_node_error(&err)
                         ));
-                        last_err = Some(err);
+                        if !replication_network_error_should_keep_timeout_over_provider_gap(
+                            last_err.as_ref(),
+                            &err,
+                            REPLICATION_FETCH_COMMIT_PROTOCOL,
+                        ) {
+                            last_err = Some(err);
+                        }
                     }
                 }
             }
@@ -909,18 +916,6 @@ impl ReplicationNetworkEndpoint {
             .get(&fetch_commit_success_cache_key(request))
             .map(|entry| entry.response.clone())
     }
-}
-
-fn short_node_error(err: &NodeError) -> String {
-    let raw = err.to_string();
-    raw.chars().take(160).collect()
-}
-
-fn summarize_fetch_commit_routes(route_events: &[String]) -> String {
-    if route_events.is_empty() {
-        return "routes=none".to_string();
-    }
-    route_events.join(";")
 }
 
 fn fetch_commit_success_cache_key(request: &FetchCommitRequest) -> FetchCommitSuccessCacheKey {
