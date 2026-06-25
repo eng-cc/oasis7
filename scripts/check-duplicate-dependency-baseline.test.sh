@@ -12,6 +12,7 @@ baseline="$tmp_dir/baseline.json"
 
 cat >"$summary" <<'JSON'
 {
+  "cargo_deny_rc": 0,
   "duplicate_dependency_cluster_count": 88,
   "duplicate_dependency_unique_crates": 88,
   "duplicate_dependency_entry_total": 213,
@@ -80,5 +81,26 @@ then
   exit 1
 fi
 grep -q "duplicate dependency baseline expired" "$tmp_dir/expired.out"
+
+python3 - "$summary" "$tmp_dir/no-cargo-deny.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload["cargo_deny_rc"] = 127
+payload["duplicate_dependency_cluster_count"] = 0
+payload["duplicate_dependency_unique_crates"] = 0
+payload["duplicate_dependency_entry_total"] = 0
+payload["duplicate_dependency_top_crates"] = []
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+if OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+  ./scripts/check-duplicate-dependency-baseline.sh "$tmp_dir/no-cargo-deny.json" >"$tmp_dir/no-cargo-deny.out" 2>&1
+then
+  echo "expected missing cargo-deny duplicate data to fail" >&2
+  exit 1
+fi
+grep -q "requires cargo-deny duplicate data" "$tmp_dir/no-cargo-deny.out"
 
 echo "check-duplicate-dependency-baseline.test: OK"

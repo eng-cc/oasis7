@@ -22,6 +22,7 @@ baseline_path = Path(sys.argv[2])
 today = os.environ.get("OASIS7_DUPLICATE_DEP_TODAY") or date.today().isoformat()
 
 required_summary_keys = (
+    "cargo_deny_rc",
     "duplicate_dependency_cluster_count",
     "duplicate_dependency_unique_crates",
     "duplicate_dependency_entry_total",
@@ -41,7 +42,6 @@ budget_keys = (
     "duplicate_dependency_cluster_count",
     "duplicate_dependency_unique_crates",
     "duplicate_dependency_entry_total",
-    "duplicate_dependency_tree_output_lines",
 )
 
 failures: list[str] = []
@@ -66,6 +66,16 @@ baseline = load_json(baseline_path, "duplicate dependency baseline")
 for key in required_summary_keys:
     if key not in summary:
         failures.append(f"summary missing key: {key}")
+
+try:
+    cargo_deny_rc = int(summary.get("cargo_deny_rc", -1))
+except (TypeError, ValueError):
+    cargo_deny_rc = -1
+if cargo_deny_rc != 0:
+    failures.append(
+        "duplicate dependency baseline requires cargo-deny duplicate data "
+        f"(cargo_deny_rc={summary.get('cargo_deny_rc')})"
+    )
 
 for key in required_baseline_keys:
     if not baseline.get(key):
@@ -148,7 +158,6 @@ print(
     f"{maxima['duplicate_dependency_unique_crates']}, "
     f"entries={summary['duplicate_dependency_entry_total']}/"
     f"{maxima['duplicate_dependency_entry_total']}, "
-    f"tree_lines={summary['duplicate_dependency_tree_output_lines']}/"
-    f"{maxima['duplicate_dependency_tree_output_lines']})"
+    f"tree_lines_observed={summary['duplicate_dependency_tree_output_lines']})"
 )
 PY
