@@ -454,19 +454,30 @@ cleanup_host_processes() {
   local control_path=$2
   local service=$3
   ssh_run "$host" "$control_path" \
-    "systemctl stop '$service' || true; systemctl reset-failed '$service' || true; STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
+    "SERVICE_NAME='$service' STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
 import os
 import signal
 import subprocess
 import sys
 import time
 
+service_name = os.environ['SERVICE_NAME']
 stack_root = os.environ['STACK_ROOT']
 needles = (
     f'{stack_root}/current/bin/oasis7_chain_runtime',
     f'{stack_root}/bin/start-node.sh',
     f'{stack_root}/releases/',
 )
+
+def quiesce_systemd():
+    subprocess.run(['systemctl', 'stop', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    subprocess.run(
+        ['systemctl', 'kill', '--kill-who=all', '--signal=SIGKILL', service_name],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    subprocess.run(['systemctl', 'reset-failed', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 def matching_pids():
     current = os.getpid()
@@ -494,6 +505,7 @@ deadline = time.monotonic() + cleanup_deadline_seconds
 quiet_since = None
 quiet_window_observed = False
 while time.monotonic() < deadline:
+    quiesce_systemd()
     pids = matching_pids()
     if pids:
         quiet_since = None
@@ -512,6 +524,7 @@ while time.monotonic() < deadline:
             break
         time.sleep(0.25)
 
+quiesce_systemd()
 remaining = matching_pids()
 if remaining:
     print(f'cleanup failed: stack-root processes remain after SIGKILL: {remaining}', file=sys.stderr)
