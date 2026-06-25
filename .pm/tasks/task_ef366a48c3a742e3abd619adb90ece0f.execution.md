@@ -77,26 +77,35 @@ Example:
 - Review Trigger: pre-PR local role review
 - Review Scope: duplicate dependency baseline/budget ratchet implementation: `scripts/rust-duplicate-dependency-baseline.json`, `scripts/check-duplicate-dependency-baseline.sh`, `scripts/check-duplicate-dependency-baseline.test.sh`, `scripts/ci-rust-governance-report.sh`, `doc/engineering/project.md`, and current `.pm` task evidence.
 - Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-6/.pm/scratch/task_ef366a48c3a742e3abd619adb90ece0f/review-packages/review-65632e37f..fdf245f8b.diff`
-- Review Roles: repository_health_engineer, qa_engineer
+- Review Roles: repository_health_engineer, qa_engineer, producer_system_designer
 - Review Question: confirm or challenge whether the duplicate dependency baseline ratchet is correctly scoped, whether the baseline metadata/budget/update policy prevent silent duplicate dependency growth without overclaiming dependency cleanup, and whether the verification evidence is sufficient for a report/check behavior change.
 - Evidence Available: `bash -n` passed for changed scripts; `./scripts/check-duplicate-dependency-baseline.test.sh` passed; `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-duplicate-baseline-full` passed and rendered `duplicate dependency baseline | 0`; `python3 -m json.tool` parsed the summary; `./scripts/check-duplicate-dependency-baseline.sh output/rust-governance-duplicate-baseline-full/summary.json` passed; `./scripts/doc-governance-check.sh` passed; `./scripts/pm/workflow-lint.sh --task-uid task_ef366a48c3a742e3abd619adb90ece0f --phase current` passed; `git diff --check` passed.
 - Expected Return Contract: findings | no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk
 - Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-6/.pm/scratch/task_ef366a48c3a742e3abd619adb90ece0f/slice-ledger.jsonl`
 - Formal Sink: `.pm/tasks/task_ef366a48c3a742e3abd619adb90ece0f.execution.md`
 
+## 2026-06-25 09:14:39 CST / producer_system_designer
+- 完成内容: Completed bounded pre-PR review for the project/status wording created by the `doc/engineering/project.md` update.
+- 遗留事项: None from this role.
+- Action: Reviewed the project status/task-trace framing for `rust-governance-duplicate-baseline-ratchet` under PRD-ENGINEERING-021/025.
+- Validation Command: Review-only professional slice against `doc/engineering/project.md`, `.pm/tasks/task_ef366a48c3a742e3abd619adb90ece0f.execution.md`, and `.pm/tasks/task_ef366a48c3a742e3abd619adb90ece0f.yaml`.
+- Expected Result: Confirm or challenge whether the project-doc update accurately frames the work as repository engineering governance, does not overclaim product/player impact, and is consistent with task acceptance/evidence.
+- Actual Result: `no_findings`; scope/spec compliance pass; producer/system-design risk pass. The role confirmed the project entry frames this as Rust dependency governance under `PRD-ENGINEERING-021/025`, keeps scope to report/baseline governance, and explicitly avoids claiming dependency cleanup, hard required-gate enforcement, or product/player impact.
+- Blocker / Next Action: No producer/system-design blocker.
+
 ## 2026-06-25 09:04:22 CST / tpm
 - Pre-PR Local Role Review: passed
 - Task UID: task_ef366a48c3a742e3abd619adb90ece0f
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-6
 - Source Branch: task/engineering-rust-governance-next-issue-6
-- Source Head: fdf245f8bc309c6266063d37083bcfd8c9308cb3
+- Source Head: 8e6160e022a27e5e1d69f50ecb76a6bf1117862b
 - Comparison Ref: refs/remotes/origin/main
-- Reviewed Changed Paths: `scripts/rust-duplicate-dependency-baseline.json`; `scripts/check-duplicate-dependency-baseline.sh`; `scripts/check-duplicate-dependency-baseline.test.sh`; `scripts/ci-rust-governance-report.sh`; `doc/engineering/project.md`; `.pm/tasks/task_ef366a48c3a742e3abd619adb90ece0f.*`; `.pm/roles/repository_health_engineer/backlog/committed.yaml`
+- Reviewed Changed Paths: `scripts/rust-duplicate-dependency-baseline.json`; `scripts/check-duplicate-dependency-baseline.sh`; `scripts/check-duplicate-dependency-baseline.test.sh`; `scripts/ci-rust-governance-report.sh`; `doc/engineering/project.md`; `.pm/tasks/task_ef366a48c3a742e3abd619adb90ece0f.*`; `.pm/roles/repository_health_engineer/backlog/committed.yaml`; `.pm/roles/repository_health_engineer/backlog/done.yaml`
 - Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-6/.pm/scratch/task_ef366a48c3a742e3abd619adb90ece0f/review-packages/review-65632e37f..fdf245f8b.diff`
-- Role Selection Basis: Rust dependency governance baseline/report behavior selected `repository_health_engineer`; verification sufficiency and report-only gate implications selected `qa_engineer`; runtime/WASM/viewer/blockchain ops were not selected because no dependency versions, lockfile, runtime source, WASM artifacts, viewer surface, deployment, or operator runbook changed.
-- Review Roles: repository_health_engineer, qa_engineer
-- Review Evidence: repository_health_engineer no_findings, scope/spec pass, repository-health risk pass, residual risk low because this freezes aggregate/top-crate duplicate growth but intentionally does not burn down duplicates; qa_engineer no_findings, scope/spec pass, QA risk pass with caveat that CI surfaces `duplicate_dependency_baseline_rc` but does not enforce it because the governance report is explicitly report-only.
-- Review Verdicts: repository_health_engineer: pass/pass; qa_engineer: pass/pass.
+- Role Selection Basis: Rust dependency governance baseline/report behavior selected `repository_health_engineer`; verification sufficiency and report-only gate implications selected `qa_engineer`; project/status wording in `doc/engineering/project.md` selected `producer_system_designer`; runtime/WASM/viewer/blockchain ops were not selected because no dependency versions, lockfile, runtime source, WASM artifacts, viewer surface, deployment, or operator runbook changed.
+- Review Roles: repository_health_engineer, qa_engineer, producer_system_designer
+- Review Evidence: repository_health_engineer no_findings, scope/spec pass, repository-health risk pass, residual risk low because this freezes aggregate/top-crate duplicate growth but intentionally does not burn down duplicates; qa_engineer no_findings, scope/spec pass, QA risk pass with caveat that CI surfaces `duplicate_dependency_baseline_rc` but does not enforce it because the governance report is explicitly report-only; producer_system_designer no_findings, scope/spec pass, producer/system-design risk pass, residual risk low because the project status language describes budget/ratchet governance and does not overclaim duplicate cleanup, hard gate enforcement, or product/player impact.
+- Review Verdicts: repository_health_engineer: pass/pass; qa_engineer: pass/pass; producer_system_designer: pass/pass.
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: no role returned required fixes before PR.
 - Verification Matrix: baseline checker syntax/test -> `bash -n` and `./scripts/check-duplicate-dependency-baseline.test.sh` passed; governance report integration -> `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-duplicate-baseline-full` passed and rendered `duplicate dependency baseline | 0`; summary schema -> `python3 -m json.tool` passed; explicit budget check -> `./scripts/check-duplicate-dependency-baseline.sh output/rust-governance-duplicate-baseline-full/summary.json` passed; docs/task evidence -> `./scripts/doc-governance-check.sh` and `./scripts/pm/workflow-lint.sh --task-uid task_ef366a48c3a742e3abd619adb90ece0f --phase current` passed; workspace hygiene -> `git diff --check` passed.
