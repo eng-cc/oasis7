@@ -290,7 +290,6 @@
 - [x] world-bounds-copy-consistency (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 codebase audit Task 3 的 world bounds / anchor fallback 双语文案一致性，保持 software-safe source 与 checked-in viewer bundle 同步，不改变 anchor fallback 行为。 Trace: .pm/tasks/task_456c5ba10a964ea69c679450d215aa64.yaml
 
 ## File Structure / Affected Paths
-- `local-cargo-cache-script-convergence`: 预计改动 `scripts/cargo-dev-lib.sh`、`scripts/cargo-dev-lib.test.sh`、本地 smoke / playtest / prewarm 脚本、`scripts/prepare-task-pr.sh` 的 preflight 修复、`testing-manual.md`、`doc/scripts/{README.md,prd.md}`、`AGENTS.md` 与本 task execution log；只读依赖 `scripts/cargo-dev.sh`、`scripts/ci-tests.sh`、`scripts/build-wasm-module.sh`、release workflow；验证入口为 `bash -n ...`、`./scripts/cargo-dev-lib.test.sh`、相关脚本 `--help`/`--dry-run` smoke、`./scripts/prepare-task-pr.test.sh`、`./scripts/pm/lint.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check`。 Trace: .pm/tasks/task_46ea1c81166043e3a1e3d5899b618ae6.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
