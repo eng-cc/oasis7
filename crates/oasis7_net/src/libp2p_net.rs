@@ -1,4 +1,3 @@
-//! Libp2p-based network adapter skeleton (gossipsub + request/response).
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 mod api;
@@ -15,6 +14,7 @@ mod peer_record;
 mod peer_record_republish;
 mod reachability;
 mod runtime_loop;
+mod runtime_support;
 mod swarm_behaviour;
 mod swarm_reachability_events;
 mod traffic_metrics;
@@ -178,10 +178,7 @@ impl Libp2pNetwork {
                 .map(peer_record_enables_rendezvous)
                 .unwrap_or(false);
         std::thread::spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("build libp2p tokio runtime");
+            let runtime = runtime_support::new_current_thread_runtime("build libp2p tokio runtime");
             runtime.block_on(async move {
             let mut swarm = build_swarm(
                 &keypair_clone,
@@ -1196,14 +1193,6 @@ impl Libp2pNetwork {
             wire_byte_counters,
         }
     }
-}
-#[cfg(test)]
-pub(super) fn run_on_libp2p_test_runtime<T>(f: impl FnOnce() -> T) -> T {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("build libp2p test tokio runtime");
-    runtime.block_on(async move { f() })
 }
 #[cfg(test)]
 mod tests;

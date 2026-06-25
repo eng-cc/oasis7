@@ -123,7 +123,7 @@ fn routing_update_skips_peer_record_for_unconnected_non_bootstrap_peer() {
 
 #[test]
 fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligible() {
-    super::super::run_on_libp2p_test_runtime(|| {
+    super::super::runtime_support::run_on_libp2p_test_runtime(|| {
         let mut swarm = super::super::swarm_behaviour::build_swarm(
             &Keypair::generate_ed25519(),
             false,

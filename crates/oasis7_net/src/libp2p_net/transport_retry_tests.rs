@@ -40,7 +40,7 @@ fn signed_discovery_peer_record(
 
 #[test]
 fn process_discovered_peer_record_retries_failed_candidate_dial_on_rediscovery() {
-    super::run_on_libp2p_test_runtime(|| {
+    super::runtime_support::run_on_libp2p_test_runtime(|| {
         let mut swarm = super::swarm_behaviour::build_swarm(
             &Keypair::generate_ed25519(),
             false,
