@@ -7,6 +7,7 @@
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] chain-world-state-doc-conflict-audit (PRD-P2P-031) [test_tier_required]: 审计旧 P2P/P2PFS/reachability 文档与“链上大世界状态底座”口径的语义冲突；保留历史路线图作为 provenance，给 current-facing 入口和历史阶段文档补 S9A / PRD-P2P-031 claim boundary，避免组件 green 被误读为 `module_full`、`integration_required` 或 `release_full`。 Trace: .pm/tasks/task_17ae7ffcdc5d4c6c9c371777a33dd02b.yaml
 - [x] testnet-rebuild-cleanup-systemd-restart (PRD-P2P-001/003/028) [test_tier_required]: 补强 public_testnet validator rebuild cleanup 对 systemd restart-loop / detached child 的压制；cleanup 在 stable quiet loop 内持续执行 stop、kill --kill-who=all 和 reset-failed，并用 fake systemd restart-loop 回归锁住失败后残留 runtime/start-node 进程。 Trace: .pm/tasks/task_3bed17701b1943d7a9556f588d1830e4.yaml
 - [x] testnet-rebuild-cleanup-stable-quiet (PRD-P2P-001/003/028) [test_tier_required]: 补强 public_testnet validator rebuild cleanup 的 race 防护；cleanup 不再因瞬时无匹配进程提前成功，必须持续扫描并达到稳定 quiet window，覆盖 stop 后延迟脱离/重现的 stack-root runtime/start-node 进程。 Trace: .pm/tasks/task_b0a073c3b7fd44549767d9540e8e6ec9.yaml
 - [x] testnet-rebuild-cleanup-verifies-orphans (PRD-P2P-001/003/028) [test_tier_required]: 补强 public_testnet validator rebuild 失败清理合同；cleanup 在 SIGKILL 后必须复查 stack-root runtime/start-node 进程并非零暴露残留，失败路径不再吞掉 cleanup command failure，fake ssh 测试也真正执行 cleanup heredoc 而不是只匹配命令字符串。 Trace: .pm/tasks/task_3b25db6324f14489adaa95eba13bb32a.yaml

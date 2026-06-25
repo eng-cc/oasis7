@@ -20,11 +20,11 @@ acceptance:
   - "Identify old docs that need update, redirect, or deletion with evidence."
   - "Apply narrowly scoped doc updates/deletions where they prevent current-reader confusion."
 handoff_to: []
-updated_at: 2026-06-25T15:43:24+08:00
+updated_at: 2026-06-25T15:51:23+08:00
 last_started_at: 2026-06-25T15:17:06+08:00
 last_claim_type: task_complete
 last_verify_command: ./scripts/doc-governance-check.sh
-last_verified_at: 2026-06-25T15:43:22+08:00
+last_verified_at: 2026-06-25T15:51:23+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
 last_closed_at: 2026-06-25T15:43:23+08:00

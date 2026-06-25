@@ -94,3 +94,12 @@ Example:
 - Expected Result: Current task closes after doc governance verification; unrelated historical task lint debt does not change the current task evidence.
 - Actual Result: Closeout command failed only at repo-wide pm lint, with failures in unrelated historical `.pm/tasks/task_*.execution.md` entries. Current-task workflow lint had already passed, and this task yaml now records verified/done status.
 - Blocker / Next Action: Treat repo-wide pm lint as unrelated historical debt for this PR; proceed to `prepare-task-pr.sh --create` and report the closeout caveat in PR evidence/final summary.
+
+## 2026-06-25 16:14:00 CST / tpm
+- 完成内容: Added claim-ready evidence and project Trace required by PR preflight.
+- 遗留事项: Rerun `prepare-task-pr.sh --create`; stop after PR creation without merging.
+- Action: Ran claim-ready for the already closed task using the allowed `task_complete` claim type, and added this task to `doc/p2p/project.md` 最近完成 with a one-hop Trace back to `.pm/tasks/task_17ae7ffcdc5d4c6c9c371777a33dd02b.yaml`.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type task_complete --verify-command "./scripts/doc-governance-check.sh" --task-uid task_17ae7ffcdc5d4c6c9c371777a33dd02b --json`
+- Expected Result: Fresh verification passes and records claim evidence for this task.
+- Actual Result: `status: verified`, `allowed_to_claim: true`, `verification_exit_code: 0`, `claim_type: task_complete`.
+- Blocker / Next Action: Commit claim-ready/project Trace evidence and rerun PR creation.
