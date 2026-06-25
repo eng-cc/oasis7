@@ -288,6 +288,7 @@
 - [x] viewer-live-disconnect-clean-exit (PRD-ENGINEERING-001/021/025) [test_tier_required]: 继续收口 repository health 巡检发现的 Rust/runtime 代码层治理点，使 `viewer_live_integration` 的客户端断开 `Broken pipe` 进入既有 clean-exit 语义，并补 live-loop disconnect/non-disconnect 单元覆盖。 Trace: .pm/tasks/task_d82150a949bf4b3488de3423b3d1622e.yaml
 - [x] pixel-world-bridge-focused-clippy-cleanup (PRD-ENGINEERING-001/021/025) [test_tier_required]: 继续收口 repository health 巡检发现的 Rust/viewer 代码层治理点，使 `pixel_world_bridge` focused Clippy `-D warnings` 通过，并保持 Bevy render system 注册、lib tests 与 wasm target compile surface。 Trace: .pm/tasks/task_31ee2a7dc18e4f578f2fd5ebcc87800d.yaml
 - [x] world-bounds-copy-consistency (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 codebase audit Task 3 的 world bounds / anchor fallback 双语文案一致性，保持 software-safe source 与 checked-in viewer bundle 同步，不改变 anchor fallback 行为。 Trace: .pm/tasks/task_456c5ba10a964ea69c679450d215aa64.yaml
+- [x] stale-cargo-cache-project-plan-cleanup (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 engineering project 中已完成 `local-cargo-cache-script-convergence` 的过期 File Structure / Affected Paths 计划残留，保留完成行与 `.pm` task trace，不改 cargo-dev 行为。 Trace: .pm/tasks/task_42b496aae8c8456a882acea4c2116a22.yaml
 
 ## File Structure / Affected Paths
 
