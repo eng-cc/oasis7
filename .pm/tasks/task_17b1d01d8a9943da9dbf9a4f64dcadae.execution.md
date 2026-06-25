@@ -52,3 +52,12 @@ Example:
 - Expected Result: Only the router skill remains changed, with a small routing hook; bootstrap/execution/review/verification skills no longer duplicate the module field or gate matrix.
 - Actual Result: Net skill diff is limited to .agents/skills/repo-owned-workflow-router/SKILL.md with 8 added lines.
 - Blocker / Next Action: none
+
+## 2026-06-25 21:31:57 CST / tpm
+- 完成内容: Reviewed PR #640 for unnecessary change surface with repository_health_engineer and producer_system_designer slices; identified parent/child productization as the main optional/overweight area and removed two confirmed hard-contract leftovers from generic review/eval surfaces.
+- 遗留事项: Report remaining optional deletions for user decision; do not merge PR.
+- Action: Trimmed workflow eval and pre-PR packet requirements so optional parent/child evidence does not become a default PR burden.
+- Validation Command: ./scripts/pm/workflow-behavior-eval.sh && git diff --check
+- Expected Result: Workflow eval passes after removing obsolete required markers; diff has no whitespace errors.
+- Actual Result: workflow behavior eval: OK; git diff --check passed.
+- Blocker / Next Action: none
