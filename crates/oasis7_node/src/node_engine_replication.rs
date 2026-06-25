@@ -1027,8 +1027,8 @@ impl PosNodeEngine {
                             execution_block_hash: payload.execution_block_hash.clone(),
                             execution_state_root: payload.execution_state_root.clone(),
                             action_root: payload.action_root.clone(),
-                            public_key_hex: message.public_key_hex.clone(),
-                            signature_hex: message.signature_hex.clone(),
+                            public_key_hex: None,
+                            signature_hex: None,
                         },
                     );
                 }

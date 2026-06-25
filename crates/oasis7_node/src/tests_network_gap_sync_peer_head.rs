@@ -64,6 +64,8 @@ fn gap_sync_fetch_commit_records_peer_head_for_readiness() {
     let peer_head = engine.peer_heads.get("node-a").expect("node-a peer head");
     assert_eq!(peer_head.height, 1);
     assert_eq!(peer_head.block_hash, "block-1");
+    assert_eq!(peer_head.public_key_hex, None);
+    assert_eq!(peer_head.signature_hex, None);
     assert_eq!(engine.committed_height, 1);
     assert_eq!(engine.replication_persisted_height, 1);
     assert_eq!(engine.network_committed_height, 1);
