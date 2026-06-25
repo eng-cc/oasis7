@@ -116,6 +116,10 @@
   - NFR-SPL-4: `limited-scope regional influence` 100% 必须与 global governance / alliance leadership 分开定义，不得偷渡成更强权力口径。
   - NFR-SPL-5: 本专题不得改写当前 `limited playable technical preview` claim envelope，也不得用来替代 `PRD-GAME-012` 的 trust/capability 样本。
   - NFR-SPL-6: 任一正式 small-player lane 样本都必须声明 `leverage_class`，且连续两个 checkpoint 不得只重复同一种收益形态；若没有新增用途、恢复力或局部影响类型，则必须升级为 grind 风险。
+- 2026-06-25 P1/P2 viewer follow-up:
+  - `software_safe` 正式玩家入口在 `Formal Gameplay Summary` 中新增 `Agency Moves`、`First Win & Anti-Grind` 与 `Mature-World Continuation` surface，分别承接 P1 的打断/重排/纠偏、首个工业胜利/anti-grind leverage，以及 P2 的 mature-world repair/rebuild/pivot 与 share replay。
+  - 该 surface 只消费或派生既有 `player_gameplay` 字段：`can_interrupt`、`can_reprioritize`、`replacement_intent_summary`、`handoff_result`、`first_win_goal_id`、`player_action`、`world_change_due_to_player`、`leverage_class`、`same_loop_repeat_count`、`grind_only_flag`、`major_power_dependency_status`、`repair_available`、`rebuild_available`、`pivot_available`、`recovery_path_*`。
+  - 本 follow-up 是 viewer / producer-readable surface alignment，不替代 `runtime-small-player-lane-state-contract`、agent specialization contract 或 QA mature-world sample verdict。
 - Security & Privacy:
   - 本专题不新增额外账号权限或经济旁路；仍遵循现有 claim / restricted starter / governance 审计边界。
 
@@ -141,6 +145,7 @@
 | PRD-GAME-015 | `small-player-progression-contract-freeze` | `test_tier_required` | 文档治理检查、根入口/主文档/索引/execution log 互链核验 | mature-world 小玩家路线合同冻结 |
 | PRD-GAME-015 | `runtime-small-player-lane-state-contract` | `test_tier_required` | canonical lane state / checkpoint / failure / recovery truth 对账与定向测试 | runtime / `player_gameplay` 语义承接 |
 | PRD-GAME-015 | `viewer-small-player-lane-surface-alignment` | `test_tier_required` | headed Web/UI 与 pure API surface 复核，确认 lane、首个胜利、区域价值与恢复路径可读 | 玩家可见承接、return hook 与多端一致性 |
+| PRD-GAME-015 | `viewer-p1-p2-agency-progression-surface` | `test_tier_required` | `software-safe-feedback-contract.test.mjs` 与 `main.test.jsx` 验证 `Agency Moves / First Win & Anti-Grind / Mature-World Continuation / Share Replay` | P1/P2 制作人可读落点、anti-grind、成熟世界承接 |
 | PRD-GAME-015 | `agent-small-player-specialization-contract` | `test_tier_required` | specialization / recovery / org-independence contract 对账，确认 agent 不默认把玩家推向强依附 | agent 行为边界、间接控制下的专业化表达 |
 | PRD-GAME-015 | `qa-small-player-progression-matrix` | `test_tier_required` + `test_tier_full` | player leverage rubric、mature-world small-player 样本、failure/recovery blocker 签名与 lane verdict 归档 | 玩法承接、mature-world 有效性与误报阻断 |
 

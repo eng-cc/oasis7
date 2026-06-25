@@ -28,3 +28,8 @@
 - 先固定首局目标结构。
 - 再补动作字典、示例填充和结构化返回。
 - 最后把反馈状态并入 `getState` 与测试闭环。
+
+## 6. 2026-06-25 Follow-up: Formal Gameplay Summary
+- `software_safe` 已把原 `getState().lastControlFeedback` / `player_gameplay` 状态回放层延展到 `Formal Gameplay Summary`：顶部新增 `Control Proof`，并展示 `Player Intent`、`World Consequence`、`Recovery Move`、`Next Move`。
+- 同一 summary 追加 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`，用于承接 P1/P2 制作人落点。
+- 该 follow-up 不改变 runtime action 语义、Web Test API 控制协议或 canonical truth；它只把既有状态聚合成正式玩家可读 surface，并由 `software-safe-feedback-contract.test.mjs` 与 `main.test.jsx` 锁定。

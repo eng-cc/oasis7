@@ -3,6 +3,8 @@
 - 对应需求文档: `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.prd.md`
 - 对应项目管理文档: `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.project.md`
 
+> 2026-06-25 状态说明：本文保留为早期控制可预期性任务清单和历史风险锚点；当前正式玩家控制反馈 surface 以 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md`、`PRD-GAME-014` 和 `software_safe` 的 `Control Proof` / `Agency Moves` 测试为准。本文不再单独代表当前 canonical viewer 方案。
+
 ## 1. 设计定位
 定义围绕“玩家控制代理感”的控制可预期性改版任务清单：把 accepted 无推进、控制命中率低和卡住恢复体验差等问题收敛为可解释、可恢复、可量化的一组任务。
 

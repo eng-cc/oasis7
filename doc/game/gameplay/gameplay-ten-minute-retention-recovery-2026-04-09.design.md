@@ -48,6 +48,11 @@
 - full:
   - 正式 active-LLM 样本趋势与弱入口复核。
 
+## 2026-06-25 Follow-up: Viewer Surface Alignment
+- `software_safe` 的 `Formal Gameplay Summary` 已追加 `Control Proof`，把 `Player Intent -> World Consequence -> Recovery Move -> Next Move` 放在同一张首局可读链路里。
+- P1/P2 的 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay` 只作为 trust gate 之后的 continuation surface，帮助制作人判断能动性、anti-grind 与中循环承接。
+- 这些 surface 只消费或派生现有 `player_gameplay` / feedback 真值，不改变 `10-minute trust gate`、`first capability gate`、runtime canonical truth 或 QA verdict。
+
 ## 风险
 - 若 `TASK-GAME-062` 未先收口，`TASK-GAME-063/064` 的任何正向结论都可能是脆弱假象。
 - 若 `TASK-GAME-065` 不区分 active-LLM 与 debug lane，门禁会再次失真。

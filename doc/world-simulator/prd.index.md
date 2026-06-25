@@ -2,7 +2,7 @@
 
 审计轮次: 8
 
-更新时间：2026-06-23
+更新时间：2026-06-25
 
 ## 用途
 - 本页是 `world-simulator` 的文件级索引，优先用于按文件名精确检索、确认配对关系与维持互链可达性。
@@ -49,6 +49,7 @@
 - `doc/core/reviews/round-005-audit-progress-log.md`
 - `doc/core/reviews/round-005-reviewed-files.md`
 - `doc/core/reviews/round-008-reviewed-files.md`
+- Viewer 旧控制反馈三件套已从下方活跃专题清单移出，只保留文件自身互链和历史审计可检索性：`viewer-control-feedback-iteration-checklist-2026-02-27.*`、`viewer-control-feedback-step-recovery-p0-2026-02-27.*`、`viewer-control-predictability-tasklist-2026-02-28.*`。当前正式控制反馈入口改读 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
 
 若需要判断当前需求、执行状态或专题配对关系，仍以 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与本索引的活跃专题清单为准。
 
@@ -152,10 +153,7 @@
 | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.prd.md` | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.design.md` | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md` |
 | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.prd.md` | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.design.md` | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md` |
-| `doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27.prd.md` | `doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27.design.md` | `doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27.project.md` |
-| `doc/world-simulator/viewer/viewer-control-feedback-step-recovery-p0-2026-02-27.prd.md` | `doc/world-simulator/viewer/viewer-control-feedback-step-recovery-p0-2026-02-27.design.md` | `doc/world-simulator/viewer/viewer-control-feedback-step-recovery-p0-2026-02-27.project.md` |
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.design.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.project.md` |
-| `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.prd.md` | `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.design.md` | `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.project.md` |
 | `doc/world-simulator/viewer/viewer-copyable-text.prd.md` | `doc/world-simulator/viewer/viewer-copyable-text.design.md` | `doc/world-simulator/viewer/viewer-copyable-text.project.md` |
 | `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.project.md` |
 | `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.prd.md` | `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.design.md` | `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.project.md` |

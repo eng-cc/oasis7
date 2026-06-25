@@ -103,6 +103,23 @@ const core = await import("../software_safe_src/legacy_core.js");
       causality_detail: "iron input exhausted at factory-0",
       next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
       branch_hint: null,
+      can_interrupt: true,
+      can_reprioritize: true,
+      replacement_intent_summary: "Switch from stalled smelter build to material recovery.",
+      handoff_result: "Old build intent stays paused until recovery proves material input.",
+      first_win_goal_id: "small_player.first_industrial_win",
+      player_action: "queued build_factory_smelter_mk1 and inspected the material blocker",
+      world_change_due_to_player: "factory-0 exposed a recoverable iron shortage instead of silent waiting",
+      player_leverage_verdict: "watch: recovery can restore the first capability",
+      leverage_class: "repair_elasticity",
+      same_loop_repeat_count: 2,
+      grind_only_flag: false,
+      major_power_dependency_status: "independent_path_available",
+      repair_available: true,
+      rebuild_available: true,
+      pivot_available: true,
+      recovery_path_kind: "repair_rebuild_or_pivot",
+      recovery_path_detail: "replenish iron, rebuild the local line, or pivot to a lower-input branch",
       available_actions: [
         {
           action_id: "advance_step",
@@ -147,7 +164,85 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.match(gameplaySummary.economicSurface.repairAction, /Advance 1 step/i);
   assert.match(gameplaySummary.economicSurface.nextValue, /stalled line becomes an operable capability again/i);
   assert.match(gameplaySummary.assetGovernanceHandoff, /no main token transfer form/i);
+  assert.equal(gameplaySummary.controlProof.intent, "No player-facing accepted intent yet");
+  assert.match(gameplaySummary.controlProof.consequence, /World Constraint/i);
+  assert.match(gameplaySummary.controlProof.recovery, /Advance 1 step/i);
+  assert.match(gameplaySummary.controlProof.nextMove, /Replenish upstream materials/i);
+  assert.match(gameplaySummary.controlProof.summary, /control is blocked but recoverable/i);
+  assert.equal(gameplaySummary.agencyMoves.interrupt, "available");
+  assert.equal(gameplaySummary.agencyMoves.reprioritize, "available");
+  assert.match(gameplaySummary.agencyMoves.correction, /material recovery/i);
+  assert.match(gameplaySummary.progressionProof.firstWinGoal, /small_player\.first_industrial_win/i);
+  assert.match(gameplaySummary.progressionProof.antiGrind, /repair_elasticity/i);
+  assert.match(gameplaySummary.matureWorldContinuation.dependencyStatus, /independent_path_available/i);
+  assert.match(gameplaySummary.matureWorldContinuation.recoveryOptions, /repair.*rebuild.*pivot/i);
+  assert.match(gameplaySummary.shareReplay.snippet, /queued build_factory_smelter_mk1/i);
   assert.equal(core.getState().gameplaySummary.goalTitle, "Recover sustainable capability");
+}
+
+{
+  core.state.snapshot = {
+    model: {
+      agents: { "agent-0": { id: "agent-0" } },
+      locations: { "loc-0": { id: "loc-0" } },
+    },
+    player_gameplay: {
+      stage_id: "post_onboarding",
+      stage_status: "blocked",
+      execution_state: "blocked",
+      goal_title: "Recover sustainable capability",
+      objective: "Recover the blocked line.",
+      blocker_kind: "material_shortage",
+      blocker_detail: "iron input exhausted at factory-0",
+      causality_kind: "world_constraint",
+      causality_detail: "iron input exhausted at factory-0",
+      next_step_hint: "Replenish upstream materials, then advance again.",
+      can_interrupt: false,
+      can_reprioritize: false,
+      repair_available: false,
+      rebuild_available: false,
+      pivot_available: false,
+      available_actions: [],
+    },
+  };
+  const gameplaySummary = core.buildGameplaySummary();
+  assert.equal(gameplaySummary.agencyMoves.interrupt, "unavailable");
+  assert.equal(gameplaySummary.agencyMoves.reprioritize, "unavailable");
+  assert.equal(gameplaySummary.agencyMoves.correction, null);
+  assert.equal(gameplaySummary.agencyMoves.handoff, null);
+  assert.equal(gameplaySummary.progressionProof.firstWinGoal, null);
+  assert.equal(gameplaySummary.progressionProof.playerAction, null);
+  assert.equal(gameplaySummary.progressionProof.worldChange, null);
+  assert.match(gameplaySummary.matureWorldContinuation.recoveryOptions, /repair: unavailable/);
+  assert.match(gameplaySummary.matureWorldContinuation.recoveryOptions, /rebuild: unavailable/);
+  assert.match(gameplaySummary.matureWorldContinuation.recoveryOptions, /pivot: unavailable/);
+  assert.equal(gameplaySummary.shareReplay.playerIntent, null);
+  assert.equal(gameplaySummary.shareReplay.worldResult, null);
+  assert.equal(gameplaySummary.shareReplay.snippet, null);
+  assert.match(gameplaySummary.controlProof.nextMove, /Replenish upstream materials/i);
+}
+
+{
+  core.state.snapshot = {
+    model: {
+      agents: { "agent-0": { id: "agent-0" } },
+      locations: { "loc-0": { id: "loc-0" } },
+    },
+    player_gameplay: {
+      stage_id: "post_onboarding",
+      stage_status: "blocked",
+      execution_state: "blocked",
+      goal_title: "Recover sustainable capability",
+      player_action: "queued build_factory_smelter_mk1",
+      causality_detail: "iron input exhausted at factory-0",
+      last_world_change: "storm damaged an unrelated storage yard",
+    },
+  };
+  const gameplaySummary = core.buildGameplaySummary();
+  assert.equal(gameplaySummary.progressionProof.worldChange, null);
+  assert.equal(gameplaySummary.shareReplay.playerIntent, "queued build_factory_smelter_mk1");
+  assert.equal(gameplaySummary.shareReplay.worldResult, null);
+  assert.equal(gameplaySummary.shareReplay.snippet, null);
 }
 
 {
@@ -241,6 +336,8 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(gameplaySummary.executionCauseKind, "agent_override");
   assert.match(gameplaySummary.executionCauseLabel, /Agent Chose Differently/i);
   assert.match(gameplaySummary.executionCauseDetail, /policy\.guard/i);
+  assert.match(gameplaySummary.controlProof.consequence, /Agent Chose Differently/i);
+  assert.match(gameplaySummary.controlProof.summary, /Control proved/i);
 }
 
 {

@@ -1475,6 +1475,121 @@ function WorldSummaryPanel() {
                 </Badge>
               </div>
               <EventCard
+                title={tr(locale(), "控制证明", "Control Proof")}
+                badge={gameplay().controlProof?.state || gameplay().executionState || "-"}
+                badgeClass={goalExecutionBadgeClass(gameplay().controlProof?.state || gameplay().executionState)}
+                meta={tr(locale(), "把玩家意图、世界后果、恢复动作和下一步串成一条首局可读链。", "Connect player intent, world consequence, recovery, and next move into one first-session-readable chain.")}
+              >
+                <div class="feedback-summary">
+                  {gameplay().controlProof?.summary
+                    || tr(locale(), "等待控制证明链路发布。", "Waiting for the control proof chain.")}
+                </div>
+                <div class="summary-grid">
+                  <MetricCard
+                    label={tr(locale(), "玩家意图", "Player Intent")}
+                    value={gameplay().controlProof?.intent || tr(locale(), "待提交", "not submitted")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "世界后果", "World Consequence")}
+                    value={gameplay().controlProof?.consequence || tr(locale(), "待回执", "waiting for receipt")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "恢复动作", "Recovery Move")}
+                    value={gameplay().controlProof?.recovery || tr(locale(), "待发布", "not published")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "下一步", "Next Move")}
+                    value={gameplay().controlProof?.nextMove || tr(locale(), "等待运行时指引", "waiting for runtime guidance")}
+                  />
+                </div>
+              </EventCard>
+              <PanelSection
+                title={tr(locale(), "玩家能动性动词", "Agency Moves")}
+                eyebrow={tr(locale(), "P1: 打断 / 重排 / 纠偏", "P1: Interrupt / Reprioritize / Correct")}
+                meta={tr(locale(), "只展示已由玩法快照发布或可从现有状态推导的能动性入口，不在 viewer 里伪造新动作。", "Shows only agency entries published by the gameplay snapshot or derived from current state; the viewer does not invent new actions.")}
+              >
+                <div class="feedback-summary">
+                  {gameplay().agencyMoves?.summary
+                    || tr(locale(), "等待玩家能动性动词发布。", "Waiting for player agency moves.")}
+                </div>
+                <div class="summary-grid">
+                  <MetricCard
+                    label={tr(locale(), "打断", "Interrupt")}
+                    value={gameplay().agencyMoves?.interrupt || tr(locale(), "未验证", "unverified")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "重排", "Reprioritize")}
+                    value={gameplay().agencyMoves?.reprioritize || tr(locale(), "未验证", "unverified")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "纠偏", "Correction")}
+                    value={gameplay().agencyMoves?.correction || tr(locale(), "等待替代意图", "waiting for replacement intent")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "交接结果", "Handoff")}
+                    value={gameplay().agencyMoves?.handoff || tr(locale(), "等待新旧意图交接", "waiting for handoff")}
+                  />
+                </div>
+              </PanelSection>
+              <PanelSection
+                title={tr(locale(), "首胜与反刷", "First Win & Anti-Grind")}
+                eyebrow={tr(locale(), "P1: 小玩家第一场工业胜利", "P1: Small-Player First Industrial Win")}
+                meta={tr(locale(), "把玩家动作、世界变化和 leverage 类型放在一起，避免首胜只变成产量数字。", "Pairs player action, world change, and leverage class so the first win is not reduced to output volume.")}
+              >
+                <div class="feedback-summary">
+                  {gameplay().progressionProof?.summary
+                    || tr(locale(), "等待首胜与反刷证据发布。", "Waiting for first-win and anti-grind evidence.")}
+                </div>
+                <div class="summary-grid">
+                  <MetricCard
+                    label={tr(locale(), "首胜目标", "First Win")}
+                    value={gameplay().progressionProof?.firstWinGoal || tr(locale(), "待发布", "not published")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "玩家动作", "Player Action")}
+                    value={gameplay().progressionProof?.playerAction || tr(locale(), "待提交", "not submitted")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "世界变化", "World Change")}
+                    value={gameplay().progressionProof?.worldChange || tr(locale(), "待回执", "waiting for receipt")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "反刷 leverage", "Anti-Grind Leverage")}
+                    value={gameplay().progressionProof?.antiGrind || tr(locale(), "待验证", "unverified")}
+                    detail={gameplay().progressionProof?.leverageVerdict}
+                  />
+                </div>
+              </PanelSection>
+              <PanelSection
+                title={tr(locale(), "成熟世界承接", "Mature-World Continuation")}
+                eyebrow={tr(locale(), "P2: 修复 / 重建 / 转向", "P2: Repair / Rebuild / Pivot")}
+                meta={tr(locale(), "呈现世界变复杂之后，小玩家是否仍有独立承接路径和可复盘短故事。", "Shows whether small players retain independent continuation paths and replayable story evidence after the world becomes complex.")}
+              >
+                <div class="feedback-summary">
+                  {gameplay().matureWorldContinuation?.summary
+                    || tr(locale(), "等待成熟世界承接证据发布。", "Waiting for mature-world continuation evidence.")}
+                </div>
+                <div class="summary-grid">
+                  <MetricCard
+                    label={tr(locale(), "依赖状态", "Dependency")}
+                    value={gameplay().matureWorldContinuation?.dependencyStatus || tr(locale(), "未验证", "unverified")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "恢复选项", "Recovery Options")}
+                    value={gameplay().matureWorldContinuation?.recoveryOptions || tr(locale(), "待发布", "not published")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "恢复路径", "Recovery Path")}
+                    value={gameplay().matureWorldContinuation?.recoveryPath || tr(locale(), "等待运行时指引", "waiting for runtime guidance")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "分享回放", "Share Replay")}
+                    value={gameplay().shareReplay?.snippet || tr(locale(), "等待可复盘片段", "waiting for replayable snippet")}
+                    detail={gameplay().shareReplay?.summary}
+                  />
+                </div>
+              </PanelSection>
+              <EventCard
                 title={tr(locale(), "已接受意图", "Accepted Intent")}
                 badge={gameplay().acceptedIntentScope || gameplay().executionStateLabel || "-"}
                 badgeClass={goalExecutionBadgeClass(gameplay().executionState)}

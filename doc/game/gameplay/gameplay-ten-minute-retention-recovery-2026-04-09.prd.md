@@ -103,6 +103,13 @@
   - NFR-RR-3: `first capability gate` 不得由单条 10 分钟样本替代；必须用 `30` 分钟窗口或 `1~3` 次会话证据判定。
   - NFR-RR-4: 每条 lane 及两层 gate 的结论必须在同日回写到 task execution log 与对应 PRD/project。
   - NFR-RR-5: 所有结论继续遵守 `internal_playable_alpha_late` / `internal_only` claim envelope，不借体验改进任务扩大对外承诺。
+- 2026-06-25 P0 control proof follow-up:
+  - `software_safe` 正式玩家入口需要把现有 `player_gameplay` 真值聚合成首局可读的 `Control Proof` surface，顺序固定为 `Player Intent -> World Consequence -> Recovery Move -> Next Move`。
+  - 该 surface 只消费既有 `accepted_intent`、`execution_state`、`causality_*`、`last_world_change`、`next_step_hint`、recommended action 与 fallback/repair 语义；不得新增或伪造 runtime canonical truth。
+  - `Control Proof` 是 `PRD-GAME-012` trust/control floor 的呈现层落点，用于降低玩家拼读成本，不替代 active-LLM trust sample、first capability gate 或 QA verdict。
+- 2026-06-25 P1/P2 continuation follow-up:
+  - P1/P2 不塞进 10-minute trust gate 作为新判定项；它们作为 trust gate 之后的制作人可读延展，检查玩家是否拥有打断/重排/纠偏、首胜 leverage、anti-grind 与 mature-world repair/rebuild/pivot 继续路径。
+  - `software_safe` viewer 可以在现有 `player_gameplay` 字段存在时展示 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`，用于让制作人快速判断“首局控制证明”之后是否形成可继续玩的中循环承接。
 - Security & Privacy:
   - 本专题只调整玩法优先级、体验反馈与门禁口径，不新增玩家敏感数据采集。
 
@@ -130,6 +137,8 @@
 | PRD-GAME-012 | `TASK-GAME-063` | `test_tier_required` | 工业引导卡组 A/B/C + `30` 分钟或 `1~3` 次会话 capability follow-up 样本 + branch-ready 人工复核 | `PostOnboarding` 后中循环承接与首个持续能力门 |
 | PRD-GAME-012 | `TASK-GAME-064` | `test_tier_required` | 首屏截图对比、Mission HUD/summary/toast/chatter 语义人工复核、噪音抢焦点评估 | 玩家身份、后果可见化、奖励节奏 |
 | PRD-GAME-012 | `TASK-GAME-065` | `test_tier_required` | `10-minute trust gate` 卡片、QA 汇总与 producer `continue_playing / hold` 决策，并与 capability verdict 分开记录 | trust verdict、正式入口可信度与后续 capability follow-up 方向 |
+| PRD-GAME-012 | `p0-control-proof-surface` | `test_tier_required` | `software-safe-feedback-contract.test.mjs` 与 `main.test.jsx` 验证 `Control Proof / Player Intent / World Consequence / Recovery Move / Next Move` | 首局控制证明、后果可读、恢复动作同卡呈现 |
+| PRD-GAME-012 | `p1-p2-continuation-surface` | `test_tier_required` | `software-safe-feedback-contract.test.mjs` 与 `main.test.jsx` 验证 P1/P2 viewer cards；设计真值挂回 `PRD-GAME-015` | trust gate 之后的能动性、anti-grind 与成熟世界承接可读性 |
 
 - Decision Log:
 

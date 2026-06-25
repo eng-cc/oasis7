@@ -991,6 +991,158 @@ export function createViewerFeedbackModule({
           playerDetail: recoveryActionDetail(recommendedAction, economicSurface),
         }
       : null;
+    const controlProofConsequence = [
+      executionCauseLabel,
+      executionCauseDetail,
+    ].filter(Boolean).join(": ") || executionSummary || lastWorldChange || null;
+    const controlProofRecovery = enrichedRecommendedAction?.label
+      || enrichedRecommendedAction?.actionId
+      || economicSurface?.repairAction
+      || blockerLabel
+      || null;
+    const controlProofSummary = (() => {
+      if (executionState === "completed") {
+        return localeText(
+          locale,
+          "控制已证明：已接受意图产生了世界级结果，玩家可以继续放大或切换下一条主线。",
+          "Control proved: the accepted intent produced a world-level result, so the player can amplify it or switch to the next line.",
+        );
+      }
+      if (executionState === "blocked") {
+        return localeText(
+          locale,
+          "控制被阻塞但可恢复：系统已把主因果和下一步恢复动作暴露给玩家。",
+          "Player control is blocked but recoverable: the system exposes the primary cause and next recovery move.",
+        );
+      }
+      if (executionState === "accepted") {
+        return localeText(
+          locale,
+          "控制已提交：系统已接受玩家意图，正在等待 committed world delta 或后续回执。",
+          "Control submitted: the system accepted the player's intent and is waiting for committed world delta or follow-up feedback.",
+        );
+      }
+      if (executionState === "rejected") {
+        return localeText(
+          locale,
+          "控制未生效：请求已被拒绝，玩家需要先修正权限、模式或动作前提。",
+          "Control did not land: the request was rejected, so the player must fix the permission, mode, or action prerequisite first.",
+        );
+      }
+      return localeText(
+        locale,
+        "控制正在证明：玩家应先读取主因果、下一步和回执，再决定是否继续推进或改道。",
+        "Control is being proven: read the primary cause, next step, and receipt before advancing or redirecting.",
+      );
+    })();
+    const controlProof = {
+      intent: acceptedIntentSummary,
+      consequence: controlProofConsequence,
+      recovery: controlProofRecovery,
+      nextMove: narrativeNextStep,
+      summary: controlProofSummary,
+      state: executionState,
+    };
+    const availabilityLabel = (value) => (
+      value === true
+        ? "available"
+        : value === false
+          ? "unavailable"
+          : "unverified"
+    );
+    const agencyMoves = {
+      interrupt: availabilityLabel(gameplay.can_interrupt),
+      reprioritize: availabilityLabel(gameplay.can_reprioritize),
+      correction: gameplay.replacement_intent_summary
+        || gameplay.reprioritize_hint
+        || gameplay.escalation_hint
+        || null,
+      handoff: gameplay.handoff_result
+        || gameplay.override_reason
+        || null,
+      summary: localeText(
+        locale,
+        "P1 玩家动词：不要只等 AI 继续，优先暴露打断、重排、纠偏和新旧意图交接。",
+        "P1 player verbs: do not only wait for AI to continue; expose interrupt, reprioritize, correction, and handoff.",
+      ),
+    };
+    const sameLoopRepeatCount = Number(gameplay.same_loop_repeat_count);
+    const normalizedRepeatCount = Number.isFinite(sameLoopRepeatCount)
+      ? Math.max(0, Math.floor(sameLoopRepeatCount))
+      : null;
+    const grindOnlyFlag = gameplay.grind_only_flag === true;
+    const leverageClass = gameplay.leverage_class || gameplay.player_leverage_class || null;
+    const progressionProof = {
+      firstWinGoal: gameplay.first_win_goal_id
+        || gameplay.first_win_definition
+        || null,
+      playerAction: gameplay.player_action || null,
+      worldChange: gameplay.world_change_due_to_player || null,
+      leverageVerdict: gameplay.player_leverage_verdict
+        || gameplay.player_leverage_score
+        || null,
+      leverageClass,
+      antiGrind: leverageClass
+        ? `${leverageClass}${normalizedRepeatCount == null ? "" : ` · repeat=${normalizedRepeatCount}`}${grindOnlyFlag ? " · grind_only" : ""}`
+        : grindOnlyFlag
+          ? localeText(locale, "grind_only 风险已触发", "grind_only risk is active")
+          : localeText(locale, "等待 leverage_class / anti-grind truth", "Waiting for leverage_class / anti-grind truth"),
+      summary: localeText(
+        locale,
+        "P1 首个胜利：证明玩家动作带来可恢复、可复用或可谈判的新 leverage，而不是只增加产量。",
+        "P1 first win: prove the player action creates recoverable, reusable, or negotiable leverage, not just more output.",
+      ),
+    };
+    const dependencyStatus = gameplay.major_power_dependency_status || "unverified";
+    const recoveryOptions = [
+      ["repair", gameplay.repair_available],
+      ["rebuild", gameplay.rebuild_available],
+      ["pivot", gameplay.pivot_available],
+    ]
+      .filter(([, value]) => value === true || value === false)
+      .map(([label, value]) => `${label}: ${availabilityLabel(value)}`);
+    const matureWorldContinuation = {
+      dependencyStatus,
+      recoveryOptions: recoveryOptions.length > 0
+        ? recoveryOptions.join(" / ")
+        : localeText(locale, "等待 repair / rebuild / pivot truth", "Waiting for repair / rebuild / pivot truth"),
+      recoveryPath: gameplay.recovery_path_detail
+        || gameplay.recovery_path_kind
+        || narrativeNextStep
+        || null,
+      summary: dependencyStatus === "forced"
+        ? localeText(
+          locale,
+          "P2 阻塞：继续路径被强制绑定到 major power，需要提供独立 repair/rebuild/pivot。",
+          "P2 blocker: continuation is forced into major power dependency; expose independent repair/rebuild/pivot.",
+        )
+        : localeText(
+          locale,
+          "P2 成熟世界承接：小玩家需要不依附大组织也能修复、重建或转向。",
+          "P2 mature-world continuation: small players need repair, rebuild, or pivot paths without forced major-power dependency.",
+        ),
+    };
+    const replayPlayerIntent = gameplay.player_action || null;
+    const replayWorldResult = gameplay.world_change_due_to_player || null;
+    const shareReplaySnippet = replayPlayerIntent && replayWorldResult
+      ? [
+        replayPlayerIntent,
+        executionCauseLabel || executionStateLabel || executionState,
+        replayWorldResult,
+      ].filter(Boolean).join(" -> ")
+      : null;
+    const shareReplay = {
+      playerIntent: replayPlayerIntent,
+      agentExecution: executionCauseLabel || executionStateLabel || executionState || null,
+      worldResult: replayWorldResult,
+      nextBranch: gameplay.branch_hint || narrativeNextStep || null,
+      snippet: shareReplaySnippet,
+      summary: localeText(
+        locale,
+        "P2 分享单位：玩家意图、AI/世界执行、世界结果和下一分支必须能组成一段可复盘短故事。",
+        "P2 share unit: player intent, AI/world execution, world result, and next branch should form a replayable short story.",
+      ),
+    };
 
     return {
       stageId: gameplay.stage_id || null,
@@ -1032,6 +1184,11 @@ export function createViewerFeedbackModule({
       narrativeBlockerDetail,
       narrativeNextStep,
       economicSurface,
+      controlProof,
+      agencyMoves,
+      progressionProof,
+      matureWorldContinuation,
+      shareReplay,
       entityCounts: {
         agents: agents.length,
         locations: locations.length,
