@@ -469,27 +469,56 @@ needles = (
     f'{stack_root}/releases/',
 )
 
+def discover_stack_services():
+    candidates = {service_name}
+    for command in (
+        ['systemctl', 'list-unit-files', '--type=service', '--no-legend', '--no-pager'],
+        ['systemctl', 'list-units', '--all', '--type=service', '--no-legend', '--no-pager'],
+    ):
+        out = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+        if out.returncode != 0:
+            continue
+        for line in out.stdout.splitlines():
+            name = line.strip().split(None, 1)[0] if line.strip() else ''
+            if name.endswith('.service'):
+                candidates.add(name)
+    owners = set()
+    for candidate in candidates:
+        show = subprocess.run(
+            ['systemctl', 'show', candidate, '-p', 'FragmentPath', '-p', 'ExecStart', '-p', 'WorkingDirectory'],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if candidate == service_name or (show.returncode == 0 and stack_root in show.stdout):
+            owners.add(candidate)
+    return [service_name] + sorted(owner for owner in owners if owner != service_name)
+
+service_names = discover_stack_services()
+
 def quiesce_systemd():
-    mask = subprocess.run(
-        ['systemctl', 'mask', '--runtime', service_name],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
-    if mask.returncode != 0:
-        details = (mask.stderr or mask.stdout or '').strip()
-        suffix = f': {details}' if details else f' (exit {mask.returncode})'
-        print(f'cleanup failed: systemctl runtime mask failed for {service_name}{suffix}', file=sys.stderr)
-        raise SystemExit(1)
-    subprocess.run(['systemctl', 'stop', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    subprocess.run(
-        ['systemctl', 'kill', '--kill-who=all', '--signal=SIGKILL', service_name],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    subprocess.run(['systemctl', 'reset-failed', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    for owner in service_names:
+        mask = subprocess.run(
+            ['systemctl', 'mask', '--runtime', owner],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if mask.returncode != 0:
+            details = (mask.stderr or mask.stdout or '').strip()
+            suffix = f': {details}' if details else f' (exit {mask.returncode})'
+            print(f'cleanup failed: systemctl runtime mask failed for {owner}{suffix}', file=sys.stderr)
+            raise SystemExit(1)
+        subprocess.run(['systemctl', 'stop', owner], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        subprocess.run(
+            ['systemctl', 'kill', '--kill-who=all', '--signal=SIGKILL', owner],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        subprocess.run(['systemctl', 'reset-failed', owner], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 def matching_pids():
     current = os.getpid()

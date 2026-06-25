@@ -127,6 +127,32 @@ cat >"$TMP_DIR/bin/systemctl" <<'EOF'
 set -euo pipefail
 printf 'systemctl\t%s\n' "$*" >>"${TEST_SYSTEMCTL_LOG:?}"
 effective_host="${TEST_SSH_HOST:-${TEST_SYSTEMD_RESTART_LOOP_HOST:-}}"
+case "${1:-}" in
+  list-unit-files|list-units)
+    IFS=',' read -r -a services <<< "${TEST_SYSTEMD_STACK_OWNER_SERVICES:-}"
+    for service in "${services[@]-}"; do
+      [[ -n "$service" ]] && printf '%s enabled\n' "$service"
+    done
+    exit 0
+    ;;
+  show)
+    service="${2:-}"
+    IFS=',' read -r -a services <<< "${TEST_SYSTEMD_STACK_OWNER_SERVICES:-}"
+    for owner in "${services[@]-}"; do
+      if [[ "$service" == "$owner" ]]; then
+        stack_root="${TEST_SYSTEMD_RESTART_LOOP_STACK_ROOT:-/opt/oasis7/p2p-testnet}"
+        printf 'FragmentPath=/etc/systemd/system/%s\n' "$service"
+        printf 'ExecStart={ path=%s/bin/start-node.sh ; argv[]=%s/bin/start-node.sh ; }\n' "$stack_root" "$stack_root"
+        printf 'WorkingDirectory=%s\n' "$stack_root"
+        exit 0
+      fi
+    done
+    printf 'FragmentPath=/etc/systemd/system/%s\n' "$service"
+    printf 'ExecStart=\n'
+    printf 'WorkingDirectory=\n'
+    exit 0
+    ;;
+esac
 if [[ "${TEST_FAIL_SYSTEMCTL_MASK_HOST:-}" == "$effective_host" && "${1:-}" == "mask" ]]; then
   echo "runtime mask denied" >&2
   exit 23
@@ -573,6 +599,51 @@ if mask_count < 2:
     raise SystemExit("cleanup did not repeatedly mask the sequencer service while waiting for quiet")
 if any(line == "spawned\troot@sequencer\toasis7-triad-sequencer.service" for line in lines):
     raise SystemExit("fake systemd restart-loop spawned despite runtime service mask")
+PY
+
+: >"$TEST_SSH_LOG"
+: >"$TEST_SYSTEMCTL_LOG"
+rm -f "$TEST_REMOTE_ROOT"/started-*
+legacy_state_dir="$TEST_REMOTE_ROOT/systemd-root_sequencer-oasis7-triad-sequencer.service"
+mkdir -p "$legacy_state_dir"
+touch "$legacy_state_dir/armed"
+if TEST_SYSTEMD_RESTART_LOOP_HOST=root@sequencer \
+  TEST_SYSTEMD_RESTART_LOOP_STACK_ROOT=/opt/oasis7/p2p-testnet \
+  TEST_SYSTEMD_STACK_OWNER_SERVICES=oasis7-testnet-sequencer.service,oasis7-triad-sequencer.service \
+  "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-testnet-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-testnet-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-stack-owner-services" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-stack-owner-services.out 2>&1; then
+  :
+fi
+
+python3 - "$TEST_SYSTEMCTL_LOG" <<'PY'
+import pathlib
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+required = {
+    "systemctl\tmask --runtime oasis7-testnet-sequencer.service",
+    "systemctl\tmask --runtime oasis7-triad-sequencer.service",
+}
+missing = sorted(required - set(lines))
+if missing:
+    raise SystemExit(f"missing stack-owner runtime mask calls: {missing}")
+if "systemctl\tunmask oasis7-triad-sequencer.service" in lines:
+    raise SystemExit("legacy stack-owner service was unmasked by explicit start path")
+if any(line == "spawned\troot@sequencer\toasis7-triad-sequencer.service" for line in lines):
+    raise SystemExit("legacy stack-owner service respawned during cleanup")
 PY
 
 : >"$TEST_SSH_LOG"
