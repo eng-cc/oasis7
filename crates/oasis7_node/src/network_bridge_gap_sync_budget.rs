@@ -53,6 +53,17 @@ pub(super) fn gap_sync_fetch_commit_route_budget_exhausted() -> NodeError {
     }
 }
 
+pub(super) fn short_node_error(err: &NodeError) -> String {
+    err.to_string().chars().take(160).collect()
+}
+
+pub(super) fn summarize_fetch_commit_routes(route_events: &[String]) -> String {
+    if route_events.is_empty() {
+        return "routes=none".to_string();
+    }
+    route_events.join(";")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

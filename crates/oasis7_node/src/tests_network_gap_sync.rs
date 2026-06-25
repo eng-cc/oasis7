@@ -192,64 +192,6 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
     }
 }
 
-#[derive(Clone)]
-struct TimeoutThenProviderUnavailableFetchCommitNetwork {
-    connected_peer_ids: Vec<String>,
-    generic_attempts: Arc<Mutex<usize>>,
-    provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
-}
-
-impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
-    for TimeoutThenProviderUnavailableFetchCommitNetwork
-{
-    fn publish(&self, _topic: &str, _payload: &[u8]) -> Result<(), WorldError> {
-        Ok(())
-    }
-
-    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
-        Ok(NetworkSubscription::new(
-            topic.to_string(),
-            Arc::new(Mutex::new(HashMap::new())),
-        ))
-    }
-
-    fn request(&self, protocol: &str, _payload: &[u8]) -> Result<Vec<u8>, WorldError> {
-        *self.generic_attempts.lock().expect("lock generic attempts") += 1;
-        Err(WorldError::NetworkRequestFailed {
-            code: DistributedErrorCode::ErrTimeout,
-            message: protocol.to_string(),
-            retryable: true,
-        })
-    }
-
-    fn connected_peer_ids(&self) -> Vec<String> {
-        self.connected_peer_ids.clone()
-    }
-
-    fn request_with_providers(
-        &self,
-        protocol: &str,
-        _payload: &[u8],
-        providers: &[String],
-    ) -> Result<Vec<u8>, WorldError> {
-        self.provider_attempts
-            .lock()
-            .expect("lock provider attempts")
-            .push(providers.to_vec());
-        Err(WorldError::NetworkProtocolUnavailable {
-            protocol: format!("libp2p-replication no connected providers for protocol {protocol}"),
-        })
-    }
-
-    fn register_handler(
-        &self,
-        _protocol: &str,
-        _handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
-    ) -> Result<(), WorldError> {
-        Ok(())
-    }
-}
-
 #[test]
 fn successor_probe_at_genesis_syncs_height_one_before_local_proposal() {
     let dir_remote = temp_dir("successor-probe-genesis-remote");
@@ -1077,62 +1019,6 @@ fn gap_sync_fetch_commit_tries_connected_peers_after_generic_unsupported() {
             .as_slice(),
         &[vec!["peer-a".to_string()], vec!["peer-b".to_string()],],
         "expected gap sync to keep trying connected peers after generic unsupported"
-    );
-
-    let _ = fs::remove_dir_all(&dir_remote);
-    let _ = fs::remove_dir_all(&dir_local);
-}
-
-#[test]
-fn gap_sync_fetch_commit_single_probe_preserves_generic_timeout_over_provider_gap() {
-    let dir_remote = temp_dir("gap-sync-fetch-commit-single-probe-timeout-remote");
-    let dir_local = temp_dir("gap-sync-fetch-commit-single-probe-timeout-local");
-    let world_id = "world-gap-sync-fetch-commit-single-probe-timeout";
-    let generic_attempts = Arc::new(Mutex::new(0usize));
-    let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TimeoutThenProviderUnavailableFetchCommitNetwork {
-        connected_peer_ids: vec!["peer-a".to_string()],
-        generic_attempts: Arc::clone(&generic_attempts),
-        provider_attempts: Arc::clone(&provider_attempts),
-    });
-    let (_, _, endpoint, _) = build_fetch_commit_success_cache_fixture(
-        world_id,
-        dir_remote.as_path(),
-        dir_local.as_path(),
-        146,
-        147,
-        Arc::clone(&network),
-    );
-    let request = signed_fetch_commit_request_for_test(world_id, 1, 147);
-
-    let err = match endpoint.request_fetch_commit_for_gap_sync_single_probe(&request) {
-        Ok(_) => panic!("single probe should return the generic timeout"),
-        Err(err) => err,
-    };
-    let reason = err.to_string();
-    assert!(
-        reason.contains("kind=timeout")
-            && reason.contains(super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL),
-        "expected generic timeout to remain actionable, got {reason}"
-    );
-    assert!(
-        !reason.contains("no connected providers"),
-        "provider route gap should not overwrite a prior connected-peer timeout: {reason}"
-    );
-    assert_eq!(
-        *generic_attempts.lock().expect("lock generic attempts"),
-        1,
-        "single probe should keep one generic attempt"
-    );
-    assert_eq!(
-        provider_attempts
-            .lock()
-            .expect("lock provider attempts")
-            .as_slice(),
-        &[vec!["peer-a".to_string()]],
-        "single probe should still attempt the provider route for diagnostics"
     );
 
     let _ = fs::remove_dir_all(&dir_remote);

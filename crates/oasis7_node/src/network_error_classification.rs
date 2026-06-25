@@ -88,6 +88,19 @@ pub(crate) fn replication_network_error_is_timeout_protocol(
             || reason.contains("request failed: Timeout"))
 }
 
+pub(crate) fn replication_network_error_should_keep_timeout_over_provider_gap(
+    current: Option<&NodeError>,
+    candidate: &NodeError,
+    protocol: &str,
+) -> bool {
+    let Some(current) = current else {
+        return false;
+    };
+    replication_network_error_is_timeout_protocol(current, protocol)
+        && (replication_network_error_is_protocol_unavailable(candidate, protocol)
+            || replication_network_error_is_availability_gap(candidate))
+}
+
 #[cfg(feature = "libp2p")]
 pub(crate) fn network_world_error_is_retryable_connection_gap(err: &WorldError) -> bool {
     oasis7_net::world_error_is_retryable_connection_gap(err)
