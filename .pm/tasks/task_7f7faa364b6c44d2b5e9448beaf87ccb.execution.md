@@ -118,7 +118,7 @@ Example:
 - Actual Result: Pending role review.
 - Blocker / Next Action: Await role review verdicts.
 
-## 2026-06-25 09:03:10 CST / repository_health_engineer
+## 2026-06-25 08:58:10 CST / repository_health_engineer
 - 完成内容: Completed pre-PR repository-health review.
 - Findings: no_findings.
 - Scope/Spec Compliance Verdict: Compliant; the doc-only change refreshes current next-action guidance while preserving the 2026-04 historical snapshot as "当时".
@@ -131,7 +131,7 @@ Example:
 - Actual Result: no_findings; PR-ready yes.
 - Blocker / Next Action: Integrate remaining role review verdicts.
 
-## 2026-06-25 09:03:20 CST / qa_engineer
+## 2026-06-25 08:58:20 CST / qa_engineer
 - 完成内容: Completed pre-PR QA review.
 - Findings: no_findings.
 - Scope/Spec Compliance Verdict: Compliant. The diff is doc-only plus task evidence, preserves historical snapshot wording, adds a dated 2026-06-25 supplement, and aligns current next-action wording with fresh `doc-inventory-report` signals.
@@ -144,7 +144,7 @@ Example:
 - Actual Result: no_findings; PR-ready yes.
 - Blocker / Next Action: Integrate remaining role review verdicts.
 
-## 2026-06-25 09:03:30 CST / producer_system_designer
+## 2026-06-25 08:58:30 CST / producer_system_designer
 - 完成内容: Completed pre-PR producer/system review.
 - Findings: no_findings.
 - Scope/Spec Compliance Verdict: Compliant. The wording preserves the 2026-04-24 snapshot by changing it to "当时", adds a dated 2026-06-25 supplement instead of rewriting history, and keeps the current next step at bounded module-density / hotspot `action_required` classification rather than choosing a concrete hotspot domain.
@@ -157,7 +157,7 @@ Example:
 - Actual Result: no_findings; PR-ready yes.
 - Blocker / Next Action: Record passed review packet and run final verification.
 
-## 2026-06-25 09:04:00 CST / tpm
+## 2026-06-25 08:59:00 CST / tpm
 - 完成内容: Integrated all pre-PR role review verdicts and recorded passed packet for PR readiness.
 - 遗留事项: Need final verification, task closeout, commit, PR creation, CI/comment watch, merge, and cleanup.
 - Pre-PR Local Role Review: passed
@@ -170,7 +170,7 @@ Example:
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-governance-next-issue-20260625/.pm/scratch/task_7f7faa364b6c44d2b5e9448beaf87ccb/review-packages/review-65632e37f..ca4395716.diff
 - Role Selection Basis: repository_health_engineer for documentation governance truth drift; qa_engineer for verification and parseability sufficiency; producer_system_designer for scope/current-next-action semantics.
 - Review Roles: repository_health_engineer,qa_engineer,producer_system_designer
-- Review Evidence: repository_health_engineer no_findings at 2026-06-25 09:03:10 CST; qa_engineer no_findings at 2026-06-25 09:03:20 CST; producer_system_designer no_findings at 2026-06-25 09:03:30 CST.
+- Review Evidence: repository_health_engineer no_findings at 2026-06-25 08:58:10 CST; qa_engineer no_findings at 2026-06-25 08:58:20 CST; producer_system_designer no_findings at 2026-06-25 08:58:30 CST.
 - Review Verdicts: repository_health_engineer compliant/acceptable/PR-ready; qa_engineer compliant/evidence sufficient/PR-ready; producer_system_designer compliant/low-risk/PR-ready.
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: All pre-PR review roles returned no_findings.
@@ -210,3 +210,14 @@ Example:
 - Expected Result: PR is created and enters normal CI/comment watch.
 - Actual Result: PR #628 created at https://github.com/eng-cc/oasis7/pull/628.
 - Blocker / Next Action: Push this PR-purpose evidence commit, then inspect PR checks/comments/threads and mergeability.
+
+## 2026-06-25 09:14:00 CST / tpm
+- 完成内容: Addressed PR #628 review thread `PRRT_kwDORHhWec6MFJo7` about closeout appearing before the review gate.
+- 遗留事项: Need push, thread resolution, PR state recheck, merge, and cleanup.
+- Review Comment Classification: valid PM/audit ordering risk. The task YAML `last_closed_at` was `2026-06-25T09:02:15+08:00`, while the execution log used later manual timestamps for role verdicts and `Pre-PR Local Role Review: passed`, making the audit trail appear to close before the required review gate.
+- Fix: Corrected the execution-log timestamps for role verdicts and the passed packet to the actual pre-closeout review-gate order, keeping the YAML closeout metadata after the review gate.
+- Action: Push the review fix, resolve the PR review thread, and re-check PR state.
+- Validation Command: `./scripts/pm/lint.sh > /tmp/oasis7-pm-lint-task_7f7faa-review-fix.out 2>&1; rg "task_7f7faa364b6c44d2b5e9448beaf87ccb" /tmp/oasis7-pm-lint-task_7f7faa-review-fix.out || true`; `./scripts/doc-governance-check.sh`; `git diff --check`
+- Expected Result: Current task PM lint filter remains clean, docs still pass governance, and whitespace check is clean.
+- Actual Result: Current-task `.pm` lint filter had no output; `doc-governance-check: OK`; `git diff --check` had no output.
+- Blocker / Next Action: Commit and push the review fix, then resolve the PR thread.
