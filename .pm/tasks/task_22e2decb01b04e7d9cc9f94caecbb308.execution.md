@@ -107,3 +107,12 @@ Example:
 - Actual Result: passed at `2026-06-25T09:03:48+08:00`, `verification_exit_code: 0`, `status: verified`, `allowed_to_claim: true`.
 - 遗留事项: commit current task slice and run prepare-task-pr.
 - Blocker / Next Action: commit and create PR.
+
+## 2026-06-25 09:12:09 CST / tpm
+- 完成内容: Closed task after fresh focused rebuild cleanup regression verification and recorded final task truth.
+- Action: task closeout for PR path.
+- Validation Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_22e2decb01b04e7d9cc9f94caecbb308 --verify-command "bash scripts/p2p-public-testnet-rebuild-validators.test.sh" --no-lint`
+- Expected Result: closeout reports final task status `done` and records claim verification status `verified`.
+- Actual Result: passed at `2026-06-25T09:12:09+08:00`; final_status `done`; claim_verification_status `verified`; verify_command `bash scripts/p2p-public-testnet-rebuild-validators.test.sh`; pm_lint skipped intentionally because this task uses focused task closeout and repo-wide lint may include unrelated historical debt.
+- 遗留事项: create PR, watch required checks/comments, merge, then rerun live validator rebuild before observer updates or public testnet health claims.
+- Blocker / Next Action: rerun `./scripts/prepare-task-pr.sh --create`.
