@@ -68,7 +68,7 @@ Example:
 - Task UID: task_17ae7ffcdc5d4c6c9c371777a33dd02b
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit
 - Source Branch: task/engineering-chain-world-state-doc-conflict-audit
-- Source Head: 964f1122ffb1dc66fa5b75d5b7f6eaf60cee01d2
+- Source Head: bbcf011473080399b66614107c2af07161fce7be
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/tasks/`; `.pm/roles/tpm/backlog/committed.yaml`; `doc/p2p/design.md`; `doc/p2p/project.md`; `doc/p2p/{node,distfs,observer,network,blockchain}/`.
 - Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit/.pm/scratch/task_17ae7ffcdc5d4c6c9c371777a33dd02b/review-packages/review-d22384078..964f1122f.diff`
