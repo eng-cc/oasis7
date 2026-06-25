@@ -28,7 +28,8 @@ use status_payload_observability::{
 };
 pub(crate) use status_payload_observability::{
     build_liveness_status, classify_transport_stability, observability_status_for_alerts,
-    observability_summary_for_alerts, push_observability_alert, reachability_policy_ok,
+    observability_summary_for_alerts, push_local_chain_ahead_alert, push_observability_alert,
+    reachability_policy_ok,
 };
 use status_payload_state_sync::{
     consensus_participation_hold_reason, state_sync_fallback_reason,
@@ -571,23 +572,7 @@ pub(super) fn build_chain_node_observability_status(
             ),
         );
     }
-    if let Some(network_head_height) = network_head.height {
-        if snapshot.consensus.committed_height > network_head_height {
-            let ahead_by = snapshot
-                .consensus
-                .committed_height
-                .saturating_sub(network_head_height);
-            push_observability_alert(
-                &mut alerts,
-                "critical",
-                "local_chain_ahead_of_network_head",
-                format!(
-                    "local committed height {} is ahead of network head {} by {}; verify clean-rebuild generation before preserving local state",
-                    snapshot.consensus.committed_height, network_head_height, ahead_by
-                ),
-            );
-        }
-    }
+    push_local_chain_ahead_alert(&mut alerts, snapshot, network_head.height);
     if network_height_lag > 0
         && snapshot
             .consensus
