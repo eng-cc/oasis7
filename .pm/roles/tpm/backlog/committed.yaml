@@ -99,15 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_22e2decb01b04e7d9cc9f94caecbb308
-    title: "fail rebuild cleanup when post-cleanup orphan reappears"
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance:
-      - "validator rebuild cleanup detects and fails closed when stack-root runtime reappears after cleanup returned quiet"
-      - "regression test covers post-cleanup orphan reappearance after readiness failure"
-      - "live public testnet rerun remains a post-merge validation gate"
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_22e2decb01b04e7d9cc9f94caecbb308.yaml
