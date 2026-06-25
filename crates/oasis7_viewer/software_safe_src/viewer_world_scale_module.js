@@ -128,7 +128,7 @@ export function createViewerWorldScaleModule({
         : null,
       worldBoundsDetail: space
         ? isZh
-          ? "来自 snapshot.config.space 的真实世界边界。"
+          ? "真实世界边界来自 snapshot.config.space；锚点选择 fallback 另行处理。"
           : "Physical world bounds from snapshot.config.space; anchor selection fallback is handled separately."
         : isZh
           ? "当前快照没有发布 world bounds。"
