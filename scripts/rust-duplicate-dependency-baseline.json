@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "owner": "repository_health_engineer",
+  "reviewed_at": "2026-06-25",
+  "expires": "2026-09-30",
+  "rationale": "Freeze the current duplicate-dependency report budget so dependency graph growth is explicit while existing duplicate-version debt is burned down in focused tasks.",
+  "update_policy": "Only raise a maximum with repository-health review evidence, a task execution-log entry, and a follow-up burn-down rationale. Lower maxima when dependency cleanup removes duplicates.",
+  "maxima": {
+    "duplicate_dependency_cluster_count": 88,
+    "duplicate_dependency_unique_crates": 88,
+    "duplicate_dependency_entry_total": 213,
+    "duplicate_dependency_tree_output_lines": 1903
+  },
+  "top_crate_maxima": {
+    "getrandom": 3,
+    "hashbrown": 4,
+    "linux-raw-sys": 3,
+    "petgraph": 3,
+    "redox_syscall": 3,
+    "rustix": 3,
+    "socket2": 3,
+    "toml_datetime": 3,
+    "windows": 4,
+    "windows-core": 4,
+    "windows-result": 4,
+    "windows-sys": 6,
+    "windows-targets": 4,
+    "windows_aarch64_gnullvm": 4,
+    "windows_aarch64_msvc": 4,
+    "windows_i686_gnu": 4,
+    "windows_i686_msvc": 4,
+    "windows_x86_64_gnu": 4,
+    "windows_x86_64_gnullvm": 4,
+    "windows_x86_64_msvc": 4
+  }
+}

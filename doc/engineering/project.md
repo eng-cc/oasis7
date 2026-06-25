@@ -263,6 +263,7 @@
 - [x] rustsec-advisory-ignore-baseline-ratchet (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Rust 依赖层治理点，为 libp2p network closure 的 RustSec advisory ignore baseline 补 owner/expiry/validation 元数据、CI ratchet 与 governance report 证据，阻止 ignored advisory 集合静默增长，并保留后续依赖 burn-down 风险边界。 Trace: .pm/tasks/task_d1eac391d57b48dd926a33eeafde29d0.yaml
 - [x] cargo-deny-license-baseline-ratchet (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Rust 依赖层治理点，为 workspace Rust crates 补 MIT license metadata，并将当前 cargo-deny license baseline 显式化为全局 permissive allow、crate-scoped font exception 与 `ring@0.16.20` clarify，消除 Rust governance report 中的 cargo-deny license 红点。 Trace: .pm/tasks/task_fec2c65fcc8946b989da540526fda094.yaml
 - [x] rust-governance-duplicate-report-ratchet (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Rust 依赖层治理点，将 cargo-deny duplicate warnings 和 `cargo tree -d` 输出显式汇总为 duplicate cluster、unique crate、entry total、tree-line 与 top-crate report 字段，避免重复依赖在 report-only 摘要里被状态码 0 掩盖。 Trace: .pm/tasks/task_faef35ddfd1941d697e7648c5cdf2e81.yaml
+- [x] rust-governance-duplicate-baseline-ratchet (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Rust 依赖层治理点，为 duplicate dependency report 增加 owner/review/expiry/update-policy 基线与预算校验，冻结当前 cluster/unique/entry/tree-line 上限，阻止重复依赖面静默增长，同时不改变 `Cargo.lock`、依赖版本或 `deny.toml` duplicate warn 策略。 Trace: .pm/tasks/task_ef366a48c3a742e3abd619adb90ece0f.yaml
 - [x] rust-governance-internal-path-version-ratchet (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Rust 依赖层治理点，为 cargo-deny report-visible workspace internal path dependencies 补 `version = "0.1.0"` manifest metadata，消除内部 path dependency wildcard warnings，同时保持 `Cargo.lock`、外部依赖版本与 `deny.toml` 边界不变。 Trace: .pm/tasks/task_d3474ab9cb2b46f29409b3bd575c8c2d.yaml
 - [x] rust-governance-all-features-internal-path-version-ratchet (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Rust 依赖层治理点，为 all-features/workspace metadata 中剩余 optional internal path dependencies 补 `version = "0.1.0"`，消除可选特性图里的内部 path dependency wildcard metadata 盲区，同时保持 `Cargo.lock`、外部依赖版本与 `deny.toml` 边界不变。 Trace: .pm/tasks/task_3567a753dcca412f8794bd5b613642d9.yaml
 - [x] builtin-wasm-module-internal-path-version-ratchet (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Rust 依赖层治理点，为非 workspace builtin WASM module manifests 中 37 个 `oasis7_wasm_sdk` internal path dependencies 补 `version = "0.1.0"`，消除 builtin module 单独 metadata 中的内部 path dependency wildcard 盲区，同时保持 `Cargo.lock`、外部依赖版本、`deny.toml` 与 workspace membership 边界不变。 Trace: .pm/tasks/task_f1990219b9bd41ed99db93c13a64c0c5.yaml
@@ -345,10 +346,10 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-06-24
+- 更新日期: 2026-06-25
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `builtin-wasm-module-internal-path-version-ratchet`（已为非 workspace builtin WASM module manifests 中 37 个 `oasis7_wasm_sdk` internal path dependencies 补 `version = "0.1.0"`，消除 builtin module 单独 metadata 中的内部 path dependency wildcard 盲区，同时保持 `Cargo.lock`、外部依赖版本、`deny.toml` 与 workspace membership 边界不变。）
+- 最新完成: `rust-governance-duplicate-baseline-ratchet`（已为 duplicate dependency report 增加 owner/review/expiry/update-policy 基线与预算校验，冻结当前 cluster/unique/entry/tree-line 上限，阻止重复依赖面静默增长，同时不改变 `Cargo.lock`、依赖版本或 `deny.toml` duplicate warn 策略。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
