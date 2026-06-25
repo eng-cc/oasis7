@@ -71,7 +71,7 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 ### 1.3 Parent Initiative + Domain Child Tasks
 Use this pattern when one user-level initiative contains multiple independently
 mergeable domain tracks, such as game strategy, visualization/player-facing UI,
-and P2P infrastructure. It exists to preserve repo truth while avoiding one
+and chain-world-state substrate. It exists to preserve repo truth while avoiding one
 oversized task/PR that serializes unrelated module feedback loops.
 
 Parent initiative task:
