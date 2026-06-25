@@ -58,6 +58,7 @@ ROUTING_SCENARIOS_JSON_FILE="$TMP_DIR/routing-scenarios.json"
 "$ROOT_DIR/scripts/pm/new-task-worktree-bootstrap-smoke.sh" --json > "$TASK_WORKTREE_JSON_FILE"
 "$ROOT_DIR/scripts/pm/required-tier-smoke.sh" --json > "$REQUIRED_TIER_JSON_FILE"
 "$ROOT_DIR/scripts/pm/claim-ready.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
 "$ROOT_DIR/scripts/prepare-task-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pr-review-thread-closeout.test.sh" >/dev/null
 
@@ -822,6 +823,15 @@ segments = [
         "status": "passed",
         "evidence": {
             "helper": "claim-ready",
+        },
+    },
+    {
+        "id": "post_pr_evidence_chain",
+        "command": "./scripts/pm/workflow-lint.test.sh",
+        "status": "passed",
+        "evidence": {
+            "helper": "workflow-lint",
+            "root_pr_md_allowed": False,
         },
     },
     {
