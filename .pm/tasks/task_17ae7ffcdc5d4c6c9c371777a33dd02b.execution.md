@@ -79,7 +79,7 @@ Example:
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: `doc/p2p/distfs/README.md`, `doc/p2p/node/README.md`, and `doc/p2p/observer/README.md` now use canonical S9A `module_required / module_full / integration_required / release_full`.
 - Verification Matrix: doc semantic cleanup -> `doc-governance-check: OK`; workflow/task truth -> `workflow-lint: OK`; whitespace -> `git diff --check` exit 0; claim-level enum -> targeted `rg` confirms no `foundation_only` remains.
-- Visual Evidence: n/a, documentation-only non-UI change; game_visual_interaction_designer confirmed no screenshot/browser visual evidence is required.
+- Visual Evidence: specific exemption: documentation-only change with no visual/UI paths changed; screenshot/model-review evidence exempted; game_visual_interaction_designer confirmed no screenshot/browser visual evidence is required.
 - WASM Evidence: n/a, no wasm crate/build/determinism surface changed.
 - Ops Evidence: n/a, no deployment/runtime operator procedure changed beyond docs clarifying claim boundaries.
 - LiveOps Evidence: n/a, no external messaging/release/community surface changed.
