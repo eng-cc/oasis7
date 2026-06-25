@@ -88,9 +88,10 @@ small question into a heavyweight workflow.
   inside an existing bound task; append the follow-up evidence to the current
   task unless it changes owner, scope, or PR chain.
 - Use `.pm/tasks/<TASK-UID>.yaml` `module` as the default large-module marker for
-  ordinary task grouping, reporting, and parallel work queues. This is enough
-  when the task only needs a module lane such as `engineering`, `viewer`,
-  `game`, `p2p`, or `chain-world-state-substrate`.
+  ordinary task grouping, reporting, and parallel work queues. It is a small
+  enum, not a free tag or owner-role substitute. Current allowed values are
+  `engineering`, `game-strategy`, `visualization`, and
+  `chain-world-state-substrate`.
 - Do not create a separate parent/planning surface merely to label a task's
   large module. Use a normal task with `module` unless the user explicitly asks
   for a separate coordination task.

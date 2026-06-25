@@ -86,6 +86,12 @@ ROLE_MEMORY_PREFIXES = {
 DEFAULT_MEMORY_REVIEW_STALE_DAYS = 7
 DEFAULT_WORKING_MEMORY_EXPIRES_DAYS = 2
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+TASK_MODULE_VALUES = {
+    "engineering",
+    "game-strategy",
+    "visualization",
+    "chain-world-state-substrate",
+}
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 WORKING_MEMORY_ENTRY_KINDS = {
     "attempt",
@@ -1631,8 +1637,9 @@ def create_candidate_task(
         module = module.strip()
         if not module:
             module = None
-        elif not re.fullmatch(r"[a-z][a-z0-9_-]*", module):
-            raise ValueError(f"unsupported module slug: {module}")
+        elif module not in TASK_MODULE_VALUES:
+            supported_modules = ", ".join(sorted(TASK_MODULE_VALUES))
+            raise ValueError(f"unsupported module: {module}; expected one of: {supported_modules}")
     if not source_refs:
         raise ValueError("task source_refs must be a non-empty list")
     for source_ref in source_refs:
