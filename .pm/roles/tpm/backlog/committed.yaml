@@ -99,3 +99,17 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
+  - task_uid: task_17b1d01d8a9943da9dbf9a4f64dcadae
+    title: "Assess PR 640 workflow side effects"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-ENGINEERING-030
+      - PRD-P2P-031
+    acceptance:
+      - "Assess the development-workflow side effects of PR #640."
+      - "Identify risks from consolidating workflow-domain parallelism and chain-world-state docs into one PR."
+      - "Return actionable mitigations without modifying the PR unless explicitly requested."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_17b1d01d8a9943da9dbf9a4f64dcadae.yaml

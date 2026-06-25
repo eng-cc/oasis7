@@ -19,7 +19,7 @@
 | --- | --- | --- | --- | --- | --- |
 | strategy |  |  |  |  |  |
 | visualization |  |  |  |  |  |
-| p2p-infrastructure |  |  |  |  |  |
+| chain-world-state-substrate |  |  |  |  |  |
 
 ## Dependency Contracts
 | Producer | Consumer | Contract Surface | Source of Truth | Expiry / Drift Condition | Integration Owner |
