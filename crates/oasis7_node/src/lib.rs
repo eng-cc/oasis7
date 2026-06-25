@@ -44,9 +44,9 @@ mod error;
 mod execution_hook;
 mod feedback_runtime;
 mod gossip_udp;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 mod libp2p_replication_network;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "libp2p", target_arch = "wasm32"))]
 mod libp2p_replication_network_wasm;
 mod network_bridge;
 mod network_bridge_gap_sync_budget;
@@ -94,15 +94,16 @@ pub use gossip_udp::{
     GossipTrafficDirectionMetricsSnapshot, GossipTrafficLaneMetricsSnapshot,
     GossipTrafficMetricsSnapshot,
 };
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 pub use libp2p_replication_network::{
     Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig, derive_libp2p_identity_keypair,
 };
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "libp2p", target_arch = "wasm32"))]
 pub use libp2p_replication_network_wasm::{
     Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig, derive_libp2p_identity_keypair,
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
+#[cfg(feature = "libp2p")]
 pub use oasis7_net::{
     Libp2pControlPlaneMetricsSnapshot, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
     LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability, LiveTransportKind,

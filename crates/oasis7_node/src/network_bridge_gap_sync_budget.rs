@@ -2,14 +2,18 @@ use std::time::{Duration, Instant};
 
 use crate::NodeError;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 use crate::libp2p_replication_network::{
     FETCH_COMMIT_REQUEST_RETRY_BUDGET_MS, FETCH_COMMIT_REQUEST_TO_PEER_TIMEOUT_MS,
 };
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "libp2p", target_arch = "wasm32"))]
 use crate::libp2p_replication_network_wasm::{
     FETCH_COMMIT_REQUEST_RETRY_BUDGET_MS, FETCH_COMMIT_REQUEST_TO_PEER_TIMEOUT_MS,
 };
+#[cfg(not(feature = "libp2p"))]
+const FETCH_COMMIT_REQUEST_RETRY_BUDGET_MS: u64 = 120_000;
+#[cfg(not(feature = "libp2p"))]
+const FETCH_COMMIT_REQUEST_TO_PEER_TIMEOUT_MS: u64 = 30_000;
 
 pub(super) fn gap_sync_fetch_commit_route_budget(started_at: Instant) -> Option<(u64, u64)> {
     gap_sync_fetch_commit_route_budget_after(

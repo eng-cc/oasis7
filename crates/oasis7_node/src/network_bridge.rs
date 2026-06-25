@@ -4,7 +4,6 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use oasis7_net::{world_error_is_publish_failure, world_error_is_retryable_connection_gap};
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
@@ -1109,7 +1108,7 @@ fn network_err_for_protocol(protocol: &str, err: WorldError) -> NodeError {
 }
 
 fn network_err_with_request_protocol(protocol: Option<&str>, err: WorldError) -> NodeError {
-    if world_error_is_retryable_connection_gap(&err) {
+    if network_world_error_is_retryable_connection_gap(&err) {
         return NodeError::Replication {
             reason: format!(
                 "{REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX}{}",
@@ -1117,7 +1116,7 @@ fn network_err_with_request_protocol(protocol: Option<&str>, err: WorldError) ->
             ),
         };
     }
-    if world_error_is_publish_failure(&err) {
+    if network_world_error_is_publish_failure(&err) {
         return NodeError::Replication {
             reason: format!("replication network error: {err:?}"),
         };
@@ -1144,6 +1143,26 @@ fn network_err_with_request_protocol(protocol: Option<&str>, err: WorldError) ->
     NodeError::Replication {
         reason: format!("replication network error: {err:?}"),
     }
+}
+
+#[cfg(feature = "libp2p")]
+fn network_world_error_is_retryable_connection_gap(err: &WorldError) -> bool {
+    oasis7_net::world_error_is_retryable_connection_gap(err)
+}
+
+#[cfg(not(feature = "libp2p"))]
+fn network_world_error_is_retryable_connection_gap(_err: &WorldError) -> bool {
+    false
+}
+
+#[cfg(feature = "libp2p")]
+fn network_world_error_is_publish_failure(err: &WorldError) -> bool {
+    oasis7_net::world_error_is_publish_failure(err)
+}
+
+#[cfg(not(feature = "libp2p"))]
+fn network_world_error_is_publish_failure(_err: &WorldError) -> bool {
+    false
 }
 
 fn world_head_lookup_can_fallback(err: &NodeError) -> bool {
