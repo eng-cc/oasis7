@@ -14,6 +14,7 @@ Produce report-only Rust governance artifacts:
 - RustSec ignored-advisory baseline metadata/ratchet report
 - cargo-deny full policy report
 - duplicate dependency report
+- duplicate dependency baseline/budget report
 - unsafe usage distribution
 
 The script returns success even when report-only checks find issues. The
@@ -209,6 +210,52 @@ if summary["unsafe_usage_top_buckets"]:
         lines.append(f"- `{bucket}`: {count}")
 
 (out_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+
+run_report "duplicate dependency baseline" "$out_dir/duplicate-dependency-baseline.log" ./scripts/check-duplicate-dependency-baseline.sh "$out_dir/summary.json"
+
+python3 - "$out_dir" <<'PY'
+from __future__ import annotations
+
+from pathlib import Path
+import json
+import sys
+
+out_dir = Path(sys.argv[1])
+summary_path = out_dir / "summary.json"
+summary = json.loads(summary_path.read_text(encoding="utf-8"))
+
+def read_rc(name: str) -> int:
+    path = out_dir / f"{name}.rc"
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except FileNotFoundError:
+        return 127
+
+summary["duplicate_dependency_baseline_rc"] = read_rc("duplicate-dependency-baseline.log")
+summary_path.write_text(
+    json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+
+summary_md = out_dir / "summary.md"
+lines = summary_md.read_text(encoding="utf-8").splitlines()
+insert_after = "| cargo tree -d |"
+baseline_line = (
+    f"| duplicate dependency baseline | "
+    f"{summary['duplicate_dependency_baseline_rc']} | "
+    "`duplicate-dependency-baseline.log` |"
+)
+updated: list[str] = []
+inserted = False
+for line in lines:
+    updated.append(line)
+    if not inserted and line.startswith(insert_after):
+        updated.append(baseline_line)
+        inserted = True
+if not inserted:
+    updated.append(baseline_line)
+summary_md.write_text("\n".join(updated) + "\n", encoding="utf-8")
 PY
 
 cat "$out_dir/summary.md"
