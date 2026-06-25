@@ -61,6 +61,7 @@ fn response_function_call_maps_to_typed_module_call_turn() {
         name: OPENAI_TOOL_MEMORY_SHORT_TERM_RECENT.to_string(),
         id: None,
         status: None,
+        namespace: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -81,6 +82,7 @@ fn response_function_call_maps_module_lifecycle_status_tool_name() {
         name: OPENAI_TOOL_MODULE_LIFECYCLE_STATUS.to_string(),
         id: None,
         status: None,
+        namespace: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -101,6 +103,7 @@ fn response_function_call_maps_world_rules_guide_tool_name() {
         name: OPENAI_TOOL_WORLD_RULES_GUIDE.to_string(),
         id: None,
         status: None,
+        namespace: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -124,6 +127,7 @@ fn response_function_call_maps_power_order_book_status_tool_name() {
         name: OPENAI_TOOL_POWER_ORDER_BOOK_STATUS.to_string(),
         id: None,
         status: None,
+        namespace: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -147,6 +151,7 @@ fn response_function_call_maps_module_market_status_tool_name() {
         name: OPENAI_TOOL_MODULE_MARKET_STATUS.to_string(),
         id: None,
         status: None,
+        namespace: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -174,6 +179,7 @@ fn response_function_call_maps_social_state_status_tool_name() {
         name: OPENAI_TOOL_SOCIAL_STATE_STATUS.to_string(),
         id: None,
         status: None,
+        namespace: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -225,6 +231,7 @@ fn response_function_call_invalid_json_arguments_are_preserved_as_raw() {
         name: OPENAI_TOOL_AGENT_MODULES_LIST.to_string(),
         id: None,
         status: None,
+        namespace: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -247,6 +254,7 @@ fn response_function_call_maps_decision_tool_to_typed_decision_turn() {
         name: OPENAI_TOOL_AGENT_SUBMIT_DECISION.to_string(),
         id: None,
         status: None,
+        namespace: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("decision turn");
@@ -273,6 +281,7 @@ fn response_function_call_maps_debug_grant_tool_to_typed_decision_turn() {
         name: OPENAI_TOOL_AGENT_DEBUG_GRANT_RESOURCE.to_string(),
         id: None,
         status: None,
+        namespace: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("decision turn");

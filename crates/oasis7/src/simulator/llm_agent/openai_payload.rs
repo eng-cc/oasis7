@@ -216,6 +216,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false,
             })),
             strict: None,
+            defer_loading: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_ENVIRONMENT_CURRENT_OBSERVATION.to_string(),
@@ -226,6 +227,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false,
             })),
             strict: None,
+            defer_loading: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_MEMORY_SHORT_TERM_RECENT.to_string(),
@@ -242,6 +244,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false,
             })),
             strict: None,
+            defer_loading: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_MEMORY_LONG_TERM_SEARCH.to_string(),
@@ -261,6 +264,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false,
             })),
             strict: None,
+            defer_loading: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_WORLD_RULES_GUIDE.to_string(),
@@ -285,6 +289,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false,
             })),
             strict: None,
+            defer_loading: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_MODULE_LIFECYCLE_STATUS.to_string(),
@@ -309,6 +314,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false,
             })),
             strict: None,
+            defer_loading: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_POWER_ORDER_BOOK_STATUS.to_string(),
@@ -325,6 +331,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false,
             })),
             strict: None,
+            defer_loading: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_MODULE_MARKET_STATUS.to_string(),
@@ -347,6 +354,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false,
             })),
             strict: None,
+            defer_loading: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_SOCIAL_STATE_STATUS.to_string(),
@@ -369,6 +377,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false,
             })),
             strict: None,
+            defer_loading: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_AGENT_SUBMIT_DECISION.to_string(),
@@ -377,6 +386,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             ),
             parameters: Some(decision_tool_parameters()),
             strict: None,
+            defer_loading: None,
         }),
     ];
 
@@ -397,6 +407,7 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
                 "additionalProperties": false
             })),
             strict: None,
+            defer_loading: None,
         }));
     }
 
