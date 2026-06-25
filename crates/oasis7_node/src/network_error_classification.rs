@@ -1,4 +1,5 @@
 use oasis7_proto::distributed::DistributedErrorCode;
+use oasis7_proto::world_error::WorldError;
 
 use crate::NodeError;
 use crate::network_bridge::{
@@ -85,6 +86,26 @@ pub(crate) fn replication_network_error_is_timeout_protocol(
     reason.contains(protocol)
         && (network_request_reason_has_kind(reason, "timeout")
             || reason.contains("request failed: Timeout"))
+}
+
+#[cfg(feature = "libp2p")]
+pub(crate) fn network_world_error_is_retryable_connection_gap(err: &WorldError) -> bool {
+    oasis7_net::world_error_is_retryable_connection_gap(err)
+}
+
+#[cfg(not(feature = "libp2p"))]
+pub(crate) fn network_world_error_is_retryable_connection_gap(_err: &WorldError) -> bool {
+    false
+}
+
+#[cfg(feature = "libp2p")]
+pub(crate) fn network_world_error_is_publish_failure(err: &WorldError) -> bool {
+    oasis7_net::world_error_is_publish_failure(err)
+}
+
+#[cfg(not(feature = "libp2p"))]
+pub(crate) fn network_world_error_is_publish_failure(_err: &WorldError) -> bool {
+    false
 }
 
 fn network_request_reason_has_kind(reason: &str, kind: &str) -> bool {

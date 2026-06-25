@@ -22,6 +22,7 @@ use crate::network_bridge_gap_sync_budget::{
     gap_sync_fetch_commit_route_budget_exhausted,
 };
 pub(crate) use crate::network_error_classification::{
+    network_world_error_is_publish_failure, network_world_error_is_retryable_connection_gap,
     replication_network_error_is_availability_gap, replication_network_error_is_not_found,
     replication_network_error_is_protocol_unavailable,
     replication_network_error_is_route_unavailable, replication_network_error_is_timeout_protocol,
@@ -1143,26 +1144,6 @@ fn network_err_with_request_protocol(protocol: Option<&str>, err: WorldError) ->
     NodeError::Replication {
         reason: format!("replication network error: {err:?}"),
     }
-}
-
-#[cfg(feature = "libp2p")]
-fn network_world_error_is_retryable_connection_gap(err: &WorldError) -> bool {
-    oasis7_net::world_error_is_retryable_connection_gap(err)
-}
-
-#[cfg(not(feature = "libp2p"))]
-fn network_world_error_is_retryable_connection_gap(_err: &WorldError) -> bool {
-    false
-}
-
-#[cfg(feature = "libp2p")]
-fn network_world_error_is_publish_failure(err: &WorldError) -> bool {
-    oasis7_net::world_error_is_publish_failure(err)
-}
-
-#[cfg(not(feature = "libp2p"))]
-fn network_world_error_is_publish_failure(_err: &WorldError) -> bool {
-    false
 }
 
 fn world_head_lookup_can_fallback(err: &NodeError) -> bool {
