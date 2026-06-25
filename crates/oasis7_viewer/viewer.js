@@ -728,6 +728,40 @@ function cleanChildren(parent, current, marker, replacement) {
   } else parent.insertBefore(node, marker);
   return [node];
 }
+const TEST_API_GLOBAL_NAME = "__AW_TEST__";
+const RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
+const VIEWER_RENDER_MODE = "viewer";
+const SOFTWARE_SAFE_RENDER_MODE_ALIAS = "software_safe";
+const VIEWER_AUTH_BOOTSTRAP_OBJECT = "__OASIS7_VIEWER_AUTH_ENV";
+const VIEWER_PLAYER_ID_KEY = "OASIS7_VIEWER_PLAYER_ID";
+const VIEWER_AUTH_PUBLIC_KEY = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
+const VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
+const VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
+const HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
+const UI_LOCALE_STORAGE_PREFIX = "oasis7.viewer.locale.v1";
+const PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.viewer.prompt_overrides_visible.v1";
+const HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admission";
+const HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
+const HOSTED_PLAYER_SESSION_RELEASE_ROUTE = "/api/public/player-session/release";
+const HOSTED_ACCOUNT_LOGIN_START_ROUTE = "/api/public/hosted-account/login/start";
+const HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE = "/api/public/hosted-account/login/complete";
+const HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
+const HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE = "hosted_public_join";
+const HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 3e4;
+const DEFAULT_WS_ADDR = "ws://127.0.0.1:5011";
+const MAX_EVENTS = 24;
+const MAX_DECISION_TRACES = 12;
+const SOFTWARE_RENDERER_MARKERS = [
+  "swiftshader",
+  "llvmpipe",
+  "software rasterizer",
+  "basic render driver",
+  "softpipe",
+  "lavapipe"
+];
+function isHostedPublicJoinDeploymentMode(deploymentMode) {
+  return String(deploymentMode || "").trim() === HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE;
+}
 function createViewerAuthSurfaceModule({
   getSearchParams: getSearchParams2,
   localeText: localeText2,
@@ -761,7 +795,7 @@ function createViewerAuthSurfaceModule({
   }
   function authDeploymentHint(auth) {
     const hostedMode = String(state2.hostedAccess?.deployment_mode || "").trim();
-    if (hostedMode === "hosted_public_join") {
+    if (isHostedPublicJoinDeploymentMode(hostedMode)) {
       if (auth.available && auth.source === "legacy_viewer_auth_bootstrap") {
         return "hosted_public_join_contract_with_legacy_bootstrap";
       }
@@ -1011,7 +1045,7 @@ function createViewerAuthSurfaceModule({
     });
   }
   function buildHostedRecoveryHint2(locale = state2.uiLocale) {
-    if (String(state2.hostedAccess?.deployment_mode || "").trim() !== "hosted_public_join") {
+    if (!isHostedPublicJoinDeploymentMode(state2.hostedAccess?.deployment_mode)) {
       return null;
     }
     if (state2.auth.available) {
@@ -2430,36 +2464,6 @@ function createViewerWorldScaleModule({
     detectRendererMeta: detectRendererMeta2
   };
 }
-const TEST_API_GLOBAL_NAME = "__AW_TEST__";
-const RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
-const VIEWER_RENDER_MODE = "viewer";
-const SOFTWARE_SAFE_RENDER_MODE_ALIAS = "software_safe";
-const VIEWER_AUTH_BOOTSTRAP_OBJECT = "__OASIS7_VIEWER_AUTH_ENV";
-const VIEWER_PLAYER_ID_KEY = "OASIS7_VIEWER_PLAYER_ID";
-const VIEWER_AUTH_PUBLIC_KEY = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
-const VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
-const VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
-const HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
-const UI_LOCALE_STORAGE_PREFIX = "oasis7.viewer.locale.v1";
-const PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.viewer.prompt_overrides_visible.v1";
-const HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admission";
-const HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
-const HOSTED_PLAYER_SESSION_RELEASE_ROUTE = "/api/public/player-session/release";
-const HOSTED_ACCOUNT_LOGIN_START_ROUTE = "/api/public/hosted-account/login/start";
-const HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE = "/api/public/hosted-account/login/complete";
-const HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
-const HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 3e4;
-const DEFAULT_WS_ADDR = "ws://127.0.0.1:5011";
-const MAX_EVENTS = 24;
-const MAX_DECISION_TRACES = 12;
-const SOFTWARE_RENDERER_MARKERS = [
-  "swiftshader",
-  "llvmpipe",
-  "software rasterizer",
-  "basic render driver",
-  "softpipe",
-  "lavapipe"
-];
 const $RAW = /* @__PURE__ */ Symbol("store-raw"), $NODE = /* @__PURE__ */ Symbol("store-node"), $HAS = /* @__PURE__ */ Symbol("store-has"), $SELF = /* @__PURE__ */ Symbol("store-self");
 function isWrappable(obj) {
   let proto;
@@ -3104,7 +3108,7 @@ async function ensureHostedAuthSigningKey(auth = state.auth) {
   return auth;
 }
 async function refreshHostedAdmissionState() {
-  if (String(state.hostedAccess?.deployment_mode || "").trim() !== "hosted_public_join") {
+  if (!isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
     state.hostedAdmission = null;
     return null;
   }
@@ -3992,7 +3996,7 @@ async function buildGameplayActionAuthProof(request, auth) {
   };
 }
 function canAutoIssueHostedPlayerSession() {
-  return String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join" && state.auth.source !== "legacy_viewer_auth_bootstrap";
+  return isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode) && state.auth.source !== "legacy_viewer_auth_bootstrap";
 }
 function isLoopbackHostname(raw) {
   const value = String(raw || "").trim().toLowerCase();
@@ -4011,7 +4015,7 @@ function canAutoIssueLocalTestPlayerSession() {
   if (state.auth.available) {
     return false;
   }
-  if (String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join") {
+  if (isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
     return false;
   }
   const pageHost = String(window.location.hostname || "").trim();
@@ -4768,7 +4772,7 @@ function sendPromptControl(mode, payload = null) {
       render();
       await ensureRegisteredPlayerSession(agentId);
       let strongAuthGrant = null;
-      if (String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join") {
+      if (isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
         feedback.stage = "authorizing";
         feedback.effect = "requesting backend strong-auth grant";
         render();
@@ -8357,7 +8361,7 @@ function HostedLoginForm(props) {
   })();
 }
 function shouldShowHostedLoginGate() {
-  return !state.auth.available && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
+  return !state.auth.available && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode);
 }
 function focusableElements(root) {
   return [...root.querySelectorAll(["a[href]", "button:not([disabled])", "input:not([disabled])", "select:not([disabled])", "textarea:not([disabled])", "[tabindex]:not([tabindex='-1'])"].join(","))].filter((element) => !element.hasAttribute("aria-hidden"));
@@ -9143,7 +9147,7 @@ function WorldSummaryPanel() {
   const hostedRecoveryHint = () => buildHostedRecoveryHint(locale());
   const tierBadgeClass = (status) => status === "active" || status === "active_legacy_preview" || status === "active_hosted_issue" || status === "active_hosted_session" || status === "preview_backend_reauth_available" ? "badge badge--good" : status === "issued_pending_register" || status === "upgrade_after_player_session" || status === "preview_only" ? "badge badge--accent" : status === "superseded" ? "badge" : "badge badge--warn";
   const showRebindNotice = () => Boolean(state$1.auth.pendingRequestedAgentId) && (state$1.auth.pendingForceRebind || state$1.auth.runtimeStatus === "rebind_retrying" || state$1.auth.runtimeStatus === "rebind_registering");
-  const showPlayerSessionSurface = () => !!hostedRecoveryHint() || !state$1.auth.available && String(state$1.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join" || showRebindNotice();
+  const showPlayerSessionSurface = () => !!hostedRecoveryHint() || !state$1.auth.available && isHostedPublicJoinDeploymentMode(state$1.hostedAccess?.deployment_mode) || showRebindNotice();
   const diagnosticsSummaryBadges = () => [`auth=${state$1.auth.available ? state$1.auth.registrationStatus || "ready" : "missing"}`, `events=${state$1.recentEvents.length}`];
   return (() => {
     var _el$157 = _tmpl$38(), _el$158 = _el$157.firstChild, _el$159 = _el$158.firstChild, _el$160 = _el$159.firstChild, _el$161 = _el$160.nextSibling, _el$162 = _el$158.nextSibling, _el$166 = _el$162.firstChild, _el$167 = _el$166.firstChild, _el$168 = _el$167.firstChild, _el$169 = _el$168.firstChild, _el$170 = _el$169.nextSibling, _el$171 = _el$168.nextSibling, _el$172 = _el$167.nextSibling, _el$173 = _el$172.firstChild, _el$174 = _el$173.nextSibling, _el$175 = _el$174.nextSibling, _el$183 = _el$175.nextSibling, _el$184 = _el$183.nextSibling, _el$185 = _el$184.firstChild, _el$186 = _el$185.nextSibling;
@@ -9719,7 +9723,7 @@ function WorldSummaryPanel() {
               })
             }), createComponent(Show, {
               get when() {
-                return memo(() => !!!state$1.auth.available)() && String(state$1.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
+                return memo(() => !!!state$1.auth.available)() && isHostedPublicJoinDeploymentMode(state$1.hostedAccess?.deployment_mode);
               },
               get children() {
                 return createComponent(HostedLoginForm, {
@@ -9978,7 +9982,7 @@ function WorldSummaryPanel() {
     }), _el$183);
     insert(_el$172, createComponent(Show, {
       get when() {
-        return memo(() => !!!state$1.auth.available)() && String(state$1.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
+        return memo(() => !!!state$1.auth.available)() && isHostedPublicJoinDeploymentMode(state$1.hostedAccess?.deployment_mode);
       },
       get children() {
         return createComponent(HostedLoginForm, {
@@ -10643,7 +10647,7 @@ function InteractionPanel() {
               return _el$243;
             })(), createComponent(Show, {
               get when() {
-                return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
+                return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode);
               },
               get children() {
                 var _el$244 = _tmpl$45(), _el$245 = _el$244.firstChild, _el$246 = _el$245.nextSibling;
@@ -11375,7 +11379,7 @@ function setFixtureDiagnostics() {
 }
 function setFixtureHostedGate() {
   state.hostedAccess = {
-    deployment_mode: "hosted_public_join",
+    deployment_mode: HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
     action_matrix: [{
       action_id: "prompt_control_apply",
       required_auth: "strong_auth",
