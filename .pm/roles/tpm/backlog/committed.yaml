@@ -101,20 +101,6 @@ tasks:
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
   - task_uid: task_76d64040529e464da37f08d075a05120
     title: "Research AI era opening game"
-  - task_uid: task_88412210d61d4889b4cfca02bf8b824b
-    title: "govern viewer feedback contract test entrypoint"
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance:
-      - "Expose the Viewer feedback contract test through the package test script surface."
-      - "Update current callers to use the canonical package script without changing runtime behavior."
-      - "Record role evidence and focused verification in the task execution log."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_88412210d61d4889b4cfca02bf8b824b.yaml
-  - task_uid: task_76d64040529e464da37f08d075a05120
-    title: "Research AI era opening game"
     priority: P2
     source_signal: null
     related_prd: []
