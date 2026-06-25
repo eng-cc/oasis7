@@ -1077,10 +1077,7 @@ export function createViewerFeedbackModule({
         || gameplay.first_win_definition
         || null,
       playerAction: gameplay.player_action || null,
-      worldChange: gameplay.world_change_due_to_player
-        || lastWorldChange
-        || executionCauseDetail
-        || null,
+      worldChange: gameplay.world_change_due_to_player || null,
       leverageVerdict: gameplay.player_leverage_verdict
         || gameplay.player_leverage_score
         || null,
@@ -1098,10 +1095,12 @@ export function createViewerFeedbackModule({
     };
     const dependencyStatus = gameplay.major_power_dependency_status || "unverified";
     const recoveryOptions = [
-      gameplay.repair_available ? "repair" : null,
-      gameplay.rebuild_available ? "rebuild" : null,
-      gameplay.pivot_available ? "pivot" : null,
-    ].filter(Boolean);
+      ["repair", gameplay.repair_available],
+      ["rebuild", gameplay.rebuild_available],
+      ["pivot", gameplay.pivot_available],
+    ]
+      .filter(([, value]) => value === true || value === false)
+      .map(([label, value]) => `${label}: ${availabilityLabel(value)}`);
     const matureWorldContinuation = {
       dependencyStatus,
       recoveryOptions: recoveryOptions.length > 0
@@ -1124,12 +1123,8 @@ export function createViewerFeedbackModule({
         ),
     };
     const replayPlayerIntent = gameplay.player_action || null;
-    const replayWorldResult = gameplay.world_change_due_to_player
-      || lastWorldChange
-      || executionCauseDetail
-      || recentFeedback?.effect
-      || null;
-    const shareReplaySnippet = replayPlayerIntent
+    const replayWorldResult = gameplay.world_change_due_to_player || null;
+    const shareReplaySnippet = replayPlayerIntent && replayWorldResult
       ? [
         replayPlayerIntent,
         executionCauseLabel || executionStateLabel || executionState,

@@ -199,6 +199,9 @@ const core = await import("../software_safe_src/legacy_core.js");
       next_step_hint: "Replenish upstream materials, then advance again.",
       can_interrupt: false,
       can_reprioritize: false,
+      repair_available: false,
+      rebuild_available: false,
+      pivot_available: false,
       available_actions: [],
     },
   };
@@ -209,9 +212,37 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(gameplaySummary.agencyMoves.handoff, null);
   assert.equal(gameplaySummary.progressionProof.firstWinGoal, null);
   assert.equal(gameplaySummary.progressionProof.playerAction, null);
+  assert.equal(gameplaySummary.progressionProof.worldChange, null);
+  assert.match(gameplaySummary.matureWorldContinuation.recoveryOptions, /repair: unavailable/);
+  assert.match(gameplaySummary.matureWorldContinuation.recoveryOptions, /rebuild: unavailable/);
+  assert.match(gameplaySummary.matureWorldContinuation.recoveryOptions, /pivot: unavailable/);
   assert.equal(gameplaySummary.shareReplay.playerIntent, null);
+  assert.equal(gameplaySummary.shareReplay.worldResult, null);
   assert.equal(gameplaySummary.shareReplay.snippet, null);
   assert.match(gameplaySummary.controlProof.nextMove, /Replenish upstream materials/i);
+}
+
+{
+  core.state.snapshot = {
+    model: {
+      agents: { "agent-0": { id: "agent-0" } },
+      locations: { "loc-0": { id: "loc-0" } },
+    },
+    player_gameplay: {
+      stage_id: "post_onboarding",
+      stage_status: "blocked",
+      execution_state: "blocked",
+      goal_title: "Recover sustainable capability",
+      player_action: "queued build_factory_smelter_mk1",
+      causality_detail: "iron input exhausted at factory-0",
+      last_world_change: "storm damaged an unrelated storage yard",
+    },
+  };
+  const gameplaySummary = core.buildGameplaySummary();
+  assert.equal(gameplaySummary.progressionProof.worldChange, null);
+  assert.equal(gameplaySummary.shareReplay.playerIntent, "queued build_factory_smelter_mk1");
+  assert.equal(gameplaySummary.shareReplay.worldResult, null);
+  assert.equal(gameplaySummary.shareReplay.snippet, null);
 }
 
 {

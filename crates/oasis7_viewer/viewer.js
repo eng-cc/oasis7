@@ -1972,7 +1972,7 @@ function createViewerFeedbackModule({
     const progressionProof = {
       firstWinGoal: gameplay.first_win_goal_id || gameplay.first_win_definition || null,
       playerAction: gameplay.player_action || null,
-      worldChange: gameplay.world_change_due_to_player || lastWorldChange || executionCauseDetail || null,
+      worldChange: gameplay.world_change_due_to_player || null,
       leverageVerdict: gameplay.player_leverage_verdict || gameplay.player_leverage_score || null,
       leverageClass,
       antiGrind: leverageClass ? `${leverageClass}${normalizedRepeatCount == null ? "" : ` · repeat=${normalizedRepeatCount}`}${grindOnlyFlag ? " · grind_only" : ""}` : grindOnlyFlag ? localeText2(locale, "grind_only 风险已触发", "grind_only risk is active") : localeText2(locale, "等待 leverage_class / anti-grind truth", "Waiting for leverage_class / anti-grind truth"),
@@ -1984,10 +1984,10 @@ function createViewerFeedbackModule({
     };
     const dependencyStatus = gameplay.major_power_dependency_status || "unverified";
     const recoveryOptions = [
-      gameplay.repair_available ? "repair" : null,
-      gameplay.rebuild_available ? "rebuild" : null,
-      gameplay.pivot_available ? "pivot" : null
-    ].filter(Boolean);
+      ["repair", gameplay.repair_available],
+      ["rebuild", gameplay.rebuild_available],
+      ["pivot", gameplay.pivot_available]
+    ].filter(([, value]) => value === true || value === false).map(([label, value]) => `${label}: ${availabilityLabel(value)}`);
     const matureWorldContinuation = {
       dependencyStatus,
       recoveryOptions: recoveryOptions.length > 0 ? recoveryOptions.join(" / ") : localeText2(locale, "等待 repair / rebuild / pivot truth", "Waiting for repair / rebuild / pivot truth"),
@@ -2003,8 +2003,8 @@ function createViewerFeedbackModule({
       )
     };
     const replayPlayerIntent = gameplay.player_action || null;
-    const replayWorldResult = gameplay.world_change_due_to_player || lastWorldChange || executionCauseDetail || recentFeedback?.effect || null;
-    const shareReplaySnippet = replayPlayerIntent ? [
+    const replayWorldResult = gameplay.world_change_due_to_player || null;
+    const shareReplaySnippet = replayPlayerIntent && replayWorldResult ? [
       replayPlayerIntent,
       executionCauseLabel || executionStateLabel || executionState,
       replayWorldResult

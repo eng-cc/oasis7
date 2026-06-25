@@ -334,7 +334,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText(/repair_elasticity/i)).toBeInTheDocument();
     expect(within(stagePanel).getByText("Mature-World Continuation")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Recovery Options")).toBeInTheDocument();
-    expect(within(stagePanel).getByText("repair / rebuild / pivot")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("repair: available / rebuild: available / pivot: available")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Share Replay")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText(/queued build_factory_smelter_mk1/i).length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText("Accepted Intent").length).toBeGreaterThan(0);
