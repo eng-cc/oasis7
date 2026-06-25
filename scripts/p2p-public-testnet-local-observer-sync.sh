@@ -47,13 +47,14 @@ Description:
   When apply mode installs a manifest source from the repo, it also localizes
   runtime_refs files into the target config directory and rewrites the manifest
   to point at those local copies. reset-state backs up and clears the local
-  observer's replicated execution state so a drifted pre-sync history can be
-  rebuilt from the current two-validator network contract. seed-from-remote
-  bypasses replay-from-genesis by copying the healthy peer's current execution
-  world, simulator mirror, and bridge state into the local observer tree so
-  the observer can resume from the healthy peer's current execution head. It
-  intentionally seeds only the current head, not a full historical recovery
-  archive, and requires sshpass-compatible credentials via SSHPASS.
+  observer's replicated execution state, storage root, simulator mirror, and
+  bridge state so a drifted pre-sync history can be rebuilt from the current
+  two-validator network contract. seed-from-remote bypasses replay-from-genesis
+  by copying the healthy peer's current execution world, simulator mirror, and
+  bridge state into the local observer tree so the observer can resume from the
+  healthy peer's current execution head. It intentionally seeds only the current
+  head, not a full historical recovery archive, and requires sshpass-compatible
+  credentials via SSHPASS.
 EOF
 }
 
@@ -717,13 +718,14 @@ reset_local_state() {
   local local_env=$1
   local backup_dir=$2
 
-  local local_stack_root node_id execution_world_dir execution_records_dir
+  local local_stack_root node_id execution_world_dir execution_records_dir simulator_dir
   local replication_root runtime_root execution_bridge_state_path
   local storage_root
 
   local_stack_root=$(resolved_env_value "$local_env" STACK_ROOT)
   node_id=$(resolved_env_value "$local_env" NODE_ID)
   execution_world_dir=$(resolved_env_value "$local_env" EXECUTION_WORLD_DIR)
+  simulator_dir="${execution_world_dir}-simulator-mirror"
   execution_records_dir=$(resolved_env_value "$local_env" EXECUTION_RECORDS_DIR)
   storage_root=$(resolved_env_value "$local_env" STORAGE_ROOT)
   replication_root=$(optional_resolved_env_value "$local_env" REPLICATION_ROOT)
@@ -740,7 +742,9 @@ reset_local_state() {
   mkdir -p "$backup_dir"
 
   backup_and_remove_path "$execution_world_dir" "$backup_dir/execution-world"
+  backup_and_remove_path "$simulator_dir" "$backup_dir/execution-world-simulator-mirror"
   backup_and_remove_path "$execution_records_dir" "$backup_dir/execution-records"
+  backup_and_remove_path "$storage_root" "$backup_dir/storage"
   backup_and_remove_path "$replication_root" "$backup_dir/replication-root"
   if [[ -n "$runtime_root" ]]; then
     backup_and_remove_path "$runtime_root" "$backup_dir/runtime-root"
@@ -748,8 +752,6 @@ reset_local_state() {
   backup_and_remove_path \
     "$execution_bridge_state_path" \
     "$backup_dir/chain-runtime/$node_id/$(basename "$execution_bridge_state_path")"
-
-  printf 'preserved storage_root=%s\n' "$storage_root"
   printf 'backup_dir=%s\n' "$backup_dir"
 }
 

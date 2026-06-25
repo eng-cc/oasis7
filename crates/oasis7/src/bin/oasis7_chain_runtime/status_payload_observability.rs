@@ -90,6 +90,29 @@ pub(crate) fn push_observability_alert(
     });
 }
 
+pub(crate) fn push_local_chain_ahead_alert(
+    alerts: &mut Vec<ChainNodeObservabilityAlert>,
+    snapshot: &NodeSnapshot,
+    network_height: Option<u64>,
+) {
+    let Some(network_height) = network_height else {
+        return;
+    };
+    let local_height = snapshot.consensus.committed_height;
+    if local_height <= network_height {
+        return;
+    }
+    push_observability_alert(
+        alerts,
+        "critical",
+        "local_chain_ahead_of_network_head",
+        format!(
+            "local committed height {local_height} is ahead of network head {network_height} by {}; verify clean-rebuild generation before preserving local state",
+            local_height.saturating_sub(network_height)
+        ),
+    );
+}
+
 pub(crate) fn observability_status_for_alerts(alerts: &[ChainNodeObservabilityAlert]) -> String {
     if alerts.iter().any(|alert| alert.severity == "critical") {
         "critical".to_string()
