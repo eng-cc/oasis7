@@ -9,7 +9,29 @@ impl PosNodeEngine {
         if commit.height == 0 {
             return;
         }
-        let validator_id = self.validator_id_for_peer_head(commit.node_id.as_str());
+        let next_head = PeerCommittedHead {
+            height: commit.height,
+            block_hash: commit.block_hash.clone(),
+            committed_at_ms: commit.committed_at_ms,
+            observed_at_ms: crate::runtime_util::now_unix_ms(),
+            execution_block_hash: commit.execution_block_hash.clone(),
+            execution_state_root: commit.execution_state_root.clone(),
+            action_root: commit.action_root.clone(),
+            public_key_hex: commit.public_key_hex.clone(),
+            signature_hex: commit.signature_hex.clone(),
+        };
+        self.observe_peer_committed_head(commit.node_id.as_str(), next_head);
+    }
+
+    pub(super) fn observe_peer_committed_head(
+        &mut self,
+        peer_node_id: &str,
+        next_head: PeerCommittedHead,
+    ) {
+        if next_head.height == 0 {
+            return;
+        }
+        let validator_id = self.validator_id_for_peer_head(peer_node_id);
         if validator_id
             .as_deref()
             .map(|id| self.quarantined_validators.contains(id))
@@ -18,38 +40,28 @@ impl PosNodeEngine {
             return;
         }
         let now_ms = crate::runtime_util::now_unix_ms();
-        let next_head = PeerCommittedHead {
-            height: commit.height,
-            block_hash: commit.block_hash.clone(),
-            committed_at_ms: commit.committed_at_ms,
-            observed_at_ms: now_ms,
-            execution_block_hash: commit.execution_block_hash.clone(),
-            execution_state_root: commit.execution_state_root.clone(),
-            action_root: commit.action_root.clone(),
-            public_key_hex: commit.public_key_hex.clone(),
-            signature_hex: commit.signature_hex.clone(),
-        };
-        if let Some(previous) = self.peer_heads.get(commit.node_id.as_str()) {
-            if commit.height < previous.height {
+        if let Some(previous) = self.peer_heads.get(peer_node_id) {
+            if next_head.height < previous.height {
                 return;
             }
-            if commit.height == previous.height && peer_commit_heads_conflict(previous, &next_head)
+            if next_head.height == previous.height
+                && peer_commit_heads_conflict(previous, &next_head)
             {
                 if let Some(validator_id) = validator_id {
                     self.record_commit_equivocation_evidence(
                         validator_id,
-                        commit.node_id.clone(),
+                        peer_node_id.to_string(),
                         previous.clone(),
                         next_head,
                         now_ms,
                     );
-                    self.peer_heads.remove(commit.node_id.as_str());
+                    self.peer_heads.remove(peer_node_id);
                 }
                 return;
             }
         }
-        self.network_committed_height = self.network_committed_height.max(commit.height);
-        self.peer_heads.insert(commit.node_id.clone(), next_head);
+        self.network_committed_height = self.network_committed_height.max(next_head.height);
+        self.peer_heads.insert(peer_node_id.to_string(), next_head);
     }
 
     fn record_commit_equivocation_evidence(

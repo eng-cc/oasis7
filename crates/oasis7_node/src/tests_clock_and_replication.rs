@@ -6,6 +6,8 @@ mod network_gap_sync_not_found_tests;
 mod network_gap_sync_budget_tests;
 #[path = "tests_network_gap_sync_provider_routing.rs"]
 mod network_gap_sync_provider_routing_tests;
+#[path = "tests_network_gap_sync_peer_head.rs"]
+mod network_gap_sync_peer_head_tests;
 #[path = "tests_network_gap_sync.rs"]
 mod network_gap_sync_tests;
 #[path = "tests_network_gap_sync_high_checkpoint_probe.rs"]

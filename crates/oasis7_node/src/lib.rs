@@ -140,9 +140,9 @@ use replication::{
     REPLICATION_GET_HEAD_PROTOCOL, ReplicationHeadSummary, ReplicationRuntime, load_blob_from_root,
     load_commit_message_from_root, load_latest_commit_message_from_root,
 };
-use replication_fetch_handler_support::{
-    attach_checkpoint_for_fetch_commit_if_boundary, should_export_checkpoint_for_fetch_commit,
-};
+use replication_fetch_handler_support::attach_checkpoint_for_fetch_commit_if_boundary;
+#[cfg(test)]
+use replication_fetch_handler_support::should_export_checkpoint_for_fetch_commit;
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
     request_fetch_blob_with_storage_challenge_routes,
