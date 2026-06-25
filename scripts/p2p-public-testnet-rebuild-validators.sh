@@ -457,6 +457,7 @@ cleanup_host_processes() {
     "SERVICE_NAME='$service' STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
 import os
 import signal
+import shlex
 import subprocess
 import sys
 import time
@@ -468,6 +469,22 @@ needles = (
     f'{stack_root}/bin/start-node.sh',
     f'{stack_root}/releases/',
 )
+
+def is_stack_path(value):
+    value = (value or '').strip()
+    return value == stack_root or value.startswith(f'{stack_root}/')
+
+def unit_metadata_matches_stack_root(metadata):
+    for line in metadata.splitlines():
+        key, _, value = line.partition('=')
+        if key == 'WorkingDirectory':
+            if is_stack_path(value):
+                return True
+        elif key == 'ExecStart':
+            for token in shlex.split(value):
+                if is_stack_path(token):
+                    return True
+    return False
 
 def discover_stack_services():
     candidates = {service_name}
@@ -491,7 +508,7 @@ def discover_stack_services():
             stderr=subprocess.DEVNULL,
             check=False,
         )
-        if candidate == service_name or (show.returncode == 0 and stack_root in show.stdout):
+        if candidate == service_name or (show.returncode == 0 and unit_metadata_matches_stack_root(show.stdout)):
             owners.add(candidate)
     return [service_name] + sorted(owner for owner in owners if owner != service_name)
 

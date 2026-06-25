@@ -137,6 +137,16 @@ case "${1:-}" in
     ;;
   show)
     service="${2:-}"
+    IFS=',' read -r -a prefix_services <<< "${TEST_SYSTEMD_PREFIX_STACK_OWNER_SERVICES:-}"
+    for owner in "${prefix_services[@]-}"; do
+      if [[ "$service" == "$owner" ]]; then
+        stack_root="${TEST_SYSTEMD_RESTART_LOOP_STACK_ROOT:-/opt/oasis7/p2p-testnet}-old"
+        printf 'FragmentPath=/etc/systemd/system/%s\n' "$service"
+        printf 'ExecStart={ path=%s/bin/start-node.sh ; argv[]=%s/bin/start-node.sh ; }\n' "$stack_root" "$stack_root"
+        printf 'WorkingDirectory=%s\n' "$stack_root"
+        exit 0
+      fi
+    done
     IFS=',' read -r -a services <<< "${TEST_SYSTEMD_STACK_OWNER_SERVICES:-}"
     for owner in "${services[@]-}"; do
       if [[ "$service" == "$owner" ]]; then
@@ -610,6 +620,7 @@ touch "$legacy_state_dir/armed"
 if TEST_SYSTEMD_RESTART_LOOP_HOST=root@sequencer \
   TEST_SYSTEMD_RESTART_LOOP_STACK_ROOT=/opt/oasis7/p2p-testnet \
   TEST_SYSTEMD_STACK_OWNER_SERVICES=oasis7-testnet-sequencer.service,oasis7-triad-sequencer.service \
+  TEST_SYSTEMD_PREFIX_STACK_OWNER_SERVICES=oasis7-prefix-sequencer.service \
   "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
@@ -642,6 +653,8 @@ if missing:
     raise SystemExit(f"missing stack-owner runtime mask calls: {missing}")
 if "systemctl\tunmask oasis7-triad-sequencer.service" in lines:
     raise SystemExit("legacy stack-owner service was unmasked by explicit start path")
+if "systemctl\tmask --runtime oasis7-prefix-sequencer.service" in lines:
+    raise SystemExit("prefix-only stack-root service was incorrectly masked")
 if any(line == "spawned\troot@sequencer\toasis7-triad-sequencer.service" for line in lines):
     raise SystemExit("legacy stack-owner service respawned during cleanup")
 PY
