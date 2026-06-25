@@ -4,6 +4,9 @@
 - 对应需求文档: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
 
 审计轮次: 5
+
+> 现行状态：本文保留为历史 P2PFS 路线图的项目追溯，PRG-1~PRG-4 的完成态不等同于当前链上大世界状态底座的模块级闭环。当前聚合闭环、测试层级与 claim boundary 以 `testing-manual.md#s9a链上大世界状态底座自闭环` 和 `PRD-P2P-031` 为准。
+
 ## 任务拆解（含 PRD-ID 映射）
 - [x] PRG-1 (PRD-P2P-MIG-056)：完成路线图设计文档与项目管理文档。
 - [x] PRG-2 (PRD-P2P-MIG-056)：实现 `oasis7_node` 链式 `block_hash`（含状态持久化兼容）。

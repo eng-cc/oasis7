@@ -3,6 +3,8 @@
 - 对应需求文档: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phasec-distfs-proof-network.prd.md`
 - 对应项目管理文档: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phasec-distfs-proof-network.project.md`
 
+> 现行状态：本文是历史 P2PFS 路线图的 Phase C 设计追溯。当前链上大世界状态底座的聚合设计入口、测试层级与 claim boundary 以 `doc/p2p/design.md`、`testing-manual.md#s9a链上大世界状态底座自闭环` 和 `PRD-P2P-031` 为准；本文不单独证明 S9A `module_full`、`integration_required` 或 `release_full`。
+
 ## 1. 设计定位
 定义 DistFS 证明网络的节点角色、proof 传播、验证链路与共识接入方式。
 

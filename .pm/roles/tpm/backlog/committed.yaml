@@ -99,3 +99,16 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
+  - task_uid: task_17ae7ffcdc5d4c6c9c371777a33dd02b
+    title: "Audit chain-world-state substrate doc conflicts"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-P2P-031
+    acceptance:
+      - "Audit current docs for semantic conflicts with the chain-world-state substrate split."
+      - "Identify old docs that need update, redirect, or deletion with evidence."
+      - "Apply narrowly scoped doc updates/deletions where they prevent current-reader confusion."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_17ae7ffcdc5d4c6c9c371777a33dd02b.yaml

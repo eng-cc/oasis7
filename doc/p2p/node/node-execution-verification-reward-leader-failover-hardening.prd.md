@@ -9,7 +9,7 @@
 - Proposed Solution: 收口执行一致性缺口：将节点对等 commit 的执行绑定从“仅透传/记录”提升为“可校验、可拒绝、可在补洞路径执行一致性验证”。
 - Success Criteria:
   - SC-1: 收口奖励结算编排缺口：为 reward runtime 引入显式 leader/failover 策略，避免“隐式只有 sequencer 发布”导致的运行不可观测和不可配置。
-  - SC-2: 在不依赖完整玩法模块完工的前提下，先把 P2P 基础设施升级为生产语义。
+  - SC-2: 在不依赖完整玩法模块完工的前提下，先收口链上大世界状态底座中的节点执行校验、peer commit 绑定与 reward leader/failover 子链路；该专题只提供底座子链路证据，不单独代表 transport-only P2P ready、S9A `module_full`、`integration_required` 或 `release_full`。
 
 ## 2. User Experience & Functionality
 - User Personas: 协议维护者、任务执行者、质量复核者。

@@ -7,6 +7,7 @@
 ## 设计目标
 - 把“没有公网 IP 的节点如何成为主链级网络一等公民”从部署特例提升成框架层能力。
 - 为 oasis7 冻结一套可同时承载 mixed-topology 与多链型数据面的统一 P2P substrate。
+- 该 P2P substrate 是链上大世界状态底座的网络/数据面子线，不单独证明 S9A `module_full`、`integration_required` 或 `release_full`。
 
 ## 目标原则
 1. 身份与地址解耦：节点身份由签名 peer record 与 node identity key 定义，而不是由瞬时 IP:port 定义。

@@ -4,6 +4,9 @@
 - 对应需求文档: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phasec-distfs-proof-network.prd.md`
 
 审计轮次: 5
+
+> 现行状态：本文是历史 P2PFS 路线图的 Phase C 项目追溯，PRG-C1~PRG-C4 的完成态不等同于当前链上大世界状态底座的模块级闭环。当前聚合闭环、测试层级与 claim boundary 以 `testing-manual.md#s9a链上大世界状态底座自闭环` 和 `PRD-P2P-031` 为准。
+
 ## 任务拆解（含 PRD-ID 映射）
 - [x] PRG-C1 (PRD-P2P-MIG-055)：完成 Phase C 设计文档与项目管理文档；同步删除 PRG-M6 设计方向。
 - [x] PRG-C2 (PRD-P2P-MIG-055)：实现 DistFS challenge request/proof 消息、签名与验签。

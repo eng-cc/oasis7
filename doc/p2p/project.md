@@ -3,7 +3,7 @@
 审计轮次: 14
 
 ## 任务拆解（活跃面）
-- 当前主线仍是非全公网 P2P substrate、reachability/role policy 与 claims boundary；具体执行优先级以 `## 状态` 和对应 topic project 为准。
+- 当前主线收束为链上大世界状态底座及其 network tier、reachability/role policy 与 claims boundary 子线；P2P transport 是底座网络层，不单独代表模块级闭环。具体执行优先级以 `## 状态` 和对应 topic project 为准。
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）

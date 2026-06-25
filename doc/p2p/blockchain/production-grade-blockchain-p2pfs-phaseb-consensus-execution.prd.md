@@ -4,6 +4,9 @@
 - 对应项目管理文档: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phaseb-consensus-execution.project.md`
 
 审计轮次: 5
+
+> 现行状态：本文是历史 P2PFS 路线图的 Phase B 阶段文档，保留用于追溯共识内生执行收口。当前链上大世界状态底座的聚合闭环、测试层级与 claim boundary 以 `testing-manual.md#s9a链上大世界状态底座自闭环` 和 `PRD-P2P-031` 为准；本文不单独证明 S9A `module_full`、`integration_required` 或 `release_full`。
+
 ## 1. Executive Summary
 - Problem Statement: 将当前“reward runtime 外围 execution bridge 驱动执行”的模式推进为“节点共识主循环内生执行”。
 - Proposed Solution: 让共识提交高度与执行高度/状态根在同一条节点主链路中推进，降低双循环一致性风险。
