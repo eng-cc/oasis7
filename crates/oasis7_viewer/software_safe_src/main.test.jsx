@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE } from "./software_safe_constants.js";
 
 vi.mock("./pixel_world_host.jsx", () => ({
   PixelWorldHost: (props) => (
@@ -152,7 +153,7 @@ function sampleAgentClaimSnapshot() {
 
 function sampleHostedPublicJoinAccess(overrides = {}) {
   return {
-    deployment_mode: "hosted_public_join",
+    deployment_mode: HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
     action_matrix: [
       {
         action_id: "prompt_control_apply",

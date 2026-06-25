@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE } from "../software_safe_src/software_safe_constants.js";
 
 globalThis.window = {
   location: { search: "?test_api=1", href: "http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011&test_api=1", pathname: "/software_safe.html" },
@@ -157,7 +158,7 @@ const core = await import("../software_safe_src/legacy_core.js");
 
 {
   core.state.hostedAccess = {
-    deployment_mode: "hosted_public_join",
+    deployment_mode: HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
     action_matrix: [
       {
         action_id: "prompt_control_apply",
@@ -199,7 +200,7 @@ const core = await import("../software_safe_src/legacy_core.js");
 
 {
   core.state.hostedAccess = {
-    deployment_mode: "hosted_public_join",
+    deployment_mode: HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
     action_matrix: [],
   };
   core.state.auth = {

@@ -3,6 +3,10 @@ import { render as mount } from "solid-js/web";
 
 import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
+import {
+  HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
+  isHostedPublicJoinDeploymentMode,
+} from "./software_safe_constants.js";
 
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 
@@ -573,7 +577,7 @@ function HostedLoginForm(props) {
 
 function shouldShowHostedLoginGate() {
   return !core.state.auth.available
-    && String(core.state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
+    && isHostedPublicJoinDeploymentMode(core.state.hostedAccess?.deployment_mode);
 }
 
 function focusableElements(root) {
@@ -1431,7 +1435,7 @@ function WorldSummaryPanel() {
     !!hostedRecoveryHint()
       || (
         !state.auth.available
-        && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+        && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
       )
       || showRebindNotice();
   const diagnosticsSummaryBadges = () => [
@@ -1752,7 +1756,7 @@ function WorldSummaryPanel() {
           <Show
             when={
               !state.auth.available
-              && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+              && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
             }
           >
             <HostedLoginForm locale={locale()} />
@@ -1889,7 +1893,7 @@ function WorldSummaryPanel() {
           <Show
             when={
               !state.auth.available
-              && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+              && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
             }
           >
             <HostedLoginForm
@@ -2223,7 +2227,7 @@ function InteractionPanel() {
           <Show
             when={
               authSurface().capabilities.prompt_control.enabled
-              && String(core.state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+              && isHostedPublicJoinDeploymentMode(core.state.hostedAccess?.deployment_mode)
             }
           >
             <div class="field">
@@ -2808,7 +2812,7 @@ function setFixtureDiagnostics() {
 
 function setFixtureHostedGate() {
   core.state.hostedAccess = {
-    deployment_mode: "hosted_public_join",
+    deployment_mode: HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
     action_matrix: [
       {
         action_id: "prompt_control_apply",
