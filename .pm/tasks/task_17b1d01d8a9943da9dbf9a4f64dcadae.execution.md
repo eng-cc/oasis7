@@ -43,3 +43,12 @@ Example:
 - Expected Result: New module field is supported without mass rewriting historical tasks; shell/python syntax checks pass; skill/doc governance and current task workflow lint pass.
 - Actual Result: Pending verification.
 - Blocker / Next Action: Run verification, commit, and push.
+
+## 2026-06-25 17:56:29 CST / tpm
+- 完成内容: Reduced PR #640 skill-surface changes after user feedback: kept module as task YAML/script/source-of-truth concern and left only a minimal parent/child routing trigger in repo-owned-workflow-router.
+- 遗留事项: Run focused verification, commit, and push the simplification onto PR #640.
+- Action: Simplified skill propagation for module/parent-child workflow changes.
+- Validation Command: git diff origin/main -- .agents/skills
+- Expected Result: Only the router skill remains changed, with a small routing hook; bootstrap/execution/review/verification skills no longer duplicate the module field or gate matrix.
+- Actual Result: Net skill diff is limited to .agents/skills/repo-owned-workflow-router/SKILL.md with 8 added lines.
+- Blocker / Next Action: none

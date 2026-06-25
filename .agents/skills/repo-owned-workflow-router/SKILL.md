@@ -44,14 +44,11 @@ Check the task in this order:
 
 0. Already-bound read-only professional/domain judgment
    - Apply this router step after `default-workflow-bootstrap`; read-only professional/domain judgments must already be task-bound.
-   - Dispatch the matching bounded role slice: one concrete question, explicit
-     evidence paths, verdict/findings return, and no file edits unless the task
-     is later routed into execution.
+   - Dispatch the matching bounded role slice.
    - Unbound read-only professional questions are invalid under the always-bootstrap workflow; bootstrap first, then route and record the slice contract in `.pm`.
    - Skip professional dispatch only for pure fact lookup or command-output restatement.
 1. `bounded-brainstorming`
    - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
-   - Use the task `module` field for ordinary large-module ownership and queueing; do not route to parent/child just to say which module a task belongs to.
    - If one initiative has at least two independently mergeable domain tracks
      with distinct owners or verification loops, route to the parent initiative +
      domain child task pattern instead of forcing all tracks into one
@@ -82,10 +79,6 @@ Ask and answer these in order:
 
 1. Is the direction already clear enough to implement?
 2. Does the task need scope decomposition or 2-3 option comparison first?
-   - If considering parent/child, name the independently mergeable child tracks,
-     their owners, verification loops, and the dependency contract that makes a
-     parent coordination task worthwhile. If those cannot be named, keep a single
-     ordinary task.
 3. Will the task change product/runtime/interaction behavior with a stable test surface?
 4. Is the task already backed by sufficient repo truth to execute?
 5. Did a bug, failing test, broken helper, unexpected diff, or regression appear?
@@ -120,19 +113,6 @@ WORKFLOW ROUTE DECIDED
 - `project.md`:
 - `.pm/tasks/<TASK-UID>.execution.md`:
 - handoff / project supplement:
-
-## Parent Initiative / Child Task Plan (If Needed)
-- parent initiative task:
-- child tracks:
-- dependency contracts:
-- integration checkpoints:
-- verification contract matrix:
-  - child task:
-  - module_required:
-  - module_full trigger:
-  - integration_required trigger:
-  - release_full owner/evidence:
-- mock/fixture contracts:
 
 ## Subagent Slice Plan (If Needed)
 - role:
@@ -179,4 +159,3 @@ WORKFLOW ROUTE DECIDED
 - Selecting every workflow skill because the phase map exists; use the narrowest applicable surface and record skipped gates when they matter.
 - Reporting TPM evidence gathering as a professional conclusion; dispatch or attribute the matching role slice when judgment is involved.
 - Forgetting to update the route after scope changes; append the changed route before continuing work.
-- Leaving parent/child relationships as chat-only context. Parent initiative packets, child task packets, dependency contracts, and verification matrices must be written into `.pm` task truth or formal templates.

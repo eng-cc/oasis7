@@ -32,7 +32,6 @@ Do not use this skill when:
    - does each requirement or acceptance point map to a task step
    - does each meaningful step have a verification command or observable expected result
    - are names, PRD-IDs, task slug, and key paths consistent
-   - for a domain child task, is the parent initiative link, dependency input/output, `module_required` gate, `module_full` trigger, and integration/release escalation condition recorded
 3. If the gap review fails, update the existing repo truth first instead of inventing a side plan.
 4. Execute one atomic step at a time.
 5. After each meaningful step, run the named verification for that step and inspect the result directly.
@@ -54,10 +53,6 @@ Do not use this skill when:
   - `doc/<module>/project.md`
   - `.pm/tasks/<TASK-UID>.yaml`
   - `.pm/tasks/<TASK-UID>.execution.md`
-- Parent initiative / child task templates:
-  - `./.agents/roles/templates/parent-initiative.md`
-  - `./.agents/roles/templates/domain-child-task.md`
-  - `./.agents/roles/templates/mock-fixture-contract.md`
 - Planning helpers:
   - `./.agents/roles/templates/handoff-brief.md`
   - `./.agents/roles/templates/handoff-detailed.md`
@@ -72,7 +67,6 @@ Do not use this skill when:
 Stop and report the blocker instead of guessing when:
 
 - the written plan is missing required affected paths, verification, or acceptance mapping
-- a child task lacks `module_required` evidence, dependency contracts, or mock/fixture proof boundaries needed for local iteration
 - the task has drifted beyond the documented scope
 - instructions conflict across `prd.md`, `project.md`, handoff, or `.pm` truth
 - the same verification keeps failing and the failure is no longer producing new information

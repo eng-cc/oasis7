@@ -33,15 +33,9 @@ Read-only caveat:
 
 - Read-only and chat-only requests do not skip this bootstrap. They still need
   task/worktree truth before TPM answers, gathers evidence, or dispatches slices.
-- Friction control: after task/worktree truth exists, pure fact lookup, path
-  lookup, command-output restatement, and mechanical evidence collection should
-  use the objective-fact fast path. TPM may answer directly from verified
-  evidence and should avoid spawning professional slices for objective facts.
 - If a read-only question requires product/design/gameplay/game-visual-interaction/runtime/blockchain-ops/WASM/agent/viewer/QA/repository-health
   or liveops judgment, route to the matching bounded professional slice after
-  task/worktree bootstrap. Keep the default read-only professional slice bounded:
-  one concrete question, explicit evidence paths, verdict/findings return, and no
-  file edits.
+  task/worktree bootstrap.
 - Pure fact lookup, path lookup, command-output restatement, or mechanical
   evidence collection can be answered directly by TPM only inside the bound
   task worktree and only if it is not framed as a professional conclusion.
@@ -56,15 +50,11 @@ Read-only caveat:
    - are you already in an isolated task worktree
    - is the current worktree already bound to the target task
    - is there unrelated dirty state that forbids reuse
-   - is this a small follow-up that can reuse the current bound task without
-     changing owner, scope, or PR chain
 3. If isolation or task truth is missing, create it:
    - choose `tpm` as the default workflow owner role unless an existing bound task already has a valid owner
    - treat `tpm` ownership as workflow coordination only; professional work still requires matching bounded subagent slices
    - create a dedicated worktree unless the user explicitly authorized reuse
-   - bootstrap `.pm` task inside the target worktree; the `<module>` argument to
-     `new-task-worktree.sh` is recorded as the task `module` field and is the
-     first-level grouping key for ordinary parallel work
+   - bootstrap `.pm` task inside the target worktree
    - read `doc/<module>/prd.md`, `doc/<module>/project.md`, and task execution truth
 4. Once task truth exists, hand off to `repo-owned-workflow-router`.
 5. Record the bootstrap decision in `.pm/tasks/<TASK-UID>.execution.md`.
@@ -117,10 +107,6 @@ WORKFLOW BOOTSTRAP DECIDED
   - `./scripts/pm/task-closeout.sh`
 - Core workflow routing:
   - `./.agents/skills/repo-owned-workflow-router/SKILL.md`
-- Parent initiative / child task templates:
-  - `./.agents/roles/templates/parent-initiative.md`
-  - `./.agents/roles/templates/domain-child-task.md`
-  - `./.agents/roles/templates/mock-fixture-contract.md`
 - Formal truth:
   - `AGENTS.md`
   - `doc/<module>/prd.md`
@@ -137,11 +123,7 @@ WORKFLOW BOOTSTRAP DECIDED
 - Do not stop after saying which workflow surface should be used; continue into that phase.
 - Do not treat this skill as permission to bypass `repo-owned-workflow-router`, verification, or GitHub PR review.
 - Do force this bootstrap onto chat-only or read-only requests, even when they do not change repository state.
-- Do not turn the post-bootstrap objective-fact fast path into professional
-  judgment. If the answer depends on domain interpretation, dispatch the matching
-  role slice.
 - Do not treat read-only professional/domain questions as TPM-owned conclusions just because bootstrap has completed; the matching professional slice still owns the conclusion.
-- Do not collapse a multi-track initiative into one mixed-domain implementation task when the tracks are independently mergeable. Bootstrap the parent coordination task first, then route child domain tasks through their own owner/task/worktree/PR chain as defined by `doc/engineering/workflow/source-of-truth.md#13-parent-initiative--domain-child-tasks`.
 
 ## Known Failure Modes
 
@@ -149,7 +131,6 @@ WORKFLOW BOOTSTRAP DECIDED
 - Creating a task from an invalid external `source_ref`; use a repository path as the PM source and record external URLs in the execution log evidence instead.
 - Reusing a dirty or unrelated worktree because it is convenient; reuse needs explicit user authorization and matching task truth.
 - Stopping after worktree creation; this skill's job includes routing into the next workflow surface and recording the decision.
-- Treating a parent initiative as permission to put several implementation owners into one task. The parent is coordination truth only; each domain child keeps the single-chain invariant.
 
 ## Verification
 
