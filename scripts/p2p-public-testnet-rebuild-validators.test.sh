@@ -479,6 +479,121 @@ cat >"$TMP_DIR/status/sequencer.json" <<'JSON'
   "running": true,
   "last_error": null,
   "readiness": {
+    "status": "ready",
+    "failed_gates": []
+  },
+  "observability": {
+    "storage_challenge_network_degraded": false
+  },
+  "consensus": {
+    "committed_height": null,
+    "last_execution_height": null,
+    "storage_challenge_network_degraded_height": null,
+    "network_head": {
+      "source": "self_only",
+      "height": null,
+      "required_peer_count": 0,
+      "decision": "ready"
+    }
+  },
+  "replication": {
+    "local_peer_id": "12D3KooWSequencer",
+    "connected_peers": ["12D3KooWStorage"]
+  }
+}
+JSON
+
+cat >"$TMP_DIR/status/storage.json" <<'JSON'
+{
+  "running": true,
+  "last_error": null,
+  "readiness": {
+    "status": "ready",
+    "failed_gates": []
+  },
+  "observability": {
+    "storage_challenge_network_degraded": false
+  },
+  "consensus": {
+    "committed_height": null,
+    "last_execution_height": null,
+    "storage_challenge_network_degraded_height": null,
+    "network_head": {
+      "source": "self_only",
+      "height": null,
+      "required_peer_count": 0,
+      "decision": "ready"
+    }
+  },
+  "replication": {
+    "local_peer_id": "12D3KooWStorage",
+    "connected_peers": ["12D3KooWSequencer"]
+  }
+}
+JSON
+
+: >"$TEST_SSH_LOG"
+rm -f "$TEST_REMOTE_ROOT"/started-*
+json=$("$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-clean-genesis" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0)
+
+jq -e '
+  .sequencer.running == true
+  and .sequencer.committed_height == null
+  and .sequencer.last_execution_height == null
+  and .storage.running == true
+  and .storage.committed_height == null
+  and .storage.last_execution_height == null
+' <<<"$json" >/dev/null
+
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+for host, service in (
+    ("root@sequencer", "oasis7-triad-sequencer.service"),
+    ("root@storage", "oasis7-triad-storage.service"),
+):
+    commands = [line.split("\t", 1)[1] for line in lines if line.startswith(f"{host}\t")]
+    start_indexes = [
+        index for index, command in enumerate(commands) if f"systemctl start '{service}'" in command
+    ]
+    cleanup_indexes = [
+        index
+        for index, command in enumerate(commands)
+        if (
+            f"SERVICE_NAME='{service}'" in command
+            or f"systemctl stop '{service}'" in command
+        )
+        and "STACK_ROOT='/opt/oasis7/p2p-testnet' python3" in command
+        and "oasis7_chain_runtime" in command
+        and "start-node.sh" in command
+    ]
+    if not start_indexes:
+        raise SystemExit(f"missing {host} start command for clean-genesis path")
+    if any(index > start_indexes[-1] for index in cleanup_indexes):
+        raise SystemExit(f"unexpected post-start cleanup for clean-genesis ready {host}")
+PY
+
+cat >"$TMP_DIR/status/sequencer.json" <<'JSON'
+{
+  "running": true,
+  "last_error": null,
+  "readiness": {
     "status": "not_ready"
   },
   "observability": {
