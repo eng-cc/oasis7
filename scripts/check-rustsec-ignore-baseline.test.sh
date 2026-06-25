@@ -29,7 +29,7 @@ source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 out = []
 skip_previous = False
 for line in source:
-    if '"RUSTSEC-2025-0009"' in line and out and "rustsec-ignore:" in out[-1]:
+    if '"RUSTSEC-2026-0118"' in line and out and "rustsec-ignore:" in out[-1]:
         out.pop()
     out.append(line)
 Path(sys.argv[2]).write_text("\n".join(out) + "\n", encoding="utf-8")
@@ -48,7 +48,7 @@ import sys
 source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 out = []
 for line in source:
-    if '"RUSTSEC-2025-0009"' in line and not line.lstrip().startswith("#"):
+    if '"RUSTSEC-2026-0118"' in line and not line.lstrip().startswith("#"):
         out.append("  # " + line.strip() + " # test-only commented debt note")
     else:
         out.append(line)

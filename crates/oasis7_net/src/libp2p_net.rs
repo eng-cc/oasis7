@@ -178,6 +178,11 @@ impl Libp2pNetwork {
                 .map(peer_record_enables_rendezvous)
                 .unwrap_or(false);
         std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("build libp2p tokio runtime");
+            runtime.block_on(async move {
             let mut swarm = build_swarm(
                 &keypair_clone,
                 enable_rendezvous,
@@ -249,7 +254,6 @@ impl Libp2pNetwork {
                 bootstrap_redial_peers,
                 bootstrap_redial_interval_ms,
             );
-            async_std::task::block_on(async move {
                 let mut command_rx = command_rx;
                 let command_ctx = CommandContext {
                     event_published: &event_published,
@@ -352,7 +356,7 @@ impl Libp2pNetwork {
                                 }
                                 SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(event)) => {
                                     match event {
-                                        request_response::Event::Message { message, peer: _ } => {
+                                        request_response::Event::Message { message, peer: _, .. } => {
                                             match message {
                                                 request_response::Message::Request { request, channel, .. } => {
                                                     record_request_inbound(
@@ -1192,6 +1196,14 @@ impl Libp2pNetwork {
             wire_byte_counters,
         }
     }
+}
+#[cfg(test)]
+pub(super) fn run_on_libp2p_test_runtime<T>(f: impl FnOnce() -> T) -> T {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build libp2p test tokio runtime");
+    runtime.block_on(async move { f() })
 }
 #[cfg(test)]
 mod tests;

@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [features]
 default = ["self_tests", "libp2p"]
-libp2p = ["dep:libp2p", "dep:futures", "dep:async-std", "dep:pin-project"]
+libp2p = ["dep:libp2p", "dep:futures", "dep:pin-project", "dep:tokio"]
 # Reserved for backward-compatible feature flags; runtime bridge logic no longer
 # lives in this crate to avoid package-level dependency cycles.
 runtime_bridge = []
@@ -24,6 +24,6 @@ serde_cbor = "0.11"
 hex = "0.4"
 tracing = "0.1"
 futures = { version = "0.3", optional = true }
-async-std = { version = "1", optional = true }
-libp2p = { version = "0.53", optional = true, default-features = false, features = ["async-std", "autonat", "cbor", "dcutr", "dns", "gossipsub", "kad", "macros", "noise", "quic", "relay", "rendezvous", "request-response", "tcp", "yamux"] }
+libp2p = { version = "0.56", optional = true, default-features = false, features = ["autonat", "cbor", "dcutr", "dns", "gossipsub", "kad", "macros", "noise", "quic", "relay", "rendezvous", "request-response", "tcp", "tokio", "yamux"] }
 pin-project = { version = "1", optional = true }
+tokio = { version = "1", optional = true, features = ["rt", "time"] }

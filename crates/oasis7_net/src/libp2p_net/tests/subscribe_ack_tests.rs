@@ -158,8 +158,12 @@ fn handle_command_request_uses_swarm_connections_when_runtime_peers_are_empty() 
         std::time::Duration::from_secs(30),
         super::super::wire_bytes::init_shared_wire_byte_counters(),
     );
-    async_std::task::block_on(async {
-        async_std::future::timeout(
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build libp2p test tokio runtime");
+    runtime.block_on(async {
+        tokio::time::timeout(
             Duration::from_secs(10),
             connect_loopback_swarms(&mut listener, &mut dialer),
         )
