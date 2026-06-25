@@ -25,3 +25,12 @@ Example:
 - Expected Result: No residual workflow/template p2p-infrastructure wording remains; old P2P 基础设施 only appears in intentional doc/p2p historical-boundary notes; checks pass.
 - Actual Result: Targeted grep confirms parent template now uses chain-world-state-substrate; git diff --check passed; doc-governance and workflow-lint pending/rerun after this log entry.
 - Blocker / Next Action: Rerun pending checks, commit, merge into PR #640 branch, and push.
+
+## 2026-06-25 17:19:13 CST / tpm
+- 完成内容: Added friction controls for side effects 1 and 2 in PR #640.
+- 遗留事项: Verify, commit, and push the mitigation patch into PR #640.
+- Action: Updated source-of-truth to define objective-fact fast path, bounded read-only professional slices, and strict parent/child trigger criteria; synced default-workflow-bootstrap, repo-owned-workflow-router, and parent-initiative template.
+- Validation Command: git diff --check; ./scripts/lint-skills.sh; ./scripts/doc-governance-check.sh; ./scripts/pm/workflow-lint.sh --task-uid task_17b1d01d8a9943da9dbf9a4f64dcadae --phase current
+- Expected Result: No whitespace errors; local skill docs lint; doc governance passes; current task workflow lint passes.
+- Actual Result: Pending rerun after this execution-log entry.
+- Blocker / Next Action: Run verification, commit, push to #640.

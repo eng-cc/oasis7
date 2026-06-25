@@ -68,11 +68,47 @@ Specialist skills are not mandatory workflow phases. They become reachable throu
 
 If a specialist skill is used, TPM must still bind it to the same owner, `.pm` task, canonical worktree, and PR chain through the subagent slice contract. TPM may route to specialist skills, but the specialist role owns the professional conclusion.
 
+### 1.2.1 Friction Controls After Task Truth
+The always-bootstrap rule protects traceability, but it must not turn every
+small question into a heavyweight workflow.
+
+- Once a request is already inside the bound task/worktree, pure fact lookup,
+  path lookup, command-output restatement, or mechanical evidence collection may
+  use the objective-fact fast path: TPM gathers the evidence, answers directly,
+  and records a short execution-log note only when the fact materially affects
+  task truth, PR evidence, or a future decision.
+- Read-only professional/domain questions still require a matching role slice,
+  but the default slice should be bounded and time-boxed: one concrete question,
+  explicit evidence paths, `findings/no_findings` or verdict return, and no file
+  edits unless the task is routed into execution.
+- Do not dispatch a professional slice when the user is only asking for a
+  mechanical GitHub status, file path, command output, or exact current fact that
+  TPM can verify directly inside the bound task.
+- Do not create a second parent/planning surface to answer a small follow-up
+  inside an existing bound task; append the follow-up evidence to the current
+  task unless it changes owner, scope, or PR chain.
+
 ### 1.3 Parent Initiative + Domain Child Tasks
 Use this pattern when one user-level initiative contains multiple independently
 mergeable domain tracks, such as game strategy, visualization/player-facing UI,
 and chain-world-state substrate. It exists to preserve repo truth while avoiding one
 oversized task/PR that serializes unrelated module feedback loops.
+
+Use parent initiative + domain child tasks only when all of these are true:
+- there are at least two domain tracks with different owners or verification
+  loops;
+- each child can produce an independently reviewable and mergeable PR;
+- there is a real dependency contract, fixture/mock boundary, shared schema, or
+  integration checkpoint between children;
+- keeping everything in one implementation task would serialize unrelated
+  feedback loops or blur release/integration claims.
+
+Do not use parent initiative + domain child tasks for:
+- a single-module fix, doc cleanup, or narrow workflow helper;
+- a follow-up that can stay in the current task/PR chain without changing owner
+  or claim level;
+- a convenience grouping where children cannot merge independently;
+- work whose only shared surface is status reporting.
 
 Parent initiative task:
 - has one owner role, usually `tpm`, and one `.pm` task/worktree/PR chain for

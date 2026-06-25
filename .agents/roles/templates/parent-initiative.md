@@ -14,6 +14,13 @@
 - Non-Goals:
 - Done Signal:
 
+## Trigger Check
+- Independently mergeable child tracks:
+- Distinct owners / verification loops:
+- Dependency contracts or integration checkpoints:
+- Why one implementation task would serialize unrelated feedback:
+- Why this is not a single-module fix, doc cleanup, or status-only grouping:
+
 ## Child Tracks
 | Track | Child Task UID | Owner Role | Scope | Independent Merge Surface | Status |
 | --- | --- | --- | --- | --- | --- |

@@ -33,9 +33,15 @@ Read-only caveat:
 
 - Read-only and chat-only requests do not skip this bootstrap. They still need
   task/worktree truth before TPM answers, gathers evidence, or dispatches slices.
+- Friction control: after task/worktree truth exists, pure fact lookup, path
+  lookup, command-output restatement, and mechanical evidence collection should
+  use the objective-fact fast path. TPM may answer directly from verified
+  evidence and should avoid spawning professional slices for objective facts.
 - If a read-only question requires product/design/gameplay/game-visual-interaction/runtime/blockchain-ops/WASM/agent/viewer/QA/repository-health
   or liveops judgment, route to the matching bounded professional slice after
-  task/worktree bootstrap.
+  task/worktree bootstrap. Keep the default read-only professional slice bounded:
+  one concrete question, explicit evidence paths, verdict/findings return, and no
+  file edits.
 - Pure fact lookup, path lookup, command-output restatement, or mechanical
   evidence collection can be answered directly by TPM only inside the bound
   task worktree and only if it is not framed as a professional conclusion.
@@ -50,6 +56,8 @@ Read-only caveat:
    - are you already in an isolated task worktree
    - is the current worktree already bound to the target task
    - is there unrelated dirty state that forbids reuse
+   - is this a small follow-up that can reuse the current bound task without
+     changing owner, scope, or PR chain
 3. If isolation or task truth is missing, create it:
    - choose `tpm` as the default workflow owner role unless an existing bound task already has a valid owner
    - treat `tpm` ownership as workflow coordination only; professional work still requires matching bounded subagent slices
@@ -127,6 +135,9 @@ WORKFLOW BOOTSTRAP DECIDED
 - Do not stop after saying which workflow surface should be used; continue into that phase.
 - Do not treat this skill as permission to bypass `repo-owned-workflow-router`, verification, or GitHub PR review.
 - Do force this bootstrap onto chat-only or read-only requests, even when they do not change repository state.
+- Do not turn the post-bootstrap objective-fact fast path into professional
+  judgment. If the answer depends on domain interpretation, dispatch the matching
+  role slice.
 - Do not treat read-only professional/domain questions as TPM-owned conclusions just because bootstrap has completed; the matching professional slice still owns the conclusion.
 - Do not collapse a multi-track initiative into one mixed-domain implementation task when the tracks are independently mergeable. Bootstrap the parent coordination task first, then route child domain tasks through their own owner/task/worktree/PR chain as defined by `doc/engineering/workflow/source-of-truth.md#13-parent-initiative--domain-child-tasks`.
 

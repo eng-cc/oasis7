@@ -44,12 +44,20 @@ Check the task in this order:
 
 0. Already-bound read-only professional/domain judgment
    - Apply this router step after `default-workflow-bootstrap`; read-only professional/domain judgments must already be task-bound.
-   - Dispatch the matching bounded role slice.
+   - Dispatch the matching bounded role slice: one concrete question, explicit
+     evidence paths, verdict/findings return, and no file edits unless the task
+     is later routed into execution.
    - Unbound read-only professional questions are invalid under the always-bootstrap workflow; bootstrap first, then route and record the slice contract in `.pm`.
    - Skip professional dispatch only for pure fact lookup or command-output restatement.
 1. `bounded-brainstorming`
    - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
-   - If one initiative has independently mergeable tracks, route to the parent initiative + domain child task pattern instead of forcing all tracks into one implementation task.
+   - If one initiative has at least two independently mergeable domain tracks
+     with distinct owners or verification loops, route to the parent initiative +
+     domain child task pattern instead of forcing all tracks into one
+     implementation task.
+   - Do not trigger parent/child for a single-module fix, narrow doc cleanup,
+     status-only grouping, or follow-up that can remain in the current task/PR
+     chain without changing owner or claim level.
 2. `tdd-test-writer`
    - Use when the task changes automatable behavior and has a stable automated test surface.
 3. `executing-project-tasks`
@@ -73,6 +81,10 @@ Ask and answer these in order:
 
 1. Is the direction already clear enough to implement?
 2. Does the task need scope decomposition or 2-3 option comparison first?
+   - If considering parent/child, name the independently mergeable child tracks,
+     their owners, verification loops, and the dependency contract that makes a
+     parent coordination task worthwhile. If those cannot be named, keep a single
+     ordinary task.
 3. Will the task change product/runtime/interaction behavior with a stable test surface?
 4. Is the task already backed by sufficient repo truth to execute?
 5. Did a bug, failing test, broken helper, unexpected diff, or regression appear?
