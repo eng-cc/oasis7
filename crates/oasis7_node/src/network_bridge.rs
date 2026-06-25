@@ -640,7 +640,9 @@ impl ReplicationNetworkEndpoint {
                             peer_id,
                             short_node_error(&err)
                         ));
-                        last_err = Some(err);
+                        if !should_keep_fetch_commit_route_error(last_err.as_ref(), &err) {
+                            last_err = Some(err);
+                        }
                     }
                 }
             }
@@ -921,6 +923,20 @@ fn summarize_fetch_commit_routes(route_events: &[String]) -> String {
         return "routes=none".to_string();
     }
     route_events.join(";")
+}
+
+fn should_keep_fetch_commit_route_error(
+    current: Option<&NodeError>,
+    candidate: &NodeError,
+) -> bool {
+    let Some(current) = current else {
+        return false;
+    };
+    replication_network_error_is_timeout_protocol(current, REPLICATION_FETCH_COMMIT_PROTOCOL)
+        && (replication_network_error_is_protocol_unavailable(
+            candidate,
+            REPLICATION_FETCH_COMMIT_PROTOCOL,
+        ) || replication_network_error_is_availability_gap(candidate))
 }
 
 fn fetch_commit_success_cache_key(request: &FetchCommitRequest) -> FetchCommitSuccessCacheKey {

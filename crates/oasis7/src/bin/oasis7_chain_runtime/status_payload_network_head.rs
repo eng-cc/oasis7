@@ -356,15 +356,23 @@ fn required_fresh_peer_heads(
     if !snapshot.replication_enabled {
         return 0;
     }
-    if snapshot.consensus.committed_height == 0
+    let Some(loaded) = loaded_network_tier_manifest else {
+        if snapshot.consensus.committed_height == 0
+            && snapshot.consensus.network_committed_height == 0
+            && snapshot.consensus.peer_heads.is_empty()
+        {
+            return 0;
+        }
+        return DEFAULT_REQUIRED_FRESH_PEER_HEADS;
+    };
+    let clean_genesis_view = snapshot.consensus.committed_height == 0
         && snapshot.consensus.network_committed_height == 0
-        && snapshot.consensus.peer_heads.is_empty()
+        && snapshot.consensus.peer_heads.is_empty();
+    if clean_genesis_view
+        && (loaded.manifest.tier.as_str() == "local_devnet" || snapshot.role.as_str() != "observer")
     {
         return 0;
     }
-    let Some(loaded) = loaded_network_tier_manifest else {
-        return DEFAULT_REQUIRED_FRESH_PEER_HEADS;
-    };
     let target_validators = loaded.manifest.validator_policy.target_validator_count as usize;
     let max_peer_validators = target_validators.saturating_sub(1).max(1);
     match (loaded.manifest.tier.as_str(), snapshot.role.as_str()) {
