@@ -198,3 +198,15 @@ Example:
 - Expected Result: Current task is closed with fresh verification metadata, ready-for-PR claim passes, and any lint residual is unrelated to the current task.
 - Actual Result: Current task status is `done`; ready-for-PR claim passed; current-task `.pm` lint filter had no output; repo-wide `.pm` lint still has unrelated historical failures.
 - Blocker / Next Action: Commit implementation and then backfill Source Head in a metadata-only commit.
+
+## 2026-06-25 09:07:10 CST / tpm
+- 完成内容: Created GitHub PR #628 for the completed doc-corpus governance fix.
+- 遗留事项: Need required checks, mergeability, comments/review-thread closeout, merge, and worktree cleanup.
+- PR URL: https://github.com/eng-cc/oasis7/pull/628
+- PR Purpose Decision: normal_pr_ci_watch
+- Purpose Rationale: Ordinary documentation governance PR; not a manual packaging/release CI hold.
+- Action: Continue default PR watch path for required checks, mergeability, PR comments, and review threads.
+- Validation Command: `git push -u origin task/engineering-governance-next-issue-20260625`; `gh pr create --base main --head task/engineering-governance-next-issue-20260625 --title "Refresh doc corpus next governance action" --body ...`
+- Expected Result: PR is created and enters normal CI/comment watch.
+- Actual Result: PR #628 created at https://github.com/eng-cc/oasis7/pull/628.
+- Blocker / Next Action: Push this PR-purpose evidence commit, then inspect PR checks/comments/threads and mergeability.
