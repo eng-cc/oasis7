@@ -14,7 +14,7 @@ Static consistency checks for the current task:
 - project.md task item Trace points to task_uid
 - execution log has Action/Validation/Expected/Actual/Blocker/Next Action
 - claim-ready + closeout records present
-- PR evidence chain locatable
+- post-PR evidence chain is task-local
 USAGE
 }
 
@@ -106,6 +106,7 @@ if len(bound) != 1:
 task = bound[0]
 uid = str(task.get("task_uid") or "")
 errors = []
+pr_hits: list[str] = []
 
 def check(cond, bad):
     if not cond: errors.append(bad)
@@ -149,8 +150,10 @@ if elog.exists():
         check("claim-ready.sh" in et or "claim-ready" in et, "execution log missing claim-ready evidence; fix: append claim-ready command/result entry")
         check("task-closeout.sh" in et or "workflow-report.sh --phase close" in et, "execution log missing closeout evidence; fix: append closeout command/result entry")
     if phase == "post-pr":
-        pr_markers = ("prepare-task-pr.sh", "gh pr create", "PR evidence", "PR URL")
-        check(any(marker in et for marker in pr_markers), "execution log missing PR evidence marker; fix: append prepare-task-pr/PR URL evidence entry")
+        pr_markers = ("prepare-task-pr.sh", "gh pr create", "PR URL", "PR #", "https://github.com/")
+        has_pr_marker = any(marker in et for marker in pr_markers)
+        if has_pr_marker:
+            pr_hits.append(str(elog.relative_to(root)))
 
 if phase in {"pr-ready", "post-pr"}:
     check(bool(task.get("last_claim_type")) and bool(task.get("last_verified_at")) and bool(task.get("last_verification_status")),
@@ -158,8 +161,7 @@ if phase in {"pr-ready", "post-pr"}:
     check(bool(task.get("last_closed_at")),
           "closeout record missing last_closed_at; fix: run ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <task_uid> --verify-command '<cmd>'")
 
-pr_hits = []
-for p in [root / "PR.md", root / ".pm" / "signals" / "inbox.yaml", root / ".pm" / "signals" / "archive.yaml", root / ".pm" / "working_memory"]:
+for p in [root / ".pm" / "signals" / "inbox.yaml", root / ".pm" / "signals" / "archive.yaml", root / ".pm" / "working_memory"]:
     if p.is_file() and uid in p.read_text(encoding="utf-8"):
         pr_hits.append(str(p.relative_to(root)))
     elif p.is_dir():
@@ -167,7 +169,7 @@ for p in [root / "PR.md", root / ".pm" / "signals" / "inbox.yaml", root / ".pm" 
             if uid in f.read_text(encoding="utf-8"):
                 pr_hits.append(str(f.relative_to(root)))
 if phase == "post-pr":
-    check(bool(pr_hits), "PR evidence chain not locatable; fix: include task_uid in PR body/evidence (PR.md or .pm signal/memory)")
+    check(bool(pr_hits), "PR evidence chain not locatable; fix: append task-local PR evidence to the execution log or .pm signal/memory")
 
 if errors:
     print(f"workflow-lint: FAIL ({uid})")
