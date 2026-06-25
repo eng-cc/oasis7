@@ -34,3 +34,12 @@ Example:
 - Expected Result: No whitespace errors; local skill docs lint; doc governance passes; current task workflow lint passes.
 - Actual Result: Pending rerun after this execution-log entry.
 - Blocker / Next Action: Run verification, commit, push to #640.
+
+## 2026-06-25 17:29:15 CST / tpm
+- 完成内容: Added lightweight task module field as the primary large-module marker.
+- 遗留事项: Verify and push the module-field simplification into PR #640.
+- Action: Added optional new-task --module support, wired new-task-worktree positional module into .pm task YAML, surfaced module in generated task registry/backlogs, documented module as ordinary grouping/parallel-queue key, and kept parent/child reserved for dependency contracts and independently mergeable child PRs.
+- Validation Command: git diff --check; bash -n scripts/pm/pm_store.py scripts/pm/pm_store_cli.py scripts/new-task-worktree.sh; ./scripts/lint-skills.sh; ./scripts/doc-governance-check.sh; ./scripts/pm/workflow-lint.sh --task-uid task_17b1d01d8a9943da9dbf9a4f64dcadae --phase current
+- Expected Result: New module field is supported without mass rewriting historical tasks; shell/python syntax checks pass; skill/doc governance and current task workflow lint pass.
+- Actual Result: Pending verification.
+- Blocker / Next Action: Run verification, commit, and push.

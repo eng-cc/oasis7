@@ -101,6 +101,7 @@ tasks:
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
   - task_uid: task_17b1d01d8a9943da9dbf9a4f64dcadae
     title: "Assess PR 640 workflow side effects"
+    module: engineering
     priority: P2
     source_signal: null
     related_prd:

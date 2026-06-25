@@ -51,6 +51,7 @@ Check the task in this order:
    - Skip professional dispatch only for pure fact lookup or command-output restatement.
 1. `bounded-brainstorming`
    - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
+   - Use the task `module` field for ordinary large-module ownership and queueing; do not route to parent/child just to say which module a task belongs to.
    - If one initiative has at least two independently mergeable domain tracks
      with distinct owners or verification loops, route to the parent initiative +
      domain child task pattern instead of forcing all tracks into one

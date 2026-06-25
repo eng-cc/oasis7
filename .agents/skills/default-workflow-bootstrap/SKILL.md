@@ -62,7 +62,9 @@ Read-only caveat:
    - choose `tpm` as the default workflow owner role unless an existing bound task already has a valid owner
    - treat `tpm` ownership as workflow coordination only; professional work still requires matching bounded subagent slices
    - create a dedicated worktree unless the user explicitly authorized reuse
-   - bootstrap `.pm` task inside the target worktree
+   - bootstrap `.pm` task inside the target worktree; the `<module>` argument to
+     `new-task-worktree.sh` is recorded as the task `module` field and is the
+     first-level grouping key for ordinary parallel work
    - read `doc/<module>/prd.md`, `doc/<module>/project.md`, and task execution truth
 4. Once task truth exists, hand off to `repo-owned-workflow-router`.
 5. Record the bootstrap decision in `.pm/tasks/<TASK-UID>.execution.md`.

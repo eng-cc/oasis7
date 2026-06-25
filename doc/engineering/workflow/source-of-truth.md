@@ -87,6 +87,13 @@ small question into a heavyweight workflow.
 - Do not create a second parent/planning surface to answer a small follow-up
   inside an existing bound task; append the follow-up evidence to the current
   task unless it changes owner, scope, or PR chain.
+- Use `.pm/tasks/<TASK-UID>.yaml` `module` as the default large-module marker for
+  ordinary task grouping, reporting, and parallel work queues. This is enough
+  when the task only needs a module lane such as `engineering`, `viewer`,
+  `game`, `p2p`, or `chain-world-state-substrate`.
+- Do not create a parent initiative merely to label a task's large module.
+  Parent initiative + child tasks are for dependency contracts, integration
+  checkpoints, and independently mergeable child PRs, not for taxonomy.
 
 ### 1.3 Parent Initiative + Domain Child Tasks
 Use this pattern when one user-level initiative contains multiple independently
