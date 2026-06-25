@@ -58,6 +58,7 @@
   - SC-24: `public_testnet` 必须具备一条 repo-owned readiness review 路径，能把“只有 skeleton manifest”“rehearsal / partial evidence”与“正式全 pass candidate evidence”明确区分，避免把 placeholder endpoint 或模板证据误报为可部署结论。
   - SC-25: `public_testnet` 必须具备一份 repo-owned live-candidate companion checklist，把 six-lane readiness gate、最小 evidence、canonical 命令与允许/禁止 claims 固定成单一执行入口，避免 producer/liveops/QA 对“还差哪些”各说各话。
   - SC-26A: `hosted world` 仅作为历史专题名 / legacy label 保留，现行概念名为 hosted player entry / hosted access / `hosted_public_join`，表示玩家进入统一持久大世界的接入面，不表示多个玩家世界。
+  - SC-27: p2p 模块必须把“链上大世界状态底座”作为 P2P transport、DistFS/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt 与 observer/ops 的联合验收对象；`P2P` 只表示底座中的传输层，不得用单一 transport green 代替分布式世界状态闭环。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -109,6 +110,7 @@
   - PRD-P2P-028: As a producer_system_designer, I want one formal public-chain-style network-tier mechanism, so that oasis7 can stop treating `public_testnet_rehearsal`、`public_testnet` and `mainnet` as informal aliases and instead promote networks through explicit manifest + gate truth.
   - PRD-P2P-028A: As a `producer_system_designer`, I want one idealized transaction target model, so that主链交易未来从“转账裸参数”升级为统一协议对象时，有一份不受当前实现约束的长期目标态可对齐。
   - PRD-P2P-029: As a producer_system_designer, I want one explicit hosted-public-join managed identity / custody model, so that普通玩家可以用邮箱登录游戏，而不是被迫管理裸公私钥，同时 hosted player signer、step-up auth 与自托管升级路径都保持在可审计边界内。
+  - PRD-P2P-031: As a qa_engineer, I want one explicit chain-world-state substrate closure model, so that P2P transport、DistFS blob closure、replication/gap sync、consensus/finality、execution records/receipts and observer ops can be tested independently without overclaiming full game or public-testnet readiness.
 - Critical User Flows:
   1. Flow-P2P-001: `网络拓扑变更 -> 共识联调 -> DistFS 同步 -> 节点状态一致性验证`
   2. Flow-P2P-002: `执行 S9/S10 长跑 -> 采集故障与恢复数据 -> 输出收敛报告`
@@ -135,6 +137,7 @@
   23. Flow-P2P-023: `host 启动 hosted access -> public join 先过 admission control -> 远程访客建 guest/player session -> runtime 按 capability 绑定实体与动作 -> `gui-agent` 仅走 player-safe split surface -> 资产/治理类动作再升级 strong auth`
   24. Flow-P2P-024: `用户绑定 bridge 身份 -> bridge-service 分配唯一 deposit route -> 用户通过受信转账面支付 OC -> bridge watcher 等待确认并写入 bridge_ledger -> LetAI OpenAPI 执行 user upsert / project+token_key / topup / query verification -> operator 对账与异常收口`
   25. Flow-P2P-025: `访客从 guest 升级到邮箱 hosted account -> identity broker 恢复账户与 signer_ref -> session broker 签发 device/player session -> 高风险动作再经 step-up + custody sign -> 如需退出托管则走 external wallet bind / transfer-out`
+  26. Flow-P2P-026: `同一 world_id/chain_id/genesis/manifest + action/event 输入 -> 单节点执行生成 execution record/receipt/state hash -> 多节点 consensus/replication 收敛 -> DistFS/blob closure 可验证 -> observer 自动追高 -> API/viewer 读取同一 world state -> S10/public-testnet gate 再决定是否升级 claim`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -154,6 +157,7 @@
 | Validator / finality signer 治理准入 | `candidate_id/node_id/stake/finality_signer_public_key/operator_owner/public_manifest/activation_epoch/admission_status` | 创世时由 genesis validator registry 初始化 world-state registry；后续受理申请、审核 reachability/registry/failover 准入条件，并在 activation 生效后把候选节点的 membership、governed stake 与 signer binding 写入正式 validator truth | `genesis_registry -> applied -> approved_candidate -> probation_ready -> active -> rotated/revoked` | 只有 world-state registry 生效后才算正式 validator；public_testnet/mainnet 缺 registry 且未提供 genesis registry 时必须拒绝启动；genesis threshold 必须来自显式 genesis document/manifest policy，N>3 不允许静默降级为 `2-of-N`；finality 与 module-release threshold_bps 必须按签名 validator stake / active validator total stake 执行；`--node-validator*`、`NODE_VALIDATORS_CSV` 与本地 env 改动不算长期 admission 完成态；stake 必须来自 world-state registry / governance admission，旧 registry 缺失 stake 时只允许按兼容默认值回退 | `producer_system_designer` 拍板，`runtime_engineer`/`qa_engineer` 联审 |
 | Hosted player access 与 session auth | `deployment_mode/session_id/session_level/capability_set/control_plane_scope/strong_auth_state/admission_policy/player_safe_agent_surface` | 将网页远程玩家面、host 控制面与 signer plane 分层；签发 guest/player session，并对敏感动作要求 strong auth | `trusted_local_only_preview -> hosted_public_join_blocked_until_strong_auth -> hosted_public_join_strong_auth_preview -> hosted_access_ready` | 只要浏览器仍依赖 `node.private_key` bootstrap、可命中 host 控制面路由或未冻结 admission / `gui-agent` split，就不得判为 hosted access ready；`*_preview` 只表示受限预览态，不表示一个单独玩家世界 | `producer_system_designer` 拍板，`runtime_engineer`/`viewer_engineer`/`qa_engineer`/`liveops_community` 联审 |
 | Hosted public join 托管身份与托管密钥 | `hosted_account_id/player_id/device_session_id/signer_ref/custody_mode/step_up_state/transfer_out_state` | 为公开 join 玩家提供邮箱登录、托管 signer、step-up auth 与自托管升级路径 | `guest_only -> account_verified -> managed_custody_active -> self_custody_bound/transferred_out` | 只要 hosted player 仍要求用户保存裸私钥、浏览器仍长期持有托管 signer 或 `main_token_transfer` 没有正式 custody lane，就不得宣称“任意新用户默认可安全登录并长期使用” | `producer_system_designer` 拍板，`runtime_engineer`/`viewer_engineer`/`qa_engineer`/`liveops_community` 联审 |
+| 链上大世界状态底座自闭环 | `world_id/chain_id/genesis_hash/network_tier_manifest/action_or_event_input/execution_record/receipt_id/state_root/blob_manifest/consensus_hash/observer_cursor/claim_level` | 分阶段验证本地合同、proxy/triad 多节点、state-sync/observer、real-env 运维与 S10 世界状态集成；每次只声明当前 evidence 支撑的 claim level | `contract_inventory -> single_node_executed -> deterministic_exact_passed -> proxy_soak_passed -> state_sync_closed -> real_env_observed -> world_integration_passed` | `module_required` 只证明底座本地合同可接入；`module_full` 证明 proxy/triad 可推进与恢复；`integration_required` 需要 action 到 API/viewer 投影无漂移；`release_full` 必须经过 real-env/public-testnet readiness，同一窗口 evidence 不可缺席 | `qa_engineer` 定义 gate，`runtime_engineer`/`blockchain_ops_engineer` 联审，`producer_system_designer` 负责 claim boundary |
 - 三线联合验收清单（TASK-P2P-002）:
 | 线别 | 必跑命令（基线） | 联合验收门禁 | 阻断条件（任一命中即 fail） | 证据产物 |
 | --- | --- | --- | --- | --- |
@@ -205,6 +209,7 @@
   - AC-40: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结 six-lane owner/evidence/check 命令/claim boundary，并以 runbook/project 当前 verdict 约束 public claims。
   - AC-41: `p2p-network-runtime-hardening` 必须让 `libp2p` gossip `publish()` 在路由或连接不可用时向调用方同步返回失败，且失败 publish 不得继续记入 `published` 事件或成功流量统计；同时 replication request 的 retry/fallback/cooldown 判定必须收敛到共享 availability classifier 与稳定 reason prefix，不再在 `oasis7_net`/`oasis7_node` 多处重复猜测自由文本错误串。
   - AC-42: `subscribe-ack-udp-gossip-hardening` 必须让 `libp2p` `subscribe()` 只有在底层 gossipsub 真正订阅成功后才向调用方返回 `NetworkSubscription`；若后端拒绝订阅，调用方必须同步收到失败而不是拿到 dead subscription。与此同时，UDP gossip 路径必须显式拒绝超出 datagram 上限的 replication 消息、把接收缓冲提升到覆盖完整 UDP payload、并在 fan-out 遇到单点 `send_to` 失败时继续尝试其余 peer 后返回汇总错误，而不是靠 4KB 截断或“第一个错误即提前退出”的旧语义。
+  - AC-43: `testing-manual.md` 必须明确“链上大世界状态底座”自闭环分层，并把 `module_required/module_full/integration_required/release_full` 的命令、最小指标、阻断签名、禁止 claim 与 real-env/public-testnet 边界写清，避免把底座自测误报为链上大世界或公开网络整体 ready。
 - Non-Goals:
   - 不在本 PRD 细化 viewer UI 交互。
   - 不替代 runtime 内核的模块执行细节设计。
@@ -353,6 +358,7 @@
 | PRD-P2P-028 | formal-network-tiers-testnet-mechanism | `test_tier_required` | 正式网络分层 / testnet 机制专题 PRD/design/project 建档、`network_tier_manifest` 脚本+smoke+example manifests、`testing-manual` 入口、current verdict 冻结与 `public_testnet` live-candidate checklist companion runbook | 公共主链式 `local_devnet/public_testnet/mainnet` 目标分层口径、`public_testnet_rehearsal` legacy/rehearsal evidence 边界、manifest 真值、live-candidate checklist 与后续 runtime/liveops 接线排序；不表示当前已 live candidate |
 | PRD-P2P-028A | ideal-transaction-model-doc-freeze | `test_tier_required` | 理想化交易升级专题 `prd/design/project` 建档、字段分组、完整 JSON 草案、完整签名域建议、理想回执与最小理想升级集冻结 | 主链交易长期目标模型与未来协议升级对齐基线 |
 | PRD-P2P-029 | hosted-managed-identity-doc-freeze | `test_tier_required` | hosted-public-join 托管身份 / 托管密钥专题 PRD/design/project 建档、hosted account/device session/`signer_ref`/step-up auth/self-custody upgrade 边界冻结、模块入口映射与文档门禁 | 普通玩家 hosted onboarding、player custody 产品边界与后续实现排序 |
+| PRD-P2P-031 | chain-world-state-substrate-test-closure | `test_tier_required` + `test_tier_full` | `testing-manual.md` S9A 分层文档、S4/S9/S9B/S10/readiness gate traceability、claim boundary 与 forbidden-claim 检查 | 链上大世界状态底座测试口径、模块自闭环与 public_testnet / game-world integration claim boundary |
 - S9/S10 长跑结果模板（TASK-P2P-003）:
 | 字段 | 说明 | 来源 |
 | --- | --- | --- |

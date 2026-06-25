@@ -589,6 +589,105 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - `verify_tick_consensus_chain()` 通过。
 - 参考文档：`doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`、`doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24.prd.md`。
 
+### S9A：链上大世界状态底座自闭环
+- 目标语义：本节的闭环对象不是单独的 libp2p/P2P transport，而是 `链上大世界状态底座`：P2P transport、分布式存储/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/validator/storage ops，以及 API/viewer 对同一 world state 的投影。
+- 可声明结论：
+  - `module_required` 通过：底座本地合同可集成。
+  - `module_full` 通过：底座在当前可执行 proxy/triad 拓扑下能持续推进和恢复。
+  - `integration_required` 通过：真实大世界状态接到底座后，`action -> consensus -> execution -> receipt -> world state -> API/viewer` 没有明显漂移。
+  - `release_full` 通过：真实环境具备公开测试候选所需的同窗口节点、manifest、readiness lane 与 claims-boundary 证据。
+- 禁止声明：
+  - S4/S9B required 绿，不得声明真实公网可达、physical NAT/CGNAT 已覆盖、`public_testnet ready` 或游戏整机体验成立。
+  - S9/S9B proxy 绿，不得冒充 dedicated sentry/NAT lab、真实公网或 public testnet 证据。
+  - 手工 copy validator `data/`、checkpoint 或 seed 只能作为 break-glass/recovery 证据，不得作为 live-candidate readiness。
+- 开发/验证阶梯：
+```text
+Phase 0 contract inventory:
+  world_id / chain_id / genesis / manifest
+  action payload / consensus payload
+  execution record / receipt / state hash
+  blob/store closure
+  peer head / gap sync / checkpoint
+  validator / storage / observer role
+  /v1/chain/status observability
+
+Phase 1 single-node execution:
+  action -> execution record -> receipt -> state hash
+  replay same input -> same result
+  rollback/checkpoint recovery
+
+Phase 2 deterministic substrate contracts:
+  oasis7_node / oasis7_net / oasis7_consensus / oasis7_distfs
+  S9B required exact matrix
+
+Phase 3 proxy multi-node substrate:
+  S9 triad / triad_distributed soak
+  chaos restart/pause/disconnect
+  consensus hash, peer heads, gap sync, blob closure
+
+Phase 4 state-sync / observer:
+  high-head checkpoint or seed closure
+  observer automatic catch-up
+  storage blob availability and historical backfill
+
+Phase 5 real-env ops:
+  live local_peer_id, runtime sha256, service health
+  connected peers, height/head progress, resource/traffic/wasm observability
+
+Phase 6 world-state integration / release:
+  S10 five-node real game soak
+  public_testnet readiness lanes + same-window real-env evidence
+```
+- `module_required` 推荐命令：
+```bash
+env -u RUSTC_WRAPPER cargo test -p oasis7 --tests --features test_tier_required
+env -u RUSTC_WRAPPER cargo test -p oasis7_node
+env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib
+env -u RUSTC_WRAPPER cargo test -p oasis7_net --features libp2p --lib
+env -u RUSTC_WRAPPER cargo test -p oasis7_consensus --lib
+env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib
+./scripts/p2p-mixed-topology-matrix.sh --tier required
+```
+- `module_full` 推荐命令：
+```bash
+./scripts/p2p-longrun-soak.sh --profile soak_smoke --topologies triad --duration-secs 600 --no-prewarm
+./scripts/p2p-mixed-topology-matrix.sh --tier full
+```
+- state-sync / blob closure 推荐命令：
+```bash
+./scripts/p2p-verify-state-sync-closure.sh \
+  --world-dir <seed-world-dir> \
+  --execution-records-dir <seed-execution-records-dir> \
+  --store-dir <seed-store-dir>
+```
+- real-env / release 入口：
+```bash
+./scripts/p2p-real-env-triad-snapshot.sh ...
+./scripts/p2p-real-env-observability-monitor.sh ...
+./scripts/s10-five-node-game-soak.sh --duration-secs 300 --no-prewarm
+./scripts/network-tier-public-testnet-readiness.sh --manifest <manifest> --lanes-tsv <lanes.tsv>
+```
+- 最小验收指标：
+  - `committed_height` 单调推进；
+  - `consensus_hash_consistent == true` 且 `consensus_hash_mismatch_count == 0`；
+  - execution/state hash 与 receipt/event sequence 可追溯；
+  - peer heads 非空且新鲜；
+  - gap sync 成功且 replication error 不持续；
+  - blob/store closure 完整；
+  - observer 能自动追高；
+  - checkpoint / rollback / state-sync 可恢复；
+  - `/v1/chain/status` 能解释当前 readiness、degraded 或 blocker。
+- 阻断签名：
+  - `consensus_hash_divergence`；
+  - `committed_height_not_monotonic`；
+  - `known_peer_heads_zero_samples`；
+  - `http_failure_samples`；
+  - real-env 中 `sequencer_committed_height_zero`、`sequencer_execution_stale_height` 或同类 stale execution / stale peer-head；
+  - readiness lane 为 `partial` / `block`；
+  - manifest 仍是 example/template/placeholder/private-only endpoint；
+  - 非同窗口 real-env 证据；
+  - 通过手工复制数据目录获得的同步假象。
+
 ### S9B：P2P Mixed-Topology Matrix（P2PARCH-6）
 - 当前状态（2026-04-07）：`scripts/p2p-mixed-topology-matrix.sh` 已把 `P2PARCH-6` 收口成一个可执行矩阵，区分 `exact` 与 `proxy` 两类覆盖，并把 shared-window / dedicated-lab / pass-uplift 外部证据与 blocker 语义写进 `summary.json`。
 - 目标语义：
