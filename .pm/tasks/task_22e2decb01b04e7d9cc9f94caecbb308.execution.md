@@ -124,3 +124,13 @@ Example:
 - Rationale: ordinary implementation/documentation fix for validator rebuild cleanup. This PR is not a manual packaging/release CI hold.
 - Required Follow-up: watch required checks, mergeability, PR comments, and review threads; treat `REVIEW_REQUIRED`/approval-only `BLOCKED` as informational under repo policy, but do not merge with failing checks, requested changes, unresolved blocking comments/threads, conflicts, or a GitHub merge API refusal.
 - Post-Merge Gate: rerun live validator rebuild and sample service mask/active/failed state, ports/processes, peer-head freshness, replication recent errors, and committed/network heights before observer updates or public testnet health claims.
+
+## 2026-06-25 09:24:30 CST / tpm
+- 完成内容: Addressed GitHub PR #629 review thread `PRRT_kwDORHhWec6MFOJu`.
+- Review Classification: valid regression risk. `systemctl mask --runtime` is the fail-closed safety prerequisite for this root-cause fix; silently continuing with `check=False` could allow cleanup to proceed without disabling the service restart source.
+- Action: changed cleanup quiesce logic so runtime mask failure prints `cleanup failed: systemctl runtime mask failed ...` and exits the cleanup command immediately; added fake systemd regression coverage that injects a sequencer runtime-mask failure and expects the rebuild to fail before continuing.
+- Validation Command: `bash -n scripts/p2p-public-testnet-rebuild-validators.sh scripts/p2p-public-testnet-rebuild-validators.test.sh`; `git diff --check`; `bash scripts/p2p-public-testnet-rebuild-validators.test.sh`
+- Expected Result: syntax and diff hygiene pass; focused rebuild cleanup regression passes including the new runtime-mask failure assertion.
+- Actual Result: all three checks passed locally.
+- 遗留事项: push review fix, resolve the GitHub thread, continue required checks/comment/mergeability watch.
+- Blocker / Next Action: commit and push review fix.

@@ -127,6 +127,10 @@ cat >"$TMP_DIR/bin/systemctl" <<'EOF'
 set -euo pipefail
 printf 'systemctl\t%s\n' "$*" >>"${TEST_SYSTEMCTL_LOG:?}"
 effective_host="${TEST_SSH_HOST:-${TEST_SYSTEMD_RESTART_LOOP_HOST:-}}"
+if [[ "${TEST_FAIL_SYSTEMCTL_MASK_HOST:-}" == "$effective_host" && "${1:-}" == "mask" ]]; then
+  echo "runtime mask denied" >&2
+  exit 23
+fi
 if [[ "${TEST_SYSTEMD_RESTART_LOOP_HOST:-}" == "$effective_host" ]]; then
   service=${*: -1}
   state_dir="${TEST_REMOTE_ROOT:?}/systemd-${effective_host//[^A-Za-z0-9_.-]/_}-${service//[^A-Za-z0-9_.-]/_}"
@@ -594,6 +598,28 @@ fi
 grep -q "cleanup failed: stable quiet window was not observed before deadline" \
   /tmp/oasis7-rebuild-validators-late-cleanup.out
 pkill -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-node.sh" || true
+
+: >"$TEST_SSH_LOG"
+if TEST_FAIL_SYSTEMCTL_MASK_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-mask-fail" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-mask-fail.out 2>&1; then
+  echo "expected rebuild cleanup to fail when systemctl runtime mask fails" >&2
+  exit 1
+fi
+grep -q "cleanup failed: systemctl runtime mask failed for oasis7-triad-sequencer.service: runtime mask denied" \
+  /tmp/oasis7-rebuild-validators-mask-fail.out
 
 : >"$TEST_SSH_LOG"
 if TEST_FAIL_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \

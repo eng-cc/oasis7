@@ -470,7 +470,18 @@ needles = (
 )
 
 def quiesce_systemd():
-    subprocess.run(['systemctl', 'mask', '--runtime', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    mask = subprocess.run(
+        ['systemctl', 'mask', '--runtime', service_name],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if mask.returncode != 0:
+        details = (mask.stderr or mask.stdout or '').strip()
+        suffix = f': {details}' if details else f' (exit {mask.returncode})'
+        print(f'cleanup failed: systemctl runtime mask failed for {service_name}{suffix}', file=sys.stderr)
+        raise SystemExit(1)
     subprocess.run(['systemctl', 'stop', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     subprocess.run(
         ['systemctl', 'kill', '--kill-who=all', '--signal=SIGKILL', service_name],
