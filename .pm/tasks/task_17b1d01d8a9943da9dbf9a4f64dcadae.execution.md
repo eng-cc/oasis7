@@ -61,3 +61,12 @@ Example:
 - Expected Result: Workflow eval passes after removing obsolete required markers; diff has no whitespace errors.
 - Actual Result: workflow behavior eval: OK; git diff --check passed.
 - Blocker / Next Action: none
+
+## 2026-06-25 21:46:03 CST / tpm
+- 完成内容: Deleted the three parent/child/mock fixture role templates and removed their formal workflow references from lint, workflow behavior eval, AGENTS, router skill, engineering project, and workflow source-of-truth. Kept the lightweight task module field and module-local-vs-release claim boundary.
+- 遗留事项: Commit and push the simplification to PR #640; do not merge.
+- Action: Removed unnecessary parent/child template workflow productization after user requested deletion.
+- Validation Command: rg parent/child template references; git diff --check; bash -n scripts/pm/lint.sh scripts/pm/workflow-behavior-eval.sh; ./scripts/lint-skills.sh; ./scripts/doc-governance-check.sh; ./scripts/pm/workflow-behavior-eval.sh
+- Expected Result: No remaining parent/child template references; syntax, skill lint, doc governance, and workflow behavior eval pass.
+- Actual Result: No parent/child template references found; git diff --check passed; bash -n passed; lint-skills OK; doc-governance-check OK; workflow behavior eval OK. ./scripts/pm/lint.sh still fails on unrelated historical .pm execution-log debt.
+- Blocker / Next Action: none

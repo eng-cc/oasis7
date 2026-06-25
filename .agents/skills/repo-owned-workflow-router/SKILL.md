@@ -49,13 +49,6 @@ Check the task in this order:
    - Skip professional dispatch only for pure fact lookup or command-output restatement.
 1. `bounded-brainstorming`
    - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
-   - If one initiative has at least two independently mergeable domain tracks
-     with distinct owners or verification loops, route to the parent initiative +
-     domain child task pattern instead of forcing all tracks into one
-     implementation task.
-   - Do not trigger parent/child for a single-module fix, narrow doc cleanup,
-     status-only grouping, or follow-up that can remain in the current task/PR
-     chain without changing owner or claim level.
 2. `tdd-test-writer`
    - Use when the task changes automatable behavior and has a stable automated test surface.
 3. `executing-project-tasks`
@@ -149,7 +142,6 @@ WORKFLOW ROUTE DECIDED
 - Do not skip `verification-before-completion` when you are about to make a completion claim.
 - Do not use this router as a replacement for closeout; switch to `finishing-a-development-branch` when the task is done.
 - Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
-- Do not use a parent initiative to weaken child task truth. Each child still needs one owner, one `.pm` task, one canonical worktree, one PR chain, and module-local verification evidence.
 - Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current `.pm` task truth, and scoped repo context recorded in the mandatory context checklist/packet.
 - Do not let TPM direct exploration become a professional conclusion; professional findings must be owned or verified by the matching role slice.
 

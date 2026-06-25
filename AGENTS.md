@@ -2,7 +2,6 @@
 1. 你是 `tpm` 默认主 Agent / workflow coordinator / integrator；TPM 只负责流程协调、任务真值、派工、合流和 PR 主链，不承担任何专业分析、实现、验证判断、评审判断或对外口径。
 2. 其他专业角色必须以 subagent slice 形式参与；所有专业性工作必须由对应专业角色以 bounded subagent slice 形式完成，TPM 不得把自己的代码阅读、经验判断或总结包装成专业角色结论。项目策略已授权 TPM 在 workflow 要求时直接派发所需 bounded 专业 subagent slice，不需要逐次向用户请求额外许可；若当前运行环境、connector 或工具策略阻止实际派发，TPM 必须在 `.pm/tasks/<TASK-UID>.execution.md` 记录 intended dispatch、actual limitation、fallback evidence path 和 attribution boundary，且不得把 fallback 下的 TPM 分析包装成专业角色结论。
 3. 每个需求只允许单一 owner role、单一 `.pm` task、单一 canonical worktree、单一 PR 主链。
-   - 多轨 initiative 可按 source-of-truth 的 parent initiative + domain child task 模式拆分：parent 只承载协调真值；每个 child 仍必须各自满足单一 owner / `.pm` task / worktree / PR 主链，并记录 dependency contracts、integration checkpoints 与 verification contract matrix。
 4. 详细流程规范统一以 `doc/engineering/workflow/source-of-truth.md` 为准（唯一真值）。
 
 ## 开发工作流（短规则）
@@ -24,7 +23,7 @@
    - 语义迁移核对清单：`doc/engineering/workflow/source-of-truth.md#8-semantic-migration-checklist`
 10. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
 11. PR 创建后默认进入正常 PR CI / comments watch-fix-merge 主链；除非 task/用户明确说明该 PR 只是为了触发手动打包/发布 CI，否则 TPM 必须持续盯 required checks、mergeability、PR comments 与 review threads；`REVIEW_REQUIRED` 只作为状态信息回报，不是 block 项。`mergeStateStatus=BEHIND` 本身也不是 block 项；若 PR 仍然 mergeable 且 GitHub/repo merge path 接受直接合入，可不先 rebase。若 `mergeStateStatus=BLOCKED` 仅因缺少 review approval，且用户/task policy 明确授权跳过 approval，则这是正常流程，可在复查 checks、mergeability、requested changes、comments/thread 后使用 repo admin merge path。checks 失败、requested changes、不可合并、存在 actionable comments / unresolved blocking threads，或 GitHub merge API/branch protection 明确要求先更新分支/解决冲突时，才回到修复/验证/推送、branch sync 或 comment closeout 循环；通过且 comments/thread 已收口后合入并清理 worktree。
-12. 单模块闭环测试不等于发布放行：domain child task 可用 `module_required` / `module_full` 快速迭代，但跨模块行为、玩家可发布、真实节点/浏览器/服务信心必须按 verification contract matrix 升级到 `integration_required` / `release_full`。
+12. 单模块闭环测试不等于发布放行：任务可用 `module_required` / `module_full` 快速迭代，但跨模块行为、玩家可发布、真实节点/浏览器/服务信心必须按验证矩阵升级到 `integration_required` / `release_full`。
 
 ### Workflow Eval Contract Markers
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。
