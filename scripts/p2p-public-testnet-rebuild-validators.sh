@@ -470,6 +470,18 @@ needles = (
 )
 
 def quiesce_systemd():
+    mask = subprocess.run(
+        ['systemctl', 'mask', '--runtime', service_name],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if mask.returncode != 0:
+        details = (mask.stderr or mask.stdout or '').strip()
+        suffix = f': {details}' if details else f' (exit {mask.returncode})'
+        print(f'cleanup failed: systemctl runtime mask failed for {service_name}{suffix}', file=sys.stderr)
+        raise SystemExit(1)
     subprocess.run(['systemctl', 'stop', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     subprocess.run(
         ['systemctl', 'kill', '--kill-who=all', '--signal=SIGKILL', service_name],
@@ -549,7 +561,7 @@ start_host() {
   local host=$1
   local control_path=$2
   local service=$3
-  ssh_run "$host" "$control_path" "systemctl reset-failed '$service' || true; systemctl start '$service'"
+  ssh_run "$host" "$control_path" "systemctl unmask '$service' || true; systemctl reset-failed '$service' || true; systemctl start '$service'"
 }
 
 cleanup_after_failed_start() {

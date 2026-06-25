@@ -127,17 +127,29 @@ cat >"$TMP_DIR/bin/systemctl" <<'EOF'
 set -euo pipefail
 printf 'systemctl\t%s\n' "$*" >>"${TEST_SYSTEMCTL_LOG:?}"
 effective_host="${TEST_SSH_HOST:-${TEST_SYSTEMD_RESTART_LOOP_HOST:-}}"
+if [[ "${TEST_FAIL_SYSTEMCTL_MASK_HOST:-}" == "$effective_host" && "${1:-}" == "mask" ]]; then
+  echo "runtime mask denied" >&2
+  exit 23
+fi
 if [[ "${TEST_SYSTEMD_RESTART_LOOP_HOST:-}" == "$effective_host" ]]; then
   service=${*: -1}
   state_dir="${TEST_REMOTE_ROOT:?}/systemd-${effective_host//[^A-Za-z0-9_.-]/_}-${service//[^A-Za-z0-9_.-]/_}"
   case "$1" in
+    mask)
+      mkdir -p "$state_dir"
+      touch "$state_dir/masked"
+      ;;
+    unmask)
+      mkdir -p "$state_dir"
+      rm -f "$state_dir/masked"
+      ;;
     start)
       mkdir -p "$state_dir"
       rm -f "$state_dir/killed"
       touch "$state_dir/armed"
       ;;
     stop|reset-failed)
-      if [[ -f "$state_dir/armed" && ! -f "$state_dir/killed" ]]; then
+      if [[ -f "$state_dir/armed" && ! -f "$state_dir/killed" && ! -f "$state_dir/masked" ]]; then
         stack_root="${TEST_SYSTEMD_RESTART_LOOP_STACK_ROOT:?}"
         mkdir -p "${TEST_REMOTE_ROOT:?}/${effective_host}${stack_root}/bin"
         printf 'spawned\t%s\t%s\n' "$effective_host" "$service" >>"${TEST_SYSTEMCTL_LOG:?}"
@@ -260,9 +272,13 @@ case "$cmd" in
     ;;
   systemctl\ stop*)
     ;;
-  systemctl\ reset-failed*\;*\ systemctl\ start*|systemctl\ start*)
+  systemctl\ unmask*\;*\ systemctl\ reset-failed*\;*\ systemctl\ start*|systemctl\ reset-failed*\;*\ systemctl\ start*|systemctl\ start*)
     touch "${TEST_REMOTE_ROOT:?}/started-${host//[^A-Za-z0-9_.-]/_}"
     if [[ "${TEST_SYSTEMD_RESTART_LOOP_HOST:-}" == "$host" ]]; then
+      unmask_service=$(printf '%s\n' "$cmd" | sed -n "s/.*systemctl unmask '\([^']*\)'.*/\1/p")
+      if [[ -n "$unmask_service" ]]; then
+        TEST_SSH_HOST="$host" systemctl unmask "$unmask_service"
+      fi
       service=$(printf '%s\n' "$cmd" | sed -n "s/.*systemctl start '\([^']*\)'.*/\1/p")
       if [[ -n "$service" ]]; then
         TEST_SSH_HOST="$host" systemctl start "$service"
@@ -491,6 +507,10 @@ if pgrep -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-n
   echo "systemd restart-loop cleanup process survived stable quiet cleanup" >&2
   exit 1
 fi
+if [[ ! -f "$TEST_REMOTE_ROOT/systemd-root_sequencer-oasis7-triad-sequencer.service/masked" ]]; then
+  echo "expected failed cleanup path to leave sequencer service runtime-masked" >&2
+  exit 1
+fi
 
 python3 - "$TEST_SSH_LOG" <<'PY'
 import pathlib
@@ -518,6 +538,16 @@ import sys
 
 log_path = pathlib.Path(sys.argv[1])
 lines = log_path.read_text(encoding="utf-8").splitlines()
+unmask_count = sum(
+    1
+    for line in lines
+    if line == "systemctl\tunmask oasis7-triad-sequencer.service"
+)
+mask_count = sum(
+    1
+    for line in lines
+    if line == "systemctl\tmask --runtime oasis7-triad-sequencer.service"
+)
 stop_count = sum(
     1
     for line in lines
@@ -537,8 +567,12 @@ if stop_count < 2 or kill_count < 2 or reset_count < 2:
     raise SystemExit(
         "cleanup did not repeatedly quiesce systemd while waiting for a stable quiet window"
     )
-if not any(line == "spawned\troot@sequencer\toasis7-triad-sequencer.service" for line in lines):
-    raise SystemExit("fake systemd restart-loop did not spawn a detached child")
+if unmask_count < 1:
+    raise SystemExit("start path did not unmask the sequencer service before systemctl start")
+if mask_count < 2:
+    raise SystemExit("cleanup did not repeatedly mask the sequencer service while waiting for quiet")
+if any(line == "spawned\troot@sequencer\toasis7-triad-sequencer.service" for line in lines):
+    raise SystemExit("fake systemd restart-loop spawned despite runtime service mask")
 PY
 
 : >"$TEST_SSH_LOG"
@@ -564,6 +598,28 @@ fi
 grep -q "cleanup failed: stable quiet window was not observed before deadline" \
   /tmp/oasis7-rebuild-validators-late-cleanup.out
 pkill -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-node.sh" || true
+
+: >"$TEST_SSH_LOG"
+if TEST_FAIL_SYSTEMCTL_MASK_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-mask-fail" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-mask-fail.out 2>&1; then
+  echo "expected rebuild cleanup to fail when systemctl runtime mask fails" >&2
+  exit 1
+fi
+grep -q "cleanup failed: systemctl runtime mask failed for oasis7-triad-sequencer.service: runtime mask denied" \
+  /tmp/oasis7-rebuild-validators-mask-fail.out
 
 : >"$TEST_SSH_LOG"
 if TEST_FAIL_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
