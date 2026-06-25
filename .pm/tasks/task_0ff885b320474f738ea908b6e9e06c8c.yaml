@@ -1,6 +1,7 @@
 task_uid: task_0ff885b320474f738ea908b6e9e06c8c
-title: "Design isolated P2P infrastructure test closure plan"
+title: "Design chain-world-state substrate test closure plan"
 owner_role: tpm
+module: chain-world-state-substrate
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-p2p-infra-isolated-test-plan
 execution_log_path: .pm/tasks/task_0ff885b320474f738ea908b6e9e06c8c.execution.md
 status: done
@@ -13,22 +14,35 @@ source_refs:
   - doc/p2p/project.md
   - doc/p2p/README.md
   - doc/p2p/prd.index.md
+  - doc/engineering/workflow/source-of-truth.md
 doc_refs:
   - testing-manual.md
   - doc/p2p/prd.md
   - doc/p2p/project.md
   - doc/p2p/README.md
   - doc/p2p/prd.index.md
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/engineering/project.md
 related_prd:
   - PRD-P2P-031
+  - PRD-ENGINEERING-030
 acceptance:
   - "Analyze current oasis7 P2P and testing surfaces for isolated closure."
   - "Collect bounded runtime, blockchain ops, and QA perspectives."
   - "Define the isolated closure as the chain-world-state substrate rather than transport-only P2P."
   - "Document module_required/module_full/integration_required/release_full claim boundaries and forbidden overclaims."
   - "Update the related testing and p2p entry documents without changing runtime implementation."
+  - "Record bootstrap and route decisions in the task execution log."
+  - "Collect bounded specialist input for game strategy, visual interaction, and chain-world-state substrate workflow concerns."
+  - "Summarize process constraints and candidate adjustments without editing source-of-truth unless explicitly approved."
+  - "Audit current docs for semantic conflicts with the chain-world-state substrate split."
+  - "Identify old docs that need update, redirect, or deletion with evidence."
+  - "Apply narrowly scoped doc updates/deletions where they prevent current-reader confusion."
+  - "Assess the development-workflow side effects of PR #640."
+  - "Identify risks from consolidating workflow-domain parallelism and chain-world-state docs into one PR."
+  - "Return actionable mitigations without modifying the PR unless explicitly requested."
 handoff_to: []
-updated_at: 2026-06-25T14:42:12+08:00
+updated_at: 2026-06-25T22:01:12+08:00
 last_started_at: 2026-06-25T08:49:12+08:00
 last_claim_type: task_complete
 last_verify_command: "./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_0ff885b320474f738ea908b6e9e06c8c --phase current && git diff --cached --check && git diff --check"
