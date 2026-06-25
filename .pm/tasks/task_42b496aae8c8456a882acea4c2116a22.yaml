@@ -16,11 +16,11 @@ related_prd:
 acceptance:
   - "Find the next actionable engineering governance issue from repository evidence, route professional judgment through the appropriate role slice, implement the minimal safe remediation, verify the changed surfaces, and carry the normal PR/merge/cleanup flow."
 handoff_to: []
-updated_at: 2026-06-25T16:29:55+08:00
+updated_at: 2026-06-25T17:01:44+08:00
 last_started_at: 2026-06-25T15:54:33+08:00
 last_claim_type: task_complete
 last_verify_command: ./scripts/doc-governance-check.sh
-last_verified_at: 2026-06-25T16:29:43+08:00
+last_verified_at: 2026-06-25T17:01:28+08:00
 last_verification_exit_code: 0
 last_verification_status: verified
-last_closed_at: 2026-06-25T16:29:52+08:00
+last_closed_at: 2026-06-25T17:01:44+08:00
