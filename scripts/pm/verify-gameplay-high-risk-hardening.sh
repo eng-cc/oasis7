@@ -21,7 +21,7 @@ oasis7_cargo_dev test -p oasis7 \
   simulator::tests::persist::snapshot_player_gameplay_execution_state_backfills_from_legacy_fields \
   -- --nocapture
 
-node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs
+npm --prefix crates/oasis7_viewer run test:feedback-contract
 
 (
   cd crates/oasis7_viewer

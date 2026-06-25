@@ -2,6 +2,11 @@
 
 ## Active / Recent Tasks
 
+- [x] viewer-feedback-contract-script-governance (PRD-VIEWER/GOVERNANCE) [test_tier_required]: Expose the deterministic software-safe feedback contract through `npm --prefix crates/oasis7_viewer run test:feedback-contract` and route current CI/PM/manual verification callers through that canonical package script. Trace: .pm/tasks/task_88412210d61d4889b4cfca02bf8b824b.yaml
+  - Status: done
+  - Owner role: tpm
+  - Evidence: repository-health discovery, Viewer/QA implementation review, focused package-script verification, and pre-PR local role review are recorded in `.pm/tasks/task_88412210d61d4889b4cfca02bf8b824b.execution.md`.
+
 - [x] viewer-hosted-public-join-mode-governance (PRD-VIEWER/GOVERNANCE) [test_tier_required]: Centralize the Viewer `hosted_public_join` deployment-mode contract behind a shared constant/predicate so auth surface, hosted session issue, strong-auth UI, and contract fixtures cannot drift through repeated literal comparisons. Trace: .pm/tasks/task_44b808199ed84f2bb477026924877eb6.yaml
   - Status: done
   - Owner role: tpm

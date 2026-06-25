@@ -1,0 +1,27 @@
+task_uid: task_88412210d61d4889b4cfca02bf8b824b
+title: "govern viewer feedback contract test entrypoint"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-viewer-feedback-contract-script-governance-20260625
+execution_log_path: .pm/tasks/task_88412210d61d4889b4cfca02bf8b824b.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/viewer/project.md
+doc_refs:
+  - doc/viewer/project.md
+  - testing-manual.md
+related_prd: []
+acceptance:
+  - "Expose the Viewer feedback contract test through the package test script surface."
+  - "Update current callers to use the canonical package script without changing runtime behavior."
+  - "Record role evidence and focused verification in the task execution log."
+handoff_to: []
+updated_at: 2026-06-25T17:26:58+08:00
+last_started_at: 2026-06-25T16:35:09+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:feedback-contract && bash -n scripts/ci-tests.sh scripts/pm/verify-gameplay-high-risk-hardening.sh && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_88412210d61d4889b4cfca02bf8b824b --phase current && git diff --check"
+last_verified_at: 2026-06-25T17:26:51+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-25T17:26:55+08:00

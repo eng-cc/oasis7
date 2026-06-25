@@ -42,7 +42,7 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 compat_snapshot_exposes_slot_1_auto_funding_from_dedicated_pool -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime agent_claim_submit_handler_previews_slot_1_auto_funding -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime --bin oasis7_viewer_live`
-    - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
     - `npm --prefix crates/oasis7_viewer run build:software-safe`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`

@@ -25,7 +25,7 @@
 - 验证：
   - `npm --prefix crates/oasis7_viewer run test:ui`
   - `npm --prefix crates/oasis7_viewer run build:software-safe`
-  - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+  - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
   - `git diff --check`
 
 ## 依赖
