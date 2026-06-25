@@ -4,7 +4,6 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use oasis7_net::{world_error_is_publish_failure, world_error_is_retryable_connection_gap};
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
@@ -23,6 +22,7 @@ use crate::network_bridge_gap_sync_budget::{
     gap_sync_fetch_commit_route_budget_exhausted,
 };
 pub(crate) use crate::network_error_classification::{
+    network_world_error_is_publish_failure, network_world_error_is_retryable_connection_gap,
     replication_network_error_is_availability_gap, replication_network_error_is_not_found,
     replication_network_error_is_protocol_unavailable,
     replication_network_error_is_route_unavailable, replication_network_error_is_timeout_protocol,
@@ -1109,7 +1109,7 @@ fn network_err_for_protocol(protocol: &str, err: WorldError) -> NodeError {
 }
 
 fn network_err_with_request_protocol(protocol: Option<&str>, err: WorldError) -> NodeError {
-    if world_error_is_retryable_connection_gap(&err) {
+    if network_world_error_is_retryable_connection_gap(&err) {
         return NodeError::Replication {
             reason: format!(
                 "{REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX}{}",
@@ -1117,7 +1117,7 @@ fn network_err_with_request_protocol(protocol: Option<&str>, err: WorldError) ->
             ),
         };
     }
-    if world_error_is_publish_failure(&err) {
+    if network_world_error_is_publish_failure(&err) {
         return NodeError::Replication {
             reason: format!("replication network error: {err:?}"),
         };
