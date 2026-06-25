@@ -643,13 +643,16 @@ SEQUENCER_STARTED=1
 if ! start_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"; then
   cleanup_after_failed_start "sequencer start" "$OUT_DIR/sequencer-liveness.json"
 fi
-poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
-  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
 
 STORAGE_STARTED=1
 if ! start_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"; then
-  cleanup_after_failed_start "storage start" "$OUT_DIR/storage-status.json"
+  cleanup_after_failed_start "storage start" "$OUT_DIR/storage-liveness.json"
 fi
+
+poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
+  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
+poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-liveness.json" "storage liveness" json_liveness_ok \
+  || cleanup_after_failed_start "storage liveness" "$OUT_DIR/storage-liveness.json"
 poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-status.json" "sequencer readiness" json_sequencer_ok \
   || cleanup_after_failed_start "sequencer readiness" "$OUT_DIR/sequencer-status.json"
 poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-status.json" "storage readiness" json_storage_ok \

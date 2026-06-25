@@ -232,6 +232,10 @@ if [[ -n "${TEST_SSH_LOG:-}" ]]; then
   logged_cmd=${cmd//$'\n'/\\n}
   printf '%s\t%s\n' "$host" "$logged_cmd" >>"$TEST_SSH_LOG"
 fi
+if [[ -n "${TEST_EVENT_LOG:-}" ]]; then
+  logged_cmd=${cmd//$'\n'/\\n}
+  printf 'ssh\t%s\t%s\n' "$host" "$logged_cmd" >>"$TEST_EVENT_LOG"
+fi
 case "$cmd" in
   mkdir\ -p*)
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/.*mkdir -p '\([^']*\)\/config\/doc\/testing\/evidence'.*/\1/p")
@@ -352,6 +356,9 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+if [[ -n "${TEST_EVENT_LOG:-}" ]]; then
+  printf 'curl\t%s\n' "$url" >>"$TEST_EVENT_LOG"
+fi
 case "$url" in
   http://sequencer/status)
     cp "${TEST_STATUS_ROOT:?}/sequencer.json" "$out"
@@ -375,6 +382,7 @@ export PATH="$TMP_DIR/bin:$PATH"
 export TEST_REMOTE_ROOT="$TMP_DIR/remote"
 export TEST_STATUS_ROOT="$TMP_DIR/status"
 export TEST_SSH_LOG="$TMP_DIR/ssh.log"
+export TEST_EVENT_LOG="$TMP_DIR/events.log"
 export TEST_SYSTEMCTL_LOG="$TMP_DIR/systemctl.log"
 export SEQ_PASS="sequencer-pass"
 export STO_PASS="storage-pass"
@@ -411,6 +419,27 @@ json=$("$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --out-dir "$TMP_DIR/out" \
   --poll-attempts 1 \
   --poll-sleep-seconds 0)
+
+python3 - "$TEST_EVENT_LOG" <<'PY'
+import pathlib
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+
+def first_index(needle: str) -> int:
+    for index, line in enumerate(lines):
+        if needle in line:
+            return index
+    raise SystemExit(f"missing event: {needle}")
+
+first_curl_index = first_index("curl\t")
+sequencer_start_index = first_index("systemctl start 'oasis7-triad-sequencer.service'")
+storage_start_index = first_index("systemctl start 'oasis7-triad-storage.service'")
+if not sequencer_start_index < first_curl_index:
+    raise SystemExit("sequencer was not started before first status poll")
+if not storage_start_index < first_curl_index:
+    raise SystemExit("storage was not started before first status poll")
+PY
 
 jq -e '
   .sequencer.running == true
