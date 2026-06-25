@@ -11,13 +11,19 @@ Usage:
     --node-root <path> \
     [--start-script-source <path>] \
     [--launchd-label <label>] \
-    [--load-launchd]
+    [--load-launchd] \
+    [--preserve-state | --reset-state [--state-backup-dir <path>]]
 
 Description:
   Install a local public_testnet observer into a dedicated node directory.
   The installed runtime binary is copied into <node-root>/bin/ and the local
   network-tier bundle copy is rewritten to pin that copied binary hash, so
   normal repo cargo builds cannot drift the running testnet node artifact.
+
+  If <node-root> already contains persisted chain state, the caller must
+  choose --preserve-state for a same-chain package upgrade or --reset-state
+  for a clean rebuild/redeploy. The default is fail-closed so a validator
+  clean rebuild cannot silently leave a local observer on stale chain state.
 EOF
 }
 
@@ -51,6 +57,9 @@ node_root=""
 start_script_source="$repo_root/scripts/p2p-triad-node-start.sh"
 launchd_label=""
 load_launchd=0
+state_mode="require-empty"
+state_backup_dir=""
+state_mode_flag=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -82,6 +91,22 @@ while [[ $# -gt 0 ]]; do
       load_launchd=1
       shift
       ;;
+    --preserve-state)
+      [[ -z "$state_mode_flag" ]] || die "--preserve-state conflicts with $state_mode_flag"
+      state_mode="preserve"
+      state_mode_flag="--preserve-state"
+      shift
+      ;;
+    --reset-state)
+      [[ -z "$state_mode_flag" ]] || die "--reset-state conflicts with $state_mode_flag"
+      state_mode="reset"
+      state_mode_flag="--reset-state"
+      shift
+      ;;
+    --state-backup-dir)
+      state_backup_dir=${2:-}
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -106,6 +131,60 @@ source_manifest=$(abs_path "$source_manifest")
 runtime_build_ref=$(abs_path "$runtime_build_ref")
 node_root=$(abs_path "$node_root")
 start_script_source=$(abs_path "$start_script_source")
+if [[ -n "$state_backup_dir" ]]; then
+  state_backup_dir=$(abs_path "$state_backup_dir")
+fi
+
+if [[ -n "$state_backup_dir" && "$state_mode" != "reset" ]]; then
+  die "--state-backup-dir requires --reset-state"
+fi
+
+path_has_state() {
+  local path=$1
+  [[ -e "$path" ]] || return 1
+  if [[ -d "$path" ]]; then
+    find "$path" -mindepth 1 -maxdepth 1 -print -quit | grep -q .
+    return
+  fi
+  return 0
+}
+
+state_paths=(
+  "$node_root/world"
+  "$node_root/world-simulator-mirror"
+  "$node_root/execution-records"
+  "$node_root/store"
+  "$node_root/replication-root"
+  "$node_root/runtime-root"
+  "$node_root/output/chain-runtime"
+)
+existing_state_paths=()
+for state_path in "${state_paths[@]}"; do
+  if path_has_state "$state_path"; then
+    existing_state_paths+=("$state_path")
+  fi
+done
+
+if [[ "$state_mode" == "require-empty" && ${#existing_state_paths[@]} -gt 0 ]]; then
+  {
+    printf 'error: local observer node root contains persisted chain state:\n'
+    printf '  %s\n' "${existing_state_paths[@]}"
+    printf 'choose --preserve-state for a same-chain package upgrade, or --reset-state for a clean rebuild/redeploy\n'
+  } >&2
+  exit 1
+fi
+
+if [[ "$state_mode" == "reset" && ${#existing_state_paths[@]} -gt 0 ]]; then
+  if [[ -z "$state_backup_dir" ]]; then
+    state_backup_dir="$node_root/backups/local-node-install-state-reset-$(date -u +%Y%m%dT%H%M%SZ)"
+  fi
+  [[ ! -e "$state_backup_dir" ]] || die "state backup dir already exists: $state_backup_dir"
+  mkdir -p "$state_backup_dir"
+  for state_path in "${existing_state_paths[@]}"; do
+    mv "$state_path" "$state_backup_dir/$(basename "$state_path")"
+    printf 'backed up stale local observer state: %s -> %s\n' "$state_path" "$state_backup_dir/$(basename "$state_path")"
+  done
+fi
 
 mkdir -p "$node_root/bin" "$node_root/config" "$node_root/logs"
 install -m 0755 "$runtime_build_ref" "$node_root/bin/oasis7_chain_runtime"

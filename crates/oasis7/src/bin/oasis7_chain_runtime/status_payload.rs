@@ -571,6 +571,23 @@ pub(super) fn build_chain_node_observability_status(
             ),
         );
     }
+    if let Some(network_head_height) = network_head.height {
+        if snapshot.consensus.committed_height > network_head_height {
+            let ahead_by = snapshot
+                .consensus
+                .committed_height
+                .saturating_sub(network_head_height);
+            push_observability_alert(
+                &mut alerts,
+                "critical",
+                "local_chain_ahead_of_network_head",
+                format!(
+                    "local committed height {} is ahead of network head {} by {}; verify clean-rebuild generation before preserving local state",
+                    snapshot.consensus.committed_height, network_head_height, ahead_by
+                ),
+            );
+        }
+    }
     if network_height_lag > 0
         && snapshot
             .consensus

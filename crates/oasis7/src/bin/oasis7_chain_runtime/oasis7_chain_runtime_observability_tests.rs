@@ -645,6 +645,61 @@ fn assert_chain_status_payload_consensus_health_metrics() {
 }
 
 #[test]
+fn build_chain_status_payload_marks_local_chain_ahead_of_network_head() {
+    let mut consensus = NodeConsensusSnapshot::default();
+    consensus.committed_height = 1_233;
+    consensus.network_committed_height = 143;
+    consensus.replication_persisted_height = 1_233;
+    consensus.known_peer_heads = 1;
+    consensus.peer_heads = vec![NodePeerCommittedHead {
+        node_id: "clean-rebuilt-validator".to_string(),
+        validator_id: None,
+        height: 143,
+        block_hash: "clean-network-block-143".to_string(),
+        committed_at_ms: 1_700_000_000_000,
+        observed_at_ms: 1_700_000_000_000,
+        execution_block_hash: Some("clean-network-execution-143".to_string()),
+        execution_state_root: Some("clean-network-state-143".to_string()),
+    }];
+    let snapshot = NodeSnapshot {
+        node_id: "observer-with-old-state".to_string(),
+        player_id: "player-with-old-state".to_string(),
+        world_id: "world-with-old-state".to_string(),
+        role: NodeRole::Observer,
+        replication_enabled: true,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: None,
+        consensus,
+        last_error: None,
+    };
+    let network_head =
+        super::status_payload::build_network_head_status(&snapshot, 1_700_000_000_000, None);
+    assert_eq!(network_head.height, Some(143));
+    let policy = super::status_payload::readiness_policy(&snapshot, None);
+    let observability = super::status_payload::build_chain_node_observability_status(
+        &snapshot,
+        &sample_observability_storage_metrics(),
+        &sample_observability_reward_runtime_metrics(),
+        &super::ChainReplicationDebugStatus::default(),
+        &network_head,
+        &sample_observability_p2p_status(),
+        &policy,
+        1_700_000_000_000,
+    );
+
+    assert_eq!(observability.status, "critical");
+    assert!(
+        observability
+            .alerts
+            .iter()
+            .any(|alert| alert.code == "local_chain_ahead_of_network_head"),
+        "expected local-chain-ahead diagnostic alert, got {:?}",
+        observability.alerts
+    );
+}
+
+#[test]
 fn build_chain_status_payload_marks_peer_head_unavailable_not_ready() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 10;
