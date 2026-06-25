@@ -356,6 +356,12 @@ fn required_fresh_peer_heads(
     if !snapshot.replication_enabled {
         return 0;
     }
+    if snapshot.consensus.committed_height == 0
+        && snapshot.consensus.network_committed_height == 0
+        && snapshot.consensus.peer_heads.is_empty()
+    {
+        return 0;
+    }
     let Some(loaded) = loaded_network_tier_manifest else {
         return DEFAULT_REQUIRED_FRESH_PEER_HEADS;
     };

@@ -497,9 +497,14 @@ pub(super) fn build_chain_node_observability_status(
         .iter()
         .filter(|health| !health.issues.is_empty())
         .count();
+    let active_peer_available = active_peer_count > 0 || connected_peer_count > 0;
     let known_peer_heads = snapshot.consensus.known_peer_heads;
-    let network_head_available =
-        matches!(network_head.source.as_str(), "peer_quorum" | "peer_single");
+    let network_head_available = network_head.decision == "ready"
+        && match network_head.source.as_str() {
+            "peer_quorum" | "peer_single" => true,
+            "self_only" => !snapshot.replication_enabled || active_peer_available,
+            _ => false,
+        };
     let network_height_lag = snapshot
         .consensus
         .network_committed_height
@@ -584,7 +589,10 @@ pub(super) fn build_chain_node_observability_status(
             ),
         );
     }
-    if snapshot.replication_enabled && network_head.fresh_peer_count == 0 {
+    if snapshot.replication_enabled
+        && network_head.required_peer_count > 0
+        && network_head.fresh_peer_count == 0
+    {
         push_observability_alert(
             &mut alerts,
             "warn",
@@ -757,12 +765,12 @@ pub(super) fn build_chain_node_observability_status(
             ),
         );
     }
-    if !replication.peer_healths.is_empty() && connected_peer_count == 0 {
+    if snapshot.replication_enabled && !active_peer_available {
         push_observability_alert(
             &mut alerts,
             "warn",
             "replication_no_connected_peers",
-            "replication discovered peers but has no connected peers".to_string(),
+            "replication has no active or connected peers".to_string(),
         );
     }
     if blocking_replication_error_count > 0 {

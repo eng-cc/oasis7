@@ -416,4 +416,5 @@ fn replication_error_is_diagnostic(error: &str) -> bool {
         || lower.contains("single_source_discovery")
         || lower.contains("quarantine suppresses")
         || lower.contains("dial condition")
+        || lower.contains("localpeerid")
 }
