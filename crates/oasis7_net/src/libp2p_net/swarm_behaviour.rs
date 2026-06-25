@@ -108,7 +108,7 @@ pub(super) fn build_swarm(
     request_response_timeout: std::time::Duration,
     wire_byte_counters: SharedLibp2pWireByteCounters,
 ) -> Swarm<Behaviour> {
-    let swarm_config = libp2p::swarm::Config::with_async_std_executor()
+    let swarm_config = libp2p::swarm::Config::with_tokio_executor()
         .with_idle_connection_timeout(std::time::Duration::from_secs(30));
 
     let peer_id = PeerId::from(keypair.public());
@@ -150,9 +150,8 @@ pub(super) fn build_swarm(
         ),
     };
 
-    let quic_transport =
-        libp2p::quic::async_std::Transport::new(libp2p::quic::Config::new(keypair));
-    let tcp_transport = libp2p::tcp::async_io::Transport::new(libp2p::tcp::Config::default())
+    let quic_transport = libp2p::quic::tokio::Transport::new(libp2p::quic::Config::new(keypair));
+    let tcp_transport = libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::default())
         .upgrade(libp2p::core::upgrade::Version::V1)
         .authenticate(noise::Config::new(keypair).expect("noise config"))
         .multiplex(libp2p::yamux::Config::default())

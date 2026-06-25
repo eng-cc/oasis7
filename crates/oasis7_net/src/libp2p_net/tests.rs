@@ -19,13 +19,14 @@ use std::time::{Duration, Instant};
 #[path = "tests/active_set_candidate_tests.rs"]
 mod active_set_candidate_tests;
 mod admissible_request_peers_tests;
+mod discovery_dial_tests;
 mod discovery_peer_record_tests;
 mod peer_record_tests;
 mod request_peer_filter_tests;
 mod subscribe_ack_tests;
 mod transport_path_refresh_tests;
 
-fn signed_discovery_peer_record(
+pub(super) fn signed_discovery_peer_record(
     keypair: &Keypair,
     discovery_sources: Vec<crate::dht::PeerDiscoverySource>,
     published_at_ms: i64,
@@ -620,49 +621,6 @@ fn refresh_peer_manager_healths_admits_record_exchange_pending_active_peer() {
     assert!(quarantined.is_empty());
     assert_eq!(admitted, HashSet::from([bootstrap_peer]));
     assert!(!peer_requires_active_quarantine(bootstrap_peer, &healths));
-}
-
-#[test]
-fn process_discovered_peer_record_dials_candidate_peer() {
-    let mut swarm = super::swarm_behaviour::build_swarm(
-        &Keypair::generate_ed25519(),
-        false,
-        true,
-        std::time::Duration::from_secs(30),
-        super::wire_bytes::init_shared_wire_byte_counters(),
-    );
-    let peer_key = Keypair::generate_ed25519();
-    let record = signed_discovery_peer_record(
-        &peer_key,
-        vec![
-            crate::dht::PeerDiscoverySource::Dht,
-            crate::dht::PeerDiscoverySource::Rendezvous,
-        ],
-        1,
-    );
-    let peer_id = PeerId::from(peer_key.public());
-    let mut discovered_peer_records = HashMap::new();
-    let mut known_transport_paths = HashMap::new();
-    let mut last_dialed_transport_paths = HashMap::new();
-    let active_transport_paths = HashMap::new();
-    let mut failed_transport_path_labels = HashSet::new();
-
-    super::discovery::process_discovered_peer_record(
-        &mut swarm,
-        &mut discovered_peer_records,
-        &mut known_transport_paths,
-        &mut last_dialed_transport_paths,
-        &active_transport_paths,
-        &mut failed_transport_path_labels,
-        None,
-        &PeerManagerPolicy::default(),
-        record.clone(),
-    )
-    .expect("process candidate peer record");
-
-    assert!(discovered_peer_records.contains_key(&peer_id));
-    assert!(known_transport_paths.contains_key(&peer_id));
-    assert!(last_dialed_transport_paths.contains_key(&peer_id));
 }
 
 #[test]
