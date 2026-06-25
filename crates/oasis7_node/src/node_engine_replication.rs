@@ -599,6 +599,7 @@ impl PosNodeEngine {
             replication,
             execution_hook,
             None,
+            true,
         )
     }
 
@@ -859,6 +860,7 @@ impl PosNodeEngine {
         mut replication: Option<&mut ReplicationRuntime>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
         mut progress_callback: Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
+        record_peer_heads_from_gap_sync: bool,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -1014,20 +1016,22 @@ impl PosNodeEngine {
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
                 self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
-                self.observe_peer_committed_head(
-                    payload.node_id.as_str(),
-                    PeerCommittedHead {
-                        height: payload.height,
-                        block_hash: payload.block_hash.clone(),
-                        committed_at_ms: payload.committed_at_ms,
-                        observed_at_ms: crate::runtime_util::now_unix_ms(),
-                        execution_block_hash: payload.execution_block_hash.clone(),
-                        execution_state_root: payload.execution_state_root.clone(),
-                        action_root: payload.action_root.clone(),
-                        public_key_hex: message.public_key_hex.clone(),
-                        signature_hex: message.signature_hex.clone(),
-                    },
-                );
+                if record_peer_heads_from_gap_sync {
+                    self.observe_peer_committed_head(
+                        payload.node_id.as_str(),
+                        PeerCommittedHead {
+                            height: payload.height,
+                            block_hash: payload.block_hash.clone(),
+                            committed_at_ms: payload.committed_at_ms,
+                            observed_at_ms: crate::runtime_util::now_unix_ms(),
+                            execution_block_hash: payload.execution_block_hash.clone(),
+                            execution_state_root: payload.execution_state_root.clone(),
+                            action_root: payload.action_root.clone(),
+                            public_key_hex: message.public_key_hex.clone(),
+                            signature_hex: message.signature_hex.clone(),
+                        },
+                    );
+                }
                 if let Some(callback) = progress_callback.as_deref_mut() {
                     let decision = self.idle_pending_decision()?;
                     callback(self.snapshot_from_decision(&decision));
