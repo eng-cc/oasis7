@@ -47,7 +47,7 @@ Example:
 ## 2026-06-25 15:53:00 CST / tpm
 - Review Trigger: pre-PR local role review
 - Review Scope: Documentation-only semantic conflict cleanup for chain-world-state substrate docs; changed paths under `.pm/tasks/`, `.pm/roles/tpm/backlog/committed.yaml`, `doc/p2p/design.md`, `doc/p2p/project.md`, `doc/p2p/{node,distfs,observer,network,blockchain}/`.
-- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit/.pm/scratch/task_17ae7ffcdc5d4c6c9c371777a33dd02b/review-packages/review-d22384078..a78cd11ac.diff`
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit/.pm/scratch/task_17ae7ffcdc5d4c6c9c371777a33dd02b/review-packages/review-d22384078..964f1122f.diff`
 - Review Roles: producer_system_designer, qa_engineer, repository_health_engineer
 - Review Question: Confirm the patch resolves semantic conflicts between old P2P/P2PFS/reachability docs and the new S9A chain-world-state substrate framing without deleting provenance or weakening claim boundaries.
 - Evidence Available: `git diff --check` pass; `./scripts/doc-governance-check.sh` pass; `./scripts/pm/workflow-lint.sh --task-uid task_17ae7ffcdc5d4c6c9c371777a33dd02b --phase current` pass; targeted `rg` scan for old/new terminology.
@@ -68,10 +68,10 @@ Example:
 - Task UID: task_17ae7ffcdc5d4c6c9c371777a33dd02b
 - Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit`
 - Source Branch: `task/engineering-chain-world-state-doc-conflict-audit`
-- Source Head: `a78cd11ace8fbd304ca4e2a00a6b73815304a701` plus later review-evidence/QA-finding fix amendment pending in the same task branch.
+- Source Head: `964f1122ffb1dc66fa5b75d5b7f6eaf60cee01d2`
 - Comparison Ref: `refs/heads/task/engineering-p2p-infra-isolated-test-plan`
 - Reviewed Changed Paths: `.pm/tasks/`; `.pm/roles/tpm/backlog/committed.yaml`; `doc/p2p/design.md`; `doc/p2p/project.md`; `doc/p2p/{node,distfs,observer,network,blockchain}/`.
-- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit/.pm/scratch/task_17ae7ffcdc5d4c6c9c371777a33dd02b/review-packages/review-d22384078..a78cd11ac.diff`
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit/.pm/scratch/task_17ae7ffcdc5d4c6c9c371777a33dd02b/review-packages/review-d22384078..964f1122f.diff`
 - Role Selection Basis: changed p2p architecture/testing docs plus user-facing claim boundary; included producer_system_designer for system semantics, qa_engineer for test/claim-level validity, and repository_health_engineer for doc topology/deletion-vs-demotion risk.
 - Review Roles: producer_system_designer, qa_engineer, repository_health_engineer
 - Review Evidence: producer_system_designer no findings / low residual title-search risk; repository_health_engineer no findings / low discoverability risk; qa_engineer P2 finding on `foundation_only` non-canonical claim level.
