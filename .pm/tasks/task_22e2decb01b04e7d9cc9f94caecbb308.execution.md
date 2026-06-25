@@ -116,3 +116,11 @@ Example:
 - Actual Result: passed at `2026-06-25T09:12:09+08:00`; final_status `done`; claim_verification_status `verified`; verify_command `bash scripts/p2p-public-testnet-rebuild-validators.test.sh`; pm_lint skipped intentionally because this task uses focused task closeout and repo-wide lint may include unrelated historical debt.
 - 遗留事项: create PR, watch required checks/comments, merge, then rerun live validator rebuild before observer updates or public testnet health claims.
 - Blocker / Next Action: rerun `./scripts/prepare-task-pr.sh --create`.
+
+## 2026-06-25 09:13:40 CST / tpm
+- 完成内容: Created GitHub PR #629 for this task.
+- PR URL: https://github.com/eng-cc/oasis7/pull/629
+- PR Purpose Decision: normal_pr_ci_watch
+- Rationale: ordinary implementation/documentation fix for validator rebuild cleanup. This PR is not a manual packaging/release CI hold.
+- Required Follow-up: watch required checks, mergeability, PR comments, and review threads; treat `REVIEW_REQUIRED`/approval-only `BLOCKED` as informational under repo policy, but do not merge with failing checks, requested changes, unresolved blocking comments/threads, conflicts, or a GitHub merge API refusal.
+- Post-Merge Gate: rerun live validator rebuild and sample service mask/active/failed state, ports/processes, peer-head freshness, replication recent errors, and committed/network heights before observer updates or public testnet health claims.
