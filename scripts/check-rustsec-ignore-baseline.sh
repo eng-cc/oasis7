@@ -25,8 +25,6 @@ approved = [
     "RUSTSEC-2024-0384",
     "RUSTSEC-2024-0436",
     "RUSTSEC-2025-0012",
-    "RUSTSEC-2026-0118",
-    "RUSTSEC-2026-0119",
 ]
 required_keys = ("owner", "scope", "reason", "expiry", "validation")
 allowed_libp2p_local_crates = {

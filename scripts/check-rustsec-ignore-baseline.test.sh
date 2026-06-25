@@ -29,7 +29,7 @@ source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 out = []
 skip_previous = False
 for line in source:
-    if '"RUSTSEC-2026-0118"' in line and out and "rustsec-ignore:" in out[-1]:
+    if '"RUSTSEC-2025-0012"' in line and out and "rustsec-ignore:" in out[-1]:
         out.pop()
     out.append(line)
 Path(sys.argv[2]).write_text("\n".join(out) + "\n", encoding="utf-8")
@@ -48,7 +48,7 @@ import sys
 source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 out = []
 for line in source:
-    if '"RUSTSEC-2026-0118"' in line and not line.lstrip().startswith("#"):
+    if '"RUSTSEC-2025-0012"' in line and not line.lstrip().startswith("#"):
         out.append("  # " + line.strip() + " # test-only commented debt note")
     else:
         out.append(line)
@@ -69,7 +69,7 @@ source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 out = []
 for line in source:
     out.append(line)
-    if '"RUSTSEC-2026-0119"' in line:
+    if '"RUSTSEC-2025-0012"' in line:
         out.append("  # rustsec-ignore: owner=repository_health_engineer; scope=test; reason=test; expiry=2026-08-31; validation=test")
         out.append('  "RUSTSEC-2099-0001", # test-only unapproved advisory')
 Path(sys.argv[2]).write_text("\n".join(out) + "\n", encoding="utf-8")
@@ -86,7 +86,7 @@ from pathlib import Path
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-Path(sys.argv[2]).write_text(text.replace("expiry=2026-08-31", "expiry=2026-01-01"), encoding="utf-8")
+Path(sys.argv[2]).write_text(text.replace("expiry=2026-09-30", "expiry=2026-01-01"), encoding="utf-8")
 PY
 if run_check "$expired" >"$tmp_dir/expired.out" 2>&1; then
   echo "expected expired metadata case to fail" >&2

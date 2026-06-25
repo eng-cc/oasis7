@@ -20,10 +20,6 @@ ignore = [
   "RUSTSEC-2024-0436", # paste unmaintained
   # rustsec-ignore: owner=repository_health_engineer; scope=async-openai retry dependency closure; reason=backoff is pulled by async-openai and should be burned down with provider/client dependency modernization; expiry=2026-09-30; validation=cargo tree -i backoff
   "RUSTSEC-2025-0012", # backoff unmaintained via async-openai
-  # rustsec-ignore: owner=repository_health_engineer; scope=oasis7_net libp2p DNS closure; reason=hickory-proto 0.25.2 still arrives through libp2p-dns after libp2p 0.56 migration and requires upstream libp2p-dns/hickory-net modernization; expiry=2026-08-31; validation=cargo tree -p oasis7_net -i hickory-proto@0.25.2 --features libp2p
-  "RUSTSEC-2026-0118", # hickory-proto via libp2p DNS stack
-  # rustsec-ignore: owner=repository_health_engineer; scope=oasis7_net libp2p DNS closure; reason=hickory-proto 0.25.2 still arrives through libp2p-dns after libp2p 0.56 migration and requires upstream libp2p-dns/hickory-net modernization; expiry=2026-08-31; validation=cargo tree -p oasis7_net -i hickory-proto@0.25.2 --features libp2p
-  "RUSTSEC-2026-0119", # hickory-proto via libp2p DNS stack
 ]
 
 [licenses]
