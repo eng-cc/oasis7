@@ -49,6 +49,7 @@ Check the task in this order:
    - Skip professional dispatch only for pure fact lookup or command-output restatement.
 1. `bounded-brainstorming`
    - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
+   - If one initiative has independently mergeable tracks, route to the parent initiative + domain child task pattern instead of forcing all tracks into one implementation task.
 2. `tdd-test-writer`
    - Use when the task changes automatable behavior and has a stable automated test surface.
 3. `executing-project-tasks`
@@ -107,6 +108,19 @@ WORKFLOW ROUTE DECIDED
 - `.pm/tasks/<TASK-UID>.execution.md`:
 - handoff / project supplement:
 
+## Parent Initiative / Child Task Plan (If Needed)
+- parent initiative task:
+- child tracks:
+- dependency contracts:
+- integration checkpoints:
+- verification contract matrix:
+  - child task:
+  - module_required:
+  - module_full trigger:
+  - integration_required trigger:
+  - release_full owner/evidence:
+- mock/fixture contracts:
+
 ## Subagent Slice Plan (If Needed)
 - role:
 - slice type:
@@ -142,6 +156,7 @@ WORKFLOW ROUTE DECIDED
 - Do not skip `verification-before-completion` when you are about to make a completion claim.
 - Do not use this router as a replacement for closeout; switch to `finishing-a-development-branch` when the task is done.
 - Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
+- Do not use a parent initiative to weaken child task truth. Each child still needs one owner, one `.pm` task, one canonical worktree, one PR chain, and module-local verification evidence.
 - Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current `.pm` task truth, and scoped repo context recorded in the mandatory context checklist/packet.
 - Do not let TPM direct exploration become a professional conclusion; professional findings must be owned or verified by the matching role slice.
 
@@ -151,3 +166,4 @@ WORKFLOW ROUTE DECIDED
 - Selecting every workflow skill because the phase map exists; use the narrowest applicable surface and record skipped gates when they matter.
 - Reporting TPM evidence gathering as a professional conclusion; dispatch or attribute the matching role slice when judgment is involved.
 - Forgetting to update the route after scope changes; append the changed route before continuing work.
+- Leaving parent/child relationships as chat-only context. Parent initiative packets, child task packets, dependency contracts, and verification matrices must be written into `.pm` task truth or formal templates.
