@@ -345,10 +345,10 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-06-24
+- 更新日期: 2026-06-25
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `builtin-wasm-module-internal-path-version-ratchet`（已为非 workspace builtin WASM module manifests 中 37 个 `oasis7_wasm_sdk` internal path dependencies 补 `version = "0.1.0"`，消除 builtin module 单独 metadata 中的内部 path dependency wildcard 盲区，同时保持 `Cargo.lock`、外部依赖版本、`deny.toml` 与 workspace membership 边界不变。）
+- 最新完成: `doc-corpus-current-next-action-refresh`（已把 `doc-corpus-maintenance-governance` 专题页的“下一步”从已收口的 near-limit project docs 队列刷新为当前 `doc-inventory-report` 的 module density / hotspot `action_required` 分类口径。Trace: .pm/tasks/task_7f7faa364b6c44d2b5e9448beaf87ccb.yaml）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
