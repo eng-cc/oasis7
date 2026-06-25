@@ -48,7 +48,7 @@ Example:
 - Review Trigger: pre-PR local role review
 - Review Scope: Documentation-only semantic conflict cleanup for chain-world-state substrate docs; changed paths under `.pm/tasks/`, `.pm/roles/tpm/backlog/committed.yaml`, `doc/p2p/design.md`, `doc/p2p/project.md`, `doc/p2p/{node,distfs,observer,network,blockchain}/`.
 - Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit/.pm/scratch/task_17ae7ffcdc5d4c6c9c371777a33dd02b/review-packages/review-d22384078..964f1122f.diff`
-- Review Roles: producer_system_designer, qa_engineer, repository_health_engineer
+- Review Roles: producer_system_designer, viewer_engineer, game_visual_interaction_designer, qa_engineer, repository_health_engineer
 - Review Question: Confirm the patch resolves semantic conflicts between old P2P/P2PFS/reachability docs and the new S9A chain-world-state substrate framing without deleting provenance or weakening claim boundaries.
 - Evidence Available: `git diff --check` pass; `./scripts/doc-governance-check.sh` pass; `./scripts/pm/workflow-lint.sh --task-uid task_17ae7ffcdc5d4c6c9c371777a33dd02b --phase current` pass; targeted `rg` scan for old/new terminology.
 - Expected Return Contract: findings | no_findings | scope/spec compliance verdict | role quality/risk verdict | residual_risk
@@ -73,13 +73,13 @@ Example:
 - Reviewed Changed Paths: `.pm/tasks/`; `.pm/roles/tpm/backlog/committed.yaml`; `doc/p2p/design.md`; `doc/p2p/project.md`; `doc/p2p/{node,distfs,observer,network,blockchain}/`.
 - Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-chain-world-state-doc-conflict-audit/.pm/scratch/task_17ae7ffcdc5d4c6c9c371777a33dd02b/review-packages/review-d22384078..964f1122f.diff`
 - Role Selection Basis: changed p2p architecture/testing docs plus user-facing claim boundary; included producer_system_designer for system semantics, qa_engineer for test/claim-level validity, and repository_health_engineer for doc topology/deletion-vs-demotion risk.
-- Review Roles: producer_system_designer, qa_engineer, repository_health_engineer
-- Review Evidence: producer_system_designer no findings / low residual title-search risk; repository_health_engineer no findings / low discoverability risk; qa_engineer P2 finding on `foundation_only` non-canonical claim level.
-- Review Verdicts: producer_system_designer PASS; repository_health_engineer PASS; qa_engineer PASS after replacing `foundation_only` with `module_required`.
+- Review Roles: producer_system_designer, viewer_engineer, game_visual_interaction_designer, qa_engineer, repository_health_engineer
+- Review Evidence: producer_system_designer no findings / low residual title-search risk; viewer_engineer no findings / low API-viewer projection risk; game_visual_interaction_designer no findings / low player-visible overclaim risk; repository_health_engineer no findings / low discoverability risk; qa_engineer P2 finding on `foundation_only` non-canonical claim level.
+- Review Verdicts: producer_system_designer PASS; viewer_engineer PASS; game_visual_interaction_designer PASS; repository_health_engineer PASS; qa_engineer PASS after replacing `foundation_only` with `module_required`.
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: `doc/p2p/distfs/README.md`, `doc/p2p/node/README.md`, and `doc/p2p/observer/README.md` now use canonical S9A `module_required / module_full / integration_required / release_full`.
 - Verification Matrix: doc semantic cleanup -> `doc-governance-check: OK`; workflow/task truth -> `workflow-lint: OK`; whitespace -> `git diff --check` exit 0; claim-level enum -> targeted `rg` confirms no `foundation_only` remains.
-- Visual Evidence: n/a, documentation-only non-UI change.
+- Visual Evidence: n/a, documentation-only non-UI change; game_visual_interaction_designer confirmed no screenshot/browser visual evidence is required.
 - WASM Evidence: n/a, no wasm crate/build/determinism surface changed.
 - Ops Evidence: n/a, no deployment/runtime operator procedure changed beyond docs clarifying claim boundaries.
 - LiveOps Evidence: n/a, no external messaging/release/community surface changed.
