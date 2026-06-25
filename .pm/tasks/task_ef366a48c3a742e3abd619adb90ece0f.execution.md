@@ -98,7 +98,7 @@ Example:
 - Task UID: task_ef366a48c3a742e3abd619adb90ece0f
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-6
 - Source Branch: task/engineering-rust-governance-next-issue-6
-- Source Head: 8e6160e022a27e5e1d69f50ecb76a6bf1117862b
+- Source Head: e4472bdede421a1aeca463ae243a7975ea262e0c
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `scripts/rust-duplicate-dependency-baseline.json`; `scripts/check-duplicate-dependency-baseline.sh`; `scripts/check-duplicate-dependency-baseline.test.sh`; `scripts/ci-rust-governance-report.sh`; `doc/engineering/project.md`; `.pm/tasks/task_ef366a48c3a742e3abd619adb90ece0f.*`; `.pm/roles/repository_health_engineer/backlog/committed.yaml`; `.pm/roles/repository_health_engineer/backlog/done.yaml`
 - Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-rust-governance-next-issue-6/.pm/scratch/task_ef366a48c3a742e3abd619adb90ece0f/review-packages/review-65632e37f..fdf245f8b.diff`
