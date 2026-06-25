@@ -470,6 +470,7 @@ needles = (
 )
 
 def quiesce_systemd():
+    subprocess.run(['systemctl', 'mask', '--runtime', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     subprocess.run(['systemctl', 'stop', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     subprocess.run(
         ['systemctl', 'kill', '--kill-who=all', '--signal=SIGKILL', service_name],
@@ -549,7 +550,7 @@ start_host() {
   local host=$1
   local control_path=$2
   local service=$3
-  ssh_run "$host" "$control_path" "systemctl reset-failed '$service' || true; systemctl start '$service'"
+  ssh_run "$host" "$control_path" "systemctl unmask '$service' || true; systemctl reset-failed '$service' || true; systemctl start '$service'"
 }
 
 cleanup_after_failed_start() {
