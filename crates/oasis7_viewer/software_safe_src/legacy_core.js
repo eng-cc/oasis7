@@ -27,6 +27,7 @@ import {
   VIEWER_AUTH_PUBLIC_KEY,
   VIEWER_PLAYER_ID_KEY,
   VIEWER_RENDER_MODE,
+  isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
 import { createSoftwareSafeState } from "./software_safe_state.js";
 import {
@@ -293,7 +294,7 @@ async function ensureHostedAuthSigningKey(auth = state.auth) {
 }
 
 async function refreshHostedAdmissionState() {
-  if (String(state.hostedAccess?.deployment_mode || "").trim() !== "hosted_public_join") {
+  if (!isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
     state.hostedAdmission = null;
     return null;
   }
@@ -1261,7 +1262,7 @@ async function buildGameplayActionAuthProof(request, auth) {
 }
 
 function canAutoIssueHostedPlayerSession() {
-  return String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+  return isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
     && state.auth.source !== "legacy_viewer_auth_bootstrap";
 }
 
@@ -1284,7 +1285,7 @@ function canAutoIssueLocalTestPlayerSession() {
   if (state.auth.available) {
     return false;
   }
-  if (String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join") {
+  if (isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
     return false;
   }
   const pageHost = String(window.location.hostname || "").trim();
@@ -2105,7 +2106,7 @@ function sendPromptControl(mode, payload = null) {
       render();
       await ensureRegisteredPlayerSession(agentId);
       let strongAuthGrant = null;
-      if (String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join") {
+      if (isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
         feedback.stage = "authorizing";
         feedback.effect = "requesting backend strong-auth grant";
         render();
@@ -3002,7 +3003,7 @@ function renderSummary() {
             </div>
           </div>`
         : ""}
-      ${!state.auth.available && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+      ${!state.auth.available && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
         ? hostedRecoveryHint
           ? ""
           : `<div class="toolbar"><button data-auth-action="retry-issue" ${state.auth.issueInFlight ? "disabled" : ""}>Acquire Hosted Player Session</button></div>`
@@ -3141,7 +3142,7 @@ function renderInteractionPanel() {
   const mainTokenTransferPolicy = hostedActionPolicy("main_token_transfer");
   const interactionEnabled = promptCapability.enabled;
   const strongAuthGrantHint = authSurface.capabilities.prompt_control.enabled
-    && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+    && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
     ? `<div class="field">
          <label for="strong-auth-approval-code">Backend Approval Code</label>
          <input id="strong-auth-approval-code" type="password" autocomplete="off" value="${escapeHtml(state.strongAuth.approvalCode || "")}" />

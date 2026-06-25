@@ -1,0 +1,27 @@
+task_uid: task_44b808199ed84f2bb477026924877eb6
+title: "find and govern next frontend code issue"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-viewer-frontend-governance-next-20260625
+execution_log_path: .pm/tasks/task_44b808199ed84f2bb477026924877eb6.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/viewer/project.md
+doc_refs:
+  - doc/engineering/project.md
+  - doc/viewer/project.md
+related_prd: []
+acceptance:
+  - "Find one bounded frontend code governance issue and fix it with regression coverage."
+  - "Record professional role evidence and verification in the task execution log."
+handoff_to: []
+updated_at: 2026-06-25T15:00:58+08:00
+last_started_at: 2026-06-25T14:34:58+08:00
+last_claim_type: task_complete
+last_verify_command: "npm --prefix crates/oasis7_viewer run test:ui -- --run software_safe_src/software_safe_constants.test.js software_safe_src/main.test.jsx && node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs && ./scripts/pm/workflow-lint.sh --task-uid task_44b808199ed84f2bb477026924877eb6 --phase current && git diff --check"
+last_verified_at: 2026-06-25T15:00:49+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-25T15:00:55+08:00
