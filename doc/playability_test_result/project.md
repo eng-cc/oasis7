@@ -70,7 +70,7 @@
 - 专题入口状态: `game-test`/`playability_test_card`/`playability_test_manual` 已收敛到模块目录。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-010 入口治理状态: 已为 evidence-first 消费者补齐轻量入口，当前模块无需再做更重的根 README 拆分。
-- 说明: 本文档仅维护可玩性结果模块设计执行状态；过程记录在 `doc/devlog/README.md`。
+- 说明: 本文档仅维护可玩性结果模块设计执行状态；当前任务过程记录以对应 `.pm/tasks/task_<32hex>.execution.md` 为准，正式发布/可玩性证据继续回写 evidence bundle 与模块 project/prd。
 
 ## 阶段收口角色交接
 ### Meta
@@ -114,13 +114,13 @@
 - 代码改动：通常无需代码；如需，仅限卡片生成支撑脚本。
 - 文档回写：`doc/playability_test_result/project.md` 与相关模板文档。
 - 测试记录：补齐 `test_tier_required` 的字段抽样与模板引用验证。
-- devlog 记录：记录评分口径、模板与未决风险。
+- 任务证据记录：在对应 `.pm/tasks/task_<32hex>.execution.md` 记录评分口径、模板与未决风险，并按需回写正式 evidence bundle。
 
 ### Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对 `producer_system_designer` / `qa_engineer` / `viewer_engineer`
 - [ ] 对应 `prd.md` / `project.md` 已回写
-- [ ] 对应 `doc/devlog/YYYY-MM-DD.md` 已记录
+- 对应 `.pm/tasks/task_<32hex>.execution.md` 已记录
 - [ ] required 证据已补齐
 
 ### Risks / Decisions

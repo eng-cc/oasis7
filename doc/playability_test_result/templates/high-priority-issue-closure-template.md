@@ -70,4 +70,4 @@
 - 是否填写 owner、修复任务、归因标签和证据路径。
 - `verified/closed` 是否具备复测记录。
 - `waived` 是否具备批准人与复审时间。
-- 是否已同步回写对应模块 `project.md`、`doc/devlog/YYYY-MM-DD.md` 与发布证据包。
+- 是否已同步回写对应模块 `project.md`、对应 `.pm/tasks/task_<32hex>.execution.md` 与发布证据包。

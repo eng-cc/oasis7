@@ -99,3 +99,14 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
+  - task_uid: task_eb93f5de123c49d1a3889855038b6987
+    title: "Converge next stale legacy document semantics"
+    module: engineering
+    priority: P2
+    source_signal: null
+    related_prd: []
+    acceptance:
+      - "Find one additional current old-document/old-semantics drift point, remediate the live documentation surface without broad historical rewrites, verify doc governance, and close through PR."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_eb93f5de123c49d1a3889855038b6987.yaml
