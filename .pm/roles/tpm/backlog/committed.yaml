@@ -99,15 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_76d64040529e464da37f08d075a05120
-    title: "Research AI era opening game"
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance:
-      - "Compare Angry Birds as an Android-era opening work against AI-era technology and player preference signals."
-      - "Record specialist slice contracts and evidence in the .pm execution log."
-      - "Produce a sourced prediction for what an AI-era opening game should be, with risks and validation signals."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_76d64040529e464da37f08d075a05120.yaml

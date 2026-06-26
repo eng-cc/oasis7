@@ -1,6 +1,6 @@
 # `p2p/node` 热点子域入口
 
-更新时间: 2026-06-13
+更新时间: 2026-06-26
 
 ## 从这里开始
 - 想确认 P2P/DistFS/consensus/execution/observer 的整体闭环、测试层级与 claim boundary：先读 `testing-manual.md#s9a链上大世界状态底座自闭环`；本页只负责 node 子域入口。
@@ -20,7 +20,7 @@
 
 ## 高密度提示
 - 当前子域属于 `p2p` 模块最高密度热点路径之一；本页的目标是压缩首读路径，而不是按文件数维护专题清单。
-- 需要当前文件数量时，以 `find doc/p2p/node -type f | wc -l` 或 `git ls-files 'doc/p2p/node/**'` 为准。
+- 需要当前文件数量和 inventory 状态时，以仓库根目录运行 `./scripts/doc-inventory-report.sh` 为准；`find` / `git ls-files` 仅作为本地探索辅助，不作为正式 inventory 口径。
 
 ## 首读主题簇
 

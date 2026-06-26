@@ -292,6 +292,7 @@
 - [x] world-bounds-copy-consistency (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 codebase audit Task 3 的 world bounds / anchor fallback 双语文案一致性，保持 software-safe source 与 checked-in viewer bundle 同步，不改变 anchor fallback 行为。 Trace: .pm/tasks/task_456c5ba10a964ea69c679450d215aa64.yaml
 - [x] stale-cargo-cache-project-plan-cleanup (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 engineering project 中已完成 `local-cargo-cache-script-convergence` 的过期 File Structure / Affected Paths 计划残留，保留完成行与 `.pm` task trace，不改 cargo-dev 行为。 Trace: .pm/tasks/task_42b496aae8c8456a882acea4c2116a22.yaml
 - [x] engineering-project-latest-completed-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 engineering project 状态区的 `最新完成` 漂移，将其从较早的 libp2p RustSec burn-down 任务同步到当前 doc governance truth refresh，保留下一任务 inventory 分类口径不变。 Trace: .pm/tasks/task_5ca263b753114c08ab7bb6303fd49449.yaml
+- [x] p2p-node-inventory-report-contract-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 doc 层 repository health 巡检发现的 `doc/p2p/node/README.md` inventory 口径漂移，将当前文件数量入口从 ad hoc `find` / `git ls-files` 改回 canonical `scripts/doc-inventory-report.sh`，避免子域 landing page 与 p2p 模块根入口互相冲突。 Trace: .pm/tasks/task_9b5b64c5d3e34584be5a64fa438595ed.yaml
 
 ## File Structure / Affected Paths
 
@@ -356,10 +357,10 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-06-25
+- 更新日期: 2026-06-26
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `engineering-project-latest-completed-sync`（已将本状态区从较早的 `libp2p-default-runtime-rustsec-burndown` 同步到当前 doc governance truth refresh，补齐 `.pm` task trace，并保留下一任务 inventory 分类口径不变。）
+- 最新完成: `p2p-node-inventory-report-contract-sync`（已将 `doc/p2p/node/README.md` 的当前文件数量入口从 ad hoc `find` / `git ls-files` 改回 canonical `scripts/doc-inventory-report.sh`，与 p2p 模块根入口的 inventory 口径保持一致。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
