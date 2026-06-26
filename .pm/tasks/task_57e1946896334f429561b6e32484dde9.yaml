@@ -19,5 +19,10 @@ acceptance:
   - "Implement the minimal governance/script/baseline/doc/test fix in the task worktree."
   - "Run focused and required verification, complete local role review, create PR, watch checks/comments, merge, and clean up."
 handoff_to: []
-updated_at: 2026-06-26T14:46:44+08:00
+updated_at: 2026-06-26T15:31:29+08:00
 last_started_at: 2026-06-26T14:46:44+08:00
+last_claim_type: ready_for_pr
+last_verify_command: "./scripts/ci-tests.sh required"
+last_verified_at: 2026-06-26T15:31:28+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
