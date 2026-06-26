@@ -130,7 +130,7 @@ Example:
 - Visual Evidence: n/a; docs-only wording change with no UI or screenshot surface.
 - WASM Evidence: n/a; no WASM paths, ABI, manifests, or determinism workflow touched.
 - Ops Evidence: n/a; no deployment, rollback, node, or operator runbook behavior touched.
-- LiveOps Evidence: n/a; no external messaging, release notes, community promise, or incident comms touched.
+- LiveOps Evidence: explicit exemption; docs-only internal evidence-sink wording change with no external messaging, release notes, community promise, incident comms, or channel runbook surface touched.
 - Residual Risk: Low; other historical docs may still mention `doc/devlog`, but this patch intentionally converges only current live headless-runtime guidance and leaves historical archives untouched.
 - Slice Ledger: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/slice-ledger.jsonl`
 
@@ -189,6 +189,6 @@ Example:
 - Visual Evidence: n/a; docs-only wording change with no UI or screenshot surface.
 - WASM Evidence: n/a; no WASM paths, ABI, manifests, or determinism workflow touched.
 - Ops Evidence: n/a; no deployment, rollback, node, or operator runbook behavior touched.
-- LiveOps Evidence: n/a; liveops_community confirmed no external messaging, player/community promise, incident communication, channel runbook, or LiveOps follow-up obligation is created or changed.
+- LiveOps Evidence: explicit exemption; liveops_community confirmed no external messaging, player/community promise, incident communication, channel runbook, or LiveOps follow-up obligation is created or changed.
 - Residual Risk: Low; other historical docs may still mention `doc/devlog`, but this patch intentionally converges only current live headless-runtime guidance and leaves historical archives untouched.
 - Slice Ledger: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/slice-ledger.jsonl`
