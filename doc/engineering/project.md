@@ -8,6 +8,8 @@
 
 - [x] remove-root-pr-md-evidence-flow (PRD-ENGINEERING-021/025) [test_tier_required]: 删除根目录共享 `PR.md`，将 post-PR evidence 链收敛到 task-local execution log / `.pm` evidence，并用 workflow-lint smoke 阻断根 `PR.md` 回流。 Trace: .pm/tasks/task_2b7e1387ff0443719e66732a90304164.yaml
 
+- [x] viewer-performance-probe-package-script-governance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Route the Viewer performance probe wrapper through the canonical `npm --prefix crates/oasis7_viewer run test:performance` package script and align current performance PRD command口径. Trace: .pm/tasks/task_1528a3f2bcd04bd6acad166c7a257bca.yaml
+
 - [x] TASK-ENGINEERING-001 (PRD-ENGINEERING-001) [test_tier_required]: 完成 engineering PRD 改写，建立工程治理主文档。
 - [x] TASK-ENGINEERING-002 (PRD-ENGINEERING-001/002) [test_tier_required]: 补齐高频违规（超行数/超文档长度/文档平铺新增）自动诊断与门禁建议。
 - [x] TASK-ENGINEERING-005 (PRD-ENGINEERING-001/002) [test_tier_required]: 执行文档平铺存量迁移批次（world-simulator/p2p），并更新 allowlist 与引用路径。

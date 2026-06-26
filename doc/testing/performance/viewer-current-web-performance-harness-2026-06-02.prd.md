@@ -28,7 +28,7 @@
 - Active commands:
   - `./scripts/viewer-performance-probe.sh --profile smoke`
   - `./scripts/viewer-performance-probe.sh --profile release --duration-ms 8000`
-  - `cd crates/oasis7_viewer && npm run test:performance -- --profile smoke`
+  - `npm --prefix crates/oasis7_viewer run test:performance -- --profile smoke`
 - Artifacts:
   - `output/playwright/viewer-performance/<run-id>/summary.json`
   - `output/playwright/viewer-performance/<run-id>/summary.md`
