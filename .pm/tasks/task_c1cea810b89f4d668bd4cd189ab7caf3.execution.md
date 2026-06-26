@@ -192,3 +192,12 @@ Example:
 - LiveOps Evidence: explicit exemption; liveops_community confirmed no external messaging, player/community promise, incident communication, channel runbook, or LiveOps follow-up obligation is created or changed.
 - Residual Risk: Low; other historical docs may still mention `doc/devlog`, but this patch intentionally converges only current live headless-runtime guidance and leaves historical archives untouched.
 - Slice Ledger: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/slice-ledger.jsonl`
+
+## 2026-06-26 15:03:00 CST / tpm
+- 完成内容: Added claim-ready evidence and module project Trace required by PR preflight.
+- 遗留事项: Commit metadata fixes and rerun `prepare-task-pr.sh --create`.
+- Action: Ran `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/doc-governance-check.sh"` and added `headless-runtime-evidence-sink-semantics` Trace to `doc/engineering/project.md`.
+- Validation Command: ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/doc-governance-check.sh"
+- Expected Result: Fresh ready-for-PR verification passes and can be cited by preflight.
+- Actual Result: `doc-governance-check: OK`; claim verification summary returned `claim_type: ready_for_pr`, `verification_exit_code: 0`, `status: verified`, `allowed_to_claim: true`.
+- Blocker / Next Action: Commit project Trace and claim-ready evidence, then rerun PR creation.
