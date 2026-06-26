@@ -397,28 +397,31 @@ impl ExplorerStore {
     }
 
     pub(super) fn query_blocks(&self, limit: usize, cursor: usize) -> ExplorerBlocksResponse {
-        let mut blocks = self
+        let total = self.blocks_by_height.len();
+        let bounded_cursor = cursor.min(total);
+        let items = self
             .blocks_by_height
-            .values()
-            .cloned()
+            .iter()
+            .rev()
+            .skip(bounded_cursor)
+            .take(limit)
+            .map(|(_, block)| block.clone())
             .collect::<Vec<ExplorerBlockItem>>();
-        blocks.sort_by(|left, right| {
-            right
-                .height
-                .cmp(&left.height)
-                .then_with(|| right.block_hash.cmp(&left.block_hash))
-        });
-        let page = build_page_response(blocks, limit, cursor);
+        let next_cursor = if bounded_cursor + items.len() < total {
+            Some(bounded_cursor + items.len())
+        } else {
+            None
+        };
         ExplorerBlocksResponse {
-            ok: page.ok,
-            observed_at_unix_ms: page.observed_at_unix_ms,
-            limit: page.limit,
-            cursor: page.cursor,
-            total: page.total,
-            next_cursor: page.next_cursor,
-            items: page.items,
-            error_code: page.error_code,
-            error: page.error,
+            ok: true,
+            observed_at_unix_ms: super::super::now_unix_ms(),
+            limit,
+            cursor: bounded_cursor,
+            total,
+            next_cursor,
+            items,
+            error_code: None,
+            error: None,
         }
     }
 
@@ -713,5 +716,62 @@ fn build_page_response<T>(mut items: Vec<T>, limit: usize, cursor: usize) -> Pag
         items: drained,
         error_code: None,
         error: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn block(height: u64) -> ExplorerBlockItem {
+        ExplorerBlockItem {
+            height,
+            slot: height,
+            epoch: 0,
+            block_hash: format!("block-{height}"),
+            action_root: format!("root-{height}"),
+            action_count: 0,
+            committed_at_unix_ms: height as i64,
+            tx_hashes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn query_blocks_pages_descending_heights_without_full_sort() {
+        let mut store = ExplorerStore::default();
+        for height in [7, 3, 9, 4] {
+            store.blocks_by_height.insert(height, block(height));
+        }
+
+        let first_page = store.query_blocks(2, 0);
+        assert!(first_page.ok);
+        assert_eq!(first_page.total, 4);
+        assert_eq!(first_page.cursor, 0);
+        assert_eq!(first_page.next_cursor, Some(2));
+        assert_eq!(
+            first_page
+                .items
+                .iter()
+                .map(|item| item.height)
+                .collect::<Vec<_>>(),
+            vec![9, 7]
+        );
+
+        let second_page = store.query_blocks(2, 2);
+        assert_eq!(second_page.cursor, 2);
+        assert_eq!(second_page.next_cursor, None);
+        assert_eq!(
+            second_page
+                .items
+                .iter()
+                .map(|item| item.height)
+                .collect::<Vec<_>>(),
+            vec![4, 3]
+        );
+
+        let empty_page = store.query_blocks(2, 99);
+        assert_eq!(empty_page.cursor, 4);
+        assert_eq!(empty_page.next_cursor, None);
+        assert!(empty_page.items.is_empty());
     }
 }
