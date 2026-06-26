@@ -142,3 +142,53 @@ Example:
 - Expected Result: Current task closes after fresh doc-governance verification.
 - Actual Result: The helper set the task file to `status: done` with `last_verification_status: verified` and `last_verification_exit_code: 0`, but exited 1 because repo-wide `.pm` lint reports numerous pre-existing execution-log format failures in unrelated historical tasks such as `task_04d61dc5778e4b1683a61056daf454e3`, `task_060e9de147ba4757ac29cf0fb7a15210`, and many others. No failure in the current task's changed docs was reported.
 - Blocker / Next Action: Treat repo-wide historical `.pm` lint debt as outside this task scope; run current-task workflow/pre-PR checks and continue to PR creation if they pass.
+
+## 2026-06-26 14:45:00 CST / tpm
+- Review Trigger: pre-PR local role review, additional roles required by `./scripts/prepare-task-pr.sh --create` changed-path inference.
+- Review Scope: committed task diff at `e8593d1a57e18408889f02c1e4f06f745ba504dd`, especially headless-runtime live guidance and `.pm` task evidence.
+- Review Package: prior package `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/review-packages/review-c572185c0..c572185c0.diff` is stale/empty; reviewers must use `git show --stat --oneline e8593d1a57e18408889f02c1e4f06f745ba504dd` plus `git diff refs/remotes/origin/main..HEAD` for the current committed diff.
+- Review Roles: producer_system_designer, liveops_community
+- Review Question: Confirm whether this docs-only evidence-sink wording convergence changes any product/system acceptance, player/community promise, incident/runbook communication, or LiveOps obligation beyond replacing active `doc/devlog` evidence-sink wording with `.pm/tasks/task_<32hex>.execution.md`.
+- Evidence Available: current-task workflow lint passed; targeted active-devlog `rg` returned no matches; `./scripts/doc-governance-check.sh` passed; `git diff --check` passed; repository_health_engineer and qa_engineer reviews have no blocking findings.
+- Expected Return Contract: findings or no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk.
+- Slice Ledger: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/slice-ledger.jsonl`
+- Formal Sink: `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.execution.md`
+
+## 2026-06-26 14:54:00 CST / producer_system_designer
+- Review Trigger: pre-PR local role review result
+- Review Scope: committed task diff against `refs/remotes/origin/main..HEAD` for `.pm` evidence and the three headless-runtime live guidance files.
+- Review Result: no_findings.
+- Scope/Spec Compliance Verdict: pass; diff stays within `.pm` task evidence plus three headless-runtime live guidance surfaces and only redirects active evidence-sink wording from `doc/devlog/YYYY-MM-DD.md` / `devlog 记录` to `.pm/tasks/task_<32hex>.execution.md`.
+- Role Quality/Risk Verdict: pass, low risk; no changes to product/system acceptance, world/player promises, module priority, or headless-runtime lifecycle/auth requirements. Existing P0 escalation condition, required/full test expectations, and handoff scope remain intact.
+- Residual Risk: low; the Done Definition evidence line being a plain bullet is a documentation-governance formatting accommodation, not a product/system semantic change.
+
+## 2026-06-26 14:55:00 CST / liveops_community
+- Review Trigger: pre-PR local role review result
+- Review Scope: committed task diff against `refs/remotes/origin/main..HEAD` for `.pm` evidence and the three headless-runtime live guidance files.
+- Review Result: no_findings.
+- Scope/Spec Compliance Verdict: pass; change stays scoped to replacing active `doc/devlog` evidence-sink wording with `.pm/tasks/task_<32hex>.execution.md`.
+- Role Quality/Risk Verdict: pass, low risk; no external messaging, player/community promise, incident communication, channel runbook, or LiveOps follow-up obligation is created or changed. The incident template still records incident evidence and escalation fields; only the internal evidence sink is updated.
+- Residual Risk: low; other historical docs may still mention `doc/devlog`, but this patch intentionally avoids broad historical rewrites.
+
+## 2026-06-26 14:58:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_c1cea810b89f4d668bd4cd189ab7caf3
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-convergence-next
+- Source Branch: task/engineering-legacy-doc-semantics-convergence-next
+- Source Head: e8593d1a57e18408889f02c1e4f06f745ba504dd
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.yaml`; `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.execution.md`; `doc/headless-runtime/project.md`; `doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`; `doc/headless-runtime/templates/longrun-archive-incident-template.md`
+- Review Package: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/review-packages/review-c572185c0..c572185c0.diff`; limitation recorded above because the package was generated before local diff commit and is empty, so reviewers used current `git diff` / `git diff refs/remotes/origin/main..HEAD` and listed paths.
+- Role Selection Basis: changed paths affect documentation-governance semantics, current headless-runtime live guidance, and verification evidence; `./scripts/prepare-task-pr.sh --create` additionally inferred producer_system_designer, liveops_community, and qa_engineer from changed paths. Included `repository_health_engineer` for doc/workflow semantic convergence, `qa_engineer` for verification sufficiency, `producer_system_designer` for product/system semantics, and `liveops_community` for external/incident/runbook implications; skipped runtime because no runtime behavior or lifecycle/auth implementation semantics changed.
+- Review Roles: producer_system_designer, liveops_community, qa_engineer, repository_health_engineer
+- Review Evidence: repository_health_engineer returned `no_findings`, scope/spec pass, quality/risk pass, residual risk low; qa_engineer returned one P3 non-blocking checklist-shape finding, scope/spec pass, verification sufficient, residual risk low after disposition; producer_system_designer returned `no_findings`, scope/spec pass, product/system risk pass, residual risk low; liveops_community returned `no_findings`, scope/spec pass, LiveOps/community risk pass, residual risk low.
+- Review Verdicts: repository_health_engineer scope/spec compliance pass and repository health quality/risk pass; qa_engineer scope/spec compliance pass and QA quality/risk pass; producer_system_designer scope/spec compliance pass and producer/system quality/risk pass; liveops_community scope/spec compliance pass and LiveOps/community quality/risk pass.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: QA P3 requested restoring checkbox form for the Done Definition line, but `./scripts/doc-governance-check.sh` rejects newly added `- [ ]` lines in `project.md` as project task rows unless they match the task-row template; the final plain-bullet wording preserves the evidence-sink semantic fix while satisfying doc governance. Final verification rerun passed. Other roles returned no findings.
+- Verification Matrix: headless-runtime live evidence-sink wording -> targeted `rg` for active devlog terms -> no matches; doc governance contract -> `./scripts/doc-governance-check.sh` -> OK; current task workflow packet -> `./scripts/pm/workflow-lint.sh --task-uid task_c1cea810b89f4d668bd4cd189ab7caf3 --phase current` -> OK; whitespace/diff hygiene -> `git diff --check` -> pass.
+- Visual Evidence: n/a; docs-only wording change with no UI or screenshot surface.
+- WASM Evidence: n/a; no WASM paths, ABI, manifests, or determinism workflow touched.
+- Ops Evidence: n/a; no deployment, rollback, node, or operator runbook behavior touched.
+- LiveOps Evidence: n/a; liveops_community confirmed no external messaging, player/community promise, incident communication, channel runbook, or LiveOps follow-up obligation is created or changed.
+- Residual Risk: Low; other historical docs may still mention `doc/devlog`, but this patch intentionally converges only current live headless-runtime guidance and leaves historical archives untouched.
+- Slice Ledger: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/slice-ledger.jsonl`
