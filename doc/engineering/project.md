@@ -6,7 +6,7 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
-- [ ] llm-memory-top-n-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize LLM agent memory top-N selection to avoid full-candidate sorting on prompt assembly hot paths while preserving tie-order semantics. Trace: .pm/tasks/task_e9bea69b2282407e98732299a4bf4e84.yaml
+- [x] llm-memory-top-n-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize LLM agent memory top-N selection to avoid full-candidate sorting on prompt assembly hot paths while preserving tie-order semantics. Trace: .pm/tasks/task_e9bea69b2282407e98732299a4bf4e84.yaml
 
 - [x] remove-root-pr-md-evidence-flow (PRD-ENGINEERING-021/025) [test_tier_required]: 删除根目录共享 `PR.md`，将 post-PR evidence 链收敛到 task-local execution log / `.pm` evidence，并用 workflow-lint smoke 阻断根 `PR.md` 回流。 Trace: .pm/tasks/task_2b7e1387ff0443719e66732a90304164.yaml
 

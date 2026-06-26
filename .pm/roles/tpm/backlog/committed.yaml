@@ -99,18 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_e9bea69b2282407e98732299a4bf4e84
-    title: "Code execution efficiency next governance scan"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd:
-      - PRD-ENGINEERING-001
-      - PRD-ENGINEERING-021
-    acceptance:
-      - "Find one non-duplicate code execution efficiency issue with repository-health/performance evidence."
-      - "Implement a minimal low-risk code/test/doc fix in the task worktree."
-      - "Run focused and required verification, complete local role review, create PR, watch checks/comments, merge, and clean up."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_e9bea69b2282407e98732299a4bf4e84.yaml
