@@ -99,3 +99,18 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
+  - task_uid: task_9aa5cd8fecb54028a3126768eff6d8d4
+    title: "code execution efficiency next issue"
+    module: engineering
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-ENGINEERING-001
+      - PRD-ENGINEERING-021
+    acceptance:
+      - "Find one non-duplicate code execution efficiency issue in Rust/runtime code and record role-owned evidence."
+      - "Implement a scoped fix with focused regression coverage or explicit no-code evidence if no safe fix exists."
+      - "Run relevant local verification and carry the normal PR workflow through review, CI, merge, and cleanup."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_9aa5cd8fecb54028a3126768eff6d8d4.yaml
