@@ -52,4 +52,4 @@
 - 是否至少填写 1 条归档证据路径。
 - 是否记录失败签名、触发阶段、恢复动作。
 - `fail/blocked` 是否具备直接证据支撑。
-- 是否回写 `doc/headless-runtime/project.md` 与 `doc/devlog/YYYY-MM-DD.md`。
+- 是否回写 `doc/headless-runtime/project.md` 与对应 `.pm/tasks/task_<32hex>.execution.md`。
