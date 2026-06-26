@@ -279,6 +279,7 @@ function visualProbeScript() {
           rect: rectOf(receipt),
         };
       };
+      const zIndexOf = (element) => Number.parseInt(getComputedStyle(element).zIndex || "0", 10) || 0;
 
       await waitFor(() => window.__AW_TEST__?.injectSnapshot);
       window.__PIXEL_WORLD_VISUAL_BASE_SNAPSHOT__ = snapshot;
@@ -313,12 +314,16 @@ function visualProbeScript() {
       const stage = document.querySelector(".pixel-world-canvas");
       const fragments = Array.from(stage.querySelectorAll(".pixel-world-fragment-terrain"));
       const location = stage.querySelector(".pixel-world-entity--location");
-      const agent = stage.querySelector(".pixel-world-entity--agent");
-      const children = Array.from(stage.children);
+      const agent = stage.querySelector(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)");
       const fragmentRects = fragments.map(rectOf);
       const maxFragmentWidth = Math.max(...fragmentRects.map((rect) => rect.width));
       const agentRect = rectOf(agent);
       const locationOpacity = Number.parseFloat(location.style.opacity || getComputedStyle(location).opacity);
+      const layerOrder = {
+        fragmentZ: zIndexOf(fragments[0]),
+        locationZ: zIndexOf(location),
+        agentZ: zIndexOf(agent),
+      };
 
       return JSON.stringify({
         ready,
@@ -333,9 +338,10 @@ function visualProbeScript() {
           locationOpacity,
           fragmentTags: fragments.map((fragment) => fragment.tagName),
           fragmentTitles: fragments.map((fragment) => fragment.getAttribute("title")),
-          domOrder: {
-            fragmentsBeforeLocation: children.indexOf(fragments[0]) < children.indexOf(location),
-            locationBeforeAgent: children.indexOf(location) < children.indexOf(agent),
+          layerOrder: {
+            ...layerOrder,
+            fragmentsBehindLocation: layerOrder.fragmentZ < layerOrder.locationZ,
+            locationBehindAgent: layerOrder.locationZ < layerOrder.agentZ,
           },
           actionReceipt: receiptOf(),
           badges: badges(),
@@ -636,7 +642,7 @@ const server = createServer(serveFile);
 try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address();
-  const url = `http://127.0.0.1:${address.port}/software_safe.html?test_api=1&connect=0&locale=en&t=${Date.now()}`;
+  const url = `http://127.0.0.1:${address.port}/software_safe.html?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=selected_blocker&t=${Date.now()}`;
 
   closeBrowser();
   console.log(`opening pixel-world viewer visual smoke: ${url}`);
@@ -656,8 +662,8 @@ try {
   assert(summary.rendered.locationMarkerRole === "logic_anchor", "location marker was not demoted to logic anchor", summary.rendered);
   assert(summary.rendered.locationOpacity < 0.5, "location marker remains too visually dominant", summary.rendered);
   assert(summary.rendered.agentPositionSource === "location_derived", "agent position was not derived from its location", summary.rendered);
-  assert(summary.rendered.domOrder.fragmentsBeforeLocation, "fragment terrain is not behind the location layer", summary.rendered);
-  assert(summary.rendered.domOrder.locationBeforeAgent, "agent layer is not in front of the location layer", summary.rendered);
+  assert(summary.rendered.layerOrder.fragmentsBehindLocation, "fragment terrain is not behind the location layer", summary.rendered);
+  assert(summary.rendered.layerOrder.locationBehindAgent, "agent layer is not in front of the location layer", summary.rendered);
   assert(summary.rendered.actionReceipt?.present === "false", "rendered hierarchy fixture should start from an honest no-receipt state", summary.rendered);
   assert(summary.rendered.actionReceipt?.confidence === "none", "no-receipt fixture should not claim action receipt confidence", summary.rendered);
   assert(summary.rendered.maxFragmentWidth > 0, "fragment marker boxes did not render with a measurable size", summary.rendered);
