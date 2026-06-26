@@ -82,6 +82,35 @@ describe("viewer performance metrics", () => {
     expect(failed).toContain("interaction_p95_ms");
   });
 
+  it("keeps nearest-rank percentiles stable for unsorted and invalid samples", () => {
+    const summary = summarizeViewerPerformance({
+      runId: "percentile-stability",
+      durationMs: 1000,
+      sampleDurationMs: 1000,
+      frameIntervals: [30, "10", null, 20, Number.NaN, -4, 40, 50],
+      interactionLatencies: [120, "40", undefined, 80, 160, Number.POSITIVE_INFINITY],
+      thresholds: {
+        minFrameSamples: 1,
+        minFps: 1,
+        maxFrameP95Ms: 100,
+        maxFrameP99Ms: 100,
+        maxLongTaskCount: 0,
+        maxLongTaskTotalMs: 0,
+        maxDomContentLoadedMs: 1000,
+        maxLoadEventMs: 1000,
+        maxInteractionP95Ms: 200,
+      },
+    });
+
+    expect(summary.metrics.frameSamples).toBe(6);
+    expect(summary.metrics.frameP50Ms).toBe(20);
+    expect(summary.metrics.frameP95Ms).toBe(50);
+    expect(summary.metrics.frameP99Ms).toBe(50);
+    expect(summary.metrics.interactionSamples).toBe(4);
+    expect(summary.metrics.interactionP50Ms).toBe(80);
+    expect(summary.metrics.interactionP95Ms).toBe(160);
+  });
+
   it("renders markdown with the expanded metric rows", () => {
     const summary = summarizeViewerPerformance({
       runId: "markdown",
