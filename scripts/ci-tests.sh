@@ -210,6 +210,7 @@ run_required_gate_checks() {
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh
   run ./scripts/cargo-dev-lib.test.sh
+  run ./scripts/check-standalone-tool-lockfiles.sh
   run ./scripts/plan-rust-required-scope.test.sh
   run ./scripts/unified-world-code-terminology-scan.test.sh
   run ./scripts/release-gate-bash-preflight.test.sh

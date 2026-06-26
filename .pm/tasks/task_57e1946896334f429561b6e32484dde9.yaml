@@ -1,0 +1,29 @@
+task_uid: task_57e1946896334f429561b6e32484dde9
+title: "Rust dependency upgrade next governance scan"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-upgrade-next-scan-3
+execution_log_path: .pm/tasks/task_57e1946896334f429561b6e32484dde9.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-025
+acceptance:
+  - "Find the next non-duplicate Rust dependency-upgrade governance issue via repository-health role evidence."
+  - "Implement the minimal governance/script/baseline/doc/test fix in the task worktree."
+  - "Run focused and required verification, complete local role review, create PR, watch checks/comments, merge, and clean up."
+handoff_to: []
+updated_at: 2026-06-26T15:40:49+08:00
+last_started_at: 2026-06-26T14:46:44+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/ci-tests.sh required"
+last_verified_at: 2026-06-26T15:40:48+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-26T15:40:49+08:00
