@@ -232,6 +232,15 @@ Example:
 - Residual Risk: Low; other historical docs may still mention `doc/devlog`, but this patch intentionally converges only current live headless-runtime guidance and leaves historical archives untouched.
 - Slice Ledger: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/slice-ledger.jsonl`
 
+## 2026-06-26 15:35:00 CST / tpm
+- 完成内容: Addressed GitHub Codex review thread on active PRD evidence-sink drift.
+- 遗留事项: Run targeted verification, push, resolve the review thread, and continue PR checks/merge path.
+- Action: Verified the review comment against `doc/headless-runtime/prd.md:70`; AC-4 still required `devlog 记录`, which conflicted with the already-converged project/checklist/template guidance. Updated AC-4 to require test evidence plus task-local `.pm/tasks/task_<32hex>.execution.md` execution evidence.
+- Validation Command: rg -n 'devlog 记录|doc/devlog/YYYY-MM-DD\.md' doc/headless-runtime/prd.md doc/headless-runtime/project.md doc/headless-runtime/templates doc/headless-runtime/checklists; ./scripts/doc-governance-check.sh; ./scripts/pm/workflow-lint.sh --task-uid task_c1cea810b89f4d668bd4cd189ab7caf3 --phase current; git diff --check
+- Expected Result: Active headless-runtime PRD no longer instructs maintainers to use devlog as a current evidence sink.
+- Actual Result: targeted `rg` returned no matches; `./scripts/doc-governance-check.sh` returned OK; current task workflow lint returned OK; `git diff --check` passed.
+- Blocker / Next Action: Commit and push review-thread fix, then resolve the GitHub review thread.
+
 ## 2026-06-26 15:03:00 CST / tpm
 - 完成内容: Added claim-ready evidence and module project Trace required by PR preflight.
 - 遗留事项: Commit metadata fixes and rerun `prepare-task-pr.sh --create`.
