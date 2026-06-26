@@ -13,7 +13,7 @@
   - SC-2: 默认 branch/path 命名稳定、可搜索、可回收。
   - SC-3: 源 worktree 脏、目标路径已存在或目标 branch 已在其他 worktree 检出时，脚本会快速失败并给出修复建议。
   - SC-4: agent 可通过 `--json` 直接读取新建 worktree 的 `branch`、`path`、`base_ref` 与创建模式。
-  - SC-5: `--init-docs` 可立即报告 `doc/<module>/prd.md`、`doc/<module>/project.md` 与当日 `doc/devlog/YYYY-MM-DD.md` 的存在性。
+  - SC-5: `--init-docs` 可立即报告 `doc/<module>/prd.md` 与 `doc/<module>/project.md` 的存在性；启用 PM bootstrap 时返回对应 task execution log 路径。
   - SC-6: `--with-harness` 可在新 worktree 中后台预热 `./scripts/worktree-harness.sh up`，并继承 formal gameplay 的 active LLM preflight；`--json` 仍保持纯 JSON 输出。
   - SC-7: worktree 治理口径必须明确“文档改动、脚本改动、测试改动、仅改话术”都算新需求，不得因改动看起来“小”就继续复用当前 worktree。
   - SC-8: worktree 治理口径必须明确只有用户显式说出“复用当前 worktree / 就在这里改 / 不要切新 worktree”时才算例外；“先写一版”“先不要提交”“顺手改一下”都不算复用授权。
@@ -38,7 +38,7 @@
   1. `scripts/new-task-worktree.sh scripts task-worktree-bootstrap -> 校验源 worktree clean -> 创建 task/scripts-task-worktree-bootstrap 分支与默认路径 -> 输出下一步命令`
   2. `scripts/new-task-worktree.sh <module> <task> --json -> 上层读取 branch/path/base_ref -> 进入新 worktree 执行 PRD / project 工作流`
   3. `目标 branch 已存在但未被检出 -> 复用该 branch 附着到新路径 -> 输出 mode=attach_existing_branch`
-  4. `scripts/new-task-worktree.sh <module> <task> --init-docs -> 输出模块 PRD / project / 当日 devlog 的存在性与建议下一步`
+  4. `scripts/new-task-worktree.sh <module> <task> --init-docs -> 输出模块 PRD / project 的存在性与建议下一步；启用 PM bootstrap 时输出 task execution log 路径`
   5. `scripts/new-task-worktree.sh <module> <task> --with-harness -> 创建新 worktree 后异步触发 worktree-harness.sh up -> 立即返回 bootstrap_log / state.json / 当前状态摘要`
   6. `用户只说“先写一版 / 先不要提交 / 顺手改一下” -> 仍视为新需求 -> 先切独立 worktree，再开始编辑`
   7. `agent 已在错误 worktree 开始改动 -> 发现后立即说明 -> 停止继续扩写 -> 切到新 worktree 再继续`
@@ -50,7 +50,7 @@
 | worktree 创建 | `mode`、`branch_exists`、`path_exists` | 新建 branch 或附着已有 branch | `named -> created/attached/failed` | 先检查 path，再检查 branch 是否已被其他 worktree 占用 | 当前仓库执行者可用 |
 | worktree 例外授权 | `reuse_authorized`、`authorization_phrase`、`source_worktree_dirty` | 只有用户显式授权复用当前 worktree 时才允许跳过 bootstrap | `unknown -> authorized/rejected` | 仅接受“复用当前 worktree / 就在这里改 / 不要切新 worktree”等明确表述；其他模糊表达一律视为未授权 | 仅用户可授予复用例外 |
 | 摘要输出 | `worktree_path`、`branch`、`base_ref`、`mode` | 打印人类可读摘要或 JSON | `created -> ready` | `--json` 时仅输出机器可读单对象 | agent / 人类均可读 |
-| 文档检查 | `doc_checks.prd`、`doc_checks.project`、`doc_checks.today_devlog` | `--init-docs` 时报告存在性与路径 | `ready -> docs_checked` | 只读检查，不自动创建文档 | `producer_system_designer` / `qa_engineer` 可读 |
+| 文档检查 | `doc_checks.prd`、`doc_checks.project`、`pm_task.execution_log_path` | `--init-docs` 时报告模块文档存在性与路径；启用 PM bootstrap 时返回 task execution log 路径 | `ready -> docs_checked` | 只读检查，不自动创建文档；task evidence 由 `.pm/tasks/task_<32hex>.execution.md` 承载 | `producer_system_designer` / `qa_engineer` 可读 |
 | harness 预热 | `harness.bootstrap_log`、`harness.state_file`、`harness.status`、`harness.viewer_url` | `--with-harness` 时在新 worktree 后台触发 `worktree-harness.sh up` | `ready -> harness_booting -> harness_ready` | 默认走 formal gameplay 的 LLM-required launcher path；立即返回，不阻塞完整冷启动 | `qa_engineer` / agent 可触发 |
 - Acceptance Criteria:
   - AC-1: `scripts/new-task-worktree.sh --help` 明确列出 `<module> <task>`、`--base`、`--branch`、`--path`、`--json`、`--allow-dirty-source`、`--init-docs`、`--with-harness`。
@@ -58,7 +58,7 @@
   - AC-3: 源 worktree 脏时默认阻断，只有显式 `--allow-dirty-source` 才允许继续。
   - AC-4: 若目标 branch 已在其他 worktree 检出，脚本必须阻断并打印对应 worktree 路径。
   - AC-5: `--json` 至少输出 `module`、`task`、`branch`、`worktree_path`、`base_ref`、`mode`。
-  - AC-6: `--init-docs` 至少输出 `doc/<module>/prd.md`、`doc/<module>/project.md`、当日 `doc/devlog/YYYY-MM-DD.md` 的路径与存在性。
+  - AC-6: `--init-docs` 至少输出 `doc/<module>/prd.md` 与 `doc/<module>/project.md` 的路径与存在性；启用 PM bootstrap 时输出对应 `.pm/tasks/task_<32hex>.execution.md` 路径。
   - AC-7: `--with-harness` 必须在新 worktree 中异步执行 `./scripts/worktree-harness.sh up`，并在摘要中输出 `bootstrap_log`、`state_file` 与当前 `status`；若 `viewer_url` 已就绪则一并输出。
   - AC-8: `--json --with-harness` 仍只输出单个 JSON 对象；harness 子命令的人类输出不得混入 stdout。
   - AC-9: 与 `AGENTS.md` 对齐的正式口径必须明确“文档/脚本/测试/话术改动也算新需求”，并列出“不算复用授权”的模糊表达示例。

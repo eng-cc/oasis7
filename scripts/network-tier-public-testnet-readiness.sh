@@ -114,6 +114,7 @@ active_required_lanes = [
     "world_resource_provenance_ready",
     "provider_resource_provenance_ready",
     "resource_delta_replay_ready",
+    "api_viewer_projection_ready",
 ]
 required_lanes = list(active_required_lanes)
 status_rank = {"pass": 0, "partial": 1, "block": 2}
@@ -204,6 +205,34 @@ def is_template_ref(raw: str, resolved=None) -> bool:
     return relative.parts[:2] == ("doc", "testing") and "templates" in relative.parts
 
 
+def validate_api_viewer_projection_pass_evidence(raw: str, evidence: pathlib.Path) -> list[str]:
+    blockers: list[str] = []
+    try:
+        data = json.loads(evidence.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"api_viewer_projection_ready evidence must be JSON with api_viewer_projection object: {raw} ({exc})"]
+
+    projection = data.get("api_viewer_projection")
+    if not isinstance(projection, dict):
+        projection = data.get("s10_summary", {}).get("api_viewer_projection") if isinstance(data.get("s10_summary"), dict) else None
+    if not isinstance(projection, dict):
+        return [f"api_viewer_projection_ready evidence missing api_viewer_projection object: {raw}"]
+
+    if projection.get("status") != "pass":
+        blockers.append(f"api_viewer_projection_ready status must be pass: {raw}")
+    if projection.get("same_window_required") is not True:
+        blockers.append(f"api_viewer_projection_ready same_window_required must be true: {raw}")
+    if not str(projection.get("chain_status_samples_ref") or "").strip():
+        blockers.append(f"api_viewer_projection_ready chain_status_samples_ref missing: {raw}")
+    if not str(projection.get("api_projection_ref") or "").strip():
+        blockers.append(f"api_viewer_projection_ready api_projection_ref missing: {raw}")
+    if not str(projection.get("viewer_projection_ref") or "").strip():
+        blockers.append(f"api_viewer_projection_ready viewer_projection_ref missing: {raw}")
+    if projection.get("world_state_projection_match") is not True:
+        blockers.append(f"api_viewer_projection_ready world_state_projection_match must be true: {raw}")
+    return blockers
+
+
 def escape_markdown_cell(raw: str) -> str:
     return raw.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
 
@@ -285,6 +314,12 @@ if lanes_tsv_arg:
                 raise SystemExit(
                     f"lane `{lane_id}` pass evidence cannot use placeholder/template ref: {evidence_path}"
                 )
+            if lane_id == "api_viewer_projection_ready" and status == "pass":
+                projection_blockers = validate_api_viewer_projection_pass_evidence(
+                    evidence_path, evidence
+                )
+                if projection_blockers:
+                    raise SystemExit("; ".join(projection_blockers))
             seen_lane_ids.add(lane_id)
             lanes.append(
                 {

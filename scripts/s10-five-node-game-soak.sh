@@ -1452,6 +1452,21 @@ write_summary_json() {
           )
         }
       },
+      api_viewer_projection: {
+        status: "not_collected",
+        same_window_required: true,
+        chain_status_endpoint: "/v1/chain/status",
+        chain_status_samples_ref: $timeline_csv,
+        api_projection_ref: null,
+        viewer_projection_ref: null,
+        world_state_projection_match: null,
+        does_not_claim: [
+          "API/viewer projection verified",
+          "release_full",
+          "public_testnet ready"
+        ],
+        boundary_note: "S10 soak metrics do not verify API/viewer projection unless same-window API/viewer evidence refs are filled by a follow-up evidence packet."
+      },
       overall_status: (if $overall_status_code == 0 then "ok" else "failed" end)
     }' > "$summary_json"
 }
@@ -1486,6 +1501,17 @@ append_summary_metrics_section() {
     echo "| settlement_apply_failure_ratio | $analysis_settlement_apply_failure_ratio |"
     echo "| committed_height_monotonic | $analysis_monotonic_ok |"
     echo "| committed_height_monotonic_violation_nodes | ${analysis_monotonic_violation_nodes:--} |"
+    echo
+    echo "## API / Viewer Projection Contract"
+    echo
+    echo "- status: \`not_collected\`"
+    echo "- same_window_required: \`true\`"
+    echo "- chain_status_endpoint: \`/v1/chain/status\`"
+    echo "- chain_status_samples_ref: \`$timeline_csv\`"
+    echo "- api_projection_ref: \`null\`"
+    echo "- viewer_projection_ref: \`null\`"
+    echo "- world_state_projection_match: \`null\`"
+    echo "- boundary_note: S10 soak metrics do not verify API/viewer projection unless same-window API/viewer evidence refs are filled by a follow-up evidence packet."
   } >> "$summary_md"
 }
 
@@ -1567,8 +1593,36 @@ if [[ "$dry_run" -eq 1 ]]; then
         },
         report_samples: 0
       },
+      api_viewer_projection: {
+        status: "not_collected",
+        same_window_required: true,
+        chain_status_endpoint: "/v1/chain/status",
+        chain_status_samples_ref: $timeline_csv,
+        api_projection_ref: null,
+        viewer_projection_ref: null,
+        world_state_projection_match: null,
+        does_not_claim: [
+          "API/viewer projection verified",
+          "release_full",
+          "public_testnet ready"
+        ],
+        boundary_note: "Dry-run renders commands only; it cannot verify API/viewer projection."
+      },
       overall_status: "dry_run"
     }' > "$summary_json"
+  {
+    echo
+    echo "## API / Viewer Projection Contract"
+    echo
+    echo "- status: \`not_collected\`"
+    echo "- same_window_required: \`true\`"
+    echo "- chain_status_endpoint: \`/v1/chain/status\`"
+    echo "- chain_status_samples_ref: \`$timeline_csv\`"
+    echo "- api_projection_ref: \`null\`"
+    echo "- viewer_projection_ref: \`null\`"
+    echo "- world_state_projection_match: \`null\`"
+    echo "- boundary_note: Dry-run renders commands only; it cannot verify API/viewer projection."
+  } >> "$summary_md"
   rm -f "$failures_md"
 
   echo "dry-run completed:"

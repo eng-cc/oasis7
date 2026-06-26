@@ -7,4 +7,5 @@ runtime_bootstrap	runtime_engineer	partial	doc/testing/templates/public-testnet-
 world_resource_provenance_ready	blockchain_ops_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	replace with /v1/chain/status world_resource schema/world_id/chain_id/world_seed/chunk schema evidence
 provider_resource_provenance_ready	agent_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	replace with provider info world resource manifest/delta schema compatibility evidence
 resource_delta_replay_ready	runtime_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	replace with committed resource delta replay and provisional-resource blocking evidence
+api_viewer_projection_ready	viewer_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	replace with JSON evidence containing api_viewer_projection.status=pass, same-window refs, and world_state_projection_match=true
 claims_boundary_review	qa_engineer	partial	doc/testing/templates/public-testnet-exit-review-template.md	replace with claims boundary review and denylist confirmation

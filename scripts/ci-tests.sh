@@ -212,6 +212,9 @@ run_required_gate_checks() {
   run ./scripts/cargo-dev-lib.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
   run ./scripts/plan-rust-required-scope.test.sh
+  run ./scripts/game-world-state-sync-commit-module-required.test.sh
+  run ./scripts/state-sync-closure-evidence-template.test.sh
+  run ./scripts/s10-five-node-game-soak-summary.test.sh
   run ./scripts/unified-world-code-terminology-scan.test.sh
   run ./scripts/release-gate-bash-preflight.test.sh
   run_provider_remote_https_smoke
