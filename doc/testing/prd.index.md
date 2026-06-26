@@ -2,7 +2,7 @@
 
 审计轮次: 10
 
-更新时间：2026-06-24
+更新时间：2026-06-26
 
 ## 入口
 - 模块 PRD：`doc/testing/prd.md`
@@ -19,6 +19,7 @@
 - 想先回答“如何用多个 simulated player personas 补内部玩家视角，但不新增正式 `player` 角色”：先读 `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
 - 想用模型视觉判断替代常规人工视觉 review：先读 `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`，再按 `doc/testing/templates/model-visual-review-card-template.md` 输出评审卡
 - 想快速判断“现有性能测试覆盖到哪、哪些功能面最值得补性能测试、哪些更适合进 scoped gate”：先读 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`
+- 想先回答 world state sync、commit closure、state-sync bundle、API/viewer projection，或 `module_required/module_full/integration_required/release_full` 如何定档：先读 `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`，再下钻 S9/S10 执行套件。
 - 想先回答当前在推进什么、哪些测试治理任务或 QA 阻断仍在影响收口：先读 `doc/testing/project.md`
 - 想直接决定要跑哪套测试或按步骤执行：先读 `testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` 与 `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted access / legacy p2p network rehearsal / governance drill / claim-audit 问题分流：先读 `doc/testing/evidence/README.md`
@@ -33,7 +34,7 @@
 | --- | --- |
 | `evidence/` | 发布证据、趋势基线与审计留痕；当前已补 `evidence/README.md` 作为热点子域入口 |
 | `ci/` | CI、wasm determinism、tiering、required check 保护 |
-| `longrun/` | 长稳、chaos、soak 与在线稳定性 |
+| `longrun/` | 长稳、chaos、soak、world state sync / commit closure 与在线稳定性 |
 | `launcher/` | 启动器链路测试、playtest 与配置自动接线 |
 | `governance/` | 质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated personas |
 | `templates/` | 证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入 |
@@ -92,6 +93,7 @@
 | `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.prd.md` | `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.design.md` | `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.project.md` |
 | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.prd.md` | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.design.md` | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.project.md` |
 | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md` | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.design.md` | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.project.md` |
+| `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md` | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md` | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.project.md` |
 | `doc/testing/longrun/p2p-longrun-continuous-chaos-injection-2026-02-24.prd.md` | `doc/testing/longrun/p2p-longrun-continuous-chaos-injection-2026-02-24.design.md` | `doc/testing/longrun/p2p-longrun-continuous-chaos-injection-2026-02-24.project.md` |
 | `doc/testing/longrun/p2p-longrun-endurance-chaos-template-2026-02-25.prd.md` | `doc/testing/longrun/p2p-longrun-endurance-chaos-template-2026-02-25.design.md` | `doc/testing/longrun/p2p-longrun-endurance-chaos-template-2026-02-25.project.md` |
 | `doc/testing/longrun/p2p-longrun-feedback-event-injection-2026-03-02.prd.md` | `doc/testing/longrun/p2p-longrun-feedback-event-injection-2026-03-02.design.md` | `doc/testing/longrun/p2p-longrun-feedback-event-injection-2026-03-02.project.md` |

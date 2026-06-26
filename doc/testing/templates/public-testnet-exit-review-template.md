@@ -11,6 +11,7 @@
 - [ ] explorer evidence is public and current
 - [ ] guarded faucet policy stayed within announced boundary
 - [ ] reset policy was announced and rehearsed without claim drift
+- [ ] same-window API/viewer projection evidence is linked and matches S10 `api_viewer_projection`
 - [ ] no evidence claims crossed into `mainnet_live` / `production_oc_settlement`
 
 ## Mainnet gating handoff
