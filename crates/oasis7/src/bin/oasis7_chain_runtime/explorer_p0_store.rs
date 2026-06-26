@@ -491,8 +491,7 @@ impl ExplorerStore {
                 }
                 true
             })
-            .cloned()
-            .collect::<Vec<ExplorerTxItem>>();
+            .collect::<Vec<&ExplorerTxItem>>();
         txs.sort_by(|left, right| {
             right
                 .submitted_at_unix_ms
@@ -500,20 +499,32 @@ impl ExplorerStore {
                 .then_with(|| right.tx_hash.cmp(&left.tx_hash))
         });
 
-        let page = build_page_response(txs, limit, cursor);
+        let total = txs.len();
+        let bounded_cursor = cursor.min(total);
+        let items = txs
+            .into_iter()
+            .skip(bounded_cursor)
+            .take(limit)
+            .cloned()
+            .collect::<Vec<ExplorerTxItem>>();
+        let next_cursor = if bounded_cursor + items.len() < total {
+            Some(bounded_cursor + items.len())
+        } else {
+            None
+        };
         ExplorerTxsResponse {
-            ok: page.ok,
-            observed_at_unix_ms: page.observed_at_unix_ms,
+            ok: true,
+            observed_at_unix_ms: super::super::now_unix_ms(),
             account_filter: account_filter.map(ToOwned::to_owned),
             status_filter,
             action_filter,
-            limit: page.limit,
-            cursor: page.cursor,
-            total: page.total,
-            next_cursor: page.next_cursor,
-            items: page.items,
-            error_code: page.error_code,
-            error: page.error,
+            limit,
+            cursor: bounded_cursor,
+            total,
+            next_cursor,
+            items,
+            error_code: None,
+            error: None,
         }
     }
 
@@ -667,55 +678,21 @@ impl ExplorerStore {
                     (
                         item.submitted_at_unix_ms,
                         item.action_id,
-                        item.tx_hash.clone(),
+                        item.tx_hash.as_str(),
                     )
                 })
-                .collect::<Vec<(i64, u64, String)>>();
+                .collect::<Vec<(i64, u64, &str)>>();
             order.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
-            for (_, action_id, tx_hash) in order.into_iter().take(overflow) {
+            let remove_txs = order
+                .into_iter()
+                .take(overflow)
+                .map(|(_, action_id, tx_hash)| (action_id, tx_hash.to_string()))
+                .collect::<Vec<(u64, String)>>();
+            for (action_id, tx_hash) in remove_txs {
                 self.txs_by_hash.remove(tx_hash.as_str());
                 self.tx_hash_by_action_id.remove(&action_id);
             }
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct PagedResponse<T> {
-    ok: bool,
-    observed_at_unix_ms: i64,
-    limit: usize,
-    cursor: usize,
-    total: usize,
-    next_cursor: Option<usize>,
-    items: Vec<T>,
-    error_code: Option<String>,
-    error: Option<String>,
-}
-
-fn build_page_response<T>(mut items: Vec<T>, limit: usize, cursor: usize) -> PagedResponse<T> {
-    let total = items.len();
-    let bounded_cursor = cursor.min(total);
-    let drained = items
-        .drain(..)
-        .skip(bounded_cursor)
-        .take(limit)
-        .collect::<Vec<T>>();
-    let next_cursor = if bounded_cursor + drained.len() < total {
-        Some(bounded_cursor + drained.len())
-    } else {
-        None
-    };
-    PagedResponse {
-        ok: true,
-        observed_at_unix_ms: super::super::now_unix_ms(),
-        limit,
-        cursor: bounded_cursor,
-        total,
-        next_cursor,
-        items: drained,
-        error_code: None,
-        error: None,
     }
 }
 
@@ -733,6 +710,42 @@ mod tests {
             action_count: 0,
             committed_at_unix_ms: height as i64,
             tx_hashes: Vec::new(),
+        }
+    }
+
+    fn tx(
+        tx_hash: &str,
+        action_id: u64,
+        from_account_id: &str,
+        to_account_id: &str,
+        status: TransferLifecycleStatus,
+        submitted_at_unix_ms: i64,
+    ) -> ExplorerTxItem {
+        ExplorerTxItem {
+            tx_hash: tx_hash.to_string(),
+            action_id,
+            from_account_id: from_account_id.to_string(),
+            to_account_id: to_account_id.to_string(),
+            amount: action_id,
+            nonce: action_id,
+            asset_id: None,
+            memo: None,
+            chain_id: None,
+            network_id: None,
+            tx_version: None,
+            tx_type: None,
+            valid_until_unix_ms: None,
+            max_fee: None,
+            fee_asset_id: None,
+            application_payload_hash: None,
+            client_request_id: None,
+            status,
+            submitted_at_unix_ms,
+            updated_at_unix_ms: submitted_at_unix_ms,
+            block_height: None,
+            block_hash: None,
+            error_code: None,
+            error: None,
         }
     }
 
@@ -773,5 +786,131 @@ mod tests {
         assert_eq!(empty_page.cursor, 4);
         assert_eq!(empty_page.next_cursor, None);
         assert!(empty_page.items.is_empty());
+    }
+
+    #[test]
+    fn query_txs_pages_sorted_refs_and_clones_only_page() {
+        let mut store = ExplorerStore::default();
+        for item in [
+            tx(
+                "tx-a",
+                1,
+                "alice",
+                "bob",
+                TransferLifecycleStatus::Accepted,
+                100,
+            ),
+            tx(
+                "tx-c",
+                3,
+                "alice",
+                "carol",
+                TransferLifecycleStatus::Confirmed,
+                120,
+            ),
+            tx(
+                "tx-b",
+                2,
+                "dora",
+                "alice",
+                TransferLifecycleStatus::Confirmed,
+                120,
+            ),
+            tx(
+                "tx-d",
+                4,
+                "erin",
+                "frank",
+                TransferLifecycleStatus::Failed,
+                90,
+            ),
+        ] {
+            store
+                .tx_hash_by_action_id
+                .insert(item.action_id, item.tx_hash.clone());
+            store.txs_by_hash.insert(item.tx_hash.clone(), item);
+        }
+
+        let first_page = store.query_txs(
+            Some("alice"),
+            Some(TransferLifecycleStatus::Confirmed),
+            None,
+            1,
+            0,
+        );
+        assert!(first_page.ok);
+        assert_eq!(first_page.total, 2);
+        assert_eq!(first_page.cursor, 0);
+        assert_eq!(first_page.next_cursor, Some(1));
+        assert_eq!(
+            first_page
+                .items
+                .iter()
+                .map(|item| item.tx_hash.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tx-c"]
+        );
+
+        let second_page = store.query_txs(
+            Some("alice"),
+            Some(TransferLifecycleStatus::Confirmed),
+            None,
+            1,
+            1,
+        );
+        assert_eq!(second_page.cursor, 1);
+        assert_eq!(second_page.next_cursor, None);
+        assert_eq!(
+            second_page
+                .items
+                .iter()
+                .map(|item| item.tx_hash.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tx-b"]
+        );
+
+        let empty_page = store.query_txs(
+            Some("alice"),
+            Some(TransferLifecycleStatus::Confirmed),
+            None,
+            1,
+            99,
+        );
+        assert_eq!(empty_page.cursor, 2);
+        assert_eq!(empty_page.next_cursor, None);
+        assert!(empty_page.items.is_empty());
+    }
+
+    #[test]
+    fn prune_removes_oldest_txs_without_cloning_all_hashes() {
+        let mut store = ExplorerStore::default();
+        for index in 0..(EXPLORER_MAX_TRACKED_TXS + 2) {
+            let item = tx(
+                format!("tx-{index:04}").as_str(),
+                index as u64,
+                "alice",
+                "bob",
+                TransferLifecycleStatus::Accepted,
+                index as i64,
+            );
+            store
+                .tx_hash_by_action_id
+                .insert(item.action_id, item.tx_hash.clone());
+            store.txs_by_hash.insert(item.tx_hash.clone(), item);
+        }
+
+        store.prune();
+
+        assert_eq!(store.txs_by_hash.len(), EXPLORER_MAX_TRACKED_TXS);
+        assert!(!store.txs_by_hash.contains_key("tx-0000"));
+        assert!(!store.txs_by_hash.contains_key("tx-0001"));
+        assert!(!store.tx_hash_by_action_id.contains_key(&0));
+        assert!(!store.tx_hash_by_action_id.contains_key(&1));
+        assert!(store.txs_by_hash.contains_key("tx-0002"));
+        assert!(
+            store
+                .txs_by_hash
+                .contains_key(format!("tx-{:04}", EXPLORER_MAX_TRACKED_TXS + 1).as_str())
+        );
     }
 }
