@@ -131,7 +131,7 @@ python3 -m py_compile \
   "$SCRIPT_DIR/pm_store_reporting.py" \
   "$SCRIPT_DIR/pm_store_stage.py" \
   "$SCRIPT_DIR/pm_store_task_lint.py"
-python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR"
-./scripts/pm/task-execution-log-lint.sh >/dev/null
+python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR" --views-already-synced
+./scripts/pm/task-execution-log-lint.sh --views-already-synced >/dev/null
 
 echo "pm-lint: OK"
