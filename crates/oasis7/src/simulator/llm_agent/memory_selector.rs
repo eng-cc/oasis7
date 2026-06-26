@@ -1,5 +1,6 @@
 use super::super::memory::{AgentMemory, LongTermMemoryEntry, MemoryEntry, MemoryEntryKind};
 use super::super::types::WorldTime;
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemorySelectorConfig {
@@ -144,14 +145,44 @@ fn collect_long_term_candidates(
 }
 
 fn top_k(mut items: Vec<ScoredMemory>, top_k: usize) -> Vec<ScoredMemory> {
-    items.sort_by(|left, right| {
-        right
-            .score
-            .partial_cmp(&left.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    items.truncate(top_k);
-    items
+    if top_k == 0 || items.is_empty() {
+        return Vec::new();
+    }
+    if !use_bounded_top_n(top_k, items.len()) {
+        items.sort_by(|left, right| compare_score_desc(left, right));
+        items.truncate(top_k);
+        return items;
+    }
+    let mut top = Vec::with_capacity(top_k.min(items.len()));
+    for item in items.drain(..) {
+        insert_top_scored_memory(&mut top, item, top_k);
+    }
+    top
+}
+
+fn insert_top_scored_memory(top: &mut Vec<ScoredMemory>, candidate: ScoredMemory, limit: usize) {
+    let insert_at = top
+        .iter()
+        .position(|item| compare_score_desc(&candidate, item) == Ordering::Less);
+    match insert_at {
+        Some(index) => top.insert(index, candidate),
+        None if top.len() < limit => top.push(candidate),
+        None => return,
+    }
+    if top.len() > limit {
+        top.pop();
+    }
+}
+
+fn compare_score_desc(left: &ScoredMemory, right: &ScoredMemory) -> Ordering {
+    right
+        .score
+        .partial_cmp(&left.score)
+        .unwrap_or(Ordering::Equal)
+}
+
+fn use_bounded_top_n(limit: usize, total: usize) -> bool {
+    limit.saturating_mul(2) < total
 }
 
 fn short_term_entry_to_text(entry: &MemoryEntry) -> String {
@@ -214,6 +245,74 @@ mod tests {
         let result = MemorySelector::select(&memory, 10, &config);
         assert!(result.selected_total <= 5);
         assert!(result.candidates_total >= result.selected_total);
+    }
+
+    #[test]
+    fn top_k_preserves_score_order_and_tie_order() {
+        let items = vec![
+            ScoredMemory {
+                source: MemorySource::ShortTerm,
+                score: 0.4,
+                timestamp: 1,
+                content: "low".to_string(),
+            },
+            ScoredMemory {
+                source: MemorySource::ShortTerm,
+                score: 0.9,
+                timestamp: 2,
+                content: "high-a".to_string(),
+            },
+            ScoredMemory {
+                source: MemorySource::ShortTerm,
+                score: 0.9,
+                timestamp: 3,
+                content: "high-b".to_string(),
+            },
+            ScoredMemory {
+                source: MemorySource::ShortTerm,
+                score: 0.2,
+                timestamp: 4,
+                content: "lowest".to_string(),
+            },
+            ScoredMemory {
+                source: MemorySource::ShortTerm,
+                score: 0.1,
+                timestamp: 5,
+                content: "below-lowest".to_string(),
+            },
+        ];
+
+        let selected = top_k(items, 2);
+        let contents: Vec<_> = selected.iter().map(|item| item.content.as_str()).collect();
+        assert_eq!(contents, vec!["high-a", "high-b"]);
+    }
+
+    #[test]
+    fn top_k_large_fraction_uses_full_sort_semantics() {
+        let items = vec![
+            ScoredMemory {
+                source: MemorySource::ShortTerm,
+                score: 0.4,
+                timestamp: 1,
+                content: "middle".to_string(),
+            },
+            ScoredMemory {
+                source: MemorySource::ShortTerm,
+                score: 0.9,
+                timestamp: 2,
+                content: "high".to_string(),
+            },
+            ScoredMemory {
+                source: MemorySource::ShortTerm,
+                score: 0.1,
+                timestamp: 3,
+                content: "low".to_string(),
+            },
+        ];
+
+        let selected = top_k(items, 2);
+        let contents: Vec<_> = selected.iter().map(|item| item.content.as_str()).collect();
+        assert_eq!(contents, vec!["high", "middle"]);
     }
 
     #[test]
