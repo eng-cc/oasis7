@@ -24,7 +24,7 @@
 ## 模板
 | PRD-ID | 任务ID | 测试层级 | 命令 | 证据路径 | 结论 |
 | --- | --- | --- | --- | --- | --- |
-| PRD-XXX | TASK-XXX | test_tier_required | `./scripts/doc-governance-check.sh` | `doc/devlog/YYYY-MM-DD.md` | blocked |
+| PRD-XXX | TASK-XXX | test_tier_required | `./scripts/doc-governance-check.sh` | `.pm/tasks/task_<32hex>.execution.md` | blocked |
 | PRD-XXX | TASK-XXX | required | `env -u RUSTC_WRAPPER cargo test -p <crate> --features test_tier_required` | `output/<module>/required-*.log` | blocked |
 | PRD-XXX | TASK-XXX | full | `env -u RUSTC_WRAPPER cargo test -p <crate> --features test_tier_full` | `output/<module>/full-*.log` | blocked |
 
