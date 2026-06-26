@@ -175,7 +175,7 @@ Example:
 - Task UID: task_c1cea810b89f4d668bd4cd189ab7caf3
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-convergence-next
 - Source Branch: task/engineering-legacy-doc-semantics-convergence-next
-- Source Head: e8593d1a57e18408889f02c1e4f06f745ba504dd
+- Source Head: 4d0e572095fe71382d39de18a851a950811ecd12
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.yaml`; `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.execution.md`; `doc/headless-runtime/project.md`; `doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`; `doc/headless-runtime/templates/longrun-archive-incident-template.md`
 - Review Package: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/review-packages/review-c572185c0..c572185c0.diff`; limitation recorded above because the package was generated before local diff commit and is empty, so reviewers used current `git diff` / `git diff refs/remotes/origin/main..HEAD` and listed paths.
@@ -186,6 +186,45 @@ Example:
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: QA P3 requested restoring checkbox form for the Done Definition line, but `./scripts/doc-governance-check.sh` rejects newly added `- [ ]` lines in `project.md` as project task rows unless they match the task-row template; the final plain-bullet wording preserves the evidence-sink semantic fix while satisfying doc governance. Final verification rerun passed. Other roles returned no findings.
 - Verification Matrix: headless-runtime live evidence-sink wording -> targeted `rg` for active devlog terms -> no matches; doc governance contract -> `./scripts/doc-governance-check.sh` -> OK; current task workflow packet -> `./scripts/pm/workflow-lint.sh --task-uid task_c1cea810b89f4d668bd4cd189ab7caf3 --phase current` -> OK; whitespace/diff hygiene -> `git diff --check` -> pass.
+- Visual Evidence: n/a; docs-only wording change with no UI or screenshot surface.
+- WASM Evidence: n/a; no WASM paths, ABI, manifests, or determinism workflow touched.
+- Ops Evidence: n/a; no deployment, rollback, node, or operator runbook behavior touched.
+- LiveOps Evidence: explicit exemption; liveops_community confirmed no external messaging, player/community promise, incident communication, channel runbook, or LiveOps follow-up obligation is created or changed.
+- Residual Risk: Low; other historical docs may still mention `doc/devlog`, but this patch intentionally converges only current live headless-runtime guidance and leaves historical archives untouched.
+- Slice Ledger: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/slice-ledger.jsonl`
+
+## 2026-06-26 15:14:00 CST / repository_health_engineer
+- Review Trigger: pre-PR local role review result for post-review preflight-required project Trace/status metadata.
+- Review Scope: `doc/engineering/project.md` Trace row and latest-completed status line added for `task_c1cea810b89f4d668bd4cd189ab7caf3`.
+- Review Result: no_findings.
+- Scope/Spec Compliance Verdict: pass; the added Trace row and latest-completed status line are consistent with the already-reviewed docs-only evidence-sink convergence, reference the same task UID, and do not broaden into historical rewrites.
+- Role Quality/Risk Verdict: pass, low risk; the Trace row follows the project-page stable identifier pattern and links to `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.yaml`; the status line keeps `doc/devlog` framed as old evidence-sink wording / historical archive only and does not reintroduce active `doc/devlog` workflow semantics.
+- Residual Risk: low; other historical docs may still mention `doc/devlog`, but this metadata addition stays task-local and does not create a new repository health issue.
+
+## 2026-06-26 15:15:00 CST / producer_system_designer
+- Review Trigger: pre-PR local role review result for post-review preflight-required project Trace/status metadata.
+- Review Scope: `doc/engineering/project.md` Trace row and latest-completed status line added for `task_c1cea810b89f4d668bd4cd189ab7caf3`.
+- Review Result: no_findings.
+- Scope/Spec Compliance Verdict: pass; latest commit only adds this task's engineering Trace row and updates latest-completed to the same evidence-sink convergence item.
+- Role Quality/Risk Verdict: pass, low risk; these are engineering governance status metadata and do not change product/system acceptance, priority, module semantics, player capability boundaries, or headless-runtime lifecycle/auth requirements.
+- Residual Risk: low; future engineering governance status rows should keep recording completed governance facts and not become product priority or module acceptance wording.
+
+## 2026-06-26 15:17:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_c1cea810b89f4d668bd4cd189ab7caf3
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-convergence-next
+- Source Branch: task/engineering-legacy-doc-semantics-convergence-next
+- Source Head: 4d0e572095fe71382d39de18a851a950811ecd12
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.yaml`; `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.execution.md`; `doc/engineering/project.md`; `doc/headless-runtime/project.md`; `doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`; `doc/headless-runtime/templates/longrun-archive-incident-template.md`
+- Review Package: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/review-packages/review-c572185c0..c572185c0.diff`; limitation recorded above because the package was generated before local diff commit and is empty, so reviewers used current `git diff` / `git diff refs/remotes/origin/main..HEAD` and listed paths.
+- Role Selection Basis: changed paths affect documentation-governance semantics, current headless-runtime live guidance, engineering project Trace/status metadata, and verification evidence; `./scripts/prepare-task-pr.sh --create` inferred producer_system_designer, liveops_community, and qa_engineer from changed paths. Included `repository_health_engineer` for doc/workflow semantic convergence, `qa_engineer` for verification sufficiency, `producer_system_designer` for product/system semantics, and `liveops_community` for external/incident/runbook implications; skipped runtime because no runtime behavior or lifecycle/auth implementation semantics changed.
+- Review Roles: producer_system_designer, liveops_community, qa_engineer, repository_health_engineer
+- Review Evidence: repository_health_engineer returned `no_findings` for the original docs patch and the post-review engineering project Trace/status metadata; qa_engineer returned one P3 non-blocking checklist-shape finding, scope/spec pass, verification sufficient, residual risk low after disposition; producer_system_designer returned `no_findings` for the original docs patch and post-review Trace/status metadata; liveops_community returned `no_findings`, scope/spec pass, LiveOps/community risk pass, residual risk low.
+- Review Verdicts: repository_health_engineer scope/spec compliance pass and repository health quality/risk pass; qa_engineer scope/spec compliance pass and QA quality/risk pass; producer_system_designer scope/spec compliance pass and producer/system quality/risk pass; liveops_community scope/spec compliance pass and LiveOps/community quality/risk pass.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: QA P3 requested restoring checkbox form for the Done Definition line, but `./scripts/doc-governance-check.sh` rejects newly added `- [ ]` lines in `project.md` as project task rows unless they match the task-row template; the final plain-bullet wording preserves the evidence-sink semantic fix while satisfying doc governance. Post-review `doc/engineering/project.md` Trace/status metadata was separately reviewed by repository_health_engineer and producer_system_designer with no findings. Other roles returned no findings.
+- Verification Matrix: headless-runtime live evidence-sink wording -> targeted `rg` for active devlog terms -> no matches; doc governance contract -> `./scripts/doc-governance-check.sh` -> OK; current task workflow packet -> `./scripts/pm/workflow-lint.sh --task-uid task_c1cea810b89f4d668bd4cd189ab7caf3 --phase current` -> OK; ready-for-PR claim -> `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/doc-governance-check.sh"` -> verified; whitespace/diff hygiene -> `git diff --check` -> pass.
 - Visual Evidence: n/a; docs-only wording change with no UI or screenshot surface.
 - WASM Evidence: n/a; no WASM paths, ABI, manifests, or determinism workflow touched.
 - Ops Evidence: n/a; no deployment, rollback, node, or operator runbook behavior touched.
