@@ -234,3 +234,20 @@ Example:
 - Expected Result: Fresh ready-for-PR verification succeeds and can be cited in the execution log.
 - Actual Result: Passed with `verification_exit_code: 0`, `status: verified`, `allowed_to_claim: true`, `verified_at: 2026-06-26T09:51:32+08:00`.
 - Blocker / Next Action: No blocker; rerun PR helper.
+
+## 2026-06-26 10:43:00 CST / tpm
+- 完成内容: Addressed PR review comment requiring all tracked tool lockfiles to be covered.
+- 遗留事项: Commit, push, resolve GitHub review thread, and re-check PR state.
+- Review Comment: GitHub PR #654 unresolved thread `PRRT_kwDORHhWec6MZtla` noted that `tools/wasm_build_suite/templates/minimal_module/Cargo.lock` is a fourth tracked tool lockfile omitted by the explicit checker list.
+- Finding Disposition: valid; fixed by discovering tracked `tools/**/Cargo.lock` files with `git ls-files` and deriving each adjacent `Cargo.toml`.
+- Action: Updated `scripts/check-standalone-tool-lockfiles.sh` from a hard-coded 3-manifest list to tracked lockfile discovery. Fixed Bash 3 portability by using `while read` instead of `mapfile`.
+- Validation Command: `./scripts/check-standalone-tool-lockfiles.sh`
+- Expected Result: All tracked `tools/**/Cargo.lock` files with adjacent manifests are checked.
+- Actual Result: Passed: 4 manifests checked, including `tools/wasm_build_suite/templates/minimal_module/Cargo.toml`.
+- Validation Command: `bash -n scripts/check-standalone-tool-lockfiles.sh scripts/ci-rust-governance-report.sh`; `git diff --check`
+- Expected Result: Script parses on repo-supported shell and diff has no whitespace issues.
+- Actual Result: Passed.
+- Validation Command: `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-standalone-lockfile-review-fix-2`
+- Expected Result: Governance report remains all rows status 0 with the expanded lockfile checker.
+- Actual Result: Passed; `standalone tool lockfiles` row status 0 and all report rows status 0.
+- Blocker / Next Action: No local blocker; push and resolve PR review thread.
