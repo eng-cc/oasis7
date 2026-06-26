@@ -40,7 +40,6 @@
 ## 关键接口 / 入口
 - 需求入口：`doc/playability_test_result/prd.md`
 - 执行入口：`doc/playability_test_result/project.md`
-- 兼容执行入口：`doc/playability_test_result/project.md`
 - 索引入口：`doc/playability_test_result/prd.index.md`
 
 ## 设计演进计划
@@ -49,4 +48,4 @@
 
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
-- 若 legacy `*.project.md` 长期保留，执行入口会继续双轨并存。
+- 若 legacy redirect 未明确标注为兼容跳转，读者可能误判历史入口为当前执行入口。

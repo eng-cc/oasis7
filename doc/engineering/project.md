@@ -299,6 +299,7 @@
 - [x] engineering-project-latest-completed-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 engineering project 状态区的 `最新完成` 漂移，将其从较早的 libp2p RustSec burn-down 任务同步到当前 doc governance truth refresh，保留下一任务 inventory 分类口径不变。 Trace: .pm/tasks/task_5ca263b753114c08ab7bb6303fd49449.yaml
 - [x] p2p-node-inventory-report-contract-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 doc 层 repository health 巡检发现的 `doc/p2p/node/README.md` inventory 口径漂移，将当前文件数量入口从 ad hoc `find` / `git ls-files` 改回 canonical `scripts/doc-inventory-report.sh`，避免子域 landing page 与 p2p 模块根入口互相冲突。 Trace: .pm/tasks/task_9b5b64c5d3e34584be5a64fa438595ed.yaml
 - [x] world-runtime-prd-legacy-entrypoint-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 doc 层 repository health 巡检发现的 `doc/world-runtime/prd.md` legacy entrypoint 漂移，将 active PRD 接口区中的根级 `doc/world-runtime.project.md` 从“兼容执行入口”改为“兼容跳转互链”，保持当前执行入口唯一指向 `doc/world-runtime/project.md`。 Trace: .pm/tasks/task_bdacd20a0dcb4034b52208123be2c832.yaml
+- [x] root-design-legacy-entrypoint-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口当前模块根 `design.md` 的旧模板语义，删除指向标准 `project.md` 的重复“兼容执行入口”行，并把 legacy 风险改为 redirect 误标注风险，避免读者把当前执行入口误读成历史兼容入口。 Trace: .pm/tasks/task_4d604c693b8249e5aa62f03aa18985a7.yaml
 
 ## File Structure / Affected Paths
 
@@ -366,7 +367,7 @@
 - 更新日期: 2026-06-26
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `world-runtime-prd-legacy-entrypoint-sync`（已将 `doc/world-runtime/prd.md` active PRD 接口区中的根级 `doc/world-runtime.project.md` 从“兼容执行入口”改为“兼容跳转互链”，保持当前执行入口唯一指向 `doc/world-runtime/project.md`。）
+- 最新完成: `root-design-legacy-entrypoint-semantics`（已将当前模块根 `design.md` 中指向标准 `project.md` 的重复“兼容执行入口”旧模板语义收敛为唯一当前执行入口，并把 legacy 风险改为 redirect 误标注风险。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
