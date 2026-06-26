@@ -134,7 +134,7 @@ def load_direct_baseline() -> dict:
 
 def tracked_cargo_manifests() -> list[Path]:
     result = subprocess.run(
-        ["git", "ls-files", "**/Cargo.toml"],
+        ["git", "ls-files", "Cargo.toml", "**/Cargo.toml"],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

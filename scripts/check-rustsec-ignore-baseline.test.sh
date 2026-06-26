@@ -7,9 +7,13 @@ cd "$repo_root"
 tmp_dir=$(mktemp -d)
 launcher_manifest="tools/wasm_build_suite/Cargo.toml"
 launcher_backup="$tmp_dir/wasm_build_suite.Cargo.toml"
+root_manifest="Cargo.toml"
+root_backup="$tmp_dir/root.Cargo.toml"
 cp "$launcher_manifest" "$launcher_backup"
+cp "$root_manifest" "$root_backup"
 cleanup() {
   cp "$launcher_backup" "$launcher_manifest" 2>/dev/null || true
+  cp "$root_backup" "$root_manifest" 2>/dev/null || true
   rm -rf "$tmp_dir"
 }
 trap cleanup EXIT
@@ -219,5 +223,30 @@ if run_check deny.toml >"$tmp_dir/paste-direct.out" 2>&1; then
 fi
 grep -q '`paste` direct dependency manifest scope grew beyond RustSec baseline' "$tmp_dir/paste-direct.out"
 cp "$launcher_backup" "$launcher_manifest"
+
+python3 - "$root_manifest" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+out = []
+inserted = False
+for line in lines:
+    out.append(line)
+    if line.strip().startswith("resolver = ") and not inserted:
+        out.append("[workspace.dependencies]")
+        out.append('paste = "1"')
+        inserted = True
+if not inserted:
+    raise SystemExit("root manifest missing workspace resolver")
+path.write_text("\n".join(out) + "\n", encoding="utf-8")
+PY
+if run_check deny.toml >"$tmp_dir/paste-root-direct.out" 2>&1; then
+  echo "expected root workspace direct paste manifest case to fail" >&2
+  exit 1
+fi
+grep -q '`paste` direct dependency manifest scope grew beyond RustSec baseline: Cargo.toml' "$tmp_dir/paste-root-direct.out"
+cp "$root_backup" "$root_manifest"
 
 echo "check-rustsec-ignore-baseline.test: OK"
